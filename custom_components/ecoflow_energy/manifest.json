@@ -1,0 +1,12 @@
+{
+  "domain": "ecoflow_energy",
+  "name": "EcoFlow Energy",
+  "codeowners": ["@shuette42"],
+  "config_flow": true,
+  "documentation": "https://github.com/shuette42/ecoflow-energy-ha",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/shuette42/ecoflow-energy-ha/issues",
+  "requirements": ["paho-mqtt>=2.1.0", "protobuf>=4.21.0"],
+  "version": "1.0.0"
+}

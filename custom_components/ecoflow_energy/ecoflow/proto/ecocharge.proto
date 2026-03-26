@@ -1,0 +1,282 @@
+syntax = "proto3";
+
+// ecocharge — Canonical Protobuf schema for EcoFlow PowerOcean telemetry.
+// Envelope (HeaderMessage/Header) + JT-S1 PowerOcean messages in one file.
+// Source: APK extraction + BLE reverse-engineering, validated against live MQTT.
+
+package ecoflow;
+
+// --- Envelope ---
+
+message Header {
+  bytes pdata = 1;
+  uint32 src = 2;
+  uint32 dest = 3;
+  uint32 d_src = 4;
+  uint32 d_dest = 5;
+  uint32 check_type = 7;
+  uint32 cmd_func = 8;
+  uint32 cmd_id = 9;
+  uint32 data_len = 10;
+  uint32 seq = 14;
+  uint32 product_id = 15;
+  uint32 payload_ver = 16;
+  string device_sn = 24;
+}
+
+message HeaderMessage {
+  repeated Header header = 1;
+}
+
+// --- Sub-messages ---
+
+message JTS1PhaseInfo {
+  float vol = 1;
+  float amp = 2;
+  float act_pwr = 3;
+  float react_pwr = 4;
+  float apparent_pwr = 5;
+}
+
+message JTS1MpptPVInfo {
+  float vol = 1;
+  float amp = 2;
+  float pwr = 3;
+  bool light_sta = 4;
+}
+
+message JTS1MpptStaReport {
+  repeated JTS1MpptPVInfo mppt_pv = 1;
+  float mppt_ins_resist = 2;
+  repeated float mppt_temp_val = 3;
+}
+
+message JTS1MeterStaReport {
+  uint32 meter_type = 1;
+  uint32 meter_addr = 2;
+  repeated float meter_data = 3;
+}
+
+message JTS1LoadInfo {
+  float vol = 1;
+  float amp = 2;
+  float freq = 3;
+  float pwr = 4;
+}
+
+// --- Energy Stream Report (cmd_func=96, cmd_id=33) ---
+message JTS1EnergyStreamReport {
+  float sys_load_pwr = 1;
+  float sys_grid_pwr = 2;
+  float mppt_pwr = 3;
+  float bp_pwr = 4;
+  uint32 bp_soc = 5;
+}
+
+// --- PV Inverter Energy Stream Report (cmd_func=96, cmd_id=39) ---
+message JTS1EmsPVInvEnergyStreamReport {
+  float pv_inv_pwr = 1;
+}
+
+// --- Energy Stream Detail (cmd_func=96, cmd_id=34) ---
+message JTS1EnergyStreamItem {
+  float load_pwr = 1;
+  float grid_pwr = 2;
+  float mppt_pwr = 3;
+  float bp_pwr = 4;
+  uint32 timestamp = 5;
+  sint32 timezone = 6;
+  uint32 bp_soc = 7;
+}
+
+message JTS1EnergyStreamDetail {
+  repeated JTS1EnergyStreamItem sys_energy_stream = 1;
+  uint32 sys_seq = 2;
+}
+
+// --- EMS Heartbeat (cmd_func=96, cmd_id=1) ---
+message JTS1EmsHeartbeat {
+  float bp_remain_watth = 1;
+  uint32 bp_dsg_time = 2;
+  bool rate_ctrl_swtich = 3;
+  uint32 sys_rate_ctrl_time = 4;
+  uint32 dura_time = 5;
+  float pcs_act_pwr = 10;
+  float pcs_ac_freq = 11;
+  JTS1PhaseInfo pcs_a_phase = 12;
+  JTS1PhaseInfo pcs_b_phase = 13;
+  JTS1PhaseInfo pcs_c_phase = 14;
+  repeated JTS1LoadInfo pcs_load_info = 15;
+  float pcs_bus_volt = 16;
+  float pcs_leak_amp = 17;
+  float pcs_dci = 18;
+  float pcs_dcv = 19;
+  repeated JTS1MeterStaReport meter_heart_beat = 30;
+  repeated JTS1MpptStaReport mppt_heart_beat = 31;
+  float pcs_vbus_ref = 32;
+  float pcs_active_power_ref = 33;
+  float pcs_active_power_limit_up = 34;
+  float pcs_active_power_limit_dn = 35;
+  float pcs_bp_power = 36;
+  float pcs_bp_power_chg_limit = 37;
+  uint32 pcs_relay_state_show = 38;
+  uint32 pcs_grid_safety_func_record = 39;
+  uint32 pcs_grid_safety_state_record = 40;
+  float pcs_grid_inv_error_rms = 41;
+  float pcs_pfc_cur_real = 42;
+  float pcs_pfc_cur_ref = 43;
+  float pcs_reactive_power_ref = 44;
+  float pcs_meter_power = 45;
+  uint32 pcs_comm_interface_state = 46;
+  float pcs_average_voltage = 47;
+  float pcs_vgrid_thd = 48;
+  float pcs_interrupt_occupancy_rate = 49;
+  uint32 ems_mppt_selfcheck_state = 50;
+  uint32 ems_mppt_startup_state = 51;
+  uint32 ems_bp_selfcheck_state = 52;
+  uint32 ems_bp_startup_state = 53;
+  uint32 ems_pcs_selfcheck_state = 54;
+  uint32 ems_pcs_startup_state = 55;
+  float ems_bus_volt = 56;
+  uint32 ems_active_off_grid_cmd = 57;
+  uint32 ems_bp_alive_num = 58;
+  float ems_bp_power = 59;
+  float ems_bp_chg = 60;
+  float ems_bp_dsg = 61;
+  uint32 ems_bp_chg_request = 62;
+  uint32 ems_self_used_cnt = 63;
+  uint32 ems_ac_makeup_triggle_soc = 64;
+  uint32 ems_ac_makeup_exit_soc = 65;
+  uint32 ems_ac_makeup_min_soc = 66;
+  uint32 ems_ac_makeup_cnt = 67;
+  uint32 ems_start_fsm_state = 68;
+  uint32 ems_mppt_run_state = 69;
+  uint32 ems_mppt_mod_stat = 70;
+  uint32 ems_stop_cmd = 71;
+  uint32 ems_sys_cfg = 72;
+  uint32 ems_lp_state = 73;
+  uint32 ems_lp_type = 74;
+  uint32 ems_lp_mppt_cnt = 75;
+  uint32 ems_lp_bp_cnt = 76;
+  uint32 ems_lp_state_flag = 77;
+  uint32 ems_soc_calib_state = 78;
+  uint32 ems_soc_calib_request = 79;
+  uint32 ems_mppt_hb_state = 80;
+  float ems_ntc_temp_max = 81;
+  float ems_bus_volt_err_slid_filter = 82;
+  float ems_bus_volt_ripple = 83;
+  float ems_pv_inv_pwr = 84;
+  float mppt_bus_vol_ref = 100;
+  float dcdc_bus_vol_ref = 101;
+  float dcdc_bp_vol = 102;
+  float dcdc_inductance_curr = 103;
+  float inner_temperature = 104;
+  uint32 power_limit_mode = 105;
+  uint32 inv_rated_power = 106;
+  uint32 dcdc_state_record = 107;
+  uint32 ems_work_mode = 108;
+  float pcs_backup_pwr = 109;
+}
+
+// --- Battery Heartbeat (cmd_func=96, cmd_id=7) ---
+message JTS1BpStaReport {
+  float bp_pwr = 1;
+  uint32 bp_soc = 2;
+  uint32 bp_soh = 3;
+  uint32 bp_sop = 4;
+  repeated float bp_temp = 5;
+  float bp_cell_max_vol = 6;
+  float bp_cell_min_vol = 7;
+  uint32 bp_run_sta = 8;
+  float bp_vol = 9;
+  float bp_amp = 10;
+  float bp_bus_vol = 11;
+  float bp_bus_amp = 12;
+  uint32 bp_err_code = 13;
+  repeated float bp_cell_vol = 14;
+  uint32 bp_dsrc = 15;
+  bytes bp_sn = 16;
+  uint32 bp_cycles = 17;
+  uint32 bp_balance_state = 18;
+  float bp_hv_mos_temp = 19;
+  float bp_lv_mos_temp = 20;
+  float bp_ptc_temp = 21;
+  float bp_hts_temp = 22;
+  float bp_bus_neg_temp = 23;
+  float bp_bus_pos_temp = 24;
+  float bp_env_temp = 25;
+  uint32 bp_accu_chg_cap = 26;
+  uint32 bp_accu_dsg_cap = 27;
+  uint32 bp_design_cap = 28;
+  uint32 bp_full_cap = 29;
+  float bp_max_cell_temp = 30;
+  float bp_min_cell_temp = 31;
+  float bp_max_mos_temp = 32;
+  float bp_min_mos_temp = 33;
+  uint32 bp_bms_fault = 34;
+  uint32 bp_eclound_soc = 35;
+  uint32 bp_heartbeat_ver = 36;
+  uint32 bp_timestamp = 37;
+  float bp_real_soc = 38;
+  float bp_real_soh = 39;
+  uint32 bp_global_protect = 40;
+  uint32 bp_down_limit_soc = 41;
+  uint32 bp_up_limit_soc = 42;
+  uint32 bp_active_cal_req_stat = 43;
+  uint32 bp_active_cal_run_stat = 44;
+  uint32 module_product_info = 45;
+  uint32 module_program_sta = 46;
+  uint32 module_apl_sw_ver = 47;
+  uint32 module_loader_sw_ver = 48;
+  uint32 bms_run_sta = 49;
+  uint32 bms_chg_dsg_sta = 50;
+  uint32 dab_mod_sta = 51;
+  uint32 bp_chg_sop = 52;
+  uint32 bp_dsg_sop = 53;
+  float bp_remain_watth = 54;
+  float bp_target_soc = 55;
+  float bp_diff_soc = 56;
+  float bp_max_soc = 57;
+  float bp_min_soc = 58;
+  float bp_limit_soc = 59;
+  float bp_calendar_soh = 60;
+  float bp_cycle_soh = 61;
+  bool bp_ac_recharge_flag = 62;
+  bool bp_ptc_heat_flag = 63;
+  uint32 bp_ptc_exit_event = 64;
+  uint32 bp_accu_chg_energy = 65;
+  uint32 bp_accu_dsg_energy = 66;
+  float bp_ptc_temp2 = 67;
+  uint32 bp_sys_state = 68;
+}
+
+message JTS1BpHeartbeatReport {
+  repeated JTS1BpStaReport bp_heart_beat = 1;
+}
+
+// --- EMS Change Report (cmd_func=96, cmd_id=8) ---
+message JTS1EmsChangeReport {
+  uint32 sys_work_sta = 1;
+  uint32 sys_grid_sta = 2;
+  uint32 ems_word_mode = 3;
+  uint32 ems_backup_event = 4;
+  uint32 bp_chg_dsg_sta = 5;
+  uint32 ems_keep_soc = 6;
+  uint32 bp_soc = 7;
+  uint32 ems_sys_self_check_stat = 8;
+  uint32 bp_online_sum = 9;
+  uint32 sys_on_off_machine_stat = 10;
+  uint32 sys_bat_chg_up_limit = 11;
+  uint32 sys_bat_dsg_down_limit = 12;
+  uint32 bp_total_chg_energy = 13;
+  uint32 bp_total_dsg_energy = 14;
+  uint32 sys_bat_backup_ratio = 15;
+  uint32 ems_feed_mode = 16;
+  uint32 ems_feed_ratio = 17;
+  uint32 ems_feed_pwr = 18;
+  uint32 sys_meter_cfg = 19;
+  uint32 sys_type_cfg = 20;
+  uint32 pcs_run_sta = 21;
+  uint32 pcs_ac_err_code = 22;
+  uint32 pcs_dc_err_code = 23;
+}

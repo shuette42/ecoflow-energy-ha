@@ -1,0 +1,74 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "EcoFlow Developer-Zugangsdaten",
+        "description": "Gib deinen Access Key und Secret Key aus dem [EcoFlow Developer Portal]({developer_portal_url}) ein.",
+        "data": {
+          "access_key": "Access Key",
+          "secret_key": "Secret Key"
+        }
+      },
+      "devices": {
+        "title": "Geräte auswählen",
+        "description": "Wähle die EcoFlow-Geräte aus, die du zu Home Assistant hinzufügen möchtest.",
+        "data": {
+          "devices": "Geräte"
+        }
+      },
+      "mode": {
+        "title": "Verbindungsmodus",
+        "description": "**Standard-Modus** nutzt die offizielle EcoFlow IoT-API mit Updates alle 10–30 Sekunden.\n\n**Enhanced-Modus** nutzt eine Echtzeit-WebSocket-Verbindung mit Updates alle ~3 Sekunden. Dies ist eine inoffizielle Verbindungsmethode und erfordert deine EcoFlow-Konto-E-Mail und Passwort.",
+        "data": {
+          "mode": "Modus"
+        }
+      },
+      "enhanced": {
+        "title": "Enhanced-Modus Zugangsdaten",
+        "description": "**Hinweis:** Der Enhanced-Modus nutzt eine inoffizielle Verbindung zu EcoFlow-Servern. Er wird nicht von EcoFlow unterstützt und kann jederzeit aufhören zu funktionieren. Nutzung auf eigene Verantwortung.\n\nGib die E-Mail-Adresse und das Passwort deines EcoFlow-App-Kontos ein. Die User ID wird automatisch ermittelt.",
+        "data": {
+          "email": "E-Mail",
+          "password": "Passwort"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Verbindung zur EcoFlow-API fehlgeschlagen. Überprüfe deine Zugangsdaten.",
+      "invalid_auth": "Ungültiger Access Key oder Secret Key.",
+      "no_devices": "Keine Geräte gefunden. Stelle sicher, dass Geräte in der EcoFlow-App gekoppelt sind.",
+      "enhanced_login_failed": "Enhanced-Modus Login fehlgeschlagen. Überprüfe E-Mail und Passwort deines EcoFlow-App-Kontos.",
+      "enhanced_decrypt_failed": "Enhanced-Modus Entschlüsselung der Zugangsdaten fehlgeschlagen.",
+      "unknown": "Ein unerwarteter Fehler ist aufgetreten."
+    },
+    "abort": {
+      "already_configured": "Dieses EcoFlow-Konto ist bereits konfiguriert."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "EcoFlow Energy Optionen",
+        "description": "Verbindungsmodus und Geräteeinstellungen anpassen.\n\n**Enhanced-Modus** liefert Echtzeit-Updates (~3 s) nur für **PowerOcean**. Andere Geräte (Delta, Smart Plug) nutzen automatisch den Standard-Modus.",
+        "data": {
+          "mode": "Modus",
+          "devices": "Geräte"
+        }
+      },
+      "enhanced": {
+        "title": "Enhanced-Modus Zugangsdaten",
+        "description": "Gib die E-Mail-Adresse und das Passwort deines EcoFlow-App-Kontos ein.",
+        "data": {
+          "email": "E-Mail",
+          "password": "Passwort"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Verbindung zur EcoFlow-API fehlgeschlagen.",
+      "enhanced_login_failed": "Enhanced-Modus Login fehlgeschlagen.",
+      "enhanced_decrypt_failed": "Enhanced-Modus Entschlüsselung fehlgeschlagen.",
+      "no_devices": "Bitte mindestens ein Gerät auswählen.",
+      "unknown": "Ein unerwarteter Fehler ist aufgetreten."
+    }
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "EcoFlow Developer Credentials",
+        "description": "Enter your Access Key and Secret Key from the [EcoFlow Developer Portal]({developer_portal_url}).",
+        "data": {
+          "access_key": "Access Key",
+          "secret_key": "Secret Key"
+        }
+      },
+      "devices": {
+        "title": "Select Devices",
+        "description": "Select the EcoFlow devices you want to add to Home Assistant.",
+        "data": {
+          "devices": "Devices"
+        }
+      },
+      "mode": {
+        "title": "Connection Mode",
+        "description": "**Standard Mode** uses the official EcoFlow IoT API with updates every 10-30 seconds.\n\n**Enhanced Mode** uses a real-time WebSocket connection with updates every ~3 seconds. This is an unofficial connection method and requires your EcoFlow account email and password.",
+        "data": {
+          "mode": "Mode"
+        }
+      },
+      "enhanced": {
+        "title": "Enhanced Mode Credentials",
+        "description": "**Disclaimer:** Enhanced Mode uses an unofficial connection to EcoFlow servers. It is not supported by EcoFlow and may stop working at any time. Use at your own risk.\n\nEnter your EcoFlow app email and password. The User ID will be obtained automatically via login.",
+        "data": {
+          "email": "Email",
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to EcoFlow API. Check your credentials.",
+      "invalid_auth": "Invalid Access Key or Secret Key.",
+      "no_devices": "No devices found. Make sure devices are bound in the EcoFlow app.",
+      "enhanced_login_failed": "Enhanced Mode login failed. Check your EcoFlow app email and password.",
+      "enhanced_decrypt_failed": "Enhanced Mode credential decryption failed.",
+      "unknown": "An unexpected error occurred."
+    },
+    "abort": {
+      "already_configured": "This EcoFlow account is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "EcoFlow Energy Options",
+        "description": "Adjust connection mode and device settings.\n\n**Enhanced Mode** provides real-time updates (~3 s) for **PowerOcean only**. Other devices (Delta, Smart Plug) always use Standard Mode automatically.",
+        "data": {
+          "mode": "Mode",
+          "devices": "Devices"
+        }
+      },
+      "enhanced": {
+        "title": "Enhanced Mode Credentials",
+        "description": "Enter your EcoFlow app email and password.",
+        "data": {
+          "email": "Email",
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to EcoFlow API.",
+      "enhanced_login_failed": "Enhanced Mode login failed.",
+      "enhanced_decrypt_failed": "Enhanced Mode credential decryption failed.",
+      "no_devices": "Please select at least one device.",
+      "unknown": "An unexpected error occurred."
+    }
+  }
+}

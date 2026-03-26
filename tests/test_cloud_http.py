@@ -1,0 +1,113 @@
+"""Tests for EcoFlowHTTPQuota — signature, rate limiting, dead code removal."""
+
+import re
+from pathlib import Path
+
+from ecoflow_energy.ecoflow.cloud_http import EcoFlowHTTPQuota
+
+
+class TestHTTPClientInit:
+    def test_default_base_url(self):
+        from ecoflow_energy.ecoflow.const import IOT_API_BASE
+        from unittest.mock import MagicMock
+
+        client = EcoFlowHTTPQuota(
+            session=MagicMock(),
+            access_key="ak",
+            secret_key="sk",
+            device_sn="SN123",
+        )
+        assert client._base_url == IOT_API_BASE
+
+    def test_custom_base_url_trailing_slash(self):
+        from unittest.mock import MagicMock
+
+        client = EcoFlowHTTPQuota(
+            session=MagicMock(),
+            access_key="ak",
+            secret_key="sk",
+            device_sn="SN123",
+            base_url="https://example.com/",
+        )
+        assert not client._base_url.endswith("/")
+
+
+class TestSignature:
+    def _make_client(self):
+        from unittest.mock import MagicMock
+
+        return EcoFlowHTTPQuota(
+            session=MagicMock(),
+            access_key="test_ak",
+            secret_key="test_sk",
+            device_sn="SN123",
+        )
+
+    def test_sign_headers_has_required_fields(self):
+        client = self._make_client()
+        headers = client._sign_headers({"sn": "SN123"})
+        assert "accessKey" in headers
+        assert "nonce" in headers
+        assert "timestamp" in headers
+        assert "sign" in headers
+
+    def test_sign_headers_access_key_matches(self):
+        client = self._make_client()
+        headers = client._sign_headers({})
+        assert headers["accessKey"] == "test_ak"
+
+    def test_sign_is_hex(self):
+        client = self._make_client()
+        headers = client._sign_headers({"foo": "bar"})
+        assert re.match(r"^[0-9a-f]{64}$", headers["sign"]), "Sign must be 64-char hex (SHA256)"
+
+    def test_flatten_nested(self):
+        client = self._make_client()
+        result = client._flatten({"a": {"b": "c"}, "d": "e"})
+        result_dict = dict(result)
+        assert result_dict == {"a.b": "c", "d": "e"}
+
+    def test_flatten_list(self):
+        client = self._make_client()
+        result = client._flatten({"items": [1, 2]})
+        result_dict = dict(result)
+        assert result_dict == {"items[0]": "1", "items[1]": "2"}
+
+
+class TestRateLimit:
+    def test_first_request_allowed(self):
+        client = self._make_client()
+        assert client._check_rate_limit() is True
+
+    def test_second_request_blocked(self):
+        client = self._make_client()
+        client._check_rate_limit()
+        assert client._check_rate_limit() is False
+
+    def _make_client(self):
+        from unittest.mock import MagicMock
+
+        return EcoFlowHTTPQuota(
+            session=MagicMock(),
+            access_key="ak",
+            secret_key="sk",
+            device_sn="SN123",
+            min_interval=60.0,
+        )
+
+
+class TestDeadCodeRemoved:
+    def test_no_powerocean_quota_keys(self):
+        """POWEROCEAN_QUOTA_KEYS was dead code and must be removed."""
+        source = Path("custom_components/ecoflow_energy/ecoflow/cloud_http.py").read_text()
+        assert "POWEROCEAN_QUOTA_KEYS" not in source
+
+    def test_no_get_powerocean_quota(self):
+        """get_powerocean_quota was dead code and must be removed."""
+        source = Path("custom_components/ecoflow_energy/ecoflow/cloud_http.py").read_text()
+        assert "get_powerocean_quota" not in source
+
+    def test_no_iot_quota_path_import(self):
+        """IOT_QUOTA_PATH import was only used by dead code."""
+        source = Path("custom_components/ecoflow_energy/ecoflow/cloud_http.py").read_text()
+        assert "IOT_QUOTA_PATH" not in source
