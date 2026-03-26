@@ -1,7 +1,7 @@
 # EcoFlow Energy for Home Assistant
 
-[![HACS Validation](https://github.com/shuette42/ecoflow-energy-ha/actions/workflows/validate.yml/badge.svg)](https://github.com/shuette42/ecoflow-energy-ha/actions/workflows/validate.yml)
-[![Tests](https://github.com/shuette42/ecoflow-energy-ha/actions/workflows/tests.yml/badge.svg)](https://github.com/shuette42/ecoflow-energy-ha/actions/workflows/tests.yml)
+[![HACS Validation](https://github.com/shuette42/ecoflow-energy-ha/actions/workflows/validate.yml/badge.svg?branch=main)](https://github.com/shuette42/ecoflow-energy-ha/actions/workflows/validate.yml)
+[![Tests](https://github.com/shuette42/ecoflow-energy-ha/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/shuette42/ecoflow-energy-ha/actions/workflows/tests.yml)
 
 > Native Home Assistant integration for EcoFlow energy devices.
 > Real-time solar, battery, grid, and home power monitoring with Energy Dashboard support.
