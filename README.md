@@ -24,6 +24,20 @@ If the connection drops for any reason, the integration automatically reconnects
 
 **Set it up once, and it just works — reliably, around the clock.**
 
+### How it compares
+
+| | EcoFlow Energy | Other integrations |
+|---|---|---|
+| Data source | WSS MQTT, ~3 s push (Enhanced) | HTTP polling (10–30 s) or basic TCP MQTT |
+| Portal login required | No — stream runs autonomously | Yes, or HTTP-only fallback |
+| Reconnect | 4-tier, new ClientID, never gives up | Simple retry or gives up |
+| Fallback | Automatic HTTP when MQTT is stale, transparent source routing | None |
+| Stream health | 3 states: disconnected / stale / healthy | Not tracked |
+| Energy tracking | Local Riemann-sum with gap detection | API totals or not available |
+| Device types | Heterogeneous (Protobuf + JSON) in one integration | Single device type per project |
+| Control | Switches with optimistic lock (zero-flicker) | Read-only or basic |
+| Offline tolerance | Mobile devices (e.g. Delta in camper): offline = expected, no error spam | Offline = error |
+
 ---
 
 ## Features
@@ -32,12 +46,14 @@ If the connection drops for any reason, the integration automatically reconnects
 |---|---|
 | **Auto-discovery** | All devices bound to your EcoFlow account |
 | **50+ sensors per device** | Power, energy, battery, temperature, diagnostics |
-| **Energy Dashboard ready** | `total_increasing` sensors for solar, grid, battery |
-| **Switch & Number entities** | Control AC/DC output, charge speed, SoC limits |
+| **Energy Dashboard ready** | Local Riemann-sum kWh with gap detection — not API totals |
+| **Switch & Number entities** | Control AC/DC output, charge speed, SoC limits — optimistic lock, zero flicker |
 | **Two connection modes** | Standard (HTTP ~30 s) or Enhanced (MQTT ~3 s) |
-| **Automatic fallback** | Enhanced Mode falls back to HTTP when MQTT is stale |
+| **Automatic fallback** | Enhanced Mode falls back to HTTP when MQTT is stale, with source routing |
 | **4-tier reconnect** | Never gives up on the MQTT connection |
-| **Multi-device** | Multiple devices in a single integration |
+| **Stream health** | 3-state monitoring: disconnected / stale / healthy |
+| **Offline tolerance** | Mobile devices offline = expected, not an error |
+| **Multi-device** | Heterogeneous devices (Protobuf + JSON) in a single integration |
 | **Diagnostics** | Built-in HA diagnostics download (no credentials exposed) |
 
 ---
