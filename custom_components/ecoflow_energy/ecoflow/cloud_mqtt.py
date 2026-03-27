@@ -238,14 +238,12 @@ class EcoFlowMQTTClient:
                 return False
 
         min_delay = self._get_reconnect_delay()
-        if self.reconnect_attempts <= 2:
-            pass
-        elif self.reconnect_attempts <= 5:
-            min_delay *= 2.0
-        elif self.reconnect_attempts <= 8:
-            min_delay *= 4.0
+        if self.reconnect_attempts <= 3:
+            pass  # use base delay
+        elif self.reconnect_attempts <= 6:
+            min_delay *= 1.5
         else:
-            min_delay *= 6.0
+            min_delay *= 2.0
 
         return current_time - self.last_reconnect_time >= min_delay
 
