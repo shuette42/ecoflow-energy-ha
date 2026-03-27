@@ -330,48 +330,7 @@ Download diagnostics via **Settings > Devices & Services > EcoFlow Energy > 3-do
 
 ## Architecture
 
-```mermaid
-graph LR
-    subgraph EcoFlow Cloud
-        A[IoT API<br>HTTP]
-        B[WSS MQTT<br>Protobuf]
-    end
-
-    subgraph EcoFlow Energy Integration
-        C[Coordinator]
-        D[IoT API Client<br>HMAC-SHA256]
-        E[MQTT Client<br>TCP + WSS]
-        F[Protobuf Decoder]
-        G[Energy Integrator<br>Riemann Sum]
-    end
-
-    subgraph Home Assistant
-        H[Sensors<br>50+]
-        I[Switches &<br>Numbers]
-        J[Energy<br>Dashboard]
-    end
-
-    A -- "~30 s poll" --> D
-    B -- "~3 s push" --> E
-    E --> F
-    D --> C
-    F --> C
-    C --> G
-    C --> H
-    C --> I
-    G --> J
-
-    style A fill:#18181B,stroke:#30D158,color:#FAFAFA
-    style B fill:#18181B,stroke:#30D158,color:#FAFAFA
-    style C fill:#18181B,stroke:#30D158,color:#FAFAFA
-    style D fill:#18181B,stroke:#A1A1AA,color:#FAFAFA
-    style E fill:#18181B,stroke:#A1A1AA,color:#FAFAFA
-    style F fill:#18181B,stroke:#A1A1AA,color:#FAFAFA
-    style G fill:#18181B,stroke:#A1A1AA,color:#FAFAFA
-    style H fill:#18181B,stroke:#30D158,color:#FAFAFA
-    style I fill:#18181B,stroke:#30D158,color:#FAFAFA
-    style J fill:#18181B,stroke:#30D158,color:#FAFAFA
-```
+![Architecture](docs/architecture.png)
 
 ### File Structure
 
