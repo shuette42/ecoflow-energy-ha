@@ -164,20 +164,20 @@ class TestShouldAttemptReconnect:
         assert client.reconnect_attempts == 0  # reset happened
 
     def test_tier_multipliers(self):
-        """Backoff tiers: attempts 0-2 = 1x, 3-5 = 2x, 6-8 = 4x, 9+ = 6x."""
+        """Backoff tiers: attempts 0-3 = 1x, 4-6 = 1.5x, 7+ = 2x."""
         client = _make_client(base_reconnect_delay=5)
 
-        # Tier 1 (attempts 0-2): base delay
-        client.reconnect_attempts = 2
+        # Tier 1 (attempts 0-3): base delay
+        client.reconnect_attempts = 3
         client.last_reconnect_time = time.time() - 100
         assert client._should_attempt_reconnect() is True
 
-        # Tier 2 (attempts 3-5): 2x delay
-        client.reconnect_attempts = 4
+        # Tier 2 (attempts 4-6): 1.5x delay
+        client.reconnect_attempts = 5
         base = client._get_reconnect_delay()
-        client.last_reconnect_time = time.time() - (base * 2 - 1)
+        client.last_reconnect_time = time.time() - (base * 1.5 - 1)
         assert client._should_attempt_reconnect() is False
-        client.last_reconnect_time = time.time() - (base * 2 + 1)
+        client.last_reconnect_time = time.time() - (base * 1.5 + 1)
         assert client._should_attempt_reconnect() is True
 
 
