@@ -1,3 +1,6 @@
+# Claude Code (agent team, hooks, rules — private, never committed)
+.claude/
+
 # Python
 __pycache__/
 *.py[cod]
