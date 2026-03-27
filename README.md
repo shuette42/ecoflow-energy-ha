@@ -361,16 +361,16 @@ graph LR
     C --> I
     G --> J
 
-    style A fill:#1C1C1E,stroke:#30D158,color:#F5F5F7
-    style B fill:#1C1C1E,stroke:#30D158,color:#F5F5F7
-    style C fill:#1C1C1E,stroke:#0A84FF,color:#F5F5F7
-    style D fill:#1C1C1E,stroke:#86868B,color:#F5F5F7
-    style E fill:#1C1C1E,stroke:#86868B,color:#F5F5F7
-    style F fill:#1C1C1E,stroke:#86868B,color:#F5F5F7
-    style G fill:#1C1C1E,stroke:#86868B,color:#F5F5F7
-    style H fill:#1C1C1E,stroke:#0A84FF,color:#F5F5F7
-    style I fill:#1C1C1E,stroke:#0A84FF,color:#F5F5F7
-    style J fill:#1C1C1E,stroke:#30D158,color:#F5F5F7
+    style A fill:#18181B,stroke:#30D158,color:#FAFAFA
+    style B fill:#18181B,stroke:#30D158,color:#FAFAFA
+    style C fill:#18181B,stroke:#30D158,color:#FAFAFA
+    style D fill:#18181B,stroke:#A1A1AA,color:#FAFAFA
+    style E fill:#18181B,stroke:#A1A1AA,color:#FAFAFA
+    style F fill:#18181B,stroke:#A1A1AA,color:#FAFAFA
+    style G fill:#18181B,stroke:#A1A1AA,color:#FAFAFA
+    style H fill:#18181B,stroke:#30D158,color:#FAFAFA
+    style I fill:#18181B,stroke:#30D158,color:#FAFAFA
+    style J fill:#18181B,stroke:#30D158,color:#FAFAFA
 ```
 
 ### File Structure
@@ -411,7 +411,7 @@ Issues and pull requests welcome on [GitHub](https://github.com/shuette42/ecoflo
 
 <div align="center">
 
-Made by [huette.ai](https://huette.ai) — digital systems, built to hold.
+Made by [huette.ai](https://huette.ai) — When it has to work.
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-support-30D158?style=flat-square&logo=buy-me-a-coffee&logoColor=white)](https://www.buymeacoffee.com/shuette)
 
