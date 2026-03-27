@@ -48,6 +48,7 @@ class EcoFlowMQTTClient:
         wss_mode: bool = True,
         subscribe_data: bool = True,
         status_handler: Optional[Callable] = None,
+        auth_error_handler: Optional[Callable[[], None]] = None,
         max_reconnect_attempts: int = DEFAULT_MAX_RECONNECT_ATTEMPTS,
         base_reconnect_delay: int = DEFAULT_RECONNECT_DELAY,
         max_reconnect_delay: int = DEFAULT_MAX_RECONNECT_DELAY,
@@ -70,6 +71,7 @@ class EcoFlowMQTTClient:
         self.last_connect_time: float = 0
         self.last_disconnect_time: float = 0
 
+        self._auth_error_handler = auth_error_handler
         self._wss_mode = wss_mode and bool(user_id)
         self._subscribe_data = subscribe_data
         self._notified_connected = False
@@ -85,6 +87,11 @@ class EcoFlowMQTTClient:
     def wss_mode(self) -> bool:
         """Return whether this client uses WSS (True) or TCP (False)."""
         return self._wss_mode
+
+    def update_credentials(self, account: str, password: str) -> None:
+        """Update stored credentials for next reconnect (e.g. after rc=5)."""
+        self._cert_account = account
+        self._cert_password = password
 
     def create_client(self) -> bool:
         """Create and configure the Paho MQTT client."""
@@ -192,6 +199,8 @@ class EcoFlowMQTTClient:
             reason = rc_reasons.get(rc, "unknown error")
             logger.error("MQTT connect failed: rc=%s (%s)", rc, reason)
             self.connected = False
+            if rc == 5 and self._auth_error_handler:
+                self._auth_error_handler()
 
     def _on_disconnect(self, client, userdata, disconnect_flags, reason_code, properties):
         """Callback on MQTT disconnect."""

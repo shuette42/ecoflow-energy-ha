@@ -14,6 +14,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.ecoflow_energy.const import (
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_POWEROCEAN,
+    DEVICE_TYPE_SMARTPLUG,
     DOMAIN,
     ENERGY_STREAM_KEEPALIVE_S,
     HTTP_FALLBACK_INTERVAL_S,
@@ -27,6 +28,7 @@ from .conftest import (
     MOCK_DELTA_DEVICE,
     MOCK_MQTT_CREDENTIALS,
     MOCK_POWEROCEAN_DEVICE,
+    MOCK_SMARTPLUG_DEVICE,
 )
 
 
@@ -138,7 +140,7 @@ class TestProperties:
 
 
 class TestSetup:
-    async def test_standard_setup_creates_mqtt_for_set_only(
+    async def test_standard_setup_delta_subscribes_data(
         self,
         hass: HomeAssistant,
         standard_config_entry: MockConfigEntry,
@@ -146,13 +148,28 @@ class TestSetup:
         mock_mqtt_client,
         mock_http_client,
     ) -> None:
-        """Standard Mode sets up MQTT with subscribe_data=False."""
+        """Delta in Standard Mode sets up MQTT with subscribe_data=True."""
         standard_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, standard_config_entry, MOCK_DELTA_DEVICE
         )
         await coordinator.async_setup()
-        # MQTT client should have been created
+        assert coordinator.mqtt_client is not None
+
+    async def test_standard_setup_smartplug_no_subscribe(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+        mock_iot_api,
+        mock_mqtt_client,
+        mock_http_client,
+    ) -> None:
+        """Smart Plug in Standard Mode sets up MQTT with subscribe_data=False."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_SMARTPLUG_DEVICE
+        )
+        await coordinator.async_setup()
         assert coordinator.mqtt_client is not None
 
 
@@ -199,12 +216,16 @@ class TestMessageParsing:
         result = coordinator._parse_message("/some/other/topic", b"data")
         assert result is None
 
-    async def test_standard_mode_ignores_mqtt_data(
+    async def test_delta_mqtt_message_not_blocked(
         self,
         hass: HomeAssistant,
         standard_config_entry: MockConfigEntry,
     ) -> None:
-        """Standard Mode _on_mqtt_message is a no-op (HTTP is primary)."""
+        """Delta in Standard Mode passes MQTT data through (gate is open).
+
+        _on_mqtt_message bridges to the event loop via call_soon_threadsafe,
+        so we verify the gate doesn't block and _apply_data gets scheduled.
+        """
         standard_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, standard_config_entry, MOCK_DELTA_DEVICE
@@ -214,8 +235,31 @@ class TestMessageParsing:
         topic = "/open/cert/SN001/quota"
         payload = json.dumps({"typeCode": "pdStatus", "params": {"soc": 85}}).encode()
 
+        with patch.object(coordinator.hass.loop, "call_soon_threadsafe") as mock_csf:
+            coordinator._on_mqtt_message(topic, payload)
+            # Delta MQTT data should reach _apply_data (not blocked by gate)
+            mock_csf.assert_called_once()
+            args = mock_csf.call_args[0]
+            assert args[0] == coordinator._apply_data
+            assert args[1]["soc"] == 85.0
+
+    async def test_smartplug_ignores_mqtt_data(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Smart Plug in Standard Mode ignores MQTT data (HTTP only)."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_SMARTPLUG_DEVICE
+        )
+        import json
+
+        topic = "/open/cert/SN001/quota"
+        payload = json.dumps({"typeCode": "pdStatus", "params": {"soc": 85}}).encode()
+
         coordinator._on_mqtt_message(topic, payload)
-        # Data should NOT be applied in Standard Mode
+        # Smart Plug should NOT apply MQTT data
         assert coordinator.device_data == {}
 
 
@@ -893,3 +937,99 @@ class TestBpRemapping:
 
         assert result["batt_charge_energy_kwh"] == 15.0
         assert result["batt_discharge_energy_kwh"] == 12.0
+
+
+# ===========================================================================
+# Monotonic Filter (_enforce_monotonic) — total_increasing regression guard
+# ===========================================================================
+
+
+class TestMonotonicFilter:
+    async def test_regression_dropped(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Values that decrease a total_increasing sensor are dropped."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        # Seed existing data
+        coordinator._device_data["bp_cycles"] = 461.0
+        coordinator._device_data["solar_energy_kwh"] = 100.5
+
+        parsed = {"bp_cycles": 460.0, "solar_energy_kwh": 100.499, "solar_w": 3000}
+        coordinator._enforce_monotonic(parsed)
+
+        # Regressions removed, non-monotonic key preserved
+        assert "bp_cycles" not in parsed
+        assert "solar_energy_kwh" not in parsed
+        assert parsed["solar_w"] == 3000
+
+    async def test_increase_allowed(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Values that increase are kept."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        coordinator._device_data["bp_cycles"] = 460.0
+
+        parsed = {"bp_cycles": 461.0}
+        coordinator._enforce_monotonic(parsed)
+
+        assert parsed["bp_cycles"] == 461.0
+
+    async def test_equal_value_kept(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Equal values are kept (not a regression)."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        coordinator._device_data["bp_cycles"] = 460.0
+
+        parsed = {"bp_cycles": 460.0}
+        coordinator._enforce_monotonic(parsed)
+
+        assert parsed["bp_cycles"] == 460.0
+
+    async def test_no_existing_data_passes(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """First value is always accepted (no previous data)."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        parsed = {"bp_cycles": 460.0}
+        coordinator._enforce_monotonic(parsed)
+
+        assert parsed["bp_cycles"] == 460.0
+
+    async def test_delta_bms_cycles(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Delta bms_cycles regression is also filtered."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        coordinator._device_data["bms_cycles"] = 150.0
+
+        parsed = {"bms_cycles": 149.0, "soc": 85.0}
+        coordinator._enforce_monotonic(parsed)
+
+        assert "bms_cycles" not in parsed
+        assert parsed["soc"] == 85.0

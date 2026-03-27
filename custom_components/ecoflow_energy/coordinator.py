@@ -3,6 +3,7 @@
 Standard Mode: HTTP polling via IoT Developer API (POST /iot-open/sign/device/quota).
   - Primary data source is HTTP polling (update_interval=30s).
   - MQTT is used for SET commands (switches, numbers) only.
+  - Exception: Delta devices additionally subscribe to MQTT push for real-time data.
 
 Enhanced Mode: MQTT push via WSS (port 8084).
   - Primary data source is MQTT push (update_interval=None).
@@ -168,7 +169,9 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             await self._setup_enhanced(session)
         else:
             # Standard Mode: HTTP polling is the primary data source.
-            # MQTT is set up for SET commands (switches/numbers) only.
+            # MQTT is for SET commands only — except Delta, which also
+            # subscribes to the IoT MQTT /quota topic for real-time push.
+            delta_mqtt = self.device_type == DEVICE_TYPE_DELTA
             creds = await self._iot_api.get_mqtt_credentials()
             if creds is not None:
                 cert_account = creds.get("certificateAccount", "")
@@ -180,13 +183,22 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     message_handler=self._on_mqtt_message,
                     user_id="",
                     wss_mode=False,
-                    subscribe_data=False,
+                    subscribe_data=delta_mqtt,
+                    auth_error_handler=(
+                        self._on_mqtt_auth_error if delta_mqtt else None
+                    ),
                 )
                 await self.hass.async_add_executor_job(self._start_mqtt)
-            logger.info(
-                "Standard Mode: HTTP polling every %ds for %s",
-                HTTP_FALLBACK_INTERVAL_S, self.device_sn,
-            )
+            if delta_mqtt:
+                logger.info(
+                    "Standard Mode + MQTT push: HTTP every %ds + MQTT real-time for %s",
+                    HTTP_FALLBACK_INTERVAL_S, self.device_sn,
+                )
+            else:
+                logger.info(
+                    "Standard Mode: HTTP polling every %ds for %s",
+                    HTTP_FALLBACK_INTERVAL_S, self.device_sn,
+                )
 
     async def _setup_enhanced(self, session: Any) -> None:
         """Set up Enhanced Mode (WSS MQTT push)."""
@@ -395,6 +407,30 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     #   bp_pwr      → batt_pb     → batt_w
     #   sys_grid_pwr→ grid_raw_f2 → grid_w
     #   bp_soc      → soc         → soc_pct
+    # Keys with state_class=total_increasing must never decrease.
+    # EcoFlow API occasionally returns slightly lower values (e.g. 461→460
+    # for battery cycles, or 4408.259→4408.258 kWh for energy). Dropping
+    # these regressions prevents HA Recorder warnings.
+    _MONOTONIC_KEYS: frozenset[str] = frozenset({
+        # PowerOcean
+        "bp_cycles",
+        "solar_energy_kwh", "home_energy_kwh",
+        "grid_import_energy_kwh", "grid_export_energy_kwh",
+        "batt_charge_energy_kwh", "batt_discharge_energy_kwh",
+        # Delta
+        "bms_cycles",
+    })
+
+    def _enforce_monotonic(self, parsed: dict[str, Any]) -> dict[str, Any]:
+        """Drop values that would decrease a total_increasing sensor."""
+        for key in self._MONOTONIC_KEYS:
+            if key in parsed and key in self._device_data:
+                old = self._device_data[key]
+                new = parsed[key]
+                if isinstance(old, (int, float)) and isinstance(new, (int, float)) and new < old:
+                    del parsed[key]
+        return parsed
+
     _PROTO_TO_SENSOR: dict[str, str] = {
         "solar": "solar_w",
         "home_direct": "home_w",
@@ -403,14 +439,42 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         "soc": "soc_pct",
     }
 
+    # ------------------------------------------------------------------
+    # Delta MQTT auth error handling (credential refresh on rc=5)
+    # ------------------------------------------------------------------
+
+    def _on_mqtt_auth_error(self) -> None:
+        """Handle MQTT AUTH error (rc=5) — schedule credential refresh."""
+        logger.warning("MQTT AUTH error for %s — scheduling credential refresh", self.device_sn)
+        self.hass.loop.call_soon_threadsafe(
+            self.hass.async_create_task,
+            self._refresh_mqtt_credentials(),
+        )
+
+    async def _refresh_mqtt_credentials(self) -> None:
+        """Refresh MQTT credentials after AUTH failure."""
+        if self._iot_api is None or self._mqtt_client is None:
+            return
+        creds = await self._iot_api.refresh_credentials()
+        if creds is not None:
+            self._mqtt_client.update_credentials(
+                creds.get("certificateAccount", ""),
+                creds.get("certificatePassword", ""),
+            )
+            logger.info("MQTT credentials refreshed for %s", self.device_sn)
+        else:
+            logger.warning("MQTT credential refresh failed for %s", self.device_sn)
+
     def _on_mqtt_message(self, topic: str, payload: bytes) -> None:
         """Handle an incoming MQTT message (Paho thread).
 
         In Standard Mode, MQTT is only used for SET commands — data updates
-        come from HTTP polling. In Enhanced Mode, MQTT is the primary source.
+        come from HTTP polling.  Exception: Delta subscribes to MQTT push
+        for real-time data alongside HTTP polling (dual-source).
+        In Enhanced Mode, MQTT is the primary source.
         """
-        if not self._enhanced_mode:
-            return  # Standard Mode: ignore MQTT data, HTTP is primary
+        if not self._enhanced_mode and self.device_type != DEVICE_TYPE_DELTA:
+            return  # Standard Mode (non-Delta): ignore MQTT data
         parsed = self._parse_message(topic, payload)
         if parsed:
             self.hass.loop.call_soon_threadsafe(self._apply_data, parsed)
@@ -612,6 +676,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Apply parsed data and notify listeners (HA event loop)."""
         now = time.time()
         self._last_mqtt_ts = now
+        self._enforce_monotonic(parsed)
         self._device_data.update(parsed)
 
         # F-005 fix: integrate power → energy in MQTT path too
@@ -683,6 +748,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             parsed = parse_smartplug_http_quota(raw)
         else:
             parsed = raw
+        self._enforce_monotonic(parsed)
         self._device_data.update(parsed)
 
         # Riemann sum: integrate power → energy for PowerOcean

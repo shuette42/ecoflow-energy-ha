@@ -279,3 +279,71 @@ class TestOnDisconnect:
         with patch.object(client, "_schedule_reconnect") as mock_sched:
             client._on_disconnect(mock_paho, None, None, 1, None)
             mock_sched.assert_called_once()
+
+
+# ===========================================================================
+# Auth Error Handler (rc=5 credential refresh)
+# ===========================================================================
+
+
+class TestAuthErrorHandler:
+    def test_auth_error_handler_called_on_rc5(self):
+        """rc=5 triggers the auth_error_handler callback."""
+        handler = MagicMock()
+        client = _make_client(auth_error_handler=handler)
+        mock_paho = MagicMock()
+        client.client = mock_paho
+
+        client._on_connect(mock_paho, None, None, 5)
+
+        handler.assert_called_once()
+        assert client.connected is False
+
+    def test_auth_error_handler_not_called_on_rc0(self):
+        """Successful connect (rc=0) does NOT call auth_error_handler."""
+        handler = MagicMock()
+        client = _make_client(auth_error_handler=handler, subscribe_data=False)
+        mock_paho = MagicMock()
+        client.client = mock_paho
+
+        client._on_connect(mock_paho, None, None, 0)
+
+        handler.assert_not_called()
+        assert client.connected is True
+
+    def test_auth_error_handler_not_called_on_other_rc(self):
+        """Non-5 error codes do NOT call auth_error_handler."""
+        handler = MagicMock()
+        client = _make_client(auth_error_handler=handler)
+        mock_paho = MagicMock()
+        client.client = mock_paho
+
+        for rc in [1, 2, 3, 4]:
+            handler.reset_mock()
+            client._on_connect(mock_paho, None, None, rc)
+            handler.assert_not_called()
+
+    def test_no_handler_on_rc5_is_safe(self):
+        """rc=5 without handler does not crash."""
+        client = _make_client()  # no auth_error_handler
+        mock_paho = MagicMock()
+        client.client = mock_paho
+
+        client._on_connect(mock_paho, None, None, 5)  # should not raise
+        assert client.connected is False
+
+
+# ===========================================================================
+# Update Credentials
+# ===========================================================================
+
+
+class TestUpdateCredentials:
+    def test_update_credentials(self):
+        client = _make_client()
+        assert client._cert_account == "test_account"
+
+        client.update_credentials("new_account", "new_password")
+
+        assert client._cert_account == "new_account"
+        assert client._cert_password == "new_password"

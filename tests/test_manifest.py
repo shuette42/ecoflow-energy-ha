@@ -18,11 +18,11 @@ class TestManifest:
         m = _load_manifest()
         assert m["domain"] == "ecoflow_energy"
 
-    def test_iot_class_is_cloud_polling(self):
-        """Standard Mode uses HTTP polling — iot_class must reflect that."""
+    def test_iot_class_is_cloud_push(self):
+        """Enhanced Mode + Delta MQTT push — iot_class reflects primary data source."""
         m = _load_manifest()
-        assert m["iot_class"] == "cloud_polling", (
-            f"iot_class must be 'cloud_polling' for Standard Mode, got '{m['iot_class']}'"
+        assert m["iot_class"] == "cloud_push", (
+            f"iot_class must be 'cloud_push', got '{m['iot_class']}'"
         )
 
     def test_config_flow_enabled(self):

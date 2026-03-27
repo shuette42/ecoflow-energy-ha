@@ -75,7 +75,7 @@ If the connection drops for any reason, the integration automatically reconnects
 - 5 binary sensors: AC enabled, DC output, 12V, UPS mode, X-Boost
 - 3 switches: **AC output on/off**, **DC output on/off**, **12V output on/off**
 - 4 number controls: AC charge speed (200–2400 W), max/min SoC limits, standby timeout
-- Standard Mode only (HTTP polling ~30 s)
+- Standard Mode: HTTP polling ~30 s + MQTT push for real-time updates (dual-source)
 
 ### Smart Plug
 
@@ -305,7 +305,7 @@ automation:
 <details>
 <summary><strong>Data not updating</strong></summary>
 
-- **Standard Mode**: Data updates via HTTP polling every ~30 s. Check your Access Key and Secret Key if no data appears.
+- **Standard Mode**: Data updates via HTTP polling every ~30 s. Delta devices additionally receive MQTT push for real-time updates. Check your Access Key and Secret Key if no data appears.
 - **Enhanced Mode**: If the WSS connection drops, it automatically reconnects with a new ClientID. Check logs for reconnect messages.
 
 </details>

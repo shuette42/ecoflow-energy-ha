@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0] - 2026-03-27
+
+### Added
+- **Delta 2 Max MQTT push** — real-time data via IoT MQTT subscription alongside HTTP polling (dual-source)
+- MQTT credential refresh on AUTH error (rc=5) with rate-limited retry
+
+### Fixed
+- HTTP API nonce collision causing `code=8521 signature is wrong` — nonce upgraded from 6-digit numeric to 16-char alphanumeric (matching IoT API client)
+- HA Recorder warnings for `total_increasing` sensors (battery cycles, energy totals) — monotonic filter drops micro-regressions from API
+
+### Changed
+- Delta devices now subscribe to `/open/.../quota` MQTT topic for event-driven updates (~1–30 s)
+- HTTP polling (~30 s) remains as automatic fallback when MQTT is unavailable
+
 ## [1.0.0] - 2026-03-26
 
 ### Added

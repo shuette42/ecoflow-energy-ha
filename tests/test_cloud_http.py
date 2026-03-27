@@ -56,6 +56,13 @@ class TestSignature:
         headers = client._sign_headers({})
         assert headers["accessKey"] == "test_ak"
 
+    def test_nonce_is_16_char_alphanumeric(self):
+        client = self._make_client()
+        headers = client._sign_headers({"sn": "SN123"})
+        nonce = headers["nonce"]
+        assert len(nonce) == 16, f"Nonce must be 16 chars, got {len(nonce)}"
+        assert re.match(r"^[a-zA-Z0-9]{16}$", nonce), f"Nonce must be alphanumeric, got '{nonce}'"
+
     def test_sign_is_hex(self):
         client = self._make_client()
         headers = client._sign_headers({"foo": "bar"})
