@@ -18,7 +18,7 @@
 
 EcoFlow does not offer a local API, and repeated requests to enable Modbus access have been declined. The official Developer Portal provides only an HTTP API with ~30 s polling — too slow for meaningful real-time monitoring or automations. Getting reliable, near-real-time data from EcoFlow devices requires a different approach.
 
-**EcoFlow Energy solves this** by establishing a persistent MQTT connection with Protobuf-encoded payloads — delivering **~3 s real-time updates** in Enhanced Mode. The key breakthrough: **this connection works independently of the EcoFlow portal.** You do not need to be logged into the EcoFlow app or portal for this integration to receive data, and it does not compete with your mobile app for a session slot.
+**EcoFlow Energy solves this** by combining HTTP polling with real-time MQTT push — Delta devices receive event-driven updates in Standard Mode out of the box, and PowerOcean users can opt into Enhanced Mode for **~3 s Protobuf-encoded updates** via WSS. The key breakthrough: **all connections work independently of the EcoFlow portal.** You do not need to be logged into the EcoFlow app or portal for this integration to receive data, and it does not compete with your mobile app for a session slot.
 
 If the connection drops for any reason, the integration automatically reconnects in the background — with a 4-tier reconnect strategy that never gives up — so data collection resumes seamlessly without any manual intervention.
 
@@ -28,7 +28,7 @@ If the connection drops for any reason, the integration automatically reconnects
 
 | | EcoFlow Energy | Other integrations |
 |---|---|---|
-| Data source | WSS MQTT, ~3 s push (Enhanced) | HTTP polling (10–30 s) or basic TCP MQTT |
+| Data source | MQTT push for PowerOcean (Enhanced) and Delta (Standard); HTTP polling as fallback | HTTP polling (10–30 s) or basic TCP MQTT |
 | Portal login required | No — stream runs autonomously | Yes, or HTTP-only fallback |
 | Reconnect | 4-tier, new ClientID, never gives up | Simple retry or gives up |
 | Fallback | Automatic HTTP when MQTT is stale, transparent source routing | None |
@@ -48,8 +48,8 @@ If the connection drops for any reason, the integration automatically reconnects
 | **50+ sensors per device** | Power, energy, battery, temperature, diagnostics |
 | **Energy Dashboard ready** | Local Riemann-sum kWh with gap detection — not API totals |
 | **Switch & Number entities** | Control AC/DC output, charge speed, SoC limits — optimistic lock, zero flicker |
-| **Two connection modes** | Standard (HTTP ~30 s) or Enhanced (MQTT ~3 s) |
-| **Automatic fallback** | Enhanced Mode falls back to HTTP when MQTT is stale, with source routing |
+| **Real-time out of the box** | Standard Mode: Delta gets MQTT push automatically; Enhanced (PowerOcean): ~3 s WSS push |
+| **Automatic fallback** | MQTT stale? Transparent switch to HTTP polling, auto-recovery |
 | **4-tier reconnect** | Never gives up on the MQTT connection |
 | **Stream health** | 3-state monitoring: disconnected / stale / healthy |
 | **Offline tolerance** | Mobile devices offline = expected, not an error |
@@ -120,21 +120,22 @@ If the connection drops for any reason, the integration automatically reconnects
 3. Enter your **Access Key** and **Secret Key**
 4. Select the devices you want to add
 5. Choose connection mode:
-   - **Standard** (default) — official API, recommended
-   - **Enhanced** — requires EcoFlow email + password (see below)
+   - **Standard** (default) — recommended for all devices. Delta gets real-time MQTT push automatically.
+   - **Enhanced** — PowerOcean only, ~3 s updates via unofficial WSS. Requires EcoFlow email + password (see below).
 6. Done — entities appear automatically
 
 ### Standard vs Enhanced Mode
 
-| | Standard | Enhanced |
+| | Standard | Enhanced (PowerOcean only) |
 |---|---|---|
 | API | Official IoT Developer API | Unofficial WSS bridge |
-| Update rate | ~30 seconds (HTTP polling) | ~3 seconds (MQTT push) |
+| Update rate | ~30 s HTTP polling; Delta additionally gets real-time MQTT push | ~3 s MQTT push (Protobuf) |
 | Credentials | Access Key + Secret Key | + Email + Password |
 | Stability | Stable (official) | May break with EcoFlow updates |
-| Best for | Most users | Power users needing real-time data |
+| Applies to | All devices (PowerOcean, Delta, Smart Plug) | PowerOcean only |
+| Best for | Most users — Delta already gets real-time data | PowerOcean users needing ~3 s updates |
 
-**Enhanced Mode** uses reverse-engineered WebSocket connections to the EcoFlow portal. It is not officially supported and may stop working if EcoFlow changes their portal. A disclaimer is shown during setup.
+**Enhanced Mode** applies to **PowerOcean only** and uses reverse-engineered WebSocket connections to the EcoFlow portal. Delta and Smart Plug always use Standard Mode regardless of this setting. Enhanced Mode is not officially supported and may stop working if EcoFlow changes their portal. A disclaimer is shown during setup.
 
 ### Options Flow
 
