@@ -165,17 +165,16 @@ def parse_delta_report(
             parsed[a_key] = parsed.pop(ca_key) / 100.0
 
     # Power: amplified 10x -> W
-    for raw_key in ["mppt_out_w", "car_12v_out_w", "solar2_in_w"]:
-        if raw_key in parsed:
-            parsed[raw_key] = parsed[raw_key] / 10.0
+    for key in ["mppt_out_w", "car_12v_out_w", "solar2_in_w"]:
+        if key in parsed:
+            parsed[key] /= 10.0
 
     # Power: amplified 100x -> W
-    for raw_key in ["dcdc_12v_w"]:
-        if raw_key in parsed:
-            parsed[raw_key] = parsed[raw_key] / 100.0
+    if "dcdc_12v_w" in parsed:
+        parsed["dcdc_12v_w"] /= 100.0
 
     # Temperature: amplified 10x -> °C
     if "solar2_mppt_temp_c" in parsed:
-        parsed["solar2_mppt_temp_c"] = parsed["solar2_mppt_temp_c"] / 10.0
+        parsed["solar2_mppt_temp_c"] /= 10.0
 
     return parsed

@@ -162,23 +162,16 @@ def parse_delta_http_quota(quota_data: dict) -> Dict[str, float]:
             result[a_key] = result.pop(ca_key) / 100.0
 
     # --- Power conversions: amplified 10x -> W ---
-    for raw_key, w_key in [
-        ("mppt_out_w", "mppt_out_w"),
-        ("car_12v_out_w", "car_12v_out_w"),
-        ("solar2_in_w", "solar2_in_w"),
-    ]:
-        if raw_key in result:
-            result[w_key] = result[raw_key] / 10.0
+    for key in ["mppt_out_w", "car_12v_out_w", "solar2_in_w"]:
+        if key in result:
+            result[key] /= 10.0
 
     # --- Power conversions: amplified 100x -> W ---
-    for raw_key, w_key in [
-        ("dcdc_12v_w", "dcdc_12v_w"),
-    ]:
-        if raw_key in result:
-            result[w_key] = result[raw_key] / 100.0
+    if "dcdc_12v_w" in result:
+        result["dcdc_12v_w"] /= 100.0
 
     # --- Temperature conversions: amplified 10x -> °C ---
     if "solar2_mppt_temp_c" in result:
-        result["solar2_mppt_temp_c"] = result["solar2_mppt_temp_c"] / 10.0
+        result["solar2_mppt_temp_c"] /= 10.0
 
     return result
