@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.2] - 2026-03-28
+
+### Fixed
+- README uses pure markdown only — no HTML tables or emoji shortcodes that HACS cannot render
+
 ## [1.2.1] - 2026-03-28
 
 ### Changed

@@ -20,54 +20,33 @@
 
 </div>
 
-<br>
+---
 
-<table>
-<tr>
-<td width="50%">
+## Highlights
 
-:zap: **50+ Sensors per Device**<br>
-Power, energy, battery, temperature, diagnostics. Switches and number controls for AC/DC output, charge speed, SoC limits.
+- **50+ sensors per device** — power, energy, battery, temperature, diagnostics
+- **Energy Dashboard ready** — local Riemann-sum kWh with gap detection
+- **Real-time out of the box** — Delta gets MQTT push; PowerOcean Enhanced: ~3 s updates
+- **Switches & number controls** — AC/DC output, charge speed, SoC limits
+- **Auto-discovery** — all devices bound to your EcoFlow account
+- **4-tier reconnect** — never gives up on the connection
+- **Automatic fallback** — MQTT stale? Transparent switch to HTTP polling
+- **Offline tolerance** — mobile devices offline = expected, not an error
 
-</td>
-<td width="50%">
-
-:bar_chart: **Energy Dashboard Ready**<br>
-Local Riemann-sum energy tracking with gap detection. Pre-configured sensors — just select and go.
-
-</td>
-</tr>
-<tr>
-<td>
-
-:satellite: **Real-Time Updates**<br>
-Delta gets MQTT push out of the box. PowerOcean Enhanced delivers ~3 s Protobuf updates. No portal login needed.
-
-</td>
-<td>
-
-:shield: **Resilient Connection**<br>
-4-tier reconnect that never gives up. Auto HTTP fallback when MQTT stale. Offline devices handled gracefully.
-
-</td>
-</tr>
-</table>
-
-<br>
+---
 
 ## Supported Devices
 
 | | Sensors | Controls | Energy | Update Rate |
 |:---|:---:|:---:|:---:|:---|
-| **PowerOcean** — Home Battery | 63 | — | 6 kWh | ~30 s standard \| ~3 s enhanced |
-| **Delta 2 Max** — Portable Power | 62 | 3 switches · 4 numbers | 4 kWh | ~30 s + MQTT push |
+| **PowerOcean** — Home Battery | 63 | — | 6 kWh | ~30 s standard / ~3 s enhanced |
+| **Delta 2 Max** — Portable Power | 62 | 3 switches, 4 numbers | 4 kWh | ~30 s + MQTT push |
 | **Smart Plug** — Switchable Outlet | 11 | 1 switch | 1 kWh | ~30 s |
 
 > **Tip:** Other Delta-series devices (Delta Pro, Delta 2, etc.) should work automatically with the Delta sensor set.
 
 <details>
 <summary><b>PowerOcean</b> — 3-phase grid, MPPT tracking, battery diagnostics, EMS state</summary>
-<br>
 
 3-phase grid monitoring (voltage, current, power per phase) · MPPT per-string tracking (2 strings) · Battery diagnostics (SoH, cycles, cell temps & voltages, MOSFET temps) · EMS state, work mode, feed mode, grid status, power factor
 
@@ -77,7 +56,6 @@ Delta gets MQTT push out of the box. PowerOcean Enhanced delivers ~3 s Protobuf 
 
 <details>
 <summary><b>Delta 2 Max</b> — AC/DC/12V switches, charge speed control, real-time MQTT</summary>
-<br>
 
 Battery SoC/SoH · All input/output power, temperatures, voltages · **Switches:** AC, DC, 12V output · **Numbers:** AC charge speed (200–2400 W), max/min SoC, standby timeout · Real-time MQTT push in Standard Mode.
 
@@ -85,13 +63,12 @@ Battery SoC/SoH · All input/output power, temperatures, voltages · **Switches:
 
 <details>
 <summary><b>Smart Plug</b> — power monitoring, plug switch, automation-ready</summary>
-<br>
 
 Power (W), current (A), voltage (V), frequency, temperature · Plug on/off switch · Ideal for automating charging (e.g. charge Delta on solar surplus).
 
 </details>
 
-<br>
+---
 
 ## Quick Start
 
@@ -103,7 +80,6 @@ Or: **HACS** > **Integrations** > **Explore & Download** > search **EcoFlow Ener
 
 <details>
 <summary>Manual installation</summary>
-<br>
 
 Download the [latest release](https://github.com/shuette42/ecoflow-energy-ha/releases), copy `custom_components/ecoflow_energy/` to your HA `config/custom_components/`, restart.
 
@@ -127,7 +103,7 @@ You need an **Access Key** and **Secret Key** from the [EcoFlow Developer Portal
 | **Stability** | Official API — stable | Unofficial — may break |
 | **Best for** | Most users | PowerOcean real-time |
 
-<br>
+---
 
 ## Energy Dashboard
 
@@ -135,7 +111,6 @@ All energy sensors are pre-configured (`state_class: total_increasing`) — just
 
 <details>
 <summary><b>PowerOcean</b> — Grid, Solar, Battery, Home</summary>
-<br>
 
 | Dashboard Section | Sensor |
 |:---|:---|
@@ -152,7 +127,6 @@ All energy sensors are pre-configured (`state_class: total_increasing`) — just
 
 <details>
 <summary><b>Delta 2 Max</b> — Solar, AC Input, AC Output</summary>
-<br>
 
 | Dashboard Section | Sensor |
 |:---|:---|
@@ -165,7 +139,6 @@ All energy sensors are pre-configured (`state_class: total_increasing`) — just
 
 <details>
 <summary><b>Smart Plug</b> — Device Energy</summary>
-<br>
 
 | Dashboard Section | Sensor |
 |:---|:---|
@@ -175,13 +148,12 @@ Add under **Energy > Individual Devices**.
 
 </details>
 
-<br>
+---
 
 ## Automation Examples
 
 <details>
 <summary><b>Charge Delta when PowerOcean is full</b></summary>
-<br>
 
 ```yaml
 automation:
@@ -217,7 +189,6 @@ automation:
 
 <details>
 <summary><b>Delta AC off at night</b></summary>
-<br>
 
 ```yaml
 automation:
@@ -235,7 +206,6 @@ automation:
 
 <details>
 <summary><b>Solar surplus alert</b></summary>
-<br>
 
 ```yaml
 automation:
@@ -256,13 +226,12 @@ automation:
 
 </details>
 
-<br>
+---
 
 ## How It Compares
 
 <details>
 <summary><b>EcoFlow Energy vs other integrations</b></summary>
-<br>
 
 | | EcoFlow Energy | Others |
 |:---|:---|:---|
@@ -278,13 +247,12 @@ automation:
 
 </details>
 
-<br>
+---
 
 ## Troubleshooting
 
 <details>
 <summary><b>No entities appearing</b></summary>
-<br>
 
 - Devices must be online in the EcoFlow app
 - Verify Access Key and Secret Key from the Developer Portal
@@ -294,7 +262,6 @@ automation:
 
 <details>
 <summary><b>Data not updating</b></summary>
-<br>
 
 - **Standard:** HTTP polls every ~30 s. Delta also gets MQTT push. Check credentials if no data.
 - **Enhanced:** WSS auto-reconnects with new ClientID. Check logs for reconnect messages.
@@ -303,7 +270,6 @@ automation:
 
 <details>
 <summary><b>Enhanced Mode issues</b></summary>
-<br>
 
 - Verify EcoFlow email and password
 - Requires `cryptography` package (included in HA Core)
@@ -313,9 +279,8 @@ automation:
 
 <details>
 <summary><b>Download diagnostics</b></summary>
-<br>
 
-**Settings > Devices & Services > EcoFlow Energy > ⋮ > Download Diagnostics** — connection status, data freshness, no credentials exposed.
+**Settings > Devices & Services > EcoFlow Energy > 3-dot menu > Download Diagnostics** — connection status, data freshness, no credentials exposed.
 
 </details>
 
