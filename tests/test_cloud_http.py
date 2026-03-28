@@ -83,11 +83,11 @@ class TestSignature:
         result_dict = dict(result)
         assert result_dict == {"items[0]": "1", "items[1]": "2"}
 
-    def test_sign_params_sorted_with_auth(self):
-        """All parameters (payload + auth) must be sorted alphabetically together.
+    def test_sign_payload_sorted_then_auth_tail(self):
+        """Payload params sorted, then auth tail (accessKey, nonce, timestamp) appended.
 
-        Bug fix: previously auth params (accessKey, nonce, timestamp) were appended
-        as unsorted tail instead of being merged into the sorted parameter list.
+        EcoFlow API expects: sorted payload params first, then unsorted auth tail.
+        This is different from iot_api.py which has no payload params.
         """
         client = self._make_client()
         fixed_nonce = "abcdef1234567890"
@@ -100,18 +100,15 @@ class TestSignature:
 
             headers = client._sign_headers({"sn": "HW52ZZ"})
 
-        # Expected: all params sorted alphabetically
+        # Expected: payload sorted, then auth tail appended
         expected_sign_string = (
-            f"accessKey=test_ak&nonce={fixed_nonce}&sn=HW52ZZ&timestamp={fixed_ts}"
+            f"sn=HW52ZZ&accessKey=test_ak&nonce={fixed_nonce}&timestamp={fixed_ts}"
         )
         expected_sig = hmac.new(
             b"test_sk", expected_sign_string.encode(), hashlib.sha256
         ).hexdigest()
 
-        assert headers["sign"] == expected_sig, (
-            f"Signature mismatch — params must be sorted alphabetically "
-            f"including auth params. Expected sign_string: {expected_sign_string}"
-        )
+        assert headers["sign"] == expected_sig
 
     def test_sign_empty_params_only_auth(self):
         """With no payload params, signature must contain only sorted auth params."""
