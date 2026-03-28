@@ -1,6 +1,7 @@
-# Claude Code (agent team, hooks, rules — private, never committed)
+# Project-local config and docs (not for remote)
 .claude/
 CLAUDE.md
+docs/
 
 # Python
 __pycache__/
