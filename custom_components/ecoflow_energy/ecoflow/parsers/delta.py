@@ -72,10 +72,10 @@ DELTA2MAX_FIELD_MAP: Dict[str, str] = {
     "mpptStatus.carOutWatts": "car_12v_out_w",
     "mpptStatus.carState": "car_12v_enabled",
     "mpptStatus.dcdc12vWatts": "dcdc_12v_w",
-    "mpptStatus.dcdc12vVol": "dcdc_12v_vol_mv",
+    "mpptStatus.dcdc12vVol": "dcdc_12v_vol_dv",
     "mpptStatus.pv2InWatts": "solar2_in_w",
     "mpptStatus.pv2InVol": "solar2_in_vol_dv",
-    "mpptStatus.pv2InAmp": "solar2_in_amp_ma",
+    "mpptStatus.pv2InAmp": "solar2_in_amp_ca",
     "mpptStatus.pv2MpptTemp": "solar2_mppt_temp_c",
     "mpptStatus.chgState": "mppt_chg_state",
     "mpptStatus.faultCode": "mppt_fault_code",
@@ -134,7 +134,6 @@ def parse_delta_report(
         ("dc_in_vol_mv", "dc_in_vol_v"),
         ("batt_max_cell_vol_mv", "batt_max_cell_vol_mv"),  # stays mV (cell level)
         ("batt_min_cell_vol_mv", "batt_min_cell_vol_mv"),  # stays mV (cell level)
-        ("dcdc_12v_vol_mv", "dcdc_12v_vol_v"),
     ]:
         if mv_key in parsed and v_key != mv_key:
             parsed[v_key] = parsed.pop(mv_key) / 1000.0
@@ -143,6 +142,7 @@ def parse_delta_report(
     for dv_key, v_key in [
         ("solar_in_vol_dv", "solar_in_vol_v"),
         ("solar2_in_vol_dv", "solar2_in_vol_v"),
+        ("dcdc_12v_vol_dv", "dcdc_12v_vol_v"),
     ]:
         if dv_key in parsed:
             parsed[v_key] = parsed.pop(dv_key) / 10.0
@@ -153,9 +153,29 @@ def parse_delta_report(
         ("ac_out_amp_ma", "ac_out_amp_a"),
         ("ac_in_amp_ma", "ac_in_amp_a"),
         ("solar_in_amp_ma", "solar_in_amp_a"),
-        ("solar2_in_amp_ma", "solar2_in_amp_a"),
     ]:
         if ma_key in parsed:
             parsed[a_key] = parsed.pop(ma_key) / 1000.0
+
+    # Currents: cA -> A (centi-amp, amplified 100x)
+    for ca_key, a_key in [
+        ("solar2_in_amp_ca", "solar2_in_amp_a"),
+    ]:
+        if ca_key in parsed:
+            parsed[a_key] = parsed.pop(ca_key) / 100.0
+
+    # Power: amplified 10x -> W
+    for raw_key in ["mppt_out_w", "car_12v_out_w", "solar2_in_w"]:
+        if raw_key in parsed:
+            parsed[raw_key] = parsed[raw_key] / 10.0
+
+    # Power: amplified 100x -> W
+    for raw_key in ["dcdc_12v_w"]:
+        if raw_key in parsed:
+            parsed[raw_key] = parsed[raw_key] / 100.0
+
+    # Temperature: amplified 10x -> °C
+    if "solar2_mppt_temp_c" in parsed:
+        parsed["solar2_mppt_temp_c"] = parsed["solar2_mppt_temp_c"] / 10.0
 
     return parsed

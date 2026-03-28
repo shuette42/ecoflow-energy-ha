@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.2] - 2026-03-28
+
+### Fixed
+- Smart Plug: `watts` unit corrected from raw to deciWatt (/10) per API spec "0.1 W"
+- Delta 2 Max: MPPT fields scaling corrected per API spec — `outWatts`, `carOutWatts`, `pv2InWatts` (/10), `dcdc12vWatts`, `pv2InAmp` (/100), `dcdc12vVol`, `pv2MpptTemp` (/10)
+
+### Added
+- Smart Plug: `maxCur` field parsed (deciAmpere → Ampere)
+
 ## [1.1.1] - 2026-03-28
 
 ### Fixed

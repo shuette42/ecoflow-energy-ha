@@ -89,10 +89,10 @@ DELTA2MAX_HTTP_FIELD_MAP: Dict[str, str] = {
     "mppt.carOutWatts": "car_12v_out_w",
     "mppt.carState": "car_12v_enabled",
     "mppt.dcdc12vWatts": "dcdc_12v_w",
-    "mppt.dcdc12vVol": "dcdc_12v_vol_mv",
+    "mppt.dcdc12vVol": "dcdc_12v_vol_dv",
     "mppt.pv2InWatts": "solar2_in_w",
     "mppt.pv2InVol": "solar2_in_vol_dv",
-    "mppt.pv2InAmp": "solar2_in_amp_ma",
+    "mppt.pv2InAmp": "solar2_in_amp_ca",
     "mppt.pv2MpptTemp": "solar2_mppt_temp_c",
     "mppt.chgState": "mppt_chg_state",
     "mppt.faultCode": "mppt_fault_code",
@@ -130,7 +130,6 @@ def parse_delta_http_quota(quota_data: dict) -> Dict[str, float]:
         ("ac_out_vol_mv", "ac_out_vol_v"),
         ("ac_in_vol_mv", "ac_in_vol_v"),
         ("dc_in_vol_mv", "dc_in_vol_v"),
-        ("dcdc_12v_vol_mv", "dcdc_12v_vol_v"),
     ]:
         if mv_key in result:
             result[v_key] = result.pop(mv_key) / 1000.0
@@ -139,6 +138,7 @@ def parse_delta_http_quota(quota_data: dict) -> Dict[str, float]:
     for dv_key, v_key in [
         ("solar_in_vol_dv", "solar_in_vol_v"),
         ("solar2_in_vol_dv", "solar2_in_vol_v"),
+        ("dcdc_12v_vol_dv", "dcdc_12v_vol_v"),
     ]:
         if dv_key in result:
             result[v_key] = result.pop(dv_key) / 10.0
@@ -150,9 +150,35 @@ def parse_delta_http_quota(quota_data: dict) -> Dict[str, float]:
         ("ac_in_amp_ma", "ac_in_amp_a"),
         ("dc_in_amp_ma", "dc_in_amp_a"),
         ("solar_in_amp_ma", "solar_in_amp_a"),
-        ("solar2_in_amp_ma", "solar2_in_amp_a"),
     ]:
         if ma_key in result:
             result[a_key] = result.pop(ma_key) / 1000.0
+
+    # --- Current conversions: cA -> A (centi-amp, amplified 100x) ---
+    for ca_key, a_key in [
+        ("solar2_in_amp_ca", "solar2_in_amp_a"),
+    ]:
+        if ca_key in result:
+            result[a_key] = result.pop(ca_key) / 100.0
+
+    # --- Power conversions: amplified 10x -> W ---
+    for raw_key, w_key in [
+        ("mppt_out_w", "mppt_out_w"),
+        ("car_12v_out_w", "car_12v_out_w"),
+        ("solar2_in_w", "solar2_in_w"),
+    ]:
+        if raw_key in result:
+            result[w_key] = result[raw_key] / 10.0
+
+    # --- Power conversions: amplified 100x -> W ---
+    for raw_key, w_key in [
+        ("dcdc_12v_w", "dcdc_12v_w"),
+    ]:
+        if raw_key in result:
+            result[w_key] = result[raw_key] / 100.0
+
+    # --- Temperature conversions: amplified 10x -> °C ---
+    if "solar2_mppt_temp_c" in result:
+        result["solar2_mppt_temp_c"] = result["solar2_mppt_temp_c"] / 10.0
 
     return result

@@ -31,11 +31,11 @@ def parse_smartplug_http_quota(quota_data: dict) -> Dict[str, Any]:
     # --- Core measurements ---
     _prefix = "2_1."
 
-    # Power (W) — API returns integer watts
+    # Power (deci-W → W) — API returns value in 0.1 W units
     if f"{_prefix}watts" in quota_data:
         v = _safe_float(quota_data[f"{_prefix}watts"])
         if v is not None:
-            result["power_w"] = v
+            result["power_w"] = v / 10.0
 
     # Current (mA → A)
     if f"{_prefix}current" in quota_data:
@@ -79,6 +79,12 @@ def parse_smartplug_http_quota(quota_data: dict) -> Dict[str, Any]:
         v = _safe_float(quota_data[f"{_prefix}maxWatts"])
         if v is not None:
             result["max_power_w"] = v
+
+    # Max current (deci-A → A) — API returns value in 0.1 A units
+    if f"{_prefix}maxCur" in quota_data:
+        v = _safe_float(quota_data[f"{_prefix}maxCur"])
+        if v is not None:
+            result["max_current_a"] = v / 10.0
 
     if f"{_prefix}errCode" in quota_data:
         v = _safe_float(quota_data[f"{_prefix}errCode"])

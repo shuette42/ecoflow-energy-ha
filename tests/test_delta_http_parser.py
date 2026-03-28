@@ -1,5 +1,7 @@
 """Tests for Delta 2 Max HTTP quota API response parser."""
 
+import pytest
+
 from ecoflow_energy.ecoflow.parsers.delta_http import (
     DELTA2MAX_HTTP_FIELD_MAP,
     parse_delta_http_quota,
@@ -80,9 +82,10 @@ class TestVoltageConversion:
         result = parse_delta_http_quota({"inv.dcInVol": 48500})
         assert result["dc_in_vol_v"] == 48.5
 
-    def test_dcdc_12v_vol_mv_to_v(self):
-        result = parse_delta_http_quota({"mppt.dcdc12vVol": 12600})
-        assert result["dcdc_12v_vol_v"] == 12.6
+    def test_dcdc_12v_vol_dv_to_v(self):
+        """dcdc12vVol is amplified 10x (deci-volt), not mV."""
+        result = parse_delta_http_quota({"mppt.dcdc12vVol": 126})
+        assert result["dcdc_12v_vol_v"] == pytest.approx(12.6)
 
 
 # ===========================================================================
@@ -123,6 +126,44 @@ class TestCurrentConversion:
     def test_dc_in_amp_ma_to_a(self):
         result = parse_delta_http_quota({"inv.dcInAmp": 3200})
         assert result["dc_in_amp_a"] == 3.2
+
+    def test_solar2_in_amp_ca_to_a(self):
+        """pv2InAmp is amplified 100x (centi-amp), not mA."""
+        result = parse_delta_http_quota({"mppt.pv2InAmp": 850})
+        assert result["solar2_in_amp_a"] == pytest.approx(8.5)
+        assert "solar2_in_amp_ca" not in result
+
+
+# ===========================================================================
+# MPPT Power/Temp Scaling (amplified values)
+# ===========================================================================
+
+
+class TestMpptScaling:
+    def test_mppt_out_watts_amplified_10x(self):
+        """outWatts is amplified 10x."""
+        result = parse_delta_http_quota({"mppt.outWatts": 3500})
+        assert result["mppt_out_w"] == pytest.approx(350.0)
+
+    def test_car_out_watts_amplified_10x(self):
+        """carOutWatts is amplified 10x."""
+        result = parse_delta_http_quota({"mppt.carOutWatts": 1200})
+        assert result["car_12v_out_w"] == pytest.approx(120.0)
+
+    def test_solar2_in_watts_amplified_10x(self):
+        """pv2InWatts is amplified 10x."""
+        result = parse_delta_http_quota({"mppt.pv2InWatts": 2000})
+        assert result["solar2_in_w"] == pytest.approx(200.0)
+
+    def test_dcdc_12v_watts_amplified_100x(self):
+        """dcdc12vWatts is amplified 100x."""
+        result = parse_delta_http_quota({"mppt.dcdc12vWatts": 5000})
+        assert result["dcdc_12v_w"] == pytest.approx(50.0)
+
+    def test_solar2_mppt_temp_amplified_10x(self):
+        """pv2MpptTemp is amplified 10x."""
+        result = parse_delta_http_quota({"mppt.pv2MpptTemp": 350})
+        assert result["solar2_mppt_temp_c"] == pytest.approx(35.0)
 
 
 # ===========================================================================

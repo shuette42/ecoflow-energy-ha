@@ -84,6 +84,44 @@ class TestDeltaParser:
         result = parse_delta_report(report)
         assert result["solar_in_w"] == 350.0
 
+    def test_mppt_out_watts_amplified_10x(self):
+        """outWatts is amplified 10x, must be divided."""
+        report = {"typeCode": "mpptStatus", "params": {"outWatts": 3500}}
+        result = parse_delta_report(report)
+        assert result["mppt_out_w"] == 350.0
+
+    def test_car_out_watts_amplified_10x(self):
+        report = {"typeCode": "mpptStatus", "params": {"carOutWatts": 1200}}
+        result = parse_delta_report(report)
+        assert result["car_12v_out_w"] == 120.0
+
+    def test_dcdc_12v_watts_amplified_100x(self):
+        report = {"typeCode": "mpptStatus", "params": {"dcdc12vWatts": 5000}}
+        result = parse_delta_report(report)
+        assert result["dcdc_12v_w"] == 50.0
+
+    def test_dcdc_12v_vol_amplified_10x(self):
+        """dcdc12vVol is amplified 10x (deci-volt), not mV."""
+        report = {"typeCode": "mpptStatus", "params": {"dcdc12vVol": 126}}
+        result = parse_delta_report(report)
+        assert result["dcdc_12v_vol_v"] == 12.6
+
+    def test_solar2_in_watts_amplified_10x(self):
+        report = {"typeCode": "mpptStatus", "params": {"pv2InWatts": 2000}}
+        result = parse_delta_report(report)
+        assert result["solar2_in_w"] == 200.0
+
+    def test_solar2_in_amp_amplified_100x(self):
+        """pv2InAmp is amplified 100x (centi-amp), not mA."""
+        report = {"typeCode": "mpptStatus", "params": {"pv2InAmp": 850}}
+        result = parse_delta_report(report)
+        assert result["solar2_in_amp_a"] == 8.5
+
+    def test_solar2_mppt_temp_amplified_10x(self):
+        report = {"typeCode": "mpptStatus", "params": {"pv2MpptTemp": 350}}
+        result = parse_delta_report(report)
+        assert result["solar2_mppt_temp_c"] == 35.0
+
     def test_field_map_coverage(self):
         """All field_map entries must have unique destination keys."""
         dest_keys = list(DELTA2MAX_FIELD_MAP.values())
