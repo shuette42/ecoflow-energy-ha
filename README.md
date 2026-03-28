@@ -2,7 +2,8 @@
 
 # EcoFlow Energy for Home Assistant
 
-### Real-time solar, battery, grid & home power monitoring
+**Real-time solar, battery, grid & home power monitoring.**
+**Energy Dashboard ready. No portal login required.**
 
 [![HACS Default](https://img.shields.io/badge/HACS-Default-30D158?style=for-the-badge&logo=home-assistant&logoColor=white)](https://github.com/hacs/integration)
 [![GitHub Release](https://img.shields.io/github/v/release/shuette42/ecoflow-energy-ha?style=for-the-badge&color=30D158)](https://github.com/shuette42/ecoflow-energy-ha/releases)
@@ -11,7 +12,7 @@
 
 <br>
 
-**50+ sensors** &nbsp;·&nbsp; **Energy Dashboard ready** &nbsp;·&nbsp; **~3 s real-time updates** &nbsp;·&nbsp; **No portal login needed**
+<img src="https://raw.githubusercontent.com/shuette42/ecoflow-energy-ha/main/images/energy-flow.png" alt="Energy Flow" width="280">&nbsp;&nbsp;&nbsp;&nbsp;<img src="https://raw.githubusercontent.com/shuette42/ecoflow-energy-ha/main/images/energy-sources.png" alt="Energy Sources" width="340">
 
 <br>
 
@@ -21,34 +22,32 @@
 
 <br>
 
-## What You Get
-
 <table>
 <tr>
-<td>
+<td width="50%">
 
-**Sensors & Controls**<br>
-50+ sensors per device — power, energy, battery, temperature, diagnostics. Switches and number controls for AC/DC output, charge speed, SoC limits.
+:zap: **50+ Sensors per Device**<br>
+Power, energy, battery, temperature, diagnostics. Switches and number controls for AC/DC output, charge speed, SoC limits.
 
 </td>
-<td>
+<td width="50%">
 
-**Energy Dashboard**<br>
-Local Riemann-sum energy tracking with gap detection. All sensors pre-configured for the HA Energy Dashboard — just select and go.
+:bar_chart: **Energy Dashboard Ready**<br>
+Local Riemann-sum energy tracking with gap detection. Pre-configured sensors — just select and go.
 
 </td>
 </tr>
 <tr>
 <td>
 
-**Real-Time Data**<br>
-Delta gets MQTT push out of the box. PowerOcean Enhanced Mode delivers ~3 s Protobuf updates via WSS. No portal session needed.
+:satellite: **Real-Time Updates**<br>
+Delta gets MQTT push out of the box. PowerOcean Enhanced delivers ~3 s Protobuf updates. No portal login needed.
 
 </td>
 <td>
 
-**Resilient Connection**<br>
-4-tier reconnect that never gives up. Automatic HTTP fallback when MQTT is stale. Stream health monitoring. Mobile devices offline = expected.
+:shield: **Resilient Connection**<br>
+4-tier reconnect that never gives up. Auto HTTP fallback when MQTT stale. Offline devices handled gracefully.
 
 </td>
 </tr>
@@ -58,37 +57,37 @@ Delta gets MQTT push out of the box. PowerOcean Enhanced Mode delivers ~3 s Prot
 
 ## Supported Devices
 
-> **Tip:** Other Delta-series devices (Delta Pro, Delta 2, etc.) should work automatically with the Delta sensor set.
-
 | | Sensors | Controls | Energy | Update Rate |
 |:---|:---:|:---:|:---:|:---|
-| **PowerOcean** — Home Battery | 63 | — | 6 kWh | Standard ~30 s \| Enhanced ~3 s |
+| **PowerOcean** — Home Battery | 63 | — | 6 kWh | ~30 s standard \| ~3 s enhanced |
 | **Delta 2 Max** — Portable Power | 62 | 3 switches · 4 numbers | 4 kWh | ~30 s + MQTT push |
 | **Smart Plug** — Switchable Outlet | 11 | 1 switch | 1 kWh | ~30 s |
 
+> **Tip:** Other Delta-series devices (Delta Pro, Delta 2, etc.) should work automatically with the Delta sensor set.
+
 <details>
-<summary><b>PowerOcean details</b></summary>
+<summary><b>PowerOcean</b> — 3-phase grid, MPPT tracking, battery diagnostics, EMS state</summary>
 <br>
 
 3-phase grid monitoring (voltage, current, power per phase) · MPPT per-string tracking (2 strings) · Battery diagnostics (SoH, cycles, cell temps & voltages, MOSFET temps) · EMS state, work mode, feed mode, grid status, power factor
 
-**Enhanced Mode** upgrades PowerOcean from ~30 s HTTP polling to ~3 s WSS Protobuf push — requires EcoFlow email & password.
+**Enhanced Mode** upgrades to ~3 s WSS Protobuf push — requires EcoFlow email & password.
 
 </details>
 
 <details>
-<summary><b>Delta 2 Max details</b></summary>
+<summary><b>Delta 2 Max</b> — AC/DC/12V switches, charge speed control, real-time MQTT</summary>
 <br>
 
-Battery SoC/SoH · All input/output power, temperatures, voltages · **Switches:** AC output, DC output, 12V output · **Numbers:** AC charge speed (200–2400 W), max/min SoC limits, standby timeout · Receives real-time MQTT push in Standard Mode automatically.
+Battery SoC/SoH · All input/output power, temperatures, voltages · **Switches:** AC, DC, 12V output · **Numbers:** AC charge speed (200–2400 W), max/min SoC, standby timeout · Real-time MQTT push in Standard Mode.
 
 </details>
 
 <details>
-<summary><b>Smart Plug details</b></summary>
+<summary><b>Smart Plug</b> — power monitoring, plug switch, automation-ready</summary>
 <br>
 
-Power (W), current (A), voltage (V), frequency, temperature · Plug on/off switch · Ideal for automating charging (e.g. charge Delta when solar surplus).
+Power (W), current (A), voltage (V), frequency, temperature · Plug on/off switch · Ideal for automating charging (e.g. charge Delta on solar surplus).
 
 </details>
 
@@ -126,13 +125,13 @@ You need an **Access Key** and **Secret Key** from the [EcoFlow Developer Portal
 | **Update** | ~30 s HTTP + MQTT push (Delta) | ~3 s WSS Protobuf |
 | **Credentials** | Access Key + Secret Key | + Email + Password |
 | **Stability** | Official API — stable | Unofficial — may break |
-| **Recommended** | Most users | PowerOcean real-time |
+| **Best for** | Most users | PowerOcean real-time |
 
 <br>
 
 ## Energy Dashboard
 
-All energy sensors are pre-configured for the HA Energy Dashboard (`state_class: total_increasing`) — just select and go.
+All energy sensors are pre-configured (`state_class: total_increasing`) — just select and go.
 
 <details>
 <summary><b>PowerOcean</b> — Grid, Solar, Battery, Home</summary>
@@ -264,8 +263,6 @@ automation:
 <details>
 <summary><b>EcoFlow Energy vs other integrations</b></summary>
 <br>
-
-EcoFlow does not offer a local API. The official Developer Portal provides only HTTP polling (~30 s). EcoFlow Energy combines HTTP with MQTT push for real-time data.
 
 | | EcoFlow Energy | Others |
 |:---|:---|:---|
