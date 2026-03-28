@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.7] - 2026-03-28
+
+### Fixed
+- Remove license badge from README — renders as "?" in HACS due to image proxy limitations
+
 ## [1.2.6] - 2026-03-28
 
 ### Fixed
