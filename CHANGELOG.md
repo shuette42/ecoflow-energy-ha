@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2026-03-28
+
+### Added
+- Energy Dashboard support for Delta 2 Max — 4 kWh sensors (solar, solar 2, AC input, AC output) via Riemann sum integration
+- Energy Dashboard support for Smart Plug — 1 kWh energy sensor via Riemann sum integration
+- Entity translations for all 135 entities (English + German) using HA translation_key system
+- Firmware version display in HA device page (extracted from API response)
+- HACS minimum HA version requirement (2024.4.0) in manifest.json
+
+### Changed
+- Energy integrator now active for all device types (was PowerOcean only)
+- Power-to-energy mappings extracted to const.py as per-device-type constants
+- DeviceInfo centralized in coordinator (removed 4x duplication across entity platforms)
+
 ## [1.1.2] - 2026-03-28
 
 ### Fixed

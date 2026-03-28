@@ -62,7 +62,7 @@ If the connection drops for any reason, the integration automatically reconnects
 
 ### PowerOcean — Home Battery System
 
-- 57 sensors: solar, grid, battery, home power + 6 Energy Dashboard sensors (kWh)
+- 63 sensors: solar, grid, battery, home power + 6 Energy Dashboard sensors (kWh)
 - 3-phase grid monitoring (voltage, current, active power per phase)
 - MPPT per-string monitoring (2 strings: power, voltage, current)
 - Battery diagnostics (SoH, cycles, cell temps, cell voltages, MOSFET temps)
@@ -71,7 +71,7 @@ If the connection drops for any reason, the integration automatically reconnects
 
 ### Delta 2 Max — Portable Power Station
 
-- 58 sensors: battery SoC/SoH, all input/output power, temperatures, voltages
+- 62 sensors: battery SoC/SoH, all input/output power, temperatures, voltages + 4 Energy Dashboard sensors (kWh)
 - 5 binary sensors: AC enabled, DC output, 12V, UPS mode, X-Boost
 - 3 switches: **AC output on/off**, **DC output on/off**, **12V output on/off**
 - 4 number controls: AC charge speed (200–2400 W), max/min SoC limits, standby timeout
@@ -79,7 +79,7 @@ If the connection drops for any reason, the integration automatically reconnects
 
 ### Smart Plug
 
-- 9 sensors: power (W), current (A), voltage (V), frequency, temperature
+- 11 sensors: power (W), current (A), voltage (V), frequency, temperature, diagnostics + 1 Energy Dashboard sensor (kWh)
 - 1 binary sensor: relay state
 - 1 switch: **plug on/off** — ideal for automations (e.g. charge Delta when surplus)
 - Standard Mode only (HTTP polling ~30 s)
@@ -201,6 +201,27 @@ Home energy is calculated automatically by HA from the other sources. You can op
 
 After saving, the Energy Dashboard shows real-time solar production, grid import/export, battery charge/discharge, and home consumption — all from your EcoFlow system.
 
+### Delta 2 Max
+
+Delta 2 Max provides 4 energy sensors for the Energy Dashboard:
+
+| Setting | Sensor |
+|---|---|
+| Solar production (MPPT 1) | **Solar Energy** (kWh) |
+| Solar production (MPPT 2) | **Solar 2 Energy** (kWh) |
+| Energy input (charging) | **AC Input Energy** (kWh) |
+| Energy output (consumption) | **AC Output Energy** (kWh) |
+
+### Smart Plug
+
+Smart Plug provides 1 energy sensor for the Energy Dashboard:
+
+| Setting | Sensor |
+|---|---|
+| Individual device energy | **Energy** (kWh) |
+
+Add the Smart Plug as an individual device under **Settings > Dashboards > Energy > Individual Devices**.
+
 ---
 
 ## Use Cases & Automations
@@ -285,7 +306,7 @@ automation:
 
 | Platform | PowerOcean | Delta 2 Max | Smart Plug |
 |----------|-----------|-------------|------------|
-| Sensor | 57 (power, energy, battery, grid, MPPT) | 58 (power, voltage, temp, SoC) | 9 (power, voltage, current, temp) |
+| Sensor | 63 (power, energy, battery, grid, MPPT) | 62 (power, energy, voltage, temp, SoC) | 11 (power, energy, voltage, current, temp) |
 | Binary Sensor | — | 5 (AC, DC, 12V, UPS, X-Boost) | 1 (relay state) |
 | Switch | — | 3 (AC, DC, 12V output) | 1 (plug on/off) |
 | Number | — | 4 (charge speed, SoC limits, standby) | — |

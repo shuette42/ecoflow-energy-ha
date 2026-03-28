@@ -23,6 +23,7 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import (
@@ -32,6 +33,8 @@ from .const import (
     CONF_PASSWORD,
     CONF_SECRET_KEY,
     CONF_USER_ID,
+    DELTA_ENERGY_FROM_API,
+    DELTA_POWER_TO_ENERGY,
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_SMARTPLUG,
@@ -41,7 +44,11 @@ from .const import (
     HTTP_FALLBACK_INTERVAL_S,
     MODE_ENHANCED,
     PING_KEEPALIVE_S,
+    POWEROCEAN_ENERGY_FROM_API,
+    POWEROCEAN_POWER_TO_ENERGY,
     QUOTAS_KEEPALIVE_S,
+    SMARTPLUG_ENERGY_FROM_API,
+    SMARTPLUG_POWER_TO_ENERGY,
     STALE_THRESHOLD_S,
 )
 from .ecoflow.cloud_http import EcoFlowHTTPQuota
@@ -78,6 +85,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             from .const import get_device_type
             stored_type = get_device_type(device_info.get("product_name", ""))
         self.device_type: str = stored_type
+        self._sw_version: str = device_info.get("sw_version", "")
 
         # Enhanced Mode only applies to PowerOcean (WSS Protobuf stream).
         # Delta and Smart Plug have no WSS data source — always Standard.
@@ -118,11 +126,23 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._shutdown: bool = False
         self._last_flush_ts: float = 0.0
 
-        # Energy integrator for power → kWh Riemann sum (PowerOcean)
-        self._energy_integrator: EnergyIntegrator | None = None
+        # Energy integrator for power → kWh Riemann sum (all device types)
+        state_path = hass.config.path(f".storage/ecoflow_energy_{self.device_sn}.json")
+        self._energy_integrator = EnergyIntegrator(state_path)
+
+        # Device-specific power → energy mappings
         if self.device_type == DEVICE_TYPE_POWEROCEAN:
-            state_path = hass.config.path(f".storage/ecoflow_energy_{self.device_sn}.json")
-            self._energy_integrator = EnergyIntegrator(state_path)
+            self._power_to_energy = POWEROCEAN_POWER_TO_ENERGY
+            self._energy_from_api = POWEROCEAN_ENERGY_FROM_API
+        elif self.device_type == DEVICE_TYPE_DELTA:
+            self._power_to_energy = DELTA_POWER_TO_ENERGY
+            self._energy_from_api = DELTA_ENERGY_FROM_API
+        elif self.device_type == DEVICE_TYPE_SMARTPLUG:
+            self._power_to_energy = SMARTPLUG_POWER_TO_ENERGY
+            self._energy_from_api = SMARTPLUG_ENERGY_FROM_API
+        else:
+            self._power_to_energy = {}
+            self._energy_from_api = []
 
     @property
     def device_data(self) -> dict[str, Any]:
@@ -144,6 +164,19 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Return the MQTT client (or None if not set up)."""
         return self._mqtt_client
 
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device info for all entities of this device."""
+        info = DeviceInfo(
+            identifiers={(DOMAIN, self.device_sn)},
+            manufacturer="EcoFlow",
+            model=self.product_name,
+            name=f"EcoFlow {self.device_name}",
+        )
+        if self._sw_version:
+            info["sw_version"] = self._sw_version
+        return info
+
     # ------------------------------------------------------------------
     # Setup / teardown
     # ------------------------------------------------------------------
@@ -157,8 +190,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._iot_api = IoTApiClient(session, access_key, secret_key)
 
         # Load energy integrator state from disk (non-blocking)
-        if self._energy_integrator is not None:
-            await self.hass.async_add_executor_job(self._energy_integrator.load_state)
+        await self.hass.async_add_executor_job(self._energy_integrator.load_state)
 
         # HTTP client (used in Standard Mode as primary, Enhanced as fallback)
         self._http_client = EcoFlowHTTPQuota(
@@ -318,8 +350,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self._mqtt_client is not None:
             await self.hass.async_add_executor_job(self._mqtt_client.disconnect)
             self._mqtt_client = None
-        if self._energy_integrator is not None:
-            await self.hass.async_add_executor_job(self._energy_integrator.force_flush)
+        await self.hass.async_add_executor_job(self._energy_integrator.force_flush)
         await super().async_shutdown()
 
     # ------------------------------------------------------------------
@@ -419,6 +450,9 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         "batt_charge_energy_kwh", "batt_discharge_energy_kwh",
         # Delta
         "bms_cycles",
+        "solar2_energy_kwh", "ac_in_energy_kwh", "ac_out_energy_kwh",
+        # Smart Plug
+        "energy_kwh",
     })
 
     def _enforce_monotonic(self, parsed: dict[str, Any]) -> dict[str, Any]:
@@ -679,20 +713,18 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._enforce_monotonic(parsed)
         self._device_data.update(parsed)
 
-        # F-005 fix: integrate power → energy in MQTT path too
-        if self._energy_integrator is not None:
-            self._integrate_energy(parsed)
-            # Throttle flush scheduling: at most once per 60s (matches integrator's SAVE_INTERVAL_S)
-            if now - self._last_flush_ts > 60:
-                self._last_flush_ts = now
-                self.hass.async_create_task(self._async_flush_energy_state())
+        # Integrate power → energy via Riemann sum
+        self._integrate_energy(parsed)
+        # Throttle flush scheduling: at most once per 60s (matches integrator's SAVE_INTERVAL_S)
+        if now - self._last_flush_ts > 60:
+            self._last_flush_ts = now
+            self.hass.async_create_task(self._async_flush_energy_state())
 
         self.async_set_updated_data(dict(self._device_data))
 
     async def _async_flush_energy_state(self) -> None:
         """Flush energy integrator state to disk (non-blocking)."""
-        if self._energy_integrator is not None:
-            await self.hass.async_add_executor_job(self._energy_integrator.flush)
+        await self.hass.async_add_executor_job(self._energy_integrator.flush)
 
     # ------------------------------------------------------------------
     # SET commands (switches, numbers)
@@ -751,11 +783,10 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._enforce_monotonic(parsed)
         self._device_data.update(parsed)
 
-        # Riemann sum: integrate power → energy for PowerOcean
-        if self._energy_integrator is not None:
-            self._integrate_energy(parsed)
-            # Flush state to disk periodically (non-blocking)
-            await self.hass.async_add_executor_job(self._energy_integrator.flush)
+        # Riemann sum: integrate power → energy
+        self._integrate_energy(parsed)
+        # Flush state to disk periodically (non-blocking)
+        await self.hass.async_add_executor_job(self._energy_integrator.flush)
 
         return dict(self._device_data)
 
@@ -763,34 +794,22 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     # Energy integration (Riemann sum)
     # ------------------------------------------------------------------
 
-    # Power key → energy key mapping for Riemann sum integration
-    _POWER_TO_ENERGY = {
-        "solar_w": "solar_energy_kwh",
-        "home_w": "home_energy_kwh",
-        "grid_import_power_w": "grid_import_energy_kwh",
-        "grid_export_power_w": "grid_export_energy_kwh",
-    }
-
     def _integrate_energy(self, parsed: dict[str, Any]) -> None:
         """Integrate power readings into energy totals via Riemann sum.
 
-        For battery charge/discharge energy, prefer API totals if available.
-        For solar/home/grid energy, always use Riemann sum (API doesn't provide totals).
+        Uses device-specific power → energy mappings from const.py.
+        For API-provided energy totals, prefer those over Riemann sum.
         """
-        assert self._energy_integrator is not None
 
-        for power_key, energy_key in self._POWER_TO_ENERGY.items():
+        for power_key, energy_key in self._power_to_energy.items():
             power_w = parsed.get(power_key)
             if power_w is not None:
                 total = self._energy_integrator.integrate(energy_key, abs(power_w))
                 if total is not None:
                     self._device_data[energy_key] = round(total, 3)
 
-        # Battery: prefer API totals (more accurate), use Riemann as fallback
-        for power_key, energy_key in [
-            ("batt_charge_power_w", "batt_charge_energy_kwh"),
-            ("batt_discharge_power_w", "batt_discharge_energy_kwh"),
-        ]:
+        # API totals: prefer over Riemann sum (more accurate when available)
+        for power_key, energy_key in self._energy_from_api:
             if energy_key in parsed:
                 # API provided a total — use it (already set by parser)
                 self._energy_integrator.set_total(energy_key, parsed[energy_key])

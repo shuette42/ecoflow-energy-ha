@@ -277,6 +277,7 @@ class EcoFlowEnergyConfigFlow(ConfigFlow, domain=DOMAIN):
             product_name = dev.get("productName", dev.get("deviceName", "Unknown"))
             online = dev.get("online", 0)
             device_type = get_device_type(product_name)
+            sw_version = dev.get("firmwareVersion", dev.get("softwareVersion", ""))
             devices.append(
                 {
                     "sn": sn,
@@ -284,6 +285,7 @@ class EcoFlowEnergyConfigFlow(ConfigFlow, domain=DOMAIN):
                     "product_name": product_name,
                     "device_type": device_type,
                     "online": online,
+                    "sw_version": str(sw_version) if sw_version else "",
                 }
             )
         return devices

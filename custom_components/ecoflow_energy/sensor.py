@@ -11,7 +11,6 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -74,7 +73,6 @@ class EcoFlowSensor(CoordinatorEntity[EcoFlowDeviceCoordinator], RestoreSensor):
         self._definition = definition
         self._attr_unique_id = f"{coordinator.device_sn}_{definition.key}"
         self._attr_translation_key = definition.key
-        self._attr_name = definition.name
         self._attr_native_unit_of_measurement = definition.unit
         self._attr_icon = definition.icon
         self._restored_value: float | int | str | None = None
@@ -93,14 +91,9 @@ class EcoFlowSensor(CoordinatorEntity[EcoFlowDeviceCoordinator], RestoreSensor):
             self._restored_value = last.native_value
 
     @property
-    def device_info(self) -> DeviceInfo:
-        """Return device info for this entity."""
-        return DeviceInfo(
-            identifiers={(DOMAIN, self.coordinator.device_sn)},
-            manufacturer="EcoFlow",
-            model=self.coordinator.product_name,
-            name=f"EcoFlow {self.coordinator.device_name}",
-        )
+    def device_info(self) -> dict:
+        """Return device info from coordinator."""
+        return self.coordinator.device_info
 
     @callback
     def _handle_coordinator_update(self) -> None:

@@ -9,7 +9,6 @@ from homeassistant.components.binary_sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -64,7 +63,7 @@ class EcoFlowBinarySensor(
         super().__init__(coordinator)
         self._definition = definition
         self._attr_unique_id = f"{coordinator.device_sn}_{definition.key}"
-        self._attr_name = definition.name
+        self._attr_translation_key = definition.key
         self._attr_icon = definition.icon
 
         if definition.device_class:
@@ -73,14 +72,9 @@ class EcoFlowBinarySensor(
             self._attr_entity_category = _ENTITY_CATEGORY_MAP.get(definition.entity_category)
 
     @property
-    def device_info(self) -> DeviceInfo:
-        """Return device info."""
-        return DeviceInfo(
-            identifiers={(DOMAIN, self.coordinator.device_sn)},
-            manufacturer="EcoFlow",
-            model=self.coordinator.product_name,
-            name=f"EcoFlow {self.coordinator.device_name}",
-        )
+    def device_info(self) -> dict:
+        """Return device info from coordinator."""
+        return self.coordinator.device_info
 
     @callback
     def _handle_coordinator_update(self) -> None:

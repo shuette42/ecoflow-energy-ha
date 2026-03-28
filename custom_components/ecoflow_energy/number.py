@@ -8,7 +8,6 @@ from typing import Any
 from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -75,7 +74,7 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
         super().__init__(coordinator)
         self._definition = definition
         self._attr_unique_id = f"{coordinator.device_sn}_{definition.key}"
-        self._attr_name = definition.name
+        self._attr_translation_key = definition.key
         self._attr_icon = definition.icon
         self._attr_native_unit_of_measurement = definition.unit
         self._attr_native_min_value = definition.min_value
@@ -83,14 +82,9 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
         self._attr_native_step = definition.step
 
     @property
-    def device_info(self) -> DeviceInfo:
-        """Return device info."""
-        return DeviceInfo(
-            identifiers={(DOMAIN, self.coordinator.device_sn)},
-            manufacturer="EcoFlow",
-            model=self.coordinator.product_name,
-            name=f"EcoFlow {self.coordinator.device_name}",
-        )
+    def device_info(self) -> dict:
+        """Return device info from coordinator."""
+        return self.coordinator.device_info
 
     @callback
     def _handle_coordinator_update(self) -> None:

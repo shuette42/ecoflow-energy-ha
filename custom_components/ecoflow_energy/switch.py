@@ -14,7 +14,6 @@ from typing import Any
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -96,7 +95,7 @@ class EcoFlowSwitch(CoordinatorEntity[EcoFlowDeviceCoordinator], SwitchEntity):
         super().__init__(coordinator)
         self._definition = definition
         self._attr_unique_id = f"{coordinator.device_sn}_{definition.key}"
-        self._attr_name = definition.name
+        self._attr_translation_key = definition.key
         self._attr_icon = definition.icon
 
         # Optimistic lock state
@@ -104,14 +103,9 @@ class EcoFlowSwitch(CoordinatorEntity[EcoFlowDeviceCoordinator], SwitchEntity):
         self._optimistic_lock_until: float = 0.0
 
     @property
-    def device_info(self) -> DeviceInfo:
-        """Return device info."""
-        return DeviceInfo(
-            identifiers={(DOMAIN, self.coordinator.device_sn)},
-            manufacturer="EcoFlow",
-            model=self.coordinator.product_name,
-            name=f"EcoFlow {self.coordinator.device_name}",
-        )
+    def device_info(self) -> dict:
+        """Return device info from coordinator."""
+        return self.coordinator.device_info
 
     @property
     def is_on(self) -> bool | None:

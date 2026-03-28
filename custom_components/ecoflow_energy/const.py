@@ -265,6 +265,11 @@ DELTA2MAX_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("mppt_chg_state", "MPPT Charge State", None, None, None, "mdi:solar-panel"),
     EcoFlowSensorDef("ems_lcd_soc", "LCD SoC", "%", "battery", "measurement", "mdi:monitor"),
     EcoFlowSensorDef("ems_precise_soc", "EMS Precise SoC", "%", "battery", "measurement", "mdi:monitor"),
+    # --- Energy Dashboard (total_increasing, kWh) ---
+    EcoFlowSensorDef("solar_energy_kwh", "Solar Energy", "kWh", "energy", "total_increasing", "mdi:solar-power"),
+    EcoFlowSensorDef("solar2_energy_kwh", "Solar 2 Energy", "kWh", "energy", "total_increasing", "mdi:solar-power"),
+    EcoFlowSensorDef("ac_in_energy_kwh", "AC Input Energy", "kWh", "energy", "total_increasing", "mdi:power-plug"),
+    EcoFlowSensorDef("ac_out_energy_kwh", "AC Output Energy", "kWh", "energy", "total_increasing", "mdi:power-plug-outline"),
     # --- Cell voltages (diagnostic) ---
     EcoFlowSensorDef("batt_max_cell_vol_mv", "Max Cell Voltage", "mV", "voltage", "measurement", "mdi:flash-triangle-outline", "diagnostic"),
     EcoFlowSensorDef("batt_min_cell_vol_mv", "Min Cell Voltage", "mV", "voltage", "measurement", "mdi:flash-triangle-outline", "diagnostic"),
@@ -312,6 +317,8 @@ SMARTPLUG_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("led_brightness", "LED Brightness", None, None, "measurement", "mdi:brightness-6", "diagnostic"),
     EcoFlowSensorDef("error_code", "Error Code", None, None, None, "mdi:alert-circle-outline", "diagnostic"),
     EcoFlowSensorDef("warning_code", "Warning Code", None, None, None, "mdi:alert-outline", "diagnostic"),
+    # --- Energy Dashboard (total_increasing, kWh) ---
+    EcoFlowSensorDef("energy_kwh", "Energy", "kWh", "energy", "total_increasing", "mdi:flash"),
 ]
 
 SMARTPLUG_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
@@ -321,3 +328,35 @@ SMARTPLUG_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
 SMARTPLUG_SWITCHES: list[EcoFlowSwitchDef] = [
     EcoFlowSwitchDef("plug_switch", "Plug", "switch_state", "mdi:power-plug"),
 ]
+
+
+# =====================================================================
+# Power → Energy mappings (Riemann sum integration per device type)
+# =====================================================================
+
+POWEROCEAN_POWER_TO_ENERGY: dict[str, str] = {
+    "solar_w": "solar_energy_kwh",
+    "home_w": "home_energy_kwh",
+    "grid_import_power_w": "grid_import_energy_kwh",
+    "grid_export_power_w": "grid_export_energy_kwh",
+}
+
+POWEROCEAN_ENERGY_FROM_API: list[tuple[str, str]] = [
+    ("batt_charge_power_w", "batt_charge_energy_kwh"),
+    ("batt_discharge_power_w", "batt_discharge_energy_kwh"),
+]
+
+DELTA_POWER_TO_ENERGY: dict[str, str] = {
+    "solar_in_w": "solar_energy_kwh",
+    "solar2_in_w": "solar2_energy_kwh",
+    "ac_in_w": "ac_in_energy_kwh",
+    "ac_out_w": "ac_out_energy_kwh",
+}
+
+DELTA_ENERGY_FROM_API: list[tuple[str, str]] = []
+
+SMARTPLUG_POWER_TO_ENERGY: dict[str, str] = {
+    "power_w": "energy_kwh",
+}
+
+SMARTPLUG_ENERGY_FROM_API: list[tuple[str, str]] = []

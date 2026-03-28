@@ -125,7 +125,7 @@ class TestEcoFlowSensor:
         )
         sensor = EcoFlowSensor(coordinator, defn)
         assert sensor.unique_id == "DAEBK5ZZ12340001_soc"
-        assert sensor.name == "SoC"
+        assert sensor.translation_key == "soc"
         assert sensor.native_unit_of_measurement == "%"
         assert sensor.icon == "mdi:battery"
 
