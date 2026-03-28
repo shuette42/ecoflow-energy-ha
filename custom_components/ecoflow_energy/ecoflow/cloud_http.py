@@ -95,11 +95,14 @@ class EcoFlowHTTPQuota:
         nonce = "".join(random.choices(string.ascii_letters + string.digits, k=16))
 
         flat = self._flatten(params_dict)
+        flat.extend([
+            ("accessKey", self._access_key),
+            ("nonce", nonce),
+            ("timestamp", ts),
+        ])
         flat.sort(key=lambda kv: kv[0])
 
-        kv_string = "&".join(f"{k}={v}" for k, v in flat)
-        tail = f"accessKey={self._access_key}&nonce={nonce}&timestamp={ts}"
-        sign_string = (kv_string + "&" if kv_string else "") + tail
+        sign_string = "&".join(f"{k}={v}" for k, v in flat)
 
         sig = hmac.new(
             self._secret_key.encode("utf-8"),

@@ -1,7 +1,10 @@
 """Tests for EcoFlowHTTPQuota — signature, rate limiting, dead code removal."""
 
+import hashlib
+import hmac
 import re
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from ecoflow_energy.ecoflow.cloud_http import EcoFlowHTTPQuota
 
@@ -79,6 +82,58 @@ class TestSignature:
         result = client._flatten({"items": [1, 2]})
         result_dict = dict(result)
         assert result_dict == {"items[0]": "1", "items[1]": "2"}
+
+    def test_sign_params_sorted_with_auth(self):
+        """All parameters (payload + auth) must be sorted alphabetically together.
+
+        Bug fix: previously auth params (accessKey, nonce, timestamp) were appended
+        as unsorted tail instead of being merged into the sorted parameter list.
+        """
+        client = self._make_client()
+        fixed_nonce = "abcdef1234567890"
+        fixed_ts = "1700000000000"
+
+        with patch("ecoflow_energy.ecoflow.cloud_http.time") as mock_time, \
+             patch("ecoflow_energy.ecoflow.cloud_http.random") as mock_random:
+            mock_time.time.return_value = 1700000000.0
+            mock_random.choices.return_value = list(fixed_nonce)
+
+            headers = client._sign_headers({"sn": "HW52ZZ"})
+
+        # Expected: all params sorted alphabetically
+        expected_sign_string = (
+            f"accessKey=test_ak&nonce={fixed_nonce}&sn=HW52ZZ&timestamp={fixed_ts}"
+        )
+        expected_sig = hmac.new(
+            b"test_sk", expected_sign_string.encode(), hashlib.sha256
+        ).hexdigest()
+
+        assert headers["sign"] == expected_sig, (
+            f"Signature mismatch — params must be sorted alphabetically "
+            f"including auth params. Expected sign_string: {expected_sign_string}"
+        )
+
+    def test_sign_empty_params_only_auth(self):
+        """With no payload params, signature must contain only sorted auth params."""
+        client = self._make_client()
+        fixed_nonce = "zzzzzzzzzzzzzzzz"
+        fixed_ts = "1700000000000"
+
+        with patch("ecoflow_energy.ecoflow.cloud_http.time") as mock_time, \
+             patch("ecoflow_energy.ecoflow.cloud_http.random") as mock_random:
+            mock_time.time.return_value = 1700000000.0
+            mock_random.choices.return_value = list(fixed_nonce)
+
+            headers = client._sign_headers({})
+
+        expected_sign_string = (
+            f"accessKey=test_ak&nonce={fixed_nonce}&timestamp={fixed_ts}"
+        )
+        expected_sig = hmac.new(
+            b"test_sk", expected_sign_string.encode(), hashlib.sha256
+        ).hexdigest()
+
+        assert headers["sign"] == expected_sig
 
 
 class TestRateLimit:

@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.1] - 2026-03-28
+
+### Fixed
+- HTTP API signature bug — auth params (accessKey, nonce, timestamp) now sorted alphabetically together with payload params, matching EcoFlow API spec
+- MQTT keepalive reduced from 120s to 60s — prevents broker disconnect due to ~200s inactivity timeout with insufficient PINGREQ frequency
+
 ## [1.1.0] - 2026-03-27
 
 ### Added
