@@ -9,7 +9,6 @@ All notable changes to this project will be documented in this file.
 - Energy Dashboard support for Smart Plug — 1 kWh energy sensor via Riemann sum integration
 - Entity translations for all 135 entities (English + German) using HA translation_key system
 - Firmware version display in HA device page (extracted from API response)
-- HACS minimum HA version requirement (2024.4.0) in manifest.json
 
 ### Changed
 - Energy integrator now active for all device types (was PowerOcean only)
