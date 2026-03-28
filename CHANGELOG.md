@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.1] - 2026-03-28
+
+### Changed
+- README redesigned for HACS store rendering — hero screenshots, feature grid, compact structure, standard markdown for full compatibility
+
 ## [1.2.0] - 2026-03-28
 
 ### Added
