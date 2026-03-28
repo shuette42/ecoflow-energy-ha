@@ -2,232 +2,190 @@
 
 # EcoFlow Energy for Home Assistant
 
-**Real-time solar, battery, grid, and home power monitoring.**\
-**Energy Dashboard ready. No portal login required.**
+### Real-time solar, battery, grid & home power monitoring
 
-[![HACS Validation](https://img.shields.io/github/actions/workflow/status/shuette42/ecoflow-energy-ha/validate.yml?branch=main&label=HACS&logo=home-assistant&logoColor=white&style=flat-square)](https://github.com/shuette42/ecoflow-energy-ha/actions/workflows/validate.yml)
-[![Tests](https://img.shields.io/github/actions/workflow/status/shuette42/ecoflow-energy-ha/tests.yml?branch=main&label=Tests&logo=pytest&logoColor=white&style=flat-square)](https://github.com/shuette42/ecoflow-energy-ha/actions/workflows/tests.yml)
-[![License](https://img.shields.io/github/license/shuette42/ecoflow-energy-ha?style=flat-square&color=30D158)](LICENSE)
-[![HACS](https://img.shields.io/badge/HACS-Default-30D158?style=flat-square&logo=home-assistant&logoColor=white)](https://github.com/hacs/integration)
+[![HACS Default](https://img.shields.io/badge/HACS-Default-30D158?style=for-the-badge&logo=home-assistant&logoColor=white)](https://github.com/hacs/integration)
+[![GitHub Release](https://img.shields.io/github/v/release/shuette42/ecoflow-energy-ha?style=for-the-badge&color=30D158)](https://github.com/shuette42/ecoflow-energy-ha/releases)
+[![Tests](https://img.shields.io/github/actions/workflow/status/shuette42/ecoflow-energy-ha/tests.yml?branch=main&label=Tests&style=for-the-badge&logo=pytest&logoColor=white)](https://github.com/shuette42/ecoflow-energy-ha/actions/workflows/tests.yml)
+[![License: MIT](https://img.shields.io/github/license/shuette42/ecoflow-energy-ha?style=for-the-badge&color=30D158)](LICENSE)
+
+<br>
+
+**50+ sensors** &nbsp;·&nbsp; **Energy Dashboard ready** &nbsp;·&nbsp; **~3 s real-time updates** &nbsp;·&nbsp; **No portal login needed**
+
+<br>
+
+[![Add to Home Assistant](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=shuette42&repository=ecoflow-energy-ha&category=integration)
 
 </div>
 
----
+<br>
 
-## Why This Integration?
+## What You Get
 
-EcoFlow does not offer a local API, and repeated requests to enable Modbus access have been declined. The official Developer Portal provides only an HTTP API with ~30 s polling — too slow for meaningful real-time monitoring or automations. Getting reliable, near-real-time data from EcoFlow devices requires a different approach.
+<table>
+<tr>
+<td>
 
-**EcoFlow Energy solves this** by combining HTTP polling with real-time MQTT push — Delta devices receive event-driven updates in Standard Mode out of the box, and PowerOcean users can opt into Enhanced Mode for **~3 s Protobuf-encoded updates** via WSS. The key breakthrough: **all connections work independently of the EcoFlow portal.** You do not need to be logged into the EcoFlow app or portal for this integration to receive data, and it does not compete with your mobile app for a session slot.
+**Sensors & Controls**<br>
+50+ sensors per device — power, energy, battery, temperature, diagnostics. Switches and number controls for AC/DC output, charge speed, SoC limits.
 
-If the connection drops for any reason, the integration automatically reconnects in the background — with a 4-tier reconnect strategy that never gives up — so data collection resumes seamlessly without any manual intervention.
+</td>
+<td>
 
-**Set it up once, and it just works — reliably, around the clock.**
+**Energy Dashboard**<br>
+Local Riemann-sum energy tracking with gap detection. All sensors pre-configured for the HA Energy Dashboard — just select and go.
 
-### How it compares
+</td>
+</tr>
+<tr>
+<td>
 
-| | EcoFlow Energy | Other integrations |
-|---|---|---|
-| Data source | MQTT push for PowerOcean (Enhanced) and Delta (Standard); HTTP polling as fallback | HTTP polling (10–30 s) or basic TCP MQTT |
-| Portal login required | No — stream runs autonomously | Yes, or HTTP-only fallback |
-| Reconnect | 4-tier, new ClientID, never gives up | Simple retry or gives up |
-| Fallback | Automatic HTTP when MQTT is stale, transparent source routing | None |
-| Stream health | 3 states: disconnected / stale / healthy | Not tracked |
-| Energy tracking | Local Riemann-sum with gap detection | API totals or not available |
-| Device types | Heterogeneous (Protobuf + JSON) in one integration | Single device type per project |
-| Control | Switches with optimistic lock (zero-flicker) | Read-only or basic |
-| Offline tolerance | Mobile devices (e.g. Delta in camper): offline = expected, no error spam | Offline = error |
+**Real-Time Data**<br>
+Delta gets MQTT push out of the box. PowerOcean Enhanced Mode delivers ~3 s Protobuf updates via WSS. No portal session needed.
 
----
+</td>
+<td>
 
-## Features
+**Resilient Connection**<br>
+4-tier reconnect that never gives up. Automatic HTTP fallback when MQTT is stale. Stream health monitoring. Mobile devices offline = expected.
 
-| | |
-|---|---|
-| **Auto-discovery** | All devices bound to your EcoFlow account |
-| **50+ sensors per device** | Power, energy, battery, temperature, diagnostics |
-| **Energy Dashboard ready** | Local Riemann-sum kWh with gap detection — not API totals |
-| **Switch & Number entities** | Control AC/DC output, charge speed, SoC limits — optimistic lock, zero flicker |
-| **Real-time out of the box** | Standard Mode: Delta gets MQTT push automatically; Enhanced (PowerOcean): ~3 s WSS push |
-| **Automatic fallback** | MQTT stale? Transparent switch to HTTP polling, auto-recovery |
-| **4-tier reconnect** | Never gives up on the MQTT connection |
-| **Stream health** | 3-state monitoring: disconnected / stale / healthy |
-| **Offline tolerance** | Mobile devices offline = expected, not an error |
-| **Multi-device** | Heterogeneous devices (Protobuf + JSON) in a single integration |
-| **Diagnostics** | Built-in HA diagnostics download (no credentials exposed) |
+</td>
+</tr>
+</table>
 
----
+<br>
 
 ## Supported Devices
 
-### PowerOcean — Home Battery System
+> [!TIP]
+> Other Delta-series devices (Delta Pro, Delta 2, etc.) should work automatically with the Delta sensor set.
 
-- 63 sensors: solar, grid, battery, home power + 6 Energy Dashboard sensors (kWh)
-- 3-phase grid monitoring (voltage, current, active power per phase)
-- MPPT per-string monitoring (2 strings: power, voltage, current)
-- Battery diagnostics (SoH, cycles, cell temps, cell voltages, MOSFET temps)
-- EMS state (work mode, feed mode, grid status, power factor)
-- **Standard Mode**: HTTP polling ~30 s | **Enhanced Mode**: WSS real-time ~3 s
-
-### Delta 2 Max — Portable Power Station
-
-- 62 sensors: battery SoC/SoH, all input/output power, temperatures, voltages + 4 Energy Dashboard sensors (kWh)
-- 5 binary sensors: AC enabled, DC output, 12V, UPS mode, X-Boost
-- 3 switches: **AC output on/off**, **DC output on/off**, **12V output on/off**
-- 4 number controls: AC charge speed (200–2400 W), max/min SoC limits, standby timeout
-- Standard Mode: HTTP polling ~30 s + MQTT push for real-time updates (dual-source)
-
-### Smart Plug
-
-- 11 sensors: power (W), current (A), voltage (V), frequency, temperature, diagnostics + 1 Energy Dashboard sensor (kWh)
-- 1 binary sensor: relay state
-- 1 switch: **plug on/off** — ideal for automations (e.g. charge Delta when surplus)
-- Standard Mode only (HTTP polling ~30 s)
-
-> Other EcoFlow Delta-series devices (Delta Pro, Delta 2, etc.) should work automatically with the Delta sensor set.
-
----
-
-## Installation
-
-### HACS (recommended)
-
-1. Open **HACS** in Home Assistant
-2. Click **Integrations** > **+ Explore & Download Repositories**
-3. Search for **EcoFlow Energy**
-4. Click **Download**
-5. Restart Home Assistant
-
-### Manual
-
-1. Download the latest release from [Releases](https://github.com/shuette42/ecoflow-energy-ha/releases)
-2. Copy `custom_components/ecoflow_energy/` to your HA `config/custom_components/`
-3. Restart Home Assistant
-
----
-
-## Configuration
-
-### Prerequisites
-
-1. An [EcoFlow app](https://www.ecoflow.com) account with devices bound
-2. Access Key + Secret Key from the [EcoFlow Developer Portal](https://developer.ecoflow.com)
-
-### Setup
-
-1. Go to **Settings > Devices & Services > Add Integration**
-2. Search for **EcoFlow Energy**
-3. Enter your **Access Key** and **Secret Key**
-4. Select the devices you want to add
-5. Choose connection mode:
-   - **Standard** (default) — recommended for all devices. Delta gets real-time MQTT push automatically.
-   - **Enhanced** — PowerOcean only, ~3 s updates via unofficial WSS. Requires EcoFlow email + password (see below).
-6. Done — entities appear automatically
-
-### Standard vs Enhanced Mode
-
-| | Standard | Enhanced (PowerOcean only) |
-|---|---|---|
-| API | Official IoT Developer API | Unofficial WSS bridge |
-| Update rate | ~30 s HTTP polling; Delta additionally gets real-time MQTT push | ~3 s MQTT push (Protobuf) |
-| Credentials | Access Key + Secret Key | + Email + Password |
-| Stability | Stable (official) | May break with EcoFlow updates |
-| Applies to | All devices (PowerOcean, Delta, Smart Plug) | PowerOcean only |
-| Best for | Most users — Delta already gets real-time data | PowerOcean users needing ~3 s updates |
-
-**Enhanced Mode** applies to **PowerOcean only** and uses reverse-engineered WebSocket connections to the EcoFlow portal. Delta and Smart Plug always use Standard Mode regardless of this setting. Enhanced Mode is not officially supported and may stop working if EcoFlow changes their portal. A disclaimer is shown during setup.
-
-### Options Flow
-
-After initial setup, you can change settings via **Settings > Devices & Services > EcoFlow Energy > Configure**:
-
-- Switch between Standard and Enhanced mode
-- Add or remove devices
-
----
-
-## Energy Dashboard Setup
-
-All energy sensors use `state_class: total_increasing` and are automatically available in the HA Energy Dashboard. Go to **Settings > Dashboards > Energy** to configure:
+| | Sensors | Controls | Energy | Update Rate |
+|:---|:---:|:---:|:---:|:---|
+| **PowerOcean** — Home Battery | 63 | — | 6 kWh | Standard ~30 s \| Enhanced ~3 s |
+| **Delta 2 Max** — Portable Power | 62 | 3 switches · 4 numbers | 4 kWh | ~30 s + MQTT push |
+| **Smart Plug** — Switchable Outlet | 11 | 1 switch | 1 kWh | ~30 s |
 
 <details>
-<summary><strong>Grid</strong></summary>
+<summary><b>PowerOcean details</b></summary>
+<br>
 
-| Setting | Sensor |
-|---|---|
-| Grid consumption (import) | **Grid Import Energy** (kWh) |
-| Return to grid (export) | **Grid Export Energy** (kWh) |
-| Power measurement type | **Standard** |
-| Power measurement | **Grid Power** (W) |
+3-phase grid monitoring (voltage, current, power per phase) · MPPT per-string tracking (2 strings) · Battery diagnostics (SoH, cycles, cell temps & voltages, MOSFET temps) · EMS state, work mode, feed mode, grid status, power factor
+
+**Enhanced Mode** upgrades PowerOcean from ~30 s HTTP polling to ~3 s WSS Protobuf push — requires EcoFlow email & password.
 
 </details>
 
 <details>
-<summary><strong>Solar</strong></summary>
+<summary><b>Delta 2 Max details</b></summary>
+<br>
 
-| Setting | Sensor |
-|---|---|
-| Solar production energy | **Solar Energy** (kWh) |
-| Solar production power | **Solar Power** (W) |
+Battery SoC/SoH · All input/output power, temperatures, voltages · **Switches:** AC output, DC output, 12V output · **Numbers:** AC charge speed (200–2400 W), max/min SoC limits, standby timeout · Receives real-time MQTT push in Standard Mode automatically.
 
 </details>
 
 <details>
-<summary><strong>Battery</strong></summary>
+<summary><b>Smart Plug details</b></summary>
+<br>
 
-| Setting | Sensor |
-|---|---|
-| Energy charged into battery | **Battery Charge Energy** (kWh) |
-| Energy discharged from battery | **Battery Discharge Energy** (kWh) |
-| Power measurement type | **Two sensors** |
-| Discharge power | **Battery Discharge Power** (W) |
-| Charge power | **Battery Charge Power** (W) |
+Power (W), current (A), voltage (V), frequency, temperature · Plug on/off switch · Ideal for automating charging (e.g. charge Delta when solar surplus).
 
-> **Tip:** Select "Two sensors" for battery power — this gives HA both charge and discharge flow separately, which is more accurate than a single signed sensor.
+</details>
+
+<br>
+
+## Quick Start
+
+### 1. Install
+
+[![Add to Home Assistant](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=shuette42&repository=ecoflow-energy-ha&category=integration)
+
+Or: **HACS** > **Integrations** > **Explore & Download** > search **EcoFlow Energy** > **Download** > restart HA.
+
+<details>
+<summary>Manual installation</summary>
+<br>
+
+Download the [latest release](https://github.com/shuette42/ecoflow-energy-ha/releases), copy `custom_components/ecoflow_energy/` to your HA `config/custom_components/`, restart.
+
+</details>
+
+### 2. Configure
+
+> [!IMPORTANT]
+> You need an Access Key and Secret Key from the [EcoFlow Developer Portal](https://developer.ecoflow.com).
+
+1. **Settings > Devices & Services > Add Integration** > search **EcoFlow Energy**
+2. Enter your **Access Key** and **Secret Key**
+3. Select devices — done. Entities appear automatically.
+
+### 3. Choose Your Mode
+
+| | Standard | Enhanced |
+|:---|:---|:---|
+| **For** | All devices | PowerOcean only |
+| **Update** | ~30 s HTTP + MQTT push (Delta) | ~3 s WSS Protobuf |
+| **Credentials** | Access Key + Secret Key | + Email + Password |
+| **Stability** | Official API — stable | Unofficial — may break |
+| **Recommended** | Most users | PowerOcean real-time |
+
+<br>
+
+## Energy Dashboard
+
+> [!NOTE]
+> All energy sensors use `state_class: total_increasing` and are ready for the HA Energy Dashboard out of the box.
+
+<details>
+<summary><b>PowerOcean</b> — Grid, Solar, Battery, Home</summary>
+<br>
+
+| Dashboard Section | Sensor |
+|:---|:---|
+| Grid consumption | **Grid Import Energy** (kWh) |
+| Return to grid | **Grid Export Energy** (kWh) |
+| Solar production | **Solar Energy** (kWh) |
+| Battery charge | **Battery Charge Energy** (kWh) |
+| Battery discharge | **Battery Discharge Energy** (kWh) |
+| Home consumption | **Home Energy** (kWh) |
+
+> Select **Two sensors** for battery power — charge and discharge separately for higher accuracy.
 
 </details>
 
 <details>
-<summary><strong>Home Consumption</strong></summary>
+<summary><b>Delta 2 Max</b> — Solar, AC Input, AC Output</summary>
+<br>
 
-Home energy is calculated automatically by HA from the other sources. You can optionally add:
-
-| Setting | Sensor |
-|---|---|
-| Home energy | **Home Energy** (kWh) |
-| Home power | **Home Power** (W) |
+| Dashboard Section | Sensor |
+|:---|:---|
+| Solar (MPPT 1) | **Solar Energy** (kWh) |
+| Solar (MPPT 2) | **Solar 2 Energy** (kWh) |
+| AC input | **AC Input Energy** (kWh) |
+| AC output | **AC Output Energy** (kWh) |
 
 </details>
 
-After saving, the Energy Dashboard shows real-time solar production, grid import/export, battery charge/discharge, and home consumption — all from your EcoFlow system.
+<details>
+<summary><b>Smart Plug</b> — Device Energy</summary>
+<br>
 
-### Delta 2 Max
+| Dashboard Section | Sensor |
+|:---|:---|
+| Individual device | **Energy** (kWh) |
 
-Delta 2 Max provides 4 energy sensors for the Energy Dashboard:
+Add under **Energy > Individual Devices**.
 
-| Setting | Sensor |
-|---|---|
-| Solar production (MPPT 1) | **Solar Energy** (kWh) |
-| Solar production (MPPT 2) | **Solar 2 Energy** (kWh) |
-| Energy input (charging) | **AC Input Energy** (kWh) |
-| Energy output (consumption) | **AC Output Energy** (kWh) |
+</details>
 
-### Smart Plug
+<br>
 
-Smart Plug provides 1 energy sensor for the Energy Dashboard:
-
-| Setting | Sensor |
-|---|---|
-| Individual device energy | **Energy** (kWh) |
-
-Add the Smart Plug as an individual device under **Settings > Dashboards > Energy > Individual Devices**.
-
----
-
-## Use Cases & Automations
+## Automation Examples
 
 <details>
-<summary><strong>Smart Plug: Charge Delta when PowerOcean is full</strong></summary>
+<summary><b>Charge Delta when PowerOcean is full</b></summary>
+<br>
 
 ```yaml
 automation:
@@ -245,7 +203,7 @@ automation:
         target:
           entity_id: switch.ecoflow_smart_plug_plug
 
-  - alias: "Stop charging Delta when full or PowerOcean drops"
+  - alias: "Stop charging when full or PowerOcean drops"
     trigger:
       - platform: numeric_state
         entity_id: sensor.ecoflow_delta_2_max_soc
@@ -262,7 +220,8 @@ automation:
 </details>
 
 <details>
-<summary><strong>Delta 2 Max: Control AC output remotely</strong></summary>
+<summary><b>Delta AC off at night</b></summary>
+<br>
 
 ```yaml
 automation:
@@ -279,7 +238,8 @@ automation:
 </details>
 
 <details>
-<summary><strong>Solar surplus alerts</strong></summary>
+<summary><b>Solar surplus alert</b></summary>
+<br>
 
 ```yaml
 automation:
@@ -300,141 +260,125 @@ automation:
 
 </details>
 
----
+<br>
 
-## Entity Types
+## How It Compares
 
-| Platform | PowerOcean | Delta 2 Max | Smart Plug |
-|----------|-----------|-------------|------------|
-| Sensor | 63 (power, energy, battery, grid, MPPT) | 62 (power, energy, voltage, temp, SoC) | 11 (power, energy, voltage, current, temp) |
-| Binary Sensor | — | 5 (AC, DC, 12V, UPS, X-Boost) | 1 (relay state) |
-| Switch | — | 3 (AC, DC, 12V output) | 1 (plug on/off) |
-| Number | — | 4 (charge speed, SoC limits, standby) | — |
+<details>
+<summary><b>EcoFlow Energy vs other integrations</b></summary>
+<br>
 
----
+EcoFlow does not offer a local API. The official Developer Portal provides only HTTP polling (~30 s). EcoFlow Energy combines HTTP with MQTT push for real-time data.
+
+| | EcoFlow Energy | Others |
+|:---|:---|:---|
+| Data source | MQTT push + HTTP fallback | HTTP only or basic MQTT |
+| Portal login | Not required | Required |
+| Reconnect | 4-tier, never gives up | Simple retry |
+| Fallback | Auto HTTP when MQTT stale | None |
+| Stream health | 3-state monitoring | Not tracked |
+| Energy tracking | Local Riemann-sum | API totals |
+| Device types | Heterogeneous in one integration | Single type |
+| Control | Optimistic lock, zero-flicker | Read-only or basic |
+| Offline handling | Expected, no error spam | Error |
+
+</details>
+
+<br>
 
 ## Troubleshooting
 
 <details>
-<summary><strong>No entities appearing</strong></summary>
+<summary><b>No entities appearing</b></summary>
+<br>
 
-- Check that your devices are online in the EcoFlow app
-- Verify your Access Key and Secret Key in the Developer Portal
-- Check **Settings > System > Logs** for `ecoflow_energy` errors
-
-</details>
-
-<details>
-<summary><strong>Data not updating</strong></summary>
-
-- **Standard Mode**: Data updates via HTTP polling every ~30 s. Delta devices additionally receive MQTT push for real-time updates. Check your Access Key and Secret Key if no data appears.
-- **Enhanced Mode**: If the WSS connection drops, it automatically reconnects with a new ClientID. Check logs for reconnect messages.
+- Devices must be online in the EcoFlow app
+- Verify Access Key and Secret Key from the Developer Portal
+- Check **Settings > System > Logs** for `ecoflow_energy`
 
 </details>
 
 <details>
-<summary><strong>Enhanced Mode not working</strong></summary>
+<summary><b>Data not updating</b></summary>
+<br>
 
-- Verify your EcoFlow app email and password are correct
-- Enhanced Mode requires the `cryptography` package (included in HA Core)
-- Check logs for "Enhanced login failed" or "decryption failed" errors
+- **Standard:** HTTP polls every ~30 s. Delta also gets MQTT push. Check credentials if no data.
+- **Enhanced:** WSS auto-reconnects with new ClientID. Check logs for reconnect messages.
 
 </details>
 
 <details>
-<summary><strong>Diagnostics</strong></summary>
+<summary><b>Enhanced Mode issues</b></summary>
+<br>
 
-Download diagnostics via **Settings > Devices & Services > EcoFlow Energy > 3-dot menu > Download Diagnostics**. This includes connection status and data freshness — no credentials are included.
+- Verify EcoFlow email and password
+- Requires `cryptography` package (included in HA Core)
+- Check logs for "Enhanced login failed" or "decryption failed"
 
 </details>
 
----
+<details>
+<summary><b>Download diagnostics</b></summary>
+<br>
+
+**Settings > Devices & Services > EcoFlow Energy > ⋮ > Download Diagnostics** — connection status, data freshness, no credentials exposed.
+
+</details>
+
+<br>
 
 ## Architecture
 
-```mermaid
-graph LR
-    subgraph EcoFlow Cloud
-        A[IoT API<br>HTTP]
-        B[WSS MQTT<br>Protobuf]
-    end
+<details>
+<summary><b>Data flow</b></summary>
+<br>
 
-    subgraph EcoFlow Energy Integration
-        C[Coordinator]
-        D[IoT API Client<br>HMAC-SHA256]
-        E[MQTT Client<br>TCP + WSS]
-        F[Protobuf Decoder]
-        G[Energy Integrator<br>Riemann Sum]
-    end
-
-    subgraph Home Assistant
-        H[Sensors<br>50+]
-        I[Switches &<br>Numbers]
-        J[Energy<br>Dashboard]
-    end
-
-    A -- "~30 s poll" --> D
-    B -- "~3 s push" --> E
-    E --> F
-    D --> C
-    F --> C
-    C --> G
-    C --> H
-    C --> I
-    G --> J
-
-    style A fill:#18181B,stroke:#30D158,color:#FAFAFA
-    style B fill:#18181B,stroke:#30D158,color:#FAFAFA
-    style C fill:#18181B,stroke:#30D158,color:#FAFAFA
-    style D fill:#18181B,stroke:#A1A1AA,color:#FAFAFA
-    style E fill:#18181B,stroke:#A1A1AA,color:#FAFAFA
-    style F fill:#18181B,stroke:#A1A1AA,color:#FAFAFA
-    style G fill:#18181B,stroke:#A1A1AA,color:#FAFAFA
-    style H fill:#18181B,stroke:#30D158,color:#FAFAFA
-    style I fill:#18181B,stroke:#30D158,color:#FAFAFA
-    style J fill:#18181B,stroke:#30D158,color:#FAFAFA
+```
+EcoFlow Cloud
+  ├── IoT API (HTTP ~30 s) ──► API Client (HMAC-SHA256) ──┐
+  └── WSS MQTT (~3 s)     ──► MQTT Client ► Proto Decode ─┤
+                                                            ▼
+                                                      Coordinator
+                                                      ├── Energy Integrator ──► Energy Dashboard
+                                                      ├── Sensors (50+)
+                                                      └── Switches & Numbers
 ```
 
-### File Structure
+</details>
+
+<details>
+<summary><b>File structure</b></summary>
+<br>
 
 ```
 custom_components/ecoflow_energy/
-├── __init__.py              # Entry setup, reload listener
-├── coordinator.py           # Per-device coordinator (HTTP polling + MQTT push)
-├── config_flow.py           # Setup + Options flow
+├── __init__.py              # Entry point
+├── coordinator.py           # Per-device coordinator (HTTP + MQTT)
+├── config_flow.py           # Setup & options flow
 ├── sensor.py                # Sensor platform (RestoreSensor)
-├── switch.py / number.py    # Control entities (Delta only)
-├── binary_sensor.py         # Binary sensors (Delta, Smart Plug)
-├── const.py                 # Sensor/entity definitions per device type
+├── switch.py / number.py    # Control entities
+├── binary_sensor.py         # Binary sensors
+├── const.py                 # Entity definitions per device
 ├── ecoflow/
-│   ├── iot_api.py           # IoT Developer API client (HMAC-SHA256 signed)
-│   ├── cloud_http.py        # HTTP quota polling client
+│   ├── iot_api.py           # IoT Developer API (HMAC-SHA256)
+│   ├── cloud_http.py        # HTTP quota polling
 │   ├── cloud_mqtt.py        # MQTT client (TCP + WSS)
-│   ├── enhanced_auth.py     # Enhanced Mode login + AES decryption
+│   ├── enhanced_auth.py     # Enhanced login + AES
 │   ├── energy_integrator.py # Riemann-sum energy tracking
-│   ├── energy_stream.py     # Protobuf payload builders
-│   ├── clientid.py          # WSS ClientID generation (MD5 hash)
-│   ├── const.py             # API endpoints and constants
-│   ├── parsers/             # Per-device HTTP/MQTT response parsers
-│   └── proto/               # Protobuf decoder (Enhanced Mode)
+│   ├── parsers/             # Per-device response parsers
+│   └── proto/               # Protobuf decoder
 ```
 
----
-
-## License
-
-MIT — see [LICENSE](LICENSE)
-
-## Contributing
-
-Issues and pull requests welcome on [GitHub](https://github.com/shuette42/ecoflow-energy-ha).
+</details>
 
 ---
 
 <div align="center">
 
+**MIT License** — [Contributing](https://github.com/shuette42/ecoflow-energy-ha/issues) welcome
+
 Made by [huette.ai](https://huette.ai) — When it has to work.
 
-[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-support-30D158?style=flat-square&logo=buy-me-a-coffee&logoColor=white)](https://www.buymeacoffee.com/shuette)
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-support-30D158?style=for-the-badge&logo=buy-me-a-coffee&logoColor=white)](https://www.buymeacoffee.com/shuette)
 
 </div>
