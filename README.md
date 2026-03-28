@@ -58,8 +58,7 @@ Delta gets MQTT push out of the box. PowerOcean Enhanced Mode delivers ~3 s Prot
 
 ## Supported Devices
 
-> [!TIP]
-> Other Delta-series devices (Delta Pro, Delta 2, etc.) should work automatically with the Delta sensor set.
+> **Tip:** Other Delta-series devices (Delta Pro, Delta 2, etc.) should work automatically with the Delta sensor set.
 
 | | Sensors | Controls | Energy | Update Rate |
 |:---|:---:|:---:|:---:|:---|
@@ -113,11 +112,10 @@ Download the [latest release](https://github.com/shuette42/ecoflow-energy-ha/rel
 
 ### 2. Configure
 
-> [!IMPORTANT]
-> You need an Access Key and Secret Key from the [EcoFlow Developer Portal](https://developer.ecoflow.com).
+You need an **Access Key** and **Secret Key** from the [EcoFlow Developer Portal](https://developer.ecoflow.com).
 
 1. **Settings > Devices & Services > Add Integration** > search **EcoFlow Energy**
-2. Enter your **Access Key** and **Secret Key**
+2. Enter your Access Key and Secret Key
 3. Select devices — done. Entities appear automatically.
 
 ### 3. Choose Your Mode
@@ -134,8 +132,7 @@ Download the [latest release](https://github.com/shuette42/ecoflow-energy-ha/rel
 
 ## Energy Dashboard
 
-> [!NOTE]
-> All energy sensors use `state_class: total_increasing` and are ready for the HA Energy Dashboard out of the box.
+All energy sensors are pre-configured for the HA Energy Dashboard (`state_class: total_increasing`) — just select and go.
 
 <details>
 <summary><b>PowerOcean</b> — Grid, Solar, Battery, Home</summary>
