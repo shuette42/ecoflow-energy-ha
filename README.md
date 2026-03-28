@@ -325,52 +325,6 @@ EcoFlow does not offer a local API. The official Developer Portal provides only 
 
 </details>
 
-<br>
-
-## Architecture
-
-<details>
-<summary><b>Data flow</b></summary>
-<br>
-
-```
-EcoFlow Cloud
-  ├── IoT API (HTTP ~30 s) ──► API Client (HMAC-SHA256) ──┐
-  └── WSS MQTT (~3 s)     ──► MQTT Client ► Proto Decode ─┤
-                                                            ▼
-                                                      Coordinator
-                                                      ├── Energy Integrator ──► Energy Dashboard
-                                                      ├── Sensors (50+)
-                                                      └── Switches & Numbers
-```
-
-</details>
-
-<details>
-<summary><b>File structure</b></summary>
-<br>
-
-```
-custom_components/ecoflow_energy/
-├── __init__.py              # Entry point
-├── coordinator.py           # Per-device coordinator (HTTP + MQTT)
-├── config_flow.py           # Setup & options flow
-├── sensor.py                # Sensor platform (RestoreSensor)
-├── switch.py / number.py    # Control entities
-├── binary_sensor.py         # Binary sensors
-├── const.py                 # Entity definitions per device
-├── ecoflow/
-│   ├── iot_api.py           # IoT Developer API (HMAC-SHA256)
-│   ├── cloud_http.py        # HTTP quota polling
-│   ├── cloud_mqtt.py        # MQTT client (TCP + WSS)
-│   ├── enhanced_auth.py     # Enhanced login + AES
-│   ├── energy_integrator.py # Riemann-sum energy tracking
-│   ├── parsers/             # Per-device response parsers
-│   └── proto/               # Protobuf decoder
-```
-
-</details>
-
 ---
 
 <div align="center">
