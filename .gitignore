@@ -1,5 +1,6 @@
 # Claude Code (agent team, hooks, rules — private, never committed)
 .claude/
+CLAUDE.md
 
 # Python
 __pycache__/
@@ -61,6 +62,13 @@ htmlcov/
 # HA dev
 config/
 homeassistant/
+
+# MCP / RAG (local only, not for remote)
+.mcp.json
+.venv-qdrant-mcp/
+scripts/qdrant_mcp_bridge.py
+scripts/run_qdrant_mcp_bridge.sh
+scripts/import_repo_context_to_qdrant.sh
 
 # Secrets (never)
 *.env
