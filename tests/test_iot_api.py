@@ -85,7 +85,7 @@ class TestSignedHeaders:
     def test_nonce_length(self):
         client, _ = _make_client()
         headers = client._make_signed_headers()
-        assert len(headers["nonce"]) == 16
+        assert len(headers["nonce"]) == 6
 
     def test_timestamp_is_millis(self):
         client, _ = _make_client()

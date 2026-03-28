@@ -12,7 +12,6 @@ import hmac
 import json
 import logging
 import random
-import string
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -92,7 +91,7 @@ class EcoFlowHTTPQuota:
         params_dict is the flattened request parameters (body or query).
         """
         ts = str(int(time.time() * 1000))
-        nonce = "".join(random.choices(string.ascii_letters + string.digits, k=16))
+        nonce = str(random.randint(100000, 999999))
 
         flat = self._flatten(params_dict)
         flat.sort(key=lambda kv: kv[0])

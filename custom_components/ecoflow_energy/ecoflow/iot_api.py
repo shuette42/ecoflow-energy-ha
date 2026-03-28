@@ -9,7 +9,6 @@ import hashlib
 import hmac
 import logging
 import random
-import string
 import time
 from typing import Any, Dict, Optional
 
@@ -96,7 +95,7 @@ class IoTApiClient:
 
     def _make_signed_headers(self) -> Dict[str, str]:
         """Build signed request headers."""
-        nonce = "".join(random.choices(string.ascii_letters + string.digits, k=16))
+        nonce = str(random.randint(100000, 999999))
         timestamp = str(int(time.time() * 1000))
         params = {
             "accessKey": self._access_key,

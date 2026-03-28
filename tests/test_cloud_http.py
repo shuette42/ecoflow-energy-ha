@@ -59,12 +59,12 @@ class TestSignature:
         headers = client._sign_headers({})
         assert headers["accessKey"] == "test_ak"
 
-    def test_nonce_is_16_char_alphanumeric(self):
+    def test_nonce_is_6_digit_numeric(self):
         client = self._make_client()
         headers = client._sign_headers({"sn": "SN123"})
         nonce = headers["nonce"]
-        assert len(nonce) == 16, f"Nonce must be 16 chars, got {len(nonce)}"
-        assert re.match(r"^[a-zA-Z0-9]{16}$", nonce), f"Nonce must be alphanumeric, got '{nonce}'"
+        assert len(nonce) == 6, f"Nonce must be 6 digits, got {len(nonce)}"
+        assert re.match(r"^\d{6}$", nonce), f"Nonce must be 6-digit numeric, got '{nonce}'"
 
     def test_sign_is_hex(self):
         client = self._make_client()
@@ -87,16 +87,15 @@ class TestSignature:
         """Payload params sorted, then auth tail (accessKey, nonce, timestamp) appended.
 
         EcoFlow API expects: sorted payload params first, then unsorted auth tail.
-        This is different from iot_api.py which has no payload params.
         """
         client = self._make_client()
-        fixed_nonce = "abcdef1234567890"
+        fixed_nonce = 345164
         fixed_ts = "1700000000000"
 
         with patch("ecoflow_energy.ecoflow.cloud_http.time") as mock_time, \
              patch("ecoflow_energy.ecoflow.cloud_http.random") as mock_random:
             mock_time.time.return_value = 1700000000.0
-            mock_random.choices.return_value = list(fixed_nonce)
+            mock_random.randint.return_value = fixed_nonce
 
             headers = client._sign_headers({"sn": "HW52ZZ"})
 
@@ -113,13 +112,13 @@ class TestSignature:
     def test_sign_empty_params_only_auth(self):
         """With no payload params, signature must contain only sorted auth params."""
         client = self._make_client()
-        fixed_nonce = "zzzzzzzzzzzzzzzz"
+        fixed_nonce = 537642
         fixed_ts = "1700000000000"
 
         with patch("ecoflow_energy.ecoflow.cloud_http.time") as mock_time, \
              patch("ecoflow_energy.ecoflow.cloud_http.random") as mock_random:
             mock_time.time.return_value = 1700000000.0
-            mock_random.choices.return_value = list(fixed_nonce)
+            mock_random.randint.return_value = fixed_nonce
 
             headers = client._sign_headers({})
 
@@ -131,6 +130,37 @@ class TestSignature:
         ).hexdigest()
 
         assert headers["sign"] == expected_sig
+
+    def test_sign_matches_official_api_example(self):
+        """Verify signature against the official EcoFlow API documentation example.
+
+        From: https://developer-eu.ecoflow.com General Information > Step 8
+        """
+        client = EcoFlowHTTPQuota(
+            session=MagicMock(),
+            access_key="Fp4SvIprYSDPXtYJidEtUAd1o",
+            secret_key="WIbFEKre0s6sLnh4ei7SPUeYnptHG6V",
+            device_sn="unused",
+        )
+        fixed_nonce = 345164
+        fixed_ts = "1671171709428"
+
+        with patch("ecoflow_energy.ecoflow.cloud_http.time") as mock_time, \
+             patch("ecoflow_energy.ecoflow.cloud_http.random") as mock_random:
+            mock_time.time.return_value = 1671171709.428
+            mock_random.randint.return_value = fixed_nonce
+
+            # JSON body from the official example
+            headers = client._sign_headers({
+                "sn": "123456789",
+                "params": {
+                    "cmdSet": 11,
+                    "id": 24,
+                    "eps": 0,
+                },
+            })
+
+        assert headers["sign"] == "07c13b65e037faf3b153d51613638fa80003c4c38d2407379a7f52851af1473e"
 
 
 class TestRateLimit:
