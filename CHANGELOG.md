@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.4] - 2026-03-28
+
+### Changed
+- Updated hero screenshots with higher quality images
+
 ## [1.2.3] - 2026-03-28
 
 ### Fixed
