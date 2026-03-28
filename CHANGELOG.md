@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.5] - 2026-03-28
+
+### Fixed
+- Add minimum HA version (2024.1.0) to manifest — fixes "?" badge in HACS store listing
+
 ## [1.2.4] - 2026-03-28
 
 ### Changed
