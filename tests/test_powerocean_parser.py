@@ -448,6 +448,69 @@ class TestPhaseActivePowerAndCurrent:
         assert result["grid_phase_c_current_a"] == pytest.approx(1.7)
 
 
+class TestPhaseReactivePower:
+    def test_flat_key_reactive_power_all_phases(self):
+        data = {
+            "pcsAPhase.reactPwr": 120.5,
+            "pcsBPhase.reactPwr": 95.3,
+            "pcsCPhase.reactPwr": 110.7,
+        }
+        result = parse_powerocean_http_quota(data)
+        assert result["grid_phase_a_reactive_power_var"] == pytest.approx(120.5)
+        assert result["grid_phase_b_reactive_power_var"] == pytest.approx(95.3)
+        assert result["grid_phase_c_reactive_power_var"] == pytest.approx(110.7)
+
+    def test_nested_dict_reactive_power(self):
+        data = {
+            "pcsAPhase": {"reactPwr": -50.0},
+            "pcsBPhase": {"reactPwr": 30.0},
+        }
+        result = parse_powerocean_http_quota(data)
+        assert result["grid_phase_a_reactive_power_var"] == pytest.approx(-50.0)
+        assert result["grid_phase_b_reactive_power_var"] == pytest.approx(30.0)
+
+    def test_reactive_power_missing(self):
+        data = {"pcsAPhase": {"vol": 230.0}}
+        result = parse_powerocean_http_quota(data)
+        assert "grid_phase_a_reactive_power_var" not in result
+
+
+class TestPhaseApparentPower:
+    def test_flat_key_apparent_power_all_phases(self):
+        data = {
+            "pcsAPhase.apparentPwr": 450.0,
+            "pcsBPhase.apparentPwr": 380.5,
+            "pcsCPhase.apparentPwr": 420.1,
+        }
+        result = parse_powerocean_http_quota(data)
+        assert result["grid_phase_a_apparent_power_va"] == pytest.approx(450.0)
+        assert result["grid_phase_b_apparent_power_va"] == pytest.approx(380.5)
+        assert result["grid_phase_c_apparent_power_va"] == pytest.approx(420.1)
+
+    def test_nested_dict_apparent_power(self):
+        data = {
+            "pcsAPhase": {"apparentPwr": 500.0},
+            "pcsCPhase": {"apparentPwr": 470.0},
+        }
+        result = parse_powerocean_http_quota(data)
+        assert result["grid_phase_a_apparent_power_va"] == pytest.approx(500.0)
+        assert result["grid_phase_c_apparent_power_va"] == pytest.approx(470.0)
+
+    def test_apparent_power_missing(self):
+        data = {"pcsAPhase": {"vol": 230.0}}
+        result = parse_powerocean_http_quota(data)
+        assert "grid_phase_a_apparent_power_va" not in result
+
+    def test_flat_key_priority_over_nested_for_reactive(self):
+        """Flat keys take priority over nested dicts for reactive power."""
+        data = {
+            "pcsAPhase.reactPwr": 100.0,
+            "pcsAPhase": {"reactPwr": 999.0},
+        }
+        result = parse_powerocean_http_quota(data)
+        assert result["grid_phase_a_reactive_power_var"] == pytest.approx(100.0)
+
+
 class TestEMSState:
     def test_ems_work_mode_string(self):
         data = {"ems_change_report.emsWordMode": "WORKMODE_SELFUSE"}

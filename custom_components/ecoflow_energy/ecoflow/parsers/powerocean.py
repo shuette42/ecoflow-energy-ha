@@ -86,6 +86,8 @@ def parse_powerocean_http_quota(quota_data: dict) -> Dict[str, Any]:
         "vol": "voltage_v",
         "actPwr": "active_power_w",
         "amp": "current_a",
+        "reactPwr": "reactive_power_var",
+        "apparentPwr": "apparent_power_va",
     }
     for phase_key, phase_label in [("pcsAPhase", "a"), ("pcsBPhase", "b"), ("pcsCPhase", "c")]:
         for api_field, sensor_suffix in _phase_fields.items():

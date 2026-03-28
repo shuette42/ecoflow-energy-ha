@@ -10,6 +10,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 - Smart Plug: `maxCur` field parsed (deciAmpere → Ampere)
+- PowerOcean: reactive power (VAr) and apparent power (VA) for all 3 grid phases
 
 ## [1.1.1] - 2026-03-28
 
