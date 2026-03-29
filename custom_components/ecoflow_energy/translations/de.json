@@ -49,7 +49,7 @@
       },
       "reconfigure_confirm": {
         "title": "EcoFlow Zugangsdaten aktualisieren",
-        "description": "Geben Sie Ihren aktuellen Access Key und Secret Key vom EcoFlow Developer Portal ein.",
+        "description": "Geben Sie Ihren aktuellen Access Key und Secret Key aus dem [EcoFlow Developer Portal]({developer_portal_url}) ein.",
         "data": {
           "access_key": "Access Key",
           "secret_key": "Secret Key"

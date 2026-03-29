@@ -4,6 +4,7 @@
 
 **Real-time solar, battery, grid & home power monitoring.**
 **Energy Dashboard ready. No portal login required.**
+**Current stable release: v1.3.2**
 
 [![HACS Default](https://img.shields.io/badge/HACS-Default-30D158?style=for-the-badge&logo=home-assistant&logoColor=white)](https://github.com/hacs/integration)
 [![GitHub Release](https://img.shields.io/github/v/release/shuette42/ecoflow-energy-ha?style=for-the-badge&color=30D158)](https://github.com/shuette42/ecoflow-energy-ha/releases)
@@ -264,6 +265,18 @@ automation:
 
 - **Standard:** HTTP polls every ~30 s. Delta also gets MQTT push. Check credentials if no data.
 - **Enhanced:** WSS auto-reconnects with new ClientID. Check logs for reconnect messages.
+
+</details>
+
+<details>
+<summary><b>Update credentials (manual re-auth)</b></summary>
+
+Use the integration menu (not the options dialog):
+
+**Settings > Devices & Services > EcoFlow Energy > 3-dot menu > Reconfigure**
+
+- German UI label: **Neu konfigurieren**
+- This opens the manual credential update flow for Access Key / Secret Key (and Enhanced credentials if enabled)
 
 </details>
 

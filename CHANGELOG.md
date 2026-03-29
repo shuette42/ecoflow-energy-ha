@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.2] - 2026-03-29
+
+### Added
+- README troubleshooting entry for manual credential update path via `Reconfigure` / `Neu konfigurieren`
+
+### Fixed
+- German translation placeholder mismatch in `reconfigure_confirm.description` (`{developer_portal_url}`) to prevent HA translation validation errors
+
 ## [1.3.1] - 2026-03-29
 
 ### Added
