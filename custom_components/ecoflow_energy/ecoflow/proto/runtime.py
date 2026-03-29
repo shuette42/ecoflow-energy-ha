@@ -8,7 +8,7 @@ and zero-fill rules. The generic decode loop handles all message types uniformly
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, FrozenSet, Optional
+from typing import Any
 
 from google.protobuf.json_format import MessageToDict
 
@@ -18,9 +18,9 @@ from .decoder import decode_header_message
 @dataclass
 class ProtoRuntimeDecodeResult:
     headers: list[dict]
-    payload: Optional[bytes]
+    payload: bytes | None
     source: bytes
-    mapped: Dict[str, Any]
+    mapped: dict[str, Any]
     parse_path: str
     parse_reason_code: str
 
@@ -30,17 +30,17 @@ class CmdConfig:
     """Declarative configuration for a protobuf cmd_id."""
     msg_class: type
     parse_path: str
-    flags: Dict[str, bool] = field(default_factory=dict)
-    rename: Dict[str, str] = field(default_factory=dict)
-    zero_fill: FrozenSet[str] = field(default_factory=frozenset)
-    flatten_key: Optional[str] = None
+    flags: dict[str, bool] = field(default_factory=dict)
+    rename: dict[str, str] = field(default_factory=dict)
+    zero_fill: frozenset[str] = field(default_factory=frozenset)
+    flatten_key: str | None = None
 
 
-def _build_cmd_registry() -> Dict[int, CmdConfig]:
+def _build_cmd_registry() -> dict[int, CmdConfig]:
     """Build cmd_id -> CmdConfig registry. Lazy-loaded to avoid import-time pb2 dependency."""
     try:
         from . import ecocharge_pb2 as pb2
-    except Exception:
+    except ImportError:
         return {}
 
     return {
@@ -81,11 +81,11 @@ def _build_cmd_registry() -> Dict[int, CmdConfig]:
     }
 
 
-_CMD_REGISTRY: Optional[Dict[int, CmdConfig]] = None
+_CMD_REGISTRY: dict[int, CmdConfig] | None = None
 _FULL_POWER_KEYS = frozenset({"solar", "home_direct", "batt_pb", "grid_raw_f2"})
 
 
-def _empty_mapped() -> Dict[str, Any]:
+def _empty_mapped() -> dict[str, Any]:
     """Returns a stable empty mapping skeleton for non-decoded runtime frames."""
     return {
         "_available_keys": set(),
@@ -107,7 +107,7 @@ def _header_value(headers: list[dict], key: str) -> Any:
     return None
 
 
-def _first_pdata(headers: list[dict]) -> tuple[Optional[bytes], bool]:
+def _first_pdata(headers: list[dict]) -> tuple[bytes | None, bool]:
     """Extract first valid pdata from headers. Returns (pdata_bytes, had_invalid)."""
     had_invalid = False
     for header in headers or []:
@@ -126,7 +126,7 @@ def _first_pdata(headers: list[dict]) -> tuple[Optional[bytes], bool]:
     return None, had_invalid
 
 
-def _typed_runtime_map(headers: list[dict], source: bytes) -> Optional[tuple[Dict[str, Any], str]]:
+def _typed_runtime_map(headers: list[dict], source: bytes) -> tuple[dict[str, Any], str] | None:
     """Declarative decode: cmd_id -> MessageToDict -> rename -> zero-fill -> flags."""
     global _CMD_REGISTRY
     if _CMD_REGISTRY is None:
@@ -157,7 +157,7 @@ def _typed_runtime_map(headers: list[dict], source: bytes) -> Optional[tuple[Dic
         fields = items[0] if items else {}
 
     # 4. Build mapped dict with renames and available_keys tracking
-    mapped: Dict[str, Any] = _empty_mapped()
+    mapped: dict[str, Any] = _empty_mapped()
     mapped.update(config.flags)
 
     for proto_name, value in fields.items():

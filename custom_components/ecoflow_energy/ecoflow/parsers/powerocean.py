@@ -12,18 +12,15 @@ The /quota/all response contains 300+ keys including:
 Reference: EcoFlow IoT Developer Platform — PowerOcean section.
 """
 
+from __future__ import annotations
+
 import json
-from typing import Any, Dict, Optional
+from typing import Any
+
+from . import _safe_float
 
 
-def _safe_float(val: Any) -> Optional[float]:
-    try:
-        return float(val)
-    except (TypeError, ValueError):
-        return None
-
-
-def parse_powerocean_http_quota(quota_data: dict) -> Dict[str, Any]:
+def parse_powerocean_http_quota(quota_data: dict) -> dict[str, Any]:
     """Parse a PowerOcean GET /quota/all response into flat sensor keys.
 
     Args:
@@ -32,7 +29,7 @@ def parse_powerocean_http_quota(quota_data: dict) -> Dict[str, Any]:
     Returns:
         Dict mapping sensor keys to values.
     """
-    result: Dict[str, Any] = {}
+    result: dict[str, Any] = {}
 
     # --- Top-level power values ---
     _simple = {

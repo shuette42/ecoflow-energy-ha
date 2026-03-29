@@ -6,6 +6,8 @@ Uses GET /iot-open/sign/device/quota/all?sn=... for all device types.
 See: https://developer-eu.ecoflow.com/us/document/generalInfo
 """
 
+from __future__ import annotations
+
 import asyncio
 import hashlib
 import hmac
@@ -13,7 +15,7 @@ import json
 import logging
 import random
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import aiohttp
 
@@ -52,7 +54,7 @@ class EcoFlowHTTPQuota:
     # Public API
     # ------------------------------------------------------------------
 
-    async def get_quota_all(self) -> Optional[dict]:
+    async def get_quota_all(self) -> dict | None:
         """Fetch all quotas via GET /iot-open/sign/device/quota/all?sn=...
 
         No request body — SN is passed as query parameter.
@@ -70,9 +72,9 @@ class EcoFlowHTTPQuota:
     # Signature
     # ------------------------------------------------------------------
 
-    def _flatten(self, obj: Any, parent: str = "") -> List[Tuple[str, str]]:
+    def _flatten(self, obj: Any, parent: str = "") -> list[tuple[str, str]]:
         """Flatten nested objects for API signature (EcoFlow spec)."""
-        items: List[Tuple[str, str]] = []
+        items: list[tuple[str, str]] = []
         if isinstance(obj, dict):
             for k in obj.keys():
                 new_key = f"{parent}.{k}" if parent else k
@@ -131,9 +133,9 @@ class EcoFlowHTTPQuota:
         method: str,
         url: str,
         *,
-        body: Optional[dict] = None,
-        query: Optional[dict] = None,
-    ) -> Optional[dict]:
+        body: dict | None = None,
+        query: dict | None = None,
+    ) -> dict | None:
         """Execute an HTTP request with retry logic."""
         for attempt in range(1, HTTP_RETRIES + 1):
             try:
@@ -164,7 +166,7 @@ class EcoFlowHTTPQuota:
         logger.error("HTTP: all %d attempts failed for %s", HTTP_RETRIES, self._device_sn)
         return None
 
-    async def _handle_response(self, resp: aiohttp.ClientResponse) -> Optional[dict]:
+    async def _handle_response(self, resp: aiohttp.ClientResponse) -> dict | None:
         """Parse and validate an API response."""
         data = await resp.json()
         code = str(data.get("code"))

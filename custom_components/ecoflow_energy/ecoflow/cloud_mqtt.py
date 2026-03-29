@@ -7,11 +7,13 @@ Threading note: Paho runs its own network thread.  In HA, bridge callbacks
 to the event loop with ``hass.loop.call_soon_threadsafe()``.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import ssl
 import time
-from typing import Callable, Optional
+from typing import Callable
 
 import paho.mqtt.client as mqtt
 
@@ -47,8 +49,8 @@ class EcoFlowMQTTClient:
         mqtt_host: str = MQTT_HOST,
         wss_mode: bool = True,
         subscribe_data: bool = True,
-        status_handler: Optional[Callable] = None,
-        auth_error_handler: Optional[Callable[[], None]] = None,
+        status_handler: Callable | None = None,
+        auth_error_handler: Callable[[], None] | None = None,
         max_reconnect_attempts: int = DEFAULT_MAX_RECONNECT_ATTEMPTS,
         base_reconnect_delay: int = DEFAULT_RECONNECT_DELAY,
         max_reconnect_delay: int = DEFAULT_MAX_RECONNECT_DELAY,
@@ -61,7 +63,7 @@ class EcoFlowMQTTClient:
         self.message_handler = message_handler
         self.status_handler = status_handler
 
-        self.client: Optional[mqtt.Client] = None
+        self.client: mqtt.Client | None = None
         self.connected = False
         self.reconnect_attempts = 0
         self.max_reconnect_attempts = max_reconnect_attempts
@@ -197,7 +199,10 @@ class EcoFlowMQTTClient:
                 5: "Auth failed (credentials expired?)",
             }
             reason = rc_reasons.get(rc, "unknown error")
-            logger.error("MQTT connect failed: rc=%s (%s)", rc, reason)
+            if rc == 5:
+                logger.warning("MQTT connect failed: rc=%s (%s) — scheduling credential refresh", rc, reason)
+            else:
+                logger.error("MQTT connect failed: rc=%s (%s)", rc, reason)
             self.connected = False
             if rc == 5 and self._auth_error_handler:
                 self._auth_error_handler()
@@ -263,7 +268,7 @@ class EcoFlowMQTTClient:
         try:
             self.message_handler(msg.topic, msg.payload)
         except Exception as exc:
-            logger.error("MQTT message handler error: %s", exc)
+            logger.warning("MQTT message handler error for %s: %s", msg.topic, exc)
 
     def connect(self) -> bool:
         """Establish the MQTT connection."""
@@ -278,7 +283,7 @@ class EcoFlowMQTTClient:
             self.client.connect(self._mqtt_host, port, keepalive)
             return True
         except Exception as exc:
-            logger.error("MQTT connection error: %s", exc)
+            logger.warning("MQTT connection error: %s", exc)
             return False
 
     def try_reconnect(self) -> bool:
@@ -331,19 +336,19 @@ class EcoFlowMQTTClient:
             logger.error("Force-reconnect failed: %s", exc)
             return False
 
-    def disconnect(self):
+    def disconnect(self) -> None:
         """Disconnect the MQTT client."""
         if self.client:
             self.client.loop_stop()
             self.client.disconnect()
             self.connected = False
 
-    def start_loop(self):
+    def start_loop(self) -> None:
         """Start the Paho network loop."""
         if self.client:
             self.client.loop_start()
 
-    def stop_loop(self):
+    def stop_loop(self) -> None:
         """Stop the Paho network loop."""
         if self.client:
             self.client.loop_stop()
@@ -352,7 +357,7 @@ class EcoFlowMQTTClient:
         """Check if the client is connected."""
         return self.connected and self.client is not None and self.client.is_connected()
 
-    def publish(self, topic: str, payload, qos: int = 1) -> bool:
+    def publish(self, topic: str, payload: str | bytes, qos: int = 1) -> bool:
         """Publish a message to the EcoFlow cloud broker."""
         if not self.is_connected():
             return False

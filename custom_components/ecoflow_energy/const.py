@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 DOMAIN = "ecoflow_energy"
 
@@ -77,11 +76,11 @@ def get_device_type(product_name: str) -> str:
 class EcoFlowSensorDef:
     key: str
     name: str
-    unit: Optional[str] = None
-    device_class: Optional[str] = None
-    state_class: Optional[str] = None
-    icon: Optional[str] = None
-    entity_category: Optional[str] = None
+    unit: str | None = None
+    device_class: str | None = None
+    state_class: str | None = None
+    icon: str | None = None
+    entity_category: str | None = None
     enhanced_only: bool = False
 
 
@@ -89,9 +88,9 @@ class EcoFlowSensorDef:
 class EcoFlowBinarySensorDef:
     key: str
     name: str
-    device_class: Optional[str] = None
-    icon: Optional[str] = None
-    entity_category: Optional[str] = None
+    device_class: str | None = None
+    icon: str | None = None
+    entity_category: str | None = None
 
 
 @dataclass(frozen=True)
@@ -99,7 +98,7 @@ class EcoFlowSwitchDef:
     key: str
     name: str
     state_key: str
-    icon: Optional[str] = None
+    icon: str | None = None
 
 
 @dataclass(frozen=True)
@@ -107,8 +106,8 @@ class EcoFlowNumberDef:
     key: str
     name: str
     state_key: str
-    unit: Optional[str] = None
-    icon: Optional[str] = None
+    unit: str | None = None
+    icon: str | None = None
     min_value: float = 0
     max_value: float = 100
     step: float = 1

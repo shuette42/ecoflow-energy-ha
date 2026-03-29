@@ -125,6 +125,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._enhanced_mode: bool = enhanced_mode
         self._shutdown: bool = False
         self._last_flush_ts: float = 0.0
+        self._consecutive_http_failures: int = 0
 
         # Energy integrator for power → kWh Riemann sum (all device types)
         state_path = hass.config.path(f".storage/ecoflow_energy_{self.device_sn}.json")
@@ -294,7 +295,8 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 logger.warning("Enhanced Mode: login failed for %s", self.device_sn)
 
         if not user_id:
-            logger.error("Enhanced Mode: no userId available for %s", self.device_sn)
+            logger.warning("Enhanced Mode login failed for %s — triggering re-authentication", self.device_sn)
+            self._entry.async_start_reauth(self.hass)
             return None, ""
 
         # --- Step 2: Portal certification → app-* credentials ---
@@ -497,7 +499,8 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
             logger.debug("MQTT credentials refreshed for %s", self.device_sn)
         else:
-            logger.warning("MQTT credential refresh failed for %s", self.device_sn)
+            logger.warning("MQTT credential refresh failed for %s — triggering re-authentication", self.device_sn)
+            self._entry.async_start_reauth(self.hass)
 
     def _on_mqtt_message(self, topic: str, payload: bytes) -> None:
         """Handle an incoming MQTT message (Paho thread).
@@ -770,7 +773,16 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # All device types use GET /quota/all — returns the most complete data
         raw = await self._http_client.get_quota_all()
         if not raw:
+            self._consecutive_http_failures += 1
+            if self._consecutive_http_failures >= 5:
+                logger.warning(
+                    "HTTP quota failed %d consecutive times for %s — triggering re-authentication",
+                    self._consecutive_http_failures, self.device_sn,
+                )
+                self._entry.async_start_reauth(self.hass)
             return dict(self._device_data)
+
+        self._consecutive_http_failures = 0
 
         if self.device_type == DEVICE_TYPE_POWEROCEAN:
             parsed = parse_powerocean_http_quota(raw)

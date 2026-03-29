@@ -5,12 +5,14 @@ and device listing via /iot-open/sign/device/list.
 Uses aiohttp for async HTTP — HA provides the ClientSession.
 """
 
+from __future__ import annotations
+
 import hashlib
 import hmac
 import logging
 import random
 import time
-from typing import Any, Dict, Optional
+from typing import Any
 
 import aiohttp
 
@@ -18,7 +20,7 @@ from .const import IOT_API_BASE, IOT_CERT_PATH, IOT_DEVICE_LIST_PATH, IOT_MIN_FE
 
 logger = logging.getLogger(__name__)
 
-_Credentials = Dict[str, Any]
+_Credentials = dict[str, Any]
 
 
 class IoTApiClient:
@@ -40,10 +42,10 @@ class IoTApiClient:
         self._secret_key = secret_key
         self._base_url = base_url.rstrip("/")
 
-        self._cached: Optional[_Credentials] = None
+        self._cached: _Credentials | None = None
         self._last_fetch_ts: float = 0.0
 
-    async def get_mqtt_credentials(self) -> Optional[_Credentials]:
+    async def get_mqtt_credentials(self) -> _Credentials | None:
         """Return cached credentials or fetch on-demand.
 
         Returns:
@@ -54,7 +56,7 @@ class IoTApiClient:
             return self._cached
         return await self._fetch()
 
-    async def refresh_credentials(self) -> Optional[_Credentials]:
+    async def refresh_credentials(self) -> _Credentials | None:
         """Force a new fetch (e.g. after AUTH error rc=5).
 
         Respects the rate-limit guard (60 s).
@@ -62,7 +64,7 @@ class IoTApiClient:
         self._cached = None
         return await self._fetch()
 
-    async def get_device_list(self) -> Optional[list]:
+    async def get_device_list(self) -> list | None:
         """Fetch the list of bound devices.
 
         Returns:
@@ -84,7 +86,7 @@ class IoTApiClient:
             return None
 
     @staticmethod
-    def sign(params: Dict[str, str], secret_key: str) -> str:
+    def sign(params: dict[str, str], secret_key: str) -> str:
         """HMAC-SHA256 signature over alphabetically sorted parameters."""
         sorted_params = "&".join(f"{k}={v}" for k, v in sorted(params.items()))
         return hmac.new(
@@ -93,7 +95,7 @@ class IoTApiClient:
             hashlib.sha256,
         ).hexdigest()
 
-    def _make_signed_headers(self) -> Dict[str, str]:
+    def _make_signed_headers(self) -> dict[str, str]:
         """Build signed request headers."""
         nonce = str(random.randint(100000, 999999))
         timestamp = str(int(time.time() * 1000))
@@ -110,7 +112,7 @@ class IoTApiClient:
             "sign": sig,
         }
 
-    async def _fetch(self) -> Optional[_Credentials]:
+    async def _fetch(self) -> _Credentials | None:
         """Fetch credentials from the API (with rate-limit guard)."""
         now = time.time()
         if (now - self._last_fetch_ts) < IOT_MIN_FETCH_INTERVAL_S:

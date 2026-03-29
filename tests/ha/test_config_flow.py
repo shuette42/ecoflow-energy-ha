@@ -9,6 +9,9 @@ from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 
+import aiohttp
+from homeassistant.config_entries import SOURCE_REAUTH
+
 from custom_components.ecoflow_energy.const import (
     CONF_ACCESS_KEY,
     CONF_DEVICES,
@@ -507,3 +510,217 @@ class TestOptionsFlow:
             )
         assert result["type"] is FlowResultType.FORM
         assert result["errors"]["base"] == "enhanced_login_failed"
+
+
+# ===========================================================================
+# Re-authentication Flow
+# ===========================================================================
+
+
+class TestReauthFlow:
+    """Tests for the re-authentication flow."""
+
+    def _create_standard_entry(self, hass: HomeAssistant):
+        from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_ACCESS_KEY: "old_ak",
+                CONF_SECRET_KEY: "old_sk",
+                CONF_MODE: MODE_STANDARD,
+                CONF_DEVICES: [
+                    {"sn": "SN001", "name": "Delta 2 Max", "product_name": "Delta 2 Max",
+                     "device_type": "delta", "online": 1},
+                ],
+            },
+            unique_id="old_ak",
+        )
+        entry.add_to_hass(hass)
+        return entry
+
+    def _create_enhanced_entry(self, hass: HomeAssistant):
+        from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_ACCESS_KEY: "old_ak",
+                CONF_SECRET_KEY: "old_sk",
+                CONF_MODE: MODE_ENHANCED,
+                CONF_EMAIL: "old@example.com",
+                CONF_PASSWORD: "old_pass",
+                CONF_USER_ID: "old_uid",
+                CONF_DEVICES: [
+                    {"sn": "SN001", "name": "PowerOcean", "product_name": "PowerOcean",
+                     "device_type": "powerocean", "online": 1},
+                ],
+            },
+            unique_id="old_ak",
+        )
+        entry.add_to_hass(hass)
+        return entry
+
+    async def test_reauth_shows_confirm_form(self, hass: HomeAssistant) -> None:
+        """Reauth flow shows the confirm form."""
+        entry = self._create_standard_entry(hass)
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": SOURCE_REAUTH, "entry_id": entry.entry_id},
+            data=entry.data,
+        )
+        assert result["type"] is FlowResultType.FORM
+        assert result["step_id"] == "reauth_confirm"
+
+    async def test_reauth_invalid_credentials(self, hass: HomeAssistant) -> None:
+        """Invalid credentials show error on reauth."""
+        entry = self._create_standard_entry(hass)
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": SOURCE_REAUTH, "entry_id": entry.entry_id},
+            data=entry.data,
+        )
+        with patch(
+            "custom_components.ecoflow_energy.config_flow.IoTApiClient",
+        ) as mock_cls:
+            mock_cls.return_value.get_mqtt_credentials = AsyncMock(return_value=None)
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                {CONF_ACCESS_KEY: "bad_key", CONF_SECRET_KEY: "bad_secret"},
+            )
+        assert result["type"] is FlowResultType.FORM
+        assert result["errors"]["base"] == "invalid_auth"
+
+    async def test_reauth_success_standard(self, hass: HomeAssistant) -> None:
+        """Successful reauth for Standard Mode updates entry and aborts."""
+        entry = self._create_standard_entry(hass)
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": SOURCE_REAUTH, "entry_id": entry.entry_id},
+            data=entry.data,
+        )
+        with patch(
+            "custom_components.ecoflow_energy.config_flow.IoTApiClient",
+        ) as mock_cls:
+            mock_cls.return_value.get_mqtt_credentials = AsyncMock(
+                return_value=MOCK_MQTT_CREDENTIALS
+            )
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                {CONF_ACCESS_KEY: "new_ak", CONF_SECRET_KEY: "new_sk"},
+            )
+        assert result["type"] is FlowResultType.ABORT
+        assert result["reason"] == "reauth_successful"
+        assert entry.data[CONF_ACCESS_KEY] == "new_ak"
+        assert entry.data[CONF_SECRET_KEY] == "new_sk"
+
+    async def test_reauth_enhanced_shows_second_step(self, hass: HomeAssistant) -> None:
+        """Reauth for Enhanced Mode shows enhanced credentials form after API validation."""
+        entry = self._create_enhanced_entry(hass)
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": SOURCE_REAUTH, "entry_id": entry.entry_id},
+            data=entry.data,
+        )
+        with patch(
+            "custom_components.ecoflow_energy.config_flow.IoTApiClient",
+        ) as mock_cls:
+            mock_cls.return_value.get_mqtt_credentials = AsyncMock(
+                return_value=MOCK_MQTT_CREDENTIALS
+            )
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                {CONF_ACCESS_KEY: "new_ak", CONF_SECRET_KEY: "new_sk"},
+            )
+        assert result["type"] is FlowResultType.FORM
+        assert result["step_id"] == "reauth_enhanced"
+
+    async def test_reauth_enhanced_full_flow(self, hass: HomeAssistant) -> None:
+        """Complete Enhanced Mode reauth updates all credentials."""
+        entry = self._create_enhanced_entry(hass)
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": SOURCE_REAUTH, "entry_id": entry.entry_id},
+            data=entry.data,
+        )
+        with patch(
+            "custom_components.ecoflow_energy.config_flow.IoTApiClient",
+        ) as mock_cls:
+            mock_cls.return_value.get_mqtt_credentials = AsyncMock(
+                return_value=MOCK_MQTT_CREDENTIALS
+            )
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                {CONF_ACCESS_KEY: "new_ak", CONF_SECRET_KEY: "new_sk"},
+            )
+
+        with patch(
+            "custom_components.ecoflow_energy.config_flow.enhanced_login",
+            new_callable=AsyncMock,
+            return_value={"token": "new_jwt", "user_id": "new_uid"},
+        ):
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                {CONF_EMAIL: "new@example.com", CONF_PASSWORD: "new_pass"},
+            )
+        assert result["type"] is FlowResultType.ABORT
+        assert result["reason"] == "reauth_successful"
+        assert entry.data[CONF_ACCESS_KEY] == "new_ak"
+        assert entry.data[CONF_SECRET_KEY] == "new_sk"
+        assert entry.data[CONF_EMAIL] == "new@example.com"
+        assert entry.data[CONF_PASSWORD] == "new_pass"
+        assert entry.data[CONF_USER_ID] == "new_uid"
+
+    async def test_reauth_enhanced_login_failed(self, hass: HomeAssistant) -> None:
+        """Failed Enhanced login during reauth shows error."""
+        entry = self._create_enhanced_entry(hass)
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": SOURCE_REAUTH, "entry_id": entry.entry_id},
+            data=entry.data,
+        )
+        with patch(
+            "custom_components.ecoflow_energy.config_flow.IoTApiClient",
+        ) as mock_cls:
+            mock_cls.return_value.get_mqtt_credentials = AsyncMock(
+                return_value=MOCK_MQTT_CREDENTIALS
+            )
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                {CONF_ACCESS_KEY: "new_ak", CONF_SECRET_KEY: "new_sk"},
+            )
+
+        with patch(
+            "custom_components.ecoflow_energy.config_flow.enhanced_login",
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                {CONF_EMAIL: "test@example.com", CONF_PASSWORD: "wrong"},
+            )
+        assert result["type"] is FlowResultType.FORM
+        assert result["errors"]["base"] == "enhanced_login_failed"
+
+    async def test_reauth_connection_error(self, hass: HomeAssistant) -> None:
+        """Connection error during reauth shows cannot_connect."""
+        entry = self._create_standard_entry(hass)
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": SOURCE_REAUTH, "entry_id": entry.entry_id},
+            data=entry.data,
+        )
+        with patch(
+            "custom_components.ecoflow_energy.config_flow.IoTApiClient",
+        ) as mock_cls:
+            mock_cls.return_value.get_mqtt_credentials = AsyncMock(
+                side_effect=aiohttp.ClientError("Connection failed")
+            )
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                {CONF_ACCESS_KEY: "ak", CONF_SECRET_KEY: "sk"},
+            )
+        assert result["type"] is FlowResultType.FORM
+        assert result["errors"]["base"] == "cannot_connect"

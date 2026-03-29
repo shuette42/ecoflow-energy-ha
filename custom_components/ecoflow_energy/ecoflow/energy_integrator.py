@@ -13,11 +13,13 @@ Features:
 - Persistent: state survives HA restarts via JSON file
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +34,7 @@ class EnergyIntegrator:
     def __init__(self, state_file: str) -> None:
         self._state_file = Path(state_file)
         # metric → (total_kwh, last_ts, last_power_w)
-        self._state: Dict[str, Tuple[float, float, float]] = {}
+        self._state: dict[str, tuple[float, float, float]] = {}
         self._dirty: bool = False
         self._last_save_ts: float = 0.0
         self._loaded: bool = False
@@ -52,7 +54,7 @@ class EnergyIntegrator:
         self._load_state()
         self._loaded = True
 
-    def integrate(self, metric: str, power_w: float) -> Optional[float]:
+    def integrate(self, metric: str, power_w: float) -> float | None:
         """Integrate a power reading into the running energy total.
 
         Args:
@@ -139,7 +141,7 @@ class EnergyIntegrator:
             self._save_state()
             self._dirty = False
 
-    def get_total(self, metric: str) -> Optional[float]:
+    def get_total(self, metric: str) -> float | None:
         """Return current total for a metric, or None."""
         if metric in self._state:
             return self._state[metric][0]
@@ -171,7 +173,7 @@ class EnergyIntegrator:
             # Snapshot: dict() copy prevents RuntimeError if _state is mutated
             # concurrently from the event loop while this runs in executor.
             snapshot = dict(self._state)
-            data: Dict[str, Any] = {
+            data: dict[str, Any] = {
                 m: [t, ts, p] for m, (t, ts, p) in snapshot.items()
             }
             self._state_file.write_text(json.dumps(data, indent=2))

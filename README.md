@@ -36,11 +36,11 @@
 
 ## Supported Devices
 
-| | Sensors | Controls | Energy | Update Rate |
+| | Sensors | Controls | Energy Sensors | Update Rate |
 |:---|:---:|:---:|:---:|:---|
-| **PowerOcean** — Home Battery | 63 | — | 6 kWh | ~30 s standard / ~3 s enhanced |
-| **Delta 2 Max** — Portable Power | 62 | 3 switches, 4 numbers | 4 kWh | ~30 s + MQTT push |
-| **Smart Plug** — Switchable Outlet | 11 | 1 switch | 1 kWh | ~30 s |
+| **PowerOcean** — Home Battery | 63 | — | 6 (solar, grid, battery, home) | ~30 s standard / ~3 s enhanced |
+| **Delta 2 Max** — Portable Power | 62 | 3 switches, 4 numbers | 4 (solar 1+2, AC in/out) | ~30 s + MQTT push |
+| **Smart Plug** — Switchable Outlet | 11 | 1 switch | 1 (total energy) | ~30 s |
 
 > **Tip:** Other Delta-series devices (Delta Pro, Delta 2, etc.) should work automatically with the Delta sensor set.
 

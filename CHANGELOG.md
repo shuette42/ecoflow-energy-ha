@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0] - 2026-03-29
+
+### Added
+- Re-authentication flow for expired API credentials (Standard and Enhanced Mode)
+- Automatic re-auth trigger after 5 consecutive HTTP failures, MQTT credential refresh failure, or Enhanced login failure
+
+### Changed
+- Modernized OptionsFlow to use current Home Assistant pattern
+- Modernize type hints: `Optional[X]` → `X | None`, `Dict`/`List`/`Tuple` → builtins across all source files
+- Centralize `_safe_float()` into shared parser module — removes 3 duplicate definitions
+- Add missing return type hints to MQTT client and proto decoder methods
+- Replace bare `except Exception` with specific exception types in proto decoder and runtime
+- Unify parser return types to `dict[str, Any]` for consistency
+
+### Fixed
+- Downgrade MQTT auth error (rc=5) log from ERROR to WARNING — auto-recovery follows
+- Downgrade transient MQTT message handler and connection errors to appropriate log levels
+- Remove unused typing imports
+
 ## [1.2.8] - 2026-03-29
 
 ### Changed

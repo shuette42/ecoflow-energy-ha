@@ -9,11 +9,15 @@ different from MQTT which uses "typeCode" format (e.g. "pdStatus").
 Reference: EcoFlow IoT Developer Platform — DELTA 2 MAX section.
 """
 
-from typing import Any, Dict, Optional
+from __future__ import annotations
+
+from typing import Any
+
+from . import _safe_float
 
 # Mapping: HTTP API key ("module.field") -> sensor key
 # Based on GetAllQuotaResponse from EcoFlow IoT Developer Platform
-DELTA2MAX_HTTP_FIELD_MAP: Dict[str, str] = {
+DELTA2MAX_HTTP_FIELD_MAP: dict[str, str] = {
     # --- pd (Power Distribution) ---
     "pd.soc": "soc",
     "pd.wattsInSum": "watts_in_sum",
@@ -99,20 +103,14 @@ DELTA2MAX_HTTP_FIELD_MAP: Dict[str, str] = {
 }
 
 
-def _safe_float(val: Any) -> Optional[float]:
-    try:
-        return float(val)
-    except (TypeError, ValueError):
-        return None
 
-
-def parse_delta_http_quota(quota_data: dict) -> Dict[str, float]:
+def parse_delta_http_quota(quota_data: dict) -> dict[str, Any]:
     """Parse a Delta 2 Max GET /quota/all response into flat sensor keys.
 
     The API returns keys like "pd.soc": 83, "inv.outputWatts": 0, etc.
     This function maps them to sensor keys and applies unit conversions.
     """
-    result: Dict[str, float] = {}
+    result: dict[str, Any] = {}
 
     for http_key, sensor_key in DELTA2MAX_HTTP_FIELD_MAP.items():
         if http_key in quota_data:

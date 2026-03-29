@@ -7,17 +7,14 @@ The Smart Plug API uses a "2_1." prefix for heartbeat data and "2_2." for tasks.
 Key fields: switchSta, watts, current (mA), volt (V), temp, freq, brightness.
 """
 
-from typing import Any, Dict, Optional
+from __future__ import annotations
+
+from typing import Any
+
+from . import _safe_float
 
 
-def _safe_float(val: Any) -> Optional[float]:
-    try:
-        return float(val)
-    except (TypeError, ValueError):
-        return None
-
-
-def parse_smartplug_http_quota(quota_data: dict) -> Dict[str, Any]:
+def parse_smartplug_http_quota(quota_data: dict) -> dict[str, Any]:
     """Parse a Smart Plug GET /quota/all response into flat sensor keys.
 
     Args:
@@ -26,7 +23,7 @@ def parse_smartplug_http_quota(quota_data: dict) -> Dict[str, Any]:
     Returns:
         Dict mapping sensor keys to values.
     """
-    result: Dict[str, Any] = {}
+    result: dict[str, Any] = {}
 
     # --- Core measurements ---
     _prefix = "2_1."

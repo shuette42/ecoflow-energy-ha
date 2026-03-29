@@ -8,10 +8,12 @@ The IoT API sends individual reports per module:
   {"typeCode": "mpptStatus", "params": {"inWatts": 300, ...}}
 """
 
-from typing import Dict, Optional
+from __future__ import annotations
+
+from typing import Any
 
 # Field map: "typeCode.paramKey" -> destination key
-DELTA2MAX_FIELD_MAP: Dict[str, str] = {
+DELTA2MAX_FIELD_MAP: dict[str, str] = {
     # --- pdStatus (pd.*) ---
     "pdStatus.soc": "soc",
     "pdStatus.wattsInSum": "watts_in_sum",
@@ -94,8 +96,8 @@ DELTA2MAX_FIELD_MAP: Dict[str, str] = {
 
 def parse_delta_report(
     payload: dict,
-    field_map: Optional[Dict[str, str]] = None,
-) -> Dict[str, float]:
+    field_map: dict[str, str] | None = None,
+) -> dict[str, Any]:
     """Parse a Delta 2 Max IoT-API JSON report.
 
     The IoT-API format is: {"typeCode": "pdStatus", "params": {"soc": 85, ...}}
@@ -109,7 +111,7 @@ def parse_delta_report(
     if not isinstance(params, dict) or not type_code:
         return {}
 
-    parsed: Dict[str, float] = {}
+    parsed: dict[str, Any] = {}
     for param_key, value in params.items():
         if not isinstance(value, (int, float)):
             continue

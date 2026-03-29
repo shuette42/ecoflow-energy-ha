@@ -4,6 +4,8 @@ Decodes the outer EcoFlow frame header (wrapper structure).
 Inner payload fields are decoded via the generated pb2 classes.
 """
 
+from __future__ import annotations
+
 import struct
 
 _HEADER_FIELDS = {
@@ -32,10 +34,10 @@ def _read_varint(mv, i):
     return res, i
 
 
-def _try_utf8(b: bytes):
+def _try_utf8(b: bytes) -> str:
     try:
         return b.decode("utf-8")
-    except Exception:
+    except (UnicodeDecodeError, ValueError):
         return b.hex()
 
 
@@ -72,7 +74,7 @@ def _decode_single_header(hdr: bytes) -> dict:
     return out
 
 
-def decode_header_message(b: bytes):
+def decode_header_message(b: bytes) -> tuple[list[dict], bytes | None]:
     """Decode an EcoFlow frame: returns (headers, payload)."""
     headers = []
     payload = None

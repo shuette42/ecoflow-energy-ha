@@ -6,6 +6,8 @@ import re
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
 from ecoflow_energy.ecoflow.cloud_http import EcoFlowHTTPQuota
 
 
@@ -188,15 +190,15 @@ class TestRateLimit:
 class TestDeadCodeRemoved:
     def test_no_powerocean_quota_keys(self):
         """POWEROCEAN_QUOTA_KEYS was dead code and must be removed."""
-        source = Path("custom_components/ecoflow_energy/ecoflow/cloud_http.py").read_text()
+        source = (REPO_ROOT / "custom_components/ecoflow_energy/ecoflow/cloud_http.py").read_text()
         assert "POWEROCEAN_QUOTA_KEYS" not in source
 
     def test_no_get_powerocean_quota(self):
         """get_powerocean_quota was dead code and must be removed."""
-        source = Path("custom_components/ecoflow_energy/ecoflow/cloud_http.py").read_text()
+        source = (REPO_ROOT / "custom_components/ecoflow_energy/ecoflow/cloud_http.py").read_text()
         assert "get_powerocean_quota" not in source
 
     def test_no_iot_quota_path_import(self):
         """IOT_QUOTA_PATH import was only used by dead code."""
-        source = Path("custom_components/ecoflow_energy/ecoflow/cloud_http.py").read_text()
+        source = (REPO_ROOT / "custom_components/ecoflow_energy/ecoflow/cloud_http.py").read_text()
         assert "IOT_QUOTA_PATH" not in source

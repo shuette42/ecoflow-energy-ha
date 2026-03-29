@@ -3,10 +3,12 @@
 import ast
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
 
 def _extract_sensor_keys(var_name: str) -> list[str]:
     """Extract the first positional arg (key) from each call in a list variable."""
-    source = Path("custom_components/ecoflow_energy/const.py").read_text()
+    source = (REPO_ROOT / "custom_components/ecoflow_energy/const.py").read_text()
     tree = ast.parse(source)
     for node in ast.walk(tree):
         # Type-annotated: ``SENSORS: list[...] = [...]``  → AnnAssign
