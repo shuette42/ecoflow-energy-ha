@@ -46,7 +46,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up EcoFlow sensors from a config entry."""
     coordinators: dict[str, EcoFlowDeviceCoordinator] = hass.data[DOMAIN][entry.entry_id]
-    entities: list[EcoFlowSensor] = []
+    entities: list[SensorEntity] = []
 
     for coordinator in coordinators.values():
         sensor_defs = _get_sensor_defs(coordinator.device_type)
@@ -54,6 +54,10 @@ async def async_setup_entry(
             if sensor_def.enhanced_only and not coordinator.enhanced_mode:
                 continue
             entities.append(EcoFlowSensor(coordinator, sensor_def))
+
+        # Diagnostic sensors (coordinator properties, not data-driven)
+        entities.append(EcoFlowDiagnosticSensor(coordinator, "mqtt_status"))
+        entities.append(EcoFlowDiagnosticSensor(coordinator, "connection_mode"))
 
     async_add_entities(entities)
 
@@ -117,6 +121,44 @@ class EcoFlowSensor(CoordinatorEntity[EcoFlowDeviceCoordinator], RestoreSensor):
             if val is not None:
                 return val
         return self._restored_value
+
+
+class EcoFlowDiagnosticSensor(CoordinatorEntity[EcoFlowDeviceCoordinator], SensorEntity):
+    """Diagnostic sensor that reads coordinator properties directly."""
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(
+        self,
+        coordinator: EcoFlowDeviceCoordinator,
+        key: str,
+    ) -> None:
+        """Initialize the diagnostic sensor."""
+        super().__init__(coordinator)
+        self._key = key
+        self._attr_unique_id = f"{coordinator.device_sn}_{key}"
+        self._attr_translation_key = key
+
+    @property
+    def device_info(self) -> dict:
+        """Return device info from coordinator."""
+        return self.coordinator.device_info
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        self.async_write_ha_state()
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the diagnostic sensor value from coordinator property."""
+        if self._key == "mqtt_status":
+            return self.coordinator.mqtt_status
+        if self._key == "connection_mode":
+            return self.coordinator.connection_mode
+        return None
 
 
 def _get_sensor_defs(device_type: str) -> list[EcoFlowSensorDef]:

@@ -2,10 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.3] - 2026-03-30
+
+### Added
+- Diagnostic sensors for MQTT connection status and connection mode (disabled by default)
+- Event history (last 20 events) in diagnostics download for troubleshooting
+- SET command reply tracking via MQTT set_reply topic subscription
+
+### Fixed
+- Startup log correctly reports Enhanced vs Standard device count
+- Re-auth trigger fires exactly once after 5 HTTP failures (no repeated warnings)
+- MQTT event log rate-limited to prevent flooding in Enhanced Mode
+
 ## [1.3.2] - 2026-03-29
 
 ### Added
-- README troubleshooting entry for manual credential update path via `Reconfigure` / `Neu konfigurieren`
+- README troubleshooting entry for manual credential update path via Reconfigure menu
 
 ### Fixed
 - German translation placeholder mismatch in `reconfigure_confirm.description` (`{developer_portal_url}`) to prevent HA translation validation errors

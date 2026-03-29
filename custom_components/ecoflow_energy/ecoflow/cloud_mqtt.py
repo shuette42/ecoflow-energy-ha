@@ -148,6 +148,10 @@ class EcoFlowMQTTClient:
     def _on_connect(self, client, userdata, flags, rc, properties=None):
         """Callback on MQTT connection."""
         if rc == 0:
+            # Subscribe to SET reply topic (all modes) for command acknowledgement tracking
+            set_reply_topic = f"/open/{self._cert_account}/{self._device_sn}/set_reply"
+            client.subscribe(set_reply_topic, qos=1)
+
             if self._subscribe_data:
                 # Subscribe to data topics (Enhanced Mode: MQTT is primary data source)
                 topic_json = f"/open/{self._cert_account}/{self._device_sn}/quota"
@@ -161,12 +165,12 @@ class EcoFlowMQTTClient:
 
                 if not self._notified_connected:
                     self._notified_connected = True
-                    logger.debug("MQTT connected — data topics: %s | %s", topic_json, topic_pb)
+                    logger.debug("MQTT connected — data topics: %s | %s | set_reply", topic_json, topic_pb)
             else:
                 # Standard Mode: no data subscriptions, MQTT is for SET commands only
                 if not self._notified_connected:
                     self._notified_connected = True
-                    logger.debug("MQTT connected — SET-only mode (no data subscriptions)")
+                    logger.debug("MQTT connected — SET-only mode (set_reply subscribed)")
 
             self.last_connect_time = time.time()
             self.connected = True

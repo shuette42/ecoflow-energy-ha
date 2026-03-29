@@ -29,7 +29,7 @@ class TestSubscribeDataFlag:
 
     @patch("ecoflow_energy.ecoflow.cloud_mqtt.mqtt.Client")
     def test_standard_mode_no_data_subscriptions(self, mock_mqtt_cls):
-        """In Standard Mode (subscribe_data=False), _on_connect must NOT subscribe to data topics."""
+        """In Standard Mode (subscribe_data=False), _on_connect subscribes only to set_reply."""
         mock_paho = MagicMock()
         mock_mqtt_cls.return_value = mock_paho
 
@@ -39,8 +39,11 @@ class TestSubscribeDataFlag:
         # Simulate successful connection (rc=0)
         client._on_connect(mock_paho, None, None, 0)
 
-        # Must NOT subscribe to any topics
-        mock_paho.subscribe.assert_not_called()
+        # Must subscribe to set_reply only — no data topics
+        topics_subscribed = [call[0][0] for call in mock_paho.subscribe.call_args_list]
+        assert len(topics_subscribed) == 1
+        assert "/set_reply" in topics_subscribed[0]
+        assert not any("/quota" in t for t in topics_subscribed)
 
     @patch("ecoflow_energy.ecoflow.cloud_mqtt.mqtt.Client")
     def test_enhanced_mode_subscribes_data_topics(self, mock_mqtt_cls):
@@ -58,10 +61,11 @@ class TestSubscribeDataFlag:
         # Simulate successful connection (rc=0)
         client._on_connect(mock_paho, None, None, 0)
 
-        # Must subscribe to quota and property topics
+        # Must subscribe to quota, property, and set_reply topics
         topics_subscribed = [call[0][0] for call in mock_paho.subscribe.call_args_list]
         assert any("/quota" in t for t in topics_subscribed), "Missing /quota subscription"
         assert any("/property/" in t for t in topics_subscribed), "Missing /property subscription"
+        assert any("/set_reply" in t for t in topics_subscribed), "Missing /set_reply subscription"
 
 
 class TestClientCreation:

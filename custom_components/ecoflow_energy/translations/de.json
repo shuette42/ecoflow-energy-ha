@@ -241,7 +241,9 @@
       "led_brightness": { "name": "LED-Helligkeit" },
       "error_code": { "name": "Fehlercode" },
       "warning_code": { "name": "Warnungscode" },
-      "energy_kwh": { "name": "Energie" }
+      "energy_kwh": { "name": "Energie" },
+      "mqtt_status": { "name": "MQTT-Status" },
+      "connection_mode": { "name": "Verbindungsmodus" }
     },
     "binary_sensor": {
       "ac_enabled": { "name": "AC aktiviert" },

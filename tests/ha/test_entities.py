@@ -26,7 +26,11 @@ from custom_components.ecoflow_energy.const import (
     POWEROCEAN_SENSORS,
 )
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
-from custom_components.ecoflow_energy.sensor import EcoFlowSensor, _get_sensor_defs
+from custom_components.ecoflow_energy.sensor import (
+    EcoFlowDiagnosticSensor,
+    EcoFlowSensor,
+    _get_sensor_defs,
+)
 from custom_components.ecoflow_energy.binary_sensor import (
     EcoFlowBinarySensor,
     _get_binary_sensor_defs,
@@ -497,3 +501,101 @@ class TestEcoFlowNumber:
             assert cmd["moduleType"] == 2
             assert cmd["operateType"] == "upsConfig"
             assert cmd["params"]["maxChgSoc"] == 90
+
+
+# ===========================================================================
+# EcoFlowDiagnosticSensor
+# ===========================================================================
+
+
+class TestEcoFlowDiagnosticSensor:
+    async def test_diagnostic_sensor_mqtt_status(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Diagnostic sensor returns mqtt_status from coordinator."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+        sensor = EcoFlowDiagnosticSensor(coordinator, "mqtt_status")
+
+        assert sensor.unique_id == "DAEBK5ZZ12340001_mqtt_status"
+        assert sensor.translation_key == "mqtt_status"
+        assert sensor.native_value == "not_configured"
+        assert sensor.entity_registry_enabled_default is False
+
+    async def test_diagnostic_sensor_connection_mode(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Diagnostic sensor returns connection_mode from coordinator."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+        sensor = EcoFlowDiagnosticSensor(coordinator, "connection_mode")
+
+        assert sensor.unique_id == "DAEBK5ZZ12340001_connection_mode"
+        assert sensor.native_value == "standard"
+
+    async def test_diagnostic_sensor_entity_category(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Diagnostic sensors have entity_category=DIAGNOSTIC."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+        sensor = EcoFlowDiagnosticSensor(coordinator, "mqtt_status")
+        from homeassistant.const import EntityCategory
+        assert sensor.entity_category is EntityCategory.DIAGNOSTIC
+
+    async def test_diagnostic_sensor_device_info(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Diagnostic sensor provides correct device info."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+        sensor = EcoFlowDiagnosticSensor(coordinator, "mqtt_status")
+        info = sensor.device_info
+        assert (DOMAIN, "DAEBK5ZZ12340001") in info["identifiers"]
+
+    async def test_diagnostic_sensor_unknown_key(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Unknown diagnostic key returns None."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+        sensor = EcoFlowDiagnosticSensor(coordinator, "nonexistent")
+        assert sensor.native_value is None
+
+    async def test_diagnostic_sensor_mqtt_connected(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """mqtt_status sensor reflects connected MQTT client."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+        mock_mqtt = MagicMock()
+        mock_mqtt.is_connected.return_value = True
+        coordinator._mqtt_client = mock_mqtt
+
+        sensor = EcoFlowDiagnosticSensor(coordinator, "mqtt_status")
+        assert sensor.native_value == "connected"
+
+    async def test_diagnostic_sensor_enhanced_mode(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """connection_mode sensor returns 'enhanced' for Enhanced Mode."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(
+            hass, enhanced_config_entry, device=MOCK_POWEROCEAN_DEVICE
+        )
+        sensor = EcoFlowDiagnosticSensor(coordinator, "connection_mode")
+        assert sensor.native_value == "enhanced"

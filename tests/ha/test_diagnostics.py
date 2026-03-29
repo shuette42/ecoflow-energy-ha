@@ -210,3 +210,35 @@ class TestDeviceDiagnostics:
         coordinator.update_interval = timedelta(seconds=30)
         result = _device_diagnostics(coordinator)
         assert result["data_freshness"]["http_fallback_active"] is True
+
+    async def test_event_log_in_diagnostics(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Device diagnostics includes event_log."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        coordinator._log_event("http_ok", "keys=42")
+        coordinator._log_event("mqtt_connect", "TCP Standard")
+        result = _device_diagnostics(coordinator)
+
+        assert "event_log" in result
+        assert len(result["event_log"]) == 2
+        assert result["event_log"][0]["type"] == "http_ok"
+        assert result["event_log"][1]["type"] == "mqtt_connect"
+
+    async def test_event_log_empty_by_default(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Event log is empty when no events recorded."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        result = _device_diagnostics(coordinator)
+        assert result["event_log"] == []

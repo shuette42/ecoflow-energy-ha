@@ -17,6 +17,7 @@ import asyncio
 import json
 import logging
 import time
+from collections import deque
 from datetime import timedelta
 from typing import Any
 
@@ -127,6 +128,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_flush_ts: float = 0.0
         self._consecutive_http_failures: int = 0
         self._device_available: bool = True
+        self._event_log: deque[dict[str, Any]] = deque(maxlen=20)
 
         # Energy integrator for power → kWh Riemann sum (all device types)
         state_path = hass.config.path(f".storage/ecoflow_energy_{self.device_sn}.json")
@@ -170,6 +172,35 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def mqtt_client(self) -> EcoFlowMQTTClient | None:
         """Return the MQTT client (or None if not set up)."""
         return self._mqtt_client
+
+    @property
+    def mqtt_status(self) -> str:
+        """Return MQTT connection status for diagnostic sensor."""
+        if self._mqtt_client is None:
+            return "not_configured"
+        return "connected" if self._mqtt_client.is_connected() else "disconnected"
+
+    @property
+    def connection_mode(self) -> str:
+        """Return current connection mode for diagnostic sensor."""
+        if not self._enhanced_mode:
+            return "standard"
+        if self.update_interval is not None:
+            return "enhanced_fallback"
+        return "enhanced"
+
+    @property
+    def event_log(self) -> list[dict[str, Any]]:
+        """Return the event history for diagnostics export."""
+        return list(self._event_log)
+
+    def _log_event(self, event_type: str, detail: str) -> None:
+        """Record an event for diagnostics (bounded FIFO, max 20 entries)."""
+        self._event_log.append({
+            "ts": time.time(),
+            "type": event_type,
+            "detail": detail,
+        })
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -341,10 +372,13 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._mqtt_client.start_loop()
                 mode_label = "WSS Enhanced" if self._enhanced_mode else "TCP Standard"
                 logger.info("MQTT started for %s (%s)", self.device_sn, mode_label)
+                self._log_event("mqtt_connect", mode_label)
             else:
                 logger.error("MQTT connect failed for %s", self.device_sn)
+                self._log_event("mqtt_disconnect", "connect failed")
         else:
             logger.error("MQTT client creation failed for %s", self.device_sn)
+            self._log_event("mqtt_disconnect", "client creation failed")
 
     async def async_shutdown(self) -> None:
         """Stop the MQTT client and cancel timers."""
@@ -489,6 +523,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def _on_mqtt_auth_error(self) -> None:
         """Handle MQTT AUTH error (rc=5) — schedule credential refresh."""
         logger.warning("MQTT AUTH error for %s — scheduling credential refresh", self.device_sn)
+        self._log_event("reauth", "mqtt_auth_error")
         self.hass.loop.call_soon_threadsafe(
             self.hass.async_create_task,
             self._refresh_mqtt_credentials(),
@@ -517,6 +552,12 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         for real-time data alongside HTTP polling (dual-source).
         In Enhanced Mode, MQTT is the primary source.
         """
+        # SET reply tracking (all modes): log acknowledgement, do not process as data
+        if "/set_reply" in topic:
+            logger.debug("SET reply for %s: %s", self.device_sn, payload[:200])
+            self._log_event("set_reply", f"topic={topic}")
+            return
+
         if not self._enhanced_mode and self.device_type != DEVICE_TYPE_DELTA:
             return  # Standard Mode (non-Delta): ignore MQTT data
         parsed = self._parse_message(topic, payload)
@@ -721,6 +762,10 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         now = time.time()
         self._last_mqtt_ts = now
         self._device_available = True
+        # Rate-limited event log: at most once per 60s to avoid flooding the deque
+        if now - getattr(self, "_last_mqtt_event_ts", 0) > 60:
+            self._last_mqtt_event_ts = now
+            self._log_event("mqtt_data", f"keys={len(parsed)}")
         self._enforce_monotonic(parsed)
         self._device_data.update(parsed)
 
@@ -761,8 +806,10 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         if ok:
             logger.debug("SET command sent: %s → %s", topic, payload[:120])
+            self._log_event("set_cmd", f"keys={list(command.keys())[:3]}")
         else:
             logger.warning("SET command failed: %s", topic)
+            self._log_event("set_cmd_fail", f"keys={list(command.keys())[:3]}")
         return ok
 
     # ------------------------------------------------------------------
@@ -782,9 +829,10 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         raw = await self._http_client.get_quota_all()
         if not raw:
             self._consecutive_http_failures += 1
+            self._log_event("http_fail", f"consecutive={self._consecutive_http_failures}")
             if self._consecutive_http_failures >= 3:
                 self._device_available = False
-            if self._consecutive_http_failures >= 5:
+            if self._consecutive_http_failures == 5:
                 logger.warning(
                     "HTTP quota failed %d consecutive times for %s — triggering re-authentication",
                     self._consecutive_http_failures, self.device_sn,
@@ -794,6 +842,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         self._consecutive_http_failures = 0
         self._device_available = True
+        self._log_event("http_ok", f"keys={len(raw)}")
 
         if self.device_type == DEVICE_TYPE_POWEROCEAN:
             parsed = parse_powerocean_http_quota(raw)

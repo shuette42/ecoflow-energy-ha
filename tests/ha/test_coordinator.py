@@ -1298,3 +1298,192 @@ class TestParseMessageJsonError:
 
         result = coordinator._parse_message(topic, payload)
         assert result is None
+
+
+# ===========================================================================
+# Diagnostic Properties (mqtt_status, connection_mode)
+# ===========================================================================
+
+
+class TestDiagnosticProperties:
+    async def test_mqtt_status_not_configured(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """mqtt_status returns 'not_configured' when no MQTT client."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        assert coordinator.mqtt_status == "not_configured"
+
+    async def test_mqtt_status_connected(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """mqtt_status returns 'connected' when MQTT client is connected."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        mock_mqtt = MagicMock()
+        mock_mqtt.is_connected.return_value = True
+        coordinator._mqtt_client = mock_mqtt
+        assert coordinator.mqtt_status == "connected"
+
+    async def test_mqtt_status_disconnected(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """mqtt_status returns 'disconnected' when MQTT client is not connected."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        mock_mqtt = MagicMock()
+        mock_mqtt.is_connected.return_value = False
+        coordinator._mqtt_client = mock_mqtt
+        assert coordinator.mqtt_status == "disconnected"
+
+    async def test_connection_mode_standard(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """connection_mode returns 'standard' for Standard Mode."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        assert coordinator.connection_mode == "standard"
+
+    async def test_connection_mode_enhanced(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """connection_mode returns 'enhanced' for Enhanced Mode without fallback."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        assert coordinator.connection_mode == "enhanced"
+
+    async def test_connection_mode_enhanced_fallback(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """connection_mode returns 'enhanced_fallback' when HTTP fallback is active."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        coordinator.update_interval = timedelta(seconds=30)
+        assert coordinator.connection_mode == "enhanced_fallback"
+
+
+# ===========================================================================
+# Event Log (_log_event, event_log)
+# ===========================================================================
+
+
+class TestEventLog:
+    async def test_event_log_initially_empty(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Event log starts empty."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        assert coordinator.event_log == []
+
+    async def test_log_event_adds_entry(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """_log_event appends an entry to the event log."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        coordinator._log_event("http_ok", "keys=42")
+        log = coordinator.event_log
+        assert len(log) == 1
+        assert log[0]["type"] == "http_ok"
+        assert log[0]["detail"] == "keys=42"
+        assert "ts" in log[0]
+
+    async def test_event_log_bounded(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Event log is bounded to maxlen=20."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        for i in range(30):
+            coordinator._log_event("test", f"entry_{i}")
+        log = coordinator.event_log
+        assert len(log) == 20
+        # Oldest entries are evicted — first entry should be entry_10
+        assert log[0]["detail"] == "entry_10"
+
+    async def test_event_log_returns_copy(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """event_log property returns a copy, not the internal deque."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        coordinator._log_event("test", "entry_1")
+        log = coordinator.event_log
+        log.append({"ts": 0, "type": "fake", "detail": "injected"})
+        assert len(coordinator.event_log) == 1  # internal unchanged
+
+    async def test_apply_data_logs_mqtt_event(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """_apply_data logs rate-limited mqtt_data event."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        # First call always logs (no previous timestamp)
+        coordinator._apply_data({"solar_w": 3000})
+
+        log = coordinator.event_log
+        assert any(e["type"] == "mqtt_data" for e in log)
+
+    async def test_set_reply_logged(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """SET reply messages are logged as events."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        topic = f"/open/cert_account/{coordinator.device_sn}/set_reply"
+        payload = b'{"id":12345,"code":"0"}'
+
+        coordinator._on_mqtt_message(topic, payload)
+
+        log = coordinator.event_log
+        assert len(log) == 1
+        assert log[0]["type"] == "set_reply"

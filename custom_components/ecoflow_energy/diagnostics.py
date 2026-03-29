@@ -84,4 +84,5 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
         },
         "data_keys": data_keys,
         "data_key_count": len(data_keys),
+        "event_log": coordinator.event_log,
     }
