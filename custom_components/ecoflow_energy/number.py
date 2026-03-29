@@ -82,6 +82,11 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
         self._attr_native_step = definition.step
 
     @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        return self.coordinator.device_available and super().available
+
+    @property
     def device_info(self) -> dict:
         """Return device info from coordinator."""
         return self.coordinator.device_info
@@ -122,6 +127,13 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
         }
 
         await self.coordinator.async_send_set_command(command)
+
+        # Optimistic update — show new value immediately in UI.
+        # Mutates coordinator.data (dispatched snapshot), not _device_data.
+        # Next poll overwrites this with the actual device value.
+        if self.coordinator.data is not None:
+            self.coordinator.data[self._definition.state_key] = value
+            self.async_write_ha_state()
 
 
 def _get_number_defs(device_type: str) -> list[EcoFlowNumberDef]:

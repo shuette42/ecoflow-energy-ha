@@ -18,7 +18,7 @@ from custom_components.ecoflow_energy.diagnostics import (
 )
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
 
-from .conftest import MOCK_DELTA_DEVICE, MOCK_MQTT_CREDENTIALS
+from .conftest import MOCK_DELTA_DEVICE, MOCK_MQTT_CREDENTIALS, MOCK_POWEROCEAN_DEVICE
 
 
 # ===========================================================================
@@ -181,16 +181,32 @@ class TestDeviceDiagnostics:
         assert result["data_keys"] == ["batt_w", "soc", "solar_w"]
         assert result["data_key_count"] == 3
 
-    async def test_http_fallback_flag(
+    async def test_http_fallback_flag_standard_mode(
         self,
         hass: HomeAssistant,
         standard_config_entry: MockConfigEntry,
     ) -> None:
-        """http_fallback_active reflects update_interval."""
+        """Standard Mode is not a fallback — http_fallback_active is False."""
         standard_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, standard_config_entry, MOCK_DELTA_DEVICE
         )
         result = _device_diagnostics(coordinator)
-        # Standard Mode has update_interval set
+        # Standard Mode: HTTP polling is primary, not a fallback
+        assert result["data_freshness"]["http_fallback_active"] is False
+
+    async def test_http_fallback_flag_enhanced_with_fallback(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Enhanced Mode with stale MQTT shows http_fallback_active=True."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        # Simulate stale MQTT → HTTP fallback activated
+        from datetime import timedelta
+        coordinator.update_interval = timedelta(seconds=30)
+        result = _device_diagnostics(coordinator)
         assert result["data_freshness"]["http_fallback_active"] is True

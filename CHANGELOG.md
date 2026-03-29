@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.1] - 2026-03-29
+
+### Added
+- Reconfigure flow — update API credentials via Settings > Integrations > EcoFlow Energy > Reconfigure
+- Entity availability tracking — entities show "unavailable" when device is unreachable
+- Optimistic state update for number entities (charge speed, SoC limits)
+- `suggested_display_precision` for all sensors — cleaner UI values
+- `disabled_by_default` for diagnostic sensors — less overwhelming for new users
+- Entity categories for diagnostic binary sensors
+- `configuration_url` in device info — clickable link on device page
+- German translations for re-authentication and reconfigure flows
+
+### Fixed
+- Protobuf decode errors logged at DEBUG instead of WARNING (zero-noise logging)
+- HTTP retry attempts logged at DEBUG instead of WARNING
+- Startup summary log downgraded from INFO to DEBUG
+- Diagnostics `http_fallback_active` now correctly reflects actual fallback state
+
 ## [1.3.0] - 2026-03-29
 
 ### Added

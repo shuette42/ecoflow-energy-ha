@@ -158,7 +158,10 @@ class EcoFlowHTTPQuota:
                         return await self._handle_response(resp)
 
             except (aiohttp.ClientError, TimeoutError, asyncio.TimeoutError) as exc:
-                logger.warning("HTTP %s: error (attempt %d/%d): %s", method, attempt, HTTP_RETRIES, exc)
+                if attempt < HTTP_RETRIES:
+                    logger.debug("HTTP %s: error (attempt %d/%d): %s", method, attempt, HTTP_RETRIES, exc)
+                else:
+                    logger.warning("HTTP %s: error (attempt %d/%d): %s", method, attempt, HTTP_RETRIES, exc)
 
             if attempt < HTTP_RETRIES:
                 await asyncio.sleep(HTTP_RETRY_BACKOFF_S)

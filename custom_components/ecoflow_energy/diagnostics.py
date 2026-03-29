@@ -78,7 +78,9 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
         "data_freshness": {
             "last_mqtt_age_s": last_mqtt_age_s,
             "update_interval": str(coordinator.update_interval) if coordinator.update_interval else None,
-            "http_fallback_active": coordinator.update_interval is not None,
+            "http_fallback_active": bool(
+                coordinator.enhanced_mode and coordinator.update_interval is not None
+            ),
         },
         "data_keys": data_keys,
         "data_key_count": len(data_keys),

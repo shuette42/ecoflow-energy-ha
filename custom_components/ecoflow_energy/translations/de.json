@@ -30,6 +30,38 @@
           "email": "E-Mail",
           "password": "Passwort"
         }
+      },
+      "reauth_confirm": {
+        "title": "EcoFlow Energy erneut authentifizieren",
+        "description": "Ihre EcoFlow API-Zugangsdaten sind nicht mehr gültig. Geben Sie Ihren aktualisierten Access Key und Secret Key vom EcoFlow Developer Portal ein.",
+        "data": {
+          "access_key": "Access Key",
+          "secret_key": "Secret Key"
+        }
+      },
+      "reauth_enhanced": {
+        "title": "Enhanced Mode erneut authentifizieren",
+        "description": "Ihre EcoFlow App-Zugangsdaten sind nicht mehr gültig. Geben Sie Ihre aktualisierte E-Mail-Adresse und Ihr Passwort ein.",
+        "data": {
+          "email": "E-Mail",
+          "password": "Passwort"
+        }
+      },
+      "reconfigure_confirm": {
+        "title": "EcoFlow Zugangsdaten aktualisieren",
+        "description": "Geben Sie Ihren aktuellen Access Key und Secret Key vom EcoFlow Developer Portal ein.",
+        "data": {
+          "access_key": "Access Key",
+          "secret_key": "Secret Key"
+        }
+      },
+      "reconfigure_enhanced": {
+        "title": "Enhanced Mode Zugangsdaten aktualisieren",
+        "description": "Geben Sie Ihre EcoFlow App E-Mail-Adresse und Ihr Passwort ein.",
+        "data": {
+          "email": "E-Mail",
+          "password": "Passwort"
+        }
       }
     },
     "error": {
@@ -41,7 +73,9 @@
       "unknown": "Ein unerwarteter Fehler ist aufgetreten."
     },
     "abort": {
-      "already_configured": "Dieses EcoFlow-Konto ist bereits konfiguriert."
+      "already_configured": "Dieses EcoFlow-Konto ist bereits konfiguriert.",
+      "reauth_successful": "Erneute Authentifizierung erfolgreich.",
+      "reconfigure_successful": "Zugangsdaten erfolgreich aktualisiert."
     }
   },
   "options": {

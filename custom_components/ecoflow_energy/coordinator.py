@@ -126,6 +126,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._shutdown: bool = False
         self._last_flush_ts: float = 0.0
         self._consecutive_http_failures: int = 0
+        self._device_available: bool = True
 
         # Energy integrator for power → kWh Riemann sum (all device types)
         state_path = hass.config.path(f".storage/ecoflow_energy_{self.device_sn}.json")
@@ -144,6 +145,11 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         else:
             self._power_to_energy = {}
             self._energy_from_api = []
+
+    @property
+    def device_available(self) -> bool:
+        """Return whether the device is considered reachable."""
+        return self._device_available
 
     @property
     def device_data(self) -> dict[str, Any]:
@@ -173,6 +179,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             manufacturer="EcoFlow",
             model=self.product_name,
             name=f"EcoFlow {self.device_name}",
+            configuration_url="https://developer.ecoflow.com",
         )
         if self._sw_version:
             info["sw_version"] = self._sw_version
@@ -564,7 +571,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     }
                     return self._remap_bp_keys(raw)
             except Exception:
-                logger.warning("Protobuf decode error for %s", self.device_sn, exc_info=True)
+                logger.debug("Protobuf decode error for %s", self.device_sn, exc_info=True)
             return None
 
         return None
@@ -713,6 +720,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Apply parsed data and notify listeners (HA event loop)."""
         now = time.time()
         self._last_mqtt_ts = now
+        self._device_available = True
         self._enforce_monotonic(parsed)
         self._device_data.update(parsed)
 
@@ -774,6 +782,8 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         raw = await self._http_client.get_quota_all()
         if not raw:
             self._consecutive_http_failures += 1
+            if self._consecutive_http_failures >= 3:
+                self._device_available = False
             if self._consecutive_http_failures >= 5:
                 logger.warning(
                     "HTTP quota failed %d consecutive times for %s — triggering re-authentication",
@@ -783,6 +793,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return dict(self._device_data)
 
         self._consecutive_http_failures = 0
+        self._device_available = True
 
         if self.device_type == DEVICE_TYPE_POWEROCEAN:
             parsed = parse_powerocean_http_quota(raw)

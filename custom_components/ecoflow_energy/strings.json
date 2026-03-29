@@ -46,6 +46,22 @@
           "email": "Email",
           "password": "Password"
         }
+      },
+      "reconfigure_confirm": {
+        "title": "Update EcoFlow Credentials",
+        "description": "Enter your current Access Key and Secret Key from the [EcoFlow Developer Portal]({developer_portal_url}).",
+        "data": {
+          "access_key": "Access Key",
+          "secret_key": "Secret Key"
+        }
+      },
+      "reconfigure_enhanced": {
+        "title": "Update Enhanced Mode Credentials",
+        "description": "Enter your EcoFlow app email and password.",
+        "data": {
+          "email": "Email",
+          "password": "Password"
+        }
       }
     },
     "error": {
@@ -58,7 +74,8 @@
     },
     "abort": {
       "already_configured": "This EcoFlow account is already configured.",
-      "reauth_successful": "Re-authentication successful."
+      "reauth_successful": "Re-authentication successful.",
+      "reconfigure_successful": "Credentials updated successfully."
     }
   },
   "options": {

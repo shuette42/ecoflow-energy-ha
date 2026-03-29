@@ -70,6 +70,13 @@ class EcoFlowBinarySensor(
             self._attr_device_class = BinarySensorDeviceClass(definition.device_class)
         if definition.entity_category:
             self._attr_entity_category = _ENTITY_CATEGORY_MAP.get(definition.entity_category)
+        if definition.disabled_by_default:
+            self._attr_entity_registry_enabled_default = False
+
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        return self.coordinator.device_available and super().available
 
     @property
     def device_info(self) -> dict:

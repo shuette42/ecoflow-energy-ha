@@ -24,7 +24,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
         1 for d in devices if d.get(CONF_MODE) == MODE_ENHANCED
     )
     standard_count = len(devices) - enhanced_count
-    logger.info(
+    logger.debug(
         "EcoFlow Energy: %d device(s) configured (Enhanced: %d, Standard: %d)",
         len(devices), enhanced_count, standard_count,
     )

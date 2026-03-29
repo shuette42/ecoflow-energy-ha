@@ -103,6 +103,11 @@ class EcoFlowSwitch(CoordinatorEntity[EcoFlowDeviceCoordinator], SwitchEntity):
         self._optimistic_lock_until: float = 0.0
 
     @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        return self.coordinator.device_available and super().available
+
+    @property
     def device_info(self) -> dict:
         """Return device info from coordinator."""
         return self.coordinator.device_info
