@@ -7,7 +7,7 @@ import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
-from .const import CONF_DEVICES, DOMAIN, PLATFORMS
+from .const import CONF_DEVICES, CONF_MODE, DOMAIN, MODE_ENHANCED, PLATFORMS
 from .coordinator import EcoFlowDeviceCoordinator
 
 logger = logging.getLogger(__name__)
@@ -19,6 +19,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
     """Set up EcoFlow Energy from a config entry."""
     devices = entry.data.get(CONF_DEVICES, [])
     coordinators: dict[str, EcoFlowDeviceCoordinator] = {}
+
+    enhanced_count = sum(
+        1 for d in devices if d.get(CONF_MODE) == MODE_ENHANCED
+    )
+    standard_count = len(devices) - enhanced_count
+    logger.info(
+        "EcoFlow Energy: %d device(s) configured (Enhanced: %d, Standard: %d)",
+        len(devices), enhanced_count, standard_count,
+    )
 
     for device_info in devices:
         sn = device_info["sn"]
@@ -40,7 +49,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
 
 async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Reload the integration when the config entry is updated."""
-    logger.info("Config entry updated — reloading EcoFlow Energy")
+    logger.debug("Config entry updated — reloading EcoFlow Energy")
     await hass.config_entries.async_reload(entry.entry_id)
 
 

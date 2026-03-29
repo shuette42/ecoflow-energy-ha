@@ -62,7 +62,7 @@ async def enhanced_login(
                 body = await resp.json()
                 if str(body.get("code")) != "0":
                     last_error = f"code={body.get('code')} msg={body.get('message')}"
-                    logger.info("Login attempt %s: %s", base_url, last_error)
+                    logger.debug("Login attempt %s: %s", base_url, last_error)
                     continue
                 data = body.get("data", {})
                 token = data.get("token", "")
@@ -70,13 +70,13 @@ async def enhanced_login(
                 user_id = str(user.get("userId", ""))
                 if not token or not user_id:
                     last_error = "missing token or userId in response"
-                    logger.info("Login attempt %s: %s", base_url, last_error)
+                    logger.debug("Login attempt %s: %s", base_url, last_error)
                     continue
-                logger.info("Enhanced login OK via %s", base_url)
+                logger.debug("Enhanced login OK via %s", base_url)
                 return {"token": token, "user_id": user_id}
         except (aiohttp.ClientError, TimeoutError) as exc:
             last_error = str(exc)
-            logger.info("Login attempt %s failed: %s", base_url, exc)
+            logger.debug("Login attempt %s failed: %s", base_url, exc)
             continue
 
     logger.warning("Enhanced login failed on all endpoints: %s", last_error)

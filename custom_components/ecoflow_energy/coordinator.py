@@ -222,12 +222,12 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 )
                 await self.hass.async_add_executor_job(self._start_mqtt)
             if delta_mqtt:
-                logger.info(
+                logger.debug(
                     "Standard Mode + MQTT push: HTTP every %ds + MQTT real-time for %s",
                     HTTP_FALLBACK_INTERVAL_S, self.device_sn,
                 )
             else:
-                logger.info(
+                logger.debug(
                     "Standard Mode: HTTP polling every %ds for %s",
                     HTTP_FALLBACK_INTERVAL_S, self.device_sn,
                 )
@@ -289,7 +289,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if login_result is not None:
                 token = login_result["token"]
                 user_id = login_result["user_id"]
-                logger.info("Enhanced Mode: login OK, userId obtained for %s", self.device_sn)
+                logger.debug("Enhanced Mode: login OK, userId obtained for %s", self.device_sn)
             else:
                 logger.warning("Enhanced Mode: login failed for %s", self.device_sn)
 
@@ -304,7 +304,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             creds = await get_enhanced_credentials(session, token)
             if creds is not None:
-                logger.info(
+                logger.debug(
                     "Enhanced Mode: Portal credentials obtained (account=%s...) for %s",
                     str(creds.get("certificateAccount", ""))[:12], self.device_sn,
                 )
@@ -495,7 +495,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 creds.get("certificateAccount", ""),
                 creds.get("certificatePassword", ""),
             )
-            logger.info("MQTT credentials refreshed for %s", self.device_sn)
+            logger.debug("MQTT credentials refreshed for %s", self.device_sn)
         else:
             logger.warning("MQTT credential refresh failed for %s", self.device_sn)
 
@@ -749,7 +749,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._mqtt_client.publish, topic, payload, 1,
         )
         if ok:
-            logger.info("SET command sent: %s → %s", topic, payload[:120])
+            logger.debug("SET command sent: %s → %s", topic, payload[:120])
         else:
             logger.warning("SET command failed: %s", topic)
         return ok

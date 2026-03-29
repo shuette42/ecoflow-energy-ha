@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.8] - 2026-03-29
+
+### Changed
+- Reduce log noise: downgrade ~22 operational info messages to debug level across MQTT, auth, coordinator, and API modules
+- Add startup summary log with device count and mode breakdown (Enhanced/Standard)
+
 ## [1.2.7] - 2026-03-28
 
 ### Fixed

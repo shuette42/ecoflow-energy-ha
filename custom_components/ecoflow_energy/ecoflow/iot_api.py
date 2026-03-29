@@ -137,7 +137,7 @@ class IoTApiClient:
                     logger.warning("IoT API: empty response — code=%s", body.get("code"))
                     return None
                 self._cached = data
-                logger.info(
+                logger.debug(
                     "IoT API: credentials obtained (account=%s..., keys=%s)",
                     str(data.get("certificateAccount", ""))[:6],
                     sorted(data.keys()) if isinstance(data, dict) else "n/a",
