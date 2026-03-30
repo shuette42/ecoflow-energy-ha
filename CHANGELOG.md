@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.8] - 2026-03-31
+
+### Fixed
+- PowerOcean: SoC limit 0% now correctly read from device MQTT reports — proto3 zero-fill for `sys_bat_dsg_down_limit` and `sys_bat_chg_up_limit` in EMS change report processing (covers both HA SET and EcoFlow app changes)
+
 ## [1.6.7] - 2026-03-31
 
 ### Fixed
