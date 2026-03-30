@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.6] - 2026-03-31
+
+### Fixed
+- Revert `always_print_fields_with_no_presence` from v1.6.5 — it flooded all proto fields with default 0, overwriting real sensor values
+- PowerOcean: number entities now use a 10-second optimistic lock after SET commands to prevent proto3 zero-omission readback from reverting the displayed value
+
 ## [1.6.5] - 2026-03-31
 
 ### Fixed
