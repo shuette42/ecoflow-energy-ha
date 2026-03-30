@@ -669,6 +669,26 @@ class TestApplyData:
         assert coordinator.device_data["soc_pct"] == 85
         assert before <= coordinator.last_mqtt_ts <= after
 
+    async def test_apply_data_resets_http_failure_counter(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """MQTT data resets HTTP failure counter to prevent false reauth (#2)."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        # Simulate 4 consecutive HTTP failures (one short of reauth trigger)
+        coordinator._consecutive_http_failures = 4
+        coordinator._device_available = False
+
+        # MQTT data arrives — proves credentials are valid
+        coordinator._apply_data({"soc": 85})
+
+        assert coordinator._consecutive_http_failures == 0
+        assert coordinator._device_available is True
+
     async def test_apply_data_merges(
         self,
         hass: HomeAssistant,

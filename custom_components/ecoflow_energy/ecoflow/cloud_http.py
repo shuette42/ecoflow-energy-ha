@@ -157,7 +157,7 @@ class EcoFlowHTTPQuota:
                     ) as resp:
                         return await self._handle_response(resp)
 
-            except (aiohttp.ClientError, TimeoutError, asyncio.TimeoutError) as exc:
+            except (aiohttp.ClientError, TimeoutError, asyncio.TimeoutError, self._RetryableAPIError) as exc:
                 if attempt < HTTP_RETRIES:
                     _LOGGER.debug("HTTP %s: error (attempt %d/%d): %s", method, attempt, HTTP_RETRIES, exc)
                 else:
@@ -169,6 +169,9 @@ class EcoFlowHTTPQuota:
         _LOGGER.error("HTTP: all %d attempts failed for %s", HTTP_RETRIES, self._device_sn)
         return None
 
+    class _RetryableAPIError(Exception):
+        """API returned a transient error code that should be retried."""
+
     async def _handle_response(self, resp: aiohttp.ClientResponse) -> dict | None:
         """Parse and validate an API response."""
         data = await resp.json()
@@ -177,7 +180,12 @@ class EcoFlowHTTPQuota:
         if resp.ok and code == "0":
             _LOGGER.debug("HTTP: quota OK for %s", self._device_sn)
             return data.get("data") or {}
-        else:
-            _LOGGER.warning("HTTP: quota code=%s msg=%s (sn=%s)", code, data.get("message"), self._device_sn)
-            return None
+
+        # EcoFlow error 8521 is a transient server-side error — retry
+        if code == "8521":
+            _LOGGER.debug("HTTP: transient error 8521 for %s — will retry", self._device_sn)
+            raise self._RetryableAPIError(f"code={code}")
+
+        _LOGGER.warning("HTTP: quota code=%s msg=%s (sn=%s)", code, data.get("message"), self._device_sn)
+        return None
 

@@ -1,10 +1,13 @@
 """Tests for EcoFlowHTTPQuota — signature, rate limiting, dead code removal."""
 
+import asyncio
 import hashlib
 import hmac
 import re
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -185,6 +188,102 @@ class TestRateLimit:
             device_sn="SN123",
             min_interval=60.0,
         )
+
+
+class TestError8521Retry:
+    """Error 8521 is a transient EcoFlow server error that should be retried (#2)."""
+
+    @pytest.mark.asyncio
+    async def test_8521_retries_and_succeeds(self):
+        """Error 8521 on first attempt, success on second → returns data."""
+        mock_resp_fail = AsyncMock()
+        mock_resp_fail.ok = True
+        mock_resp_fail.json = AsyncMock(return_value={"code": "8521", "message": "server error"})
+
+        mock_resp_ok = AsyncMock()
+        mock_resp_ok.ok = True
+        mock_resp_ok.json = AsyncMock(return_value={"code": "0", "data": {"soc": 85}})
+
+        mock_session = MagicMock()
+        # Context manager returns fail then success
+        mock_session.get = MagicMock(
+            side_effect=[
+                AsyncContextManager(mock_resp_fail),
+                AsyncContextManager(mock_resp_ok),
+            ]
+        )
+
+        client = EcoFlowHTTPQuota(
+            session=mock_session,
+            access_key="ak",
+            secret_key="sk",
+            device_sn="SN123",
+            min_interval=0,
+        )
+
+        result = await client.get_quota_all()
+        assert result == {"soc": 85}
+
+    @pytest.mark.asyncio
+    async def test_8521_all_retries_exhausted(self):
+        """Error 8521 on all attempts → returns None."""
+        mock_resp = AsyncMock()
+        mock_resp.ok = True
+        mock_resp.json = AsyncMock(return_value={"code": "8521", "message": "server error"})
+
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(
+            side_effect=[AsyncContextManager(mock_resp) for _ in range(5)]
+        )
+
+        client = EcoFlowHTTPQuota(
+            session=mock_session,
+            access_key="ak",
+            secret_key="sk",
+            device_sn="SN123",
+            min_interval=0,
+        )
+
+        result = await client.get_quota_all()
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_non_8521_error_not_retried(self):
+        """Other API errors (e.g. code=1) are NOT retried."""
+        mock_resp = AsyncMock()
+        mock_resp.ok = True
+        mock_resp.json = AsyncMock(return_value={"code": "1", "message": "invalid param"})
+
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(
+            return_value=AsyncContextManager(mock_resp)
+        )
+
+        client = EcoFlowHTTPQuota(
+            session=mock_session,
+            access_key="ak",
+            secret_key="sk",
+            device_sn="SN123",
+            min_interval=0,
+        )
+
+        result = await client.get_quota_all()
+        assert result is None
+        # Only called once — no retry for non-8521 errors
+        assert mock_session.get.call_count == 1
+
+
+class AsyncContextManager:
+    """Helper to mock async context managers (async with session.get(...))."""
+
+    def __init__(self, response):
+        self._response = response
+
+    async def __aenter__(self):
+        return self._response
+
+    async def __aexit__(self, *args):
+        pass
 
 
 class TestDeadCodeRemoved:

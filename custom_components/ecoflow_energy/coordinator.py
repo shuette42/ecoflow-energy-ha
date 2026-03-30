@@ -829,6 +829,8 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         now = time.monotonic()
         self._last_mqtt_ts = now
         self._device_available = True
+        # MQTT data proves credentials are valid — prevent false reauth (#2)
+        self._consecutive_http_failures = 0
         # Rate-limited event log: at most once per 60s to avoid flooding the deque
         if now - getattr(self, "_last_mqtt_event_ts", 0) > 60:
             self._last_mqtt_event_ts = now

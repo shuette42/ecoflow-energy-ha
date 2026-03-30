@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.3] - 2026-03-30
+
+### Fixed
+- False "Authentication expired" reauth trigger when MQTT data is flowing but HTTP polling has transient failures (#2)
+- EcoFlow API error 8521 (intermittent server error) is now retried instead of immediately counted as a failure
+
 ## [1.5.2] - 2026-03-30
 
 ### Fixed
