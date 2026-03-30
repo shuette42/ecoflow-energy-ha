@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -142,12 +141,15 @@ class TestDeviceDiagnostics:
         )
         await coordinator.async_setup()
 
-        mock_mqtt_client.last_connect_time = max(time.monotonic() - 120, 1.0)
-        result = _device_diagnostics(coordinator)
+        mock_mqtt_client.last_connect_time = 1000.0
+        with patch(
+            "custom_components.ecoflow_energy.diagnostics.time.monotonic",
+            return_value=1120.0,
+        ):
+            result = _device_diagnostics(coordinator)
 
         assert result["mqtt_status"]["connected"] is True
-        assert result["mqtt_status"]["uptime_s"] is not None
-        assert result["mqtt_status"]["uptime_s"] >= 119
+        assert result["mqtt_status"]["uptime_s"] == 120.0
 
     async def test_data_freshness(
         self,
@@ -159,11 +161,14 @@ class TestDeviceDiagnostics:
         coordinator = EcoFlowDeviceCoordinator(
             hass, standard_config_entry, MOCK_DELTA_DEVICE
         )
-        coordinator._last_mqtt_ts = max(time.monotonic() - 10, 1.0)
-        result = _device_diagnostics(coordinator)
+        coordinator._last_mqtt_ts = 1000.0
+        with patch(
+            "custom_components.ecoflow_energy.diagnostics.time.monotonic",
+            return_value=1010.0,
+        ):
+            result = _device_diagnostics(coordinator)
 
-        assert result["data_freshness"]["last_mqtt_age_s"] is not None
-        assert result["data_freshness"]["last_mqtt_age_s"] >= 9
+        assert result["data_freshness"]["last_mqtt_age_s"] == 10.0
 
     async def test_data_keys_enumerated(
         self,
