@@ -38,7 +38,7 @@
 
 | | Sensors | Controls | Energy Sensors | Update Rate |
 |:---|:---:|:---:|:---:|:---|
-| **PowerOcean** — Home Battery | 202 | — | 6 (solar, grid, battery, home) | ~30 s standard / ~3 s enhanced |
+| **PowerOcean** — Home Battery | 202 | 2 numbers | 6 (solar, grid, battery, home) | ~30 s standard / ~3 s enhanced |
 | **Delta 2 Max** — Portable Power | 94 | 7 switches, 8 numbers | 4 (solar 1+2, AC in/out) | ~30 s + MQTT push |
 | **Smart Plug** — Switchable Outlet | 11 | 1 switch, 2 numbers | 1 (total energy) | ~30 s + MQTT push |
 
@@ -49,7 +49,7 @@
 
 3-phase grid monitoring (voltage, current, power per phase) · MPPT per-string tracking (2 strings) · **Multi-battery-pack support** (up to 5 BP5000 packs — per-pack SoC, power, SoH, cycles, temperatures, lifetime energy) · Battery diagnostics (cell temps & voltages, MOSFET temps) · EMS state, work mode, feed mode, grid status, power factor · System diagnostics (fault codes, connectivity status, capacity limits)
 
-**Enhanced Mode** upgrades to ~3 s WSS Protobuf push — requires EcoFlow email & password.
+**Enhanced Mode** upgrades to ~3 s WSS Protobuf push and enables **SoC limit control** (max charge / min discharge) — requires EcoFlow email & password.
 
 **Note:** Enhanced Mode credentials are stored in Home Assistant's configuration storage (`.storage/core.config_entries`). This is standard Home Assistant behavior for all integrations that require authentication.
 
