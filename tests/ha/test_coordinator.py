@@ -1613,16 +1613,16 @@ class TestEventLog:
         hass: HomeAssistant,
         standard_config_entry: MockConfigEntry,
     ) -> None:
-        """Event log is bounded to maxlen=20."""
+        """Event log is bounded to maxlen=50."""
         standard_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, standard_config_entry, MOCK_DELTA_DEVICE
         )
-        for i in range(30):
+        for i in range(60):
             coordinator._log_event("test", f"entry_{i}")
         log = coordinator.event_log
-        assert len(log) == 20
-        # Oldest entries are evicted — first entry should be entry_10
+        assert len(log) == 50
+        # Oldest entries evicted: 60 inserts - 50 capacity = first surviving is entry_10
         assert log[0]["detail"] == "entry_10"
 
     async def test_event_log_returns_copy(

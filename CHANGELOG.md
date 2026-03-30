@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.2] - 2026-03-30
+
+### Fixed
+- Sensor precision: `native_value` now rounds numeric values based on `suggested_display_precision` — power sensors show integers (e.g. "2347 W"), energy sensors show 2 decimal places (e.g. "15.23 kWh")
+
+### Changed
+- Diagnostics: event log capacity increased from 20 to 50 entries for better support troubleshooting
+
 ## [1.5.1] - 2026-03-30
 
 ### Fixed

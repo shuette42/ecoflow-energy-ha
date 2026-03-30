@@ -120,8 +120,15 @@ class EcoFlowSensor(CoordinatorEntity[EcoFlowDeviceCoordinator], RestoreSensor):
         if self.coordinator.data is not None:
             val = self.coordinator.data.get(self._definition.key)
             if val is not None:
-                return val
+                return self._round_value(val)
         return self._restored_value
+
+    def _round_value(self, val: float | int | str) -> float | int | str:
+        """Round numeric values based on suggested_display_precision."""
+        precision = self._definition.suggested_display_precision
+        if precision is None or not isinstance(val, (int, float)):
+            return val
+        return round(val, precision) if precision > 0 else int(round(val, 0))
 
 
 class EcoFlowDiagnosticSensor(CoordinatorEntity[EcoFlowDeviceCoordinator], SensorEntity):

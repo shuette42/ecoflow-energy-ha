@@ -154,6 +154,49 @@ class TestEcoFlowSensor:
         sensor = EcoFlowSensor(coordinator, defn)
         assert sensor.native_value == 85.0
 
+    async def test_sensor_native_value_precision_rounding(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Sensor rounds value based on suggested_display_precision."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+        coordinator.async_set_updated_data({
+            "power_w": 2347.28399,
+            "energy_kwh": 15.23456,
+            "soc_pct": 76.8,
+            "raw_val": 3.14159,
+            "int_val": 500,
+            "str_val": "online",
+        })
+
+        # precision=0 → integer
+        defn_w = EcoFlowSensorDef(key="power_w", name="Power", suggested_display_precision=0)
+        assert EcoFlowSensor(coordinator, defn_w).native_value == 2347
+        assert isinstance(EcoFlowSensor(coordinator, defn_w).native_value, int)
+
+        # precision=2 → 2 decimal places
+        defn_kwh = EcoFlowSensorDef(key="energy_kwh", name="Energy", suggested_display_precision=2)
+        assert EcoFlowSensor(coordinator, defn_kwh).native_value == 15.23
+
+        # precision=1
+        defn_soc = EcoFlowSensorDef(key="soc_pct", name="SoC", suggested_display_precision=1)
+        assert EcoFlowSensor(coordinator, defn_soc).native_value == 76.8
+
+        # no precision → raw value
+        defn_raw = EcoFlowSensorDef(key="raw_val", name="Raw")
+        assert EcoFlowSensor(coordinator, defn_raw).native_value == 3.14159
+
+        # already-int with precision=0 → stays int (no fractional rounding artifacts)
+        defn_int = EcoFlowSensorDef(key="int_val", name="Int", suggested_display_precision=0)
+        assert EcoFlowSensor(coordinator, defn_int).native_value == 500
+        assert isinstance(EcoFlowSensor(coordinator, defn_int).native_value, int)
+
+        # string value with precision set → passes through unchanged
+        defn_str = EcoFlowSensorDef(key="str_val", name="Str", suggested_display_precision=0)
+        assert EcoFlowSensor(coordinator, defn_str).native_value == "online"
+
     async def test_sensor_native_value_none_when_no_data(
         self,
         hass: HomeAssistant,

@@ -128,7 +128,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_flush_ts: float = 0.0
         self._consecutive_http_failures: int = 0
         self._device_available: bool = True
-        self._event_log: deque[dict[str, Any]] = deque(maxlen=20)
+        self._event_log: deque[dict[str, Any]] = deque(maxlen=50)
 
         # Energy integrator for power → kWh Riemann sum (all device types)
         state_path = hass.config.path(f".storage/ecoflow_energy_{self.device_sn}.json")
