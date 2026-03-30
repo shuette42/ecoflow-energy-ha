@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.3] - 2026-03-31
+
+### Fixed
+- PowerOcean: revert proto field swap from v1.6.2 — both values were broken after swap
+- PowerOcean: remove Max Charge SoC number entity — device firmware does not reliably accept charge upper limit via SysBatChgDsgSet (requires portal traffic capture for further investigation)
+
+### Changed
+- PowerOcean: SoC control reduced to Min Discharge SoC only (Enhanced Mode) until charge limit SET protocol is verified
+
 ## [1.6.2] - 2026-03-31
 
 ### Fixed

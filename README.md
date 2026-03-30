@@ -38,7 +38,7 @@
 
 | | Sensors | Controls | Energy Sensors | Update Rate |
 |:---|:---:|:---:|:---:|:---|
-| **PowerOcean** — Home Battery | 202 | 2 numbers | 6 (solar, grid, battery, home) | ~30 s standard / ~3 s enhanced |
+| **PowerOcean** — Home Battery | 202 | 1 number | 6 (solar, grid, battery, home) | ~30 s standard / ~3 s enhanced |
 | **Delta 2 Max** — Portable Power | 94 | 7 switches, 8 numbers | 4 (solar 1+2, AC in/out) | ~30 s + MQTT push |
 | **Smart Plug** — Switchable Outlet | 11 | 1 switch, 2 numbers | 1 (total energy) | ~30 s + MQTT push |
 

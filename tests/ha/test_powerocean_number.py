@@ -34,23 +34,16 @@ class TestGetNumberDefs:
     def test_powerocean_returns_powerocean_numbers(self):
         defs = _get_number_defs(DEVICE_TYPE_POWEROCEAN)
         assert defs is POWEROCEAN_NUMBERS
-        assert len(defs) == 2
+        assert len(defs) == 1
 
     def test_powerocean_number_keys(self):
         defs = _get_number_defs(DEVICE_TYPE_POWEROCEAN)
         keys = {d.key for d in defs}
-        assert keys == {"max_charge_soc", "min_discharge_soc"}
+        assert keys == {"min_discharge_soc"}
 
     def test_powerocean_numbers_are_enhanced_only(self):
         defs = _get_number_defs(DEVICE_TYPE_POWEROCEAN)
         assert all(d.enhanced_only for d in defs)
-
-    def test_powerocean_max_charge_soc_range(self):
-        defs = _get_number_defs(DEVICE_TYPE_POWEROCEAN)
-        max_soc = next(d for d in defs if d.key == "max_charge_soc")
-        assert max_soc.min_value == 50
-        assert max_soc.max_value == 100
-        assert max_soc.step == 5
 
     def test_powerocean_min_discharge_soc_range(self):
         defs = _get_number_defs(DEVICE_TYPE_POWEROCEAN)
@@ -86,10 +79,10 @@ class TestAsyncSetSocLimits:
         # Seed device data so backup_ratio and dev_soc are available
         coordinator.async_set_updated_data({
             "ems_backup_ratio_pct": 50,
-            "bp_soc": 80,
+            "soc_pct": 80,
         })
 
-        result = await coordinator.async_set_soc_limits(95, 10)
+        result = await coordinator.async_set_soc_limits(100, 10)
 
         assert result is True
         mock_mqtt.send_proto_set.assert_called_once()
@@ -110,7 +103,7 @@ class TestAsyncSetSocLimits:
         )
         assert coordinator.enhanced_mode is False
 
-        result = await coordinator.async_set_soc_limits(95, 10)
+        result = await coordinator.async_set_soc_limits(100, 10)
         assert result is False
 
     async def test_set_soc_limits_fails_mqtt_disconnected(
@@ -128,7 +121,7 @@ class TestAsyncSetSocLimits:
         mock_mqtt.is_connected.return_value = False
         coordinator._mqtt_client = mock_mqtt
 
-        result = await coordinator.async_set_soc_limits(95, 10)
+        result = await coordinator.async_set_soc_limits(100, 10)
         assert result is False
 
     async def test_set_soc_limits_fails_no_mqtt(
@@ -143,7 +136,7 @@ class TestAsyncSetSocLimits:
         )
         coordinator._mqtt_client = None
 
-        result = await coordinator.async_set_soc_limits(95, 10)
+        result = await coordinator.async_set_soc_limits(100, 10)
         assert result is False
 
 
@@ -154,9 +147,9 @@ class TestAsyncSetSocLimits:
 
 class TestPowerOceanNumberSet:
     def _make_number_entity(
-        self, hass, entry, key="max_charge_soc",
+        self, hass, entry,
     ) -> tuple[EcoFlowNumber, EcoFlowDeviceCoordinator]:
-        """Create a PowerOcean number entity with mocked coordinator."""
+        """Create a PowerOcean min_discharge_soc entity with mocked coordinator."""
         entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, entry, MOCK_POWEROCEAN_DEVICE,
@@ -166,31 +159,13 @@ class TestPowerOceanNumberSet:
             "ems_charge_upper_limit_pct": 100,
             "ems_discharge_lower_limit_pct": 0,
             "ems_backup_ratio_pct": 50,
-            "bp_soc": 80,
+            "soc_pct": 80,
         }
         coordinator.async_set_updated_data(dict(coordinator._device_data))
 
-        defn = next(d for d in POWEROCEAN_NUMBERS if d.key == key)
+        defn = next(d for d in POWEROCEAN_NUMBERS if d.key == "min_discharge_soc")
         entity = EcoFlowNumber(coordinator, defn)
         return entity, coordinator
-
-    async def test_set_max_charge_soc(
-        self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
-    ) -> None:
-        """Setting max_charge_soc sends both limits with current min."""
-        entity, coordinator = self._make_number_entity(
-            hass, enhanced_config_entry, "max_charge_soc",
-        )
-        coordinator.async_set_soc_limits = AsyncMock(return_value=True)
-        entity.async_write_ha_state = MagicMock()
-
-        await entity.async_set_native_value(95.0)
-
-        coordinator.async_set_soc_limits.assert_called_once_with(95, 0)
-        # Optimistic update
-        assert coordinator.data["ems_charge_upper_limit_pct"] == 95.0
 
     async def test_set_min_discharge_soc(
         self,
@@ -199,7 +174,7 @@ class TestPowerOceanNumberSet:
     ) -> None:
         """Setting min_discharge_soc sends both limits with current max."""
         entity, coordinator = self._make_number_entity(
-            hass, enhanced_config_entry, "min_discharge_soc",
+            hass, enhanced_config_entry,
         )
         coordinator.async_set_soc_limits = AsyncMock(return_value=True)
         entity.async_write_ha_state = MagicMock()
@@ -217,15 +192,15 @@ class TestPowerOceanNumberSet:
     ) -> None:
         """Failed SET does not optimistically update coordinator data."""
         entity, coordinator = self._make_number_entity(
-            hass, enhanced_config_entry, "max_charge_soc",
+            hass, enhanced_config_entry,
         )
         coordinator.async_set_soc_limits = AsyncMock(return_value=False)
 
-        await entity.async_set_native_value(90.0)
+        await entity.async_set_native_value(10.0)
 
-        coordinator.async_set_soc_limits.assert_called_once_with(90, 0)
+        coordinator.async_set_soc_limits.assert_called_once_with(100, 10)
         # No optimistic update — original value retained
-        assert coordinator.data["ems_charge_upper_limit_pct"] == 100
+        assert coordinator.data["ems_discharge_lower_limit_pct"] == 0
 
     async def test_native_value_reads_state_key(
         self,
@@ -234,9 +209,9 @@ class TestPowerOceanNumberSet:
     ) -> None:
         """Number entity reads current value from coordinator data via state_key."""
         entity, coordinator = self._make_number_entity(
-            hass, enhanced_config_entry, "max_charge_soc",
+            hass, enhanced_config_entry,
         )
-        assert entity.native_value == 100.0
+        assert entity.native_value == 0.0
 
     async def test_native_value_none_when_no_data(
         self,
@@ -245,7 +220,7 @@ class TestPowerOceanNumberSet:
     ) -> None:
         """Number entity returns None when coordinator has no data."""
         entity, coordinator = self._make_number_entity(
-            hass, enhanced_config_entry, "max_charge_soc",
+            hass, enhanced_config_entry,
         )
         coordinator.async_set_updated_data(None)
         assert entity.native_value is None
