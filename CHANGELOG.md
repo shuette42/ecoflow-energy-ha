@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.7] - 2026-03-31
+
+### Fixed
+- PowerOcean: Min Discharge SoC 0% now persists permanently — optimistic value is written to `_device_data` so it survives coordinator refresh cycles (proto3 omits zero-valued fields from MQTT readback, but the merge no longer overwrites the SET value)
+
+### Removed
+- Temporary 10-second optimistic lock from v1.6.6 (no longer needed)
+
 ## [1.6.6] - 2026-03-31
 
 ### Fixed

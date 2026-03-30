@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import time
 from typing import Any
 
 from homeassistant.components.number import NumberEntity, NumberMode
@@ -127,8 +126,6 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
         """Initialize the number entity."""
         super().__init__(coordinator)
         self._definition = definition
-        self._optimistic_value: float | None = None
-        self._optimistic_until: float = 0.0
         self._attr_unique_id = f"{coordinator.device_sn}_{definition.key}"
         self._attr_translation_key = definition.key
         self._attr_icon = definition.icon
@@ -154,15 +151,7 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
 
     @property
     def native_value(self) -> float | None:
-        """Return the current value.
-
-        After a SET command, the optimistic value is returned for a few
-        seconds to prevent MQTT readback from reverting the display when
-        proto3 omits zero-valued fields from the update dict.
-        """
-        if self._optimistic_value is not None and time.monotonic() < self._optimistic_until:
-            return self._optimistic_value
-        self._optimistic_value = None
+        """Return the current value."""
         if self.coordinator.data is None:
             return None
         value = self.coordinator.data.get(self._definition.state_key)
@@ -240,12 +229,13 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
 
         ok = await self.coordinator.async_set_soc_limits(max_soc, min_soc)
         if ok:
-            # Hold optimistic value for 10s to prevent proto3 zero-omission
-            # from reverting the display before the device confirms.
-            self._optimistic_value = value
-            self._optimistic_until = time.monotonic() + 10.0
+            # Update _device_data so the value survives coordinator refreshes.
+            # Proto3 omits zero-valued fields from MQTT readback, so the merge
+            # won't overwrite this value when the device reports 0.
+            state_key = self._definition.state_key
+            self.coordinator._device_data[state_key] = value
             if self.coordinator.data is not None:
-                self.coordinator.data[self._definition.state_key] = value
+                self.coordinator.data[state_key] = value
             self.async_write_ha_state()
 
 
