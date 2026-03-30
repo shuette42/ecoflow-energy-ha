@@ -372,14 +372,22 @@ class EcoFlowMQTTClient:
             _LOGGER.error("Publish failed (%s): %s", topic, exc)
             return False
 
-    def send_energy_stream_switch(self) -> bool:
-        """Send EnergyStreamSwitch to keep energy_stream_report alive (WSS only)."""
+    def send_proto_set(self, payload: bytes) -> bool:
+        """Send a binary protobuf SET command to the device (WSS only).
+
+        Publishes to /app/{user_id}/{sn}/thing/property/set.
+        Used by EnergyStreamSwitch and SoC limit SET commands.
+        """
         if not self._wss_mode or not self.is_connected() or not self._user_id:
             return False
+        topic = f"/app/{self._user_id}/{self._device_sn}/thing/property/set"
+        return self.publish(topic, payload, qos=1)
+
+    def send_energy_stream_switch(self) -> bool:
+        """Send EnergyStreamSwitch to keep energy_stream_report alive (WSS only)."""
         try:
             payload = build_energy_stream_activate_payload()
-            topic = f"/app/{self._user_id}/{self._device_sn}/thing/property/set"
-            return self.publish(topic, payload, qos=1)
+            return self.send_proto_set(payload)
         except Exception as exc:
             _LOGGER.warning("EnergyStreamSwitch error: %s", exc)
             return False

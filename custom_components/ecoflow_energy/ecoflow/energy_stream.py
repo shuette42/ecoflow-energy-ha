@@ -72,6 +72,51 @@ def build_energy_stream_activate_payload(seq: int = 0) -> bytes:
     return _encode_field_bytes(1, bytes(header))
 
 
+def build_soc_limit_set_payload(
+    max_charge_soc: int, min_discharge_soc: int, seq: int = 0,
+) -> bytes:
+    """Build SysBatChgDsgSet protobuf payload for PowerOcean SoC limits.
+
+    Sets battery charge upper limit and discharge lower limit via the WSS
+    Protobuf protocol (Enhanced Mode only).  Same header pattern as
+    EnergyStreamSwitch but with cmd_id=112.
+
+    Args:
+        max_charge_soc: Max charge SoC (50-100).
+        min_discharge_soc: Min discharge SoC (0-30).
+        seq: Sequence number.  Default 0 generates from timestamp.
+
+    Returns:
+        Binary protobuf payload (Send_Header_Msg).
+    """
+    if seq == 0:
+        seq = int(time.time() * 1000) & 0x7FFFFFFF
+
+    # SysBatChgDsgSet: field 1 = sys_bat_chg_up_limit, field 2 = sys_bat_dsg_down_limit
+    payload_bytes = (
+        _encode_field_varint(1, max_charge_soc)
+        + _encode_field_varint(2, min_discharge_soc)
+    )
+
+    # Header — portal-exact field order (same as EnergyStreamSwitch, cmd_id=112):
+    header = bytearray()
+    header.extend(_encode_field_bytes(1, payload_bytes))          # pdata
+    header.extend(_encode_field_varint(2, 32))                    # src = 32 (Client/App)
+    header.extend(_encode_field_varint(3, 96))                    # dest = 96 (EMS)
+    header.extend(_encode_field_varint(4, 1))                     # dSrc = 1
+    header.extend(_encode_field_varint(5, 1))                     # dDest = 1
+    header.extend(_encode_field_varint(8, 96))                    # cmdFunc = 96 (EMS)
+    header.extend(_encode_field_varint(9, 112))                   # cmdId = 112 (SysBatChgDsgSet)
+    header.extend(_encode_field_varint(10, len(payload_bytes)))   # dataLen
+    header.extend(_encode_field_varint(11, 1))                    # needAck = 1
+    header.extend(_encode_field_varint(14, seq))                  # seq (timestamp)
+    header.extend(_encode_field_varint(16, 3))                    # isRwCmd = 3
+    header.extend(_encode_field_varint(17, 1))                    # isQueue = 1
+
+    # Send_Header_Msg: field 1 = Header (length-delimited)
+    return _encode_field_bytes(1, bytes(header))
+
+
 def build_energy_stream_deactivate_payload(seq: int = 0) -> bytes:
     """Build the payload to deactivate energy_stream_report."""
     if seq == 0:

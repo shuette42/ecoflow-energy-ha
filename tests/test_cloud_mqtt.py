@@ -102,6 +102,16 @@ class TestConnectionStatus:
         client = _make_client()
         assert client.publish("test/topic", "payload") is False
 
+    def test_send_proto_set_noop_tcp(self):
+        """TCP mode: send_proto_set should be a no-op."""
+        client = _make_client(wss_mode=False)
+        assert client.send_proto_set(b"\x00") is False
+
+    def test_send_proto_set_noop_no_user_id(self):
+        """WSS mode without user_id: send_proto_set should be a no-op."""
+        client = _make_client(wss_mode=True, user_id="")
+        assert client.send_proto_set(b"\x00") is False
+
     def test_send_energy_stream_switch_noop_tcp(self):
         """TCP mode: send_energy_stream_switch should be a no-op."""
         client = _make_client(wss_mode=False)
