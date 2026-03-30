@@ -875,7 +875,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Pass current backup_ratio and dev_soc from device data (required by firmware)
         data = self.data or {}
         backup_ratio = int(data.get("ems_backup_ratio_pct", 0))
-        dev_soc = int(data.get("bpSoc", data.get("bp_soc", 0)))
+        dev_soc = int(data.get("soc_pct", data.get("bpSoc", 0)))
         payload = build_soc_limit_set_payload(
             max_charge_soc, min_discharge_soc, backup_ratio, dev_soc,
         )
