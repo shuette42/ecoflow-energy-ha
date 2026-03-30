@@ -11,7 +11,14 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DELTA2MAX_NUMBERS, DEVICE_TYPE_DELTA, DOMAIN, EcoFlowNumberDef
+from .const import (
+    DELTA2MAX_NUMBERS,
+    DEVICE_TYPE_DELTA,
+    DEVICE_TYPE_SMARTPLUG,
+    DOMAIN,
+    EcoFlowNumberDef,
+    SMARTPLUG_NUMBERS,
+)
 from .coordinator import EcoFlowDeviceCoordinator
 
 logger = logging.getLogger(__name__)
@@ -38,6 +45,22 @@ NUMBER_COMMANDS: dict[str, dict[str, Any]] = {
         "moduleType": 1,
         "operateType": "standbyTime",
         "param_key": "standbyMin",
+    },
+}
+
+# Smart Plug SET-command templates (cmdCode format, different from Delta's moduleType/operateType)
+SMARTPLUG_NUMBER_COMMANDS: dict[str, dict[str, Any]] = {
+    "led_brightness": {
+        "cmdCode": "WN511_SOCKET_SET_BRIGHTNESS_PACK",
+        "param_key": "brightness",
+        "scale": 1,
+    },
+    "max_watts": {
+        "cmdCode": "WN511_SOCKET_SET_MAX_WATTS",
+        "param_key": "maxWatts",
+        # scale=1: maxWatts is in watts (not deci-watts). Confirmed by HTTP parser
+        # which reads maxWatts without /10 scaling (unlike watts which is /10).
+        "scale": 1,
     },
 }
 
@@ -111,6 +134,23 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         """Set a new value via the EcoFlow IoT API."""
+        # Smart Plug uses cmdCode format (different from Delta's moduleType/operateType)
+        sp_template = SMARTPLUG_NUMBER_COMMANDS.get(self._definition.key)
+        if sp_template is not None:
+            scale = sp_template.get("scale", 1)
+            command = {
+                "sn": self.coordinator.device_sn,
+                "cmdCode": sp_template["cmdCode"],
+                "params": {sp_template["param_key"]: int(value * scale)},
+            }
+            await self.coordinator.async_send_set_command(command)
+
+            if self.coordinator.data is not None:
+                self.coordinator.data[self._definition.state_key] = value
+                self.async_write_ha_state()
+            return
+
+        # Delta uses moduleType/operateType format
         cmd_template = NUMBER_COMMANDS.get(self._definition.key)
         if cmd_template is None:
             logger.warning("No command template for number %s", self._definition.key)
@@ -140,4 +180,6 @@ def _get_number_defs(device_type: str) -> list[EcoFlowNumberDef]:
     """Return number definitions based on device type."""
     if device_type == DEVICE_TYPE_DELTA:
         return DELTA2MAX_NUMBERS
+    if device_type == DEVICE_TYPE_SMARTPLUG:
+        return SMARTPLUG_NUMBERS
     return []

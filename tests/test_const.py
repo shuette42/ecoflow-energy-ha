@@ -69,6 +69,25 @@ class TestDelta2MaxSensors:
         assert len(keys) == len(set(keys))
 
 
+class TestSmartPlugEntities:
+    def test_sensor_keys_unique(self):
+        keys = _extract_sensor_keys("SMARTPLUG_SENSORS")
+        assert len(keys) >= 11, f"Expected 11+ sensors, got {len(keys)}"
+        assert len(keys) == len(set(keys)), "Duplicate Smart Plug sensor keys"
+
+    def test_number_defs_unique(self):
+        keys = _extract_sensor_keys("SMARTPLUG_NUMBERS")
+        assert len(keys) == 2
+        assert len(keys) == len(set(keys))
+        assert "led_brightness" in keys
+        assert "max_watts" in keys
+
+    def test_switch_defs_unique(self):
+        keys = _extract_sensor_keys("SMARTPLUG_SWITCHES")
+        assert len(keys) == 1
+        assert "plug_switch" in keys
+
+
 class TestBinarySensors:
     def test_powerocean_binary_sensors(self):
         keys = _extract_sensor_keys("POWEROCEAN_BINARY_SENSORS")

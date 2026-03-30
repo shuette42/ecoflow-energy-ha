@@ -17,6 +17,7 @@ from custom_components.ecoflow_energy.const import (
     DELTA2MAX_SWITCHES,
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_POWEROCEAN,
+    DEVICE_TYPE_SMARTPLUG,
     DOMAIN,
     EcoFlowBinarySensorDef,
     EcoFlowNumberDef,
@@ -24,6 +25,7 @@ from custom_components.ecoflow_energy.const import (
     EcoFlowSwitchDef,
     POWEROCEAN_BINARY_SENSORS,
     POWEROCEAN_SENSORS,
+    SMARTPLUG_NUMBERS,
 )
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
 from custom_components.ecoflow_energy.sensor import (
@@ -44,10 +46,11 @@ from custom_components.ecoflow_energy.switch import (
 from custom_components.ecoflow_energy.number import (
     EcoFlowNumber,
     NUMBER_COMMANDS,
+    SMARTPLUG_NUMBER_COMMANDS,
     _get_number_defs,
 )
 
-from .conftest import MOCK_DELTA_DEVICE, MOCK_POWEROCEAN_DEVICE
+from .conftest import MOCK_DELTA_DEVICE, MOCK_POWEROCEAN_DEVICE, MOCK_SMARTPLUG_DEVICE
 
 
 # ---------------------------------------------------------------------------
@@ -104,6 +107,9 @@ class TestSwitchDefsRouting:
 class TestNumberDefsRouting:
     def test_delta_numbers(self):
         assert _get_number_defs(DEVICE_TYPE_DELTA) is DELTA2MAX_NUMBERS
+
+    def test_smartplug_numbers(self):
+        assert _get_number_defs(DEVICE_TYPE_SMARTPLUG) is SMARTPLUG_NUMBERS
 
     def test_powerocean_numbers_empty(self):
         assert _get_number_defs(DEVICE_TYPE_POWEROCEAN) == []
@@ -501,6 +507,96 @@ class TestEcoFlowNumber:
             assert cmd["moduleType"] == 2
             assert cmd["operateType"] == "upsConfig"
             assert cmd["params"]["maxChgSoc"] == 90
+
+    async def test_smartplug_number_command_templates(self) -> None:
+        """All Smart Plug number defs have matching command templates."""
+        for defn in SMARTPLUG_NUMBERS:
+            assert defn.key in SMARTPLUG_NUMBER_COMMANDS, f"No command for {defn.key}"
+            cmd = SMARTPLUG_NUMBER_COMMANDS[defn.key]
+            assert "cmdCode" in cmd
+            assert "param_key" in cmd
+
+    async def test_smartplug_led_brightness_set(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Smart Plug LED brightness sends cmdCode format command."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry, MOCK_SMARTPLUG_DEVICE)
+        coordinator.async_set_updated_data({"led_brightness": 512})
+
+        defn = EcoFlowNumberDef(
+            key="led_brightness", name="LED Brightness",
+            state_key="led_brightness",
+            min_value=0, max_value=1023, step=1,
+        )
+        number = EcoFlowNumber(coordinator, defn)
+
+        with (
+            patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock) as mock_cmd,
+            patch.object(number, "async_write_ha_state"),
+        ):
+            await number.async_set_native_value(800.0)
+            mock_cmd.assert_called_once()
+            cmd = mock_cmd.call_args[0][0]
+            assert cmd["cmdCode"] == "WN511_SOCKET_SET_BRIGHTNESS_PACK"
+            assert cmd["params"]["brightness"] == 800
+            assert cmd["sn"] == coordinator.device_sn
+
+    async def test_smartplug_max_watts_set(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Smart Plug max watts sends cmdCode format command."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry, MOCK_SMARTPLUG_DEVICE)
+        coordinator.async_set_updated_data({"max_power_w": 2500})
+
+        defn = EcoFlowNumberDef(
+            key="max_watts", name="Max Power Limit",
+            state_key="max_power_w", unit="W",
+            min_value=0, max_value=2500, step=100,
+        )
+        number = EcoFlowNumber(coordinator, defn)
+
+        with (
+            patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock) as mock_cmd,
+            patch.object(number, "async_write_ha_state"),
+        ):
+            await number.async_set_native_value(2000.0)
+            mock_cmd.assert_called_once()
+            cmd = mock_cmd.call_args[0][0]
+            assert cmd["cmdCode"] == "WN511_SOCKET_SET_MAX_WATTS"
+            assert cmd["params"]["maxWatts"] == 2000
+            assert cmd["sn"] == coordinator.device_sn
+
+    async def test_smartplug_number_optimistic_update(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Smart Plug number entity updates state optimistically after SET."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry, MOCK_SMARTPLUG_DEVICE)
+        coordinator.async_set_updated_data({"led_brightness": 0})
+
+        defn = EcoFlowNumberDef(
+            key="led_brightness", name="LED Brightness",
+            state_key="led_brightness",
+            min_value=0, max_value=1023, step=1,
+        )
+        number = EcoFlowNumber(coordinator, defn)
+        assert number.native_value == 0.0
+
+        with (
+            patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock),
+            patch.object(number, "async_write_ha_state"),
+        ):
+            await number.async_set_native_value(512.0)
+            # Optimistic update should reflect new value
+            assert coordinator.data["led_brightness"] == 512.0
 
 
 # ===========================================================================

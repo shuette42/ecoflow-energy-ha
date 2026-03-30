@@ -94,3 +94,65 @@ def parse_smartplug_http_quota(quota_data: dict) -> dict[str, Any]:
             result["warning_code"] = int(v)
 
     return result
+
+
+# MQTT field → (sensor_key, scale_factor)
+# Scale factors match parse_smartplug_http_quota exactly:
+#   watts:   deci-W → W  (/10)
+#   current: mA → A      (/1000)
+#   volt:    V → V        (1)
+#   maxCur:  deci-A → A   (/10)
+#   maxWatts: W → W       (1)  — no scaling in HTTP parser
+_MQTT_FIELD_MAP: dict[str, tuple[str, float]] = {
+    "watts": ("power_w", 0.1),
+    "current": ("current_a", 0.001),
+    "volt": ("voltage_v", 1.0),
+    "freq": ("frequency_hz", 1.0),
+    "temp": ("temperature_c", 1.0),
+    "brightness": ("led_brightness", 1.0),
+    "maxWatts": ("max_power_w", 1.0),
+    "maxCur": ("max_current_a", 0.1),
+    "errCode": ("error_code", 1.0),
+    "warnCode": ("warning_code", 1.0),
+}
+
+
+def parse_smartplug_report(data: dict[str, Any]) -> dict[str, Any]:
+    """Parse a Smart Plug MQTT report message.
+
+    MQTT reports may arrive in different envelope formats:
+    1. {"params": {"2_1.watts": 150, ...}} — same keys as HTTP quota
+    2. {"param": {"watts": 150, ...}} — direct field names (cmdId/cmdFunc format)
+    3. Direct dict with field names
+    """
+    # Extract inner payload from envelope
+    params = data.get("params") or data.get("param") or data
+
+    # If keys have "2_1." prefix, reuse the HTTP parser (same format)
+    if any(k.startswith("2_1.") for k in params):
+        return parse_smartplug_http_quota(params)
+
+    # Direct field names — apply same scaling as HTTP parser
+    result: dict[str, Any] = {}
+
+    for api_key, (sensor_key, scale) in _MQTT_FIELD_MAP.items():
+        val = params.get(api_key)
+        if val is None:
+            continue
+        fval = _safe_float(val)
+        if fval is None:
+            continue
+        if sensor_key in ("error_code", "warning_code"):
+            result[sensor_key] = int(fval)
+        else:
+            result[sensor_key] = fval * scale
+
+    # Switch state: handle bool and int
+    switch_val = params.get("switchSta")
+    if switch_val is not None:
+        if isinstance(switch_val, bool):
+            result["switch_state"] = 1 if switch_val else 0
+        elif isinstance(switch_val, (int, float)):
+            result["switch_state"] = 1 if switch_val else 0
+
+    return result

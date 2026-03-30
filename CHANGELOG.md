@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.4] - 2026-03-30
+
+### Added
+- Smart Plug: LED brightness control (0-1023) via number entity
+- Smart Plug: overload protection / max power limit (0-2500W) via number entity
+- Smart Plug: MQTT real-time data subscription for near-instant updates alongside HTTP polling
+
 ## [1.3.3] - 2026-03-30
 
 ### Added

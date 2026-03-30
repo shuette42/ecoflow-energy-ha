@@ -331,6 +331,11 @@ SMARTPLUG_SWITCHES: list[EcoFlowSwitchDef] = [
     EcoFlowSwitchDef("plug_switch", "Plug", "switch_state", "mdi:power-plug"),
 ]
 
+SMARTPLUG_NUMBERS: list[EcoFlowNumberDef] = [
+    EcoFlowNumberDef("led_brightness", "LED Brightness", "led_brightness", None, "mdi:brightness-6", 0, 1023, 1),
+    EcoFlowNumberDef("max_watts", "Max Power Limit", "max_power_w", "W", "mdi:flash-alert", 0, 2500, 100),
+]
+
 
 # =====================================================================
 # Power → Energy mappings (Riemann sum integration per device type)

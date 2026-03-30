@@ -59,7 +59,7 @@ from .ecoflow.iot_api import IoTApiClient
 from .ecoflow.parsers.delta import parse_delta_report
 from .ecoflow.parsers.delta_http import parse_delta_http_quota
 from .ecoflow.parsers.powerocean import parse_powerocean_http_quota
-from .ecoflow.parsers.smartplug import parse_smartplug_http_quota
+from .ecoflow.parsers.smartplug import parse_smartplug_http_quota, parse_smartplug_report
 from .ecoflow.proto.runtime import decode_proto_runtime_frame
 
 logger = logging.getLogger(__name__)
@@ -240,9 +240,13 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             await self._setup_enhanced(session)
         else:
             # Standard Mode: HTTP polling is the primary data source.
-            # MQTT is for SET commands only — except Delta, which also
-            # subscribes to the IoT MQTT /quota topic for real-time push.
-            delta_mqtt = self.device_type == DEVICE_TYPE_DELTA
+            # MQTT is for SET commands only — except Delta and Smart Plug,
+            # which also subscribe to the IoT MQTT /quota topic for
+            # real-time push alongside HTTP polling.
+            subscribe_mqtt = self.device_type in (
+                DEVICE_TYPE_DELTA,
+                DEVICE_TYPE_SMARTPLUG,
+            )
             creds = await self._iot_api.get_mqtt_credentials()
             if creds is not None:
                 cert_account = creds.get("certificateAccount", "")
@@ -254,13 +258,13 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     message_handler=self._on_mqtt_message,
                     user_id="",
                     wss_mode=False,
-                    subscribe_data=delta_mqtt,
+                    subscribe_data=subscribe_mqtt,
                     auth_error_handler=(
-                        self._on_mqtt_auth_error if delta_mqtt else None
+                        self._on_mqtt_auth_error if subscribe_mqtt else None
                     ),
                 )
                 await self.hass.async_add_executor_job(self._start_mqtt)
-            if delta_mqtt:
+            if subscribe_mqtt:
                 logger.debug(
                     "Standard Mode + MQTT push: HTTP every %ds + MQTT real-time for %s",
                     HTTP_FALLBACK_INTERVAL_S, self.device_sn,
@@ -548,8 +552,8 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Handle an incoming MQTT message (Paho thread).
 
         In Standard Mode, MQTT is only used for SET commands — data updates
-        come from HTTP polling.  Exception: Delta subscribes to MQTT push
-        for real-time data alongside HTTP polling (dual-source).
+        come from HTTP polling.  Exception: Delta and Smart Plug subscribe
+        to MQTT push for real-time data alongside HTTP polling (dual-source).
         In Enhanced Mode, MQTT is the primary source.
         """
         # SET reply tracking (all modes): log acknowledgement, do not process as data
@@ -558,8 +562,8 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._log_event("set_reply", f"topic={topic}")
             return
 
-        if not self._enhanced_mode and self.device_type != DEVICE_TYPE_DELTA:
-            return  # Standard Mode (non-Delta): ignore MQTT data
+        if not self._enhanced_mode and self.device_type not in (DEVICE_TYPE_DELTA, DEVICE_TYPE_SMARTPLUG):
+            return  # Standard Mode (non-Delta/SmartPlug): ignore MQTT data
         parsed = self._parse_message(topic, payload)
         if parsed:
             self.hass.loop.call_soon_threadsafe(self._apply_data, parsed)
@@ -575,6 +579,10 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 # Delta devices send {"typeCode": "pdStatus", "params": {...}}
                 if self.device_type == DEVICE_TYPE_DELTA and data.get("typeCode"):
                     parsed = parse_delta_report(data)
+                    return parsed if parsed else None
+                # Smart Plug MQTT reports: may use params/param envelope
+                if self.device_type == DEVICE_TYPE_SMARTPLUG:
+                    parsed = parse_smartplug_report(data)
                     return parsed if parsed else None
                 # PowerOcean sends flat {"params": {...}} or flat dicts
                 if data.get("params"):

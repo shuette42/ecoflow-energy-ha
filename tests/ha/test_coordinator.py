@@ -156,7 +156,7 @@ class TestSetup:
         await coordinator.async_setup()
         assert coordinator.mqtt_client is not None
 
-    async def test_standard_setup_smartplug_no_subscribe(
+    async def test_standard_setup_smartplug_subscribes_data(
         self,
         hass: HomeAssistant,
         standard_config_entry: MockConfigEntry,
@@ -164,7 +164,7 @@ class TestSetup:
         mock_mqtt_client,
         mock_http_client,
     ) -> None:
-        """Smart Plug in Standard Mode sets up MQTT with subscribe_data=False."""
+        """Smart Plug in Standard Mode sets up MQTT with subscribe_data=True."""
         standard_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, standard_config_entry, MOCK_SMARTPLUG_DEVICE
@@ -243,12 +243,16 @@ class TestMessageParsing:
             assert args[0] == coordinator._apply_data
             assert args[1]["soc"] == 85.0
 
-    async def test_smartplug_ignores_mqtt_data(
+    async def test_smartplug_mqtt_data_processed(
         self,
         hass: HomeAssistant,
         standard_config_entry: MockConfigEntry,
     ) -> None:
-        """Smart Plug in Standard Mode ignores MQTT data (HTTP only)."""
+        """Smart Plug in Standard Mode processes MQTT data (gate is open).
+
+        _on_mqtt_message bridges to the event loop via call_soon_threadsafe,
+        so we verify the gate doesn't block and _apply_data gets scheduled.
+        """
         standard_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, standard_config_entry, MOCK_SMARTPLUG_DEVICE
@@ -256,11 +260,43 @@ class TestMessageParsing:
         import json
 
         topic = "/open/cert/SN001/quota"
-        payload = json.dumps({"typeCode": "pdStatus", "params": {"soc": 85}}).encode()
+        payload = json.dumps({
+            "params": {"2_1.watts": 150, "2_1.volt": 230},
+        }).encode()
 
-        coordinator._on_mqtt_message(topic, payload)
-        # Smart Plug should NOT apply MQTT data
-        assert coordinator.device_data == {}
+        with patch.object(coordinator.hass.loop, "call_soon_threadsafe") as mock_csf:
+            coordinator._on_mqtt_message(topic, payload)
+            # Smart Plug MQTT data should reach _apply_data (not blocked by gate)
+            mock_csf.assert_called_once()
+            args = mock_csf.call_args[0]
+            assert args[0] == coordinator._apply_data
+            assert args[1]["power_w"] == pytest.approx(15.0)
+            assert args[1]["voltage_v"] == 230.0
+
+    async def test_smartplug_mqtt_direct_fields(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Smart Plug MQTT with direct field names is parsed correctly."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_SMARTPLUG_DEVICE
+        )
+        import json
+
+        topic = "/open/cert/SN001/quota"
+        payload = json.dumps({
+            "param": {"watts": 100, "brightness": 512, "switchSta": 1},
+        }).encode()
+
+        with patch.object(coordinator.hass.loop, "call_soon_threadsafe") as mock_csf:
+            coordinator._on_mqtt_message(topic, payload)
+            mock_csf.assert_called_once()
+            args = mock_csf.call_args[0]
+            assert args[1]["power_w"] == pytest.approx(10.0)
+            assert args[1]["led_brightness"] == 512.0
+            assert args[1]["switch_state"] == 1
 
 
 # ===========================================================================

@@ -263,7 +263,9 @@
       "ac_charge_speed": { "name": "AC Charge Speed" },
       "max_charge_soc": { "name": "Max Charge SoC" },
       "min_discharge_soc": { "name": "Min Discharge SoC" },
-      "standby_timeout": { "name": "Standby Timeout" }
+      "standby_timeout": { "name": "Standby Timeout" },
+      "led_brightness": { "name": "LED Brightness" },
+      "max_watts": { "name": "Max Power Limit" }
     }
   }
 }

@@ -263,7 +263,9 @@
       "ac_charge_speed": { "name": "AC-Ladegeschwindigkeit" },
       "max_charge_soc": { "name": "Max. Ladezustand" },
       "min_discharge_soc": { "name": "Min. Entladezustand" },
-      "standby_timeout": { "name": "Standby-Zeitlimit" }
+      "standby_timeout": { "name": "Standby-Zeitlimit" },
+      "led_brightness": { "name": "LED-Helligkeit" },
+      "max_watts": { "name": "Max. Leistungsgrenze" }
     }
   }
 }
