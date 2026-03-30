@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.5] - 2026-03-31
+
+### Fixed
+- Proto3 zero-value readback: `MessageToDict` now includes fields with value 0 — previously, setting Min Discharge SoC to 0% was accepted by the device but HA reverted to the previous value because the proto3 decoder omitted zero-valued fields
+
 ## [1.6.4] - 2026-03-31
 
 ### Fixed
