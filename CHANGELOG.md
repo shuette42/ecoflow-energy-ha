@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.4] - 2026-03-31
+
+### Fixed
+- PowerOcean: revert to 2-field SysBatChgDsgSet payload (charge upper + discharge lower only) — the 4-field version from v1.6.1 caused the device to reject discharge lower limit value 0
+
 ## [1.6.3] - 2026-03-31
 
 ### Fixed

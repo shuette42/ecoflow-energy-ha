@@ -76,12 +76,6 @@ class TestAsyncSetSocLimits:
         mock_mqtt.send_proto_set.return_value = True
         coordinator._mqtt_client = mock_mqtt
 
-        # Seed device data so backup_ratio and dev_soc are available
-        coordinator.async_set_updated_data({
-            "ems_backup_ratio_pct": 50,
-            "soc_pct": 80,
-        })
-
         result = await coordinator.async_set_soc_limits(100, 10)
 
         assert result is True
@@ -154,12 +148,10 @@ class TestPowerOceanNumberSet:
         coordinator = EcoFlowDeviceCoordinator(
             hass, entry, MOCK_POWEROCEAN_DEVICE,
         )
-        # Seed device data with current limits + required pass-through fields
+        # Seed device data with current limits
         coordinator._device_data = {
             "ems_charge_upper_limit_pct": 100,
             "ems_discharge_lower_limit_pct": 0,
-            "ems_backup_ratio_pct": 50,
-            "soc_pct": 80,
         }
         coordinator.async_set_updated_data(dict(coordinator._device_data))
 

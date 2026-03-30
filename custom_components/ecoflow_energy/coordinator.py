@@ -872,13 +872,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         from .ecoflow.energy_stream import build_soc_limit_set_payload
 
-        # Pass current backup_ratio and dev_soc from device data (required by firmware)
-        data = self.data or {}
-        backup_ratio = int(data.get("ems_backup_ratio_pct", 0))
-        dev_soc = int(data.get("soc_pct", data.get("bpSoc", 0)))
-        payload = build_soc_limit_set_payload(
-            max_charge_soc, min_discharge_soc, backup_ratio, dev_soc,
-        )
+        payload = build_soc_limit_set_payload(max_charge_soc, min_discharge_soc)
         ok = await self.hass.async_add_executor_job(
             self._mqtt_client.send_proto_set, payload,
         )
