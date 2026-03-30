@@ -15,9 +15,11 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import (
     DELTA2MAX_NUMBERS,
     DEVICE_TYPE_DELTA,
+    DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_SMARTPLUG,
     DOMAIN,
     EcoFlowNumberDef,
+    POWEROCEAN_NUMBERS,
     SMARTPLUG_NUMBERS,
 )
 from .coordinator import EcoFlowDeviceCoordinator
@@ -103,6 +105,8 @@ async def async_setup_entry(
     for coordinator in coordinators.values():
         defs = _get_number_defs(coordinator.device_type)
         for defn in defs:
+            if defn.enhanced_only and not coordinator.enhanced_mode:
+                continue
             entities.append(EcoFlowNumber(coordinator, defn))
 
     async_add_entities(entities)
@@ -160,6 +164,11 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         """Set a new value via the EcoFlow IoT API."""
+        # PowerOcean uses protobuf SET via Enhanced Mode (WSS)
+        if self.coordinator.device_type == DEVICE_TYPE_POWEROCEAN:
+            await self._async_set_powerocean_value(value)
+            return
+
         # Smart Plug uses cmdCode format (different from Delta's moduleType/operateType)
         sp_template = SMARTPLUG_NUMBER_COMMANDS.get(self._definition.key)
         if sp_template is not None:
@@ -202,10 +211,37 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
             self.async_write_ha_state()
 
 
+    async def _async_set_powerocean_value(self, value: float) -> None:
+        """Set a PowerOcean number value via WSS Protobuf.
+
+        SysBatChgDsgSet sends both limits in one message.  The unchanged
+        limit is read from coordinator data so both are always consistent.
+        """
+        key = self._definition.key
+        int_value = int(value)
+
+        if key == "max_charge_soc":
+            max_soc = int_value
+            min_soc = int(self.coordinator.data.get("ems_discharge_lower_limit_pct", 0))
+        elif key == "min_discharge_soc":
+            max_soc = int(self.coordinator.data.get("ems_charge_upper_limit_pct", 100))
+            min_soc = int_value
+        else:
+            _LOGGER.warning("No PowerOcean SET handler for %s", key)
+            return
+
+        ok = await self.coordinator.async_set_soc_limits(max_soc, min_soc)
+        if ok and self.coordinator.data is not None:
+            self.coordinator.data[self._definition.state_key] = value
+            self.async_write_ha_state()
+
+
 def _get_number_defs(device_type: str) -> list[EcoFlowNumberDef]:
     """Return number definitions based on device type."""
     if device_type == DEVICE_TYPE_DELTA:
         return DELTA2MAX_NUMBERS
+    if device_type == DEVICE_TYPE_POWEROCEAN:
+        return POWEROCEAN_NUMBERS
     if device_type == DEVICE_TYPE_SMARTPLUG:
         return SMARTPLUG_NUMBERS
     return []

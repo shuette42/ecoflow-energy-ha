@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.0] - 2026-03-30
+
+### Added
+- PowerOcean: battery SoC limit control — Max Charge SoC (50–100%) and Min Discharge SoC (0–30%) as number entities (Enhanced Mode only)
+- PowerOcean: SysBatChgDsgSet protobuf SET command (cmd_func=96, cmd_id=112) for real-time SoC limit adjustment via WSS
+
+### Changed
+- MQTT client: refactored `send_energy_stream_switch` to use generic `send_proto_set` method for all protobuf SET commands
+
 ## [1.5.3] - 2026-03-30
 
 ### Fixed

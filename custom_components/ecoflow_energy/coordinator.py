@@ -855,6 +855,38 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     # SET commands (switches, numbers)
     # ------------------------------------------------------------------
 
+    async def async_set_soc_limits(
+        self, max_charge_soc: int, min_discharge_soc: int,
+    ) -> bool:
+        """Send SoC limits to PowerOcean via WSS Protobuf (Enhanced Mode only).
+
+        Sends a SysBatChgDsgSet message (cmd_func=96, cmd_id=112) that sets
+        both battery charge upper limit and discharge lower limit.
+        """
+        if not self._enhanced_mode:
+            _LOGGER.warning("SoC limit SET requires Enhanced Mode (%s)", self.device_sn)
+            return False
+        if self._mqtt_client is None or not self._mqtt_client.is_connected():
+            _LOGGER.warning("Cannot send SoC limits — MQTT not connected (%s)", self.device_sn)
+            return False
+
+        from .ecoflow.energy_stream import build_soc_limit_set_payload
+
+        payload = build_soc_limit_set_payload(max_charge_soc, min_discharge_soc)
+        ok = await self.hass.async_add_executor_job(
+            self._mqtt_client.send_proto_set, payload,
+        )
+        if ok:
+            _LOGGER.debug(
+                "SoC limits sent: max=%d, min=%d (%s)",
+                max_charge_soc, min_discharge_soc, self.device_sn,
+            )
+            self._log_event("set_soc_limits", f"max={max_charge_soc}, min={min_discharge_soc}")
+        else:
+            _LOGGER.warning("SoC limits SET failed (%s)", self.device_sn)
+            self._log_event("set_soc_limits_fail", f"max={max_charge_soc}, min={min_discharge_soc}")
+        return ok
+
     async def async_send_set_command(self, command: dict[str, Any]) -> bool:
         """Send a SET command to the device via MQTT.
 

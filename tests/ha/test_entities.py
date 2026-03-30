@@ -112,8 +112,9 @@ class TestNumberDefsRouting:
     def test_smartplug_numbers(self):
         assert _get_number_defs(DEVICE_TYPE_SMARTPLUG) is SMARTPLUG_NUMBERS
 
-    def test_powerocean_numbers_empty(self):
-        assert _get_number_defs(DEVICE_TYPE_POWEROCEAN) == []
+    def test_powerocean_numbers(self):
+        from custom_components.ecoflow_energy.const import POWEROCEAN_NUMBERS
+        assert _get_number_defs(DEVICE_TYPE_POWEROCEAN) is POWEROCEAN_NUMBERS
 
 
 # ===========================================================================
