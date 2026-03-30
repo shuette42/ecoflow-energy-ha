@@ -20,7 +20,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from .const import IOT_API_BASE
 
-logger = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
 _AUTH_LOGIN_PATH = "/auth/login"
 _ENHANCED_CERT_PATH = "/iot-auth/enterprise-development/user/certification"
@@ -62,7 +62,7 @@ async def enhanced_login(
                 body = await resp.json()
                 if str(body.get("code")) != "0":
                     last_error = f"code={body.get('code')} msg={body.get('message')}"
-                    logger.debug("Login attempt %s: %s", base_url, last_error)
+                    _LOGGER.debug("Login attempt %s: %s", base_url, last_error)
                     continue
                 data = body.get("data", {})
                 token = data.get("token", "")
@@ -70,16 +70,16 @@ async def enhanced_login(
                 user_id = str(user.get("userId", ""))
                 if not token or not user_id:
                     last_error = "missing token or userId in response"
-                    logger.debug("Login attempt %s: %s", base_url, last_error)
+                    _LOGGER.debug("Login attempt %s: %s", base_url, last_error)
                     continue
-                logger.debug("Enhanced login OK via %s", base_url)
+                _LOGGER.debug("Enhanced login OK via %s", base_url)
                 return {"token": token, "user_id": user_id}
         except (aiohttp.ClientError, TimeoutError) as exc:
             last_error = str(exc)
-            logger.debug("Login attempt %s failed: %s", base_url, exc)
+            _LOGGER.debug("Login attempt %s failed: %s", base_url, exc)
             continue
 
-    logger.warning("Enhanced login failed on all endpoints: %s", last_error)
+    _LOGGER.warning("Enhanced login failed on all endpoints: %s", last_error)
     return None
 
 
@@ -102,7 +102,7 @@ async def get_enhanced_credentials(
         async with session.get(url, headers=headers, timeout=timeout) as resp:
             body = await resp.json()
             if str(body.get("code")) != "0":
-                logger.warning(
+                _LOGGER.warning(
                     "Enhanced certification failed: code=%s msg=%s",
                     body.get("code"),
                     body.get("message"),
@@ -110,11 +110,11 @@ async def get_enhanced_credentials(
                 return None
             encrypted_data = body.get("data")
             if not encrypted_data or not isinstance(encrypted_data, str):
-                logger.warning("Enhanced certification: empty or invalid response")
+                _LOGGER.warning("Enhanced certification: empty or invalid response")
                 return None
             return _decrypt_certification(token, encrypted_data)
     except (aiohttp.ClientError, TimeoutError) as exc:
-        logger.warning("Enhanced certification request failed: %s", exc)
+        _LOGGER.warning("Enhanced certification request failed: %s", exc)
         return None
 
 
@@ -145,5 +145,5 @@ def _decrypt_certification(
 
         return json.loads(plaintext)
     except (ValueError, json.JSONDecodeError) as exc:
-        logger.warning("Enhanced certification decryption failed: %s", exc)
+        _LOGGER.warning("Enhanced certification decryption failed: %s", exc)
         return None

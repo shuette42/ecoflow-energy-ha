@@ -21,7 +21,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
 MAX_GAP_S = 420.0  # Skip integration for gaps >7 minutes
 MIN_DELTA_S = 0.1  # Ignore updates faster than 100ms
@@ -66,7 +66,7 @@ class EnergyIntegrator:
         """
         if not self._loaded:
             self.load_state()
-        now = time.time()
+        now = time.monotonic()
 
         if metric in self._state:
             total_kwh, last_ts, last_power_w = self._state[metric]
@@ -117,7 +117,7 @@ class EnergyIntegrator:
         else:
             last_power = 0.0
 
-        self._state[metric] = (total_kwh, time.time(), last_power)
+        self._state[metric] = (total_kwh, time.monotonic(), last_power)
         self._dirty = True
 
     def flush(self) -> None:
@@ -128,7 +128,7 @@ class EnergyIntegrator:
         """
         if not self._dirty:
             return
-        now = time.time()
+        now = time.monotonic()
         if now - self._last_save_ts < SAVE_INTERVAL_S:
             return
         self._save_state()
@@ -155,16 +155,21 @@ class EnergyIntegrator:
         try:
             if self._state_file.exists():
                 data = json.loads(self._state_file.read_text())
+                now = time.monotonic()
                 for metric, values in data.items():
                     if isinstance(values, list) and len(values) >= 3:
+                        last_ts = float(values[1])
+                        # Migrate epoch timestamps from pre-v1.5.1 state files
+                        if last_ts > 1e9:
+                            last_ts = now
                         self._state[metric] = (
                             float(values[0]),
-                            float(values[1]),
+                            last_ts,
                             float(values[2]),
                         )
-                logger.debug("Energy state loaded: %d metrics", len(self._state))
+                _LOGGER.debug("Energy state loaded: %d metrics", len(self._state))
         except Exception as exc:
-            logger.warning("Failed to load energy state: %s", exc)
+            _LOGGER.warning("Failed to load energy state: %s", exc)
             self._state = {}
 
     def _save_state(self) -> None:
@@ -178,4 +183,4 @@ class EnergyIntegrator:
             }
             self._state_file.write_text(json.dumps(data, indent=2))
         except Exception as exc:
-            logger.warning("Failed to save energy state: %s", exc)
+            _LOGGER.warning("Failed to save energy state: %s", exc)

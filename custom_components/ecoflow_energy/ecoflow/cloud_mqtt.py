@@ -32,7 +32,7 @@ from .const import (
 )
 from .energy_stream import build_energy_stream_activate_payload
 
-logger = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
 
 class EcoFlowMQTTClient:
@@ -99,12 +99,12 @@ class EcoFlowMQTTClient:
         """Create and configure the Paho MQTT client."""
         try:
             if not self._cert_account or not self._cert_password:
-                logger.error("MQTT: certificate_account or certificate_password missing")
+                _LOGGER.error("MQTT: certificate_account or certificate_password missing")
                 return False
 
             if self._wss_mode:
                 client_id = generate_client_id(self._user_id)
-                logger.debug("WSS MQTT client (port %d)", MQTT_PORT_WSS)
+                _LOGGER.debug("WSS MQTT client (port %d)", MQTT_PORT_WSS)
                 try:
                     self.client = mqtt.Client(
                         mqtt.CallbackAPIVersion.VERSION2,
@@ -121,7 +121,7 @@ class EcoFlowMQTTClient:
                 self.client.ws_set_options(path=MQTT_WSS_PATH)
             else:
                 client_id = f"ecoflow_ha_{self._device_sn}"
-                logger.debug("TCP MQTT client (port %d)", MQTT_PORT_TCP)
+                _LOGGER.debug("TCP MQTT client (port %d)", MQTT_PORT_TCP)
                 try:
                     self.client = mqtt.Client(
                         mqtt.CallbackAPIVersion.VERSION2,
@@ -142,7 +142,7 @@ class EcoFlowMQTTClient:
             return True
 
         except Exception as exc:
-            logger.error("MQTT: client creation failed: %s", exc)
+            _LOGGER.error("MQTT: client creation failed: %s", exc)
             return False
 
     def _on_connect(self, client, userdata, flags, rc, properties=None):
@@ -165,14 +165,14 @@ class EcoFlowMQTTClient:
 
                 if not self._notified_connected:
                     self._notified_connected = True
-                    logger.debug("MQTT connected — data topics: %s | %s | set_reply", topic_json, topic_pb)
+                    _LOGGER.debug("MQTT connected — data topics: %s | %s | set_reply", topic_json, topic_pb)
             else:
                 # Standard Mode: no data subscriptions, MQTT is for SET commands only
                 if not self._notified_connected:
                     self._notified_connected = True
-                    logger.debug("MQTT connected — SET-only mode (set_reply subscribed)")
+                    _LOGGER.debug("MQTT connected — SET-only mode (set_reply subscribed)")
 
-            self.last_connect_time = time.time()
+            self.last_connect_time = time.monotonic()
             self.connected = True
             self.reconnect_attempts = 0
 
@@ -183,14 +183,14 @@ class EcoFlowMQTTClient:
                     payload = build_energy_stream_activate_payload()
                     set_topic = f"/app/{self._user_id}/{self._device_sn}/thing/property/set"
                     client.publish(set_topic, payload, qos=1)
-                    logger.debug("EnergyStreamSwitch sent — energy_stream_report activated")
+                    _LOGGER.debug("EnergyStreamSwitch sent — energy_stream_report activated")
                 except Exception as exc:
-                    logger.warning("EnergyStreamSwitch error: %s", exc)
+                    _LOGGER.warning("EnergyStreamSwitch error: %s", exc)
                 try:
                     self.send_latest_quotas()
-                    logger.debug("Post-connect latestQuotas sent — minimizing data gap")
+                    _LOGGER.debug("Post-connect latestQuotas sent — minimizing data gap")
                 except Exception as exc:
-                    logger.warning("Post-connect latestQuotas error: %s", exc)
+                    _LOGGER.warning("Post-connect latestQuotas error: %s", exc)
 
             if self.status_handler:
                 self.status_handler("connected", 0, "Connected")
@@ -204,9 +204,9 @@ class EcoFlowMQTTClient:
             }
             reason = rc_reasons.get(rc, "unknown error")
             if rc == 5:
-                logger.warning("MQTT connect failed: rc=%s (%s) — scheduling credential refresh", rc, reason)
+                _LOGGER.warning("MQTT connect failed: rc=%s (%s) — scheduling credential refresh", rc, reason)
             else:
-                logger.error("MQTT connect failed: rc=%s (%s)", rc, reason)
+                _LOGGER.error("MQTT connect failed: rc=%s (%s)", rc, reason)
             self.connected = False
             if rc == 5 and self._auth_error_handler:
                 self._auth_error_handler()
@@ -217,12 +217,12 @@ class EcoFlowMQTTClient:
         self.connected = False
         self._notified_connected = False
 
-        current_time = time.time()
+        current_time = time.monotonic()
         duration = current_time - self.last_connect_time if self.last_connect_time > 0 else 0
         self.last_disconnect_time = current_time
 
         if was_connected or reason_code != 0:
-            _log = logger.warning if reason_code != 0 else logger.debug
+            _log = _LOGGER.warning if reason_code != 0 else _LOGGER.debug
             _log(
                 "MQTT disconnect: rc=%s, was_connected=%s, duration=%.1fs, attempts=%d",
                 reason_code, was_connected, duration, self.reconnect_attempts,
@@ -236,13 +236,13 @@ class EcoFlowMQTTClient:
 
     def _should_attempt_reconnect(self) -> bool:
         """Check if a reconnect attempt should be made. Never gives up permanently."""
-        current_time = time.time()
+        current_time = time.monotonic()
 
         if self.reconnect_attempts >= self.max_reconnect_attempts:
             if (current_time - self._last_counter_reset_time) >= self._counter_reset_interval:
                 self._last_counter_reset_time = current_time
                 self.reconnect_attempts = 0
-                logger.debug("MQTT: counter reset after %ds — starting new cycle", self._counter_reset_interval)
+                _LOGGER.debug("MQTT: counter reset after %ds — starting new cycle", self._counter_reset_interval)
             else:
                 return False
 
@@ -265,14 +265,14 @@ class EcoFlowMQTTClient:
 
     def _schedule_reconnect(self):
         """Signal that a reconnect is needed."""
-        logger.debug("MQTT: reconnect scheduled — attempts: %d/%d", self.reconnect_attempts, self.max_reconnect_attempts)
+        _LOGGER.debug("MQTT: reconnect scheduled — attempts: %d/%d", self.reconnect_attempts, self.max_reconnect_attempts)
 
     def _on_message(self, client, userdata, msg):
         """Callback for incoming MQTT messages."""
         try:
             self.message_handler(msg.topic, msg.payload)
         except Exception as exc:
-            logger.warning("MQTT message handler error for %s: %s", msg.topic, exc)
+            _LOGGER.warning("MQTT message handler error for %s: %s", msg.topic, exc)
 
     def connect(self) -> bool:
         """Establish the MQTT connection."""
@@ -283,11 +283,11 @@ class EcoFlowMQTTClient:
             port = MQTT_PORT_WSS if self._wss_mode else MQTT_PORT_TCP
             keepalive = DEFAULT_WSS_KEEPALIVE if self._wss_mode else DEFAULT_MQTT_KEEPALIVE
 
-            logger.debug("Connecting to %s:%d (%s)", self._mqtt_host, port, "WSS" if self._wss_mode else "TCP")
+            _LOGGER.debug("Connecting to %s:%d (%s)", self._mqtt_host, port, "WSS" if self._wss_mode else "TCP")
             self.client.connect(self._mqtt_host, port, keepalive)
             return True
         except Exception as exc:
-            logger.warning("MQTT connection error: %s", exc)
+            _LOGGER.warning("MQTT connection error: %s", exc)
             return False
 
     def try_reconnect(self) -> bool:
@@ -298,9 +298,9 @@ class EcoFlowMQTTClient:
             return False
 
         self.reconnect_attempts += 1
-        self.last_reconnect_time = time.time()
+        self.last_reconnect_time = time.monotonic()
 
-        logger.debug(
+        _LOGGER.debug(
             "MQTT: reconnect attempt %d/%d",
             self.reconnect_attempts, self.max_reconnect_attempts,
         )
@@ -312,7 +312,7 @@ class EcoFlowMQTTClient:
         Recreates the Paho client instead of manipulating private attributes.
         No blocking sleep — the old connection is torn down synchronously.
         """
-        logger.debug("Force-reconnect: disconnecting and recreating client...")
+        _LOGGER.debug("Force-reconnect: disconnecting and recreating client...")
         try:
             self.client.loop_stop()
         except Exception:
@@ -326,7 +326,7 @@ class EcoFlowMQTTClient:
 
         # Recreate the client (generates new ClientID for WSS)
         if not self.create_client():
-            logger.error("Force-reconnect: client recreation failed")
+            _LOGGER.error("Force-reconnect: client recreation failed")
             return False
 
         try:
@@ -334,10 +334,10 @@ class EcoFlowMQTTClient:
             keepalive = DEFAULT_WSS_KEEPALIVE if self._wss_mode else DEFAULT_MQTT_KEEPALIVE
             self.client.connect(self._mqtt_host, port, keepalive)
             self.client.loop_start()
-            logger.debug("Force-reconnect: success at %s:%s (%s)", self._mqtt_host, port, "WSS" if self._wss_mode else "TCP")
+            _LOGGER.debug("Force-reconnect: success at %s:%s (%s)", self._mqtt_host, port, "WSS" if self._wss_mode else "TCP")
             return True
         except Exception as exc:
-            logger.error("Force-reconnect failed: %s", exc)
+            _LOGGER.error("Force-reconnect failed: %s", exc)
             return False
 
     def disconnect(self) -> None:
@@ -369,7 +369,7 @@ class EcoFlowMQTTClient:
             result = self.client.publish(topic, payload, qos=qos)
             return result.rc == 0
         except Exception as exc:
-            logger.error("Publish failed (%s): %s", topic, exc)
+            _LOGGER.error("Publish failed (%s): %s", topic, exc)
             return False
 
     def send_energy_stream_switch(self) -> bool:
@@ -381,7 +381,7 @@ class EcoFlowMQTTClient:
             topic = f"/app/{self._user_id}/{self._device_sn}/thing/property/set"
             return self.publish(topic, payload, qos=1)
         except Exception as exc:
-            logger.warning("EnergyStreamSwitch error: %s", exc)
+            _LOGGER.warning("EnergyStreamSwitch error: %s", exc)
             return False
 
     def send_latest_quotas(self) -> bool:
@@ -415,6 +415,6 @@ class EcoFlowMQTTClient:
     def get_status(self) -> tuple:
         """Return the current connection status."""
         if self.is_connected():
-            uptime = time.time() - self.last_connect_time if self.last_connect_time > 0 else 0
+            uptime = time.monotonic() - self.last_connect_time if self.last_connect_time > 0 else 0
             return "connected", 0, f"Connected ({int(uptime)}s)"
         return "disconnected", self.reconnect_attempts, f"Disconnected (attempt {self.reconnect_attempts})"

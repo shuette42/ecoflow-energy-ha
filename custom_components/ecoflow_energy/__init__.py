@@ -10,9 +10,16 @@ from homeassistant.core import HomeAssistant
 from .const import CONF_DEVICES, CONF_MODE, DOMAIN, MODE_ENHANCED, PLATFORMS
 from .coordinator import EcoFlowDeviceCoordinator
 
-logger = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
 type EcoFlowConfigEntry = ConfigEntry
+
+
+async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
+    """Migrate old entry."""
+    if config_entry.version > 1:
+        return False
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> bool:
@@ -23,7 +30,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
     is_enhanced = entry.data.get(CONF_MODE) == MODE_ENHANCED
     enhanced_count = len(devices) if is_enhanced else 0
     standard_count = len(devices) - enhanced_count
-    logger.debug(
+    _LOGGER.debug(
         "EcoFlow Energy: %d device(s) configured (Enhanced: %d, Standard: %d)",
         len(devices), enhanced_count, standard_count,
     )
@@ -48,7 +55,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
 
 async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Reload the integration when the config entry is updated."""
-    logger.debug("Config entry updated — reloading EcoFlow Energy")
+    _LOGGER.debug("Config entry updated — reloading EcoFlow Energy")
     await hass.config_entries.async_reload(entry.entry_id)
 
 

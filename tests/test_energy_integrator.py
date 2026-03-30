@@ -29,7 +29,7 @@ class TestBasicIntegration:
         """Second call after time delta produces energy."""
         integrator.integrate("solar", 1000.0)
         # Simulate time passing
-        integrator._state["solar"] = (0.0, time.time() - 30, 1000.0)
+        integrator._state["solar"] = (0.0, time.monotonic() - 30, 1000.0)
         result = integrator.integrate("solar", 1000.0)
         # 1000W * 30s / 3600 / 1000 = 0.00833 kWh
         assert result is not None
@@ -38,13 +38,13 @@ class TestBasicIntegration:
     def test_zero_power_no_increase(self, integrator):
         """Zero power should not increase the total."""
         integrator.integrate("solar", 0.0)
-        integrator._state["solar"] = (0.0, time.time() - 30, 0.0)
+        integrator._state["solar"] = (0.0, time.monotonic() - 30, 0.0)
         result = integrator.integrate("solar", 0.0)
         assert result == 0.0
 
     def test_monotonic_never_decreases(self, integrator):
         """Total should never decrease."""
-        integrator._state["solar"] = (10.0, time.time() - 30, 500.0)
+        integrator._state["solar"] = (10.0, time.monotonic() - 30, 500.0)
         result = integrator.integrate("solar", 500.0)
         assert result >= 10.0
 
@@ -52,13 +52,13 @@ class TestBasicIntegration:
 class TestGapDetection:
     def test_large_gap_preserves_total(self, integrator):
         """Gap >7min should skip integration but keep total."""
-        integrator._state["solar"] = (5.0, time.time() - 500, 1000.0)
+        integrator._state["solar"] = (5.0, time.monotonic() - 500, 1000.0)
         result = integrator.integrate("solar", 2000.0)
         assert result == 5.0  # Total unchanged
 
     def test_small_delta_skipped(self, integrator):
         """Updates faster than 100ms are skipped."""
-        integrator._state["solar"] = (5.0, time.time(), 1000.0)
+        integrator._state["solar"] = (5.0, time.monotonic(), 1000.0)
         result = integrator.integrate("solar", 1000.0)
         assert result == 5.0  # No change
 
@@ -67,7 +67,7 @@ class TestJumpDetection:
     def test_large_jump_uses_minimum(self, integrator):
         """When power changes >50%, use min(last, current)."""
         # 100W → 1000W is a >50% jump
-        integrator._state["solar"] = (0.0, time.time() - 30, 100.0)
+        integrator._state["solar"] = (0.0, time.monotonic() - 30, 100.0)
         result = integrator.integrate("solar", 1000.0)
         # Should use min(100, 1000) = 100W, not average
         # 100W * 30s / 3600000 ≈ 0.000833 kWh
@@ -78,13 +78,13 @@ class TestJumpDetection:
 class TestSetTotal:
     def test_set_total_monotonic(self, integrator):
         """set_total only accepts higher values."""
-        integrator._state["batt"] = (100.0, time.time(), 0.0)
+        integrator._state["batt"] = (100.0, time.monotonic(), 0.0)
         integrator.set_total("batt", 50.0)  # Lower → ignored
         assert integrator.get_total("batt") == 100.0
 
     def test_set_total_higher_accepted(self, integrator):
         """set_total accepts higher values."""
-        integrator._state["batt"] = (100.0, time.time(), 0.0)
+        integrator._state["batt"] = (100.0, time.monotonic(), 0.0)
         integrator.set_total("batt", 150.0)
         assert integrator.get_total("batt") == 150.0
 
@@ -98,7 +98,7 @@ class TestPersistence:
     def test_save_and_load(self, state_file):
         """State survives across instances (explicit load_state call)."""
         i1 = EnergyIntegrator(state_file)
-        i1._state["solar"] = (123.456, time.time(), 500.0)
+        i1._state["solar"] = (123.456, time.monotonic(), 500.0)
         i1._save_state()
 
         i2 = EnergyIntegrator(state_file)
@@ -118,3 +118,28 @@ class TestPersistence:
         i = EnergyIntegrator(str(f))
         i.load_state()
         assert i.get_total("solar") is None
+
+    def test_epoch_timestamp_migration(self, state_file):
+        """State files with epoch timestamps (pre-v1.5.1) are migrated on load."""
+        import json
+        from pathlib import Path
+
+        epoch_ts = 1748000000.0  # Unix epoch from 2025
+        data = {"solar": [123.456, epoch_ts, 500.0]}
+        Path(state_file).write_text(json.dumps(data))
+
+        integrator = EnergyIntegrator(state_file)
+        integrator.load_state()
+
+        # Total must be preserved
+        assert integrator.get_total("solar") == pytest.approx(123.456)
+
+        # Timestamp must be migrated to monotonic range (not epoch)
+        _, ts, _ = integrator._state["solar"]
+        assert ts < 1e9  # monotonic timestamps are never in epoch range
+
+        # Integration must work normally after migration
+        integrator._state["solar"] = (123.456, time.monotonic() - 30, 500.0)
+        result = integrator.integrate("solar", 1000.0)
+        assert result is not None
+        assert result > 123.456

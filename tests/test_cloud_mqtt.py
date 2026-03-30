@@ -143,25 +143,25 @@ class TestShouldAttemptReconnect:
     def test_too_soon_blocked(self):
         client = _make_client(base_reconnect_delay=60)
         client.reconnect_attempts = 1
-        client.last_reconnect_time = time.time()  # just now
+        client.last_reconnect_time = time.monotonic()  # just now
         assert client._should_attempt_reconnect() is False
 
     def test_after_delay_allowed(self):
         client = _make_client(base_reconnect_delay=5)
         client.reconnect_attempts = 1
-        client.last_reconnect_time = time.time() - 100  # long ago
+        client.last_reconnect_time = time.monotonic() - 100  # long ago
         assert client._should_attempt_reconnect() is True
 
     def test_max_attempts_blocked(self):
         client = _make_client(max_reconnect_attempts=3)
         client.reconnect_attempts = 3
-        client._last_counter_reset_time = time.time()  # recent reset
+        client._last_counter_reset_time = time.monotonic()  # recent reset
         assert client._should_attempt_reconnect() is False
 
     def test_counter_reset_after_interval(self):
         client = _make_client(max_reconnect_attempts=3)
         client.reconnect_attempts = 3
-        client._last_counter_reset_time = time.time() - 2000  # long ago
+        client._last_counter_reset_time = time.monotonic() - 2000  # long ago
         client._counter_reset_interval = 1800
         client.last_reconnect_time = 0
         assert client._should_attempt_reconnect() is True
@@ -173,15 +173,15 @@ class TestShouldAttemptReconnect:
 
         # Tier 1 (attempts 0-3): base delay
         client.reconnect_attempts = 3
-        client.last_reconnect_time = time.time() - 100
+        client.last_reconnect_time = time.monotonic() - 100
         assert client._should_attempt_reconnect() is True
 
         # Tier 2 (attempts 4-6): 1.5x delay
         client.reconnect_attempts = 5
         base = client._get_reconnect_delay()
-        client.last_reconnect_time = time.time() - (base * 1.5 - 1)
+        client.last_reconnect_time = time.monotonic() - (base * 1.5 - 1)
         assert client._should_attempt_reconnect() is False
-        client.last_reconnect_time = time.time() - (base * 1.5 + 1)
+        client.last_reconnect_time = time.monotonic() - (base * 1.5 + 1)
         assert client._should_attempt_reconnect() is True
 
 
@@ -207,7 +207,7 @@ class TestTryReconnect:
         client = _make_client(base_reconnect_delay=60)
         client.connected = False
         client.reconnect_attempts = 1
-        client.last_reconnect_time = time.time()  # just now
+        client.last_reconnect_time = time.monotonic()  # just now
         assert client.try_reconnect() is False
 
 
@@ -264,7 +264,7 @@ class TestOnDisconnect:
     def test_on_disconnect_updates_state(self):
         client = _make_client()
         client.connected = True
-        client.last_connect_time = time.time() - 60
+        client.last_connect_time = time.monotonic() - 60
 
         mock_paho = MagicMock()
         client.client = mock_paho

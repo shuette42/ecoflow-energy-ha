@@ -37,7 +37,7 @@ from .const import (
 from .ecoflow.enhanced_auth import enhanced_login
 from .ecoflow.iot_api import IoTApiClient
 
-logger = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
 
 class EcoFlowEnergyConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -86,10 +86,10 @@ class EcoFlowEnergyConfigFlow(ConfigFlow, domain=DOMAIN):
                     else:
                         self._devices = self._normalize_devices(devices)
                         return await self.async_step_devices()
-            except (aiohttp.ClientError, TimeoutError):
+            except (aiohttp.ClientError, TimeoutError, OSError):
                 errors["base"] = "cannot_connect"
-            except Exception:
-                logger.exception("Unexpected error during EcoFlow API validation")
+            except (KeyError, ValueError, TypeError, AttributeError):
+                _LOGGER.exception("Unexpected error during EcoFlow API validation")
                 errors["base"] = "unknown"
 
         return self.async_show_form(
@@ -219,10 +219,10 @@ class EcoFlowEnergyConfigFlow(ConfigFlow, domain=DOMAIN):
                             password=password,
                             user_id=login_result["user_id"],
                         )
-                except (aiohttp.ClientError, TimeoutError):
+                except (aiohttp.ClientError, TimeoutError, OSError):
                     errors["base"] = "cannot_connect"
-                except Exception:
-                    logger.exception("Unexpected error during Enhanced login")
+                except (KeyError, ValueError, TypeError, AttributeError):
+                    _LOGGER.exception("Unexpected error during Enhanced login")
                     errors["base"] = "unknown"
 
         return self.async_show_form(
@@ -279,10 +279,10 @@ class EcoFlowEnergyConfigFlow(ConfigFlow, domain=DOMAIN):
                         reauth_entry, data=new_data
                     )
                     return self.async_abort(reason="reauth_successful")
-            except (aiohttp.ClientError, TimeoutError):
+            except (aiohttp.ClientError, TimeoutError, OSError):
                 errors["base"] = "cannot_connect"
-            except Exception:
-                logger.exception("Unexpected error during re-authentication")
+            except (KeyError, ValueError, TypeError, AttributeError):
+                _LOGGER.exception("Unexpected error during re-authentication")
                 errors["base"] = "unknown"
 
         return self.async_show_form(
@@ -329,10 +329,10 @@ class EcoFlowEnergyConfigFlow(ConfigFlow, domain=DOMAIN):
                             reauth_entry, data=new_data
                         )
                         return self.async_abort(reason="reauth_successful")
-                except (aiohttp.ClientError, TimeoutError):
+                except (aiohttp.ClientError, TimeoutError, OSError):
                     errors["base"] = "cannot_connect"
-                except Exception:
-                    logger.exception("Unexpected error during Enhanced re-authentication")
+                except (KeyError, ValueError, TypeError, AttributeError):
+                    _LOGGER.exception("Unexpected error during Enhanced re-authentication")
                     errors["base"] = "unknown"
 
         return self.async_show_form(
@@ -390,10 +390,10 @@ class EcoFlowEnergyConfigFlow(ConfigFlow, domain=DOMAIN):
                         reconfigure_entry, data=new_data
                     )
                     return self.async_abort(reason="reconfigure_successful")
-            except (aiohttp.ClientError, TimeoutError):
+            except (aiohttp.ClientError, TimeoutError, OSError):
                 errors["base"] = "cannot_connect"
-            except Exception:
-                logger.exception("Unexpected error during reconfiguration")
+            except (KeyError, ValueError, TypeError, AttributeError):
+                _LOGGER.exception("Unexpected error during reconfiguration")
                 errors["base"] = "unknown"
 
         return self.async_show_form(
@@ -443,10 +443,10 @@ class EcoFlowEnergyConfigFlow(ConfigFlow, domain=DOMAIN):
                             reconfigure_entry, data=new_data
                         )
                         return self.async_abort(reason="reconfigure_successful")
-                except (aiohttp.ClientError, TimeoutError):
+                except (aiohttp.ClientError, TimeoutError, OSError):
                     errors["base"] = "cannot_connect"
-                except Exception:
-                    logger.exception("Unexpected error during Enhanced reconfiguration")
+                except (KeyError, ValueError, TypeError, AttributeError):
+                    _LOGGER.exception("Unexpected error during Enhanced reconfiguration")
                     errors["base"] = "unknown"
 
         return self.async_show_form(
@@ -551,8 +551,8 @@ class EcoFlowOptionsFlow(OptionsFlow):
                 raw = await api.get_device_list()
                 if raw:
                     self._all_devices = EcoFlowEnergyConfigFlow._normalize_devices(raw)
-            except Exception:
-                logger.warning("Options flow: failed to fetch device list", exc_info=True)
+            except (aiohttp.ClientError, TimeoutError, OSError, KeyError, ValueError, TypeError):
+                _LOGGER.warning("Options flow: failed to fetch device list", exc_info=True)
 
         if user_input is not None:
             new_mode = user_input.get(CONF_MODE, current_mode)
@@ -622,9 +622,9 @@ class EcoFlowOptionsFlow(OptionsFlow):
                     if login_result is not None:
                         user_id = login_result["user_id"]
                 except (aiohttp.ClientError, TimeoutError) as exc:
-                    logger.warning("Options flow: Enhanced login failed: %s", exc)
-                except Exception:
-                    logger.exception("Options flow: Enhanced login error")
+                    _LOGGER.warning("Options flow: Enhanced login failed: %s", exc)
+                except (KeyError, ValueError, TypeError, AttributeError):
+                    _LOGGER.exception("Options flow: Enhanced login error")
 
             if user_id:
                 return self._save_options(

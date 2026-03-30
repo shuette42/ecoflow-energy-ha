@@ -464,7 +464,7 @@ class TestStaleDetection:
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
-        coordinator._last_mqtt_ts = time.time() - STALE_THRESHOLD_S - 10
+        coordinator._last_mqtt_ts = time.monotonic() - STALE_THRESHOLD_S - 10
         assert coordinator.update_interval is None
 
         coordinator._check_stale()
@@ -484,7 +484,7 @@ class TestStaleDetection:
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
         coordinator.update_interval = timedelta(seconds=HTTP_FALLBACK_INTERVAL_S)
-        coordinator._last_mqtt_ts = time.time()
+        coordinator._last_mqtt_ts = time.monotonic()
 
         coordinator._check_stale()
 
@@ -541,7 +541,7 @@ class TestStaleDetection:
         mock_mqtt.is_connected.return_value = False
         mock_mqtt.try_reconnect.return_value = False
         coordinator._mqtt_client = mock_mqtt
-        coordinator._last_mqtt_ts = time.time() - STALE_THRESHOLD_S - 10
+        coordinator._last_mqtt_ts = time.monotonic() - STALE_THRESHOLD_S - 10
 
         coordinator._check_stale()
 
@@ -661,9 +661,9 @@ class TestApplyData:
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
-        before = time.time()
+        before = time.monotonic()
         coordinator._apply_data({"solar_w": 3000, "soc_pct": 85})
-        after = time.time()
+        after = time.monotonic()
 
         assert coordinator.device_data["solar_w"] == 3000
         assert coordinator.device_data["soc_pct"] == 85
@@ -708,7 +708,7 @@ class TestApplyData:
         for metric in ("solar_energy_kwh", "home_energy_kwh"):
             if metric in coordinator._energy_integrator._state:
                 total, _ts, power = coordinator._energy_integrator._state[metric]
-                coordinator._energy_integrator._state[metric] = (total, time.time() - 30, power)
+                coordinator._energy_integrator._state[metric] = (total, time.monotonic() - 30, power)
         coordinator._apply_data({"solar_w": 3000, "home_w": 1500})
 
         # Energy keys should now exist in device_data
@@ -982,13 +982,13 @@ class TestBpRemapping:
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """_all_packs in proto heartbeat extracts per-pack sensors."""
+        """all_packs in proto heartbeat extracts per-pack sensors."""
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
         raw = {
-            "_all_packs": [
+            "all_packs": [
                 {"bp_soc": 76, "bp_pwr": 2486.48, "bp_vol": 54.671, "bp_accu_chg_energy": 2238706},
                 {"bp_soc": 74, "bp_pwr": 2529.19, "bp_vol": 54.698, "bp_accu_chg_energy": 2207455},
             ],
@@ -1016,13 +1016,13 @@ class TestBpRemapping:
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """Only first 5 packs are extracted from _all_packs."""
+        """Only first 5 packs are extracted from all_packs."""
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
         raw = {
-            "_all_packs": [{"bp_soc": i * 10} for i in range(1, 8)],  # 7 packs
+            "all_packs": [{"bp_soc": i * 10} for i in range(1, 8)],  # 7 packs
         }
         result = coordinator._remap_bp_keys(raw)
 
@@ -1030,6 +1030,53 @@ class TestBpRemapping:
         assert "pack5_soc" in result
         assert "pack6_soc" not in result
         assert "pack7_soc" not in result
+
+    async def test_phantom_empty_pack_skipped(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Phantom pack (all zeros / proto3 defaults) is skipped in numbering."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        raw = {
+            "all_packs": [
+                {"bp_soc": 0, "bp_pwr": 0, "bp_vol": 0},  # phantom (all zeros)
+                {"bp_soc": 76, "bp_pwr": 2486.48, "bp_vol": 54.671},  # real pack
+                {"bp_soc": 74, "bp_pwr": 2529.19, "bp_vol": 54.698},  # real pack
+            ],
+        }
+        result = coordinator._remap_bp_keys(raw)
+
+        # Phantom skipped — real packs are pack1 and pack2
+        assert result["pack1_soc"] == 76.0
+        assert result["pack1_power_w"] == 2486.48
+        assert result["pack2_soc"] == 74.0
+        assert result["pack2_power_w"] == 2529.19
+        assert "pack3_soc" not in result
+
+    async def test_phantom_only_packs(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """All packs are phantom — no pack sensors produced."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        raw = {
+            "all_packs": [
+                {"bp_soc": 0, "bp_pwr": 0},
+                {"bp_soc": 0, "bp_pwr": 0, "bp_vol": 0},
+            ],
+        }
+        result = coordinator._remap_bp_keys(raw)
+
+        assert "pack1_soc" not in result
+        assert "pack2_soc" not in result
 
 
 # ===========================================================================
@@ -1347,6 +1394,56 @@ class TestParseMessageProtobuf:
         result = coordinator._parse_message(topic, malformed)
 
         assert result is None
+
+    async def test_parse_protobuf_bp_heartbeat_multi_pack(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """E2E: bp_heartbeat proto frame with 2 packs survives underscore filter."""
+        from custom_components.ecoflow_energy.ecoflow.energy_stream import (
+            _encode_field_bytes,
+            _encode_field_varint,
+        )
+        from custom_components.ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
+            JTS1BpHeartbeatReport,
+        )
+
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+
+        # Build a real protobuf bp_heartbeat frame with 2 battery packs
+        msg = JTS1BpHeartbeatReport()
+        pack1 = msg.bp_heart_beat.add()
+        pack1.bp_soc = 76
+        pack1.bp_pwr = 2486.0
+        pack1.bp_vol = 54.67
+        pack2 = msg.bp_heart_beat.add()
+        pack2.bp_soc = 74
+        pack2.bp_pwr = 2529.0
+        pack2.bp_vol = 54.70
+        inner = msg.SerializeToString()
+
+        # Wrap in HeaderMessage frame (cmd_func=96, cmd_id=7)
+        header = bytearray()
+        header.extend(_encode_field_bytes(1, inner))
+        header.extend(_encode_field_varint(8, 96))
+        header.extend(_encode_field_varint(9, 7))
+        frame = _encode_field_bytes(1, bytes(header))
+
+        topic = "/app/device/property/HW52ZAB412340001"
+        result = coordinator._parse_message(topic, frame)
+
+        assert result is not None
+        # Pack-specific sensors must survive the underscore filter
+        assert result["pack1_soc"] == 76.0
+        assert result["pack1_power_w"] == 2486.0
+        assert result["pack1_voltage_v"] == pytest.approx(54.67, abs=0.01)
+        assert result["pack2_soc"] == 74.0
+        assert result["pack2_power_w"] == 2529.0
+        assert result["pack2_voltage_v"] == pytest.approx(54.70, abs=0.01)
 
 
 # ===========================================================================

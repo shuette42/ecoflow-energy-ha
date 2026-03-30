@@ -62,7 +62,7 @@ from .ecoflow.parsers.powerocean import parse_powerocean_http_quota
 from .ecoflow.parsers.smartplug import parse_smartplug_http_quota, parse_smartplug_report
 from .ecoflow.proto.runtime import decode_proto_runtime_frame
 
-logger = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
 
 class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -106,7 +106,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         super().__init__(
             hass,
-            logger,
+            _LOGGER,
             config_entry=entry,
             name=f"EcoFlow {self.device_name} ({self.device_sn[:8]})",
             update_interval=poll_interval,
@@ -265,12 +265,12 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 )
                 await self.hass.async_add_executor_job(self._start_mqtt)
             if subscribe_mqtt:
-                logger.debug(
+                _LOGGER.debug(
                     "Standard Mode + MQTT push: HTTP every %ds + MQTT real-time for %s",
                     HTTP_FALLBACK_INTERVAL_S, self.device_sn,
                 )
             else:
-                logger.debug(
+                _LOGGER.debug(
                     "Standard Mode: HTTP polling every %ds for %s",
                     HTTP_FALLBACK_INTERVAL_S, self.device_sn,
                 )
@@ -280,7 +280,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         creds, user_id = await self._fetch_enhanced_credentials(session)
 
         if creds is None:
-            logger.error("Failed to fetch MQTT credentials for %s", self.device_sn)
+            _LOGGER.error("Failed to fetch MQTT credentials for %s", self.device_sn)
             return
 
         # Portal returns userName/password, IoT API returns certificateAccount/certificatePassword
@@ -332,12 +332,12 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if login_result is not None:
                 token = login_result["token"]
                 user_id = login_result["user_id"]
-                logger.debug("Enhanced Mode: login OK, userId obtained for %s", self.device_sn)
+                _LOGGER.debug("Enhanced Mode: login OK, userId obtained for %s", self.device_sn)
             else:
-                logger.warning("Enhanced Mode: login failed for %s", self.device_sn)
+                _LOGGER.warning("Enhanced Mode: login failed for %s", self.device_sn)
 
         if not user_id:
-            logger.warning("Enhanced Mode login failed for %s — triggering re-authentication", self.device_sn)
+            _LOGGER.warning("Enhanced Mode login failed for %s — triggering re-authentication", self.device_sn)
             self._entry.async_start_reauth(self.hass)
             return None, ""
 
@@ -348,21 +348,21 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             creds = await get_enhanced_credentials(session, token)
             if creds is not None:
-                logger.debug(
+                _LOGGER.debug(
                     "Enhanced Mode: Portal credentials obtained (account=%s...) for %s",
                     str(creds.get("certificateAccount", ""))[:12], self.device_sn,
                 )
 
         # --- Step 3: Fallback to IoT Developer API (open-* credentials) ---
         if creds is None:
-            logger.warning(
+            _LOGGER.warning(
                 "Enhanced Mode: Portal credentials unavailable for %s — "
                 "falling back to IoT API (energy_stream may not work)",
                 self.device_sn,
             )
             creds = await self._iot_api.get_mqtt_credentials()
             if creds is None:
-                logger.error("Enhanced Mode: all credential sources failed for %s", self.device_sn)
+                _LOGGER.error("Enhanced Mode: all credential sources failed for %s", self.device_sn)
                 return None, ""
 
         return creds, user_id
@@ -375,13 +375,13 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if self._mqtt_client.connect():
                 self._mqtt_client.start_loop()
                 mode_label = "WSS Enhanced" if self._enhanced_mode else "TCP Standard"
-                logger.info("MQTT started for %s (%s)", self.device_sn, mode_label)
+                _LOGGER.info("MQTT started for %s (%s)", self.device_sn, mode_label)
                 self._log_event("mqtt_connect", mode_label)
             else:
-                logger.error("MQTT connect failed for %s", self.device_sn)
+                _LOGGER.error("MQTT connect failed for %s", self.device_sn)
                 self._log_event("mqtt_disconnect", "connect failed")
         else:
-            logger.error("MQTT client creation failed for %s", self.device_sn)
+            _LOGGER.error("MQTT client creation failed for %s", self.device_sn)
             self._log_event("mqtt_disconnect", "client creation failed")
 
     async def async_shutdown(self) -> None:
@@ -419,9 +419,9 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self.hass.async_add_executor_job(
                 self._mqtt_client.send_energy_stream_switch,
             )
-            logger.debug("EnergyStreamSwitch keepalive sent for %s", self.device_sn)
+            _LOGGER.debug("EnergyStreamSwitch keepalive sent for %s", self.device_sn)
         else:
-            logger.debug("EnergyStreamSwitch skipped for %s (not connected)", self.device_sn)
+            _LOGGER.debug("EnergyStreamSwitch skipped for %s (not connected)", self.device_sn)
         if not self._shutdown:
             self._keepalive_unsub = self.hass.loop.call_later(
                 ENERGY_STREAM_KEEPALIVE_S,
@@ -530,7 +530,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def _on_mqtt_auth_error(self) -> None:
         """Handle MQTT AUTH error (rc=5) — schedule credential refresh."""
-        logger.warning("MQTT AUTH error for %s — scheduling credential refresh", self.device_sn)
+        _LOGGER.warning("MQTT AUTH error for %s — scheduling credential refresh", self.device_sn)
         self._log_event("reauth", "mqtt_auth_error")
         self.hass.loop.call_soon_threadsafe(
             self.hass.async_create_task,
@@ -547,9 +547,9 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 creds.get("certificateAccount", ""),
                 creds.get("certificatePassword", ""),
             )
-            logger.debug("MQTT credentials refreshed for %s", self.device_sn)
+            _LOGGER.debug("MQTT credentials refreshed for %s", self.device_sn)
         else:
-            logger.warning("MQTT credential refresh failed for %s — triggering re-authentication", self.device_sn)
+            _LOGGER.warning("MQTT credential refresh failed for %s — triggering re-authentication", self.device_sn)
             self._entry.async_start_reauth(self.hass)
 
     def _on_mqtt_message(self, topic: str, payload: bytes) -> None:
@@ -562,7 +562,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """
         # SET reply tracking (all modes): log acknowledgement, do not process as data
         if "/set_reply" in topic:
-            logger.debug("SET reply for %s: %s", self.device_sn, payload[:200])
+            _LOGGER.debug("SET reply for %s: %s", self.device_sn, payload[:200])
             self._log_event("set_reply", f"topic={topic}")
             return
 
@@ -624,7 +624,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     }
                     return self._remap_bp_keys(raw)
             except Exception:
-                logger.debug("Protobuf decode error for %s", self.device_sn, exc_info=True)
+                _LOGGER.debug("Protobuf decode error for %s", self.device_sn, exc_info=True)
             return None
 
         return None
@@ -784,10 +784,16 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         result: dict[str, Any] = {}
 
         # Multi-pack extraction from proto heartbeat (cmd_id=7)
-        all_packs = raw.pop("_all_packs", [])
-        for idx, pack_data in enumerate(all_packs[:5], 1):
-            if not isinstance(pack_data, dict):
-                continue
+        # Filter out phantom/empty packs: proto3 omits 0-value fields from
+        # MessageToDict, so all-zero entries are wire defaults, not real packs.
+        all_packs = raw.pop("all_packs", [])
+        real_packs = [
+            p for p in all_packs
+            if isinstance(p, dict) and any(
+                v != 0 for v in p.values() if isinstance(v, (int, float))
+            )
+        ]
+        for idx, pack_data in enumerate(real_packs[:5], 1):
             prefix = f"pack{idx}"
             for proto_key, sensor_suffix in self._BP_PACK_SENSOR_MAP.items():
                 val = pack_data.get(proto_key)
@@ -820,7 +826,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def _apply_data(self, parsed: dict[str, Any]) -> None:
         """Apply parsed data and notify listeners (HA event loop)."""
-        now = time.time()
+        now = time.monotonic()
         self._last_mqtt_ts = now
         self._device_available = True
         # Rate-limited event log: at most once per 60s to avoid flooding the deque
@@ -855,7 +861,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         Payload: {"id": <ts>, "version": "1.0", ...command}
         """
         if self._mqtt_client is None or not self._mqtt_client.is_connected():
-            logger.warning("Cannot send SET command — MQTT not connected (%s)", self.device_sn)
+            _LOGGER.warning("Cannot send SET command — MQTT not connected (%s)", self.device_sn)
             return False
 
         msg_id = int(time.time() * 1000) % 1_000_000
@@ -866,10 +872,10 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._mqtt_client.publish, topic, payload, 1,
         )
         if ok:
-            logger.debug("SET command sent: %s → %s", topic, payload[:120])
+            _LOGGER.debug("SET command sent: %s → %s", topic, payload[:120])
             self._log_event("set_cmd", f"keys={list(command.keys())[:3]}")
         else:
-            logger.warning("SET command failed: %s", topic)
+            _LOGGER.warning("SET command failed: %s", topic)
             self._log_event("set_cmd_fail", f"keys={list(command.keys())[:3]}")
         return ok
 
@@ -894,7 +900,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if self._consecutive_http_failures >= 3:
                 self._device_available = False
             if self._consecutive_http_failures == 5:
-                logger.warning(
+                _LOGGER.warning(
                     "HTTP quota failed %d consecutive times for %s — triggering re-authentication",
                     self._consecutive_http_failures, self.device_sn,
                 )
@@ -976,16 +982,16 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self._shutdown:
             return
 
-        age = time.time() - self._last_mqtt_ts if self._last_mqtt_ts > 0 else float("inf")
+        age = time.monotonic() - self._last_mqtt_ts if self._last_mqtt_ts > 0 else float("inf")
 
         if age > STALE_THRESHOLD_S and self.update_interval is None:
-            logger.warning(
+            _LOGGER.warning(
                 "MQTT stale for %s (%.0fs) — switching to HTTP fallback (tier 4)",
                 self.device_sn, age,
             )
             self.update_interval = timedelta(seconds=HTTP_FALLBACK_INTERVAL_S)
         elif age <= STALE_THRESHOLD_S and self.update_interval is not None:
-            logger.info("MQTT recovered for %s — disabling HTTP fallback", self.device_sn)
+            _LOGGER.info("MQTT recovered for %s — disabling HTTP fallback", self.device_sn)
             self.update_interval = None
 
         # Tier 2+3: try MQTT reconnect if disconnected

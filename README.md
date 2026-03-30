@@ -51,6 +51,8 @@
 
 **Enhanced Mode** upgrades to ~3 s WSS Protobuf push — requires EcoFlow email & password.
 
+**Note:** Enhanced Mode credentials are stored in Home Assistant's configuration storage (`.storage/core.config_entries`). This is standard Home Assistant behavior for all integrations that require authentication.
+
 </details>
 
 <details>

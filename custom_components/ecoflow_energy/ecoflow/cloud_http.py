@@ -27,7 +27,7 @@ from .const import (
     QUOTA_HTTP_MIN_INTERVAL_S,
 )
 
-logger = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
 
 class EcoFlowHTTPQuota:
@@ -121,9 +121,9 @@ class EcoFlowHTTPQuota:
 
     def _check_rate_limit(self) -> bool:
         """Check and update rate limit. Returns True if request is allowed."""
-        now = time.time()
+        now = time.monotonic()
         if now - self._last_call < self._min_interval:
-            logger.debug("HTTP: rate-limited (%.1fs since last call)", now - self._last_call)
+            _LOGGER.debug("HTTP: rate-limited (%.1fs since last call)", now - self._last_call)
             return False
         self._last_call = now
         return True
@@ -159,14 +159,14 @@ class EcoFlowHTTPQuota:
 
             except (aiohttp.ClientError, TimeoutError, asyncio.TimeoutError) as exc:
                 if attempt < HTTP_RETRIES:
-                    logger.debug("HTTP %s: error (attempt %d/%d): %s", method, attempt, HTTP_RETRIES, exc)
+                    _LOGGER.debug("HTTP %s: error (attempt %d/%d): %s", method, attempt, HTTP_RETRIES, exc)
                 else:
-                    logger.warning("HTTP %s: error (attempt %d/%d): %s", method, attempt, HTTP_RETRIES, exc)
+                    _LOGGER.warning("HTTP %s: error (attempt %d/%d): %s", method, attempt, HTTP_RETRIES, exc)
 
             if attempt < HTTP_RETRIES:
                 await asyncio.sleep(HTTP_RETRY_BACKOFF_S)
 
-        logger.error("HTTP: all %d attempts failed for %s", HTTP_RETRIES, self._device_sn)
+        _LOGGER.error("HTTP: all %d attempts failed for %s", HTTP_RETRIES, self._device_sn)
         return None
 
     async def _handle_response(self, resp: aiohttp.ClientResponse) -> dict | None:
@@ -175,9 +175,9 @@ class EcoFlowHTTPQuota:
         code = str(data.get("code"))
 
         if resp.ok and code == "0":
-            logger.debug("HTTP: quota OK for %s", self._device_sn)
+            _LOGGER.debug("HTTP: quota OK for %s", self._device_sn)
             return data.get("data") or {}
         else:
-            logger.warning("HTTP: quota code=%s msg=%s (sn=%s)", code, data.get("message"), self._device_sn)
+            _LOGGER.warning("HTTP: quota code=%s msg=%s (sn=%s)", code, data.get("message"), self._device_sn)
             return None
 

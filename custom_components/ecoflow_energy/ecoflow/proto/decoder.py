@@ -22,6 +22,7 @@ _HEADER_FIELDS = {
 
 
 def _read_varint(mv, i):
+    """Read a variable-length integer from protobuf wire format at position i."""
     shift = 0
     res = 0
     while True:
@@ -35,6 +36,7 @@ def _read_varint(mv, i):
 
 
 def _try_utf8(b: bytes) -> str:
+    """Attempt to decode bytes as UTF-8, falling back to hex representation."""
     try:
         return b.decode("utf-8")
     except (UnicodeDecodeError, ValueError):
@@ -42,6 +44,7 @@ def _try_utf8(b: bytes) -> str:
 
 
 def _decode_single_header(hdr: bytes) -> dict:
+    """Decode a single protobuf header message into field name/value pairs."""
     mv = memoryview(hdr)
     i = 0
     out = {}

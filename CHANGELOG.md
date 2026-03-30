@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.1] - 2026-03-30
+
+### Fixed
+- PowerOcean: battery pack numbering now starts at "Pack 1" instead of "Pack 2" — phantom/empty API entries (EMS module) are skipped before numbering (#5)
+- PowerOcean: aggregate battery sensors (bp_*) now correctly select the first real battery pack, not a phantom entry
+- PowerOcean: Enhanced Mode (Protobuf) now delivers multi-pack data correctly — previously silently discarded by internal key filter
+- Config flow: narrowed exception handling with OSError coverage for SSL/socket errors
+
+### Note for multi-pack users
+- If you have multiple battery packs and previously saw "Pack 2"/"Pack 3" instead of "Pack 1"/"Pack 2", the entity IDs will change after this update (e.g. `pack2_soc_pct` becomes `pack1_soc_pct`). You may need to update any dashboard cards or automations that reference pack entities.
+
+### Changed
+- Logging convention: renamed `logger` to `_LOGGER` across all modules (Home Assistant standard)
+- Timing: interval measurements now use `time.monotonic()` instead of `time.time()` for NTP-resilient elapsed time tracking
+- Entity type hints: `device_info` return type corrected to `DeviceInfo` across all entity platforms
+- Import order: PEP 8 compliant import ordering in `const.py`
+- Typing: modern `from __future__ import annotations` and union syntax used consistently
+- Energy integrator: state file migration handles pre-v1.5.1 epoch timestamps gracefully
+
+### Added
+- Protobuf import failure now logs a warning instead of failing silently
+- `async_migrate_entry` stub for future config schema migrations
+- Proto decoder functions documented with docstrings
+- `CONTRIBUTING.md` with development setup, code style, and PR guidelines
+- Security note in README about Enhanced Mode credential storage
+
 ## [1.5.0] - 2026-03-30
 
 ### Added

@@ -1,5 +1,10 @@
 """Tests for protobuf decoder and runtime decoder."""
 
+import importlib.abc
+import importlib.machinery
+import logging
+import sys
+
 from ecoflow_energy.ecoflow.energy_stream import (
     _encode_field_bytes,
     _encode_field_varint,
@@ -13,6 +18,7 @@ from ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
     JTS1EnergyStreamReport,
 )
 from ecoflow_energy.ecoflow.proto.runtime import (
+    _build_cmd_registry,
     decode_proto_runtime_frame,
 )
 
@@ -124,3 +130,52 @@ class TestEnergyStreamPayload:
         a = build_energy_stream_activate_payload(seq=1)
         d = build_energy_stream_deactivate_payload(seq=1)
         assert a != d
+
+
+class TestProtobufImportFailure:
+    """Tests for protobuf import failure handling."""
+
+    def test_build_cmd_registry_logs_warning_on_import_failure(self, caplog):
+        """When protobuf pb2 module cannot be imported, a warning must be logged."""
+        pb2_key = "ecoflow_energy.ecoflow.proto.ecocharge_pb2"
+        proto_pkg_key = "ecoflow_energy.ecoflow.proto"
+
+        # Save and remove the cached pb2 module from sys.modules
+        saved_module = sys.modules.pop(pb2_key, None)
+
+        # Remove the attribute from the parent package so Python cannot
+        # short-circuit the import via the package namespace.
+        proto_pkg = sys.modules.get(proto_pkg_key)
+        had_attr = hasattr(proto_pkg, "ecocharge_pb2")
+        if had_attr:
+            saved_attr = getattr(proto_pkg, "ecocharge_pb2")
+            delattr(proto_pkg, "ecocharge_pb2")
+
+        # Install a blocking meta path finder (modern find_spec API) that
+        # raises ImportError before file-system finders locate the .py on disk.
+
+        class _BlockPb2Finder(importlib.abc.MetaPathFinder):
+            def find_spec(self, fullname, path, target=None):
+                if fullname == pb2_key:
+                    raise ImportError("mocked: protobuf module not installed")
+                return None
+
+        blocker = _BlockPb2Finder()
+        sys.meta_path.insert(0, blocker)
+
+        try:
+            with caplog.at_level(
+                logging.WARNING,
+                logger="ecoflow_energy.ecoflow.proto.runtime",
+            ):
+                result = _build_cmd_registry()
+
+            assert result == {}
+            assert "Failed to import protobuf module" in caplog.text
+            assert "Enhanced Mode will not work" in caplog.text
+        finally:
+            sys.meta_path.remove(blocker)
+            if saved_module is not None:
+                sys.modules[pb2_key] = saved_module
+            if had_attr:
+                setattr(proto_pkg, "ecocharge_pb2", saved_attr)

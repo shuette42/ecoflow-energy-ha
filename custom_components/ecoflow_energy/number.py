@@ -8,6 +8,7 @@ from typing import Any
 from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -21,7 +22,7 @@ from .const import (
 )
 from .coordinator import EcoFlowDeviceCoordinator
 
-logger = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
 # IoT API SET-command templates for number entities (Delta 2 Max)
 NUMBER_COMMANDS: dict[str, dict[str, Any]] = {
@@ -135,7 +136,7 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
         return self.coordinator.device_available and super().available
 
     @property
-    def device_info(self) -> dict:
+    def device_info(self) -> DeviceInfo:
         """Return device info from coordinator."""
         return self.coordinator.device_info
 
@@ -178,7 +179,7 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
         # Delta uses moduleType/operateType format
         cmd_template = NUMBER_COMMANDS.get(self._definition.key)
         if cmd_template is None:
-            logger.warning("No command template for number %s", self._definition.key)
+            _LOGGER.warning("No command template for number %s", self._definition.key)
             return
 
         params = {cmd_template["param_key"]: int(value)}

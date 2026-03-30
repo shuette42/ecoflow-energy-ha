@@ -134,9 +134,9 @@ def _extract_battery_pack(quota_data: dict, result: dict) -> None:
                     val = json.loads(val)
                 except (json.JSONDecodeError, ValueError):
                     continue
-            if isinstance(val, dict):
+            if isinstance(val, dict) and _is_real_battery_pack(val):
                 bp_data = val
-                break  # Use first pack
+                break  # Use first real pack
 
     if bp_data is None:
         return
@@ -249,11 +249,24 @@ def _extract_energy_stream(quota_data: dict, result: dict) -> None:
             result["pcs_ac_freq_hz"] = v
 
 
+def _is_real_battery_pack(bp_dict: dict) -> bool:
+    """Check if a bp_addr dict represents a real battery pack.
+
+    The EcoFlow API may return a phantom/empty entry (e.g. the EMS module)
+    before real battery packs.  A real pack always has at least one core
+    battery field with a non-None value.
+    """
+    _BATTERY_INDICATORS = ("bpSoc", "bpPwr", "bpSoh", "bpCycles", "bpVol")
+    return any(bp_dict.get(k) is not None for k in _BATTERY_INDICATORS)
+
+
 def _extract_all_battery_packs(quota_data: dict) -> dict[str, Any]:
     """Extract per-pack battery data from all bp_addr.{SN} keys.
 
     Maps each pack to pack{n}_* sensor keys (n = 1..5).
     Existing bp_* sensors are NOT affected — this produces separate keys.
+    Phantom/empty entries (no core battery fields) are skipped so that
+    numbering starts at 1 for the first real battery pack.
     """
     result: dict[str, Any] = {}
 
@@ -269,6 +282,10 @@ def _extract_all_battery_packs(quota_data: dict) -> dict[str, Any]:
                 continue
 
         if not isinstance(val, dict):
+            continue
+
+        # Skip phantom/empty packs (e.g. EMS module entry)
+        if not _is_real_battery_pack(val):
             continue
 
         pack_num += 1

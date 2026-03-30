@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-DOMAIN = "ecoflow_energy"
-
 from homeassistant.const import Platform
+
+DOMAIN = "ecoflow_energy"
 
 PLATFORMS: list[Platform] = [
     Platform.SENSOR,

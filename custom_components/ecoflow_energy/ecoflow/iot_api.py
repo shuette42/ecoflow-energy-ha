@@ -18,7 +18,7 @@ import aiohttp
 
 from .const import IOT_API_BASE, IOT_CERT_PATH, IOT_DEVICE_LIST_PATH, IOT_MIN_FETCH_INTERVAL_S
 
-logger = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
 _Credentials = dict[str, Any]
 
@@ -78,11 +78,11 @@ class IoTApiClient:
                 body = await resp.json()
                 data = body.get("data")
                 if not data:
-                    logger.warning("IoT API device list: empty response — code=%s", body.get("code"))
+                    _LOGGER.warning("IoT API device list: empty response — code=%s", body.get("code"))
                     return None
                 return data
         except (aiohttp.ClientError, TimeoutError) as exc:
-            logger.warning("IoT API device list failed — %s", exc)
+            _LOGGER.warning("IoT API device list failed — %s", exc)
             return None
 
     @staticmethod
@@ -114,16 +114,16 @@ class IoTApiClient:
 
     async def _fetch(self) -> _Credentials | None:
         """Fetch credentials from the API (with rate-limit guard)."""
-        now = time.time()
+        now = time.monotonic()
         if (now - self._last_fetch_ts) < IOT_MIN_FETCH_INTERVAL_S:
-            logger.debug(
+            _LOGGER.debug(
                 "IoT API: rate-limited — next fetch in %.0f s",
                 IOT_MIN_FETCH_INTERVAL_S - (now - self._last_fetch_ts),
             )
             return self._cached
 
         if not self._access_key or not self._secret_key:
-            logger.warning("IoT API: access_key / secret_key not set")
+            _LOGGER.warning("IoT API: access_key / secret_key not set")
             return None
 
         self._last_fetch_ts = now
@@ -136,15 +136,15 @@ class IoTApiClient:
                 body = await resp.json()
                 data = body.get("data")
                 if not data:
-                    logger.warning("IoT API: empty response — code=%s", body.get("code"))
+                    _LOGGER.warning("IoT API: empty response — code=%s", body.get("code"))
                     return None
                 self._cached = data
-                logger.debug(
+                _LOGGER.debug(
                     "IoT API: credentials obtained (account=%s..., keys=%s)",
                     str(data.get("certificateAccount", ""))[:6],
                     sorted(data.keys()) if isinstance(data, dict) else "n/a",
                 )
                 return data
         except (aiohttp.ClientError, TimeoutError) as exc:
-            logger.warning("IoT API: fetch failed — %s", exc)
+            _LOGGER.warning("IoT API: fetch failed — %s", exc)
             return None

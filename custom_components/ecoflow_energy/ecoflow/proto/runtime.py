@@ -7,12 +7,15 @@ and zero-fill rules. The generic decode loop handles all message types uniformly
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any
 
 from google.protobuf.json_format import MessageToDict
 
 from .decoder import decode_header_message
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
@@ -41,6 +44,7 @@ def _build_cmd_registry() -> dict[int, CmdConfig]:
     try:
         from . import ecocharge_pb2 as pb2
     except ImportError:
+        _LOGGER.warning("Failed to import protobuf module — Enhanced Mode will not work")
         return {}
 
     return {
@@ -158,7 +162,7 @@ def _typed_runtime_map(headers: list[dict], source: bytes) -> tuple[dict[str, An
             # Keep first item as before (backward compatible for existing bp_* sensors)
             first = items[0] if isinstance(items[0], dict) else {}
             # Store all items for multi-pack extraction
-            first["_all_packs"] = items
+            first["all_packs"] = items
             fields = first
         else:
             fields = {}

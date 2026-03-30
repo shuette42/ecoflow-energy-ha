@@ -142,7 +142,7 @@ class TestDeviceDiagnostics:
         )
         await coordinator.async_setup()
 
-        mock_mqtt_client.last_connect_time = time.time() - 120
+        mock_mqtt_client.last_connect_time = time.monotonic() - 120
         result = _device_diagnostics(coordinator)
 
         assert result["mqtt_status"]["connected"] is True
@@ -159,7 +159,7 @@ class TestDeviceDiagnostics:
         coordinator = EcoFlowDeviceCoordinator(
             hass, standard_config_entry, MOCK_DELTA_DEVICE
         )
-        coordinator._last_mqtt_ts = time.time() - 10
+        coordinator._last_mqtt_ts = time.monotonic() - 10
         result = _device_diagnostics(coordinator)
 
         assert result["data_freshness"]["last_mqtt_age_s"] is not None

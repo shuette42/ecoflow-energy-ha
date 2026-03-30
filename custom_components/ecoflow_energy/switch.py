@@ -14,13 +14,14 @@ from typing import Any
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DELTA2MAX_SWITCHES, DEVICE_TYPE_DELTA, DEVICE_TYPE_SMARTPLUG, DOMAIN, EcoFlowSwitchDef, SMARTPLUG_SWITCHES
 from .coordinator import EcoFlowDeviceCoordinator
 
-logger = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
 OPTIMISTIC_LOCK_S = 5.0
 
@@ -141,7 +142,7 @@ class EcoFlowSwitch(CoordinatorEntity[EcoFlowDeviceCoordinator], SwitchEntity):
         return self.coordinator.device_available and super().available
 
     @property
-    def device_info(self) -> dict:
+    def device_info(self) -> DeviceInfo:
         """Return device info from coordinator."""
         return self.coordinator.device_info
 
@@ -152,7 +153,7 @@ class EcoFlowSwitch(CoordinatorEntity[EcoFlowDeviceCoordinator], SwitchEntity):
         During the optimistic lock window, returns the locally set value
         instead of the coordinator data to prevent flicker.
         """
-        if time.time() < self._optimistic_lock_until:
+        if time.monotonic() < self._optimistic_lock_until:
             return self._optimistic_value
 
         if self.coordinator.data is None:
@@ -176,12 +177,12 @@ class EcoFlowSwitch(CoordinatorEntity[EcoFlowDeviceCoordinator], SwitchEntity):
         """Send a SET command and apply optimistic lock."""
         command = self._build_command(turn_on)
         if command is None:
-            logger.warning("No command template for %s", self._definition.key)
+            _LOGGER.warning("No command template for %s", self._definition.key)
             return
 
         # Optimistic update: immediately reflect the new state
         self._optimistic_value = turn_on
-        self._optimistic_lock_until = time.time() + OPTIMISTIC_LOCK_S
+        self._optimistic_lock_until = time.monotonic() + OPTIMISTIC_LOCK_S
         self.async_write_ha_state()
 
         # Send the command via the coordinator

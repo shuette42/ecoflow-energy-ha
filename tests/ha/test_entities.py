@@ -291,7 +291,7 @@ class TestEcoFlowSwitch:
 
         # Simulate optimistic lock (turned off)
         switch._optimistic_value = False
-        switch._optimistic_lock_until = time.time() + 10.0  # far in the future
+        switch._optimistic_lock_until = time.monotonic() + 10.0  # far in the future
         # Even though coordinator says 1 (on), optimistic lock says off
         assert switch.is_on is False
 
@@ -310,7 +310,7 @@ class TestEcoFlowSwitch:
 
         # Expired lock
         switch._optimistic_value = False
-        switch._optimistic_lock_until = time.time() - 1.0
+        switch._optimistic_lock_until = time.monotonic() - 1.0
         assert switch.is_on is True  # back to coordinator value
 
     async def test_switch_commands_templates(self) -> None:
@@ -349,7 +349,7 @@ class TestEcoFlowSwitch:
             cmd = mock_cmd.call_args[0][0]
             assert cmd["params"]["enabled"] == 1
             assert switch._optimistic_value is True
-            assert switch._optimistic_lock_until > time.time()
+            assert switch._optimistic_lock_until > time.monotonic()
 
     async def test_async_turn_off(
         self,

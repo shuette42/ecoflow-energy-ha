@@ -10,6 +10,7 @@ from ecoflow_energy.ecoflow.parsers.powerocean import (
     _extract_energy_stream,
     _extract_all_battery_packs,
     _extract_ems_extended,
+    _is_real_battery_pack,
 )
 
 
@@ -763,6 +764,85 @@ class TestMultiBatteryPack:
         assert result["soc_pct"] == 76.0
         assert result["pack1_power_w"] == pytest.approx(2486.4836)
         assert result["pack2_power_w"] == pytest.approx(2529.1938)
+
+    def test_phantom_empty_pack_skipped(self):
+        """Phantom/empty pack at position 0 is skipped — real packs start at 1."""
+        data = {
+            "bp_addr.PHANTOM_EMS": {},  # empty entry (EMS module)
+            "bp_addr.HJ32ZDH5ZG190227": dict(self.PACK1_DATA),
+            "bp_addr.HJ32ZDH5ZG190278": dict(self.PACK2_DATA),
+        }
+        result = _extract_all_battery_packs(data)
+        # Real packs numbered 1 and 2 (phantom skipped)
+        assert result["pack1_soc"] == 76.0
+        assert result["pack2_soc"] == 76.0
+        assert "pack3_soc" not in result
+
+    def test_phantom_pack_no_battery_fields(self):
+        """Pack with non-battery fields only is skipped."""
+        data = {
+            "bp_addr.EMS_MODULE": {"someOtherField": 42, "anotherField": "abc"},
+            "bp_addr.REAL_PACK": dict(self.PACK1_DATA),
+        }
+        result = _extract_all_battery_packs(data)
+        assert result["pack1_soc"] == 76.0
+        assert "pack2_soc" not in result
+
+    def test_aggregate_bp_skips_phantom(self):
+        """_extract_battery_pack picks first real pack, not phantom."""
+        data = {
+            "bp_addr.PHANTOM": {},
+            "bp_addr.REAL": {"bpSoh": 98, "bpCycles": 42},
+        }
+        result = {}
+        _extract_battery_pack(data, result)
+        assert result["bp_soh_pct"] == 98.0
+        assert result["bp_cycles"] == 42.0
+
+    def test_aggregate_bp_phantom_only(self):
+        """Only phantom packs — no aggregate sensors produced."""
+        data = {"bp_addr.PHANTOM": {}}
+        result = {}
+        _extract_battery_pack(data, result)
+        assert "bp_soh_pct" not in result
+
+
+# ===========================================================================
+# Phantom Pack Detection (_is_real_battery_pack)
+# ===========================================================================
+
+
+class TestIsRealBatteryPack:
+    """Tests for the phantom pack detection helper."""
+
+    def test_real_pack_with_soc(self):
+        assert _is_real_battery_pack({"bpSoc": 76}) is True
+
+    def test_real_pack_with_power(self):
+        assert _is_real_battery_pack({"bpPwr": 2500.0}) is True
+
+    def test_real_pack_with_soh(self):
+        assert _is_real_battery_pack({"bpSoh": 100}) is True
+
+    def test_real_pack_with_cycles(self):
+        assert _is_real_battery_pack({"bpCycles": 464}) is True
+
+    def test_real_pack_with_voltage(self):
+        assert _is_real_battery_pack({"bpVol": 54.6}) is True
+
+    def test_empty_dict_is_phantom(self):
+        assert _is_real_battery_pack({}) is False
+
+    def test_non_battery_fields_is_phantom(self):
+        assert _is_real_battery_pack({"someField": 42, "other": "abc"}) is False
+
+    def test_zero_soc_is_real(self):
+        """SoC of 0 (deeply discharged) is still a real pack."""
+        assert _is_real_battery_pack({"bpSoc": 0}) is True
+
+    def test_none_values_is_phantom(self):
+        """All indicator fields explicitly None is phantom."""
+        assert _is_real_battery_pack({"bpSoc": None, "bpPwr": None}) is False
 
 
 # ===========================================================================

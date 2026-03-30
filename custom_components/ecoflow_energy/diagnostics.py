@@ -46,7 +46,7 @@ async def async_get_config_entry_diagnostics(
 
 def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]:
     """Build diagnostics dict for one device — no credentials."""
-    now = time.time()
+    now = time.monotonic()
 
     mqtt_client = coordinator.mqtt_client
     mqtt_connected = False

@@ -190,7 +190,7 @@ class TestRateLimit:
         client._cached = None
 
         # Pretend 61 seconds have passed
-        client._last_fetch_ts = time.time() - 61
+        client._last_fetch_ts = time.monotonic() - 61
         result = await client._fetch()
         assert result == creds
         assert session.get.call_count == 2
