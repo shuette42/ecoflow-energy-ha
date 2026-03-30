@@ -152,8 +152,10 @@ def _typed_runtime_map(headers: list[dict], source: bytes) -> tuple[dict[str, An
     msg = config.msg_class()
     msg.ParseFromString(source)
 
-    # 2. Convert to dict (only present fields, proto field names preserved)
-    fields = MessageToDict(msg, preserving_proto_field_name=True)
+    # 2. Convert to dict (include zero-valued fields so 0 is not lost on merge)
+    fields = MessageToDict(
+        msg, preserving_proto_field_name=True, always_print_fields_with_no_presence=True,
+    )
 
     # 3. For repeated messages, extract first element (keep all for multi-pack)
     if config.flatten_key:
