@@ -35,6 +35,12 @@ DELTA2MAX_HTTP_FIELD_MAP: dict[str, str] = {
     "pd.chgDsgState": "chg_dsg_state",
     "pd.errCode": "pd_err_code",
     "pd.standbyMin": "standby_timeout_min",
+    "pd.beepMode": "beep_mode_raw",
+    "pd.newAcAutoOnCfg": "ac_auto_on",
+    "pd.brightLevel": "screen_brightness",
+    "pd.lcdOffSec": "screen_timeout_sec",
+    "pd.bpPowerSoc": "backup_reserve_soc",
+    "pd.watchIsConfig": "backup_reserve_enabled",
     # --- inv (Inverter) ---
     "inv.inputWatts": "ac_in_w",
     "inv.outputWatts": "ac_out_w",
@@ -98,8 +104,43 @@ DELTA2MAX_HTTP_FIELD_MAP: dict[str, str] = {
     "mppt.pv2InVol": "solar2_in_vol_dv",
     "mppt.pv2InAmp": "solar2_in_amp_ca",
     "mppt.pv2MpptTemp": "solar2_mppt_temp_c",
+    "mppt.carStandbyMin": "car_standby_min",
     "mppt.chgState": "mppt_chg_state",
     "mppt.faultCode": "mppt_fault_code",
+    # --- bms_slave.1 (Slave Battery Pack 1) ---
+    "bms_slave.1.soc": "slave1_soc",
+    "bms_slave.1.vol": "slave1_voltage_mv",
+    "bms_slave.1.amp": "slave1_current_ma",
+    "bms_slave.1.temp": "slave1_temp_raw",
+    "bms_slave.1.soh": "slave1_soh",
+    "bms_slave.1.cycles": "slave1_cycles",
+    "bms_slave.1.inputWatts": "slave1_in_w",
+    "bms_slave.1.outputWatts": "slave1_out_w",
+    "bms_slave.1.remainCap": "slave1_remain_cap_mah",
+    "bms_slave.1.fullCap": "slave1_full_cap_mah",
+    "bms_slave.1.maxCellVol": "slave1_max_cell_vol_mv",
+    "bms_slave.1.minCellVol": "slave1_min_cell_vol_mv",
+    "bms_slave.1.maxCellTemp": "slave1_max_cell_temp_c",
+    "bms_slave.1.minCellTemp": "slave1_min_cell_temp_c",
+    "bms_slave.1.maxMosTemp": "slave1_max_mos_temp_c",
+    "bms_slave.1.errCode": "slave1_err_code",
+    # --- bms_slave.2 (Slave Battery Pack 2) ---
+    "bms_slave.2.soc": "slave2_soc",
+    "bms_slave.2.vol": "slave2_voltage_mv",
+    "bms_slave.2.amp": "slave2_current_ma",
+    "bms_slave.2.temp": "slave2_temp_raw",
+    "bms_slave.2.soh": "slave2_soh",
+    "bms_slave.2.cycles": "slave2_cycles",
+    "bms_slave.2.inputWatts": "slave2_in_w",
+    "bms_slave.2.outputWatts": "slave2_out_w",
+    "bms_slave.2.remainCap": "slave2_remain_cap_mah",
+    "bms_slave.2.fullCap": "slave2_full_cap_mah",
+    "bms_slave.2.maxCellVol": "slave2_max_cell_vol_mv",
+    "bms_slave.2.minCellVol": "slave2_min_cell_vol_mv",
+    "bms_slave.2.maxCellTemp": "slave2_max_cell_temp_c",
+    "bms_slave.2.minCellTemp": "slave2_min_cell_temp_c",
+    "bms_slave.2.maxMosTemp": "slave2_max_mos_temp_c",
+    "bms_slave.2.errCode": "slave2_err_code",
 }
 
 
@@ -118,9 +159,17 @@ def parse_delta_http_quota(quota_data: dict) -> dict[str, Any]:
             if v is not None:
                 result[sensor_key] = v
 
-    # --- Temperature offset: bms_bmsStatus.temp has +15 offset ---
+    # --- Temperature offset: BMS temp fields have +15 offset ---
     if "batt_temp_raw" in result:
         result["batt_temp_c"] = result.pop("batt_temp_raw") - 15.0
+    for prefix in ("slave1", "slave2"):
+        raw_key = f"{prefix}_temp_raw"
+        if raw_key in result:
+            result[f"{prefix}_temp_c"] = result.pop(raw_key) - 15.0
+
+    # --- Beeper inversion: beepMode=0 means beeper ON (normal mode) ---
+    if "beep_mode_raw" in result:
+        result["beep_enabled"] = 0 if result.pop("beep_mode_raw") else 1
 
     # --- Voltage conversions: mV -> V ---
     for mv_key, v_key in [
@@ -128,6 +177,8 @@ def parse_delta_http_quota(quota_data: dict) -> dict[str, Any]:
         ("ac_out_vol_mv", "ac_out_vol_v"),
         ("ac_in_vol_mv", "ac_in_vol_v"),
         ("dc_in_vol_mv", "dc_in_vol_v"),
+        ("slave1_voltage_mv", "slave1_voltage_v"),
+        ("slave2_voltage_mv", "slave2_voltage_v"),
     ]:
         if mv_key in result:
             result[v_key] = result.pop(mv_key) / 1000.0
@@ -148,6 +199,8 @@ def parse_delta_http_quota(quota_data: dict) -> dict[str, Any]:
         ("ac_in_amp_ma", "ac_in_amp_a"),
         ("dc_in_amp_ma", "dc_in_amp_a"),
         ("solar_in_amp_ma", "solar_in_amp_a"),
+        ("slave1_current_ma", "slave1_current_a"),
+        ("slave2_current_ma", "slave2_current_a"),
     ]:
         if ma_key in result:
             result[a_key] = result.pop(ma_key) / 1000.0

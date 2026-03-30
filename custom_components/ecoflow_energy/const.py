@@ -280,6 +280,40 @@ DELTA2MAX_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("inv_err_code", "Inverter Error Code", None, None, None, "mdi:alert-circle-outline", "diagnostic", disabled_by_default=True),
     EcoFlowSensorDef("bms_err_code", "BMS Error Code", None, None, None, "mdi:alert-circle-outline", "diagnostic", disabled_by_default=True),
     EcoFlowSensorDef("mppt_fault_code", "MPPT Fault Code", None, None, None, "mdi:alert-circle-outline", "diagnostic", disabled_by_default=True),
+    # --- Slave Battery Pack 1 (expansion) ---
+    EcoFlowSensorDef("slave1_soc", "Slave 1 SoC", "%", "battery", "measurement", "mdi:battery", disabled_by_default=True),
+    EcoFlowSensorDef("slave1_soh", "Slave 1 SoH", "%", None, "measurement", "mdi:battery-heart-variant", "diagnostic", disabled_by_default=True),
+    EcoFlowSensorDef("slave1_voltage_v", "Slave 1 Voltage", "V", "voltage", "measurement", suggested_display_precision=1, disabled_by_default=True),
+    EcoFlowSensorDef("slave1_current_a", "Slave 1 Current", "A", "current", "measurement", suggested_display_precision=2, disabled_by_default=True),
+    EcoFlowSensorDef("slave1_temp_c", "Slave 1 Temp", "\u00b0C", "temperature", "measurement", suggested_display_precision=1, disabled_by_default=True),
+    EcoFlowSensorDef("slave1_cycles", "Slave 1 Cycles", None, None, "total_increasing", "mdi:battery-sync", "diagnostic", disabled_by_default=True),
+    EcoFlowSensorDef("slave1_in_w", "Slave 1 Input", "W", "power", "measurement", suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("slave1_out_w", "Slave 1 Output", "W", "power", "measurement", suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("slave1_remain_cap_mah", "Slave 1 Remaining Capacity", "mAh", None, "measurement", "mdi:battery-outline", "diagnostic", disabled_by_default=True, suggested_display_precision=0),
+    EcoFlowSensorDef("slave1_full_cap_mah", "Slave 1 Full Capacity", "mAh", None, "measurement", "mdi:battery", "diagnostic", disabled_by_default=True, suggested_display_precision=0),
+    EcoFlowSensorDef("slave1_max_cell_vol_mv", "Slave 1 Max Cell Voltage", "mV", "voltage", "measurement", "mdi:flash-triangle-outline", "diagnostic", disabled_by_default=True, suggested_display_precision=0),
+    EcoFlowSensorDef("slave1_min_cell_vol_mv", "Slave 1 Min Cell Voltage", "mV", "voltage", "measurement", "mdi:flash-triangle-outline", "diagnostic", disabled_by_default=True, suggested_display_precision=0),
+    EcoFlowSensorDef("slave1_max_cell_temp_c", "Slave 1 Max Cell Temp", "\u00b0C", "temperature", "measurement", "mdi:thermometer-high", "diagnostic", disabled_by_default=True, suggested_display_precision=1),
+    EcoFlowSensorDef("slave1_min_cell_temp_c", "Slave 1 Min Cell Temp", "\u00b0C", "temperature", "measurement", "mdi:thermometer-low", "diagnostic", disabled_by_default=True, suggested_display_precision=1),
+    EcoFlowSensorDef("slave1_max_mos_temp_c", "Slave 1 Max MOSFET Temp", "\u00b0C", "temperature", "measurement", "mdi:thermometer-alert", "diagnostic", disabled_by_default=True, suggested_display_precision=1),
+    EcoFlowSensorDef("slave1_err_code", "Slave 1 Error Code", None, None, None, "mdi:alert-circle-outline", "diagnostic", disabled_by_default=True),
+    # --- Slave Battery Pack 2 (expansion) ---
+    EcoFlowSensorDef("slave2_soc", "Slave 2 SoC", "%", "battery", "measurement", "mdi:battery", disabled_by_default=True),
+    EcoFlowSensorDef("slave2_soh", "Slave 2 SoH", "%", None, "measurement", "mdi:battery-heart-variant", "diagnostic", disabled_by_default=True),
+    EcoFlowSensorDef("slave2_voltage_v", "Slave 2 Voltage", "V", "voltage", "measurement", suggested_display_precision=1, disabled_by_default=True),
+    EcoFlowSensorDef("slave2_current_a", "Slave 2 Current", "A", "current", "measurement", suggested_display_precision=2, disabled_by_default=True),
+    EcoFlowSensorDef("slave2_temp_c", "Slave 2 Temp", "\u00b0C", "temperature", "measurement", suggested_display_precision=1, disabled_by_default=True),
+    EcoFlowSensorDef("slave2_cycles", "Slave 2 Cycles", None, None, "total_increasing", "mdi:battery-sync", "diagnostic", disabled_by_default=True),
+    EcoFlowSensorDef("slave2_in_w", "Slave 2 Input", "W", "power", "measurement", suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("slave2_out_w", "Slave 2 Output", "W", "power", "measurement", suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("slave2_remain_cap_mah", "Slave 2 Remaining Capacity", "mAh", None, "measurement", "mdi:battery-outline", "diagnostic", disabled_by_default=True, suggested_display_precision=0),
+    EcoFlowSensorDef("slave2_full_cap_mah", "Slave 2 Full Capacity", "mAh", None, "measurement", "mdi:battery", "diagnostic", disabled_by_default=True, suggested_display_precision=0),
+    EcoFlowSensorDef("slave2_max_cell_vol_mv", "Slave 2 Max Cell Voltage", "mV", "voltage", "measurement", "mdi:flash-triangle-outline", "diagnostic", disabled_by_default=True, suggested_display_precision=0),
+    EcoFlowSensorDef("slave2_min_cell_vol_mv", "Slave 2 Min Cell Voltage", "mV", "voltage", "measurement", "mdi:flash-triangle-outline", "diagnostic", disabled_by_default=True, suggested_display_precision=0),
+    EcoFlowSensorDef("slave2_max_cell_temp_c", "Slave 2 Max Cell Temp", "\u00b0C", "temperature", "measurement", "mdi:thermometer-high", "diagnostic", disabled_by_default=True, suggested_display_precision=1),
+    EcoFlowSensorDef("slave2_min_cell_temp_c", "Slave 2 Min Cell Temp", "\u00b0C", "temperature", "measurement", "mdi:thermometer-low", "diagnostic", disabled_by_default=True, suggested_display_precision=1),
+    EcoFlowSensorDef("slave2_max_mos_temp_c", "Slave 2 Max MOSFET Temp", "\u00b0C", "temperature", "measurement", "mdi:thermometer-alert", "diagnostic", disabled_by_default=True, suggested_display_precision=1),
+    EcoFlowSensorDef("slave2_err_code", "Slave 2 Error Code", None, None, None, "mdi:alert-circle-outline", "diagnostic", disabled_by_default=True),
 ]
 
 DELTA2MAX_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
@@ -287,13 +321,16 @@ DELTA2MAX_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
     EcoFlowBinarySensorDef("dc_out_enabled", "DC Output Enabled", "power", "mdi:flash"),
     EcoFlowBinarySensorDef("car_12v_enabled", "12V Enabled", "power", "mdi:car-battery"),
     EcoFlowBinarySensorDef("ups_enabled", "UPS Enabled", "power", "mdi:lightning-bolt", "diagnostic", disabled_by_default=True),
-    EcoFlowBinarySensorDef("ac_xboost", "AC X-Boost", "power", "mdi:flash-auto", "diagnostic", disabled_by_default=True),
 ]
 
 DELTA2MAX_SWITCHES: list[EcoFlowSwitchDef] = [
     EcoFlowSwitchDef("ac_switch", "AC Output", "ac_enabled", "mdi:power-plug"),
     EcoFlowSwitchDef("dc_switch", "DC Output", "dc_out_enabled", "mdi:flash"),
     EcoFlowSwitchDef("car_12v_switch", "12V Output", "car_12v_enabled", "mdi:car-battery"),
+    EcoFlowSwitchDef("beeper_switch", "Beeper", "beep_enabled", "mdi:volume-high"),
+    EcoFlowSwitchDef("xboost_switch", "X-Boost", "ac_xboost", "mdi:lightning-bolt"),
+    EcoFlowSwitchDef("ac_auto_on_switch", "AC Auto Restart", "ac_auto_on", "mdi:power-plug"),
+    EcoFlowSwitchDef("backup_reserve_switch", "Backup Reserve", "backup_reserve_enabled", "mdi:battery-lock"),
 ]
 
 DELTA2MAX_NUMBERS: list[EcoFlowNumberDef] = [
@@ -301,6 +338,10 @@ DELTA2MAX_NUMBERS: list[EcoFlowNumberDef] = [
     EcoFlowNumberDef("max_charge_soc", "Max Charge SoC", "max_charge_soc", "%", "mdi:battery-charging-100", 50, 100, 1),
     EcoFlowNumberDef("min_discharge_soc", "Min Discharge SoC", "min_discharge_soc", "%", "mdi:battery-alert-variant-outline", 0, 30, 1),
     EcoFlowNumberDef("standby_timeout", "Standby Timeout", "standby_timeout_min", "min", "mdi:timer-off-outline", 0, 720, 1),
+    EcoFlowNumberDef("car_standby_timeout", "12V Port Timeout", "car_standby_min", "min", "mdi:timer-outline", 0, 720, 30),
+    EcoFlowNumberDef("screen_brightness", "Screen Brightness", "screen_brightness", "%", "mdi:brightness-6", 0, 100, 10),
+    EcoFlowNumberDef("screen_timeout", "Screen Timeout", "screen_timeout_sec", "s", "mdi:monitor-off", 0, 1800, 10),
+    EcoFlowNumberDef("backup_reserve_soc", "Backup Reserve Level", "backup_reserve_soc", "%", "mdi:battery-lock", 5, 100, 5),
 ]
 
 

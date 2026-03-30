@@ -41,6 +41,7 @@ from custom_components.ecoflow_energy.switch import (
     EcoFlowSwitch,
     OPTIMISTIC_LOCK_S,
     SWITCH_COMMANDS,
+    SWITCH_DECLARATIVE,
     _get_switch_defs,
 )
 from custom_components.ecoflow_energy.number import (
@@ -313,11 +314,19 @@ class TestEcoFlowSwitch:
         assert switch.is_on is True  # back to coordinator value
 
     async def test_switch_commands_templates(self) -> None:
-        """All switch defs have matching command templates."""
+        """All switch defs have matching command templates (legacy or declarative)."""
         for defn in DELTA2MAX_SWITCHES:
-            assert defn.key in SWITCH_COMMANDS, f"No command template for {defn.key}"
-            assert "on" in SWITCH_COMMANDS[defn.key]
-            assert "off" in SWITCH_COMMANDS[defn.key]
+            has_legacy = defn.key in SWITCH_COMMANDS
+            has_declarative = defn.key in SWITCH_DECLARATIVE
+            assert has_legacy or has_declarative, f"No command template for {defn.key}"
+            if has_legacy:
+                assert "on" in SWITCH_COMMANDS[defn.key]
+                assert "off" in SWITCH_COMMANDS[defn.key]
+            if has_declarative:
+                decl = SWITCH_DECLARATIVE[defn.key]
+                assert "moduleType" in decl
+                assert "operateType" in decl
+                assert "param_key" in decl
 
     async def test_async_turn_on(
         self,
@@ -392,6 +401,121 @@ class TestEcoFlowSwitch:
         defn = EcoFlowSwitchDef(key="ac_switch", name="AC Output", state_key="ac_enabled")
         switch = EcoFlowSwitch(coordinator, defn)
         assert switch.is_on is None
+
+    async def test_beeper_switch_on_sends_inverted(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Beeper ON sends quietCfg enabled=0 (quiet mode OFF)."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+
+        defn = EcoFlowSwitchDef(key="beeper_switch", name="Beeper", state_key="beep_enabled")
+        switch = EcoFlowSwitch(coordinator, defn)
+
+        with (
+            patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock) as mock_cmd,
+            patch.object(switch, "async_write_ha_state"),
+        ):
+            await switch.async_turn_on()
+            mock_cmd.assert_called_once()
+            cmd = mock_cmd.call_args[0][0]
+            assert cmd["moduleType"] == 1
+            assert cmd["operateType"] == "quietCfg"
+            assert cmd["params"]["enabled"] == 0  # inverted: ON = quiet OFF
+
+    async def test_beeper_switch_off_sends_inverted(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Beeper OFF sends quietCfg enabled=1 (quiet mode ON)."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+
+        defn = EcoFlowSwitchDef(key="beeper_switch", name="Beeper", state_key="beep_enabled")
+        switch = EcoFlowSwitch(coordinator, defn)
+
+        with (
+            patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock) as mock_cmd,
+            patch.object(switch, "async_write_ha_state"),
+        ):
+            await switch.async_turn_off()
+            mock_cmd.assert_called_once()
+            cmd = mock_cmd.call_args[0][0]
+            assert cmd["params"]["enabled"] == 1  # inverted: OFF = quiet ON
+
+    async def test_xboost_switch_on(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """X-Boost ON sends acOutCfg xboost=1."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+
+        defn = EcoFlowSwitchDef(key="xboost_switch", name="X-Boost", state_key="ac_xboost")
+        switch = EcoFlowSwitch(coordinator, defn)
+
+        with (
+            patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock) as mock_cmd,
+            patch.object(switch, "async_write_ha_state"),
+        ):
+            await switch.async_turn_on()
+            cmd = mock_cmd.call_args[0][0]
+            assert cmd["moduleType"] == 3
+            assert cmd["operateType"] == "acOutCfg"
+            assert cmd["params"]["xboost"] == 1
+
+    async def test_ac_auto_on_switch_on(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """AC Auto Restart ON sends extra_params."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+
+        defn = EcoFlowSwitchDef(key="ac_auto_on_switch", name="AC Auto Restart", state_key="ac_auto_on")
+        switch = EcoFlowSwitch(coordinator, defn)
+
+        with (
+            patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock) as mock_cmd,
+            patch.object(switch, "async_write_ha_state"),
+        ):
+            await switch.async_turn_on()
+            cmd = mock_cmd.call_args[0][0]
+            assert cmd["params"]["enabled"] == 1
+            assert cmd["params"]["minAcSoc"] == 5
+
+    async def test_backup_reserve_switch_off(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Backup Reserve OFF sends isConfig=0 with extra_params."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+
+        defn = EcoFlowSwitchDef(
+            key="backup_reserve_switch", name="Backup Reserve",
+            state_key="backup_reserve_enabled",
+        )
+        switch = EcoFlowSwitch(coordinator, defn)
+
+        with (
+            patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock) as mock_cmd,
+            patch.object(switch, "async_write_ha_state"),
+        ):
+            await switch.async_turn_off()
+            cmd = mock_cmd.call_args[0][0]
+            assert cmd["moduleType"] == 1
+            assert cmd["operateType"] == "watthConfig"
+            assert cmd["params"]["isConfig"] == 0
+            assert cmd["params"]["bpPowerSoc"] == 50
+            assert cmd["params"]["minChgSoc"] == 0
+            assert cmd["params"]["minDsgSoc"] == 0
 
 
 # ===========================================================================
@@ -597,6 +721,117 @@ class TestEcoFlowNumber:
             await number.async_set_native_value(512.0)
             # Optimistic update should reflect new value
             assert coordinator.data["led_brightness"] == 512.0
+
+    async def test_screen_brightness_command(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Screen brightness sends lcdCfg with brighLevel and delayOff=0."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+        coordinator.async_set_updated_data({"screen_brightness": 50})
+
+        defn = EcoFlowNumberDef(
+            key="screen_brightness", name="Screen Brightness",
+            state_key="screen_brightness", unit="%",
+            min_value=0, max_value=100, step=10,
+        )
+        number = EcoFlowNumber(coordinator, defn)
+
+        with (
+            patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock) as mock_cmd,
+            patch.object(number, "async_write_ha_state"),
+        ):
+            await number.async_set_native_value(80.0)
+            cmd = mock_cmd.call_args[0][0]
+            assert cmd["moduleType"] == 1
+            assert cmd["operateType"] == "lcdCfg"
+            assert cmd["params"]["brighLevel"] == 80
+            assert cmd["params"]["delayOff"] == 0
+
+    async def test_screen_timeout_command(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Screen timeout sends lcdCfg with delayOff and brighLevel=255."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+        coordinator.async_set_updated_data({"screen_timeout_sec": 30})
+
+        defn = EcoFlowNumberDef(
+            key="screen_timeout", name="Screen Timeout",
+            state_key="screen_timeout_sec", unit="s",
+            min_value=0, max_value=1800, step=10,
+        )
+        number = EcoFlowNumber(coordinator, defn)
+
+        with (
+            patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock) as mock_cmd,
+            patch.object(number, "async_write_ha_state"),
+        ):
+            await number.async_set_native_value(300.0)
+            cmd = mock_cmd.call_args[0][0]
+            assert cmd["params"]["delayOff"] == 300
+            assert cmd["params"]["brighLevel"] == 255
+
+    async def test_backup_reserve_soc_command(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Backup reserve level sends watthConfig with extra_params."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+        coordinator.async_set_updated_data({"backup_reserve_soc": 50})
+
+        defn = EcoFlowNumberDef(
+            key="backup_reserve_soc", name="Backup Reserve Level",
+            state_key="backup_reserve_soc", unit="%",
+            min_value=5, max_value=100, step=5,
+        )
+        number = EcoFlowNumber(coordinator, defn)
+
+        with (
+            patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock) as mock_cmd,
+            patch.object(number, "async_write_ha_state"),
+        ):
+            await number.async_set_native_value(75.0)
+            cmd = mock_cmd.call_args[0][0]
+            assert cmd["moduleType"] == 1
+            assert cmd["operateType"] == "watthConfig"
+            assert cmd["params"]["bpPowerSoc"] == 75
+            assert cmd["params"]["isConfig"] == 1
+            assert cmd["params"]["minChgSoc"] == 0
+            assert cmd["params"]["minDsgSoc"] == 0
+
+    async def test_car_standby_timeout_command(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """12V port timeout sends standbyTime to moduleType 5."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+        coordinator.async_set_updated_data({"car_standby_min": 120})
+
+        defn = EcoFlowNumberDef(
+            key="car_standby_timeout", name="12V Port Timeout",
+            state_key="car_standby_min", unit="min",
+            min_value=0, max_value=720, step=30,
+        )
+        number = EcoFlowNumber(coordinator, defn)
+
+        with (
+            patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock) as mock_cmd,
+            patch.object(number, "async_write_ha_state"),
+        ):
+            await number.async_set_native_value(240.0)
+            cmd = mock_cmd.call_args[0][0]
+            assert cmd["moduleType"] == 5
+            assert cmd["operateType"] == "standbyTime"
+            assert cmd["params"]["standbyMins"] == 240
 
 
 # ===========================================================================

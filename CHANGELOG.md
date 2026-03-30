@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.0] - 2026-03-30
+
+### Added
+- Delta 2 Max: beeper, X-Boost, AC auto restart, backup reserve switches (4 new)
+- Delta 2 Max: screen brightness, screen timeout, 12V port timeout, backup reserve level numbers (4 new)
+- Delta 2 Max: expansion battery pack support — 32 sensors for up to 2 slave packs (disabled by default)
+
+### Changed
+- Delta 2 Max: X-Boost promoted from read-only binary sensor to controllable switch
+
 ## [1.3.4] - 2026-03-30
 
 ### Added

@@ -212,10 +212,233 @@ class TestFieldMapIntegrity:
         assert len(DELTA2MAX_HTTP_FIELD_MAP) > 50
 
     def test_all_modules_covered(self):
-        """Field map should cover pd, inv, bms_bmsStatus, bms_emsStatus, mppt."""
+        """Field map should cover pd, inv, bms_bmsStatus, bms_emsStatus, mppt, bms_slave."""
         prefixes = {k.split(".")[0] for k in DELTA2MAX_HTTP_FIELD_MAP}
         assert "pd" in prefixes
         assert "inv" in prefixes
         assert "bms_bmsStatus" in prefixes
         assert "bms_emsStatus" in prefixes
         assert "mppt" in prefixes
+
+    def test_slave_modules_covered(self):
+        """Field map should include slave battery pack mappings."""
+        keys = list(DELTA2MAX_HTTP_FIELD_MAP.keys())
+        slave1_keys = [k for k in keys if k.startswith("bms_slave.1.")]
+        slave2_keys = [k for k in keys if k.startswith("bms_slave.2.")]
+        assert len(slave1_keys) == 16, f"Expected 16 slave1 keys, got {len(slave1_keys)}"
+        assert len(slave2_keys) == 16, f"Expected 16 slave2 keys, got {len(slave2_keys)}"
+
+
+# ===========================================================================
+# New Fields: Beeper, AC Auto On, Screen, Backup Reserve, Car Standby
+# ===========================================================================
+
+
+class TestNewPdFields:
+    def test_beep_mode_inverted_normal(self):
+        """beepMode=0 (normal mode) → beep_enabled=1 (beeper ON)."""
+        result = parse_delta_http_quota({"pd.beepMode": 0})
+        assert result["beep_enabled"] == 1
+        assert "beep_mode_raw" not in result
+
+    def test_beep_mode_inverted_quiet(self):
+        """beepMode=1 (quiet mode) → beep_enabled=0 (beeper OFF)."""
+        result = parse_delta_http_quota({"pd.beepMode": 1})
+        assert result["beep_enabled"] == 0
+
+    def test_ac_auto_on(self):
+        result = parse_delta_http_quota({"pd.newAcAutoOnCfg": 1})
+        assert result["ac_auto_on"] == 1.0
+
+    def test_ac_auto_on_disabled(self):
+        result = parse_delta_http_quota({"pd.newAcAutoOnCfg": 0})
+        assert result["ac_auto_on"] == 0.0
+
+    def test_screen_brightness(self):
+        result = parse_delta_http_quota({"pd.brightLevel": 80})
+        assert result["screen_brightness"] == 80.0
+
+    def test_screen_timeout(self):
+        result = parse_delta_http_quota({"pd.lcdOffSec": 300})
+        assert result["screen_timeout_sec"] == 300.0
+
+    def test_screen_timeout_never(self):
+        result = parse_delta_http_quota({"pd.lcdOffSec": 0})
+        assert result["screen_timeout_sec"] == 0.0
+
+    def test_backup_reserve_soc(self):
+        result = parse_delta_http_quota({"pd.bpPowerSoc": 50})
+        assert result["backup_reserve_soc"] == 50.0
+
+    def test_backup_reserve_enabled(self):
+        result = parse_delta_http_quota({"pd.watchIsConfig": 1})
+        assert result["backup_reserve_enabled"] == 1.0
+
+    def test_backup_reserve_disabled(self):
+        result = parse_delta_http_quota({"pd.watchIsConfig": 0})
+        assert result["backup_reserve_enabled"] == 0.0
+
+
+class TestNewMpptFields:
+    def test_car_standby_min(self):
+        result = parse_delta_http_quota({"mppt.carStandbyMin": 120})
+        assert result["car_standby_min"] == 120.0
+
+    def test_car_standby_min_zero(self):
+        result = parse_delta_http_quota({"mppt.carStandbyMin": 0})
+        assert result["car_standby_min"] == 0.0
+
+
+# ===========================================================================
+# Slave Battery Pack Support
+# ===========================================================================
+
+
+class TestSlavePackMapping:
+    """Test slave battery pack field mapping and unit conversions."""
+
+    def test_slave1_soc(self):
+        result = parse_delta_http_quota({"bms_slave.1.soc": 85})
+        assert result["slave1_soc"] == 85.0
+
+    def test_slave2_soc(self):
+        result = parse_delta_http_quota({"bms_slave.2.soc": 72})
+        assert result["slave2_soc"] == 72.0
+
+    def test_slave1_voltage_mv_to_v(self):
+        """Slave battery voltage in mV must be converted to V."""
+        result = parse_delta_http_quota({"bms_slave.1.vol": 52000})
+        assert result["slave1_voltage_v"] == 52.0
+        assert "slave1_voltage_mv" not in result
+
+    def test_slave2_voltage_mv_to_v(self):
+        result = parse_delta_http_quota({"bms_slave.2.vol": 48500})
+        assert result["slave2_voltage_v"] == 48.5
+
+    def test_slave1_current_ma_to_a(self):
+        """Slave battery current in mA must be converted to A."""
+        result = parse_delta_http_quota({"bms_slave.1.amp": 1500})
+        assert result["slave1_current_a"] == 1.5
+        assert "slave1_current_ma" not in result
+
+    def test_slave1_current_negative(self):
+        """Negative current (discharging) must be preserved."""
+        result = parse_delta_http_quota({"bms_slave.1.amp": -2000})
+        assert result["slave1_current_a"] == -2.0
+
+    def test_slave2_current_ma_to_a(self):
+        result = parse_delta_http_quota({"bms_slave.2.amp": 3200})
+        assert result["slave2_current_a"] == 3.2
+
+    def test_slave1_temp_offset(self):
+        """Slave BMS temp has +15 offset like main battery."""
+        result = parse_delta_http_quota({"bms_slave.1.temp": 40})
+        assert result["slave1_temp_c"] == 25.0
+        assert "slave1_temp_raw" not in result
+
+    def test_slave2_temp_offset(self):
+        result = parse_delta_http_quota({"bms_slave.2.temp": 15})
+        assert result["slave2_temp_c"] == 0.0
+
+    def test_slave1_soh(self):
+        result = parse_delta_http_quota({"bms_slave.1.soh": 98})
+        assert result["slave1_soh"] == 98.0
+
+    def test_slave1_cycles(self):
+        result = parse_delta_http_quota({"bms_slave.1.cycles": 42})
+        assert result["slave1_cycles"] == 42.0
+
+    def test_slave1_power_direct(self):
+        """Slave input/output watts are direct values (no scaling)."""
+        result = parse_delta_http_quota({
+            "bms_slave.1.inputWatts": 200,
+            "bms_slave.1.outputWatts": 150,
+        })
+        assert result["slave1_in_w"] == 200.0
+        assert result["slave1_out_w"] == 150.0
+
+    def test_slave1_capacity(self):
+        result = parse_delta_http_quota({
+            "bms_slave.1.remainCap": 38000,
+            "bms_slave.1.fullCap": 40000,
+        })
+        assert result["slave1_remain_cap_mah"] == 38000.0
+        assert result["slave1_full_cap_mah"] == 40000.0
+
+    def test_slave1_cell_voltages_stay_mv(self):
+        """Cell-level voltages stay in mV (not converted to V)."""
+        result = parse_delta_http_quota({
+            "bms_slave.1.maxCellVol": 3450,
+            "bms_slave.1.minCellVol": 3380,
+        })
+        assert result["slave1_max_cell_vol_mv"] == 3450.0
+        assert result["slave1_min_cell_vol_mv"] == 3380.0
+
+    def test_slave1_cell_temps_direct(self):
+        """Cell temps are direct Celsius (no offset)."""
+        result = parse_delta_http_quota({
+            "bms_slave.1.maxCellTemp": 35,
+            "bms_slave.1.minCellTemp": 28,
+        })
+        assert result["slave1_max_cell_temp_c"] == 35.0
+        assert result["slave1_min_cell_temp_c"] == 28.0
+
+    def test_slave1_mos_temp_direct(self):
+        result = parse_delta_http_quota({"bms_slave.1.maxMosTemp": 42})
+        assert result["slave1_max_mos_temp_c"] == 42.0
+
+    def test_slave1_err_code(self):
+        result = parse_delta_http_quota({"bms_slave.1.errCode": 0})
+        assert result["slave1_err_code"] == 0.0
+
+    def test_slave_full_payload(self):
+        """Parse a complete slave battery pack payload."""
+        data = {
+            "bms_slave.1.soc": 85,
+            "bms_slave.1.vol": 52000,
+            "bms_slave.1.amp": -1200,
+            "bms_slave.1.temp": 40,
+            "bms_slave.1.soh": 97,
+            "bms_slave.1.cycles": 150,
+            "bms_slave.1.inputWatts": 0,
+            "bms_slave.1.outputWatts": 62,
+            "bms_slave.1.remainCap": 38000,
+            "bms_slave.1.fullCap": 40000,
+            "bms_slave.1.maxCellVol": 3450,
+            "bms_slave.1.minCellVol": 3380,
+            "bms_slave.1.maxCellTemp": 35,
+            "bms_slave.1.minCellTemp": 28,
+            "bms_slave.1.maxMosTemp": 42,
+            "bms_slave.1.errCode": 0,
+        }
+        result = parse_delta_http_quota(data)
+        assert result["slave1_soc"] == 85.0
+        assert result["slave1_voltage_v"] == 52.0
+        assert result["slave1_current_a"] == -1.2
+        assert result["slave1_temp_c"] == 25.0
+        assert result["slave1_soh"] == 97.0
+        assert result["slave1_cycles"] == 150.0
+        assert result["slave1_in_w"] == 0.0
+        assert result["slave1_out_w"] == 62.0
+        assert result["slave1_remain_cap_mah"] == 38000.0
+        assert result["slave1_full_cap_mah"] == 40000.0
+        assert result["slave1_max_cell_vol_mv"] == 3450.0
+        assert result["slave1_min_cell_vol_mv"] == 3380.0
+        assert result["slave1_max_cell_temp_c"] == 35.0
+        assert result["slave1_min_cell_temp_c"] == 28.0
+        assert result["slave1_max_mos_temp_c"] == 42.0
+        assert result["slave1_err_code"] == 0.0
+
+    def test_both_slaves_independent(self):
+        """Both slave packs can be parsed independently in same payload."""
+        data = {
+            "bms_slave.1.soc": 85,
+            "bms_slave.2.soc": 72,
+            "bms_slave.1.vol": 52000,
+            "bms_slave.2.vol": 48000,
+        }
+        result = parse_delta_http_quota(data)
+        assert result["slave1_soc"] == 85.0
+        assert result["slave2_soc"] == 72.0
+        assert result["slave1_voltage_v"] == 52.0
+        assert result["slave2_voltage_v"] == 48.0

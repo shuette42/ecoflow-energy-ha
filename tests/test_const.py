@@ -58,14 +58,32 @@ class TestDelta2MaxSensors:
         assert len(keys) > 40, f"Expected 40+ sensors, got {len(keys)}"
         assert len(keys) == len(set(keys)), "Duplicate Delta sensor keys"
 
+    def test_slave_battery_sensors_exist(self):
+        keys = _extract_sensor_keys("DELTA2MAX_SENSORS")
+        for pack in (1, 2):
+            prefix = f"slave{pack}"
+            for suffix in (
+                "_soc", "_soh", "_voltage_v", "_current_a", "_temp_c",
+                "_cycles", "_in_w", "_out_w", "_remain_cap_mah",
+                "_full_cap_mah", "_max_cell_vol_mv", "_min_cell_vol_mv",
+                "_max_cell_temp_c", "_min_cell_temp_c", "_max_mos_temp_c",
+                "_err_code",
+            ):
+                assert f"{prefix}{suffix}" in keys, f"Missing slave sensor: {prefix}{suffix}"
+
+    def test_slave_sensors_count(self):
+        keys = _extract_sensor_keys("DELTA2MAX_SENSORS")
+        slave_keys = [k for k in keys if k.startswith("slave")]
+        assert len(slave_keys) == 32, f"Expected 32 slave sensors, got {len(slave_keys)}"
+
     def test_switch_defs_unique(self):
         keys = _extract_sensor_keys("DELTA2MAX_SWITCHES")
-        assert len(keys) == 3
+        assert len(keys) == 7
         assert len(keys) == len(set(keys))
 
     def test_number_defs_unique(self):
         keys = _extract_sensor_keys("DELTA2MAX_NUMBERS")
-        assert len(keys) == 4
+        assert len(keys) == 8
         assert len(keys) == len(set(keys))
 
 
@@ -96,5 +114,5 @@ class TestBinarySensors:
 
     def test_delta_binary_sensors(self):
         keys = _extract_sensor_keys("DELTA2MAX_BINARY_SENSORS")
-        assert len(keys) >= 5
+        assert len(keys) >= 4
         assert "ac_enabled" in keys

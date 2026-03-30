@@ -40,6 +40,9 @@ SMARTPLUG_COMMANDS: dict[str, dict[str, dict[str, Any]]] = {
 
 # IoT API SET-command templates (Delta 2 Max)
 # moduleType: 1=PD, 2=BMS, 3=INV, 5=MPPT
+#
+# Legacy switches use on/off dict with full params.
+# New switches use declarative format with param_key, invert, extra_params.
 SWITCH_COMMANDS: dict[str, dict[str, dict[str, Any]]] = {
     "ac_switch": {
         "on": {
@@ -60,6 +63,36 @@ SWITCH_COMMANDS: dict[str, dict[str, dict[str, Any]]] = {
     "car_12v_switch": {
         "on": {"moduleType": 5, "operateType": "mpptCar", "params": {"enabled": 1}},
         "off": {"moduleType": 5, "operateType": "mpptCar", "params": {"enabled": 0}},
+    },
+}
+
+# Declarative switch command templates (Delta 2 Max)
+# param_key: the parameter name sent in the command (default: "enabled")
+# invert: when True, ON sends 0 and OFF sends 1 (e.g. beeper vs quiet mode)
+# extra_params: additional fixed parameters merged into the command params
+SWITCH_DECLARATIVE: dict[str, dict[str, Any]] = {
+    "beeper_switch": {
+        "moduleType": 1,
+        "operateType": "quietCfg",
+        "param_key": "enabled",
+        "invert": True,
+    },
+    "xboost_switch": {
+        "moduleType": 3,
+        "operateType": "acOutCfg",
+        "param_key": "xboost",
+    },
+    "ac_auto_on_switch": {
+        "moduleType": 1,
+        "operateType": "newAcAutoOnCfg",
+        "param_key": "enabled",
+        "extra_params": {"minAcSoc": 5},
+    },
+    "backup_reserve_switch": {
+        "moduleType": 1,
+        "operateType": "watthConfig",
+        "param_key": "isConfig",
+        "extra_params": {"bpPowerSoc": 50, "minChgSoc": 0, "minDsgSoc": 0},
     },
 }
 
@@ -141,11 +174,9 @@ class EcoFlowSwitch(CoordinatorEntity[EcoFlowDeviceCoordinator], SwitchEntity):
 
     async def _send_command(self, turn_on: bool) -> None:
         """Send a SET command and apply optimistic lock."""
-        cmd_key = "on" if turn_on else "off"
-        commands = _get_switch_commands(self.coordinator.device_type)
-        command = commands.get(self._definition.key, {}).get(cmd_key)
+        command = self._build_command(turn_on)
         if command is None:
-            logger.warning("No command template for %s/%s", self._definition.key, cmd_key)
+            logger.warning("No command template for %s", self._definition.key)
             return
 
         # Optimistic update: immediately reflect the new state
@@ -155,6 +186,32 @@ class EcoFlowSwitch(CoordinatorEntity[EcoFlowDeviceCoordinator], SwitchEntity):
 
         # Send the command via the coordinator
         await self.coordinator.async_send_set_command(command)
+
+    def _build_command(self, turn_on: bool) -> dict[str, Any] | None:
+        """Build a SET command from legacy or declarative templates."""
+        # Check declarative templates first (new switches)
+        decl = SWITCH_DECLARATIVE.get(self._definition.key)
+        if decl is not None:
+            invert = decl.get("invert", False)
+            if invert:
+                value = 0 if turn_on else 1
+            else:
+                value = 1 if turn_on else 0
+
+            params = {decl["param_key"]: value}
+            if "extra_params" in decl:
+                params.update(decl["extra_params"])
+
+            return {
+                "moduleType": decl["moduleType"],
+                "operateType": decl["operateType"],
+                "params": params,
+            }
+
+        # Legacy on/off templates
+        cmd_key = "on" if turn_on else "off"
+        commands = _get_switch_commands(self.coordinator.device_type)
+        return commands.get(self._definition.key, {}).get(cmd_key)
 
     @callback
     def _handle_coordinator_update(self) -> None:

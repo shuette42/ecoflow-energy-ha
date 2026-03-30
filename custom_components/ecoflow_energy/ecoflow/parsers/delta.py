@@ -29,6 +29,12 @@ DELTA2MAX_FIELD_MAP: dict[str, str] = {
     "pdStatus.carWatts": "car_out_w",
     "pdStatus.chgDsgState": "chg_dsg_state",
     "pdStatus.errCode": "pd_err_code",
+    "pdStatus.beepMode": "beep_mode_raw",
+    "pdStatus.newAcAutoOnCfg": "ac_auto_on",
+    "pdStatus.brightLevel": "screen_brightness",
+    "pdStatus.lcdOffSec": "screen_timeout_sec",
+    "pdStatus.bpPowerSoc": "backup_reserve_soc",
+    "pdStatus.watchIsConfig": "backup_reserve_enabled",
     # --- invStatus (inv.*) ---
     "invStatus.inputWatts": "ac_in_w",
     "invStatus.outputWatts": "ac_out_w",
@@ -79,6 +85,7 @@ DELTA2MAX_FIELD_MAP: dict[str, str] = {
     "mpptStatus.pv2InVol": "solar2_in_vol_dv",
     "mpptStatus.pv2InAmp": "solar2_in_amp_ca",
     "mpptStatus.pv2MpptTemp": "solar2_mppt_temp_c",
+    "mpptStatus.carStandbyMin": "car_standby_min",
     "mpptStatus.chgState": "mppt_chg_state",
     "mpptStatus.faultCode": "mppt_fault_code",
     # --- emsStatus (ems.*) ---
@@ -91,6 +98,40 @@ DELTA2MAX_FIELD_MAP: dict[str, str] = {
     "emsStatus.chgState": "ems_chg_state",
     "emsStatus.fanLevel": "fan_level",
     "emsStatus.openUpsFlag": "ups_enabled",
+    # --- bmsSlaveStatus_1 (Slave Battery Pack 1) ---
+    "bmsSlaveStatus_1.soc": "slave1_soc",
+    "bmsSlaveStatus_1.vol": "slave1_voltage_mv",
+    "bmsSlaveStatus_1.amp": "slave1_current_ma",
+    "bmsSlaveStatus_1.temp": "slave1_temp_raw",
+    "bmsSlaveStatus_1.soh": "slave1_soh",
+    "bmsSlaveStatus_1.cycles": "slave1_cycles",
+    "bmsSlaveStatus_1.inputWatts": "slave1_in_w",
+    "bmsSlaveStatus_1.outputWatts": "slave1_out_w",
+    "bmsSlaveStatus_1.remainCap": "slave1_remain_cap_mah",
+    "bmsSlaveStatus_1.fullCap": "slave1_full_cap_mah",
+    "bmsSlaveStatus_1.maxCellVol": "slave1_max_cell_vol_mv",
+    "bmsSlaveStatus_1.minCellVol": "slave1_min_cell_vol_mv",
+    "bmsSlaveStatus_1.maxCellTemp": "slave1_max_cell_temp_c",
+    "bmsSlaveStatus_1.minCellTemp": "slave1_min_cell_temp_c",
+    "bmsSlaveStatus_1.maxMosTemp": "slave1_max_mos_temp_c",
+    "bmsSlaveStatus_1.errCode": "slave1_err_code",
+    # --- bmsSlaveStatus_2 (Slave Battery Pack 2) ---
+    "bmsSlaveStatus_2.soc": "slave2_soc",
+    "bmsSlaveStatus_2.vol": "slave2_voltage_mv",
+    "bmsSlaveStatus_2.amp": "slave2_current_ma",
+    "bmsSlaveStatus_2.temp": "slave2_temp_raw",
+    "bmsSlaveStatus_2.soh": "slave2_soh",
+    "bmsSlaveStatus_2.cycles": "slave2_cycles",
+    "bmsSlaveStatus_2.inputWatts": "slave2_in_w",
+    "bmsSlaveStatus_2.outputWatts": "slave2_out_w",
+    "bmsSlaveStatus_2.remainCap": "slave2_remain_cap_mah",
+    "bmsSlaveStatus_2.fullCap": "slave2_full_cap_mah",
+    "bmsSlaveStatus_2.maxCellVol": "slave2_max_cell_vol_mv",
+    "bmsSlaveStatus_2.minCellVol": "slave2_min_cell_vol_mv",
+    "bmsSlaveStatus_2.maxCellTemp": "slave2_max_cell_temp_c",
+    "bmsSlaveStatus_2.minCellTemp": "slave2_min_cell_temp_c",
+    "bmsSlaveStatus_2.maxMosTemp": "slave2_max_mos_temp_c",
+    "bmsSlaveStatus_2.errCode": "slave2_err_code",
 }
 
 
@@ -119,9 +160,13 @@ def parse_delta_report(
         dest_key = field_map.get(lookup)
         if dest_key is None:
             continue
-        # Temperature offset: bmsStatus.temp has +15 offset
-        if dest_key == "batt_temp_raw":
-            parsed["batt_temp_c"] = float(value) - 15.0
+        # Temperature offset: BMS temp fields have +15 offset
+        if dest_key in ("batt_temp_raw", "slave1_temp_raw", "slave2_temp_raw"):
+            temp_key = dest_key.replace("_temp_raw", "_temp_c")
+            parsed[temp_key] = float(value) - 15.0
+        # Beeper inversion: beepMode=0 means beeper ON (normal mode)
+        elif dest_key == "beep_mode_raw":
+            parsed["beep_enabled"] = 0 if float(value) else 1
         else:
             parsed[dest_key] = float(value)
 
@@ -136,6 +181,8 @@ def parse_delta_report(
         ("dc_in_vol_mv", "dc_in_vol_v"),
         ("batt_max_cell_vol_mv", "batt_max_cell_vol_mv"),  # stays mV (cell level)
         ("batt_min_cell_vol_mv", "batt_min_cell_vol_mv"),  # stays mV (cell level)
+        ("slave1_voltage_mv", "slave1_voltage_v"),
+        ("slave2_voltage_mv", "slave2_voltage_v"),
     ]:
         if mv_key in parsed and v_key != mv_key:
             parsed[v_key] = parsed.pop(mv_key) / 1000.0
@@ -155,6 +202,8 @@ def parse_delta_report(
         ("ac_out_amp_ma", "ac_out_amp_a"),
         ("ac_in_amp_ma", "ac_in_amp_a"),
         ("solar_in_amp_ma", "solar_in_amp_a"),
+        ("slave1_current_ma", "slave1_current_a"),
+        ("slave2_current_ma", "slave2_current_a"),
     ]:
         if ma_key in parsed:
             parsed[a_key] = parsed.pop(ma_key) / 1000.0

@@ -46,6 +46,31 @@ NUMBER_COMMANDS: dict[str, dict[str, Any]] = {
         "operateType": "standbyTime",
         "param_key": "standbyMin",
     },
+    "car_standby_timeout": {
+        "moduleType": 5,
+        "operateType": "standbyTime",
+        "param_key": "standbyMins",
+    },
+    "screen_brightness": {
+        "moduleType": 1,
+        "operateType": "lcdCfg",
+        "param_key": "brighLevel",
+        # delayOff=0: device sentinel for "do not change timeout"
+        "extra_params": {"delayOff": 0},
+    },
+    "screen_timeout": {
+        "moduleType": 1,
+        "operateType": "lcdCfg",
+        "param_key": "delayOff",
+        # brighLevel=255: device sentinel for "do not change brightness"
+        "extra_params": {"brighLevel": 255},
+    },
+    "backup_reserve_soc": {
+        "moduleType": 1,
+        "operateType": "watthConfig",
+        "param_key": "bpPowerSoc",
+        "extra_params": {"isConfig": 1, "minChgSoc": 0, "minDsgSoc": 0},
+    },
 }
 
 # Smart Plug SET-command templates (cmdCode format, different from Delta's moduleType/operateType)

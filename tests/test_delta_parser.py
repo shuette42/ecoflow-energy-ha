@@ -125,6 +125,137 @@ class TestDeltaParser:
     def test_field_map_coverage(self):
         """All field_map entries must have unique destination keys."""
         dest_keys = list(DELTA2MAX_FIELD_MAP.values())
-        # batt_temp_raw is never in the output (replaced by batt_temp_c)
-        dest_keys_without_raw = [k for k in dest_keys if k != "batt_temp_raw"]
+        # Raw keys are never in the output (replaced by processed keys)
+        raw_keys = ("batt_temp_raw", "beep_mode_raw", "slave1_temp_raw", "slave2_temp_raw")
+        dest_keys_without_raw = [k for k in dest_keys if k not in raw_keys]
         assert len(dest_keys_without_raw) == len(set(dest_keys_without_raw))
+
+    # --- New fields: beeper, ac auto on, screen, backup reserve, car standby ---
+
+    def test_beeper_mode_inverted(self):
+        """beepMode=0 (normal mode) → beep_enabled=1 (beeper ON)."""
+        report = {"typeCode": "pdStatus", "params": {"beepMode": 0}}
+        result = parse_delta_report(report)
+        assert result["beep_enabled"] == 1
+
+    def test_beeper_quiet_mode_inverted(self):
+        """beepMode=1 (quiet mode) → beep_enabled=0 (beeper OFF)."""
+        report = {"typeCode": "pdStatus", "params": {"beepMode": 1}}
+        result = parse_delta_report(report)
+        assert result["beep_enabled"] == 0
+
+    def test_ac_auto_on(self):
+        report = {"typeCode": "pdStatus", "params": {"newAcAutoOnCfg": 1}}
+        result = parse_delta_report(report)
+        assert result["ac_auto_on"] == 1.0
+
+    def test_screen_brightness(self):
+        report = {"typeCode": "pdStatus", "params": {"brightLevel": 80}}
+        result = parse_delta_report(report)
+        assert result["screen_brightness"] == 80.0
+
+    def test_screen_timeout(self):
+        report = {"typeCode": "pdStatus", "params": {"lcdOffSec": 300}}
+        result = parse_delta_report(report)
+        assert result["screen_timeout_sec"] == 300.0
+
+    def test_backup_reserve_soc(self):
+        report = {"typeCode": "pdStatus", "params": {"bpPowerSoc": 50}}
+        result = parse_delta_report(report)
+        assert result["backup_reserve_soc"] == 50.0
+
+    def test_backup_reserve_enabled(self):
+        report = {"typeCode": "pdStatus", "params": {"watchIsConfig": 1}}
+        result = parse_delta_report(report)
+        assert result["backup_reserve_enabled"] == 1.0
+
+    def test_car_standby_min(self):
+        report = {"typeCode": "mpptStatus", "params": {"carStandbyMin": 120}}
+        result = parse_delta_report(report)
+        assert result["car_standby_min"] == 120.0
+
+    # --- Slave Battery Pack Support ---
+
+    def test_slave1_soc(self):
+        report = {"typeCode": "bmsSlaveStatus_1", "params": {"soc": 85}}
+        result = parse_delta_report(report)
+        assert result["slave1_soc"] == 85.0
+
+    def test_slave2_soc(self):
+        report = {"typeCode": "bmsSlaveStatus_2", "params": {"soc": 72}}
+        result = parse_delta_report(report)
+        assert result["slave2_soc"] == 72.0
+
+    def test_slave1_voltage_mv_to_v(self):
+        """Slave battery voltage in mV must be converted to V."""
+        report = {"typeCode": "bmsSlaveStatus_1", "params": {"vol": 52000}}
+        result = parse_delta_report(report)
+        assert result["slave1_voltage_v"] == 52.0
+
+    def test_slave1_current_ma_to_a(self):
+        """Slave battery current in mA must be converted to A."""
+        report = {"typeCode": "bmsSlaveStatus_1", "params": {"amp": -1500}}
+        result = parse_delta_report(report)
+        assert result["slave1_current_a"] == -1.5
+
+    def test_slave1_temp_offset(self):
+        """Slave BMS temp has +15 offset like main battery."""
+        report = {"typeCode": "bmsSlaveStatus_1", "params": {"temp": 40}}
+        result = parse_delta_report(report)
+        assert result["slave1_temp_c"] == 25.0
+
+    def test_slave2_temp_offset(self):
+        report = {"typeCode": "bmsSlaveStatus_2", "params": {"temp": 15}}
+        result = parse_delta_report(report)
+        assert result["slave2_temp_c"] == 0.0
+
+    def test_slave1_full_report(self):
+        """Parse a complete slave battery pack MQTT report."""
+        report = {
+            "typeCode": "bmsSlaveStatus_1",
+            "params": {
+                "soc": 85,
+                "vol": 52000,
+                "amp": -1200,
+                "temp": 40,
+                "soh": 97,
+                "cycles": 150,
+                "inputWatts": 0,
+                "outputWatts": 62,
+                "remainCap": 38000,
+                "fullCap": 40000,
+                "maxCellVol": 3450,
+                "minCellVol": 3380,
+                "maxCellTemp": 35,
+                "minCellTemp": 28,
+                "maxMosTemp": 42,
+                "errCode": 0,
+            },
+        }
+        result = parse_delta_report(report)
+        assert result["slave1_soc"] == 85.0
+        assert result["slave1_voltage_v"] == 52.0
+        assert result["slave1_current_a"] == -1.2
+        assert result["slave1_temp_c"] == 25.0
+        assert result["slave1_soh"] == 97.0
+        assert result["slave1_cycles"] == 150.0
+        assert result["slave1_in_w"] == 0.0
+        assert result["slave1_out_w"] == 62.0
+        assert result["slave1_remain_cap_mah"] == 38000.0
+        assert result["slave1_full_cap_mah"] == 40000.0
+        assert result["slave1_max_cell_vol_mv"] == 3450.0
+        assert result["slave1_min_cell_vol_mv"] == 3380.0
+        assert result["slave1_max_cell_temp_c"] == 35.0
+        assert result["slave1_min_cell_temp_c"] == 28.0
+        assert result["slave1_max_mos_temp_c"] == 42.0
+        assert result["slave1_err_code"] == 0.0
+
+    def test_slave2_voltage_and_current(self):
+        """Verify slave 2 uses independent conversion paths."""
+        report = {
+            "typeCode": "bmsSlaveStatus_2",
+            "params": {"vol": 48000, "amp": 2500},
+        }
+        result = parse_delta_report(report)
+        assert result["slave2_voltage_v"] == 48.0
+        assert result["slave2_current_a"] == 2.5

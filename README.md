@@ -40,7 +40,7 @@
 | | Sensors | Controls | Energy Sensors | Update Rate |
 |:---|:---:|:---:|:---:|:---|
 | **PowerOcean** — Home Battery | 63 | — | 6 (solar, grid, battery, home) | ~30 s standard / ~3 s enhanced |
-| **Delta 2 Max** — Portable Power | 62 | 3 switches, 4 numbers | 4 (solar 1+2, AC in/out) | ~30 s + MQTT push |
+| **Delta 2 Max** — Portable Power | 94 | 7 switches, 8 numbers | 4 (solar 1+2, AC in/out) | ~30 s + MQTT push |
 | **Smart Plug** — Switchable Outlet | 11 | 1 switch, 2 numbers | 1 (total energy) | ~30 s + MQTT push |
 
 > **Tip:** Other Delta-series devices (Delta Pro, Delta 2, etc.) should work automatically with the Delta sensor set.
@@ -57,7 +57,7 @@
 <details>
 <summary><b>Delta 2 Max</b> — AC/DC/12V switches, charge speed control, real-time MQTT</summary>
 
-Battery SoC/SoH · All input/output power, temperatures, voltages · **Switches:** AC, DC, 12V output · **Numbers:** AC charge speed (200–2400 W), max/min SoC, standby timeout · Real-time MQTT push in Standard Mode.
+Battery SoC/SoH · All input/output power, temperatures, voltages · **Expansion battery packs** (up to 2, disabled by default) · **Switches:** AC, DC, 12V output, beeper, X-Boost, AC auto restart, backup reserve · **Numbers:** AC charge speed (200–2400 W), max/min SoC, standby timeout, screen brightness/timeout, 12V port timeout, backup reserve level · Real-time MQTT push in Standard Mode.
 
 </details>
 
