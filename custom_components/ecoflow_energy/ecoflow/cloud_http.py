@@ -128,6 +128,9 @@ class EcoFlowHTTPQuota:
         self._last_call = now
         return True
 
+    class _RetryableAPIError(Exception):
+        """API returned a transient error code that should be retried."""
+
     async def _request_with_retry(
         self,
         method: str,
@@ -168,9 +171,6 @@ class EcoFlowHTTPQuota:
 
         _LOGGER.error("HTTP: all %d attempts failed for %s", HTTP_RETRIES, self._device_sn)
         return None
-
-    class _RetryableAPIError(Exception):
-        """API returned a transient error code that should be retried."""
 
     async def _handle_response(self, resp: aiohttp.ClientResponse) -> dict | None:
         """Parse and validate an API response."""
