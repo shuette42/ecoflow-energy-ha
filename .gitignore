@@ -64,13 +64,14 @@ htmlcov/
 config/
 homeassistant/
 
+# Scripts (local tools, not for remote)
+scripts/
+
 # MCP / RAG (local only, not for remote)
 .mcp.json
 .venv-qdrant-mcp/
-scripts/qdrant_mcp_bridge.py
-scripts/run_qdrant_mcp_bridge.sh
-scripts/import_repo_context_to_qdrant.sh
 
 # Secrets (never)
 *.env
 .secrets
+probe_output_*.json
