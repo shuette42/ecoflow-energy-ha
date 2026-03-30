@@ -65,6 +65,9 @@ def parse_powerocean_http_quota(quota_data: dict) -> dict[str, Any]:
     # --- Battery pack data (first pack found in bp_addr.*) ---
     _extract_battery_pack(quota_data, result)
 
+    # --- Per-pack battery data (all packs → pack{n}_* keys) ---
+    result.update(_extract_all_battery_packs(quota_data))
+
     # --- MPPT per-string (mpptHeartBeat[0].mpptPv[0|1]) ---
     mppt_hb = quota_data.get("mpptHeartBeat")
     if isinstance(mppt_hb, list) and mppt_hb:
@@ -109,6 +112,9 @@ def parse_powerocean_http_quota(quota_data: dict) -> dict[str, Any]:
 
     # --- Energy stream data (from ems_change_report or energy_stream) ---
     _extract_energy_stream(quota_data, result)
+
+    # --- EMS extended fields (from ems_change_report.*) ---
+    _extract_ems_extended(quota_data, result)
 
     return result
 
@@ -241,3 +247,121 @@ def _extract_energy_stream(quota_data: dict, result: dict) -> None:
         v = _safe_float(quota_data["pcs_change_report.gridFreq"])
         if v is not None:
             result["pcs_ac_freq_hz"] = v
+
+
+def _extract_all_battery_packs(quota_data: dict) -> dict[str, Any]:
+    """Extract per-pack battery data from all bp_addr.{SN} keys.
+
+    Maps each pack to pack{n}_* sensor keys (n = 1..5).
+    Existing bp_* sensors are NOT affected — this produces separate keys.
+    """
+    result: dict[str, Any] = {}
+
+    pack_num = 0
+    for key, val in quota_data.items():
+        if not key.startswith("bp_addr.") or key == "bp_addr.updateTime":
+            continue
+
+        if isinstance(val, str):
+            try:
+                val = json.loads(val)
+            except (json.JSONDecodeError, TypeError):
+                continue
+
+        if not isinstance(val, dict):
+            continue
+
+        pack_num += 1
+        if pack_num > 5:
+            break  # Max 5 packs
+
+        prefix = f"pack{pack_num}"
+
+        # Core + diagnostic fields (no scaling needed — verified from probe data)
+        _field_map = {
+            "bpSoc": f"{prefix}_soc",
+            "bpPwr": f"{prefix}_power_w",
+            "bpSoh": f"{prefix}_soh",
+            "bpCycles": f"{prefix}_cycles",
+            "bpVol": f"{prefix}_voltage_v",
+            "bpAmp": f"{prefix}_current_a",
+            "bpRemainWatth": f"{prefix}_remain_watth",
+            "bpMaxCellTemp": f"{prefix}_max_cell_temp_c",
+            "bpMinCellTemp": f"{prefix}_min_cell_temp_c",
+            "bpEnvTemp": f"{prefix}_env_temp_c",
+            "bpCalendarSoh": f"{prefix}_calendar_soh",
+            "bpCycleSoh": f"{prefix}_cycle_soh",
+            "bpMaxMosTemp": f"{prefix}_max_mos_temp_c",
+            "bpHvMosTemp": f"{prefix}_hv_mos_temp_c",
+            "bpLvMosTemp": f"{prefix}_lv_mos_temp_c",
+            "bpBusVol": f"{prefix}_bus_voltage_v",
+            "bpPtcTemp": f"{prefix}_ptc_temp_c",
+            "bpCellMaxVol": f"{prefix}_cell_max_vol_mv",
+            "bpCellMinVol": f"{prefix}_cell_min_vol_mv",
+            "bpDesignCap": f"{prefix}_design_cap_mah",
+            "bpFullCap": f"{prefix}_full_cap_mah",
+            "bpErrCode": f"{prefix}_error_code",
+        }
+
+        for api_key, sensor_key in _field_map.items():
+            val_field = val.get(api_key)
+            if val_field is not None:
+                fv = _safe_float(val_field)
+                if fv is not None:
+                    result[sensor_key] = fv
+
+        # Lifetime energy: Wh -> kWh (divide by 1000)
+        for api_key, sensor_key in (
+            ("bpAccuChgEnergy", f"{prefix}_accu_chg_energy_kwh"),
+            ("bpAccuDsgEnergy", f"{prefix}_accu_dsg_energy_kwh"),
+        ):
+            val_field = val.get(api_key)
+            if val_field is not None:
+                fv = _safe_float(val_field)
+                if fv is not None:
+                    result[sensor_key] = fv / 1000.0
+
+    return result
+
+
+def _extract_ems_extended(quota_data: dict, result: dict) -> None:
+    """Extract additional EMS/system fields from ems_change_report.* keys."""
+    ems_prefix = "ems_change_report."
+
+    _ems_extended = {
+        "sysBatChgUpLimit": "ems_charge_upper_limit_pct",
+        "sysBatDsgDownLimit": "ems_discharge_lower_limit_pct",
+        "emsKeepSoc": "ems_keep_soc_pct",
+        "sysBatBackupRatio": "ems_backup_ratio_pct",
+        "mppt1FaultCode": "mppt1_fault_code",
+        "mppt2FaultCode": "mppt2_fault_code",
+        "pcsAcErrCode": "pcs_ac_error_code",
+        "pcsDcErrCode": "pcs_dc_error_code",
+        "pcsAcWarningCode": "pcs_ac_warning_code",
+        "wifiStaStat": "wifi_status",
+        "ethWanStat": "ethernet_status",
+        "iot4gSta": "cellular_status",
+        "emsCtrlLedBright": "ems_led_brightness",
+        "emsWorkState": "ems_work_state",
+    }
+    for api_key, sensor_key in _ems_extended.items():
+        full_key = ems_prefix + api_key
+        if full_key in quota_data:
+            fv = _safe_float(quota_data[full_key])
+            if fv is not None:
+                result[sensor_key] = fv
+
+    # Nested poAiSchedule fields (system capabilities)
+    _ai_schedule = {
+        "poAiSchedule.bpFullCap": "ems_total_battery_capacity_wh",
+        "poAiSchedule.pcsMaxOutPwr": "pcs_max_output_power_w",
+        "poAiSchedule.pcsMaxInPwr": "pcs_max_input_power_w",
+        "poAiSchedule.bpChgPwrMax": "bp_max_charge_power_w",
+        "poAiSchedule.bpDsgPwrMax": "bp_max_discharge_power_w",
+    }
+    for api_key, sensor_key in _ai_schedule.items():
+        full_key = ems_prefix + api_key
+        if full_key in quota_data:
+            fv = _safe_float(quota_data[full_key])
+            if fv is not None:
+                result[sensor_key] = fv

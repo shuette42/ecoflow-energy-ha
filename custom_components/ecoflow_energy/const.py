@@ -195,7 +195,74 @@ POWEROCEAN_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("ems_feed_power_limit_w", "Feed Power Limit", "W", "power", "measurement", "mdi:transmission-tower-export", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("ems_feed_ratio_pct", "Feed Ratio", "%", None, "measurement", "mdi:percent", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("batt_charge_discharge_state", "Battery Charge/Discharge State", None, None, None, "mdi:battery-sync", "diagnostic"),
+    # --- EMS / System extended sensors (diagnostic, disabled by default) ---
+    EcoFlowSensorDef("ems_charge_upper_limit_pct", "EMS Charge Upper Limit", "%", None, "measurement", "mdi:battery-charging-high", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("ems_discharge_lower_limit_pct", "EMS Discharge Lower Limit", "%", None, "measurement", "mdi:battery-alert-variant-outline", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("ems_keep_soc_pct", "EMS Keep SoC", "%", None, "measurement", "mdi:battery-lock", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("ems_backup_ratio_pct", "EMS Backup Ratio", "%", None, "measurement", "mdi:battery-lock-open", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("mppt1_fault_code", "MPPT 1 Fault Code", None, None, None, "mdi:alert-circle-outline", "diagnostic", disabled_by_default=True),
+    EcoFlowSensorDef("mppt2_fault_code", "MPPT 2 Fault Code", None, None, None, "mdi:alert-circle-outline", "diagnostic", disabled_by_default=True),
+    EcoFlowSensorDef("pcs_ac_error_code", "PCS AC Error Code", None, None, None, "mdi:alert-circle-outline", "diagnostic", disabled_by_default=True),
+    EcoFlowSensorDef("pcs_dc_error_code", "PCS DC Error Code", None, None, None, "mdi:alert-circle-outline", "diagnostic", disabled_by_default=True),
+    EcoFlowSensorDef("pcs_ac_warning_code", "PCS AC Warning Code", None, None, None, "mdi:alert-outline", "diagnostic", disabled_by_default=True),
+    EcoFlowSensorDef("wifi_status", "WiFi Status", None, None, None, "mdi:wifi", "diagnostic", disabled_by_default=True),
+    EcoFlowSensorDef("ethernet_status", "Ethernet Status", None, None, None, "mdi:ethernet", "diagnostic", disabled_by_default=True),
+    EcoFlowSensorDef("cellular_status", "4G Status", None, None, None, "mdi:signal-4g", "diagnostic", disabled_by_default=True),
+    EcoFlowSensorDef("ems_led_brightness", "EMS LED Brightness", None, None, "measurement", "mdi:brightness-6", "diagnostic", disabled_by_default=True),
+    EcoFlowSensorDef("ems_work_state", "EMS Work State", None, None, None, "mdi:cog", "diagnostic", disabled_by_default=True),
+    EcoFlowSensorDef("ems_total_battery_capacity_wh", "Total Battery Capacity", "Wh", "energy_storage", "measurement", "mdi:battery", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("pcs_max_output_power_w", "PCS Max Output Power", "W", "power", "measurement", "mdi:flash-triangle", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("pcs_max_input_power_w", "PCS Max Input Power", "W", "power", "measurement", "mdi:flash-triangle", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("bp_max_charge_power_w", "Battery Max Charge Power", "W", "power", "measurement", "mdi:battery-charging", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("bp_max_discharge_power_w", "Battery Max Discharge Power", "W", "power", "measurement", "mdi:battery", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
 ]
+
+
+def _build_po_pack_sensors(pack_num: int) -> list[EcoFlowSensorDef]:
+    """Build sensor definitions for a PowerOcean battery pack.
+
+    Pack 1: 7 core sensors enabled, 17 diagnostic disabled.
+    Packs 2-5: all 24 sensors disabled by default.
+    """
+    p = f"pack{pack_num}"
+    enabled = pack_num == 1  # Only Pack 1 core sensors enabled by default
+
+    core = [
+        EcoFlowSensorDef(f"{p}_soc", f"Pack {pack_num} SoC", "%", "battery", "measurement", "mdi:battery", suggested_display_precision=0, disabled_by_default=not enabled),
+        EcoFlowSensorDef(f"{p}_power_w", f"Pack {pack_num} Power", "W", "power", "measurement", "mdi:flash", suggested_display_precision=0, disabled_by_default=not enabled),
+        EcoFlowSensorDef(f"{p}_soh", f"Pack {pack_num} SoH", "%", None, "measurement", "mdi:battery-heart-variant", suggested_display_precision=0, disabled_by_default=not enabled),
+        EcoFlowSensorDef(f"{p}_cycles", f"Pack {pack_num} Cycles", None, None, "total_increasing", "mdi:battery-sync", suggested_display_precision=0, disabled_by_default=not enabled),
+        EcoFlowSensorDef(f"{p}_voltage_v", f"Pack {pack_num} Voltage", "V", "voltage", "measurement", "mdi:flash-triangle", suggested_display_precision=1, disabled_by_default=not enabled),
+        EcoFlowSensorDef(f"{p}_current_a", f"Pack {pack_num} Current", "A", "current", "measurement", "mdi:current-dc", suggested_display_precision=2, disabled_by_default=not enabled),
+        EcoFlowSensorDef(f"{p}_remain_watth", f"Pack {pack_num} Remaining Capacity", "Wh", "energy_storage", "measurement", "mdi:battery-clock", suggested_display_precision=0, disabled_by_default=not enabled),
+    ]
+
+    diagnostic = [
+        EcoFlowSensorDef(f"{p}_max_cell_temp_c", f"Pack {pack_num} Max Cell Temp", "\u00b0C", "temperature", "measurement", "mdi:thermometer-chevron-up", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
+        EcoFlowSensorDef(f"{p}_min_cell_temp_c", f"Pack {pack_num} Min Cell Temp", "\u00b0C", "temperature", "measurement", "mdi:thermometer-chevron-down", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
+        EcoFlowSensorDef(f"{p}_env_temp_c", f"Pack {pack_num} Environment Temp", "\u00b0C", "temperature", "measurement", "mdi:thermometer", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
+        EcoFlowSensorDef(f"{p}_calendar_soh", f"Pack {pack_num} Calendar SoH", "%", None, "measurement", "mdi:battery-heart-variant", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
+        EcoFlowSensorDef(f"{p}_cycle_soh", f"Pack {pack_num} Cycle SoH", "%", None, "measurement", "mdi:battery-heart-variant", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
+        EcoFlowSensorDef(f"{p}_accu_chg_energy_kwh", f"Pack {pack_num} Lifetime Charge Energy", "kWh", "energy", "total_increasing", "mdi:battery-charging", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+        EcoFlowSensorDef(f"{p}_accu_dsg_energy_kwh", f"Pack {pack_num} Lifetime Discharge Energy", "kWh", "energy", "total_increasing", "mdi:battery", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+        EcoFlowSensorDef(f"{p}_max_mos_temp_c", f"Pack {pack_num} Max MOSFET Temp", "\u00b0C", "temperature", "measurement", "mdi:thermometer-alert", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
+        EcoFlowSensorDef(f"{p}_hv_mos_temp_c", f"Pack {pack_num} HV MOSFET Temp", "\u00b0C", "temperature", "measurement", "mdi:thermometer-alert", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
+        EcoFlowSensorDef(f"{p}_lv_mos_temp_c", f"Pack {pack_num} LV MOSFET Temp", "\u00b0C", "temperature", "measurement", "mdi:thermometer-alert", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
+        EcoFlowSensorDef(f"{p}_bus_voltage_v", f"Pack {pack_num} Bus Voltage", "V", "voltage", "measurement", "mdi:flash-triangle", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
+        EcoFlowSensorDef(f"{p}_ptc_temp_c", f"Pack {pack_num} PTC Heater Temp", "\u00b0C", "temperature", "measurement", "mdi:thermometer", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
+        EcoFlowSensorDef(f"{p}_cell_max_vol_mv", f"Pack {pack_num} Max Cell Voltage", "mV", "voltage", "measurement", "mdi:sine-wave", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+        EcoFlowSensorDef(f"{p}_cell_min_vol_mv", f"Pack {pack_num} Min Cell Voltage", "mV", "voltage", "measurement", "mdi:sine-wave", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+        EcoFlowSensorDef(f"{p}_design_cap_mah", f"Pack {pack_num} Design Capacity", "mAh", None, "measurement", "mdi:battery", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+        EcoFlowSensorDef(f"{p}_full_cap_mah", f"Pack {pack_num} Full Capacity", "mAh", None, "measurement", "mdi:battery", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+        EcoFlowSensorDef(f"{p}_error_code", f"Pack {pack_num} Error Code", None, None, None, "mdi:alert-circle-outline", "diagnostic", disabled_by_default=True),
+    ]
+
+    return core + diagnostic
+
+
+# Append per-pack sensors (5 packs x 24 sensors = 120 sensors)
+for _pack_num in range(1, 6):
+    POWEROCEAN_SENSORS.extend(_build_po_pack_sensors(_pack_num))
 
 POWEROCEAN_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
 ]

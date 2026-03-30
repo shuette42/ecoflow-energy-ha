@@ -23,7 +23,7 @@
 
 ## Highlights
 
-- **50+ sensors per device** — power, energy, battery, temperature, diagnostics
+- **Up to 200 sensors per device** — power, energy, battery packs, temperature, diagnostics
 - **Energy Dashboard ready** — local Riemann-sum kWh with gap detection
 - **Real-time out of the box** — Delta gets MQTT push; PowerOcean Enhanced: ~3 s updates
 - **Switches & number controls** — AC/DC output, charge speed, SoC limits
@@ -38,16 +38,16 @@
 
 | | Sensors | Controls | Energy Sensors | Update Rate |
 |:---|:---:|:---:|:---:|:---|
-| **PowerOcean** — Home Battery | 63 | — | 6 (solar, grid, battery, home) | ~30 s standard / ~3 s enhanced |
+| **PowerOcean** — Home Battery | 202 | — | 6 (solar, grid, battery, home) | ~30 s standard / ~3 s enhanced |
 | **Delta 2 Max** — Portable Power | 94 | 7 switches, 8 numbers | 4 (solar 1+2, AC in/out) | ~30 s + MQTT push |
 | **Smart Plug** — Switchable Outlet | 11 | 1 switch, 2 numbers | 1 (total energy) | ~30 s + MQTT push |
 
 > **Tip:** Other Delta-series devices (Delta Pro, Delta 2, etc.) should work automatically with the Delta sensor set.
 
 <details>
-<summary><b>PowerOcean</b> — 3-phase grid, MPPT tracking, battery diagnostics, EMS state</summary>
+<summary><b>PowerOcean</b> — 3-phase grid, MPPT tracking, multi-pack battery, EMS diagnostics</summary>
 
-3-phase grid monitoring (voltage, current, power per phase) · MPPT per-string tracking (2 strings) · Battery diagnostics (SoH, cycles, cell temps & voltages, MOSFET temps) · EMS state, work mode, feed mode, grid status, power factor
+3-phase grid monitoring (voltage, current, power per phase) · MPPT per-string tracking (2 strings) · **Multi-battery-pack support** (up to 5 BP5000 packs — per-pack SoC, power, SoH, cycles, temperatures, lifetime energy) · Battery diagnostics (cell temps & voltages, MOSFET temps) · EMS state, work mode, feed mode, grid status, power factor · System diagnostics (fault codes, connectivity status, capacity limits)
 
 **Enhanced Mode** upgrades to ~3 s WSS Protobuf push — requires EcoFlow email & password.
 

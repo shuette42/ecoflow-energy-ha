@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.0] - 2026-03-30
+
+### Added
+- PowerOcean: multi-battery-pack support — per-pack sensors for up to 5 BP5000 packs (120 new sensors, 7 enabled for Pack 1)
+- PowerOcean: 19 additional EMS/system diagnostic sensors (SoC limits, fault codes, connectivity, system capabilities)
+- PowerOcean: lifetime energy counters per battery pack (accumulated charge/discharge kWh)
+- PowerOcean: multi-pack data in Enhanced Mode (Protobuf heartbeat extracts all packs)
+
 ## [1.4.0] - 2026-03-30
 
 ### Added

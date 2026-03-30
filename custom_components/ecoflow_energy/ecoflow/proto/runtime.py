@@ -151,10 +151,17 @@ def _typed_runtime_map(headers: list[dict], source: bytes) -> tuple[dict[str, An
     # 2. Convert to dict (only present fields, proto field names preserved)
     fields = MessageToDict(msg, preserving_proto_field_name=True)
 
-    # 3. For repeated messages, extract first element
+    # 3. For repeated messages, extract first element (keep all for multi-pack)
     if config.flatten_key:
         items = fields.get(config.flatten_key, [])
-        fields = items[0] if items else {}
+        if items:
+            # Keep first item as before (backward compatible for existing bp_* sensors)
+            first = items[0] if isinstance(items[0], dict) else {}
+            # Store all items for multi-pack extraction
+            first["_all_packs"] = items
+            fields = first
+        else:
+            fields = {}
 
     # 4. Build mapped dict with renames and available_keys tracking
     mapped: dict[str, Any] = _empty_mapped()

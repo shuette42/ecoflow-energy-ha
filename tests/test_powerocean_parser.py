@@ -8,6 +8,8 @@ from ecoflow_energy.ecoflow.parsers.powerocean import (
     parse_powerocean_http_quota,
     _extract_battery_pack,
     _extract_energy_stream,
+    _extract_all_battery_packs,
+    _extract_ems_extended,
 )
 
 
@@ -581,3 +583,291 @@ class TestSafeFloat:
     def test_zero_included(self):
         result = parse_powerocean_http_quota({"mpptPwr": 0})
         assert result["solar_w"] == 0.0
+
+
+# ===========================================================================
+# Multi-Battery-Pack Extraction (_extract_all_battery_packs)
+# ===========================================================================
+
+
+class TestMultiBatteryPack:
+    """Tests for per-pack battery extraction (pack{n}_* keys)."""
+
+    # Real probe data structure (2 packs from HJ31ZDH4ZF7H0170)
+    PACK1_DATA = {
+        "bpPwr": 2486.4836, "bpSoc": 76, "bpSoh": 100,
+        "bpCycles": 464, "bpVol": 54.671, "bpAmp": 45.48085,
+        "bpRemainWatth": 3891.2, "bpMaxCellTemp": 23.0,
+        "bpMinCellTemp": 21.0, "bpEnvTemp": 33.0,
+        "bpCalendarSoh": 100.0, "bpCycleSoh": 100.0,
+        "bpMaxMosTemp": 41.0, "bpHvMosTemp": 41.0,
+        "bpLvMosTemp": 38.0, "bpBusVol": 809.11285,
+        "bpPtcTemp": 22.0, "bpCellMaxVol": 3422.0,
+        "bpCellMinVol": 3414.0, "bpDesignCap": 100000,
+        "bpFullCap": 100000, "bpErrCode": 0,
+        "bpAccuChgEnergy": 2238706, "bpAccuDsgEnergy": 2147108,
+    }
+
+    PACK2_DATA = {
+        "bpPwr": 2529.1938, "bpSoc": 76, "bpSoh": 100,
+        "bpCycles": 464, "bpVol": 54.698, "bpAmp": 46.23924,
+        "bpRemainWatth": 3891.2, "bpMaxCellTemp": 24.0,
+        "bpMinCellTemp": 21.0, "bpEnvTemp": 34.0,
+        "bpCalendarSoh": 100.0, "bpCycleSoh": 100.0,
+        "bpMaxMosTemp": 42.0, "bpHvMosTemp": 42.0,
+        "bpLvMosTemp": 39.0, "bpBusVol": 809.7283,
+        "bpPtcTemp": 22.0, "bpCellMaxVol": 3420.0,
+        "bpCellMinVol": 3412.0, "bpDesignCap": 100000,
+        "bpFullCap": 100000, "bpErrCode": 0,
+        "bpAccuChgEnergy": 2207455, "bpAccuDsgEnergy": 2122737,
+    }
+
+    def _two_pack_data(self):
+        """Build quota_data with 2 battery packs (dict form)."""
+        return {
+            "bp_addr.HJ32ZDH5ZG190227": dict(self.PACK1_DATA),
+            "bp_addr.HJ32ZDH5ZG190278": dict(self.PACK2_DATA),
+        }
+
+    def test_extract_two_packs(self):
+        """Two packs produce pack1_* and pack2_* keys."""
+        result = _extract_all_battery_packs(self._two_pack_data())
+        assert "pack1_soc" in result
+        assert "pack2_soc" in result
+        assert "pack3_soc" not in result
+
+    def test_pack1_soc_from_probe_data(self):
+        """Pack 1 SoC matches real probe value."""
+        result = _extract_all_battery_packs(self._two_pack_data())
+        assert result["pack1_soc"] == 76.0
+
+    def test_pack2_power_from_probe_data(self):
+        """Pack 2 power matches real probe value."""
+        result = _extract_all_battery_packs(self._two_pack_data())
+        assert result["pack2_power_w"] == pytest.approx(2529.1938)
+
+    def test_accu_energy_wh_to_kwh(self):
+        """Accumulated energy converts from Wh to kWh."""
+        result = _extract_all_battery_packs(self._two_pack_data())
+        assert result["pack1_accu_chg_energy_kwh"] == pytest.approx(2238.706)
+        assert result["pack1_accu_dsg_energy_kwh"] == pytest.approx(2147.108)
+        assert result["pack2_accu_chg_energy_kwh"] == pytest.approx(2207.455)
+        assert result["pack2_accu_dsg_energy_kwh"] == pytest.approx(2122.737)
+
+    def test_pack1_all_core_fields(self):
+        """All 7 core fields extracted for pack 1."""
+        result = _extract_all_battery_packs(self._two_pack_data())
+        assert result["pack1_soc"] == 76.0
+        assert result["pack1_power_w"] == pytest.approx(2486.4836)
+        assert result["pack1_soh"] == 100.0
+        assert result["pack1_cycles"] == 464.0
+        assert result["pack1_voltage_v"] == pytest.approx(54.671)
+        assert result["pack1_current_a"] == pytest.approx(45.48085)
+        assert result["pack1_remain_watth"] == pytest.approx(3891.2)
+
+    def test_pack1_diagnostic_fields(self):
+        """Diagnostic fields extracted for pack 1."""
+        result = _extract_all_battery_packs(self._two_pack_data())
+        assert result["pack1_max_cell_temp_c"] == 23.0
+        assert result["pack1_min_cell_temp_c"] == 21.0
+        assert result["pack1_env_temp_c"] == 33.0
+        assert result["pack1_calendar_soh"] == 100.0
+        assert result["pack1_cycle_soh"] == 100.0
+        assert result["pack1_max_mos_temp_c"] == 41.0
+        assert result["pack1_hv_mos_temp_c"] == 41.0
+        assert result["pack1_lv_mos_temp_c"] == 38.0
+        assert result["pack1_bus_voltage_v"] == pytest.approx(809.11285)
+        assert result["pack1_ptc_temp_c"] == 22.0
+        assert result["pack1_cell_max_vol_mv"] == 3422.0
+        assert result["pack1_cell_min_vol_mv"] == 3414.0
+        assert result["pack1_design_cap_mah"] == 100000.0
+        assert result["pack1_full_cap_mah"] == 100000.0
+        assert result["pack1_error_code"] == 0.0
+
+    def test_pack_from_json_string(self):
+        """Battery pack data as JSON string (API format)."""
+        data = {
+            "bp_addr.PACK_SN1": json.dumps({"bpSoc": 80, "bpPwr": 1000}),
+        }
+        result = _extract_all_battery_packs(data)
+        assert result["pack1_soc"] == 80.0
+        assert result["pack1_power_w"] == 1000.0
+
+    def test_update_time_ignored(self):
+        """bp_addr.updateTime is not a battery pack."""
+        data = {"bp_addr.updateTime": "2026-03-30 17:46:38"}
+        result = _extract_all_battery_packs(data)
+        assert len(result) == 0
+
+    def test_max_5_packs(self):
+        """Packs beyond 5 are ignored."""
+        data = {}
+        for i in range(7):
+            data[f"bp_addr.PACK_{i}"] = {"bpSoc": 50 + i}
+        result = _extract_all_battery_packs(data)
+        assert "pack5_soc" in result
+        assert "pack6_soc" not in result
+        assert "pack7_soc" not in result
+
+    def test_invalid_json_skipped(self):
+        """Invalid JSON string is skipped, valid pack still extracted."""
+        data = {
+            "bp_addr.BAD": "not valid json",
+            "bp_addr.GOOD": {"bpSoc": 90},
+        }
+        result = _extract_all_battery_packs(data)
+        assert result["pack1_soc"] == 90.0
+
+    def test_non_dict_value_skipped(self):
+        """Non-dict/non-string value is skipped."""
+        data = {
+            "bp_addr.NUM": 12345,
+            "bp_addr.DICT": {"bpSoc": 70},
+        }
+        result = _extract_all_battery_packs(data)
+        assert result["pack1_soc"] == 70.0
+
+    def test_non_numeric_field_skipped(self):
+        """Non-numeric field values are skipped."""
+        data = {"bp_addr.P1": {"bpSoc": "unknown", "bpVol": 54.0}}
+        result = _extract_all_battery_packs(data)
+        assert "pack1_soc" not in result
+        assert result["pack1_voltage_v"] == 54.0
+
+    def test_no_packs(self):
+        """No battery packs returns empty dict."""
+        result = _extract_all_battery_packs({"mpptPwr": 100})
+        assert result == {}
+
+    def test_existing_bp_sensors_unchanged(self):
+        """Multi-pack extraction does not affect existing bp_* sensors."""
+        data = self._two_pack_data()
+        result = parse_powerocean_http_quota(data)
+        # Existing bp_* keys come from first pack via _extract_battery_pack
+        assert result["bp_soh_pct"] == 100.0
+        assert result["bp_cycles"] == 464.0
+        assert result["bp_voltage_v"] == pytest.approx(54.671)
+        # Pack-specific keys also present
+        assert result["pack1_soc"] == 76.0
+        assert result["pack2_soc"] == 76.0
+
+    def test_full_integration_with_parse(self):
+        """Full parser produces both bp_* and pack{n}_* keys."""
+        data = {
+            "mpptPwr": 3000,
+            "bpSoc": 76,
+            **self._two_pack_data(),
+        }
+        result = parse_powerocean_http_quota(data)
+        assert result["solar_w"] == 3000.0
+        assert result["soc_pct"] == 76.0
+        assert result["pack1_power_w"] == pytest.approx(2486.4836)
+        assert result["pack2_power_w"] == pytest.approx(2529.1938)
+
+
+# ===========================================================================
+# EMS Extended Fields
+# ===========================================================================
+
+
+class TestEMSExtended:
+    """Tests for EMS extended sensor extraction."""
+
+    def test_ems_charge_upper_limit(self):
+        data = {"ems_change_report.sysBatChgUpLimit": 100}
+        result = parse_powerocean_http_quota(data)
+        assert result["ems_charge_upper_limit_pct"] == 100.0
+
+    def test_ems_discharge_lower_limit(self):
+        data = {"ems_change_report.sysBatDsgDownLimit": 0}
+        result = parse_powerocean_http_quota(data)
+        assert result["ems_discharge_lower_limit_pct"] == 0.0
+
+    def test_ems_keep_soc(self):
+        data = {"ems_change_report.emsKeepSoc": 0}
+        result = parse_powerocean_http_quota(data)
+        assert result["ems_keep_soc_pct"] == 0.0
+
+    def test_ems_backup_ratio(self):
+        data = {"ems_change_report.sysBatBackupRatio": 0}
+        result = parse_powerocean_http_quota(data)
+        assert result["ems_backup_ratio_pct"] == 0.0
+
+    def test_mppt_fault_codes(self):
+        data = {
+            "ems_change_report.mppt1FaultCode": 0,
+            "ems_change_report.mppt2FaultCode": 0,
+        }
+        result = parse_powerocean_http_quota(data)
+        assert result["mppt1_fault_code"] == 0.0
+        assert result["mppt2_fault_code"] == 0.0
+
+    def test_pcs_error_codes(self):
+        data = {
+            "ems_change_report.pcsAcErrCode": 0,
+            "ems_change_report.pcsDcErrCode": 0,
+            "ems_change_report.pcsAcWarningCode": 0,
+        }
+        result = parse_powerocean_http_quota(data)
+        assert result["pcs_ac_error_code"] == 0.0
+        assert result["pcs_dc_error_code"] == 0.0
+        assert result["pcs_ac_warning_code"] == 0.0
+
+    def test_connectivity_status(self):
+        data = {
+            "ems_change_report.wifiStaStat": 0,
+            "ems_change_report.ethWanStat": 0,
+            "ems_change_report.iot4gSta": 2,
+        }
+        result = parse_powerocean_http_quota(data)
+        assert result["wifi_status"] == 0.0
+        assert result["ethernet_status"] == 0.0
+        assert result["cellular_status"] == 2.0
+
+    def test_ems_led_brightness(self):
+        data = {"ems_change_report.emsCtrlLedBright": 10}
+        result = parse_powerocean_http_quota(data)
+        assert result["ems_led_brightness"] == 10.0
+
+    def test_ems_work_state(self):
+        data = {"ems_change_report.emsWorkState": 0}
+        result = parse_powerocean_http_quota(data)
+        assert result["ems_work_state"] == 0.0
+
+    def test_ai_schedule_battery_capacity(self):
+        data = {"ems_change_report.poAiSchedule.bpFullCap": 10240.0}
+        result = parse_powerocean_http_quota(data)
+        assert result["ems_total_battery_capacity_wh"] == 10240.0
+
+    def test_ai_schedule_power_limits(self):
+        data = {
+            "ems_change_report.poAiSchedule.pcsMaxOutPwr": 9985.556,
+            "ems_change_report.poAiSchedule.pcsMaxInPwr": 10000.0,
+            "ems_change_report.poAiSchedule.bpChgPwrMax": 5000.0,
+            "ems_change_report.poAiSchedule.bpDsgPwrMax": 6600.0,
+        }
+        result = parse_powerocean_http_quota(data)
+        assert result["pcs_max_output_power_w"] == pytest.approx(9985.556)
+        assert result["pcs_max_input_power_w"] == 10000.0
+        assert result["bp_max_charge_power_w"] == 5000.0
+        assert result["bp_max_discharge_power_w"] == 6600.0
+
+    def test_ems_extended_missing_keys(self):
+        """Missing keys produce no sensor entries."""
+        result = parse_powerocean_http_quota({})
+        assert "ems_charge_upper_limit_pct" not in result
+        assert "mppt1_fault_code" not in result
+        assert "wifi_status" not in result
+        assert "ems_total_battery_capacity_wh" not in result
+
+    def test_ems_extended_does_not_conflict_with_existing(self):
+        """New EMS sensors do not conflict with existing ems_feed_mode etc."""
+        data = {
+            "ems_change_report.emsFeedMode": 3,
+            "ems_change_report.sysBatChgUpLimit": 100,
+            "ems_change_report.emsCtrlLedBright": 10,
+        }
+        result = parse_powerocean_http_quota(data)
+        assert result["ems_feed_mode"] == 3
+        assert result["ems_charge_upper_limit_pct"] == 100.0
+        assert result["ems_led_brightness"] == 10.0

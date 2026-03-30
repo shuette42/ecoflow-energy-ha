@@ -495,6 +495,10 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         "solar_energy_kwh", "home_energy_kwh",
         "grid_import_energy_kwh", "grid_export_energy_kwh",
         "batt_charge_energy_kwh", "batt_discharge_energy_kwh",
+        # PowerOcean per-pack (cycles + lifetime energy are total_increasing)
+        *(f"pack{n}_cycles" for n in range(1, 6)),
+        *(f"pack{n}_accu_chg_energy_kwh" for n in range(1, 6)),
+        *(f"pack{n}_accu_dsg_energy_kwh" for n in range(1, 6)),
         # Delta
         "bms_cycles",
         "solar2_energy_kwh", "ac_in_energy_kwh", "ac_out_energy_kwh",
@@ -692,6 +696,36 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         "pcs_pf_value": "pcs_power_factor",
         "bp_total_chg_energy": "batt_charge_energy_kwh",
         "bp_total_dsg_energy": "batt_discharge_energy_kwh",
+        "sys_bat_chg_up_limit": "ems_charge_upper_limit_pct",
+        "sys_bat_dsg_down_limit": "ems_discharge_lower_limit_pct",
+        "ems_keep_soc": "ems_keep_soc_pct",
+        "sys_bat_backup_ratio": "ems_backup_ratio_pct",
+    }
+
+    # Battery pack proto key suffix → sensor key suffix (for multi-pack extraction)
+    _BP_PACK_SENSOR_MAP: dict[str, str] = {
+        "bp_soc": "soc",
+        "bp_pwr": "power_w",
+        "bp_soh": "soh",
+        "bp_cycles": "cycles",
+        "bp_vol": "voltage_v",
+        "bp_amp": "current_a",
+        "bp_remain_watth": "remain_watth",
+        "bp_max_cell_temp": "max_cell_temp_c",
+        "bp_min_cell_temp": "min_cell_temp_c",
+        "bp_env_temp": "env_temp_c",
+        "bp_calendar_soh": "calendar_soh",
+        "bp_cycle_soh": "cycle_soh",
+        "bp_max_mos_temp": "max_mos_temp_c",
+        "bp_hv_mos_temp": "hv_mos_temp_c",
+        "bp_lv_mos_temp": "lv_mos_temp_c",
+        "bp_bus_vol": "bus_voltage_v",
+        "bp_ptc_temp": "ptc_temp_c",
+        "bp_cell_max_vol": "cell_max_vol_mv",
+        "bp_cell_min_vol": "cell_min_vol_mv",
+        "bp_design_cap": "design_cap_mah",
+        "bp_full_cap": "full_cap_mah",
+        "bp_err_code": "error_code",
     }
 
     def _flatten_heartbeat(self, raw: dict[str, Any]) -> dict[str, Any]:
@@ -748,6 +782,25 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def _remap_bp_keys(self, raw: dict[str, Any]) -> dict[str, Any]:
         """Remap battery heartbeat (cmd_id=7) and EMS change (cmd_id=8) keys to sensor keys."""
         result: dict[str, Any] = {}
+
+        # Multi-pack extraction from proto heartbeat (cmd_id=7)
+        all_packs = raw.pop("_all_packs", [])
+        for idx, pack_data in enumerate(all_packs[:5], 1):
+            if not isinstance(pack_data, dict):
+                continue
+            prefix = f"pack{idx}"
+            for proto_key, sensor_suffix in self._BP_PACK_SENSOR_MAP.items():
+                val = pack_data.get(proto_key)
+                if val is not None:
+                    result[f"{prefix}_{sensor_suffix}"] = float(val)
+            # Lifetime energy Wh -> kWh
+            for proto_key, sensor_suffix in (
+                ("bp_accu_chg_energy", "accu_chg_energy_kwh"),
+                ("bp_accu_dsg_energy", "accu_dsg_energy_kwh"),
+            ):
+                val = pack_data.get(proto_key)
+                if val is not None:
+                    result[f"{prefix}_{sensor_suffix}"] = float(val) / 1000.0
 
         # Try battery key mapping first, then EMS change mapping
         for proto_key, value in raw.items():

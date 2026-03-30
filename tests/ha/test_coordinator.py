@@ -977,6 +977,60 @@ class TestBpRemapping:
         assert result["batt_charge_energy_kwh"] == 15.0
         assert result["batt_discharge_energy_kwh"] == 12.0
 
+    async def test_multi_pack_proto_extraction(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """_all_packs in proto heartbeat extracts per-pack sensors."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        raw = {
+            "_all_packs": [
+                {"bp_soc": 76, "bp_pwr": 2486.48, "bp_vol": 54.671, "bp_accu_chg_energy": 2238706},
+                {"bp_soc": 74, "bp_pwr": 2529.19, "bp_vol": 54.698, "bp_accu_chg_energy": 2207455},
+            ],
+            "bp_soh": 100,
+        }
+        result = coordinator._remap_bp_keys(raw)
+
+        # Pack 1
+        assert result["pack1_soc"] == 76.0
+        assert result["pack1_power_w"] == 2486.48
+        assert result["pack1_voltage_v"] == 54.671
+        assert abs(result["pack1_accu_chg_energy_kwh"] - 2238.706) < 0.01
+
+        # Pack 2
+        assert result["pack2_soc"] == 74.0
+        assert result["pack2_power_w"] == 2529.19
+        assert result["pack2_voltage_v"] == 54.698
+        assert abs(result["pack2_accu_chg_energy_kwh"] - 2207.455) < 0.01
+
+        # Existing bp_* still mapped
+        assert result["bp_soh_pct"] == 100.0
+
+    async def test_multi_pack_max_5(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Only first 5 packs are extracted from _all_packs."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        raw = {
+            "_all_packs": [{"bp_soc": i * 10} for i in range(1, 8)],  # 7 packs
+        }
+        result = coordinator._remap_bp_keys(raw)
+
+        assert "pack1_soc" in result
+        assert "pack5_soc" in result
+        assert "pack6_soc" not in result
+        assert "pack7_soc" not in result
+
 
 # ===========================================================================
 # Monotonic Filter (_enforce_monotonic) — total_increasing regression guard
