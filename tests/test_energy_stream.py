@@ -99,26 +99,21 @@ class TestSocLimitSetPayload:
         assert b"\x40\x60" in payload
 
     def test_payload_contains_soc_values(self):
-        """The inner SysBatChgDsgSet message should contain all 4 fields."""
-        payload = build_soc_limit_set_payload(95, 10, backup_ratio=50, dev_soc=80, seq=1)
-        # field 1 = 95 (charge upper — per APK proto)
+        """The inner SysBatChgDsgSet message should contain both SoC fields."""
+        payload = build_soc_limit_set_payload(95, 10, seq=1)
+        # field 1 = 95 (charge upper)
         inner_field1 = _encode_field_varint(1, 95)
         # field 2 = 10 (discharge lower)
         inner_field2 = _encode_field_varint(2, 10)
-        # field 3 = 50 (backup ratio)
-        inner_field3 = _encode_field_varint(3, 50)
-        # field 4 = 80 (dev soc)
-        inner_field4 = _encode_field_varint(4, 80)
-        # All 4 must appear consecutively in the payload
-        assert inner_field1 + inner_field2 + inner_field3 + inner_field4 in payload
+        # Both must appear consecutively in the payload
+        assert inner_field1 + inner_field2 in payload
 
-    def test_payload_with_zero_backup_and_soc(self):
-        """Default backup_ratio=0 and dev_soc=0 still encode all 4 fields."""
+    def test_payload_with_zero_discharge(self):
+        """Value 0 for min_discharge_soc is correctly encoded."""
         payload = build_soc_limit_set_payload(100, 0, seq=1)
-        # field 3 = 0 (backup ratio) and field 4 = 0 (dev soc) encoded
-        inner_field3 = _encode_field_varint(3, 0)
-        inner_field4 = _encode_field_varint(4, 0)
-        assert inner_field3 + inner_field4 in payload
+        # field 2 = 0 must still be on the wire
+        inner_field2 = _encode_field_varint(2, 0)
+        assert inner_field2 in payload
 
     def test_default_seq_generates_timestamp(self):
         """Default seq=0 auto-generates from current timestamp."""
