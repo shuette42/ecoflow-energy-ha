@@ -73,7 +73,11 @@ def build_energy_stream_activate_payload(seq: int = 0) -> bytes:
 
 
 def build_soc_limit_set_payload(
-    max_charge_soc: int, min_discharge_soc: int, seq: int = 0,
+    max_charge_soc: int,
+    min_discharge_soc: int,
+    backup_ratio: int = 0,
+    dev_soc: int = 0,
+    seq: int = 0,
 ) -> bytes:
     """Build SysBatChgDsgSet protobuf payload for PowerOcean SoC limits.
 
@@ -81,9 +85,17 @@ def build_soc_limit_set_payload(
     Protobuf protocol (Enhanced Mode only).  Same header pattern as
     EnergyStreamSwitch but with cmd_id=112.
 
+    The device expects all 4 fields (APK proto: JtS1Sys.SysBatChgDsgSet):
+      field 1 = sys_bat_chg_up_limit   (charge upper)
+      field 2 = sys_bat_dsg_down_limie (discharge lower — typo in APK proto)
+      field 3 = sys_bat_backup_ratio
+      field 4 = dev_soc
+
     Args:
         max_charge_soc: Max charge SoC (50-100).
         min_discharge_soc: Min discharge SoC (0-30).
+        backup_ratio: Current backup ratio from device (pass-through).
+        dev_soc: Current device SoC from device (pass-through).
         seq: Sequence number.  Default 0 generates from timestamp.
 
     Returns:
@@ -92,10 +104,12 @@ def build_soc_limit_set_payload(
     if seq == 0:
         seq = int(time.time() * 1000) & 0x7FFFFFFF
 
-    # SysBatChgDsgSet: field 1 = sys_bat_chg_up_limit, field 2 = sys_bat_dsg_down_limit
+    # SysBatChgDsgSet (APK: JtS1Sys.proto) — all 4 fields required
     payload_bytes = (
         _encode_field_varint(1, max_charge_soc)
         + _encode_field_varint(2, min_discharge_soc)
+        + _encode_field_varint(3, backup_ratio)
+        + _encode_field_varint(4, dev_soc)
     )
 
     # Header — portal-exact field order (same as EnergyStreamSwitch, cmd_id=112):
