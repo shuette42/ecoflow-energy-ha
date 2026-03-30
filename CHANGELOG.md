@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 - PowerOcean: revert to 2-field SysBatChgDsgSet payload (charge upper + discharge lower only) — the 4-field version from v1.6.1 caused the device to reject discharge lower limit value 0
+- Proto3 zero-value readback: `MessageToDict` now includes fields with value 0 — previously, setting Min Discharge SoC to 0% was accepted by the device but HA reverted to the previous value because the proto3 decoder omitted zero-valued fields
 
 ## [1.6.3] - 2026-03-31
 
