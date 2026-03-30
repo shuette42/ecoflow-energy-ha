@@ -860,8 +860,8 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     ) -> bool:
         """Send SoC limits to PowerOcean via WSS Protobuf (Enhanced Mode only).
 
-        Sends a SysBatChgDsgSet message (cmd_func=96, cmd_id=112) that sets
-        both battery charge upper limit and discharge lower limit.
+        Sends a SysBatChgDsgSet message (cmd_func=96, cmd_id=112) with all
+        4 required fields: charge upper, discharge lower, backup ratio, dev SoC.
         """
         if not self._enhanced_mode:
             _LOGGER.warning("SoC limit SET requires Enhanced Mode (%s)", self.device_sn)
@@ -872,7 +872,13 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         from .ecoflow.energy_stream import build_soc_limit_set_payload
 
-        payload = build_soc_limit_set_payload(max_charge_soc, min_discharge_soc)
+        # Pass current backup_ratio and dev_soc from device data (required by firmware)
+        data = self.data or {}
+        backup_ratio = int(data.get("ems_backup_ratio_pct", 0))
+        dev_soc = int(data.get("bpSoc", data.get("bp_soc", 0)))
+        payload = build_soc_limit_set_payload(
+            max_charge_soc, min_discharge_soc, backup_ratio, dev_soc,
+        )
         ok = await self.hass.async_add_executor_job(
             self._mqtt_client.send_proto_set, payload,
         )

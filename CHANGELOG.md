@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.1] - 2026-03-31
+
+### Fixed
+- PowerOcean: Max Charge SoC SET now includes all 4 required protobuf fields (charge upper, discharge lower, backup ratio, device SoC) — previously only 2 fields were sent, causing the device to silently reject the charge limit change
+
 ## [1.6.0] - 2026-03-30
 
 ### Added
