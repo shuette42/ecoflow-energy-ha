@@ -104,13 +104,13 @@ def build_soc_limit_set_payload(
     if seq == 0:
         seq = int(time.time() * 1000) & 0x7FFFFFFF
 
-    # SysBatChgDsgSet (APK: JtS1Sys.proto) — field order swapped vs APK labels
-    # APK names field 1 as chg_up_limit and field 2 as dsg_down_limit,
-    # but live testing shows the device reads field 1 as discharge lower
-    # and field 2 as charge upper (confirmed: field swap fixes #12).
+    # SysBatChgDsgSet (APK: JtS1Sys.proto) — all 4 fields per proto definition.
+    # NOTE: only min_discharge_soc (field 2) is confirmed working via live testing.
+    # max_charge_soc (field 1) is sent but device firmware does not accept it
+    # reliably — requires further investigation with portal traffic capture.
     payload_bytes = (
-        _encode_field_varint(1, min_discharge_soc)
-        + _encode_field_varint(2, max_charge_soc)
+        _encode_field_varint(1, max_charge_soc)
+        + _encode_field_varint(2, min_discharge_soc)
         + _encode_field_varint(3, backup_ratio)
         + _encode_field_varint(4, dev_soc)
     )

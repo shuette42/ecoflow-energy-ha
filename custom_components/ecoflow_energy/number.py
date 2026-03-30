@@ -220,10 +220,7 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
         key = self._definition.key
         int_value = int(value)
 
-        if key == "max_charge_soc":
-            max_soc = int_value
-            min_soc = int(self.coordinator.data.get("ems_discharge_lower_limit_pct", 0))
-        elif key == "min_discharge_soc":
+        if key == "min_discharge_soc":
             max_soc = int(self.coordinator.data.get("ems_charge_upper_limit_pct", 100))
             min_soc = int_value
         else:

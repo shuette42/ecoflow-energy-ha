@@ -269,7 +269,6 @@ POWEROCEAN_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
 ]
 
 POWEROCEAN_NUMBERS: list[EcoFlowNumberDef] = [
-    EcoFlowNumberDef("max_charge_soc", "Max Charge SoC", "ems_charge_upper_limit_pct", "%", "mdi:battery-charging-100", 50, 100, 5, enhanced_only=True),
     EcoFlowNumberDef("min_discharge_soc", "Min Discharge SoC", "ems_discharge_lower_limit_pct", "%", "mdi:battery-alert-variant-outline", 0, 30, 5, enhanced_only=True),
 ]
 
