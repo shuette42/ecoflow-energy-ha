@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.2] - 2026-03-31
+
+### Fixed
+- PowerOcean: swap proto field order in SysBatChgDsgSet — device reads field 1 as discharge lower and field 2 as charge upper (opposite of APK proto labels)
+- PowerOcean: fix dev_soc lookup in SET payload — was reading unmapped key, now uses coordinator-mapped `soc_pct`
+
 ## [1.6.1] - 2026-03-31
 
 ### Fixed

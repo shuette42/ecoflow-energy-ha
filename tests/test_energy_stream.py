@@ -99,12 +99,16 @@ class TestSocLimitSetPayload:
         assert b"\x40\x60" in payload
 
     def test_payload_contains_soc_values(self):
-        """The inner SysBatChgDsgSet message should contain all 4 fields."""
+        """The inner SysBatChgDsgSet message should contain all 4 fields.
+
+        Field order is swapped vs APK labels: field 1 = discharge lower,
+        field 2 = charge upper (verified by live testing).
+        """
         payload = build_soc_limit_set_payload(95, 10, backup_ratio=50, dev_soc=80, seq=1)
-        # field 1 = 95 (charge upper)
-        inner_field1 = _encode_field_varint(1, 95)
-        # field 2 = 10 (discharge lower)
-        inner_field2 = _encode_field_varint(2, 10)
+        # field 1 = 10 (discharge lower — swapped)
+        inner_field1 = _encode_field_varint(1, 10)
+        # field 2 = 95 (charge upper — swapped)
+        inner_field2 = _encode_field_varint(2, 95)
         # field 3 = 50 (backup ratio)
         inner_field3 = _encode_field_varint(3, 50)
         # field 4 = 80 (dev soc)
