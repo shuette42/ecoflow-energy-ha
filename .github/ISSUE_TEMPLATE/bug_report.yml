@@ -7,6 +7,8 @@ body:
       value: |
         Thank you for reporting a bug. Please fill in the details below so we can investigate and fix it.
 
+        **Was your issue closed but the problem persists?** Due to GitHub permissions, only maintainers can reopen issues. Please comment on the closed issue describing what still doesn't work, and we will reopen it for you.
+
   - type: input
     id: ha_version
     attributes:

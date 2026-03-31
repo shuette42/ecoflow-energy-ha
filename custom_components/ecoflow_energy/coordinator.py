@@ -998,7 +998,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if power_w is not None:
                 total = self._energy_integrator.integrate(energy_key, abs(power_w))
                 if total is not None:
-                    self._device_data[energy_key] = round(total, 3)
+                    self._device_data[energy_key] = round(total, 2)
 
         # API totals: prefer over Riemann sum (more accurate when available)
         for power_key, energy_key in self._energy_from_api:
@@ -1011,7 +1011,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 if power_w is not None:
                     total = self._energy_integrator.integrate(energy_key, abs(power_w))
                     if total is not None:
-                        self._device_data[energy_key] = round(total, 3)
+                        self._device_data[energy_key] = round(total, 2)
 
     # ------------------------------------------------------------------
     # Stale detection + fallback switching (4-tier reconnect tier 4)
@@ -1038,7 +1038,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         age = time.monotonic() - self._last_mqtt_ts if self._last_mqtt_ts > 0 else float("inf")
 
         if age > STALE_THRESHOLD_S and self.update_interval is None:
-            _LOGGER.warning(
+            _LOGGER.info(
                 "MQTT stale for %s (%.0fs) — switching to HTTP fallback (tier 4)",
                 self.device_sn, age,
             )

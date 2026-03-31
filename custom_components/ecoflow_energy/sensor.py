@@ -81,6 +81,7 @@ class EcoFlowSensor(CoordinatorEntity[EcoFlowDeviceCoordinator], RestoreSensor):
         self._attr_native_unit_of_measurement = definition.unit
         self._attr_icon = definition.icon
         self._restored_value: float | int | str | None = None
+        self._last_written_value: float | int | str | None = None
 
         if definition.device_class:
             self._attr_device_class = SensorDeviceClass(definition.device_class)
@@ -103,6 +104,7 @@ class EcoFlowSensor(CoordinatorEntity[EcoFlowDeviceCoordinator], RestoreSensor):
         await super().async_added_to_hass()
         if (last := await self.async_get_last_sensor_data()) and last.native_value is not None:
             self._restored_value = last.native_value
+            self._last_written_value = last.native_value
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -112,7 +114,10 @@ class EcoFlowSensor(CoordinatorEntity[EcoFlowDeviceCoordinator], RestoreSensor):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        self.async_write_ha_state()
+        new_value = self.native_value
+        if new_value != self._last_written_value:
+            self._last_written_value = new_value
+            self.async_write_ha_state()
 
     @property
     def native_value(self) -> float | int | str | None:
@@ -148,6 +153,7 @@ class EcoFlowDiagnosticSensor(CoordinatorEntity[EcoFlowDeviceCoordinator], Senso
         self._key = key
         self._attr_unique_id = f"{coordinator.device_sn}_{key}"
         self._attr_translation_key = key
+        self._last_written_value: str | None = None
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -157,7 +163,10 @@ class EcoFlowDiagnosticSensor(CoordinatorEntity[EcoFlowDeviceCoordinator], Senso
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        self.async_write_ha_state()
+        new_value = self.native_value
+        if new_value != self._last_written_value:
+            self._last_written_value = new_value
+            self.async_write_ha_state()
 
     @property
     def native_value(self) -> str | None:

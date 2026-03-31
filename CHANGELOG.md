@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.0] - 2026-03-31
+
+### Changed
+- State update deduplication: entities only write to HA recorder when their value actually changes, reducing state writes by ~60-80% (previously every coordinator update triggered a state write for all entities regardless of value change)
+- Energy integration precision reduced from 3 to 2 decimal places (0.01 kWh resolution) to further reduce fractional churn on total_increasing sensors
+- Optimistic writes (switch, number) now sync dedup state to prevent one redundant write on the next coordinator tick
+
+### Fixed
+- MQTT fallback logging reduced from WARNING to INFO: transient stale/recovery transitions are self-healing and no longer clutter the HA log — both "switching to HTTP fallback" and "MQTT recovered" now log at INFO level as a matched pair
+
 ## [1.7.1] - 2026-03-31
 
 ### Fixed

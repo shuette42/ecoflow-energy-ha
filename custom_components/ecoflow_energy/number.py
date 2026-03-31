@@ -134,6 +134,8 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
         self._attr_native_max_value = definition.max_value
         self._attr_native_step = definition.step
 
+        self._last_written_value: float | None = None
+
     @property
     def available(self) -> bool:
         """Return True if entity is available."""
@@ -147,7 +149,10 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        self.async_write_ha_state()
+        new_value = self.native_value
+        if new_value != self._last_written_value:
+            self._last_written_value = new_value
+            self.async_write_ha_state()
 
     @property
     def native_value(self) -> float | None:
@@ -182,6 +187,7 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
 
             if self.coordinator.data is not None:
                 self.coordinator.data[self._definition.state_key] = value
+                self._last_written_value = float(value)  # keep dedup in sync
                 self.async_write_ha_state()
             return
 
@@ -208,6 +214,7 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
         # Next poll overwrites this with the actual device value.
         if self.coordinator.data is not None:
             self.coordinator.data[self._definition.state_key] = value
+            self._last_written_value = float(value)  # keep dedup in sync
             self.async_write_ha_state()
 
 
@@ -236,6 +243,7 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
             self.coordinator.set_device_value(state_key, value)
             if self.coordinator.data is not None:
                 self.coordinator.data[state_key] = value
+            self._last_written_value = float(value)  # keep dedup in sync
             self.async_write_ha_state()
 
 

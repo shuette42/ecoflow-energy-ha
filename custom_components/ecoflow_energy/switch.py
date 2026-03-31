@@ -136,6 +136,8 @@ class EcoFlowSwitch(CoordinatorEntity[EcoFlowDeviceCoordinator], SwitchEntity):
         self._optimistic_value: bool | None = None
         self._optimistic_lock_until: float = 0.0
 
+        self._last_written_value: bool | None = None
+
     @property
     def available(self) -> bool:
         """Return True if entity is available."""
@@ -183,6 +185,7 @@ class EcoFlowSwitch(CoordinatorEntity[EcoFlowDeviceCoordinator], SwitchEntity):
         # Optimistic update: immediately reflect the new state
         self._optimistic_value = turn_on
         self._optimistic_lock_until = time.monotonic() + OPTIMISTIC_LOCK_S
+        self._last_written_value = turn_on  # keep dedup in sync
         self.async_write_ha_state()
 
         # Send the command via the coordinator
@@ -217,7 +220,10 @@ class EcoFlowSwitch(CoordinatorEntity[EcoFlowDeviceCoordinator], SwitchEntity):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        self.async_write_ha_state()
+        new_value = self.is_on
+        if new_value != self._last_written_value:
+            self._last_written_value = new_value
+            self.async_write_ha_state()
 
 
 def _get_switch_defs(device_type: str) -> list[EcoFlowSwitchDef]:
