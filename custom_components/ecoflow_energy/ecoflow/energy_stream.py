@@ -88,9 +88,16 @@ def build_soc_limit_set_payload(
     when fields 3+4 are included.  Sending only 2 fields matches the
     original working implementation (v1.6.0).
 
+    Note: Only min_discharge_soc (field 2) is confirmed working via live
+    testing.  max_charge_soc (field 1) is sent as pass-through for protocol
+    completeness, but the device does not reliably accept charge limit
+    changes through this command.
+
     Args:
-        max_charge_soc: Max charge SoC (50-100).
-        min_discharge_soc: Min discharge SoC (0-30).
+        max_charge_soc: Max charge SoC (50-100).  Sent as pass-through;
+            not reliably accepted by the device.
+        min_discharge_soc: Min discharge SoC (0-30).  Confirmed working
+            via live testing.
         seq: Sequence number.  Default 0 generates from timestamp.
 
     Returns:

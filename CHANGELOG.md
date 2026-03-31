@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.1] - 2026-03-31
+
+### Fixed
+- Protobuf bindings backward compatibility: runtime version check now wrapped in try/except for protobuf <5.29
+- Coordinator: encapsulated `_device_data` access via public `set_device_value()` method
+- Docstrings updated: `async_set_soc_limits` (2 fields, not 4) and `build_soc_limit_set_payload` (min discharge confirmed, max charge pass-through only)
+
 ## [1.7.0] - 2026-03-31
 
 ### Fixed

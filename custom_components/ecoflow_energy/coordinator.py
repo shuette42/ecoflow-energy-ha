@@ -158,6 +158,14 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Return the current device data dict."""
         return self._device_data
 
+    def set_device_value(self, key: str, value: Any) -> None:
+        """Set a single value in the persistent device data store.
+
+        Used by entity platforms (e.g. number) for optimistic updates that
+        must survive coordinator refresh cycles.
+        """
+        self._device_data[key] = value
+
     @property
     def enhanced_mode(self) -> bool:
         """Return whether Enhanced Mode is active."""
@@ -871,8 +879,8 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     ) -> bool:
         """Send SoC limits to PowerOcean via WSS Protobuf (Enhanced Mode only).
 
-        Sends a SysBatChgDsgSet message (cmd_func=96, cmd_id=112) with all
-        4 required fields: charge upper, discharge lower, backup ratio, dev SoC.
+        Sends a SysBatChgDsgSet message (cmd_func=96, cmd_id=112) with
+        2 fields: charge upper limit and discharge lower limit.
         """
         if not self._enhanced_mode:
             _LOGGER.warning("SoC limit SET requires Enhanced Mode (%s)", self.device_sn)
