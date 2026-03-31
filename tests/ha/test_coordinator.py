@@ -1209,36 +1209,51 @@ class TestBpRemapping:
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """Partial heartbeat (only Pack 1) preserves Pack 2 remain_watth (#10).
+        """Separate heartbeats per pack preserve accumulated remain_watth (#10).
 
-        When the device sends a heartbeat with only one pack, the aggregate
-        bp_remain_watth should include the last known value for the other pack
-        from _device_data, not revert to a single-pack sum.
+        The device sends one pack per heartbeat (~1s apart).  SN-based indexing
+        ensures each pack maps to a stable pack{n}_* key, and the aggregate
+        bp_remain_watth always sums all known packs from _device_data.
         """
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
 
-        # First heartbeat: both packs report
+        # First heartbeat: Pack A reports (SN=AAA)
         msg1 = coordinator._remap_bp_keys({
             "all_packs": [
-                {"bp_soc": 76, "bp_pwr": 2486, "bp_remain_watth": 2400},
-                {"bp_soc": 74, "bp_pwr": 2529, "bp_remain_watth": 2600},
+                {"bp_sn": "AAA", "bp_soc": 76, "bp_pwr": 2486,
+                 "bp_remain_watth": 2400},
             ],
         })
         coordinator._apply_data(msg1)
-        assert coordinator.device_data["bp_remain_watth"] == 5000.0
+        assert coordinator.device_data["pack1_remain_watth"] == 2400.0
 
-        # Second heartbeat: only Pack 1 reports (Pack 2 absent from message)
+        # Second heartbeat: Pack B reports (SN=BBB) — different SN → pack2
         msg2 = coordinator._remap_bp_keys({
             "all_packs": [
-                {"bp_soc": 75, "bp_pwr": 2400, "bp_remain_watth": 2300},
+                {"bp_sn": "BBB", "bp_soc": 74, "bp_pwr": 2529,
+                 "bp_remain_watth": 2600},
             ],
         })
         coordinator._apply_data(msg2)
 
-        # Pack 1 updated to 2300, Pack 2 retains last known 2600 → total 4900
+        # Both packs in device_data, aggregate is sum
+        assert coordinator.device_data["pack1_remain_watth"] == 2400.0
+        assert coordinator.device_data["pack2_remain_watth"] == 2600.0
+        assert coordinator.device_data["bp_remain_watth"] == 5000.0
+
+        # Third heartbeat: Pack A again with updated value
+        msg3 = coordinator._remap_bp_keys({
+            "all_packs": [
+                {"bp_sn": "AAA", "bp_soc": 75, "bp_pwr": 2400,
+                 "bp_remain_watth": 2300},
+            ],
+        })
+        coordinator._apply_data(msg3)
+
+        # Pack 1 updated to 2300, Pack 2 retains 2600 → total 4900
         assert coordinator.device_data["pack1_remain_watth"] == 2300.0
         assert coordinator.device_data["pack2_remain_watth"] == 2600.0
         assert coordinator.device_data["bp_remain_watth"] == 4900.0

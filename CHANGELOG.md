@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.2] - 2026-03-31
+
+### Fixed
+- PowerOcean Enhanced Mode: stable per-pack sensor numbering via battery serial number — each physical pack now consistently maps to the same `pack{n}_*` sensors across heartbeats, fixing Pack 2 sensors not updating (#10)
+
 ## [1.8.1] - 2026-03-31
 
 ### Fixed

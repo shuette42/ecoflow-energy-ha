@@ -129,6 +129,10 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._consecutive_http_failures: int = 0
         self._device_available: bool = True
         self._event_log: deque[dict[str, Any]] = deque(maxlen=50)
+        # Stable SN → pack index mapping for proto heartbeats (cmd_id=7).
+        # Each heartbeat contains only one pack; this map ensures the same
+        # physical pack always maps to the same pack{n}_* sensor keys.
+        self._bp_sn_to_index: dict[str, int] = {}
 
         # Energy integrator for power → kWh Riemann sum (all device types)
         state_path = hass.config.path(f".storage/ecoflow_energy_{self.device_sn}.json")
@@ -820,7 +824,21 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "BP heartbeat for %s: %d pack(s) in message, %d real",
             self.device_sn, len(all_packs), len(real_packs),
         )
-        for idx, pack_data in enumerate(real_packs[:5], 1):
+        for pos, pack_data in enumerate(real_packs[:5], 1):
+            # Stable pack numbering via SN: the device sends one pack per
+            # heartbeat, so positional indexing would assign every pack to
+            # pack1.  Using bp_sn as key gives each physical battery a
+            # consistent pack number across messages.
+            sn = pack_data.get("bp_sn", "")
+            if sn:
+                if sn not in self._bp_sn_to_index:
+                    self._bp_sn_to_index[sn] = len(self._bp_sn_to_index) + 1
+                idx = self._bp_sn_to_index[sn]
+            else:
+                # No SN available — fall back to positional index
+                idx = pos
+            if idx > 5:
+                continue
             prefix = f"pack{idx}"
             for proto_key, sensor_suffix in self._BP_PACK_SENSOR_MAP.items():
                 val = pack_data.get(proto_key)
