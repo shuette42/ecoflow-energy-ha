@@ -351,6 +351,173 @@ class TestHTTPPolling:
 
 
 # ===========================================================================
+# Reauth Suppression (#2)
+# ===========================================================================
+
+
+class TestReauthSuppression:
+    """Error 1006 and Enhanced Mode MQTT guard must not trigger false reauth (#2)."""
+
+    async def test_1006_does_not_increment_failure_counter(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+        mock_iot_api,
+        mock_mqtt_client,
+        mock_http_client,
+    ) -> None:
+        """HTTP error 1006 must not increment the failure counter."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        await coordinator.async_setup()
+
+        mock_http_client.get_quota_all = AsyncMock(return_value=None)
+        mock_http_client.last_error_code = "1006"
+
+        for _ in range(10):
+            await coordinator._async_update_data()
+
+        assert coordinator._consecutive_http_failures == 0
+
+    async def test_1006_does_not_trigger_reauth(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+        mock_iot_api,
+        mock_mqtt_client,
+        mock_http_client,
+    ) -> None:
+        """5+ error 1006 responses must not trigger reauth."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        await coordinator.async_setup()
+
+        mock_http_client.get_quota_all = AsyncMock(return_value=None)
+        mock_http_client.last_error_code = "1006"
+
+        for _ in range(10):
+            await coordinator._async_update_data()
+
+        # No reauth should have been triggered
+        assert not hasattr(standard_config_entry, "_async_start_reauth_called") or \
+            not standard_config_entry._async_start_reauth_called
+
+    async def test_non_1006_still_triggers_reauth_standard_mode(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+        mock_iot_api,
+        mock_mqtt_client,
+        mock_http_client,
+    ) -> None:
+        """Non-1006 HTTP errors still trigger reauth after 5 failures in Standard Mode."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        await coordinator.async_setup()
+
+        mock_http_client.get_quota_all = AsyncMock(return_value=None)
+        mock_http_client.last_error_code = "network"
+
+        with patch.object(standard_config_entry, "async_start_reauth") as mock_reauth:
+            for _ in range(5):
+                await coordinator._async_update_data()
+
+            mock_reauth.assert_called_once()
+
+    async def test_enhanced_mode_no_reauth_when_mqtt_active(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+        mock_enhanced_auth,
+        mock_mqtt_client,
+        mock_http_client,
+    ) -> None:
+        """Enhanced Mode: HTTP failures do not trigger reauth when MQTT is delivering data."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        await coordinator.async_setup()
+
+        # Simulate MQTT has delivered data
+        coordinator._last_mqtt_ts = 1000.0
+
+        mock_http_client.get_quota_all = AsyncMock(return_value=None)
+        mock_http_client.last_error_code = "network"
+
+        with patch.object(enhanced_config_entry, "async_start_reauth") as mock_reauth:
+            for _ in range(10):
+                await coordinator._async_update_data()
+
+            mock_reauth.assert_not_called()
+
+        await coordinator.async_shutdown()
+
+    async def test_enhanced_mode_reauth_when_mqtt_never_connected(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+        mock_enhanced_auth,
+        mock_mqtt_client,
+        mock_http_client,
+    ) -> None:
+        """Enhanced Mode: HTTP failures DO trigger reauth when MQTT never delivered data."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        await coordinator.async_setup()
+
+        # MQTT never delivered data (default: _last_mqtt_ts = 0.0)
+        assert coordinator._last_mqtt_ts == 0.0
+
+        mock_http_client.get_quota_all = AsyncMock(return_value=None)
+        mock_http_client.last_error_code = "network"
+
+        with patch.object(enhanced_config_entry, "async_start_reauth") as mock_reauth:
+            for _ in range(5):
+                await coordinator._async_update_data()
+
+            mock_reauth.assert_called_once()
+
+        await coordinator.async_shutdown()
+
+    async def test_mixed_1006_and_real_failures(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+        mock_iot_api,
+        mock_mqtt_client,
+        mock_http_client,
+    ) -> None:
+        """Only non-1006 errors increment the failure counter."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        await coordinator.async_setup()
+
+        # 3x 1006 (should NOT count) + 2x network error (should count)
+        mock_http_client.get_quota_all = AsyncMock(return_value=None)
+
+        mock_http_client.last_error_code = "1006"
+        for _ in range(3):
+            await coordinator._async_update_data()
+
+        mock_http_client.last_error_code = "network"
+        for _ in range(2):
+            await coordinator._async_update_data()
+
+        assert coordinator._consecutive_http_failures == 2
+
+
+# ===========================================================================
 # SET Commands
 # ===========================================================================
 

@@ -286,6 +286,107 @@ class AsyncContextManager:
         pass
 
 
+class TestError1006Handling:
+    """Error 1006 (device not linked to API key) — config issue, not auth (#2)."""
+
+    def _make_1006_response(self):
+        resp = AsyncMock()
+        resp.ok = True
+        resp.json = AsyncMock(return_value={
+            "code": "1006",
+            "message": "current device is not allowed to get device info",
+        })
+        return resp
+
+    def _make_success_response(self):
+        resp = AsyncMock()
+        resp.ok = True
+        resp.json = AsyncMock(return_value={"code": "0", "data": {"soc": 85}})
+        return resp
+
+    def _make_client(self, session):
+        return EcoFlowHTTPQuota(
+            session=session,
+            access_key="ak",
+            secret_key="sk",
+            device_sn="SN123",
+            min_interval=0,
+        )
+
+    @pytest.mark.asyncio
+    async def test_1006_sets_last_error_code(self):
+        """Error 1006 sets last_error_code to '1006'."""
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(
+            return_value=AsyncContextManager(self._make_1006_response())
+        )
+        client = self._make_client(mock_session)
+
+        result = await client.get_quota_all()
+        assert result is None
+        assert client.last_error_code == "1006"
+
+    @pytest.mark.asyncio
+    async def test_1006_not_retried(self):
+        """Error 1006 is not retried — only one HTTP call."""
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(
+            return_value=AsyncContextManager(self._make_1006_response())
+        )
+        client = self._make_client(mock_session)
+
+        await client.get_quota_all()
+        assert mock_session.get.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_1006_logged_once(self, caplog):
+        """First 1006 → WARNING, subsequent → DEBUG only."""
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(
+            return_value=AsyncContextManager(self._make_1006_response())
+        )
+        client = self._make_client(mock_session)
+
+        import logging
+        with caplog.at_level(logging.DEBUG, logger="ecoflow_energy.ecoflow.cloud_http"):
+            await client.get_quota_all()
+            warnings_1 = [r for r in caplog.records if r.levelno == logging.WARNING]
+            assert len(warnings_1) == 1
+            assert "not linked to API key" in warnings_1[0].message
+
+            caplog.clear()
+            # Reset rate limit for second call
+            client._last_call = 0.0
+            mock_session.get = MagicMock(
+                return_value=AsyncContextManager(self._make_1006_response())
+            )
+            await client.get_quota_all()
+            warnings_2 = [r for r in caplog.records if r.levelno == logging.WARNING]
+            assert len(warnings_2) == 0  # No WARNING on second occurrence
+
+    @pytest.mark.asyncio
+    async def test_success_after_1006_resets(self):
+        """Success after 1006 resets last_error_code and log flag."""
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(
+            return_value=AsyncContextManager(self._make_1006_response())
+        )
+        client = self._make_client(mock_session)
+
+        await client.get_quota_all()
+        assert client.last_error_code == "1006"
+        assert client._logged_1006 is True
+
+        # Now success
+        client._last_call = 0.0
+        mock_session.get = MagicMock(
+            return_value=AsyncContextManager(self._make_success_response())
+        )
+        await client.get_quota_all()
+        assert client.last_error_code is None
+        assert client._logged_1006 is False
+
+
 class TestDeadCodeRemoved:
     def test_no_powerocean_quota_keys(self):
         """POWEROCEAN_QUOTA_KEYS was dead code and must be removed."""

@@ -282,6 +282,27 @@ Use the integration menu (not the options dialog):
 </details>
 
 <details>
+<summary><b>"Authentication expired" after restart</b></summary>
+
+This notification can appear when your IoT Developer API key does not have access to the configured devices. The integration uses two credential sets:
+
+- **Access Key / Secret Key** (IoT Developer Portal) — used for HTTP data polling
+- **Email / Password** (Enhanced Mode only) — used for MQTT real-time data
+
+If the devices are not linked to the API key, HTTP polling fails with error 1006 ("device not allowed"). In Enhanced Mode, MQTT data still works fine, but the repeated HTTP errors used to trigger a false re-authentication prompt.
+
+**To fix:**
+
+1. Log in at [developer.ecoflow.com](https://developer.ecoflow.com)
+2. Go to "Devices" and verify both your API key and your devices are listed
+3. Make sure the Developer Portal account uses the **same email** as your EcoFlow App account — devices are linked automatically when the accounts match
+4. If the accounts differ, bind the devices manually via their serial numbers
+
+Since v1.8.3, the integration handles this gracefully: error 1006 is logged once with a clear message and does not trigger re-authentication.
+
+</details>
+
+<details>
 <summary><b>Enhanced Mode issues</b></summary>
 
 - Verify EcoFlow email and password

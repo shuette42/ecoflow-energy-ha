@@ -49,6 +49,8 @@ class EcoFlowHTTPQuota:
         self._base_url = base_url.rstrip("/")
         self._min_interval = min_interval
         self._last_call: float = 0.0
+        self.last_error_code: str | None = None
+        self._logged_1006: bool = False
 
     # ------------------------------------------------------------------
     # Public API
@@ -169,6 +171,7 @@ class EcoFlowHTTPQuota:
             if attempt < HTTP_RETRIES:
                 await asyncio.sleep(HTTP_RETRY_BACKOFF_S)
 
+        self.last_error_code = "network"
         _LOGGER.error("HTTP: all %d attempts failed for %s", HTTP_RETRIES, self._device_sn)
         return None
 
@@ -179,6 +182,8 @@ class EcoFlowHTTPQuota:
 
         if resp.ok and code == "0":
             _LOGGER.debug("HTTP: quota OK for %s", self._device_sn)
+            self.last_error_code = None
+            self._logged_1006 = False
             return data.get("data") or {}
 
         # EcoFlow error 8521 is a transient server-side error — retry
@@ -186,6 +191,21 @@ class EcoFlowHTTPQuota:
             _LOGGER.debug("HTTP: transient error 8521 for %s — will retry", self._device_sn)
             raise self._RetryableAPIError(f"code={code}")
 
+        # Error 1006: device not linked to API key — not an auth failure (#2)
+        if code == "1006":
+            self.last_error_code = "1006"
+            if not self._logged_1006:
+                _LOGGER.warning(
+                    "HTTP: device %s not linked to API key — "
+                    "verify device binding at developer.ecoflow.com (code=1006)",
+                    self._device_sn,
+                )
+                self._logged_1006 = True
+            else:
+                _LOGGER.debug("HTTP: device %s still returns 1006", self._device_sn)
+            return None
+
+        self.last_error_code = code
         _LOGGER.warning("HTTP: quota code=%s msg=%s (sn=%s)", code, data.get("message"), self._device_sn)
         return None
 

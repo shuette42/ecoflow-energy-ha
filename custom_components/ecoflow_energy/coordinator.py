@@ -985,11 +985,22 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # All device types use GET /quota/all — returns the most complete data
         raw = await self._http_client.get_quota_all()
         if not raw:
+            error_code = self._http_client.last_error_code
+
+            # Error 1006 = device not linked to API key — config issue, not auth (#2)
+            if error_code == "1006":
+                self._log_event("http_1006", "device not linked to API key")
+                return dict(self._device_data)
+
             self._consecutive_http_failures += 1
             self._log_event("http_fail", f"consecutive={self._consecutive_http_failures}")
             if self._consecutive_http_failures >= 3:
                 self._device_available = False
-            if self._consecutive_http_failures == 5:
+
+            # In Enhanced Mode, only trigger reauth if MQTT has never delivered data.
+            # When MQTT is active, HTTP failures are expected fallback noise (#2).
+            mqtt_active = self._enhanced_mode and self._last_mqtt_ts > 0.0
+            if self._consecutive_http_failures == 5 and not mqtt_active:
                 _LOGGER.warning(
                     "HTTP quota failed %d consecutive times for %s — triggering re-authentication",
                     self._consecutive_http_failures, self.device_sn,

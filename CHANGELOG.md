@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.3] - 2026-03-31
+
+### Fixed
+- HTTP error 1006 ("device not linked to API key") no longer triggers false re-authentication — classified as a configuration issue with an actionable log message instead of counting toward the auth failure threshold (#2)
+- Enhanced Mode: HTTP fallback failures no longer trigger re-authentication when MQTT is actively delivering data (#2)
+- Error 1006 logged once per device with clear guidance instead of repeating every 30 seconds
+
 ## [1.8.2] - 2026-03-31
 
 ### Fixed
