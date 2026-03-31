@@ -1056,14 +1056,14 @@ class TestBpRemapping:
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """Phantom pack (all zeros / proto3 defaults) is skipped in numbering."""
+        """Phantom pack (empty dict from EMS module) is skipped in numbering."""
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
         raw = {
             "all_packs": [
-                {"bp_soc": 0, "bp_pwr": 0, "bp_vol": 0},  # phantom (all zeros)
+                {},  # phantom: EMS module placeholder (no battery identity keys)
                 {"bp_soc": 76, "bp_pwr": 2486.48, "bp_vol": 54.671},  # real pack
                 {"bp_soc": 74, "bp_pwr": 2529.19, "bp_vol": 54.698},  # real pack
             ],
@@ -1082,15 +1082,15 @@ class TestBpRemapping:
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """All packs are phantom — no pack sensors produced."""
+        """All packs are empty dicts (EMS module placeholders) — no pack sensors produced."""
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
         raw = {
             "all_packs": [
-                {"bp_soc": 0, "bp_pwr": 0},
-                {"bp_soc": 0, "bp_pwr": 0, "bp_vol": 0},
+                {},  # phantom
+                {},  # phantom
             ],
         }
         result = coordinator._remap_bp_keys(raw)
@@ -1103,7 +1103,7 @@ class TestBpRemapping:
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """bp_remain_watth is the sum of all real packs."""
+        """bp_remain_watth is aggregated from accumulated device_data in _apply_data."""
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
@@ -1114,18 +1114,23 @@ class TestBpRemapping:
                 {"bp_soc": 74, "bp_pwr": 2529, "bp_remain_watth": 2600},
             ],
         }
-        result = coordinator._remap_bp_keys(raw)
+        parsed = coordinator._remap_bp_keys(raw)
+        # Per-pack values extracted by _remap_bp_keys
+        assert parsed["pack1_remain_watth"] == 2400.0
+        assert parsed["pack2_remain_watth"] == 2600.0
+        # Aggregate is NOT in _remap_bp_keys output — it's computed in _apply_data
+        assert "bp_remain_watth" not in parsed
 
-        assert result["bp_remain_watth"] == 5000.0
-        assert result["pack1_remain_watth"] == 2400.0
-        assert result["pack2_remain_watth"] == 2600.0
+        # _apply_data computes the aggregate from accumulated device_data
+        coordinator._apply_data(parsed)
+        assert coordinator.device_data["bp_remain_watth"] == 5000.0
 
     async def test_bp_remain_watth_single_pack(
         self,
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """Single pack: bp_remain_watth equals that pack's value."""
+        """Single pack: bp_remain_watth equals that pack's value via _apply_data."""
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
@@ -1135,9 +1140,10 @@ class TestBpRemapping:
                 {"bp_soc": 76, "bp_pwr": 2486, "bp_remain_watth": 4800},
             ],
         }
-        result = coordinator._remap_bp_keys(raw)
+        parsed = coordinator._remap_bp_keys(raw)
+        coordinator._apply_data(parsed)
 
-        assert result["bp_remain_watth"] == 4800.0
+        assert coordinator.device_data["bp_remain_watth"] == 4800.0
 
     async def test_bp_remain_watth_not_in_bp_to_sensor(
         self,
@@ -1157,10 +1163,173 @@ class TestBpRemapping:
             # This raw key should NOT be mapped since it's excluded from _BP_TO_SENSOR
             "bp_remain_watth": 2400,
         }
+        parsed = coordinator._remap_bp_keys(raw)
+        coordinator._apply_data(parsed)
+
+        # Sum of packs (from _apply_data aggregation), not the raw single-pack value
+        assert coordinator.device_data["bp_remain_watth"] == 5000.0
+
+    async def test_idle_pack_not_filtered_as_phantom(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Idle pack with zero SoC/power is still recognized as real (#10).
+
+        Proto3 MessageToDict omits zero-valued fields, but a real battery pack
+        always has bp_design_cap/bp_full_cap > 0 (present in dict).  The identity
+        key check ensures idle packs are not rejected.
+        """
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        raw = {
+            "all_packs": [
+                # Pack 1: active (non-zero power)
+                {"bp_soc": 76, "bp_pwr": 2486.48, "bp_vol": 54.671,
+                 "bp_design_cap": 100000, "bp_full_cap": 100000,
+                 "bp_remain_watth": 3891.2},
+                # Pack 2: idle — proto3 omits bp_soc=0, bp_pwr=0.0 but
+                # bp_design_cap/bp_full_cap are >0 so they survive MessageToDict
+                {"bp_design_cap": 100000, "bp_full_cap": 100000,
+                 "bp_remain_watth": 2000.0},
+            ],
+        }
+        parsed = coordinator._remap_bp_keys(raw)
+
+        # Both packs recognized — idle pack is NOT filtered
+        assert parsed["pack1_soc"] == 76.0
+        assert parsed["pack1_remain_watth"] == pytest.approx(3891.2)
+        assert parsed["pack2_remain_watth"] == 2000.0
+        assert "pack3_soc" not in parsed
+
+    async def test_partial_heartbeat_preserves_accumulated_remain(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Partial heartbeat (only Pack 1) preserves Pack 2 remain_watth (#10).
+
+        When the device sends a heartbeat with only one pack, the aggregate
+        bp_remain_watth should include the last known value for the other pack
+        from _device_data, not revert to a single-pack sum.
+        """
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+
+        # First heartbeat: both packs report
+        msg1 = coordinator._remap_bp_keys({
+            "all_packs": [
+                {"bp_soc": 76, "bp_pwr": 2486, "bp_remain_watth": 2400},
+                {"bp_soc": 74, "bp_pwr": 2529, "bp_remain_watth": 2600},
+            ],
+        })
+        coordinator._apply_data(msg1)
+        assert coordinator.device_data["bp_remain_watth"] == 5000.0
+
+        # Second heartbeat: only Pack 1 reports (Pack 2 absent from message)
+        msg2 = coordinator._remap_bp_keys({
+            "all_packs": [
+                {"bp_soc": 75, "bp_pwr": 2400, "bp_remain_watth": 2300},
+            ],
+        })
+        coordinator._apply_data(msg2)
+
+        # Pack 1 updated to 2300, Pack 2 retains last known 2600 → total 4900
+        assert coordinator.device_data["pack1_remain_watth"] == 2300.0
+        assert coordinator.device_data["pack2_remain_watth"] == 2600.0
+        assert coordinator.device_data["bp_remain_watth"] == 4900.0
+
+    async def test_empty_dict_phantom_still_filtered(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Empty dict packs (true EMS module phantoms) are filtered out."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        raw = {
+            "all_packs": [
+                {},  # EMS module placeholder
+                {"bp_soc": 76, "bp_pwr": 2486.48, "bp_design_cap": 100000},
+            ],
+        }
         result = coordinator._remap_bp_keys(raw)
 
-        # Sum of packs, not the raw single-pack value
-        assert result["bp_remain_watth"] == 5000.0
+        assert result["pack1_soc"] == 76.0
+        assert "pack2_soc" not in result
+
+    async def test_non_identity_keys_only_is_phantom(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Pack with only non-identity keys (e.g. timestamps) is treated as phantom."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        raw = {
+            "all_packs": [
+                {"bp_timestamp": 1234567890, "bp_heartbeat_ver": 1},  # no identity keys
+                {"bp_soc": 76, "bp_pwr": 2486.48},  # real
+            ],
+        }
+        result = coordinator._remap_bp_keys(raw)
+
+        assert result["pack1_soc"] == 76.0
+        assert "pack2_soc" not in result
+
+    async def test_no_reaggregate_without_pack_remain_keys(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """_apply_data does not re-aggregate when no pack remain_watth keys in parsed."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        # Pre-populate with existing pack data
+        coordinator._device_data["pack1_remain_watth"] = 2400.0
+        coordinator._device_data["pack2_remain_watth"] = 2600.0
+        coordinator._device_data["bp_remain_watth"] = 5000.0
+
+        # EMS change report: no pack remain_watth keys
+        coordinator._apply_data({"ems_feed_mode": 1, "grid_status": 0})
+
+        # bp_remain_watth unchanged (no re-aggregation triggered)
+        assert coordinator.device_data["bp_remain_watth"] == 5000.0
+
+    async def test_bp_remain_watth_zero_total_written(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """bp_remain_watth is written as 0 when all packs are fully discharged.
+
+        Ensures measurement sensors are updated to 0 rather than retaining
+        stale non-zero values.
+        """
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        # Simulate fully discharged state
+        parsed = coordinator._remap_bp_keys({
+            "all_packs": [
+                {"bp_design_cap": 100000, "bp_full_cap": 100000, "bp_remain_watth": 0.0},
+                {"bp_design_cap": 100000, "bp_full_cap": 100000, "bp_remain_watth": 0.0},
+            ],
+        })
+        coordinator._apply_data(parsed)
+
+        assert coordinator.device_data["bp_remain_watth"] == 0.0
 
 
 # ===========================================================================

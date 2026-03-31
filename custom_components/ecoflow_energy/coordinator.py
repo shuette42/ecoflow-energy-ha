@@ -738,6 +738,16 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         "bp_err_code": "error_code",
     }
 
+    # Core battery identity keys: if ANY of these are present in a proto pack
+    # dict, the pack is real.  Proto3 MessageToDict omits zero-valued fields,
+    # but a real battery always has bp_design_cap/bp_full_cap > 0 and bp_sn
+    # non-empty, so at least one key will be present.  An EMS module placeholder
+    # produces {} (no battery fields at all).
+    _BP_IDENTITY_KEYS: frozenset[str] = frozenset({
+        "bp_soc", "bp_pwr", "bp_soh", "bp_vol", "bp_cycles",
+        "bp_design_cap", "bp_full_cap", "bp_sn",
+    })
+
     def _flatten_heartbeat(self, raw: dict[str, Any]) -> dict[str, Any]:
         """Extract nested messages from EMS heartbeat (cmd_id=1).
 
@@ -794,15 +804,22 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         result: dict[str, Any] = {}
 
         # Multi-pack extraction from proto heartbeat (cmd_id=7)
-        # Filter out phantom/empty packs: proto3 omits 0-value fields from
-        # MessageToDict, so all-zero entries are wire defaults, not real packs.
+        # Filter out phantom/empty packs using key-presence check:
+        # A real battery pack always has at least one core identity key
+        # (bp_design_cap, bp_full_cap, bp_sn are always >0/non-empty for real packs).
+        # Proto3 MessageToDict omits zero-valued fields, so an EMS module
+        # placeholder or wire-default entry produces {} (no identity keys).
+        # This replaces the previous numeric non-zero filter that falsely
+        # rejected idle packs whose power/SoC happened to be zero (#10).
         all_packs = raw.pop("all_packs", [])
         real_packs = [
             p for p in all_packs
-            if isinstance(p, dict) and any(
-                v != 0 for v in p.values() if isinstance(v, (int, float))
-            )
+            if isinstance(p, dict) and any(k in p for k in self._BP_IDENTITY_KEYS)
         ]
+        _LOGGER.debug(
+            "BP heartbeat for %s: %d pack(s) in message, %d real",
+            self.device_sn, len(all_packs), len(real_packs),
+        )
         for idx, pack_data in enumerate(real_packs[:5], 1):
             prefix = f"pack{idx}"
             for proto_key, sensor_suffix in self._BP_PACK_SENSOR_MAP.items():
@@ -817,15 +834,6 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 val = pack_data.get(proto_key)
                 if val is not None:
                     result[f"{prefix}_{sensor_suffix}"] = float(val) / 1000.0
-
-        # Aggregate bp_remain_watth as sum of all real packs
-        remain_values = [
-            float(p["bp_remain_watth"])
-            for p in real_packs
-            if p.get("bp_remain_watth") is not None
-        ]
-        if remain_values:
-            result["bp_remain_watth"] = sum(remain_values)
 
         # Try battery key mapping first, then EMS change mapping
         for proto_key, value in raw.items():
@@ -856,6 +864,17 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._log_event("mqtt_data", f"keys={len(parsed)}")
         self._enforce_monotonic(parsed)
         self._device_data.update(parsed)
+
+        # Re-aggregate bp_remain_watth from accumulated device_data (#10).
+        # Each proto heartbeat may only contain a subset of battery packs.
+        # Computing the sum from _device_data (not the current message) ensures
+        # all known packs contribute even if only one pack reported this tick.
+        if any(k.endswith("_remain_watth") and k.startswith("pack") for k in parsed):
+            self._device_data["bp_remain_watth"] = sum(
+                v for k, v in self._device_data.items()
+                if k.startswith("pack") and k.endswith("_remain_watth")
+                and isinstance(v, (int, float))
+            )
 
         # Integrate power → energy via Riemann sum
         self._integrate_energy(parsed)

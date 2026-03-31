@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.1] - 2026-03-31
+
+### Fixed
+- PowerOcean Enhanced Mode: idle battery packs no longer falsely filtered as phantoms — replaced numeric non-zero check with identity key presence check (bp_soc, bp_design_cap, bp_sn, etc.) so packs with zero power/SoC are still recognized (#10)
+- PowerOcean Enhanced Mode: aggregate `bp_remain_watth` now computed from accumulated device data instead of per-message — partial heartbeats (single pack reporting) no longer cause the total to revert to one pack's value (#10)
+
 ## [1.8.0] - 2026-03-31
 
 ### Changed
