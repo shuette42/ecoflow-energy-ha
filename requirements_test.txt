@@ -1,0 +1,9 @@
+# Runtime dependencies (must match manifest.json requirements)
+paho-mqtt>=2.1.0
+protobuf>=4.21.0
+cryptography>=42.0.0
+
+# Test framework
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+pytest-homeassistant-custom-component>=0.13.0
