@@ -11,6 +11,10 @@ updates:
     commit-message:
       prefix: "chore"
     open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   # GitHub Actions versions
   - package-ecosystem: "github-actions"
@@ -23,3 +27,7 @@ updates:
     commit-message:
       prefix: "ci"
     open-pull-requests-limit: 3
+    groups:
+      minor-and-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
