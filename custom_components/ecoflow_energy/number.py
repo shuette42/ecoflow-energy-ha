@@ -229,11 +229,11 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
 
         ok = await self.coordinator.async_set_soc_limits(max_soc, min_soc)
         if ok:
-            # Update _device_data so the value survives coordinator refreshes.
+            # Update device_data so the value survives coordinator refreshes.
             # Proto3 omits zero-valued fields from MQTT readback, so the merge
             # won't overwrite this value when the device reports 0.
             state_key = self._definition.state_key
-            self.coordinator._device_data[state_key] = value
+            self.coordinator.set_device_value(state_key, value)
             if self.coordinator.data is not None:
                 self.coordinator.data[state_key] = value
             self.async_write_ha_state()
