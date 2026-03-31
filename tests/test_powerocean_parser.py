@@ -210,6 +210,55 @@ class TestBatteryPack:
         assert "bp_soh_pct" not in result
         assert result["bp_cycles"] == 10.0
 
+    def test_bp_remain_watth_summed_across_packs(self):
+        """bp_remain_watth is the sum of all real packs, not just pack 1."""
+        data = {
+            "bp_addr.PACK1": {
+                "bpSoh": 98,
+                "bpCycles": 45,
+                "bpRemainWatth": 2400,
+                "bpVol": 52.1,
+            },
+            "bp_addr.PACK2": {
+                "bpSoh": 97,
+                "bpCycles": 40,
+                "bpRemainWatth": 2600,
+                "bpVol": 51.8,
+            },
+        }
+        result = parse_powerocean_http_quota(data)
+        assert result["bp_remain_watth"] == 5000.0
+
+    def test_bp_remain_watth_single_pack(self):
+        """Single pack: bp_remain_watth equals that pack's value."""
+        data = {
+            "bp_addr.PACK1": {
+                "bpSoh": 98,
+                "bpRemainWatth": 4800,
+                "bpVol": 52.1,
+            },
+        }
+        result = parse_powerocean_http_quota(data)
+        assert result["bp_remain_watth"] == 4800.0
+
+    def test_bp_remain_watth_phantom_excluded(self):
+        """Phantom pack (all zeros) excluded from remain_watth sum."""
+        data = {
+            "bp_addr.EMS": {},
+            "bp_addr.PACK1": {
+                "bpSoh": 98,
+                "bpRemainWatth": 2400,
+                "bpVol": 52.1,
+            },
+            "bp_addr.PACK2": {
+                "bpSoh": 97,
+                "bpRemainWatth": 2600,
+                "bpVol": 51.8,
+            },
+        }
+        result = parse_powerocean_http_quota(data)
+        assert result["bp_remain_watth"] == 5000.0
+
 
 # ===========================================================================
 # MPPT Per-String (mpptHeartBeat[0].mpptPv[0|1])
