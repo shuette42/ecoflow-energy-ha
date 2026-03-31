@@ -3,7 +3,6 @@ paho-mqtt>=2.1.0
 protobuf>=4.21.0
 cryptography>=42.0.0
 
-# Test framework
-pytest>=8.0.0
-pytest-asyncio>=0.23.0
+# Test framework - let pytest-homeassistant-custom-component drive
+# compatible pytest/pytest-asyncio versions to avoid conflicts
 pytest-homeassistant-custom-component>=0.13.0
