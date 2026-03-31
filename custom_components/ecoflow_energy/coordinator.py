@@ -622,6 +622,8 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         for k, v in result.mapped.items()
                         if not k.startswith("_")
                     }
+                    if not raw:
+                        return None
                     return self._remap_bp_keys(raw)
             except Exception:
                 _LOGGER.debug("Protobuf decode error for %s", self.device_sn, exc_info=True)
@@ -816,16 +818,6 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         ]
         if remain_values:
             result["bp_remain_watth"] = sum(remain_values)
-
-        # Proto3 zero-fill: these EMS fields can be legitimately 0 but proto3
-        # omits them from MessageToDict.  If the EMS change report contains ANY
-        # of the mapped keys, fill in missing ones as 0 so the coordinator merge
-        # propagates 0 instead of keeping the stale previous value.
-        _EMS_ZERO_FILL = ("sys_bat_dsg_down_limit", "sys_bat_chg_up_limit")
-        if any(k in raw for k in self._EMS_CHANGE_TO_SENSOR):
-            for k in _EMS_ZERO_FILL:
-                if k not in raw:
-                    raw[k] = 0
 
         # Try battery key mapping first, then EMS change mapping
         for proto_key, value in raw.items():

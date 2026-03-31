@@ -122,10 +122,10 @@ def parse_powerocean_http_quota(quota_data: dict) -> dict[str, Any]:
 def _extract_battery_pack(quota_data: dict, result: dict) -> None:
     """Extract battery pack data from bp_addr.{sn} nested objects.
 
-    Takes the first battery pack found and maps to sensor keys.
-    If multiple packs exist, aggregates SOC/SOH from the top level.
+    Takes the first real battery pack for single-value sensors.
+    Aggregates bp_remain_watth as sum across all real packs.
     """
-    bp_data = None
+    real_packs: list[dict] = []
     for key, val in quota_data.items():
         if key.startswith("bp_addr.") and key != "bp_addr.updateTime":
             # API returns bp_addr.{sn} as JSON string, not dict
@@ -135,16 +135,17 @@ def _extract_battery_pack(quota_data: dict, result: dict) -> None:
                 except (json.JSONDecodeError, ValueError):
                     continue
             if isinstance(val, dict) and _is_real_battery_pack(val):
-                bp_data = val
-                break  # Use first real pack
+                real_packs.append(val)
 
-    if bp_data is None:
+    if not real_packs:
         return
+
+    # Use first real pack for single-value sensors
+    bp_data = real_packs[0]
 
     _bp_map = {
         "bpSoh": "bp_soh_pct",
         "bpCycles": "bp_cycles",
-        "bpRemainWatth": "bp_remain_watth",
         "bpVol": "bp_voltage_v",
         "bpAmp": "bp_current_a",
         "bpMaxCellTemp": "bp_max_cell_temp_c",
@@ -164,6 +165,17 @@ def _extract_battery_pack(quota_data: dict, result: dict) -> None:
             v = _safe_float(bp_data[http_key])
             if v is not None:
                 result[sensor_key] = v
+
+    # Aggregate remaining capacity across all real packs
+    total_remain = 0.0
+    has_remain = False
+    for pack in real_packs:
+        v = _safe_float(pack.get("bpRemainWatth"))
+        if v is not None:
+            total_remain += v
+            has_remain = True
+    if has_remain:
+        result["bp_remain_watth"] = total_remain
 
 
 def _extract_energy_stream(quota_data: dict, result: dict) -> None:

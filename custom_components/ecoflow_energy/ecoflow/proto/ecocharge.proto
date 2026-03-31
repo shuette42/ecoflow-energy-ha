@@ -266,8 +266,8 @@ message JTS1EmsChangeReport {
   uint32 ems_sys_self_check_stat = 8;
   uint32 bp_online_sum = 9;
   uint32 sys_on_off_machine_stat = 10;
-  uint32 sys_bat_chg_up_limit = 11;
-  uint32 sys_bat_dsg_down_limit = 12;
+  optional uint32 sys_bat_chg_up_limit = 11;
+  optional uint32 sys_bat_dsg_down_limit = 12;
   uint32 bp_total_chg_energy = 13;
   uint32 bp_total_dsg_energy = 14;
   uint32 sys_bat_backup_ratio = 15;

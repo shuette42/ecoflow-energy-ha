@@ -1098,6 +1098,70 @@ class TestBpRemapping:
         assert "pack1_soc" not in result
         assert "pack2_soc" not in result
 
+    async def test_bp_remain_watth_summed_across_packs(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """bp_remain_watth is the sum of all real packs."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        raw = {
+            "all_packs": [
+                {"bp_soc": 76, "bp_pwr": 2486, "bp_remain_watth": 2400},
+                {"bp_soc": 74, "bp_pwr": 2529, "bp_remain_watth": 2600},
+            ],
+        }
+        result = coordinator._remap_bp_keys(raw)
+
+        assert result["bp_remain_watth"] == 5000.0
+        assert result["pack1_remain_watth"] == 2400.0
+        assert result["pack2_remain_watth"] == 2600.0
+
+    async def test_bp_remain_watth_single_pack(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Single pack: bp_remain_watth equals that pack's value."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        raw = {
+            "all_packs": [
+                {"bp_soc": 76, "bp_pwr": 2486, "bp_remain_watth": 4800},
+            ],
+        }
+        result = coordinator._remap_bp_keys(raw)
+
+        assert result["bp_remain_watth"] == 4800.0
+
+    async def test_bp_remain_watth_not_in_bp_to_sensor(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Raw bp_remain_watth from single-pack field does not overwrite sum."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        raw = {
+            "all_packs": [
+                {"bp_soc": 76, "bp_pwr": 2486, "bp_remain_watth": 2400},
+                {"bp_soc": 74, "bp_pwr": 2529, "bp_remain_watth": 2600},
+            ],
+            # This raw key should NOT be mapped since it's excluded from _BP_TO_SENSOR
+            "bp_remain_watth": 2400,
+        }
+        result = coordinator._remap_bp_keys(raw)
+
+        # Sum of packs, not the raw single-pack value
+        assert result["bp_remain_watth"] == 5000.0
+
 
 # ===========================================================================
 # Monotonic Filter (_enforce_monotonic) — total_increasing regression guard

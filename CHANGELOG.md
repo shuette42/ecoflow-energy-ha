@@ -2,10 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.6.8] - 2026-03-31
+## [1.7.0] - 2026-03-31
 
 ### Fixed
-- PowerOcean: SoC limit 0% now correctly read from device MQTT reports — proto3 zero-fill for `sys_bat_dsg_down_limit` and `sys_bat_chg_up_limit` in EMS change report processing (covers both HA SET and EcoFlow app changes)
+- PowerOcean: SoC limit 0% now correctly synced in both directions — `optional` proto3 field presence on `sys_bat_dsg_down_limit` and `sys_bat_chg_up_limit` ensures `MessageToDict` includes zero values instead of silently omitting them
+- PowerOcean: "Battery Remaining Capacity" (`bp_remain_watth`) now shows total capacity across all battery packs instead of only Pack 1 — affects both Standard Mode (HTTP) and Enhanced Mode (Protobuf) (#10)
+
+### Removed
+- Temporary workarounds from v1.6.5–v1.6.8 (proto3 global flag, optimistic lock, zero-fill, HTTP sync loop) — all replaced by proper `optional` field presence
 
 ## [1.6.7] - 2026-03-31
 
