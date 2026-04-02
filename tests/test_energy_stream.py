@@ -1,12 +1,14 @@
 """Tests for EcoFlow Protobuf encoder — EnergyStreamSwitch and SoC limit SET."""
 
 from ecoflow_energy.ecoflow.energy_stream import (
-    _encode_field_bytes,
-    _encode_field_varint,
-    _encode_varint,
     build_energy_stream_activate_payload,
     build_energy_stream_deactivate_payload,
     build_soc_limit_set_payload,
+)
+from ecoflow_energy.ecoflow.proto_encoding import (
+    encode_field_bytes,
+    encode_field_varint,
+    encode_varint,
 )
 
 
@@ -17,22 +19,22 @@ from ecoflow_energy.ecoflow.energy_stream import (
 
 class TestVarintEncoding:
     def test_single_byte(self):
-        assert _encode_varint(0) == b"\x00"
-        assert _encode_varint(1) == b"\x01"
-        assert _encode_varint(127) == b"\x7f"
+        assert encode_varint(0) == b"\x00"
+        assert encode_varint(1) == b"\x01"
+        assert encode_varint(127) == b"\x7f"
 
     def test_two_bytes(self):
-        assert _encode_varint(128) == b"\x80\x01"
-        assert _encode_varint(300) == b"\xac\x02"
+        assert encode_varint(128) == b"\x80\x01"
+        assert encode_varint(300) == b"\xac\x02"
 
-    def test_encode_field_varint(self):
+    def testencode_field_varint(self):
         # field 1, value 1 → tag=0x08, value=0x01
-        result = _encode_field_varint(1, 1)
+        result = encode_field_varint(1, 1)
         assert result == b"\x08\x01"
 
-    def test_encode_field_bytes(self):
+    def testencode_field_bytes(self):
         # field 1, 2-byte payload → tag=0x0a, len=2, data
-        result = _encode_field_bytes(1, b"\x08\x01")
+        result = encode_field_bytes(1, b"\x08\x01")
         assert result == b"\x0a\x02\x08\x01"
 
 
@@ -102,9 +104,9 @@ class TestSocLimitSetPayload:
         """The inner SysBatChgDsgSet message should contain both SoC fields."""
         payload = build_soc_limit_set_payload(95, 10, seq=1)
         # field 1 = 95 (charge upper)
-        inner_field1 = _encode_field_varint(1, 95)
+        inner_field1 = encode_field_varint(1, 95)
         # field 2 = 10 (discharge lower)
-        inner_field2 = _encode_field_varint(2, 10)
+        inner_field2 = encode_field_varint(2, 10)
         # Both must appear consecutively in the payload
         assert inner_field1 + inner_field2 in payload
 
@@ -112,7 +114,7 @@ class TestSocLimitSetPayload:
         """Value 0 for min_discharge_soc is correctly encoded."""
         payload = build_soc_limit_set_payload(100, 0, seq=1)
         # field 2 = 0 must still be on the wire
-        inner_field2 = _encode_field_varint(2, 0)
+        inner_field2 = encode_field_varint(2, 0)
         assert inner_field2 in payload
 
     def test_default_seq_generates_timestamp(self):

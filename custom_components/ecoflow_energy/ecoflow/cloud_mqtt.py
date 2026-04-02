@@ -48,6 +48,7 @@ class EcoFlowMQTTClient:
         user_id: str = "",
         mqtt_host: str = MQTT_HOST,
         wss_mode: bool = True,
+        enhanced_mode: bool = False,
         subscribe_data: bool = True,
         status_handler: Callable | None = None,
         auth_error_handler: Callable[[], None] | None = None,
@@ -75,6 +76,7 @@ class EcoFlowMQTTClient:
 
         self._auth_error_handler = auth_error_handler
         self._wss_mode = wss_mode and bool(user_id)
+        self._enhanced_mode = enhanced_mode
         self._subscribe_data = subscribe_data
         self._notified_connected = False
         self._last_counter_reset_time: float = 0
@@ -84,6 +86,11 @@ class EcoFlowMQTTClient:
     def cert_account(self) -> str:
         """Return the certificate account used for MQTT authentication."""
         return self._cert_account
+
+    @property
+    def user_id(self) -> str:
+        """Return the user ID used for app-auth MQTT topics."""
+        return self._user_id
 
     @property
     def wss_mode(self) -> bool:
@@ -148,9 +155,12 @@ class EcoFlowMQTTClient:
     def _on_connect(self, client, userdata, flags, rc, properties=None):
         """Callback on MQTT connection."""
         if rc == 0:
-            # Subscribe to SET reply topic (all modes) for command acknowledgement tracking
+            # Subscribe to SET reply topics (all modes) for command acknowledgement tracking
             set_reply_topic = f"/open/{self._cert_account}/{self._device_sn}/set_reply"
             client.subscribe(set_reply_topic, qos=1)
+            if self._user_id:
+                app_set_reply = f"/app/{self._user_id}/{self._device_sn}/thing/property/set_reply"
+                client.subscribe(app_set_reply, qos=1)
 
             if self._subscribe_data:
                 # Subscribe to data topics (Enhanced Mode: MQTT is primary data source)
@@ -176,21 +186,34 @@ class EcoFlowMQTTClient:
             self.connected = True
             self.reconnect_attempts = 0
 
-            # WSS: send EnergyStreamSwitch + latestQuotas on (re)connect
-            # Both are needed immediately to minimize data gap after reconnect
+            # WSS: send initial data requests on (re)connect
             if self._wss_mode and self._user_id:
-                try:
-                    payload = build_energy_stream_activate_payload()
-                    set_topic = f"/app/{self._user_id}/{self._device_sn}/thing/property/set"
-                    client.publish(set_topic, payload, qos=1)
-                    _LOGGER.debug("EnergyStreamSwitch sent — energy_stream_report activated")
-                except Exception as exc:
-                    _LOGGER.warning("EnergyStreamSwitch error: %s", exc)
-                try:
-                    self.send_latest_quotas()
-                    _LOGGER.debug("Post-connect latestQuotas sent — minimizing data gap")
-                except Exception as exc:
-                    _LOGGER.warning("Post-connect latestQuotas error: %s", exc)
+                if self._enhanced_mode:
+                    # Enhanced: EnergyStreamSwitch + latestQuotas
+                    try:
+                        payload = build_energy_stream_activate_payload()
+                        set_topic = f"/app/{self._user_id}/{self._device_sn}/thing/property/set"
+                        client.publish(set_topic, payload, qos=1)
+                        _LOGGER.debug("EnergyStreamSwitch sent - energy_stream_report activated")
+                    except Exception as exc:
+                        _LOGGER.warning("EnergyStreamSwitch error: %s", exc)
+                    try:
+                        self.send_latest_quotas()
+                        _LOGGER.debug("Post-connect latestQuotas sent - minimizing data gap")
+                    except Exception as exc:
+                        _LOGGER.warning("Post-connect latestQuotas error: %s", exc)
+                else:
+                    # Non-enhanced (SmartPlug, Delta): protobuf get-all + JSON latestQuotas
+                    try:
+                        self.send_get_all()
+                        _LOGGER.debug("Post-connect get-all sent - requesting full state")
+                    except Exception as exc:
+                        _LOGGER.warning("Post-connect get-all error: %s", exc)
+                    try:
+                        self.send_latest_quotas()
+                        _LOGGER.debug("Post-connect latestQuotas sent - JSON fallback")
+                    except Exception as exc:
+                        _LOGGER.warning("Post-connect latestQuotas error: %s", exc)
 
             if self.status_handler:
                 self.status_handler("connected", 0, "Connected")
@@ -222,7 +245,12 @@ class EcoFlowMQTTClient:
         self.last_disconnect_time = current_time
 
         if was_connected or reason_code != 0:
-            _log = _LOGGER.warning if reason_code != 0 else _LOGGER.debug
+            # First disconnect is normal (broker-side rotation) - only warn
+            # if previous reconnect attempts are already pending (sustained failure)
+            if reason_code != 0 and self.reconnect_attempts > 0:
+                _log = _LOGGER.warning
+            else:
+                _log = _LOGGER.debug
             _log(
                 "MQTT disconnect: rc=%s, was_connected=%s, duration=%.1fs, attempts=%d",
                 reason_code, was_connected, duration, self.reconnect_attempts,
@@ -269,6 +297,7 @@ class EcoFlowMQTTClient:
 
     def _on_message(self, client, userdata, msg):
         """Callback for incoming MQTT messages."""
+        _LOGGER.debug("MQTT msg: %s (%d bytes) for %s", msg.topic, len(msg.payload), self._device_sn)
         try:
             self.message_handler(msg.topic, msg.payload)
         except Exception as exc:
@@ -406,6 +435,22 @@ class EcoFlowMQTTClient:
             "params": {},
             "version": "1.0",
         })
+        return self.publish(topic, payload, qos=1)
+
+    def send_get_all(self) -> bool:
+        """Send a protobuf get-all request to fetch full device state.
+
+        Used for non-Enhanced devices (SmartPlug, Delta) connected via
+        app-auth WSS. The device responds with a full heartbeat on the
+        get_reply topic.
+        """
+        if not self._user_id or not self.is_connected():
+            return False
+
+        from .energy_stream import build_device_get_all_payload
+
+        topic = f"/app/{self._user_id}/{self._device_sn}/thing/property/get"
+        payload = build_device_get_all_payload()
         return self.publish(topic, payload, qos=1)
 
     def send_ping(self) -> bool:

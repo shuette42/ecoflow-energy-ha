@@ -254,6 +254,18 @@ class TestNewPdFields:
         result = parse_delta_http_quota({"pd.newAcAutoOnCfg": 0})
         assert result["ac_auto_on"] == 0.0
 
+    def test_ac_auto_on_legacy(self):
+        result = parse_delta_http_quota({"pd.acAutoOutConfig": 1})
+        assert result["ac_auto_on"] == 1.0
+
+    def test_modern_key_wins_over_legacy(self):
+        """When both modern and legacy keys are present, modern value wins."""
+        result = parse_delta_http_quota({
+            "pd.newAcAutoOnCfg": 1,
+            "pd.acAutoOutConfig": 0,
+        })
+        assert result["ac_auto_on"] == 1.0
+
     def test_screen_brightness(self):
         result = parse_delta_http_quota({"pd.brightLevel": 80})
         assert result["screen_brightness"] == 80.0
@@ -287,6 +299,18 @@ class TestNewMpptFields:
     def test_car_standby_min_zero(self):
         result = parse_delta_http_quota({"mppt.carStandbyMin": 0})
         assert result["car_standby_min"] == 0.0
+
+    def test_legacy_mppt_ac_enabled_fallback(self):
+        result = parse_delta_http_quota({"mppt.cfgAcEnabled": 1})
+        assert result["ac_enabled"] == 1.0
+
+    def test_legacy_mppt_xboost_fallback(self):
+        result = parse_delta_http_quota({"mppt.cfgAcXboost": 1})
+        assert result["ac_xboost"] == 1.0
+
+    def test_legacy_mppt_beeper_inverted(self):
+        result = parse_delta_http_quota({"mppt.beepState": 1})
+        assert result["beep_enabled"] == 0
 
 
 # ===========================================================================

@@ -33,6 +33,7 @@ async def async_get_config_entry_diagnostics(
 
     return {
         "config_entry": {
+            "auth_method": entry.data.get("auth_method", "developer"),
             "mode": entry.data.get(CONF_MODE, "standard"),
             "device_count": len(entry.data.get(CONF_DEVICES, [])),
             "access_key": REDACTED,

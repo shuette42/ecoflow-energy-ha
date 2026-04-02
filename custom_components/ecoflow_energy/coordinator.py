@@ -28,9 +28,11 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import (
+    AUTH_METHOD_APP,
+    AUTH_METHOD_DEVELOPER,
     CONF_ACCESS_KEY,
+    CONF_AUTH_METHOD,
     CONF_EMAIL,
-    CONF_MODE,
     CONF_PASSWORD,
     CONF_SECRET_KEY,
     CONF_USER_ID,
@@ -38,12 +40,12 @@ from .const import (
     DELTA_POWER_TO_ENERGY,
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_POWEROCEAN,
+    DEVICE_TYPE_DISPLAY_NAMES,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_UNKNOWN,
     DOMAIN,
     ENERGY_STREAM_KEEPALIVE_S,
     HTTP_FALLBACK_INTERVAL_S,
-    MODE_ENHANCED,
     PING_KEEPALIVE_S,
     POWEROCEAN_ENERGY_FROM_API,
     POWEROCEAN_POWER_TO_ENERGY,
@@ -51,6 +53,7 @@ from .const import (
     SMARTPLUG_ENERGY_FROM_API,
     SMARTPLUG_POWER_TO_ENERGY,
     STALE_THRESHOLD_S,
+    get_delta_profile,
 )
 from .ecoflow.cloud_http import EcoFlowHTTPQuota
 from .ecoflow.cloud_mqtt import EcoFlowMQTTClient
@@ -78,22 +81,29 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     ) -> None:
         """Initialize the coordinator."""
         self.device_sn: str = device_info["sn"]
-        self.device_name: str = device_info.get("name", "EcoFlow Device")
-        self.product_name: str = device_info.get("product_name", "Unknown")
         # Re-classify device type from product_name if stored as "unknown"
         stored_type = device_info.get("device_type", "")
         if stored_type == DEVICE_TYPE_UNKNOWN:
             from .const import get_device_type
-            stored_type = get_device_type(device_info.get("product_name", ""))
+            stored_type = get_device_type(device_info.get("product_name", ""), self.device_sn)
         self.device_type: str = stored_type
-        self._sw_version: str = device_info.get("sw_version", "")
-
-        # Enhanced Mode only applies to PowerOcean (WSS Protobuf stream).
-        # Delta and Smart Plug have no WSS data source — always Standard.
-        enhanced_mode = (
-            entry.data.get(CONF_MODE) == MODE_ENHANCED
-            and self.device_type == DEVICE_TYPE_POWEROCEAN
+        display_name = DEVICE_TYPE_DISPLAY_NAMES.get(self.device_type, "")
+        self.device_name: str = (
+            device_info.get("name") or display_name or "EcoFlow Device"
         )
+        self.product_name: str = (
+            device_info.get("product_name") or display_name or "Unknown"
+        )
+        self._sw_version: str = device_info.get("sw_version", "")
+        self.delta_profile: str = (
+            get_delta_profile(self.product_name, self.device_sn)
+            if self.device_type == DEVICE_TYPE_DELTA
+            else ""
+        )
+
+        # App-auth (Enhanced Mode): WSS MQTT push, no HTTP polling.
+        # Developer-auth (Standard Mode): HTTP polling + TCP MQTT.
+        enhanced_mode = entry.data.get(CONF_AUTH_METHOD) == AUTH_METHOD_APP
 
         # Standard Mode: HTTP polling every 30s (primary data source)
         # Enhanced Mode: MQTT push only — protobuf carries all sensor data
@@ -128,6 +138,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_flush_ts: float = 0.0
         self._consecutive_http_failures: int = 0
         self._device_available: bool = True
+        self._consecutive_stale_checks: int = 0
         self._event_log: deque[dict[str, Any]] = deque(maxlen=50)
         # Stable SN → pack index mapping for proto heartbeats (cmd_id=7).
         # Each heartbeat contains only one pack; this map ensures the same
@@ -217,12 +228,18 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     @property
     def device_info(self) -> DeviceInfo:
         """Return device info for all entities of this device."""
+        auth_method = getattr(self, "_auth_method", AUTH_METHOD_DEVELOPER)
+        config_url = (
+            "https://ecoflow.com"
+            if auth_method == AUTH_METHOD_APP
+            else "https://developer.ecoflow.com"
+        )
         info = DeviceInfo(
             identifiers={(DOMAIN, self.device_sn)},
             manufacturer="EcoFlow",
             model=self.product_name,
             name=f"EcoFlow {self.device_name}",
-            configuration_url="https://developer.ecoflow.com",
+            configuration_url=config_url,
         )
         if self._sw_version:
             info["sw_version"] = self._sw_version
@@ -234,68 +251,51 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def async_setup(self) -> None:
         """Set up the data source for this device."""
-        access_key = self._entry.data[CONF_ACCESS_KEY]
-        secret_key = self._entry.data[CONF_SECRET_KEY]
+        self._auth_method = self._entry.data.get(CONF_AUTH_METHOD, AUTH_METHOD_DEVELOPER)
         session = async_get_clientsession(self.hass)
-
-        self._iot_api = IoTApiClient(session, access_key, secret_key)
 
         # Load energy integrator state from disk (non-blocking)
         await self.hass.async_add_executor_job(self._energy_integrator.load_state)
 
-        # HTTP client (used in Standard Mode as primary, Enhanced as fallback)
-        self._http_client = EcoFlowHTTPQuota(
-            session, access_key, secret_key, self.device_sn,
-        )
-
-        if self._enhanced_mode:
-            await self._setup_enhanced(session)
+        if self._auth_method == AUTH_METHOD_APP:
+            await self._setup_app_auth(session)
         else:
-            # Standard Mode: HTTP polling is the primary data source.
-            # MQTT is for SET commands only — except Delta and Smart Plug,
-            # which also subscribe to the IoT MQTT /quota topic for
-            # real-time push alongside HTTP polling.
-            subscribe_mqtt = self.device_type in (
-                DEVICE_TYPE_DELTA,
-                DEVICE_TYPE_SMARTPLUG,
-            )
-            creds = await self._iot_api.get_mqtt_credentials()
-            if creds is not None:
-                cert_account = creds.get("certificateAccount", "")
-                cert_password = creds.get("certificatePassword", "")
-                self._mqtt_client = EcoFlowMQTTClient(
-                    certificate_account=cert_account,
-                    certificate_password=cert_password,
-                    device_sn=self.device_sn,
-                    message_handler=self._on_mqtt_message,
-                    user_id="",
-                    wss_mode=False,
-                    subscribe_data=subscribe_mqtt,
-                    auth_error_handler=(
-                        self._on_mqtt_auth_error if subscribe_mqtt else None
-                    ),
-                )
-                await self.hass.async_add_executor_job(self._start_mqtt)
-            if subscribe_mqtt:
-                _LOGGER.debug(
-                    "Standard Mode + MQTT push: HTTP every %ds + MQTT real-time for %s",
-                    HTTP_FALLBACK_INTERVAL_S, self.device_sn,
-                )
-            else:
-                _LOGGER.debug(
-                    "Standard Mode: HTTP polling every %ds for %s",
-                    HTTP_FALLBACK_INTERVAL_S, self.device_sn,
-                )
+            await self._setup_developer_auth(session)
 
-    async def _setup_enhanced(self, session: Any) -> None:
-        """Set up Enhanced Mode (WSS MQTT push)."""
-        creds, user_id = await self._fetch_enhanced_credentials(session)
+    async def _setup_app_auth(self, session: Any) -> None:
+        """Set up using app authentication (email/password, no Developer API keys).
 
-        if creds is None:
-            _LOGGER.error("Failed to fetch MQTT credentials for %s", self.device_sn)
+        App-auth always uses WSS MQTT. No HTTP client or IoT API.
+        """
+        from .ecoflow.app_api import AppApiClient
+
+        email = self._entry.data.get(CONF_EMAIL, "")
+        password = self._entry.data.get(CONF_PASSWORD, "")
+
+        if not email or not password:
+            _LOGGER.error("App-auth: missing credentials for %s", self.device_sn)
+            self._entry.async_start_reauth(self.hass)
             return
 
-        # Portal returns userName/password, IoT API returns certificateAccount/certificatePassword
+        app_api = AppApiClient(session, email, password)
+        if not await app_api.login():
+            _LOGGER.warning("App-auth: login failed for %s - triggering re-authentication", self.device_sn)
+            self._entry.async_start_reauth(self.hass)
+            return
+
+        user_id = app_api.user_id or self._entry.data.get(CONF_USER_ID, "")
+
+        # No IoT API, no HTTP client for app-auth
+        self._iot_api = None
+        self._http_client = None
+
+        # Fetch portal MQTT credentials (AES-decrypted app-* creds)
+        creds = await app_api.get_mqtt_credentials()
+        if creds is None:
+            _LOGGER.error("App-auth: failed to fetch MQTT credentials for %s", self.device_sn)
+            self._entry.async_start_reauth(self.hass)
+            return
+
         cert_account = creds.get("certificateAccount") or creds.get("userName", "")
         cert_password = creds.get("certificatePassword") or creds.get("password", "")
 
@@ -306,78 +306,74 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             message_handler=self._on_mqtt_message,
             user_id=user_id,
             wss_mode=True,
+            enhanced_mode=(self._enhanced_mode and self.device_type == DEVICE_TYPE_POWEROCEAN),
         )
 
         await self.hass.async_add_executor_job(self._start_mqtt)
-        self._schedule_keepalive()
-        self._schedule_quotas_poll()
+
+        if self._enhanced_mode:
+            if self.device_type == DEVICE_TYPE_POWEROCEAN:
+                self._schedule_keepalive()
+            self._schedule_quotas_poll()
         self._schedule_ping()
         self._schedule_stale_check()
 
-    async def _fetch_enhanced_credentials(
-        self, session: Any
-    ) -> tuple[dict[str, Any] | None, str]:
-        """Fetch Enhanced Mode MQTT credentials + userId.
+        _LOGGER.debug(
+            "App-auth setup complete for %s (enhanced=%s)",
+            self.device_sn, self._enhanced_mode,
+        )
 
-        Enhanced Mode requires Portal/App credentials (app-* prefix), NOT the
-        IoT Developer API credentials (open-* prefix).  Only app-* credentials
-        have access to energy_stream_report data on the WSS broker.
+    async def _setup_developer_auth(self, session: Any) -> None:
+        """Set up using Developer API keys (existing flow, unchanged)."""
+        access_key = self._entry.data.get(CONF_ACCESS_KEY)
+        secret_key = self._entry.data.get(CONF_SECRET_KEY)
 
-        Strategy:
-        1. Login with email + password → JWT token + userId
-        2. Use JWT token to fetch Portal certification → AES-decrypt → app-* creds
-        3. Fallback: IoT Developer API creds (open-*) — works for heartbeats but
-           NOT for energy_stream_report
-
-        Returns (credentials_dict, user_id) or (None, "").
-        """
-        email = self._entry.data.get(CONF_EMAIL, "")
-        password = self._entry.data.get(CONF_PASSWORD, "")
-        user_id = self._entry.data.get(CONF_USER_ID, "")
-
-        # --- Step 1: Login → JWT token + userId ---
-        token = ""
-        if email and password:
-            from .ecoflow.enhanced_auth import enhanced_login
-
-            login_result = await enhanced_login(session, email, password)
-            if login_result is not None:
-                token = login_result["token"]
-                user_id = login_result["user_id"]
-                _LOGGER.debug("Enhanced Mode: login OK, userId obtained for %s", self.device_sn)
-            else:
-                _LOGGER.warning("Enhanced Mode: login failed for %s", self.device_sn)
-
-        if not user_id:
-            _LOGGER.warning("Enhanced Mode login failed for %s — triggering re-authentication", self.device_sn)
+        if not access_key or not secret_key:
+            _LOGGER.error("Developer API keys missing for %s - triggering re-authentication", self.device_sn)
             self._entry.async_start_reauth(self.hass)
-            return None, ""
+            return
 
-        # --- Step 2: Portal certification → app-* credentials ---
-        creds = None
-        if token:
-            from .ecoflow.enhanced_auth import get_enhanced_credentials
+        self._iot_api = IoTApiClient(session, access_key, secret_key)
 
-            creds = await get_enhanced_credentials(session, token)
-            if creds is not None:
-                _LOGGER.debug(
-                    "Enhanced Mode: Portal credentials obtained (account=%s...) for %s",
-                    str(creds.get("certificateAccount", ""))[:12], self.device_sn,
-                )
+        self._http_client = EcoFlowHTTPQuota(
+            session, access_key, secret_key, self.device_sn,
+        )
 
-        # --- Step 3: Fallback to IoT Developer API (open-* credentials) ---
-        if creds is None:
-            _LOGGER.warning(
-                "Enhanced Mode: Portal credentials unavailable for %s — "
-                "falling back to IoT API (energy_stream may not work)",
-                self.device_sn,
+        # Standard Mode: HTTP polling is the primary data source.
+        # MQTT is for SET commands only - except Delta and Smart Plug,
+        # which also subscribe to the IoT MQTT /quota topic for
+        # real-time push alongside HTTP polling.
+        subscribe_mqtt = self.device_type in (
+            DEVICE_TYPE_DELTA,
+            DEVICE_TYPE_SMARTPLUG,
+        )
+        creds = await self._iot_api.get_mqtt_credentials()
+        if creds is not None:
+            cert_account = creds.get("certificateAccount", "")
+            cert_password = creds.get("certificatePassword", "")
+            self._mqtt_client = EcoFlowMQTTClient(
+                certificate_account=cert_account,
+                certificate_password=cert_password,
+                device_sn=self.device_sn,
+                message_handler=self._on_mqtt_message,
+                user_id="",
+                wss_mode=False,
+                subscribe_data=subscribe_mqtt,
+                auth_error_handler=(
+                    self._on_mqtt_auth_error if subscribe_mqtt else None
+                ),
             )
-            creds = await self._iot_api.get_mqtt_credentials()
-            if creds is None:
-                _LOGGER.error("Enhanced Mode: all credential sources failed for %s", self.device_sn)
-                return None, ""
-
-        return creds, user_id
+            await self.hass.async_add_executor_job(self._start_mqtt)
+        if subscribe_mqtt:
+            _LOGGER.debug(
+                "Standard Mode + MQTT push: HTTP every %ds + MQTT real-time for %s",
+                HTTP_FALLBACK_INTERVAL_S, self.device_sn,
+            )
+        else:
+            _LOGGER.debug(
+                "Standard Mode: HTTP polling every %ds for %s",
+                HTTP_FALLBACK_INTERVAL_S, self.device_sn,
+            )
 
     def _start_mqtt(self) -> None:
         """Start the MQTT client (runs in executor thread)."""
@@ -541,8 +537,8 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     # ------------------------------------------------------------------
 
     def _on_mqtt_auth_error(self) -> None:
-        """Handle MQTT AUTH error (rc=5) — schedule credential refresh."""
-        _LOGGER.warning("MQTT AUTH error for %s — scheduling credential refresh", self.device_sn)
+        """Handle MQTT AUTH error (rc=5) - schedule credential refresh."""
+        _LOGGER.warning("MQTT AUTH error for %s - scheduling credential refresh", self.device_sn)
         self._log_event("reauth", "mqtt_auth_error")
         self.hass.loop.call_soon_threadsafe(
             self.hass.async_create_task,
@@ -551,18 +547,52 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _refresh_mqtt_credentials(self) -> None:
         """Refresh MQTT credentials after AUTH failure."""
-        if self._iot_api is None or self._mqtt_client is None:
+        if self._mqtt_client is None:
             return
-        creds = await self._iot_api.refresh_credentials()
-        if creds is not None:
-            self._mqtt_client.update_credentials(
-                creds.get("certificateAccount", ""),
-                creds.get("certificatePassword", ""),
-            )
-            _LOGGER.debug("MQTT credentials refreshed for %s", self.device_sn)
+
+        auth_method = getattr(self, "_auth_method", AUTH_METHOD_DEVELOPER)
+
+        if auth_method == AUTH_METHOD_APP:
+            # App-auth: re-login and re-fetch portal credentials
+            session = async_get_clientsession(self.hass)
+            from .ecoflow.app_api import AppApiClient
+
+            email = self._entry.data.get(CONF_EMAIL, "")
+            password = self._entry.data.get(CONF_PASSWORD, "")
+            if not email or not password:
+                _LOGGER.warning("App-auth credential refresh failed for %s - no credentials", self.device_sn)
+                self._entry.async_start_reauth(self.hass)
+                return
+
+            app_api = AppApiClient(session, email, password)
+            if not await app_api.login():
+                _LOGGER.warning("App-auth credential refresh failed for %s - login failed", self.device_sn)
+                self._entry.async_start_reauth(self.hass)
+                return
+
+            creds = await app_api.get_mqtt_credentials()
+            if creds is not None:
+                cert_account = creds.get("certificateAccount") or creds.get("userName", "")
+                cert_password = creds.get("certificatePassword") or creds.get("password", "")
+                self._mqtt_client.update_credentials(cert_account, cert_password)
+                _LOGGER.debug("App-auth MQTT credentials refreshed for %s", self.device_sn)
+            else:
+                _LOGGER.warning("App-auth credential refresh failed for %s - triggering re-authentication", self.device_sn)
+                self._entry.async_start_reauth(self.hass)
         else:
-            _LOGGER.warning("MQTT credential refresh failed for %s — triggering re-authentication", self.device_sn)
-            self._entry.async_start_reauth(self.hass)
+            # Developer-auth: use IoT API
+            if self._iot_api is None:
+                return
+            creds = await self._iot_api.refresh_credentials()
+            if creds is not None:
+                self._mqtt_client.update_credentials(
+                    creds.get("certificateAccount", ""),
+                    creds.get("certificatePassword", ""),
+                )
+                _LOGGER.debug("MQTT credentials refreshed for %s", self.device_sn)
+            else:
+                _LOGGER.warning("MQTT credential refresh failed for %s - triggering re-authentication", self.device_sn)
+                self._entry.async_start_reauth(self.hass)
 
     def _on_mqtt_message(self, topic: str, payload: bytes) -> None:
         """Handle an incoming MQTT message (Paho thread).
@@ -586,6 +616,24 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def _parse_message(self, topic: str, payload: bytes) -> dict[str, Any] | None:
         """Parse an MQTT message payload."""
+        # get_reply topic: /app/{userId}/{sn}/thing/property/get_reply
+        if "get_reply" in topic:
+            try:
+                data = json.loads(payload)
+                quota_map = (data.get("data") or {}).get("quotaMap")
+                if isinstance(quota_map, dict) and quota_map:
+                    if self.device_type == DEVICE_TYPE_DELTA:
+                        return parse_delta_http_quota(quota_map)
+                    if self.device_type == DEVICE_TYPE_SMARTPLUG:
+                        return parse_smartplug_http_quota(quota_map)
+                    return quota_map
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                pass
+            # Proto get_reply: binary protobuf
+            if b"\x0a" in payload[:4]:
+                return self._parse_proto_device_data(payload)
+            return None
+
         # JSON topic: /open/{account}/{sn}/quota
         if topic.endswith("/quota"):
             try:
@@ -608,7 +656,26 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 pass
             return None
 
-        # Protobuf topic: /app/device/property/{sn}
+        # /app/device/property/{sn} - JSON (Delta) or Protobuf (PowerOcean/SmartPlug)
+        if payload[:1] == b"{":
+            try:
+                data = json.loads(payload)
+                if isinstance(data, dict):
+                    if self.device_type == DEVICE_TYPE_DELTA:
+                        if data.get("typeCode"):
+                            parsed = parse_delta_report(data)
+                            return parsed if parsed else None
+                        # Dot-notation format: {"params": {"pd.soc": 85, ...}}
+                        params = data.get("params")
+                        if isinstance(params, dict) and params:
+                            return parse_delta_http_quota(params)
+                    if self.device_type == DEVICE_TYPE_SMARTPLUG:
+                        parsed = parse_smartplug_report(data)
+                        return parsed if parsed else None
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                pass
+            return None
+
         if b"\x0a" in payload[:4]:
             try:
                 result = decode_proto_runtime_frame(payload)
@@ -637,9 +704,33 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     if not raw:
                         return None
                     return self._remap_bp_keys(raw)
+                # Non-PowerOcean protobuf: SmartPlug heartbeats
+                return self._parse_proto_device_data(payload)
             except Exception:
                 _LOGGER.debug("Protobuf decode error for %s", self.device_sn, exc_info=True)
             return None
+
+        return None
+
+    def _parse_proto_device_data(self, payload: bytes) -> dict[str, Any] | None:
+        """Parse SmartPlug/Delta protobuf heartbeat via generic wire-format decoder."""
+        from .ecoflow.proto.decoder import decode_header_message
+
+        headers, _ = decode_header_message(payload)
+        for hdr in headers:
+            pdata_hex = hdr.get("pdata")
+            if not pdata_hex:
+                continue
+            try:
+                pdata = bytes.fromhex(pdata_hex)
+            except (ValueError, Exception):
+                continue
+
+            if self.device_type == DEVICE_TYPE_SMARTPLUG:
+                from .ecoflow.parsers.smartplug import parse_smartplug_proto_heartbeat
+                result = parse_smartplug_proto_heartbeat(pdata)
+                if result:
+                    return result
 
         return None
 
@@ -923,7 +1014,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             _LOGGER.warning("SoC limit SET requires Enhanced Mode (%s)", self.device_sn)
             return False
         if self._mqtt_client is None or not self._mqtt_client.is_connected():
-            _LOGGER.warning("Cannot send SoC limits — MQTT not connected (%s)", self.device_sn)
+            _LOGGER.warning("Cannot send SoC limits - MQTT not connected (%s)", self.device_sn)
             return False
 
         from .ecoflow.energy_stream import build_soc_limit_set_payload
@@ -943,6 +1034,25 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._log_event("set_soc_limits_fail", f"max={max_charge_soc}, min={min_discharge_soc}")
         return ok
 
+    async def async_send_proto_set_command(
+        self, payload: bytes, label: str,
+    ) -> bool:
+        """Send a protobuf SET command via WSS MQTT."""
+        if self._mqtt_client is None or not self._mqtt_client.is_connected():
+            _LOGGER.warning("Cannot send proto SET (%s) - MQTT not connected (%s)", label, self.device_sn)
+            return False
+
+        ok = await self.hass.async_add_executor_job(
+            self._mqtt_client.send_proto_set, payload,
+        )
+        if ok:
+            _LOGGER.debug("Proto SET sent: %s (%s)", label, self.device_sn)
+            self._log_event(f"proto_set_{label}", "ok")
+        else:
+            _LOGGER.warning("Proto SET failed: %s (%s)", label, self.device_sn)
+            self._log_event(f"proto_set_{label}_fail", "")
+        return ok
+
     async def async_send_set_command(self, command: dict[str, Any]) -> bool:
         """Send a SET command to the device via MQTT.
 
@@ -951,18 +1061,28 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         Payload: {"id": <ts>, "version": "1.0", ...command}
         """
         if self._mqtt_client is None or not self._mqtt_client.is_connected():
-            _LOGGER.warning("Cannot send SET command — MQTT not connected (%s)", self.device_sn)
+            _LOGGER.warning("Cannot send SET command - MQTT not connected (%s)", self.device_sn)
             return False
 
         msg_id = int(time.time() * 1000) % 1_000_000
-        payload = json.dumps({"id": msg_id, "version": "1.0", **command})
-        topic = f"/open/{self._mqtt_client.cert_account}/{self.device_sn}/set"
+        payload = json.dumps(
+            {
+                "from": "Android",
+                "id": str(msg_id),
+                "version": "1.0",
+                **command,
+            }
+        )
+        if self._mqtt_client.wss_mode:
+            topic = f"/app/{self._mqtt_client.user_id}/{self.device_sn}/thing/property/set"
+        else:
+            topic = f"/open/{self._mqtt_client.cert_account}/{self.device_sn}/set"
 
         ok = await self.hass.async_add_executor_job(
             self._mqtt_client.publish, topic, payload, 1,
         )
         if ok:
-            _LOGGER.debug("SET command sent: %s → %s", topic, payload[:120])
+            _LOGGER.debug("SET command sent: %s -> %s", topic, payload[:120])
             self._log_event("set_cmd", f"keys={list(command.keys())[:3]}")
         else:
             _LOGGER.warning("SET command failed: %s", topic)
@@ -1075,25 +1195,42 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Check if MQTT data is stale and switch to HTTP fallback if needed.
 
         4-tier reconnect strategy:
-        1. Paho auto-reconnect (immediate, same ClientID) — handled by Paho
-        2. Force-reconnect with new ClientID — handled by cloud_mqtt.try_reconnect()
-        3. Counter-reset every 30 min (never give up) — handled by cloud_mqtt
-        4. HTTP fallback — handled here when MQTT is stale
+        1. Paho auto-reconnect (immediate, same ClientID) - handled by Paho
+        2. Force-reconnect with new ClientID - handled by cloud_mqtt.try_reconnect()
+        3. Counter-reset every 30 min (never give up) - handled by cloud_mqtt
+        4. HTTP fallback - handled here when MQTT is stale (developer-auth only)
         """
         if self._shutdown:
             return
 
         age = time.monotonic() - self._last_mqtt_ts if self._last_mqtt_ts > 0 else float("inf")
 
-        if age > STALE_THRESHOLD_S and self.update_interval is None:
-            _LOGGER.info(
-                "MQTT stale for %s (%.0fs) — switching to HTTP fallback (tier 4)",
-                self.device_sn, age,
-            )
-            self.update_interval = timedelta(seconds=HTTP_FALLBACK_INTERVAL_S)
-        elif age <= STALE_THRESHOLD_S and self.update_interval is not None:
-            _LOGGER.info("MQTT recovered for %s — disabling HTTP fallback", self.device_sn)
-            self.update_interval = None
+        if self._http_client is not None:
+            # Developer-auth: HTTP fallback available
+            if age > STALE_THRESHOLD_S and self.update_interval is None:
+                _LOGGER.info(
+                    "MQTT stale for %s (%.0fs) - switching to HTTP fallback (tier 4)",
+                    self.device_sn, age,
+                )
+                self.update_interval = timedelta(seconds=HTTP_FALLBACK_INTERVAL_S)
+            elif age <= STALE_THRESHOLD_S and self.update_interval is not None:
+                _LOGGER.info("MQTT recovered for %s - disabling HTTP fallback", self.device_sn)
+                self.update_interval = None
+        else:
+            # App-auth: no HTTP fallback, mark unavailable after sustained stale
+            if age > STALE_THRESHOLD_S:
+                self._consecutive_stale_checks += 1
+                if self._device_available and self._consecutive_stale_checks >= 2:
+                    _LOGGER.warning(
+                        "MQTT stale for %s (%.0fs) - device unavailable (no HTTP fallback)",
+                        self.device_sn, age,
+                    )
+                    self._device_available = False
+            else:
+                if not self._device_available:
+                    _LOGGER.info("MQTT recovered for %s - device available again", self.device_sn)
+                    self._device_available = True
+                self._consecutive_stale_checks = 0
 
         # Tier 2+3: try MQTT reconnect if disconnected
         if self._mqtt_client is not None and not self._mqtt_client.is_connected():

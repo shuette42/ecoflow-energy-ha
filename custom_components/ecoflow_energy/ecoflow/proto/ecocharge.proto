@@ -2,7 +2,7 @@ syntax = "proto3";
 
 // ecocharge — Canonical Protobuf schema for EcoFlow PowerOcean telemetry.
 // Envelope (HeaderMessage/Header) + JT-S1 PowerOcean messages in one file.
-// Source: APK extraction + BLE reverse-engineering, validated against live MQTT.
+// Source: Protocol analysis of EcoFlow Portal web client, validated against live MQTT.
 
 package ecoflow;
 

@@ -7,7 +7,18 @@ import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
-from .const import CONF_DEVICES, CONF_MODE, DOMAIN, MODE_ENHANCED, PLATFORMS
+from .const import (
+    AUTH_METHOD_APP,
+    AUTH_METHOD_DEVELOPER,
+    CONF_AUTH_METHOD,
+    CONF_DEVICES,
+    CONF_EMAIL,
+    CONF_MODE,
+    CONF_PASSWORD,
+    DOMAIN,
+    MODE_ENHANCED,
+    PLATFORMS,
+)
 from .coordinator import EcoFlowDeviceCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -15,15 +26,50 @@ _LOGGER = logging.getLogger(__name__)
 type EcoFlowConfigEntry = ConfigEntry
 
 
+CONFIG_VERSION = 3
+
+
 async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
-    """Migrate old entry."""
-    if config_entry.version > 1:
+    """Migrate old config entries to current schema."""
+    if config_entry.version > CONFIG_VERSION:
         return False
+
+    if config_entry.version < 3:
+        _LOGGER.debug(
+            "Migrating config entry %s from version %d to 3",
+            config_entry.entry_id, config_entry.version,
+        )
+        new_data = {**config_entry.data}
+        new_data.setdefault(CONF_AUTH_METHOD, AUTH_METHOD_DEVELOPER)
+        hass.config_entries.async_update_entry(
+            config_entry, data=new_data, version=3,
+        )
+        _LOGGER.info(
+            "Migration of config entry %s to version 3 successful",
+            config_entry.entry_id,
+        )
+
     return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> bool:
     """Set up EcoFlow Energy from a config entry."""
+    # Auto-upgrade: Enhanced Mode entries with email+password -> app-auth.
+    # This lets existing Enhanced users benefit from the app-auth path
+    # (no Developer Keys needed for MQTT) without manual reconfiguration.
+    if (
+        entry.data.get(CONF_MODE) == MODE_ENHANCED
+        and entry.data.get(CONF_AUTH_METHOD) != AUTH_METHOD_APP
+        and entry.data.get(CONF_EMAIL)
+        and entry.data.get(CONF_PASSWORD)
+    ):
+        new_data = {**entry.data, CONF_AUTH_METHOD: AUTH_METHOD_APP}
+        hass.config_entries.async_update_entry(entry, data=new_data)
+        _LOGGER.info(
+            "Auto-upgraded Enhanced Mode entry %s to app-auth",
+            entry.entry_id,
+        )
+
     devices = entry.data.get(CONF_DEVICES, [])
     coordinators: dict[str, EcoFlowDeviceCoordinator] = {}
 

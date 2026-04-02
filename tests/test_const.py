@@ -4,6 +4,8 @@ import ast
 from pathlib import Path
 
 from ecoflow_energy.const import (
+    DELTA_PROFILE_R331,
+    DELTA_PROFILE_R351,
     POWEROCEAN_SENSORS,
     DELTA2MAX_SENSORS,
     SMARTPLUG_SENSORS,
@@ -13,9 +15,27 @@ from ecoflow_energy.const import (
     POWEROCEAN_BINARY_SENSORS,
     SMARTPLUG_SWITCHES,
     SMARTPLUG_NUMBERS,
+    get_delta_profile,
 )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+class TestDeltaProfileRouting:
+    def test_delta2max_r351_by_name(self):
+        assert get_delta_profile("Delta 2 Max", "DAEBK5ZZ12340001") == DELTA_PROFILE_R351
+
+    def test_legacy_delta_max_r331_by_name(self):
+        assert get_delta_profile("Delta Max", "RXXX123456789012") == DELTA_PROFILE_R331
+
+    def test_r331_sn_prefix_wins(self):
+        assert get_delta_profile("Delta 2 Max", "R331ABCDEF123456") == DELTA_PROFILE_R331
+
+    def test_delta2_without_max_is_r331(self):
+        assert get_delta_profile("Delta 2", "DAEBK5ZZ12340001") == DELTA_PROFILE_R331
+
+    def test_unknown_sn_unknown_name_defaults_r351(self):
+        assert get_delta_profile("Delta Pro", "XXXX123456789012") == DELTA_PROFILE_R351
 
 
 def _extract_sensor_keys(var_name: str) -> list[str]:

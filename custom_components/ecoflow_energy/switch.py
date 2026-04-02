@@ -18,8 +18,17 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DELTA2MAX_SWITCHES, DEVICE_TYPE_DELTA, DEVICE_TYPE_SMARTPLUG, DOMAIN, EcoFlowSwitchDef, SMARTPLUG_SWITCHES
+from .const import (
+    DELTA2MAX_SWITCHES,
+    DELTA_PROFILE_R331,
+    DEVICE_TYPE_DELTA,
+    DEVICE_TYPE_SMARTPLUG,
+    DOMAIN,
+    EcoFlowSwitchDef,
+    SMARTPLUG_SWITCHES,
+)
 from .coordinator import EcoFlowDeviceCoordinator
+from .ecoflow.parsers.smartplug import build_plug_switch_payload
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -44,7 +53,7 @@ SMARTPLUG_COMMANDS: dict[str, dict[str, dict[str, Any]]] = {
 #
 # Legacy switches use on/off dict with full params.
 # New switches use declarative format with param_key, invert, extra_params.
-SWITCH_COMMANDS: dict[str, dict[str, dict[str, Any]]] = {
+SWITCH_COMMANDS_R351: dict[str, dict[str, dict[str, Any]]] = {
     "ac_switch": {
         "on": {
             "moduleType": 3,
@@ -67,11 +76,46 @@ SWITCH_COMMANDS: dict[str, dict[str, dict[str, Any]]] = {
     },
 }
 
+SWITCH_COMMANDS_R331: dict[str, dict[str, dict[str, Any]]] = {
+    "ac_switch": {
+        "on": {
+            "moduleType": 5,
+            "operateType": "acOutCfg",
+            "params": {"enabled": 1, "out_voltage": 4294967295, "out_freq": 255, "xboost": 255},
+        },
+        "off": {
+            "moduleType": 5,
+            "operateType": "acOutCfg",
+            "params": {"enabled": 0, "out_voltage": 4294967295, "out_freq": 255, "xboost": 255},
+        },
+    },
+    "dc_switch": {
+        "on": {"moduleType": 1, "operateType": "dcOutCfg", "params": {"enabled": 1}},
+        "off": {"moduleType": 1, "operateType": "dcOutCfg", "params": {"enabled": 0}},
+    },
+    "car_12v_switch": {
+        "on": {"moduleType": 5, "operateType": "mpptCar", "params": {"enabled": 1}},
+        "off": {"moduleType": 5, "operateType": "mpptCar", "params": {"enabled": 0}},
+    },
+    "xboost_switch": {
+        "on": {
+            "moduleType": 5,
+            "operateType": "acOutCfg",
+            "params": {"xboost": 1, "enabled": 255, "out_voltage": 4294967295, "out_freq": 255},
+        },
+        "off": {
+            "moduleType": 5,
+            "operateType": "acOutCfg",
+            "params": {"xboost": 0, "enabled": 255, "out_voltage": 4294967295, "out_freq": 255},
+        },
+    },
+}
+
 # Declarative switch command templates (Delta 2 Max)
 # param_key: the parameter name sent in the command (default: "enabled")
 # invert: when True, ON sends 0 and OFF sends 1 (e.g. beeper vs quiet mode)
 # extra_params: additional fixed parameters merged into the command params
-SWITCH_DECLARATIVE: dict[str, dict[str, Any]] = {
+SWITCH_DECLARATIVE_R351: dict[str, dict[str, Any]] = {
     "beeper_switch": {
         "moduleType": 1,
         "operateType": "quietCfg",
@@ -88,6 +132,27 @@ SWITCH_DECLARATIVE: dict[str, dict[str, Any]] = {
         "operateType": "newAcAutoOnCfg",
         "param_key": "enabled",
         "extra_params": {"minAcSoc": 5},
+    },
+    "backup_reserve_switch": {
+        "moduleType": 1,
+        "operateType": "watthConfig",
+        "param_key": "isConfig",
+        "extra_params": {"bpPowerSoc": 50, "minChgSoc": 0, "minDsgSoc": 0},
+    },
+}
+
+SWITCH_DECLARATIVE_R331: dict[str, dict[str, Any]] = {
+    "beeper_switch": {
+        "moduleType": 1,
+        "operateType": "quietMode",
+        "param_key": "enabled",
+        "invert": True,
+    },
+    "ac_auto_on_switch": {
+        "moduleType": 1,
+        "operateType": "acAutoOutConfig",
+        "param_key": "acAutoOutConfig",
+        "extra_params": {"minAcOutSoc": 5},
     },
     "backup_reserve_switch": {
         "moduleType": 1,
@@ -177,24 +242,43 @@ class EcoFlowSwitch(CoordinatorEntity[EcoFlowDeviceCoordinator], SwitchEntity):
 
     async def _send_command(self, turn_on: bool) -> None:
         """Send a SET command and apply optimistic lock."""
+        # SmartPlug app-auth: use protobuf SET (JSON cmdCode only works on /open/ topic)
+        if (
+            self.coordinator.device_type == DEVICE_TYPE_SMARTPLUG
+            and self.coordinator.enhanced_mode
+            and self._definition.key == "plug_switch"
+        ):
+            self._apply_optimistic(turn_on)
+            payload = build_plug_switch_payload(turn_on, device_sn=self.coordinator.device_sn)
+            await self.coordinator.async_send_proto_set_command(payload, "plug_switch")
+            return
+
         command = self._build_command(turn_on)
         if command is None:
             _LOGGER.warning("No command template for %s", self._definition.key)
             return
 
-        # Optimistic update: immediately reflect the new state
+        self._apply_optimistic(turn_on)
+        await self.coordinator.async_send_set_command(command)
+
+    def _apply_optimistic(self, turn_on: bool) -> None:
+        """Apply optimistic lock: immediately reflect the new state."""
         self._optimistic_value = turn_on
         self._optimistic_lock_until = time.monotonic() + OPTIMISTIC_LOCK_S
-        self._last_written_value = turn_on  # keep dedup in sync
+        self._last_written_value = turn_on
         self.async_write_ha_state()
-
-        # Send the command via the coordinator
-        await self.coordinator.async_send_set_command(command)
 
     def _build_command(self, turn_on: bool) -> dict[str, Any] | None:
         """Build a SET command from legacy or declarative templates."""
+        if self.coordinator.device_type == DEVICE_TYPE_DELTA:
+            commands = _get_delta_switch_commands(self.coordinator.delta_profile)
+            declarative_templates = _get_delta_switch_declarative(self.coordinator.delta_profile)
+        else:
+            commands = _get_switch_commands(self.coordinator.device_type)
+            declarative_templates = {}
+
         # Check declarative templates first (new switches)
-        decl = SWITCH_DECLARATIVE.get(self._definition.key)
+        decl = declarative_templates.get(self._definition.key)
         if decl is not None:
             invert = decl.get("invert", False)
             if invert:
@@ -214,7 +298,6 @@ class EcoFlowSwitch(CoordinatorEntity[EcoFlowDeviceCoordinator], SwitchEntity):
 
         # Legacy on/off templates
         cmd_key = "on" if turn_on else "off"
-        commands = _get_switch_commands(self.coordinator.device_type)
         return commands.get(self._definition.key, {}).get(cmd_key)
 
     @callback
@@ -239,4 +322,18 @@ def _get_switch_commands(device_type: str) -> dict[str, dict[str, dict[str, Any]
     """Return command templates based on device type."""
     if device_type == DEVICE_TYPE_SMARTPLUG:
         return SMARTPLUG_COMMANDS
-    return SWITCH_COMMANDS
+    return SWITCH_COMMANDS_R351
+
+
+def _get_delta_switch_commands(delta_profile: str) -> dict[str, dict[str, dict[str, Any]]]:
+    """Return Delta switch command templates for the selected profile."""
+    if delta_profile == DELTA_PROFILE_R331:
+        return SWITCH_COMMANDS_R331
+    return SWITCH_COMMANDS_R351
+
+
+def _get_delta_switch_declarative(delta_profile: str) -> dict[str, dict[str, Any]]:
+    """Return Delta declarative switch templates for the selected profile."""
+    if delta_profile == DELTA_PROFILE_R331:
+        return SWITCH_DECLARATIVE_R331
+    return SWITCH_DECLARATIVE_R351

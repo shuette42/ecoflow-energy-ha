@@ -6,10 +6,12 @@ import logging
 import sys
 
 from ecoflow_energy.ecoflow.energy_stream import (
-    _encode_field_bytes,
-    _encode_field_varint,
     build_energy_stream_activate_payload,
     build_energy_stream_deactivate_payload,
+)
+from ecoflow_energy.ecoflow.proto_encoding import (
+    encode_field_bytes,
+    encode_field_varint,
 )
 from ecoflow_energy.ecoflow.proto.decoder import decode_header_message
 from ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
@@ -26,10 +28,10 @@ from ecoflow_energy.ecoflow.proto.runtime import (
 def _build_frame(cmd_func: int, cmd_id: int, inner: bytes) -> bytes:
     """Build a minimal HeaderMessage frame for testing."""
     header = bytearray()
-    header.extend(_encode_field_bytes(1, inner))       # pdata
-    header.extend(_encode_field_varint(8, cmd_func))   # cmd_func
-    header.extend(_encode_field_varint(9, cmd_id))     # cmd_id
-    return _encode_field_bytes(1, bytes(header))
+    header.extend(encode_field_bytes(1, inner))       # pdata
+    header.extend(encode_field_varint(8, cmd_func))   # cmd_func
+    header.extend(encode_field_varint(9, cmd_id))     # cmd_id
+    return encode_field_bytes(1, bytes(header))
 
 
 class TestProtobufDecoder:
@@ -42,7 +44,7 @@ class TestProtobufDecoder:
 
     def test_decode_simple_header(self):
         """Build a frame with one header containing cmd_func=96, cmd_id=33."""
-        inner = _encode_field_varint(1, 1)  # dummy pdata
+        inner = encode_field_varint(1, 1)  # dummy pdata
         frame = _build_frame(96, 33, inner)
         headers, payload = decode_header_message(frame)
         assert len(headers) == 1

@@ -37,6 +37,7 @@ DELTA2MAX_HTTP_FIELD_MAP: dict[str, str] = {
     "pd.standbyMin": "standby_timeout_min",
     "pd.beepMode": "beep_mode_raw",
     "pd.newAcAutoOnCfg": "ac_auto_on",
+    "pd.acAutoOutConfig": "ac_auto_on_legacy",
     "pd.brightLevel": "screen_brightness",
     "pd.lcdOffSec": "screen_timeout_sec",
     "pd.bpPowerSoc": "backup_reserve_soc",
@@ -107,6 +108,11 @@ DELTA2MAX_HTTP_FIELD_MAP: dict[str, str] = {
     "mppt.carStandbyMin": "car_standby_min",
     "mppt.chgState": "mppt_chg_state",
     "mppt.faultCode": "mppt_fault_code",
+    # Legacy R331 (Delta 2 / Delta Max): AC/Beeper state can be reported under mppt.*
+    "mppt.cfgAcEnabled": "ac_enabled_legacy",
+    "mppt.cfgAcXboost": "ac_xboost_legacy",
+    "mppt.cfgAcOutFreq": "ac_out_freq_hz_legacy",
+    "mppt.beepState": "beep_mode_raw_legacy",
     # --- bms_slave.1 (Slave Battery Pack 1) ---
     "bms_slave.1.soc": "slave1_soc",
     "bms_slave.1.vol": "slave1_voltage_mv",
@@ -170,6 +176,23 @@ def parse_delta_http_quota(quota_data: dict) -> dict[str, Any]:
     # --- Beeper inversion: beepMode=0 means beeper ON (normal mode) ---
     if "beep_mode_raw" in result:
         result["beep_enabled"] = 0 if result.pop("beep_mode_raw") else 1
+    if "beep_mode_raw_legacy" in result and "beep_enabled" not in result:
+        result["beep_enabled"] = 0 if result.pop("beep_mode_raw_legacy") else 1
+    result.pop("beep_mode_raw_legacy", None)
+
+    # Legacy fallbacks: use legacy paths only when modern keys are absent.
+    if "ac_auto_on" not in result and "ac_auto_on_legacy" in result:
+        result["ac_auto_on"] = result["ac_auto_on_legacy"]
+    if "ac_enabled" not in result and "ac_enabled_legacy" in result:
+        result["ac_enabled"] = result["ac_enabled_legacy"]
+    if "ac_xboost" not in result and "ac_xboost_legacy" in result:
+        result["ac_xboost"] = result["ac_xboost_legacy"]
+    if "ac_out_freq_hz" not in result and "ac_out_freq_hz_legacy" in result:
+        result["ac_out_freq_hz"] = result["ac_out_freq_hz_legacy"]
+    result.pop("ac_auto_on_legacy", None)
+    result.pop("ac_enabled_legacy", None)
+    result.pop("ac_xboost_legacy", None)
+    result.pop("ac_out_freq_hz_legacy", None)
 
     # --- Voltage conversions: mV -> V ---
     for mv_key, v_key in [

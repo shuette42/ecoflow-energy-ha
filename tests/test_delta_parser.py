@@ -149,6 +149,16 @@ class TestDeltaParser:
         result = parse_delta_report(report)
         assert result["ac_auto_on"] == 1.0
 
+    def test_ac_auto_on_legacy(self):
+        report = {"typeCode": "pdStatus", "params": {"acAutoOutConfig": 1}}
+        result = parse_delta_report(report)
+        assert result["ac_auto_on"] == 1.0
+
+    def test_standby_timeout_via_mqtt(self):
+        report = {"typeCode": "pdStatus", "params": {"standbyMin": 60}}
+        result = parse_delta_report(report)
+        assert result["standby_timeout_min"] == 60.0
+
     def test_screen_brightness(self):
         report = {"typeCode": "pdStatus", "params": {"brightLevel": 80}}
         result = parse_delta_report(report)
@@ -173,6 +183,21 @@ class TestDeltaParser:
         report = {"typeCode": "mpptStatus", "params": {"carStandbyMin": 120}}
         result = parse_delta_report(report)
         assert result["car_standby_min"] == 120.0
+
+    def test_legacy_mppt_ac_enabled_fallback(self):
+        report = {"typeCode": "mpptStatus", "params": {"cfgAcEnabled": 1}}
+        result = parse_delta_report(report)
+        assert result["ac_enabled"] == 1.0
+
+    def test_legacy_mppt_xboost_fallback(self):
+        report = {"typeCode": "mpptStatus", "params": {"cfgAcXboost": 1}}
+        result = parse_delta_report(report)
+        assert result["ac_xboost"] == 1.0
+
+    def test_legacy_mppt_beeper_inverted(self):
+        report = {"typeCode": "mpptStatus", "params": {"beepState": 1}}
+        result = parse_delta_report(report)
+        assert result["beep_enabled"] == 0
 
     # --- Slave Battery Pack Support ---
 

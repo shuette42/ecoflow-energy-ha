@@ -2,6 +2,13 @@
   "config": {
     "step": {
       "user": {
+        "title": "Verbindungsmodus",
+        "description": "Wie soll die Verbindung zu deinen EcoFlow-Geräten hergestellt werden?\n\n**Standard** - Offizielle EcoFlow IoT API. Von EcoFlow unterstützt. Updates alle 10-30 Sekunden. Erfordert Developer API Keys.\n\n**Enhanced** - Community-basierte Echtzeit-Verbindung. Updates alle ~3 Sekunden. Erfordert dein EcoFlow-App-Login. Inoffiziell - Nutzung auf eigene Verantwortung.",
+        "data": {
+          "mode": "Verbindungsmodus"
+        }
+      },
+      "developer": {
         "title": "EcoFlow Developer-Zugangsdaten",
         "description": "Gib deinen Access Key und Secret Key aus dem [EcoFlow Developer Portal]({developer_portal_url}) ein.",
         "data": {
@@ -9,26 +16,19 @@
           "secret_key": "Secret Key"
         }
       },
+      "app_credentials": {
+        "title": "EcoFlow App Login",
+        "description": "Gib die E-Mail-Adresse und das Passwort ein, mit dem du dich in der EcoFlow-App anmeldest. Alle mit deinem Konto verbundenen Geräte werden automatisch erkannt.",
+        "data": {
+          "email": "E-Mail",
+          "password": "Passwort"
+        }
+      },
       "devices": {
         "title": "Geräte auswählen",
         "description": "Wähle die EcoFlow-Geräte aus, die du zu Home Assistant hinzufügen möchtest.",
         "data": {
           "devices": "Geräte"
-        }
-      },
-      "mode": {
-        "title": "Verbindungsmodus",
-        "description": "**Standard-Modus** nutzt die offizielle EcoFlow IoT-API mit Updates alle 10–30 Sekunden.\n\n**Enhanced-Modus** nutzt eine Echtzeit-WebSocket-Verbindung mit Updates alle ~3 Sekunden. Dies ist eine inoffizielle Verbindungsmethode und erfordert deine EcoFlow-Konto-E-Mail und Passwort.",
-        "data": {
-          "mode": "Modus"
-        }
-      },
-      "enhanced": {
-        "title": "Enhanced-Modus Zugangsdaten",
-        "description": "**Hinweis:** Der Enhanced-Modus nutzt eine inoffizielle Verbindung zu EcoFlow-Servern. Er wird nicht von EcoFlow unterstützt und kann jederzeit aufhören zu funktionieren. Nutzung auf eigene Verantwortung.\n\nGib die E-Mail-Adresse und das Passwort deines EcoFlow-App-Kontos ein. Die User ID wird automatisch ermittelt.",
-        "data": {
-          "email": "E-Mail",
-          "password": "Passwort"
         }
       },
       "reauth_confirm": {
@@ -42,6 +42,22 @@
       "reauth_enhanced": {
         "title": "Enhanced Mode erneut authentifizieren",
         "description": "Ihre EcoFlow App-Zugangsdaten sind nicht mehr gültig. Geben Sie Ihre aktualisierte E-Mail-Adresse und Ihr Passwort ein.",
+        "data": {
+          "email": "E-Mail",
+          "password": "Passwort"
+        }
+      },
+      "reauth_app": {
+        "title": "EcoFlow App erneut authentifizieren",
+        "description": "Deine EcoFlow App-Zugangsdaten sind nicht mehr gültig. Gib deine aktualisierte E-Mail-Adresse und dein Passwort ein.",
+        "data": {
+          "email": "E-Mail",
+          "password": "Passwort"
+        }
+      },
+      "reconfigure_app": {
+        "title": "EcoFlow App Zugangsdaten aktualisieren",
+        "description": "Gib deine EcoFlow App E-Mail-Adresse und dein Passwort ein.",
         "data": {
           "email": "E-Mail",
           "password": "Passwort"
@@ -82,10 +98,18 @@
     "step": {
       "init": {
         "title": "EcoFlow Energy Optionen",
-        "description": "Verbindungsmodus und Geräteeinstellungen anpassen.\n\n**Enhanced-Modus** liefert Echtzeit-Updates (~3 s) nur für **PowerOcean**. Andere Geräte (Delta, Smart Plug) nutzen automatisch den Standard-Modus.",
+        "description": "**Standard** - Offizielle EcoFlow IoT API. Von EcoFlow unterstützt. Updates alle 10-30 Sekunden.\n\n**Enhanced** - Community-basierte Echtzeit-Verbindung. Updates alle ~3 Sekunden. Inoffiziell - Nutzung auf eigene Verantwortung.\n\nBeim Wechsel des Modus werden ggf. neue Zugangsdaten benötigt.",
         "data": {
-          "mode": "Modus",
+          "mode": "Verbindungsmodus",
           "devices": "Geräte"
+        }
+      },
+      "developer": {
+        "title": "Developer API Zugangsdaten",
+        "description": "Der Standard-Modus benötigt Developer API Keys aus dem EcoFlow IoT Developer Portal.",
+        "data": {
+          "access_key": "Access Key",
+          "secret_key": "Secret Key"
         }
       },
       "enhanced": {
@@ -99,6 +123,7 @@
     },
     "error": {
       "cannot_connect": "Verbindung zur EcoFlow-API fehlgeschlagen.",
+      "invalid_auth": "Ungültige API-Zugangsdaten.",
       "enhanced_login_failed": "Enhanced-Modus Login fehlgeschlagen.",
       "enhanced_decrypt_failed": "Enhanced-Modus Entschlüsselung fehlgeschlagen.",
       "no_devices": "Bitte mindestens ein Gerät auswählen.",

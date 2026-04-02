@@ -147,3 +147,56 @@ def _decrypt_certification(
     except (ValueError, json.JSONDecodeError) as exc:
         _LOGGER.warning("Enhanced certification decryption failed: %s", exc)
         return None
+
+
+_DEVICE_LIST_PATH = "/iot-service/user/device"
+
+
+async def get_app_device_list(
+    session: aiohttp.ClientSession,
+    token: str,
+    base_url: str = IOT_API_BASE,
+) -> list[dict] | None:
+    """Fetch device list using app-auth Bearer token (no Developer Keys needed).
+
+    Uses /iot-service/user/device which returns ALL devices bound to the
+    user's EcoFlow account, regardless of IoT Developer API key binding.
+
+    Tries multiple API base URLs for resilience (same pattern as enhanced_login).
+
+    Returns:
+        list of dicts with sn, device_name, product_type, online, or None on failure.
+    """
+    last_error = ""
+    for try_url in _AUTH_BASE_URLS:
+        url = f"{try_url.rstrip('/')}{_DEVICE_LIST_PATH}"
+        headers = {"Authorization": f"Bearer {token}"}
+        try:
+            timeout = aiohttp.ClientTimeout(total=10)
+            async with session.get(url, headers=headers, timeout=timeout) as resp:
+                body = await resp.json()
+                if str(body.get("code")) != "0":
+                    last_error = f"code={body.get('code')} msg={body.get('message')}"
+                    _LOGGER.debug("Device list attempt %s: %s", try_url, last_error)
+                    continue
+                data = body.get("data", {})
+                return _normalize_device_list(data)
+        except (aiohttp.ClientError, TimeoutError) as exc:
+            last_error = str(exc)
+            _LOGGER.debug("Device list attempt %s failed: %s", try_url, exc)
+            continue
+
+    _LOGGER.warning("Device list fetch failed on all endpoints: %s", last_error)
+    return None
+
+
+def _normalize_device_list(data: dict) -> list[dict]:
+    """Normalize the nested bound/share device dict into a flat list.
+
+    Delegates to app_api._parse_device_response for robust parsing
+    (handles both dict and list formats, deduplicates, classifies devices).
+    """
+    # Lazy import to avoid circular dependency (app_api imports enhanced_auth)
+    from .app_api import _parse_device_response  # noqa: C0415
+
+    return _parse_device_response(data)

@@ -6,6 +6,14 @@ from dataclasses import dataclass
 
 from homeassistant.const import Platform
 
+from .ecoflow.const import (  # noqa: E402
+    DEVICE_TYPE_DELTA,
+    DEVICE_TYPE_POWEROCEAN,
+    DEVICE_TYPE_SMARTPLUG,
+    DEVICE_TYPE_UNKNOWN,
+    get_device_type,
+)
+
 DOMAIN = "ecoflow_energy"
 
 PLATFORMS: list[Platform] = [
@@ -23,6 +31,11 @@ CONF_MODE = "mode"
 CONF_EMAIL = "email"
 CONF_PASSWORD = "password"
 CONF_USER_ID = "user_id"
+CONF_AUTH_METHOD = "auth_method"
+
+# Auth methods
+AUTH_METHOD_DEVELOPER = "developer"
+AUTH_METHOD_APP = "app"
 
 # Device modes
 MODE_STANDARD = "standard"
@@ -36,35 +49,35 @@ ENERGY_STREAM_KEEPALIVE_S = 20  # Re-send EnergyStreamSwitch every 20s
 QUOTAS_KEEPALIVE_S = 30  # latestQuotas poll interval (app-level keepalive)
 PING_KEEPALIVE_S = 60  # MQTT ping heartbeat interval
 
-# Device types (from IoT API productName / productType)
-DEVICE_TYPE_POWEROCEAN = "powerocean"
-DEVICE_TYPE_DELTA = "delta"
-DEVICE_TYPE_SMARTPLUG = "smartplug"
-DEVICE_TYPE_UNKNOWN = "unknown"
+DEVICE_TYPE_DISPLAY_NAMES: dict[str, str] = {
+    DEVICE_TYPE_POWEROCEAN: "PowerOcean",
+    DEVICE_TYPE_DELTA: "Delta 2 Max",
+    DEVICE_TYPE_SMARTPLUG: "Smart Plug",
+}
 
-# Keywords used to classify devices from productName strings
-_POWEROCEAN_KEYWORDS = ("powerocean", "power ocean")
-_DELTA_KEYWORDS = ("delta",)
-_SMARTPLUG_KEYWORDS = ("smart plug", "smartplug")
+# Delta write/profile variants.
+# R351: newer Delta 2 Max-style operateType naming.
+# R331: legacy Delta/Delta Max-style operateType naming.
+DELTA_PROFILE_R351 = "r351"
+DELTA_PROFILE_R331 = "r331"
 
 
-def get_device_type(product_name: str) -> str:
-    """Classify a device based on its productName string.
-
-    Returns DEVICE_TYPE_POWEROCEAN, DEVICE_TYPE_DELTA, DEVICE_TYPE_SMARTPLUG,
-    or DEVICE_TYPE_UNKNOWN.
-    """
+def get_delta_profile(product_name: str, device_sn: str = "") -> str:
+    """Return Delta command/profile variant for write/read compatibility."""
     name = product_name.lower()
-    for kw in _POWEROCEAN_KEYWORDS:
-        if kw in name:
-            return DEVICE_TYPE_POWEROCEAN
-    for kw in _DELTA_KEYWORDS:
-        if kw in name:
-            return DEVICE_TYPE_DELTA
-    for kw in _SMARTPLUG_KEYWORDS:
-        if kw in name:
-            return DEVICE_TYPE_SMARTPLUG
-    return DEVICE_TYPE_UNKNOWN
+    sn = device_sn.upper()
+
+    if sn.startswith("R331"):
+        return DELTA_PROFILE_R331
+    if sn.startswith("R351"):
+        return DELTA_PROFILE_R351
+
+    if "delta 2 max" in name:
+        return DELTA_PROFILE_R351
+    if "delta max" in name or "deltamax" in name or "delta 2" in name:
+        return DELTA_PROFILE_R331
+
+    return DELTA_PROFILE_R351
 
 
 # =====================================================================
@@ -429,7 +442,7 @@ SMARTPLUG_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("temperature_c", "Temperature", "\u00b0C", "temperature", "measurement", "mdi:thermometer", "diagnostic", suggested_display_precision=1),
     EcoFlowSensorDef("max_power_w", "Max Power Rating", "W", "power", None, "mdi:flash-alert", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("max_current_a", "Max Current Rating", "A", "current", None, "mdi:current-ac", "diagnostic", suggested_display_precision=2, disabled_by_default=True),
-    EcoFlowSensorDef("led_brightness", "LED Brightness", None, None, "measurement", "mdi:brightness-6", "diagnostic", disabled_by_default=True),
+    EcoFlowSensorDef("led_brightness", "LED Brightness", "%", None, "measurement", "mdi:brightness-6", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("error_code", "Error Code", None, None, None, "mdi:alert-circle-outline", "diagnostic", disabled_by_default=True),
     EcoFlowSensorDef("warning_code", "Warning Code", None, None, None, "mdi:alert-outline", "diagnostic", disabled_by_default=True),
     # --- Energy Dashboard (total_increasing, kWh) ---
@@ -445,7 +458,7 @@ SMARTPLUG_SWITCHES: list[EcoFlowSwitchDef] = [
 ]
 
 SMARTPLUG_NUMBERS: list[EcoFlowNumberDef] = [
-    EcoFlowNumberDef("led_brightness", "LED Brightness", "led_brightness", None, "mdi:brightness-6", 0, 1023, 1),
+    EcoFlowNumberDef("led_brightness", "LED Brightness", "led_brightness", "%", "mdi:brightness-6", 0, 100, 5),
     EcoFlowNumberDef("max_watts", "Max Power Limit", "max_power_w", "W", "mdi:flash-alert", 0, 2500, 100),
 ]
 

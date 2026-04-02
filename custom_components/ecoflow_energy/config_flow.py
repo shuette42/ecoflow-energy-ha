@@ -1,10 +1,12 @@
 """Config flow for EcoFlow Energy integration.
 
-Step 1: User enters access_key + secret_key (EcoFlow Developer Portal)
-Step 2: User selects devices from auto-discovered list
-Step 3: Mode selection — Standard (default) or Enhanced (WSS real-time)
+Step 1: User selects auth type (Developer API keys or App login)
+Step 2a (Developer): User enters access_key + secret_key
+Step 2b (App): User enters email + password
+Step 3: User selects devices from auto-discovered list
+Step 4: Mode selection - Standard (default) or Enhanced (WSS real-time)
         Enhanced requires email + password and shows a disclaimer.
-Step 4: Config entry created
+Step 5: Config entry created
 """
 
 from __future__ import annotations
@@ -22,28 +24,43 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import SelectSelector, SelectSelectorConfig
 
 from .const import (
+    AUTH_METHOD_APP,
+    AUTH_METHOD_DEVELOPER,
     CONF_ACCESS_KEY,
+    CONF_AUTH_METHOD,
     CONF_DEVICES,
     CONF_EMAIL,
     CONF_MODE,
     CONF_PASSWORD,
     CONF_SECRET_KEY,
     CONF_USER_ID,
+    DEVICE_TYPE_DISPLAY_NAMES,
     DOMAIN,
     MODE_ENHANCED,
     MODE_STANDARD,
     get_device_type,
 )
-from .ecoflow.enhanced_auth import enhanced_login
+from .ecoflow.enhanced_auth import enhanced_login, get_app_device_list
 from .ecoflow.iot_api import IoTApiClient
 
 _LOGGER = logging.getLogger(__name__)
 
 
+def _device_label(device: dict[str, Any]) -> str:
+    """Build a human-readable label for a device selection checkbox."""
+    name = device.get("name") or device.get("product_name") or ""
+    if not name:
+        name = DEVICE_TYPE_DISPLAY_NAMES.get(device.get("device_type", ""), "")
+    sn = device.get("sn", "")
+    sn_short = f"{sn[:8]}..." if len(sn) > 8 else sn
+    status = "" if device.get("online", 0) else " (offline)"
+    return f"{name} ({sn_short}){status}" if name else f"{sn_short}{status}"
+
+
 class EcoFlowEnergyConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for EcoFlow Energy."""
 
-    VERSION = 1
+    VERSION = 3
 
     @staticmethod
     @callback
@@ -55,17 +72,50 @@ class EcoFlowEnergyConfigFlow(ConfigFlow, domain=DOMAIN):
         """Initialize the config flow."""
         self._access_key: str = ""
         self._secret_key: str = ""
+        self._email: str = ""
+        self._password: str = ""
+        self._user_id: str = ""
+        self._mode: str = MODE_STANDARD
+        self._auth_type: str = AUTH_METHOD_DEVELOPER
         self._devices: list[dict[str, Any]] = []
         self._selected_devices: list[dict[str, Any]] = []
 
     # ------------------------------------------------------------------
-    # Step 1: Credentials
+    # Step 1: Mode selection (Standard vs Enhanced)
     # ------------------------------------------------------------------
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Step 1: Enter access_key and secret_key."""
+        """Step 1: Select connection mode."""
+        if user_input is not None:
+            mode = user_input[CONF_MODE]
+            if mode == MODE_ENHANCED:
+                return await self.async_step_app_credentials()
+            return await self.async_step_developer()
+
+        return self.async_show_form(
+            step_id="user",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_MODE, default=MODE_STANDARD): vol.In(
+                        {
+                            MODE_STANDARD: "Standard - Official EcoFlow API",
+                            MODE_ENHANCED: "Enhanced - Real-time (~3 s)",
+                        }
+                    ),
+                }
+            ),
+        )
+
+    # ------------------------------------------------------------------
+    # Step 2a: Developer API credentials
+    # ------------------------------------------------------------------
+
+    async def async_step_developer(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Step 2a: Enter access_key and secret_key."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -93,7 +143,7 @@ class EcoFlowEnergyConfigFlow(ConfigFlow, domain=DOMAIN):
                 errors["base"] = "unknown"
 
         return self.async_show_form(
-            step_id="user",
+            step_id="developer",
             data_schema=vol.Schema(
                 {
                     vol.Required(CONF_ACCESS_KEY): str,
@@ -104,6 +154,62 @@ class EcoFlowEnergyConfigFlow(ConfigFlow, domain=DOMAIN):
             description_placeholders={
                 "developer_portal_url": "https://developer.ecoflow.com",
             },
+        )
+
+    # ------------------------------------------------------------------
+    # Step 2b: App credentials (email + password)
+    # ------------------------------------------------------------------
+
+    async def async_step_app_credentials(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Step 2b: Enter EcoFlow app email and password."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            email = user_input.get(CONF_EMAIL, "").strip()
+            password = user_input.get(CONF_PASSWORD, "")
+
+            if not email or not password:
+                errors["base"] = "enhanced_login_failed"
+            else:
+                session = async_get_clientsession(self.hass)
+                try:
+                    login_result = await enhanced_login(session, email, password)
+                    if login_result is None:
+                        errors["base"] = "enhanced_login_failed"
+                    else:
+                        token = login_result["token"]
+                        self._email = email
+                        self._password = password
+                        self._user_id = login_result["user_id"]
+                        self._auth_type = AUTH_METHOD_APP
+
+                        # Fetch device list via app API (Bearer token)
+                        raw_devices = await get_app_device_list(session, token)
+                        if not raw_devices:
+                            errors["base"] = "no_devices"
+                        else:
+                            self._devices = self._normalize_app_devices(raw_devices)
+                            if not self._devices:
+                                errors["base"] = "no_devices"
+                            else:
+                                return await self.async_step_devices()
+                except (aiohttp.ClientError, TimeoutError, OSError):
+                    errors["base"] = "cannot_connect"
+                except (KeyError, ValueError, TypeError, AttributeError):
+                    _LOGGER.exception("Unexpected error during EcoFlow app login")
+                    errors["base"] = "unknown"
+
+        return self.async_show_form(
+            step_id="app_credentials",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_EMAIL): str,
+                    vol.Required(CONF_PASSWORD): str,
+                }
+            ),
+            errors=errors,
         )
 
     # ------------------------------------------------------------------
@@ -124,10 +230,17 @@ class EcoFlowEnergyConfigFlow(ConfigFlow, domain=DOMAIN):
                 self._selected_devices = [
                     d for d in self._devices if d["sn"] in selected_sns
                 ]
-                return await self.async_step_mode()
+                if self._auth_type == AUTH_METHOD_APP:
+                    return self._create_entry(
+                        mode=MODE_ENHANCED,
+                        email=self._email,
+                        password=self._password,
+                        user_id=self._user_id,
+                    )
+                return self._create_entry(mode=MODE_STANDARD)
 
         device_options = {
-            d["sn"]: f"{d['name']} ({d['sn'][:8]}...)"
+            d["sn"]: _device_label(d)
             for d in self._devices
         }
 
@@ -153,90 +266,6 @@ class EcoFlowEnergyConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
     # ------------------------------------------------------------------
-    # Step 3: Mode selection
-    # ------------------------------------------------------------------
-
-    async def async_step_mode(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Step 3: Choose Standard or Enhanced mode."""
-        errors: dict[str, str] = {}
-
-        if user_input is not None:
-            mode = user_input.get(CONF_MODE, MODE_STANDARD)
-
-            if mode == MODE_ENHANCED:
-                return await self.async_step_enhanced()
-
-            # Standard mode — create entry directly
-            return self._create_entry(mode=MODE_STANDARD)
-
-        return self.async_show_form(
-            step_id="mode",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_MODE, default=MODE_STANDARD): vol.In(
-                        {
-                            MODE_STANDARD: "Standard (official API, ~10-30 s updates)",
-                            MODE_ENHANCED: "Enhanced (real-time WSS, ~3 s updates)",
-                        }
-                    ),
-                }
-            ),
-            errors=errors,
-        )
-
-    # ------------------------------------------------------------------
-    # Step 3b: Enhanced credentials (email + password + disclaimer)
-    # ------------------------------------------------------------------
-
-    async def async_step_enhanced(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Step 3b: Enhanced Mode credentials.
-
-        Login with email + password to obtain userId automatically.
-        MQTT credentials come from the IoT Developer API at runtime.
-        """
-        errors: dict[str, str] = {}
-
-        if user_input is not None:
-            email = user_input.get(CONF_EMAIL, "").strip()
-            password = user_input.get(CONF_PASSWORD, "")
-
-            if not email or not password:
-                errors["base"] = "enhanced_login_failed"
-            else:
-                session = async_get_clientsession(self.hass)
-                try:
-                    login_result = await enhanced_login(session, email, password)
-                    if login_result is None:
-                        errors["base"] = "enhanced_login_failed"
-                    else:
-                        return self._create_entry(
-                            mode=MODE_ENHANCED,
-                            email=email,
-                            password=password,
-                            user_id=login_result["user_id"],
-                        )
-                except (aiohttp.ClientError, TimeoutError, OSError):
-                    errors["base"] = "cannot_connect"
-                except (KeyError, ValueError, TypeError, AttributeError):
-                    _LOGGER.exception("Unexpected error during Enhanced login")
-                    errors["base"] = "unknown"
-
-        return self.async_show_form(
-            step_id="enhanced",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_EMAIL): str,
-                    vol.Required(CONF_PASSWORD): str,
-                }
-            ),
-            errors=errors,
-        )
-
-    # ------------------------------------------------------------------
     # Re-authentication flow
     # ------------------------------------------------------------------
 
@@ -244,6 +273,9 @@ class EcoFlowEnergyConfigFlow(ConfigFlow, domain=DOMAIN):
         self, entry_data: Mapping[str, Any]
     ) -> ConfigFlowResult:
         """Handle re-authentication trigger."""
+        reauth_entry = self._get_reauth_entry()
+        if reauth_entry.data.get(CONF_AUTH_METHOD) == AUTH_METHOD_APP:
+            return await self.async_step_reauth_app()
         return await self.async_step_reauth_confirm()
 
     async def async_step_reauth_confirm(
@@ -349,6 +381,54 @@ class EcoFlowEnergyConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    async def async_step_reauth_app(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Re-auth for app-auth entries: email + password only."""
+        errors: dict[str, str] = {}
+        reauth_entry = self._get_reauth_entry()
+
+        if user_input is not None:
+            email = user_input.get(CONF_EMAIL, "").strip()
+            password = user_input.get(CONF_PASSWORD, "")
+
+            if not email or not password:
+                errors["base"] = "enhanced_login_failed"
+            else:
+                session = async_get_clientsession(self.hass)
+                try:
+                    login_result = await enhanced_login(session, email, password)
+                    if login_result is None:
+                        errors["base"] = "enhanced_login_failed"
+                    else:
+                        new_data = dict(reauth_entry.data)
+                        new_data[CONF_EMAIL] = email
+                        new_data[CONF_PASSWORD] = password
+                        new_data[CONF_USER_ID] = login_result["user_id"]
+                        self.hass.config_entries.async_update_entry(
+                            reauth_entry, data=new_data
+                        )
+                        return self.async_abort(reason="reauth_successful")
+                except (aiohttp.ClientError, TimeoutError, OSError):
+                    errors["base"] = "cannot_connect"
+                except (KeyError, ValueError, TypeError, AttributeError):
+                    _LOGGER.exception("Unexpected error during app re-authentication")
+                    errors["base"] = "unknown"
+
+        return self.async_show_form(
+            step_id="reauth_app",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_EMAIL,
+                        default=reauth_entry.data.get(CONF_EMAIL, ""),
+                    ): str,
+                    vol.Required(CONF_PASSWORD): str,
+                }
+            ),
+            errors=errors,
+        )
+
     # ------------------------------------------------------------------
     # Reconfigure flow (user-initiated credential update)
     # ------------------------------------------------------------------
@@ -357,6 +437,9 @@ class EcoFlowEnergyConfigFlow(ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Handle user-initiated credential update."""
+        reconfigure_entry = self._get_reconfigure_entry()
+        if reconfigure_entry.data.get(CONF_AUTH_METHOD) == AUTH_METHOD_APP:
+            return await self.async_step_reconfigure_app()
         return await self.async_step_reconfigure_confirm()
 
     async def async_step_reconfigure_confirm(
@@ -463,6 +546,54 @@ class EcoFlowEnergyConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    async def async_step_reconfigure_app(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Reconfigure for app-auth entries: email + password only."""
+        errors: dict[str, str] = {}
+        reconfigure_entry = self._get_reconfigure_entry()
+
+        if user_input is not None:
+            email = user_input.get(CONF_EMAIL, "").strip()
+            password = user_input.get(CONF_PASSWORD, "")
+
+            if not email or not password:
+                errors["base"] = "enhanced_login_failed"
+            else:
+                session = async_get_clientsession(self.hass)
+                try:
+                    login_result = await enhanced_login(session, email, password)
+                    if login_result is None:
+                        errors["base"] = "enhanced_login_failed"
+                    else:
+                        new_data = dict(reconfigure_entry.data)
+                        new_data[CONF_EMAIL] = email
+                        new_data[CONF_PASSWORD] = password
+                        new_data[CONF_USER_ID] = login_result["user_id"]
+                        self.hass.config_entries.async_update_entry(
+                            reconfigure_entry, data=new_data
+                        )
+                        return self.async_abort(reason="reconfigure_successful")
+                except (aiohttp.ClientError, TimeoutError, OSError):
+                    errors["base"] = "cannot_connect"
+                except (KeyError, ValueError, TypeError, AttributeError):
+                    _LOGGER.exception("Unexpected error during app reconfiguration")
+                    errors["base"] = "unknown"
+
+        return self.async_show_form(
+            step_id="reconfigure_app",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_EMAIL,
+                        default=reconfigure_entry.data.get(CONF_EMAIL, ""),
+                    ): str,
+                    vol.Required(CONF_PASSWORD): str,
+                }
+            ),
+            errors=errors,
+        )
+
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
@@ -476,19 +607,28 @@ class EcoFlowEnergyConfigFlow(ConfigFlow, domain=DOMAIN):
         user_id: str = "",
     ) -> ConfigFlowResult:
         """Create the config entry with all collected data."""
-        self._async_abort_entries_match({CONF_ACCESS_KEY: self._access_key})
+        if self._auth_type == AUTH_METHOD_APP:
+            self._async_abort_entries_match({CONF_EMAIL: self._email})
+        else:
+            self._async_abort_entries_match({CONF_ACCESS_KEY: self._access_key})
 
         data: dict[str, Any] = {
-            CONF_ACCESS_KEY: self._access_key,
-            CONF_SECRET_KEY: self._secret_key,
+            CONF_AUTH_METHOD: self._auth_type,
             CONF_DEVICES: self._selected_devices,
             CONF_MODE: mode,
         }
 
-        if mode == MODE_ENHANCED:
+        if self._auth_type == AUTH_METHOD_APP:
             data[CONF_EMAIL] = email
             data[CONF_PASSWORD] = password
             data[CONF_USER_ID] = user_id
+        else:
+            data[CONF_ACCESS_KEY] = self._access_key
+            data[CONF_SECRET_KEY] = self._secret_key
+            if mode == MODE_ENHANCED:
+                data[CONF_EMAIL] = email
+                data[CONF_PASSWORD] = password
+                data[CONF_USER_ID] = user_id
 
         return self.async_create_entry(title="EcoFlow Energy", data=data)
 
@@ -504,7 +644,7 @@ class EcoFlowEnergyConfigFlow(ConfigFlow, domain=DOMAIN):
                 continue
             product_name = dev.get("productName", dev.get("deviceName", "Unknown"))
             online = dev.get("online", 0)
-            device_type = get_device_type(product_name)
+            device_type = get_device_type(product_name, sn)
             sw_version = dev.get("firmwareVersion", dev.get("softwareVersion", ""))
             devices.append(
                 {
@@ -514,6 +654,35 @@ class EcoFlowEnergyConfigFlow(ConfigFlow, domain=DOMAIN):
                     "device_type": device_type,
                     "online": online,
                     "sw_version": str(sw_version) if sw_version else "",
+                }
+            )
+        return devices
+
+    @staticmethod
+    def _normalize_app_devices(
+        raw_devices: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Normalize the device list from the app API response.
+
+        The app API returns {sn, product_name, online, device_type} per device
+        (same format as app_api._parse_device_response).
+        """
+        devices = []
+        for dev in raw_devices:
+            sn = dev.get("sn", "")
+            if not sn:
+                continue
+            product_name = dev.get("product_name", "Unknown")
+            online = dev.get("online", 0)
+            device_type = dev.get("device_type", get_device_type(product_name, sn))
+            devices.append(
+                {
+                    "sn": sn,
+                    "name": product_name,
+                    "product_name": product_name,
+                    "device_type": device_type,
+                    "online": 1 if online else 0,
+                    "sw_version": "",
                 }
             )
         return devices
@@ -539,20 +708,24 @@ class EcoFlowOptionsFlow(OptionsFlow):
             d["sn"] for d in self.config_entry.data.get(CONF_DEVICES, [])
         ]
 
-        # Fetch current device list from API
+        # Fetch current device list from API (developer auth only)
         if not self._all_devices:
-            session = async_get_clientsession(self.hass)
-            api = IoTApiClient(
-                session,
-                self.config_entry.data[CONF_ACCESS_KEY],
-                self.config_entry.data[CONF_SECRET_KEY],
-            )
-            try:
-                raw = await api.get_device_list()
-                if raw:
-                    self._all_devices = EcoFlowEnergyConfigFlow._normalize_devices(raw)
-            except (aiohttp.ClientError, TimeoutError, OSError, KeyError, ValueError, TypeError):
-                _LOGGER.warning("Options flow: failed to fetch device list", exc_info=True)
+            auth_method = self.config_entry.data.get(CONF_AUTH_METHOD, AUTH_METHOD_DEVELOPER)
+            if auth_method == AUTH_METHOD_DEVELOPER:
+                ak = self.config_entry.data.get(CONF_ACCESS_KEY)
+                sk = self.config_entry.data.get(CONF_SECRET_KEY)
+                if ak and sk:
+                    session = async_get_clientsession(self.hass)
+                    api = IoTApiClient(session, ak, sk)
+                    try:
+                        raw = await api.get_device_list()
+                        if raw:
+                            self._all_devices = EcoFlowEnergyConfigFlow._normalize_devices(raw)
+                    except (aiohttp.ClientError, TimeoutError, OSError, KeyError, ValueError, TypeError):
+                        _LOGGER.warning("Options flow: failed to fetch device list", exc_info=True)
+            elif auth_method == AUTH_METHOD_APP:
+                # TODO: refresh device list from app API (requires token re-login)
+                pass
 
         if user_input is not None:
             new_mode = user_input.get(CONF_MODE, current_mode)
@@ -561,19 +734,32 @@ class EcoFlowOptionsFlow(OptionsFlow):
             if not selected_sns:
                 errors["base"] = "no_devices"
             elif new_mode == MODE_ENHANCED and current_mode != MODE_ENHANCED:
-                # Switching to Enhanced — need email + password
+                # Switching to Enhanced - need email + password
                 self._pending_mode = new_mode
                 self._pending_devices = selected_sns
                 return await self.async_step_enhanced()
+            elif new_mode != MODE_ENHANCED and not self.config_entry.data.get(CONF_ACCESS_KEY):
+                # Switching to Standard but no Developer API keys stored
+                self._pending_mode = new_mode
+                self._pending_devices = selected_sns
+                return await self.async_step_developer()
             else:
                 return self._save_options(new_mode, selected_sns)
 
-        device_options = {
-            d["sn"]: f"{d['name']} ({d['sn'][:8]}...)"
-            for d in self._all_devices
-        } if self._all_devices else {
-            sn: sn[:12] for sn in current_device_sns
-        }
+        if self._all_devices:
+            device_options = {
+                d["sn"]: _device_label(d)
+                for d in self._all_devices
+            }
+        else:
+            stored = {
+                d["sn"]: d.get("device_type", "")
+                for d in self.config_entry.data.get(CONF_DEVICES, [])
+            }
+            device_options = {
+                sn: f"{DEVICE_TYPE_DISPLAY_NAMES.get(stored.get(sn, ''), sn[:12])} ({sn[:12]})"
+                for sn in current_device_sns
+            }
 
         return self.async_show_form(
             step_id="init",
@@ -581,8 +767,8 @@ class EcoFlowOptionsFlow(OptionsFlow):
                 {
                     vol.Required(CONF_MODE, default=current_mode): vol.In(
                         {
-                            MODE_STANDARD: "Standard (official API, ~10-30 s)",
-                            MODE_ENHANCED: "Enhanced (real-time WSS, ~3 s)",
+                            MODE_STANDARD: "Standard - Official EcoFlow API",
+                            MODE_ENHANCED: "Enhanced - Real-time (~3 s)",
                         }
                     ),
                     vol.Required(
@@ -602,10 +788,49 @@ class EcoFlowOptionsFlow(OptionsFlow):
             errors=errors,
         )
 
+    async def async_step_developer(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Switch to Standard mode - collect Developer API keys."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            access_key = user_input.get(CONF_ACCESS_KEY, "").strip()
+            secret_key = user_input.get(CONF_SECRET_KEY, "").strip()
+
+            if access_key and secret_key:
+                session = async_get_clientsession(self.hass)
+                api = IoTApiClient(session, access_key, secret_key)
+                try:
+                    devices = await api.get_device_list()
+                    if devices is not None:
+                        return self._save_options(
+                            self._pending_mode,
+                            self._pending_devices,
+                            access_key=access_key,
+                            secret_key=secret_key,
+                        )
+                    errors["base"] = "invalid_auth"
+                except (aiohttp.ClientError, TimeoutError, OSError):
+                    errors["base"] = "cannot_connect"
+            else:
+                errors["base"] = "invalid_auth"
+
+        return self.async_show_form(
+            step_id="developer",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_ACCESS_KEY): str,
+                    vol.Required(CONF_SECRET_KEY): str,
+                }
+            ),
+            errors=errors,
+        )
+
     async def async_step_enhanced(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Switch to Enhanced mode — login to obtain userId."""
+        """Switch to Enhanced mode - login to obtain userId."""
         errors: dict[str, str] = {}
 
         current_email = self.config_entry.data.get(CONF_EMAIL, "")
@@ -656,6 +881,8 @@ class EcoFlowOptionsFlow(OptionsFlow):
         email: str = "",
         password: str = "",
         user_id: str = "",
+        access_key: str = "",
+        secret_key: str = "",
     ) -> ConfigFlowResult:
         """Persist changes by updating config entry data."""
         existing = {d["sn"]: d for d in self.config_entry.data.get(CONF_DEVICES, [])}
@@ -669,10 +896,16 @@ class EcoFlowOptionsFlow(OptionsFlow):
         new_data[CONF_DEVICES] = selected_devices
 
         if mode == MODE_ENHANCED:
+            new_data[CONF_AUTH_METHOD] = AUTH_METHOD_APP
             new_data[CONF_EMAIL] = email or new_data.get(CONF_EMAIL, "")
             new_data[CONF_PASSWORD] = password or new_data.get(CONF_PASSWORD, "")
             new_data[CONF_USER_ID] = user_id or new_data.get(CONF_USER_ID, "")
         else:
+            new_data[CONF_AUTH_METHOD] = AUTH_METHOD_DEVELOPER
+            if access_key:
+                new_data[CONF_ACCESS_KEY] = access_key
+            if secret_key:
+                new_data[CONF_SECRET_KEY] = secret_key
             new_data.pop(CONF_EMAIL, None)
             new_data.pop(CONF_PASSWORD, None)
             new_data.pop(CONF_USER_ID, None)

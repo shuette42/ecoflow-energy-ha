@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.0] - 2026-04-02
+
+### Added
+- **Enhanced Mode for all devices** - set up with just your EcoFlow email and password, no Developer API keys needed. Real-time updates: PowerOcean ~3 s, Delta 2 Max ~2 s, Smart Plug ~3 s
+- New setup flow: choose between Standard (official API) or Enhanced (community-driven real-time) at first setup
+- Auto-discovery of all devices bound to your EcoFlow account (Enhanced Mode)
+- Smart Plug full control in Enhanced Mode: on/off switch, LED brightness, max power limit
+- Automatic upgrade: existing Enhanced Mode setups migrate seamlessly on restart
+
+### Changed
+- Config flow redesigned: mode selection (Standard vs Enhanced) is now the first step
+- Smart Plug LED brightness now shows 0-100% instead of raw device values
+- Enhanced Mode and Standard Mode are fully separated - clean architecture, no hybrid paths
+- Reduced log noise: transient MQTT reconnects no longer flood the log with warnings
+
+### Fixed
+- Smart Plug switch and number controls now work reliably in Enhanced Mode
+- Delta 2 Max receives real-time updates (~2 s) in Enhanced Mode instead of only HTTP polling
+- Options flow mode switch correctly handles credential changes
+- Device type detection works even when the EcoFlow API returns empty device names
+
+### Upgrade notes
+- **Standard Mode users**: No action needed. Your setup continues to work exactly as before.
+- **Enhanced Mode users** (v1.8.x with Developer Keys + email/password): The integration automatically upgrades to the new app-auth flow. Developer Keys are no longer needed for Enhanced Mode.
+- **Config entry migration**: The integration migrates your configuration automatically (v1/v2 to v3). This is transparent and non-breaking.
+
 ## [1.8.3] - 2026-03-31
 
 ### Fixed
@@ -83,7 +109,7 @@ All notable changes to this project will be documented in this file.
 ## [1.6.2] - 2026-03-31
 
 ### Fixed
-- PowerOcean: swap proto field order in SysBatChgDsgSet — device reads field 1 as discharge lower and field 2 as charge upper (opposite of APK proto labels)
+- PowerOcean: swap proto field order in SysBatChgDsgSet - device reads field 1 as discharge lower and field 2 as charge upper (opposite of proto definition labels)
 - PowerOcean: fix dev_soc lookup in SET payload — was reading unmapped key, now uses coordinator-mapped `soc_pct`
 
 ## [1.6.1] - 2026-03-31

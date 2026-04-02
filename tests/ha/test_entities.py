@@ -40,8 +40,8 @@ from custom_components.ecoflow_energy.binary_sensor import (
 from custom_components.ecoflow_energy.switch import (
     EcoFlowSwitch,
     OPTIMISTIC_LOCK_S,
-    SWITCH_COMMANDS,
-    SWITCH_DECLARATIVE,
+    SWITCH_COMMANDS_R351 as SWITCH_COMMANDS,
+    SWITCH_DECLARATIVE_R351 as SWITCH_DECLARATIVE,
     _get_switch_defs,
 )
 from custom_components.ecoflow_energy.number import (
@@ -689,15 +689,15 @@ class TestEcoFlowNumber:
         hass: HomeAssistant,
         standard_config_entry: MockConfigEntry,
     ) -> None:
-        """Smart Plug LED brightness sends cmdCode format command."""
+        """Smart Plug LED brightness sends cmdCode format command (% -> raw)."""
         standard_config_entry.add_to_hass(hass)
         coordinator = _make_coordinator(hass, standard_config_entry, MOCK_SMARTPLUG_DEVICE)
-        coordinator.async_set_updated_data({"led_brightness": 512})
+        coordinator.async_set_updated_data({"led_brightness": 50.0})  # 50%
 
         defn = EcoFlowNumberDef(
             key="led_brightness", name="LED Brightness",
             state_key="led_brightness",
-            min_value=0, max_value=1023, step=1,
+            min_value=0, max_value=100, step=5, unit="%",
         )
         number = EcoFlowNumber(coordinator, defn)
 
@@ -705,11 +705,12 @@ class TestEcoFlowNumber:
             patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock) as mock_cmd,
             patch.object(number, "async_write_ha_state"),
         ):
-            await number.async_set_native_value(800.0)
+            await number.async_set_native_value(80.0)  # 80%
             mock_cmd.assert_called_once()
             cmd = mock_cmd.call_args[0][0]
             assert cmd["cmdCode"] == "WN511_SOCKET_SET_BRIGHTNESS_PACK"
-            assert cmd["params"]["brightness"] == 800
+            # 80% * 1023/100 = 818.4 -> int = 818
+            assert cmd["params"]["brightness"] == 818
             assert cmd["sn"] == coordinator.device_sn
 
     async def test_smartplug_max_watts_set(
@@ -753,7 +754,7 @@ class TestEcoFlowNumber:
         defn = EcoFlowNumberDef(
             key="led_brightness", name="LED Brightness",
             state_key="led_brightness",
-            min_value=0, max_value=1023, step=1,
+            min_value=0, max_value=100, step=5, unit="%",
         )
         number = EcoFlowNumber(coordinator, defn)
         assert number.native_value == 0.0
@@ -762,9 +763,9 @@ class TestEcoFlowNumber:
             patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock),
             patch.object(number, "async_write_ha_state"),
         ):
-            await number.async_set_native_value(512.0)
-            # Optimistic update should reflect new value
-            assert coordinator.data["led_brightness"] == 512.0
+            await number.async_set_native_value(50.0)  # 50%
+            # Optimistic update persists in device_data (survives coordinator refresh)
+            assert coordinator.device_data["led_brightness"] == 50.0
 
     async def test_screen_brightness_command(
         self,

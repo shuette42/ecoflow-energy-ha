@@ -23,6 +23,10 @@ from .const import (
     SMARTPLUG_NUMBERS,
 )
 from .coordinator import EcoFlowDeviceCoordinator
+from .ecoflow.parsers.smartplug import (
+    build_plug_brightness_payload,
+    build_plug_max_watts_payload,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -81,7 +85,7 @@ SMARTPLUG_NUMBER_COMMANDS: dict[str, dict[str, Any]] = {
     "led_brightness": {
         "cmdCode": "WN511_SOCKET_SET_BRIGHTNESS_PACK",
         "param_key": "brightness",
-        "scale": 1,
+        "scale": 1023.0 / 100.0,  # 0-100% -> 0-1023 device range
     },
     "max_watts": {
         "cmdCode": "WN511_SOCKET_SET_MAX_WATTS",
@@ -163,7 +167,11 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
         if value is None:
             return None
         try:
-            return float(value)
+            fval = float(value)
+            # Show clean integers when step is >= 1 (no fractional steps)
+            if self._attr_native_step and self._attr_native_step >= 1:
+                return round(fval)
+            return fval
         except (TypeError, ValueError):
             return None
 
@@ -174,9 +182,19 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
             await self._async_set_powerocean_value(value)
             return
 
-        # Smart Plug uses cmdCode format (different from Delta's moduleType/operateType)
+        # Smart Plug number commands
         sp_template = SMARTPLUG_NUMBER_COMMANDS.get(self._definition.key)
         if sp_template is not None:
+            # App-auth: use protobuf SET (JSON cmdCode only works on /open/ topic)
+            if self.coordinator.enhanced_mode:
+                ok = await self._async_set_smartplug_proto(self._definition.key, value)
+                if ok:
+                    self.coordinator.set_device_value(self._definition.state_key, value)
+                    self._last_written_value = float(value)
+                    self.async_write_ha_state()
+                return
+
+            # Standard Mode: JSON cmdCode format
             scale = sp_template.get("scale", 1)
             command = {
                 "sn": self.coordinator.device_sn,
@@ -185,10 +203,9 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
             }
             await self.coordinator.async_send_set_command(command)
 
-            if self.coordinator.data is not None:
-                self.coordinator.data[self._definition.state_key] = value
-                self._last_written_value = float(value)  # keep dedup in sync
-                self.async_write_ha_state()
+            self.coordinator.set_device_value(self._definition.state_key, value)
+            self._last_written_value = float(value)  # keep dedup in sync
+            self.async_write_ha_state()
             return
 
         # Delta uses moduleType/operateType format
@@ -218,6 +235,23 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
             self.async_write_ha_state()
 
 
+    async def _async_set_smartplug_proto(self, key: str, value: float) -> bool:
+        """Set a SmartPlug number value via WSS Protobuf (app-auth mode)."""
+        int_value = int(value)
+        sn = self.coordinator.device_sn
+        if key == "led_brightness":
+            # User sets 0-100%, device expects 0-1023
+            raw_brightness = int(round(value * 1023.0 / 100.0))
+            payload = build_plug_brightness_payload(raw_brightness, device_sn=sn)
+            label = "brightness"
+        elif key == "max_watts":
+            payload = build_plug_max_watts_payload(int_value, device_sn=sn)
+            label = "max_watts"
+        else:
+            _LOGGER.warning("No SmartPlug proto SET handler for %s", key)
+            return False
+        return await self.coordinator.async_send_proto_set_command(payload, label)
+
     async def _async_set_powerocean_value(self, value: float) -> None:
         """Set a PowerOcean number value via WSS Protobuf.
 
@@ -226,6 +260,10 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
         """
         key = self._definition.key
         int_value = int(value)
+
+        if self.coordinator.data is None:
+            _LOGGER.warning("No data available yet for %s", self.coordinator.device_sn)
+            return
 
         if key == "min_discharge_soc":
             max_soc = int(self.coordinator.data.get("ems_charge_upper_limit_pct", 100))

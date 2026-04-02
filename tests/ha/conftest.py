@@ -31,7 +31,10 @@ def _record_threads_before_test():
             thread.join(timeout=5)
 
 from custom_components.ecoflow_energy.const import (  # noqa: E402
+    AUTH_METHOD_APP,
+    AUTH_METHOD_DEVELOPER,
     CONF_ACCESS_KEY,
+    CONF_AUTH_METHOD,
     CONF_DEVICES,
     CONF_EMAIL,
     CONF_MODE,
@@ -118,20 +121,37 @@ def standard_config_entry() -> MockConfigEntry:
 
 @pytest.fixture
 def enhanced_config_entry() -> MockConfigEntry:
-    """Create an Enhanced Mode config entry for a PowerOcean."""
+    """Create an Enhanced Mode (app-auth) config entry for a PowerOcean."""
     return MockConfigEntry(
         domain=DOMAIN,
         title="EcoFlow Energy",
         data={
-            CONF_ACCESS_KEY: "test_access_key",
-            CONF_SECRET_KEY: "test_secret_key",
+            CONF_AUTH_METHOD: AUTH_METHOD_APP,
             CONF_MODE: MODE_ENHANCED,
             CONF_EMAIL: "test@example.com",
             CONF_PASSWORD: "test_password",
             CONF_USER_ID: "user123",
             CONF_DEVICES: [MOCK_POWEROCEAN_DEVICE],
         },
-        unique_id="test_access_key",
+        unique_id="test@example.com",
+    )
+
+
+@pytest.fixture
+def app_auth_config_entry() -> MockConfigEntry:
+    """Create an App-Auth config entry for a PowerOcean."""
+    return MockConfigEntry(
+        domain=DOMAIN,
+        title="EcoFlow Energy",
+        data={
+            CONF_AUTH_METHOD: AUTH_METHOD_APP,
+            CONF_MODE: MODE_ENHANCED,
+            CONF_EMAIL: "test@example.com",
+            CONF_PASSWORD: "test_password",
+            CONF_USER_ID: "user123",
+            CONF_DEVICES: [MOCK_POWEROCEAN_DEVICE],
+        },
+        unique_id="test@example.com",
     )
 
 
@@ -187,10 +207,12 @@ def mock_http_client():
 
 @pytest.fixture
 def mock_enhanced_auth():
-    """Patch enhanced_auth to return mock login/credentials."""
+    """Patch AppApiClient to return mock login/credentials for app-auth setup."""
     with patch(
-        "custom_components.ecoflow_energy.coordinator.EcoFlowDeviceCoordinator._fetch_enhanced_credentials",
-        new_callable=AsyncMock,
-    ) as mock:
-        mock.return_value = (MOCK_MQTT_CREDENTIALS, "user123")
-        yield mock
+        "custom_components.ecoflow_energy.ecoflow.app_api.AppApiClient",
+    ) as cls:
+        instance = cls.return_value
+        instance.login = AsyncMock(return_value=True)
+        instance.user_id = "user123"
+        instance.get_mqtt_credentials = AsyncMock(return_value=MOCK_MQTT_CREDENTIALS)
+        yield instance

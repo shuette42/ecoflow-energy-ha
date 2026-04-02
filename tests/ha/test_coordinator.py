@@ -12,6 +12,13 @@ from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.const import (
+    AUTH_METHOD_APP,
+    CONF_AUTH_METHOD,
+    CONF_DEVICES,
+    CONF_EMAIL,
+    CONF_MODE,
+    CONF_PASSWORD,
+    CONF_USER_ID,
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_SMARTPLUG,
@@ -64,19 +71,19 @@ class TestCoordinatorInit:
         assert coordinator.update_interval is None
         assert coordinator.enhanced_mode is True
 
-    async def test_enhanced_mode_ignored_for_delta(
+    async def test_app_auth_enhanced_for_all_device_types(
         self,
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """Enhanced Mode config is ignored for non-PowerOcean devices (no WSS stream)."""
+        """App-auth enables Enhanced Mode for all device types (including Delta)."""
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_DELTA_DEVICE
         )
-        # Delta has no WSS data source — always Standard regardless of config
-        assert coordinator.enhanced_mode is False
-        assert coordinator.update_interval is not None
+        # App-auth is enhanced for all device types
+        assert coordinator.enhanced_mode is True
+        assert coordinator.update_interval is None
 
     async def test_device_attributes(
         self,
@@ -295,7 +302,7 @@ class TestMessageParsing:
             mock_csf.assert_called_once()
             args = mock_csf.call_args[0]
             assert args[1]["power_w"] == pytest.approx(10.0)
-            assert args[1]["led_brightness"] == 512.0
+            assert args[1]["led_brightness"] == round(512 * 100.0 / 1023.0)
             assert args[1]["switch_state"] == 1
 
 
@@ -430,63 +437,50 @@ class TestReauthSuppression:
 
             mock_reauth.assert_called_once()
 
-    async def test_enhanced_mode_no_reauth_when_mqtt_active(
+    async def test_app_auth_no_http_polling(
         self,
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
         mock_enhanced_auth,
         mock_mqtt_client,
-        mock_http_client,
     ) -> None:
-        """Enhanced Mode: HTTP failures do not trigger reauth when MQTT is delivering data."""
+        """App-auth mode has no HTTP client - _async_update_data returns cached data."""
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
         await coordinator.async_setup()
 
-        # Simulate MQTT has delivered data
-        coordinator._last_mqtt_ts = 1000.0
+        # App-auth: no HTTP client
+        assert coordinator._http_client is None
 
-        mock_http_client.get_quota_all = AsyncMock(return_value=None)
-        mock_http_client.last_error_code = "network"
-
-        with patch.object(enhanced_config_entry, "async_start_reauth") as mock_reauth:
-            for _ in range(10):
-                await coordinator._async_update_data()
-
-            mock_reauth.assert_not_called()
+        # _async_update_data returns cached data without HTTP call
+        result = await coordinator._async_update_data()
+        assert result == coordinator._device_data
 
         await coordinator.async_shutdown()
 
-    async def test_enhanced_mode_reauth_when_mqtt_never_connected(
+    async def test_app_auth_reauth_on_login_failure(
         self,
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
-        mock_enhanced_auth,
         mock_mqtt_client,
-        mock_http_client,
     ) -> None:
-        """Enhanced Mode: HTTP failures DO trigger reauth when MQTT never delivered data."""
+        """App-auth mode triggers reauth when login fails."""
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
-        await coordinator.async_setup()
 
-        # MQTT never delivered data (default: _last_mqtt_ts = 0.0)
-        assert coordinator._last_mqtt_ts == 0.0
+        with patch(
+            "custom_components.ecoflow_energy.ecoflow.app_api.AppApiClient",
+        ) as cls:
+            instance = cls.return_value
+            instance.login = AsyncMock(return_value=False)
 
-        mock_http_client.get_quota_all = AsyncMock(return_value=None)
-        mock_http_client.last_error_code = "network"
-
-        with patch.object(enhanced_config_entry, "async_start_reauth") as mock_reauth:
-            for _ in range(5):
-                await coordinator._async_update_data()
-
-            mock_reauth.assert_called_once()
-
-        await coordinator.async_shutdown()
+            with patch.object(enhanced_config_entry, "async_start_reauth") as mock_reauth:
+                await coordinator.async_setup()
+                mock_reauth.assert_called_once()
 
     async def test_mixed_1006_and_real_failures(
         self,
@@ -557,6 +551,72 @@ class TestSETCommands:
         ok = await coordinator.async_send_set_command({"params": {}})
         assert ok is False
 
+    async def test_send_set_command_tcp_topic(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+        mock_iot_api,
+        mock_mqtt_client,
+        mock_http_client,
+    ) -> None:
+        """TCP mode (IoT API) publishes to /open/{cert_account}/{SN}/set."""
+        standard_config_entry.add_to_hass(hass)
+        mock_mqtt_client.wss_mode = False
+        mock_mqtt_client.cert_account = "test_cert_account"
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        await coordinator.async_setup()
+
+        command = {"moduleType": 1, "operateType": "dcOutCfg", "params": {"enabled": 1}}
+        ok = await coordinator.async_send_set_command(command)
+        assert ok is True
+        topic = mock_mqtt_client.publish.call_args[0][0]
+        assert topic == f"/open/test_cert_account/{MOCK_DELTA_DEVICE['sn']}/set"
+
+    async def test_send_set_command_wss_topic(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+        mock_iot_api,
+        mock_mqtt_client,
+        mock_http_client,
+    ) -> None:
+        """WSS mode (app-auth) publishes to /app/{user_id}/{SN}/thing/property/set."""
+        standard_config_entry.add_to_hass(hass)
+        mock_mqtt_client.wss_mode = True
+        mock_mqtt_client.user_id = "test_user_123"
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        await coordinator.async_setup()
+
+        command = {"moduleType": 1, "operateType": "dcOutCfg", "params": {"enabled": 1}}
+        ok = await coordinator.async_send_set_command(command)
+        assert ok is True
+        topic = mock_mqtt_client.publish.call_args[0][0]
+        assert topic == f"/app/test_user_123/{MOCK_DELTA_DEVICE['sn']}/thing/property/set"
+
+    async def test_send_set_command_mqtt_disconnected(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+        mock_iot_api,
+        mock_mqtt_client,
+        mock_http_client,
+    ) -> None:
+        """SET command returns False when MQTT client exists but is disconnected."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        await coordinator.async_setup()
+        mock_mqtt_client.is_connected.return_value = False
+
+        ok = await coordinator.async_send_set_command({"params": {}})
+        assert ok is False
+        mock_mqtt_client.publish.assert_not_called()
+
 
 # ===========================================================================
 # Shutdown
@@ -588,9 +648,7 @@ class TestShutdown:
         self,
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
-        mock_iot_api,
         mock_mqtt_client,
-        mock_http_client,
         mock_enhanced_auth,
     ) -> None:
         """Shutdown cancels keepalive and stale check timers."""
@@ -631,6 +689,7 @@ class TestStaleDetection:
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
+        coordinator._http_client = MagicMock()  # simulate developer-auth with HTTP
         coordinator._last_mqtt_ts = time.monotonic() - STALE_THRESHOLD_S - 10
         assert coordinator.update_interval is None
 
@@ -650,6 +709,7 @@ class TestStaleDetection:
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
+        coordinator._http_client = MagicMock()  # simulate developer-auth with HTTP
         coordinator.update_interval = timedelta(seconds=HTTP_FALLBACK_INTERVAL_S)
         coordinator._last_mqtt_ts = time.monotonic()
 
@@ -663,11 +723,12 @@ class TestStaleDetection:
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """When last_mqtt_ts is 0, age is infinite → triggers fallback."""
+        """When last_mqtt_ts is 0, age is infinite - triggers fallback."""
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
+        coordinator._http_client = MagicMock()  # simulate developer-auth with HTTP
         coordinator._last_mqtt_ts = 0.0
 
         coordinator._check_stale()
@@ -770,12 +831,10 @@ class TestEnhancedSetup:
         self,
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
-        mock_iot_api,
         mock_mqtt_client,
-        mock_http_client,
         mock_enhanced_auth,
     ) -> None:
-        """Enhanced setup creates MQTT client and schedules timers."""
+        """App-auth setup creates WSS MQTT client and schedules timers."""
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
@@ -785,6 +844,8 @@ class TestEnhancedSetup:
         assert coordinator.mqtt_client is not None
         assert coordinator._keepalive_unsub is not None
         assert coordinator._stale_check_unsub is not None
+        # App-auth has no HTTP client
+        assert coordinator._http_client is None
         # Cleanup
         await coordinator.async_shutdown()
 
@@ -792,20 +853,21 @@ class TestEnhancedSetup:
         self,
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
-        mock_iot_api,
         mock_mqtt_client,
-        mock_http_client,
     ) -> None:
-        """Enhanced setup handles credential fetch failure gracefully."""
+        """App-auth setup handles MQTT credential fetch failure gracefully."""
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
-        with patch.object(
-            coordinator, "_fetch_enhanced_credentials",
-            new_callable=AsyncMock,
-            return_value=(None, ""),
-        ):
+        with patch(
+            "custom_components.ecoflow_energy.ecoflow.app_api.AppApiClient",
+        ) as cls:
+            instance = cls.return_value
+            instance.login = AsyncMock(return_value=True)
+            instance.user_id = "user123"
+            instance.get_mqtt_credentials = AsyncMock(return_value=None)
+
             await coordinator.async_setup()
 
         # MQTT client should NOT be created on failure
@@ -1770,9 +1832,9 @@ class TestParseMessageProtobuf:
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """_parse_message decodes a protobuf energy_stream frame for PowerOcean."""
-        from custom_components.ecoflow_energy.ecoflow.energy_stream import (
-            _encode_field_bytes,
-            _encode_field_varint,
+        from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
+            encode_field_bytes,
+            encode_field_varint,
         )
         from custom_components.ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
             JTS1EnergyStreamReport,
@@ -1794,12 +1856,12 @@ class TestParseMessageProtobuf:
 
         # Wrap in HeaderMessage frame (cmd_func=96, cmd_id=33)
         header = bytearray()
-        header.extend(_encode_field_bytes(1, inner))
-        header.extend(_encode_field_varint(8, 96))
-        header.extend(_encode_field_varint(9, 33))
-        frame = _encode_field_bytes(1, bytes(header))
+        header.extend(encode_field_bytes(1, inner))
+        header.extend(encode_field_varint(8, 96))
+        header.extend(encode_field_varint(9, 33))
+        frame = encode_field_bytes(1, bytes(header))
 
-        topic = "/app/device/property/HW52ZAB412340001"
+        topic = "/app/device/property/HW52TEST00000001"
         result = coordinator._parse_message(topic, frame)
 
         assert result is not None
@@ -1825,7 +1887,7 @@ class TestParseMessageProtobuf:
 
         # Data with 0x0a in first 4 bytes triggers protobuf path, but is invalid
         malformed = b"\x0a\xff\xfe\x01garbage_data_here"
-        topic = "/app/device/property/HW52ZAB412340001"
+        topic = "/app/device/property/HW52TEST00000001"
         result = coordinator._parse_message(topic, malformed)
 
         assert result is None
@@ -1836,9 +1898,9 @@ class TestParseMessageProtobuf:
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """E2E: bp_heartbeat proto frame with 2 packs survives underscore filter."""
-        from custom_components.ecoflow_energy.ecoflow.energy_stream import (
-            _encode_field_bytes,
-            _encode_field_varint,
+        from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
+            encode_field_bytes,
+            encode_field_varint,
         )
         from custom_components.ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
             JTS1BpHeartbeatReport,
@@ -1863,12 +1925,12 @@ class TestParseMessageProtobuf:
 
         # Wrap in HeaderMessage frame (cmd_func=96, cmd_id=7)
         header = bytearray()
-        header.extend(_encode_field_bytes(1, inner))
-        header.extend(_encode_field_varint(8, 96))
-        header.extend(_encode_field_varint(9, 7))
-        frame = _encode_field_bytes(1, bytes(header))
+        header.extend(encode_field_bytes(1, inner))
+        header.extend(encode_field_varint(8, 96))
+        header.extend(encode_field_varint(9, 7))
+        frame = encode_field_bytes(1, bytes(header))
 
-        topic = "/app/device/property/HW52ZAB412340001"
+        topic = "/app/device/property/HW52TEST00000001"
         result = coordinator._parse_message(topic, frame)
 
         assert result is not None
@@ -1917,6 +1979,116 @@ class TestParseMessageJsonError:
         )
         topic = "/open/cert_account/SN001/quota"
         payload = json.dumps([1, 2, 3]).encode()
+
+        result = coordinator._parse_message(topic, payload)
+        assert result is None
+
+
+# ===========================================================================
+# get_reply parsing (app-auth latestQuotas response)
+# ===========================================================================
+
+
+class TestParseMessageGetReply:
+    """Tests for _parse_message handling of get_reply topic (latestQuotas response)."""
+
+    async def test_delta_get_reply_parsed(
+        self, hass: HomeAssistant, standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Delta get_reply with quotaMap is parsed via delta_http_quota parser."""
+        import json as json_mod
+
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        topic = "/app/user123/SN001/thing/property/get_reply"
+        payload = json_mod.dumps({
+            "operateType": "latestQuotas",
+            "data": {
+                "quotaMap": {
+                    "pd.soc": 75,
+                    "pd.wattsInSum": 200,
+                    "pd.wattsOutSum": 100,
+                    "inv.outputWatts": 142,
+                }
+            }
+        }).encode()
+
+        result = coordinator._parse_message(topic, payload)
+        assert result is not None
+        assert result.get("soc") == 75
+        assert result.get("watts_in_sum") == 200
+
+    async def test_smartplug_get_reply_parsed(
+        self, hass: HomeAssistant,
+    ) -> None:
+        """SmartPlug get_reply with quotaMap is parsed via smartplug_http_quota parser."""
+        import json as json_mod
+
+        from .conftest import MOCK_SMARTPLUG_DEVICE
+
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                "access_key": "ak", "secret_key": "sk",
+                "mode": MODE_STANDARD, "devices": [MOCK_SMARTPLUG_DEVICE],
+            },
+            unique_id="ak_plug",
+        )
+        entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, entry, MOCK_SMARTPLUG_DEVICE
+        )
+        topic = "/app/user123/SN001/thing/property/get_reply"
+        payload = json_mod.dumps({
+            "operateType": "latestQuotas",
+            "data": {
+                "quotaMap": {
+                    "2_1.watts": 1500,
+                    "2_1.voltage": 2300,
+                    "2_1.switchSta": 1,
+                }
+            }
+        }).encode()
+
+        result = coordinator._parse_message(topic, payload)
+        assert result is not None
+        assert result.get("power_w") == 150.0  # 1500 / 10 (deciWatt)
+        assert result.get("switch_state") == 1
+
+    async def test_get_reply_empty_quota_map_returns_none(
+        self, hass: HomeAssistant, standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """get_reply with empty quotaMap returns None."""
+        import json as json_mod
+
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        topic = "/app/user123/SN001/thing/property/get_reply"
+        payload = json_mod.dumps({
+            "operateType": "latestQuotas",
+            "data": {"quotaMap": {}}
+        }).encode()
+
+        result = coordinator._parse_message(topic, payload)
+        assert result is None
+
+    async def test_get_reply_no_data_returns_none(
+        self, hass: HomeAssistant, standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """get_reply without data field returns None."""
+        import json as json_mod
+
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        topic = "/app/user123/SN001/thing/property/get_reply"
+        payload = json_mod.dumps({"operateType": "latestQuotas"}).encode()
 
         result = coordinator._parse_message(topic, payload)
         assert result is None
@@ -2109,3 +2281,139 @@ class TestEventLog:
         log = coordinator.event_log
         assert len(log) == 1
         assert log[0]["type"] == "set_reply"
+
+
+# ===========================================================================
+# App-Auth Mode
+# ===========================================================================
+
+
+class TestAppAuthMode:
+    """Tests for app-auth coordinator behavior."""
+
+    def _create_app_auth_entry(
+        self, hass: HomeAssistant, device: dict | None = None
+    ) -> MockConfigEntry:
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_AUTH_METHOD: AUTH_METHOD_APP,
+                CONF_MODE: MODE_ENHANCED,
+                CONF_EMAIL: "test@example.com",
+                CONF_PASSWORD: "test_password",
+                CONF_USER_ID: "user123",
+                CONF_DEVICES: [device or MOCK_POWEROCEAN_DEVICE],
+            },
+            unique_id="test@example.com",
+        )
+        entry.add_to_hass(hass)
+        return entry
+
+    async def test_app_auth_powerocean_is_enhanced(
+        self, hass: HomeAssistant,
+    ) -> None:
+        """App-auth PowerOcean has enhanced_mode=True, no polling."""
+        entry = self._create_app_auth_entry(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, entry, MOCK_POWEROCEAN_DEVICE
+        )
+        assert coordinator.enhanced_mode is True
+        assert coordinator.update_interval is None
+
+    async def test_app_auth_delta_is_enhanced(
+        self, hass: HomeAssistant,
+    ) -> None:
+        """App-auth Delta also has enhanced_mode=True (WSS, no HTTP)."""
+        entry = self._create_app_auth_entry(hass, MOCK_DELTA_DEVICE)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, entry, MOCK_DELTA_DEVICE
+        )
+        assert coordinator.enhanced_mode is True
+        assert coordinator.update_interval is None
+
+    async def test_app_auth_smartplug_is_enhanced(
+        self, hass: HomeAssistant,
+    ) -> None:
+        """App-auth SmartPlug also has enhanced_mode=True (WSS, no HTTP)."""
+        entry = self._create_app_auth_entry(hass, MOCK_SMARTPLUG_DEVICE)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, entry, MOCK_SMARTPLUG_DEVICE
+        )
+        assert coordinator.enhanced_mode is True
+        assert coordinator.update_interval is None
+
+    async def test_app_auth_setup_calls_login(
+        self, hass: HomeAssistant, mock_mqtt_client,
+    ) -> None:
+        """App-auth setup calls enhanced_login and get_enhanced_credentials."""
+        entry = self._create_app_auth_entry(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, entry, MOCK_POWEROCEAN_DEVICE
+        )
+
+        mock_app_api = MagicMock()
+        mock_app_api.login = AsyncMock(return_value=True)
+        mock_app_api.user_id = "uid"
+        mock_app_api.get_mqtt_credentials = AsyncMock(return_value={
+            "userName": "app-user",
+            "password": "app-pass",
+        })
+
+        with patch(
+            "custom_components.ecoflow_energy.ecoflow.app_api.AppApiClient",
+            return_value=mock_app_api,
+        ):
+            await coordinator.async_setup()
+
+        mock_app_api.login.assert_called_once()
+        mock_app_api.get_mqtt_credentials.assert_called_once()
+
+        # Clean up timers to avoid lingering handles
+        await coordinator.async_shutdown()
+
+    async def test_app_auth_login_failure_triggers_reauth(
+        self, hass: HomeAssistant,
+    ) -> None:
+        """App-auth login failure triggers re-authentication."""
+        entry = self._create_app_auth_entry(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, entry, MOCK_POWEROCEAN_DEVICE
+        )
+
+        mock_app_api = MagicMock()
+        mock_app_api.login = AsyncMock(return_value=False)
+
+        with (
+            patch(
+                "custom_components.ecoflow_energy.ecoflow.app_api.AppApiClient",
+                return_value=mock_app_api,
+            ),
+            patch.object(entry, "async_start_reauth") as mock_reauth,
+        ):
+            await coordinator.async_setup()
+
+        mock_reauth.assert_called_once()
+
+    async def test_app_auth_no_http_fallback_on_stale(
+        self, hass: HomeAssistant,
+    ) -> None:
+        """App-auth mode does not switch to HTTP fallback when MQTT is stale."""
+        entry = self._create_app_auth_entry(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, entry, MOCK_POWEROCEAN_DEVICE
+        )
+        coordinator._mqtt_client = MagicMock()
+        coordinator._mqtt_client.is_connected.return_value = False
+        coordinator._mqtt_client.try_reconnect.return_value = None
+
+        # Simulate stale MQTT (no data received)
+        coordinator._last_mqtt_ts = 0.0
+
+        coordinator._check_stale()
+
+        # App-auth should NOT enable HTTP polling
+        assert coordinator.update_interval is None
+
+        # Clean up the re-scheduled timer
+        await coordinator.async_shutdown()

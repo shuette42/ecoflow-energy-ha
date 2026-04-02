@@ -31,6 +31,8 @@ DELTA2MAX_FIELD_MAP: dict[str, str] = {
     "pdStatus.errCode": "pd_err_code",
     "pdStatus.beepMode": "beep_mode_raw",
     "pdStatus.newAcAutoOnCfg": "ac_auto_on",
+    "pdStatus.acAutoOutConfig": "ac_auto_on_legacy",
+    "pdStatus.standbyMin": "standby_timeout_min",
     "pdStatus.brightLevel": "screen_brightness",
     "pdStatus.lcdOffSec": "screen_timeout_sec",
     "pdStatus.bpPowerSoc": "backup_reserve_soc",
@@ -88,6 +90,11 @@ DELTA2MAX_FIELD_MAP: dict[str, str] = {
     "mpptStatus.carStandbyMin": "car_standby_min",
     "mpptStatus.chgState": "mppt_chg_state",
     "mpptStatus.faultCode": "mppt_fault_code",
+    # Legacy R331 (Delta 2 / Delta Max): AC/Beeper state can be reported under mppt.*
+    "mpptStatus.cfgAcEnabled": "ac_enabled_legacy",
+    "mpptStatus.cfgAcXboost": "ac_xboost_legacy",
+    "mpptStatus.cfgAcOutFreq": "ac_out_freq_hz_legacy",
+    "mpptStatus.beepState": "beep_mode_raw_legacy",
     # --- emsStatus (ems.*) ---
     "emsStatus.chgRemainTime": "chg_remain_time_min",
     "emsStatus.dsgRemainTime": "dsg_remain_time_min",
@@ -165,10 +172,24 @@ def parse_delta_report(
             temp_key = dest_key.replace("_temp_raw", "_temp_c")
             parsed[temp_key] = float(value) - 15.0
         # Beeper inversion: beepMode=0 means beeper ON (normal mode)
-        elif dest_key == "beep_mode_raw":
+        elif dest_key in ("beep_mode_raw", "beep_mode_raw_legacy"):
             parsed["beep_enabled"] = 0 if float(value) else 1
         else:
             parsed[dest_key] = float(value)
+
+    # Legacy fallbacks: use legacy paths only when modern keys are absent.
+    if "ac_auto_on" not in parsed and "ac_auto_on_legacy" in parsed:
+        parsed["ac_auto_on"] = parsed["ac_auto_on_legacy"]
+    if "ac_enabled" not in parsed and "ac_enabled_legacy" in parsed:
+        parsed["ac_enabled"] = parsed["ac_enabled_legacy"]
+    if "ac_xboost" not in parsed and "ac_xboost_legacy" in parsed:
+        parsed["ac_xboost"] = parsed["ac_xboost_legacy"]
+    if "ac_out_freq_hz" not in parsed and "ac_out_freq_hz_legacy" in parsed:
+        parsed["ac_out_freq_hz"] = parsed["ac_out_freq_hz_legacy"]
+    parsed.pop("ac_auto_on_legacy", None)
+    parsed.pop("ac_enabled_legacy", None)
+    parsed.pop("ac_xboost_legacy", None)
+    parsed.pop("ac_out_freq_hz_legacy", None)
 
     # --- Unit conversions ---
 

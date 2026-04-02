@@ -3,7 +3,7 @@
 # EcoFlow Energy for Home Assistant
 
 **Real-time solar, battery, grid & home power monitoring.**
-**Energy Dashboard ready. No portal login required.**
+**Energy Dashboard ready. Two modes: official API or real-time app connection.**
 
 [![HACS Default](https://img.shields.io/badge/HACS-Default-30D158?style=for-the-badge&logo=home-assistant&logoColor=white)](https://github.com/hacs/integration)
 [![GitHub Release](https://img.shields.io/github/v/release/shuette42/ecoflow-energy-ha?style=for-the-badge&color=30D158)](https://github.com/shuette42/ecoflow-energy-ha/releases)
@@ -25,11 +25,11 @@
 
 - **Up to 200 sensors per device** — power, energy, battery packs, temperature, diagnostics
 - **Energy Dashboard ready** — local Riemann-sum kWh with gap detection
-- **Real-time out of the box** — Delta gets MQTT push; PowerOcean Enhanced: ~3 s updates
+- **Real-time out of the box** — Enhanced Mode: ~2-4 s updates for all devices
 - **Switches & number controls** — AC/DC output, charge speed, SoC limits
 - **Auto-discovery** — all devices bound to your EcoFlow account
 - **4-tier reconnect** — never gives up on the connection
-- **Automatic fallback** — MQTT stale? Transparent switch to HTTP polling
+- **Automatic fallback** — MQTT stale? Transparent switch to HTTP polling (Standard Mode)
 - **Offline tolerance** — mobile devices offline = expected, not an error
 
 ---
@@ -39,8 +39,8 @@
 | | Sensors | Controls | Energy Sensors | Update Rate |
 |:---|:---:|:---:|:---:|:---|
 | **PowerOcean** — Home Battery | 202 | 1 number | 6 (solar, grid, battery, home) | ~30 s standard / ~3 s enhanced |
-| **Delta 2 Max** — Portable Power | 94 | 7 switches, 8 numbers | 4 (solar 1+2, AC in/out) | ~30 s + MQTT push |
-| **Smart Plug** — Switchable Outlet | 11 | 1 switch, 2 numbers | 1 (total energy) | ~30 s + MQTT push |
+| **Delta 2 Max** — Portable Power | 94 | 7 switches, 8 numbers | 4 (solar 1+2, AC in/out) | ~30 s standard / ~2 s enhanced |
+| **Smart Plug** — Switchable Outlet | 11 | 1 switch, 2 numbers | 1 (total energy) | ~30 s standard / ~3 s enhanced |
 
 > **Tip:** Other Delta-series devices (Delta Pro, Delta 2, etc.) should work automatically with the Delta sensor set.
 
@@ -49,23 +49,23 @@
 
 3-phase grid monitoring (voltage, current, power per phase) · MPPT per-string tracking (2 strings) · **Multi-battery-pack support** (up to 5 BP5000 packs — per-pack SoC, power, SoH, cycles, temperatures, lifetime energy) · Battery diagnostics (cell temps & voltages, MOSFET temps) · EMS state, work mode, feed mode, grid status, power factor · System diagnostics (fault codes, connectivity status, capacity limits)
 
-**Enhanced Mode** upgrades to ~3 s WSS Protobuf push and enables **SoC limit control** (max charge / min discharge) — requires EcoFlow email & password.
+**Enhanced Mode** upgrades to ~3 s WSS Protobuf push and enables **SoC limit control** (max charge / min discharge).
 
-**Note:** Enhanced Mode credentials are stored in Home Assistant's configuration storage (`.storage/core.config_entries`). This is standard Home Assistant behavior for all integrations that require authentication.
+**Note:** All credentials (API keys or email/password) are stored in Home Assistant's encrypted configuration storage (`.storage/core.config_entries`). This is standard Home Assistant behavior.
 
 </details>
 
 <details>
 <summary><b>Delta 2 Max</b> — AC/DC/12V switches, charge speed control, real-time MQTT</summary>
 
-Battery SoC/SoH · All input/output power, temperatures, voltages · **Expansion battery packs** (up to 2, disabled by default) · **Switches:** AC, DC, 12V output, beeper, X-Boost, AC auto restart, backup reserve · **Numbers:** AC charge speed (200–2400 W), max/min SoC, standby timeout, screen brightness/timeout, 12V port timeout, backup reserve level · Real-time MQTT push in Standard Mode.
+Battery SoC/SoH · All input/output power, temperatures, voltages · **Expansion battery packs** (up to 2, disabled by default) · **Switches:** AC, DC, 12V output, beeper, X-Boost, AC auto restart, backup reserve · **Numbers:** AC charge speed (200-2400 W), max/min SoC, standby timeout, screen brightness/timeout, 12V port timeout, backup reserve level · Real-time MQTT push in Standard Mode · ~2 s updates in Enhanced Mode.
 
 </details>
 
 <details>
 <summary><b>Smart Plug</b> — power monitoring, plug switch, automation-ready</summary>
 
-Power (W), current (A), voltage (V), frequency, temperature · Plug on/off switch · **Numbers:** LED brightness (0-1023), max power limit (0-2500 W) · Real-time MQTT push in Standard Mode. Ideal for automating charging (e.g. charge Delta on solar surplus).
+Power (W), current (A), voltage (V), frequency, temperature · Plug on/off switch · **Numbers:** LED brightness (0-100%), max power limit (0-2500 W) · Real-time MQTT push in Standard Mode · ~3 s updates in Enhanced Mode. Ideal for automating charging (e.g. charge Delta on solar surplus).
 
 </details>
 
@@ -88,21 +88,22 @@ Download the [latest release](https://github.com/shuette42/ecoflow-energy-ha/rel
 
 ### 2. Configure
 
-You need an **Access Key** and **Secret Key** from the [EcoFlow Developer Portal](https://developer.ecoflow.com).
-
-1. **Settings > Devices & Services > Add Integration** > search **EcoFlow Energy**
-2. Enter your Access Key and Secret Key
-3. Select devices — done. Entities appear automatically.
-
-### 3. Choose Your Mode
+**Settings > Devices & Services > Add Integration** > search **EcoFlow Energy** > choose your mode:
 
 | | Standard | Enhanced |
 |:---|:---|:---|
-| **For** | All devices | PowerOcean only |
-| **Update** | ~30 s HTTP + MQTT push (Delta) | ~3 s WSS Protobuf |
-| **Credentials** | Access Key + Secret Key | + Email + Password |
-| **Stability** | Official API — stable | Unofficial — may break |
-| **Best for** | Most users | PowerOcean real-time |
+| **Credentials** | Access Key + Secret Key ([Developer Portal](https://developer.ecoflow.com)) | EcoFlow email + password (same as mobile app) |
+| **Devices** | All supported devices | All supported devices |
+| **Update rate** | ~30 s HTTP polling (+ MQTT push for Delta/Smart Plug) | ~2-4 s real-time via WSS MQTT |
+| **Controls** | All switches and numbers | All switches and numbers |
+| **Stability** | Official EcoFlow API - supported and stable | Community-driven - unofficial, use at your own risk |
+| **Best for** | Reliable long-term operation | Real-time monitoring and fast automations |
+
+**Standard Mode** uses the official EcoFlow IoT Developer API. Apply for free API keys at [developer.ecoflow.com](https://developer.ecoflow.com).
+
+**Enhanced Mode** connects with your EcoFlow email and password. No Developer API keys needed. Faster updates, but this is an unofficial, community-driven protocol that may change without notice.
+
+**Upgrading from v1.8.x?** Existing Standard Mode setups continue to work without changes. If you previously used Enhanced Mode with Developer Keys + email/password, the integration automatically upgrades to the new app-auth flow on restart.
 
 ---
 
