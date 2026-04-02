@@ -50,9 +50,11 @@ from .const import (
     POWEROCEAN_ENERGY_FROM_API,
     POWEROCEAN_POWER_TO_ENERGY,
     QUOTAS_KEEPALIVE_S,
+    SMARTPLUG_GET_ALL_KEEPALIVE_S,
     SMARTPLUG_ENERGY_FROM_API,
     SMARTPLUG_POWER_TO_ENERGY,
     STALE_THRESHOLD_S,
+    SMARTPLUG_STALE_THRESHOLD_S,
     get_delta_profile,
 )
 from .ecoflow.cloud_http import EcoFlowHTTPQuota
@@ -139,6 +141,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._consecutive_http_failures: int = 0
         self._device_available: bool = True
         self._consecutive_stale_checks: int = 0
+        self._last_smartplug_get_all_ts: float = 0.0
         self._event_log: deque[dict[str, Any]] = deque(maxlen=50)
         # Stable SN → pack index mapping for proto heartbeats (cmd_id=7).
         # Each heartbeat contains only one pack; this map ensures the same
@@ -454,6 +457,19 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self.hass.async_add_executor_job(
                 self._mqtt_client.send_latest_quotas,
             )
+            # Smart Plug app-auth: periodically pull a full snapshot in addition
+            # to latestQuotas. This keeps control-state fields fresh and adds
+            # resilience against sparse telemetry bursts.
+            if self.device_type == DEVICE_TYPE_SMARTPLUG:
+                now = time.monotonic()
+                if (
+                    self._last_smartplug_get_all_ts <= 0.0
+                    or (now - self._last_smartplug_get_all_ts) >= SMARTPLUG_GET_ALL_KEEPALIVE_S
+                ):
+                    self._last_smartplug_get_all_ts = now
+                    self.hass.async_add_executor_job(
+                        self._mqtt_client.send_get_all,
+                    )
         if not self._shutdown:
             self._quotas_unsub = self.hass.loop.call_later(
                 QUOTAS_KEEPALIVE_S, self._send_quotas_poll,
@@ -1187,9 +1203,16 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def _schedule_stale_check(self) -> None:
         """Schedule a periodic check for stale MQTT data."""
+        stale_threshold_s = self._stale_threshold_s()
         self._stale_check_unsub = self.hass.loop.call_later(
-            STALE_THRESHOLD_S, self._check_stale,
+            stale_threshold_s, self._check_stale,
         )
+
+    def _stale_threshold_s(self) -> float:
+        """Return the MQTT stale threshold for this device."""
+        if self._enhanced_mode and self.device_type == DEVICE_TYPE_SMARTPLUG:
+            return SMARTPLUG_STALE_THRESHOLD_S
+        return STALE_THRESHOLD_S
 
     def _check_stale(self) -> None:
         """Check if MQTT data is stale and switch to HTTP fallback if needed.
@@ -1203,22 +1226,23 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self._shutdown:
             return
 
+        stale_threshold_s = self._stale_threshold_s()
         age = time.monotonic() - self._last_mqtt_ts if self._last_mqtt_ts > 0 else float("inf")
 
         if self._http_client is not None:
             # Developer-auth: HTTP fallback available
-            if age > STALE_THRESHOLD_S and self.update_interval is None:
+            if age > stale_threshold_s and self.update_interval is None:
                 _LOGGER.info(
                     "MQTT stale for %s (%.0fs) - switching to HTTP fallback (tier 4)",
                     self.device_sn, age,
                 )
                 self.update_interval = timedelta(seconds=HTTP_FALLBACK_INTERVAL_S)
-            elif age <= STALE_THRESHOLD_S and self.update_interval is not None:
+            elif age <= stale_threshold_s and self.update_interval is not None:
                 _LOGGER.info("MQTT recovered for %s - disabling HTTP fallback", self.device_sn)
                 self.update_interval = None
         else:
             # App-auth: no HTTP fallback, mark unavailable after sustained stale
-            if age > STALE_THRESHOLD_S:
+            if age > stale_threshold_s:
                 self._consecutive_stale_checks += 1
                 if self._device_available and self._consecutive_stale_checks >= 2:
                     _LOGGER.warning(
@@ -1238,5 +1262,5 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         # Re-schedule unless shutting down
         self._stale_check_unsub = self.hass.loop.call_later(
-            STALE_THRESHOLD_S, self._check_stale,
+            stale_threshold_s, self._check_stale,
         )

@@ -43,11 +43,13 @@ MODE_ENHANCED = "enhanced"
 
 # Coordinator
 STALE_THRESHOLD_S = 35.0  # MQTT data older than this → HTTP fallback
+SMARTPLUG_STALE_THRESHOLD_S = 180.0  # Smart Plug app-auth: tolerate sparse telemetry bursts
 HTTP_FALLBACK_INTERVAL_S = 30
 HTTP_SUPPLEMENT_INTERVAL_S = 60  # Enhanced Mode: HTTP supplement poll for detail sensors
 ENERGY_STREAM_KEEPALIVE_S = 20  # Re-send EnergyStreamSwitch every 20s
 QUOTAS_KEEPALIVE_S = 30  # latestQuotas poll interval (app-level keepalive)
 PING_KEEPALIVE_S = 60  # MQTT ping heartbeat interval
+SMARTPLUG_GET_ALL_KEEPALIVE_S = 120.0  # Smart Plug app-auth: periodic full-state refresh
 
 DEVICE_TYPE_DISPLAY_NAMES: dict[str, str] = {
     DEVICE_TYPE_POWEROCEAN: "PowerOcean",

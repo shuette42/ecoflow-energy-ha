@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.1] - 2026-04-02
+
+### Changed
+- Smart Plug in app-auth now uses a device-specific stale threshold (180s) instead of the global 35s threshold to avoid false temporary unavailability on sparse telemetry bursts.
+- Smart Plug app-auth keepalive now adds periodic `get-all` full-state refreshes (every 120s) alongside `latestQuotas`.
+
+### Fixed
+- Reduced false "device unavailable (no HTTP fallback)" transitions for Smart Plug while MQTT is still healthy but temporarily quiet.
+- Improved Smart Plug control-state freshness (switch/brightness/max limit) during long-running sessions.
+
 ## [1.9.0] - 2026-04-02
 
 ### Added

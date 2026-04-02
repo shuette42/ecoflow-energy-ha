@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from datetime import timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
@@ -27,6 +27,8 @@ from custom_components.ecoflow_energy.const import (
     HTTP_FALLBACK_INTERVAL_S,
     MODE_ENHANCED,
     MODE_STANDARD,
+    SMARTPLUG_GET_ALL_KEEPALIVE_S,
+    SMARTPLUG_STALE_THRESHOLD_S,
     STALE_THRESHOLD_S,
 )
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
@@ -753,6 +755,59 @@ class TestStaleDetection:
 
         assert coordinator.update_interval is None
         # No timer scheduled when shutdown
+
+    async def test_app_auth_smartplug_uses_relaxed_stale_threshold(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Smart Plug app-auth uses a higher stale threshold than PowerOcean."""
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_AUTH_METHOD: AUTH_METHOD_APP,
+                CONF_MODE: MODE_ENHANCED,
+                CONF_EMAIL: "test@example.com",
+                CONF_PASSWORD: "test_password",
+                CONF_USER_ID: "user123",
+                CONF_DEVICES: [MOCK_SMARTPLUG_DEVICE],
+            },
+            unique_id="test@example.com",
+        )
+        entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_SMARTPLUG_DEVICE)
+
+        assert coordinator._stale_threshold_s() == SMARTPLUG_STALE_THRESHOLD_S
+
+    async def test_app_auth_smartplug_not_stale_at_default_threshold(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Smart Plug is not marked unavailable at ~45s MQTT age."""
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_AUTH_METHOD: AUTH_METHOD_APP,
+                CONF_MODE: MODE_ENHANCED,
+                CONF_EMAIL: "test@example.com",
+                CONF_PASSWORD: "test_password",
+                CONF_USER_ID: "user123",
+                CONF_DEVICES: [MOCK_SMARTPLUG_DEVICE],
+            },
+            unique_id="test@example.com",
+        )
+        entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_SMARTPLUG_DEVICE)
+        coordinator._mqtt_client = MagicMock()
+        coordinator._mqtt_client.is_connected.return_value = True
+
+        coordinator._last_mqtt_ts = time.monotonic() - STALE_THRESHOLD_S - 10
+        coordinator._check_stale()
+
+        assert coordinator.device_available is True
+        assert coordinator._consecutive_stale_checks == 0
+        self._cleanup_stale_timer(coordinator)
 
     async def test_stale_triggers_reconnect(
         self,
@@ -1741,6 +1796,119 @@ class TestQuotasPoll:
             mock_exec.assert_not_called()
 
         # Should still reschedule
+        assert coordinator._quotas_unsub is not None
+        coordinator._quotas_unsub.cancel()
+        coordinator._quotas_unsub = None
+
+    async def test_smartplug_send_quotas_poll_triggers_get_all_initially(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Smart Plug app-auth sends latestQuotas + get-all on first poll."""
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_AUTH_METHOD: AUTH_METHOD_APP,
+                CONF_MODE: MODE_ENHANCED,
+                CONF_EMAIL: "test@example.com",
+                CONF_PASSWORD: "test_password",
+                CONF_USER_ID: "user123",
+                CONF_DEVICES: [MOCK_SMARTPLUG_DEVICE],
+            },
+            unique_id="test@example.com",
+        )
+        entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_SMARTPLUG_DEVICE)
+        mock_mqtt = MagicMock()
+        mock_mqtt.is_connected.return_value = True
+        coordinator._mqtt_client = mock_mqtt
+
+        with patch.object(hass, "async_add_executor_job") as mock_exec:
+            coordinator._send_quotas_poll()
+            mock_exec.assert_has_calls(
+                [call(mock_mqtt.send_latest_quotas), call(mock_mqtt.send_get_all)],
+                any_order=False,
+            )
+
+        assert coordinator._quotas_unsub is not None
+        coordinator._quotas_unsub.cancel()
+        coordinator._quotas_unsub = None
+
+    async def test_smartplug_send_quotas_poll_throttles_get_all(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Smart Plug get-all is throttled between keepalive windows."""
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_AUTH_METHOD: AUTH_METHOD_APP,
+                CONF_MODE: MODE_ENHANCED,
+                CONF_EMAIL: "test@example.com",
+                CONF_PASSWORD: "test_password",
+                CONF_USER_ID: "user123",
+                CONF_DEVICES: [MOCK_SMARTPLUG_DEVICE],
+            },
+            unique_id="test@example.com",
+        )
+        entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_SMARTPLUG_DEVICE)
+        mock_mqtt = MagicMock()
+        mock_mqtt.is_connected.return_value = True
+        coordinator._mqtt_client = mock_mqtt
+        coordinator._last_smartplug_get_all_ts = 1000.0
+
+        with (
+            patch("custom_components.ecoflow_energy.coordinator.time.monotonic", return_value=1000.0),
+            patch.object(hass, "async_add_executor_job") as mock_exec,
+        ):
+            coordinator._send_quotas_poll()
+            mock_exec.assert_called_once_with(mock_mqtt.send_latest_quotas)
+
+        assert coordinator._quotas_unsub is not None
+        coordinator._quotas_unsub.cancel()
+        coordinator._quotas_unsub = None
+
+    async def test_smartplug_send_quotas_poll_get_all_after_interval(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Smart Plug get-all is sent again once keepalive interval has elapsed."""
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_AUTH_METHOD: AUTH_METHOD_APP,
+                CONF_MODE: MODE_ENHANCED,
+                CONF_EMAIL: "test@example.com",
+                CONF_PASSWORD: "test_password",
+                CONF_USER_ID: "user123",
+                CONF_DEVICES: [MOCK_SMARTPLUG_DEVICE],
+            },
+            unique_id="test@example.com",
+        )
+        entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_SMARTPLUG_DEVICE)
+        mock_mqtt = MagicMock()
+        mock_mqtt.is_connected.return_value = True
+        coordinator._mqtt_client = mock_mqtt
+        coordinator._last_smartplug_get_all_ts = 1000.0
+
+        with (
+            patch(
+                "custom_components.ecoflow_energy.coordinator.time.monotonic",
+                return_value=1000.0 + SMARTPLUG_GET_ALL_KEEPALIVE_S + 1.0,
+            ),
+            patch.object(hass, "async_add_executor_job") as mock_exec,
+        ):
+            coordinator._send_quotas_poll()
+            mock_exec.assert_has_calls(
+                [call(mock_mqtt.send_latest_quotas), call(mock_mqtt.send_get_all)],
+                any_order=False,
+            )
+
         assert coordinator._quotas_unsub is not None
         coordinator._quotas_unsub.cancel()
         coordinator._quotas_unsub = None
