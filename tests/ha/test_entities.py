@@ -668,7 +668,8 @@ class TestEcoFlowNumber:
         )
         number = EcoFlowNumber(coordinator, defn)
 
-        with patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock) as mock_cmd:
+        with patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock) as mock_cmd, \
+             patch.object(number, "async_write_ha_state"):
             await number.async_set_native_value(90.0)
             mock_cmd.assert_called_once()
             cmd = mock_cmd.call_args[0][0]

@@ -232,13 +232,10 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
 
         await self.coordinator.async_send_set_command(command)
 
-        # Optimistic update — show new value immediately in UI.
-        # Mutates coordinator.data (dispatched snapshot), not _device_data.
-        # Next poll overwrites this with the actual device value.
-        if self.coordinator.data is not None:
-            self.coordinator.data[self._definition.state_key] = value
-            self._last_written_value = float(value)  # keep dedup in sync
-            self.async_write_ha_state()
+        self.coordinator.set_device_value(self._definition.state_key, value)
+        self._last_written_value = float(value)
+        self._optimistic_lock_until = time.monotonic() + 5.0
+        self.async_write_ha_state()
 
 
     async def _async_set_smartplug_proto(self, key: str, value: float) -> bool:
@@ -280,14 +277,10 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
 
         ok = await self.coordinator.async_set_soc_limits(max_soc, min_soc)
         if ok:
-            # Update device_data so the value survives coordinator refreshes.
-            # Proto3 omits zero-valued fields from MQTT readback, so the merge
-            # won't overwrite this value when the device reports 0.
             state_key = self._definition.state_key
             self.coordinator.set_device_value(state_key, value)
-            if self.coordinator.data is not None:
-                self.coordinator.data[state_key] = value
-            self._last_written_value = float(value)  # keep dedup in sync
+            self._last_written_value = float(value)
+            self._optimistic_lock_until = time.monotonic() + 5.0
             self.async_write_ha_state()
 
 

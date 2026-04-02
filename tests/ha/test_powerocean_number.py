@@ -174,8 +174,8 @@ class TestPowerOceanNumberSet:
         await entity.async_set_native_value(10.0)
 
         coordinator.async_set_soc_limits.assert_called_once_with(100, 10)
-        # Optimistic update
-        assert coordinator.data["ems_discharge_lower_limit_pct"] == 10.0
+        # Optimistic update persisted in device_data
+        assert coordinator._device_data["ems_discharge_lower_limit_pct"] == 10.0
 
     async def test_set_failed_no_optimistic_update(
         self,
