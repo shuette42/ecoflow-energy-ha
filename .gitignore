@@ -1,6 +1,4 @@
-# Project-local config and docs (not for remote)
-.claude/
-CLAUDE.md
+# Project-local docs
 docs/
 
 # Python
