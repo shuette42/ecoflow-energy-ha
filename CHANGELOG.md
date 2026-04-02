@@ -22,6 +22,7 @@ All notable changes to this project will be documented in this file.
 - Delta 2 Max receives real-time updates (~2 s) in Enhanced Mode instead of only HTTP polling
 - Options flow mode switch correctly handles credential changes
 - Device type detection works even when the EcoFlow API returns empty device names
+- Enhanced Mode no longer creates coordinators for unsupported devices (e.g. PowerGlow, PowerPulse) - eliminates WARNING spam about MQTT stale data (#28)
 
 ### Upgrade notes
 - **Standard Mode users**: No action needed. Your setup continues to work exactly as before.

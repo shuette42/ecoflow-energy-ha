@@ -214,6 +214,173 @@ class TestMigration:
 # ===========================================================================
 
 
+class TestUnsupportedDeviceSkip:
+    async def test_unsupported_device_skipped(
+        self,
+        hass: HomeAssistant,
+        mock_mqtt_client,
+    ) -> None:
+        """Devices with unknown device_type are skipped during setup."""
+        unsupported_device = {
+            "sn": "XY99ZZ1234500001",
+            "name": "PowerGlow",
+            "product_name": "PowerGlow",
+            "device_type": "unknown",
+            "online": 1,
+        }
+        supported_device = MOCK_POWEROCEAN_DEVICE
+
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_AUTH_METHOD: AUTH_METHOD_APP,
+                CONF_MODE: MODE_ENHANCED,
+                CONF_EMAIL: "test@example.com",
+                CONF_PASSWORD: "test_password",
+                CONF_USER_ID: "uid",
+                CONF_DEVICES: [supported_device, unsupported_device],
+            },
+            unique_id="test@example.com",
+        )
+        entry.add_to_hass(hass)
+
+        mock_app_api = MagicMock()
+        mock_app_api.login = AsyncMock(return_value=True)
+        mock_app_api.user_id = "uid"
+        mock_app_api.get_mqtt_credentials = AsyncMock(return_value={
+            "userName": "app-user",
+            "password": "app-pass",
+        })
+
+        with (
+            patch(
+                "custom_components.ecoflow_energy.ecoflow.app_api.AppApiClient",
+                return_value=mock_app_api,
+            ),
+            patch(
+                "custom_components.ecoflow_energy.coordinator.EcoFlowDeviceCoordinator.async_config_entry_first_refresh",
+                new_callable=AsyncMock,
+            ),
+        ):
+            result = await hass.config_entries.async_setup(entry.entry_id)
+            await hass.async_block_till_done()
+
+        assert result is True
+        coordinators = hass.data[DOMAIN][entry.entry_id]
+        # Only the supported device should have a coordinator
+        assert len(coordinators) == 1
+        assert supported_device["sn"] in coordinators
+        assert unsupported_device["sn"] not in coordinators
+
+    async def test_all_unsupported_devices_results_in_empty_setup(
+        self,
+        hass: HomeAssistant,
+        mock_mqtt_client,
+    ) -> None:
+        """If all devices are unsupported, setup succeeds with no coordinators."""
+        unsupported_device = {
+            "sn": "XY99ZZ1234500001",
+            "name": "PowerPulse",
+            "product_name": "PowerPulse",
+            "device_type": "unknown",
+            "online": 1,
+        }
+
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_AUTH_METHOD: AUTH_METHOD_APP,
+                CONF_MODE: MODE_ENHANCED,
+                CONF_EMAIL: "test@example.com",
+                CONF_PASSWORD: "test_password",
+                CONF_USER_ID: "uid",
+                CONF_DEVICES: [unsupported_device],
+            },
+            unique_id="test@example.com",
+        )
+        entry.add_to_hass(hass)
+
+        mock_app_api = MagicMock()
+        mock_app_api.login = AsyncMock(return_value=True)
+        mock_app_api.user_id = "uid"
+        mock_app_api.get_mqtt_credentials = AsyncMock(return_value={
+            "userName": "app-user",
+            "password": "app-pass",
+        })
+
+        with (
+            patch(
+                "custom_components.ecoflow_energy.ecoflow.app_api.AppApiClient",
+                return_value=mock_app_api,
+            ),
+            patch(
+                "custom_components.ecoflow_energy.coordinator.EcoFlowDeviceCoordinator.async_config_entry_first_refresh",
+                new_callable=AsyncMock,
+            ),
+        ):
+            result = await hass.config_entries.async_setup(entry.entry_id)
+            await hass.async_block_till_done()
+
+        assert result is True
+        coordinators = hass.data[DOMAIN][entry.entry_id]
+        assert len(coordinators) == 0
+
+    async def test_device_without_device_type_skipped(
+        self,
+        hass: HomeAssistant,
+        mock_mqtt_client,
+    ) -> None:
+        """Devices missing the device_type field are skipped."""
+        no_type_device = {
+            "sn": "AB12CD3456780001",
+            "name": "Mystery Device",
+            "product_name": "Mystery Device",
+            "online": 1,
+        }
+
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_AUTH_METHOD: AUTH_METHOD_APP,
+                CONF_MODE: MODE_ENHANCED,
+                CONF_EMAIL: "test@example.com",
+                CONF_PASSWORD: "test_password",
+                CONF_USER_ID: "uid",
+                CONF_DEVICES: [no_type_device],
+            },
+            unique_id="test@example.com",
+        )
+        entry.add_to_hass(hass)
+
+        mock_app_api = MagicMock()
+        mock_app_api.login = AsyncMock(return_value=True)
+        mock_app_api.user_id = "uid"
+        mock_app_api.get_mqtt_credentials = AsyncMock(return_value={
+            "userName": "app-user",
+            "password": "app-pass",
+        })
+
+        with (
+            patch(
+                "custom_components.ecoflow_energy.ecoflow.app_api.AppApiClient",
+                return_value=mock_app_api,
+            ),
+            patch(
+                "custom_components.ecoflow_energy.coordinator.EcoFlowDeviceCoordinator.async_config_entry_first_refresh",
+                new_callable=AsyncMock,
+            ),
+        ):
+            result = await hass.config_entries.async_setup(entry.entry_id)
+            await hass.async_block_till_done()
+
+        assert result is True
+        coordinators = hass.data[DOMAIN][entry.entry_id]
+        assert len(coordinators) == 0
+
+
 class TestAppAuthSetup:
     async def test_app_auth_setup_creates_coordinators(
         self,
