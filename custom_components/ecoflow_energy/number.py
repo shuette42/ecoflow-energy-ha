@@ -193,10 +193,7 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
             if self.coordinator.enhanced_mode:
                 ok = await self._async_set_smartplug_proto(self._definition.key, value)
                 if ok:
-                    self.coordinator.set_device_value(self._definition.state_key, value)
-                    self._last_written_value = float(value)
-                    self._optimistic_lock_until = time.monotonic() + 5.0
-                    self.async_write_ha_state()
+                    self._apply_optimistic_number(value)
                 return
 
             # Standard Mode: JSON cmdCode format
@@ -207,11 +204,7 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
                 "params": {sp_template["param_key"]: int(value * scale)},
             }
             await self.coordinator.async_send_set_command(command)
-
-            self.coordinator.set_device_value(self._definition.state_key, value)
-            self._last_written_value = float(value)
-            self._optimistic_lock_until = time.monotonic() + 5.0
-            self.async_write_ha_state()
+            self._apply_optimistic_number(value)
             return
 
         # Delta uses moduleType/operateType format
@@ -231,12 +224,18 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
         }
 
         await self.coordinator.async_send_set_command(command)
+        self._apply_optimistic_number(value)
 
-        self.coordinator.set_device_value(self._definition.state_key, value)
+
+    def _apply_optimistic_number(self, value: float) -> None:
+        """Apply optimistic lock: immediately reflect the new value."""
+        state_key = self._definition.state_key
+        self.coordinator.set_device_value(state_key, value)
+        if self.coordinator.data is not None:
+            self.coordinator.data[state_key] = value
         self._last_written_value = float(value)
         self._optimistic_lock_until = time.monotonic() + 5.0
         self.async_write_ha_state()
-
 
     async def _async_set_smartplug_proto(self, key: str, value: float) -> bool:
         """Set a SmartPlug number value via WSS Protobuf (app-auth mode)."""
@@ -277,11 +276,7 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
 
         ok = await self.coordinator.async_set_soc_limits(max_soc, min_soc)
         if ok:
-            state_key = self._definition.state_key
-            self.coordinator.set_device_value(state_key, value)
-            self._last_written_value = float(value)
-            self._optimistic_lock_until = time.monotonic() + 5.0
-            self.async_write_ha_state()
+            self._apply_optimistic_number(value)
 
 
 def _get_number_defs(device_type: str) -> list[EcoFlowNumberDef]:
