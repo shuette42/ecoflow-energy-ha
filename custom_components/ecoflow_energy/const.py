@@ -44,6 +44,8 @@ MODE_ENHANCED = "enhanced"
 # Coordinator
 STALE_THRESHOLD_S = 35.0  # MQTT data older than this → HTTP fallback
 SMARTPLUG_STALE_THRESHOLD_S = 180.0  # Smart Plug app-auth: tolerate sparse telemetry bursts
+MQTT_HEALTH_CHECK_INTERVAL_S = 5.0  # Run stale/reconnect health checks independently from stale threshold
+APP_AUTH_UNAVAILABLE_GRACE_S = 60.0  # Additional grace after stale threshold before marking unavailable
 HTTP_FALLBACK_INTERVAL_S = 30
 HTTP_SUPPLEMENT_INTERVAL_S = 60  # Enhanced Mode: HTTP supplement poll for detail sensors
 ENERGY_STREAM_KEEPALIVE_S = 20  # Re-send EnergyStreamSwitch every 20s
