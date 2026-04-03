@@ -825,15 +825,20 @@ class TestStaleDetection:
         coordinator._mqtt_client.is_connected.return_value = False
         coordinator._mqtt_client.try_reconnect.return_value = False
 
-        # Stale, but still inside stale+grace window
-        coordinator._last_mqtt_ts = (
-            time.monotonic()
-            - STALE_THRESHOLD_S
-            - APP_AUTH_UNAVAILABLE_GRACE_S
-            + 5
-        )
-
-        coordinator._check_stale()
+        # Use deterministic monotonic time to avoid negative timestamps on CI.
+        now = 1_000.0
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.time.monotonic",
+            return_value=now,
+        ):
+            # Stale, but still inside stale+grace window.
+            coordinator._last_mqtt_ts = (
+                now
+                - STALE_THRESHOLD_S
+                - APP_AUTH_UNAVAILABLE_GRACE_S
+                + 5
+            )
+            coordinator._check_stale()
 
         assert coordinator.device_available is True
         self._cleanup_stale_timer(coordinator)
@@ -853,15 +858,19 @@ class TestStaleDetection:
         coordinator._mqtt_client.is_connected.return_value = False
         coordinator._mqtt_client.try_reconnect.return_value = False
 
-        coordinator._last_mqtt_ts = (
-            time.monotonic()
-            - STALE_THRESHOLD_S
-            - APP_AUTH_UNAVAILABLE_GRACE_S
-            - 5
-        )
-
-        with caplog.at_level("WARNING"):
-            coordinator._check_stale()
+        now = 1_000.0
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.time.monotonic",
+            return_value=now,
+        ):
+            coordinator._last_mqtt_ts = (
+                now
+                - STALE_THRESHOLD_S
+                - APP_AUTH_UNAVAILABLE_GRACE_S
+                - 5
+            )
+            with caplog.at_level("WARNING"):
+                coordinator._check_stale()
 
         assert coordinator.device_available is False
         assert (
