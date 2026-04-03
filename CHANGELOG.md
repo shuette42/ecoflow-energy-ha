@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.3] - 2026-04-03
+
+### Changed
+- App-auth stale warning wording simplified: removed mode suffix from the user-facing message. Logs now state only the concrete condition and action (`MQTT stream interrupted ... marking device unavailable`).
+
+## [1.9.2] - 2026-04-03
+
+### Fixed
+- App-auth MQTT health checks now run on a short dedicated interval (5s) instead of the device stale threshold, so reconnect attempts start promptly after disconnects.
+- App-auth stale handling now uses a time-based grace window (`stale_threshold + 60s`) before marking a device unavailable, reducing false temporary unavailability during short broker interruptions.
+- Connected-but-silent app-auth MQTT sessions now trigger a forced reconnect attempt, improving recovery from stalled WSS sessions.
+
+### Changed
+- Improved stale warning context in app-auth mode by including reconnect attempt count in the warning message.
+- Removed legacy "no HTTP fallback" wording from app-auth stale warnings; logs now describe only the actual state/actionable mode context.
+- App-auth stale/recovery logs now include both device name and serial number for unambiguous per-device troubleshooting.
+
 ## [1.9.1] - 2026-04-02
 
 ### Changed

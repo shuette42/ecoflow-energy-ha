@@ -45,7 +45,9 @@ from .const import (
     DEVICE_TYPE_UNKNOWN,
     DOMAIN,
     ENERGY_STREAM_KEEPALIVE_S,
+    APP_AUTH_UNAVAILABLE_GRACE_S,
     HTTP_FALLBACK_INTERVAL_S,
+    MQTT_HEALTH_CHECK_INTERVAL_S,
     PING_KEEPALIVE_S,
     POWEROCEAN_ENERGY_FROM_API,
     POWEROCEAN_POWER_TO_ENERGY,
@@ -140,7 +142,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_flush_ts: float = 0.0
         self._consecutive_http_failures: int = 0
         self._device_available: bool = True
-        self._consecutive_stale_checks: int = 0
+        self._last_stale_reconnect_ts: float = 0.0
         self._last_smartplug_get_all_ts: float = 0.0
         self._event_log: deque[dict[str, Any]] = deque(maxlen=50)
         # Stable SN → pack index mapping for proto heartbeats (cmd_id=7).
@@ -1203,7 +1205,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def _schedule_stale_check(self) -> None:
         """Schedule a periodic check for stale MQTT data."""
-        stale_threshold_s = self._stale_threshold_s()
+        stale_threshold_s = min(self._stale_threshold_s(), MQTT_HEALTH_CHECK_INTERVAL_S)
         self._stale_check_unsub = self.hass.loop.call_later(
             stale_threshold_s, self._check_stale,
         )
@@ -1228,6 +1230,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         stale_threshold_s = self._stale_threshold_s()
         age = time.monotonic() - self._last_mqtt_ts if self._last_mqtt_ts > 0 else float("inf")
+        mqtt_connected = self._mqtt_client is not None and self._mqtt_client.is_connected()
 
         if self._http_client is not None:
             # Developer-auth: HTTP fallback available
@@ -1241,26 +1244,58 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 _LOGGER.info("MQTT recovered for %s - disabling HTTP fallback", self.device_sn)
                 self.update_interval = None
         else:
-            # App-auth: no HTTP fallback, mark unavailable after sustained stale
+            # App-auth: MQTT-only path, mark unavailable after sustained stale
             if age > stale_threshold_s:
-                self._consecutive_stale_checks += 1
-                if self._device_available and self._consecutive_stale_checks >= 2:
+                unavailable_after_s = stale_threshold_s + APP_AUTH_UNAVAILABLE_GRACE_S
+
+                # Connected-but-silent sessions are common after broker-side rotation.
+                # Force a reconnect at most once per stale threshold window.
+                now = time.monotonic()
+                if (
+                    mqtt_connected
+                    and self._mqtt_client is not None
+                    and self._last_mqtt_ts > 0.0
+                    and (now - self._last_stale_reconnect_ts) >= stale_threshold_s
+                ):
+                    self._last_stale_reconnect_ts = now
+                    _LOGGER.info(
+                        "MQTT stale for %s [%s] (%.0fs) while connected - forcing reconnect",
+                        self.device_name,
+                        self.device_sn,
+                        age,
+                    )
+                    self.hass.async_add_executor_job(self._mqtt_client.force_reconnect)
+
+                if self._device_available and age >= unavailable_after_s:
+                    reconnect_attempts = (
+                        self._mqtt_client.reconnect_attempts
+                        if self._mqtt_client is not None
+                        else 0
+                    )
                     _LOGGER.warning(
-                        "MQTT stale for %s (%.0fs) - device unavailable (no HTTP fallback)",
-                        self.device_sn, age,
+                        "MQTT stream interrupted for %s [%s] (%.0fs, reconnect_attempts=%d) - "
+                        "marking device unavailable",
+                        self.device_name,
+                        self.device_sn,
+                        age,
+                        reconnect_attempts,
                     )
                     self._device_available = False
             else:
                 if not self._device_available:
-                    _LOGGER.info("MQTT recovered for %s - device available again", self.device_sn)
+                    _LOGGER.info(
+                        "MQTT recovered for %s [%s] - device available again",
+                        self.device_name,
+                        self.device_sn,
+                    )
                     self._device_available = True
-                self._consecutive_stale_checks = 0
+                self._last_stale_reconnect_ts = 0.0
 
         # Tier 2+3: try MQTT reconnect if disconnected
-        if self._mqtt_client is not None and not self._mqtt_client.is_connected():
+        if self._mqtt_client is not None and not mqtt_connected:
             self.hass.async_add_executor_job(self._mqtt_client.try_reconnect)
 
         # Re-schedule unless shutting down
         self._stale_check_unsub = self.hass.loop.call_later(
-            stale_threshold_s, self._check_stale,
+            min(stale_threshold_s, MQTT_HEALTH_CHECK_INTERVAL_S), self._check_stale,
         )

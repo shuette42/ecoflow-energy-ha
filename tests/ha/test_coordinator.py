@@ -12,6 +12,7 @@ from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.const import (
+    APP_AUTH_UNAVAILABLE_GRACE_S,
     AUTH_METHOD_APP,
     CONF_AUTH_METHOD,
     CONF_DEVICES,
@@ -27,6 +28,7 @@ from custom_components.ecoflow_energy.const import (
     HTTP_FALLBACK_INTERVAL_S,
     MODE_ENHANCED,
     MODE_STANDARD,
+    MQTT_HEALTH_CHECK_INTERVAL_S,
     SMARTPLUG_GET_ALL_KEEPALIVE_S,
     SMARTPLUG_STALE_THRESHOLD_S,
     STALE_THRESHOLD_S,
@@ -806,7 +808,100 @@ class TestStaleDetection:
         coordinator._check_stale()
 
         assert coordinator.device_available is True
-        assert coordinator._consecutive_stale_checks == 0
+        assert coordinator._last_stale_reconnect_ts == 0.0
+        self._cleanup_stale_timer(coordinator)
+
+    async def test_app_auth_unavailable_waits_for_grace_window(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """App-auth stale state keeps device available until grace window elapses."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        coordinator._mqtt_client = MagicMock()
+        coordinator._mqtt_client.is_connected.return_value = False
+        coordinator._mqtt_client.try_reconnect.return_value = False
+
+        # Use deterministic monotonic time to avoid negative timestamps on CI.
+        now = 1_000.0
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.time.monotonic",
+            return_value=now,
+        ):
+            # Stale, but still inside stale+grace window.
+            coordinator._last_mqtt_ts = (
+                now
+                - STALE_THRESHOLD_S
+                - APP_AUTH_UNAVAILABLE_GRACE_S
+                + 5
+            )
+            coordinator._check_stale()
+
+        assert coordinator.device_available is True
+        self._cleanup_stale_timer(coordinator)
+
+    async def test_app_auth_unavailable_after_grace_window(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """App-auth stale state marks unavailable after stale+grace window."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        coordinator._mqtt_client = MagicMock()
+        coordinator._mqtt_client.is_connected.return_value = False
+        coordinator._mqtt_client.try_reconnect.return_value = False
+
+        now = 1_000.0
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.time.monotonic",
+            return_value=now,
+        ):
+            coordinator._last_mqtt_ts = (
+                now
+                - STALE_THRESHOLD_S
+                - APP_AUTH_UNAVAILABLE_GRACE_S
+                - 5
+            )
+            with caplog.at_level("WARNING"):
+                coordinator._check_stale()
+
+        assert coordinator.device_available is False
+        assert (
+            f"MQTT stream interrupted for PowerOcean [{MOCK_POWEROCEAN_DEVICE['sn']}]"
+            in caplog.text
+        )
+        assert "marking device unavailable" in caplog.text
+        assert "no HTTP fallback" not in caplog.text
+        self._cleanup_stale_timer(coordinator)
+
+    async def test_stale_connected_forces_reconnect(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Connected-but-stale app-auth sessions trigger a forced reconnect."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        mock_mqtt = MagicMock()
+        mock_mqtt.is_connected.return_value = True
+        mock_mqtt.force_reconnect.return_value = True
+        coordinator._mqtt_client = mock_mqtt
+        coordinator._last_mqtt_ts = time.monotonic() - STALE_THRESHOLD_S - 5
+        coordinator._last_stale_reconnect_ts = 0.0
+
+        coordinator._check_stale()
+
+        mock_mqtt.force_reconnect.assert_called_once()
+        assert coordinator._last_stale_reconnect_ts > 0.0
         self._cleanup_stale_timer(coordinator)
 
     async def test_stale_triggers_reconnect(
@@ -830,6 +925,24 @@ class TestStaleDetection:
 
         mock_mqtt.try_reconnect.assert_called_once()
         self._cleanup_stale_timer(coordinator)
+
+    async def test_stale_check_reschedules_with_health_interval(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Stale check timer runs on health interval, not stale threshold."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+
+        with patch.object(coordinator.hass.loop, "call_later") as mock_call_later:
+            coordinator._schedule_stale_check()
+
+        mock_call_later.assert_called_once()
+        scheduled_delay = mock_call_later.call_args.args[0]
+        assert scheduled_delay == min(STALE_THRESHOLD_S, MQTT_HEALTH_CHECK_INTERVAL_S)
 
 
 # ===========================================================================
