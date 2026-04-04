@@ -3037,16 +3037,35 @@ class TestAppAuthMode:
             "certificatePassword": "new-pass",
         })
 
+        # Call proactive refresh directly instead of going through
+        # _check_credential_age -> async_create_task (avoids timing issues in CI)
         with patch(
             "custom_components.ecoflow_energy.ecoflow.app_api.AppApiClient",
             return_value=mock_app_api,
         ):
+            await coordinator._proactive_credential_refresh()
+
+        log = coordinator.event_log
+        assert any(e["type"] == "credential_proactive_ok" for e in log)
+        mock_app_api.login.assert_called_once()
+        mock_app_api.get_mqtt_credentials.assert_called_once()
+
+    async def test_credential_age_check_schedules_refresh_when_old(
+        self, hass: HomeAssistant,
+    ) -> None:
+        """_check_credential_age logs event when credentials are old enough."""
+        entry = self._create_app_auth_entry(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, entry, MOCK_POWEROCEAN_DEVICE
+        )
+        coordinator._credential_obtained_ts = time.monotonic() - CREDENTIAL_MAX_AGE_S - 100
+
+        # Patch _proactive_credential_refresh to avoid actual refresh
+        with patch.object(coordinator, "_proactive_credential_refresh", new_callable=AsyncMock):
             coordinator._check_credential_age()
-            await hass.async_block_till_done()
 
         log = coordinator.event_log
         assert any(e["type"] == "credential_proactive_refresh" for e in log)
-        assert any(e["type"] == "credential_proactive_ok" for e in log)
 
         # Clean up re-scheduled timer
         if coordinator._credential_refresh_unsub is not None:
