@@ -15,6 +15,8 @@ All notable changes to this project will be documented in this file.
 - Proactive credential refresh for app-auth: credentials older than 20 hours are refreshed automatically every 12 hours, preventing brief outages from token expiry.
 
 ### Changed
+- Graduated availability degradation replaces the binary 95-second hard-unavailable cutoff. Entities now remain available with last-known-good values during stream interruptions, degrading through stages (healthy -> stale -> degraded -> unavailable). Hard unavailable is now 10 minutes instead of 95 seconds, matching observed device behavior where PowerOcean telemetry gaps can exceed 600 seconds.
+- Device-specific degradation thresholds: PowerOcean/Delta soft=5min hard=10min, Smart Plug soft=6min hard=10min.
 - Extracted PowerOcean proto remapping logic (~150 lines) from `coordinator.py` into `ecoflow/parsers/powerocean_proto.py` for cleaner core/device separation.
 - Moved SET command templates from `switch.py` and `number.py` into `const.py` alongside entity definitions.
 

@@ -71,6 +71,7 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
         "device_name": coordinator.device_name,
         "product_name": coordinator.product_name,
         "enhanced_mode": coordinator.enhanced_mode,
+        "availability_stage": coordinator.availability_stage,
         "mqtt_status": {
             "status": coordinator.mqtt_status,
             "connected": mqtt_connected,

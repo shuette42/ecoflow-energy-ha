@@ -41,11 +41,24 @@ AUTH_METHOD_APP = "app"
 MODE_STANDARD = "standard"
 MODE_ENHANCED = "enhanced"
 
-# Coordinator
-STALE_THRESHOLD_S = 35.0  # MQTT data older than this → HTTP fallback
+# Coordinator - Stale detection
+STALE_THRESHOLD_S = 35.0  # MQTT data older than this → trigger reconnect + HTTP fallback
 SMARTPLUG_STALE_THRESHOLD_S = 180.0  # Smart Plug app-auth: tolerate sparse telemetry bursts
 MQTT_HEALTH_CHECK_INTERVAL_S = 5.0  # Run stale/reconnect health checks independently from stale threshold
-APP_AUTH_UNAVAILABLE_GRACE_S = 60.0  # Additional grace after stale threshold before marking unavailable
+
+# Graduated availability degradation thresholds (app-auth only).
+# Entities remain available with last-known values until HARD_UNAVAILABLE.
+# Codex APK analysis: real PowerOcean telemetry has gaps up to 613s (cmd_id=33).
+# The old 95s hard cutoff (35s stale + 60s grace) was too aggressive.
+#
+# Stages: healthy -> stale -> degraded -> unavailable
+#   stale: age > STALE_THRESHOLD_S (reconnect attempts start)
+#   degraded: age > SOFT_UNAVAILABLE_S (data is old but entities still visible)
+#   unavailable: age > HARD_UNAVAILABLE_S (entities go unavailable in HA)
+SOFT_UNAVAILABLE_S = 300.0  # 5 min: data old, entities visible but stale
+SMARTPLUG_SOFT_UNAVAILABLE_S = 360.0  # 6 min: SmartPlug tolerates longer gaps
+HARD_UNAVAILABLE_S = 600.0  # 10 min: entities go unavailable
+SMARTPLUG_HARD_UNAVAILABLE_S = 600.0  # 10 min: SmartPlug hard cutoff
 HTTP_FALLBACK_INTERVAL_S = 30
 HTTP_SUPPLEMENT_INTERVAL_S = 60  # Enhanced Mode: HTTP supplement poll for detail sensors
 ENERGY_STREAM_KEEPALIVE_S = 20  # Re-send EnergyStreamSwitch every 20s
