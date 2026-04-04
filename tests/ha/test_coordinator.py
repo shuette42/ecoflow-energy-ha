@@ -963,7 +963,7 @@ class TestStaleDetection:
         coordinator._mqtt_client.is_connected.return_value = False
         coordinator._mqtt_client.try_reconnect.return_value = False
 
-        now = 1_000.0
+        now = 10_000.0
         with patch(
             "custom_components.ecoflow_energy.coordinator.time.monotonic",
             return_value=now,
@@ -973,8 +973,8 @@ class TestStaleDetection:
             with caplog.at_level("WARNING"):
                 coordinator._check_stale()
 
-        assert coordinator.device_available is False
-        assert coordinator.availability_stage == "unavailable"
+            assert coordinator.device_available is False
+            assert coordinator.availability_stage == "unavailable"
         assert "marking device unavailable" in caplog.text
         self._cleanup_stale_timer(coordinator)
 
