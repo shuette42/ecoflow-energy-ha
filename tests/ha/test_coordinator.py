@@ -3058,11 +3058,20 @@ class TestAppAuthMode:
         coordinator = EcoFlowDeviceCoordinator(
             hass, entry, MOCK_POWEROCEAN_DEVICE
         )
-        coordinator._credential_obtained_ts = time.monotonic() - CREDENTIAL_MAX_AGE_S - 100
+        # Use a fixed monotonic value far in the past via mock to guarantee
+        # age > CREDENTIAL_MAX_AGE_S regardless of CI system clock.
+        now = time.monotonic()
+        coordinator._credential_obtained_ts = 1.0  # fixed positive value
 
         # Replace the coroutine method with a sync no-op to avoid async scheduling issues
         coordinator._proactive_credential_refresh = lambda: None  # type: ignore[assignment]
-        with patch.object(hass, "async_create_task") as mock_task:
+        with (
+            patch.object(hass, "async_create_task") as mock_task,
+            patch(
+                "custom_components.ecoflow_energy.coordinator.time.monotonic",
+                return_value=1.0 + CREDENTIAL_MAX_AGE_S + 100,
+            ),
+        ):
             coordinator._check_credential_age()
 
         log = coordinator.event_log
