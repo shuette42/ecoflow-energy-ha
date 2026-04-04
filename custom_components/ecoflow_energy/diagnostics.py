@@ -7,6 +7,7 @@ NEVER exposes credentials (access_key, secret_key, email, password, certificates
 from __future__ import annotations
 
 import time
+from datetime import datetime, timezone
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -71,7 +72,9 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
         "product_name": coordinator.product_name,
         "enhanced_mode": coordinator.enhanced_mode,
         "mqtt_status": {
+            "status": coordinator.mqtt_status,
             "connected": mqtt_connected,
+            "data_receiving": coordinator.data_receiving,
             "uptime_s": mqtt_uptime_s,
             "reconnect_attempts": mqtt_reconnect_attempts,
             "wss_mode": mqtt_client.wss_mode if mqtt_client else False,
@@ -85,5 +88,17 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
         },
         "data_keys": data_keys,
         "data_key_count": len(data_keys),
-        "event_log": coordinator.event_log,
+        "event_log": _format_event_log(coordinator.event_log),
     }
+
+
+def _format_event_log(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Format event log with ISO timestamps for human readability."""
+    formatted = []
+    for event in events:
+        entry = dict(event)
+        ts = entry.get("ts")
+        if isinstance(ts, (int, float)) and ts > 0:
+            entry["ts_iso"] = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+        formatted.append(entry)
+    return formatted

@@ -20,6 +20,7 @@ from custom_components.ecoflow_energy.const import (
     CONF_MODE,
     CONF_PASSWORD,
     CONF_USER_ID,
+    CREDENTIAL_MAX_AGE_S,
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_SMARTPLUG,
@@ -143,6 +144,104 @@ class TestProperties:
             hass, standard_config_entry, MOCK_DELTA_DEVICE
         )
         assert coordinator.last_mqtt_ts == 0.0
+
+    async def test_mqtt_status_not_configured(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """mqtt_status returns 'not_configured' when no MQTT client."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        assert coordinator.mqtt_status == "not_configured"
+
+    async def test_mqtt_status_disconnected(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """mqtt_status returns 'disconnected' when MQTT is not connected."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        coordinator._mqtt_client = MagicMock()
+        coordinator._mqtt_client.is_connected.return_value = False
+        assert coordinator.mqtt_status == "disconnected"
+
+    async def test_mqtt_status_receiving(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """mqtt_status returns 'receiving' when connected and data is fresh."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        coordinator._mqtt_client = MagicMock()
+        coordinator._mqtt_client.is_connected.return_value = True
+        coordinator._last_mqtt_ts = time.monotonic()
+        assert coordinator.mqtt_status == "receiving"
+
+    async def test_mqtt_status_connected_stale(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """mqtt_status returns 'connected_stale' when connected but data is old."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        coordinator._mqtt_client = MagicMock()
+        coordinator._mqtt_client.is_connected.return_value = True
+        coordinator._last_mqtt_ts = time.monotonic() - STALE_THRESHOLD_S - 10
+        assert coordinator.mqtt_status == "connected_stale"
+
+    async def test_data_receiving_false_without_client(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """data_receiving is False when no MQTT client."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        assert coordinator.data_receiving is False
+
+    async def test_data_receiving_false_when_stale(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """data_receiving is False when data is older than stale threshold."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        coordinator._mqtt_client = MagicMock()
+        coordinator._mqtt_client.is_connected.return_value = True
+        coordinator._last_mqtt_ts = time.monotonic() - STALE_THRESHOLD_S - 10
+        assert coordinator.data_receiving is False
+
+    async def test_data_receiving_true_when_fresh(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """data_receiving is True when connected and data is fresh."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        coordinator._mqtt_client = MagicMock()
+        coordinator._mqtt_client.is_connected.return_value = True
+        coordinator._last_mqtt_ts = time.monotonic()
+        assert coordinator.data_receiving is True
 
 
 # ===========================================================================
@@ -2393,12 +2492,12 @@ class TestDiagnosticProperties:
         )
         assert coordinator.mqtt_status == "not_configured"
 
-    async def test_mqtt_status_connected(
+    async def test_mqtt_status_receiving(
         self,
         hass: HomeAssistant,
         standard_config_entry: MockConfigEntry,
     ) -> None:
-        """mqtt_status returns 'connected' when MQTT client is connected."""
+        """mqtt_status returns 'receiving' when connected and data is fresh."""
         standard_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, standard_config_entry, MOCK_DELTA_DEVICE
@@ -2406,7 +2505,24 @@ class TestDiagnosticProperties:
         mock_mqtt = MagicMock()
         mock_mqtt.is_connected.return_value = True
         coordinator._mqtt_client = mock_mqtt
-        assert coordinator.mqtt_status == "connected"
+        coordinator._last_mqtt_ts = time.monotonic()
+        assert coordinator.mqtt_status == "receiving"
+
+    async def test_mqtt_status_connected_stale(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """mqtt_status returns 'connected_stale' when connected but data is old."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        mock_mqtt = MagicMock()
+        mock_mqtt.is_connected.return_value = True
+        coordinator._mqtt_client = mock_mqtt
+        coordinator._last_mqtt_ts = time.monotonic() - STALE_THRESHOLD_S - 10
+        assert coordinator.mqtt_status == "connected_stale"
 
     async def test_mqtt_status_disconnected(
         self,
@@ -2563,6 +2679,75 @@ class TestEventLog:
         assert len(log) == 1
         assert log[0]["type"] == "set_reply"
 
+    async def test_stale_detection_logs_event(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """_check_stale logs 'stale_detected' when HTTP fallback activates."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        coordinator._http_client = MagicMock()
+        coordinator._last_mqtt_ts = time.monotonic() - STALE_THRESHOLD_S - 10
+
+        coordinator._check_stale()
+
+        log = coordinator.event_log
+        assert any(e["type"] == "stale_detected" for e in log)
+
+        if coordinator._stale_check_unsub is not None:
+            coordinator._stale_check_unsub.cancel()
+
+    async def test_stale_recovery_logs_event(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """_check_stale logs 'stale_recovered' when HTTP fallback is disabled."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        coordinator._http_client = MagicMock()
+        coordinator.update_interval = timedelta(seconds=HTTP_FALLBACK_INTERVAL_S)
+        coordinator._last_mqtt_ts = time.monotonic()
+
+        coordinator._check_stale()
+
+        log = coordinator.event_log
+        assert any(e["type"] == "stale_recovered" for e in log)
+
+        if coordinator._stale_check_unsub is not None:
+            coordinator._stale_check_unsub.cancel()
+
+    async def test_stale_force_reconnect_logs_event(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """_check_stale logs 'stale_force_reconnect' on connected-but-silent."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        coordinator._mqtt_client = MagicMock()
+        coordinator._mqtt_client.is_connected.return_value = True
+        coordinator._mqtt_client.try_reconnect.return_value = None
+        coordinator._mqtt_client.force_reconnect.return_value = None
+        coordinator._mqtt_client.reconnect_attempts = 0
+        coordinator._last_mqtt_ts = time.monotonic() - STALE_THRESHOLD_S - 10
+        coordinator._last_stale_reconnect_ts = 0.0
+
+        coordinator._check_stale()
+
+        log = coordinator.event_log
+        assert any(e["type"] == "stale_force_reconnect" for e in log)
+
+        if coordinator._stale_check_unsub is not None:
+            coordinator._stale_check_unsub.cancel()
+
 
 # ===========================================================================
 # App-Auth Mode
@@ -2698,3 +2883,198 @@ class TestAppAuthMode:
 
         # Clean up the re-scheduled timer
         await coordinator.async_shutdown()
+
+    async def test_app_auth_mqtt_has_auth_error_handler(
+        self, hass: HomeAssistant,
+    ) -> None:
+        """App-auth MQTT client must have auth_error_handler wired."""
+        entry = self._create_app_auth_entry(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, entry, MOCK_POWEROCEAN_DEVICE
+        )
+
+        mock_app_api = MagicMock()
+        mock_app_api.login = AsyncMock(return_value=True)
+        mock_app_api.user_id = "uid"
+        mock_app_api.get_mqtt_credentials = AsyncMock(return_value={
+            "userName": "app-user",
+            "password": "app-pass",
+        })
+
+        with (
+            patch(
+                "custom_components.ecoflow_energy.ecoflow.app_api.AppApiClient",
+                return_value=mock_app_api,
+            ),
+            patch(
+                "custom_components.ecoflow_energy.coordinator.EcoFlowMQTTClient",
+            ) as mqtt_cls,
+        ):
+            instance = mqtt_cls.return_value
+            instance.create_client.return_value = True
+            instance.connect.return_value = True
+            instance.start_loop.return_value = None
+            instance.is_connected.return_value = True
+            instance.disconnect.return_value = None
+            instance.reconnect_attempts = 0
+            instance.publish.return_value = True
+            instance.send_energy_stream_switch.return_value = None
+            instance.try_reconnect.return_value = None
+
+            await coordinator.async_setup()
+
+            # The MQTT client constructor must have auth_error_handler set
+            assert mqtt_cls.call_args is not None
+            assert "auth_error_handler" in mqtt_cls.call_args.kwargs
+            assert mqtt_cls.call_args.kwargs["auth_error_handler"] is not None
+
+        await coordinator.async_shutdown()
+
+    async def test_app_auth_rc5_triggers_credential_refresh(
+        self, hass: HomeAssistant,
+    ) -> None:
+        """App-auth rc=5 triggers login + credential refresh."""
+        entry = self._create_app_auth_entry(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, entry, MOCK_POWEROCEAN_DEVICE
+        )
+
+        mock_app_api = MagicMock()
+        mock_app_api.login = AsyncMock(return_value=True)
+        mock_app_api.user_id = "uid"
+        mock_app_api.get_mqtt_credentials = AsyncMock(return_value={
+            "userName": "app-user",
+            "password": "app-pass",
+        })
+
+        with (
+            patch(
+                "custom_components.ecoflow_energy.ecoflow.app_api.AppApiClient",
+                return_value=mock_app_api,
+            ),
+            patch(
+                "custom_components.ecoflow_energy.coordinator.EcoFlowMQTTClient",
+            ) as mqtt_cls,
+        ):
+            instance = mqtt_cls.return_value
+            instance.create_client.return_value = True
+            instance.connect.return_value = True
+            instance.start_loop.return_value = None
+            instance.is_connected.return_value = True
+            instance.disconnect.return_value = None
+            instance.reconnect_attempts = 0
+            instance.publish.return_value = True
+            instance.send_energy_stream_switch.return_value = None
+            instance.try_reconnect.return_value = None
+
+            await coordinator.async_setup()
+
+            # Capture the auth_error_handler callback
+            handler = mqtt_cls.call_args.kwargs["auth_error_handler"]
+
+        # Simulate rc=5 by calling the handler
+        mock_refresh_api = MagicMock()
+        mock_refresh_api.login = AsyncMock(return_value=True)
+        mock_refresh_api.get_mqtt_credentials = AsyncMock(return_value={
+            "certificateAccount": "new-user",
+            "certificatePassword": "new-pass",
+        })
+
+        with patch(
+            "custom_components.ecoflow_energy.ecoflow.app_api.AppApiClient",
+            return_value=mock_refresh_api,
+        ):
+            handler()
+            await hass.async_block_till_done()
+
+        # Credentials should have been refreshed
+        mock_refresh_api.login.assert_called_once()
+        mock_refresh_api.get_mqtt_credentials.assert_called_once()
+
+        await coordinator.async_shutdown()
+
+    async def test_credential_age_check_fresh(
+        self, hass: HomeAssistant,
+    ) -> None:
+        """Credential check does not refresh when credentials are fresh."""
+        entry = self._create_app_auth_entry(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, entry, MOCK_POWEROCEAN_DEVICE
+        )
+        coordinator._mqtt_client = MagicMock()
+        coordinator._mqtt_client.cert_account = "test"
+        coordinator._credential_obtained_ts = time.monotonic()  # just obtained
+
+        coordinator._check_credential_age()
+
+        log = coordinator.event_log
+        assert not any(e["type"] == "credential_proactive_refresh" for e in log)
+
+        # Clean up re-scheduled timer
+        if coordinator._credential_refresh_unsub is not None:
+            coordinator._credential_refresh_unsub.cancel()
+
+    async def test_credential_age_check_old_triggers_refresh(
+        self, hass: HomeAssistant,
+    ) -> None:
+        """Credential check triggers proactive refresh when credentials are old."""
+        entry = self._create_app_auth_entry(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, entry, MOCK_POWEROCEAN_DEVICE
+        )
+        coordinator._auth_method = "app"
+        coordinator._mqtt_client = MagicMock()
+        coordinator._mqtt_client.cert_account = "old-account"
+        coordinator._mqtt_client.update_credentials.return_value = None
+        coordinator._mqtt_client.force_reconnect.return_value = None
+        # Credentials older than CREDENTIAL_MAX_AGE_S
+        coordinator._credential_obtained_ts = time.monotonic() - CREDENTIAL_MAX_AGE_S - 100
+
+        mock_app_api = MagicMock()
+        mock_app_api.login = AsyncMock(return_value=True)
+        mock_app_api.get_mqtt_credentials = AsyncMock(return_value={
+            "certificateAccount": "new-account",
+            "certificatePassword": "new-pass",
+        })
+
+        with patch(
+            "custom_components.ecoflow_energy.ecoflow.app_api.AppApiClient",
+            return_value=mock_app_api,
+        ):
+            coordinator._check_credential_age()
+            await hass.async_block_till_done()
+
+        log = coordinator.event_log
+        assert any(e["type"] == "credential_proactive_refresh" for e in log)
+        assert any(e["type"] == "credential_proactive_ok" for e in log)
+
+        # Clean up re-scheduled timer
+        if coordinator._credential_refresh_unsub is not None:
+            coordinator._credential_refresh_unsub.cancel()
+
+    async def test_proactive_refresh_failure_graceful(
+        self, hass: HomeAssistant,
+    ) -> None:
+        """Proactive refresh failure does not mark device unavailable."""
+        entry = self._create_app_auth_entry(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, entry, MOCK_POWEROCEAN_DEVICE
+        )
+        coordinator._auth_method = "app"
+        coordinator._mqtt_client = MagicMock()
+        coordinator._mqtt_client.cert_account = "old"
+        coordinator._device_available = True
+
+        mock_app_api = MagicMock()
+        mock_app_api.login = AsyncMock(return_value=False)
+
+        with patch(
+            "custom_components.ecoflow_energy.ecoflow.app_api.AppApiClient",
+            return_value=mock_app_api,
+        ):
+            await coordinator._proactive_credential_refresh()
+
+        # Device must still be available after failed proactive refresh
+        assert coordinator._device_available is True
+        log = coordinator.event_log
+        assert any(e["type"] == "credential_proactive_fail" for e in log)
