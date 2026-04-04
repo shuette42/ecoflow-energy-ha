@@ -3060,12 +3060,14 @@ class TestAppAuthMode:
         )
         coordinator._credential_obtained_ts = time.monotonic() - CREDENTIAL_MAX_AGE_S - 100
 
-        # Patch _proactive_credential_refresh to avoid actual refresh
-        with patch.object(coordinator, "_proactive_credential_refresh", new_callable=AsyncMock):
+        # Replace the coroutine method with a sync no-op to avoid async scheduling issues
+        coordinator._proactive_credential_refresh = lambda: None  # type: ignore[assignment]
+        with patch.object(hass, "async_create_task") as mock_task:
             coordinator._check_credential_age()
 
         log = coordinator.event_log
         assert any(e["type"] == "credential_proactive_refresh" for e in log)
+        mock_task.assert_called_once()
 
         # Clean up re-scheduled timer
         if coordinator._credential_refresh_unsub is not None:
