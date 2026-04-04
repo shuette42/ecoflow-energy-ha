@@ -52,6 +52,8 @@ ENERGY_STREAM_KEEPALIVE_S = 20  # Re-send EnergyStreamSwitch every 20s
 QUOTAS_KEEPALIVE_S = 30  # latestQuotas poll interval (app-level keepalive)
 PING_KEEPALIVE_S = 60  # MQTT ping heartbeat interval
 SMARTPLUG_GET_ALL_KEEPALIVE_S = 120.0  # Smart Plug app-auth: periodic full-state refresh
+CREDENTIAL_REFRESH_CHECK_S = 43200.0  # Check every 12h whether credentials need proactive refresh
+CREDENTIAL_MAX_AGE_S = 72000.0  # Proactively refresh credentials older than 20h
 
 DEVICE_TYPE_DISPLAY_NAMES: dict[str, str] = {
     DEVICE_TYPE_POWEROCEAN: "PowerOcean",

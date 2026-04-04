@@ -247,3 +247,38 @@ class TestDeviceDiagnostics:
         )
         result = _device_diagnostics(coordinator)
         assert result["event_log"] == []
+
+    async def test_mqtt_status_includes_3state(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Diagnostics mqtt_status includes 'status' and 'data_receiving' fields."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        result = _device_diagnostics(coordinator)
+
+        assert "status" in result["mqtt_status"]
+        assert "data_receiving" in result["mqtt_status"]
+        assert result["mqtt_status"]["status"] == "not_configured"
+        assert result["mqtt_status"]["data_receiving"] is False
+
+    async def test_event_log_has_iso_timestamps(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Event log entries include ISO-formatted timestamps."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        coordinator._log_event("test", "entry_1")
+        result = _device_diagnostics(coordinator)
+
+        assert len(result["event_log"]) == 1
+        entry = result["event_log"][0]
+        assert "ts_iso" in entry
+        assert entry["ts_iso"].endswith("+00:00")

@@ -53,6 +53,8 @@ from .const import (
     POWEROCEAN_POWER_TO_ENERGY,
     QUOTAS_KEEPALIVE_S,
     SMARTPLUG_GET_ALL_KEEPALIVE_S,
+    CREDENTIAL_REFRESH_CHECK_S,
+    CREDENTIAL_MAX_AGE_S,
     SMARTPLUG_ENERGY_FROM_API,
     SMARTPLUG_POWER_TO_ENERGY,
     STALE_THRESHOLD_S,
@@ -144,6 +146,8 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._device_available: bool = True
         self._last_stale_reconnect_ts: float = 0.0
         self._last_smartplug_get_all_ts: float = 0.0
+        self._credential_obtained_ts: float = 0.0
+        self._credential_refresh_unsub: asyncio.TimerHandle | None = None
         self._event_log: deque[dict[str, Any]] = deque(maxlen=50)
         # Stable SN → pack index mapping for proto heartbeats (cmd_id=7).
         # Each heartbeat contains only one pack; this map ensures the same
@@ -203,10 +207,31 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     @property
     def mqtt_status(self) -> str:
-        """Return MQTT connection status for diagnostic sensor."""
+        """Return MQTT connection status for diagnostic sensor.
+
+        Three-state model:
+        - "receiving": TCP connected AND data flowing within stale threshold
+        - "connected_stale": TCP connected but no recent data
+        - "disconnected": TCP not connected
+        - "not_configured": no MQTT client
+        """
         if self._mqtt_client is None:
             return "not_configured"
-        return "connected" if self._mqtt_client.is_connected() else "disconnected"
+        if not self._mqtt_client.is_connected():
+            return "disconnected"
+        if self.data_receiving:
+            return "receiving"
+        return "connected_stale"
+
+    @property
+    def data_receiving(self) -> bool:
+        """Return whether MQTT is actively delivering data (not just TCP-connected)."""
+        if self._mqtt_client is None or not self._mqtt_client.is_connected():
+            return False
+        if self._last_mqtt_ts <= 0:
+            return False
+        age = time.monotonic() - self._last_mqtt_ts
+        return age <= self._stale_threshold_s()
 
     @property
     def connection_mode(self) -> str:
@@ -312,8 +337,10 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             user_id=user_id,
             wss_mode=True,
             enhanced_mode=(self._enhanced_mode and self.device_type == DEVICE_TYPE_POWEROCEAN),
+            auth_error_handler=self._on_mqtt_auth_error,
         )
 
+        self._credential_obtained_ts = time.monotonic()
         await self.hass.async_add_executor_job(self._start_mqtt)
 
         if self._enhanced_mode:
@@ -322,6 +349,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._schedule_quotas_poll()
         self._schedule_ping()
         self._schedule_stale_check()
+        self._schedule_credential_refresh()
 
         _LOGGER.debug(
             "App-auth setup complete for %s (enhanced=%s)",
@@ -368,6 +396,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     self._on_mqtt_auth_error if subscribe_mqtt else None
                 ),
             )
+            self._credential_obtained_ts = time.monotonic()
             await self.hass.async_add_executor_job(self._start_mqtt)
         if subscribe_mqtt:
             _LOGGER.debug(
@@ -400,13 +429,17 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def async_shutdown(self) -> None:
         """Stop the MQTT client and cancel timers."""
         self._shutdown = True
-        for handle in (self._keepalive_unsub, self._quotas_unsub, self._ping_unsub, self._stale_check_unsub):
+        for handle in (
+            self._keepalive_unsub, self._quotas_unsub, self._ping_unsub,
+            self._stale_check_unsub, self._credential_refresh_unsub,
+        ):
             if handle is not None:
                 handle.cancel()
         self._keepalive_unsub = None
         self._quotas_unsub = None
         self._ping_unsub = None
         self._stale_check_unsub = None
+        self._credential_refresh_unsub = None
         if self._mqtt_client is not None:
             await self.hass.async_add_executor_job(self._mqtt_client.disconnect)
             self._mqtt_client = None
@@ -593,8 +626,11 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 cert_account = creds.get("certificateAccount") or creds.get("userName", "")
                 cert_password = creds.get("certificatePassword") or creds.get("password", "")
                 self._mqtt_client.update_credentials(cert_account, cert_password)
+                self._credential_obtained_ts = time.monotonic()
+                self._log_event("credential_refresh_ok", "app-auth")
                 _LOGGER.debug("App-auth MQTT credentials refreshed for %s", self.device_sn)
             else:
+                self._log_event("credential_refresh_fail", "app-auth, no credentials")
                 _LOGGER.warning("App-auth credential refresh failed for %s - triggering re-authentication", self.device_sn)
                 self._entry.async_start_reauth(self.hass)
         else:
@@ -607,10 +643,102 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     creds.get("certificateAccount", ""),
                     creds.get("certificatePassword", ""),
                 )
+                self._credential_obtained_ts = time.monotonic()
+                self._log_event("credential_refresh_ok", "developer-auth")
                 _LOGGER.debug("MQTT credentials refreshed for %s", self.device_sn)
             else:
+                self._log_event("credential_refresh_fail", "developer-auth")
                 _LOGGER.warning("MQTT credential refresh failed for %s - triggering re-authentication", self.device_sn)
                 self._entry.async_start_reauth(self.hass)
+
+    # ------------------------------------------------------------------
+    # Proactive credential refresh (before expiry)
+    # ------------------------------------------------------------------
+
+    def _schedule_credential_refresh(self) -> None:
+        """Schedule periodic credential age check."""
+        if self._shutdown:
+            return
+        self._credential_refresh_unsub = self.hass.loop.call_later(
+            CREDENTIAL_REFRESH_CHECK_S, self._check_credential_age,
+        )
+
+    def _check_credential_age(self) -> None:
+        """Check if credentials are old enough to warrant proactive refresh."""
+        if self._shutdown:
+            return
+
+        if self._credential_obtained_ts > 0:
+            age = time.monotonic() - self._credential_obtained_ts
+            if age >= CREDENTIAL_MAX_AGE_S:
+                _LOGGER.debug(
+                    "Credentials for %s are %.0fh old - proactive refresh",
+                    self.device_sn, age / 3600,
+                )
+                self._log_event("credential_proactive_refresh", f"age={age / 3600:.0f}h")
+                self.hass.async_create_task(self._proactive_credential_refresh())
+            else:
+                _LOGGER.debug(
+                    "Credentials for %s are %.0fh old - still fresh",
+                    self.device_sn, age / 3600,
+                )
+
+        # Re-schedule
+        if not self._shutdown:
+            self._credential_refresh_unsub = self.hass.loop.call_later(
+                CREDENTIAL_REFRESH_CHECK_S, self._check_credential_age,
+            )
+
+    async def _proactive_credential_refresh(self) -> None:
+        """Proactively refresh credentials before they expire."""
+        if self._mqtt_client is None:
+            return
+
+        auth_method = getattr(self, "_auth_method", AUTH_METHOD_DEVELOPER)
+        old_account = self._mqtt_client.cert_account
+
+        if auth_method == AUTH_METHOD_APP:
+            session = async_get_clientsession(self.hass)
+            from .ecoflow.app_api import AppApiClient
+
+            email = self._entry.data.get(CONF_EMAIL, "")
+            password = self._entry.data.get(CONF_PASSWORD, "")
+            if not email or not password:
+                return
+
+            app_api = AppApiClient(session, email, password)
+            if not await app_api.login():
+                _LOGGER.debug("Proactive credential refresh: login failed for %s", self.device_sn)
+                self._log_event("credential_proactive_fail", "login failed")
+                return
+
+            creds = await app_api.get_mqtt_credentials()
+            if creds is not None:
+                cert_account = creds.get("certificateAccount") or creds.get("userName", "")
+                cert_password = creds.get("certificatePassword") or creds.get("password", "")
+                self._mqtt_client.update_credentials(cert_account, cert_password)
+                self._credential_obtained_ts = time.monotonic()
+                self._log_event("credential_proactive_ok", "app-auth")
+                if cert_account != old_account:
+                    _LOGGER.debug("Proactive refresh: credentials changed for %s - force reconnect", self.device_sn)
+                    self.hass.async_add_executor_job(self._mqtt_client.force_reconnect)
+            else:
+                self._log_event("credential_proactive_fail", "no credentials")
+        else:
+            if self._iot_api is None:
+                return
+            creds = await self._iot_api.refresh_credentials()
+            if creds is not None:
+                cert_account = creds.get("certificateAccount", "")
+                cert_password = creds.get("certificatePassword", "")
+                self._mqtt_client.update_credentials(cert_account, cert_password)
+                self._credential_obtained_ts = time.monotonic()
+                self._log_event("credential_proactive_ok", "developer-auth")
+                if cert_account != old_account:
+                    _LOGGER.debug("Proactive refresh: credentials changed for %s - force reconnect", self.device_sn)
+                    self.hass.async_add_executor_job(self._mqtt_client.force_reconnect)
+            else:
+                self._log_event("credential_proactive_fail", "api failed")
 
     def _on_mqtt_message(self, topic: str, payload: bytes) -> None:
         """Handle an incoming MQTT message (Paho thread).
@@ -1239,9 +1367,11 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     "MQTT stale for %s (%.0fs) - switching to HTTP fallback (tier 4)",
                     self.device_sn, age,
                 )
+                self._log_event("stale_detected", f"age={age:.0f}s, http_fallback")
                 self.update_interval = timedelta(seconds=HTTP_FALLBACK_INTERVAL_S)
             elif age <= stale_threshold_s and self.update_interval is not None:
                 _LOGGER.info("MQTT recovered for %s - disabling HTTP fallback", self.device_sn)
+                self._log_event("stale_recovered", "http_fallback_disabled")
                 self.update_interval = None
         else:
             # App-auth: MQTT-only path, mark unavailable after sustained stale
@@ -1264,6 +1394,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         self.device_sn,
                         age,
                     )
+                    self._log_event("stale_force_reconnect", f"age={age:.0f}s")
                     self.hass.async_add_executor_job(self._mqtt_client.force_reconnect)
 
                 if self._device_available and age >= unavailable_after_s:
@@ -1280,6 +1411,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         age,
                         reconnect_attempts,
                     )
+                    self._log_event("stale_unavailable", f"age={age:.0f}s, attempts={reconnect_attempts}")
                     self._device_available = False
             else:
                 if not self._device_available:
@@ -1288,6 +1420,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         self.device_name,
                         self.device_sn,
                     )
+                    self._log_event("stale_recovered", "device_available")
                     self._device_available = True
                 self._last_stale_reconnect_ts = 0.0
 

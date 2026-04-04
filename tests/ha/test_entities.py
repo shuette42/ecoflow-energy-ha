@@ -949,12 +949,30 @@ class TestEcoFlowDiagnosticSensor:
         sensor = EcoFlowDiagnosticSensor(coordinator, "nonexistent")
         assert sensor.native_value is None
 
-    async def test_diagnostic_sensor_mqtt_connected(
+    async def test_diagnostic_sensor_mqtt_receiving(
         self,
         hass: HomeAssistant,
         standard_config_entry: MockConfigEntry,
     ) -> None:
-        """mqtt_status sensor reflects connected MQTT client."""
+        """mqtt_status sensor reflects 'receiving' when connected with fresh data."""
+        import time
+
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+        mock_mqtt = MagicMock()
+        mock_mqtt.is_connected.return_value = True
+        coordinator._mqtt_client = mock_mqtt
+        coordinator._last_mqtt_ts = time.monotonic()
+
+        sensor = EcoFlowDiagnosticSensor(coordinator, "mqtt_status")
+        assert sensor.native_value == "receiving"
+
+    async def test_diagnostic_sensor_mqtt_connected_stale(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """mqtt_status sensor reflects 'connected_stale' when connected but no recent data."""
         standard_config_entry.add_to_hass(hass)
         coordinator = _make_coordinator(hass, standard_config_entry)
         mock_mqtt = MagicMock()
@@ -962,7 +980,7 @@ class TestEcoFlowDiagnosticSensor:
         coordinator._mqtt_client = mock_mqtt
 
         sensor = EcoFlowDiagnosticSensor(coordinator, "mqtt_status")
-        assert sensor.native_value == "connected"
+        assert sensor.native_value == "connected_stale"
 
     async def test_diagnostic_sensor_enhanced_mode(
         self,

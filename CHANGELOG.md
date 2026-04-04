@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.10.0] - 2026-04-04
+
+### Fixed
+- App-auth MQTT client now triggers credential refresh on auth errors (rc=5). Previously, expired WSS credentials caused indefinite reconnect failures because the `auth_error_handler` callback was not wired for the app-auth path.
+
+### Added
+- Three-state MQTT status: diagnostics now report `receiving`, `connected_stale`, or `disconnected` instead of binary `connected`/`disconnected`, making it easier to identify connected-but-silent MQTT sessions.
+- `data_receiving` property on the coordinator for programmatic stale detection.
+- Enhanced connectivity event log: stale detection triggers, force-reconnect events, credential refresh outcomes, and recovery transitions are now captured in the per-device event log.
+- ISO timestamps in diagnostic event log entries for human-readable debugging.
+- Proactive credential refresh for app-auth: credentials older than 20 hours are refreshed automatically every 12 hours, preventing brief outages from token expiry.
+
 ## [1.9.3] - 2026-04-04
 
 ### Fixed
