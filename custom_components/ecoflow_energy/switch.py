@@ -25,7 +25,12 @@ from .const import (
     DEVICE_TYPE_SMARTPLUG,
     DOMAIN,
     EcoFlowSwitchDef,
+    SMARTPLUG_SWITCH_COMMANDS,
     SMARTPLUG_SWITCHES,
+    SWITCH_COMMANDS_R331,
+    SWITCH_COMMANDS_R351,
+    SWITCH_DECLARATIVE_R331,
+    SWITCH_DECLARATIVE_R351,
 )
 from .coordinator import EcoFlowDeviceCoordinator
 from .ecoflow.parsers.smartplug import build_plug_switch_payload
@@ -33,134 +38,6 @@ from .ecoflow.parsers.smartplug import build_plug_switch_payload
 _LOGGER = logging.getLogger(__name__)
 
 OPTIMISTIC_LOCK_S = 5.0
-
-# Smart Plug SET-command templates (uses cmdCode format)
-SMARTPLUG_COMMANDS: dict[str, dict[str, dict[str, Any]]] = {
-    "plug_switch": {
-        "on": {
-            "cmdCode": "WN511_SOCKET_SET_PLUG_SWITCH_MESSAGE",
-            "params": {"plugSwitch": 1},
-        },
-        "off": {
-            "cmdCode": "WN511_SOCKET_SET_PLUG_SWITCH_MESSAGE",
-            "params": {"plugSwitch": 0},
-        },
-    },
-}
-
-# IoT API SET-command templates (Delta 2 Max)
-# moduleType: 1=PD, 2=BMS, 3=INV, 5=MPPT
-#
-# Legacy switches use on/off dict with full params.
-# New switches use declarative format with param_key, invert, extra_params.
-SWITCH_COMMANDS_R351: dict[str, dict[str, dict[str, Any]]] = {
-    "ac_switch": {
-        "on": {
-            "moduleType": 3,
-            "operateType": "acOutCfg",
-            "params": {"enabled": 1, "out_voltage": 4294967295, "out_freq": 1, "xboost": 1},
-        },
-        "off": {
-            "moduleType": 3,
-            "operateType": "acOutCfg",
-            "params": {"enabled": 0, "out_voltage": 4294967295, "out_freq": 1, "xboost": 0},
-        },
-    },
-    "dc_switch": {
-        "on": {"moduleType": 1, "operateType": "dcOutCfg", "params": {"enabled": 1}},
-        "off": {"moduleType": 1, "operateType": "dcOutCfg", "params": {"enabled": 0}},
-    },
-    "car_12v_switch": {
-        "on": {"moduleType": 5, "operateType": "mpptCar", "params": {"enabled": 1}},
-        "off": {"moduleType": 5, "operateType": "mpptCar", "params": {"enabled": 0}},
-    },
-}
-
-SWITCH_COMMANDS_R331: dict[str, dict[str, dict[str, Any]]] = {
-    "ac_switch": {
-        "on": {
-            "moduleType": 5,
-            "operateType": "acOutCfg",
-            "params": {"enabled": 1, "out_voltage": 4294967295, "out_freq": 255, "xboost": 255},
-        },
-        "off": {
-            "moduleType": 5,
-            "operateType": "acOutCfg",
-            "params": {"enabled": 0, "out_voltage": 4294967295, "out_freq": 255, "xboost": 255},
-        },
-    },
-    "dc_switch": {
-        "on": {"moduleType": 1, "operateType": "dcOutCfg", "params": {"enabled": 1}},
-        "off": {"moduleType": 1, "operateType": "dcOutCfg", "params": {"enabled": 0}},
-    },
-    "car_12v_switch": {
-        "on": {"moduleType": 5, "operateType": "mpptCar", "params": {"enabled": 1}},
-        "off": {"moduleType": 5, "operateType": "mpptCar", "params": {"enabled": 0}},
-    },
-    "xboost_switch": {
-        "on": {
-            "moduleType": 5,
-            "operateType": "acOutCfg",
-            "params": {"xboost": 1, "enabled": 255, "out_voltage": 4294967295, "out_freq": 255},
-        },
-        "off": {
-            "moduleType": 5,
-            "operateType": "acOutCfg",
-            "params": {"xboost": 0, "enabled": 255, "out_voltage": 4294967295, "out_freq": 255},
-        },
-    },
-}
-
-# Declarative switch command templates (Delta 2 Max)
-# param_key: the parameter name sent in the command (default: "enabled")
-# invert: when True, ON sends 0 and OFF sends 1 (e.g. beeper vs quiet mode)
-# extra_params: additional fixed parameters merged into the command params
-SWITCH_DECLARATIVE_R351: dict[str, dict[str, Any]] = {
-    "beeper_switch": {
-        "moduleType": 1,
-        "operateType": "quietCfg",
-        "param_key": "enabled",
-        "invert": True,
-    },
-    "xboost_switch": {
-        "moduleType": 3,
-        "operateType": "acOutCfg",
-        "param_key": "xboost",
-    },
-    "ac_auto_on_switch": {
-        "moduleType": 1,
-        "operateType": "newAcAutoOnCfg",
-        "param_key": "enabled",
-        "extra_params": {"minAcSoc": 5},
-    },
-    "backup_reserve_switch": {
-        "moduleType": 1,
-        "operateType": "watthConfig",
-        "param_key": "isConfig",
-        "extra_params": {"bpPowerSoc": 50, "minChgSoc": 0, "minDsgSoc": 0},
-    },
-}
-
-SWITCH_DECLARATIVE_R331: dict[str, dict[str, Any]] = {
-    "beeper_switch": {
-        "moduleType": 1,
-        "operateType": "quietMode",
-        "param_key": "enabled",
-        "invert": True,
-    },
-    "ac_auto_on_switch": {
-        "moduleType": 1,
-        "operateType": "acAutoOutConfig",
-        "param_key": "acAutoOutConfig",
-        "extra_params": {"minAcOutSoc": 5},
-    },
-    "backup_reserve_switch": {
-        "moduleType": 1,
-        "operateType": "watthConfig",
-        "param_key": "isConfig",
-        "extra_params": {"bpPowerSoc": 50, "minChgSoc": 0, "minDsgSoc": 0},
-    },
-}
 
 
 async def async_setup_entry(
@@ -321,7 +198,7 @@ def _get_switch_defs(device_type: str) -> list[EcoFlowSwitchDef]:
 def _get_switch_commands(device_type: str) -> dict[str, dict[str, dict[str, Any]]]:
     """Return command templates based on device type."""
     if device_type == DEVICE_TYPE_SMARTPLUG:
-        return SMARTPLUG_COMMANDS
+        return SMARTPLUG_SWITCH_COMMANDS
     return SWITCH_COMMANDS_R351
 
 

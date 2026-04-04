@@ -14,6 +14,10 @@ All notable changes to this project will be documented in this file.
 - ISO timestamps in diagnostic event log entries for human-readable debugging.
 - Proactive credential refresh for app-auth: credentials older than 20 hours are refreshed automatically every 12 hours, preventing brief outages from token expiry.
 
+### Changed
+- Extracted PowerOcean proto remapping logic (~150 lines) from `coordinator.py` into `ecoflow/parsers/powerocean_proto.py` for cleaner core/device separation.
+- Moved SET command templates from `switch.py` and `number.py` into `const.py` alongside entity definitions.
+
 ## [1.9.3] - 2026-04-04
 
 ### Fixed

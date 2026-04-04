@@ -499,3 +499,193 @@ SMARTPLUG_POWER_TO_ENERGY: dict[str, str] = {
 }
 
 SMARTPLUG_ENERGY_FROM_API: list[tuple[str, str]] = []
+
+
+# ===========================================================================
+# SET Command Templates (per device type)
+# ===========================================================================
+
+# Smart Plug SET-command templates (uses cmdCode format)
+SMARTPLUG_SWITCH_COMMANDS: dict[str, dict[str, dict[str, Any]]] = {
+    "plug_switch": {
+        "on": {
+            "cmdCode": "WN511_SOCKET_SET_PLUG_SWITCH_MESSAGE",
+            "params": {"plugSwitch": 1},
+        },
+        "off": {
+            "cmdCode": "WN511_SOCKET_SET_PLUG_SWITCH_MESSAGE",
+            "params": {"plugSwitch": 0},
+        },
+    },
+}
+
+# IoT API SET-command templates for switches (Delta 2 Max R351 profile)
+SWITCH_COMMANDS_R351: dict[str, dict[str, dict[str, Any]]] = {
+    "ac_switch": {
+        "on": {
+            "moduleType": 3,
+            "operateType": "acOutCfg",
+            "params": {"enabled": 1, "out_voltage": 4294967295, "out_freq": 1, "xboost": 1},
+        },
+        "off": {
+            "moduleType": 3,
+            "operateType": "acOutCfg",
+            "params": {"enabled": 0, "out_voltage": 4294967295, "out_freq": 1, "xboost": 0},
+        },
+    },
+    "dc_switch": {
+        "on": {"moduleType": 1, "operateType": "dcOutCfg", "params": {"enabled": 1}},
+        "off": {"moduleType": 1, "operateType": "dcOutCfg", "params": {"enabled": 0}},
+    },
+    "car_12v_switch": {
+        "on": {"moduleType": 5, "operateType": "mpptCar", "params": {"enabled": 1}},
+        "off": {"moduleType": 5, "operateType": "mpptCar", "params": {"enabled": 0}},
+    },
+}
+
+# IoT API SET-command templates for switches (Delta 2 Max R331/legacy profile)
+SWITCH_COMMANDS_R331: dict[str, dict[str, dict[str, Any]]] = {
+    "ac_switch": {
+        "on": {
+            "moduleType": 5,
+            "operateType": "acOutCfg",
+            "params": {"enabled": 1, "out_voltage": 4294967295, "out_freq": 255, "xboost": 255},
+        },
+        "off": {
+            "moduleType": 5,
+            "operateType": "acOutCfg",
+            "params": {"enabled": 0, "out_voltage": 4294967295, "out_freq": 255, "xboost": 255},
+        },
+    },
+    "dc_switch": {
+        "on": {"moduleType": 1, "operateType": "dcOutCfg", "params": {"enabled": 1}},
+        "off": {"moduleType": 1, "operateType": "dcOutCfg", "params": {"enabled": 0}},
+    },
+    "car_12v_switch": {
+        "on": {"moduleType": 5, "operateType": "mpptCar", "params": {"enabled": 1}},
+        "off": {"moduleType": 5, "operateType": "mpptCar", "params": {"enabled": 0}},
+    },
+    "xboost_switch": {
+        "on": {
+            "moduleType": 5,
+            "operateType": "acOutCfg",
+            "params": {"xboost": 1, "enabled": 255, "out_voltage": 4294967295, "out_freq": 255},
+        },
+        "off": {
+            "moduleType": 5,
+            "operateType": "acOutCfg",
+            "params": {"xboost": 0, "enabled": 255, "out_voltage": 4294967295, "out_freq": 255},
+        },
+    },
+}
+
+# Declarative switch command templates (Delta 2 Max R351)
+SWITCH_DECLARATIVE_R351: dict[str, dict[str, Any]] = {
+    "beeper_switch": {
+        "moduleType": 1,
+        "operateType": "quietCfg",
+        "param_key": "enabled",
+        "invert": True,
+    },
+    "xboost_switch": {
+        "moduleType": 3,
+        "operateType": "acOutCfg",
+        "param_key": "xboost",
+    },
+    "ac_auto_on_switch": {
+        "moduleType": 1,
+        "operateType": "newAcAutoOnCfg",
+        "param_key": "enabled",
+        "extra_params": {"minAcSoc": 5},
+    },
+    "backup_reserve_switch": {
+        "moduleType": 1,
+        "operateType": "watthConfig",
+        "param_key": "isConfig",
+        "extra_params": {"bpPowerSoc": 50, "minChgSoc": 0, "minDsgSoc": 0},
+    },
+}
+
+# Declarative switch command templates (Delta 2 Max R331/legacy)
+SWITCH_DECLARATIVE_R331: dict[str, dict[str, Any]] = {
+    "beeper_switch": {
+        "moduleType": 1,
+        "operateType": "quietMode",
+        "param_key": "enabled",
+        "invert": True,
+    },
+    "ac_auto_on_switch": {
+        "moduleType": 1,
+        "operateType": "acAutoOutConfig",
+        "param_key": "acAutoOutConfig",
+        "extra_params": {"minAcOutSoc": 5},
+    },
+    "backup_reserve_switch": {
+        "moduleType": 1,
+        "operateType": "watthConfig",
+        "param_key": "isConfig",
+        "extra_params": {"bpPowerSoc": 50, "minChgSoc": 0, "minDsgSoc": 0},
+    },
+}
+
+# IoT API SET-command templates for number entities (Delta 2 Max)
+NUMBER_COMMANDS: dict[str, dict[str, Any]] = {
+    "ac_charge_speed": {
+        "moduleType": 3,
+        "operateType": "acChgCfg",
+        "param_key": "fastChgWatts",
+        "extra_params": {"slowChgWatts": 400, "chgPauseFlag": 0},
+    },
+    "max_charge_soc": {
+        "moduleType": 2,
+        "operateType": "upsConfig",
+        "param_key": "maxChgSoc",
+    },
+    "min_discharge_soc": {
+        "moduleType": 2,
+        "operateType": "dsgCfg",
+        "param_key": "minDsgSoc",
+    },
+    "standby_timeout": {
+        "moduleType": 1,
+        "operateType": "standbyTime",
+        "param_key": "standbyMin",
+    },
+    "car_standby_timeout": {
+        "moduleType": 5,
+        "operateType": "standbyTime",
+        "param_key": "standbyMins",
+    },
+    "screen_brightness": {
+        "moduleType": 1,
+        "operateType": "lcdCfg",
+        "param_key": "brighLevel",
+        "extra_params": {"delayOff": 0},
+    },
+    "screen_timeout": {
+        "moduleType": 1,
+        "operateType": "lcdCfg",
+        "param_key": "delayOff",
+        "extra_params": {"brighLevel": 255},
+    },
+    "backup_reserve_soc": {
+        "moduleType": 1,
+        "operateType": "watthConfig",
+        "param_key": "bpPowerSoc",
+        "extra_params": {"isConfig": 1, "minChgSoc": 0, "minDsgSoc": 0},
+    },
+}
+
+# Smart Plug SET-command templates for number entities
+SMARTPLUG_NUMBER_COMMANDS: dict[str, dict[str, Any]] = {
+    "led_brightness": {
+        "cmdCode": "WN511_SOCKET_SET_BRIGHTNESS_PACK",
+        "param_key": "brightness",
+        "scale": 1023.0 / 100.0,
+    },
+    "max_watts": {
+        "cmdCode": "WN511_SOCKET_SET_MAX_WATTS",
+        "param_key": "maxWatts",
+        "scale": 1,
+    },
+}

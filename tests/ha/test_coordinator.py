@@ -35,6 +35,11 @@ from custom_components.ecoflow_energy.const import (
     STALE_THRESHOLD_S,
 )
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
+from custom_components.ecoflow_energy.ecoflow.parsers.powerocean_proto import (
+    flatten_heartbeat,
+    remap_bp_keys,
+    remap_proto_keys,
+)
 
 from .conftest import (
     MOCK_DELTA_DEVICE,
@@ -1258,7 +1263,7 @@ class TestProtoKeyRemapping:
             "grid_raw_f2": 200,
             "soc": 72.0,
         }
-        result = coordinator._remap_proto_keys(raw)
+        result = remap_proto_keys(raw)
 
         assert result["solar_w"] == 3200
         assert result["home_w"] == 1500
@@ -1277,12 +1282,12 @@ class TestProtoKeyRemapping:
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
         # Positive grid_w = import
-        result = coordinator._remap_proto_keys({"grid_raw_f2": 500})
+        result = remap_proto_keys({"grid_raw_f2": 500})
         assert result["grid_import_power_w"] == 500
         assert result["grid_export_power_w"] == 0.0
 
         # Negative grid_w = export
-        result = coordinator._remap_proto_keys({"grid_raw_f2": -300})
+        result = remap_proto_keys({"grid_raw_f2": -300})
         assert result["grid_import_power_w"] == 0.0
         assert result["grid_export_power_w"] == 300
 
@@ -1297,12 +1302,12 @@ class TestProtoKeyRemapping:
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
         # Positive batt_w = charging
-        result = coordinator._remap_proto_keys({"batt_pb": 1200})
+        result = remap_proto_keys({"batt_pb": 1200})
         assert result["batt_charge_power_w"] == 1200
         assert result["batt_discharge_power_w"] == 0.0
 
         # Negative batt_w = discharging
-        result = coordinator._remap_proto_keys({"batt_pb": -900})
+        result = remap_proto_keys({"batt_pb": -900})
         assert result["batt_charge_power_w"] == 0.0
         assert result["batt_discharge_power_w"] == 900
 
@@ -1316,7 +1321,7 @@ class TestProtoKeyRemapping:
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
-        result = coordinator._remap_proto_keys({"solar": 100, "some_new_field": 42})
+        result = remap_proto_keys({"solar": 100, "some_new_field": 42})
         assert result["solar_w"] == 100
         assert result["some_new_field"] == 42
 
@@ -1330,7 +1335,7 @@ class TestProtoKeyRemapping:
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
-        result = coordinator._remap_proto_keys({"grid_raw_f2": 0.0, "batt_pb": 0.0})
+        result = remap_proto_keys({"grid_raw_f2": 0.0, "batt_pb": 0.0})
         assert result["grid_w"] == 0.0
         assert result["grid_import_power_w"] == 0.0
         assert result["grid_export_power_w"] == 0.0
@@ -1366,7 +1371,7 @@ class TestHeartbeatExtraction:
             ],
             "pcs_ac_freq": 50.01,
         }
-        result = coordinator._flatten_heartbeat(raw)
+        result = flatten_heartbeat(raw)
 
         assert result["mppt_pv1_power_w"] == 2500.0
         assert result["mppt_pv1_voltage_v"] == 480.0
@@ -1393,7 +1398,7 @@ class TestHeartbeatExtraction:
                 {"vol": 229.8, "amp": 9.5, "pwr": 2100.0},
             ]
         }
-        result = coordinator._flatten_heartbeat(raw)
+        result = flatten_heartbeat(raw)
 
         assert result["grid_phase_a_voltage_v"] == 230.5
         assert result["grid_phase_a_current_a"] == 10.2
@@ -1415,7 +1420,7 @@ class TestHeartbeatExtraction:
             "pcs_a_phase": {"vol": 230.0, "amp": 10.0, "act_pwr": -2200.0},
             "pcs_b_phase": {"vol": 231.0, "amp": 11.0, "act_pwr": -2500.0},
         }
-        result = coordinator._flatten_heartbeat(raw)
+        result = flatten_heartbeat(raw)
 
         assert result["grid_phase_a_voltage_v"] == 230.0
         assert result["grid_phase_a_current_a"] == 10.0
@@ -1432,7 +1437,7 @@ class TestHeartbeatExtraction:
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
-        result = coordinator._flatten_heartbeat({})
+        result = flatten_heartbeat({})
         assert result == {}
 
 
@@ -1453,7 +1458,7 @@ class TestBpRemapping:
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
         raw = {"bp_soh": 98, "bp_cycles": 42, "bp_vol": 52.1, "bp_env_temp": 25}
-        result = coordinator._remap_bp_keys(raw)
+        result = remap_bp_keys(raw, coordinator._bp_sn_to_index, coordinator.device_sn)
 
         assert result["bp_soh_pct"] == 98.0
         assert result["bp_cycles"] == 42.0
@@ -1471,7 +1476,7 @@ class TestBpRemapping:
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
         raw = {"bp_online_sum": 2, "ems_feed_mode": 1, "sys_grid_sta": 0}
-        result = coordinator._remap_bp_keys(raw)
+        result = remap_bp_keys(raw, coordinator._bp_sn_to_index, coordinator.device_sn)
 
         assert result["bp_online_sum"] == 2.0
         assert result["ems_feed_mode"] == 1.0
@@ -1488,7 +1493,7 @@ class TestBpRemapping:
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
         raw = {"bp_total_chg_energy": 15000, "bp_total_dsg_energy": 12000}
-        result = coordinator._remap_bp_keys(raw)
+        result = remap_bp_keys(raw, coordinator._bp_sn_to_index, coordinator.device_sn)
 
         assert result["batt_charge_energy_kwh"] == 15.0
         assert result["batt_discharge_energy_kwh"] == 12.0
@@ -1510,7 +1515,7 @@ class TestBpRemapping:
             ],
             "bp_soh": 100,
         }
-        result = coordinator._remap_bp_keys(raw)
+        result = remap_bp_keys(raw, coordinator._bp_sn_to_index, coordinator.device_sn)
 
         # Pack 1
         assert result["pack1_soc"] == 76.0
@@ -1540,7 +1545,7 @@ class TestBpRemapping:
         raw = {
             "all_packs": [{"bp_soc": i * 10} for i in range(1, 8)],  # 7 packs
         }
-        result = coordinator._remap_bp_keys(raw)
+        result = remap_bp_keys(raw, coordinator._bp_sn_to_index, coordinator.device_sn)
 
         assert "pack1_soc" in result
         assert "pack5_soc" in result
@@ -1564,7 +1569,7 @@ class TestBpRemapping:
                 {"bp_soc": 74, "bp_pwr": 2529.19, "bp_vol": 54.698},  # real pack
             ],
         }
-        result = coordinator._remap_bp_keys(raw)
+        result = remap_bp_keys(raw, coordinator._bp_sn_to_index, coordinator.device_sn)
 
         # Phantom skipped — real packs are pack1 and pack2
         assert result["pack1_soc"] == 76.0
@@ -1589,7 +1594,7 @@ class TestBpRemapping:
                 {},  # phantom
             ],
         }
-        result = coordinator._remap_bp_keys(raw)
+        result = remap_bp_keys(raw, coordinator._bp_sn_to_index, coordinator.device_sn)
 
         assert "pack1_soc" not in result
         assert "pack2_soc" not in result
@@ -1610,7 +1615,7 @@ class TestBpRemapping:
                 {"bp_soc": 74, "bp_pwr": 2529, "bp_remain_watth": 2600},
             ],
         }
-        parsed = coordinator._remap_bp_keys(raw)
+        parsed = remap_bp_keys(raw, coordinator._bp_sn_to_index, coordinator.device_sn)
         # Per-pack values extracted by _remap_bp_keys
         assert parsed["pack1_remain_watth"] == 2400.0
         assert parsed["pack2_remain_watth"] == 2600.0
@@ -1636,7 +1641,7 @@ class TestBpRemapping:
                 {"bp_soc": 76, "bp_pwr": 2486, "bp_remain_watth": 4800},
             ],
         }
-        parsed = coordinator._remap_bp_keys(raw)
+        parsed = remap_bp_keys(raw, coordinator._bp_sn_to_index, coordinator.device_sn)
         coordinator._apply_data(parsed)
 
         assert coordinator.device_data["bp_remain_watth"] == 4800.0
@@ -1659,7 +1664,7 @@ class TestBpRemapping:
             # This raw key should NOT be mapped since it's excluded from _BP_TO_SENSOR
             "bp_remain_watth": 2400,
         }
-        parsed = coordinator._remap_bp_keys(raw)
+        parsed = remap_bp_keys(raw, coordinator._bp_sn_to_index, coordinator.device_sn)
         coordinator._apply_data(parsed)
 
         # Sum of packs (from _apply_data aggregation), not the raw single-pack value
@@ -1692,7 +1697,7 @@ class TestBpRemapping:
                  "bp_remain_watth": 2000.0},
             ],
         }
-        parsed = coordinator._remap_bp_keys(raw)
+        parsed = remap_bp_keys(raw, coordinator._bp_sn_to_index, coordinator.device_sn)
 
         # Both packs recognized — idle pack is NOT filtered
         assert parsed["pack1_soc"] == 76.0
@@ -1717,22 +1722,22 @@ class TestBpRemapping:
         )
 
         # First heartbeat: Pack A reports (SN=AAA)
-        msg1 = coordinator._remap_bp_keys({
+        msg1 = remap_bp_keys({
             "all_packs": [
                 {"bp_sn": "AAA", "bp_soc": 76, "bp_pwr": 2486,
                  "bp_remain_watth": 2400},
             ],
-        })
+        }, coordinator._bp_sn_to_index, coordinator.device_sn)
         coordinator._apply_data(msg1)
         assert coordinator.device_data["pack1_remain_watth"] == 2400.0
 
         # Second heartbeat: Pack B reports (SN=BBB) — different SN → pack2
-        msg2 = coordinator._remap_bp_keys({
+        msg2 = remap_bp_keys({
             "all_packs": [
                 {"bp_sn": "BBB", "bp_soc": 74, "bp_pwr": 2529,
                  "bp_remain_watth": 2600},
             ],
-        })
+        }, coordinator._bp_sn_to_index, coordinator.device_sn)
         coordinator._apply_data(msg2)
 
         # Both packs in device_data, aggregate is sum
@@ -1741,12 +1746,12 @@ class TestBpRemapping:
         assert coordinator.device_data["bp_remain_watth"] == 5000.0
 
         # Third heartbeat: Pack A again with updated value
-        msg3 = coordinator._remap_bp_keys({
+        msg3 = remap_bp_keys({
             "all_packs": [
                 {"bp_sn": "AAA", "bp_soc": 75, "bp_pwr": 2400,
                  "bp_remain_watth": 2300},
             ],
-        })
+        }, coordinator._bp_sn_to_index, coordinator.device_sn)
         coordinator._apply_data(msg3)
 
         # Pack 1 updated to 2300, Pack 2 retains 2600 → total 4900
@@ -1770,7 +1775,7 @@ class TestBpRemapping:
                 {"bp_soc": 76, "bp_pwr": 2486.48, "bp_design_cap": 100000},
             ],
         }
-        result = coordinator._remap_bp_keys(raw)
+        result = remap_bp_keys(raw, coordinator._bp_sn_to_index, coordinator.device_sn)
 
         assert result["pack1_soc"] == 76.0
         assert "pack2_soc" not in result
@@ -1791,7 +1796,7 @@ class TestBpRemapping:
                 {"bp_soc": 76, "bp_pwr": 2486.48},  # real
             ],
         }
-        result = coordinator._remap_bp_keys(raw)
+        result = remap_bp_keys(raw, coordinator._bp_sn_to_index, coordinator.device_sn)
 
         assert result["pack1_soc"] == 76.0
         assert "pack2_soc" not in result
@@ -1832,12 +1837,12 @@ class TestBpRemapping:
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
         # Simulate fully discharged state
-        parsed = coordinator._remap_bp_keys({
+        parsed = remap_bp_keys({
             "all_packs": [
                 {"bp_design_cap": 100000, "bp_full_cap": 100000, "bp_remain_watth": 0.0},
                 {"bp_design_cap": 100000, "bp_full_cap": 100000, "bp_remain_watth": 0.0},
             ],
-        })
+        }, coordinator._bp_sn_to_index, coordinator.device_sn)
         coordinator._apply_data(parsed)
 
         assert coordinator.device_data["bp_remain_watth"] == 0.0
