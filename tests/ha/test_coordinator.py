@@ -12,7 +12,6 @@ from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.const import (
-    APP_AUTH_UNAVAILABLE_GRACE_S,
     AUTH_METHOD_APP,
     CONF_AUTH_METHOD,
     CONF_DEVICES,
@@ -26,12 +25,14 @@ from custom_components.ecoflow_energy.const import (
     DEVICE_TYPE_SMARTPLUG,
     DOMAIN,
     ENERGY_STREAM_KEEPALIVE_S,
+    HARD_UNAVAILABLE_S,
     HTTP_FALLBACK_INTERVAL_S,
     MODE_ENHANCED,
     MODE_STANDARD,
     MQTT_HEALTH_CHECK_INTERVAL_S,
     SMARTPLUG_GET_ALL_KEEPALIVE_S,
     SMARTPLUG_STALE_THRESHOLD_S,
+    SOFT_UNAVAILABLE_S,
     STALE_THRESHOLD_S,
 )
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
@@ -915,12 +916,12 @@ class TestStaleDetection:
         assert coordinator._last_stale_reconnect_ts == 0.0
         self._cleanup_stale_timer(coordinator)
 
-    async def test_app_auth_unavailable_waits_for_grace_window(
+    async def test_app_auth_stays_available_during_degraded(
         self,
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """App-auth stale state keeps device available until grace window elapses."""
+        """App-auth keeps device available during stale and degraded stages."""
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
@@ -928,32 +929,32 @@ class TestStaleDetection:
         coordinator._mqtt_client = MagicMock()
         coordinator._mqtt_client.is_connected.return_value = False
         coordinator._mqtt_client.try_reconnect.return_value = False
+        coordinator._mqtt_client.reconnect_attempts = 0
 
-        # Use deterministic monotonic time to avoid negative timestamps on CI.
-        now = 1_000.0
+        now = 10_000.0
         with patch(
             "custom_components.ecoflow_energy.coordinator.time.monotonic",
             return_value=now,
         ):
-            # Stale, but still inside stale+grace window.
-            coordinator._last_mqtt_ts = (
-                now
-                - STALE_THRESHOLD_S
-                - APP_AUTH_UNAVAILABLE_GRACE_S
-                + 5
-            )
+            # Data age between soft and hard threshold: degraded but available
+            coordinator._last_mqtt_ts = now - SOFT_UNAVAILABLE_S - 10
             coordinator._check_stale()
 
         assert coordinator.device_available is True
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.time.monotonic",
+            return_value=now,
+        ):
+            assert coordinator.availability_stage == "degraded"
         self._cleanup_stale_timer(coordinator)
 
-    async def test_app_auth_unavailable_after_grace_window(
+    async def test_app_auth_unavailable_after_hard_threshold(
         self,
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """App-auth stale state marks unavailable after stale+grace window."""
+        """App-auth marks unavailable only after hard unavailable threshold (10 min)."""
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
@@ -967,22 +968,81 @@ class TestStaleDetection:
             "custom_components.ecoflow_energy.coordinator.time.monotonic",
             return_value=now,
         ):
-            coordinator._last_mqtt_ts = (
-                now
-                - STALE_THRESHOLD_S
-                - APP_AUTH_UNAVAILABLE_GRACE_S
-                - 5
-            )
+            # Data age beyond hard threshold
+            coordinator._last_mqtt_ts = now - HARD_UNAVAILABLE_S - 5
             with caplog.at_level("WARNING"):
                 coordinator._check_stale()
 
         assert coordinator.device_available is False
-        assert (
-            f"MQTT stream interrupted for PowerOcean [{MOCK_POWEROCEAN_DEVICE['sn']}]"
-            in caplog.text
-        )
+        assert coordinator.availability_stage == "unavailable"
         assert "marking device unavailable" in caplog.text
-        assert "no HTTP fallback" not in caplog.text
+        self._cleanup_stale_timer(coordinator)
+
+    async def test_availability_stage_transitions(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Availability stage progresses through healthy -> stale -> degraded -> unavailable."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        coordinator._mqtt_client = MagicMock()
+        coordinator._mqtt_client.is_connected.return_value = True
+
+        now = 1_000.0
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.time.monotonic",
+            return_value=now,
+        ):
+            # Healthy: fresh data
+            coordinator._last_mqtt_ts = now - 10
+            assert coordinator.availability_stage == "healthy"
+
+            # Stale: past stale threshold but before soft unavailable
+            coordinator._last_mqtt_ts = now - STALE_THRESHOLD_S - 10
+            assert coordinator.availability_stage == "stale"
+
+            # Degraded: past soft unavailable but before hard
+            coordinator._last_mqtt_ts = now - SOFT_UNAVAILABLE_S - 10
+            assert coordinator.availability_stage == "degraded"
+
+            # Unavailable: past hard threshold
+            coordinator._last_mqtt_ts = now - HARD_UNAVAILABLE_S - 10
+            assert coordinator.availability_stage == "unavailable"
+
+    async def test_powerocean_survives_600s_gap(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """PowerOcean stays available during a 600s stream gap (observed real behavior)."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        coordinator._mqtt_client = MagicMock()
+        coordinator._mqtt_client.is_connected.return_value = True
+        coordinator._mqtt_client.force_reconnect.return_value = None
+        coordinator._mqtt_client.reconnect_attempts = 0
+
+        now = 10_000.0
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.time.monotonic",
+            return_value=now,
+        ):
+            # 590s gap: between SOFT_UNAVAILABLE (300s) and HARD_UNAVAILABLE (600s)
+            coordinator._last_mqtt_ts = now - 590
+            coordinator._check_stale()
+
+        assert coordinator.device_available is True
+        # Check stage with the same mocked time
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.time.monotonic",
+            return_value=now,
+        ):
+            assert coordinator.availability_stage == "degraded"
         self._cleanup_stale_timer(coordinator)
 
     async def test_stale_connected_forces_reconnect(
