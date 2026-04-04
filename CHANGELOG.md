@@ -2,7 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.9.3] - 2026-04-03
+## [1.9.3] - 2026-04-04
+
+### Fixed
+- Delta 2 Max device header in Home Assistant showed wrong battery percentage (100% SoH instead of actual SoC) because multiple sensors had `device_class: battery`. Only the primary `soc` sensor now carries the battery device class; SoH and secondary SoC variants use `device_class: None`.
 
 ### Changed
 - App-auth stale warning wording simplified: removed mode suffix from the user-facing message. Logs now state only the concrete condition and action (`MQTT stream interrupted ... marking device unavailable`).
