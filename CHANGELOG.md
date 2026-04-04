@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.11.0] - 2026-04-05
+
+### Added
+- Snapshot continuity layer: explicit last-known-good data contract for the Graduated Availability degraded stage. Device data snapshots are captured on every update with metadata (timestamp, source, key count) and expire only at hard-unavailable. Formalizes the implicit guarantee that entities retain values during stream interruptions.
+- Snapshot metadata in diagnostics: source, age, key count, and capture status for debugging availability behavior.
+
 ## [1.10.0] - 2026-04-04
 
 ### Fixed

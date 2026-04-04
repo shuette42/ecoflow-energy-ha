@@ -18,6 +18,7 @@ import json
 import logging
 import time
 from collections import deque
+from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any
 
@@ -82,6 +83,16 @@ from .ecoflow.proto.runtime import decode_proto_runtime_frame
 _LOGGER = logging.getLogger(__name__)
 
 
+@dataclass
+class DeviceSnapshot:
+    """Immutable snapshot of device state at a point in time."""
+
+    data: dict[str, Any] = field(default_factory=dict)
+    captured_at: float = 0.0
+    source: str = ""
+    key_count: int = 0
+
+
 class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Coordinator for a single EcoFlow device."""
 
@@ -143,6 +154,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         self._last_mqtt_ts: float = 0.0
         self._device_data: dict[str, Any] = {}
+        self._snapshot = DeviceSnapshot()
         self._keepalive_unsub: asyncio.TimerHandle | None = None
         self._stale_check_unsub: asyncio.TimerHandle | None = None
         self._quotas_unsub: asyncio.TimerHandle | None = None
@@ -189,6 +201,11 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def device_data(self) -> dict[str, Any]:
         """Return the current device data dict."""
         return self._device_data
+
+    @property
+    def snapshot(self) -> DeviceSnapshot:
+        """Return the latest device data snapshot."""
+        return self._snapshot
 
     def set_device_value(self, key: str, value: Any) -> None:
         """Set a single value in the persistent device data store.
@@ -960,6 +977,12 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._last_flush_ts = now
             self.hass.async_create_task(self._async_flush_energy_state())
 
+        self._snapshot = DeviceSnapshot(
+            data=dict(self._device_data),
+            captured_at=time.monotonic(),
+            source="mqtt",
+            key_count=len(self._device_data),
+        )
         self.async_set_updated_data(dict(self._device_data))
 
     async def _async_flush_energy_state(self) -> None:
@@ -1084,6 +1107,12 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._log_event("http_fail", f"consecutive={self._consecutive_http_failures}")
             if self._consecutive_http_failures >= 3:
                 self._device_available = False
+                self._snapshot = DeviceSnapshot(
+                    data={},
+                    captured_at=self._snapshot.captured_at,
+                    source=self._snapshot.source,
+                    key_count=0,
+                )
 
             # In Enhanced Mode, only trigger reauth if MQTT has never delivered data.
             # When MQTT is active, HTTP failures are expected fallback noise (#2).
@@ -1116,6 +1145,12 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Flush state to disk periodically (non-blocking)
         await self.hass.async_add_executor_job(self._energy_integrator.flush)
 
+        self._snapshot = DeviceSnapshot(
+            data=dict(self._device_data),
+            captured_at=time.monotonic(),
+            source="http",
+            key_count=len(self._device_data),
+        )
         return dict(self._device_data)
 
     # ------------------------------------------------------------------
@@ -1242,6 +1277,12 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     )
                     self._log_event("stale_unavailable", f"age={age:.0f}s, attempts={reconnect_attempts}")
                     self._device_available = False
+                    self._snapshot = DeviceSnapshot(
+                        data={},
+                        captured_at=self._snapshot.captured_at,
+                        source=self._snapshot.source,
+                        key_count=0,
+                    )
             else:
                 if not self._device_available:
                     _LOGGER.info(

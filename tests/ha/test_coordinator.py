@@ -35,7 +35,10 @@ from custom_components.ecoflow_energy.const import (
     SOFT_UNAVAILABLE_S,
     STALE_THRESHOLD_S,
 )
-from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
+from custom_components.ecoflow_energy.coordinator import (
+    DeviceSnapshot,
+    EcoFlowDeviceCoordinator,
+)
 from custom_components.ecoflow_energy.ecoflow.parsers.powerocean_proto import (
     flatten_heartbeat,
     remap_bp_keys,
@@ -3173,3 +3176,258 @@ class TestAppAuthMode:
         assert coordinator._device_available is True
         log = coordinator.event_log
         assert any(e["type"] == "credential_proactive_fail" for e in log)
+
+
+# ===========================================================================
+# Snapshot Continuity Layer
+# ===========================================================================
+
+
+class TestSnapshotContinuity:
+    """DeviceSnapshot captures, persistence, expiry, and recovery."""
+
+    async def test_snapshot_initial_state(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """New coordinator has an empty snapshot."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        snapshot = coordinator.snapshot
+        assert snapshot.data == {}
+        assert snapshot.captured_at == 0.0
+        assert snapshot.source == ""
+        assert snapshot.key_count == 0
+
+    async def test_snapshot_capture_on_mqtt(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """_apply_data captures a snapshot with source='mqtt'."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        with patch.object(coordinator, "async_set_updated_data"):
+            coordinator._apply_data({"soc": 85.0, "watts_in_sum": 200.0})
+
+        snapshot = coordinator.snapshot
+        assert snapshot.data == {"soc": 85.0, "watts_in_sum": 200.0}
+        assert snapshot.source == "mqtt"
+        assert snapshot.captured_at > 0
+        assert snapshot.key_count == 2
+
+    async def test_snapshot_capture_on_http(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+        mock_iot_api,
+        mock_mqtt_client,
+        mock_http_client,
+    ) -> None:
+        """HTTP polling captures a snapshot with source='http'."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        await coordinator.async_setup()
+
+        data = await coordinator._async_update_data()
+        assert data  # sanity check
+
+        snapshot = coordinator.snapshot
+        assert snapshot.source == "http"
+        assert snapshot.captured_at > 0
+        assert snapshot.key_count > 0
+        assert "soc" in snapshot.data
+
+    async def test_snapshot_persists_during_stale(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Snapshot data remains populated when MQTT goes stale."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        # Simulate data received
+        with patch.object(coordinator, "async_set_updated_data"):
+            coordinator._apply_data({"solar_w": 1500.0})
+
+        # Push time past stale threshold (but before hard unavailable)
+        coordinator._last_mqtt_ts = 1000.0
+        coordinator._mqtt_client = MagicMock()
+        coordinator._mqtt_client.is_connected.return_value = True
+        coordinator._mqtt_client.reconnect_attempts = 0
+        coordinator._last_stale_reconnect_ts = 0.0
+
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.time.monotonic",
+            return_value=1000.0 + STALE_THRESHOLD_S + 10,
+        ):
+            coordinator._check_stale()
+            coordinator._stale_check_unsub.cancel()
+
+        # Snapshot data must still be available (stale, not hard unavailable)
+        assert coordinator.snapshot.data != {}
+        assert coordinator.snapshot.key_count > 0
+
+    async def test_snapshot_persists_during_degraded(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Snapshot data remains populated during the degraded stage."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        with patch.object(coordinator, "async_set_updated_data"):
+            coordinator._apply_data({"solar_w": 1200.0})
+
+        # Push time past soft_unavailable (degraded) but before hard_unavailable
+        coordinator._last_mqtt_ts = 1000.0
+        coordinator._mqtt_client = MagicMock()
+        coordinator._mqtt_client.is_connected.return_value = True
+        coordinator._mqtt_client.reconnect_attempts = 0
+        coordinator._last_stale_reconnect_ts = 0.0
+
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.time.monotonic",
+            return_value=1000.0 + SOFT_UNAVAILABLE_S + 10,
+        ):
+            coordinator._check_stale()
+            coordinator._stale_check_unsub.cancel()
+
+        # Data should persist in degraded stage (not yet hard unavailable)
+        assert coordinator.snapshot.data != {}
+        assert coordinator._device_available is True  # degraded, not unavailable
+
+    async def test_snapshot_expires_at_hard_unavailable(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Snapshot data is cleared at hard unavailable, but metadata preserved."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        with patch.object(coordinator, "async_set_updated_data"):
+            coordinator._apply_data({"solar_w": 900.0})
+
+        original_captured_at = coordinator.snapshot.captured_at
+        original_source = coordinator.snapshot.source
+
+        # Push time past hard_unavailable
+        coordinator._last_mqtt_ts = 1000.0
+        coordinator._mqtt_client = MagicMock()
+        coordinator._mqtt_client.is_connected.return_value = True
+        coordinator._mqtt_client.reconnect_attempts = 0
+        coordinator._last_stale_reconnect_ts = 0.0
+
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.time.monotonic",
+            return_value=1000.0 + HARD_UNAVAILABLE_S + 10,
+        ):
+            coordinator._check_stale()
+            coordinator._stale_check_unsub.cancel()
+
+        # Data should be expired
+        assert coordinator.snapshot.data == {}
+        assert coordinator.snapshot.key_count == 0
+        # Metadata should be preserved
+        assert coordinator.snapshot.captured_at == original_captured_at
+        assert coordinator.snapshot.source == original_source
+        assert coordinator._device_available is False
+
+    async def test_snapshot_recovers_on_fresh_data(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """After expiry, fresh MQTT data re-populates the snapshot."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        # Initial data + expiry
+        with patch.object(coordinator, "async_set_updated_data"):
+            coordinator._apply_data({"solar_w": 500.0})
+
+        coordinator._last_mqtt_ts = 1000.0
+        coordinator._mqtt_client = MagicMock()
+        coordinator._mqtt_client.is_connected.return_value = True
+        coordinator._mqtt_client.reconnect_attempts = 0
+        coordinator._last_stale_reconnect_ts = 0.0
+
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.time.monotonic",
+            return_value=1000.0 + HARD_UNAVAILABLE_S + 10,
+        ):
+            coordinator._check_stale()
+            coordinator._stale_check_unsub.cancel()
+
+        assert coordinator.snapshot.data == {}
+
+        # Recovery: fresh data arrives
+        with patch.object(coordinator, "async_set_updated_data"):
+            coordinator._apply_data({"solar_w": 1800.0, "grid_w": -200.0})
+
+        snapshot = coordinator.snapshot
+        assert snapshot.data != {}
+        assert snapshot.source == "mqtt"
+        assert snapshot.captured_at > 0
+        # key_count may be > 2 due to energy integrator adding derived keys
+        assert snapshot.key_count >= 2
+        assert snapshot.data["solar_w"] == 1800.0
+
+    async def test_snapshot_diagnostics(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Diagnostics output includes snapshot metadata."""
+        from custom_components.ecoflow_energy.diagnostics import _device_diagnostics
+
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        with patch.object(coordinator, "async_set_updated_data"):
+            coordinator._apply_data({"soc": 75.0})
+
+        result = _device_diagnostics(coordinator)
+
+        assert "snapshot" in result
+        snap_diag = result["snapshot"]
+        assert snap_diag["source"] == "mqtt"
+        assert snap_diag["captured"] is True
+        assert snap_diag["key_count"] >= 1
+        assert isinstance(snap_diag["age_s"], float)
+        assert snap_diag["age_s"] >= 0
+
+    async def test_snapshot_diagnostics_initial(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Diagnostics for a fresh coordinator shows no snapshot."""
+        from custom_components.ecoflow_energy.diagnostics import _device_diagnostics
+
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        result = _device_diagnostics(coordinator)
+
+        snap_diag = result["snapshot"]
+        assert snap_diag["source"] == "none"
+        assert snap_diag["captured"] is False
+        assert snap_diag["age_s"] is None
+        assert snap_diag["key_count"] == 0

@@ -66,6 +66,11 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
 
     data_keys = sorted(coordinator.device_data.keys()) if coordinator.device_data else []
 
+    snapshot = coordinator.snapshot
+    snapshot_age_s: float | None = None
+    if snapshot.captured_at > 0:
+        snapshot_age_s = round(now - snapshot.captured_at, 1)
+
     return {
         "device_sn": coordinator.device_sn,
         "device_name": coordinator.device_name,
@@ -86,6 +91,12 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
             "http_fallback_active": bool(
                 coordinator.enhanced_mode and coordinator.update_interval is not None
             ),
+        },
+        "snapshot": {
+            "source": snapshot.source or "none",
+            "age_s": snapshot_age_s,
+            "key_count": snapshot.key_count,
+            "captured": snapshot.captured_at > 0,
         },
         "data_keys": data_keys,
         "data_key_count": len(data_keys),
