@@ -297,8 +297,8 @@ POWEROCEAN_NUMBERS: list[EcoFlowNumberDef] = [
 DELTA2MAX_SENSORS: list[EcoFlowSensorDef] = [
     # --- Battery / SoC ---
     EcoFlowSensorDef("soc", "SoC", "%", "battery", "measurement", "mdi:battery", suggested_display_precision=0),
-    EcoFlowSensorDef("bms_soh_pct", "Battery SoH", "%", "battery", "measurement", "mdi:battery-heart-variant", suggested_display_precision=0),
-    EcoFlowSensorDef("bms_precise_soc", "Precise SoC", "%", "battery", "measurement", "mdi:battery-sync", suggested_display_precision=0),
+    EcoFlowSensorDef("bms_soh_pct", "Battery SoH", "%", None, "measurement", "mdi:battery-heart-variant", suggested_display_precision=0),
+    EcoFlowSensorDef("bms_precise_soc", "Precise SoC", "%", None, "measurement", "mdi:battery-sync", suggested_display_precision=0),
     # --- Power (W) ---
     EcoFlowSensorDef("watts_in_sum", "Input Total", "W", "power", "measurement", "mdi:flash", suggested_display_precision=0),
     EcoFlowSensorDef("watts_out_sum", "Output Total", "W", "power", "measurement", "mdi:flash", suggested_display_precision=0),
@@ -354,8 +354,8 @@ DELTA2MAX_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("ems_chg_state", "EMS Charge State", None, None, None, "mdi:battery-charging-outline", disabled_by_default=True),
     EcoFlowSensorDef("charger_type", "Charger Type", None, None, None, "mdi:ev-plug-type2", disabled_by_default=True),
     EcoFlowSensorDef("mppt_chg_state", "MPPT Charge State", None, None, None, "mdi:solar-panel", disabled_by_default=True),
-    EcoFlowSensorDef("ems_lcd_soc", "LCD SoC", "%", "battery", "measurement", "mdi:monitor", suggested_display_precision=0, disabled_by_default=True),
-    EcoFlowSensorDef("ems_precise_soc", "EMS Precise SoC", "%", "battery", "measurement", "mdi:monitor", suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("ems_lcd_soc", "LCD SoC", "%", None, "measurement", "mdi:monitor", suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("ems_precise_soc", "EMS Precise SoC", "%", None, "measurement", "mdi:monitor", suggested_display_precision=0, disabled_by_default=True),
     # --- Energy Dashboard (total_increasing, kWh) ---
     EcoFlowSensorDef("solar_energy_kwh", "Solar Energy", "kWh", "energy", "total_increasing", "mdi:solar-power", suggested_display_precision=2),
     EcoFlowSensorDef("solar2_energy_kwh", "Solar 2 Energy", "kWh", "energy", "total_increasing", "mdi:solar-power", suggested_display_precision=2),

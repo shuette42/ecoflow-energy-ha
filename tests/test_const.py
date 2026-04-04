@@ -180,6 +180,31 @@ class TestDelta2MaxSensors:
         slave_keys = [k for k in keys if k.startswith("slave")]
         assert len(slave_keys) == 32, f"Expected 32 slave sensors, got {len(slave_keys)}"
 
+    def test_only_soc_sensors_have_battery_device_class(self):
+        """Only actual SoC sensors should have device_class='battery'.
+
+        SoH and secondary SoC variants (bms_precise_soc, ems_lcd_soc,
+        ems_precise_soc) must NOT use device_class='battery' because HA
+        picks battery-class entities for the device header.
+        """
+        battery_sensors = [
+            s for s in DELTA2MAX_SENSORS if s.device_class == "battery"
+        ]
+        keys = {s.key for s in battery_sensors}
+        expected = {"soc", "slave1_soc", "slave2_soc"}
+        assert keys == expected, (
+            f"Expected battery device_class on {expected}, "
+            f"but found: {keys}"
+        )
+
+    def test_soh_no_battery_device_class(self):
+        """SoH sensors (main + slave) must not have device_class='battery'."""
+        soh_sensors = [s for s in DELTA2MAX_SENSORS if "soh" in s.key]
+        for s in soh_sensors:
+            assert s.device_class != "battery", (
+                f"{s.key} has device_class='battery' but SoH is not SoC"
+            )
+
     def test_switch_defs_unique(self):
         keys = _extract_sensor_keys("DELTA2MAX_SWITCHES")
         assert len(keys) == 7
