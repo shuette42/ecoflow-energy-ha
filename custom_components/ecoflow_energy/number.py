@@ -20,7 +20,9 @@ from .const import (
     DEVICE_TYPE_SMARTPLUG,
     DOMAIN,
     EcoFlowNumberDef,
+    NUMBER_COMMANDS,
     POWEROCEAN_NUMBERS,
+    SMARTPLUG_NUMBER_COMMANDS,
     SMARTPLUG_NUMBERS,
 )
 from .coordinator import EcoFlowDeviceCoordinator
@@ -30,72 +32,6 @@ from .ecoflow.parsers.smartplug import (
 )
 
 _LOGGER = logging.getLogger(__name__)
-
-# IoT API SET-command templates for number entities (Delta 2 Max)
-NUMBER_COMMANDS: dict[str, dict[str, Any]] = {
-    "ac_charge_speed": {
-        "moduleType": 3,
-        "operateType": "acChgCfg",
-        "param_key": "fastChgWatts",
-        "extra_params": {"slowChgWatts": 400, "chgPauseFlag": 0},
-    },
-    "max_charge_soc": {
-        "moduleType": 2,
-        "operateType": "upsConfig",
-        "param_key": "maxChgSoc",
-    },
-    "min_discharge_soc": {
-        "moduleType": 2,
-        "operateType": "dsgCfg",
-        "param_key": "minDsgSoc",
-    },
-    "standby_timeout": {
-        "moduleType": 1,
-        "operateType": "standbyTime",
-        "param_key": "standbyMin",
-    },
-    "car_standby_timeout": {
-        "moduleType": 5,
-        "operateType": "standbyTime",
-        "param_key": "standbyMins",
-    },
-    "screen_brightness": {
-        "moduleType": 1,
-        "operateType": "lcdCfg",
-        "param_key": "brighLevel",
-        # delayOff=0: device sentinel for "do not change timeout"
-        "extra_params": {"delayOff": 0},
-    },
-    "screen_timeout": {
-        "moduleType": 1,
-        "operateType": "lcdCfg",
-        "param_key": "delayOff",
-        # brighLevel=255: device sentinel for "do not change brightness"
-        "extra_params": {"brighLevel": 255},
-    },
-    "backup_reserve_soc": {
-        "moduleType": 1,
-        "operateType": "watthConfig",
-        "param_key": "bpPowerSoc",
-        "extra_params": {"isConfig": 1, "minChgSoc": 0, "minDsgSoc": 0},
-    },
-}
-
-# Smart Plug SET-command templates (cmdCode format, different from Delta's moduleType/operateType)
-SMARTPLUG_NUMBER_COMMANDS: dict[str, dict[str, Any]] = {
-    "led_brightness": {
-        "cmdCode": "WN511_SOCKET_SET_BRIGHTNESS_PACK",
-        "param_key": "brightness",
-        "scale": 1023.0 / 100.0,  # 0-100% -> 0-1023 device range
-    },
-    "max_watts": {
-        "cmdCode": "WN511_SOCKET_SET_MAX_WATTS",
-        "param_key": "maxWatts",
-        # scale=1: maxWatts is in watts (not deci-watts). Confirmed by HTTP parser
-        # which reads maxWatts without /10 scaling (unlike watts which is /10).
-        "scale": 1,
-    },
-}
 
 
 async def async_setup_entry(
