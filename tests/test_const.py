@@ -156,6 +156,22 @@ class TestPowerOceanSensors:
         assert len(keys) == 202, f"Expected 202 total sensors, got {len(keys)}"
 
 
+    def test_only_soc_has_battery_device_class(self):
+        """Only the primary soc_pct should have device_class='battery'.
+
+        Pack SoC and bp_real_soc_pct must NOT use device_class='battery'
+        because HA picks battery-class entities for the device header.
+        """
+        battery_sensors = [
+            s for s in POWEROCEAN_SENSORS if s.device_class == "battery"
+        ]
+        keys = {s.key for s in battery_sensors}
+        assert keys == {"soc_pct"}, (
+            f"Expected battery device_class only on {{'soc_pct'}}, "
+            f"but found: {keys}"
+        )
+
+
 class TestDelta2MaxSensors:
     def test_keys_unique(self):
         keys = _extract_sensor_keys("DELTA2MAX_SENSORS")

@@ -83,7 +83,7 @@ from .ecoflow.proto.runtime import decode_proto_runtime_frame
 _LOGGER = logging.getLogger(__name__)
 
 
-@dataclass
+@dataclass(frozen=True)
 class DeviceSnapshot:
     """Immutable snapshot of device state at a point in time."""
 
@@ -160,8 +160,10 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._quotas_unsub: asyncio.TimerHandle | None = None
         self._ping_unsub: asyncio.TimerHandle | None = None
         self._enhanced_mode: bool = enhanced_mode
+        self._auth_method: str = AUTH_METHOD_DEVELOPER
         self._shutdown: bool = False
         self._last_flush_ts: float = 0.0
+        self._last_mqtt_event_ts: float = 0.0
         self._consecutive_http_failures: int = 0
         self._device_available: bool = True
         self._last_stale_reconnect_ts: float = 0.0
@@ -321,7 +323,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return list(self._event_log)
 
     def _log_event(self, event_type: str, detail: str) -> None:
-        """Record an event for diagnostics (bounded FIFO, max 20 entries)."""
+        """Record an event for diagnostics (bounded FIFO, max 50 entries)."""
         self._event_log.append({
             "ts": time.time(),
             "type": event_type,
@@ -331,7 +333,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     @property
     def device_info(self) -> DeviceInfo:
         """Return device info for all entities of this device."""
-        auth_method = getattr(self, "_auth_method", AUTH_METHOD_DEVELOPER)
+        auth_method = self._auth_method
         config_url = (
             "https://ecoflow.com"
             if auth_method == AUTH_METHOD_APP
@@ -666,7 +668,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self._mqtt_client is None:
             return
 
-        auth_method = getattr(self, "_auth_method", AUTH_METHOD_DEVELOPER)
+        auth_method = self._auth_method
 
         if auth_method == AUTH_METHOD_APP:
             # App-auth: re-login and re-fetch portal credentials
@@ -759,7 +761,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self._mqtt_client is None:
             return
 
-        auth_method = getattr(self, "_auth_method", AUTH_METHOD_DEVELOPER)
+        auth_method = self._auth_method
         old_account = self._mqtt_client.cert_account
 
         if auth_method == AUTH_METHOD_APP:
@@ -953,7 +955,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # MQTT data proves credentials are valid — prevent false reauth (#2)
         self._consecutive_http_failures = 0
         # Rate-limited event log: at most once per 60s to avoid flooding the deque
-        if now - getattr(self, "_last_mqtt_event_ts", 0) > 60:
+        if now - self._last_mqtt_event_ts > 60:
             self._last_mqtt_event_ts = now
             self._log_event("mqtt_data", f"keys={len(parsed)}")
         self._enforce_monotonic(parsed)
