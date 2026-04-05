@@ -994,3 +994,60 @@ class TestEcoFlowDiagnosticSensor:
         )
         sensor = EcoFlowDiagnosticSensor(coordinator, "connection_mode")
         assert sensor.native_value == "enhanced"
+
+
+# ===========================================================================
+# Availability propagation
+# ===========================================================================
+
+
+class TestAvailabilityPropagation:
+    """Switch and Number entities propagate coordinator.device_available."""
+
+    async def test_switch_unavailable_when_device_unavailable(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+        coordinator.async_set_updated_data({"ac_enabled": 1})
+
+        defn = EcoFlowSwitchDef(key="ac_switch", name="AC Output", state_key="ac_enabled")
+        switch = EcoFlowSwitch(coordinator, defn)
+
+        assert switch.available is True
+
+        coordinator._device_available = False
+        assert switch.available is False
+
+        coordinator._device_available = True
+        assert switch.available is True
+
+    async def test_number_unavailable_when_device_unavailable(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+        coordinator.async_set_updated_data({"min_discharge_soc": 10})
+
+        defn = EcoFlowNumberDef(
+            key="min_discharge_soc",
+            name="Min Discharge SoC",
+            state_key="min_discharge_soc",
+            min_value=0,
+            max_value=100,
+            step=1,
+            unit="%",
+        )
+        number = EcoFlowNumber(coordinator, defn)
+
+        assert number.available is True
+
+        coordinator._device_available = False
+        assert number.available is False
+
+        coordinator._device_available = True
+        assert number.available is True

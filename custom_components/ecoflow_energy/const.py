@@ -186,7 +186,7 @@ POWEROCEAN_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("bp_max_mos_temp_c", "Battery Max MOSFET Temp", "\u00b0C", "temperature", "measurement", "mdi:thermometer-alert", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
     EcoFlowSensorDef("bp_cell_max_vol_mv", "Battery Cell Max Voltage", "mV", "voltage", "measurement", "mdi:sine-wave", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("bp_cell_min_vol_mv", "Battery Cell Min Voltage", "mV", "voltage", "measurement", "mdi:sine-wave", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
-    EcoFlowSensorDef("bp_real_soc_pct", "Battery Real SOC", "%", "battery", "measurement", "mdi:battery", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("bp_real_soc_pct", "Battery Real SOC", "%", None, "measurement", "mdi:battery", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("bp_real_soh_pct", "Battery Real SOH", "%", None, "measurement", "mdi:battery-heart-variant", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("bp_down_limit_soc_pct", "Battery Min SOC Limit", "%", None, None, "mdi:battery-low", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("bp_up_limit_soc_pct", "Battery Max SOC Limit", "%", None, None, "mdi:battery-high", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
@@ -261,7 +261,7 @@ def _build_po_pack_sensors(pack_num: int) -> list[EcoFlowSensorDef]:
     enabled = pack_num == 1  # Only Pack 1 core sensors enabled by default
 
     core = [
-        EcoFlowSensorDef(f"{p}_soc", f"Pack {pack_num} SoC", "%", "battery", "measurement", "mdi:battery", suggested_display_precision=0, disabled_by_default=not enabled),
+        EcoFlowSensorDef(f"{p}_soc", f"Pack {pack_num} SoC", "%", None, "measurement", "mdi:battery", suggested_display_precision=0, disabled_by_default=not enabled),
         EcoFlowSensorDef(f"{p}_power_w", f"Pack {pack_num} Power", "W", "power", "measurement", "mdi:flash", suggested_display_precision=0, disabled_by_default=not enabled),
         EcoFlowSensorDef(f"{p}_soh", f"Pack {pack_num} SoH", "%", None, "measurement", "mdi:battery-heart-variant", suggested_display_precision=0, disabled_by_default=not enabled),
         EcoFlowSensorDef(f"{p}_cycles", f"Pack {pack_num} Cycles", None, None, "total_increasing", "mdi:battery-sync", suggested_display_precision=0, disabled_by_default=not enabled),

@@ -8,6 +8,12 @@ All notable changes to this project will be documented in this file.
 - Snapshot continuity layer: explicit last-known-good data contract for the Graduated Availability degraded stage. Device data snapshots are captured on every update with metadata (timestamp, source, key count) and expire only at hard-unavailable. Formalizes the implicit guarantee that entities retain values during stream interruptions.
 - Snapshot metadata in diagnostics: source, age, key count, and capture status for debugging availability behavior.
 
+### Fixed
+- DeviceSnapshot dataclass now frozen for immutability guarantee (beta.2)
+- Coordinator docstring accuracy: _log_event max entries corrected to 50 (beta.2)
+- Proper __init__ declaration for _auth_method and _last_mqtt_event_ts, removing defensive getattr calls (beta.2)
+- PowerOcean battery device_class limited to primary soc_pct sensor; pack SoC and bp_real_soc_pct no longer carry battery class (beta.2)
+
 ## [1.10.0] - 2026-04-04
 
 ### Fixed
