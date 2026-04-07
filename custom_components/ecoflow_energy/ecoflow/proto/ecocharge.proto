@@ -255,28 +255,41 @@ message JTS1BpHeartbeatReport {
 }
 
 // --- EMS Change Report (cmd_func=96, cmd_id=8) ---
+// All fields use oneof wrappers to preserve proto3 zero-values.
+// Without oneof, proto3 omits fields with value 0 during serialization,
+// which causes connectivity status (0=disconnected) and feed_mode
+// (0=self_use) to silently disappear from MessageToDict output.
 message JTS1EmsChangeReport {
-  uint32 sys_work_sta = 1;
-  uint32 sys_grid_sta = 2;
-  uint32 ems_word_mode = 3;
-  uint32 ems_backup_event = 4;
-  uint32 bp_chg_dsg_sta = 5;
-  uint32 ems_keep_soc = 6;
-  uint32 bp_soc = 7;
-  uint32 ems_sys_self_check_stat = 8;
-  uint32 bp_online_sum = 9;
-  uint32 sys_on_off_machine_stat = 10;
-  optional uint32 sys_bat_chg_up_limit = 11;
-  optional uint32 sys_bat_dsg_down_limit = 12;
-  uint32 bp_total_chg_energy = 13;
-  uint32 bp_total_dsg_energy = 14;
-  uint32 sys_bat_backup_ratio = 15;
-  uint32 ems_feed_mode = 16;
-  uint32 ems_feed_ratio = 17;
-  uint32 ems_feed_pwr = 18;
-  uint32 sys_meter_cfg = 19;
-  uint32 sys_type_cfg = 20;
-  uint32 pcs_run_sta = 21;
-  uint32 pcs_ac_err_code = 22;
-  uint32 pcs_dc_err_code = 23;
+  oneof _sys_work_sta { uint32 sys_work_sta = 1; }
+  oneof _sys_grid_sta { uint32 sys_grid_sta = 2; }
+  oneof _ems_word_mode { uint32 ems_word_mode = 3; }
+  oneof _ems_backup_event { uint32 ems_backup_event = 4; }
+  oneof _bp_chg_dsg_sta { uint32 bp_chg_dsg_sta = 5; }
+  oneof _ems_keep_soc { uint32 ems_keep_soc = 6; }
+  oneof _bp_soc { uint32 bp_soc = 7; }
+  oneof _ems_sys_self_check_stat { uint32 ems_sys_self_check_stat = 8; }
+  oneof _bp_online_sum { uint32 bp_online_sum = 9; }
+  oneof _sys_on_off_machine_stat { uint32 sys_on_off_machine_stat = 10; }
+  oneof _sys_bat_chg_up_limit { uint32 sys_bat_chg_up_limit = 11; }
+  oneof _sys_bat_dsg_down_limit { uint32 sys_bat_dsg_down_limit = 12; }
+  oneof _bp_total_chg_energy { uint32 bp_total_chg_energy = 13; }
+  oneof _bp_total_dsg_energy { uint32 bp_total_dsg_energy = 14; }
+  oneof _sys_bat_backup_ratio { uint32 sys_bat_backup_ratio = 15; }
+  oneof _ems_feed_mode { uint32 ems_feed_mode = 16; }
+  oneof _ems_feed_ratio { uint32 ems_feed_ratio = 17; }
+  oneof _ems_feed_pwr { uint32 ems_feed_pwr = 18; }
+  oneof _sys_meter_cfg { uint32 sys_meter_cfg = 19; }
+  oneof _sys_type_cfg { uint32 sys_type_cfg = 20; }
+  oneof _pcs_run_sta { uint32 pcs_run_sta = 21; }
+  oneof _pcs_ac_err_code { uint32 pcs_ac_err_code = 22; }
+  oneof _pcs_dc_err_code { uint32 pcs_dc_err_code = 23; }
+  oneof _pcs_ac_warning_code { uint32 pcs_ac_warning_code = 191; }
+  oneof _mppt1_fault_code { uint32 mppt1_fault_code = 194; }
+  oneof _mppt2_fault_code { uint32 mppt2_fault_code = 195; }
+  oneof _ems_ctrl_led_bright { uint32 ems_ctrl_led_bright = 152; }
+  oneof _ems_work_state { uint32 ems_work_state = 205; }
+  oneof _iot_4g_sta { sint32 iot_4g_sta = 187; }
+  oneof _eth_wan_stat { uint32 eth_wan_stat = 224; }
+  oneof _wifi_sta_stat { uint32 wifi_sta_stat = 225; }
+  oneof _grid_is_energized { bool grid_is_energized = 752; }
 }

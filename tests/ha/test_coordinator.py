@@ -1490,6 +1490,28 @@ class TestHeartbeatExtraction:
         assert result["grid_phase_a_active_power_w"] == -2200.0
         assert result["grid_phase_b_voltage_v"] == 231.0
 
+    async def test_grid_status_derived_from_phase_voltage(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Grid status derived as 'ok' when phase A voltage > 50V."""
+        enhanced_config_entry.add_to_hass(hass)
+        raw = {"pcs_a_phase": {"vol": 230.0, "amp": 10.0, "act_pwr": -2000.0}}
+        result = flatten_heartbeat(raw)
+        assert result["grid_status"] == "ok"
+
+    async def test_grid_status_not_detected_low_voltage(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Grid status 'not_detected' when phase A voltage <= 50V."""
+        enhanced_config_entry.add_to_hass(hass)
+        raw = {"pcs_a_phase": {"vol": 0.0, "amp": 0.0, "act_pwr": 0.0}}
+        result = flatten_heartbeat(raw)
+        assert result["grid_status"] == "not_detected"
+
     async def test_empty_heartbeat(
         self,
         hass: HomeAssistant,
@@ -1542,8 +1564,8 @@ class TestBpRemapping:
         result = remap_bp_keys(raw, coordinator._bp_sn_to_index, coordinator.device_sn)
 
         assert result["bp_online_sum"] == 2.0
-        assert result["ems_feed_mode"] == "time_of_use"
-        assert result["grid_status"] == "disconnected"
+        assert result["ems_feed_mode"] == "no_limit"
+        assert result["grid_status"] == "not_detected"
 
     async def test_ems_change_no_false_defaults(
         self,
@@ -1581,11 +1603,69 @@ class TestBpRemapping:
         raw = {"sys_grid_sta": 1, "bp_chg_dsg_sta": 2, "ems_feed_mode": 0, "ems_work_mode": 0, "pcs_run_sta": 1}
         result = remap_bp_keys(raw, coordinator._bp_sn_to_index, coordinator.device_sn)
 
-        assert result["grid_status"] == "connected"
+        assert result["grid_status"] == "ok"
         assert result["batt_charge_discharge_state"] == "charging"
-        assert result["ems_feed_mode"] == "self_use"
+        assert result["ems_feed_mode"] == "off"
         assert result["ems_work_mode"] == "self_use"
         assert result["pcs_run_state"] == "running"
+
+    async def test_ems_work_state_via_proto(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """ems_work_state from proto EMS change report (field 205) maps correctly."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        raw = {"ems_work_state": 7}
+        result = remap_bp_keys(raw, coordinator._bp_sn_to_index, coordinator.device_sn)
+        assert result["ems_work_state"] == "running"
+
+    async def test_ems_work_state_zero_via_proto(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """ems_work_state=0 maps to 'none' (not lost by zero-omission thanks to oneof)."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        raw = {"ems_work_state": 0}
+        result = remap_bp_keys(raw, coordinator._bp_sn_to_index, coordinator.device_sn)
+        assert result["ems_work_state"] == "none"
+
+    async def test_grid_is_energized_overrides_sys_grid_sta(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """grid_is_energized (bool) overrides sys_grid_sta for grid_status."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        # sys_grid_sta=0 would normally be "not_detected", but grid_is_energized=True overrides
+        raw = {"sys_grid_sta": 0, "grid_is_energized": True}
+        result = remap_bp_keys(raw, coordinator._bp_sn_to_index, coordinator.device_sn)
+        assert result["grid_status"] == "ok"
+        assert "grid_is_energized" not in result  # consumed, not passed through
+
+    async def test_grid_is_energized_false(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """grid_is_energized=False maps to not_detected."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        raw = {"grid_is_energized": False}
+        result = remap_bp_keys(raw, coordinator._bp_sn_to_index, coordinator.device_sn)
+        assert result["grid_status"] == "not_detected"
 
     async def test_energy_totals_wh_to_kwh(
         self,
@@ -2582,6 +2662,36 @@ class TestParseMessageGetReply:
 
         result = coordinator._parse_message(topic, payload)
         assert result is None
+
+    async def test_powerocean_get_reply_json_parsed(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """PowerOcean JSON get_reply with quotaMap is parsed via powerocean_http_quota parser."""
+        import json as json_mod
+
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        topic = "/app/user123/SN001/thing/property/get_reply"
+        payload = json_mod.dumps({
+            "operateType": "latestQuotas",
+            "data": {
+                "quotaMap": {
+                    "bpSoc": 85,
+                    "ems_change_report.emsFeedMode": 3,
+                    "ems_change_report.sysGridSta": 1,
+                    "pcs_change_report.gridFreq": 50.01,
+                }
+            }
+        }).encode()
+
+        result = coordinator._parse_message(topic, payload)
+        assert result is not None
+        assert result.get("soc_pct") == 85
+        assert result.get("ems_feed_mode") == "limit"
+        assert result.get("grid_status") == "ok"
+        assert result.get("pcs_ac_freq_hz") == 50.01
 
 
 # ===========================================================================

@@ -300,9 +300,10 @@
       "ems_feed_mode": {
         "name": "EMS Feed Mode",
         "state": {
-          "self_use": "Self-use",
-          "time_of_use": "Time of Use",
-          "backup": "Backup"
+          "off": "Off",
+          "no_limit": "No Limit",
+          "zero": "Zero Feed-in",
+          "limit": "Limited"
         }
       },
       "ems_work_mode": {
@@ -335,8 +336,8 @@
       "grid_status": {
         "name": "Grid Status",
         "state": {
-          "disconnected": "Disconnected",
-          "connected": "Connected"
+          "not_detected": "Not Detected",
+          "ok": "OK"
         }
       },
       "pcs_power_factor": {
@@ -1084,22 +1085,22 @@
       "wifi_status": {
         "name": "WiFi Status",
         "state": {
-          "disconnected": "Disconnected",
-          "connected": "Connected"
+          "not_detected": "Not Detected",
+          "ok": "OK"
         }
       },
       "ethernet_status": {
         "name": "Ethernet Status",
         "state": {
-          "disconnected": "Disconnected",
-          "connected": "Connected"
+          "not_detected": "Not Detected",
+          "ok": "OK"
         }
       },
       "cellular_status": {
         "name": "4G Status",
         "state": {
-          "disconnected": "Disconnected",
-          "connected": "Connected"
+          "not_detected": "Not Detected",
+          "ok": "OK"
         }
       },
       "ems_led_brightness": {
@@ -1108,11 +1109,16 @@
       "ems_work_state": {
         "name": "EMS Work State",
         "state": {
-          "pre_power_on": "Pre Power On",
-          "confirm_power_on": "Confirm Power On",
-          "normal": "Normal",
-          "power_off": "Power Off",
-          "sleep": "Sleep"
+          "none": "None",
+          "init": "Initializing",
+          "idle": "Idle",
+          "startup_ext_bp": "Starting (Ext. Battery)",
+          "startup_inner_bp": "Starting (Int. Battery)",
+          "startup_pv": "Starting (PV)",
+          "startup_grid": "Starting (Grid)",
+          "running": "Running",
+          "stop": "Stopped",
+          "maintain": "Maintenance"
         }
       },
       "ems_total_battery_capacity_wh": {

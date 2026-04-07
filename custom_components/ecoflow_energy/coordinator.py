@@ -839,11 +839,15 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         return parse_delta_http_quota(quota_map)
                     if self.device_type == DEVICE_TYPE_SMARTPLUG:
                         return parse_smartplug_http_quota(quota_map)
+                    if self.device_type == DEVICE_TYPE_POWEROCEAN:
+                        return parse_powerocean_http_quota(quota_map)
                     return quota_map
             except (json.JSONDecodeError, UnicodeDecodeError):
                 pass
             # Proto get_reply: binary protobuf
             if b"\x0a" in payload[:4]:
+                if self.device_type == DEVICE_TYPE_POWEROCEAN:
+                    return self._parse_powerocean_get_reply(payload)
                 return self._parse_proto_device_data(payload)
             return None
 
@@ -922,6 +926,45 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             except Exception:
                 _LOGGER.debug("Protobuf decode error for %s", self.device_sn, exc_info=True)
             return None
+
+        return None
+
+    def _parse_powerocean_get_reply(self, payload: bytes) -> dict[str, Any] | None:
+        """Parse PowerOcean proto get_reply by extracting the EmsChangeReport sub-message.
+
+        The get_reply contains multiple sub-messages (19 headers), each with its
+        own cmd_func/cmd_id and pdata. We find cmd_func=96, cmd_id=8 (EmsChangeReport)
+        and decode its pdata to extract connectivity and enum fields.
+        """
+        from .ecoflow.proto.decoder import decode_header_message
+        from .ecoflow.parsers.powerocean_proto import remap_bp_keys
+
+        headers, _ = decode_header_message(payload)
+
+        try:
+            from .ecoflow.proto import ecocharge_pb2 as pb2
+            from google.protobuf.json_format import MessageToDict
+
+            for hdr in headers or []:
+                if hdr.get("cmd_func") != 96 or hdr.get("cmd_id") != 8:
+                    continue
+                pdata_hex = hdr.get("pdata")
+                if not isinstance(pdata_hex, str) or not pdata_hex:
+                    continue
+                try:
+                    pdata = bytes.fromhex(pdata_hex)
+                except ValueError:
+                    continue
+                msg = pb2.JTS1EmsChangeReport()
+                msg.ParseFromString(pdata)
+                fields = MessageToDict(msg, preserving_proto_field_name=True)
+                if not fields:
+                    continue
+                if "ems_word_mode" in fields:
+                    fields["ems_work_mode"] = fields.pop("ems_word_mode")
+                return remap_bp_keys(fields, self._bp_sn_to_index, self.device_sn)
+        except Exception:
+            _LOGGER.debug("PowerOcean get_reply decode error", exc_info=True)
 
         return None
 

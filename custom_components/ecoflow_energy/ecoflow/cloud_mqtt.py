@@ -189,7 +189,7 @@ class EcoFlowMQTTClient:
             # WSS: send initial data requests on (re)connect
             if self._wss_mode and self._user_id:
                 if self._enhanced_mode:
-                    # Enhanced: EnergyStreamSwitch + latestQuotas
+                    # Enhanced: EnergyStreamSwitch + get-all + latestQuotas
                     try:
                         payload = build_energy_stream_activate_payload()
                         set_topic = f"/app/{self._user_id}/{self._device_sn}/thing/property/set"
@@ -197,6 +197,11 @@ class EcoFlowMQTTClient:
                         _LOGGER.debug("EnergyStreamSwitch sent - energy_stream_report activated")
                     except Exception as exc:
                         _LOGGER.warning("EnergyStreamSwitch error: %s", exc)
+                    try:
+                        self.send_get_all()
+                        _LOGGER.debug("Post-connect get-all sent - requesting full state")
+                    except Exception as exc:
+                        _LOGGER.warning("Post-connect get-all error: %s", exc)
                     try:
                         self.send_latest_quotas()
                         _LOGGER.debug("Post-connect latestQuotas sent - minimizing data gap")

@@ -28,8 +28,8 @@ _CHG_DSG_STATE_MAP: dict[int, str] = {
 }
 
 _GRID_STATUS_MAP: dict[int, str] = {
-    0: "disconnected",
-    1: "connected",
+    0: "not_detected",
+    1: "ok",
 }
 
 _PCS_RUN_STATE_MAP: dict[str, str] = {
@@ -80,22 +80,23 @@ _PCS_RUN_STATE_INT_MAP: dict[int, str] = {
 }
 
 _FEED_MODE_MAP: dict[int, str] = {
-    0: "self_use",
-    1: "time_of_use",
-    2: "backup",
-}
-
-_CONNECTIVITY_MAP: dict[int, str] = {
-    0: "disconnected",
-    1: "connected",
+    0: "off",
+    1: "no_limit",
+    2: "zero",
+    3: "limit",
 }
 
 _WORK_STATE_MAP: dict[int, str] = {
-    0: "pre_power_on",
-    1: "confirm_power_on",
-    2: "normal",
-    3: "power_off",
-    4: "sleep",
+    0: "none",
+    1: "init",
+    2: "idle",
+    3: "startup_ext_bp",
+    4: "startup_inner_bp",
+    5: "startup_pv",
+    6: "startup_grid",
+    7: "running",
+    8: "stop",
+    9: "maintain",
 }
 
 
@@ -467,7 +468,11 @@ def _extract_ems_extended(quota_data: dict, result: dict) -> None:
             if fv is not None:
                 result[sensor_key] = fv
 
-    # Connectivity fields (0 = disconnected, any non-zero = connected)
+    # Connectivity fields: 0 = connected (OK), non-zero = disconnected/error.
+    # wifi_sta_stat/eth_wan_stat: 0 when interface is up (verified via live probe).
+    # iot_4g_sta (sint32): 1 = connected per APK BasePo2ViewModel$b,
+    #   but 0 = connected for wifi/eth (different semantics per interface).
+    _CONN_WIFI_ETH = ("wifiStaStat", "ethWanStat")
     for api_key, sensor_key in (
         ("wifiStaStat", "wifi_status"),
         ("ethWanStat", "ethernet_status"),
@@ -477,7 +482,13 @@ def _extract_ems_extended(quota_data: dict, result: dict) -> None:
         if full_key in quota_data:
             fv = _safe_float(quota_data[full_key])
             if fv is not None:
-                result[sensor_key] = "disconnected" if int(fv) == 0 else "connected"
+                iv = int(fv)
+                if api_key in _CONN_WIFI_ETH:
+                    # WiFi/Ethernet: 0 = connected, non-zero = disconnected
+                    result[sensor_key] = "connected" if iv == 0 else "disconnected"
+                else:
+                    # 4G: 1 = connected per APK
+                    result[sensor_key] = "connected" if iv == 1 else "disconnected"
 
     # Work state enum (numeric -> string)
     ems_ws_key = ems_prefix + "emsWorkState"
