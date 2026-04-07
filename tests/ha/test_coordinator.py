@@ -1562,10 +1562,13 @@ class TestBpRemapping:
         assert result["grid_status"] == "disconnected"
         assert result["batt_charge_discharge_state"] == "standby"
         assert result["ems_feed_mode"] == "self_use"
-        assert result["wifi_status"] == "disconnected"
-        assert result["ethernet_status"] == "disconnected"
-        assert result["cellular_status"] == "disconnected"
-        assert result["ems_work_state"] == "pre_power_on"
+        assert result["ems_work_mode"] == "self_use"
+        assert result["pcs_run_state"] == "standby"
+        # Connectivity and work_state come via HTTP only, not proto EMS Change
+        assert "wifi_status" not in result
+        assert "ethernet_status" not in result
+        assert "cellular_status" not in result
+        assert "ems_work_state" not in result
 
     async def test_bp_heartbeat_no_enum_defaults(
         self,

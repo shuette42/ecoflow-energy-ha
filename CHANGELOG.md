@@ -13,6 +13,7 @@ All notable changes to this project will be documented in this file.
 - Enum sensors showing "unavailable" in Enhanced Mode due to proto3 zero-value omission. Fields like grid_status=0 were silently dropped by MessageToDict; EMS change reports now default missing enum fields to their zero-value label. (beta.2)
 - Work mode and inverter state sensors blocked by HA validation after upgrade. RestoreSensor loaded old raw values (e.g. "WORKMODE_SELFUSE") that are not in the new options list. Invalid restored values are now discarded so the sensor can start fresh. (beta.3)
 - Proto path for work mode and inverter state used string-keyed maps but proto sends integer values. Added integer-keyed mapping tables for the proto decode path. (beta.3)
+- Connectivity sensors (WiFi, Ethernet, 4G) and work state falsely showing "disconnected"/"pre_power_on" because proto EMS change reports applied zero-defaults to HTTP-only fields. These fields now only update when actual data arrives. (beta.4)
 
 ### Changed
 - Enum sensors use HA `device_class: enum` with `options` for proper state handling and translation support.
