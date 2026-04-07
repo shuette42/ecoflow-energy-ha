@@ -13,6 +13,7 @@ All notable changes to this project will be documented in this file.
 - Work mode and inverter state sensors blocked by HA validation after upgrade. RestoreSensor loaded old raw values (e.g. "WORKMODE_SELFUSE") that are not in the new options list. Invalid restored values are now discarded so the sensor can start fresh. (beta.3)
 - Proto path for work mode and inverter state used string-keyed maps but proto sends integer values. Added integer-keyed mapping tables for the proto decode path. (beta.3)
 - Enum sensors no longer inject false zero-defaults. EMS change reports typically contain only bp_soc, not status fields. Injecting defaults overwrote correct values from HTTP. Enum fields are now only mapped when actually present in the message. (beta.5)
+- Connectivity sensors (WiFi, Ethernet, 4G) added to proto decoder. Previously missing from EmsChangeReport proto definition (stopped at field 23, connectivity at field 224/225/187). PowerOcean latestQuotas response now parsed through HTTP parser for correct enum mapping. (beta.6)
 
 ### Changed
 - Enum sensors use HA `device_class: enum` with `options` for proper state handling and translation support.

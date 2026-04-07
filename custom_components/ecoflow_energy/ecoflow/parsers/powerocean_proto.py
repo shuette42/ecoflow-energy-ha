@@ -106,6 +106,9 @@ EMS_CHANGE_TO_SENSOR: dict[str, str] = {
     "sys_bat_dsg_down_limit": "ems_discharge_lower_limit_pct",
     "ems_keep_soc": "ems_keep_soc_pct",
     "sys_bat_backup_ratio": "ems_backup_ratio_pct",
+    "wifi_sta_stat": "wifi_status",
+    "eth_wan_stat": "ethernet_status",
+    "iot_4g_sta": "cellular_status",
 }
 
 # Battery pack proto key suffix -> sensor key suffix (for multi-pack extraction)

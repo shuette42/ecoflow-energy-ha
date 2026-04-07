@@ -279,4 +279,7 @@ message JTS1EmsChangeReport {
   uint32 pcs_run_sta = 21;
   uint32 pcs_ac_err_code = 22;
   uint32 pcs_dc_err_code = 23;
+  sint32 iot_4g_sta = 187;
+  uint32 eth_wan_stat = 224;
+  uint32 wifi_sta_stat = 225;
 }

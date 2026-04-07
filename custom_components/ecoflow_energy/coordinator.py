@@ -839,6 +839,8 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         return parse_delta_http_quota(quota_map)
                     if self.device_type == DEVICE_TYPE_SMARTPLUG:
                         return parse_smartplug_http_quota(quota_map)
+                    if self.device_type == DEVICE_TYPE_POWEROCEAN:
+                        return parse_powerocean_http_quota(quota_map)
                     return quota_map
             except (json.JSONDecodeError, UnicodeDecodeError):
                 pass
