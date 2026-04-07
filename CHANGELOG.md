@@ -20,6 +20,7 @@ All notable changes to this project will be documented in this file.
 - Work state mapping corrected to 10 values from EMS_WORK_STATE enum (was using wrong 5-value bms_SysState enum). (beta.6)
 - Proto get_reply parsing for PowerOcean: extracts EmsChangeReport from multi-header response for initial state on startup. (beta.6)
 - Protobuf version guard restored for compatibility with protobuf < 5.29. (beta.6)
+- Delta 2 Max charger_type value 255 (no charger) now mapped to "unknown" instead of causing ValueError. (beta.7)
 
 ### Changed
 - Enum sensors use HA `device_class: enum` with `options` for proper state handling and translation support.

@@ -517,7 +517,8 @@
           "none": "None",
           "ac": "AC",
           "solar": "Solar",
-          "dc": "DC"
+          "dc": "DC",
+          "unknown": "Unknown"
         }
       },
       "mppt_chg_state": {

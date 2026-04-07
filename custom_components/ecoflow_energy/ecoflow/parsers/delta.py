@@ -25,6 +25,7 @@ _DELTA_CHARGER_TYPE_MAP: dict[int, str] = {
     1: "ac",
     2: "solar",
     3: "dc",
+    255: "unknown",
 }
 
 _DELTA_MPPT_CHG_MAP: dict[int, str] = {
