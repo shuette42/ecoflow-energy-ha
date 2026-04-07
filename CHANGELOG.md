@@ -14,6 +14,12 @@ All notable changes to this project will be documented in this file.
 - Proto path for work mode and inverter state used string-keyed maps but proto sends integer values. Added integer-keyed mapping tables for the proto decode path. (beta.3)
 - Enum sensors no longer inject false zero-defaults. EMS change reports typically contain only bp_soc, not status fields. Injecting defaults overwrote correct values from HTTP. Enum fields are now only mapped when actually present in the message. (beta.5)
 - Connectivity sensors (WiFi, Ethernet, 4G) added to proto decoder. Previously missing from EmsChangeReport proto definition (stopped at field 23, connectivity at field 224/225/187). PowerOcean latestQuotas response now parsed through HTTP parser for correct enum mapping. (beta.6)
+- WiFi/Ethernet connectivity semantics corrected: 0 = connected, non-zero = disconnected. 4G uses inverted logic (1 = connected). Verified against live device probe and EcoFlow portal code. (beta.6)
+- Feed mode mapping corrected to 4 values: off/no_limit/zero/limit (was using wrong enum class). Based on FeedMode.smali from EcoFlow portal analysis. (beta.6)
+- Grid status now derived from phase voltage (> 50V = ok) in Enhanced Mode heartbeat. The raw sys_grid_sta field is unreliable (always reports 0). (beta.6)
+- Work state mapping corrected to 10 values from EMS_WORK_STATE enum (was using wrong 5-value bms_SysState enum). (beta.6)
+- Proto get_reply parsing for PowerOcean: extracts EmsChangeReport from multi-header response for initial state on startup. (beta.6)
+- Protobuf version guard restored for compatibility with protobuf < 5.29. (beta.6)
 
 ### Changed
 - Enum sensors use HA `device_class: enum` with `options` for proper state handling and translation support.

@@ -26,8 +26,7 @@ from .powerocean import (
 _LOGGER = logging.getLogger(__name__)
 
 # Proto enum sensor keys present in EMS Change Report (cmd_id=8).
-# These get zero-value defaults when proto3 omits them.
-# Only keys that actually appear in EMS_CHANGE_TO_SENSOR belong here.
+# With oneof wrappers in the proto, zero-values are preserved.
 _PROTO_ENUM_INT: dict[str, dict[int, str]] = {
     "grid_status": _GRID_STATUS_MAP,
     "batt_charge_discharge_state": _CHG_DSG_STATE_MAP,
@@ -42,16 +41,52 @@ _PROTO_ENUM_STR: dict[str, dict[str, str]] = {
     "ems_work_mode": _WORK_MODE_MAP,
 }
 
-# Connectivity and work_state come via HTTP only (ems_change_report.*
-# in the HTTP quota response), NOT via proto EMS Change Report.
-# Map them when present in result, but never apply zero-defaults.
-_HTTP_ONLY_ENUM_INT: dict[str, dict[int, str]] = {
+# Work state enum (separate from work mode). Present in HTTP
+# (ems_change_report.emsWorkState) and proto EMS Change Report (field 205).
+_WORK_STATE_ENUM_INT: dict[str, dict[int, str]] = {
     "ems_work_state": _WORK_STATE_MAP,
 }
 
 _CONNECTIVITY_KEYS: frozenset[str] = frozenset({
     "wifi_status", "ethernet_status", "cellular_status",
 })
+
+# WiFi/Ethernet: 0 = connected, non-zero = error/disconnected.
+# 4G (cellular): 1 = connected per APK BasePo2ViewModel$b.
+_WIFI_ETH_KEYS: frozenset[str] = frozenset({"wifi_status", "ethernet_status"})
+
+
+def _apply_enum_mappings(result: dict[str, Any]) -> None:
+    """Apply all enum and connectivity mappings to sensor-keyed result dict in place."""
+    for sensor_key, mapping in _PROTO_ENUM_INT.items():
+        if sensor_key in result:
+            iv = int(result[sensor_key]) if isinstance(result[sensor_key], (int, float)) else None
+            if iv is not None and iv in mapping:
+                result[sensor_key] = mapping[iv]
+
+    for sensor_key, mapping in _WORK_STATE_ENUM_INT.items():
+        if sensor_key in result:
+            iv = int(result[sensor_key]) if isinstance(result[sensor_key], (int, float)) else None
+            if iv is not None and iv in mapping:
+                result[sensor_key] = mapping[iv]
+
+    for sensor_key in _CONNECTIVITY_KEYS:
+        if sensor_key in result:
+            iv = int(result[sensor_key]) if isinstance(result[sensor_key], (int, float)) else 0
+            if sensor_key in _WIFI_ETH_KEYS:
+                result[sensor_key] = "connected" if iv == 0 else "disconnected"
+            else:
+                result[sensor_key] = "connected" if iv == 1 else "disconnected"
+
+    for sensor_key, mapping in _PROTO_ENUM_STR.items():
+        if sensor_key in result:
+            raw_val = str(result[sensor_key])
+            result[sensor_key] = mapping.get(raw_val, raw_val)
+
+    # grid_is_energized (bool, field 752) overrides sys_grid_sta when present.
+    # The EcoFlow app uses gridIsEnergized for the main grid display.
+    if "grid_is_energized" in result:
+        result["grid_status"] = "ok" if result.pop("grid_is_energized") else "not_detected"
 
 # EnergyStream (fast ~3s updates): proto key -> sensor key
 PROTO_TO_SENSOR: dict[str, str] = {
@@ -109,6 +144,8 @@ EMS_CHANGE_TO_SENSOR: dict[str, str] = {
     "wifi_sta_stat": "wifi_status",
     "eth_wan_stat": "ethernet_status",
     "iot_4g_sta": "cellular_status",
+    "grid_is_energized": "grid_is_energized",
+    "ems_work_state": "ems_work_state",
 }
 
 # Battery pack proto key suffix -> sensor key suffix (for multi-pack extraction)
@@ -190,25 +227,7 @@ def flatten_heartbeat(raw: dict[str, Any]) -> dict[str, Any]:
         if val is not None:
             result[sensor_key] = float(val) if isinstance(val, (int, float)) else val
 
-    # Apply enum mappings to heartbeat fields
-    for sensor_key, mapping in _PROTO_ENUM_INT.items():
-        if sensor_key in result:
-            iv = int(result[sensor_key]) if isinstance(result[sensor_key], (int, float)) else None
-            if iv is not None and iv in mapping:
-                result[sensor_key] = mapping[iv]
-    for sensor_key, mapping in _HTTP_ONLY_ENUM_INT.items():
-        if sensor_key in result:
-            iv = int(result[sensor_key]) if isinstance(result[sensor_key], (int, float)) else None
-            if iv is not None and iv in mapping:
-                result[sensor_key] = mapping[iv]
-    for sensor_key in _CONNECTIVITY_KEYS:
-        if sensor_key in result:
-            iv = int(result[sensor_key]) if isinstance(result[sensor_key], (int, float)) else 0
-            result[sensor_key] = "disconnected" if iv == 0 else "connected"
-    for sensor_key, mapping in _PROTO_ENUM_STR.items():
-        if sensor_key in result:
-            raw_val = str(result[sensor_key])
-            result[sensor_key] = mapping.get(raw_val, raw_val)
+    _apply_enum_mappings(result)
 
     # MPPT per-string (nested in mppt_heart_beat[0].mppt_pv[])
     mppt_hb = raw.get("mppt_heart_beat")
@@ -244,6 +263,15 @@ def flatten_heartbeat(raw: dict[str, Any]) -> dict[str, Any]:
                     val = phase.get(field)
                     if val is not None:
                         result[f"grid_phase_{label}_{suffix}"] = float(val)
+
+    # Derive grid_status from phase voltage when not set by grid_is_energized.
+    # sys_grid_sta is unreliable (always 0). The EcoFlow app uses gridIsEnergized
+    # which is computed app-side, not sent by the device. We replicate that logic:
+    # if any phase voltage > 50V, the grid is energized.
+    if "grid_status" not in result:
+        phase_a_vol = result.get("grid_phase_a_voltage_v")
+        if phase_a_vol is not None:
+            result["grid_status"] = "ok" if phase_a_vol > 50.0 else "not_detected"
 
     return result
 
@@ -327,26 +355,6 @@ def remap_bp_keys(
     # EMS change reports only include fields that actually changed,
     # so most updates contain only bp_soc or are empty.
     # Injecting defaults would overwrite correct values from HTTP.
-    for sensor_key, mapping in _PROTO_ENUM_INT.items():
-        if sensor_key in result:
-            iv = int(result[sensor_key]) if isinstance(result[sensor_key], (int, float)) else None
-            if iv is not None and iv in mapping:
-                result[sensor_key] = mapping[iv]
-
-    for sensor_key, mapping in _HTTP_ONLY_ENUM_INT.items():
-        if sensor_key in result:
-            iv = int(result[sensor_key]) if isinstance(result[sensor_key], (int, float)) else None
-            if iv is not None and iv in mapping:
-                result[sensor_key] = mapping[iv]
-
-    for sensor_key in _CONNECTIVITY_KEYS:
-        if sensor_key in result:
-            iv = int(result[sensor_key]) if isinstance(result[sensor_key], (int, float)) else 0
-            result[sensor_key] = "disconnected" if iv == 0 else "connected"
-
-    for sensor_key, mapping in _PROTO_ENUM_STR.items():
-        if sensor_key in result:
-            raw_val = str(result[sensor_key])
-            result[sensor_key] = mapping.get(raw_val, raw_val)
+    _apply_enum_mappings(result)
 
     return result

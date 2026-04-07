@@ -300,9 +300,10 @@
       "ems_feed_mode": {
         "name": "EMS Einspeisemodus",
         "state": {
-          "self_use": "Eigenverbrauch",
-          "time_of_use": "Zeitgesteuert",
-          "backup": "Backup"
+          "off": "Aus",
+          "no_limit": "Unbegrenzt",
+          "zero": "Null-Einspeisung",
+          "limit": "Begrenzt"
         }
       },
       "ems_work_mode": {
@@ -335,8 +336,8 @@
       "grid_status": {
         "name": "Netzstatus",
         "state": {
-          "disconnected": "Getrennt",
-          "connected": "Verbunden"
+          "not_detected": "Nicht erkannt",
+          "ok": "OK"
         }
       },
       "pcs_power_factor": {
@@ -1108,11 +1109,16 @@
       "ems_work_state": {
         "name": "EMS Betriebszustand",
         "state": {
-          "pre_power_on": "Vor Einschalten",
-          "confirm_power_on": "Einschalten bestaetigt",
-          "normal": "Normal",
-          "power_off": "Ausgeschaltet",
-          "sleep": "Schlaf"
+          "none": "Kein Status",
+          "init": "Initialisierung",
+          "idle": "Leerlauf",
+          "startup_ext_bp": "Start (Ext. Batterie)",
+          "startup_inner_bp": "Start (Int. Batterie)",
+          "startup_pv": "Start (PV)",
+          "startup_grid": "Start (Netz)",
+          "running": "Aktiv",
+          "stop": "Gestoppt",
+          "maintain": "Wartung"
         }
       },
       "ems_total_battery_capacity_wh": {

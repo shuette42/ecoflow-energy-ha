@@ -465,3 +465,119 @@ class TestOptimisticDedupSync:
             # Because _last_written_value is already 95.0, no second write.
             number._handle_coordinator_update()
             assert mock_write.call_count == 1  # no additional write
+
+
+# ===========================================================================
+# Enum sensor restore discard
+# ===========================================================================
+
+
+class TestEnumRestoreDiscard:
+    """Verify that restored values not in the options list are discarded.
+
+    Uses direct patch on super().async_added_to_hass to avoid CoordinatorEntity
+    listener registration which leaves lingering timers.
+    """
+
+    async def test_enum_sensor_discards_invalid_restored_value(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Old numeric restored value '0' is discarded for enum sensor."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+
+        definition = EcoFlowSensorDef(
+            "ems_feed_mode", "EMS Feed Mode", None, "enum", None,
+            "mdi:cog", "diagnostic", options=["off", "no_limit", "zero", "limit"],
+        )
+        sensor = EcoFlowSensor(coordinator, definition)
+        sensor.hass = hass
+
+        mock_last = MagicMock()
+        mock_last.native_value = "0"
+        with (
+            patch.object(type(sensor).__mro__[1], "async_added_to_hass", new_callable=AsyncMock),
+            patch.object(sensor, "async_get_last_sensor_data", new_callable=AsyncMock, return_value=mock_last),
+        ):
+            await sensor.async_added_to_hass()
+
+        assert sensor._restored_value is None
+
+    async def test_enum_sensor_discards_old_workmode_string(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Old string restored value 'WORKMODE_SELFUSE' is discarded for enum sensor."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+
+        definition = EcoFlowSensorDef(
+            "ems_work_mode", "EMS Work Mode", None, "enum", None,
+            "mdi:cog", "diagnostic", options=["self_use", "time_of_use", "backup"],
+        )
+        sensor = EcoFlowSensor(coordinator, definition)
+        sensor.hass = hass
+
+        mock_last = MagicMock()
+        mock_last.native_value = "WORKMODE_SELFUSE"
+        with (
+            patch.object(type(sensor).__mro__[1], "async_added_to_hass", new_callable=AsyncMock),
+            patch.object(sensor, "async_get_last_sensor_data", new_callable=AsyncMock, return_value=mock_last),
+        ):
+            await sensor.async_added_to_hass()
+
+        assert sensor._restored_value is None
+
+    async def test_enum_sensor_accepts_valid_restored_value(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Valid restored value 'limit' is accepted for enum sensor."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+
+        definition = EcoFlowSensorDef(
+            "ems_feed_mode", "EMS Feed Mode", None, "enum", None,
+            "mdi:cog", "diagnostic", options=["off", "no_limit", "zero", "limit"],
+        )
+        sensor = EcoFlowSensor(coordinator, definition)
+        sensor.hass = hass
+
+        mock_last = MagicMock()
+        mock_last.native_value = "limit"
+        with (
+            patch.object(type(sensor).__mro__[1], "async_added_to_hass", new_callable=AsyncMock),
+            patch.object(sensor, "async_get_last_sensor_data", new_callable=AsyncMock, return_value=mock_last),
+        ):
+            await sensor.async_added_to_hass()
+
+        assert sensor._restored_value == "limit"
+
+    async def test_non_enum_sensor_restores_any_value(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Non-enum sensor restores any value without filtering."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+
+        definition = EcoFlowSensorDef(
+            "soc_pct", "Battery SoC", "%", "battery", "measurement", "mdi:battery", None,
+        )
+        sensor = EcoFlowSensor(coordinator, definition)
+        sensor.hass = hass
+
+        mock_last = MagicMock()
+        mock_last.native_value = 85.0
+        with (
+            patch.object(type(sensor).__mro__[1], "async_added_to_hass", new_callable=AsyncMock),
+            patch.object(sensor, "async_get_last_sensor_data", new_callable=AsyncMock, return_value=mock_last),
+        ):
+            await sensor.async_added_to_hass()
+
+        assert sensor._restored_value == 85.0
