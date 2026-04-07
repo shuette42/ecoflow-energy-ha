@@ -105,6 +105,11 @@ class EcoFlowSensor(CoordinatorEntity[EcoFlowDeviceCoordinator], RestoreSensor):
         """Restore last known value when entity is added."""
         await super().async_added_to_hass()
         if (last := await self.async_get_last_sensor_data()) and last.native_value is not None:
+            # Enum sensors: discard restored values not in options list.
+            # After migrating from numeric to enum, old values like "0"
+            # or "WORKMODE_SELFUSE" are invalid and would block entity setup.
+            if self._definition.options and str(last.native_value) not in self._definition.options:
+                return
             self._restored_value = last.native_value
             self._last_written_value = last.native_value
 
