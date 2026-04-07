@@ -14,7 +14,6 @@ from typing import Any
 
 from .powerocean import (
     _CHG_DSG_STATE_MAP,
-    _CONNECTIVITY_MAP,
     _FEED_MODE_MAP,
     _GRID_STATUS_MAP,
     _PCS_RUN_STATE_MAP,
