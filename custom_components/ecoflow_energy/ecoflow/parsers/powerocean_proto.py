@@ -25,13 +25,13 @@ from .powerocean import (
 
 _LOGGER = logging.getLogger(__name__)
 
-# Proto enum sensor keys and their mappings (reuse HTTP parser maps).
-# Proto sends integer values (not strings like HTTP), so use int-keyed maps.
+# Proto enum sensor keys present in EMS Change Report (cmd_id=8).
+# These get zero-value defaults when proto3 omits them.
+# Only keys that actually appear in EMS_CHANGE_TO_SENSOR belong here.
 _PROTO_ENUM_INT: dict[str, dict[int, str]] = {
     "grid_status": _GRID_STATUS_MAP,
     "batt_charge_discharge_state": _CHG_DSG_STATE_MAP,
     "ems_feed_mode": _FEED_MODE_MAP,
-    "ems_work_state": _WORK_STATE_MAP,
     "ems_work_mode": _WORK_MODE_INT_MAP,
     "pcs_run_state": _PCS_RUN_STATE_INT_MAP,
 }
@@ -42,7 +42,13 @@ _PROTO_ENUM_STR: dict[str, dict[str, str]] = {
     "ems_work_mode": _WORK_MODE_MAP,
 }
 
-# Connectivity keys: 0 = disconnected, any non-zero = connected
+# Connectivity and work_state come via HTTP only (ems_change_report.*
+# in the HTTP quota response), NOT via proto EMS Change Report.
+# Map them when present in result, but never apply zero-defaults.
+_HTTP_ONLY_ENUM_INT: dict[str, dict[int, str]] = {
+    "ems_work_state": _WORK_STATE_MAP,
+}
+
 _CONNECTIVITY_KEYS: frozenset[str] = frozenset({
     "wifi_status", "ethernet_status", "cellular_status",
 })
@@ -187,6 +193,11 @@ def flatten_heartbeat(raw: dict[str, Any]) -> dict[str, Any]:
             iv = int(result[sensor_key]) if isinstance(result[sensor_key], (int, float)) else None
             if iv is not None and iv in mapping:
                 result[sensor_key] = mapping[iv]
+    for sensor_key, mapping in _HTTP_ONLY_ENUM_INT.items():
+        if sensor_key in result:
+            iv = int(result[sensor_key]) if isinstance(result[sensor_key], (int, float)) else None
+            if iv is not None and iv in mapping:
+                result[sensor_key] = mapping[iv]
     for sensor_key in _CONNECTIVITY_KEYS:
         if sensor_key in result:
             iv = int(result[sensor_key]) if isinstance(result[sensor_key], (int, float)) else 0
@@ -322,12 +333,23 @@ def remap_bp_keys(
                 result[sensor_key] = mapping[iv]
         elif is_ems_change and 0 in mapping:
             result[sensor_key] = mapping[0]
+
+    # HTTP-only enum fields: map when present, no zero-defaults.
+    # These come via HTTP quota, not proto EMS Change Report.
+    for sensor_key, mapping in _HTTP_ONLY_ENUM_INT.items():
+        if sensor_key in result:
+            iv = int(result[sensor_key]) if isinstance(result[sensor_key], (int, float)) else None
+            if iv is not None and iv in mapping:
+                result[sensor_key] = mapping[iv]
+
+    # Connectivity: map when present, no zero-defaults.
+    # These come via HTTP quota (ems_change_report.wifiStaStat etc.),
+    # not proto EMS Change Report.
     for sensor_key in _CONNECTIVITY_KEYS:
         if sensor_key in result:
             iv = int(result[sensor_key]) if isinstance(result[sensor_key], (int, float)) else 0
             result[sensor_key] = "disconnected" if iv == 0 else "connected"
-        elif is_ems_change:
-            result[sensor_key] = "disconnected"
+
     for sensor_key, mapping in _PROTO_ENUM_STR.items():
         if sensor_key in result:
             raw_val = str(result[sensor_key])
