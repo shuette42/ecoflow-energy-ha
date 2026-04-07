@@ -9,6 +9,9 @@ All notable changes to this project will be documented in this file.
 - German translations for all new state values.
 - Delta 2 Max enum sensors: charge/discharge state, EMS charge state, MPPT charge state, and charger type now show translated labels.
 
+### Fixed
+- Enum sensors showing "unavailable" in Enhanced Mode due to proto3 zero-value omission. Fields like grid_status=0 were silently dropped by MessageToDict; EMS change reports now default missing enum fields to their zero-value label. (beta.2)
+
 ### Changed
 - Enum sensors use HA `device_class: enum` with `options` for proper state handling and translation support.
 - **Breaking:** Automations using raw numeric state values (e.g. `state == "1"`) for these sensors must update to the new string values (e.g. `state == "charging"`). All affected sensors are diagnostic and disabled by default.

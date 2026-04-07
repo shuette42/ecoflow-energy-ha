@@ -908,15 +908,16 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     }
                     return flatten_heartbeat(raw)
                 # Enhanced Mode: change reports and battery heartbeat
-                if result.mapped.get("_is_ems_change") or result.mapped.get("_is_bp_heartbeat"):
+                is_ems_change = bool(result.mapped.get("_is_ems_change"))
+                if is_ems_change or result.mapped.get("_is_bp_heartbeat"):
                     raw = {
                         k: v
                         for k, v in result.mapped.items()
                         if not k.startswith("_")
                     }
-                    if not raw:
+                    if not raw and not is_ems_change:
                         return None
-                    return remap_bp_keys(raw, self._bp_sn_to_index, self.device_sn)
+                    return remap_bp_keys(raw, self._bp_sn_to_index, self.device_sn, is_ems_change=is_ems_change)
                 # Non-PowerOcean protobuf: SmartPlug heartbeats
                 return self._parse_proto_device_data(payload)
             except Exception:
