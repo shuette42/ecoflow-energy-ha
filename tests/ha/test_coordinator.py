@@ -1545,46 +1545,47 @@ class TestBpRemapping:
         assert result["ems_feed_mode"] == "time_of_use"
         assert result["grid_status"] == "disconnected"
 
-    async def test_ems_change_proto3_zero_defaults(
+    async def test_ems_change_no_false_defaults(
         self,
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """Proto3 omits zero-valued fields; EMS change defaults them to zero-value labels."""
+        """EMS change reports must not inject defaults for absent fields.
+
+        Most EMS change reports contain only bp_soc or are empty.
+        Injecting defaults would overwrite correct values from HTTP.
+        """
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
-        # Proto3 omits sys_grid_sta=0, bp_chg_dsg_sta=0, etc. — raw dict is empty
         raw = {"bp_online_sum": 2}
-        result = remap_bp_keys(raw, coordinator._bp_sn_to_index, coordinator.device_sn, is_ems_change=True)
+        result = remap_bp_keys(raw, coordinator._bp_sn_to_index, coordinator.device_sn)
 
-        assert result["grid_status"] == "disconnected"
-        assert result["batt_charge_discharge_state"] == "standby"
+        assert result["bp_online_sum"] == 2.0
+        # Enum fields not in raw must NOT be injected
+        assert "grid_status" not in result
+        assert "ems_work_mode" not in result
+        assert "wifi_status" not in result
+
+    async def test_ems_change_maps_present_enum_fields(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """When enum fields are present in EMS change, they get mapped correctly."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        raw = {"sys_grid_sta": 1, "bp_chg_dsg_sta": 2, "ems_feed_mode": 0, "ems_work_mode": 0, "pcs_run_sta": 1}
+        result = remap_bp_keys(raw, coordinator._bp_sn_to_index, coordinator.device_sn)
+
+        assert result["grid_status"] == "connected"
+        assert result["batt_charge_discharge_state"] == "charging"
         assert result["ems_feed_mode"] == "self_use"
         assert result["ems_work_mode"] == "self_use"
-        assert result["pcs_run_state"] == "standby"
-        # Connectivity and work_state come via HTTP only, not proto EMS Change
-        assert "wifi_status" not in result
-        assert "ethernet_status" not in result
-        assert "cellular_status" not in result
-        assert "ems_work_state" not in result
-
-    async def test_bp_heartbeat_no_enum_defaults(
-        self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
-    ) -> None:
-        """Battery heartbeat (is_ems_change=False) must NOT inject enum defaults."""
-        enhanced_config_entry.add_to_hass(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
-        )
-        raw = {"bp_soh": 98}
-        result = remap_bp_keys(raw, coordinator._bp_sn_to_index, coordinator.device_sn, is_ems_change=False)
-
-        assert "grid_status" not in result
-        assert "wifi_status" not in result
+        assert result["pcs_run_state"] == "running"
 
     async def test_energy_totals_wh_to_kwh(
         self,
