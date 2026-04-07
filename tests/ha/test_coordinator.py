@@ -1545,6 +1545,44 @@ class TestBpRemapping:
         assert result["ems_feed_mode"] == "time_of_use"
         assert result["grid_status"] == "disconnected"
 
+    async def test_ems_change_proto3_zero_defaults(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Proto3 omits zero-valued fields; EMS change defaults them to zero-value labels."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        # Proto3 omits sys_grid_sta=0, bp_chg_dsg_sta=0, etc. — raw dict is empty
+        raw = {"bp_online_sum": 2}
+        result = remap_bp_keys(raw, coordinator._bp_sn_to_index, coordinator.device_sn, is_ems_change=True)
+
+        assert result["grid_status"] == "disconnected"
+        assert result["batt_charge_discharge_state"] == "standby"
+        assert result["ems_feed_mode"] == "self_use"
+        assert result["wifi_status"] == "disconnected"
+        assert result["ethernet_status"] == "disconnected"
+        assert result["cellular_status"] == "disconnected"
+        assert result["ems_work_state"] == "pre_power_on"
+
+    async def test_bp_heartbeat_no_enum_defaults(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Battery heartbeat (is_ems_change=False) must NOT inject enum defaults."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        raw = {"bp_soh": 98}
+        result = remap_bp_keys(raw, coordinator._bp_sn_to_index, coordinator.device_sn, is_ems_change=False)
+
+        assert "grid_status" not in result
+        assert "wifi_status" not in result
+
     async def test_energy_totals_wh_to_kwh(
         self,
         hass: HomeAssistant,
