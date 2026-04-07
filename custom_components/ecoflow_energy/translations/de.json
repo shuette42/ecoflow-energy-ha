@@ -298,16 +298,46 @@
         "name": "PV-Wechselrichterleistung"
       },
       "ems_feed_mode": {
-        "name": "EMS Einspeisemodus"
+        "name": "EMS Einspeisemodus",
+        "state": {
+          "self_use": "Eigenverbrauch",
+          "time_of_use": "Zeitgesteuert",
+          "backup": "Backup"
+        }
       },
       "ems_work_mode": {
-        "name": "EMS Betriebsmodus"
+        "name": "EMS Betriebsmodus",
+        "state": {
+          "self_use": "Eigenverbrauch",
+          "time_of_use": "Zeitgesteuert",
+          "backup": "Backup",
+          "debug": "Debug",
+          "ac_makeup": "AC-Ergaenzung",
+          "drm": "DRM",
+          "remote_schedule": "Fernsteuerung",
+          "standby": "Standby",
+          "soc_calibration": "SoC-Kalibrierung",
+          "timer": "Timer",
+          "fcr": "FCR",
+          "third_party": "Drittanbieter",
+          "ai_schedule": "KI-Zeitplan",
+          "kraken": "Kraken"
+        }
       },
       "pcs_run_state": {
-        "name": "PCS Betriebszustand"
+        "name": "PCS Betriebszustand",
+        "state": {
+          "standby": "Standby",
+          "running": "Aktiv",
+          "stopped": "Gestoppt"
+        }
       },
       "grid_status": {
-        "name": "Netzstatus"
+        "name": "Netzstatus",
+        "state": {
+          "disconnected": "Getrennt",
+          "connected": "Verbunden"
+        }
       },
       "pcs_power_factor": {
         "name": "Leistungsfaktor"
@@ -319,7 +349,12 @@
         "name": "Einspeiseverhältnis"
       },
       "batt_charge_discharge_state": {
-        "name": "Batterie Lade-/Entladezustand"
+        "name": "Batterie Lade-/Entladezustand",
+        "state": {
+          "standby": "Standby",
+          "discharging": "Entladen",
+          "charging": "Laden"
+        }
       },
       "soc": {
         "name": "Ladezustand"
@@ -460,16 +495,36 @@
         "name": "Lüfterstufe"
       },
       "chg_dsg_state": {
-        "name": "Lade-/Entladezustand"
+        "name": "Lade-/Entladezustand",
+        "state": {
+          "idle": "Leerlauf",
+          "discharging": "Entladen",
+          "charging": "Laden"
+        }
       },
       "ems_chg_state": {
-        "name": "EMS Ladezustand"
+        "name": "EMS Ladezustand",
+        "state": {
+          "idle": "Leerlauf",
+          "charging": "Laden",
+          "discharging": "Entladen"
+        }
       },
       "charger_type": {
-        "name": "Ladegerätetyp"
+        "name": "Ladegeraetetyp",
+        "state": {
+          "none": "Keins",
+          "ac": "AC",
+          "solar": "Solar",
+          "dc": "DC"
+        }
       },
       "mppt_chg_state": {
-        "name": "MPPT Ladezustand"
+        "name": "MPPT Ladezustand",
+        "state": {
+          "idle": "Leerlauf",
+          "charging": "Laden"
+        }
       },
       "ems_lcd_soc": {
         "name": "LCD-Ladezustand"
@@ -1027,19 +1082,38 @@
         "name": "PCS AC-Warnungscode"
       },
       "wifi_status": {
-        "name": "WLAN-Status"
+        "name": "WLAN-Status",
+        "state": {
+          "disconnected": "Getrennt",
+          "connected": "Verbunden"
+        }
       },
       "ethernet_status": {
-        "name": "Ethernet-Status"
+        "name": "Ethernet-Status",
+        "state": {
+          "disconnected": "Getrennt",
+          "connected": "Verbunden"
+        }
       },
       "cellular_status": {
-        "name": "4G-Status"
+        "name": "4G-Status",
+        "state": {
+          "disconnected": "Getrennt",
+          "connected": "Verbunden"
+        }
       },
       "ems_led_brightness": {
         "name": "EMS LED-Helligkeit"
       },
       "ems_work_state": {
-        "name": "EMS Betriebszustand"
+        "name": "EMS Betriebszustand",
+        "state": {
+          "pre_power_on": "Vor Einschalten",
+          "confirm_power_on": "Einschalten bestaetigt",
+          "normal": "Normal",
+          "power_off": "Ausgeschaltet",
+          "sleep": "Schlaf"
+        }
       },
       "ems_total_battery_capacity_wh": {
         "name": "Gesamte Batteriekapazität"

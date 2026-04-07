@@ -12,7 +12,35 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from .powerocean import (
+    _CHG_DSG_STATE_MAP,
+    _CONNECTIVITY_MAP,
+    _FEED_MODE_MAP,
+    _GRID_STATUS_MAP,
+    _PCS_RUN_STATE_MAP,
+    _WORK_MODE_MAP,
+    _WORK_STATE_MAP,
+)
+
 _LOGGER = logging.getLogger(__name__)
+
+# Proto enum sensor keys and their mappings (reuse HTTP parser maps)
+_PROTO_ENUM_INT: dict[str, dict[int, str]] = {
+    "grid_status": _GRID_STATUS_MAP,
+    "batt_charge_discharge_state": _CHG_DSG_STATE_MAP,
+    "ems_feed_mode": _FEED_MODE_MAP,
+    "ems_work_state": _WORK_STATE_MAP,
+}
+
+_PROTO_ENUM_STR: dict[str, dict[str, str]] = {
+    "pcs_run_state": _PCS_RUN_STATE_MAP,
+    "ems_work_mode": _WORK_MODE_MAP,
+}
+
+# Connectivity keys: 0 = disconnected, any non-zero = connected
+_CONNECTIVITY_KEYS: frozenset[str] = frozenset({
+    "wifi_status", "ethernet_status", "cellular_status",
+})
 
 # EnergyStream (fast ~3s updates): proto key -> sensor key
 PROTO_TO_SENSOR: dict[str, str] = {
@@ -148,6 +176,21 @@ def flatten_heartbeat(raw: dict[str, Any]) -> dict[str, Any]:
         if val is not None:
             result[sensor_key] = float(val) if isinstance(val, (int, float)) else val
 
+    # Apply enum mappings to heartbeat fields
+    for sensor_key, mapping in _PROTO_ENUM_INT.items():
+        if sensor_key in result:
+            iv = int(result[sensor_key]) if isinstance(result[sensor_key], (int, float)) else None
+            if iv is not None and iv in mapping:
+                result[sensor_key] = mapping[iv]
+    for sensor_key in _CONNECTIVITY_KEYS:
+        if sensor_key in result:
+            iv = int(result[sensor_key]) if isinstance(result[sensor_key], (int, float)) else 0
+            result[sensor_key] = "disconnected" if iv == 0 else "connected"
+    for sensor_key, mapping in _PROTO_ENUM_STR.items():
+        if sensor_key in result:
+            raw_val = str(result[sensor_key])
+            result[sensor_key] = mapping.get(raw_val, raw_val)
+
     # MPPT per-string (nested in mppt_heart_beat[0].mppt_pv[])
     mppt_hb = raw.get("mppt_heart_beat")
     if isinstance(mppt_hb, list) and mppt_hb:
@@ -259,5 +302,20 @@ def remap_bp_keys(
                     result[sensor_key] = float(value) / 1000.0
             else:
                 result[sensor_key] = float(value) if isinstance(value, (int, float)) else value
+
+    # Apply enum mappings to remapped sensor keys
+    for sensor_key, mapping in _PROTO_ENUM_INT.items():
+        if sensor_key in result:
+            iv = int(result[sensor_key]) if isinstance(result[sensor_key], (int, float)) else None
+            if iv is not None and iv in mapping:
+                result[sensor_key] = mapping[iv]
+    for sensor_key in _CONNECTIVITY_KEYS:
+        if sensor_key in result:
+            iv = int(result[sensor_key]) if isinstance(result[sensor_key], (int, float)) else 0
+            result[sensor_key] = "disconnected" if iv == 0 else "connected"
+    for sensor_key, mapping in _PROTO_ENUM_STR.items():
+        if sensor_key in result:
+            raw_val = str(result[sensor_key])
+            result[sensor_key] = mapping.get(raw_val, raw_val)
 
     return result

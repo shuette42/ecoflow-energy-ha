@@ -19,6 +19,61 @@ from typing import Any
 
 from . import _safe_float
 
+# --- State value mappings (numeric -> enum string) ---
+
+_CHG_DSG_STATE_MAP: dict[int, str] = {
+    0: "standby",
+    1: "discharging",
+    2: "charging",
+}
+
+_GRID_STATUS_MAP: dict[int, str] = {
+    0: "disconnected",
+    1: "connected",
+}
+
+_PCS_RUN_STATE_MAP: dict[str, str] = {
+    "RUNSTA_STANDBY": "standby",
+    "RUNSTA_RUN": "running",
+    "RUNSTA_STOP": "stopped",
+}
+
+_WORK_MODE_MAP: dict[str, str] = {
+    "WORKMODE_SELFUSE": "self_use",
+    "WORKMODE_TOU": "time_of_use",
+    "WORKMODE_BACKUP": "backup",
+    "WORKMODE_DBG": "debug",
+    "WORKMODE_AC_MAKEUP": "ac_makeup",
+    "WORKMODE_DRM_MODE": "drm",
+    "WORKMODE_REMOTE_SCHED": "remote_schedule",
+    "WORKMODE_STANDBY_MODE": "standby",
+    "WORKMODE_SOC_CALIB": "soc_calibration",
+    "WORKMODE_TIMER_MODE": "timer",
+    "WORKMODE_FCR_MODE": "fcr",
+    "WORKMODE_THIRD_MODE": "third_party",
+    "WORKMODE_AI_SCHEDULE": "ai_schedule",
+    "WORKMODE_KRAKEN": "kraken",
+}
+
+_FEED_MODE_MAP: dict[int, str] = {
+    0: "self_use",
+    1: "time_of_use",
+    2: "backup",
+}
+
+_CONNECTIVITY_MAP: dict[int, str] = {
+    0: "disconnected",
+    1: "connected",
+}
+
+_WORK_STATE_MAP: dict[int, str] = {
+    0: "pre_power_on",
+    1: "confirm_power_on",
+    2: "normal",
+    3: "power_off",
+    4: "sleep",
+}
+
 
 def parse_powerocean_http_quota(quota_data: dict) -> dict[str, Any]:
     """Parse a PowerOcean GET /quota/all response into flat sensor keys.
@@ -182,15 +237,12 @@ def _extract_energy_stream(quota_data: dict, result: dict) -> None:
     """Extract energy stream / EMS change report data."""
     # Try ems_change_report prefix
     ems_prefix = "ems_change_report."
-    # Numeric EMS fields
+    # Numeric EMS fields (non-enum)
     _ems_numeric = {
-        "emsFeedMode": "ems_feed_mode",
         "bpOnlineSum": "bp_online_sum",
         "pcsPfValue": "pcs_power_factor",
         "emsFeedPwr": "ems_feed_power_limit_w",
         "emsFeedRatio": "ems_feed_ratio_pct",
-        "sysGridSta": "grid_status",
-        "bpChgDsgSta": "batt_charge_discharge_state",
     }
     for http_key, sensor_key in _ems_numeric.items():
         full_key = ems_prefix + http_key
@@ -203,15 +255,30 @@ def _extract_energy_stream(quota_data: dict, result: dict) -> None:
                 if fv is not None:
                     result[sensor_key] = fv
 
-    # String EMS fields (work mode, run state)
-    _ems_string = {
-        "emsWordMode": "ems_work_mode",
-        "pcsRunSta": "pcs_run_state",
+    # Enum EMS fields (numeric -> string)
+    _ems_enum_int: dict[str, tuple[str, dict[int, str]]] = {
+        "emsFeedMode": ("ems_feed_mode", _FEED_MODE_MAP),
+        "sysGridSta": ("grid_status", _GRID_STATUS_MAP),
+        "bpChgDsgSta": ("batt_charge_discharge_state", _CHG_DSG_STATE_MAP),
     }
-    for http_key, sensor_key in _ems_string.items():
+    for http_key, (sensor_key, mapping) in _ems_enum_int.items():
         full_key = ems_prefix + http_key
         if full_key in quota_data:
-            result[sensor_key] = quota_data[full_key]
+            v = quota_data[full_key]
+            iv = int(v) if isinstance(v, (int, float)) else None
+            if iv is not None and iv in mapping:
+                result[sensor_key] = mapping[iv]
+
+    # Enum EMS fields (string -> string)
+    _ems_enum_str: dict[str, tuple[str, dict[str, str]]] = {
+        "emsWordMode": ("ems_work_mode", _WORK_MODE_MAP),
+        "pcsRunSta": ("pcs_run_state", _PCS_RUN_STATE_MAP),
+    }
+    for http_key, (sensor_key, mapping) in _ems_enum_str.items():
+        full_key = ems_prefix + http_key
+        if full_key in quota_data:
+            raw = quota_data[full_key]
+            result[sensor_key] = mapping.get(str(raw), str(raw))
 
     # Energy totals from energy_stream if available
     _energy_keys = {
@@ -367,11 +434,7 @@ def _extract_ems_extended(quota_data: dict, result: dict) -> None:
         "pcsAcErrCode": "pcs_ac_error_code",
         "pcsDcErrCode": "pcs_dc_error_code",
         "pcsAcWarningCode": "pcs_ac_warning_code",
-        "wifiStaStat": "wifi_status",
-        "ethWanStat": "ethernet_status",
-        "iot4gSta": "cellular_status",
         "emsCtrlLedBright": "ems_led_brightness",
-        "emsWorkState": "ems_work_state",
     }
     for api_key, sensor_key in _ems_extended.items():
         full_key = ems_prefix + api_key
@@ -379,6 +442,27 @@ def _extract_ems_extended(quota_data: dict, result: dict) -> None:
             fv = _safe_float(quota_data[full_key])
             if fv is not None:
                 result[sensor_key] = fv
+
+    # Connectivity fields (0 = disconnected, any non-zero = connected)
+    for api_key, sensor_key in (
+        ("wifiStaStat", "wifi_status"),
+        ("ethWanStat", "ethernet_status"),
+        ("iot4gSta", "cellular_status"),
+    ):
+        full_key = ems_prefix + api_key
+        if full_key in quota_data:
+            fv = _safe_float(quota_data[full_key])
+            if fv is not None:
+                result[sensor_key] = "disconnected" if int(fv) == 0 else "connected"
+
+    # Work state enum (numeric -> string)
+    ems_ws_key = ems_prefix + "emsWorkState"
+    if ems_ws_key in quota_data:
+        fv = _safe_float(quota_data[ems_ws_key])
+        if fv is not None:
+            iv = int(fv)
+            if iv in _WORK_STATE_MAP:
+                result["ems_work_state"] = _WORK_STATE_MAP[iv]
 
     # Nested poAiSchedule fields (system capabilities)
     _ai_schedule = {

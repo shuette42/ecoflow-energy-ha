@@ -12,6 +12,33 @@ from __future__ import annotations
 
 from typing import Any
 
+# --- State value mappings (numeric -> enum string) ---
+
+_DELTA_CHG_DSG_MAP: dict[int, str] = {
+    0: "idle",
+    1: "discharging",
+    2: "charging",
+}
+
+_DELTA_CHARGER_TYPE_MAP: dict[int, str] = {
+    0: "none",
+    1: "ac",
+    2: "solar",
+    3: "dc",
+}
+
+_DELTA_MPPT_CHG_MAP: dict[int, str] = {
+    0: "idle",
+    1: "charging",
+}
+
+_DELTA_ENUM_FIELDS: dict[str, dict[int, str]] = {
+    "chg_dsg_state": _DELTA_CHG_DSG_MAP,
+    "ems_chg_state": _DELTA_CHG_DSG_MAP,
+    "charger_type": _DELTA_CHARGER_TYPE_MAP,
+    "mppt_chg_state": _DELTA_MPPT_CHG_MAP,
+}
+
 # Field map: "typeCode.paramKey" -> destination key
 DELTA2MAX_FIELD_MAP: dict[str, str] = {
     # --- pdStatus (pd.*) ---
@@ -248,5 +275,12 @@ def parse_delta_report(
     # Temperature: amplified 10x -> °C
     if "solar2_mppt_temp_c" in parsed:
         parsed["solar2_mppt_temp_c"] /= 10.0
+
+    # Enum state mappings (numeric -> string)
+    for key, mapping in _DELTA_ENUM_FIELDS.items():
+        if key in parsed:
+            iv = int(parsed[key])
+            if iv in mapping:
+                parsed[key] = mapping[iv]
 
     return parsed

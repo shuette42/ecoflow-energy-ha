@@ -298,16 +298,46 @@
         "name": "PV Inverter Power"
       },
       "ems_feed_mode": {
-        "name": "EMS Feed Mode"
+        "name": "EMS Feed Mode",
+        "state": {
+          "self_use": "Self-use",
+          "time_of_use": "Time of Use",
+          "backup": "Backup"
+        }
       },
       "ems_work_mode": {
-        "name": "EMS Work Mode"
+        "name": "EMS Work Mode",
+        "state": {
+          "self_use": "Self-use",
+          "time_of_use": "Time of Use",
+          "backup": "Backup",
+          "debug": "Debug",
+          "ac_makeup": "AC Makeup",
+          "drm": "DRM",
+          "remote_schedule": "Remote Schedule",
+          "standby": "Standby",
+          "soc_calibration": "SoC Calibration",
+          "timer": "Timer",
+          "fcr": "FCR",
+          "third_party": "Third Party",
+          "ai_schedule": "AI Schedule",
+          "kraken": "Kraken"
+        }
       },
       "pcs_run_state": {
-        "name": "PCS Running State"
+        "name": "PCS Running State",
+        "state": {
+          "standby": "Standby",
+          "running": "Running",
+          "stopped": "Stopped"
+        }
       },
       "grid_status": {
-        "name": "Grid Status"
+        "name": "Grid Status",
+        "state": {
+          "disconnected": "Disconnected",
+          "connected": "Connected"
+        }
       },
       "pcs_power_factor": {
         "name": "Power Factor"
@@ -319,7 +349,12 @@
         "name": "Feed Ratio"
       },
       "batt_charge_discharge_state": {
-        "name": "Battery Charge/Discharge State"
+        "name": "Battery Charge/Discharge State",
+        "state": {
+          "standby": "Standby",
+          "discharging": "Discharging",
+          "charging": "Charging"
+        }
       },
       "soc": {
         "name": "SoC"
@@ -460,16 +495,36 @@
         "name": "Fan Level"
       },
       "chg_dsg_state": {
-        "name": "Charge/Discharge State"
+        "name": "Charge/Discharge State",
+        "state": {
+          "idle": "Idle",
+          "discharging": "Discharging",
+          "charging": "Charging"
+        }
       },
       "ems_chg_state": {
-        "name": "EMS Charge State"
+        "name": "EMS Charge State",
+        "state": {
+          "idle": "Idle",
+          "charging": "Charging",
+          "discharging": "Discharging"
+        }
       },
       "charger_type": {
-        "name": "Charger Type"
+        "name": "Charger Type",
+        "state": {
+          "none": "None",
+          "ac": "AC",
+          "solar": "Solar",
+          "dc": "DC"
+        }
       },
       "mppt_chg_state": {
-        "name": "MPPT Charge State"
+        "name": "MPPT Charge State",
+        "state": {
+          "idle": "Idle",
+          "charging": "Charging"
+        }
       },
       "ems_lcd_soc": {
         "name": "LCD SoC"
@@ -1027,19 +1082,38 @@
         "name": "PCS AC Warning Code"
       },
       "wifi_status": {
-        "name": "WiFi Status"
+        "name": "WiFi Status",
+        "state": {
+          "disconnected": "Disconnected",
+          "connected": "Connected"
+        }
       },
       "ethernet_status": {
-        "name": "Ethernet Status"
+        "name": "Ethernet Status",
+        "state": {
+          "disconnected": "Disconnected",
+          "connected": "Connected"
+        }
       },
       "cellular_status": {
-        "name": "4G Status"
+        "name": "4G Status",
+        "state": {
+          "disconnected": "Disconnected",
+          "connected": "Connected"
+        }
       },
       "ems_led_brightness": {
         "name": "EMS LED Brightness"
       },
       "ems_work_state": {
-        "name": "EMS Work State"
+        "name": "EMS Work State",
+        "state": {
+          "pre_power_on": "Pre Power On",
+          "confirm_power_on": "Confirm Power On",
+          "normal": "Normal",
+          "power_off": "Power Off",
+          "sleep": "Sleep"
+        }
       },
       "ems_total_battery_capacity_wh": {
         "name": "Total Battery Capacity"

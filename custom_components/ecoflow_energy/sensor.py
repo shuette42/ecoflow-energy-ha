@@ -93,6 +93,8 @@ class EcoFlowSensor(CoordinatorEntity[EcoFlowDeviceCoordinator], RestoreSensor):
             self._attr_suggested_display_precision = definition.suggested_display_precision
         if definition.disabled_by_default:
             self._attr_entity_registry_enabled_default = False
+        if definition.options:
+            self._attr_options = definition.options
 
     @property
     def available(self) -> bool:

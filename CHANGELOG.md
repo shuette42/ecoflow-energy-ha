@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.12.0] - 2026-04-07
+
+### Added
+- Human-readable state translations for enum sensors: battery charge/discharge state, grid status, inverter state, work mode, feed mode, connectivity (WiFi/Ethernet/4G), and charger type now show descriptive labels instead of raw numeric values.
+- German translations for all new state values.
+- Delta 2 Max enum sensors: charge/discharge state, EMS charge state, MPPT charge state, and charger type now show translated labels.
+
+### Changed
+- Enum sensors use HA `device_class: enum` with `options` for proper state handling and translation support.
+- **Breaking:** Automations using raw numeric state values (e.g. `state == "1"`) for these sensors must update to the new string values (e.g. `state == "charging"`). All affected sensors are diagnostic and disabled by default.
+
 ## [1.11.0] - 2026-04-05
 
 ### Added

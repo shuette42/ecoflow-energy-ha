@@ -470,7 +470,7 @@ class TestEnergyStream:
     def test_ems_feed_mode(self):
         data = {"ems_change_report.emsFeedMode": 1}
         result = parse_powerocean_http_quota(data)
-        assert result["ems_feed_mode"] == 1
+        assert result["ems_feed_mode"] == "time_of_use"
 
     def test_pcs_grid_freq(self):
         data = {"pcs_change_report.gridFreq": 50.02}
@@ -567,17 +567,17 @@ class TestEMSState:
     def test_ems_work_mode_string(self):
         data = {"ems_change_report.emsWordMode": "WORKMODE_SELFUSE"}
         result = parse_powerocean_http_quota(data)
-        assert result["ems_work_mode"] == "WORKMODE_SELFUSE"
+        assert result["ems_work_mode"] == "self_use"
 
     def test_pcs_run_state_string(self):
         data = {"ems_change_report.pcsRunSta": "RUNSTA_RUN"}
         result = parse_powerocean_http_quota(data)
-        assert result["pcs_run_state"] == "RUNSTA_RUN"
+        assert result["pcs_run_state"] == "running"
 
     def test_grid_status_numeric(self):
         data = {"ems_change_report.sysGridSta": 0}
         result = parse_powerocean_http_quota(data)
-        assert result["grid_status"] == 0
+        assert result["grid_status"] == "disconnected"
 
     def test_power_factor(self):
         data = {"ems_change_report.pcsPfValue": 0.98}
@@ -597,7 +597,7 @@ class TestEMSState:
     def test_batt_charge_discharge_state(self):
         data = {"ems_change_report.bpChgDsgSta": 1}
         result = parse_powerocean_http_quota(data)
-        assert result["batt_charge_discharge_state"] == 1
+        assert result["batt_charge_discharge_state"] == "discharging"
 
 
 class TestPVInverterPower:
@@ -949,9 +949,9 @@ class TestEMSExtended:
             "ems_change_report.iot4gSta": 2,
         }
         result = parse_powerocean_http_quota(data)
-        assert result["wifi_status"] == 0.0
-        assert result["ethernet_status"] == 0.0
-        assert result["cellular_status"] == 2.0
+        assert result["wifi_status"] == "disconnected"
+        assert result["ethernet_status"] == "disconnected"
+        assert result["cellular_status"] == "connected"
 
     def test_ems_led_brightness(self):
         data = {"ems_change_report.emsCtrlLedBright": 10}
@@ -961,7 +961,7 @@ class TestEMSExtended:
     def test_ems_work_state(self):
         data = {"ems_change_report.emsWorkState": 0}
         result = parse_powerocean_http_quota(data)
-        assert result["ems_work_state"] == 0.0
+        assert result["ems_work_state"] == "pre_power_on"
 
     def test_ai_schedule_battery_capacity(self):
         data = {"ems_change_report.poAiSchedule.bpFullCap": 10240.0}
@@ -992,11 +992,11 @@ class TestEMSExtended:
     def test_ems_extended_does_not_conflict_with_existing(self):
         """New EMS sensors do not conflict with existing ems_feed_mode etc."""
         data = {
-            "ems_change_report.emsFeedMode": 3,
+            "ems_change_report.emsFeedMode": 2,
             "ems_change_report.sysBatChgUpLimit": 100,
             "ems_change_report.emsCtrlLedBright": 10,
         }
         result = parse_powerocean_http_quota(data)
-        assert result["ems_feed_mode"] == 3
+        assert result["ems_feed_mode"] == "backup"
         assert result["ems_charge_upper_limit_pct"] == 100.0
         assert result["ems_led_brightness"] == 10.0
