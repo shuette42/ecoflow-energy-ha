@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from .delta import _DELTA_ENUM_FIELDS
+
 from . import _safe_float
 
 # Mapping: HTTP API key ("module.field") -> sensor key
@@ -247,5 +249,12 @@ def parse_delta_http_quota(quota_data: dict) -> dict[str, Any]:
     # --- Temperature conversions: amplified 10x -> °C ---
     if "solar2_mppt_temp_c" in result:
         result["solar2_mppt_temp_c"] /= 10.0
+
+    # Enum state mappings (numeric -> string)
+    for key, mapping in _DELTA_ENUM_FIELDS.items():
+        if key in result:
+            iv = int(result[key])
+            if iv in mapping:
+                result[key] = mapping[iv]
 
     return result

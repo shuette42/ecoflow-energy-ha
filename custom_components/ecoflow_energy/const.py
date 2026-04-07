@@ -116,6 +116,7 @@ class EcoFlowSensorDef:
     enhanced_only: bool = False
     suggested_display_precision: int | None = None
     disabled_by_default: bool = False
+    options: list[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -220,14 +221,14 @@ POWEROCEAN_SENSORS: list[EcoFlowSensorDef] = [
     # --- PV Inverter Link ---
     EcoFlowSensorDef("pv_inverter_power_w", "PV Inverter Power", "W", "power", "measurement", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     # --- EMS State & Control ---
-    EcoFlowSensorDef("ems_feed_mode", "EMS Feed Mode", None, None, None, "mdi:cog", "diagnostic"),
-    EcoFlowSensorDef("ems_work_mode", "EMS Work Mode", None, None, None, "mdi:cog", "diagnostic"),
-    EcoFlowSensorDef("pcs_run_state", "PCS Running State", None, None, None, "mdi:power", "diagnostic", disabled_by_default=True),
-    EcoFlowSensorDef("grid_status", "Grid Status", None, None, None, "mdi:transmission-tower", "diagnostic"),
+    EcoFlowSensorDef("ems_feed_mode", "EMS Feed Mode", None, "enum", None, "mdi:cog", "diagnostic", options=["self_use", "time_of_use", "backup"]),
+    EcoFlowSensorDef("ems_work_mode", "EMS Work Mode", None, "enum", None, "mdi:cog", "diagnostic", options=["self_use", "time_of_use", "backup", "debug", "ac_makeup", "drm", "remote_schedule", "standby", "soc_calibration", "timer", "fcr", "third_party", "ai_schedule", "kraken"]),
+    EcoFlowSensorDef("pcs_run_state", "PCS Running State", None, "enum", None, "mdi:power", "diagnostic", disabled_by_default=True, options=["standby", "running", "stopped"]),
+    EcoFlowSensorDef("grid_status", "Grid Status", None, "enum", None, "mdi:transmission-tower", "diagnostic", options=["disconnected", "connected"]),
     EcoFlowSensorDef("pcs_power_factor", "Power Factor", None, "power_factor", "measurement", "mdi:sine-wave", "diagnostic", disabled_by_default=True),
     EcoFlowSensorDef("ems_feed_power_limit_w", "Feed Power Limit", "W", "power", "measurement", "mdi:transmission-tower-export", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("ems_feed_ratio_pct", "Feed Ratio", "%", None, "measurement", "mdi:percent", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
-    EcoFlowSensorDef("batt_charge_discharge_state", "Battery Charge/Discharge State", None, None, None, "mdi:battery-sync", "diagnostic"),
+    EcoFlowSensorDef("batt_charge_discharge_state", "Battery Charge/Discharge State", None, "enum", None, "mdi:battery-sync", "diagnostic", options=["standby", "discharging", "charging"]),
     # --- EMS / System extended sensors (diagnostic, disabled by default) ---
     EcoFlowSensorDef("ems_charge_upper_limit_pct", "EMS Charge Upper Limit", "%", None, "measurement", "mdi:battery-charging-high", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("ems_discharge_lower_limit_pct", "EMS Discharge Lower Limit", "%", None, "measurement", "mdi:battery-alert-variant-outline", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
@@ -238,11 +239,11 @@ POWEROCEAN_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("pcs_ac_error_code", "PCS AC Error Code", None, None, None, "mdi:alert-circle-outline", "diagnostic", disabled_by_default=True),
     EcoFlowSensorDef("pcs_dc_error_code", "PCS DC Error Code", None, None, None, "mdi:alert-circle-outline", "diagnostic", disabled_by_default=True),
     EcoFlowSensorDef("pcs_ac_warning_code", "PCS AC Warning Code", None, None, None, "mdi:alert-outline", "diagnostic", disabled_by_default=True),
-    EcoFlowSensorDef("wifi_status", "WiFi Status", None, None, None, "mdi:wifi", "diagnostic", disabled_by_default=True),
-    EcoFlowSensorDef("ethernet_status", "Ethernet Status", None, None, None, "mdi:ethernet", "diagnostic", disabled_by_default=True),
-    EcoFlowSensorDef("cellular_status", "4G Status", None, None, None, "mdi:signal-4g", "diagnostic", disabled_by_default=True),
+    EcoFlowSensorDef("wifi_status", "WiFi Status", None, "enum", None, "mdi:wifi", "diagnostic", disabled_by_default=True, options=["disconnected", "connected"]),
+    EcoFlowSensorDef("ethernet_status", "Ethernet Status", None, "enum", None, "mdi:ethernet", "diagnostic", disabled_by_default=True, options=["disconnected", "connected"]),
+    EcoFlowSensorDef("cellular_status", "4G Status", None, "enum", None, "mdi:signal-4g", "diagnostic", disabled_by_default=True, options=["disconnected", "connected"]),
     EcoFlowSensorDef("ems_led_brightness", "EMS LED Brightness", None, None, "measurement", "mdi:brightness-6", "diagnostic", disabled_by_default=True),
-    EcoFlowSensorDef("ems_work_state", "EMS Work State", None, None, None, "mdi:cog", "diagnostic", disabled_by_default=True),
+    EcoFlowSensorDef("ems_work_state", "EMS Work State", None, "enum", None, "mdi:cog", "diagnostic", disabled_by_default=True, options=["pre_power_on", "confirm_power_on", "normal", "power_off", "sleep"]),
     EcoFlowSensorDef("ems_total_battery_capacity_wh", "Total Battery Capacity", "Wh", "energy_storage", "measurement", "mdi:battery", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("pcs_max_output_power_w", "PCS Max Output Power", "W", "power", "measurement", "mdi:flash-triangle", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("pcs_max_input_power_w", "PCS Max Input Power", "W", "power", "measurement", "mdi:flash-triangle", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
@@ -365,10 +366,10 @@ DELTA2MAX_SENSORS: list[EcoFlowSensorDef] = [
     # --- Counters / State ---
     EcoFlowSensorDef("bms_cycles", "Battery Cycles", None, None, "total_increasing", "mdi:counter"),
     EcoFlowSensorDef("fan_level", "Fan Level", None, None, "measurement", "mdi:fan", disabled_by_default=True),
-    EcoFlowSensorDef("chg_dsg_state", "Charge/Discharge State", None, None, None, "mdi:battery-charging", disabled_by_default=True),
-    EcoFlowSensorDef("ems_chg_state", "EMS Charge State", None, None, None, "mdi:battery-charging-outline", disabled_by_default=True),
-    EcoFlowSensorDef("charger_type", "Charger Type", None, None, None, "mdi:ev-plug-type2", disabled_by_default=True),
-    EcoFlowSensorDef("mppt_chg_state", "MPPT Charge State", None, None, None, "mdi:solar-panel", disabled_by_default=True),
+    EcoFlowSensorDef("chg_dsg_state", "Charge/Discharge State", None, "enum", None, "mdi:battery-charging", disabled_by_default=True, options=["idle", "discharging", "charging"]),
+    EcoFlowSensorDef("ems_chg_state", "EMS Charge State", None, "enum", None, "mdi:battery-charging-outline", disabled_by_default=True, options=["idle", "charging", "discharging"]),
+    EcoFlowSensorDef("charger_type", "Charger Type", None, "enum", None, "mdi:ev-plug-type2", disabled_by_default=True, options=["none", "ac", "solar", "dc"]),
+    EcoFlowSensorDef("mppt_chg_state", "MPPT Charge State", None, "enum", None, "mdi:solar-panel", disabled_by_default=True, options=["idle", "charging"]),
     EcoFlowSensorDef("ems_lcd_soc", "LCD SoC", "%", None, "measurement", "mdi:monitor", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("ems_precise_soc", "EMS Precise SoC", "%", None, "measurement", "mdi:monitor", suggested_display_precision=0, disabled_by_default=True),
     # --- Energy Dashboard (total_increasing, kWh) ---

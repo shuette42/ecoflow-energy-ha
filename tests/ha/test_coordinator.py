@@ -1542,8 +1542,8 @@ class TestBpRemapping:
         result = remap_bp_keys(raw, coordinator._bp_sn_to_index, coordinator.device_sn)
 
         assert result["bp_online_sum"] == 2.0
-        assert result["ems_feed_mode"] == 1.0
-        assert result["grid_status"] == 0.0
+        assert result["ems_feed_mode"] == "time_of_use"
+        assert result["grid_status"] == "disconnected"
 
     async def test_energy_totals_wh_to_kwh(
         self,
