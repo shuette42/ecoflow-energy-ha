@@ -55,6 +55,30 @@ _WORK_MODE_MAP: dict[str, str] = {
     "WORKMODE_KRAKEN": "kraken",
 }
 
+# Integer-keyed variants for Proto path (proto sends int, HTTP sends string)
+_WORK_MODE_INT_MAP: dict[int, str] = {
+    0: "self_use",
+    1: "time_of_use",
+    2: "backup",
+    3: "debug",
+    4: "ac_makeup",
+    5: "drm",
+    6: "remote_schedule",
+    7: "standby",
+    8: "soc_calibration",
+    9: "timer",
+    10: "fcr",
+    11: "third_party",
+    12: "ai_schedule",
+    13: "kraken",
+}
+
+_PCS_RUN_STATE_INT_MAP: dict[int, str] = {
+    0: "standby",
+    1: "running",
+    2: "stopped",
+}
+
 _FEED_MODE_MAP: dict[int, str] = {
     0: "self_use",
     1: "time_of_use",

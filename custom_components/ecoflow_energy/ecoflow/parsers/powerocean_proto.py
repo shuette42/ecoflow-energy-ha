@@ -16,21 +16,27 @@ from .powerocean import (
     _CHG_DSG_STATE_MAP,
     _FEED_MODE_MAP,
     _GRID_STATUS_MAP,
+    _PCS_RUN_STATE_INT_MAP,
     _PCS_RUN_STATE_MAP,
+    _WORK_MODE_INT_MAP,
     _WORK_MODE_MAP,
     _WORK_STATE_MAP,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
-# Proto enum sensor keys and their mappings (reuse HTTP parser maps)
+# Proto enum sensor keys and their mappings (reuse HTTP parser maps).
+# Proto sends integer values (not strings like HTTP), so use int-keyed maps.
 _PROTO_ENUM_INT: dict[str, dict[int, str]] = {
     "grid_status": _GRID_STATUS_MAP,
     "batt_charge_discharge_state": _CHG_DSG_STATE_MAP,
     "ems_feed_mode": _FEED_MODE_MAP,
     "ems_work_state": _WORK_STATE_MAP,
+    "ems_work_mode": _WORK_MODE_INT_MAP,
+    "pcs_run_state": _PCS_RUN_STATE_INT_MAP,
 }
 
+# String enum maps (HTTP path sends "WORKMODE_SELFUSE" etc.)
 _PROTO_ENUM_STR: dict[str, dict[str, str]] = {
     "pcs_run_state": _PCS_RUN_STATE_MAP,
     "ems_work_mode": _WORK_MODE_MAP,
