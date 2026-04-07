@@ -233,6 +233,7 @@ def remap_bp_keys(
     raw: dict[str, Any],
     bp_sn_to_index: dict[str, int],
     device_sn: str,
+    is_ems_change: bool = False,
 ) -> dict[str, Any]:
     """Remap battery heartbeat (cmd_id=7) and EMS change (cmd_id=8) keys to sensor keys.
 
@@ -240,6 +241,8 @@ def remap_bp_keys(
         raw: Raw protobuf-decoded dict (mutated: all_packs is popped).
         bp_sn_to_index: Mutable SN-to-pack-index mapping (updated in place).
         device_sn: Device serial number for debug logging.
+        is_ems_change: True for EMS change reports (cmd_id=8), enables
+            proto3 zero-value defaults for enum fields.
     """
     result: dict[str, Any] = {}
 
@@ -303,16 +306,23 @@ def remap_bp_keys(
             else:
                 result[sensor_key] = float(value) if isinstance(value, (int, float)) else value
 
-    # Apply enum mappings to remapped sensor keys
+    # Apply enum mappings to remapped sensor keys.
+    # Proto3 zero-value omission: MessageToDict omits fields with value 0,
+    # so enum fields like grid_status=0 are missing from result.
+    # For EMS change reports, default to 0 (proto3 default) when absent.
     for sensor_key, mapping in _PROTO_ENUM_INT.items():
         if sensor_key in result:
             iv = int(result[sensor_key]) if isinstance(result[sensor_key], (int, float)) else None
             if iv is not None and iv in mapping:
                 result[sensor_key] = mapping[iv]
+        elif is_ems_change and 0 in mapping:
+            result[sensor_key] = mapping[0]
     for sensor_key in _CONNECTIVITY_KEYS:
         if sensor_key in result:
             iv = int(result[sensor_key]) if isinstance(result[sensor_key], (int, float)) else 0
             result[sensor_key] = "disconnected" if iv == 0 else "connected"
+        elif is_ems_change:
+            result[sensor_key] = "disconnected"
     for sensor_key, mapping in _PROTO_ENUM_STR.items():
         if sensor_key in result:
             raw_val = str(result[sensor_key])
