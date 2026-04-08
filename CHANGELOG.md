@@ -21,6 +21,7 @@ All notable changes to this project will be documented in this file.
 - Proto get_reply parsing for PowerOcean: extracts EmsChangeReport from multi-header response for initial state on startup. (beta.6)
 - Protobuf version guard restored for compatibility with protobuf < 5.29. (beta.6)
 - Delta 2 Max charger_type value 255 (no charger) now mapped to "unknown" instead of causing ValueError. (beta.7)
+- Energy sensors (solar, grid import/export, home) stopped increasing after host reboot. The monotonic clock resets on reboot but the energy integrator state file retained the old timestamp, producing a negative time delta that silently skipped all integration. (beta.8)
 
 ### Changed
 - Enum sensors use HA `device_class: enum` with `options` for proper state handling and translation support.
