@@ -23,8 +23,8 @@ from . import _safe_float
 
 _CHG_DSG_STATE_MAP: dict[int, str] = {
     0: "standby",
-    1: "discharging",
-    2: "charging",
+    1: "charging",
+    2: "discharging",
 }
 
 _GRID_STATUS_MAP: dict[int, str] = {
