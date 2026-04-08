@@ -1302,6 +1302,50 @@ class TestApplyData:
         raw_total = coordinator._energy_integrator.get_total("solar_energy_kwh")
         assert raw_total is not None and raw_total > 0
 
+    async def test_apply_data_derives_battery_state_charging(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Battery state derived from actual power: charging when charge_w > 50."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        coordinator._apply_data({"batt_charge_power_w": 910, "batt_discharge_power_w": 0})
+        assert coordinator.device_data["batt_charge_discharge_state"] == "charging"
+
+    async def test_apply_data_derives_battery_state_discharging(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Battery state derived from actual power: discharging when discharge_w > 50."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        coordinator._apply_data({"batt_charge_power_w": 0, "batt_discharge_power_w": 1500})
+        assert coordinator.device_data["batt_charge_discharge_state"] == "discharging"
+
+    async def test_apply_data_derives_battery_state_standby(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Battery state derived from actual power: standby when both near zero."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        # EMS sends "discharge mode" but battery is idle at 100% SOC
+        coordinator._apply_data({
+            "batt_charge_power_w": 0,
+            "batt_discharge_power_w": 0,
+            "batt_charge_discharge_state": "discharging",
+        })
+        assert coordinator.device_data["batt_charge_discharge_state"] == "standby"
+
 
 # ===========================================================================
 # Protobuf Key Remapping (_remap_proto_keys) — F-001

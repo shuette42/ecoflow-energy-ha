@@ -1015,6 +1015,20 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 and isinstance(v, (int, float))
             )
 
+        # Derive battery charge/discharge state from actual power (#50).
+        # The EMS field bp_chg_dsg_sta reports the controller MODE, not the
+        # physical state: at 100% SOC with 0W flow, it still sends "discharge
+        # mode". Override with the measured power when available.
+        charge_w = self._device_data.get("batt_charge_power_w")
+        discharge_w = self._device_data.get("batt_discharge_power_w")
+        if charge_w is not None and discharge_w is not None:
+            if charge_w > 50:
+                self._device_data["batt_charge_discharge_state"] = "charging"
+            elif discharge_w > 50:
+                self._device_data["batt_charge_discharge_state"] = "discharging"
+            else:
+                self._device_data["batt_charge_discharge_state"] = "standby"
+
         # Integrate power → energy via Riemann sum
         self._integrate_energy(parsed)
         # Throttle flush scheduling: at most once per 60s (matches integrator's SAVE_INTERVAL_S)
