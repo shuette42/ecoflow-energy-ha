@@ -1604,7 +1604,7 @@ class TestBpRemapping:
         result = remap_bp_keys(raw, coordinator._bp_sn_to_index, coordinator.device_sn)
 
         assert result["grid_status"] == "ok"
-        assert result["batt_charge_discharge_state"] == "charging"
+        assert result["batt_charge_discharge_state"] == "discharging"
         assert result["ems_feed_mode"] == "off"
         assert result["ems_work_mode"] == "self_use"
         assert result["pcs_run_state"] == "running"

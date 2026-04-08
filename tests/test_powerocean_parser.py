@@ -615,10 +615,20 @@ class TestEMSState:
         result = parse_powerocean_http_quota(data)
         assert result["ems_feed_ratio_pct"] == 100
 
-    def test_batt_charge_discharge_state(self):
+    def test_batt_charge_discharge_state_charging(self):
         data = {"ems_change_report.bpChgDsgSta": 1}
         result = parse_powerocean_http_quota(data)
+        assert result["batt_charge_discharge_state"] == "charging"
+
+    def test_batt_charge_discharge_state_discharging(self):
+        data = {"ems_change_report.bpChgDsgSta": 2}
+        result = parse_powerocean_http_quota(data)
         assert result["batt_charge_discharge_state"] == "discharging"
+
+    def test_batt_charge_discharge_state_standby(self):
+        data = {"ems_change_report.bpChgDsgSta": 0}
+        result = parse_powerocean_http_quota(data)
+        assert result["batt_charge_discharge_state"] == "standby"
 
 
 class TestPVInverterPower:
