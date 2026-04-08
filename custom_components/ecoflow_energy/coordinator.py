@@ -1023,11 +1023,24 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         discharge_w = self._device_data.get("batt_discharge_power_w")
         if charge_w is not None and discharge_w is not None:
             if charge_w > 50:
-                self._device_data["batt_charge_discharge_state"] = "charging"
+                derived = "charging"
             elif discharge_w > 50:
-                self._device_data["batt_charge_discharge_state"] = "discharging"
+                derived = "discharging"
             else:
-                self._device_data["batt_charge_discharge_state"] = "standby"
+                derived = "standby"
+            prev = self._device_data.get("batt_charge_discharge_state")
+            self._device_data["batt_charge_discharge_state"] = derived
+            if derived != prev:
+                batt_w_raw = self._device_data.get("batt_w")
+                _LOGGER.debug(
+                    "Battery state for %s: batt_w=%.1f charge_w=%.1f discharge_w=%.1f -> %s (was %s)",
+                    self.device_sn,
+                    batt_w_raw if batt_w_raw is not None else 0.0,
+                    charge_w,
+                    discharge_w,
+                    derived,
+                    prev,
+                )
 
         # Integrate power → energy via Riemann sum
         self._integrate_energy(parsed)
