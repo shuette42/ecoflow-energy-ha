@@ -27,6 +27,9 @@ All notable changes to this project will be documented in this file.
 - Battery state flipping rapidly between charging/discharging/standby when solar production is close to house load. Raised power threshold from 50W to 200W to filter inverter balancing currents, and added hysteresis requiring two consecutive identical derivations before changing state. (beta.11)
 
 ### Changed
+- Entity display names follow a consistent naming convention: suffix qualifiers (max./min./real), no internal abbreviations (EMS/PCS/MPPT), app-aligned names where possible. Entity IDs unchanged - automations and dashboards are not affected. (beta.12)
+
+### Changed
 - Enum sensors use HA `device_class: enum` with `options` for proper state handling and translation support.
 - **Breaking:** Automations using raw numeric state values (e.g. `state == "1"`) for these sensors must update to the new string values (e.g. `state == "charging"`). All affected sensors are diagnostic and disabled by default.
 

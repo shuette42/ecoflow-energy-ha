@@ -154,7 +154,7 @@
         "name": "Netzbezugsleistung"
       },
       "grid_export_power_w": {
-        "name": "Netzeinspeisung"
+        "name": "Netzeinspeiseleistung"
       },
       "soc_pct": {
         "name": "Batterieladezustand"
@@ -178,7 +178,7 @@
         "name": "Netzbezugsenergie"
       },
       "grid_export_energy_kwh": {
-        "name": "Einspeiseenergie"
+        "name": "Netzeinspeiseenergie"
       },
       "batt_charge_energy_kwh": {
         "name": "Batterieladeenergie"
@@ -193,34 +193,34 @@
         "name": "Batteriestrom"
       },
       "bp_max_cell_temp_c": {
-        "name": "Max. Zelltemperatur"
+        "name": "Batterie-Zelltemperatur (max.)"
       },
       "bp_min_cell_temp_c": {
-        "name": "Min. Zelltemperatur"
+        "name": "Batterie-Zelltemperatur (min.)"
       },
       "bp_env_temp_c": {
-        "name": "Batterieumgebungstemperatur"
+        "name": "Batterie-Umgebungstemperatur"
       },
       "bp_max_mos_temp_c": {
-        "name": "Max. MOSFET-Temperatur"
+        "name": "Batterie-MOSFET-Temperatur (max.)"
       },
       "bp_cell_max_vol_mv": {
-        "name": "Max. Zellspannung"
+        "name": "Batterie-Zellspannung (max.)"
       },
       "bp_cell_min_vol_mv": {
-        "name": "Min. Zellspannung"
+        "name": "Batterie-Zellspannung (min.)"
       },
       "bp_real_soc_pct": {
-        "name": "Realer Ladezustand"
+        "name": "Batterie-Ladezustand (real)"
       },
       "bp_real_soh_pct": {
-        "name": "Realer Batteriezustand (SOH)"
+        "name": "Batteriezustand (real)"
       },
       "bp_down_limit_soc_pct": {
-        "name": "Min. Ladezustandsgrenze"
+        "name": "Batterie-Ladezustandsgrenze (min.)"
       },
       "bp_up_limit_soc_pct": {
-        "name": "Max. Ladezustandsgrenze"
+        "name": "Batterie-Ladezustandsgrenze (max.)"
       },
       "pcs_ac_freq_hz": {
         "name": "Netzfrequenz"
@@ -232,22 +232,22 @@
         "name": "Batteriepakete online (EMS)"
       },
       "mppt_pv1_power_w": {
-        "name": "MPPT Strang 1 Leistung"
+        "name": "PV-Strang 1 Leistung"
       },
       "mppt_pv1_voltage_v": {
-        "name": "MPPT Strang 1 Spannung"
+        "name": "PV-Strang 1 Spannung"
       },
       "mppt_pv1_current_a": {
-        "name": "MPPT Strang 1 Strom"
+        "name": "PV-Strang 1 Strom"
       },
       "mppt_pv2_power_w": {
-        "name": "MPPT Strang 2 Leistung"
+        "name": "PV-Strang 2 Leistung"
       },
       "mppt_pv2_voltage_v": {
-        "name": "MPPT Strang 2 Spannung"
+        "name": "PV-Strang 2 Spannung"
       },
       "mppt_pv2_current_a": {
-        "name": "MPPT Strang 2 Strom"
+        "name": "PV-Strang 2 Strom"
       },
       "grid_phase_a_voltage_v": {
         "name": "Netz Phase A Spannung"
@@ -298,7 +298,7 @@
         "name": "PV-Wechselrichterleistung"
       },
       "ems_feed_mode": {
-        "name": "EMS Einspeisemodus",
+        "name": "Einspeisemodus",
         "state": {
           "off": "Aus",
           "no_limit": "Unbegrenzt",
@@ -307,7 +307,7 @@
         }
       },
       "ems_work_mode": {
-        "name": "EMS Betriebsmodus",
+        "name": "Betriebsmodus",
         "state": {
           "self_use": "Eigenverbrauch",
           "time_of_use": "Zeitgesteuert",
@@ -326,7 +326,7 @@
         }
       },
       "pcs_run_state": {
-        "name": "PCS Betriebszustand",
+        "name": "Wechselrichter-Status",
         "state": {
           "standby": "Standby",
           "running": "Aktiv",
@@ -344,7 +344,7 @@
         "name": "Leistungsfaktor"
       },
       "ems_feed_power_limit_w": {
-        "name": "Einspeiseleistungsgrenze"
+        "name": "Einspeisegrenze"
       },
       "ems_feed_ratio_pct": {
         "name": "Einspeiseverhältnis"
@@ -460,13 +460,13 @@
         "name": "MPPT 2 Temperatur"
       },
       "batt_max_cell_temp_c": {
-        "name": "Max. Zelltemperatur"
+        "name": "Zelltemperatur (max.)"
       },
       "batt_min_cell_temp_c": {
-        "name": "Min. Zelltemperatur"
+        "name": "Zelltemperatur (min.)"
       },
       "batt_max_mos_temp_c": {
-        "name": "Max. MOSFET-Temperatur"
+        "name": "MOSFET-Temperatur (max.)"
       },
       "remain_time_min": {
         "name": "Restlaufzeit"
@@ -544,10 +544,10 @@
         "name": "AC-Ausgangsenergie"
       },
       "batt_max_cell_vol_mv": {
-        "name": "Max. Zellspannung"
+        "name": "Zellspannung (max.)"
       },
       "batt_min_cell_vol_mv": {
-        "name": "Min. Zellspannung"
+        "name": "Zellspannung (min.)"
       },
       "pd_err_code": {
         "name": "PD-Fehlercode"
@@ -592,19 +592,19 @@
         "name": "Slave 1 Vollkapazität"
       },
       "slave1_max_cell_vol_mv": {
-        "name": "Slave 1 Max. Zellspannung"
+        "name": "Slave 1 Zellspannung (max.)"
       },
       "slave1_min_cell_vol_mv": {
-        "name": "Slave 1 Min. Zellspannung"
+        "name": "Slave 1 Zellspannung (min.)"
       },
       "slave1_max_cell_temp_c": {
-        "name": "Slave 1 Max. Zelltemperatur"
+        "name": "Slave 1 Zelltemperatur (max.)"
       },
       "slave1_min_cell_temp_c": {
-        "name": "Slave 1 Min. Zelltemperatur"
+        "name": "Slave 1 Zelltemperatur (min.)"
       },
       "slave1_max_mos_temp_c": {
-        "name": "Slave 1 Max. MOSFET-Temperatur"
+        "name": "Slave 1 MOSFET-Temperatur (max.)"
       },
       "slave1_err_code": {
         "name": "Slave 1 Fehlercode"
@@ -640,19 +640,19 @@
         "name": "Slave 2 Vollkapazität"
       },
       "slave2_max_cell_vol_mv": {
-        "name": "Slave 2 Max. Zellspannung"
+        "name": "Slave 2 Zellspannung (max.)"
       },
       "slave2_min_cell_vol_mv": {
-        "name": "Slave 2 Min. Zellspannung"
+        "name": "Slave 2 Zellspannung (min.)"
       },
       "slave2_max_cell_temp_c": {
-        "name": "Slave 2 Max. Zelltemperatur"
+        "name": "Slave 2 Zelltemperatur (max.)"
       },
       "slave2_min_cell_temp_c": {
-        "name": "Slave 2 Min. Zelltemperatur"
+        "name": "Slave 2 Zelltemperatur (min.)"
       },
       "slave2_max_mos_temp_c": {
-        "name": "Slave 2 Max. MOSFET-Temperatur"
+        "name": "Slave 2 MOSFET-Temperatur (max.)"
       },
       "slave2_err_code": {
         "name": "Slave 2 Fehlercode"
@@ -718,10 +718,10 @@
         "name": "Pack 1 Restkapazität"
       },
       "pack1_max_cell_temp_c": {
-        "name": "Pack 1 Max. Zelltemperatur"
+        "name": "Pack 1 Zelltemperatur (max.)"
       },
       "pack1_min_cell_temp_c": {
-        "name": "Pack 1 Min. Zelltemperatur"
+        "name": "Pack 1 Zelltemperatur (min.)"
       },
       "pack1_env_temp_c": {
         "name": "Pack 1 Umgebungstemperatur"
@@ -739,7 +739,7 @@
         "name": "Pack 1 Lebensdauer-Entladeenergie"
       },
       "pack1_max_mos_temp_c": {
-        "name": "Pack 1 Max. MOSFET-Temperatur"
+        "name": "Pack 1 MOSFET-Temperatur (max.)"
       },
       "pack1_hv_mos_temp_c": {
         "name": "Pack 1 HV-MOSFET-Temperatur"
@@ -754,10 +754,10 @@
         "name": "Pack 1 PTC-Heizungstemperatur"
       },
       "pack1_cell_max_vol_mv": {
-        "name": "Pack 1 Max. Zellspannung"
+        "name": "Pack 1 Zellspannung (max.)"
       },
       "pack1_cell_min_vol_mv": {
-        "name": "Pack 1 Min. Zellspannung"
+        "name": "Pack 1 Zellspannung (min.)"
       },
       "pack1_design_cap_mah": {
         "name": "Pack 1 Nennkapazität"
@@ -790,10 +790,10 @@
         "name": "Pack 2 Restkapazität"
       },
       "pack2_max_cell_temp_c": {
-        "name": "Pack 2 Max. Zelltemperatur"
+        "name": "Pack 2 Zelltemperatur (max.)"
       },
       "pack2_min_cell_temp_c": {
-        "name": "Pack 2 Min. Zelltemperatur"
+        "name": "Pack 2 Zelltemperatur (min.)"
       },
       "pack2_env_temp_c": {
         "name": "Pack 2 Umgebungstemperatur"
@@ -811,7 +811,7 @@
         "name": "Pack 2 Lebensdauer-Entladeenergie"
       },
       "pack2_max_mos_temp_c": {
-        "name": "Pack 2 Max. MOSFET-Temperatur"
+        "name": "Pack 2 MOSFET-Temperatur (max.)"
       },
       "pack2_hv_mos_temp_c": {
         "name": "Pack 2 HV-MOSFET-Temperatur"
@@ -826,10 +826,10 @@
         "name": "Pack 2 PTC-Heizungstemperatur"
       },
       "pack2_cell_max_vol_mv": {
-        "name": "Pack 2 Max. Zellspannung"
+        "name": "Pack 2 Zellspannung (max.)"
       },
       "pack2_cell_min_vol_mv": {
-        "name": "Pack 2 Min. Zellspannung"
+        "name": "Pack 2 Zellspannung (min.)"
       },
       "pack2_design_cap_mah": {
         "name": "Pack 2 Nennkapazität"
@@ -862,10 +862,10 @@
         "name": "Pack 3 Restkapazität"
       },
       "pack3_max_cell_temp_c": {
-        "name": "Pack 3 Max. Zelltemperatur"
+        "name": "Pack 3 Zelltemperatur (max.)"
       },
       "pack3_min_cell_temp_c": {
-        "name": "Pack 3 Min. Zelltemperatur"
+        "name": "Pack 3 Zelltemperatur (min.)"
       },
       "pack3_env_temp_c": {
         "name": "Pack 3 Umgebungstemperatur"
@@ -883,7 +883,7 @@
         "name": "Pack 3 Lebensdauer-Entladeenergie"
       },
       "pack3_max_mos_temp_c": {
-        "name": "Pack 3 Max. MOSFET-Temperatur"
+        "name": "Pack 3 MOSFET-Temperatur (max.)"
       },
       "pack3_hv_mos_temp_c": {
         "name": "Pack 3 HV-MOSFET-Temperatur"
@@ -898,10 +898,10 @@
         "name": "Pack 3 PTC-Heizungstemperatur"
       },
       "pack3_cell_max_vol_mv": {
-        "name": "Pack 3 Max. Zellspannung"
+        "name": "Pack 3 Zellspannung (max.)"
       },
       "pack3_cell_min_vol_mv": {
-        "name": "Pack 3 Min. Zellspannung"
+        "name": "Pack 3 Zellspannung (min.)"
       },
       "pack3_design_cap_mah": {
         "name": "Pack 3 Nennkapazität"
@@ -934,10 +934,10 @@
         "name": "Pack 4 Restkapazität"
       },
       "pack4_max_cell_temp_c": {
-        "name": "Pack 4 Max. Zelltemperatur"
+        "name": "Pack 4 Zelltemperatur (max.)"
       },
       "pack4_min_cell_temp_c": {
-        "name": "Pack 4 Min. Zelltemperatur"
+        "name": "Pack 4 Zelltemperatur (min.)"
       },
       "pack4_env_temp_c": {
         "name": "Pack 4 Umgebungstemperatur"
@@ -955,7 +955,7 @@
         "name": "Pack 4 Lebensdauer-Entladeenergie"
       },
       "pack4_max_mos_temp_c": {
-        "name": "Pack 4 Max. MOSFET-Temperatur"
+        "name": "Pack 4 MOSFET-Temperatur (max.)"
       },
       "pack4_hv_mos_temp_c": {
         "name": "Pack 4 HV-MOSFET-Temperatur"
@@ -970,10 +970,10 @@
         "name": "Pack 4 PTC-Heizungstemperatur"
       },
       "pack4_cell_max_vol_mv": {
-        "name": "Pack 4 Max. Zellspannung"
+        "name": "Pack 4 Zellspannung (max.)"
       },
       "pack4_cell_min_vol_mv": {
-        "name": "Pack 4 Min. Zellspannung"
+        "name": "Pack 4 Zellspannung (min.)"
       },
       "pack4_design_cap_mah": {
         "name": "Pack 4 Nennkapazität"
@@ -1006,10 +1006,10 @@
         "name": "Pack 5 Restkapazität"
       },
       "pack5_max_cell_temp_c": {
-        "name": "Pack 5 Max. Zelltemperatur"
+        "name": "Pack 5 Zelltemperatur (max.)"
       },
       "pack5_min_cell_temp_c": {
-        "name": "Pack 5 Min. Zelltemperatur"
+        "name": "Pack 5 Zelltemperatur (min.)"
       },
       "pack5_env_temp_c": {
         "name": "Pack 5 Umgebungstemperatur"
@@ -1027,7 +1027,7 @@
         "name": "Pack 5 Lebensdauer-Entladeenergie"
       },
       "pack5_max_mos_temp_c": {
-        "name": "Pack 5 Max. MOSFET-Temperatur"
+        "name": "Pack 5 MOSFET-Temperatur (max.)"
       },
       "pack5_hv_mos_temp_c": {
         "name": "Pack 5 HV-MOSFET-Temperatur"
@@ -1042,10 +1042,10 @@
         "name": "Pack 5 PTC-Heizungstemperatur"
       },
       "pack5_cell_max_vol_mv": {
-        "name": "Pack 5 Max. Zellspannung"
+        "name": "Pack 5 Zellspannung (max.)"
       },
       "pack5_cell_min_vol_mv": {
-        "name": "Pack 5 Min. Zellspannung"
+        "name": "Pack 5 Zellspannung (min.)"
       },
       "pack5_design_cap_mah": {
         "name": "Pack 5 Nennkapazität"
@@ -1057,31 +1057,31 @@
         "name": "Pack 5 Fehlercode"
       },
       "ems_charge_upper_limit_pct": {
-        "name": "EMS Ladeobergrenze"
+        "name": "Ladeobergrenze"
       },
       "ems_discharge_lower_limit_pct": {
-        "name": "EMS Entladeuntergrenze"
+        "name": "Entladeuntergrenze"
       },
       "ems_keep_soc_pct": {
-        "name": "EMS Mindest-SoC"
+        "name": "Batterie-Backup-Reserve"
       },
       "ems_backup_ratio_pct": {
-        "name": "EMS Backup-Anteil"
+        "name": "Backup-Anteil"
       },
       "mppt1_fault_code": {
-        "name": "MPPT 1 Fehlercode"
+        "name": "PV MPPT 1 Fehlercode"
       },
       "mppt2_fault_code": {
-        "name": "MPPT 2 Fehlercode"
+        "name": "PV MPPT 2 Fehlercode"
       },
       "pcs_ac_error_code": {
-        "name": "PCS AC-Fehlercode"
+        "name": "Wechselrichter AC-Fehler"
       },
       "pcs_dc_error_code": {
-        "name": "PCS DC-Fehlercode"
+        "name": "Wechselrichter DC-Fehler"
       },
       "pcs_ac_warning_code": {
-        "name": "PCS AC-Warnungscode"
+        "name": "Wechselrichter AC-Warnung"
       },
       "wifi_status": {
         "name": "WLAN-Status",
@@ -1105,10 +1105,10 @@
         }
       },
       "ems_led_brightness": {
-        "name": "EMS LED-Helligkeit"
+        "name": "LED-Helligkeit"
       },
       "ems_work_state": {
-        "name": "EMS Betriebszustand",
+        "name": "Betriebszustand",
         "state": {
           "none": "Kein Status",
           "init": "Initialisierung",
@@ -1126,16 +1126,16 @@
         "name": "Gesamte Batteriekapazität"
       },
       "pcs_max_output_power_w": {
-        "name": "PCS Max. Ausgangsleistung"
+        "name": "Wechselrichter Ausgangsleistung (max.)"
       },
       "pcs_max_input_power_w": {
-        "name": "PCS Max. Eingangsleistung"
+        "name": "Wechselrichter Eingangsleistung (max.)"
       },
       "bp_max_charge_power_w": {
-        "name": "Max. Batterieladeleistung"
+        "name": "Batterieladeleistung (max.)"
       },
       "bp_max_discharge_power_w": {
-        "name": "Max. Batterieentladeleistung"
+        "name": "Batterieentladeleistung (max.)"
       }
     },
     "binary_sensor": {

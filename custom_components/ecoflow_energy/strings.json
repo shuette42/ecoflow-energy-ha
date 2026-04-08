@@ -193,34 +193,34 @@
         "name": "Battery Current"
       },
       "bp_max_cell_temp_c": {
-        "name": "Battery Max Cell Temp"
+        "name": "Battery Cell Temp (Max)"
       },
       "bp_min_cell_temp_c": {
-        "name": "Battery Min Cell Temp"
+        "name": "Battery Cell Temp (Min)"
       },
       "bp_env_temp_c": {
-        "name": "Battery Environment Temp"
+        "name": "Battery Ambient Temp"
       },
       "bp_max_mos_temp_c": {
-        "name": "Battery Max MOSFET Temp"
+        "name": "Battery MOSFET Temp (Max)"
       },
       "bp_cell_max_vol_mv": {
-        "name": "Battery Cell Max Voltage"
+        "name": "Battery Cell Voltage (Max)"
       },
       "bp_cell_min_vol_mv": {
-        "name": "Battery Cell Min Voltage"
+        "name": "Battery Cell Voltage (Min)"
       },
       "bp_real_soc_pct": {
-        "name": "Battery Real SOC"
+        "name": "Battery SOC (Real)"
       },
       "bp_real_soh_pct": {
-        "name": "Battery Real SOH"
+        "name": "Battery SOH (Real)"
       },
       "bp_down_limit_soc_pct": {
-        "name": "Battery Min SOC Limit"
+        "name": "Battery SOC Limit (Min)"
       },
       "bp_up_limit_soc_pct": {
-        "name": "Battery Max SOC Limit"
+        "name": "Battery SOC Limit (Max)"
       },
       "pcs_ac_freq_hz": {
         "name": "Grid Frequency"
@@ -232,22 +232,22 @@
         "name": "Battery Packs Online (EMS)"
       },
       "mppt_pv1_power_w": {
-        "name": "MPPT String 1 Power"
+        "name": "PV String 1 Power"
       },
       "mppt_pv1_voltage_v": {
-        "name": "MPPT String 1 Voltage"
+        "name": "PV String 1 Voltage"
       },
       "mppt_pv1_current_a": {
-        "name": "MPPT String 1 Current"
+        "name": "PV String 1 Current"
       },
       "mppt_pv2_power_w": {
-        "name": "MPPT String 2 Power"
+        "name": "PV String 2 Power"
       },
       "mppt_pv2_voltage_v": {
-        "name": "MPPT String 2 Voltage"
+        "name": "PV String 2 Voltage"
       },
       "mppt_pv2_current_a": {
-        "name": "MPPT String 2 Current"
+        "name": "PV String 2 Current"
       },
       "grid_phase_a_voltage_v": {
         "name": "Grid Phase A Voltage"
@@ -298,7 +298,7 @@
         "name": "PV Inverter Power"
       },
       "ems_feed_mode": {
-        "name": "EMS Feed Mode",
+        "name": "Feed Mode",
         "state": {
           "off": "Off",
           "no_limit": "No Limit",
@@ -307,7 +307,7 @@
         }
       },
       "ems_work_mode": {
-        "name": "EMS Work Mode",
+        "name": "Work Mode",
         "state": {
           "self_use": "Self-use",
           "time_of_use": "Time of Use",
@@ -326,7 +326,7 @@
         }
       },
       "pcs_run_state": {
-        "name": "PCS Running State",
+        "name": "Inverter Status",
         "state": {
           "standby": "Standby",
           "running": "Running",
@@ -460,13 +460,13 @@
         "name": "MPPT 2 Temp"
       },
       "batt_max_cell_temp_c": {
-        "name": "Max Cell Temp"
+        "name": "Cell Temp (Max)"
       },
       "batt_min_cell_temp_c": {
-        "name": "Min Cell Temp"
+        "name": "Cell Temp (Min)"
       },
       "batt_max_mos_temp_c": {
-        "name": "Max MOSFET Temp"
+        "name": "MOSFET Temp (Max)"
       },
       "remain_time_min": {
         "name": "Remaining Time"
@@ -544,10 +544,10 @@
         "name": "AC Output Energy"
       },
       "batt_max_cell_vol_mv": {
-        "name": "Max Cell Voltage"
+        "name": "Cell Voltage (Max)"
       },
       "batt_min_cell_vol_mv": {
-        "name": "Min Cell Voltage"
+        "name": "Cell Voltage (Min)"
       },
       "pd_err_code": {
         "name": "PD Error Code"
@@ -592,19 +592,19 @@
         "name": "Slave 1 Full Capacity"
       },
       "slave1_max_cell_vol_mv": {
-        "name": "Slave 1 Max Cell Voltage"
+        "name": "Slave 1 Cell Voltage (Max)"
       },
       "slave1_min_cell_vol_mv": {
-        "name": "Slave 1 Min Cell Voltage"
+        "name": "Slave 1 Cell Voltage (Min)"
       },
       "slave1_max_cell_temp_c": {
-        "name": "Slave 1 Max Cell Temp"
+        "name": "Slave 1 Cell Temp (Max)"
       },
       "slave1_min_cell_temp_c": {
-        "name": "Slave 1 Min Cell Temp"
+        "name": "Slave 1 Cell Temp (Min)"
       },
       "slave1_max_mos_temp_c": {
-        "name": "Slave 1 Max MOSFET Temp"
+        "name": "Slave 1 MOSFET Temp (Max)"
       },
       "slave1_err_code": {
         "name": "Slave 1 Error Code"
@@ -640,19 +640,19 @@
         "name": "Slave 2 Full Capacity"
       },
       "slave2_max_cell_vol_mv": {
-        "name": "Slave 2 Max Cell Voltage"
+        "name": "Slave 2 Cell Voltage (Max)"
       },
       "slave2_min_cell_vol_mv": {
-        "name": "Slave 2 Min Cell Voltage"
+        "name": "Slave 2 Cell Voltage (Min)"
       },
       "slave2_max_cell_temp_c": {
-        "name": "Slave 2 Max Cell Temp"
+        "name": "Slave 2 Cell Temp (Max)"
       },
       "slave2_min_cell_temp_c": {
-        "name": "Slave 2 Min Cell Temp"
+        "name": "Slave 2 Cell Temp (Min)"
       },
       "slave2_max_mos_temp_c": {
-        "name": "Slave 2 Max MOSFET Temp"
+        "name": "Slave 2 MOSFET Temp (Max)"
       },
       "slave2_err_code": {
         "name": "Slave 2 Error Code"
@@ -718,10 +718,10 @@
         "name": "Pack 1 Remaining Capacity"
       },
       "pack1_max_cell_temp_c": {
-        "name": "Pack 1 Max Cell Temp"
+        "name": "Pack 1 Cell Temp (Max)"
       },
       "pack1_min_cell_temp_c": {
-        "name": "Pack 1 Min Cell Temp"
+        "name": "Pack 1 Cell Temp (Min)"
       },
       "pack1_env_temp_c": {
         "name": "Pack 1 Environment Temp"
@@ -739,7 +739,7 @@
         "name": "Pack 1 Lifetime Discharge Energy"
       },
       "pack1_max_mos_temp_c": {
-        "name": "Pack 1 Max MOSFET Temp"
+        "name": "Pack 1 MOSFET Temp (Max)"
       },
       "pack1_hv_mos_temp_c": {
         "name": "Pack 1 HV MOSFET Temp"
@@ -754,10 +754,10 @@
         "name": "Pack 1 PTC Heater Temp"
       },
       "pack1_cell_max_vol_mv": {
-        "name": "Pack 1 Max Cell Voltage"
+        "name": "Pack 1 Cell Voltage (Max)"
       },
       "pack1_cell_min_vol_mv": {
-        "name": "Pack 1 Min Cell Voltage"
+        "name": "Pack 1 Cell Voltage (Min)"
       },
       "pack1_design_cap_mah": {
         "name": "Pack 1 Design Capacity"
@@ -790,10 +790,10 @@
         "name": "Pack 2 Remaining Capacity"
       },
       "pack2_max_cell_temp_c": {
-        "name": "Pack 2 Max Cell Temp"
+        "name": "Pack 2 Cell Temp (Max)"
       },
       "pack2_min_cell_temp_c": {
-        "name": "Pack 2 Min Cell Temp"
+        "name": "Pack 2 Cell Temp (Min)"
       },
       "pack2_env_temp_c": {
         "name": "Pack 2 Environment Temp"
@@ -811,7 +811,7 @@
         "name": "Pack 2 Lifetime Discharge Energy"
       },
       "pack2_max_mos_temp_c": {
-        "name": "Pack 2 Max MOSFET Temp"
+        "name": "Pack 2 MOSFET Temp (Max)"
       },
       "pack2_hv_mos_temp_c": {
         "name": "Pack 2 HV MOSFET Temp"
@@ -826,10 +826,10 @@
         "name": "Pack 2 PTC Heater Temp"
       },
       "pack2_cell_max_vol_mv": {
-        "name": "Pack 2 Max Cell Voltage"
+        "name": "Pack 2 Cell Voltage (Max)"
       },
       "pack2_cell_min_vol_mv": {
-        "name": "Pack 2 Min Cell Voltage"
+        "name": "Pack 2 Cell Voltage (Min)"
       },
       "pack2_design_cap_mah": {
         "name": "Pack 2 Design Capacity"
@@ -862,10 +862,10 @@
         "name": "Pack 3 Remaining Capacity"
       },
       "pack3_max_cell_temp_c": {
-        "name": "Pack 3 Max Cell Temp"
+        "name": "Pack 3 Cell Temp (Max)"
       },
       "pack3_min_cell_temp_c": {
-        "name": "Pack 3 Min Cell Temp"
+        "name": "Pack 3 Cell Temp (Min)"
       },
       "pack3_env_temp_c": {
         "name": "Pack 3 Environment Temp"
@@ -883,7 +883,7 @@
         "name": "Pack 3 Lifetime Discharge Energy"
       },
       "pack3_max_mos_temp_c": {
-        "name": "Pack 3 Max MOSFET Temp"
+        "name": "Pack 3 MOSFET Temp (Max)"
       },
       "pack3_hv_mos_temp_c": {
         "name": "Pack 3 HV MOSFET Temp"
@@ -898,10 +898,10 @@
         "name": "Pack 3 PTC Heater Temp"
       },
       "pack3_cell_max_vol_mv": {
-        "name": "Pack 3 Max Cell Voltage"
+        "name": "Pack 3 Cell Voltage (Max)"
       },
       "pack3_cell_min_vol_mv": {
-        "name": "Pack 3 Min Cell Voltage"
+        "name": "Pack 3 Cell Voltage (Min)"
       },
       "pack3_design_cap_mah": {
         "name": "Pack 3 Design Capacity"
@@ -934,10 +934,10 @@
         "name": "Pack 4 Remaining Capacity"
       },
       "pack4_max_cell_temp_c": {
-        "name": "Pack 4 Max Cell Temp"
+        "name": "Pack 4 Cell Temp (Max)"
       },
       "pack4_min_cell_temp_c": {
-        "name": "Pack 4 Min Cell Temp"
+        "name": "Pack 4 Cell Temp (Min)"
       },
       "pack4_env_temp_c": {
         "name": "Pack 4 Environment Temp"
@@ -955,7 +955,7 @@
         "name": "Pack 4 Lifetime Discharge Energy"
       },
       "pack4_max_mos_temp_c": {
-        "name": "Pack 4 Max MOSFET Temp"
+        "name": "Pack 4 MOSFET Temp (Max)"
       },
       "pack4_hv_mos_temp_c": {
         "name": "Pack 4 HV MOSFET Temp"
@@ -970,10 +970,10 @@
         "name": "Pack 4 PTC Heater Temp"
       },
       "pack4_cell_max_vol_mv": {
-        "name": "Pack 4 Max Cell Voltage"
+        "name": "Pack 4 Cell Voltage (Max)"
       },
       "pack4_cell_min_vol_mv": {
-        "name": "Pack 4 Min Cell Voltage"
+        "name": "Pack 4 Cell Voltage (Min)"
       },
       "pack4_design_cap_mah": {
         "name": "Pack 4 Design Capacity"
@@ -1006,10 +1006,10 @@
         "name": "Pack 5 Remaining Capacity"
       },
       "pack5_max_cell_temp_c": {
-        "name": "Pack 5 Max Cell Temp"
+        "name": "Pack 5 Cell Temp (Max)"
       },
       "pack5_min_cell_temp_c": {
-        "name": "Pack 5 Min Cell Temp"
+        "name": "Pack 5 Cell Temp (Min)"
       },
       "pack5_env_temp_c": {
         "name": "Pack 5 Environment Temp"
@@ -1027,7 +1027,7 @@
         "name": "Pack 5 Lifetime Discharge Energy"
       },
       "pack5_max_mos_temp_c": {
-        "name": "Pack 5 Max MOSFET Temp"
+        "name": "Pack 5 MOSFET Temp (Max)"
       },
       "pack5_hv_mos_temp_c": {
         "name": "Pack 5 HV MOSFET Temp"
@@ -1042,10 +1042,10 @@
         "name": "Pack 5 PTC Heater Temp"
       },
       "pack5_cell_max_vol_mv": {
-        "name": "Pack 5 Max Cell Voltage"
+        "name": "Pack 5 Cell Voltage (Max)"
       },
       "pack5_cell_min_vol_mv": {
-        "name": "Pack 5 Min Cell Voltage"
+        "name": "Pack 5 Cell Voltage (Min)"
       },
       "pack5_design_cap_mah": {
         "name": "Pack 5 Design Capacity"
@@ -1057,31 +1057,31 @@
         "name": "Pack 5 Error Code"
       },
       "ems_charge_upper_limit_pct": {
-        "name": "EMS Charge Upper Limit"
+        "name": "Charge Upper Limit"
       },
       "ems_discharge_lower_limit_pct": {
-        "name": "EMS Discharge Lower Limit"
+        "name": "Discharge Lower Limit"
       },
       "ems_keep_soc_pct": {
-        "name": "EMS Keep SoC"
+        "name": "Backup Reserve"
       },
       "ems_backup_ratio_pct": {
-        "name": "EMS Backup Ratio"
+        "name": "Backup Ratio"
       },
       "mppt1_fault_code": {
-        "name": "MPPT 1 Fault Code"
+        "name": "PV MPPT 1 Fault Code"
       },
       "mppt2_fault_code": {
-        "name": "MPPT 2 Fault Code"
+        "name": "PV MPPT 2 Fault Code"
       },
       "pcs_ac_error_code": {
-        "name": "PCS AC Error Code"
+        "name": "Inverter AC Error"
       },
       "pcs_dc_error_code": {
-        "name": "PCS DC Error Code"
+        "name": "Inverter DC Error"
       },
       "pcs_ac_warning_code": {
-        "name": "PCS AC Warning Code"
+        "name": "Inverter AC Warning"
       },
       "wifi_status": {
         "name": "WiFi Status",
@@ -1105,10 +1105,10 @@
         }
       },
       "ems_led_brightness": {
-        "name": "EMS LED Brightness"
+        "name": "LED Brightness"
       },
       "ems_work_state": {
-        "name": "EMS Work State",
+        "name": "System State",
         "state": {
           "none": "None",
           "init": "Initializing",
@@ -1126,16 +1126,16 @@
         "name": "Total Battery Capacity"
       },
       "pcs_max_output_power_w": {
-        "name": "PCS Max Output Power"
+        "name": "Inverter Output Power (Max)"
       },
       "pcs_max_input_power_w": {
-        "name": "PCS Max Input Power"
+        "name": "Inverter Input Power (Max)"
       },
       "bp_max_charge_power_w": {
-        "name": "Battery Max Charge Power"
+        "name": "Battery Charge Power (Max)"
       },
       "bp_max_discharge_power_w": {
-        "name": "Battery Max Discharge Power"
+        "name": "Battery Discharge Power (Max)"
       }
     },
     "binary_sensor": {
