@@ -23,6 +23,7 @@ All notable changes to this project will be documented in this file.
 - Delta 2 Max charger_type value 255 (no charger) now mapped to "unknown" instead of causing ValueError. (beta.7)
 - Energy sensors (solar, grid import/export, home) stopped increasing after host reboot. The monotonic clock resets on reboot but the energy integrator state file retained the old timestamp, producing a negative time delta that silently skipped all integration. (beta.8)
 - Battery charge/discharge state showing inverted values: "discharging" while charging and vice versa. The EMS field reports the controller mode, not the physical state. State is now derived from actual battery power: charging when charge power > 50W, discharging when discharge power > 50W, standby otherwise. (beta.9)
+- Added diagnostic logging for battery state derivation to help debug device-specific sign convention differences. Logs raw power values on each state transition at DEBUG level. (beta.10)
 
 ### Changed
 - Enum sensors use HA `device_class: enum` with `options` for proper state handling and translation support.
