@@ -2693,6 +2693,60 @@ class TestParseMessageGetReply:
         assert result.get("grid_status") == "ok"
         assert result.get("pcs_ac_freq_hz") == 50.01
 
+    async def test_powerocean_get_reply_proto_parsed(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """PowerOcean proto get_reply extracts EmsChangeReport (cmd_func=96, cmd_id=8)."""
+        from ecoflow_energy.ecoflow.proto.ecocharge_pb2 import JTS1EmsChangeReport
+        from ecoflow_energy.ecoflow.proto_encoding import encode_field_bytes, encode_field_varint
+
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+
+        # Build an EmsChangeReport with connectivity and enum fields
+        msg = JTS1EmsChangeReport()
+        msg.wifi_sta_stat = 0   # connected
+        msg.eth_wan_stat = 1    # disconnected
+        msg.iot_4g_sta = 1      # connected
+        msg.bp_soc = 75
+        inner = msg.SerializeToString()
+
+        # Wrap in HeaderMessage frame: cmd_func=96, cmd_id=8
+        header = bytearray()
+        header.extend(encode_field_bytes(1, inner))       # pdata
+        header.extend(encode_field_varint(8, 96))         # cmd_func
+        header.extend(encode_field_varint(9, 8))          # cmd_id
+        payload = encode_field_bytes(1, bytes(header))
+
+        result = coordinator._parse_powerocean_get_reply(payload)
+        assert result is not None
+        assert result.get("wifi_status") == "connected"
+        assert result.get("ethernet_status") == "disconnected"
+        assert result.get("cellular_status") == "connected"
+
+    async def test_powerocean_get_reply_no_ems_change_returns_none(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Proto get_reply without cmd_func=96/cmd_id=8 header returns None."""
+        from ecoflow_energy.ecoflow.proto_encoding import encode_field_bytes, encode_field_varint
+
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+
+        # Build a frame with wrong cmd_id (not 8)
+        header = bytearray()
+        header.extend(encode_field_bytes(1, b"\x08\x01"))  # some pdata
+        header.extend(encode_field_varint(8, 96))           # cmd_func=96
+        header.extend(encode_field_varint(9, 1))            # cmd_id=1 (heartbeat, not change)
+        payload = encode_field_bytes(1, bytes(header))
+
+        result = coordinator._parse_powerocean_get_reply(payload)
+        assert result is None
+
 
 # ===========================================================================
 # Diagnostic Properties (mqtt_status, connection_mode)

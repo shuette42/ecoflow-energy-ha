@@ -12,6 +12,7 @@ from ecoflow_energy.ecoflow.parsers.powerocean import (
     _extract_ems_extended,
     _is_real_battery_pack,
 )
+from ecoflow_energy.ecoflow.parsers.powerocean_proto import remap_bp_keys
 
 
 # ===========================================================================
@@ -1052,3 +1053,41 @@ class TestEMSExtended:
         assert result["ems_feed_mode"] == "no_limit"
         assert result["ems_charge_upper_limit_pct"] == 100.0
         assert result["ems_led_brightness"] == 10.0
+
+
+class TestProtoConnectivityViaRemapBpKeys:
+    """Proto path: connectivity keys through remap_bp_keys + _apply_enum_mappings."""
+
+    def test_wifi_eth_connected(self):
+        """WiFi/Ethernet: 0 = connected via proto path."""
+        raw = {"wifi_sta_stat": 0, "eth_wan_stat": 0}
+        result = remap_bp_keys(raw, {}, "HJ31TEST0001")
+        assert result["wifi_status"] == "connected"
+        assert result["ethernet_status"] == "connected"
+
+    def test_wifi_eth_disconnected(self):
+        """WiFi/Ethernet: non-zero = disconnected via proto path."""
+        raw = {"wifi_sta_stat": 1, "eth_wan_stat": 2}
+        result = remap_bp_keys(raw, {}, "HJ31TEST0001")
+        assert result["wifi_status"] == "disconnected"
+        assert result["ethernet_status"] == "disconnected"
+
+    def test_4g_connected(self):
+        """4G: 1 = connected via proto path."""
+        raw = {"iot_4g_sta": 1}
+        result = remap_bp_keys(raw, {}, "HJ31TEST0001")
+        assert result["cellular_status"] == "connected"
+
+    def test_4g_disconnected(self):
+        """4G: != 1 = disconnected via proto path."""
+        raw = {"iot_4g_sta": 0}
+        result = remap_bp_keys(raw, {}, "HJ31TEST0001")
+        assert result["cellular_status"] == "disconnected"
+
+    def test_mixed_connectivity(self):
+        """WiFi connected, Ethernet disconnected, 4G connected via proto path."""
+        raw = {"wifi_sta_stat": 0, "eth_wan_stat": 5, "iot_4g_sta": 1}
+        result = remap_bp_keys(raw, {}, "HJ31TEST0001")
+        assert result["wifi_status"] == "connected"
+        assert result["ethernet_status"] == "disconnected"
+        assert result["cellular_status"] == "connected"
