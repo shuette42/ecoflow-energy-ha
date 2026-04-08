@@ -162,6 +162,13 @@ class EnergyIntegrator:
                         # Migrate epoch timestamps from pre-v1.5.1 state files
                         if last_ts > 1e9:
                             last_ts = now
+                        # Monotonic clock reset after host reboot
+                        elif last_ts > now:
+                            _LOGGER.debug(
+                                "Monotonic reset for %s: saved=%.1f > now=%.1f",
+                                metric, last_ts, now,
+                            )
+                            last_ts = now
                         self._state[metric] = (
                             float(values[0]),
                             last_ts,

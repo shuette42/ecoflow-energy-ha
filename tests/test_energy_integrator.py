@@ -143,3 +143,76 @@ class TestPersistence:
         result = integrator.integrate("solar", 1000.0)
         assert result is not None
         assert result > 123.456
+
+    def test_monotonic_clock_reset_after_reboot(self, state_file):
+        """State file from before host reboot has last_ts > current monotonic.
+
+        After a host reboot, time.monotonic() restarts near zero while the
+        state file retains the old (higher) timestamp. Without migration,
+        delta_t_s becomes negative and the integrator is stuck forever.
+        """
+        from pathlib import Path
+
+        old_uptime_ts = 86400.0  # 24h of uptime before reboot
+        data = {"solar": [50.0, old_uptime_ts, 1000.0]}
+        Path(state_file).write_text(json.dumps(data))
+
+        # Simulate post-reboot: monotonic is ~10s (fresh boot)
+        with patch(
+            "ecoflow_energy.ecoflow.energy_integrator.time.monotonic",
+            return_value=10.0,
+        ):
+            integrator = EnergyIntegrator(state_file)
+            integrator.load_state()
+
+        # Total must be preserved
+        assert integrator.get_total("solar") == pytest.approx(50.0)
+
+        # Timestamp must be reset to current monotonic, not the stale value
+        _, ts, _ = integrator._state["solar"]
+        assert ts == pytest.approx(10.0)
+
+    def test_integration_works_after_monotonic_reset(self, state_file):
+        """After monotonic reset migration, integration resumes normally."""
+        from pathlib import Path
+
+        old_uptime_ts = 86400.0
+        data = {"solar": [50.0, old_uptime_ts, 1000.0]}
+        Path(state_file).write_text(json.dumps(data))
+
+        # Load with post-reboot monotonic
+        with patch(
+            "ecoflow_energy.ecoflow.energy_integrator.time.monotonic",
+            return_value=100.0,
+        ):
+            integrator = EnergyIntegrator(state_file)
+            integrator.load_state()
+
+        # First integrate call after load: 30s later at 1000W
+        with patch(
+            "ecoflow_energy.ecoflow.energy_integrator.time.monotonic",
+            return_value=130.0,
+        ):
+            result = integrator.integrate("solar", 1000.0)
+
+        # 1000W * 30s / 3_600_000 = 0.00833 kWh added to 50.0
+        assert result is not None
+        assert result == pytest.approx(50.00833, abs=0.001)
+
+    def test_normal_monotonic_not_affected_by_reset_check(self, state_file):
+        """Normal case: last_ts < now is not touched by the reboot migration."""
+        from pathlib import Path
+
+        data = {"solar": [50.0, 100.0, 1000.0]}
+        Path(state_file).write_text(json.dumps(data))
+
+        with patch(
+            "ecoflow_energy.ecoflow.energy_integrator.time.monotonic",
+            return_value=200.0,
+        ):
+            integrator = EnergyIntegrator(state_file)
+            integrator.load_state()
+
+        # Timestamp preserved as-is (100.0), not reset to now (200.0)
+        _, ts, _ = integrator._state["solar"]
+        assert ts == pytest.approx(100.0)
