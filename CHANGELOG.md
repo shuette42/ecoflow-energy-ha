@@ -26,6 +26,7 @@ All notable changes to this project will be documented in this file.
 - Added diagnostic logging for battery state derivation to help debug device-specific sign convention differences. Logs raw power values on each state transition at DEBUG level. (beta.10)
 - Battery state flipping rapidly between charging/discharging/standby when solar production is close to house load. Raised power threshold from 50W to 200W to filter inverter balancing currents, and added hysteresis requiring two consecutive identical derivations before changing state. (beta.11)
 - Battery state still flickering at sunrise/sunset when power oscillates around the 200W threshold. Added two-layer debounce: 3 consecutive confirmations (~9s) plus 60-second minimum hold time before state transitions. (beta.13)
+- Battery state still flipping ~250 times/day despite debounce. Root cause: the EMS raw field bp_chg_dsg_sta (which reports controller mode, not physical state) overwrote the power-derived state on every EMS report and HTTP poll, bypassing the debounce entirely. The raw EMS value is now stripped before it reaches device data. (beta.15)
 
 ### Changed
 - Entity display names follow a consistent naming convention: suffix qualifiers (max./min./real), no internal abbreviations (EMS/PCS/MPPT), app-aligned names where possible. Entity IDs unchanged - automations and dashboards are not affected. (beta.12)
