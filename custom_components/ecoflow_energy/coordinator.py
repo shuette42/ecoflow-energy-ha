@@ -1010,6 +1010,12 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._last_mqtt_event_ts = now
             self._log_event("mqtt_data", f"keys={len(parsed)}")
         self._enforce_monotonic(parsed)
+        # Remove EMS raw battery state before update: bp_chg_dsg_sta reports the
+        # controller MODE ("discharging" even at 0W/100% SoC), not the physical
+        # state. The derivation below sets the correct value from actual power.
+        # Without this, the parser overwrites the derived state on every EMS
+        # report, causing ~250 false transitions/day (#50).
+        parsed.pop("batt_charge_discharge_state", None)
         self._device_data.update(parsed)
 
         # Re-aggregate bp_remain_watth from accumulated device_data (#10).
@@ -1024,58 +1030,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
 
         # Derive battery charge/discharge state from actual power (#50).
-        # The EMS field bp_chg_dsg_sta reports the controller MODE, not the
-        # physical state: at 100% SOC with 0W flow, it still sends "discharge
-        # mode". Override with the measured power when available.
-        # Threshold 200W filters inverter balancing currents that cause rapid
-        # state flipping when solar production ~ house load.
-        # Two-layer debounce:
-        #   1. New state must be derived 3 consecutive times (~9s at 3s heartbeat)
-        #   2. Current state must have been held for >= 60s
-        # This prevents flicker when power oscillates around the threshold.
-        charge_w = self._device_data.get("batt_charge_power_w")
-        discharge_w = self._device_data.get("batt_discharge_power_w")
-        if charge_w is not None and discharge_w is not None:
-            threshold = 200
-            if charge_w > threshold:
-                derived = "charging"
-            elif discharge_w > threshold:
-                derived = "discharging"
-            else:
-                derived = "standby"
-            prev = self._device_data.get("batt_charge_discharge_state")
-            if derived != prev:
-                if derived == self._batt_state_candidate:
-                    self._batt_state_confirm_count += 1
-                else:
-                    self._batt_state_candidate = derived
-                    self._batt_state_confirm_count = 1
-                now_mono = time.monotonic()
-                hold_elapsed = now_mono - self._batt_state_changed_at
-                min_hold_s = 60
-                if self._batt_state_confirm_count >= 3 and (
-                    prev is None or hold_elapsed >= min_hold_s
-                ):
-                    self._device_data["batt_charge_discharge_state"] = derived
-                    self._batt_state_candidate = None
-                    self._batt_state_confirm_count = 0
-                    self._batt_state_changed_at = now_mono
-                    batt_w_raw = self._device_data.get("batt_w")
-                    _LOGGER.debug(
-                        "Battery state for %s: batt_w=%.1f charge_w=%.1f "
-                        "discharge_w=%.1f -> %s (was %s, held %.0fs)",
-                        self.device_sn,
-                        batt_w_raw if batt_w_raw is not None else 0.0,
-                        charge_w,
-                        discharge_w,
-                        derived,
-                        prev,
-                        hold_elapsed,
-                    )
-            else:
-                # State confirmed - reset candidate
-                self._batt_state_candidate = None
-                self._batt_state_confirm_count = 0
+        self._derive_battery_state()
 
         # Integrate power → energy via Riemann sum
         self._integrate_energy(parsed)
@@ -1095,6 +1050,59 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _async_flush_energy_state(self) -> None:
         """Flush energy integrator state to disk (non-blocking)."""
         await self.hass.async_add_executor_job(self._energy_integrator.flush)
+
+    def _derive_battery_state(self) -> None:
+        """Derive battery charge/discharge state from actual power (#50).
+
+        The EMS field bp_chg_dsg_sta reports the controller MODE, not the
+        physical state: at 100% SoC with 0W flow, it still sends "discharging".
+        We override it using measured power values with a two-layer debounce:
+          1. New state must be derived 3 consecutive times (~9s at 3s heartbeat)
+          2. Current state must have been held for >= 60s
+        """
+        charge_w = self._device_data.get("batt_charge_power_w")
+        discharge_w = self._device_data.get("batt_discharge_power_w")
+        if charge_w is None or discharge_w is None:
+            return
+        threshold = 200
+        if charge_w > threshold:
+            derived = "charging"
+        elif discharge_w > threshold:
+            derived = "discharging"
+        else:
+            derived = "standby"
+        prev = self._device_data.get("batt_charge_discharge_state")
+        if derived != prev:
+            if derived == self._batt_state_candidate:
+                self._batt_state_confirm_count += 1
+            else:
+                self._batt_state_candidate = derived
+                self._batt_state_confirm_count = 1
+            now_mono = time.monotonic()
+            hold_elapsed = now_mono - self._batt_state_changed_at
+            min_hold_s = 60
+            if self._batt_state_confirm_count >= 3 and (
+                prev is None or hold_elapsed >= min_hold_s
+            ):
+                self._device_data["batt_charge_discharge_state"] = derived
+                self._batt_state_candidate = None
+                self._batt_state_confirm_count = 0
+                self._batt_state_changed_at = now_mono
+                batt_w_raw = self._device_data.get("batt_w")
+                _LOGGER.debug(
+                    "Battery state for %s: batt_w=%.1f charge_w=%.1f "
+                    "discharge_w=%.1f -> %s (was %s, held %.0fs)",
+                    self.device_sn,
+                    batt_w_raw if batt_w_raw is not None else 0.0,
+                    charge_w,
+                    discharge_w,
+                    derived,
+                    prev,
+                    hold_elapsed,
+                )
+        else:
+            self._batt_state_candidate = None
+            self._batt_state_confirm_count = 0
 
     # ------------------------------------------------------------------
     # SET commands (switches, numbers)
@@ -1245,7 +1253,13 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         else:
             parsed = raw
         self._enforce_monotonic(parsed)
+        # Same pop as in _apply_data: prevent EMS raw battery state from
+        # overwriting the power-derived value (#50).
+        parsed.pop("batt_charge_discharge_state", None)
         self._device_data.update(parsed)
+
+        # Derive battery state from power (same logic as MQTT path, #50)
+        self._derive_battery_state()
 
         # Riemann sum: integrate power → energy
         self._integrate_energy(parsed)

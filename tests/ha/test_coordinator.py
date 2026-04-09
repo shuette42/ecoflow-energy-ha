@@ -1439,6 +1439,54 @@ class TestApplyData:
         coordinator._apply_data({"batt_charge_power_w": 150, "batt_discharge_power_w": 0})
         assert coordinator.device_data["batt_charge_discharge_state"] == "standby"
 
+    async def test_apply_data_ems_raw_state_does_not_overwrite_derived(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """EMS bp_chg_dsg_sta must not overwrite the power-derived state (#50).
+
+        The EMS reports controller MODE ("discharging" at 0W/100% SoC).
+        Without the pop fix, each EMS report overwrites the derived "standby",
+        causing ~250 false transitions/day.
+        """
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        # Establish standby (prev=None, no hold time needed)
+        for _ in range(3):
+            coordinator._apply_data({"batt_charge_power_w": 0, "batt_discharge_power_w": 0})
+        assert coordinator.device_data["batt_charge_discharge_state"] == "standby"
+
+        # Simulate EMS change report with "discharging" mode at 0W
+        # (the exact scenario causing 15-minute night flips)
+        coordinator._batt_state_changed_at = time.monotonic() - 900
+        for _ in range(5):
+            coordinator._apply_data({
+                "batt_charge_power_w": 0,
+                "batt_discharge_power_w": 0,
+                "batt_charge_discharge_state": "discharging",
+            })
+        # Must remain standby - EMS raw value must not leak through
+        assert coordinator.device_data["batt_charge_discharge_state"] == "standby"
+
+    async def test_apply_data_ems_raw_state_stripped_from_device_data(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """The EMS raw field must not appear in device_data before power data arrives."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        # Send only EMS state, no power data
+        coordinator._apply_data({"batt_charge_discharge_state": "discharging"})
+        # Without power data, derivation doesn't run, and the raw EMS value
+        # should have been popped - so no state is set
+        assert coordinator.device_data.get("batt_charge_discharge_state") is None
+
 
 # ===========================================================================
 # Protobuf Key Remapping (_remap_proto_keys) — F-001
