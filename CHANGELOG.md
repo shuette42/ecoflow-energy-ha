@@ -29,6 +29,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 - Entity display names follow a consistent naming convention: suffix qualifiers (max./min./real), no internal abbreviations (EMS/PCS/MPPT), app-aligned names where possible. Entity IDs unchanged - automations and dashboards are not affected. (beta.12)
+- Renamed "Backup Reserve" sensor to "Backup Reserve (EMS)" to distinguish it from the controllable backup reserve settings. (beta.14)
 
 ### Changed
 - Enum sensors use HA `device_class: enum` with `options` for proper state handling and translation support.
