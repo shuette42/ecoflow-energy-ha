@@ -1312,8 +1312,11 @@ class TestApplyData:
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
-        # Hysteresis: need 2 consecutive derivations to change state
+        # Hysteresis: need 3 consecutive derivations to change state
+        # (no hold time required when prev is None)
         coordinator._apply_data({"batt_charge_power_w": 910, "batt_discharge_power_w": 0})
+        coordinator._apply_data({"batt_charge_power_w": 910, "batt_discharge_power_w": 0})
+        assert coordinator.device_data.get("batt_charge_discharge_state") is None
         coordinator._apply_data({"batt_charge_power_w": 910, "batt_discharge_power_w": 0})
         assert coordinator.device_data["batt_charge_discharge_state"] == "charging"
 
@@ -1329,6 +1332,7 @@ class TestApplyData:
         )
         coordinator._apply_data({"batt_charge_power_w": 0, "batt_discharge_power_w": 1500})
         coordinator._apply_data({"batt_charge_power_w": 0, "batt_discharge_power_w": 1500})
+        coordinator._apply_data({"batt_charge_power_w": 0, "batt_discharge_power_w": 1500})
         assert coordinator.device_data["batt_charge_discharge_state"] == "discharging"
 
     async def test_apply_data_derives_battery_state_standby(
@@ -1342,11 +1346,15 @@ class TestApplyData:
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
         # EMS sends "discharge mode" but battery is idle at 100% SOC
-        # Hysteresis: need 2 consecutive derivations to change state
+        # Hysteresis: need 3 consecutive derivations to change state
         coordinator._apply_data({
             "batt_charge_power_w": 0,
             "batt_discharge_power_w": 0,
             "batt_charge_discharge_state": "discharging",
+        })
+        coordinator._apply_data({
+            "batt_charge_power_w": 0,
+            "batt_discharge_power_w": 0,
         })
         coordinator._apply_data({
             "batt_charge_power_w": 0,
@@ -1359,21 +1367,61 @@ class TestApplyData:
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """Single transient spike should not change state (hysteresis)."""
+        """Transient spikes should not change state (hysteresis + hold time)."""
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
-        # Establish discharging state
-        coordinator._apply_data({"batt_charge_power_w": 0, "batt_discharge_power_w": 1000})
-        coordinator._apply_data({"batt_charge_power_w": 0, "batt_discharge_power_w": 1000})
+        # Establish discharging state (prev=None, no hold time needed)
+        for _ in range(3):
+            coordinator._apply_data({"batt_charge_power_w": 0, "batt_discharge_power_w": 1000})
         assert coordinator.device_data["batt_charge_discharge_state"] == "discharging"
-        # Single spike to charging - should NOT change state
-        coordinator._apply_data({"batt_charge_power_w": 300, "batt_discharge_power_w": 0})
+
+        # 3 consecutive charging spikes within hold time - should NOT change state
+        for _ in range(3):
+            coordinator._apply_data({"batt_charge_power_w": 300, "batt_discharge_power_w": 0})
         assert coordinator.device_data["batt_charge_discharge_state"] == "discharging"
-        # Back to discharging - resets candidate
-        coordinator._apply_data({"batt_charge_power_w": 0, "batt_discharge_power_w": 800})
+
+        # Even more spikes - still blocked by hold time
+        for _ in range(5):
+            coordinator._apply_data({"batt_charge_power_w": 500, "batt_discharge_power_w": 0})
         assert coordinator.device_data["batt_charge_discharge_state"] == "discharging"
+
+        # After hold time expires, 3 consecutive derivations should change state
+        coordinator._batt_state_changed_at = time.monotonic() - 61
+        coordinator._batt_state_candidate = None
+        coordinator._batt_state_confirm_count = 0
+        for _ in range(3):
+            coordinator._apply_data({"batt_charge_power_w": 500, "batt_discharge_power_w": 0})
+        assert coordinator.device_data["batt_charge_discharge_state"] == "charging"
+
+    async def test_apply_data_battery_state_hold_time_prevents_oscillation(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Oscillating power around threshold should not cause state flicker."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        # Establish standby
+        for _ in range(3):
+            coordinator._apply_data({"batt_charge_power_w": 50, "batt_discharge_power_w": 0})
+        assert coordinator.device_data["batt_charge_discharge_state"] == "standby"
+
+        # Simulate oscillation: 250W, 150W, 250W, 150W (around 200W threshold)
+        # Even with 3 consecutive 250W readings, hold time blocks the change
+        oscillating = [
+            {"batt_charge_power_w": 250, "batt_discharge_power_w": 0},
+            {"batt_charge_power_w": 150, "batt_discharge_power_w": 0},
+            {"batt_charge_power_w": 250, "batt_discharge_power_w": 0},
+            {"batt_charge_power_w": 250, "batt_discharge_power_w": 0},
+            {"batt_charge_power_w": 250, "batt_discharge_power_w": 0},
+        ]
+        for data in oscillating:
+            coordinator._apply_data(data)
+        assert coordinator.device_data["batt_charge_discharge_state"] == "standby"
 
     async def test_apply_data_battery_state_below_threshold_is_standby(
         self,
@@ -1386,6 +1434,7 @@ class TestApplyData:
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
         # 150W charge power is below 200W threshold - should be standby
+        coordinator._apply_data({"batt_charge_power_w": 150, "batt_discharge_power_w": 0})
         coordinator._apply_data({"batt_charge_power_w": 150, "batt_discharge_power_w": 0})
         coordinator._apply_data({"batt_charge_power_w": 150, "batt_discharge_power_w": 0})
         assert coordinator.device_data["batt_charge_discharge_state"] == "standby"

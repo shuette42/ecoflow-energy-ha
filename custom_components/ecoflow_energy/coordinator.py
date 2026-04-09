@@ -176,9 +176,13 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # physical pack always maps to the same pack{n}_* sensor keys.
         self._bp_sn_to_index: dict[str, int] = {}
         # Hysteresis for battery charge/discharge state (#50).
-        # Require 2 consecutive identical derivations before changing state.
+        # Two-layer debounce to prevent flicker:
+        #   1. Confirmation: new state must be derived 3 consecutive times (~9s)
+        #   2. Hold time: current state must have been active for >= 60s
+        # Both conditions must be met before a state transition occurs.
         self._batt_state_candidate: str | None = None
         self._batt_state_confirm_count: int = 0
+        self._batt_state_changed_at: float = 0.0  # monotonic timestamp
 
         # Energy integrator for power → kWh Riemann sum (all device types)
         state_path = hass.config.path(f".storage/ecoflow_energy_{self.device_sn}.json")
@@ -1025,8 +1029,10 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # mode". Override with the measured power when available.
         # Threshold 200W filters inverter balancing currents that cause rapid
         # state flipping when solar production ~ house load.
-        # Hysteresis: new state must be derived twice consecutively (~6-10s)
-        # before it replaces the current state.
+        # Two-layer debounce:
+        #   1. New state must be derived 3 consecutive times (~9s at 3s heartbeat)
+        #   2. Current state must have been held for >= 60s
+        # This prevents flicker when power oscillates around the threshold.
         charge_w = self._device_data.get("batt_charge_power_w")
         discharge_w = self._device_data.get("batt_discharge_power_w")
         if charge_w is not None and discharge_w is not None:
@@ -1044,19 +1050,27 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 else:
                     self._batt_state_candidate = derived
                     self._batt_state_confirm_count = 1
-                if self._batt_state_confirm_count >= 2:
+                now_mono = time.monotonic()
+                hold_elapsed = now_mono - self._batt_state_changed_at
+                min_hold_s = 60
+                if self._batt_state_confirm_count >= 3 and (
+                    prev is None or hold_elapsed >= min_hold_s
+                ):
                     self._device_data["batt_charge_discharge_state"] = derived
                     self._batt_state_candidate = None
                     self._batt_state_confirm_count = 0
+                    self._batt_state_changed_at = now_mono
                     batt_w_raw = self._device_data.get("batt_w")
                     _LOGGER.debug(
-                        "Battery state for %s: batt_w=%.1f charge_w=%.1f discharge_w=%.1f -> %s (was %s)",
+                        "Battery state for %s: batt_w=%.1f charge_w=%.1f "
+                        "discharge_w=%.1f -> %s (was %s, held %.0fs)",
                         self.device_sn,
                         batt_w_raw if batt_w_raw is not None else 0.0,
                         charge_w,
                         discharge_w,
                         derived,
                         prev,
+                        hold_elapsed,
                     )
             else:
                 # State confirmed - reset candidate
