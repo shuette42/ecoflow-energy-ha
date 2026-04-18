@@ -1056,22 +1056,49 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         The EMS field bp_chg_dsg_sta reports the controller MODE, not the
         physical state: at 100% SoC with 0W flow, it still sends "discharging".
-        We override it using measured power values with a two-layer debounce:
+        We override it from the signed battery power with asymmetric hysteresis:
+
+            batt_w > 200W           -> charging
+            batt_w < -200W          -> discharging
+            |batt_w| < 50W          -> standby (inner band)
+            50W <= |batt_w| <= 200W -> deadband: keep previous state
+
+        The deadband prevents single zero-valued messages (proto3 omission or
+        transient artefacts) from flipping an otherwise stable charging or
+        discharging state. Combined with the two-layer debounce:
           1. New state must be derived 3 consecutive times (~9s at 3s heartbeat)
           2. Current state must have been held for >= 60s
+
+        Prefers signed `batt_w` when available, falls back to the derived
+        charge/discharge power split so existing tests and HTTP-only paths
+        still work.
         """
-        charge_w = self._device_data.get("batt_charge_power_w")
-        discharge_w = self._device_data.get("batt_discharge_power_w")
-        if charge_w is None or discharge_w is None:
-            return
-        threshold = 200
-        if charge_w > threshold:
-            derived = "charging"
-        elif discharge_w > threshold:
-            derived = "discharging"
-        else:
-            derived = "standby"
+        batt_w = self._device_data.get("batt_w")
+        if batt_w is None:
+            charge_w = self._device_data.get("batt_charge_power_w")
+            discharge_w = self._device_data.get("batt_discharge_power_w")
+            if charge_w is None or discharge_w is None:
+                return
+            batt_w = charge_w - discharge_w
+
+        outer_threshold = 200
+        inner_threshold = 50
         prev = self._device_data.get("batt_charge_discharge_state")
+
+        if batt_w > outer_threshold:
+            derived = "charging"
+        elif batt_w < -outer_threshold:
+            derived = "discharging"
+        elif abs(batt_w) < inner_threshold:
+            derived = "standby"
+        else:
+            # Deadband 50-200W: neither clearly directional nor true standby.
+            # Keep the existing candidate (if any) so outer-threshold readings
+            # can accumulate confirmations across short deadband interruptions.
+            # This also handles bootstrap: when prev is None, deadband readings
+            # are ignored and state is set on the first 3 outer-threshold hits.
+            return
+
         if derived != prev:
             if derived == self._batt_state_candidate:
                 self._batt_state_confirm_count += 1
@@ -1088,14 +1115,10 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._batt_state_candidate = None
                 self._batt_state_confirm_count = 0
                 self._batt_state_changed_at = now_mono
-                batt_w_raw = self._device_data.get("batt_w")
                 _LOGGER.debug(
-                    "Battery state for %s: batt_w=%.1f charge_w=%.1f "
-                    "discharge_w=%.1f -> %s (was %s, held %.0fs)",
+                    "Battery state for %s: batt_w=%.1f -> %s (was %s, held %.0fs)",
                     self.device_sn,
-                    batt_w_raw if batt_w_raw is not None else 0.0,
-                    charge_w,
-                    discharge_w,
+                    batt_w,
                     derived,
                     prev,
                     hold_elapsed,
