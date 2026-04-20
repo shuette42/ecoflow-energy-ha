@@ -175,13 +175,14 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Each heartbeat contains only one pack; this map ensures the same
         # physical pack always maps to the same pack{n}_* sensor keys.
         self._bp_sn_to_index: dict[str, int] = {}
-        # Hysteresis for battery charge/discharge state (#50).
-        # Two-layer debounce to prevent flicker:
-        #   1. Confirmation: new state must be derived 3 consecutive times (~9s)
-        #   2. Hold time: current state must have been active for >= 60s
-        # Both conditions must be met before a state transition occurs.
-        self._batt_state_candidate: str | None = None
-        self._batt_state_confirm_count: int = 0
+        # Battery charge/discharge state: rolling-average derivation (#63).
+        # State is derived from a 3-minute moving average of signed batt_w,
+        # not the instantaneous value. This filters short oscillations that
+        # occur when solar production and house load balance (morning/evening),
+        # where instantaneous power swings from +1000W to -300W within seconds.
+        # Min hold time prevents rapid flipping even if the average crosses
+        # a threshold right after a transition.
+        self._batt_w_samples: list[tuple[float, float]] = []  # (monotonic_ts, batt_w)
         self._batt_state_changed_at: float = 0.0  # monotonic timestamp
 
         # Energy integrator for power → kWh Riemann sum (all device types)
@@ -1051,27 +1052,35 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Flush energy integrator state to disk (non-blocking)."""
         await self.hass.async_add_executor_job(self._energy_integrator.flush)
 
+    # Battery state derivation parameters (#63).
+    # These are class-level so tests can override without touching instance state.
+    BATT_WINDOW_S = 180       # 3-minute rolling window
+    BATT_MIN_SAMPLES = 10     # minimum samples before derivation is trusted
+    BATT_OUTER_W = 150        # |avg| > 150W -> charging/discharging
+    BATT_INNER_W = 50         # |avg| < 50W  -> standby
+    BATT_MIN_HOLD_S = 120     # min seconds a state must be held before it can change
+
     def _derive_battery_state(self) -> None:
-        """Derive battery charge/discharge state from actual power (#50).
+        """Derive battery charge/discharge state from a rolling-average power (#63).
 
-        The EMS field bp_chg_dsg_sta reports the controller MODE, not the
-        physical state: at 100% SoC with 0W flow, it still sends "discharging".
-        We override it from the signed battery power with asymmetric hysteresis:
+        The raw EMS field bp_chg_dsg_sta reports the controller MODE, not the
+        physical state, so we override it from signed batt_w. Using the
+        instantaneous value causes rapid flipping when solar and house load
+        balance (morning/evening): batt_w swings between +1000W and -300W
+        within seconds, and any threshold check flips with each sample.
 
-            batt_w > 200W           -> charging
-            batt_w < -200W          -> discharging
-            |batt_w| < 50W          -> standby (inner band)
-            50W <= |batt_w| <= 200W -> deadband: keep previous state
-
-        The deadband prevents single zero-valued messages (proto3 omission or
-        transient artefacts) from flipping an otherwise stable charging or
-        discharging state. Combined with the two-layer debounce:
-          1. New state must be derived 3 consecutive times (~9s at 3s heartbeat)
-          2. Current state must have been held for >= 60s
+        Strategy:
+          1. Append current batt_w to a rolling buffer (timestamp, value).
+          2. Drop samples older than BATT_WINDOW_S seconds.
+          3. Compute the mean over the buffer.
+          4. Apply thresholds to the mean, not the raw sample.
+          5. A deadband between BATT_INNER_W and BATT_OUTER_W keeps prev state.
+          6. A transition requires the previous state to have been held for
+             at least BATT_MIN_HOLD_S seconds.
 
         Prefers signed `batt_w` when available, falls back to the derived
-        charge/discharge power split so existing tests and HTTP-only paths
-        still work.
+        charge/discharge power split for HTTP-only paths that never expose
+        signed power directly.
         """
         batt_w = self._device_data.get("batt_w")
         if batt_w is None:
@@ -1081,51 +1090,47 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 return
             batt_w = charge_w - discharge_w
 
-        outer_threshold = 200
-        inner_threshold = 50
-        prev = self._device_data.get("batt_charge_discharge_state")
+        now_mono = time.monotonic()
+        self._batt_w_samples.append((now_mono, float(batt_w)))
+        cutoff = now_mono - self.BATT_WINDOW_S
+        self._batt_w_samples = [
+            (t, v) for t, v in self._batt_w_samples if t >= cutoff
+        ]
 
-        if batt_w > outer_threshold:
-            derived = "charging"
-        elif batt_w < -outer_threshold:
-            derived = "discharging"
-        elif abs(batt_w) < inner_threshold:
-            derived = "standby"
-        else:
-            # Deadband 50-200W: neither clearly directional nor true standby.
-            # Keep the existing candidate (if any) so outer-threshold readings
-            # can accumulate confirmations across short deadband interruptions.
-            # This also handles bootstrap: when prev is None, deadband readings
-            # are ignored and state is set on the first 3 outer-threshold hits.
+        if len(self._batt_w_samples) < self.BATT_MIN_SAMPLES:
             return
 
-        if derived != prev:
-            if derived == self._batt_state_candidate:
-                self._batt_state_confirm_count += 1
-            else:
-                self._batt_state_candidate = derived
-                self._batt_state_confirm_count = 1
-            now_mono = time.monotonic()
-            hold_elapsed = now_mono - self._batt_state_changed_at
-            min_hold_s = 60
-            if self._batt_state_confirm_count >= 3 and (
-                prev is None or hold_elapsed >= min_hold_s
-            ):
-                self._device_data["batt_charge_discharge_state"] = derived
-                self._batt_state_candidate = None
-                self._batt_state_confirm_count = 0
-                self._batt_state_changed_at = now_mono
-                _LOGGER.debug(
-                    "Battery state for %s: batt_w=%.1f -> %s (was %s, held %.0fs)",
-                    self.device_sn,
-                    batt_w,
-                    derived,
-                    prev,
-                    hold_elapsed,
-                )
+        avg = sum(v for _, v in self._batt_w_samples) / len(self._batt_w_samples)
+        prev = self._device_data.get("batt_charge_discharge_state")
+
+        if avg > self.BATT_OUTER_W:
+            derived = "charging"
+        elif avg < -self.BATT_OUTER_W:
+            derived = "discharging"
+        elif abs(avg) < self.BATT_INNER_W:
+            derived = "standby"
         else:
-            self._batt_state_candidate = None
-            self._batt_state_confirm_count = 0
+            return  # deadband: keep previous state
+
+        if derived == prev:
+            return
+
+        hold_elapsed = now_mono - self._batt_state_changed_at
+        if prev is not None and hold_elapsed < self.BATT_MIN_HOLD_S:
+            return
+
+        self._device_data["batt_charge_discharge_state"] = derived
+        self._batt_state_changed_at = now_mono
+        _LOGGER.debug(
+            "Battery state for %s: avg(%ds)=%.1fW -> %s (was %s, held %.0fs, n=%d)",
+            self.device_sn,
+            self.BATT_WINDOW_S,
+            avg,
+            derived,
+            prev,
+            hold_elapsed,
+            len(self._batt_w_samples),
+        )
 
     # ------------------------------------------------------------------
     # SET commands (switches, numbers)
