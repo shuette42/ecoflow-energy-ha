@@ -53,6 +53,79 @@ from .conftest import (
 )
 
 
+# ---------------------------------------------------------------------------
+# Helpers for battery state derivation tests (#63)
+# ---------------------------------------------------------------------------
+
+
+def _feed_samples(
+    coordinator,
+    values: list[float],
+    start_ts: float = 1000.0,
+    dt: float = 3.0,
+) -> None:
+    """Feed a sequence of batt_w values through _apply_data with mocked time.
+
+    Each sample advances the monotonic clock by `dt` seconds so the rolling
+    window behaves realistically without relying on real-time delays.
+    """
+    with patch(
+        "custom_components.ecoflow_energy.coordinator.time.monotonic"
+    ) as mock_mono:
+        for i, v in enumerate(values):
+            mock_mono.return_value = start_ts + i * dt
+            coordinator._apply_data({"batt_w": float(v)})
+
+
+# Real PowerOcean batt_w timeline sampled from the Prod Raspberry Pi on
+# 2026-04-20 between 06:45 and 07:00 UTC (15 min). The old instantaneous
+# logic produced 8 state flips across this window; the rolling-average
+# logic should collapse these into at most a handful of transitions.
+# Format: (seconds_from_start, batt_w).
+_PROD_TIMELINE_2026_04_20: list[tuple[float, float]] = [
+    (0, 640), (4, 680), (5, 700), (9, 740), (14, 790), (19, 840),
+    (24, 900), (25, 910), (29, 990), (34, 1080), (39, 1110), (44, 1070),
+    (45, 1040), (49, 960), (55, 930),
+    (60, 940), (65, 930), (70, 910), (75, 880), (80, 850), (85, 790),
+    (90, 680), (95, 590), (100, 510), (104, 480), (105, 470), (110, 420),
+    (115, 310),
+    (120, 190), (125, 170), (125, 160), (130, 130), (135, 100), (141, 70),
+    (145, 50), (146, 40), (151, 30),
+    (156, 20), (165, 10), (171, 30), (176, 60), (181, 80),
+    (185, 60), (186, 30), (191, -30), (196, -20), (201, 10),
+    (205, 30), (211, 40), (216, 50), (221, 60), (225, 70), (232, 80),
+    (237, 110), (242, 150),
+    (245, 190), (247, 220), (252, 270),
+    (257, 280), (262, 260), (265, 270), (267, 290), (272, 340), (277, 370),
+    (282, 420), (285, 440), (287, 450), (292, 480), (297, 520),
+    (305, 570), (307, 580), (312, 620), (317, 690), (322, 740), (325, 750),
+    (327, 720), (332, 650), (337, 630), (342, 640), (352, 620), (357, 610),
+    (362, 620), (367, 630), (372, 820), (377, 1170), (382, 1180), (385, 1130),
+    (388, 890), (393, 450), (398, 230), (403, 140), (405, 130), (408, 100),
+    (413, 90), (418, 70),
+    (423, 40), (425, 30), (428, 10),
+    (433, 0), (438, -30), (443, -60), (445, -70), (453, -50), (458, -60),
+    (464, -70), (465, -80), (469, -160), (474, -230),
+    (484, -240), (489, -250),
+    (494, -270), (499, -280), (504, -290), (509, -300),
+    (519, -280), (524, -240), (529, -220), (534, -260), (539, -340),
+    (545, -330), (550, -310), (555, -300), (560, -280), (565, -270),
+    (570, -260), (575, -250), (580, -230), (585, -210), (590, -160),
+    (595, -100), (600, -80), (605, -130), (605, -140), (610, -170),
+    (615, -130), (620, -110), (625, -90), (625, -80), (631, -60), (636, -40),
+    (641, -20),
+    (645, 0), (651, 40), (656, 90), (661, 140), (665, 190), (666, 200),
+    (676, 170), (681, 190), (685, 210), (686, 220), (691, 260), (696, 290),
+    (701, 310), (705, 330),
+    (711, 360), (721, 400), (725, 450), (726, 460), (731, 500), (736, 520),
+    (741, 450), (745, 420), (751, 430), (756, 440), (776, 430), (781, 410),
+    (791, 430), (797, 460), (805, 410), (812, 320), (817, 340), (822, 350),
+    (832, 360), (837, 370), (842, 380), (845, 390), (847, 400), (852, 430),
+    (857, 490), (862, 560), (865, 580), (867, 600), (873, 580), (878, 560),
+    (883, 600), (885, 610), (888, 630), (893, 660), (898, 690),
+]
+
+
 # ===========================================================================
 # Coordinator Initialization
 # ===========================================================================
@@ -1307,17 +1380,12 @@ class TestApplyData:
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """Battery state derived from actual power: charging when charge_w > 200."""
+        """Battery state: avg batt_w > 150W over the window -> charging."""
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
-        # Hysteresis: need 3 consecutive derivations to change state
-        # (no hold time required when prev is None)
-        coordinator._apply_data({"batt_charge_power_w": 910, "batt_discharge_power_w": 0})
-        coordinator._apply_data({"batt_charge_power_w": 910, "batt_discharge_power_w": 0})
-        assert coordinator.device_data.get("batt_charge_discharge_state") is None
-        coordinator._apply_data({"batt_charge_power_w": 910, "batt_discharge_power_w": 0})
+        _feed_samples(coordinator, [900.0] * 10)
         assert coordinator.device_data["batt_charge_discharge_state"] == "charging"
 
     async def test_apply_data_derives_battery_state_discharging(
@@ -1325,14 +1393,12 @@ class TestApplyData:
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """Battery state derived from actual power: discharging when discharge_w > 200."""
+        """Battery state: avg batt_w < -150W over the window -> discharging."""
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
-        coordinator._apply_data({"batt_charge_power_w": 0, "batt_discharge_power_w": 1500})
-        coordinator._apply_data({"batt_charge_power_w": 0, "batt_discharge_power_w": 1500})
-        coordinator._apply_data({"batt_charge_power_w": 0, "batt_discharge_power_w": 1500})
+        _feed_samples(coordinator, [-1500.0] * 10)
         assert coordinator.device_data["batt_charge_discharge_state"] == "discharging"
 
     async def test_apply_data_derives_battery_state_standby(
@@ -1340,144 +1406,93 @@ class TestApplyData:
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """Battery state derived from actual power: standby when both near zero."""
+        """Battery state: |avg batt_w| < 50W over the window -> standby."""
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
-        # EMS sends "discharge mode" but battery is idle at 100% SOC
-        # Hysteresis: need 3 consecutive derivations to change state
-        coordinator._apply_data({
-            "batt_charge_power_w": 0,
-            "batt_discharge_power_w": 0,
-            "batt_charge_discharge_state": "discharging",
-        })
-        coordinator._apply_data({
-            "batt_charge_power_w": 0,
-            "batt_discharge_power_w": 0,
-        })
-        coordinator._apply_data({
-            "batt_charge_power_w": 0,
-            "batt_discharge_power_w": 0,
-        })
+        _feed_samples(coordinator, [10.0, -5.0, 20.0, 0.0, 15.0, -10.0, 5.0, 30.0, -15.0, 25.0])
         assert coordinator.device_data["batt_charge_discharge_state"] == "standby"
 
-    async def test_apply_data_battery_state_hysteresis_filters_flicker(
+    async def test_apply_data_needs_min_samples_before_deriving(
         self,
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """Transient spikes should not change state (hysteresis + hold time)."""
+        """Fewer than BATT_MIN_SAMPLES samples -> no derivation."""
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
-        # Establish discharging state (prev=None, no hold time needed)
-        for _ in range(3):
-            coordinator._apply_data({"batt_charge_power_w": 0, "batt_discharge_power_w": 1000})
-        assert coordinator.device_data["batt_charge_discharge_state"] == "discharging"
+        _feed_samples(coordinator, [900.0] * 5)  # below min
+        assert coordinator.device_data.get("batt_charge_discharge_state") is None
 
-        # 3 consecutive charging spikes within hold time - should NOT change state
-        for _ in range(3):
-            coordinator._apply_data({"batt_charge_power_w": 300, "batt_discharge_power_w": 0})
-        assert coordinator.device_data["batt_charge_discharge_state"] == "discharging"
-
-        # Even more spikes - still blocked by hold time
-        for _ in range(5):
-            coordinator._apply_data({"batt_charge_power_w": 500, "batt_discharge_power_w": 0})
-        assert coordinator.device_data["batt_charge_discharge_state"] == "discharging"
-
-        # After hold time expires, 3 consecutive derivations should change state
-        coordinator._batt_state_changed_at = time.monotonic() - 61
-        coordinator._batt_state_candidate = None
-        coordinator._batt_state_confirm_count = 0
-        for _ in range(3):
-            coordinator._apply_data({"batt_charge_power_w": 500, "batt_discharge_power_w": 0})
-        assert coordinator.device_data["batt_charge_discharge_state"] == "charging"
-
-    async def test_apply_data_battery_state_hold_time_prevents_oscillation(
+    async def test_apply_data_short_spike_does_not_flip(
         self,
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """Oscillating power at the outer threshold should not cause state flicker."""
-        enhanced_config_entry.add_to_hass(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
-        )
-        # Establish standby (|batt_w| < 50W)
-        for _ in range(3):
-            coordinator._apply_data({"batt_charge_power_w": 10, "batt_discharge_power_w": 0})
-        assert coordinator.device_data["batt_charge_discharge_state"] == "standby"
+        """A brief high-power spike does not flip state when averaged over the window.
 
-        # Simulate oscillation: 250W (charging band), 150W (deadband) - hold time blocks
-        oscillating = [
-            {"batt_charge_power_w": 250, "batt_discharge_power_w": 0},
-            {"batt_charge_power_w": 150, "batt_discharge_power_w": 0},
-            {"batt_charge_power_w": 250, "batt_discharge_power_w": 0},
-            {"batt_charge_power_w": 250, "batt_discharge_power_w": 0},
-            {"batt_charge_power_w": 250, "batt_discharge_power_w": 0},
-        ]
-        for data in oscillating:
-            coordinator._apply_data(data)
-        assert coordinator.device_data["batt_charge_discharge_state"] == "standby"
-
-    async def test_apply_data_battery_state_deadband_with_prev_none_stays_unset(
-        self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
-    ) -> None:
-        """Power only in the 50-200W deadband with prev=None does not bootstrap.
-
-        With asymmetric hysteresis, a reading of 150W is neither clearly
-        charging (>200W) nor true standby (<50W). Without any outer-threshold
-        evidence, the state cannot be inferred - it stays unset until a clear
-        charging/discharging/standby reading arrives.
+        Prod scenario 2026-04-20 06:51: batt_w peaked at 1180W for ~15s then
+        crashed to 10W. The old logic treated those 3 consecutive high samples
+        as a confirmed charging state. The rolling average treats the peak as
+        a minor contribution and keeps the dominant standby state.
         """
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
-        # 150W samples only - deadband, no bootstrap
-        for _ in range(5):
-            coordinator._apply_data({"batt_charge_power_w": 150, "batt_discharge_power_w": 0})
-        assert coordinator.device_data.get("batt_charge_discharge_state") is None
-
-        # Add a clear standby reading (< 50W) - bootstraps to standby after 3
-        for _ in range(3):
-            coordinator._apply_data({"batt_charge_power_w": 10, "batt_discharge_power_w": 0})
+        # Establish standby with 60 samples (3 min at 3s dt)
+        _feed_samples(coordinator, [10.0] * 60)
         assert coordinator.device_data["batt_charge_discharge_state"] == "standby"
+        # Brief 5-sample (15s) spike at 1200W - avg stays around 105W, still standby
+        _feed_samples(coordinator, [1200.0] * 5, start_ts=1000.0 + 60 * 3.0)
+        # Avg over trailing 3 min window: mostly 10W with a handful of 1200W -> ~100W
+        # That's deadband, so state holds at standby.
+        assert coordinator.device_data["batt_charge_discharge_state"] == "standby"
+
+    async def test_apply_data_min_hold_time_blocks_rapid_flip(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """After a transition, next transition requires BATT_MIN_HOLD_S elapsed."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        # Bootstrap to charging
+        _feed_samples(coordinator, [900.0] * 10)
+        assert coordinator.device_data["batt_charge_discharge_state"] == "charging"
+        # Rapid swing to strongly-discharging samples within the hold window
+        # (dt=3s, 10 samples = 30s total, still < 120s hold)
+        _feed_samples(coordinator, [-900.0] * 10, start_ts=1000.0 + 10 * 3.0)
+        assert coordinator.device_data["batt_charge_discharge_state"] == "charging"
 
     async def test_apply_data_ems_raw_state_does_not_overwrite_derived(
         self,
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """EMS bp_chg_dsg_sta must not overwrite the power-derived state (#50).
-
-        The EMS reports controller MODE ("discharging" at 0W/100% SoC).
-        Without the pop fix, each EMS report overwrites the derived "standby",
-        causing ~250 false transitions/day.
-        """
+        """EMS bp_chg_dsg_sta must not leak into device_data (#50)."""
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
-        # Establish standby (prev=None, no hold time needed)
-        for _ in range(3):
-            coordinator._apply_data({"batt_charge_power_w": 0, "batt_discharge_power_w": 0})
+        # Bootstrap to standby
+        _feed_samples(coordinator, [0.0] * 10)
         assert coordinator.device_data["batt_charge_discharge_state"] == "standby"
 
-        # Simulate EMS change report with "discharging" mode at 0W
-        # (the exact scenario causing 15-minute night flips)
-        coordinator._batt_state_changed_at = time.monotonic() - 900
-        for _ in range(5):
+        # Simulate EMS injecting "discharging" raw value - must be stripped
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.time.monotonic",
+            return_value=2000.0,
+        ):
             coordinator._apply_data({
-                "batt_charge_power_w": 0,
-                "batt_discharge_power_w": 0,
+                "batt_w": 0.0,
                 "batt_charge_discharge_state": "discharging",
             })
-        # Must remain standby - EMS raw value must not leak through
         assert coordinator.device_data["batt_charge_discharge_state"] == "standby"
 
     async def test_apply_data_ems_raw_state_stripped_from_device_data(
@@ -1485,31 +1500,20 @@ class TestApplyData:
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """The EMS raw field must not appear in device_data before power data arrives."""
+        """EMS raw field without power data must not appear in device_data."""
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
-        # Send only EMS state, no power data
         coordinator._apply_data({"batt_charge_discharge_state": "discharging"})
-        # Without power data, derivation doesn't run, and the raw EMS value
-        # should have been popped - so no state is set
         assert coordinator.device_data.get("batt_charge_discharge_state") is None
 
-    async def test_apply_data_zero_batt_w_spikes_dont_flip_state(
+    async def test_apply_data_batt_w_preferred_over_split_fields(
         self,
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """Intermittent batt_w=0 values must not flip a stable discharging state (#50).
-
-        Exact prod scenario: PowerOcean discharges constantly at -640W, but some
-        heartbeats report batt_w=0 (proto3 omission, message-type variation, or
-        transient parser artefact). With the old 200W threshold, this flipped
-        state to standby every 60s. With asymmetric hysteresis (50W inner band),
-        batt_w=0 is below standby threshold but the next -640W reading resets
-        the candidate counter, so the state holds.
-        """
+        """When batt_w is present, it is the source of truth."""
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
@@ -1517,119 +1521,71 @@ class TestApplyData:
         with patch(
             "custom_components.ecoflow_energy.coordinator.time.monotonic"
         ) as mock_mono:
-            mock_mono.return_value = 1000.0
-            # Establish discharging (batt_w < -200W, 3 consecutive, prev=None)
-            for _ in range(3):
-                coordinator._apply_data({"batt_w": -640.0})
-            assert coordinator.device_data["batt_charge_discharge_state"] == "discharging"
-
-            # Advance clock past hold time
-            mock_mono.return_value = 1120.0
-
-            # Alternating -640W and 0W: standby candidate never reaches 3 consecutive
-            for batt_w in [0.0, -640.0, 0.0, -640.0, 0.0, -640.0, 0.0, -640.0]:
-                coordinator._apply_data({"batt_w": batt_w})
-            assert coordinator.device_data["batt_charge_discharge_state"] == "discharging"
-
-    async def test_apply_data_deadband_keeps_state(
-        self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
-    ) -> None:
-        """Power in the 50-200W deadband keeps the previous state (#50).
-
-        Inverter balancing currents around 100W must not drag a discharging
-        state into standby. This is the exact prod trigger pattern.
-        """
-        enhanced_config_entry.add_to_hass(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
-        )
-        with patch(
-            "custom_components.ecoflow_energy.coordinator.time.monotonic"
-        ) as mock_mono:
-            mock_mono.return_value = 1000.0
-            for _ in range(3):
-                coordinator._apply_data({"batt_w": -1000.0})
-            assert coordinator.device_data["batt_charge_discharge_state"] == "discharging"
-
-            mock_mono.return_value = 1120.0
-
-            # Deadband samples (50-200W range): must not transition
-            for batt_w in [-100.0, -150.0, -80.0, -120.0, 100.0, 80.0]:
-                coordinator._apply_data({"batt_w": batt_w})
-            assert coordinator.device_data["batt_charge_discharge_state"] == "discharging"
-
-    async def test_apply_data_sustained_zero_batt_w_transitions_to_standby(
-        self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
-    ) -> None:
-        """Sustained |batt_w|<50W for >=3 consecutive readings + hold time should transition.
-
-        Real idle (full SoC, no load) must still be detected. The deadband only
-        prevents flips on intermittent zero spikes, not genuine standby.
-        """
-        enhanced_config_entry.add_to_hass(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
-        )
-        with patch(
-            "custom_components.ecoflow_energy.coordinator.time.monotonic"
-        ) as mock_mono:
-            mock_mono.return_value = 1000.0
-            for _ in range(3):
-                coordinator._apply_data({"batt_w": -640.0})
-            assert coordinator.device_data["batt_charge_discharge_state"] == "discharging"
-
-            # Advance past 60s hold time
-            mock_mono.return_value = 1061.0
-
-            for _ in range(3):
-                coordinator._apply_data({"batt_w": 0.0})
-            assert coordinator.device_data["batt_charge_discharge_state"] == "standby"
-
-    async def test_apply_data_batt_w_preferred_over_derived_splits(
-        self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
-    ) -> None:
-        """When batt_w is present, it is the source of truth, not the split fields."""
-        enhanced_config_entry.add_to_hass(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
-        )
-        # Split fields say standby (both 0) but batt_w says discharging
-        for _ in range(3):
-            coordinator._apply_data({
-                "batt_w": -500.0,
-                "batt_charge_power_w": 0.0,
-                "batt_discharge_power_w": 0.0,
-            })
+            for i in range(10):
+                mock_mono.return_value = 1000.0 + i * 3.0
+                coordinator._apply_data({
+                    "batt_w": -500.0,
+                    "batt_charge_power_w": 0.0,
+                    "batt_discharge_power_w": 0.0,
+                })
         assert coordinator.device_data["batt_charge_discharge_state"] == "discharging"
 
-    async def test_apply_data_bootstrap_through_deadband_interruptions(
+    async def test_apply_data_split_fields_fallback_when_no_batt_w(
         self,
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """With prev=None, alternating deadband + outer-threshold eventually sets state.
+        """HTTP-only paths without batt_w still work via split fields."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.time.monotonic"
+        ) as mock_mono:
+            for i in range(10):
+                mock_mono.return_value = 1000.0 + i * 3.0
+                coordinator._apply_data({
+                    "batt_charge_power_w": 800.0,
+                    "batt_discharge_power_w": 0.0,
+                })
+        assert coordinator.device_data["batt_charge_discharge_state"] == "charging"
 
-        Exact prod-like bootstrap: device starts while discharging at -2500W but
-        short deadband intervals (-100W) occur between heartbeats. The deadband
-        must not reset the discharging candidate - 3 consecutive outer-threshold
-        readings (even with deadband gaps between them) must bootstrap to
-        discharging.
+    async def test_apply_data_prod_timeline_few_flips(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Replay of real PowerOcean batt_w timeline (2026-04-20 06:45-07:00 UTC).
+
+        The old beta.16 logic produced 8 flips over this 15-min window.
+        With rolling-average derivation the count drops to at most 3 transitions,
+        reflecting the real morning dynamic (charging -> standby/light discharge
+        -> charging again) rather than every momentary swing.
         """
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
-        # Interleaved: -2500, -100 (deadband), -2500, -100, -2500
-        # Expected: candidate=discharging accumulates to 3 across deadband gaps
-        for batt_w in [-2500.0, -100.0, -2500.0, -100.0, -2500.0]:
-            coordinator._apply_data({"batt_w": batt_w})
-        assert coordinator.device_data["batt_charge_discharge_state"] == "discharging"
+        transitions: list[str] = []
+
+        def _record() -> None:
+            s = coordinator.device_data.get("batt_charge_discharge_state")
+            if s and (not transitions or transitions[-1] != s):
+                transitions.append(s)
+
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.time.monotonic"
+        ) as mock_mono:
+            for ts_offset, batt_w in _PROD_TIMELINE_2026_04_20:
+                mock_mono.return_value = 1000.0 + ts_offset
+                coordinator._apply_data({"batt_w": float(batt_w)})
+                _record()
+
+        # At most 3 distinct state phases over 15 minutes (generous upper bound).
+        # Old logic produced 8+ in the same window.
+        assert len(transitions) <= 3, f"Expected <=3 transitions, got: {transitions}"
+        assert transitions  # must have derived at least one state
 
 
 # ===========================================================================
