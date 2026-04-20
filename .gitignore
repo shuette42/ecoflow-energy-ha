@@ -65,10 +65,6 @@ homeassistant/
 # Scripts (local tools, not for remote)
 scripts/
 
-# MCP / RAG (local only, not for remote)
-.mcp.json
-.venv-qdrant-mcp/
-
 # Secrets (never)
 *.env
 .secrets
