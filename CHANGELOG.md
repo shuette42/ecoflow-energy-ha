@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.12.0] - 2026-04-07
+## [1.12.0] - 2026-04-22
 
 ### Added
 - Human-readable state translations for enum sensors: battery charge/discharge state, grid status, inverter state, work mode, feed mode, connectivity (WiFi/Ethernet/4G), and charger type now show descriptive labels instead of raw numeric values.
