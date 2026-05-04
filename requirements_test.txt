@@ -1,2 +1,2 @@
 # Test framework
-pytest-homeassistant-custom-component>=0.13.0
+pytest-homeassistant-custom-component>=0.13.326
