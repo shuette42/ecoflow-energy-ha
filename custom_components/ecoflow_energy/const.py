@@ -21,6 +21,7 @@ PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
     Platform.SWITCH,
     Platform.NUMBER,
+    Platform.SELECT,
 ]
 
 # Config entry keys
@@ -147,6 +148,17 @@ class EcoFlowNumberDef:
     min_value: float = 0
     max_value: float = 100
     step: float = 1
+    enhanced_only: bool = False
+
+
+@dataclass(frozen=True)
+class EcoFlowSelectDef:
+    """Select entity definition - maps a state value to user-facing options."""
+    key: str
+    name: str
+    state_key: str
+    options: tuple[str, ...]
+    icon: str | None = None
     enhanced_only: bool = False
 
 
@@ -302,7 +314,26 @@ POWEROCEAN_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
 ]
 
 POWEROCEAN_NUMBERS: list[EcoFlowNumberDef] = [
-    EcoFlowNumberDef("min_discharge_soc", "Min Discharge SoC", "ems_discharge_lower_limit_pct", "%", "mdi:battery-alert-variant-outline", 0, 30, 5, enhanced_only=True),
+    # Backup-Reserve (App-slider): minimum SoC kept in reserve. Wire field 2
+    # in cmd_id=112 SysBatChgDsgSet, sent as a 3-field app-replay payload.
+    EcoFlowNumberDef("backup_reserve", "Backup Reserve", "ems_discharge_lower_limit_pct", "%", "mdi:battery-lock", 0, 100, 5, enhanced_only=True),
+    # Überschüssige-Solarenergie threshold (App-slider): SoC above which
+    # surplus solar is routed to controllable devices. Wire field 4.
+    EcoFlowNumberDef("solar_surplus_threshold", "Solar Surplus Threshold", "ems_backup_ratio_pct", "%", "mdi:solar-power-variant", 0, 100, 5, enhanced_only=True),
+]
+
+
+POWEROCEAN_SELECTS: list[EcoFlowSelectDef] = [
+    # Work mode select. Phase 1 scope: SELFUSE (0) and AI_SCHEDULE (12),
+    # which are the modes that work without TouParam/BackupParam sub-data.
+    EcoFlowSelectDef(
+        "work_mode",
+        "Work Mode",
+        "ems_work_mode",
+        ("self_use", "ai_schedule"),
+        icon="mdi:cog-transfer",
+        enhanced_only=True,
+    ),
 ]
 
 

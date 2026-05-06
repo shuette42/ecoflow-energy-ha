@@ -1188,8 +1188,11 @@
       "max_charge_soc": {
         "name": "Max. Ladezustand"
       },
-      "min_discharge_soc": {
-        "name": "Min. Entladezustand"
+      "backup_reserve": {
+        "name": "Backup-Reserve"
+      },
+      "solar_surplus_threshold": {
+        "name": "Solarüberschuss-Schwelle"
       },
       "standby_timeout": {
         "name": "Standby-Zeitlimit"
@@ -1211,6 +1214,15 @@
       },
       "max_watts": {
         "name": "Max. Leistungsgrenze"
+      }
+    },
+    "select": {
+      "work_mode": {
+        "name": "Betriebsmodus",
+        "state": {
+          "self_use": "Eigenstromversorgung",
+          "ai_schedule": "Intelligenter Modus"
+        }
       }
     }
   }

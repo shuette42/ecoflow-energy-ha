@@ -1188,8 +1188,11 @@
       "max_charge_soc": {
         "name": "Max Charge SoC"
       },
-      "min_discharge_soc": {
-        "name": "Min Discharge SoC"
+      "backup_reserve": {
+        "name": "Backup Reserve"
+      },
+      "solar_surplus_threshold": {
+        "name": "Solar Surplus Threshold"
       },
       "standby_timeout": {
         "name": "Standby Timeout"
@@ -1211,6 +1214,15 @@
       },
       "max_watts": {
         "name": "Max Power Limit"
+      }
+    },
+    "select": {
+      "work_mode": {
+        "name": "Work Mode",
+        "state": {
+          "self_use": "Self-use",
+          "ai_schedule": "AI Schedule"
+        }
       }
     }
   }
