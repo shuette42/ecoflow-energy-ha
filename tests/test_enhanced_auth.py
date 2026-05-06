@@ -4,7 +4,12 @@ import base64
 import hashlib
 import json
 
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms
+
+try:
+    from cryptography.hazmat.decrepit.ciphers.modes import CFB
+except ImportError:  # cryptography < 43.0
+    from cryptography.hazmat.primitives.ciphers.modes import CFB
 
 from ecoflow_energy.ecoflow.enhanced_auth import _AES_IV, _decrypt_certification
 
@@ -16,7 +21,7 @@ def _encrypt_test_data(token: str, data: dict) -> str:
     pad_len = 16 - (len(plaintext) % 16)
     padded = plaintext + bytes([pad_len] * pad_len)
     key = hashlib.sha256(token.encode()).digest()
-    cipher = Cipher(algorithms.AES(key), modes.CFB(_AES_IV))
+    cipher = Cipher(algorithms.AES(key), CFB(_AES_IV))
     encryptor = cipher.encryptor()
     return base64.b64encode(encryptor.update(padded) + encryptor.finalize()).decode()
 
