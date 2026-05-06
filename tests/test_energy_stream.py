@@ -171,10 +171,23 @@ class TestPowerOceanSocSetPayload:
         assert b"\x48\x70" in payload  # cmd_id=112
 
     def test_pdata_contains_all_three_fields(self):
-        # field 1=100 (0x64), field 2=60 (0x3c), field 4=100 (0x64)
+        # field 1=100 (0x64), field 2=60 (0x3c), field 3=100 (0x64)
+        # Field 3 is sys_bat_backup_ratio per Re307Sys/JtS1Sys SysBatChgDsgSet
+        # proto definition. Earlier versions wrote field 4 (dev_soc), which
+        # the device silently ignored.
         payload = build_powerocean_soc_set_payload(60, 100, seq=1)
-        # Inner pdata should contain: 0x08 0x64 (f1=100), 0x10 0x3c (f2=60), 0x20 0x64 (f4=100)
-        assert b"\x08\x64\x10\x3c\x20\x64" in payload
+        # Inner pdata should contain: 0x08 0x64 (f1=100), 0x10 0x3c (f2=60), 0x18 0x64 (f3=100)
+        assert b"\x08\x64\x10\x3c\x18\x64" in payload
+
+    def test_solar_surplus_uses_field_3_not_4(self):
+        # Regression guard: writing solar_surplus to field 4 (dev_soc) leaves
+        # sys_bat_backup_ratio untouched on the device, so the slider reverts
+        # to the device's last value on the next EmsChangeReport.
+        payload = build_powerocean_soc_set_payload(0, 75, seq=1)
+        # Field 3 varint tag = (3<<3)|0 = 0x18, value 75 = 0x4B
+        assert b"\x18\x4b" in payload
+        # Field 4 varint tag = (4<<3)|0 = 0x20 must not carry solar_surplus
+        assert b"\x20\x4b" not in payload
 
     def test_check_type_field7_present(self):
         # New envelope adds field 7 (check_type) = 3

@@ -235,8 +235,9 @@ class TestAsyncSetPowerOceanSoc:
         assert result is True
         mock_mqtt.send_proto_set.assert_called_once()
         payload = mock_mqtt.send_proto_set.call_args[0][0]
-        # Inner pdata contains 3 fields: 1=100, 2=25, 4=80
-        assert b"\x08\x64\x10\x19\x20\x50" in payload
+        # Inner pdata contains 3 fields: 1=100, 2=25, 3=80
+        # Field 3 (0x18 tag) is sys_bat_backup_ratio per SysBatChgDsgSet proto.
+        assert b"\x08\x64\x10\x19\x18\x50" in payload
 
     async def test_3field_set_rejects_backup_above_solar(
         self,

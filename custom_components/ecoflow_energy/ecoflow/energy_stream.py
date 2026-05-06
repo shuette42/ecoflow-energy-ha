@@ -59,11 +59,11 @@ def build_powerocean_soc_set_payload(
     """Build SysBatChgDsgSet (cmd_id=112) replicating the EcoFlow app frame.
 
     The app sends THREE fields in the inner pdata for every SoC-limit
-    change (verified 2026-05-06 against live app traffic):
+    change (verified against device echo via EmsChangeReport field 15):
 
-        field 1 = max_charge_soc       (always 100 in observed app traffic)
-        field 2 = backup_reserve_pct   (the "Backup-Reserve" slider)
-        field 4 = solar_surplus_pct    (the "Überschüssige Solarenergie" slider)
+        field 1 = max_charge_soc       (sys_bat_chg_up_limit, always 100)
+        field 2 = backup_reserve_pct   (sys_bat_dsg_down_limit, "Backup-Reserve" slider)
+        field 3 = solar_surplus_pct    (sys_bat_backup_ratio, "Überschüssige Solarenergie" slider)
 
     The older 2-field builder (`build_soc_limit_set_payload`) sent only
     fields 1+2, which the device sometimes silently ignored. Using the
@@ -100,7 +100,7 @@ def build_powerocean_soc_set_payload(
     pdata = (
         encode_field_varint(1, 100)                       # max_charge_soc, constant
         + encode_field_varint(2, backup_reserve_pct)      # backup reserve floor
-        + encode_field_varint(4, solar_surplus_pct)       # solar surplus threshold
+        + encode_field_varint(3, solar_surplus_pct)       # solar surplus threshold
     )
     return _build_powerocean_set_envelope(pdata, cmd_id=112, seq=seq, device_sn=device_sn)
 

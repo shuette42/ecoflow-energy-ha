@@ -1173,10 +1173,10 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     ) -> bool:
         """Send a 3-field SoC SET to PowerOcean (app-replay format).
 
-        Wire: cmd_id=112 SysBatChgDsgSet with field 1=100, field 2=backup,
-        field 4=solar_surplus, plus extended envelope (check_type, from=ios,
-        device_sn). Verified 2026-05-06 against the official EcoFlow app
-        traffic. The legacy `async_set_soc_limits` only sends fields 1+2
+        Wire: cmd_id=112 SysBatChgDsgSet with field 1=100 (sys_bat_chg_up_limit),
+        field 2=backup (sys_bat_dsg_down_limit), field 3=solar_surplus
+        (sys_bat_backup_ratio), plus extended envelope (check_type, from=ios,
+        device_sn). The legacy `async_set_soc_limits` only sends fields 1+2
         and is silently ignored by the device for backup-reserve changes.
         """
         if not self._enhanced_mode:
