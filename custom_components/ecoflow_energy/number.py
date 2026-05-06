@@ -193,8 +193,10 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
     async def _async_set_powerocean_value(self, value: float) -> None:
         """Set a PowerOcean number value via WSS Protobuf.
 
-        SysBatChgDsgSet sends both limits in one message.  The unchanged
-        limit is read from coordinator data so both are always consistent.
+        SysBatChgDsgSet (cmd_id=112) is sent as a 3-field app-replay
+        payload: field 1=100 constant, field 2=backup_reserve, field
+        4=solar_surplus. The unchanged value is read from coordinator
+        data so both slider positions stay consistent with the device.
         """
         key = self._definition.key
         int_value = int(value)
@@ -203,16 +205,26 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
             _LOGGER.warning("No data available yet for %s", self.coordinator.device_sn)
             return
 
-        if key == "min_discharge_soc":
-            max_soc = int(self.coordinator.data.get("ems_charge_upper_limit_pct", 100))
-            min_soc = int_value
-        else:
-            _LOGGER.warning("No PowerOcean SET handler for %s", key)
+        # New 3-field handlers (verified against official app traffic).
+        if key == "backup_reserve":
+            current_solar = int(self.coordinator.data.get("ems_backup_ratio_pct", 100))
+            backup = int_value
+            solar = max(current_solar, backup)  # enforce backup <= solar
+            ok = await self.coordinator.async_set_powerocean_soc(backup, solar)
+            if ok:
+                self._apply_optimistic_number(value)
             return
 
-        ok = await self.coordinator.async_set_soc_limits(max_soc, min_soc)
-        if ok:
-            self._apply_optimistic_number(value)
+        if key == "solar_surplus_threshold":
+            current_backup = int(self.coordinator.data.get("ems_discharge_lower_limit_pct", 0))
+            solar = int_value
+            backup = min(current_backup, solar)  # enforce backup <= solar
+            ok = await self.coordinator.async_set_powerocean_soc(backup, solar)
+            if ok:
+                self._apply_optimistic_number(value)
+            return
+
+        _LOGGER.warning("No PowerOcean SET handler for %s", key)
 
 
 def _get_number_defs(device_type: str) -> list[EcoFlowNumberDef]:

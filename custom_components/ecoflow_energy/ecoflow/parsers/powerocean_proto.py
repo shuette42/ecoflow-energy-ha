@@ -57,18 +57,38 @@ _WIFI_ETH_KEYS: frozenset[str] = frozenset({"wifi_status", "ethernet_status"})
 
 
 def _apply_enum_mappings(result: dict[str, Any]) -> None:
-    """Apply all enum and connectivity mappings to sensor-keyed result dict in place."""
+    """Apply all enum and connectivity mappings to sensor-keyed result dict in place.
+
+    Unknown integer values (e.g. firmware adding new states) are dropped
+    rather than passed through, because HA's enum sensors raise
+    ``ValueError: state value 'N' not in options`` for any value not in
+    the declared options list.
+    """
     for sensor_key, mapping in _PROTO_ENUM_INT.items():
         if sensor_key in result:
             iv = int(result[sensor_key]) if isinstance(result[sensor_key], (int, float)) else None
             if iv is not None and iv in mapping:
                 result[sensor_key] = mapping[iv]
+            else:
+                # Drop unknown enum value - keeping the raw int crashes the
+                # HA sensor with "not in list of options".
+                _LOGGER.debug(
+                    "Unknown enum value for %s: %r (dropped)",
+                    sensor_key, result[sensor_key],
+                )
+                result.pop(sensor_key, None)
 
     for sensor_key, mapping in _WORK_STATE_ENUM_INT.items():
         if sensor_key in result:
             iv = int(result[sensor_key]) if isinstance(result[sensor_key], (int, float)) else None
             if iv is not None and iv in mapping:
                 result[sensor_key] = mapping[iv]
+            else:
+                _LOGGER.debug(
+                    "Unknown work-state value: %r (dropped)",
+                    result[sensor_key],
+                )
+                result.pop(sensor_key, None)
 
     for sensor_key in _CONNECTIVITY_KEYS:
         if sensor_key in result:

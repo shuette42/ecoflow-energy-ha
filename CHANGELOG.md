@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.13.0] - 2026-05-06
+
+### Added
+- PowerOcean controls verified against live app traffic. The 3-field `SysBatChgDsgSet` payload (cmd_id=112) replicates the official EcoFlow app byte-for-byte, ensuring writes are accepted reliably. (beta.1)
+  - `number.backup_reserve` - emergency reserve SoC (0-100%, step 5). Maps to the "Backup-Reserve" slider in the EcoFlow app.
+  - `number.solar_surplus_threshold` - SoC threshold above which surplus solar is routed to controllable devices (0-100%, step 5). Maps to "Überschüssige Solarenergie" in the app.
+  - `select.work_mode` - operational strategy. Phase 1 supports Self-use ("Eigenstromversorgung") and AI Schedule ("Intelligenter Modus"). TOU and Backup require additional sub-parameters and are deferred.
+
+### Fixed
+- Enum sensors no longer crash with `ValueError: state value not in options` when the device emits a previously-unseen enum value. Unknown values are now dropped (sensor stays unavailable until a known value arrives) rather than being passed through as raw integers. Affects `ems_work_mode`, `ems_work_state`, `pcs_run_state`, and other enum fields. (beta.1)
+
+### Removed
+- `number.min_discharge_soc` (legacy) - sent only 2 of the 3 fields the device requires, causing writes to be silently ignored. Use the new `number.backup_reserve` instead. The wire field and read sensor are unchanged; only the entity name and range (was 0-30%, now 0-100%) differ. (beta.1)
+
+### Migration
+- After upgrade, the old `number.ecoflow_powerocean_min_entladezustand` (DE) / `min_discharge_soc` (EN) entity will appear as "unavailable" in HA. It is safe to delete via Settings → Devices & Services → EcoFlow Energy → ⋮ → Delete on the entity. Any automation referencing it should be updated to use `number.ecoflow_powerocean_backup_reserve` instead.
+
 ## [1.12.0] - 2026-04-22
 
 ### Added

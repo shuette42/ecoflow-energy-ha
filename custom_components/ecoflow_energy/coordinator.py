@@ -1168,6 +1168,82 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._log_event("set_soc_limits_fail", f"max={max_charge_soc}, min={min_discharge_soc}")
         return ok
 
+    async def async_set_powerocean_soc(
+        self, backup_reserve_pct: int, solar_surplus_pct: int,
+    ) -> bool:
+        """Send a 3-field SoC SET to PowerOcean (app-replay format).
+
+        Wire: cmd_id=112 SysBatChgDsgSet with field 1=100, field 2=backup,
+        field 4=solar_surplus, plus extended envelope (check_type, from=ios,
+        device_sn). Verified 2026-05-06 against the official EcoFlow app
+        traffic. The legacy `async_set_soc_limits` only sends fields 1+2
+        and is silently ignored by the device for backup-reserve changes.
+        """
+        if not self._enhanced_mode:
+            _LOGGER.warning("PowerOcean SoC SET requires Enhanced Mode (%s)", self.device_sn)
+            return False
+        if self._mqtt_client is None or not self._mqtt_client.is_connected():
+            _LOGGER.warning("Cannot send PowerOcean SoC - MQTT not connected (%s)", self.device_sn)
+            return False
+        if backup_reserve_pct > solar_surplus_pct:
+            _LOGGER.warning(
+                "PowerOcean SoC SET rejected locally: backup_reserve (%d) > "
+                "solar_surplus (%d). Device requires backup <= solar.",
+                backup_reserve_pct, solar_surplus_pct,
+            )
+            return False
+
+        from .ecoflow.energy_stream import build_powerocean_soc_set_payload
+
+        payload = build_powerocean_soc_set_payload(
+            backup_reserve_pct,
+            solar_surplus_pct,
+            device_sn=self.device_sn,
+        )
+        ok = await self.hass.async_add_executor_job(
+            self._mqtt_client.send_proto_set, payload,
+        )
+        label = f"backup={backup_reserve_pct} solar={solar_surplus_pct}"
+        if ok:
+            _LOGGER.debug("PowerOcean SoC sent: %s (%s)", label, self.device_sn)
+            self._log_event("set_powerocean_soc", label)
+        else:
+            _LOGGER.warning("PowerOcean SoC SET failed: %s (%s)", label, self.device_sn)
+            self._log_event("set_powerocean_soc_fail", label)
+        return ok
+
+    async def async_set_powerocean_work_mode(self, work_mode: int) -> bool:
+        """Send SysWorkModeSet (cmd_id=98) for PowerOcean.
+
+        Phase 1 supports only modes that work without sub-params:
+        SELFUSE (0) and AI_SCHEDULE (12). TOU (1) and BACKUP (2) require
+        TouParam/BackupParam and return result=1 if sent without them.
+        """
+        if not self._enhanced_mode:
+            _LOGGER.warning(
+                "Work-mode SET requires Enhanced Mode (%s)", self.device_sn,
+            )
+            return False
+        if self._mqtt_client is None or not self._mqtt_client.is_connected():
+            _LOGGER.warning(
+                "Cannot send work-mode - MQTT not connected (%s)", self.device_sn,
+            )
+            return False
+
+        from .ecoflow.energy_stream import build_work_mode_set_payload
+
+        payload = build_work_mode_set_payload(work_mode)
+        ok = await self.hass.async_add_executor_job(
+            self._mqtt_client.send_proto_set, payload,
+        )
+        if ok:
+            _LOGGER.debug("Work-mode sent: %d (%s)", work_mode, self.device_sn)
+            self._log_event("set_work_mode", str(work_mode))
+        else:
+            _LOGGER.warning("Work-mode SET failed: %d (%s)", work_mode, self.device_sn)
+            self._log_event("set_work_mode_fail", str(work_mode))
+        return ok
+
     async def async_send_proto_set_command(
         self, payload: bytes, label: str,
     ) -> bool:
