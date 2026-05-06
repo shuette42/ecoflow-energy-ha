@@ -15,6 +15,11 @@ updates:
       minor-and-patch:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+    ignore:
+      # pytest-homeassistant-custom-component >=0.13.317 requires Python 3.14.
+      # Our CI runs Python 3.13. Re-evaluate when CI is upgraded to 3.14.
+      - dependency-name: "pytest-homeassistant-custom-component"
+        versions: [">=0.13.317"]
 
   # GitHub Actions versions
   - package-ecosystem: "github-actions"

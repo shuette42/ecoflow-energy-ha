@@ -1,2 +1,4 @@
 # Test framework
-pytest-homeassistant-custom-component>=0.13.0
+# Floor pinned to 0.13.316 because >=0.13.317 requires Python 3.14 (CI uses 3.13).
+# See .github/dependabot.yml ignore rule.
+pytest-homeassistant-custom-component>=0.13.316
