@@ -26,7 +26,8 @@
 - **Up to 200 sensors per device** — power, energy, battery packs, temperature, diagnostics
 - **Energy Dashboard ready** — local Riemann-sum kWh with gap detection
 - **Real-time out of the box** — Enhanced Mode: ~2-4 s updates for all devices
-- **Switches & number controls** — AC/DC output, charge speed, SoC limits
+- **Full PowerOcean control** — Backup Reserve, Solar Surplus Threshold, Work Mode (Self-use / AI Schedule)
+- **Delta switches & numbers** — AC/DC output, charge speed, backup reserve, screen settings
 - **Auto-discovery** — all devices bound to your EcoFlow account
 - **4-tier reconnect** — never gives up on the connection
 - **Automatic fallback** — MQTT stale? Transparent switch to HTTP polling (Standard Mode)
@@ -38,18 +39,24 @@
 
 | | Sensors | Controls | Energy Sensors | Update Rate |
 |:---|:---:|:---:|:---:|:---|
-| **PowerOcean** — Home Battery | 202 | 1 number | 6 (solar, grid, battery, home) | ~30 s standard / ~3 s enhanced |
+| **PowerOcean** — Home Battery | 202 | 2 numbers, 1 select (Enhanced only) | 6 (solar, grid, battery, home) | ~30 s standard / ~3 s enhanced |
 | **Delta 2 Max** — Portable Power | 94 | 7 switches, 8 numbers | 4 (solar 1+2, AC in/out) | ~30 s standard / ~2 s enhanced |
 | **Smart Plug** — Switchable Outlet | 11 | 1 switch, 2 numbers | 1 (total energy) | ~30 s standard / ~3 s enhanced |
 
 > **Tip:** Other Delta-series devices (Delta Pro, Delta 2, etc.) should work automatically with the Delta sensor set.
 
 <details>
-<summary><b>PowerOcean</b> — 3-phase grid, MPPT tracking, multi-pack battery, EMS diagnostics</summary>
+<summary><b>PowerOcean</b> — 3-phase grid, MPPT tracking, multi-pack battery, EMS diagnostics, energy strategy controls</summary>
 
 3-phase grid monitoring (voltage, current, power per phase) · MPPT per-string tracking (2 strings) · **Multi-battery-pack support** (up to 5 BP5000 packs — per-pack SoC, power, SoH, cycles, temperatures, lifetime energy) · Battery diagnostics (cell temps & voltages, MOSFET temps) · EMS state, work mode, feed mode, grid status, power factor · System diagnostics (fault codes, connectivity status, capacity limits)
 
-**Enhanced Mode** upgrades to ~3 s WSS Protobuf push and enables **SoC limit control** (max charge / min discharge).
+**Enhanced Mode controls** (verified against the official EcoFlow app, byte-for-byte wire compatible):
+
+- **Backup Reserve** (`number`, 0-100%) — minimum SoC the system keeps in reserve. Same slider as "Backup-Reserve" in the EcoFlow app.
+- **Solar Surplus Threshold** (`number`, 0-100%) — SoC above which surplus solar is routed to controllable devices. Same slider as "Prioritize controllable devices (Beta)" in the app.
+- **Work Mode** (`select`) — Self-use ("Eigenstromversorgung") or AI Schedule ("Intelligenter Modus"). TOU and Backup modes are deferred (require additional sub-parameters).
+
+The integration enforces the app's `backup_reserve <= solar_surplus_threshold` constraint automatically.
 
 **Note:** All credentials (API keys or email/password) are stored in Home Assistant's encrypted configuration storage (`.storage/core.config_entries`). This is standard Home Assistant behavior.
 
@@ -95,15 +102,16 @@ Download the [latest release](https://github.com/shuette42/ecoflow-energy-ha/rel
 | **Credentials** | Access Key + Secret Key ([Developer Portal](https://developer.ecoflow.com)) | EcoFlow email + password (same as mobile app) |
 | **Devices** | All supported devices | All supported devices |
 | **Update rate** | ~30 s HTTP polling (+ MQTT push for Delta/Smart Plug) | ~2-4 s real-time via WSS MQTT |
-| **Controls** | All switches and numbers | All switches and numbers |
+| **Delta / Smart Plug controls** | All switches and numbers | All switches and numbers |
+| **PowerOcean controls** | Read-only sensors only | Full energy strategy controls (Backup Reserve, Solar Surplus Threshold, Work Mode) |
 | **Stability** | Official EcoFlow API - supported and stable | Community-driven - unofficial, use at your own risk |
-| **Best for** | Reliable long-term operation | Real-time monitoring and fast automations |
+| **Best for** | Reliable long-term operation | Real-time monitoring, fast automations, PowerOcean control |
 
 **Standard Mode** uses the official EcoFlow IoT Developer API. Apply for free API keys at [developer.ecoflow.com](https://developer.ecoflow.com).
 
 **Enhanced Mode** connects with your EcoFlow email and password. No Developer API keys needed. Faster updates, but this is an unofficial, community-driven protocol that may change without notice.
 
-**Upgrading from v1.8.x?** Existing Standard Mode setups continue to work without changes. If you previously used Enhanced Mode with Developer Keys + email/password, the integration automatically upgrades to the new app-auth flow on restart.
+**Upgrading?** See [CHANGELOG.md](CHANGELOG.md) for migration notes. Most upgrades are seamless. v1.13.0 removes the legacy `min_discharge_soc` PowerOcean entity (replaced by `backup_reserve`); after upgrading you may see it as "unavailable" in HA - safe to delete via Settings > Devices & services > Entities.
 
 ---
 
@@ -228,6 +236,65 @@ automation:
 
 </details>
 
+<details>
+<summary><b>PowerOcean dynamic backup reserve (Enhanced Mode)</b></summary>
+
+Raise the backup reserve when an EV is plugged in or a storm is forecast, lower it overnight to use the battery for self-consumption.
+
+```yaml
+automation:
+  - alias: "Backup reserve high before storm"
+    trigger:
+      - platform: state
+        entity_id: weather.home
+        attribute: forecast
+    condition:
+      - condition: template
+        value_template: >
+          {{ state_attr('weather.home', 'forecast')[0].condition in ['lightning', 'lightning-rainy'] }}
+    action:
+      - service: number.set_value
+        target:
+          entity_id: number.ecoflow_powerocean_backup_reserve
+        data:
+          value: 80
+
+  - alias: "Backup reserve low overnight"
+    trigger:
+      - platform: time
+        at: "23:00:00"
+    action:
+      - service: number.set_value
+        target:
+          entity_id: number.ecoflow_powerocean_backup_reserve
+        data:
+          value: 10
+```
+
+</details>
+
+<details>
+<summary><b>PowerOcean Work Mode switching (Enhanced Mode)</b></summary>
+
+Switch to AI Schedule when dynamic-tariff data is available, fall back to Self-use otherwise.
+
+```yaml
+automation:
+  - alias: "Work Mode AI Schedule on cheap-tariff days"
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.tibber_price_total
+        below: 0.20
+    action:
+      - service: select.select_option
+        target:
+          entity_id: select.ecoflow_powerocean_work_mode
+        data:
+          option: "ai_schedule"
+```
+
+</details>
+
 ---
 
 ## How It Compares
@@ -244,6 +311,7 @@ automation:
 | Stream health | 3-state monitoring | Not tracked |
 | Energy tracking | Local Riemann-sum | API totals |
 | Device types | Heterogeneous in one integration | Single type |
+| PowerOcean control | Backup Reserve, Solar Surplus, Work Mode (verified app-replay) | Read-only or untested |
 | Control | Optimistic lock, zero-flicker | Read-only or basic |
 | Offline handling | Expected, no error spam | Error |
 
