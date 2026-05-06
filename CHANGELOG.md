@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 - Enum sensors no longer crash with `ValueError: state value not in options` when the device emits a previously-unseen enum value. Unknown values are now dropped (sensor stays unavailable until a known value arrives) rather than being passed through as raw integers. Affects `ems_work_mode`, `ems_work_state`, `pcs_run_state`, and other enum fields. (beta.1)
+- PowerOcean `number.solar_surplus_threshold` ("Überschüssige Solarenergie") slider reverted to the device's stored value after every change. The 3-field `SysBatChgDsgSet` payload (cmd_id=112) wrote the surplus percentage to wire field 4, which the device silently accepts but ignores. The value now goes to wire field 3 (`sys_bat_backup_ratio`) and is reflected back via `JTS1EmsChangeReport` within ~0.5s. The Backup-Reserve slider was unaffected. (beta.2)
 
 ### Removed
 - `number.min_discharge_soc` (legacy) - sent only 2 of the 3 fields the device requires, causing writes to be silently ignored. Use the new `number.backup_reserve` instead. The wire field and read sensor are unchanged; only the entity name and range (was 0-30%, now 0-100%) differ. (beta.1)
