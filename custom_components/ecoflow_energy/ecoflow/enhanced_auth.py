@@ -16,7 +16,12 @@ import logging
 from typing import Any
 
 import aiohttp
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms
+
+try:
+    from cryptography.hazmat.decrepit.ciphers.modes import CFB
+except ImportError:  # cryptography < 43.0
+    from cryptography.hazmat.primitives.ciphers.modes import CFB
 
 from .const import IOT_API_BASE
 
@@ -133,7 +138,7 @@ def _decrypt_certification(
     """
     try:
         key = hashlib.sha256(token.encode()).digest()
-        cipher = Cipher(algorithms.AES(key), modes.CFB(_AES_IV))
+        cipher = Cipher(algorithms.AES(key), CFB(_AES_IV))
         decryptor = cipher.decryptor()
         plaintext = decryptor.update(base64.b64decode(encrypted_data)) + decryptor.finalize()
 
