@@ -66,6 +66,7 @@ ENERGY_STREAM_KEEPALIVE_S = 20  # Re-send EnergyStreamSwitch every 20s
 QUOTAS_KEEPALIVE_S = 30  # latestQuotas poll interval (app-level keepalive)
 APP_SURPLUS_SYNC_MIN_INTERVAL_S = 30.0  # min interval between auto-sync SETs that mirror EmsParamChangeReport.dev_soc into the EMS sysBatBackupRatio
 APP_SURPLUS_SYNC_USER_GRACE_S = 5.0  # ignore discrepancy briefly after a user SET to wait for the device echo
+POWEROCEAN_SOC_DEBOUNCE_S = 0.3  # coalesce slider-drag SETs into one frame; the device cannot keep up with 5%-step sets at 100ms cadence and the EMS/App-layer fields desync
 PING_KEEPALIVE_S = 60  # MQTT ping heartbeat interval
 SMARTPLUG_GET_ALL_KEEPALIVE_S = 120.0  # Smart Plug app-auth: periodic full-state refresh
 CREDENTIAL_REFRESH_CHECK_S = 43200.0  # Check every 12h whether credentials need proactive refresh

@@ -198,6 +198,9 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
         field 3+4=solar_surplus_pct (EMS state + app-UI state). The
         unchanged value is read from coordinator data so both slider
         positions stay consistent with the device and the EcoFlow app.
+
+        SET delivery goes through the coordinator's debouncer so that
+        rapid-fire slider drags coalesce into a single frame.
         """
         key = self._definition.key
         int_value = int(value)
@@ -206,13 +209,12 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
             _LOGGER.warning("No data available yet for %s", self.coordinator.device_sn)
             return
 
-        # New 3-field handlers (verified against official app traffic).
         if key == "backup_reserve":
             current_solar = int(self.coordinator.data.get("ems_backup_ratio_pct", 100))
             backup = int_value
             solar = max(current_solar, backup)  # enforce backup <= solar
             self.coordinator._last_user_surplus_set_ts = time.monotonic()
-            ok = await self.coordinator.async_set_powerocean_soc(backup, solar)
+            ok = await self.coordinator.async_set_powerocean_soc_debounced(backup, solar)
             if ok:
                 self._apply_optimistic_number(value)
             return
@@ -222,7 +224,7 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
             solar = int_value
             backup = min(current_backup, solar)  # enforce backup <= solar
             self.coordinator._last_user_surplus_set_ts = time.monotonic()
-            ok = await self.coordinator.async_set_powerocean_soc(backup, solar)
+            ok = await self.coordinator.async_set_powerocean_soc_debounced(backup, solar)
             if ok:
                 self._apply_optimistic_number(value)
             return

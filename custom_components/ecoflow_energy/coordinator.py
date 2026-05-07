@@ -44,6 +44,7 @@ from .const import (
     DEVICE_TYPE_DISPLAY_NAMES,
     APP_SURPLUS_SYNC_MIN_INTERVAL_S,
     APP_SURPLUS_SYNC_USER_GRACE_S,
+    POWEROCEAN_SOC_DEBOUNCE_S,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_UNKNOWN,
     DOMAIN,
@@ -179,6 +180,15 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # avoids redundant SETs and the user-grace gives the device echo time.
         self._last_app_surplus_sync_ts: float = 0.0
         self._last_user_surplus_set_ts: float = 0.0
+        # Debounce state for the PowerOcean SoC SET. HA Number-Entity sliders
+        # send one SET per 5%-step during a mouse drag, which arrives at the
+        # device at ~100 ms cadence. The device cannot keep all SETs in sync
+        # between Field 3 (EMS) and Field 4 (App-Layer), so the two fields
+        # desync. The debouncer coalesces all SET requests inside
+        # POWEROCEAN_SOC_DEBOUNCE_S to a single frame carrying the most
+        # recent (backup, solar) pair.
+        self._powerocean_soc_pending: tuple[int, int] | None = None
+        self._powerocean_soc_debounce_unsub: asyncio.TimerHandle | None = None
         self._credential_obtained_ts: float = 0.0
         self._credential_refresh_unsub: asyncio.TimerHandle | None = None
         self._event_log: deque[dict[str, Any]] = deque(maxlen=50)
@@ -527,6 +537,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         for handle in (
             self._keepalive_unsub, self._quotas_unsub, self._ping_unsub,
             self._stale_check_unsub, self._credential_refresh_unsub,
+            self._powerocean_soc_debounce_unsub,
         ):
             if handle is not None:
                 handle.cancel()
@@ -1272,6 +1283,60 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             _LOGGER.warning("SoC limits SET failed (%s)", self.device_sn)
             self._log_event("set_soc_limits_fail", f"max={max_charge_soc}, min={min_discharge_soc}")
         return ok
+
+    async def async_set_powerocean_soc_debounced(
+        self, backup_reserve_pct: int, solar_surplus_pct: int,
+    ) -> bool:
+        """Coalesce rapid-fire SoC SET requests (HA slider drag) into one frame.
+
+        HA's Number-Entity emits one async_set_native_value call per 5%-step
+        when the user drags the slider, producing 5-10 SETs in <1 s. The
+        device cannot keep wire field 3 (sys_bat_backup_ratio, EMS) and
+        field 4 (dev_soc, App-Layer) in sync at that cadence, so the two
+        fields drift apart and the user sees stale values in HA or the
+        EcoFlow app. This method stores the latest (backup, solar) and
+        defers the actual MQTT SET by `POWEROCEAN_SOC_DEBOUNCE_S`. Each
+        new call within the window resets the timer, so only the final
+        value reaches the device.
+
+        Returns True synchronously - the caller should treat this as an
+        accepted user request and apply the optimistic UI value. The
+        actual SET runs asynchronously and may still fail; failures are
+        logged via the underlying async_set_powerocean_soc.
+        """
+        if not self._enhanced_mode:
+            _LOGGER.warning(
+                "PowerOcean SoC SET requires Enhanced Mode (%s)", self.device_sn,
+            )
+            return False
+        if backup_reserve_pct > solar_surplus_pct:
+            _LOGGER.warning(
+                "PowerOcean SoC SET rejected locally: backup_reserve (%d) > "
+                "solar_surplus (%d). Device requires backup <= solar.",
+                backup_reserve_pct, solar_surplus_pct,
+            )
+            return False
+
+        self._powerocean_soc_pending = (backup_reserve_pct, solar_surplus_pct)
+        if self._powerocean_soc_debounce_unsub is not None:
+            self._powerocean_soc_debounce_unsub.cancel()
+        self._powerocean_soc_debounce_unsub = self.hass.loop.call_later(
+            POWEROCEAN_SOC_DEBOUNCE_S,
+            lambda: self.hass.async_create_task(self._flush_powerocean_soc()),
+        )
+        return True
+
+    async def _flush_powerocean_soc(self) -> None:
+        """Send the most recent debounced SoC SET to the device."""
+        if self._powerocean_soc_debounce_unsub is not None:
+            self._powerocean_soc_debounce_unsub.cancel()
+            self._powerocean_soc_debounce_unsub = None
+        pending = self._powerocean_soc_pending
+        if pending is None:
+            return
+        self._powerocean_soc_pending = None
+        backup, solar = pending
+        await self.async_set_powerocean_soc(backup, solar)
 
     async def async_set_powerocean_soc(
         self, backup_reserve_pct: int, solar_surplus_pct: int,

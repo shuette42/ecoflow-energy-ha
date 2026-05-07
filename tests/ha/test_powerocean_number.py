@@ -178,11 +178,11 @@ class TestPowerOceanNumberBasic:
         entity, coordinator = self._make_number_entity(
             hass, enhanced_config_entry,
         )
-        coordinator.async_set_powerocean_soc = AsyncMock(return_value=False)
+        coordinator.async_set_powerocean_soc_debounced = AsyncMock(return_value=False)
 
         await entity.async_set_native_value(50.0)
 
-        coordinator.async_set_powerocean_soc.assert_called_once_with(50, 100)
+        coordinator.async_set_powerocean_soc_debounced.assert_called_once_with(50, 100)
         # No optimistic update — original value retained
         assert coordinator.data["ems_discharge_lower_limit_pct"] == 0
 
@@ -342,12 +342,12 @@ class TestPowerOceanNumberSet3Field:
         entity, coordinator = self._make_entity(
             hass, enhanced_config_entry, "backup_reserve",
         )
-        coordinator.async_set_powerocean_soc = AsyncMock(return_value=True)
+        coordinator.async_set_powerocean_soc_debounced = AsyncMock(return_value=True)
         entity.async_write_ha_state = MagicMock()
 
         await entity.async_set_native_value(50.0)
 
-        coordinator.async_set_powerocean_soc.assert_called_once_with(50, 80)
+        coordinator.async_set_powerocean_soc_debounced.assert_called_once_with(50, 80)
 
     async def test_set_backup_reserve_clamps_solar_when_higher(
         self,
@@ -360,12 +360,12 @@ class TestPowerOceanNumberSet3Field:
         )
         coordinator._device_data["ems_backup_ratio_pct"] = 40
         coordinator.async_set_updated_data(dict(coordinator._device_data))
-        coordinator.async_set_powerocean_soc = AsyncMock(return_value=True)
+        coordinator.async_set_powerocean_soc_debounced = AsyncMock(return_value=True)
         entity.async_write_ha_state = MagicMock()
 
         await entity.async_set_native_value(60.0)
 
-        coordinator.async_set_powerocean_soc.assert_called_once_with(60, 60)
+        coordinator.async_set_powerocean_soc_debounced.assert_called_once_with(60, 60)
 
     async def test_set_solar_surplus_holds_backup(
         self,
@@ -376,12 +376,12 @@ class TestPowerOceanNumberSet3Field:
         entity, coordinator = self._make_entity(
             hass, enhanced_config_entry, "solar_surplus_threshold",
         )
-        coordinator.async_set_powerocean_soc = AsyncMock(return_value=True)
+        coordinator.async_set_powerocean_soc_debounced = AsyncMock(return_value=True)
         entity.async_write_ha_state = MagicMock()
 
         await entity.async_set_native_value(90.0)
 
-        coordinator.async_set_powerocean_soc.assert_called_once_with(30, 90)
+        coordinator.async_set_powerocean_soc_debounced.assert_called_once_with(30, 90)
 
     async def test_set_solar_clamps_backup_when_lower(
         self,
@@ -392,13 +392,13 @@ class TestPowerOceanNumberSet3Field:
         entity, coordinator = self._make_entity(
             hass, enhanced_config_entry, "solar_surplus_threshold",
         )
-        coordinator.async_set_powerocean_soc = AsyncMock(return_value=True)
+        coordinator.async_set_powerocean_soc_debounced = AsyncMock(return_value=True)
         entity.async_write_ha_state = MagicMock()
 
         # current backup = 30, set solar to 20 -> backup must clamp to 20
         await entity.async_set_native_value(20.0)
 
-        coordinator.async_set_powerocean_soc.assert_called_once_with(20, 20)
+        coordinator.async_set_powerocean_soc_debounced.assert_called_once_with(20, 20)
 
 
 class TestPowerOceanAppSurplusAutoSync:
@@ -544,7 +544,7 @@ class TestPowerOceanAppSurplusAutoSync:
             "ems_backup_ratio_pct": 90,
         }
         coordinator.async_set_updated_data(dict(coordinator._device_data))
-        coordinator.async_set_powerocean_soc = AsyncMock(return_value=True)
+        coordinator.async_set_powerocean_soc_debounced = AsyncMock(return_value=True)
         defn = next(d for d in POWEROCEAN_NUMBERS if d.key == "solar_surplus_threshold")
         entity = EcoFlowNumber(coordinator, defn)
         entity.async_write_ha_state = MagicMock()
@@ -554,3 +554,100 @@ class TestPowerOceanAppSurplusAutoSync:
         ):
             await entity.async_set_native_value(50.0)
         assert coordinator._last_user_surplus_set_ts == 2000.0
+
+
+class TestPowerOceanSocSetDebounce:
+    """Coalesce slider-drag SETs into one frame.
+
+    HA's Number-Entity emits one async_set_native_value call per 5%-step
+    while the user drags the slider. The device cannot keep wire field 3
+    (EMS) and field 4 (App-Layer) in sync at that cadence, so the two
+    fields desync. The debouncer collects calls inside the configured
+    window and forwards only the most recent (backup, solar) pair.
+    """
+
+    def _make_coordinator(self, hass, entry):
+        entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, entry, MOCK_POWEROCEAN_DEVICE,
+        )
+        coordinator._enhanced_mode = True
+        coordinator.async_set_powerocean_soc = AsyncMock(return_value=True)
+        return coordinator
+
+    async def test_single_call_schedules_set(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        coordinator = self._make_coordinator(hass, enhanced_config_entry)
+        ok = await coordinator.async_set_powerocean_soc_debounced(50, 80)
+        assert ok is True
+        # Pending state recorded
+        assert coordinator._powerocean_soc_pending == (50, 80)
+        # Underlying SET not yet called - it is debounced
+        coordinator.async_set_powerocean_soc.assert_not_called()
+        # Timer still armed; flush to keep cleanup tidy
+        assert coordinator._powerocean_soc_debounce_unsub is not None
+        await coordinator._flush_powerocean_soc()
+
+    async def test_drag_burst_only_sends_last_value(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        coordinator = self._make_coordinator(hass, enhanced_config_entry)
+        # Simulate a slider drag: 5 SETs in quick succession
+        for solar in (60, 70, 80, 90, 100):
+            ok = await coordinator.async_set_powerocean_soc_debounced(0, solar)
+            assert ok is True
+        # Only the last (backup, solar) is pending
+        assert coordinator._powerocean_soc_pending == (0, 100)
+        # No underlying SET yet
+        coordinator.async_set_powerocean_soc.assert_not_called()
+        # Manually flush to skip the timer
+        await coordinator._flush_powerocean_soc()
+        coordinator.async_set_powerocean_soc.assert_called_once_with(0, 100)
+
+    async def test_flush_clears_pending(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        coordinator = self._make_coordinator(hass, enhanced_config_entry)
+        await coordinator.async_set_powerocean_soc_debounced(0, 75)
+        await coordinator._flush_powerocean_soc()
+        assert coordinator._powerocean_soc_pending is None
+
+    async def test_rejects_invalid_constraint(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        # backup > solar must be rejected without scheduling anything
+        coordinator = self._make_coordinator(hass, enhanced_config_entry)
+        ok = await coordinator.async_set_powerocean_soc_debounced(80, 25)
+        assert ok is False
+        assert coordinator._powerocean_soc_pending is None
+
+    async def test_rejects_outside_enhanced_mode(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        coordinator = self._make_coordinator(hass, enhanced_config_entry)
+        coordinator._enhanced_mode = False
+        ok = await coordinator.async_set_powerocean_soc_debounced(0, 50)
+        assert ok is False
+        assert coordinator._powerocean_soc_pending is None
+
+    async def test_flush_with_no_pending_is_noop(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        # If the timer fires after some other path cleared the pending value,
+        # the flush must not call the underlying SET with stale or empty data.
+        coordinator = self._make_coordinator(hass, enhanced_config_entry)
+        await coordinator._flush_powerocean_soc()
+        coordinator.async_set_powerocean_soc.assert_not_called()
