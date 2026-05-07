@@ -423,6 +423,10 @@ class TestPowerOceanAppSurplusAutoSync:
             "ems_backup_ratio_pct": 90,
             "ems_app_surplus_pct": 47,
         }
+        # Fresh ParamChange frame in the coordinator's view by default. The
+        # auto-sync only acts on frames newer than the last user SET; tests
+        # that set _last_user_surplus_set_ts higher must override this too.
+        coordinator._last_ems_param_change_ts = 1500.0
         coordinator.async_set_powerocean_soc = AsyncMock(return_value=True)
         return coordinator
 
@@ -525,6 +529,79 @@ class TestPowerOceanAppSurplusAutoSync:
             coordinator._maybe_schedule_surplus_sync()
             await hass.async_block_till_done()
         coordinator.async_set_powerocean_soc.assert_called_once_with(0, 47)
+
+    async def test_no_sync_when_param_change_frame_is_stale(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """If the most recent EmsParamChangeReport arrived BEFORE the user
+        pushed a new value in HA, the auto-sync must not fire — the
+        ParamChange's dev_soc value is the obsolete app-side mirror that
+        the user has already superseded."""
+        coordinator = self._make_coordinator(hass, enhanced_config_entry)
+        coordinator._last_user_surplus_set_ts = 2000.0
+        coordinator._last_ems_param_change_ts = 1500.0  # frame older than user SET
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.time.monotonic",
+            return_value=2010.0,  # past user-grace and throttle
+        ):
+            coordinator._maybe_schedule_surplus_sync()
+        coordinator.async_set_powerocean_soc.assert_not_called()
+
+    async def test_sync_when_param_change_arrives_after_user_set(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """A genuine app-side change after the user's HA SET produces a
+        fresh ParamChange frame; the auto-sync should pick it up and
+        align the EMS to the new app value."""
+        coordinator = self._make_coordinator(hass, enhanced_config_entry)
+        coordinator._last_user_surplus_set_ts = 1000.0
+        coordinator._last_ems_param_change_ts = 2000.0  # frame newer than user SET
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.time.monotonic",
+            return_value=2010.0,
+        ):
+            coordinator._maybe_schedule_surplus_sync()
+            await hass.async_block_till_done()
+        coordinator.async_set_powerocean_soc.assert_called_once_with(0, 47)
+
+    async def test_apply_data_updates_param_change_ts(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Receiving a new EmsParamChangeReport with `ems_app_surplus_pct`
+        must record the current monotonic time so the auto-sync can
+        recognise the frame as fresh."""
+        coordinator = self._make_coordinator(hass, enhanced_config_entry)
+        coordinator._last_ems_param_change_ts = 0.0
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.time.monotonic",
+            return_value=3000.0,
+        ):
+            coordinator._apply_data({"ems_app_surplus_pct": 47})
+        assert coordinator._last_ems_param_change_ts == 3000.0
+
+    async def test_apply_data_does_not_touch_param_change_ts_for_other_fields(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Frames that do not carry `ems_app_surplus_pct` (e.g. a regular
+        EmsChangeReport for sysBatBackupRatio) must leave the timestamp
+        alone — only the ParamChange path proves the app-side value is
+        fresh."""
+        coordinator = self._make_coordinator(hass, enhanced_config_entry)
+        coordinator._last_ems_param_change_ts = 1234.0
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.time.monotonic",
+            return_value=3000.0,
+        ):
+            coordinator._apply_data({"ems_backup_ratio_pct": 80})
+        assert coordinator._last_ems_param_change_ts == 1234.0
 
     async def test_user_set_records_timestamp_via_number(
         self,

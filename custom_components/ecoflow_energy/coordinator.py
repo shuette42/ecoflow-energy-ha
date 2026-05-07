@@ -180,6 +180,12 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # avoids redundant SETs and the user-grace gives the device echo time.
         self._last_app_surplus_sync_ts: float = 0.0
         self._last_user_surplus_set_ts: float = 0.0
+        # Timestamp of the most recent EmsParamChangeReport (cmd_id=13) that
+        # carried a `dev_soc` field. The auto-sync only acts on frames newer
+        # than the last user SET — stale ParamChange frames (e.g. an EMS
+        # echo of a value the user has since superseded in HA) would
+        # otherwise pull HA back to the obsolete app-side value.
+        self._last_ems_param_change_ts: float = 0.0
         # Debounce state for the PowerOcean SoC SET. HA Number-Entity sliders
         # send one SET per 5%-step during a mouse drag, which arrives at the
         # device at ~100 ms cadence. The device cannot keep all SETs in sync
@@ -1075,6 +1081,11 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Without this, the parser overwrites the derived state on every EMS
         # report, causing ~250 false transitions/day (#50).
         parsed.pop("batt_charge_discharge_state", None)
+        # Track the arrival of a fresh EmsParamChangeReport so the auto-sync
+        # below can distinguish a real app-side change from a stale frame
+        # whose value the user has since superseded.
+        if "ems_app_surplus_pct" in parsed:
+            self._last_ems_param_change_ts = now
         self._device_data.update(parsed)
 
         # Re-aggregate bp_remain_watth from accumulated device_data (#10).
@@ -1139,6 +1150,16 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return
 
         now = time.monotonic()
+        # Suppress sync if the latest EmsParamChangeReport carrying the
+        # `dev_soc` value is older than the user's most recent SET. The
+        # ParamChange echo is event-driven and lags the EmsChangeReport
+        # echo - if the user just pushed a new value in HA, the
+        # ParamChange we still see may be the obsolete app-side mirror
+        # of a value the user has now superseded. Without this guard the
+        # auto-sync would reissue the *old* app value as a both-field
+        # SET, dragging HA back to the value the user just left.
+        if self._last_ems_param_change_ts <= self._last_user_surplus_set_ts:
+            return
         if now - self._last_app_surplus_sync_ts < APP_SURPLUS_SYNC_MIN_INTERVAL_S:
             return
         if now - self._last_user_surplus_set_ts < APP_SURPLUS_SYNC_USER_GRACE_S:
