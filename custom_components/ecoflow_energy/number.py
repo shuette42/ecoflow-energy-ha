@@ -210,7 +210,12 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
             return
 
         if key == "backup_reserve":
-            current_solar = int(self.coordinator.data.get("ems_backup_ratio_pct", 100))
+            # Read the current solar-surplus from the user-side mirror
+            # (ems_app_surplus_pct = dev_soc), not from the EMS-side
+            # ems_backup_ratio_pct which can be clamped/derived. The
+            # constraint backup <= solar must hold against the user's
+            # actual surplus setting.
+            current_solar = int(self.coordinator.data.get("ems_app_surplus_pct", 100))
             backup = int_value
             solar = max(current_solar, backup)  # enforce backup <= solar
             self.coordinator._last_user_surplus_set_ts = time.monotonic()

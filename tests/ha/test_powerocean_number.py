@@ -326,7 +326,8 @@ class TestPowerOceanNumberSet3Field:
         coordinator._device_data = {
             "ems_charge_upper_limit_pct": 100,
             "ems_discharge_lower_limit_pct": 30,
-            "ems_backup_ratio_pct": 80,
+            "ems_app_surplus_pct": 80,  # user-side surplus mirror (dev_soc)
+            "ems_backup_ratio_pct": 80,  # EMS-side derived value
         }
         coordinator.async_set_updated_data(dict(coordinator._device_data))
         defn = next(d for d in POWEROCEAN_NUMBERS if d.key == key)
@@ -358,7 +359,8 @@ class TestPowerOceanNumberSet3Field:
         entity, coordinator = self._make_entity(
             hass, enhanced_config_entry, "backup_reserve",
         )
-        coordinator._device_data["ems_backup_ratio_pct"] = 40
+        coordinator._device_data["ems_app_surplus_pct"] = 40  # source for backup constraint
+        coordinator._device_data["ems_backup_ratio_pct"] = 40  # EMS mirror
         coordinator.async_set_updated_data(dict(coordinator._device_data))
         coordinator.async_set_powerocean_soc_debounced = AsyncMock(return_value=True)
         entity.async_write_ha_state = MagicMock()
@@ -584,6 +586,44 @@ class TestPowerOceanAppSurplusAutoSync:
         ):
             coordinator._apply_data({"ems_app_surplus_pct": 47})
         assert coordinator._last_ems_param_change_ts == 3000.0
+
+    async def test_no_sync_when_app_value_is_100(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """At app_int == 100 the EMS clamps sys_bat_backup_ratio to 90 by
+        design. Auto-syncing would generate periodic write traffic that
+        never reconciles. The user-side mirror is the source of truth."""
+        coordinator = self._make_coordinator(hass, enhanced_config_entry)
+        coordinator._device_data["ems_app_surplus_pct"] = 100
+        coordinator._device_data["ems_backup_ratio_pct"] = 90
+        coordinator._last_user_surplus_set_ts = 1000.0
+        coordinator._last_ems_param_change_ts = 2000.0
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.time.monotonic",
+            return_value=2010.0,
+        ):
+            coordinator._maybe_schedule_surplus_sync()
+        coordinator.async_set_powerocean_soc.assert_not_called()
+
+    async def test_no_sync_when_app_value_is_0(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """At app_int == 0 the EMS may also diverge by design."""
+        coordinator = self._make_coordinator(hass, enhanced_config_entry)
+        coordinator._device_data["ems_app_surplus_pct"] = 0
+        coordinator._device_data["ems_backup_ratio_pct"] = 10
+        coordinator._last_user_surplus_set_ts = 1000.0
+        coordinator._last_ems_param_change_ts = 2000.0
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.time.monotonic",
+            return_value=2010.0,
+        ):
+            coordinator._maybe_schedule_surplus_sync()
+        coordinator.async_set_powerocean_soc.assert_not_called()
 
     async def test_apply_data_does_not_touch_param_change_ts_for_other_fields(
         self,
