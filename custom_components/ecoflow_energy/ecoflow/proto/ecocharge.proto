@@ -293,3 +293,16 @@ message JTS1EmsChangeReport {
   oneof _wifi_sta_stat { uint32 wifi_sta_stat = 225; }
   oneof _grid_is_energized { bool grid_is_energized = 752; }
 }
+
+// JTS1EmsParamChangeReport (cmd_id=13). Carries the user-tunable parameter
+// state that the EcoFlow app reads on dashboard open. Field 10 is the
+// surplus-slider mirror that the app writes via cmd_id=112 wire field 4
+// (`dev_soc`); the device echoes it here so other clients can observe
+// what the app set, even though the EMS-side `sys_bat_backup_ratio` (in
+// JTS1EmsChangeReport) is not updated by the app's truncated SET.
+//
+// Only `dev_soc` is decoded for now; other fields are documented for
+// future use but not parsed.
+message JTS1EmsParamChangeReport {
+  oneof _dev_soc { uint32 dev_soc = 10; }
+}

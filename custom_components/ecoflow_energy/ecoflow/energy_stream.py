@@ -55,33 +55,33 @@ def build_powerocean_soc_set_payload(
     solar_surplus_pct: int,
     seq: int = 0,
     device_sn: str = "",
+    surplus_field: str = "both",
 ) -> bytes:
     """Build SysBatChgDsgSet (cmd_id=112) replicating the EcoFlow app frame.
 
-    The app sends THREE fields in the inner pdata for every SoC-limit
-    change (verified against device echo via EmsChangeReport field 15):
+    Field mapping (verified against live cloud quota + device echo):
 
         field 1 = max_charge_soc       (sys_bat_chg_up_limit, always 100)
         field 2 = backup_reserve_pct   (sys_bat_dsg_down_limit, "Backup-Reserve" slider)
-        field 3 = solar_surplus_pct    (sys_bat_backup_ratio, "Überschüssige Solarenergie" slider)
+        field 3 = solar_surplus_pct    (sys_bat_backup_ratio, EMS internal state)
+        field 4 = solar_surplus_pct    (dev_soc / socDev, App-UI state)
 
-    The older 2-field builder (`build_soc_limit_set_payload`) sent only
-    fields 1+2, which the device sometimes silently ignored. Using the
-    full 3-field payload plus the extended app envelope (check_type,
-    from="ios", device_sn) is accepted reliably.
+    Field 3 and field 4 are two separate views of the same logical slider.
+    The device's EMS controller reads field 3 (sys_bat_backup_ratio) and
+    publishes it via JTS1EmsChangeReport. The EcoFlow app reads field 4
+    (dev_soc / socDev) from the cloud quota cache. Writing only one of
+    them desynchronizes app and device:
 
-    Constraint enforced by the device UI: backup_reserve_pct <= solar_surplus_pct.
-    Sending values that violate this constraint can be rejected with
-    SetAck result=1.
+        only field 3 -> EMS controls correctly, but the app shows the
+            previous value because socDev is never updated.
+        only field 4 -> the cloud cache reflects the new value, but the
+            EMS keeps running with the old threshold.
+
+    Setting both keeps app, cloud quota, and EMS aligned.
 
     Args:
-        backup_reserve_pct: 0..100, the Backup-Reserve floor SoC.
-        solar_surplus_pct: 0..100, the Überschüssige-Solarenergie threshold.
-        seq: Sequence number. Default 0 generates from timestamp.
-        device_sn: Device serial number for envelope field 25.
-
-    Returns:
-        Binary protobuf payload (Send_Header_Msg).
+        surplus_field: "both" (default) writes field 3 + field 4. "field3"
+            and "field4" exist only as diagnostic shortcuts for probe scripts.
     """
     if not 0 <= backup_reserve_pct <= 100:
         raise ValueError(
@@ -96,12 +96,19 @@ def build_powerocean_soc_set_payload(
             f"backup_reserve_pct ({backup_reserve_pct}) must be <= "
             f"solar_surplus_pct ({solar_surplus_pct})"
         )
+    if surplus_field not in ("field3", "field4", "both"):
+        raise ValueError(
+            f"surplus_field must be field3|field4|both, got {surplus_field!r}"
+        )
 
     pdata = (
-        encode_field_varint(1, 100)                       # max_charge_soc, constant
-        + encode_field_varint(2, backup_reserve_pct)      # backup reserve floor
-        + encode_field_varint(3, solar_surplus_pct)       # solar surplus threshold
+        encode_field_varint(1, 100)
+        + encode_field_varint(2, backup_reserve_pct)
     )
+    if surplus_field in ("field3", "both"):
+        pdata += encode_field_varint(3, solar_surplus_pct)
+    if surplus_field in ("field4", "both"):
+        pdata += encode_field_varint(4, solar_surplus_pct)
     return _build_powerocean_set_envelope(pdata, cmd_id=112, seq=seq, device_sn=device_sn)
 
 

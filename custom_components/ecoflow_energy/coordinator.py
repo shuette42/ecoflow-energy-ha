@@ -42,6 +42,8 @@ from .const import (
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_DISPLAY_NAMES,
+    APP_SURPLUS_SYNC_MIN_INTERVAL_S,
+    APP_SURPLUS_SYNC_USER_GRACE_S,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_UNKNOWN,
     DOMAIN,
@@ -168,6 +170,15 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._device_available: bool = True
         self._last_stale_reconnect_ts: float = 0.0
         self._last_smartplug_get_all_ts: float = 0.0
+        # Surplus auto-sync state (PowerOcean Enhanced Mode):
+        # the EcoFlow app sets the slider via cmd_id=112 wire field 4 only,
+        # which leaves the EMS-side `sys_bat_backup_ratio` unchanged. The
+        # device mirrors the app's value back via cmd_id=13 EmsParamChangeReport
+        # field 10 (`dev_soc`). When that diverges from the EMS value, the
+        # coordinator schedules a corrective both-field SET. The throttle
+        # avoids redundant SETs and the user-grace gives the device echo time.
+        self._last_app_surplus_sync_ts: float = 0.0
+        self._last_user_surplus_set_ts: float = 0.0
         self._credential_obtained_ts: float = 0.0
         self._credential_refresh_unsub: asyncio.TimerHandle | None = None
         self._event_log: deque[dict[str, Any]] = deque(maxlen=50)
@@ -920,8 +931,23 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         if not k.startswith("_")
                     }
                     return flatten_heartbeat(raw)
+                # Enhanced Mode: param change report (cmd_id=13) carries
+                # only `ems_app_surplus_pct` (renamed from `dev_soc`). This
+                # field has no entry in the BP/EMS-change rename tables and
+                # would be dropped by remap_bp_keys, so pass it through
+                # unchanged.
+                if result.mapped.get("_is_ems_param_change"):
+                    raw = {
+                        k: v
+                        for k, v in result.mapped.items()
+                        if not k.startswith("_")
+                    }
+                    return raw or None
                 # Enhanced Mode: change reports and battery heartbeat
-                if result.mapped.get("_is_ems_change") or result.mapped.get("_is_bp_heartbeat"):
+                if (
+                    result.mapped.get("_is_ems_change")
+                    or result.mapped.get("_is_bp_heartbeat")
+                ):
                     raw = {
                         k: v
                         for k, v in result.mapped.items()
@@ -939,11 +965,13 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return None
 
     def _parse_powerocean_get_reply(self, payload: bytes) -> dict[str, Any] | None:
-        """Parse PowerOcean proto get_reply by extracting the EmsChangeReport sub-message.
+        """Parse PowerOcean proto get_reply by extracting EmsChangeReport
+        and EmsParamChangeReport sub-messages.
 
-        The get_reply contains multiple sub-messages (19 headers), each with its
-        own cmd_func/cmd_id and pdata. We find cmd_func=96, cmd_id=8 (EmsChangeReport)
-        and decode its pdata to extract connectivity and enum fields.
+        The get_reply contains multiple sub-messages, each with its own
+        cmd_func/cmd_id and pdata. We extract cmd_func=96 cmd_id=8
+        (EmsChangeReport, connectivity + enum fields) and cmd_id=13
+        (EmsParamChangeReport, the app-side surplus mirror).
         """
         from .ecoflow.proto.decoder import decode_header_message
         from .ecoflow.parsers.powerocean_proto import remap_bp_keys
@@ -954,24 +982,43 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             from .ecoflow.proto import ecocharge_pb2 as pb2
             from google.protobuf.json_format import MessageToDict
 
+            merged: dict[str, Any] = {}
             for hdr in headers or []:
-                if hdr.get("cmd_func") != 96 or hdr.get("cmd_id") != 8:
+                if hdr.get("cmd_func") != 96:
                     continue
+                cmd_id = hdr.get("cmd_id")
                 pdata_hex = hdr.get("pdata")
+                if cmd_id not in (8, 13):
+                    continue
                 if not isinstance(pdata_hex, str) or not pdata_hex:
                     continue
                 try:
                     pdata = bytes.fromhex(pdata_hex)
                 except ValueError:
                     continue
-                msg = pb2.JTS1EmsChangeReport()
+                msg_class = pb2.JTS1EmsChangeReport if cmd_id == 8 else pb2.JTS1EmsParamChangeReport
+                msg = msg_class()
                 msg.ParseFromString(pdata)
                 fields = MessageToDict(msg, preserving_proto_field_name=True)
                 if not fields:
                     continue
-                if "ems_word_mode" in fields:
+                if cmd_id == 8 and "ems_word_mode" in fields:
                     fields["ems_work_mode"] = fields.pop("ems_word_mode")
-                return remap_bp_keys(fields, self._bp_sn_to_index, self.device_sn)
+                if cmd_id == 13 and "dev_soc" in fields:
+                    fields["ems_app_surplus_pct"] = fields.pop("dev_soc")
+                merged.update(fields)
+            if merged:
+                # remap_bp_keys filters via BP/EMS-change rename tables and
+                # drops anything not listed there. Pull out fields that are
+                # already in sensor-key form (e.g. ems_app_surplus_pct from
+                # cmd_id=13) before remap, then re-add them.
+                passthrough = {}
+                for key in ("ems_app_surplus_pct",):
+                    if key in merged:
+                        passthrough[key] = merged.pop(key)
+                remapped = remap_bp_keys(merged, self._bp_sn_to_index, self.device_sn)
+                remapped.update(passthrough)
+                return remapped
         except Exception:
             _LOGGER.debug("PowerOcean get_reply decode error", exc_info=True)
 
@@ -1047,6 +1094,64 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             key_count=len(self._device_data),
         )
         self.async_set_updated_data(dict(self._device_data))
+
+        # PowerOcean Enhanced Mode: detect cloud-only app changes to the
+        # solar-surplus slider via the EmsParamChangeReport.dev_soc echo
+        # (cmd_id=13 wire field 10) and push a corrective both-field SET so
+        # the EMS-side sys_bat_backup_ratio catches up to what the app set.
+        if self._enhanced_mode and self.device_type == DEVICE_TYPE_POWEROCEAN:
+            self._maybe_schedule_surplus_sync()
+
+    def _maybe_schedule_surplus_sync(self) -> None:
+        """Schedule an auto-sync SET if the app's dev_soc echo diverges from
+        the EMS internal sys_bat_backup_ratio.
+
+        The EcoFlow app sets the surplus slider via cmd_id=112 with only
+        wire field 4 (`dev_soc`). The device acknowledges (result=0) but
+        does not propagate it into the EMS-side `sys_bat_backup_ratio`
+        (field 3). The device does, however, echo the app-set value back
+        via the cmd_id=13 EmsParamChangeReport message (`dev_soc`, mapped
+        here to `ems_app_surplus_pct`). When that value diverges from
+        `ems_backup_ratio_pct`, this method schedules a corrective
+        both-field SET that brings the EMS in line.
+        """
+        app_val = self._device_data.get("ems_app_surplus_pct")
+        ems_val = self._device_data.get("ems_backup_ratio_pct")
+        if app_val is None or ems_val is None:
+            return
+        try:
+            app_int = int(app_val)
+            ems_int = int(ems_val)
+        except (TypeError, ValueError):
+            return
+        if app_int == ems_int:
+            return
+
+        now = time.monotonic()
+        if now - self._last_app_surplus_sync_ts < APP_SURPLUS_SYNC_MIN_INTERVAL_S:
+            return
+        if now - self._last_user_surplus_set_ts < APP_SURPLUS_SYNC_USER_GRACE_S:
+            return
+
+        backup_val = self._device_data.get("ems_discharge_lower_limit_pct", 0)
+        try:
+            backup_int = int(backup_val)
+        except (TypeError, ValueError):
+            backup_int = 0
+        target_backup = min(backup_int, app_int)
+
+        self._last_app_surplus_sync_ts = now
+        _LOGGER.info(
+            "PowerOcean surplus auto-sync (%s): app=%d ems=%d -> SET both=%d",
+            self.device_sn, app_int, ems_int, app_int,
+        )
+        self._log_event(
+            "surplus_auto_sync",
+            f"app={app_int} ems={ems_int}",
+        )
+        self.hass.async_create_task(
+            self.async_set_powerocean_soc(target_backup, app_int)
+        )
 
     async def _async_flush_energy_state(self) -> None:
         """Flush energy integrator state to disk (non-blocking)."""
