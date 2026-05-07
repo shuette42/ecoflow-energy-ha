@@ -1154,6 +1154,16 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if app_int == ems_int:
             return
 
+        # Edge-case suppress: at app_int == 100 (and likely 0), the EMS
+        # internally clamps `sys_bat_backup_ratio` to ~90 by design even
+        # though dev_soc / socDev hold the user value. Reissuing a SET
+        # would never reconcile the two - it would just generate periodic
+        # write traffic. The user-side mirror (ems_app_surplus_pct) is
+        # the source of truth for the slider; the EMS-side divergence at
+        # the boundaries is expected device behaviour.
+        if app_int in (0, 100):
+            return
+
         now = time.monotonic()
         # Suppress sync if the latest EmsParamChangeReport carrying the
         # `dev_soc` value is older than the user's most recent SET. The

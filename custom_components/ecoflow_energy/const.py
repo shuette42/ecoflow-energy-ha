@@ -320,9 +320,18 @@ POWEROCEAN_NUMBERS: list[EcoFlowNumberDef] = [
     # Backup-Reserve (App-slider): minimum SoC kept in reserve. Wire field 2
     # in cmd_id=112 SysBatChgDsgSet, sent as a 3-field app-replay payload.
     EcoFlowNumberDef("backup_reserve", "Backup Reserve", "ems_discharge_lower_limit_pct", "%", "mdi:battery-lock", 0, 100, 5, enhanced_only=True),
-    # Überschüssige-Solarenergie threshold (App-slider): SoC above which
-    # surplus solar is routed to controllable devices. Wire field 4.
-    EcoFlowNumberDef("solar_surplus_threshold", "Solar Surplus Threshold", "ems_backup_ratio_pct", "%", "mdi:solar-power-variant", 0, 100, 5, enhanced_only=True),
+    # Überschüssige-Solarenergie threshold (App-slider).
+    #
+    # Source key is `ems_app_surplus_pct` (proto wire field 4 = dev_soc /
+    # cloud-quota socDev) - the user-side setting the EcoFlow app reads
+    # and writes. The companion `ems_backup_ratio_pct` (wire field 3 =
+    # sys_bat_backup_ratio) is a derived EMS status that the device
+    # clamps internally; it diverges from dev_soc at edge cases (notably
+    # 100%, where the EMS caps at 90). The SET path still writes BOTH
+    # fields (handled in async_set_powerocean_soc) so the device EMS
+    # follows the user value where it can; the slider sources from the
+    # user-side mirror so HA matches what the app shows the user.
+    EcoFlowNumberDef("solar_surplus_threshold", "Solar Surplus Threshold", "ems_app_surplus_pct", "%", "mdi:solar-power-variant", 0, 100, 5, enhanced_only=True),
 ]
 
 
