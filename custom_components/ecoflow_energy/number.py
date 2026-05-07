@@ -193,10 +193,11 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
     async def _async_set_powerocean_value(self, value: float) -> None:
         """Set a PowerOcean number value via WSS Protobuf.
 
-        SysBatChgDsgSet (cmd_id=112) is sent as a 3-field app-replay
-        payload: field 1=100 constant, field 2=backup_reserve, field
-        4=solar_surplus. The unchanged value is read from coordinator
-        data so both slider positions stay consistent with the device.
+        SysBatChgDsgSet (cmd_id=112) is sent as a 4-field app-replay
+        payload: field 1=100 constant, field 2=backup_reserve_pct,
+        field 3+4=solar_surplus_pct (EMS state + app-UI state). The
+        unchanged value is read from coordinator data so both slider
+        positions stay consistent with the device and the EcoFlow app.
         """
         key = self._definition.key
         int_value = int(value)
@@ -210,6 +211,7 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
             current_solar = int(self.coordinator.data.get("ems_backup_ratio_pct", 100))
             backup = int_value
             solar = max(current_solar, backup)  # enforce backup <= solar
+            self.coordinator._last_user_surplus_set_ts = time.monotonic()
             ok = await self.coordinator.async_set_powerocean_soc(backup, solar)
             if ok:
                 self._apply_optimistic_number(value)
@@ -219,6 +221,7 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
             current_backup = int(self.coordinator.data.get("ems_discharge_lower_limit_pct", 0))
             solar = int_value
             backup = min(current_backup, solar)  # enforce backup <= solar
+            self.coordinator._last_user_surplus_set_ts = time.monotonic()
             ok = await self.coordinator.async_set_powerocean_soc(backup, solar)
             if ok:
                 self._apply_optimistic_number(value)

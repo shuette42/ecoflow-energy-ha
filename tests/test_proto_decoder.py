@@ -112,6 +112,27 @@ class TestRuntimeDecoder:
         assert result.parse_path == "typed_runtime:no_match"
         assert result.mapped["_is_energy_stream"] is False
 
+    def test_ems_param_change_report_dev_soc_renamed(self):
+        """cmd_id=13 (EmsParamChangeReport) maps dev_soc -> ems_app_surplus_pct.
+
+        This is the device-side mirror of the surplus value the EcoFlow app
+        writes via cmd_id=112 wire field 4. The coordinator uses this field
+        to detect cloud-only app changes that bypass the EMS-side
+        sys_bat_backup_ratio.
+        """
+        from custom_components.ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
+            JTS1EmsParamChangeReport,
+        )
+        msg = JTS1EmsParamChangeReport()
+        msg.dev_soc = 47
+        inner = msg.SerializeToString()
+        frame = _build_frame(96, 13, inner)
+
+        result = decode_proto_runtime_frame(frame)
+        assert result.parse_path == "typed_runtime:ems_param_change"
+        assert result.mapped.get("ems_app_surplus_pct") == 47
+        assert "dev_soc" not in result.mapped
+
 
 class TestEnergyStreamPayload:
     """Tests for the EnergyStreamSwitch payload builder."""

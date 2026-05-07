@@ -82,6 +82,12 @@ def _build_cmd_registry() -> dict[int, CmdConfig]:
             flags={"_is_ems_change": True},
             rename={"ems_word_mode": "ems_work_mode"},
         ),
+        13: CmdConfig(
+            msg_class=pb2.JTS1EmsParamChangeReport,
+            parse_path="typed_runtime:ems_param_change",
+            flags={"_is_ems_param_change": True},
+            rename={"dev_soc": "ems_app_surplus_pct"},
+        ),
     }
 
 

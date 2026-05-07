@@ -235,9 +235,12 @@ class TestAsyncSetPowerOceanSoc:
         assert result is True
         mock_mqtt.send_proto_set.assert_called_once()
         payload = mock_mqtt.send_proto_set.call_args[0][0]
-        # Inner pdata contains 3 fields: 1=100, 2=25, 3=80
-        # Field 3 (0x18 tag) is sys_bat_backup_ratio per SysBatChgDsgSet proto.
-        assert b"\x08\x64\x10\x19\x18\x50" in payload
+        # Inner pdata contains 4 fields: 1=100, 2=25, 3=80, 4=80
+        # Field 3 (0x18 tag) is sys_bat_backup_ratio (EMS state).
+        # Field 4 (0x20 tag) is dev_soc / socDev (App-UI state, cloud quota).
+        # Both must be present so HA, the device EMS, and the EcoFlow app
+        # stay synchronized; writing only one desynchronizes them.
+        assert b"\x08\x64\x10\x19\x18\x50\x20\x50" in payload
 
     async def test_3field_set_rejects_backup_above_solar(
         self,
@@ -396,3 +399,158 @@ class TestPowerOceanNumberSet3Field:
         await entity.async_set_native_value(20.0)
 
         coordinator.async_set_powerocean_soc.assert_called_once_with(20, 20)
+
+
+class TestPowerOceanAppSurplusAutoSync:
+    """Auto-sync the EMS-side sysBatBackupRatio with the app-side dev_soc.
+
+    The EcoFlow app writes only proto wire field 4 (`dev_soc`) via cmd_id=112,
+    so the EMS keeps its previous threshold. The device mirrors the app's
+    value back via cmd_id=13 (`EmsParamChangeReport.dev_soc`, surfaced as
+    `ems_app_surplus_pct`). When that diverges from `ems_backup_ratio_pct`,
+    the coordinator schedules a corrective both-field SET.
+    """
+
+    def _make_coordinator(self, hass, entry):
+        entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, entry, MOCK_POWEROCEAN_DEVICE,
+        )
+        coordinator._enhanced_mode = True
+        coordinator._device_data = {
+            "ems_charge_upper_limit_pct": 100,
+            "ems_discharge_lower_limit_pct": 0,
+            "ems_backup_ratio_pct": 90,
+            "ems_app_surplus_pct": 47,
+        }
+        coordinator.async_set_powerocean_soc = AsyncMock(return_value=True)
+        return coordinator
+
+    async def test_discrepancy_triggers_corrective_set(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        coordinator = self._make_coordinator(hass, enhanced_config_entry)
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.time.monotonic",
+            return_value=1000.0,
+        ):
+            coordinator._maybe_schedule_surplus_sync()
+            await hass.async_block_till_done()
+        coordinator.async_set_powerocean_soc.assert_called_once_with(0, 47)
+
+    async def test_no_sync_when_app_and_ems_equal(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        coordinator = self._make_coordinator(hass, enhanced_config_entry)
+        coordinator._device_data["ems_backup_ratio_pct"] = 47
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.time.monotonic",
+            return_value=1000.0,
+        ):
+            coordinator._maybe_schedule_surplus_sync()
+        coordinator.async_set_powerocean_soc.assert_not_called()
+
+    async def test_no_sync_when_app_value_missing(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        coordinator = self._make_coordinator(hass, enhanced_config_entry)
+        coordinator._device_data.pop("ems_app_surplus_pct")
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.time.monotonic",
+            return_value=1000.0,
+        ):
+            coordinator._maybe_schedule_surplus_sync()
+        coordinator.async_set_powerocean_soc.assert_not_called()
+
+    async def test_throttle_blocks_rapid_resync(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        coordinator = self._make_coordinator(hass, enhanced_config_entry)
+        coordinator._last_app_surplus_sync_ts = 1000.0
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.time.monotonic",
+            return_value=1010.0,  # 10s after last sync, throttle = 30s
+        ):
+            coordinator._maybe_schedule_surplus_sync()
+        coordinator.async_set_powerocean_soc.assert_not_called()
+
+    async def test_throttle_releases_after_interval(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        coordinator = self._make_coordinator(hass, enhanced_config_entry)
+        coordinator._last_app_surplus_sync_ts = 1000.0
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.time.monotonic",
+            return_value=1031.0,
+        ):
+            coordinator._maybe_schedule_surplus_sync()
+            await hass.async_block_till_done()
+        coordinator.async_set_powerocean_soc.assert_called_once_with(0, 47)
+
+    async def test_user_grace_suppresses_auto_sync(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        coordinator = self._make_coordinator(hass, enhanced_config_entry)
+        coordinator._last_user_surplus_set_ts = 1000.0
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.time.monotonic",
+            return_value=1002.0,
+        ):
+            coordinator._maybe_schedule_surplus_sync()
+        coordinator.async_set_powerocean_soc.assert_not_called()
+
+    async def test_user_grace_releases_after_interval(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        coordinator = self._make_coordinator(hass, enhanced_config_entry)
+        coordinator._last_user_surplus_set_ts = 1000.0
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.time.monotonic",
+            return_value=1006.0,
+        ):
+            coordinator._maybe_schedule_surplus_sync()
+            await hass.async_block_till_done()
+        coordinator.async_set_powerocean_soc.assert_called_once_with(0, 47)
+
+    async def test_user_set_records_timestamp_via_number(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        # When the user pushes a value via the surplus-threshold number entity,
+        # the coordinator's `_last_user_surplus_set_ts` is updated so the
+        # next auto-sync waits for the device echo before firing.
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE,
+        )
+        coordinator._device_data = {
+            "ems_charge_upper_limit_pct": 100,
+            "ems_discharge_lower_limit_pct": 0,
+            "ems_backup_ratio_pct": 90,
+        }
+        coordinator.async_set_updated_data(dict(coordinator._device_data))
+        coordinator.async_set_powerocean_soc = AsyncMock(return_value=True)
+        defn = next(d for d in POWEROCEAN_NUMBERS if d.key == "solar_surplus_threshold")
+        entity = EcoFlowNumber(coordinator, defn)
+        entity.async_write_ha_state = MagicMock()
+        with patch(
+            "custom_components.ecoflow_energy.number.time.monotonic",
+            return_value=2000.0,
+        ):
+            await entity.async_set_native_value(50.0)
+        assert coordinator._last_user_surplus_set_ts == 2000.0
