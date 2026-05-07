@@ -1013,7 +1013,12 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     pdata = bytes.fromhex(pdata_hex)
                 except ValueError:
                     continue
-                msg_class = pb2.JTS1EmsChangeReport if cmd_id == 8 else pb2.JTS1EmsParamChangeReport
+                # Generated _pb2 classes are registered via _descriptor_pool
+                # at runtime, which Pyright/Pylance cannot resolve statically.
+                msg_class = (
+                    pb2.JTS1EmsChangeReport if cmd_id == 8  # type: ignore[attr-defined]
+                    else pb2.JTS1EmsParamChangeReport  # type: ignore[attr-defined]
+                )
                 msg = msg_class()
                 msg.ParseFromString(pdata)
                 fields = MessageToDict(msg, preserving_proto_field_name=True)
