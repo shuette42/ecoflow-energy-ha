@@ -41,13 +41,21 @@ class TestManifest:
                 f"pycryptodome must not be in requirements — use cryptography instead (found: {req})"
             )
 
-    def test_requirements_has_paho_mqtt(self):
+    def test_requirements_does_not_redeclare_paho_mqtt(self):
+        """paho-mqtt ships with HA core via the `mqtt` integration — must not be redeclared here."""
         m = _load_manifest()
-        assert any("paho-mqtt" in r for r in m["requirements"])
+        for req in m["requirements"]:
+            assert "paho-mqtt" not in req.lower(), (
+                f"paho-mqtt is already part of Home Assistant core; do not list it in manifest.json (found: {req})"
+            )
 
-    def test_requirements_has_protobuf(self):
+    def test_requirements_does_not_redeclare_protobuf(self):
+        """protobuf ships with HA core via several core integrations — must not be redeclared here."""
         m = _load_manifest()
-        assert any("protobuf" in r for r in m["requirements"])
+        for req in m["requirements"]:
+            assert "protobuf" not in req.lower(), (
+                f"protobuf is already part of Home Assistant core; do not list it in manifest.json (found: {req})"
+            )
 
     def test_version_format(self):
         m = _load_manifest()

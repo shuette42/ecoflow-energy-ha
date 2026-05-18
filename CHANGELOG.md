@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.14.0] - 2026-05-18
+
+### Changed
+- Dropped `paho-mqtt` and `protobuf` from `manifest.json` requirements. Both libraries are already shipped with Home Assistant core (paho-mqtt via the built-in `mqtt` integration, protobuf via several core integrations), so listing them in the integration manifest was redundant and could cause unnecessary dependency resolution work on setup.
+
+### Removed
+- Removed legacy brand assets `icon.png`, `icon@2x.png`, `logo.png`, `logo@2x.png` from the integration root. Brand artwork is now sourced exclusively from the `brand/` subdirectory, matching the layout used by the [home-assistant/brands](https://github.com/home-assistant/brands) repository.
+
 ## [1.13.0] - 2026-05-06
 
 ### Added
