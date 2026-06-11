@@ -19,6 +19,7 @@ from .const import (
     DOMAIN,
     MODE_ENHANCED,
     PLATFORMS,
+    get_device_type,
 )
 from .coordinator import EcoFlowDeviceCoordinator
 
@@ -86,11 +87,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
         sn = device_info["sn"]
         device_type = device_info.get("device_type", "")
         if not device_type or device_type == DEVICE_TYPE_UNKNOWN:
+            device_type = get_device_type(
+                device_info.get("product_name", ""),
+                sn,
+            )
+        if not device_type or device_type == DEVICE_TYPE_UNKNOWN:
             _LOGGER.debug(
                 "Skipping device %s... - no parser available",
                 sn[:4],
             )
             continue
+        device_info = {**device_info, "device_type": device_type}
         coordinator = EcoFlowDeviceCoordinator(hass, entry, device_info)
         await coordinator.async_setup()
         # First refresh — raises ConfigEntryNotReady on failure so HA retries

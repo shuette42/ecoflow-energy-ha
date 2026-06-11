@@ -44,6 +44,7 @@ from custom_components.ecoflow_energy.const import (  # noqa: E402
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_SMARTPLUG,
+    DEVICE_TYPE_STREAM,
     DOMAIN,
     MODE_ENHANCED,
     MODE_STANDARD,
@@ -86,6 +87,14 @@ MOCK_SMARTPLUG_DEVICE: dict[str, Any] = {
     "name": "Smart Plug",
     "product_name": "Smart Plug",
     "device_type": DEVICE_TYPE_SMARTPLUG,
+    "online": 1,
+}
+
+MOCK_STREAM_DEVICE: dict[str, Any] = {
+    "sn": "BK31_TEST_DEVICE",
+    "name": "Stream AC Pro",
+    "product_name": "Stream AC Pro",
+    "device_type": DEVICE_TYPE_STREAM,
     "online": 1,
 }
 

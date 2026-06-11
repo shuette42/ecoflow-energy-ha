@@ -150,6 +150,21 @@
       "batt_discharge_power_w": {
         "name": "Batterieentladeleistung"
       },
+      "batt_charge_energy_wh": {
+        "name": "Batterieladeenergie"
+      },
+      "batt_discharge_energy_wh": {
+        "name": "Batterieentladeenergie"
+      },
+      "batt_design_cap_mah": {
+        "name": "Designkapazität"
+      },
+      "batt_charge_capacity_ah": {
+        "name": "Batterieladekapazität"
+      },
+      "batt_discharge_capacity_ah": {
+        "name": "Batterieentladekapazität"
+      },
       "grid_import_power_w": {
         "name": "Netzbezugsleistung"
       },
@@ -356,6 +371,24 @@
           "discharging": "Entladen",
           "charging": "Laden"
         }
+      },
+      "soc_precise_pct": {
+        "name": "Batterie Ladezustand (präzise)"
+      },
+      "ac_voltage_v": {
+        "name": "AC-Spannung"
+      },
+      "ac_frequency_hz": {
+        "name": "AC-Frequenz"
+      },
+      "backup_reserve_pct": {
+        "name": "Backup-Reserve"
+      },
+      "max_charge_soc_pct": {
+        "name": "Max. Lade-SoC"
+      },
+      "min_discharge_soc_pct": {
+        "name": "Min. Entlade-SoC"
       },
       "soc": {
         "name": "Ladezustand"

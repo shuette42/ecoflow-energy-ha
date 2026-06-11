@@ -19,11 +19,13 @@ from .const import (
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_SMARTPLUG,
+    DEVICE_TYPE_STREAM,
     DOMAIN,
     DELTA2MAX_SENSORS,
     EcoFlowSensorDef,
     POWEROCEAN_SENSORS,
     SMARTPLUG_SENSORS,
+    STREAM_SENSORS,
 )
 from .coordinator import EcoFlowDeviceCoordinator
 
@@ -193,4 +195,6 @@ def _get_sensor_defs(device_type: str) -> list[EcoFlowSensorDef]:
         return POWEROCEAN_SENSORS
     if device_type == DEVICE_TYPE_SMARTPLUG:
         return SMARTPLUG_SENSORS
+    if device_type == DEVICE_TYPE_STREAM:
+        return STREAM_SENSORS
     return []

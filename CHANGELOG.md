@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.15.0] - 2026-06-12
+
+### Added
+- Initial Stream AC Pro (BK31) support in Enhanced Mode, including device detection, protobuf telemetry parsing, Home Assistant sensor entities, and a Backup Reserve number control.
+
 ## [1.14.0] - 2026-05-18
 
 ### Changed

@@ -18,12 +18,14 @@ from .const import (
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_SMARTPLUG,
+    DEVICE_TYPE_STREAM,
     DOMAIN,
     EcoFlowNumberDef,
     NUMBER_COMMANDS,
     POWEROCEAN_NUMBERS,
     SMARTPLUG_NUMBER_COMMANDS,
     SMARTPLUG_NUMBERS,
+    STREAM_NUMBERS,
 )
 from .coordinator import EcoFlowDeviceCoordinator
 from .ecoflow.parsers.smartplug import (
@@ -120,6 +122,11 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
         # PowerOcean uses protobuf SET via Enhanced Mode (WSS)
         if self.coordinator.device_type == DEVICE_TYPE_POWEROCEAN:
             await self._async_set_powerocean_value(value)
+            return
+        if self.coordinator.device_type == DEVICE_TYPE_STREAM:
+            ok = await self._async_set_stream_value(self._definition.key, value)
+            if ok:
+                self._apply_optimistic_number(value)
             return
 
         # Smart Plug number commands
@@ -236,6 +243,29 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
 
         _LOGGER.warning("No PowerOcean SET handler for %s", key)
 
+    async def _async_set_stream_value(self, key: str, value: float) -> bool:
+        """Set a Stream AC Pro number value via app-style JSON SET."""
+        if key != "backup_reserve":
+            _LOGGER.warning(
+                "No Stream SET handler for %s (%s)",
+                key,
+                self.coordinator.device_sn,
+            )
+            return False
+
+        return await self.coordinator.async_send_set_command(
+            {
+                "sn": self.coordinator.device_sn,
+                "cmdId": 17,
+                "cmdFunc": 254,
+                "dirDest": 1,
+                "dirSrc": 1,
+                "dest": 2,
+                "needAck": True,
+                "params": {"cfgBackupReverseSoc": int(value)},
+            }
+        )
+
 
 def _get_number_defs(device_type: str) -> list[EcoFlowNumberDef]:
     """Return number definitions based on device type."""
@@ -245,4 +275,6 @@ def _get_number_defs(device_type: str) -> list[EcoFlowNumberDef]:
         return POWEROCEAN_NUMBERS
     if device_type == DEVICE_TYPE_SMARTPLUG:
         return SMARTPLUG_NUMBERS
+    if device_type == DEVICE_TYPE_STREAM:
+        return STREAM_NUMBERS
     return []

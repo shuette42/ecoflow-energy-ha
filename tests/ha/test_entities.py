@@ -18,6 +18,7 @@ from custom_components.ecoflow_energy.const import (
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_SMARTPLUG,
+    DEVICE_TYPE_STREAM,
     DOMAIN,
     EcoFlowBinarySensorDef,
     EcoFlowNumberDef,
@@ -26,6 +27,8 @@ from custom_components.ecoflow_energy.const import (
     POWEROCEAN_BINARY_SENSORS,
     POWEROCEAN_SENSORS,
     SMARTPLUG_NUMBERS,
+    STREAM_NUMBERS,
+    STREAM_SENSORS,
 )
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
 from custom_components.ecoflow_energy.sensor import (
@@ -51,7 +54,12 @@ from custom_components.ecoflow_energy.number import (
     _get_number_defs,
 )
 
-from .conftest import MOCK_DELTA_DEVICE, MOCK_POWEROCEAN_DEVICE, MOCK_SMARTPLUG_DEVICE
+from .conftest import (
+    MOCK_DELTA_DEVICE,
+    MOCK_POWEROCEAN_DEVICE,
+    MOCK_SMARTPLUG_DEVICE,
+    MOCK_STREAM_DEVICE,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -82,6 +90,9 @@ class TestSensorDefsRouting:
     def test_powerocean_sensors(self):
         assert _get_sensor_defs(DEVICE_TYPE_POWEROCEAN) is POWEROCEAN_SENSORS
 
+    def test_stream_sensors(self) -> None:
+        assert _get_sensor_defs(DEVICE_TYPE_STREAM) is STREAM_SENSORS
+
     def test_unknown_sensors_empty(self):
         assert _get_sensor_defs("unknown") == []
 
@@ -101,6 +112,9 @@ class TestSwitchDefsRouting:
     def test_delta_switches(self):
         assert _get_switch_defs(DEVICE_TYPE_DELTA) is DELTA2MAX_SWITCHES
 
+    def test_stream_switches(self) -> None:
+        assert _get_switch_defs(DEVICE_TYPE_STREAM) == []
+
     def test_powerocean_switches_empty(self):
         assert _get_switch_defs(DEVICE_TYPE_POWEROCEAN) == []
 
@@ -115,6 +129,9 @@ class TestNumberDefsRouting:
     def test_powerocean_numbers(self):
         from custom_components.ecoflow_energy.const import POWEROCEAN_NUMBERS
         assert _get_number_defs(DEVICE_TYPE_POWEROCEAN) is POWEROCEAN_NUMBERS
+
+    def test_stream_numbers(self) -> None:
+        assert _get_number_defs(DEVICE_TYPE_STREAM) is STREAM_NUMBERS
 
 
 # ===========================================================================
@@ -561,7 +578,6 @@ class TestEcoFlowSwitch:
             assert cmd["params"]["minChgSoc"] == 0
             assert cmd["params"]["minDsgSoc"] == 0
 
-
 # ===========================================================================
 # EcoFlowNumber
 # ===========================================================================
@@ -878,6 +894,59 @@ class TestEcoFlowNumber:
             assert cmd["moduleType"] == 5
             assert cmd["operateType"] == "standbyTime"
             assert cmd["params"]["standbyMins"] == 240
+
+    async def test_stream_backup_reserve_set(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Stream backup reserve uses the app-style JSON SET path."""
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                "auth_method": "app",
+                "mode": "enhanced",
+                "email": "stream-test@example.invalid",
+                "password": "not-a-real-password",
+                "user_id": "user123",
+                "devices": [MOCK_STREAM_DEVICE],
+            },
+            unique_id="stream-test@example.invalid",
+        )
+        entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, entry, MOCK_STREAM_DEVICE)
+        coordinator.async_set_updated_data({"backup_reserve_pct": 20})
+
+        defn = EcoFlowNumberDef(
+            key="backup_reserve",
+            name="Backup Reserve",
+            state_key="backup_reserve_pct",
+            unit="%",
+            min_value=3,
+            max_value=95,
+            step=1,
+        )
+        number = EcoFlowNumber(coordinator, defn)
+
+        with (
+            patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock, return_value=True) as mock_cmd,
+            patch.object(number, "async_write_ha_state"),
+        ):
+            await number.async_set_native_value(80.0)
+
+        mock_cmd.assert_awaited_once_with(
+            {
+                "sn": MOCK_STREAM_DEVICE["sn"],
+                "cmdId": 17,
+                "cmdFunc": 254,
+                "dirDest": 1,
+                "dirSrc": 1,
+                "dest": 2,
+                "needAck": True,
+                "params": {"cfgBackupReverseSoc": 80},
+            }
+        )
+        assert coordinator.device_data["backup_reserve_pct"] == 80.0
 
 
 # ===========================================================================

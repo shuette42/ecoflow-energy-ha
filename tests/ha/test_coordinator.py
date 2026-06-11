@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import struct
 import time
 from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock, call, patch
@@ -44,12 +45,18 @@ from custom_components.ecoflow_energy.ecoflow.parsers.powerocean_proto import (
     remap_bp_keys,
     remap_proto_keys,
 )
+from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
+    encode_field_bytes,
+    encode_field_varint,
+    encode_varint,
+)
 
 from .conftest import (
     MOCK_DELTA_DEVICE,
     MOCK_MQTT_CREDENTIALS,
     MOCK_POWEROCEAN_DEVICE,
     MOCK_SMARTPLUG_DEVICE,
+    MOCK_STREAM_DEVICE,
 )
 
 
@@ -124,6 +131,21 @@ _PROD_TIMELINE_2026_04_20: list[tuple[float, float]] = [
     (857, 490), (862, 560), (865, 580), (867, 600), (873, 580), (878, 560),
     (883, 600), (885, 610), (888, 630), (893, 660), (898, 690),
 ]
+
+
+def _encode_fixed32_field(field_number: int, value: float) -> bytes:
+    """Encode one protobuf fixed32 field for Stream tests."""
+    tag = (field_number << 3) | 5
+    return encode_varint(tag) + struct.pack("<f", value)
+
+
+def _build_proto_frame(cmd_func: int, cmd_id: int, inner: bytes) -> bytes:
+    """Build a minimal EcoFlow header frame for coordinator parser tests."""
+    header = bytearray()
+    header.extend(encode_field_bytes(1, inner))
+    header.extend(encode_field_varint(8, cmd_func))
+    header.extend(encode_field_varint(9, cmd_id))
+    return encode_field_bytes(1, bytes(header))
 
 
 # ===========================================================================
@@ -2912,6 +2934,45 @@ class TestParseMessageGetReply:
         assert result is not None
         assert result.get("power_w") == 150.0  # 1500 / 10 (deciWatt)
         assert result.get("switch_state") == 1
+
+    async def test_stream_proto_get_reply_parsed(
+        self, hass: HomeAssistant,
+    ) -> None:
+        """Stream get_reply protobuf is parsed via the BK31 proto mapper."""
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_AUTH_METHOD: AUTH_METHOD_APP,
+                CONF_MODE: MODE_ENHANCED,
+                CONF_EMAIL: "stream-test@example.invalid",
+                CONF_PASSWORD: "not-a-real-password",
+                CONF_USER_ID: "user123",
+                CONF_DEVICES: [MOCK_STREAM_DEVICE],
+            },
+            unique_id="stream-test@example.invalid",
+        )
+        entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_STREAM_DEVICE)
+
+        inner = bytearray()
+        inner.extend(encode_field_varint(242, 19))
+        inner.extend(encode_field_varint(461, 20))
+        inner.extend(_encode_fixed32_field(518, -304.15))
+        inner.extend(_encode_fixed32_field(613, 227.8))
+        inner.extend(_encode_fixed32_field(615, 49.99))
+        payload = _build_proto_frame(254, 21, bytes(inner))
+        topic = "/app/user123/BK31_TEST_DEVICE/thing/property/get_reply"
+
+        result = coordinator._parse_message(topic, payload)
+
+        assert result is not None
+        assert result.get("soc_pct") == 19
+        assert result.get("backup_reserve_pct") == 20
+        assert result.get("batt_w") == pytest.approx(-304.15, rel=1e-5)
+        assert result.get("batt_discharge_power_w") == pytest.approx(304.15, rel=1e-5)
+        assert result.get("ac_voltage_v") == pytest.approx(227.8, rel=1e-5)
+        assert result.get("ac_frequency_hz") == pytest.approx(49.99, rel=1e-5)
 
     async def test_get_reply_empty_quota_map_returns_none(
         self, hass: HomeAssistant, standard_config_entry: MockConfigEntry,

@@ -1,5 +1,7 @@
 """Tests for entity definitions in const.py — uniqueness and completeness."""
 
+from __future__ import annotations
+
 import ast
 from pathlib import Path
 
@@ -9,12 +11,16 @@ from ecoflow_energy.const import (
     POWEROCEAN_SENSORS,
     DELTA2MAX_SENSORS,
     SMARTPLUG_SENSORS,
+    STREAM_SENSORS,
+    STREAM_NUMBERS,
     DELTA2MAX_BINARY_SENSORS,
     DELTA2MAX_SWITCHES,
     DELTA2MAX_NUMBERS,
     POWEROCEAN_BINARY_SENSORS,
+    STREAM_SWITCHES,
     SMARTPLUG_SWITCHES,
     SMARTPLUG_NUMBERS,
+    get_device_type,
     get_delta_profile,
 )
 
@@ -38,6 +44,11 @@ class TestDeltaProfileRouting:
         assert get_delta_profile("Delta Pro", "XXXX123456789012") == DELTA_PROFILE_R351
 
 
+class TestDeviceTypeRouting:
+    def test_stream_detected_by_bk31_prefix(self) -> None:
+        assert get_device_type("", "BK31_TEST_DEVICE") == "stream"
+
+
 def _extract_sensor_keys(var_name: str) -> list[str]:
     """Extract sensor keys from a named list variable.
 
@@ -49,10 +60,13 @@ def _extract_sensor_keys(var_name: str) -> list[str]:
         "POWEROCEAN_SENSORS": POWEROCEAN_SENSORS,
         "DELTA2MAX_SENSORS": DELTA2MAX_SENSORS,
         "SMARTPLUG_SENSORS": SMARTPLUG_SENSORS,
+        "STREAM_SENSORS": STREAM_SENSORS,
+        "STREAM_NUMBERS": STREAM_NUMBERS,
         "DELTA2MAX_BINARY_SENSORS": DELTA2MAX_BINARY_SENSORS,
         "DELTA2MAX_SWITCHES": DELTA2MAX_SWITCHES,
         "DELTA2MAX_NUMBERS": DELTA2MAX_NUMBERS,
         "POWEROCEAN_BINARY_SENSORS": POWEROCEAN_BINARY_SENSORS,
+        "STREAM_SWITCHES": STREAM_SWITCHES,
         "SMARTPLUG_SWITCHES": SMARTPLUG_SWITCHES,
         "SMARTPLUG_NUMBERS": SMARTPLUG_NUMBERS,
     }
@@ -249,6 +263,34 @@ class TestSmartPlugEntities:
         keys = _extract_sensor_keys("SMARTPLUG_SWITCHES")
         assert len(keys) == 1
         assert "plug_switch" in keys
+
+
+class TestStreamEntities:
+    def test_sensor_keys_unique(self) -> None:
+        keys = _extract_sensor_keys("STREAM_SENSORS")
+        assert len(keys) >= 10, f"Expected 10+ sensors, got {len(keys)}"
+        assert len(keys) == len(set(keys)), "Duplicate Stream sensor keys"
+
+    def test_core_stream_sensors_exist(self) -> None:
+        keys = _extract_sensor_keys("STREAM_SENSORS")
+        for expected in (
+            "soc_pct",
+            "batt_w",
+            "batt_charge_power_w",
+            "batt_discharge_power_w",
+            "ac_voltage_v",
+            "ac_frequency_hz",
+            "backup_reserve_pct",
+        ):
+            assert expected in keys, f"Missing Stream sensor: {expected}"
+
+    def test_switch_defs_unique(self) -> None:
+        keys = _extract_sensor_keys("STREAM_SWITCHES")
+        assert keys == []
+
+    def test_number_defs_unique(self) -> None:
+        keys = _extract_sensor_keys("STREAM_NUMBERS")
+        assert keys == ["backup_reserve"]
 
 
 class TestBinarySensors:
