@@ -35,6 +35,7 @@ from custom_components.ecoflow_energy.const import (
     SMARTPLUG_STALE_THRESHOLD_S,
     SOFT_UNAVAILABLE_S,
     STALE_THRESHOLD_S,
+    STREAM_POWER_TO_ENERGY,
 )
 from custom_components.ecoflow_energy.coordinator import (
     DeviceSnapshot,
@@ -2973,6 +2974,40 @@ class TestParseMessageGetReply:
         assert result.get("batt_discharge_power_w") == pytest.approx(304.15, rel=1e-5)
         assert result.get("ac_voltage_v") == pytest.approx(227.8, rel=1e-5)
         assert result.get("ac_frequency_hz") == pytest.approx(49.99, rel=1e-5)
+
+    async def test_stream_coordinator_power_to_energy_mapping(
+        self, hass: HomeAssistant,
+    ) -> None:
+        """A Stream coordinator wires STREAM_POWER_TO_ENERGY (not empty)."""
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_AUTH_METHOD: AUTH_METHOD_APP,
+                CONF_MODE: MODE_ENHANCED,
+                CONF_EMAIL: "stream-test@example.invalid",
+                CONF_PASSWORD: "not-a-real-password",
+                CONF_USER_ID: "user123",
+                CONF_DEVICES: [MOCK_STREAM_DEVICE],
+            },
+            unique_id="stream-test@example.invalid",
+        )
+        entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_STREAM_DEVICE)
+
+        assert coordinator._power_to_energy == STREAM_POWER_TO_ENERGY
+        assert coordinator._power_to_energy  # not empty
+        # The four Stream power → energy keys must be present.
+        assert coordinator._power_to_energy["solar_w"] == "solar_energy_kwh"
+        assert coordinator._power_to_energy["home_w"] == "home_energy_kwh"
+        assert (
+            coordinator._power_to_energy["batt_charge_power_w"]
+            == "batt_charge_energy_kwh"
+        )
+        assert (
+            coordinator._power_to_energy["batt_discharge_power_w"]
+            == "batt_discharge_energy_kwh"
+        )
 
     async def test_get_reply_empty_quota_map_returns_none(
         self, hass: HomeAssistant, standard_config_entry: MockConfigEntry,

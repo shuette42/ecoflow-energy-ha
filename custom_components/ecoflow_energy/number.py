@@ -28,6 +28,7 @@ from .const import (
     STREAM_NUMBERS,
 )
 from .coordinator import EcoFlowDeviceCoordinator
+from .ecoflow.energy_stream import build_stream_backup_reserve_payload
 from .ecoflow.parsers.smartplug import (
     build_plug_brightness_payload,
     build_plug_max_watts_payload,
@@ -244,7 +245,12 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
         _LOGGER.warning("No PowerOcean SET handler for %s", key)
 
     async def _async_set_stream_value(self, key: str, value: float) -> bool:
-        """Set a Stream AC Pro number value via app-style JSON SET."""
+        """Set a Stream AC Pro number value via WSS Protobuf SET.
+
+        JSON SET does not work on the /app/ WSS topic (SmartPlug proves
+        this). The Backup-Reserve value is sent as a protobuf ConfigWrite
+        frame (cmd_func=254, cmd_id=17).
+        """
         if key != "backup_reserve":
             _LOGGER.warning(
                 "No Stream SET handler for %s (%s)",
@@ -253,17 +259,11 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
             )
             return False
 
-        return await self.coordinator.async_send_set_command(
-            {
-                "sn": self.coordinator.device_sn,
-                "cmdId": 17,
-                "cmdFunc": 254,
-                "dirDest": 1,
-                "dirSrc": 1,
-                "dest": 2,
-                "needAck": True,
-                "params": {"cfgBackupReverseSoc": int(value)},
-            }
+        payload = build_stream_backup_reserve_payload(
+            int(value), self.coordinator.device_sn
+        )
+        return await self.coordinator.async_send_proto_set_command(
+            payload, label="stream_backup_reserve"
         )
 
 

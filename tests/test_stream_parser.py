@@ -1,4 +1,4 @@
-"""Tests for the reverse-engineered Stream protobuf parser."""
+"""Tests for the Stream protobuf telemetry parser."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Reverse-engineered protobuf parser for EcoFlow Stream devices.
+"""Protobuf telemetry parser for EcoFlow Stream devices.
 
 Current scope targets BK31 (Stream AC Pro) in app-auth MQTT mode.
 Only fields that have been observed repeatedly in live captures are

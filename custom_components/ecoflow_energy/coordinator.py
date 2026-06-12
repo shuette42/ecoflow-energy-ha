@@ -65,6 +65,8 @@ from .const import (
     SMARTPLUG_POWER_TO_ENERGY,
     SMARTPLUG_SOFT_UNAVAILABLE_S,
     SOFT_UNAVAILABLE_S,
+    STREAM_ENERGY_FROM_API,
+    STREAM_POWER_TO_ENERGY,
     STALE_THRESHOLD_S,
     SMARTPLUG_STALE_THRESHOLD_S,
     get_delta_profile,
@@ -228,6 +230,9 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         elif self.device_type == DEVICE_TYPE_SMARTPLUG:
             self._power_to_energy = SMARTPLUG_POWER_TO_ENERGY
             self._energy_from_api = SMARTPLUG_ENERGY_FROM_API
+        elif self.device_type == DEVICE_TYPE_STREAM:
+            self._power_to_energy = STREAM_POWER_TO_ENERGY
+            self._energy_from_api = STREAM_ENERGY_FROM_API
         else:
             self._power_to_energy = {}
             self._energy_from_api = []

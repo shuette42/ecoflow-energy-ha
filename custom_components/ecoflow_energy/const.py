@@ -547,11 +547,15 @@ STREAM_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("batt_w", "Battery Power", "W", "power", "measurement", "mdi:battery", suggested_display_precision=0),
     EcoFlowSensorDef("batt_charge_power_w", "Battery Charge Power", "W", "power", "measurement", "mdi:battery-charging", suggested_display_precision=0),
     EcoFlowSensorDef("batt_discharge_power_w", "Battery Discharge Power", "W", "power", "measurement", "mdi:battery", suggested_display_precision=0),
+    EcoFlowSensorDef("solar_energy_kwh", "Solar Energy", "kWh", "energy", "total_increasing", "mdi:solar-power", suggested_display_precision=2),
+    EcoFlowSensorDef("home_energy_kwh", "Home Energy", "kWh", "energy", "total_increasing", "mdi:home-lightning-bolt", suggested_display_precision=2),
+    EcoFlowSensorDef("batt_charge_energy_kwh", "Battery Charge Energy", "kWh", "energy", "total_increasing", "mdi:battery-charging", suggested_display_precision=2),
+    EcoFlowSensorDef("batt_discharge_energy_kwh", "Battery Discharge Energy", "kWh", "energy", "total_increasing", "mdi:battery", suggested_display_precision=2),
     EcoFlowSensorDef("bms_soh_pct", "Battery SoH", "%", None, "measurement", "mdi:battery-heart-variant", suggested_display_precision=0),
     EcoFlowSensorDef("batt_voltage_v", "Battery Voltage", "V", "voltage", "measurement", "mdi:flash-triangle", suggested_display_precision=1),
     EcoFlowSensorDef("batt_temp_c", "Battery Temp", "\u00b0C", "temperature", "measurement", "mdi:thermometer", suggested_display_precision=1),
-    EcoFlowSensorDef("batt_charge_energy_wh", "Battery Charge Energy", "Wh", "energy", "total_increasing", "mdi:battery-charging", suggested_display_precision=0),
-    EcoFlowSensorDef("batt_discharge_energy_wh", "Battery Discharge Energy", "Wh", "energy", "total_increasing", "mdi:battery", suggested_display_precision=0),
+    EcoFlowSensorDef("batt_charge_energy_wh", "Battery Charge Energy (Raw)", "Wh", None, "total_increasing", "mdi:battery-charging", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("batt_discharge_energy_wh", "Battery Discharge Energy (Raw)", "Wh", None, "total_increasing", "mdi:battery", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("batt_design_cap_mah", "Design Capacity", "mAh", None, "measurement", "mdi:battery", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("batt_remain_cap_mah", "Remaining Capacity", "mAh", None, "measurement", "mdi:battery-50", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("batt_full_cap_mah", "Full Capacity", "mAh", None, "measurement", "mdi:battery", suggested_display_precision=0, disabled_by_default=True),
@@ -601,6 +605,19 @@ SMARTPLUG_POWER_TO_ENERGY: dict[str, str] = {
 }
 
 SMARTPLUG_ENERGY_FROM_API: list[tuple[str, str]] = []
+
+# grid_w is deliberately excluded: the Stream reports a signed grid power
+# without an import/export split. Feeding abs(grid_w) into a single energy
+# counter would conflate consumption and feed-in, making it useless for the
+# Energy Dashboard.
+STREAM_POWER_TO_ENERGY: dict[str, str] = {
+    "solar_w": "solar_energy_kwh",
+    "home_w": "home_energy_kwh",
+    "batt_charge_power_w": "batt_charge_energy_kwh",
+    "batt_discharge_power_w": "batt_discharge_energy_kwh",
+}
+
+STREAM_ENERGY_FROM_API: list[tuple[str, str]] = []
 
 
 # ===========================================================================

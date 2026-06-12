@@ -389,6 +389,51 @@ def build_device_get_all_payload(seq: int = 0) -> bytes:
     return encode_field_bytes(1, bytes(header))
 
 
+def build_stream_backup_reserve_payload(
+    backup_soc: int, device_sn: str, seq: int = 0,
+) -> bytes:
+    """Build the Stream AC Pro (BkSeries) Backup-Reserve SET frame.
+
+    ConfigWrite { cfg_backup_reverse_soc = 102 } wrapped in a cmd_func=254,
+    cmd_id=17 header on the /app/ WSS topic, mirroring the SmartPlug builder.
+
+    Inner pdata sets field 102 (cfg_backup_reverse_soc, uint32 varint). The
+    header replicates the app frame for routing on the /app/ topic:
+      1  pdata          5  -            10 data_len
+      2  src = 32       8  cmd_func=254 11 need_ack = 1
+      3  dest = 2       9  cmd_id = 17  14 seq
+      25 device_sn (string) - required for routing on /app/
+
+    Args:
+        backup_soc: Backup reserve SoC percentage (0-100).
+        device_sn: Device serial number (required for /app/ routing).
+        seq: Sequence number (0 = auto-generate from timestamp).
+
+    Returns:
+        Binary protobuf payload ready to publish on the SET topic.
+    """
+    if not 0 <= backup_soc <= 100:
+        raise ValueError(f"backup_soc must be 0..100, got {backup_soc}")
+
+    if seq == 0:
+        seq = int(time.time() * 1000) & 0x7FFFFFFF
+
+    pdata = encode_field_varint(102, backup_soc)  # cfg_backup_reverse_soc
+
+    header = bytearray()
+    header.extend(encode_field_bytes(1, pdata))              # pdata (field 1)
+    header.extend(encode_field_varint(2, 32))                # src = 32 (field 2)
+    header.extend(encode_field_varint(3, 2))                 # dest = 2 (field 3)
+    header.extend(encode_field_varint(8, 254))               # cmd_func = 254 (field 8)
+    header.extend(encode_field_varint(9, 17))                # cmd_id = 17 (field 9)
+    header.extend(encode_field_varint(10, len(pdata)))       # data_len (field 10)
+    header.extend(encode_field_varint(11, 1))                # need_ack = 1 (field 11)
+    header.extend(encode_field_varint(14, seq))              # seq (field 14)
+    header.extend(encode_field_bytes(25, device_sn.encode("ascii")))  # deviceSn (field 25)
+
+    return encode_field_bytes(1, bytes(header))
+
+
 def build_energy_stream_deactivate_payload(seq: int = 0) -> bytes:
     """Build the payload to deactivate energy_stream_report."""
     if seq == 0:

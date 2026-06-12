@@ -899,7 +899,12 @@ class TestEcoFlowNumber:
         self,
         hass: HomeAssistant,
     ) -> None:
-        """Stream backup reserve uses the app-style JSON SET path."""
+        """Stream backup reserve uses the WSS protobuf SET path.
+
+        JSON SET does not work on the /app/ WSS topic, so the value is sent
+        as a protobuf ConfigWrite frame (cmd_func=254, cmd_id=17, field 102)
+        built by build_stream_backup_reserve_payload.
+        """
         entry = MockConfigEntry(
             domain=DOMAIN,
             title="EcoFlow Energy",
@@ -929,23 +934,28 @@ class TestEcoFlowNumber:
         number = EcoFlowNumber(coordinator, defn)
 
         with (
-            patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock, return_value=True) as mock_cmd,
+            patch.object(coordinator, "async_send_proto_set_command", new_callable=AsyncMock, return_value=True) as mock_cmd,
             patch.object(number, "async_write_ha_state"),
         ):
             await number.async_set_native_value(80.0)
 
-        mock_cmd.assert_awaited_once_with(
-            {
-                "sn": MOCK_STREAM_DEVICE["sn"],
-                "cmdId": 17,
-                "cmdFunc": 254,
-                "dirDest": 1,
-                "dirSrc": 1,
-                "dest": 2,
-                "needAck": True,
-                "params": {"cfgBackupReverseSoc": 80},
-            }
+        mock_cmd.assert_awaited_once()
+        payload, kwargs = mock_cmd.call_args.args[0], mock_cmd.call_args.kwargs
+        assert isinstance(payload, bytes)
+        # The protobuf frame must decode back to the requested value: the
+        # outer envelope carries cmd_func=254 / cmd_id=17 with field 102=80.
+        from custom_components.ecoflow_energy.ecoflow.proto.decoder import (
+            decode_header_message,
         )
+
+        headers, _ = decode_header_message(payload)
+        assert headers, "expected a decodable header frame"
+        header = headers[0]
+        assert int(header["cmd_func"]) == 254
+        assert int(header["cmd_id"]) == 17
+        pdata = bytes.fromhex(header["pdata"])
+        # field 102, wire-type 0 (varint): tag = (102 << 3) | 0 = 816 -> b"\xb0\x06"
+        assert b"\xb0\x06\x50" in pdata  # field 102 = 0x50 = 80
         assert coordinator.device_data["backup_reserve_pct"] == 80.0
 
 

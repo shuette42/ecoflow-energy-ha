@@ -292,6 +292,30 @@ class TestStreamEntities:
         keys = _extract_sensor_keys("STREAM_NUMBERS")
         assert keys == ["backup_reserve"]
 
+    def test_only_soc_has_battery_device_class(self) -> None:
+        """Only the primary soc_pct should have device_class='battery'.
+
+        soc_precise_pct and bms_soh_pct are percentages too, but must NOT
+        use device_class='battery' because HA picks battery-class entities
+        for the device header (Issue #32).
+        """
+        battery_sensors = [
+            s for s in STREAM_SENSORS if s.device_class == "battery"
+        ]
+        keys = {s.key for s in battery_sensors}
+        assert keys == {"soc_pct"}, (
+            f"Expected battery device_class only on {{'soc_pct'}}, "
+            f"but found: {keys}"
+        )
+
+    def test_soh_and_precise_soc_no_battery_device_class(self) -> None:
+        """SoH and precise-SoC variants must not have device_class='battery'."""
+        for s in STREAM_SENSORS:
+            if s.key in ("bms_soh_pct", "soc_precise_pct"):
+                assert s.device_class != "battery", (
+                    f"{s.key} has device_class='battery' but is not the primary SoC"
+                )
+
 
 class TestBinarySensors:
     def test_powerocean_binary_sensors(self):
