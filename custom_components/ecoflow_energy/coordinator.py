@@ -46,6 +46,7 @@ from .const import (
     APP_SURPLUS_SYNC_USER_GRACE_S,
     POWEROCEAN_SOC_DEBOUNCE_S,
     DEVICE_TYPE_SMARTPLUG,
+    DEVICE_TYPE_STREAM,
     DEVICE_TYPE_UNKNOWN,
     DOMAIN,
     ENERGY_STREAM_KEEPALIVE_S,
@@ -64,6 +65,8 @@ from .const import (
     SMARTPLUG_POWER_TO_ENERGY,
     SMARTPLUG_SOFT_UNAVAILABLE_S,
     SOFT_UNAVAILABLE_S,
+    STREAM_ENERGY_FROM_API,
+    STREAM_POWER_TO_ENERGY,
     STALE_THRESHOLD_S,
     SMARTPLUG_STALE_THRESHOLD_S,
     get_delta_profile,
@@ -81,6 +84,7 @@ from .ecoflow.parsers.powerocean_proto import (
 )
 from .ecoflow.parsers.powerocean import parse_powerocean_http_quota
 from .ecoflow.parsers.smartplug import parse_smartplug_http_quota, parse_smartplug_report
+from .ecoflow.parsers.stream_proto import parse_stream_proto_message
 from .ecoflow.proto.runtime import decode_proto_runtime_frame
 
 _LOGGER = logging.getLogger(__name__)
@@ -226,6 +230,9 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         elif self.device_type == DEVICE_TYPE_SMARTPLUG:
             self._power_to_energy = SMARTPLUG_POWER_TO_ENERGY
             self._energy_from_api = SMARTPLUG_ENERGY_FROM_API
+        elif self.device_type == DEVICE_TYPE_STREAM:
+            self._power_to_energy = STREAM_POWER_TO_ENERGY
+            self._energy_from_api = STREAM_ENERGY_FROM_API
         else:
             self._power_to_energy = {}
             self._energy_from_api = []
@@ -490,6 +497,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         subscribe_mqtt = self.device_type in (
             DEVICE_TYPE_DELTA,
             DEVICE_TYPE_SMARTPLUG,
+            DEVICE_TYPE_STREAM,
         )
         creds = await self._iot_api.get_mqtt_credentials()
         if creds is not None:
@@ -858,7 +866,11 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._log_event("set_reply", f"topic={topic}")
             return
 
-        if not self._enhanced_mode and self.device_type not in (DEVICE_TYPE_DELTA, DEVICE_TYPE_SMARTPLUG):
+        if not self._enhanced_mode and self.device_type not in (
+            DEVICE_TYPE_DELTA,
+            DEVICE_TYPE_SMARTPLUG,
+            DEVICE_TYPE_STREAM,
+        ):
             return  # Standard Mode (non-Delta/SmartPlug): ignore MQTT data
         parsed = self._parse_message(topic, payload)
         if parsed:
@@ -885,6 +897,8 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if b"\x0a" in payload[:4]:
                 if self.device_type == DEVICE_TYPE_POWEROCEAN:
                     return self._parse_powerocean_get_reply(payload)
+                if self.device_type == DEVICE_TYPE_STREAM:
+                    return parse_stream_proto_message(payload)
                 return self._parse_proto_device_data(payload)
             return None
 
@@ -1051,6 +1065,8 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         from .ecoflow.proto.decoder import decode_header_message
 
         headers, _ = decode_header_message(payload)
+        if self.device_type == DEVICE_TYPE_STREAM:
+            return parse_stream_proto_message(payload)
         for hdr in headers:
             pdata_hex = hdr.get("pdata")
             if not pdata_hex:

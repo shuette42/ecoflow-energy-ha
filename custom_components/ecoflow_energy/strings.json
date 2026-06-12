@@ -150,6 +150,9 @@
       "batt_discharge_power_w": {
         "name": "Battery Discharge Power"
       },
+      "batt_design_cap_mah": {
+        "name": "Design Capacity"
+      },
       "grid_import_power_w": {
         "name": "Grid Import Power"
       },

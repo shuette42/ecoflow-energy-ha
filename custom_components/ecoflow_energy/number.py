@@ -18,14 +18,17 @@ from .const import (
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_SMARTPLUG,
+    DEVICE_TYPE_STREAM,
     DOMAIN,
     EcoFlowNumberDef,
     NUMBER_COMMANDS,
     POWEROCEAN_NUMBERS,
     SMARTPLUG_NUMBER_COMMANDS,
     SMARTPLUG_NUMBERS,
+    STREAM_NUMBERS,
 )
 from .coordinator import EcoFlowDeviceCoordinator
+from .ecoflow.energy_stream import build_stream_backup_reserve_payload
 from .ecoflow.parsers.smartplug import (
     build_plug_brightness_payload,
     build_plug_max_watts_payload,
@@ -120,6 +123,11 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
         # PowerOcean uses protobuf SET via Enhanced Mode (WSS)
         if self.coordinator.device_type == DEVICE_TYPE_POWEROCEAN:
             await self._async_set_powerocean_value(value)
+            return
+        if self.coordinator.device_type == DEVICE_TYPE_STREAM:
+            ok = await self._async_set_stream_value(self._definition.key, value)
+            if ok:
+                self._apply_optimistic_number(value)
             return
 
         # Smart Plug number commands
@@ -236,6 +244,28 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
 
         _LOGGER.warning("No PowerOcean SET handler for %s", key)
 
+    async def _async_set_stream_value(self, key: str, value: float) -> bool:
+        """Set a Stream AC Pro number value via WSS Protobuf SET.
+
+        JSON SET does not work on the /app/ WSS topic (SmartPlug proves
+        this). The Backup-Reserve value is sent as a protobuf ConfigWrite
+        frame (cmd_func=254, cmd_id=17).
+        """
+        if key != "backup_reserve":
+            _LOGGER.warning(
+                "No Stream SET handler for %s (%s)",
+                key,
+                self.coordinator.device_sn,
+            )
+            return False
+
+        payload = build_stream_backup_reserve_payload(
+            int(value), self.coordinator.device_sn
+        )
+        return await self.coordinator.async_send_proto_set_command(
+            payload, label="stream_backup_reserve"
+        )
+
 
 def _get_number_defs(device_type: str) -> list[EcoFlowNumberDef]:
     """Return number definitions based on device type."""
@@ -245,4 +275,6 @@ def _get_number_defs(device_type: str) -> list[EcoFlowNumberDef]:
         return POWEROCEAN_NUMBERS
     if device_type == DEVICE_TYPE_SMARTPLUG:
         return SMARTPLUG_NUMBERS
+    if device_type == DEVICE_TYPE_STREAM:
+        return STREAM_NUMBERS
     return []

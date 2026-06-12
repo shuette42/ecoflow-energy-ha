@@ -23,10 +23,12 @@ from .const import (
     DELTA_PROFILE_R331,
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_SMARTPLUG,
+    DEVICE_TYPE_STREAM,
     DOMAIN,
     EcoFlowSwitchDef,
     SMARTPLUG_SWITCH_COMMANDS,
     SMARTPLUG_SWITCHES,
+    STREAM_SWITCHES,
     SWITCH_COMMANDS_R331,
     SWITCH_COMMANDS_R351,
     SWITCH_DECLARATIVE_R331,
@@ -192,6 +194,8 @@ def _get_switch_defs(device_type: str) -> list[EcoFlowSwitchDef]:
         return DELTA2MAX_SWITCHES
     if device_type == DEVICE_TYPE_SMARTPLUG:
         return SMARTPLUG_SWITCHES
+    if device_type == DEVICE_TYPE_STREAM:
+        return STREAM_SWITCHES
     return []
 
 

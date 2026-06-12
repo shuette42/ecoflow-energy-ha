@@ -10,6 +10,7 @@ from ecoflow_energy.ecoflow.energy_stream import (
     build_feed_power_set_payload,
     build_powerocean_soc_set_payload,
     build_soc_limit_set_payload,
+    build_stream_backup_reserve_payload,
     build_work_mode_set_payload,
 )
 from ecoflow_energy.ecoflow.proto_encoding import (
@@ -439,3 +440,114 @@ class TestBackupEventSetPayload:
         # Disabling doesn't require valid window
         payload = build_backup_event_set_payload(False, 0, 0, seq=1)
         assert isinstance(payload, bytes)
+
+
+# ===========================================================================
+# Stream AC Pro Backup-Reserve SET payload (ConfigWrite field 102, cmd_id=17)
+# ===========================================================================
+
+
+class TestStreamBackupReservePayload:
+    """ConfigWrite { cfg_backup_reverse_soc=102 } in a cmd_func=254/cmd_id=17
+    header on the /app/ WSS topic, mirroring the SmartPlug builder."""
+
+    # Dummy SN: 4-char prefix convention, never a real serial.
+    SN = "BK31TESTSN0000000"
+
+    def test_payload_structure(self):
+        payload = build_stream_backup_reserve_payload(50, self.SN, seq=1)
+        assert isinstance(payload, bytes)
+        # Outer wrapper: field 1 (tag=0x0a) length-delimited
+        assert payload[0] == 0x0A
+
+    def test_build_backup_reserve_payload(self):
+        """cmd_func=254 (field 8), cmd_id=17 (field 9), field 102 = 50."""
+        payload = build_stream_backup_reserve_payload(50, self.SN, seq=1)
+        # cmd_func=254 → field 8 tag = (8<<3)|0 = 0x40, value 254 = varint 0xfe 0x01
+        assert b"\x40\xfe\x01" in payload
+        # cmd_id=17 → field 9 tag = (9<<3)|0 = 0x48, value 17 = 0x11
+        assert b"\x48\x11" in payload
+        # cfg_backup_reverse_soc → field 102 tag = (102<<3)|0 = 816
+        #   = varint 0xb0 0x06, value 50 = 0x32
+        assert b"\xb0\x06\x32" in payload
+
+    def test_decodes_via_stream_parser(self):
+        """The Stream proto parser interprets the frame as a backup ack:
+        cmd_func=254/cmd_id=18 path reads field 102 as backup_reserve_pct.
+
+        The builder emits cmd_id=17 (write). To verify field 102 is decoded
+        semantically, re-wrap the inner pdata under the parser's ack header
+        shape and confirm the value round-trips."""
+        # Decode the outer/inner structure the builder produced.
+        from ecoflow_energy.ecoflow.parsers.stream_proto import (
+            parse_stream_proto_message,
+        )
+
+        # Build a parser-recognized ack frame carrying field 102 = 50, using
+        # the same primitives the builder uses. This proves field 102 is the
+        # ConfigWrite SoC slot the parser maps to backup_reserve_pct.
+        inner = encode_field_varint(102, 50)
+        ack_header = bytearray()
+        ack_header.extend(encode_field_bytes(1, inner))
+        ack_header.extend(encode_field_varint(8, 254))
+        ack_header.extend(encode_field_varint(9, 18))
+        frame = encode_field_bytes(1, bytes(ack_header))
+
+        result = parse_stream_proto_message(frame)
+        assert result is not None
+        assert result["backup_reserve_pct"] == 50
+
+    def test_build_backup_reserve_includes_device_sn(self):
+        """device_sn is encoded as field 25 (string) in the header."""
+        payload = build_stream_backup_reserve_payload(50, self.SN, seq=1)
+        # field 25, wire type 2: tag = (25<<3)|2 = 202 = 0xca 0x01,
+        # then length, then ASCII SN
+        assert b"\xca\x01" + bytes([len(self.SN)]) + self.SN.encode("ascii") in payload
+        assert self.SN.encode("ascii") in payload
+
+    def test_field_102_encodes_value(self):
+        """Different backup_soc values encode on field 102."""
+        # backup_soc=80 → field 102 tag 0xb0 0x06, value 80 = 0x50
+        payload = build_stream_backup_reserve_payload(80, self.SN, seq=1)
+        assert b"\xb0\x06\x50" in payload
+
+    def test_zero_value_encoded(self):
+        """backup_soc=0 must still be on the wire (field 102 = 0)."""
+        payload = build_stream_backup_reserve_payload(0, self.SN, seq=1)
+        # field 102 tag 0xb0 0x06, value 0 = 0x00
+        assert b"\xb0\x06\x00" in payload
+
+    def test_need_ack_set(self):
+        """need_ack=1 (field 11, varint) must be present."""
+        payload = build_stream_backup_reserve_payload(50, self.SN, seq=1)
+        # field 11 tag = (11<<3)|0 = 0x58, value 1 = 0x01
+        assert b"\x58\x01" in payload
+
+    def test_src_and_dest_present(self):
+        """src=32 (field 2) and dest=2 (field 3) routing fields present."""
+        payload = build_stream_backup_reserve_payload(50, self.SN, seq=1)
+        # field 2 tag = 0x10, value 32 = 0x20
+        assert b"\x10\x20" in payload
+        # field 3 tag = 0x18, value 2 = 0x02
+        assert b"\x18\x02" in payload
+
+    def test_deterministic_with_fixed_seq(self):
+        p1 = build_stream_backup_reserve_payload(50, self.SN, seq=42)
+        p2 = build_stream_backup_reserve_payload(50, self.SN, seq=42)
+        assert p1 == p2
+
+    def test_different_values_produce_different_payload(self):
+        p1 = build_stream_backup_reserve_payload(50, self.SN, seq=42)
+        p2 = build_stream_backup_reserve_payload(80, self.SN, seq=42)
+        assert p1 != p2
+
+    def test_build_backup_reserve_rejects_out_of_range(self):
+        with pytest.raises(ValueError):
+            build_stream_backup_reserve_payload(150, self.SN)
+        with pytest.raises(ValueError):
+            build_stream_backup_reserve_payload(-1, self.SN)
+
+    def test_boundary_values_allowed(self):
+        for soc in (0, 100):
+            payload = build_stream_backup_reserve_payload(soc, self.SN, seq=1)
+            assert isinstance(payload, bytes)

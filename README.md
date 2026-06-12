@@ -42,6 +42,7 @@
 | **PowerOcean** — Home Battery | 202 | 2 numbers, 1 select (Enhanced only) | 6 (solar, grid, battery, home) | ~30 s standard / ~3 s enhanced |
 | **Delta 2 Max** — Portable Power | 94 | 7 switches, 8 numbers | 4 (solar 1+2, AC in/out) | ~30 s standard / ~2 s enhanced |
 | **Smart Plug** — Switchable Outlet | 11 | 1 switch, 2 numbers | 1 (total energy) | ~30 s standard / ~3 s enhanced |
+| **Stream AC Pro** — Home Battery | 33 | 1 number (Enhanced only) | 4 (solar, home, battery charge/discharge) | Enhanced only / ~3 s |
 
 > **Tip:** Other Delta-series devices (Delta Pro, Delta 2, etc.) should work automatically with the Delta sensor set.
 
@@ -73,6 +74,13 @@ Battery SoC/SoH · All input/output power, temperatures, voltages · **Expansion
 <summary><b>Smart Plug</b> — power monitoring, plug switch, automation-ready</summary>
 
 Power (W), current (A), voltage (V), frequency, temperature · Plug on/off switch · **Numbers:** LED brightness (0-100%), max power limit (0-2500 W) · Real-time MQTT push in Standard Mode · ~3 s updates in Enhanced Mode. Ideal for automating charging (e.g. charge Delta on solar surplus).
+
+</details>
+
+<details>
+<summary><b>Stream AC Pro</b> — battery telemetry and reserve control</summary>
+
+Battery SoC/SoH · solar, home, grid, and battery power · battery charge/discharge power · AC voltage and frequency · battery temperature, capacity, cell voltage, and lifetime charge/discharge diagnostics · **Number:** Backup Reserve (3-95%) in Enhanced Mode.
 
 </details>
 

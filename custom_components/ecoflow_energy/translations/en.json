@@ -150,6 +150,21 @@
       "batt_discharge_power_w": {
         "name": "Battery Discharge Power"
       },
+      "batt_charge_energy_wh": {
+        "name": "Battery Charge Energy (Raw)"
+      },
+      "batt_discharge_energy_wh": {
+        "name": "Battery Discharge Energy (Raw)"
+      },
+      "batt_design_cap_mah": {
+        "name": "Design Capacity"
+      },
+      "batt_charge_capacity_ah": {
+        "name": "Battery Charge Capacity"
+      },
+      "batt_discharge_capacity_ah": {
+        "name": "Battery Discharge Capacity"
+      },
       "grid_import_power_w": {
         "name": "Grid Import Power"
       },
@@ -356,6 +371,24 @@
           "discharging": "Discharging",
           "charging": "Charging"
         }
+      },
+      "soc_precise_pct": {
+        "name": "Battery SOC (Precise)"
+      },
+      "ac_voltage_v": {
+        "name": "AC Voltage"
+      },
+      "ac_frequency_hz": {
+        "name": "AC Frequency"
+      },
+      "backup_reserve_pct": {
+        "name": "Backup Reserve"
+      },
+      "max_charge_soc_pct": {
+        "name": "Max Charge SoC"
+      },
+      "min_discharge_soc_pct": {
+        "name": "Min Discharge SoC"
       },
       "soc": {
         "name": "SoC"

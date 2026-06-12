@@ -1,5 +1,7 @@
 """EcoFlow API constants and default configuration."""
 
+from __future__ import annotations
+
 # MQTT Broker
 MQTT_HOST = "mqtt-e.ecoflow.com"
 MQTT_PORT_TCP = 8883
@@ -32,12 +34,14 @@ HTTP_RETRY_BACKOFF_S = 2.0
 DEVICE_TYPE_POWEROCEAN = "powerocean"
 DEVICE_TYPE_DELTA = "delta"
 DEVICE_TYPE_SMARTPLUG = "smartplug"
+DEVICE_TYPE_STREAM = "stream"
 DEVICE_TYPE_UNKNOWN = "unknown"
 
 # Keywords used to classify devices from productName strings
 _POWEROCEAN_KEYWORDS = ("powerocean", "power ocean")
 _DELTA_KEYWORDS = ("delta",)
 _SMARTPLUG_KEYWORDS = ("smart plug", "smartplug")
+_STREAM_KEYWORDS = ("stream",)
 
 _SN_PREFIX_MAP = {
     "HJ31": DEVICE_TYPE_POWEROCEAN,
@@ -45,6 +49,7 @@ _SN_PREFIX_MAP = {
     "R351": DEVICE_TYPE_DELTA,
     "R331": DEVICE_TYPE_DELTA,
     "HW52": DEVICE_TYPE_SMARTPLUG,
+    "BK31": DEVICE_TYPE_STREAM,
 }
 
 
@@ -52,7 +57,7 @@ def get_device_type(product_name: str, sn: str = "") -> str:
     """Classify a device based on its productName string or SN prefix.
 
     Returns DEVICE_TYPE_POWEROCEAN, DEVICE_TYPE_DELTA, DEVICE_TYPE_SMARTPLUG,
-    or DEVICE_TYPE_UNKNOWN.
+    DEVICE_TYPE_STREAM, or DEVICE_TYPE_UNKNOWN.
     """
     name = product_name.lower()
     for kw in _POWEROCEAN_KEYWORDS:
@@ -64,6 +69,9 @@ def get_device_type(product_name: str, sn: str = "") -> str:
     for kw in _SMARTPLUG_KEYWORDS:
         if kw in name:
             return DEVICE_TYPE_SMARTPLUG
+    for kw in _STREAM_KEYWORDS:
+        if kw in name:
+            return DEVICE_TYPE_STREAM
     if sn:
         prefix = sn[:4].upper()
         if prefix in _SN_PREFIX_MAP:
