@@ -2,24 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.16.0] - 2026-06-14
+## [1.15.0] - 2026-06-14
 
 ### Added
-- Stream AC Pro read-only telemetry for individual AC outlet state and power, LED brightness diagnostics, and signed AC grid connection power matching the EcoFlow app "Netz-Anschluss" value.
+- Initial Stream AC Pro (BK31) support in Enhanced Mode, including device detection, protobuf telemetry parsing, Home Assistant sensor entities, and a Backup Reserve number control. (beta.1)
+- Stream AC Pro Energy Dashboard sensors (battery charge/discharge) derived via Riemann-sum integration from the live power telemetry. (beta.1)
+- Stream AC Pro read-only telemetry for individual AC outlet state and power, LED brightness diagnostics, and signed AC grid connection power matching the EcoFlow app "Netz-Anschluss" value. (beta.2)
 
 ### Changed
-- Stream AC Pro is now modeled as an AC-coupled battery: battery charge/discharge energy stays enabled for the Energy Dashboard, while meter-dependent solar/home values remain disabled diagnostics unless an EcoFlow-compatible meter is paired in the app.
-- Ah battery capacity counters are disabled diagnostic entities.
+- Stream AC Pro is now modeled as an AC-coupled battery: battery charge/discharge energy stays enabled for the Energy Dashboard, while meter-dependent solar/home values remain disabled diagnostics unless an EcoFlow-compatible meter is paired in the app. (beta.2)
+- Ah battery capacity counters are disabled diagnostic entities. (beta.2)
 
 ### Removed
-- Removed unconfirmed experimental write paths for Stream AC Pro AC outlets and LED brightness.
-- Removed raw Wh battery-energy entities in favor of the kWh battery charge/discharge energy sensors.
-
-## [1.15.0] - 2026-06-12
-
-### Added
-- Initial Stream AC Pro (BK31) support in Enhanced Mode, including device detection, protobuf telemetry parsing, Home Assistant sensor entities, and a Backup Reserve number control.
-- Stream AC Pro Energy Dashboard sensors (solar, home, battery charge/discharge) derived via Riemann-sum integration from the live power telemetry.
+- Removed unconfirmed experimental write paths for Stream AC Pro AC outlets and LED brightness. (beta.2)
+- Removed raw Wh battery-energy entities in favor of the kWh battery charge/discharge energy sensors. (beta.2)
 
 ## [1.14.0] - 2026-05-18
 
