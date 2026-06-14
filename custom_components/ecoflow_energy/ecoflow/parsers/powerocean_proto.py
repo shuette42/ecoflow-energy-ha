@@ -52,7 +52,7 @@ _CONNECTIVITY_KEYS: frozenset[str] = frozenset({
 })
 
 # WiFi/Ethernet: 0 = connected, non-zero = error/disconnected.
-# 4G (cellular): 1 = connected per APK BasePo2ViewModel$b.
+# 4G (cellular): 1 = connected per observed portal behavior.
 _WIFI_ETH_KEYS: frozenset[str] = frozenset({"wifi_status", "ethernet_status"})
 
 

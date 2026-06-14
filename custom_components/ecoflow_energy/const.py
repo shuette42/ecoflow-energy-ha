@@ -50,7 +50,7 @@ MQTT_HEALTH_CHECK_INTERVAL_S = 5.0  # Run stale/reconnect health checks independ
 
 # Graduated availability degradation thresholds (app-auth only).
 # Entities remain available with last-known values until HARD_UNAVAILABLE.
-# Codex APK analysis: real PowerOcean telemetry has gaps up to 613s (cmd_id=33).
+# Observed PowerOcean telemetry has gaps up to 613s (cmd_id=33).
 # The old 95s hard cutoff (35s stale + 60s grace) was too aggressive.
 #
 # Stages: healthy -> stale -> degraded -> unavailable
