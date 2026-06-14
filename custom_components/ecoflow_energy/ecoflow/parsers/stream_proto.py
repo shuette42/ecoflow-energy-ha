@@ -25,10 +25,12 @@ Current field notes from dump analysis:
   it may be absent or misleading, and in zero-export setups it can remain
   zero until surplus power would be exported.
 - LED brightness is confirmed separately from battery health:
-  `254/18 field 384` carries the set/ack value and `254/21 field 994`
-  carries the live brightness percentage. `32/50 field 15` stayed at
-  `100` throughout the dedicated LED capture and does not track
-  brightness changes.
+  `254/21 field 994` carries the live brightness percentage and is the
+  only field mapped to `led_brightness`. `254/18 field 384` carries the
+  set/ack (slider target) value and is intentionally not mapped, so the
+  live value never flaps to the slider target on a SET acknowledgement.
+  `32/50 field 15` stayed at `100` throughout the dedicated LED capture
+  and does not track brightness changes.
 """
 
 from __future__ import annotations
@@ -53,7 +55,6 @@ _STREAM_FIELD_MAP: dict[tuple[int, int], dict[int, tuple[str, str]]] = {
         271: ("min_discharge_soc_pct", _TYPE_INT),
         380: ("ac_outlet_1_enabled", _TYPE_INT),
         381: ("ac_outlet_2_enabled", _TYPE_INT),
-        384: ("led_brightness", _TYPE_INT),
         461: ("backup_reserve_pct", _TYPE_INT),
         # Summed AC intake from grid. Charge-dump correlation:
         # grid_w ~= batt_w + home_from_grid_w.
@@ -68,10 +69,16 @@ _STREAM_FIELD_MAP: dict[tuple[int, int], dict[int, tuple[str, str]]] = {
         613: ("ac_voltage_v", _TYPE_FLOAT),
         615: ("ac_frequency_hz", _TYPE_FLOAT),
         616: ("grid_connection_power_w", _TYPE_FLOAT),
+        # Mirror fields for the AC outlet enable flags. They carry the same
+        # on/off semantics as 380/381; whichever appears last in the frame
+        # wins, which is harmless because both encode the same boolean state.
         980: ("ac_outlet_1_enabled", _TYPE_INT),
         982: ("ac_outlet_2_enabled", _TYPE_INT),
-        994: ("led_brightness", _TYPE_INT),
         992: ("sys_grid_connection_power_w", _TYPE_FLOAT),
+        # Live LED brightness percentage. The set/ack value (field 384) is
+        # intentionally NOT mapped to the same key: it carries the slider
+        # target rather than the live value and would otherwise flap with 994.
+        994: ("led_brightness", _TYPE_INT),
         1003: ("home_from_batt_w", _TYPE_FLOAT),
         # House/system load supplied from grid, excluding battery path.
         1004: ("home_from_grid_w", _TYPE_FLOAT),
@@ -99,14 +106,11 @@ _STREAM_FIELD_MAP: dict[tuple[int, int], dict[int, tuple[str, str]]] = {
         32: ("_batt_charge_capacity_ah_rounded", _TYPE_INT),
         50: ("_batt_charge_capacity_mah_total", _TYPE_INT),
         51: ("_batt_discharge_capacity_mah_total", _TYPE_INT),
-        79: ("batt_charge_energy_wh", _TYPE_INT),
-        80: ("batt_discharge_energy_wh", _TYPE_INT),
     },
     # SET acknowledgement path for backup reserve slider
     (254, 18): {
         380: ("ac_outlet_1_enabled", _TYPE_INT),
         381: ("ac_outlet_2_enabled", _TYPE_INT),
-        384: ("led_brightness", _TYPE_INT),
         102: ("backup_reserve_pct", _TYPE_INT),
     },
 }
@@ -231,12 +235,11 @@ def _finalize_stream_state(parsed: dict[str, Any]) -> dict[str, Any]:
     if isinstance(batt_w, (int, float)):
         result["batt_charge_power_w"] = float(batt_w) if batt_w > 0 else 0.0
         result["batt_discharge_power_w"] = abs(float(batt_w)) if batt_w < 0 else 0.0
-        if batt_w > 0:
-            result["batt_charge_discharge_state"] = "charging"
-        elif batt_w < 0:
-            result["batt_charge_discharge_state"] = "discharging"
-        else:
-            result["batt_charge_discharge_state"] = "standby"
+        # batt_charge_discharge_state is intentionally NOT set here. The
+        # coordinator pops any parser-provided value and derives the state
+        # from a hysteresis window over batt_w (see _derive_battery_state,
+        # issue #50). Setting it from instantaneous sign would only be used
+        # by unit tests and never reaches the live entity.
 
     return result
 

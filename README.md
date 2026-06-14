@@ -123,7 +123,9 @@ Download the [latest release](https://github.com/shuette42/ecoflow-energy-ha/rel
 
 **Upgrading?** See [CHANGELOG.md](CHANGELOG.md) for migration notes. Most upgrades are seamless. v1.13.0 removes the legacy `min_discharge_soc` PowerOcean entity (replaced by `backup_reserve`); after upgrading you may see it as "unavailable" in HA - safe to delete via Settings > Devices & services > Entities.
 
-For Stream AC Pro, old experimental outlet switches and raw Wh battery-energy entities may remain in Home Assistant's entity registry after upgrading. They are safe to delete if shown as unavailable or duplicated; use the kWh Battery Charge Energy and Battery Discharge Energy sensors for the Energy Dashboard.
+**Upgrading a Stream AC Pro from v1.15.0?** Two things changed:
+- Old experimental outlet switches and raw Wh battery-energy entities may remain in the entity registry. They are safe to delete if shown as unavailable or duplicated; use the kWh Battery Charge Energy and Battery Discharge Energy sensors for the Energy Dashboard.
+- Solar Power, Home Power, and Grid Power are now meter-dependent diagnostics, disabled by default for new installs. Existing installs keep them enabled, so nothing disappears. If your Stream has no EcoFlow-paired meter these report unreliable values and can be disabled under Settings > Devices & services > Entities.
 
 ---
 

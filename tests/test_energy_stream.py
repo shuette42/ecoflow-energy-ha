@@ -13,7 +13,6 @@ from ecoflow_energy.ecoflow.energy_stream import (
     build_stream_backup_reserve_payload,
     build_work_mode_set_payload,
 )
-from ecoflow_energy.ecoflow.proto.decoder import decode_header_message
 from ecoflow_energy.ecoflow.proto_encoding import (
     encode_field_bytes,
     encode_field_varint,
@@ -221,8 +220,6 @@ class TestPowerOceanSocSetPayload:
         payload = build_powerocean_soc_set_payload(0, 100, seq=1, device_sn=sn)
         assert b"\xca\x01" + bytes([len(sn)]) + sn.encode() in payload
 
-
-class TestPowerOceanSocSetPayloadContinuation:
     def test_device_sn_omitted_when_empty(self):
         sn_marker = b"\xca\x01"
         payload_with_sn = build_powerocean_soc_set_payload(0, 100, seq=1, device_sn="X")
