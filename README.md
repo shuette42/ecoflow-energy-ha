@@ -42,7 +42,7 @@
 | **PowerOcean** — Home Battery | 202 | 2 numbers, 1 select (Enhanced only) | 6 (solar, grid, battery, home) | ~30 s standard / ~3 s enhanced |
 | **Delta 2 Max** — Portable Power | 94 | 7 switches, 8 numbers | 4 (solar 1+2, AC in/out) | ~30 s standard / ~2 s enhanced |
 | **Smart Plug** — Switchable Outlet | 11 | 1 switch, 2 numbers | 1 (total energy) | ~30 s standard / ~3 s enhanced |
-| **Stream AC Pro** — Home Battery | 33 | 1 number (Enhanced only) | 4 (solar, home, battery charge/discharge) | Enhanced only / ~3 s |
+| **Stream AC Pro** — AC-coupled Battery | 39 + 2 binary | 1 number (Enhanced only) | 2 default (battery charge/discharge), 2 optional diagnostic (solar/home) | Enhanced only / ~3 s |
 
 > **Tip:** Other Delta-series devices (Delta Pro, Delta 2, etc.) should work automatically with the Delta sensor set.
 
@@ -78,9 +78,11 @@ Power (W), current (A), voltage (V), frequency, temperature · Plug on/off switc
 </details>
 
 <details>
-<summary><b>Stream AC Pro</b> — battery telemetry and reserve control</summary>
+<summary><b>Stream AC Pro</b> — AC-coupled battery telemetry and reserve control</summary>
 
-Battery SoC/SoH · solar, home, grid, and battery power · battery charge/discharge power · AC voltage and frequency · battery temperature, capacity, cell voltage, and lifetime charge/discharge diagnostics · **Number:** Backup Reserve (3-95%) in Enhanced Mode.
+Battery SoC/SoH · signed battery power · battery charge/discharge power · signed AC grid connection power ("Netz-Anschluss": negative=input, positive=output/feed-in) · read-only AC outlet states and outlet power · AC voltage and frequency · battery temperature, capacity and cell voltage diagnostics · LED brightness diagnostics · **Number:** Backup Reserve (3-95%) in Enhanced Mode.
+
+The Stream AC Pro is treated as an AC-coupled battery. House/grid/solar flow values depend on an EcoFlow-paired meter and are disabled by default as diagnostic entities. Individual AC outlets and LED brightness are exposed read-only; the app write path is not yet confirmed for third-party MQTT control.
 
 </details>
 
@@ -120,6 +122,8 @@ Download the [latest release](https://github.com/shuette42/ecoflow-energy-ha/rel
 **Enhanced Mode** connects with your EcoFlow email and password. No Developer API keys needed. Faster updates, but this is an unofficial, community-driven protocol that may change without notice.
 
 **Upgrading?** See [CHANGELOG.md](CHANGELOG.md) for migration notes. Most upgrades are seamless. v1.13.0 removes the legacy `min_discharge_soc` PowerOcean entity (replaced by `backup_reserve`); after upgrading you may see it as "unavailable" in HA - safe to delete via Settings > Devices & services > Entities.
+
+For Stream AC Pro, old experimental outlet switches and raw Wh battery-energy entities may remain in Home Assistant's entity registry after upgrading. They are safe to delete if shown as unavailable or duplicated; use the kWh Battery Charge Energy and Battery Discharge Energy sensors for the Energy Dashboard.
 
 ---
 
@@ -163,6 +167,18 @@ All energy sensors are pre-configured (`state_class: total_increasing`) — just
 | Individual device | **Energy** (kWh) |
 
 Add under **Energy > Individual Devices**.
+
+</details>
+
+<details>
+<summary><b>Stream AC Pro</b> — AC-coupled Battery</summary>
+
+| Dashboard Section | Sensor |
+|:---|:---|
+| Battery charge | **Battery Charge Energy** (kWh) |
+| Battery discharge | **Battery Discharge Energy** (kWh) |
+
+Solar and home energy sensors exist as diagnostics but are disabled by default because the Stream AC Pro only reports meaningful home/grid/solar flow values when an EcoFlow-compatible meter is paired in the app. For normal AC-coupled battery use, select the two battery energy sensors above.
 
 </details>
 

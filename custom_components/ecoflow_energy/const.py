@@ -522,6 +522,11 @@ SMARTPLUG_SWITCHES: list[EcoFlowSwitchDef] = [
     EcoFlowSwitchDef("plug_switch", "Plug", "switch_state", "mdi:power-plug"),
 ]
 
+STREAM_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
+    EcoFlowBinarySensorDef("ac_outlet_1_enabled", "AC Outlet 1", "power", "mdi:power-socket-eu"),
+    EcoFlowBinarySensorDef("ac_outlet_2_enabled", "AC Outlet 2", "power", "mdi:power-socket-eu"),
+]
+
 STREAM_SWITCHES: list[EcoFlowSwitchDef] = []
 
 SMARTPLUG_NUMBERS: list[EcoFlowNumberDef] = [
@@ -541,26 +546,32 @@ STREAM_NUMBERS: list[EcoFlowNumberDef] = [
 STREAM_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("soc_pct", "Battery SOC", "%", "battery", "measurement", "mdi:battery", suggested_display_precision=0),
     EcoFlowSensorDef("soc_precise_pct", "Battery SOC (Precise)", "%", None, "measurement", "mdi:battery-sync", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
-    EcoFlowSensorDef("solar_w", "Solar Power", "W", "power", "measurement", "mdi:solar-power", suggested_display_precision=0),
-    EcoFlowSensorDef("home_w", "Home Power", "W", "power", "measurement", "mdi:home-lightning-bolt", suggested_display_precision=0),
-    EcoFlowSensorDef("grid_w", "Grid Power", "W", "power", "measurement", "mdi:transmission-tower", suggested_display_precision=0),
+    EcoFlowSensorDef("solar_w", "Solar Power", "W", "power", "measurement", "mdi:solar-power", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("home_w", "Home Power", "W", "power", "measurement", "mdi:home-lightning-bolt", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("grid_w", "Grid Power", "W", "power", "measurement", "mdi:transmission-tower", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("batt_w", "Battery Power", "W", "power", "measurement", "mdi:battery", suggested_display_precision=0),
     EcoFlowSensorDef("batt_charge_power_w", "Battery Charge Power", "W", "power", "measurement", "mdi:battery-charging", suggested_display_precision=0),
     EcoFlowSensorDef("batt_discharge_power_w", "Battery Discharge Power", "W", "power", "measurement", "mdi:battery", suggested_display_precision=0),
-    EcoFlowSensorDef("solar_energy_kwh", "Solar Energy", "kWh", "energy", "total_increasing", "mdi:solar-power", suggested_display_precision=2),
-    EcoFlowSensorDef("home_energy_kwh", "Home Energy", "kWh", "energy", "total_increasing", "mdi:home-lightning-bolt", suggested_display_precision=2),
+    EcoFlowSensorDef("ac_grid_connection_power_w", "AC Grid Connection Power", "W", "power", "measurement", "mdi:transmission-tower", suggested_display_precision=0),
+    EcoFlowSensorDef("solar_energy_kwh", "Solar Energy", "kWh", "energy", "total_increasing", "mdi:solar-power", "diagnostic", suggested_display_precision=2, disabled_by_default=True),
+    EcoFlowSensorDef("home_energy_kwh", "Home Energy", "kWh", "energy", "total_increasing", "mdi:home-lightning-bolt", "diagnostic", suggested_display_precision=2, disabled_by_default=True),
     EcoFlowSensorDef("batt_charge_energy_kwh", "Battery Charge Energy", "kWh", "energy", "total_increasing", "mdi:battery-charging", suggested_display_precision=2),
     EcoFlowSensorDef("batt_discharge_energy_kwh", "Battery Discharge Energy", "kWh", "energy", "total_increasing", "mdi:battery", suggested_display_precision=2),
+    EcoFlowSensorDef("home_from_batt_w", "Home From Battery", "W", "power", "measurement", "mdi:home-battery-outline", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("home_from_grid_w", "Home From Grid", "W", "power", "measurement", "mdi:home-import-outline", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("ac_outlet_1_w", "AC Outlet 1 Power", "W", "power", "measurement", "mdi:power-socket-eu", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("ac_outlet_2_w", "AC Outlet 2 Power", "W", "power", "measurement", "mdi:power-socket-eu", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("led_brightness", "LED Brightness", "%", None, "measurement", "mdi:brightness-6", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("grid_connection_power_w", "Grid Connection Power", "W", "power", "measurement", "mdi:transmission-tower", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("sys_grid_connection_power_w", "System Grid Connection Power", "W", "power", "measurement", "mdi:transmission-tower-export", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("bms_soh_pct", "Battery SoH", "%", None, "measurement", "mdi:battery-heart-variant", suggested_display_precision=0),
     EcoFlowSensorDef("batt_voltage_v", "Battery Voltage", "V", "voltage", "measurement", "mdi:flash-triangle", suggested_display_precision=1),
     EcoFlowSensorDef("batt_temp_c", "Battery Temp", "\u00b0C", "temperature", "measurement", "mdi:thermometer", suggested_display_precision=1),
-    EcoFlowSensorDef("batt_charge_energy_wh", "Battery Charge Energy (Raw)", "Wh", None, "total_increasing", "mdi:battery-charging", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
-    EcoFlowSensorDef("batt_discharge_energy_wh", "Battery Discharge Energy (Raw)", "Wh", None, "total_increasing", "mdi:battery", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("batt_design_cap_mah", "Design Capacity", "mAh", None, "measurement", "mdi:battery", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("batt_remain_cap_mah", "Remaining Capacity", "mAh", None, "measurement", "mdi:battery-50", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("batt_full_cap_mah", "Full Capacity", "mAh", None, "measurement", "mdi:battery", suggested_display_precision=0, disabled_by_default=True),
-    EcoFlowSensorDef("batt_charge_capacity_ah", "Battery Charge Capacity", "Ah", None, "total_increasing", "mdi:battery-plus", suggested_display_precision=2, disabled_by_default=True),
-    EcoFlowSensorDef("batt_discharge_capacity_ah", "Battery Discharge Capacity", "Ah", None, "total_increasing", "mdi:battery-minus", suggested_display_precision=2, disabled_by_default=True),
+    EcoFlowSensorDef("batt_charge_capacity_ah", "Battery Charge Capacity", "Ah", None, "total_increasing", "mdi:battery-plus", "diagnostic", suggested_display_precision=2, disabled_by_default=True),
+    EcoFlowSensorDef("batt_discharge_capacity_ah", "Battery Discharge Capacity", "Ah", None, "total_increasing", "mdi:battery-minus", "diagnostic", suggested_display_precision=2, disabled_by_default=True),
     EcoFlowSensorDef("ac_voltage_v", "AC Voltage", "V", "voltage", "measurement", "mdi:sine-wave", suggested_display_precision=1),
     EcoFlowSensorDef("ac_frequency_hz", "AC Frequency", "Hz", "frequency", "measurement", "mdi:sine-wave", suggested_display_precision=2),
     EcoFlowSensorDef("batt_max_cell_temp_c", "Max Cell Temp", "\u00b0C", "temperature", "measurement", "mdi:thermometer-high", "diagnostic", suggested_display_precision=1, disabled_by_default=True),

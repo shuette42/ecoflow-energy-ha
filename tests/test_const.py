@@ -13,6 +13,7 @@ from ecoflow_energy.const import (
     SMARTPLUG_SENSORS,
     STREAM_SENSORS,
     STREAM_NUMBERS,
+    STREAM_BINARY_SENSORS,
     DELTA2MAX_BINARY_SENSORS,
     DELTA2MAX_SWITCHES,
     DELTA2MAX_NUMBERS,
@@ -62,6 +63,7 @@ def _extract_sensor_keys(var_name: str) -> list[str]:
         "SMARTPLUG_SENSORS": SMARTPLUG_SENSORS,
         "STREAM_SENSORS": STREAM_SENSORS,
         "STREAM_NUMBERS": STREAM_NUMBERS,
+        "STREAM_BINARY_SENSORS": STREAM_BINARY_SENSORS,
         "DELTA2MAX_BINARY_SENSORS": DELTA2MAX_BINARY_SENSORS,
         "DELTA2MAX_SWITCHES": DELTA2MAX_SWITCHES,
         "DELTA2MAX_NUMBERS": DELTA2MAX_NUMBERS,
@@ -278,15 +280,43 @@ class TestStreamEntities:
             "batt_w",
             "batt_charge_power_w",
             "batt_discharge_power_w",
+            "ac_grid_connection_power_w",
             "ac_voltage_v",
             "ac_frequency_hz",
             "backup_reserve_pct",
         ):
             assert expected in keys, f"Missing Stream sensor: {expected}"
 
+    def test_meter_dependent_stream_sensors_disabled_by_default(self) -> None:
+        sensors = {sensor.key: sensor for sensor in STREAM_SENSORS}
+        for key in (
+            "solar_w",
+            "home_w",
+            "grid_w",
+            "solar_energy_kwh",
+            "home_energy_kwh",
+        ):
+            assert sensors[key].disabled_by_default is True
+            assert sensors[key].entity_category == "diagnostic"
+
+    def test_stream_raw_battery_energy_not_exposed(self) -> None:
+        keys = _extract_sensor_keys("STREAM_SENSORS")
+        assert "batt_charge_energy_wh" not in keys
+        assert "batt_discharge_energy_wh" not in keys
+
+    def test_stream_battery_capacity_ah_is_diagnostic(self) -> None:
+        sensors = {sensor.key: sensor for sensor in STREAM_SENSORS}
+        for key in ("batt_charge_capacity_ah", "batt_discharge_capacity_ah"):
+            assert sensors[key].disabled_by_default is True
+            assert sensors[key].entity_category == "diagnostic"
+
     def test_switch_defs_unique(self) -> None:
         keys = _extract_sensor_keys("STREAM_SWITCHES")
         assert keys == []
+
+    def test_binary_sensor_defs_unique(self) -> None:
+        keys = _extract_sensor_keys("STREAM_BINARY_SENSORS")
+        assert keys == ["ac_outlet_1_enabled", "ac_outlet_2_enabled"]
 
     def test_number_defs_unique(self) -> None:
         keys = _extract_sensor_keys("STREAM_NUMBERS")

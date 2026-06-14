@@ -248,23 +248,22 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
         """Set a Stream AC Pro number value via WSS Protobuf SET.
 
         JSON SET does not work on the /app/ WSS topic (SmartPlug proves
-        this). The Backup-Reserve value is sent as a protobuf ConfigWrite
-        frame (cmd_func=254, cmd_id=17).
+        this). Stream numbers are sent as protobuf ConfigWrite frames.
         """
-        if key != "backup_reserve":
-            _LOGGER.warning(
-                "No Stream SET handler for %s (%s)",
-                key,
-                self.coordinator.device_sn,
+        if key == "backup_reserve":
+            payload = build_stream_backup_reserve_payload(
+                int(value), self.coordinator.device_sn
             )
-            return False
+            return await self.coordinator.async_send_proto_set_command(
+                payload, label="stream_backup_reserve"
+            )
 
-        payload = build_stream_backup_reserve_payload(
-            int(value), self.coordinator.device_sn
+        _LOGGER.warning(
+            "No Stream SET handler for %s (%s)",
+            key,
+            self.coordinator.device_sn,
         )
-        return await self.coordinator.async_send_proto_set_command(
-            payload, label="stream_backup_reserve"
-        )
+        return False
 
 
 def _get_number_defs(device_type: str) -> list[EcoFlowNumberDef]:

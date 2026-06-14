@@ -150,11 +150,26 @@
       "batt_discharge_power_w": {
         "name": "Battery Discharge Power"
       },
-      "batt_charge_energy_wh": {
-        "name": "Battery Charge Energy (Raw)"
+      "ac_grid_connection_power_w": {
+        "name": "AC Grid Connection Power"
       },
-      "batt_discharge_energy_wh": {
-        "name": "Battery Discharge Energy (Raw)"
+      "home_from_batt_w": {
+        "name": "Home From Battery"
+      },
+      "home_from_grid_w": {
+        "name": "Home From Grid"
+      },
+      "ac_outlet_1_w": {
+        "name": "AC Outlet 1 Power"
+      },
+      "ac_outlet_2_w": {
+        "name": "AC Outlet 2 Power"
+      },
+      "grid_connection_power_w": {
+        "name": "Grid Connection Power"
+      },
+      "sys_grid_connection_power_w": {
+        "name": "System Grid Connection Power"
       },
       "batt_design_cap_mah": {
         "name": "Design Capacity"
@@ -1186,6 +1201,12 @@
       },
       "switch_state": {
         "name": "Relay"
+      },
+      "ac_outlet_1_enabled": {
+        "name": "AC Outlet 1"
+      },
+      "ac_outlet_2_enabled": {
+        "name": "AC Outlet 2"
       }
     },
     "switch": {

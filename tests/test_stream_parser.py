@@ -35,11 +35,19 @@ class TestStreamProtoParser:
         inner.extend(encode_field_varint(242, 21))
         inner.extend(encode_field_varint(270, 95))
         inner.extend(encode_field_varint(271, 15))
+        inner.extend(encode_field_varint(380, 1))
+        inner.extend(encode_field_varint(381, 0))
         inner.extend(_encode_fixed32_field(515, 1351.0))
         inner.extend(_encode_fixed32_field(516, 309.5))
         inner.extend(_encode_fixed32_field(517, 0.0))
         inner.extend(encode_field_varint(461, 20))
         inner.extend(_encode_fixed32_field(518, 1043.4))
+        inner.extend(_encode_fixed32_field(616, -967.2))
+        inner.extend(_encode_fixed32_field(992, -2020.0))
+        inner.extend(_encode_fixed32_field(1003, 0.0))
+        inner.extend(_encode_fixed32_field(1004, 309.5))
+        inner.extend(_encode_fixed32_field(1210, 0.0))
+        inner.extend(_encode_fixed32_field(1211, -0.0))
         inner.extend(_encode_fixed32_field(613, 228.4))
         inner.extend(_encode_fixed32_field(615, 49.98))
 
@@ -49,6 +57,8 @@ class TestStreamProtoParser:
         assert result["soc_pct"] == 21
         assert result["max_charge_soc_pct"] == 95
         assert result["min_discharge_soc_pct"] == 15
+        assert result["ac_outlet_1_enabled"] == 1
+        assert result["ac_outlet_2_enabled"] == 0
         assert result["grid_w"] == pytest.approx(1351.0, rel=1e-5)
         assert result["home_w"] == pytest.approx(309.5, rel=1e-5)
         assert result["solar_w"] == 0.0
@@ -56,6 +66,14 @@ class TestStreamProtoParser:
         assert result["batt_w"] == pytest.approx(1043.4, rel=1e-5)
         assert result["batt_charge_power_w"] == pytest.approx(1043.4, rel=1e-5)
         assert result["batt_discharge_power_w"] == 0.0
+        assert result["batt_charge_discharge_state"] == "charging"
+        assert result["ac_grid_connection_power_w"] == pytest.approx(-2020.0, rel=1e-5)
+        assert result["grid_connection_power_w"] == pytest.approx(-967.2, rel=1e-5)
+        assert result["sys_grid_connection_power_w"] == pytest.approx(-2020.0, rel=1e-5)
+        assert result["home_from_batt_w"] == 0.0
+        assert result["home_from_grid_w"] == pytest.approx(309.5, rel=1e-5)
+        assert result["ac_outlet_1_w"] == 0.0
+        assert result["ac_outlet_2_w"] == 0.0
         assert result["ac_voltage_v"] == pytest.approx(228.4, rel=1e-5)
         assert result["ac_frequency_hz"] == pytest.approx(49.98, rel=1e-5)
 
@@ -70,7 +88,16 @@ class TestStreamProtoParser:
         assert result["soc_pct"] == pytest.approx(21.6, rel=1e-5)
         assert result["backup_reserve_pct"] == 80
 
-    def test_parse_cumulative_totals_and_battery_details(self) -> None:
+    def test_parse_led_brightness_live_and_ack(self) -> None:
+        live = _build_frame(254, 21, encode_field_varint(994, 50))
+        ack = _build_frame(254, 18, encode_field_varint(384, 60))
+
+        result = parse_stream_proto_message(live + ack)
+
+        assert result is not None
+        assert result["led_brightness"] == 60
+
+    def test_parse_cumulative_totals_battery_details_and_outlet_mirrors(self) -> None:
         aux = bytearray()
         aux.extend(encode_field_varint(7, 20161))
         aux.extend(encode_field_varint(9, 35))
@@ -90,9 +117,17 @@ class TestStreamProtoParser:
         aux.extend(encode_field_varint(79, 110))
         aux.extend(encode_field_varint(80, 296))
 
-        result = parse_stream_proto_message(_build_frame(32, 50, bytes(aux)))
+        mirror = bytearray()
+        mirror.extend(encode_field_varint(980, 1))
+        mirror.extend(encode_field_varint(982, 0))
+
+        result = parse_stream_proto_message(
+            _build_frame(32, 50, bytes(aux)) + _build_frame(254, 21, bytes(mirror))
+        )
 
         assert result is not None
+        assert result["ac_outlet_1_enabled"] == 1
+        assert result["ac_outlet_2_enabled"] == 0
         assert result["batt_voltage_v"] == pytest.approx(20.161, rel=1e-5)
         assert result["batt_temp_c"] == 35
         assert result["batt_design_cap_mah"] == 100000
@@ -109,12 +144,53 @@ class TestStreamProtoParser:
         assert result["batt_charge_capacity_ah"] == pytest.approx(5.503, rel=1e-5)
         assert result["batt_discharge_capacity_ah"] == pytest.approx(15.27, rel=1e-5)
 
-    def test_parse_negated_power_fallback(self) -> None:
+    def test_parse_grid_connection_without_battery_power(self) -> None:
         inner = _encode_fixed32_field(992, 304.15)
 
         result = parse_stream_proto_message(_build_frame(254, 21, inner))
 
         assert result is not None
-        assert result["batt_w"] == pytest.approx(-304.15, rel=1e-5)
+        assert "batt_w" not in result
+        assert "batt_charge_power_w" not in result
+        assert "batt_discharge_power_w" not in result
+        assert "batt_charge_discharge_state" not in result
+        assert result["ac_grid_connection_power_w"] == pytest.approx(304.15, rel=1e-5)
+        assert result["sys_grid_connection_power_w"] == pytest.approx(304.15, rel=1e-5)
+
+    def test_parse_zero_battery_power_reports_standby(self):
+        inner = _encode_fixed32_field(518, 0.0)
+
+        result = parse_stream_proto_message(_build_frame(254, 21, inner))
+
+        assert result is not None
+        assert result["batt_w"] == 0.0
         assert result["batt_charge_power_w"] == 0.0
-        assert result["batt_discharge_power_w"] == pytest.approx(304.15, rel=1e-5)
+        assert result["batt_discharge_power_w"] == 0.0
+        assert result["batt_charge_discharge_state"] == "standby"
+
+    def test_parse_tiny_negative_float_is_normalized_to_zero(self):
+        inner = bytearray()
+        inner.extend(_encode_fixed32_field(992, -0.0))
+        inner.extend(_encode_fixed32_field(1003, -0.0))
+        inner.extend(_encode_fixed32_field(1211, -0.0))
+
+        result = parse_stream_proto_message(_build_frame(254, 21, bytes(inner)))
+
+        assert result is not None
+        assert result["sys_grid_connection_power_w"] == 0.0
+        assert result["home_from_batt_w"] == 0.0
+        assert result["ac_outlet_2_w"] == 0.0
+        assert result["ac_grid_connection_power_w"] == 0.0
+        assert "batt_w" not in result
+        assert "batt_charge_discharge_state" not in result
+
+    def test_parse_confirmed_ac_outlet_power_fields(self):
+        inner = bytearray()
+        inner.extend(_encode_fixed32_field(1210, 201.47))
+        inner.extend(_encode_fixed32_field(1211, 228.18))
+
+        result = parse_stream_proto_message(_build_frame(254, 21, bytes(inner)))
+
+        assert result is not None
+        assert result["ac_outlet_1_w"] == pytest.approx(201.47, rel=1e-5)
+        assert result["ac_outlet_2_w"] == pytest.approx(228.18, rel=1e-5)

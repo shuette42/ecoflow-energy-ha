@@ -27,6 +27,8 @@ from custom_components.ecoflow_energy.const import (
     POWEROCEAN_BINARY_SENSORS,
     POWEROCEAN_SENSORS,
     SMARTPLUG_NUMBERS,
+    STREAM_BINARY_SENSORS,
+    STREAM_SWITCHES,
     STREAM_NUMBERS,
     STREAM_SENSORS,
 )
@@ -104,6 +106,9 @@ class TestBinarySensorDefsRouting:
     def test_powerocean_binary_sensors(self):
         assert _get_binary_sensor_defs(DEVICE_TYPE_POWEROCEAN) is POWEROCEAN_BINARY_SENSORS
 
+    def test_stream_binary_sensors(self):
+        assert _get_binary_sensor_defs(DEVICE_TYPE_STREAM) is STREAM_BINARY_SENSORS
+
     def test_unknown_binary_sensors_empty(self):
         assert _get_binary_sensor_defs("unknown") == []
 
@@ -113,7 +118,7 @@ class TestSwitchDefsRouting:
         assert _get_switch_defs(DEVICE_TYPE_DELTA) is DELTA2MAX_SWITCHES
 
     def test_stream_switches(self) -> None:
-        assert _get_switch_defs(DEVICE_TYPE_STREAM) == []
+        assert _get_switch_defs(DEVICE_TYPE_STREAM) is STREAM_SWITCHES
 
     def test_powerocean_switches_empty(self):
         assert _get_switch_defs(DEVICE_TYPE_POWEROCEAN) == []
@@ -957,7 +962,6 @@ class TestEcoFlowNumber:
         # field 102, wire-type 0 (varint): tag = (102 << 3) | 0 = 816 -> b"\xb0\x06"
         assert b"\xb0\x06\x50" in pdata  # field 102 = 0x50 = 80
         assert coordinator.device_data["backup_reserve_pct"] == 80.0
-
 
 # ===========================================================================
 # EcoFlowDiagnosticSensor
