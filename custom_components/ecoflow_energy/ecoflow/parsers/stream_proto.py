@@ -4,17 +4,46 @@ Current scope targets BK31 (Stream AC Pro) in app-auth MQTT mode.
 Only fields that have been observed repeatedly in live captures are
 mapped here. The parser is intentionally conservative so we can extend
 it safely as more captures become available.
+
+Current field notes from dump analysis:
+- `grid_w` tracks the summed AC grid intake seen in the app "grid
+  connection" view and matches `batt_w + home_from_grid_w` during
+  charging cycles.
+- `ac_grid_connection_power_w` is derived from the signed system grid
+  connection path and matches the app "grid connection" / "Netz-Anschluss"
+  value. It includes battery charging plus AC outlet pass-through load:
+  negative = input from grid, positive = output/feed-in.
+- `batt_w` is the signed battery power path. Most charging/discharging
+  frames line up with real battery behavior, while AC outlet activity is
+  exposed separately via `ac_outlet_1_w` / `ac_outlet_2_w`.
+- `home_w` behaves like the overall active load path. In zero-export
+  discharge captures, `home_w` stays aligned with `abs(batt_w)` while
+  `ac_outlet_1_w` remains a diagnostic breakdown of that total rather
+  than an extra load to add on top.
+- `solar_w` appears to be Smart-Meter/App energy-flow data rather than
+  direct PV production on the AC-coupled battery. Without a paired meter
+  it may be absent or misleading, and in zero-export setups it can remain
+  zero until surplus power would be exported.
+- LED brightness is confirmed separately from battery health:
+  `254/21 field 994` carries the live brightness percentage and is the
+  only field mapped to `led_brightness`. `254/18 field 384` carries the
+  set/ack (slider target) value and is intentionally not mapped, so the
+  live value never flaps to the slider target on a SET acknowledgement.
+  `32/50 field 15` stayed at `100` throughout the dedicated LED capture
+  and does not track brightness changes.
 """
 
 from __future__ import annotations
 
 import struct
+from math import isfinite
 from typing import Any
 
 from ..proto.decoder import decode_header_message
 
 _TYPE_INT = "int"
 _TYPE_FLOAT = "float"
+_FLOAT_ZERO_EPS = 1e-6
 
 # cmd_func/cmd_id -> field_number -> (sensor_key, scalar_type)
 _STREAM_FIELD_MAP: dict[tuple[int, int], dict[int, tuple[str, str]]] = {
@@ -24,15 +53,40 @@ _STREAM_FIELD_MAP: dict[tuple[int, int], dict[int, tuple[str, str]]] = {
         262: ("soc_pct", _TYPE_INT),  # mirrored SoC
         270: ("max_charge_soc_pct", _TYPE_INT),
         271: ("min_discharge_soc_pct", _TYPE_INT),
+        380: ("ac_outlet_1_enabled", _TYPE_INT),
+        381: ("ac_outlet_2_enabled", _TYPE_INT),
         461: ("backup_reserve_pct", _TYPE_INT),
+        # Summed AC intake from grid. Charge-dump correlation:
+        # grid_w ~= batt_w + home_from_grid_w.
         515: ("grid_w", _TYPE_FLOAT),
+        # Overall active load path. Outlet power appears to be included in
+        # this total and is published separately for diagnostics.
         516: ("home_w", _TYPE_FLOAT),
         517: ("solar_w", _TYPE_FLOAT),
+        # Signed battery power path: positive = charging, negative = discharging.
         518: ("batt_w", _TYPE_FLOAT),
+        602: ("_batt_w_fallback", _TYPE_FLOAT),
         613: ("ac_voltage_v", _TYPE_FLOAT),
         615: ("ac_frequency_hz", _TYPE_FLOAT),
-        616: ("_batt_w_inverted", _TYPE_FLOAT),
-        992: ("_batt_w_negated", _TYPE_FLOAT),
+        616: ("grid_connection_power_w", _TYPE_FLOAT),
+        # Mirror fields for the AC outlet enable flags. They carry the same
+        # on/off semantics as 380/381; whichever appears last in the frame
+        # wins, which is harmless because both encode the same boolean state.
+        980: ("ac_outlet_1_enabled", _TYPE_INT),
+        982: ("ac_outlet_2_enabled", _TYPE_INT),
+        992: ("sys_grid_connection_power_w", _TYPE_FLOAT),
+        # Live LED brightness percentage. The set/ack value (field 384) is
+        # intentionally NOT mapped to the same key: it carries the slider
+        # target rather than the live value and would otherwise flap with 994.
+        994: ("led_brightness", _TYPE_INT),
+        1003: ("home_from_batt_w", _TYPE_FLOAT),
+        # House/system load supplied from grid, excluding battery path.
+        1004: ("home_from_grid_w", _TYPE_FLOAT),
+        # Confirmed by live load dumps on AC1/AC2 outlets. These values act
+        # as a diagnostic split of the total load path, not an extra load
+        # that should be summed on top of `home_w`.
+        1210: ("ac_outlet_1_w", _TYPE_FLOAT),
+        1211: ("ac_outlet_2_w", _TYPE_FLOAT),
     },
     # Auxiliary status/config frame with a more precise SoC value
     (32, 50): {
@@ -41,6 +95,7 @@ _STREAM_FIELD_MAP: dict[tuple[int, int], dict[int, tuple[str, str]]] = {
         11: ("batt_design_cap_mah", _TYPE_INT),
         12: ("batt_remain_cap_mah", _TYPE_INT),
         13: ("batt_full_cap_mah", _TYPE_INT),
+        # Stable 100 even during a dedicated LED brightness sweep.
         15: ("bms_soh_pct", _TYPE_INT),
         16: ("batt_max_cell_vol_mv", _TYPE_INT),
         17: ("batt_min_cell_vol_mv", _TYPE_INT),
@@ -51,11 +106,11 @@ _STREAM_FIELD_MAP: dict[tuple[int, int], dict[int, tuple[str, str]]] = {
         32: ("_batt_charge_capacity_ah_rounded", _TYPE_INT),
         50: ("_batt_charge_capacity_mah_total", _TYPE_INT),
         51: ("_batt_discharge_capacity_mah_total", _TYPE_INT),
-        79: ("batt_charge_energy_wh", _TYPE_INT),
-        80: ("batt_discharge_energy_wh", _TYPE_INT),
     },
     # SET acknowledgement path for backup reserve slider
     (254, 18): {
+        380: ("ac_outlet_1_enabled", _TYPE_INT),
+        381: ("ac_outlet_2_enabled", _TYPE_INT),
         102: ("backup_reserve_pct", _TYPE_INT),
     },
 }
@@ -142,16 +197,17 @@ def _finalize_stream_state(parsed: dict[str, Any]) -> dict[str, Any]:
     """Normalize mirrored fields and derive convenience sensor values."""
     result = dict(parsed)
 
+    for key, value in list(result.items()):
+        if isinstance(value, float) and isfinite(value) and abs(value) < _FLOAT_ZERO_EPS:
+            result[key] = 0.0
+
     if "soc_pct" not in result and "soc_precise_pct" in result:
         result["soc_pct"] = result["soc_precise_pct"]
 
-    if "batt_w" not in result and "_batt_w_negated" in result:
-        result["batt_w"] = -float(result["_batt_w_negated"])
-    if "batt_w" not in result and "_batt_w_inverted" in result:
-        result["batt_w"] = -float(result["_batt_w_inverted"])
+    if "batt_w" not in result and "_batt_w_fallback" in result:
+        result["batt_w"] = float(result["_batt_w_fallback"])
 
-    result.pop("_batt_w_negated", None)
-    result.pop("_batt_w_inverted", None)
+    result.pop("_batt_w_fallback", None)
     batt_voltage_mv = result.pop("_batt_voltage_mv", None)
 
     if isinstance(batt_voltage_mv, (int, float)):
@@ -169,10 +225,21 @@ def _finalize_stream_state(parsed: dict[str, Any]) -> dict[str, Any]:
     if isinstance(discharge_capacity_mah, (int, float)):
         result["batt_discharge_capacity_ah"] = float(discharge_capacity_mah) / 1000.0
 
+    grid_connection = result.get("sys_grid_connection_power_w")
+    if not isinstance(grid_connection, (int, float)):
+        grid_connection = result.get("grid_connection_power_w")
+    if isinstance(grid_connection, (int, float)):
+        result["ac_grid_connection_power_w"] = float(grid_connection)
+
     batt_w = result.get("batt_w")
     if isinstance(batt_w, (int, float)):
         result["batt_charge_power_w"] = float(batt_w) if batt_w > 0 else 0.0
         result["batt_discharge_power_w"] = abs(float(batt_w)) if batt_w < 0 else 0.0
+        # batt_charge_discharge_state is intentionally NOT set here. The
+        # coordinator pops any parser-provided value and derives the state
+        # from a hysteresis window over batt_w (see _derive_battery_state,
+        # issue #50). Setting it from instantaneous sign would only be used
+        # by unit tests and never reaches the live entity.
 
     return result
 

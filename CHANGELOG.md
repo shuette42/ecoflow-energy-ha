@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.16.0] - 2026-06-14
+
+### Added
+- Stream AC Pro read-only telemetry for individual AC outlet state and power, LED brightness diagnostics, and signed AC grid connection power matching the EcoFlow app "Netz-Anschluss" value.
+
+### Changed
+- Stream AC Pro is now modeled as an AC-coupled battery: battery charge/discharge energy stays enabled for the Energy Dashboard, while meter-dependent solar/home values remain disabled diagnostics unless an EcoFlow-compatible meter is paired in the app.
+- Ah battery capacity counters are disabled diagnostic entities.
+
+### Removed
+- Removed unconfirmed experimental write paths for Stream AC Pro AC outlets and LED brightness.
+- Removed raw Wh battery-energy entities in favor of the kWh battery charge/discharge energy sensors.
+
 ## [1.15.0] - 2026-06-12
 
 ### Added

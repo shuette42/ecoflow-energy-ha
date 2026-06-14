@@ -150,11 +150,26 @@
       "batt_discharge_power_w": {
         "name": "Batterieentladeleistung"
       },
-      "batt_charge_energy_wh": {
-        "name": "Batterieladeenergie (Rohwert)"
+      "ac_grid_connection_power_w": {
+        "name": "AC-Netzanschlussleistung"
       },
-      "batt_discharge_energy_wh": {
-        "name": "Batterieentladeenergie (Rohwert)"
+      "home_from_batt_w": {
+        "name": "Hausverbrauch aus Batterie"
+      },
+      "home_from_grid_w": {
+        "name": "Hausverbrauch aus Netz"
+      },
+      "ac_outlet_1_w": {
+        "name": "AC-Ausgang 1 Leistung"
+      },
+      "ac_outlet_2_w": {
+        "name": "AC-Ausgang 2 Leistung"
+      },
+      "grid_connection_power_w": {
+        "name": "Netzanschlussleistung"
+      },
+      "sys_grid_connection_power_w": {
+        "name": "System-Netzanschlussleistung"
       },
       "batt_design_cap_mah": {
         "name": "Designkapazität"
@@ -1186,6 +1201,12 @@
       },
       "switch_state": {
         "name": "Relais"
+      },
+      "ac_outlet_1_enabled": {
+        "name": "AC-Ausgang 1"
+      },
+      "ac_outlet_2_enabled": {
+        "name": "AC-Ausgang 2"
       }
     },
     "switch": {
