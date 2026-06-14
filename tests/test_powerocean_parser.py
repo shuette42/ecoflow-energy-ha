@@ -994,7 +994,7 @@ class TestEMSExtended:
         assert result["ethernet_status"] == "disconnected"
 
     def test_connectivity_4g_connected(self):
-        # 4G: 1 = connected (APK BasePo2ViewModel$b)
+        # 4G: 1 = connected (per observed portal behavior)
         data = {"ems_change_report.iot4gSta": 1}
         result = parse_powerocean_http_quota(data)
         assert result["cellular_status"] == "connected"

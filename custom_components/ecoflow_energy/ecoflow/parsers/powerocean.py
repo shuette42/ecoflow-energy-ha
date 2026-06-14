@@ -470,7 +470,7 @@ def _extract_ems_extended(quota_data: dict, result: dict) -> None:
 
     # Connectivity fields: 0 = connected (OK), non-zero = disconnected/error.
     # wifi_sta_stat/eth_wan_stat: 0 when interface is up (verified via live probe).
-    # iot_4g_sta (sint32): 1 = connected per APK BasePo2ViewModel$b,
+    # iot_4g_sta (sint32): 1 = connected per observed portal behavior,
     #   but 0 = connected for wifi/eth (different semantics per interface).
     _CONN_WIFI_ETH = ("wifiStaStat", "ethWanStat")
     for api_key, sensor_key in (
@@ -487,7 +487,7 @@ def _extract_ems_extended(quota_data: dict, result: dict) -> None:
                     # WiFi/Ethernet: 0 = connected, non-zero = disconnected
                     result[sensor_key] = "connected" if iv == 0 else "disconnected"
                 else:
-                    # 4G: 1 = connected per APK
+                    # 4G: 1 = connected per observed portal behavior
                     result[sensor_key] = "connected" if iv == 1 else "disconnected"
 
     # Work state enum (numeric -> string)
