@@ -907,7 +907,7 @@ class TestEcoFlowNumber:
         """Stream backup reserve uses the WSS protobuf SET path.
 
         JSON SET does not work on the /app/ WSS topic, so the value is sent
-        as a protobuf ConfigWrite frame (cmd_func=254, cmd_id=17, field 102)
+        as a protobuf ConfigWrite frame (cmd_func=254, cmd_id=18, field 102)
         built by build_stream_backup_reserve_payload.
         """
         entry = MockConfigEntry(
@@ -948,7 +948,9 @@ class TestEcoFlowNumber:
         payload, kwargs = mock_cmd.call_args.args[0], mock_cmd.call_args.kwargs
         assert isinstance(payload, bytes)
         # The protobuf frame must decode back to the requested value: the
-        # outer envelope carries cmd_func=254 / cmd_id=17 with field 102=80.
+        # outer envelope carries cmd_func=254 / cmd_id=18 with field 102=80.
+        # cmd_id=18 is the app-verified backup-reserve config path (#98);
+        # the earlier cmd_id=17 was silently ignored by the device.
         from custom_components.ecoflow_energy.ecoflow.proto.decoder import (
             decode_header_message,
         )
@@ -957,7 +959,8 @@ class TestEcoFlowNumber:
         assert headers, "expected a decodable header frame"
         header = headers[0]
         assert int(header["cmd_func"]) == 254
-        assert int(header["cmd_id"]) == 17
+        assert int(header["cmd_id"]) == 18
+        assert int(header["cmd_id"]) != 17  # regression guard for #98
         pdata = bytes.fromhex(header["pdata"])
         # field 102, wire-type 0 (varint): tag = (102 << 3) | 0 = 816 -> b"\xb0\x06"
         assert b"\xb0\x06\x50" in pdata  # field 102 = 0x50 = 80

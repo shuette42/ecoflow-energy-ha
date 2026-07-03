@@ -395,13 +395,15 @@ def build_stream_backup_reserve_payload(
     """Build the Stream AC Pro (BkSeries) Backup-Reserve SET frame.
 
     ConfigWrite { cfg_backup_reverse_soc = 102 } wrapped in a cmd_func=254,
-    cmd_id=17 header on the /app/ WSS topic, mirroring the SmartPlug builder.
+    cmd_id=18 header on the /app/ WSS topic. The (254, 18) config path and
+    field 102 are confirmed against observed device report/ack frames (see
+    stream_proto.py field map).
 
     Inner pdata sets field 102 (cfg_backup_reverse_soc, uint32 varint). The
     header replicates the app frame for routing on the /app/ topic:
       1  pdata          5  -            10 data_len
       2  src = 32       8  cmd_func=254 11 need_ack = 1
-      3  dest = 2       9  cmd_id = 17  14 seq
+      3  dest = 2       9  cmd_id = 18  14 seq
       25 device_sn (string) - required for routing on /app/
 
     Args:
@@ -425,7 +427,7 @@ def build_stream_backup_reserve_payload(
     header.extend(encode_field_varint(2, 32))                # src = 32 (field 2)
     header.extend(encode_field_varint(3, 2))                 # dest = 2 (field 3)
     header.extend(encode_field_varint(8, 254))               # cmd_func = 254 (field 8)
-    header.extend(encode_field_varint(9, 17))                # cmd_id = 17 (field 9)
+    header.extend(encode_field_varint(9, 18))                # cmd_id = 18 (field 9)
     header.extend(encode_field_varint(10, len(pdata)))       # data_len (field 10)
     header.extend(encode_field_varint(11, 1))                # need_ack = 1 (field 11)
     header.extend(encode_field_varint(14, seq))              # seq (field 14)
