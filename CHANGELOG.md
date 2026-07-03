@@ -13,6 +13,9 @@ All notable changes to this project will be documented in this file.
 - Stream AC Pro is now modeled as an AC-coupled battery: battery charge/discharge energy stays enabled for the Energy Dashboard, while meter-dependent solar/home values remain disabled diagnostics unless an EcoFlow-compatible meter is paired in the app. (beta.2)
 - Ah battery capacity counters are disabled diagnostic entities. (beta.2)
 
+### Fixed
+- Stream AC Pro Backup Reserve control now applies to the device. The setting was sent on a command path the device ignored, so changing the slider in Home Assistant had no effect. It now uses the correct backup-reserve config path and the value reaches the device. (beta.3)
+
 ### Removed
 - Removed unconfirmed experimental write paths for Stream AC Pro AC outlets and LED brightness. (beta.2)
 - Removed raw Wh battery-energy entities in favor of the kWh battery charge/discharge energy sensors. (beta.2)

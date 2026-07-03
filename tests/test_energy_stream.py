@@ -443,16 +443,69 @@ class TestBackupEventSetPayload:
 
 
 # ===========================================================================
-# Stream AC Pro Backup-Reserve SET payload (ConfigWrite field 102, cmd_id=17)
+# Stream AC Pro Backup-Reserve SET payload (ConfigWrite field 102, cmd_id=18)
 # ===========================================================================
 
 
+def _decode_header_fields(payload: bytes) -> dict[int, list]:
+    """Decode the outer-wrapped Stream SET frame into a field-number map.
+
+    The builder returns encode_field_bytes(1, header). Unwrap field 1, then
+    walk the inner header collecting varint values and length-delimited bytes
+    per field number. Returns {field_num: [values...]} so assertions target
+    fields, not fragile raw byte offsets.
+    """
+    mv = memoryview(payload)
+    pos = 0
+    # Outer field 1 (length-delimited): tag 0x0a, then len, then header bytes.
+    tag, pos = _read_test_varint(mv, pos)
+    assert (tag >> 3) == 1 and (tag & 0x07) == 2
+    length, pos = _read_test_varint(mv, pos)
+    header = mv[pos:pos + length]
+
+    fields: dict[int, list] = {}
+    hpos = 0
+    while hpos < len(header):
+        htag, hpos = _read_test_varint(header, hpos)
+        fnum = htag >> 3
+        wtype = htag & 0x07
+        if wtype == 0:
+            val, hpos = _read_test_varint(header, hpos)
+            fields.setdefault(fnum, []).append(val)
+        elif wtype == 2:
+            flen, hpos = _read_test_varint(header, hpos)
+            fields.setdefault(fnum, []).append(header[hpos:hpos + flen].tobytes())
+            hpos += flen
+        else:  # pragma: no cover - unexpected wire type in test frame
+            raise AssertionError(f"unexpected wire type {wtype} for field {fnum}")
+    return fields
+
+
+def _read_test_varint(mv, pos: int):
+    """Minimal varint reader for the header-decode test helper."""
+    shift = 0
+    value = 0
+    while True:
+        byte = mv[pos]
+        pos += 1
+        value |= (byte & 0x7F) << shift
+        if not byte & 0x80:
+            return value, pos
+        shift += 7
+
+
 class TestStreamBackupReservePayload:
-    """ConfigWrite { cfg_backup_reverse_soc=102 } in a cmd_func=254/cmd_id=17
-    header on the /app/ WSS topic, mirroring the SmartPlug builder."""
+    """ConfigWrite { cfg_backup_reverse_soc=102 } in a cmd_func=254/cmd_id=18
+    header on the /app/ WSS topic. The (254, 18) config path is confirmed
+    against observed device report/ack frames (see stream_proto.py)."""
 
     # Dummy SN: 4-char prefix convention, never a real serial.
     SN = "BK31TESTSN0000000"
+
+    def _inner_pdata(self, payload: bytes) -> bytes:
+        """Extract the inner pdata (header field 1) from a built frame."""
+        header = _decode_header_fields(payload)
+        return header[1][0]
 
     def test_payload_structure(self):
         payload = build_stream_backup_reserve_payload(50, self.SN, seq=1)
@@ -460,76 +513,84 @@ class TestStreamBackupReservePayload:
         # Outer wrapper: field 1 (tag=0x0a) length-delimited
         assert payload[0] == 0x0A
 
-    def test_build_backup_reserve_payload(self):
-        """cmd_func=254 (field 8), cmd_id=17 (field 9), field 102 = 50."""
+    def test_cmd_id_18_present(self):
+        """cmd_id=18 (field 9, varint) must be encoded in the header (#98)."""
         payload = build_stream_backup_reserve_payload(50, self.SN, seq=1)
-        # cmd_func=254 → field 8 tag = (8<<3)|0 = 0x40, value 254 = varint 0xfe 0x01
-        assert b"\x40\xfe\x01" in payload
-        # cmd_id=17 → field 9 tag = (9<<3)|0 = 0x48, value 17 = 0x11
-        assert b"\x48\x11" in payload
-        # cfg_backup_reverse_soc → field 102 tag = (102<<3)|0 = 816
-        #   = varint 0xb0 0x06, value 50 = 0x32
-        assert b"\xb0\x06\x32" in payload
+        header = _decode_header_fields(payload)
+        assert header[9] == [18]
+
+    def test_cmd_id_is_not_17_regression(self):
+        """Regression guard for #98: the SET must NOT use the ignored cmd_id 17.
+
+        cmd_id=17 was the original bug - the device silently ignored the frame.
+        The only app-verified backup-reserve config path is cmd_id=18.
+        """
+        payload = build_stream_backup_reserve_payload(50, self.SN, seq=1)
+        header = _decode_header_fields(payload)
+        assert 17 not in header[9]
+        assert header[9] == [18]
+
+    def test_cmd_func_254_present(self):
+        """cmd_func=254 (field 8, varint) must be encoded in the header."""
+        payload = build_stream_backup_reserve_payload(50, self.SN, seq=1)
+        header = _decode_header_fields(payload)
+        assert header[8] == [254]
+
+    def test_payload_contains_backup_soc(self):
+        """Field 102 in the pdata carries the requested backup_soc value."""
+        payload = build_stream_backup_reserve_payload(50, self.SN, seq=1)
+        pdata = self._inner_pdata(payload)
+        # field 102 varint: tag = (102<<3)|0 = 816 = varint 0xb0 0x06, value 50
+        assert encode_field_varint(102, 50) in pdata
+
+    def test_device_sn_field25_present(self):
+        """device_sn is encoded as field 25 (string) in the header."""
+        payload = build_stream_backup_reserve_payload(50, self.SN, seq=1)
+        header = _decode_header_fields(payload)
+        assert header[25] == [self.SN.encode("ascii")]
 
     def test_decodes_via_stream_parser(self):
-        """The Stream proto parser interprets the frame as a backup ack:
-        cmd_func=254/cmd_id=18 path reads field 102 as backup_reserve_pct.
+        """The built frame decodes through the Stream proto parser: the
+        (254, 18) config path reads field 102 as backup_reserve_pct.
 
-        The builder emits cmd_id=17 (write). To verify field 102 is decoded
-        semantically, re-wrap the inner pdata under the parser's ack header
-        shape and confirm the value round-trips."""
-        # Decode the outer/inner structure the builder produced.
+        Because the builder now emits cmd_id=18 (the verified config path),
+        the parser recognizes the frame directly - no re-wrapping needed.
+        """
         from ecoflow_energy.ecoflow.parsers.stream_proto import (
             parse_stream_proto_message,
         )
 
-        # Build a parser-recognized ack frame carrying field 102 = 50, using
-        # the same primitives the builder uses. This proves field 102 is the
-        # ConfigWrite SoC slot the parser maps to backup_reserve_pct.
-        inner = encode_field_varint(102, 50)
-        ack_header = bytearray()
-        ack_header.extend(encode_field_bytes(1, inner))
-        ack_header.extend(encode_field_varint(8, 254))
-        ack_header.extend(encode_field_varint(9, 18))
-        frame = encode_field_bytes(1, bytes(ack_header))
-
-        result = parse_stream_proto_message(frame)
+        payload = build_stream_backup_reserve_payload(50, self.SN, seq=1)
+        result = parse_stream_proto_message(payload)
         assert result is not None
         assert result["backup_reserve_pct"] == 50
 
-    def test_build_backup_reserve_includes_device_sn(self):
-        """device_sn is encoded as field 25 (string) in the header."""
-        payload = build_stream_backup_reserve_payload(50, self.SN, seq=1)
-        # field 25, wire type 2: tag = (25<<3)|2 = 202 = 0xca 0x01,
-        # then length, then ASCII SN
-        assert b"\xca\x01" + bytes([len(self.SN)]) + self.SN.encode("ascii") in payload
-        assert self.SN.encode("ascii") in payload
-
     def test_field_102_encodes_value(self):
         """Different backup_soc values encode on field 102."""
-        # backup_soc=80 → field 102 tag 0xb0 0x06, value 80 = 0x50
         payload = build_stream_backup_reserve_payload(80, self.SN, seq=1)
-        assert b"\xb0\x06\x50" in payload
+        pdata = self._inner_pdata(payload)
+        assert encode_field_varint(102, 80) in pdata
 
-    def test_zero_value_encoded(self):
-        """backup_soc=0 must still be on the wire (field 102 = 0)."""
-        payload = build_stream_backup_reserve_payload(0, self.SN, seq=1)
-        # field 102 tag 0xb0 0x06, value 0 = 0x00
-        assert b"\xb0\x06\x00" in payload
+    def test_boundary_values(self):
+        """backup_soc=0 and =100 both produce valid payloads with field 102."""
+        for soc in (0, 100):
+            payload = build_stream_backup_reserve_payload(soc, self.SN, seq=1)
+            assert isinstance(payload, bytes)
+            pdata = self._inner_pdata(payload)
+            assert encode_field_varint(102, soc) in pdata
 
     def test_need_ack_set(self):
         """need_ack=1 (field 11, varint) must be present."""
         payload = build_stream_backup_reserve_payload(50, self.SN, seq=1)
-        # field 11 tag = (11<<3)|0 = 0x58, value 1 = 0x01
-        assert b"\x58\x01" in payload
+        header = _decode_header_fields(payload)
+        assert header[11] == [1]
 
     def test_src_and_dest_present(self):
         """src=32 (field 2) and dest=2 (field 3) routing fields present."""
         payload = build_stream_backup_reserve_payload(50, self.SN, seq=1)
-        # field 2 tag = 0x10, value 32 = 0x20
-        assert b"\x10\x20" in payload
-        # field 3 tag = 0x18, value 2 = 0x02
-        assert b"\x18\x02" in payload
+        header = _decode_header_fields(payload)
+        assert header[2] == [32]
+        assert header[3] == [2]
 
     def test_deterministic_with_fixed_seq(self):
         p1 = build_stream_backup_reserve_payload(50, self.SN, seq=42)
@@ -541,13 +602,8 @@ class TestStreamBackupReservePayload:
         p2 = build_stream_backup_reserve_payload(80, self.SN, seq=42)
         assert p1 != p2
 
-    def test_build_backup_reserve_rejects_out_of_range(self):
+    def test_rejects_out_of_range(self):
         with pytest.raises(ValueError):
             build_stream_backup_reserve_payload(150, self.SN)
         with pytest.raises(ValueError):
             build_stream_backup_reserve_payload(-1, self.SN)
-
-    def test_boundary_values_allowed(self):
-        for soc in (0, 100):
-            payload = build_stream_backup_reserve_payload(soc, self.SN, seq=1)
-            assert isinstance(payload, bytes)
