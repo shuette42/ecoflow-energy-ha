@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file.
 - Initial Stream AC Pro (BK31) support in Enhanced Mode, including device detection, protobuf telemetry parsing, Home Assistant sensor entities, and a Backup Reserve number control. (beta.1)
 - Stream AC Pro Energy Dashboard sensors (battery charge/discharge) derived via Riemann-sum integration from the live power telemetry. (beta.1)
 - Stream AC Pro read-only telemetry for individual AC outlet state and power, LED brightness diagnostics, and signed AC grid connection power matching the EcoFlow app "Netz-Anschluss" value. (beta.2)
+- Initial read-only support for the Delta 3 Max Plus (D3M1) in Standard mode: sensors for battery state of charge, input and output power, AC, solar and USB port power, charge/discharge state, remaining charge and discharge times, and SoC limits, with German and English translations. Raw quota diagnostics are exposed to help confirm and extend the field mappings during beta. (beta.4)
 
 ### Changed
 - Stream AC Pro is now modeled as an AC-coupled battery: battery charge/discharge energy stays enabled for the Energy Dashboard, while meter-dependent solar/home values remain disabled diagnostics unless an EcoFlow-compatible meter is paired in the app. (beta.2)
@@ -15,6 +16,8 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 - Stream AC Pro Backup Reserve control now applies to the device. The setting was sent on a command path the device ignored, so changing the slider in Home Assistant had no effect. It now uses the correct backup-reserve config path and the value reaches the device. (beta.3)
+- Delta 3 Max Plus is no longer misrouted to the Delta 2 Max parser, which left all of its entities stuck as `unknown`. Device classification now recognizes the Delta 3 line by product name and serial prefix. (beta.4, Ref #110)
+- Unsupported devices are no longer skipped silently. Setup now emits one clear warning per unsupported device and lists them in a new `skipped_devices` diagnostics section, so a device that produces no entities is visible instead of vanishing without a trace. (beta.4, Ref #100, #111)
 
 ### Removed
 - Removed unconfirmed experimental write paths for Stream AC Pro AC outlets and LED brightness. (beta.2)

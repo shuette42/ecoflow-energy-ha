@@ -40,6 +40,7 @@ from .const import (
     DELTA_ENERGY_FROM_API,
     DELTA_POWER_TO_ENERGY,
     DEVICE_TYPE_DELTA,
+    DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_DISPLAY_NAMES,
     APP_SURPLUS_SYNC_MIN_INTERVAL_S,
@@ -77,6 +78,7 @@ from .ecoflow.energy_integrator import EnergyIntegrator
 from .ecoflow.iot_api import IoTApiClient
 from .ecoflow.parsers.delta import parse_delta_report
 from .ecoflow.parsers.delta_http import parse_delta_http_quota
+from .ecoflow.parsers.delta3_http import parse_delta3_http_quota
 from .ecoflow.parsers.powerocean_proto import (
     flatten_heartbeat,
     remap_bp_keys,
@@ -162,6 +164,12 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_mqtt_ts: float = 0.0
         self._device_data: dict[str, Any] = {}
         self._snapshot = DeviceSnapshot()
+        # Raw HTTP quota snapshot (Delta 3 only): the field map is
+        # community-researched but not yet hardware-verified for every key,
+        # so diagnostics expose the raw key/value pairs to let beta dumps
+        # confirm existing mappings and surface keys still to be added.
+        self._raw_quota: dict[str, Any] = {}
+        self._raw_quota_captured_at: float = 0.0
         self._keepalive_unsub: asyncio.TimerHandle | None = None
         self._stale_check_unsub: asyncio.TimerHandle | None = None
         self._quotas_unsub: asyncio.TimerHandle | None = None
@@ -251,6 +259,16 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def snapshot(self) -> DeviceSnapshot:
         """Return the latest device data snapshot."""
         return self._snapshot
+
+    @property
+    def raw_quota(self) -> dict[str, Any]:
+        """Return the raw HTTP quota snapshot (Delta 3 only, else empty)."""
+        return self._raw_quota
+
+    @property
+    def raw_quota_captured_at(self) -> float:
+        """Return monotonic timestamp of the raw quota capture (0 = never)."""
+        return self._raw_quota_captured_at
 
     def set_device_value(self, key: str, value: Any) -> None:
         """Set a single value in the persistent device data store.
@@ -496,6 +514,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # real-time push alongside HTTP polling.
         subscribe_mqtt = self.device_type in (
             DEVICE_TYPE_DELTA,
+            DEVICE_TYPE_DELTA3,
             DEVICE_TYPE_SMARTPLUG,
             DEVICE_TYPE_STREAM,
         )
@@ -868,6 +887,7 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         if not self._enhanced_mode and self.device_type not in (
             DEVICE_TYPE_DELTA,
+            DEVICE_TYPE_DELTA3,
             DEVICE_TYPE_SMARTPLUG,
             DEVICE_TYPE_STREAM,
         ):
@@ -886,6 +906,12 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 if isinstance(quota_map, dict) and quota_map:
                     if self.device_type == DEVICE_TYPE_DELTA:
                         return parse_delta_http_quota(quota_map)
+                    if self.device_type == DEVICE_TYPE_DELTA3:
+                        # Route through the community-researched field map;
+                        # unmapped keys are dropped so raw quota keys never
+                        # leak into the device data store.
+                        parsed = parse_delta3_http_quota(quota_map)
+                        return parsed if parsed else None
                     if self.device_type == DEVICE_TYPE_SMARTPLUG:
                         return parse_smartplug_http_quota(quota_map)
                     if self.device_type == DEVICE_TYPE_POWEROCEAN:
@@ -915,6 +941,19 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 # Smart Plug MQTT reports: may use params/param envelope
                 if self.device_type == DEVICE_TYPE_SMARTPLUG:
                     parsed = parse_smartplug_report(data)
+                    return parsed if parsed else None
+                # Delta 3 generation push: top-level cmdId/cmdFunc plus a
+                # `param` object (sometimes `params`) with the same flat
+                # camelCase keys. Prefer `param`, fall back to `params`, then
+                # the flat dict. Always route through the field map so
+                # unmapped keys never leak into _device_data.
+                if self.device_type == DEVICE_TYPE_DELTA3:
+                    payload_obj = data.get("param")
+                    if not isinstance(payload_obj, dict):
+                        payload_obj = data.get("params")
+                    if not isinstance(payload_obj, dict):
+                        payload_obj = data
+                    parsed = parse_delta3_http_quota(payload_obj)
                     return parsed if parsed else None
                 # PowerOcean sends flat {"params": {...}} or flat dicts
                 if data.get("params"):
@@ -1574,6 +1613,14 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             parsed = parse_powerocean_http_quota(raw)
         elif self.device_type == DEVICE_TYPE_DELTA:
             parsed = parse_delta_http_quota(raw)
+        elif self.device_type == DEVICE_TYPE_DELTA3:
+            # Keep the raw quota snapshot for diagnostics: the Delta 3 field
+            # map is community-researched but not yet hardware-verified for
+            # every key, so the raw key names let beta dumps confirm and
+            # extend the mapping.
+            self._raw_quota = dict(raw)
+            self._raw_quota_captured_at = time.monotonic()
+            parsed = parse_delta3_http_quota(raw)
         elif self.device_type == DEVICE_TYPE_SMARTPLUG:
             parsed = parse_smartplug_http_quota(raw)
         else:

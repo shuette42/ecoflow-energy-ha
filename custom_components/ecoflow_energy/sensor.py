@@ -17,11 +17,13 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
     DEVICE_TYPE_DELTA,
+    DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
     DOMAIN,
     DELTA2MAX_SENSORS,
+    DELTA3_SENSORS,
     EcoFlowSensorDef,
     POWEROCEAN_SENSORS,
     SMARTPLUG_SENSORS,
@@ -191,6 +193,8 @@ def _get_sensor_defs(device_type: str) -> list[EcoFlowSensorDef]:
     """Return sensor definitions based on device type."""
     if device_type == DEVICE_TYPE_DELTA:
         return DELTA2MAX_SENSORS
+    if device_type == DEVICE_TYPE_DELTA3:
+        return DELTA3_SENSORS
     if device_type == DEVICE_TYPE_POWEROCEAN:
         return POWEROCEAN_SENSORS
     if device_type == DEVICE_TYPE_SMARTPLUG:

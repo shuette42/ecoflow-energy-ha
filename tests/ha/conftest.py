@@ -42,6 +42,7 @@ from custom_components.ecoflow_energy.const import (  # noqa: E402
     CONF_SECRET_KEY,
     CONF_USER_ID,
     DEVICE_TYPE_DELTA,
+    DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
@@ -95,6 +96,14 @@ MOCK_STREAM_DEVICE: dict[str, Any] = {
     "name": "Stream AC Pro",
     "product_name": "Stream AC Pro",
     "device_type": DEVICE_TYPE_STREAM,
+    "online": 1,
+}
+
+MOCK_DELTA3_DEVICE: dict[str, Any] = {
+    "sn": "D3M1TEST00000001",
+    "name": "Delta 3 Max Plus",
+    "product_name": "DELTA 3 Max Plus",
+    "device_type": DEVICE_TYPE_DELTA3,
     "online": 1,
 }
 

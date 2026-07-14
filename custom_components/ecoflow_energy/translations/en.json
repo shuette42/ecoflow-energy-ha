@@ -132,6 +132,39 @@
   },
   "entity": {
     "sensor": {
+      "cms_batt_soc": {
+        "name": "SoC"
+      },
+      "bms_batt_soc": {
+        "name": "Main Pack SoC"
+      },
+      "pow_in_sum_w": {
+        "name": "Input Total"
+      },
+      "pow_out_sum_w": {
+        "name": "Output Total"
+      },
+      "pv1_in_w": {
+        "name": "Solar Input 1"
+      },
+      "pv2_in_w": {
+        "name": "Solar Input 2"
+      },
+      "dc_12v_out_w": {
+        "name": "12V Output"
+      },
+      "ac1_out_w": {
+        "name": "AC Output 1"
+      },
+      "ac2_out_w": {
+        "name": "AC Output 2"
+      },
+      "typec3_w": {
+        "name": "Type-C 3"
+      },
+      "backup_reserve_soc_pct": {
+        "name": "Backup Reserve Level"
+      },
       "solar_w": {
         "name": "Solar Power"
       },
@@ -1207,6 +1240,27 @@
       },
       "ac_outlet_2_enabled": {
         "name": "AC Outlet 2"
+      },
+      "ac_out_flow": {
+        "name": "AC Output Flow"
+      },
+      "ac2_out_flow": {
+        "name": "AC Output 2 Flow"
+      },
+      "dc_12v_out_flow": {
+        "name": "12V Output Flow"
+      },
+      "backup_reserve_enabled": {
+        "name": "Backup Reserve"
+      },
+      "xboost_enabled": {
+        "name": "X-Boost"
+      },
+      "beeper_enabled": {
+        "name": "Beeper"
+      },
+      "bypass_out_disabled": {
+        "name": "Bypass Output Disabled"
       }
     },
     "switch": {

@@ -132,6 +132,39 @@
   },
   "entity": {
     "sensor": {
+      "cms_batt_soc": {
+        "name": "Ladezustand"
+      },
+      "bms_batt_soc": {
+        "name": "Hauptpaket-Ladezustand"
+      },
+      "pow_in_sum_w": {
+        "name": "Eingang Gesamt"
+      },
+      "pow_out_sum_w": {
+        "name": "Ausgang Gesamt"
+      },
+      "pv1_in_w": {
+        "name": "Solareingang 1"
+      },
+      "pv2_in_w": {
+        "name": "Solareingang 2"
+      },
+      "dc_12v_out_w": {
+        "name": "12V-Ausgang"
+      },
+      "ac1_out_w": {
+        "name": "AC-Ausgang 1"
+      },
+      "ac2_out_w": {
+        "name": "AC-Ausgang 2"
+      },
+      "typec3_w": {
+        "name": "Type-C 3"
+      },
+      "backup_reserve_soc_pct": {
+        "name": "Backup-Reserve Niveau"
+      },
       "solar_w": {
         "name": "Solarleistung"
       },
@@ -1207,6 +1240,27 @@
       },
       "ac_outlet_2_enabled": {
         "name": "AC-Ausgang 2"
+      },
+      "ac_out_flow": {
+        "name": "AC-Ausgang Stromfluss"
+      },
+      "ac2_out_flow": {
+        "name": "AC-Ausgang 2 Stromfluss"
+      },
+      "dc_12v_out_flow": {
+        "name": "12V-Ausgang Stromfluss"
+      },
+      "backup_reserve_enabled": {
+        "name": "Backup-Reserve"
+      },
+      "xboost_enabled": {
+        "name": "X-Boost"
+      },
+      "beeper_enabled": {
+        "name": "Signalton"
+      },
+      "bypass_out_disabled": {
+        "name": "Bypass-Ausgang deaktiviert"
       }
     },
     "switch": {
