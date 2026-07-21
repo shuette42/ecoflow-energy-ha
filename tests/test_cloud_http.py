@@ -88,6 +88,30 @@ class TestSignature:
         result_dict = dict(result)
         assert result_dict == {"items[0]": "1", "items[1]": "2"}
 
+    def test_flatten_booleans_use_json_spelling(self):
+        """Booleans must sign as "true"/"false", never Python's "True"/"False".
+
+        The server recomputes the signature from the JSON body it receives. A
+        capitalised boolean produces a different string on our side and the
+        request comes back as 8521 "signature is wrong". Delta 3 control
+        payloads are all booleans, so this is on the hot path.
+        """
+        client = self._make_client()
+        result = dict(client._flatten({"cfgAcOutOpen": True, "cfgBeepEn": False}))
+        assert result == {"cfgAcOutOpen": "true", "cfgBeepEn": "false"}
+
+    def test_flatten_nested_boolean(self):
+        """The energy-backup command nests its boolean one level down."""
+        client = self._make_client()
+        result = dict(client._flatten({"cfgEnergyBackup": {"energyBackupEn": True}}))
+        assert result == {"cfgEnergyBackup.energyBackupEn": "true"}
+
+    def test_flatten_keeps_integers_unquoted(self):
+        """Guard against the boolean branch swallowing ints (bool subclasses int)."""
+        client = self._make_client()
+        result = dict(client._flatten({"cfgMaxChgSoc": 90, "cfgMinDsgSoc": 0}))
+        assert result == {"cfgMaxChgSoc": "90", "cfgMinDsgSoc": "0"}
+
     def test_sign_payload_sorted_then_auth_tail(self):
         """Payload params sorted, then auth tail (accessKey, nonce, timestamp) appended.
 
@@ -398,7 +422,16 @@ class TestDeadCodeRemoved:
         source = (REPO_ROOT / "custom_components/ecoflow_energy/ecoflow/cloud_http.py").read_text()
         assert "get_powerocean_quota" not in source
 
-    def test_no_iot_quota_path_import(self):
-        """IOT_QUOTA_PATH import was only used by dead code."""
+    def test_iot_quota_path_is_only_used_for_writes(self):
+        """IOT_QUOTA_PATH came back for Delta 3 controls, not for reading.
+
+        It was removed once as dead code. Reads must keep using the /quota/all
+        endpoint, so guard that the path is reachable from set_quota only.
+        """
         source = (REPO_ROOT / "custom_components/ecoflow_energy/ecoflow/cloud_http.py").read_text()
-        assert "IOT_QUOTA_PATH" not in source
+        assert "IOT_QUOTA_PATH" in source
+        set_quota_body = source.split("async def set_quota")[1].split("async def")[0]
+        assert "IOT_QUOTA_PATH" in set_quota_body
+        get_body = source.split("async def get_quota_all")[1].split("async def")[0]
+        assert "IOT_QUOTA_ALL_PATH" in get_body
+        assert "IOT_QUOTA_PATH}" not in get_body

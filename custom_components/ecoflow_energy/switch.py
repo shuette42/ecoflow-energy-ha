@@ -18,10 +18,15 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .ecoflow.delta3_commands import (
+    build_switch_command as build_delta3_switch_command,
+)
 from .const import (
     DELTA2MAX_SWITCHES,
+    DELTA3_SWITCHES,
     DELTA_PROFILE_R331,
     DEVICE_TYPE_DELTA,
+    DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
     DOMAIN,
@@ -138,6 +143,9 @@ class EcoFlowSwitch(CoordinatorEntity[EcoFlowDeviceCoordinator], SwitchEntity):
             return
 
         self._apply_optimistic(turn_on)
+        if self.coordinator.device_type == DEVICE_TYPE_DELTA3:
+            await self.coordinator.async_send_delta3_set(command)
+            return
         await self.coordinator.async_send_set_command(command)
 
     def _apply_optimistic(self, turn_on: bool) -> None:
@@ -149,6 +157,9 @@ class EcoFlowSwitch(CoordinatorEntity[EcoFlowDeviceCoordinator], SwitchEntity):
 
     def _build_command(self, turn_on: bool) -> dict[str, Any] | None:
         """Build a SET command from legacy or declarative templates."""
+        if self.coordinator.device_type == DEVICE_TYPE_DELTA3:
+            return build_delta3_switch_command(self._definition.key, turn_on)
+
         if self.coordinator.device_type == DEVICE_TYPE_DELTA:
             commands = _get_delta_switch_commands(self.coordinator.delta_profile)
             declarative_templates = _get_delta_switch_declarative(self.coordinator.delta_profile)
@@ -196,6 +207,8 @@ def _get_switch_defs(device_type: str) -> list[EcoFlowSwitchDef]:
         return SMARTPLUG_SWITCHES
     if device_type == DEVICE_TYPE_STREAM:
         return STREAM_SWITCHES
+    if device_type == DEVICE_TYPE_DELTA3:
+        return DELTA3_SWITCHES
     return []
 
 

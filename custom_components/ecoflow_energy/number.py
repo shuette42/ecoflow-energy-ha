@@ -15,7 +15,9 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
     DELTA2MAX_NUMBERS,
+    DELTA3_NUMBERS,
     DEVICE_TYPE_DELTA,
+    DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
@@ -28,6 +30,9 @@ from .const import (
     STREAM_NUMBERS,
 )
 from .coordinator import EcoFlowDeviceCoordinator
+from .ecoflow.delta3_commands import (
+    build_number_command as build_delta3_number_command,
+)
 from .ecoflow.energy_stream import build_stream_backup_reserve_payload
 from .ecoflow.parsers.smartplug import (
     build_plug_brightness_payload,
@@ -126,6 +131,15 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
             return
         if self.coordinator.device_type == DEVICE_TYPE_STREAM:
             ok = await self._async_set_stream_value(self._definition.key, value)
+            if ok:
+                self._apply_optimistic_number(value)
+            return
+        if self.coordinator.device_type == DEVICE_TYPE_DELTA3:
+            command = build_delta3_number_command(self._definition.key, value)
+            if command is None:
+                _LOGGER.warning("No command template for number %s", self._definition.key)
+                return
+            ok = await self.coordinator.async_send_delta3_set(command)
             if ok:
                 self._apply_optimistic_number(value)
             return
@@ -276,4 +290,6 @@ def _get_number_defs(device_type: str) -> list[EcoFlowNumberDef]:
         return SMARTPLUG_NUMBERS
     if device_type == DEVICE_TYPE_STREAM:
         return STREAM_NUMBERS
+    if device_type == DEVICE_TYPE_DELTA3:
+        return DELTA3_NUMBERS
     return []

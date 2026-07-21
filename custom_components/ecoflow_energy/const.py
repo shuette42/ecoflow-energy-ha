@@ -588,8 +588,6 @@ STREAM_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("batt_max_cell_vol_mv", "Max Cell Voltage", "mV", "voltage", "measurement", "mdi:flash-triangle-outline", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("batt_min_cell_vol_mv", "Min Cell Voltage", "mV", "voltage", "measurement", "mdi:flash-triangle-outline", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("backup_reserve_pct", "Backup Reserve", "%", None, "measurement", "mdi:battery-lock", "diagnostic", suggested_display_precision=0),
-    EcoFlowSensorDef("max_charge_soc_pct", "Max Charge SoC", "%", None, "measurement", "mdi:battery-charging-100", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
-    EcoFlowSensorDef("min_discharge_soc_pct", "Min Discharge SoC", "%", None, "measurement", "mdi:battery-alert-variant-outline", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("batt_charge_discharge_state", "Battery Charge/Discharge State", None, "enum", None, "mdi:battery-sync", "diagnostic", disabled_by_default=True, options=["standby", "discharging", "charging"]),
 ]
 
@@ -605,7 +603,6 @@ STREAM_SENSORS: list[EcoFlowSensorDef] = [
 DELTA3_SENSORS: list[EcoFlowSensorDef] = [
     # --- Battery / SoC ---
     EcoFlowSensorDef("cms_batt_soc", "SoC", "%", "battery", "measurement", "mdi:battery", suggested_display_precision=0),
-    EcoFlowSensorDef("bms_batt_soc", "Main Pack SoC", "%", None, "measurement", "mdi:battery-sync", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     # --- Power (W) ---
     EcoFlowSensorDef("pow_in_sum_w", "Input Total", "W", "power", "measurement", "mdi:flash", suggested_display_precision=0),
     EcoFlowSensorDef("pow_out_sum_w", "Output Total", "W", "power", "measurement", "mdi:flash", suggested_display_precision=0),
@@ -613,6 +610,7 @@ DELTA3_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("pv1_in_w", "Solar Input 1", "W", "power", "measurement", "mdi:solar-power", suggested_display_precision=0),
     EcoFlowSensorDef("pv2_in_w", "Solar Input 2", "W", "power", "measurement", "mdi:solar-power", suggested_display_precision=0),
     EcoFlowSensorDef("dc_12v_out_w", "12V Output", "W", "power", "measurement", "mdi:car-battery", suggested_display_precision=0),
+    EcoFlowSensorDef("anderson_out_w", "Anderson Output", "W", "power", "measurement", "mdi:power-plug-outline", suggested_display_precision=0),
     EcoFlowSensorDef("ac1_out_w", "AC Output 1", "W", "power", "measurement", "mdi:power-plug-outline", suggested_display_precision=0),
     EcoFlowSensorDef("ac2_out_w", "AC Output 2", "W", "power", "measurement", "mdi:power-plug-outline", suggested_display_precision=0),
     EcoFlowSensorDef("typec1_w", "Type-C 1", "W", "power", "measurement", "mdi:usb-c-port", suggested_display_precision=0),
@@ -628,19 +626,33 @@ DELTA3_SENSORS: list[EcoFlowSensorDef] = [
     # --- SoC limits / backup reserve (diagnostic) ---
     EcoFlowSensorDef("max_charge_soc_pct", "Charge Limit", "%", None, "measurement", "mdi:battery-charging-100", "diagnostic", suggested_display_precision=0),
     EcoFlowSensorDef("min_discharge_soc_pct", "Discharge Limit", "%", None, "measurement", "mdi:battery-alert-variant-outline", "diagnostic", suggested_display_precision=0),
-    EcoFlowSensorDef("backup_reserve_soc_pct", "Backup Reserve Level", "%", None, "measurement", "mdi:battery-lock", "diagnostic", suggested_display_precision=0),
 ]
 
-DELTA3_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
-    # --- Output flow states (derived: value != 4 = flowing) ---
-    EcoFlowBinarySensorDef("ac_out_flow", "AC Output Flow", "power", "mdi:power-plug"),
-    EcoFlowBinarySensorDef("ac2_out_flow", "AC Output 2 Flow", "power", "mdi:power-plug"),
-    EcoFlowBinarySensorDef("dc_12v_out_flow", "12V Output Flow", "power", "mdi:car-battery"),
-    # --- Configuration flags (diagnostic) ---
-    EcoFlowBinarySensorDef("backup_reserve_enabled", "Backup Reserve", "power", "mdi:battery-lock", "diagnostic"),
-    EcoFlowBinarySensorDef("xboost_enabled", "X-Boost", "power", "mdi:lightning-bolt", "diagnostic"),
-    EcoFlowBinarySensorDef("beeper_enabled", "Beeper", None, "mdi:volume-high", "diagnostic"),
-    EcoFlowBinarySensorDef("bypass_out_disabled", "Bypass Output Disabled", None, "mdi:transmission-tower-off", "diagnostic", disabled_by_default=True),
+# The Delta 3 controls read back from the same fields a binary sensor would
+# expose, so a read-only twin for every switch would just double the entity
+# count. Kept empty rather than deleted: the platform still asks for a list.
+DELTA3_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = []
+
+# Controls. Every switch reads back from the same field the read-only entity
+# above uses, so the device state stays the single source of truth. The params
+# keys and value ranges are vendor-documented, see
+# docs/reference/ecoflow-api-delta3-max-plus.md
+DELTA3_SWITCHES: list[EcoFlowSwitchDef] = [
+    EcoFlowSwitchDef("ac_out_switch", "AC Output", "ac_out_flow", "mdi:power-plug"),
+    EcoFlowSwitchDef("ac2_out_switch", "AC Output 2", "ac2_out_flow", "mdi:power-plug"),
+    EcoFlowSwitchDef("dc_12v_out_switch", "12V Output", "dc_12v_out_flow", "mdi:car-battery"),
+    EcoFlowSwitchDef("energy_backup_switch", "Backup Reserve", "backup_reserve_enabled", "mdi:battery-lock"),
+    EcoFlowSwitchDef("xboost_switch", "X-Boost", "xboost_enabled", "mdi:lightning-bolt"),
+    EcoFlowSwitchDef("beeper_switch", "Beeper", "beeper_enabled", "mdi:volume-high"),
+    EcoFlowSwitchDef("bypass_out_disable_switch", "Bypass Output Disabled", "bypass_out_disabled", "mdi:transmission-tower-off"),
+]
+
+# Ranges are the vendor's own bounds, not our choice. Backup reserve tops out at
+# 50 and the charge limit cannot go below 50.
+DELTA3_NUMBERS: list[EcoFlowNumberDef] = [
+    EcoFlowNumberDef("backup_reserve_soc", "Backup Reserve Level", "backup_reserve_soc_pct", "%", "mdi:battery-lock", 0, 50, 1),
+    EcoFlowNumberDef("max_charge_soc", "Charge Limit", "max_charge_soc_pct", "%", "mdi:battery-charging-100", 50, 100, 1),
+    EcoFlowNumberDef("min_discharge_soc", "Discharge Limit", "min_discharge_soc_pct", "%", "mdi:battery-alert-variant-outline", 0, 30, 1),
 ]
 
 

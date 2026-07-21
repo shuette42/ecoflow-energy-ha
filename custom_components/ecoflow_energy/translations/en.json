@@ -135,9 +135,6 @@
       "cms_batt_soc": {
         "name": "SoC"
       },
-      "bms_batt_soc": {
-        "name": "Main Pack SoC"
-      },
       "pow_in_sum_w": {
         "name": "Input Total"
       },
@@ -1217,6 +1214,9 @@
       },
       "bp_max_discharge_power_w": {
         "name": "Battery Discharge Power (Max)"
+      },
+      "anderson_out_w": {
+        "name": "Anderson output"
       }
     },
     "binary_sensor": {
@@ -1242,13 +1242,13 @@
         "name": "AC Outlet 2"
       },
       "ac_out_flow": {
-        "name": "AC Output Flow"
+        "name": "AC output active"
       },
       "ac2_out_flow": {
-        "name": "AC Output 2 Flow"
+        "name": "AC output 2 active"
       },
       "dc_12v_out_flow": {
-        "name": "12V Output Flow"
+        "name": "12V output active"
       },
       "backup_reserve_enabled": {
         "name": "Backup Reserve"
@@ -1287,6 +1287,21 @@
       },
       "plug_switch": {
         "name": "Plug"
+      },
+      "ac_out_switch": {
+        "name": "AC output"
+      },
+      "ac2_out_switch": {
+        "name": "AC output 2"
+      },
+      "dc_12v_out_switch": {
+        "name": "12V output"
+      },
+      "energy_backup_switch": {
+        "name": "Backup reserve"
+      },
+      "bypass_out_disable_switch": {
+        "name": "Bypass output disabled"
       }
     },
     "number": {
@@ -1322,6 +1337,9 @@
       },
       "max_watts": {
         "name": "Max Power Limit"
+      },
+      "min_discharge_soc": {
+        "name": "Discharge limit"
       }
     },
     "select": {

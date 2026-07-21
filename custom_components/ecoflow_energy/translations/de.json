@@ -135,9 +135,6 @@
       "cms_batt_soc": {
         "name": "Ladezustand"
       },
-      "bms_batt_soc": {
-        "name": "Hauptpaket-Ladezustand"
-      },
       "pow_in_sum_w": {
         "name": "Eingang Gesamt"
       },
@@ -1217,6 +1214,9 @@
       },
       "bp_max_discharge_power_w": {
         "name": "Batterieentladeleistung (max.)"
+      },
+      "anderson_out_w": {
+        "name": "Anderson-Ausgang"
       }
     },
     "binary_sensor": {
@@ -1242,13 +1242,13 @@
         "name": "AC-Ausgang 2"
       },
       "ac_out_flow": {
-        "name": "AC-Ausgang Stromfluss"
+        "name": "AC-Ausgang aktiv"
       },
       "ac2_out_flow": {
-        "name": "AC-Ausgang 2 Stromfluss"
+        "name": "AC-Ausgang 2 aktiv"
       },
       "dc_12v_out_flow": {
-        "name": "12V-Ausgang Stromfluss"
+        "name": "12V-Ausgang aktiv"
       },
       "backup_reserve_enabled": {
         "name": "Backup-Reserve"
@@ -1287,6 +1287,21 @@
       },
       "plug_switch": {
         "name": "Steckdose"
+      },
+      "ac_out_switch": {
+        "name": "AC-Ausgang"
+      },
+      "ac2_out_switch": {
+        "name": "AC-Ausgang 2"
+      },
+      "dc_12v_out_switch": {
+        "name": "12V-Ausgang"
+      },
+      "energy_backup_switch": {
+        "name": "Notstromreserve"
+      },
+      "bypass_out_disable_switch": {
+        "name": "Bypass-Ausgang gesperrt"
       }
     },
     "number": {
@@ -1322,6 +1337,9 @@
       },
       "max_watts": {
         "name": "Max. Leistungsgrenze"
+      },
+      "min_discharge_soc": {
+        "name": "Entladegrenze"
       }
     },
     "select": {

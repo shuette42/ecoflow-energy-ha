@@ -1524,6 +1524,38 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._log_event(f"proto_set_{label}_fail", "")
         return ok
 
+    async def async_send_delta3_set(self, command: dict[str, Any]) -> bool:
+        """Apply a Delta 3 setting over the official HTTP endpoint.
+
+        The Delta 3 write contract is documented and verified for HTTP
+        `PUT /iot-open/sign/device/quota`. The MQTT variant is documented too,
+        but its example spells the source-direction field differently, so the
+        proven path is used here. Standard mode only: app-auth entries have no
+        HTTP client.
+        """
+        if self._http_client is None:
+            _LOGGER.warning(
+                "Cannot apply setting for %s - controls need Standard mode "
+                "(Developer Keys); Enhanced Mode has no HTTP path",
+                self.device_sn,
+            )
+            return False
+
+        result = await self._http_client.set_quota(command)
+        params = command.get("params", {})
+        if result is None:
+            _LOGGER.warning("SET failed for %s: no response", self.device_sn)
+            self._log_event("set_cmd_fail", f"params={list(params)[:3]}")
+            return False
+
+        _LOGGER.debug("SET applied for %s: %s", self.device_sn, params)
+        self._log_event("set_cmd", f"params={list(params)[:3]}")
+        # The device needs a moment before the change shows up in the quota.
+        # The entity holds an optimistic value until then, so a plain refresh
+        # on the next scheduled poll is enough.
+        await self.async_request_refresh()
+        return True
+
     async def async_send_set_command(self, command: dict[str, Any]) -> bool:
         """Send a SET command to the device via MQTT.
 
