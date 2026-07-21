@@ -15,6 +15,21 @@ current or temperature fields that would need decimals).
 No native energy (Wh/kWh) counters exist in the HTTP quota, so Energy
 Dashboard integration is deferred until the power keys are validated on
 real hardware.
+
+Remaining-time quirk: the device keeps both `cmsChgRemTime` and
+`cmsDsgRemTime` populated at all times and parks the direction that is
+not currently active on a large placeholder (12927 minutes = 215 h was
+observed on a D3M1 in both fields). Reading them unconditionally puts a
+nonsense runtime on the entity whenever the battery is idle or moving the
+other way, so each value is gated on `cmsChgDsgState`.
+
+Field semantics verified against a real DELTA 3 Max Plus (D3M1):
+
+    scaling            direct W, no deciwatt (7 points, 42 W .. 2186 W)
+    powGetAcOutItem    signed, negative on output; [0] = AC1, [2] = AC2
+    flowInfo*          4 = port inactive, other values (14) = active
+    cmsChgDsgState     0 = idle, 1 = discharging, 2 = charging
+    bmsBattSoc         not sent by this model (cmsBattSoc is)
 """
 
 from __future__ import annotations
@@ -32,6 +47,18 @@ _DELTA3_CHG_DSG_MAP: dict[int, str] = {
     2: "charging",
 }
 
+_DELTA3_STATE_DISCHARGING = 1
+_DELTA3_STATE_CHARGING = 2
+
+# Remaining-time keys, each valid only while the battery moves in that
+# direction. The device parks the inactive one on a placeholder instead of
+# omitting it, so the value must be gated on the state rather than emitted
+# unconditionally (see the module docstring).
+_DELTA3_REMAIN_TIME_FIELDS: dict[str, tuple[str, int]] = {
+    "cmsChgRemTime": ("chg_remain_time_min", _DELTA3_STATE_CHARGING),
+    "cmsDsgRemTime": ("dsg_remain_time_min", _DELTA3_STATE_DISCHARGING),
+}
+
 # Output flow states are NOT booleans: "on" means value != 4 (per the
 # official docs, value 4 = no flow). Emit a derived 0/1 boolean per flow.
 _DELTA3_FLOW_FIELD_MAP: dict[str, str] = {
@@ -47,9 +74,6 @@ DELTA3_HTTP_FIELD_MAP: dict[str, str] = {
     # --- Battery / SoC ---
     "cmsBattSoc": "cms_batt_soc",
     "bmsBattSoc": "bms_batt_soc",
-    # --- Remaining time (minutes; can exceed 12000, never clamp) ---
-    "cmsChgRemTime": "chg_remain_time_min",
-    "cmsDsgRemTime": "dsg_remain_time_min",
     # --- Power (W, direct) ---
     "powInSumW": "pow_in_sum_w",
     "powOutSumW": "pow_out_sum_w",
@@ -106,10 +130,29 @@ def parse_delta3_http_quota(quota_data: dict) -> dict[str, Any]:
                 result[sensor_key] = int(round(v))
 
     # Charge/discharge state: int -> option label, drop unknown values.
+    state: int | None = None
     if "cmsChgDsgState" in quota_data:
         raw = _safe_float(quota_data["cmsChgDsgState"])
-        if raw is not None and int(raw) in _DELTA3_CHG_DSG_MAP:
-            result["chg_dsg_state"] = _DELTA3_CHG_DSG_MAP[int(raw)]
+        if raw is not None:
+            state = int(raw)
+            if state in _DELTA3_CHG_DSG_MAP:
+                result["chg_dsg_state"] = _DELTA3_CHG_DSG_MAP[state]
+
+    # Remaining times: only meaningful for the direction currently active.
+    # When the state is absent (partial push) nothing is emitted, so the
+    # coordinator keeps whatever it already had.
+    if state is not None:
+        for http_key, (sensor_key, valid_state) in _DELTA3_REMAIN_TIME_FIELDS.items():
+            if http_key not in quota_data:
+                continue
+            if state != valid_state:
+                # Clear instead of skipping: leaving the previous value in
+                # place would strand a stale runtime across a state change.
+                result[sensor_key] = None
+                continue
+            v = _safe_float(quota_data[http_key])
+            if v is not None:
+                result[sensor_key] = int(round(v))
 
     # Output flow states: "on" = value != 4 (NOT a plain boolean).
     for http_key, sensor_key in _DELTA3_FLOW_FIELD_MAP.items():

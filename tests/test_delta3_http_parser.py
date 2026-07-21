@@ -58,7 +58,8 @@ EXPECTED_FULL: dict = {
     "cms_batt_soc": 86,
     "bms_batt_soc": 85,
     "chg_remain_time_min": 143,
-    "dsg_remain_time_min": 5999,
+    # FULL_QUOTA is a charging snapshot, so the discharge runtime is cleared.
+    "dsg_remain_time_min": None,
     "pow_in_sum_w": 512,
     "pow_out_sum_w": 232,
     "ac_in_w": 500,
@@ -103,8 +104,40 @@ class TestDelta3FieldMap:
         assert parse_delta3_http_quota({"cmsBattSoc": "not-a-number"}) == {}
 
     def test_remain_time_passes_through_uncapped(self) -> None:
-        result = parse_delta3_http_quota({"cmsChgRemTime": 143999})
+        result = parse_delta3_http_quota(
+            {"cmsChgRemTime": 143999, "cmsChgDsgState": 2}
+        )
         assert result["chg_remain_time_min"] == 143999
+
+    def test_remain_time_needs_the_matching_state(self) -> None:
+        """The idle direction carries a placeholder, so it must be cleared.
+
+        A D3M1 parks the inactive direction on 12927 minutes (215 h) rather
+        than omitting the key, which would otherwise surface as a runtime.
+        """
+        charging = parse_delta3_http_quota(
+            {"cmsChgRemTime": 1, "cmsDsgRemTime": 12927, "cmsChgDsgState": 2}
+        )
+        assert charging["chg_remain_time_min"] == 1
+        assert charging["dsg_remain_time_min"] is None
+
+        discharging = parse_delta3_http_quota(
+            {"cmsChgRemTime": 12927, "cmsDsgRemTime": 276, "cmsChgDsgState": 1}
+        )
+        assert discharging["dsg_remain_time_min"] == 276
+        assert discharging["chg_remain_time_min"] is None
+
+        idle = parse_delta3_http_quota(
+            {"cmsChgRemTime": 12927, "cmsDsgRemTime": 7939, "cmsChgDsgState": 0}
+        )
+        assert idle["chg_remain_time_min"] is None
+        assert idle["dsg_remain_time_min"] is None
+
+    def test_remain_time_without_state_is_left_untouched(self) -> None:
+        """A partial push carries no state, so the prior value must survive."""
+        result = parse_delta3_http_quota({"cmsChgRemTime": 143, "cmsDsgRemTime": 5999})
+        assert "chg_remain_time_min" not in result
+        assert "dsg_remain_time_min" not in result
 
     def test_backup_reserve_soc_passes_through_unclamped(self) -> None:
         result = parse_delta3_http_quota({"backupReverseSoc": 90})
