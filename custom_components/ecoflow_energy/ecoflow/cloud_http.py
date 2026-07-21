@@ -24,6 +24,7 @@ from .const import (
     HTTP_RETRY_BACKOFF_S,
     IOT_API_BASE,
     IOT_QUOTA_ALL_PATH,
+    IOT_QUOTA_PATH,
     QUOTA_HTTP_MIN_INTERVAL_S,
 )
 
@@ -70,6 +71,17 @@ class EcoFlowHTTPQuota:
 
         return await self._request_with_retry("GET", url, query=query)
 
+    async def set_quota(self, command: dict) -> dict | None:
+        """Apply a device setting via PUT /iot-open/sign/device/quota.
+
+        `command` is the device-specific body without the serial, which is
+        added here. Returns the decoded response, or None when the request
+        could not be delivered.
+        """
+        url = f"{self._base_url}{IOT_QUOTA_PATH}"
+        body = {"sn": self._device_sn, **command}
+        return await self._request_with_retry("PUT", url, body=body)
+
     # ------------------------------------------------------------------
     # Signature
     # ------------------------------------------------------------------
@@ -85,6 +97,11 @@ class EcoFlowHTTPQuota:
             for i, v in enumerate(obj):
                 new_key = f"{parent}[{i}]"
                 items.extend(self._flatten(v, new_key))
+        elif isinstance(obj, bool):
+            # Must be signed the way JSON spells it. str(True) yields "True",
+            # which the server never reconstructs from the body, so the request
+            # would fail with 8521 "signature is wrong".
+            items.append((parent, "true" if obj else "false"))
         else:
             items.append((parent, str(obj)))
         return items
@@ -149,10 +166,14 @@ class EcoFlowHTTPQuota:
                 headers = self._sign_headers(sign_params)
                 timeout = aiohttp.ClientTimeout(total=10)
 
-                if method == "POST":
+                if method in ("POST", "PUT"):
+                    # Content-Type belongs on body requests only. Setting it on
+                    # a GET makes the server validate the signature as if a
+                    # body were present and reject it with 8521.
                     headers["Content-Type"] = "application/json;charset=UTF-8"
                     body_json = json.dumps(body, separators=(",", ":"), ensure_ascii=False)
-                    async with self._session.post(
+                    request = self._session.post if method == "POST" else self._session.put
+                    async with request(
                         url, headers=headers, data=body_json.encode("utf-8"), timeout=timeout,
                     ) as resp:
                         return await self._handle_response(resp)

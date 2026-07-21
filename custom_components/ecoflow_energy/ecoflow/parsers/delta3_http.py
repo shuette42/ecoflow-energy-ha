@@ -73,7 +73,6 @@ _DELTA3_FLOW_FIELD_MAP: dict[str, str] = {
 DELTA3_HTTP_FIELD_MAP: dict[str, str] = {
     # --- Battery / SoC ---
     "cmsBattSoc": "cms_batt_soc",
-    "bmsBattSoc": "bms_batt_soc",
     # --- Power (W, direct) ---
     "powInSumW": "pow_in_sum_w",
     "powOutSumW": "pow_out_sum_w",
@@ -98,14 +97,18 @@ DELTA3_HTTP_FIELD_MAP: dict[str, str] = {
 }
 
 
-def _extract_ac_out_list(quota_data: dict) -> list[Any] | None:
-    """Return the powGetAcOutItem array from either nested or dotted form."""
-    nested = quota_data.get("powGetAcOutList")
+def _extract_list(quota_data: dict, outer: str, inner: str) -> list[Any] | None:
+    """Return an array field from either the nested or the dotted form.
+
+    HTTP `/quota/all` returns these dotted ("powGetAcOutList.powGetAcOutItem"),
+    the MQTT heartbeat returns them nested. Both forms are documented.
+    """
+    nested = quota_data.get(outer)
     if isinstance(nested, dict):
-        items = nested.get("powGetAcOutItem")
+        items = nested.get(inner)
         if isinstance(items, list):
             return items
-    dotted = quota_data.get("powGetAcOutList.powGetAcOutItem")
+    dotted = quota_data.get(f"{outer}.{inner}")
     if isinstance(dotted, list):
         return dotted
     return None
@@ -161,8 +164,9 @@ def parse_delta3_http_quota(quota_data: dict) -> dict[str, Any]:
             if v is not None:
                 result[sensor_key] = 0 if int(v) == 4 else 1
 
-    # Per-outlet AC power: nested signed array, item[0]=AC1, item[2]=AC2.
-    ac_out = _extract_ac_out_list(quota_data)
+    # Per-outlet AC power: signed array, item[0]=AC1, item[2]=AC2. Both indices
+    # were confirmed on hardware by loading each socket on its own.
+    ac_out = _extract_list(quota_data, "powGetAcOutList", "powGetAcOutItem")
     if ac_out is not None:
         if len(ac_out) >= 1:
             v = _safe_float(ac_out[0])
@@ -172,5 +176,15 @@ def parse_delta3_http_quota(quota_data: dict) -> dict[str, Any]:
             v = _safe_float(ac_out[2])
             if v is not None:
                 result["ac2_out_w"] = int(round(abs(v)))
+
+    # Anderson port power: two elements per the official field list. The
+    # per-element meaning is undocumented and both read 0 on the reference
+    # unit, so only the total is exposed until a loaded port proves otherwise.
+    anderson = _extract_list(quota_data, "powGet12vList", "powGet12vItem")
+    if anderson:
+        values = [_safe_float(v) for v in anderson]
+        known = [abs(v) for v in values if v is not None]
+        if known:
+            result["anderson_out_w"] = int(round(sum(known)))
 
     return result

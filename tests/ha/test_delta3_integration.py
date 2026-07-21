@@ -141,17 +141,21 @@ class TestDelta3EndToEnd:
         # Charge/discharge enum: raw 2 -> translated option key "charging".
         assert state_for("sensor", "chg_dsg_state") == "charging"
 
-        # Flow binary sensors: 12V flowing (value 0 != 4) -> on;
-        # AC output not flowing (value 4) -> off.
-        assert state_for("binary_sensor", "dc_12v_out_flow") == "on"
-        assert state_for("binary_sensor", "ac_out_flow") == "off"
+        # Output states surface as switches, not read-only sensors: the same
+        # field drives the switch state, so 12V active (value != 4) is "on" and
+        # AC output inactive (value 4) is "off".
+        assert state_for("switch", "dc_12v_out_switch") == "on"
+        assert state_for("switch", "ac_out_switch") == "off"
+
+        # Controls exist with the vendor-documented ranges.
+        assert state_for("number", "max_charge_soc") is not None
 
         # None of the spot-checked entities should be unavailable.
         for platform, key in (
             ("sensor", "cms_batt_soc"),
             ("sensor", "pow_in_sum_w"),
             ("sensor", "chg_dsg_state"),
-            ("binary_sensor", "dc_12v_out_flow"),
+            ("switch", "dc_12v_out_switch"),
         ):
             assert state_for(platform, key) not in ("unavailable", "unknown")
 

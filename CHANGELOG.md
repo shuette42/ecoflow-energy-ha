@@ -9,6 +9,8 @@ All notable changes to this project will be documented in this file.
 - Stream AC Pro Energy Dashboard sensors (battery charge/discharge) derived via Riemann-sum integration from the live power telemetry. (beta.1)
 - Stream AC Pro read-only telemetry for individual AC outlet state and power, LED brightness diagnostics, and signed AC grid connection power matching the EcoFlow app "Netz-Anschluss" value. (beta.2)
 - Initial read-only support for the Delta 3 Max Plus (D3M1) in Standard mode: sensors for battery state of charge, input and output power, AC, solar and USB port power, charge/discharge state, remaining charge and discharge times, and SoC limits, with German and English translations. All field mappings, value scaling and the charge/discharge states were checked against a Delta 3 Max Plus across idle, discharge, bypass and charge operation. Raw quota diagnostics remain available to help extend the mapping to other Delta 3 models. (beta.4)
+- Delta 3 Max Plus controls. Both AC outputs, the 12 V output, X-Boost, the buzzer, the bypass lock and the backup reserve can now be switched from Home Assistant, and the charge limit, discharge limit and backup reserve level are adjustable. Every command was verified against a Delta 3 Max Plus before release. Controls require Standard mode. (beta.5)
+- Anderson port output power for the Delta 3 Max Plus. (beta.5)
 - Remaining charge and discharge time are now reported only while the battery is actually charging or discharging. The device keeps both values populated at all times and parks the inactive one on a placeholder, which would otherwise show a runtime of over 200 hours on an idle unit. (beta.4)
 
 ### Changed
@@ -16,11 +18,14 @@ All notable changes to this project will be documented in this file.
 - Ah battery capacity counters are disabled diagnostic entities. (beta.2)
 
 ### Fixed
+- Requests carrying boolean values were signed with Python spelling instead of the JSON spelling the server expects, so any such request would have been rejected as having a wrong signature. This had no effect before because no request contained booleans. (beta.5)
 - Stream AC Pro Backup Reserve control now applies to the device. The setting was sent on a command path the device ignored, so changing the slider in Home Assistant had no effect. It now uses the correct backup-reserve config path and the value reaches the device. (beta.3)
 - Delta 3 Max Plus is no longer misrouted to the Delta 2 Max parser, which left all of its entities stuck as `unknown`. Device classification now recognizes the Delta 3 line by product name and serial prefix. (beta.4, Ref #110)
 - Unsupported devices are no longer skipped silently. Setup now emits one clear warning per unsupported device and lists them in a new `skipped_devices` diagnostics section, so a device that produces no entities is visible instead of vanishing without a trace. (beta.4, Ref #100, #111)
 
 ### Removed
+- Removed the read-only Delta 3 Max Plus entities that the new controls replace: the output and setting binary sensors, and the charge limit, discharge limit and backup reserve level sensors. Each of these reported exactly what its switch or slider now shows, so keeping both would have doubled the entity count for no gain. If you already ran beta.4, the old entities stay listed as unavailable until you delete them in Home Assistant. (beta.5)
+- Removed the Delta 3 Max Plus "Main Pack SoC" sensor. The field is not part of the documented device contract and no unit reports it, so the entity could never hold a value. (beta.5)
 - Removed unconfirmed experimental write paths for Stream AC Pro AC outlets and LED brightness. (beta.2)
 - Removed raw Wh battery-energy entities in favor of the kWh battery charge/discharge energy sensors. (beta.2)
 

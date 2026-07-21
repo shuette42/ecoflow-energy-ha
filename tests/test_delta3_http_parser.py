@@ -19,7 +19,6 @@ from ecoflow_energy.ecoflow.parsers.delta3_http import (
 FULL_QUOTA: dict = {
     # Battery / SoC
     "cmsBattSoc": 85.6,
-    "bmsBattSoc": 84.9,
     # Remaining time (minutes)
     "cmsChgRemTime": 143,
     "cmsDsgRemTime": 5999,
@@ -30,6 +29,7 @@ FULL_QUOTA: dict = {
     "powGetPv": 210.7,
     "powGetPv2": 98.2,
     "powGet12v": 24.3,
+    "powGet12vList.powGet12vItem": [12.0, 6.0],
     "powGetTypec1": 45.0,
     "powGetTypec2": 0,
     "powGetTypec3": 18.6,
@@ -56,7 +56,6 @@ FULL_QUOTA: dict = {
 
 EXPECTED_FULL: dict = {
     "cms_batt_soc": 86,
-    "bms_batt_soc": 85,
     "chg_remain_time_min": 143,
     # FULL_QUOTA is a charging snapshot, so the discharge runtime is cleared.
     "dsg_remain_time_min": None,
@@ -66,6 +65,7 @@ EXPECTED_FULL: dict = {
     "pv1_in_w": 211,
     "pv2_in_w": 98,
     "dc_12v_out_w": 24,
+    "anderson_out_w": 18,
     "typec1_w": 45,
     "typec2_w": 0,
     "typec3_w": 19,
@@ -227,3 +227,22 @@ class TestDelta3AcOutArray:
     def test_non_list_payload_is_ignored(self) -> None:
         raw = {"powGetAcOutList": {"powGetAcOutItem": "garbage"}}
         assert parse_delta3_http_quota(raw) == {}
+
+    def test_anderson_port_sums_both_elements(self) -> None:
+        """The two elements have no documented individual meaning, so only the
+        total is exposed until a loaded port proves the index semantics."""
+        result = parse_delta3_http_quota({"powGet12vList.powGet12vItem": [12.0, 6.0]})
+        assert result["anderson_out_w"] == 18
+
+    def test_anderson_port_accepts_the_nested_mqtt_form(self) -> None:
+        result = parse_delta3_http_quota(
+            {"powGet12vList": {"powGet12vItem": [5.0, 0.0]}}
+        )
+        assert result["anderson_out_w"] == 5
+
+    def test_anderson_port_absent_emits_nothing(self) -> None:
+        assert "anderson_out_w" not in parse_delta3_http_quota({"cmsBattSoc": 50})
+
+    def test_bms_batt_soc_is_not_mapped(self) -> None:
+        """Not part of the official 27-field contract; no device sends it."""
+        assert "bms_batt_soc" not in parse_delta3_http_quota({"bmsBattSoc": 85})
