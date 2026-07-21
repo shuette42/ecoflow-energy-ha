@@ -20,6 +20,8 @@ from custom_components.ecoflow_energy.const import (
     CONF_PASSWORD,
     CONF_SECRET_KEY,
     CONF_USER_ID,
+    DATA_SKIPPED_DEVICES,
+    DEVICE_TYPE_DELTA3,
     DOMAIN,
     MODE_ENHANCED,
     MODE_STANDARD,
@@ -379,6 +381,226 @@ class TestUnsupportedDeviceSkip:
         assert result is True
         coordinators = hass.data[DOMAIN][entry.entry_id]
         assert len(coordinators) == 0
+
+    async def test_unsupported_device_warns_once_and_lists_skipped(
+        self,
+        hass: HomeAssistant,
+        mock_mqtt_client,
+        caplog,
+    ) -> None:
+        """Unsupported device: setup succeeds, one WARNING, tracked as skipped."""
+        unsupported_device = {
+            "sn": "BK21TEST00000001",
+            "name": "Smart Meter",
+            "product_name": "Smart Meter",
+            "device_type": "unknown",
+            "online": 1,
+        }
+
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_AUTH_METHOD: AUTH_METHOD_APP,
+                CONF_MODE: MODE_ENHANCED,
+                CONF_EMAIL: "test@example.com",
+                CONF_PASSWORD: "test_password",
+                CONF_USER_ID: "uid",
+                CONF_DEVICES: [unsupported_device],
+            },
+            unique_id="test@example.com",
+        )
+        entry.add_to_hass(hass)
+
+        mock_app_api = MagicMock()
+        mock_app_api.login = AsyncMock(return_value=True)
+        mock_app_api.user_id = "uid"
+        mock_app_api.get_mqtt_credentials = AsyncMock(return_value={
+            "userName": "app-user",
+            "password": "app-pass",
+        })
+
+        import logging
+        caplog.set_level(logging.WARNING)
+
+        with (
+            patch(
+                "custom_components.ecoflow_energy.ecoflow.app_api.AppApiClient",
+                return_value=mock_app_api,
+            ),
+            patch(
+                "custom_components.ecoflow_energy.coordinator.EcoFlowDeviceCoordinator.async_config_entry_first_refresh",
+                new_callable=AsyncMock,
+            ),
+        ):
+            result = await hass.config_entries.async_setup(entry.entry_id)
+            await hass.async_block_till_done()
+
+        assert result is True
+        # Exactly one WARNING for the skipped device
+        warnings = [
+            r for r in caplog.records
+            if r.levelno == logging.WARNING and "Skipping unsupported" in r.message
+        ]
+        assert len(warnings) == 1
+        # SN prefix only (privacy) — full serial must not leak
+        assert "BK21" in warnings[0].getMessage()
+        assert "BK21TEST00000001" not in warnings[0].getMessage()
+
+        # Tracked under the top-level skipped-devices namespace
+        skipped = hass.data[DATA_SKIPPED_DEVICES][entry.entry_id]
+        assert len(skipped) == 1
+        assert skipped[0]["sn_prefix"] == "BK21"
+        assert skipped[0]["product_name"] == "Smart Meter"
+
+    async def test_skipped_devices_cleared_on_unload(
+        self,
+        hass: HomeAssistant,
+        mock_mqtt_client,
+    ) -> None:
+        """Unload removes the entry from the skipped-devices namespace."""
+        unsupported_device = {
+            "sn": "BK21TEST00000001",
+            "name": "Smart Meter",
+            "product_name": "Smart Meter",
+            "device_type": "unknown",
+            "online": 1,
+        }
+
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_AUTH_METHOD: AUTH_METHOD_APP,
+                CONF_MODE: MODE_ENHANCED,
+                CONF_EMAIL: "test@example.com",
+                CONF_PASSWORD: "test_password",
+                CONF_USER_ID: "uid",
+                CONF_DEVICES: [unsupported_device],
+            },
+            unique_id="test@example.com",
+        )
+        entry.add_to_hass(hass)
+
+        mock_app_api = MagicMock()
+        mock_app_api.login = AsyncMock(return_value=True)
+        mock_app_api.user_id = "uid"
+        mock_app_api.get_mqtt_credentials = AsyncMock(return_value={
+            "userName": "app-user",
+            "password": "app-pass",
+        })
+
+        with (
+            patch(
+                "custom_components.ecoflow_energy.ecoflow.app_api.AppApiClient",
+                return_value=mock_app_api,
+            ),
+            patch(
+                "custom_components.ecoflow_energy.coordinator.EcoFlowDeviceCoordinator.async_config_entry_first_refresh",
+                new_callable=AsyncMock,
+            ),
+        ):
+            await hass.config_entries.async_setup(entry.entry_id)
+            await hass.async_block_till_done()
+            assert entry.entry_id in hass.data[DATA_SKIPPED_DEVICES]
+
+            await hass.config_entries.async_unload(entry.entry_id)
+            await hass.async_block_till_done()
+
+        assert entry.entry_id not in hass.data.get(DATA_SKIPPED_DEVICES, {})
+
+
+class TestDeltaThreeReclassification:
+    async def test_stored_delta_reclassified_to_delta3(
+        self,
+        hass: HomeAssistant,
+        mock_iot_api,
+        mock_mqtt_client,
+        mock_http_client,
+    ) -> None:
+        """A device stored as 'delta' but named 'DELTA 3 Max Plus' heals to delta3.
+
+        This is what fixes existing #110-style installs: classification is
+        re-run on setup and takes precedence over the stored device_type.
+        """
+        stale_device = {
+            "sn": "D3M1TEST00000001",
+            "name": "Delta 3 Max Plus",
+            "product_name": "DELTA 3 Max Plus",
+            "device_type": "delta",  # wrong type from an older install
+            "online": 1,
+        }
+
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_ACCESS_KEY: "test_access_key",
+                CONF_SECRET_KEY: "test_secret_key",
+                CONF_MODE: MODE_STANDARD,
+                CONF_DEVICES: [stale_device],
+            },
+            unique_id="test_access_key",
+        )
+        entry.add_to_hass(hass)
+
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.EcoFlowDeviceCoordinator.async_config_entry_first_refresh",
+            new_callable=AsyncMock,
+        ):
+            result = await hass.config_entries.async_setup(entry.entry_id)
+            await hass.async_block_till_done()
+
+        assert result is True
+        coordinators = hass.data[DOMAIN][entry.entry_id]
+        assert "D3M1TEST00000001" in coordinators
+        assert coordinators["D3M1TEST00000001"].device_type == DEVICE_TYPE_DELTA3
+
+    async def test_null_product_name_does_not_crash_setup(
+        self,
+        hass: HomeAssistant,
+        mock_iot_api,
+        mock_mqtt_client,
+        mock_http_client,
+    ) -> None:
+        """A stored device with product_name None sets up without crashing.
+
+        Both device-list producers pass a JSON-null productName through, so
+        re-classification on setup must tolerate None (SN prefix still
+        classifies the device).
+        """
+        null_name_device = {
+            "sn": "D3M1TEST00000001",
+            "name": "Delta 3 Max Plus",
+            "product_name": None,
+            "device_type": "",
+            "online": 1,
+        }
+
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_ACCESS_KEY: "test_access_key",
+                CONF_SECRET_KEY: "test_secret_key",
+                CONF_MODE: MODE_STANDARD,
+                CONF_DEVICES: [null_name_device],
+            },
+            unique_id="test_access_key",
+        )
+        entry.add_to_hass(hass)
+
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.EcoFlowDeviceCoordinator.async_config_entry_first_refresh",
+            new_callable=AsyncMock,
+        ):
+            result = await hass.config_entries.async_setup(entry.entry_id)
+            await hass.async_block_till_done()
+
+        assert result is True
+        coordinators = hass.data[DOMAIN][entry.entry_id]
+        assert "D3M1TEST00000001" in coordinators
+        assert coordinators["D3M1TEST00000001"].device_type == DEVICE_TYPE_DELTA3
 
 
 class TestAppAuthSetup:

@@ -15,7 +15,9 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
     DELTA2MAX_BINARY_SENSORS,
+    DELTA3_BINARY_SENSORS,
     DEVICE_TYPE_DELTA,
+    DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
@@ -118,6 +120,8 @@ def _get_binary_sensor_defs(
     """Return binary sensor definitions based on device type."""
     if device_type == DEVICE_TYPE_DELTA:
         return DELTA2MAX_BINARY_SENSORS
+    if device_type == DEVICE_TYPE_DELTA3:
+        return DELTA3_BINARY_SENSORS
     if device_type == DEVICE_TYPE_POWEROCEAN:
         return POWEROCEAN_BINARY_SENSORS
     if device_type == DEVICE_TYPE_SMARTPLUG:

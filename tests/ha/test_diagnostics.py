@@ -9,15 +9,29 @@ from homeassistant.core import HomeAssistant
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.ecoflow_energy.const import DOMAIN
+from custom_components.ecoflow_energy.const import (
+    CONF_ACCESS_KEY,
+    CONF_DEVICES,
+    CONF_MODE,
+    CONF_SECRET_KEY,
+    DATA_SKIPPED_DEVICES,
+    DOMAIN,
+    MODE_STANDARD,
+)
 from custom_components.ecoflow_energy.diagnostics import (
     REDACTED,
     _device_diagnostics,
+    _redact_serials,
     async_get_config_entry_diagnostics,
 )
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
 
-from .conftest import MOCK_DELTA_DEVICE, MOCK_MQTT_CREDENTIALS, MOCK_POWEROCEAN_DEVICE
+from .conftest import (
+    MOCK_DELTA_DEVICE,
+    MOCK_DELTA3_DEVICE,
+    MOCK_MQTT_CREDENTIALS,
+    MOCK_POWEROCEAN_DEVICE,
+)
 
 
 # ===========================================================================
@@ -85,6 +99,45 @@ class TestConfigEntryDiagnostics:
         # Don't set up the integration — no coordinators in hass.data
         result = await async_get_config_entry_diagnostics(hass, standard_config_entry)
         assert result["devices"] == []
+        assert result["skipped_devices"] == []
+
+    async def test_skipped_devices_in_diagnostics(
+        self,
+        hass: HomeAssistant,
+        mock_mqtt_client,
+    ) -> None:
+        """Diagnostics expose the skipped_devices list for the entry."""
+        unsupported_device = {
+            "sn": "BK21TEST00000001",
+            "name": "Smart Meter",
+            "product_name": "Smart Meter",
+            "device_type": "unknown",
+            "online": 1,
+        }
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_ACCESS_KEY: "test_access_key",
+                CONF_SECRET_KEY: "test_secret_key",
+                CONF_MODE: MODE_STANDARD,
+                CONF_DEVICES: [unsupported_device],
+            },
+            unique_id="test_access_key",
+        )
+        entry.add_to_hass(hass)
+
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.EcoFlowDeviceCoordinator.async_config_entry_first_refresh",
+            new_callable=AsyncMock,
+        ):
+            await hass.config_entries.async_setup(entry.entry_id)
+            await hass.async_block_till_done()
+
+        result = await async_get_config_entry_diagnostics(hass, entry)
+        assert len(result["skipped_devices"]) == 1
+        assert result["skipped_devices"][0]["sn_prefix"] == "BK21"
+        assert result["skipped_devices"][0]["product_name"] == "Smart Meter"
 
 
 # ===========================================================================
@@ -282,3 +335,158 @@ class TestDeviceDiagnostics:
         entry = result["event_log"][0]
         assert "ts_iso" in entry
         assert entry["ts_iso"].endswith("+00:00")
+
+
+class TestDeltaThreeRawQuotaDiagnostics:
+    async def test_non_delta3_has_no_raw_quota_section(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Only delta3 devices expose the raw_quota diagnostics section."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        result = _device_diagnostics(coordinator)
+        assert "raw_quota" not in result
+
+    async def test_delta3_raw_quota_exposed(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Delta 3 diagnostics expose the raw quota key/value snapshot."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA3_DEVICE
+        )
+        coordinator._raw_quota = {"bpSoc": 80, "meterTotalPower": 1234.5}
+        coordinator._raw_quota_captured_at = 1000.0
+
+        with patch(
+            "custom_components.ecoflow_energy.diagnostics.time.monotonic",
+            return_value=1005.0,
+        ):
+            result = _device_diagnostics(coordinator)
+
+        assert "raw_quota" in result
+        assert result["raw_quota"]["captured"] is True
+        assert result["raw_quota"]["key_count"] == 2
+        assert result["raw_quota"]["age_s"] == 5.0
+        assert result["raw_quota"]["values"]["bpSoc"] == 80
+        assert result["raw_quota"]["values"]["meterTotalPower"] == 1234.5
+
+    async def test_delta3_raw_quota_redacts_serials(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Serial-looking raw quota values are redacted."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA3_DEVICE
+        )
+        coordinator._raw_quota = {
+            "sn": "D3M1TEST00000001",
+            "bpSoc": 80,
+        }
+        coordinator._raw_quota_captured_at = 1000.0
+        result = _device_diagnostics(coordinator)
+
+        assert result["raw_quota"]["values"]["sn"] == REDACTED
+        assert result["raw_quota"]["values"]["bpSoc"] == 80
+
+    async def test_delta3_raw_quota_redacts_nested_and_embedded_serials(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Redaction recurses into nested containers and matches embedded serials."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA3_DEVICE
+        )
+        coordinator._raw_quota = {
+            # Serial nested inside a dict value
+            "nested": {"deviceSn": "D3M1TESTAAAABBBB"},
+            # Serial embedded in a longer string
+            "meta": "sn=D3M1TESTAAAABBBB;x=1",
+            # Serial inside a list value
+            "list": ["D3M1TESTAAAABBBB", 42],
+            "bpSoc": 80,
+        }
+        coordinator._raw_quota_captured_at = 1000.0
+        result = _device_diagnostics(coordinator)
+
+        values = result["raw_quota"]["values"]
+        assert values["nested"]["deviceSn"] == REDACTED
+        assert REDACTED in values["meta"]
+        assert "D3M1TESTAAAABBBB" not in values["meta"]
+        assert values["list"][0] == REDACTED
+        assert values["list"][1] == 42
+        assert values["bpSoc"] == 80
+
+    async def test_delta3_raw_quota_empty_before_capture(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Before the first quota poll the section reports not-captured."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA3_DEVICE
+        )
+        result = _device_diagnostics(coordinator)
+
+        assert result["raw_quota"]["captured"] is False
+        assert result["raw_quota"]["key_count"] == 0
+        assert result["raw_quota"]["age_s"] is None
+
+
+class TestRedactSerials:
+    """Unit coverage for the recursive, unanchored serial redactor."""
+
+    def test_bare_serial_redacted(self) -> None:
+        assert _redact_serials("D3M1TESTAAAABBBB") == REDACTED
+
+    def test_embedded_serial_redacted(self) -> None:
+        out = _redact_serials("sn=D3M1TESTAAAABBBB;x=1")
+        assert REDACTED in out
+        assert "D3M1TESTAAAABBBB" not in out
+
+    def test_nested_dict_recurses(self) -> None:
+        out = _redact_serials({"a": {"b": "D3M1TESTAAAABBBB"}})
+        assert out == {"a": {"b": REDACTED}}
+
+    def test_list_recurses(self) -> None:
+        out = _redact_serials(["D3M1TESTAAAABBBB", 42, "ok"])
+        assert out == [REDACTED, 42, "ok"]
+
+    def test_short_values_untouched(self) -> None:
+        assert _redact_serials("bpSoc") == "bpSoc"
+        assert _redact_serials(80) == 80
+
+
+class TestDeltaThreeRawQuotaCapture:
+    async def test_http_update_captures_raw_quota(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """The HTTP update stores the raw quota snapshot for delta3 devices."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA3_DEVICE
+        )
+
+        raw_quota = {"bpSoc": 80, "meterTotalPower": 1234.5, "sysWorkSta": 3}
+        coordinator._http_client = MagicMock()
+        coordinator._http_client.get_quota_all = AsyncMock(return_value=raw_quota)
+
+        result = await coordinator._async_update_data()
+
+        assert coordinator.raw_quota == raw_quota
+        assert coordinator.raw_quota_captured_at > 0
+        # Field map still empty → no mapped keys leak into device data
+        assert result == {}

@@ -8,6 +8,7 @@ from homeassistant.const import Platform
 
 from .ecoflow.const import (  # noqa: E402
     DEVICE_TYPE_DELTA,
+    DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
@@ -16,6 +17,12 @@ from .ecoflow.const import (  # noqa: E402
 )
 
 DOMAIN = "ecoflow_energy"
+
+# Top-level hass.data key for per-entry lists of skipped (unsupported)
+# devices. Kept separate from hass.data[DOMAIN] (which is keyed by
+# entry_id and holds coordinators) so a reserved string key cannot
+# collide with an entry_id.
+DATA_SKIPPED_DEVICES = "ecoflow_energy_skipped_devices"
 
 PLATFORMS: list[Platform] = [
     Platform.SENSOR,
@@ -76,6 +83,7 @@ CREDENTIAL_MAX_AGE_S = 72000.0  # Proactively refresh credentials older than 20h
 DEVICE_TYPE_DISPLAY_NAMES: dict[str, str] = {
     DEVICE_TYPE_POWEROCEAN: "PowerOcean",
     DEVICE_TYPE_DELTA: "Delta 2 Max",
+    DEVICE_TYPE_DELTA3: "Delta 3 Series",
     DEVICE_TYPE_SMARTPLUG: "Smart Plug",
     DEVICE_TYPE_STREAM: "Stream AC Pro",
 }
@@ -583,6 +591,56 @@ STREAM_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("max_charge_soc_pct", "Max Charge SoC", "%", None, "measurement", "mdi:battery-charging-100", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("min_discharge_soc_pct", "Min Discharge SoC", "%", None, "measurement", "mdi:battery-alert-variant-outline", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("batt_charge_discharge_state", "Battery Charge/Discharge State", None, "enum", None, "mdi:battery-sync", "diagnostic", disabled_by_default=True, options=["standby", "discharging", "charging"]),
+]
+
+
+# =====================================================================
+# Delta 3 Max Plus sensor definitions (read-only, HTTP quota)
+# =====================================================================
+#
+# Read-only in this pass: SET commands (switches/numbers) are deferred
+# until verified on hardware. No energy (kWh) sensors yet - the HTTP quota
+# exposes no native energy counters (see delta3_http.py docstring).
+
+DELTA3_SENSORS: list[EcoFlowSensorDef] = [
+    # --- Battery / SoC ---
+    EcoFlowSensorDef("cms_batt_soc", "SoC", "%", "battery", "measurement", "mdi:battery", suggested_display_precision=0),
+    EcoFlowSensorDef("bms_batt_soc", "Main Pack SoC", "%", None, "measurement", "mdi:battery-sync", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    # --- Power (W) ---
+    EcoFlowSensorDef("pow_in_sum_w", "Input Total", "W", "power", "measurement", "mdi:flash", suggested_display_precision=0),
+    EcoFlowSensorDef("pow_out_sum_w", "Output Total", "W", "power", "measurement", "mdi:flash", suggested_display_precision=0),
+    EcoFlowSensorDef("ac_in_w", "AC Input", "W", "power", "measurement", "mdi:power-plug", suggested_display_precision=0),
+    EcoFlowSensorDef("pv1_in_w", "Solar Input 1", "W", "power", "measurement", "mdi:solar-power", suggested_display_precision=0),
+    EcoFlowSensorDef("pv2_in_w", "Solar Input 2", "W", "power", "measurement", "mdi:solar-power", suggested_display_precision=0),
+    EcoFlowSensorDef("dc_12v_out_w", "12V Output", "W", "power", "measurement", "mdi:car-battery", suggested_display_precision=0),
+    EcoFlowSensorDef("ac1_out_w", "AC Output 1", "W", "power", "measurement", "mdi:power-plug-outline", suggested_display_precision=0),
+    EcoFlowSensorDef("ac2_out_w", "AC Output 2", "W", "power", "measurement", "mdi:power-plug-outline", suggested_display_precision=0),
+    EcoFlowSensorDef("typec1_w", "Type-C 1", "W", "power", "measurement", "mdi:usb-c-port", suggested_display_precision=0),
+    EcoFlowSensorDef("typec2_w", "Type-C 2", "W", "power", "measurement", "mdi:usb-c-port", suggested_display_precision=0),
+    EcoFlowSensorDef("typec3_w", "Type-C 3", "W", "power", "measurement", "mdi:usb-c-port", suggested_display_precision=0),
+    EcoFlowSensorDef("usb_qc1_w", "USB QC 1", "W", "power", "measurement", "mdi:usb", suggested_display_precision=0),
+    EcoFlowSensorDef("usb_qc2_w", "USB QC 2", "W", "power", "measurement", "mdi:usb", suggested_display_precision=0),
+    # --- Duration (minutes; can exceed 12000, no cap) ---
+    EcoFlowSensorDef("chg_remain_time_min", "Charge Time Remaining", "min", "duration", "measurement", "mdi:battery-clock", suggested_display_precision=0),
+    EcoFlowSensorDef("dsg_remain_time_min", "Discharge Time Remaining", "min", "duration", "measurement", "mdi:battery-clock-outline", suggested_display_precision=0),
+    # --- State (enum) ---
+    EcoFlowSensorDef("chg_dsg_state", "Charge/Discharge State", None, "enum", None, "mdi:battery-charging", options=["idle", "discharging", "charging"]),
+    # --- SoC limits / backup reserve (diagnostic) ---
+    EcoFlowSensorDef("max_charge_soc_pct", "Charge Limit", "%", None, "measurement", "mdi:battery-charging-100", "diagnostic", suggested_display_precision=0),
+    EcoFlowSensorDef("min_discharge_soc_pct", "Discharge Limit", "%", None, "measurement", "mdi:battery-alert-variant-outline", "diagnostic", suggested_display_precision=0),
+    EcoFlowSensorDef("backup_reserve_soc_pct", "Backup Reserve Level", "%", None, "measurement", "mdi:battery-lock", "diagnostic", suggested_display_precision=0),
+]
+
+DELTA3_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
+    # --- Output flow states (derived: value != 4 = flowing) ---
+    EcoFlowBinarySensorDef("ac_out_flow", "AC Output Flow", "power", "mdi:power-plug"),
+    EcoFlowBinarySensorDef("ac2_out_flow", "AC Output 2 Flow", "power", "mdi:power-plug"),
+    EcoFlowBinarySensorDef("dc_12v_out_flow", "12V Output Flow", "power", "mdi:car-battery"),
+    # --- Configuration flags (diagnostic) ---
+    EcoFlowBinarySensorDef("backup_reserve_enabled", "Backup Reserve", "power", "mdi:battery-lock", "diagnostic"),
+    EcoFlowBinarySensorDef("xboost_enabled", "X-Boost", "power", "mdi:lightning-bolt", "diagnostic"),
+    EcoFlowBinarySensorDef("beeper_enabled", "Beeper", None, "mdi:volume-high", "diagnostic"),
+    EcoFlowBinarySensorDef("bypass_out_disabled", "Bypass Output Disabled", None, "mdi:transmission-tower-off", "diagnostic", disabled_by_default=True),
 ]
 
 

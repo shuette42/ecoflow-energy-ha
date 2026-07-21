@@ -49,6 +49,30 @@ class TestDeviceTypeRouting:
     def test_stream_detected_by_bk31_prefix(self) -> None:
         assert get_device_type("", "BK31_TEST_DEVICE") == "stream"
 
+    def test_delta3_by_product_name(self) -> None:
+        # "DELTA 3 Max Plus" contains "delta" but must route to delta3,
+        # not the Delta 2 Max parser (root cause of the #110 report).
+        assert get_device_type("DELTA 3 Max Plus", "") == "delta3"
+
+    def test_delta3_by_sn_prefix(self) -> None:
+        assert get_device_type("", "D3M1TEST00000001") == "delta3"
+
+    def test_delta3_keyword_wins_over_delta(self) -> None:
+        # The delta3 keyword check runs before the generic delta check.
+        assert get_device_type("Delta3", "") == "delta3"
+
+    def test_delta2_max_unchanged(self) -> None:
+        assert get_device_type("DELTA 2 Max", "R351TEST00000001") == "delta"
+
+    def test_bk21_smart_meter_stays_unknown(self) -> None:
+        # Smart Meter support is deferred: it must remain unknown so it
+        # shows up as a visible skip, not silently mapped to a wrong parser.
+        assert get_device_type("", "BK21TEST00000001") == "unknown"
+
+    def test_plain_delta_pro_stays_delta(self) -> None:
+        # "DELTA Pro" (no "3") keeps its existing Delta behavior.
+        assert get_device_type("DELTA Pro", "") == "delta"
+
 
 def _extract_sensor_keys(var_name: str) -> list[str]:
     """Extract sensor keys from a named list variable.

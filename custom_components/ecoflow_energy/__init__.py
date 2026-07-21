@@ -15,6 +15,7 @@ from .const import (
     CONF_EMAIL,
     CONF_MODE,
     CONF_PASSWORD,
+    DATA_SKIPPED_DEVICES,
     DEVICE_TYPE_UNKNOWN,
     DOMAIN,
     MODE_ENHANCED,
@@ -83,19 +84,35 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
         len(devices), enhanced_count, standard_count,
     )
 
+    skipped_devices: list[dict[str, str]] = []
     for device_info in devices:
         sn = device_info["sn"]
-        device_type = device_info.get("device_type", "")
+        # Both device producers may pass product_name through as null, so
+        # coalesce to "" here (get(..., "") would still return None).
+        product_name = device_info.get("product_name") or ""
+        # Re-classify from product_name + SN on every setup: classification
+        # rules improve over releases (e.g. Delta 3 split from Delta 2 Max),
+        # and the type stored at config-flow time may be outdated.
+        device_type = get_device_type(product_name, sn)
+        if device_type == DEVICE_TYPE_UNKNOWN:
+            device_type = device_info.get("device_type", "")
         if not device_type or device_type == DEVICE_TYPE_UNKNOWN:
-            device_type = get_device_type(
-                device_info.get("product_name", ""),
-                sn,
-            )
-        if not device_type or device_type == DEVICE_TYPE_UNKNOWN:
-            _LOGGER.debug(
-                "Skipping device %s... - no parser available",
+            # One WARNING per unsupported device per setup: the user sees
+            # the device in the EcoFlow account but gets no entities, so
+            # this degradation must be visible and actionable.
+            _LOGGER.warning(
+                "Skipping unsupported EcoFlow device %s... (%s) - no parser "
+                "available for this model yet. Please open an issue at "
+                "https://github.com/shuette42/ecoflow-energy-ha/issues so "
+                "support can be added",
                 sn[:4],
+                product_name or "unknown product",
             )
+            skipped_devices.append({
+                "sn_prefix": sn[:4],
+                "product_name": product_name,
+                "reason": "no parser available for this device type",
+            })
             continue
         device_info = {**device_info, "device_type": device_type}
         coordinator = EcoFlowDeviceCoordinator(hass, entry, device_info)
@@ -105,6 +122,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
         coordinators[sn] = coordinator
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinators
+    hass.data.setdefault(DATA_SKIPPED_DEVICES, {})[entry.entry_id] = skipped_devices
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
@@ -130,6 +148,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> 
     coordinators: dict[str, EcoFlowDeviceCoordinator] = hass.data[DOMAIN].pop(
         entry.entry_id, {}
     )
+    hass.data.get(DATA_SKIPPED_DEVICES, {}).pop(entry.entry_id, None)
     for coordinator in coordinators.values():
         await coordinator.async_shutdown()
 

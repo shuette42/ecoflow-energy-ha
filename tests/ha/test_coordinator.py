@@ -54,6 +54,7 @@ from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
 
 from .conftest import (
     MOCK_DELTA_DEVICE,
+    MOCK_DELTA3_DEVICE,
     MOCK_MQTT_CREDENTIALS,
     MOCK_POWEROCEAN_DEVICE,
     MOCK_SMARTPLUG_DEVICE,
@@ -4018,3 +4019,102 @@ class TestSnapshotContinuity:
         assert snap_diag["captured"] is False
         assert snap_diag["age_s"] is None
         assert snap_diag["key_count"] == 0
+
+
+# ===========================================================================
+# Delta 3 MQTT message parsing (_parse_message)
+# ===========================================================================
+
+
+class TestDelta3ParseMessage:
+    """Delta 3 push and get_reply routing through _parse_message."""
+
+    @staticmethod
+    def _encode(obj: dict) -> bytes:
+        import json
+
+        return json.dumps(obj).encode()
+
+    def _coordinator(
+        self, hass: HomeAssistant, entry: MockConfigEntry
+    ) -> EcoFlowDeviceCoordinator:
+        return EcoFlowDeviceCoordinator(hass, entry, MOCK_DELTA3_DEVICE)
+
+    async def test_quota_push_param_wrapper(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """A /quota push with a `param` wrapper is mapped through the field map."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = self._coordinator(hass, standard_config_entry)
+
+        topic = "/open/acct/D3M1TEST00000001/quota"
+        payload = self._encode(
+            {"cmdId": 1, "cmdFunc": 254, "param": {"cmsBattSoc": 82, "powInSumW": 640}}
+        )
+
+        parsed = coordinator._parse_message(topic, payload)
+        assert parsed == {"cms_batt_soc": 82, "pow_in_sum_w": 640}
+
+    async def test_quota_push_params_wrapper(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """A /quota push with a `params` wrapper (no `param`) is mapped too."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = self._coordinator(hass, standard_config_entry)
+
+        topic = "/open/acct/D3M1TEST00000001/quota"
+        payload = self._encode({"params": {"cmsBattSoc": 55}})
+
+        parsed = coordinator._parse_message(topic, payload)
+        assert parsed == {"cms_batt_soc": 55}
+
+    async def test_quota_push_flat_dict_fallback(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """A flat /quota push (no param/params) falls back to the top-level dict."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = self._coordinator(hass, standard_config_entry)
+
+        topic = "/open/acct/D3M1TEST00000001/quota"
+        payload = self._encode({"cmsBattSoc": 73, "flowInfo12v": 0})
+
+        parsed = coordinator._parse_message(topic, payload)
+        assert parsed == {"cms_batt_soc": 73, "dc_12v_out_flow": 1}
+
+    async def test_quota_push_non_dict_param_falls_through(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """A non-dict `param` value does not crash; parsing falls back safely."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = self._coordinator(hass, standard_config_entry)
+
+        topic = "/open/acct/D3M1TEST00000001/quota"
+        payload = self._encode({"param": "garbage", "cmsBattSoc": 61})
+
+        parsed = coordinator._parse_message(topic, payload)
+        assert parsed == {"cms_batt_soc": 61}
+
+    async def test_get_reply_quota_map(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """A get_reply with a quotaMap is mapped through the field map."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = self._coordinator(hass, standard_config_entry)
+
+        topic = "/app/user123/D3M1TEST00000001/thing/property/get_reply"
+        payload = self._encode(
+            {"data": {"quotaMap": {"cmsBattSoc": 90, "powOutSumW": 120}}}
+        )
+
+        parsed = coordinator._parse_message(topic, payload)
+        assert parsed == {"cms_batt_soc": 90, "pow_out_sum_w": 120}

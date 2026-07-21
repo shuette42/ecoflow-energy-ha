@@ -33,12 +33,20 @@ HTTP_RETRY_BACKOFF_S = 2.0
 # Device types
 DEVICE_TYPE_POWEROCEAN = "powerocean"
 DEVICE_TYPE_DELTA = "delta"
+DEVICE_TYPE_DELTA3 = "delta3"
 DEVICE_TYPE_SMARTPLUG = "smartplug"
 DEVICE_TYPE_STREAM = "stream"
 DEVICE_TYPE_UNKNOWN = "unknown"
 
-# Keywords used to classify devices from productName strings
+# Keywords used to classify devices from productName strings.
+# Delta 3 keywords must be checked BEFORE the generic "delta" keyword:
+# "DELTA 3 Max Plus" contains "delta" and would otherwise be routed to
+# the Delta 2 Max parser, whose field map matches none of its quota keys.
 _POWEROCEAN_KEYWORDS = ("powerocean", "power ocean")
+# Family net: intentionally matches the whole Delta 3 line (base Delta 3,
+# Delta 3 Plus, Delta 3 Max Plus). Their quota key sets are identical; the
+# base model just omits PV2, so one parser and one device type serve all.
+_DELTA3_KEYWORDS = ("delta 3", "delta3")
 _DELTA_KEYWORDS = ("delta",)
 _SMARTPLUG_KEYWORDS = ("smart plug", "smartplug")
 _STREAM_KEYWORDS = ("stream",)
@@ -48,6 +56,7 @@ _SN_PREFIX_MAP = {
     "HJ32": DEVICE_TYPE_POWEROCEAN,
     "R351": DEVICE_TYPE_DELTA,
     "R331": DEVICE_TYPE_DELTA,
+    "D3M1": DEVICE_TYPE_DELTA3,
     "HW52": DEVICE_TYPE_SMARTPLUG,
     "BK31": DEVICE_TYPE_STREAM,
 }
@@ -56,13 +65,16 @@ _SN_PREFIX_MAP = {
 def get_device_type(product_name: str, sn: str = "") -> str:
     """Classify a device based on its productName string or SN prefix.
 
-    Returns DEVICE_TYPE_POWEROCEAN, DEVICE_TYPE_DELTA, DEVICE_TYPE_SMARTPLUG,
-    DEVICE_TYPE_STREAM, or DEVICE_TYPE_UNKNOWN.
+    Returns DEVICE_TYPE_POWEROCEAN, DEVICE_TYPE_DELTA, DEVICE_TYPE_DELTA3,
+    DEVICE_TYPE_SMARTPLUG, DEVICE_TYPE_STREAM, or DEVICE_TYPE_UNKNOWN.
     """
-    name = product_name.lower()
+    name = (product_name or "").lower()
     for kw in _POWEROCEAN_KEYWORDS:
         if kw in name:
             return DEVICE_TYPE_POWEROCEAN
+    for kw in _DELTA3_KEYWORDS:
+        if kw in name:
+            return DEVICE_TYPE_DELTA3
     for kw in _DELTA_KEYWORDS:
         if kw in name:
             return DEVICE_TYPE_DELTA
