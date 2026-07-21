@@ -41,6 +41,7 @@
 |:---|:---:|:---:|:---:|:---|
 | **PowerOcean** — Home Battery | 202 | 2 numbers, 1 select (Enhanced only) | 6 (solar, grid, battery, home) | ~30 s standard / ~3 s enhanced |
 | **Delta 2 Max** — Portable Power | 94 | 7 switches, 8 numbers | 4 (solar 1+2, AC in/out) | ~30 s standard / ~2 s enhanced |
+| **Delta 3 Max Plus** — Portable Power | 20 | 7 switches, 3 numbers | - | ~30 s standard / ~2 s enhanced |
 | **Smart Plug** — Switchable Outlet | 11 | 1 switch, 2 numbers | 1 (total energy) | ~30 s standard / ~3 s enhanced |
 | **Stream AC Pro** — AC-coupled Battery | 39 + 2 binary | 1 number (Enhanced only) | 2 default (battery charge/discharge), 2 optional diagnostic (solar/home) | Enhanced only / ~3 s |
 

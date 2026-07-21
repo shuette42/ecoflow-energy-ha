@@ -79,6 +79,10 @@ from .ecoflow.iot_api import IoTApiClient
 from .ecoflow.parsers.delta import parse_delta_report
 from .ecoflow.parsers.delta_http import parse_delta_http_quota
 from .ecoflow.parsers.delta3_http import parse_delta3_http_quota
+from .ecoflow.parsers.delta3_proto import (
+    parse_delta3_cms_heartbeat,
+    parse_delta3_display_property,
+)
 from .ecoflow.parsers.powerocean_proto import (
     flatten_heartbeat,
     remap_bp_keys,
@@ -482,6 +486,11 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self._enhanced_mode:
             if self.device_type == DEVICE_TYPE_POWEROCEAN:
                 self._schedule_keepalive()
+            # The Delta 3 generation never answers the quota request - it
+            # pushes its status frame on its own schedule. The request is
+            # kept anyway: it is one small publish every 30 s and it keeps
+            # outbound traffic on the connection, which is what the other
+            # device families rely on to hold the session open.
             self._schedule_quotas_poll()
         self._schedule_ping()
         self._schedule_stale_check()
@@ -883,6 +892,8 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if "/set_reply" in topic:
             _LOGGER.debug("SET reply for %s: %s", self.device_sn, payload[:200])
             self._log_event("set_reply", f"topic={topic}")
+            if self.device_type == DEVICE_TYPE_DELTA3:
+                self._check_delta3_set_ack(payload)
             return
 
         if not self._enhanced_mode and self.device_type not in (
@@ -895,6 +906,31 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         parsed = self._parse_message(topic, payload)
         if parsed:
             self.hass.loop.call_soon_threadsafe(self._apply_data, parsed)
+
+    def _check_delta3_set_ack(self, payload: bytes) -> None:
+        """Report a rejected Delta 3 setting (Paho thread).
+
+        A rejection means the user pressed a control and the device did not
+        apply it, which is worth a warning. A successful write stays silent.
+        """
+        from .ecoflow.delta3_commands import parse_config_write_ack
+
+        ack = parse_config_write_ack(payload)
+        if ack is None:
+            return
+        if ack.applied:
+            _LOGGER.debug(
+                "Setting applied on %s (field %s)", self.device_sn, ack.action_id
+            )
+            return
+        _LOGGER.warning(
+            "Device %s rejected a setting (field %s, status %s) - "
+            "the change was not applied",
+            self.device_sn,
+            ack.action_id,
+            ack.config_ok,
+        )
+        self._log_event("set_rejected", f"field={ack.action_id}")
 
     def _parse_message(self, topic: str, payload: bytes) -> dict[str, Any] | None:
         """Parse an MQTT message payload."""
@@ -985,21 +1021,33 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         if b"\x0a" in payload[:4]:
             try:
+                # Device-type routing comes first: (cmd_func, cmd_id) pairs are
+                # not unique across device classes. The Stream AC Pro uses the
+                # very same (254, 21) main status frame as the Delta 3
+                # generation, so a generic registry lookup would hand a Stream
+                # frame to the Delta 3 parser and drop the Stream telemetry.
+                if self.device_type == DEVICE_TYPE_STREAM:
+                    return parse_stream_proto_message(payload)
                 result = decode_proto_runtime_frame(payload)
+                raw = {
+                    k: v
+                    for k, v in result.mapped.items()
+                    if not k.startswith("_")
+                }
+                # Delta 3 generation: status frame and battery heartbeat.
+                # Both feed the same parser as the HTTP path, so the sensor
+                # keys are identical in Standard and Enhanced Mode.
+                if self.device_type == DEVICE_TYPE_DELTA3:
+                    if result.mapped.get("_is_delta3_display"):
+                        parsed = parse_delta3_display_property(raw)
+                        return parsed if parsed else None
+                    if result.mapped.get("_is_delta3_cms_heartbeat"):
+                        parsed = parse_delta3_cms_heartbeat(raw)
+                        return parsed if parsed else None
                 if result.mapped.get("_is_energy_stream"):
-                    raw = {
-                        k: v
-                        for k, v in result.mapped.items()
-                        if not k.startswith("_")
-                    }
                     return remap_proto_keys(raw)
                 # Enhanced Mode: heartbeat with nested extraction
                 if result.mapped.get("_is_ems_heartbeat"):
-                    raw = {
-                        k: v
-                        for k, v in result.mapped.items()
-                        if not k.startswith("_")
-                    }
                     return flatten_heartbeat(raw)
                 # Enhanced Mode: param change report (cmd_id=13) carries
                 # only `ems_app_surplus_pct` (renamed from `dev_soc`). This
@@ -1007,27 +1055,19 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 # would be dropped by remap_bp_keys, so pass it through
                 # unchanged.
                 if result.mapped.get("_is_ems_param_change"):
-                    raw = {
-                        k: v
-                        for k, v in result.mapped.items()
-                        if not k.startswith("_")
-                    }
                     return raw or None
                 # Enhanced Mode: change reports and battery heartbeat
                 if (
                     result.mapped.get("_is_ems_change")
                     or result.mapped.get("_is_bp_heartbeat")
                 ):
-                    raw = {
-                        k: v
-                        for k, v in result.mapped.items()
-                        if not k.startswith("_")
-                    }
                     if not raw:
                         return None
                     return remap_bp_keys(raw, self._bp_sn_to_index, self.device_sn)
-                # Non-PowerOcean protobuf: SmartPlug heartbeats
-                return self._parse_proto_device_data(payload)
+                # Non-PowerOcean protobuf: SmartPlug heartbeats. The headers
+                # are already decoded above, so hand them over instead of
+                # decoding the same frame a second time.
+                return self._parse_proto_device_data(payload, result.headers)
             except Exception:
                 _LOGGER.debug("Protobuf decode error for %s", self.device_sn, exc_info=True)
             return None
@@ -1099,14 +1139,22 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         return None
 
-    def _parse_proto_device_data(self, payload: bytes) -> dict[str, Any] | None:
-        """Parse SmartPlug/Delta protobuf heartbeat via generic wire-format decoder."""
-        from .ecoflow.proto.decoder import decode_header_message
+    def _parse_proto_device_data(
+        self, payload: bytes, headers: list[dict[str, Any]] | None = None
+    ) -> dict[str, Any] | None:
+        """Parse SmartPlug/Delta protobuf heartbeat via generic wire-format decoder.
 
-        headers, _ = decode_header_message(payload)
+        `headers` may be supplied by a caller that already decoded the frame
+        so the header decode does not run twice per message.
+        """
         if self.device_type == DEVICE_TYPE_STREAM:
             return parse_stream_proto_message(payload)
-        for hdr in headers:
+
+        if headers is None:
+            from .ecoflow.proto.decoder import decode_header_message
+
+            headers, _ = decode_header_message(payload)
+        for hdr in headers or []:
             pdata_hex = hdr.get("pdata")
             if not pdata_hex:
                 continue
@@ -1525,18 +1573,20 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return ok
 
     async def async_send_delta3_set(self, command: dict[str, Any]) -> bool:
-        """Apply a Delta 3 setting over the official HTTP endpoint.
+        """Apply a Delta 3 setting on whichever channel this entry is using.
 
-        The Delta 3 write contract is documented and verified for HTTP
-        `PUT /iot-open/sign/device/quota`. The MQTT variant is documented too,
-        but its example spells the source-direction field differently, so the
-        proven path is used here. Standard mode only: app-auth entries have no
-        HTTP client.
+        Developer keys write over the official HTTP endpoint
+        `PUT /iot-open/sign/device/quota`. App logins have no HTTP endpoint and
+        write the same setting as a binary ConfigWrite frame on the app channel
+        instead - verified against hardware (ack plus readback).
         """
+        if self._auth_method == AUTH_METHOD_APP:
+            return await self._async_send_delta3_set_proto(command)
+
         if self._http_client is None:
             _LOGGER.warning(
-                "Cannot apply setting for %s - controls need Standard mode "
-                "(Developer Keys); Enhanced Mode has no HTTP path",
+                "Cannot apply setting for %s - no write channel available "
+                "(no HTTP client for this entry)",
                 self.device_sn,
             )
             return False
@@ -1554,6 +1604,43 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # The entity holds an optimistic value until then, so a plain refresh
         # on the next scheduled poll is enough.
         await self.async_request_refresh()
+        return True
+
+    async def _async_send_delta3_set_proto(self, command: dict[str, Any]) -> bool:
+        """Write a Delta 3 setting as a ConfigWrite frame on the app channel."""
+        from .ecoflow.delta3_commands import build_proto_command
+
+        params = command.get("params", {})
+        if self._mqtt_client is None or not self._mqtt_client.is_connected():
+            _LOGGER.warning(
+                "Cannot apply setting for %s - device connection is down",
+                self.device_sn,
+            )
+            self._log_event("set_cmd_fail", f"params={list(params)[:3]}")
+            return False
+
+        payload = build_proto_command(command, self.device_sn)
+        if payload is None:
+            _LOGGER.warning(
+                "Cannot apply setting for %s - unsupported control %s",
+                self.device_sn,
+                list(params)[:3],
+            )
+            self._log_event("set_cmd_fail", f"params={list(params)[:3]}")
+            return False
+
+        ok = await self.hass.async_add_executor_job(
+            self._mqtt_client.send_proto_set, payload
+        )
+        if not ok:
+            _LOGGER.warning("SET failed for %s: not sent", self.device_sn)
+            self._log_event("set_cmd_fail", f"params={list(params)[:3]}")
+            return False
+
+        _LOGGER.debug("SET sent for %s: %s", self.device_sn, params)
+        self._log_event("set_cmd", f"params={list(params)[:3]}")
+        # The device echoes the new value on its own report stream, so the
+        # entity only has to hold its optimistic value until then.
         return True
 
     async def async_send_set_command(self, command: dict[str, Any]) -> bool:

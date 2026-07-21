@@ -1,8 +1,15 @@
 """Proto-runtime decoder using google.protobuf.json_format.MessageToDict.
 
-Declarative cmd_id registry replaces manual per-field extraction.
-Each cmd_id maps to a CmdConfig that defines message class, flags, field renames,
-and zero-fill rules. The generic decode loop handles all message types uniformly.
+Declarative (cmd_func, cmd_id) registry replaces manual per-field extraction.
+Each command tuple maps to a CmdConfig that defines message class, flags, field
+renames, and zero-fill rules. The generic decode loop handles all message types
+uniformly.
+
+Contract: the registry is device-type agnostic. A command tuple is NOT unique
+across device classes - the Stream AC Pro and the Delta 3 generation both use
+(254, 21) as their main status frame. Callers must therefore route by device
+type BEFORE consuming a decode result, and must never treat a registry hit as
+proof that the frame belongs to the device they are decoding for.
 """
 
 from __future__ import annotations
@@ -12,6 +19,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from google.protobuf.json_format import MessageToDict
+from google.protobuf.message import DecodeError
 
 from .decoder import decode_header_message
 
@@ -39,8 +47,15 @@ class CmdConfig:
     flatten_key: str | None = None
 
 
-def _build_cmd_registry() -> dict[int, CmdConfig]:
-    """Build cmd_id -> CmdConfig registry. Lazy-loaded to avoid import-time pb2 dependency."""
+def _build_cmd_registry() -> dict[tuple[int, int], CmdConfig]:
+    """Build (cmd_func, cmd_id) -> CmdConfig registry.
+
+    Lazy-loaded to avoid an import-time pb2 dependency. The key is the full
+    command tuple because cmd_id values are only unique within a command
+    family: PowerOcean uses cmd_func=96, the Delta 3 generation uses 254
+    (system status) and 32 (battery heartbeat), and their cmd_id ranges
+    overlap.
+    """
     try:
         from . import ecocharge_pb2 as pb2
     except ImportError:
@@ -48,7 +63,7 @@ def _build_cmd_registry() -> dict[int, CmdConfig]:
         return {}
 
     return {
-        33: CmdConfig(
+        (96, 33): CmdConfig(
             msg_class=pb2.JTS1EnergyStreamReport,
             parse_path="typed_runtime:energy_stream_report",
             flags={"_is_energy_stream": True, "_is_energy_stream_report": True},
@@ -61,37 +76,50 @@ def _build_cmd_registry() -> dict[int, CmdConfig]:
             },
             zero_fill=frozenset({"solar", "home_direct", "batt_pb", "grid_raw_f2"}),
         ),
-        39: CmdConfig(
+        (96, 39): CmdConfig(
             msg_class=pb2.JTS1EmsPVInvEnergyStreamReport,
             parse_path="typed_runtime:pv_inv_energy_stream",
         ),
-        1: CmdConfig(
+        (96, 1): CmdConfig(
             msg_class=pb2.JTS1EmsHeartbeat,
             parse_path="typed_runtime:ems_heartbeat",
             flags={"_is_ems_heartbeat": True},
         ),
-        7: CmdConfig(
+        (96, 7): CmdConfig(
             msg_class=pb2.JTS1BpHeartbeatReport,
             parse_path="typed_runtime:bp_heartbeat",
             flags={"_is_bp_heartbeat": True},
             flatten_key="bp_heart_beat",
         ),
-        8: CmdConfig(
+        (96, 8): CmdConfig(
             msg_class=pb2.JTS1EmsChangeReport,
             parse_path="typed_runtime:ems_change",
             flags={"_is_ems_change": True},
             rename={"ems_word_mode": "ems_work_mode"},
         ),
-        13: CmdConfig(
+        (96, 13): CmdConfig(
             msg_class=pb2.JTS1EmsParamChangeReport,
             parse_path="typed_runtime:ems_param_change",
             flags={"_is_ems_param_change": True},
             rename={"dev_soc": "ems_app_surplus_pct"},
         ),
+        # --- Delta 3 generation ---
+        # Main status frame: full every 120 s, incremental about every 2 s.
+        (254, 21): CmdConfig(
+            msg_class=pb2.Delta3DisplayProperty,
+            parse_path="typed_runtime:delta3_display_property",
+            flags={"_is_delta3_display": True},
+        ),
+        # Battery heartbeat with two nested version packs, every 10 s.
+        (32, 2): CmdConfig(
+            msg_class=pb2.Delta3CmsHeartbeat,
+            parse_path="typed_runtime:delta3_cms_heartbeat",
+            flags={"_is_delta3_cms_heartbeat": True},
+        ),
     }
 
 
-_CMD_REGISTRY: dict[int, CmdConfig] | None = None
+_CMD_REGISTRY: dict[tuple[int, int], CmdConfig] | None = None
 _FULL_POWER_KEYS = frozenset({"solar", "home_direct", "batt_pb", "grid_raw_f2"})
 
 
@@ -104,6 +132,8 @@ def _empty_mapped() -> dict[str, Any]:
         "_is_energy_stream_report": False,
         "_is_ems_heartbeat": False,
         "_is_full_power_frame": False,
+        "_is_delta3_display": False,
+        "_is_delta3_cms_heartbeat": False,
     }
 
 
@@ -137,7 +167,7 @@ def _first_pdata(headers: list[dict]) -> tuple[bytes | None, bool]:
 
 
 def _typed_runtime_map(headers: list[dict], source: bytes) -> tuple[dict[str, Any], str] | None:
-    """Declarative decode: cmd_id -> MessageToDict -> rename -> zero-fill -> flags."""
+    """Declarative decode: (cmd_func, cmd_id) -> MessageToDict -> rename -> zero-fill -> flags."""
     global _CMD_REGISTRY
     if _CMD_REGISTRY is None:
         _CMD_REGISTRY = _build_cmd_registry()
@@ -147,16 +177,26 @@ def _typed_runtime_map(headers: list[dict], source: bytes) -> tuple[dict[str, An
     cmd_func = _header_value(headers, "cmd_func")
     cmd_id = _header_value(headers, "cmd_id")
 
-    if cmd_func != 96:
+    if not isinstance(cmd_func, int) or not isinstance(cmd_id, int):
         return None
 
-    config = _CMD_REGISTRY.get(cmd_id)
+    config = _CMD_REGISTRY.get((cmd_func, cmd_id))
     if config is None:
         return None
 
-    # 1. Parse protobuf message
+    # 1. Parse protobuf message. A registry hit only means the command tuple
+    # is known - the payload may still belong to another device class and be
+    # wire-incompatible. Returning None lets the caller fall back to its own
+    # parser instead of losing the message.
     msg = config.msg_class()
-    msg.ParseFromString(source)
+    try:
+        msg.ParseFromString(source)
+    except DecodeError:
+        _LOGGER.debug(
+            "Proto decode failed for %s, falling back to generic parsing",
+            config.parse_path,
+        )
+        return None
 
     # 2. Convert to dict (only present fields, proto field names preserved)
     fields = MessageToDict(msg, preserving_proto_field_name=True)
@@ -211,7 +251,7 @@ def decode_proto_runtime_frame(payload_bytes: bytes) -> ProtoRuntimeDecodeResult
     global _CMD_REGISTRY
     if _CMD_REGISTRY is None:
         _CMD_REGISTRY = _build_cmd_registry()
-    typed_eligible = cmd_func == 96 and cmd_id in (_CMD_REGISTRY or {})
+    typed_eligible = (cmd_func, cmd_id) in (_CMD_REGISTRY or {})
 
     # Resolve inner payload source for typed decode
     if payload is not None:

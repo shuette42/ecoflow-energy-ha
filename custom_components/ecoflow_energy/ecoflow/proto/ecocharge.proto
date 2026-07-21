@@ -306,3 +306,97 @@ message JTS1EmsChangeReport {
 message JTS1EmsParamChangeReport {
   oneof _dev_soc { uint32 dev_soc = 10; }
 }
+
+// --- Delta 3 generation (portable power stations) ---
+//
+// The Delta 3 generation publishes protobuf only - it never answers the
+// JSON `latestQuotas` request that the other device families use. The
+// main status frame (cmd_func=254, cmd_id=21) carries the same field
+// names as the HTTP quota response, so both transports feed the same
+// sensor keys.
+//
+// Every field is wrapped in its own `oneof` (the proto3 `optional`
+// form). This is presence tracking and it is mandatory: without it a
+// legitimate 0 (for example AC input power while the grid is
+// disconnected) would be indistinguishable from "not sent" and the
+// sensor would silently keep the previous value.
+//
+// This is a deliberate subset of the device's status message - protobuf
+// ignores field numbers it does not know, so unlisted fields are simply
+// skipped during parsing.
+
+message Delta3PowGetAcOutList {
+  repeated float pow_get_ac_out_item = 1;
+}
+
+message Delta3PowGet12VList {
+  repeated float pow_get_12v_item = 1;
+}
+
+// Main status frame (cmd_func=254, cmd_id=21). Sent in full every 120 s
+// and incrementally (changed fields only) about every 2 s under load.
+message Delta3DisplayProperty {
+  // --- Power totals (W) ---
+  oneof _pow_in_sum_w { float pow_in_sum_w = 3; }
+  oneof _pow_out_sum_w { float pow_out_sum_w = 4; }
+
+  // --- Inputs (W) ---
+  oneof _pow_get_ac_in { float pow_get_ac_in = 54; }
+  oneof _pow_get_pv { float pow_get_pv = 361; }
+  oneof _pow_get_pv2 { float pow_get_pv2 = 70; }
+
+  // --- Outputs (W) ---
+  oneof _pow_get_12v { float pow_get_12v = 37; }
+  oneof _pow_get_typec1 { float pow_get_typec1 = 11; }
+  oneof _pow_get_typec2 { float pow_get_typec2 = 12; }
+  oneof _pow_get_typec3 { float pow_get_typec3 = 100; }
+  oneof _pow_get_qcusb1 { float pow_get_qcusb1 = 9; }
+  oneof _pow_get_qcusb2 { float pow_get_qcusb2 = 10; }
+
+  // Per-outlet arrays: AC item[0] = AC1, item[2] = AC2 (signed, negative
+  // while the outlet delivers power). The 12 V list is the Anderson port.
+  oneof _pow_get_ac_out_list { Delta3PowGetAcOutList pow_get_ac_out_list = 972; }
+  oneof _pow_get_12v_list { Delta3PowGet12VList pow_get_12v_list = 969; }
+
+  // --- Port flow states (4 = inactive, other values = active) ---
+  oneof _flow_info_ac_out { uint32 flow_info_ac_out = 367; }
+  oneof _flow_info_ac2_out { uint32 flow_info_ac2_out = 971; }
+  oneof _flow_info_12v { uint32 flow_info_12v = 33; }
+
+  // --- Battery state ---
+  oneof _cms_batt_soc { float cms_batt_soc = 262; }
+  oneof _cms_chg_dsg_state { uint32 cms_chg_dsg_state = 282; }
+  oneof _cms_dsg_rem_time { uint32 cms_dsg_rem_time = 268; }
+  oneof _cms_chg_rem_time { uint32 cms_chg_rem_time = 269; }
+
+  // --- SoC limits / backup reserve (%) ---
+  oneof _cms_max_chg_soc { uint32 cms_max_chg_soc = 270; }
+  oneof _cms_min_dsg_soc { uint32 cms_min_dsg_soc = 271; }
+  oneof _backup_reverse_soc { uint32 backup_reverse_soc = 461; }
+
+  // --- Switch / flag state ---
+  oneof _energy_backup_en { bool energy_backup_en = 7; }
+  oneof _en_beep { bool en_beep = 195; }
+  oneof _xboost_en { bool xboost_en = 25; }
+  oneof _bypass_out_disable { bool bypass_out_disable = 146; }
+}
+
+// Battery-side heartbeat (cmd_func=32, cmd_id=2), sent every 10 s. Two
+// nested version packs; only the v1p0 pack carries values we surface.
+message Delta3EmsHeartbeatV1P0 {
+  oneof _max_charge_soc { uint32 max_charge_soc = 7; }
+  oneof _lcd_show_soc { uint32 lcd_show_soc = 9; }
+  oneof _chg_remain_time { uint32 chg_remain_time = 12; }
+  oneof _dsg_remain_time { uint32 dsg_remain_time = 13; }
+  oneof _f32_lcd_show_soc { float f32_lcd_show_soc = 15; }
+  oneof _min_dsg_soc { uint32 min_dsg_soc = 21; }
+}
+
+message Delta3EmsHeartbeatV1P3 {
+  oneof _sys_chg_dsg_state { uint32 sys_chg_dsg_state = 4; }
+}
+
+message Delta3CmsHeartbeat {
+  optional Delta3EmsHeartbeatV1P0 v1p0 = 1;
+  optional Delta3EmsHeartbeatV1P3 v1p3 = 2;
+}

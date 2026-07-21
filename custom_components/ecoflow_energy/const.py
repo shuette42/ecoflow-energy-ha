@@ -593,12 +593,15 @@ STREAM_SENSORS: list[EcoFlowSensorDef] = [
 
 
 # =====================================================================
-# Delta 3 Max Plus sensor definitions (read-only, HTTP quota)
+# Delta 3 Max Plus sensor definitions
 # =====================================================================
 #
-# Read-only in this pass: SET commands (switches/numbers) are deferred
-# until verified on hardware. No energy (kWh) sensors yet - the HTTP quota
-# exposes no native energy counters (see delta3_http.py docstring).
+# Telemetry arrives via HTTP quota (Standard mode) or protobuf push
+# (Enhanced mode); both paths produce identical sensor keys. Switches and
+# numbers are defined further below and require Standard mode, because the
+# SET commands go through the official HTTP endpoint. No energy (kWh)
+# sensors yet - the quota exposes no native energy counters (see the
+# delta3_http.py docstring).
 
 DELTA3_SENSORS: list[EcoFlowSensorDef] = [
     # --- Battery / SoC ---
