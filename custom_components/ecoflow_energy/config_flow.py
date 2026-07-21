@@ -688,6 +688,26 @@ class EcoFlowEnergyConfigFlow(ConfigFlow, domain=DOMAIN):
         return devices
 
 
+async def _async_fetch_app_devices(
+    hass: Any, email: str, password: str
+) -> list[dict[str, Any]]:
+    """Log in to the app API and return the normalized device list.
+
+    Mirrors the discovery performed by
+    :meth:`EcoFlowEnergyConfigFlow.async_step_app_credentials`. Returns an
+    empty list when the login fails or the account exposes no devices.
+    Network and parsing errors are raised to the caller.
+    """
+    session = async_get_clientsession(hass)
+    login_result = await enhanced_login(session, email, password)
+    if login_result is None:
+        return []
+    raw_devices = await get_app_device_list(session, login_result["token"])
+    if not raw_devices:
+        return []
+    return EcoFlowEnergyConfigFlow._normalize_app_devices(raw_devices)
+
+
 class EcoFlowOptionsFlow(OptionsFlow):
     """Handle options for EcoFlow Energy."""
 
@@ -724,8 +744,36 @@ class EcoFlowOptionsFlow(OptionsFlow):
                     except (aiohttp.ClientError, TimeoutError, OSError, KeyError, ValueError, TypeError):
                         _LOGGER.warning("Options flow: failed to fetch device list", exc_info=True)
             elif auth_method == AUTH_METHOD_APP:
-                # TODO: refresh device list from app API (requires token re-login)
-                pass
+                email = self.config_entry.data.get(CONF_EMAIL)
+                password = self.config_entry.data.get(CONF_PASSWORD)
+                if email and password:
+                    try:
+                        devices = await _async_fetch_app_devices(
+                            self.hass, email, password
+                        )
+                    except (
+                        aiohttp.ClientError,
+                        TimeoutError,
+                        OSError,
+                        KeyError,
+                        ValueError,
+                        TypeError,
+                        AttributeError,
+                    ):
+                        # Fall back to the stored device list - the options
+                        # flow stays usable without a fresh discovery.
+                        _LOGGER.debug(
+                            "Options flow: failed to fetch app device list",
+                            exc_info=True,
+                        )
+                    else:
+                        if devices:
+                            self._all_devices = devices
+                        else:
+                            _LOGGER.debug(
+                                "Options flow: app device list empty, "
+                                "using stored devices"
+                            )
 
         if user_input is not None:
             new_mode = user_input.get(CONF_MODE, current_mode)

@@ -523,16 +523,83 @@ class TestOptionsFlow:
         return entry
 
     async def test_options_app_auth_skips_api_fetch(self, hass: HomeAssistant) -> None:
-        """App-auth entries skip IoTApiClient and use stored devices."""
+        """App-auth entries skip IoTApiClient and use the app API instead."""
         entry = self._create_app_auth_entry(hass)
         # No IoTApiClient mock needed - it should not be called
-        with patch(
-            "custom_components.ecoflow_energy.config_flow.IoTApiClient",
-        ) as mock_cls:
+        with (
+            patch(
+                "custom_components.ecoflow_energy.config_flow.IoTApiClient",
+            ) as mock_cls,
+            patch(
+                "custom_components.ecoflow_energy.config_flow.enhanced_login",
+                AsyncMock(return_value={"token": "t", "user_id": "uid"}),
+            ),
+            patch(
+                "custom_components.ecoflow_energy.config_flow.get_app_device_list",
+                AsyncMock(return_value=[]),
+            ),
+        ):
             result = await hass.config_entries.options.async_init(entry.entry_id)
             mock_cls.assert_not_called()
         assert result["type"] is FlowResultType.FORM
         assert result["step_id"] == "init"
+
+    async def test_options_app_auth_refreshes_device_list(
+        self, hass: HomeAssistant
+    ) -> None:
+        """App-auth options flow offers devices added after initial setup."""
+        entry = self._create_app_auth_entry(hass)
+        with (
+            patch(
+                "custom_components.ecoflow_energy.config_flow.enhanced_login",
+                AsyncMock(return_value={"token": "t", "user_id": "uid"}),
+            ) as mock_login,
+            patch(
+                "custom_components.ecoflow_energy.config_flow.get_app_device_list",
+                AsyncMock(
+                    return_value=[
+                        {
+                            "sn": "SN001",
+                            "product_name": "Delta 2 Max",
+                            "device_type": "delta",
+                            "online": 1,
+                        },
+                        {
+                            "sn": "SN002",
+                            "product_name": "DELTA 3 Max Plus",
+                            "device_type": "delta3",
+                            "online": 1,
+                        },
+                    ]
+                ),
+            ),
+        ):
+            result = await hass.config_entries.options.async_init(entry.entry_id)
+
+        mock_login.assert_awaited_once()
+        assert result["type"] is FlowResultType.FORM
+        assert result["step_id"] == "init"
+
+        options = result["data_schema"].schema[CONF_DEVICES].config["options"]
+        values = [opt["value"] for opt in options]
+        assert values == ["SN001", "SN002"]
+
+    async def test_options_app_auth_login_failure_falls_back(
+        self, hass: HomeAssistant
+    ) -> None:
+        """A failed app login keeps the options flow usable with stored devices."""
+        entry = self._create_app_auth_entry(hass)
+        with patch(
+            "custom_components.ecoflow_energy.config_flow.enhanced_login",
+            AsyncMock(side_effect=TimeoutError),
+        ):
+            result = await hass.config_entries.options.async_init(entry.entry_id)
+
+        assert result["type"] is FlowResultType.FORM
+        assert result["step_id"] == "init"
+
+        options = result["data_schema"].schema[CONF_DEVICES].config["options"]
+        assert [opt["value"] for opt in options] == ["SN001"]
 
     async def test_options_enhanced_login_validates(self, hass: HomeAssistant) -> None:
         """Enhanced login in options flow validates credentials."""

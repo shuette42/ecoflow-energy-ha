@@ -68,4 +68,7 @@ scripts/
 # Secrets (never)
 *.env
 .secrets
-probe_output_*.json
+# Probe output carries real serial numbers, user IDs and raw frames.
+# Match files with any extension and whole output directories, not just .json.
+probe_output_*
+probe_output_*/

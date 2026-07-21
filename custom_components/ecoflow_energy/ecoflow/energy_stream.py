@@ -436,6 +436,64 @@ def build_stream_backup_reserve_payload(
     return encode_field_bytes(1, bytes(header))
 
 
+def build_delta3_config_write_payload(
+    config_field: int,
+    value: int,
+    device_sn: str,
+    seq: int = 0,
+    nested: bool = False,
+) -> bytes:
+    """Build a Delta 3 ConfigWrite SET frame for the app WebSocket channel.
+
+    One frame carries exactly one changed setting: the pdata holds only the
+    field being written, the device keeps everything else untouched. The
+    header replicates the app frame so the device routes it on the /app/
+    topic - verified against hardware (ack plus readback of the new value).
+
+      1  pdata            8  cmd_func = 254   14 seq
+      2  src = 32         9  cmd_id = 17      16 payload_ver = 3
+      3  dest = 2        10  data_len         17 is_queue = 1
+      4  d_src = 1       11  need_ack = 1     25 device_sn (string)
+      5  d_dest = 1
+      7  check_type = 3
+
+    Args:
+        config_field: ConfigWrite field number of the setting.
+        value: Varint value to write (booleans as 0/1).
+        device_sn: Device serial number (required for /app/ routing).
+        seq: Sequence number (0 = auto-generate from timestamp).
+        nested: True for settings wrapped in a submessage (inner field 1).
+
+    Returns:
+        Binary protobuf payload ready to publish on the SET topic.
+    """
+    if seq == 0:
+        seq = int(time.time() * 1000) & 0x7FFFFFFF
+
+    if nested:
+        pdata = encode_field_bytes(config_field, encode_field_varint(1, value))
+    else:
+        pdata = encode_field_varint(config_field, value)
+
+    header = bytearray()
+    header.extend(encode_field_bytes(1, pdata))              # pdata
+    header.extend(encode_field_varint(2, 32))                # src = 32 (App)
+    header.extend(encode_field_varint(3, 2))                 # dest = 2
+    header.extend(encode_field_varint(4, 1))                 # d_src
+    header.extend(encode_field_varint(5, 1))                 # d_dest
+    header.extend(encode_field_varint(7, 3))                 # check_type
+    header.extend(encode_field_varint(8, 254))               # cmd_func
+    header.extend(encode_field_varint(9, 17))                # cmd_id = ConfigWrite
+    header.extend(encode_field_varint(10, len(pdata)))       # data_len
+    header.extend(encode_field_varint(11, 1))                # need_ack
+    header.extend(encode_field_varint(14, seq))              # seq
+    header.extend(encode_field_varint(16, 3))                # payload_ver
+    header.extend(encode_field_varint(17, 1))                # is_queue
+    header.extend(encode_field_bytes(25, device_sn.encode("ascii")))  # deviceSn
+
+    return encode_field_bytes(1, bytes(header))
+
+
 def build_energy_stream_deactivate_payload(seq: int = 0) -> bytes:
     """Build the payload to deactivate energy_stream_report."""
     if seq == 0:
