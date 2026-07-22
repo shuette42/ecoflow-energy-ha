@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import ssl
+import threading
 import time
 from typing import Callable
 
@@ -81,6 +82,9 @@ class EcoFlowMQTTClient:
         self._notified_connected = False
         self._last_counter_reset_time: float = 0
         self._counter_reset_interval = DEFAULT_COUNTER_RESET_INTERVAL
+        # Guards client swaps (create/connect/force_reconnect/disconnect).
+        # Reentrant: force_reconnect holds it while calling create_client.
+        self._client_lock = threading.RLock()
 
     @property
     def cert_account(self) -> str:
@@ -98,12 +102,27 @@ class EcoFlowMQTTClient:
         return self._wss_mode
 
     def update_credentials(self, account: str, password: str) -> None:
-        """Update stored credentials for next reconnect (e.g. after rc=5)."""
+        """Update stored credentials for next reconnect (e.g. after rc=5).
+
+        Also updates the live Paho client so its internal auto-reconnect
+        uses the fresh credentials instead of retrying stale ones until
+        the next force_reconnect.
+        """
         self._cert_account = account
         self._cert_password = password
+        if self.client is not None:
+            try:
+                self.client.username_pw_set(account, password)
+            except Exception as exc:
+                _LOGGER.debug("MQTT: live credential update failed: %s", exc)
 
     def create_client(self) -> bool:
         """Create and configure the Paho MQTT client."""
+        with self._client_lock:
+            return self._create_client_unlocked()
+
+    def _create_client_unlocked(self) -> bool:
+        """Create the Paho client. Caller must hold ``_client_lock``."""
         try:
             if not self._cert_account or not self._cert_password:
                 _LOGGER.error("MQTT: certificate_account or certificate_password missing")
@@ -112,34 +131,21 @@ class EcoFlowMQTTClient:
             if self._wss_mode:
                 client_id = generate_client_id(self._user_id)
                 _LOGGER.debug("WSS MQTT client (port %d)", MQTT_PORT_WSS)
-                try:
-                    self.client = mqtt.Client(
-                        mqtt.CallbackAPIVersion.VERSION2,
-                        client_id=client_id,
-                        transport="websockets",
-                        clean_session=True,
-                    )
-                except AttributeError:
-                    self.client = mqtt.Client(
-                        client_id=client_id,
-                        transport="websockets",
-                        clean_session=True,
-                    )
+                self.client = mqtt.Client(
+                    mqtt.CallbackAPIVersion.VERSION2,
+                    client_id=client_id,
+                    transport="websockets",
+                    clean_session=True,
+                )
                 self.client.ws_set_options(path=MQTT_WSS_PATH)
             else:
                 client_id = f"ecoflow_ha_{self._device_sn}"
                 _LOGGER.debug("TCP MQTT client (port %d)", MQTT_PORT_TCP)
-                try:
-                    self.client = mqtt.Client(
-                        mqtt.CallbackAPIVersion.VERSION2,
-                        client_id=client_id,
-                        clean_session=True,
-                    )
-                except AttributeError:
-                    self.client = mqtt.Client(
-                        client_id=client_id,
-                        clean_session=True,
-                    )
+                self.client = mqtt.Client(
+                    mqtt.CallbackAPIVersion.VERSION2,
+                    client_id=client_id,
+                    clean_session=True,
+                )
 
             self.client.username_pw_set(self._cert_account, self._cert_password)
             self.client.tls_set(cert_reqs=ssl.CERT_REQUIRED)
@@ -153,8 +159,15 @@ class EcoFlowMQTTClient:
             return False
 
     def _on_connect(self, client, userdata, flags, rc, properties=None):
-        """Callback on MQTT connection."""
-        if rc == 0:
+        """Callback on MQTT connection.
+
+        Under paho-mqtt 2.x VERSION2 callbacks ``rc`` is a ReasonCode object
+        (unhashable, MQTT 3.1.1 CONNACK codes mapped to MQTT 5 identifiers:
+        4 -> 134, 5 -> 135). Normalize to int first so dict lookups and
+        comparisons work for both int and ReasonCode inputs.
+        """
+        rc_val = rc.value if hasattr(rc, "value") else rc
+        if rc_val == 0:
             # Subscribe to SET reply topics (all modes) for command acknowledgement tracking
             set_reply_topic = f"/open/{self._cert_account}/{self._device_sn}/set_reply"
             client.subscribe(set_reply_topic, qos=1)
@@ -229,18 +242,26 @@ class EcoFlowMQTTClient:
                 3: "Broker unavailable",
                 4: "Bad username/password",
                 5: "Auth failed (credentials expired?)",
+                134: "Bad username/password",
+                135: "Not authorized (credentials expired?)",
             }
-            reason = rc_reasons.get(rc, "unknown error")
-            if rc == 5:
-                _LOGGER.warning("MQTT connect failed: rc=%s (%s) — scheduling credential refresh", rc, reason)
+            reason = rc_reasons.get(rc_val, "unknown error")
+            auth_failure = rc_val in (4, 5, 134, 135)
+            if auth_failure:
+                _LOGGER.warning("MQTT connect failed: rc=%s (%s) — scheduling credential refresh", rc_val, reason)
             else:
-                _LOGGER.error("MQTT connect failed: rc=%s (%s)", rc, reason)
+                _LOGGER.error("MQTT connect failed: rc=%s (%s)", rc_val, reason)
             self.connected = False
-            if rc == 5 and self._auth_error_handler:
+            if auth_failure and self._auth_error_handler:
                 self._auth_error_handler()
 
     def _on_disconnect(self, client, userdata, disconnect_flags, reason_code, properties):
-        """Callback on MQTT disconnect."""
+        """Callback on MQTT disconnect.
+
+        ``reason_code`` is a ReasonCode object under paho-mqtt 2.x VERSION2
+        callbacks — normalize to int before any comparison.
+        """
+        rc_val = reason_code.value if hasattr(reason_code, "value") else reason_code
         was_connected = self.connected
         self.connected = False
         self._notified_connected = False
@@ -249,23 +270,23 @@ class EcoFlowMQTTClient:
         duration = current_time - self.last_connect_time if self.last_connect_time > 0 else 0
         self.last_disconnect_time = current_time
 
-        if was_connected or reason_code != 0:
+        if was_connected or rc_val != 0:
             # First disconnect is normal (broker-side rotation) - only warn
             # if previous reconnect attempts are already pending (sustained failure)
-            if reason_code != 0 and self.reconnect_attempts > 0:
+            if rc_val != 0 and self.reconnect_attempts > 0:
                 _log = _LOGGER.warning
             else:
                 _log = _LOGGER.debug
             _log(
                 "MQTT disconnect: rc=%s, was_connected=%s, duration=%.1fs, attempts=%d",
-                reason_code, was_connected, duration, self.reconnect_attempts,
+                rc_val, was_connected, duration, self.reconnect_attempts,
             )
 
-        if reason_code != 0:
+        if rc_val != 0:
             self._schedule_reconnect()
 
         if self.status_handler:
-            self.status_handler("disconnected", reason_code, f"Disconnected (rc={reason_code})")
+            self.status_handler("disconnected", rc_val, f"Disconnected (rc={rc_val})")
 
     def _should_attempt_reconnect(self) -> bool:
         """Check if a reconnect attempt should be made. Never gives up permanently."""
@@ -286,6 +307,9 @@ class EcoFlowMQTTClient:
             min_delay *= 1.5
         else:
             min_delay *= 2.0
+        # Re-apply the cap: the tier multiplier must not push the effective
+        # delay beyond max_reconnect_delay.
+        min_delay = min(min_delay, self.max_reconnect_delay)
 
         return current_time - self.last_reconnect_time >= min_delay
 
@@ -300,8 +324,19 @@ class EcoFlowMQTTClient:
         """Signal that a reconnect is needed."""
         _LOGGER.debug("MQTT: reconnect scheduled — attempts: %d/%d", self.reconnect_attempts, self.max_reconnect_attempts)
 
+    # send_ping publishes JSON to the same /app/device/property/{sn} topic the
+    # client subscribes to — the broker echoes it back. Marker covers both
+    # compact and default json.dumps spellings.
+    _PING_ECHO_MARKERS = (b'{"command":"ping"', b'{"command": "ping"')
+
     def _on_message(self, client, userdata, msg):
         """Callback for incoming MQTT messages."""
+        if (
+            msg.topic == f"/app/device/property/{self._device_sn}"
+            and msg.payload.startswith(self._PING_ECHO_MARKERS)
+        ):
+            # Broker echo of our own keepalive ping — not device data
+            return
         _LOGGER.debug("MQTT msg: %s (%d bytes) for %s", msg.topic, len(msg.payload), self._device_sn)
         try:
             self.message_handler(msg.topic, msg.payload)
@@ -310,19 +345,20 @@ class EcoFlowMQTTClient:
 
     def connect(self) -> bool:
         """Establish the MQTT connection."""
-        try:
-            if self.is_connected():
+        with self._client_lock:
+            try:
+                if self.is_connected():
+                    return True
+
+                port = MQTT_PORT_WSS if self._wss_mode else MQTT_PORT_TCP
+                keepalive = DEFAULT_WSS_KEEPALIVE if self._wss_mode else DEFAULT_MQTT_KEEPALIVE
+
+                _LOGGER.debug("Connecting to %s:%d (%s)", self._mqtt_host, port, "WSS" if self._wss_mode else "TCP")
+                self.client.connect(self._mqtt_host, port, keepalive)
                 return True
-
-            port = MQTT_PORT_WSS if self._wss_mode else MQTT_PORT_TCP
-            keepalive = DEFAULT_WSS_KEEPALIVE if self._wss_mode else DEFAULT_MQTT_KEEPALIVE
-
-            _LOGGER.debug("Connecting to %s:%d (%s)", self._mqtt_host, port, "WSS" if self._wss_mode else "TCP")
-            self.client.connect(self._mqtt_host, port, keepalive)
-            return True
-        except Exception as exc:
-            _LOGGER.warning("MQTT connection error: %s", exc)
-            return False
+            except Exception as exc:
+                _LOGGER.warning("MQTT connection error: %s", exc)
+                return False
 
     def try_reconnect(self) -> bool:
         """Attempt reconnect if disconnected and backoff has elapsed."""
@@ -345,41 +381,53 @@ class EcoFlowMQTTClient:
 
         Recreates the Paho client instead of manipulating private attributes.
         No blocking sleep — the old connection is torn down synchronously.
+
+        Guarded by a non-blocking lock: overlapping calls (watchdog +
+        credential refresh run in separate executor threads) would orphan
+        a live Paho client with a running network thread. The second
+        caller skips instead.
         """
-        _LOGGER.debug("Force-reconnect: disconnecting and recreating client...")
-        try:
-            self.client.loop_stop()
-        except Exception:
-            pass
-        try:
-            self.client.disconnect()
-        except Exception:
-            pass
-        self.connected = False
-        self.client = None
-
-        # Recreate the client (generates new ClientID for WSS)
-        if not self.create_client():
-            _LOGGER.error("Force-reconnect: client recreation failed")
+        if not self._client_lock.acquire(blocking=False):
+            _LOGGER.debug("Force-reconnect: skipped — another reconnect already in flight")
             return False
-
         try:
-            port = MQTT_PORT_WSS if self._wss_mode else MQTT_PORT_TCP
-            keepalive = DEFAULT_WSS_KEEPALIVE if self._wss_mode else DEFAULT_MQTT_KEEPALIVE
-            self.client.connect(self._mqtt_host, port, keepalive)
-            self.client.loop_start()
-            _LOGGER.debug("Force-reconnect: success at %s:%s (%s)", self._mqtt_host, port, "WSS" if self._wss_mode else "TCP")
-            return True
-        except Exception as exc:
-            _LOGGER.error("Force-reconnect failed: %s", exc)
-            return False
+            _LOGGER.debug("Force-reconnect: disconnecting and recreating client...")
+            try:
+                self.client.loop_stop()
+            except Exception:
+                pass
+            try:
+                self.client.disconnect()
+            except Exception:
+                pass
+            self.connected = False
+            self.client = None
+
+            # Recreate the client (generates new ClientID for WSS)
+            if not self._create_client_unlocked():
+                _LOGGER.error("Force-reconnect: client recreation failed")
+                return False
+
+            try:
+                port = MQTT_PORT_WSS if self._wss_mode else MQTT_PORT_TCP
+                keepalive = DEFAULT_WSS_KEEPALIVE if self._wss_mode else DEFAULT_MQTT_KEEPALIVE
+                self.client.connect(self._mqtt_host, port, keepalive)
+                self.client.loop_start()
+                _LOGGER.debug("Force-reconnect: success at %s:%s (%s)", self._mqtt_host, port, "WSS" if self._wss_mode else "TCP")
+                return True
+            except Exception as exc:
+                _LOGGER.error("Force-reconnect failed: %s", exc)
+                return False
+        finally:
+            self._client_lock.release()
 
     def disconnect(self) -> None:
         """Disconnect the MQTT client."""
-        if self.client:
-            self.client.loop_stop()
-            self.client.disconnect()
-            self.connected = False
+        with self._client_lock:
+            if self.client:
+                self.client.loop_stop()
+                self.client.disconnect()
+                self.connected = False
 
     def start_loop(self) -> None:
         """Start the Paho network loop."""

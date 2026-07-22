@@ -178,21 +178,43 @@ class TestShouldAttemptReconnect:
         assert client.reconnect_attempts == 0  # reset happened
 
     def test_tier_multipliers(self):
-        """Backoff tiers: attempts 0-3 = 1x, 4-6 = 1.5x, 7+ = 2x."""
-        client = _make_client(base_reconnect_delay=5)
+        """Backoff tiers: attempts 0-3 = 1x, 4-6 = 1.5x, 7+ = 2x (below cap)."""
+        # base=1 keeps the tier-2 delay below the 60s cap: 1 * 2^4 * 1.5 = 24
+        client = _make_client(base_reconnect_delay=1, max_reconnect_delay=60)
 
         # Tier 1 (attempts 0-3): base delay
         client.reconnect_attempts = 3
         client.last_reconnect_time = time.monotonic() - 100
         assert client._should_attempt_reconnect() is True
 
-        # Tier 2 (attempts 4-6): 1.5x delay
-        client.reconnect_attempts = 5
+        # Tier 2 (attempts 4-6): 1.5x delay (16 * 1.5 = 24, below cap)
+        client.reconnect_attempts = 4
         base = client._get_reconnect_delay()
+        assert base * 1.5 < client.max_reconnect_delay
         client.last_reconnect_time = time.monotonic() - (base * 1.5 - 1)
         assert client._should_attempt_reconnect() is False
         client.last_reconnect_time = time.monotonic() - (base * 1.5 + 1)
         assert client._should_attempt_reconnect() is True
+
+    def test_effective_delay_never_exceeds_cap(self):
+        """Tier multipliers must not push the effective delay past max_reconnect_delay."""
+        client = _make_client(base_reconnect_delay=5, max_reconnect_delay=60)
+        client.reconnect_attempts = 7  # tier 3: 2x multiplier
+        client.last_reconnect_time = 1000.0
+
+        # 61s elapsed: must be allowed (uncapped 2x would demand 120s)
+        with patch(
+            "ecoflow_energy.ecoflow.cloud_mqtt.time.monotonic",
+            return_value=1000.0 + 61,
+        ):
+            assert client._should_attempt_reconnect() is True
+
+        # 59s elapsed: still blocked (cap is 60, not less)
+        with patch(
+            "ecoflow_energy.ecoflow.cloud_mqtt.time.monotonic",
+            return_value=1000.0 + 59,
+        ):
+            assert client._should_attempt_reconnect() is False
 
 
 class TestTryReconnect:
@@ -250,6 +272,87 @@ class TestForceReconnect:
         assert result is False
 
 
+class TestForceReconnectLock:
+    def test_force_reconnect_skipped_while_another_in_flight(self):
+        """A second force_reconnect from another thread is skipped, not stacked."""
+        import threading
+
+        client = _make_client()
+        old_paho = MagicMock()
+        client.client = old_paho
+
+        acquired = threading.Event()
+        release = threading.Event()
+
+        def hold_lock():
+            client._client_lock.acquire()
+            acquired.set()
+            release.wait(5)
+            client._client_lock.release()
+
+        holder = threading.Thread(target=hold_lock)
+        holder.start()
+        assert acquired.wait(5)
+        try:
+            result = client.force_reconnect()
+        finally:
+            release.set()
+            holder.join(5)
+
+        assert result is False
+        # The live client must not have been torn down by the skipped call
+        old_paho.loop_stop.assert_not_called()
+        old_paho.disconnect.assert_not_called()
+        assert client.client is old_paho
+
+
+class TestPingEchoFilter:
+    def _msg(self, topic: str, payload: bytes):
+        msg = MagicMock()
+        msg.topic = topic
+        msg.payload = payload
+        return msg
+
+    def test_ping_echo_dropped(self):
+        """The broker echo of our own ping must not reach the message handler."""
+        handler = MagicMock()
+        client = _make_client(message_handler=handler)
+
+        payload = b'{"command": "ping", "value": 123, "deviceSn": "TEST1234SN"}'
+        client._on_message(None, None, self._msg("/app/device/property/TEST1234SN", payload))
+
+        handler.assert_not_called()
+
+    def test_ping_echo_compact_spelling_dropped(self):
+        handler = MagicMock()
+        client = _make_client(message_handler=handler)
+
+        payload = b'{"command":"ping","value":123,"deviceSn":"TEST1234SN"}'
+        client._on_message(None, None, self._msg("/app/device/property/TEST1234SN", payload))
+
+        handler.assert_not_called()
+
+    def test_proto_payload_still_dispatched(self):
+        """Binary device payloads on the property topic still reach the handler."""
+        handler = MagicMock()
+        client = _make_client(message_handler=handler)
+
+        payload = b"\x0a\x12\x08\x01"
+        client._on_message(None, None, self._msg("/app/device/property/TEST1234SN", payload))
+
+        handler.assert_called_once_with("/app/device/property/TEST1234SN", payload)
+
+    def test_ping_marker_on_other_topic_not_dropped(self):
+        """The filter is topic-scoped — same marker on another topic passes through."""
+        handler = MagicMock()
+        client = _make_client(message_handler=handler)
+
+        payload = b'{"command": "ping"}'
+        client._on_message(None, None, self._msg("/open/acct/TEST1234SN/quota", payload))
+
+        handler.assert_called_once()
+
+
 class TestDisconnect:
     def test_disconnect_stops_loop(self):
         client = _make_client()
@@ -294,6 +397,41 @@ class TestOnDisconnect:
             client._on_disconnect(mock_paho, None, None, 1, None)
             mock_sched.assert_called_once()
 
+    def test_on_disconnect_reasoncode_normal(self):
+        """ReasonCode 0 (normal disconnection) does not schedule a reconnect."""
+        from paho.mqtt.packettypes import PacketTypes
+        from paho.mqtt.reasoncodes import ReasonCode
+
+        client = _make_client()
+        client.connected = True
+        mock_paho = MagicMock()
+        client.client = mock_paho
+
+        rc = ReasonCode(PacketTypes.DISCONNECT)  # Normal disconnection (0)
+        with patch.object(client, "_schedule_reconnect") as mock_sched:
+            client._on_disconnect(mock_paho, None, None, rc, None)
+            mock_sched.assert_not_called()
+        assert client.connected is False
+
+    def test_on_disconnect_reasoncode_error_schedules_reconnect(self):
+        """A non-zero ReasonCode schedules a reconnect and does not raise."""
+        from paho.mqtt.packettypes import PacketTypes
+        from paho.mqtt.reasoncodes import ReasonCode
+
+        status_handler = MagicMock()
+        client = _make_client(status_handler=status_handler)
+        client.connected = True
+        mock_paho = MagicMock()
+        client.client = mock_paho
+
+        rc = ReasonCode(PacketTypes.DISCONNECT, identifier=135)  # Not authorized
+        with patch.object(client, "_schedule_reconnect") as mock_sched:
+            client._on_disconnect(mock_paho, None, None, rc, None)
+            mock_sched.assert_called_once()
+        # Status handler receives the normalized int, not the ReasonCode object
+        status_handler.assert_called_once()
+        assert status_handler.call_args[0][1] == 135
+
 
 # ===========================================================================
 # Auth Error Handler (rc=5 credential refresh)
@@ -325,17 +463,78 @@ class TestAuthErrorHandler:
         handler.assert_not_called()
         assert client.connected is True
 
-    def test_auth_error_handler_not_called_on_other_rc(self):
-        """Non-5 error codes do NOT call auth_error_handler."""
+    def test_auth_error_handler_called_on_rc4(self):
+        """rc=4 (bad username/password) also triggers the auth_error_handler."""
         handler = MagicMock()
         client = _make_client(auth_error_handler=handler)
         mock_paho = MagicMock()
         client.client = mock_paho
 
-        for rc in [1, 2, 3, 4]:
+        client._on_connect(mock_paho, None, None, 4)
+
+        handler.assert_called_once()
+        assert client.connected is False
+
+    def test_auth_error_handler_not_called_on_other_rc(self):
+        """Non-auth error codes do NOT call auth_error_handler."""
+        handler = MagicMock()
+        client = _make_client(auth_error_handler=handler)
+        mock_paho = MagicMock()
+        client.client = mock_paho
+
+        for rc in [1, 2, 3]:
             handler.reset_mock()
             client._on_connect(mock_paho, None, None, rc)
             handler.assert_not_called()
+
+    def test_auth_error_handler_called_on_reasoncode_135(self):
+        """paho 2.x VERSION2 delivers ReasonCode objects — 135 (Not authorized)
+        must fire the auth-error handler without raising (ReasonCode is unhashable)."""
+        from paho.mqtt.packettypes import PacketTypes
+        from paho.mqtt.reasoncodes import ReasonCode
+
+        handler = MagicMock()
+        client = _make_client(auth_error_handler=handler)
+        mock_paho = MagicMock()
+        client.client = mock_paho
+
+        rc = ReasonCode(PacketTypes.CONNACK, identifier=135)
+        client._on_connect(mock_paho, None, None, rc, None)
+
+        handler.assert_called_once()
+        assert client.connected is False
+
+    def test_auth_error_handler_called_on_reasoncode_134(self):
+        """ReasonCode 134 (bad user name or password) fires the auth-error handler."""
+        from paho.mqtt.packettypes import PacketTypes
+        from paho.mqtt.reasoncodes import ReasonCode
+
+        handler = MagicMock()
+        client = _make_client(auth_error_handler=handler)
+        mock_paho = MagicMock()
+        client.client = mock_paho
+
+        rc = ReasonCode(PacketTypes.CONNACK, identifier=134)
+        client._on_connect(mock_paho, None, None, rc, None)
+
+        handler.assert_called_once()
+        assert client.connected is False
+
+    def test_connect_success_with_reasoncode_0(self):
+        """ReasonCode Success (0) is treated as a successful connect."""
+        from paho.mqtt.packettypes import PacketTypes
+        from paho.mqtt.reasoncodes import ReasonCode
+
+        handler = MagicMock()
+        client = _make_client(auth_error_handler=handler, subscribe_data=False)
+        mock_paho = MagicMock()
+        client.client = mock_paho
+
+        rc = ReasonCode(PacketTypes.CONNACK)  # Success (0)
+        client._on_connect(mock_paho, None, None, rc, None)
+
+        handler.assert_not_called()
+        assert client.connected is True
 
     def test_no_handler_on_rc5_is_safe(self):
         """rc=5 without handler does not crash."""
@@ -361,3 +560,19 @@ class TestUpdateCredentials:
 
         assert client._cert_account == "new_account"
         assert client._cert_password == "new_password"
+
+    def test_update_credentials_propagates_to_live_client(self):
+        """A live Paho client gets the new credentials for its auto-reconnect."""
+        client = _make_client()
+        mock_paho = MagicMock()
+        client.client = mock_paho
+
+        client.update_credentials("new_account", "new_password")
+
+        mock_paho.username_pw_set.assert_called_once_with("new_account", "new_password")
+
+    def test_update_credentials_without_client_is_safe(self):
+        client = _make_client()
+        client.client = None
+        client.update_credentials("new_account", "new_password")  # must not raise
+        assert client._cert_account == "new_account"
