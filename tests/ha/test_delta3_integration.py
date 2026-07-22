@@ -93,10 +93,10 @@ class TestDelta3EndToEnd:
 
         with (
             patch(
-                "custom_components.ecoflow_energy.coordinator.IoTApiClient",
+                "custom_components.ecoflow_energy.coordinator.setup.IoTApiClient",
             ) as iot_cls,
             patch(
-                "custom_components.ecoflow_energy.coordinator.EcoFlowHTTPQuota",
+                "custom_components.ecoflow_energy.coordinator.setup.EcoFlowHTTPQuota",
             ) as http_cls,
         ):
             iot = iot_cls.return_value
