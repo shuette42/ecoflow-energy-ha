@@ -1273,7 +1273,7 @@ class TestReconfigureFlow:
             context={"source": SOURCE_RECONFIGURE, "entry_id": entry.entry_id},
         )
         with patch(
-            "custom_components.ecoflow_energy.config_flow.IoTApiClient",
+            "custom_components.ecoflow_energy.config_flow_reconfigure.IoTApiClient",
         ) as mock_cls:
             mock_cls.return_value.get_mqtt_credentials = AsyncMock(return_value=None)
             result = await hass.config_entries.flow.async_configure(
@@ -1291,7 +1291,7 @@ class TestReconfigureFlow:
             context={"source": SOURCE_RECONFIGURE, "entry_id": entry.entry_id},
         )
         with patch(
-            "custom_components.ecoflow_energy.config_flow.IoTApiClient",
+            "custom_components.ecoflow_energy.config_flow_reconfigure.IoTApiClient",
         ) as mock_cls:
             mock_cls.return_value.get_mqtt_credentials = AsyncMock(
                 return_value=MOCK_MQTT_CREDENTIALS
@@ -1313,7 +1313,7 @@ class TestReconfigureFlow:
             context={"source": SOURCE_RECONFIGURE, "entry_id": entry.entry_id},
         )
         with patch(
-            "custom_components.ecoflow_energy.config_flow.IoTApiClient",
+            "custom_components.ecoflow_energy.config_flow_reconfigure.IoTApiClient",
         ) as mock_cls:
             mock_cls.return_value.get_mqtt_credentials = AsyncMock(
                 return_value=MOCK_MQTT_CREDENTIALS
@@ -1326,7 +1326,7 @@ class TestReconfigureFlow:
         assert result["step_id"] == "reconfigure_enhanced"
 
         with patch(
-            "custom_components.ecoflow_energy.config_flow.enhanced_login",
+            "custom_components.ecoflow_energy.config_flow_reconfigure.enhanced_login",
             new_callable=AsyncMock,
             return_value={"token": "new_jwt", "user_id": "new_uid"},
         ):
@@ -1348,7 +1348,7 @@ class TestReconfigureFlow:
             context={"source": SOURCE_RECONFIGURE, "entry_id": entry.entry_id},
         )
         with patch(
-            "custom_components.ecoflow_energy.config_flow.IoTApiClient",
+            "custom_components.ecoflow_energy.config_flow_reconfigure.IoTApiClient",
         ) as mock_cls:
             mock_cls.return_value.get_mqtt_credentials = AsyncMock(
                 return_value=MOCK_MQTT_CREDENTIALS
@@ -1359,7 +1359,7 @@ class TestReconfigureFlow:
             )
 
         with patch(
-            "custom_components.ecoflow_energy.config_flow.enhanced_login",
+            "custom_components.ecoflow_energy.config_flow_reconfigure.enhanced_login",
             new_callable=AsyncMock,
             return_value=None,
         ):
@@ -1379,7 +1379,7 @@ class TestReconfigureFlow:
             context={"source": SOURCE_RECONFIGURE, "entry_id": entry.entry_id},
         )
         with patch(
-            "custom_components.ecoflow_energy.config_flow.IoTApiClient",
+            "custom_components.ecoflow_energy.config_flow_reconfigure.IoTApiClient",
         ) as mock_cls:
             mock_cls.return_value.get_mqtt_credentials = AsyncMock(
                 side_effect=aiohttp.ClientError("Connection failed")
@@ -1525,7 +1525,7 @@ class TestAppAuthReconfigureFlow:
             context={"source": SOURCE_RECONFIGURE, "entry_id": entry.entry_id},
         )
         with patch(
-            "custom_components.ecoflow_energy.config_flow.enhanced_login",
+            "custom_components.ecoflow_energy.config_flow_reconfigure.enhanced_login",
             new_callable=AsyncMock,
             return_value={"token": "new_jwt", "user_id": "new_uid"},
         ):
@@ -1546,7 +1546,7 @@ class TestAppAuthReconfigureFlow:
             context={"source": SOURCE_RECONFIGURE, "entry_id": entry.entry_id},
         )
         with patch(
-            "custom_components.ecoflow_energy.config_flow.enhanced_login",
+            "custom_components.ecoflow_energy.config_flow_reconfigure.enhanced_login",
             new_callable=AsyncMock,
             return_value=None,
         ):
@@ -1573,7 +1573,7 @@ EXCEPTION_ERROR_CASES = [
 # collaborators.
 FLOW_STEP_MODULE = {
     SOURCE_REAUTH: "custom_components.ecoflow_energy.config_flow_reauth",
-    SOURCE_RECONFIGURE: "custom_components.ecoflow_energy.config_flow",
+    SOURCE_RECONFIGURE: "custom_components.ecoflow_energy.config_flow_reconfigure",
 }
 
 
