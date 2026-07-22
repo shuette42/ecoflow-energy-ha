@@ -11,7 +11,10 @@ Reference: EcoFlow IoT Developer Platform — DELTA 2 MAX section.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
+
+_LOGGER = logging.getLogger(__name__)
 
 from .delta import _DELTA_ENUM_FIELDS
 
@@ -250,11 +253,16 @@ def parse_delta_http_quota(quota_data: dict) -> dict[str, Any]:
     if "solar2_mppt_temp_c" in result:
         result["solar2_mppt_temp_c"] /= 10.0
 
-    # Enum state mappings (numeric -> string)
+    # Enum state mappings (numeric -> string). Unknown values (e.g. new
+    # firmware states) are dropped: HA enum sensors raise ValueError for
+    # any state not in the declared options list.
     for key, mapping in _DELTA_ENUM_FIELDS.items():
         if key in result:
             iv = int(result[key])
             if iv in mapping:
                 result[key] = mapping[iv]
+            else:
+                _LOGGER.debug("Unknown enum value for %s: %r (dropped)", key, result[key])
+                del result[key]
 
     return result
