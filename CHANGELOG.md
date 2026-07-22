@@ -20,6 +20,7 @@ All notable changes to this project will be documented in this file.
 - Ah battery capacity counters are disabled diagnostic entities. (beta.2)
 
 ### Fixed
+- App API devices reported with an unknown device type are now classified locally using their product name or supported serial-number prefix. (beta.10)
 - Entities no longer stay unavailable indefinitely after a Home Assistant restart that happens while their device is between transmissions. When a device (for example an idle Delta 3) was silent during startup, its entities were written as unavailable and the later recovery was filtered out by the state-write deduplication if the sensor value had not changed, so they never came back without a manual reload. (beta.9)
 - The PowerOcean battery state sensor (charging/discharging/standby) is now stable through short power swings around zero. At dawn and dusk, when solar production and house load balance, the sensor could change state dozens of times a day. A state change now has to persist for ten minutes before the sensor follows it; sustained changes still come through reliably. (beta.8)
 - The Delta 2 Max AC Charge Speed slider now reads and writes the actually configured charging speed. It previously displayed the rated maximum (2400 W), never picked up changes made in the EcoFlow app, and every value written from Home Assistant effectively ended up at 400 W because the command hardcoded the governing parameter. (beta.7)

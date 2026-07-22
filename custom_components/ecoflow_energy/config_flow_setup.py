@@ -23,6 +23,7 @@ from .const import (
     CONF_SECRET_KEY,
     CONF_USER_ID,
     DEVICE_TYPE_DISPLAY_NAMES,
+    DEVICE_TYPE_UNKNOWN,
     MODE_ENHANCED,
     MODE_STANDARD,
     get_device_type,
@@ -312,7 +313,9 @@ class SetupFlowMixin:
                 continue
             product_name = dev.get("product_name", "Unknown")
             online = dev.get("online", 0)
-            device_type = dev.get("device_type", get_device_type(product_name, sn))
+            device_type = dev.get("device_type")
+            if not device_type or device_type == DEVICE_TYPE_UNKNOWN:
+                device_type = get_device_type(product_name, sn)
             devices.append(
                 {
                     "sn": sn,
