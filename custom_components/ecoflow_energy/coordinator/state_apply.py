@@ -181,16 +181,17 @@ class StateApplyMixin:
             return
         self._energy_integrator.set_total(key, total_kwh)
 
-    # Battery state derivation parameters (#63).
+    # Battery state derivation parameters (#63, #50).
     # These are class-level so tests can override without touching instance state.
-    BATT_WINDOW_S = 180       # 3-minute rolling window
+    BATT_WINDOW_S = 120       # 2-minute rolling window (confirmation does the rest)
     BATT_MIN_SAMPLES = 10     # minimum samples before derivation is trusted
     BATT_OUTER_W = 150        # |avg| > 150W -> charging/discharging
     BATT_INNER_W = 50         # |avg| < 50W  -> standby
     BATT_MIN_HOLD_S = 120     # min seconds a state must be held before it can change
+    BATT_CONFIRM_S = 600      # a diverging candidate must persist this long to commit
 
     def _derive_battery_state(self) -> None:
-        """Derive battery charge/discharge state from a rolling-average power (#63).
+        """Derive battery charge/discharge state from a rolling-average power (#63, #50).
 
         The raw EMS field bp_chg_dsg_sta reports the controller MODE, not the
         physical state, so we override it from signed batt_w. Using the
@@ -203,9 +204,16 @@ class StateApplyMixin:
           2. Drop samples older than BATT_WINDOW_S seconds.
           3. Compute the mean over the buffer.
           4. Apply thresholds to the mean, not the raw sample.
-          5. A deadband between BATT_INNER_W and BATT_OUTER_W keeps prev state.
+          5. A deadband between BATT_INNER_W and BATT_OUTER_W keeps prev state
+             (and deliberately leaves any pending candidate untouched, so a
+             brief dip into the deadband does not restart the confirmation).
           6. A transition requires the previous state to have been held for
              at least BATT_MIN_HOLD_S seconds.
+          7. Confirmation gate: a candidate state that differs from the
+             previous state must persist for BATT_CONFIRM_S seconds before
+             the change is committed. Only the average returning to the
+             previous state's band drops the pending candidate. The very
+             first derived state (no previous state) commits immediately.
 
         Prefers signed `batt_w` when available, falls back to the derived
         charge/discharge power split for HTTP-only paths that never expose
@@ -242,22 +250,51 @@ class StateApplyMixin:
             return  # deadband: keep previous state
 
         if derived == prev:
+            # Settled back into the previous state's band: drop any pending
+            # candidate so a later divergence starts a fresh confirmation.
+            self._batt_pending_state = None
             return
 
         hold_elapsed = now_mono - self._batt_state_changed_at
         if prev is not None and hold_elapsed < self.BATT_MIN_HOLD_S:
             return
 
+        if prev is not None:
+            # Confirmation gate (#50): the diverging candidate must persist
+            # BATT_CONFIRM_S before the transition commits. Deadband samples
+            # neither reset nor clear the pending timer (noreset semantics).
+            if self._batt_pending_state != derived:
+                self._batt_pending_state = derived
+                self._batt_pending_since = now_mono
+                _LOGGER.debug(
+                    "Battery state for %s: avg(%ds)=%.1fW pending %s "
+                    "(was %s, commit in %ds, n=%d)",
+                    self.device_sn,
+                    self.BATT_WINDOW_S,
+                    avg,
+                    derived,
+                    prev,
+                    self.BATT_CONFIRM_S,
+                    len(self._batt_w_samples),
+                )
+                return
+            confirm_elapsed = now_mono - self._batt_pending_since
+            if confirm_elapsed < self.BATT_CONFIRM_S:
+                return
+            self._batt_pending_state = None
+
         self._device_data["batt_charge_discharge_state"] = derived
         self._batt_state_changed_at = now_mono
         _LOGGER.debug(
-            "Battery state for %s: avg(%ds)=%.1fW -> %s (was %s, held %.0fs, n=%d)",
+            "Battery state for %s: avg(%ds)=%.1fW -> %s "
+            "(was %s, held %.0fs, confirmed %.0fs, n=%d)",
             self.device_sn,
             self.BATT_WINDOW_S,
             avg,
             derived,
             prev,
             hold_elapsed,
+            now_mono - self._batt_pending_since if prev is not None else 0.0,
             len(self._batt_w_samples),
         )
 

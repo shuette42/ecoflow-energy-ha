@@ -90,6 +90,29 @@ def _feed_samples(
             coordinator._apply_data({"batt_w": float(v)})
 
 
+def _feed_timeline(
+    coordinator,
+    points: list[tuple[float, float]],
+    start_ts: float = 1000.0,
+) -> list[str]:
+    """Feed (offset_seconds, batt_w) points through _apply_data with mocked time.
+
+    Returns the sequence of distinct battery states observed after each
+    sample (deduplicated), so tests can assert on the transition history.
+    """
+    states: list[str] = []
+    with patch(
+        "custom_components.ecoflow_energy.coordinator.time.monotonic"
+    ) as mock_mono:
+        for offset, v in points:
+            mock_mono.return_value = start_ts + offset
+            coordinator._apply_data({"batt_w": float(v)})
+            s = coordinator.device_data.get("batt_charge_discharge_state")
+            if s and (not states or states[-1] != s):
+                states.append(s)
+    return states
+
+
 # Real PowerOcean batt_w timeline sampled from the Prod Raspberry Pi on
 # 2026-04-20 between 06:45 and 07:00 UTC (15 min). The old instantaneous
 # logic produced 8 state flips across this window; the rolling-average
@@ -2557,6 +2580,191 @@ class TestApplyData:
         # Old logic produced 8+ in the same window.
         assert len(transitions) <= 3, f"Expected <=3 transitions, got: {transitions}"
         assert transitions  # must have derived at least one state
+
+    # -------------------------------------------------------------------
+    # Confirmation-time gate (#50): a diverging candidate must persist
+    # BATT_CONFIRM_S before the state commits. Synthetic sequences modeled
+    # on real Prod flip classes (dawn oscillation, cloud swing, load
+    # cycling) with relative times and rounded values.
+    # -------------------------------------------------------------------
+
+    async def test_battery_confirm_dawn_oscillation_no_flip(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Dawn pattern: batt_w oscillates within +-150W around zero for
+        several minutes. No candidate persists BATT_CONFIRM_S, so the
+        state never leaves discharging."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        points: list[tuple[float, float]] = []
+        # Bootstrap: steady discharge (first derived state commits)
+        points += [(i * 10.0, -300.0) for i in range(15)]           # t=0..140
+        # Oscillation around zero for ~500s (< BATT_CONFIRM_S)
+        for i in range(50):                                          # t=150..640
+            points.append((150.0 + i * 10.0, 140.0 if i % 2 == 0 else -140.0))
+        # Back to steady discharge (candidate dropped via derived == prev)
+        points += [(650.0 + i * 10.0, -300.0) for i in range(12)]    # t=650..760
+        states = _feed_timeline(coordinator, points)
+        assert states == ["discharging"], f"Unexpected flips: {states}"
+
+    async def test_battery_confirm_cloud_swing_no_flip(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Cloud pattern: a multi-kW swing from discharge to charge that
+        lasts under BATT_CONFIRM_S does not commit a transition."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        points: list[tuple[float, float]] = []
+        points += [(i * 10.0, -400.0) for i in range(15)]            # t=0..140
+        # Ramp -400W -> +1700W over 300s, then hold +1700W for ~180s
+        for i in range(30):                                          # t=150..440
+            points.append((150.0 + i * 10.0, -400.0 + (i + 1) * 70.0))
+        points += [(460.0 + i * 10.0, 1700.0) for i in range(19)]    # t=460..640
+        states = _feed_timeline(coordinator, points)
+        assert states == ["discharging"], f"Unexpected flips: {states}"
+
+    async def test_battery_confirm_load_cycling_no_flip(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Load-cycling pattern: a ~90s -1700W appliance burst inside a
+        charging phase does not flip the state."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        points: list[tuple[float, float]] = []
+        points += [(i * 10.0, 1000.0) for i in range(15)]            # t=0..140
+        points += [(150.0 + i * 10.0, -1700.0) for i in range(10)]   # t=150..240
+        points += [(250.0 + i * 10.0, 600.0) for i in range(26)]     # t=250..500
+        states = _feed_timeline(coordinator, points)
+        assert states == ["charging"], f"Unexpected flips: {states}"
+
+    async def test_battery_confirm_sustained_change_commits(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """A sustained regime change commits after BATT_CONFIRM_S and is
+        not swallowed."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        points: list[tuple[float, float]] = []
+        points += [(i * 10.0, 900.0) for i in range(15)]             # t=0..140
+        points += [(150.0 + i * 10.0, -900.0) for i in range(67)]    # t=150..810
+        _feed_timeline(coordinator, points)
+        # Candidate registered at ~t=220 (first avg < -150 past hold);
+        # 600s not yet elapsed at t=810 -> still charging.
+        assert coordinator.device_data["batt_charge_discharge_state"] == "charging"
+        # One more sample past the confirmation window -> commit.
+        _feed_timeline(coordinator, [(0.0, -900.0)], start_ts=1000.0 + 830.0)
+        assert coordinator.device_data["batt_charge_discharge_state"] == "discharging"
+
+    async def test_battery_confirm_deadband_does_not_reset_timer(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """noreset semantics: while a candidate is pending, a dip of the
+        average into the deadband keeps the confirmation timer running.
+        The commit happens BATT_CONFIRM_S after the candidate first
+        appeared, not after the deadband excursion."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        points: list[tuple[float, float]] = []
+        points += [(i * 10.0, 0.0) for i in range(15)]               # t=0..140 standby
+        points += [(150.0 + i * 10.0, 900.0) for i in range(7)]      # t=150..210 candidate
+        # Deadband excursion: window average settles at 100W (50..150)
+        points += [(220.0 + i * 10.0, 100.0) for i in range(13)]     # t=220..340
+        # Candidate band again until just before the 600s confirmation
+        points += [(350.0 + i * 10.0, 900.0) for i in range(46)]     # t=350..800
+        _feed_timeline(coordinator, points)
+        # Pending since ~t=210; at t=800 confirmation not yet elapsed.
+        assert coordinator.device_data["batt_charge_discharge_state"] == "standby"
+        # t=820 -> more than 600s since the candidate appeared -> commit,
+        # proving the deadband excursion did not restart the timer.
+        _feed_timeline(coordinator, [(0.0, 900.0)], start_ts=1000.0 + 820.0)
+        assert coordinator.device_data["batt_charge_discharge_state"] == "charging"
+
+    async def test_battery_confirm_return_to_prev_drops_pending(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Returning to the previous state's band drops the pending
+        candidate; a later candidate starts a fresh confirmation timer."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        points: list[tuple[float, float]] = []
+        points += [(i * 10.0, 0.0) for i in range(15)]               # t=0..140 standby
+        points += [(150.0 + i * 10.0, 900.0) for i in range(16)]     # t=150..300 candidate
+        points += [(310.0 + i * 10.0, 0.0) for i in range(16)]       # t=310..460 back to standby
+        _feed_timeline(coordinator, points)
+        assert coordinator._batt_pending_state is None
+        # Fresh candidate from t=470; old timer (started ~t=210) would
+        # have committed at ~t=810 - the state must still be standby well
+        # past that point.
+        points_d = [(470.0 + i * 10.0, 900.0) for i in range(60)]    # t=470..1060
+        _feed_timeline(coordinator, points_d)
+        assert coordinator.device_data["batt_charge_discharge_state"] == "standby"
+        # The fresh timer commits ~600s after the new candidate appeared.
+        points_e = [(1070.0 + i * 10.0, 900.0) for i in range(9)]    # t=1070..1150
+        _feed_timeline(coordinator, points_e)
+        assert coordinator.device_data["batt_charge_discharge_state"] == "charging"
+
+    async def test_battery_confirm_first_state_commits_immediately(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """First derived state (no previous state) commits without
+        confirmation delay."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        _feed_samples(coordinator, [-900.0] * 10)
+        assert coordinator.device_data["batt_charge_discharge_state"] == "discharging"
+        assert coordinator._batt_pending_state is None
+
+    async def test_battery_confirm_hold_gate_still_active(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Within BATT_MIN_HOLD_S after a confirmed commit, no new
+        transition starts - the hold gate blocks even candidate
+        registration."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        points: list[tuple[float, float]] = []
+        points += [(i * 10.0, 900.0) for i in range(15)]             # t=0..140 charging
+        points += [(150.0 + i * 10.0, -900.0) for i in range(69)]    # t=150..830 confirm+commit
+        _feed_timeline(coordinator, points)
+        assert coordinator.device_data["batt_charge_discharge_state"] == "discharging"
+        # Strong opposite swing right after the commit (t=840..930, within
+        # the 120s hold window) -> blocked, and no pending timer starts.
+        swing = [(840.0 + i * 10.0, 900.0) for i in range(10)]       # t=840..930
+        _feed_timeline(coordinator, swing)
+        assert coordinator.device_data["batt_charge_discharge_state"] == "discharging"
+        assert coordinator._batt_pending_state is None
 
     async def test_integrate_energy_prefers_api_total(
         self,
