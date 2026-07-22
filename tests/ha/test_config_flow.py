@@ -511,7 +511,7 @@ class TestOptionsFlow:
         """Options flow shows init form with mode and devices."""
         entry = self._create_standard_entry(hass)
         with patch(
-            "custom_components.ecoflow_energy.config_flow.IoTApiClient",
+            "custom_components.ecoflow_energy.config_flow_options.IoTApiClient",
         ) as mock_cls:
             mock_cls.return_value.get_device_list = AsyncMock(return_value=[
                 {"sn": "SN001", "productName": "Delta 2 Max", "online": 1},
@@ -524,7 +524,7 @@ class TestOptionsFlow:
         """Keeping Standard Mode saves options directly."""
         entry = self._create_standard_entry(hass)
         with patch(
-            "custom_components.ecoflow_energy.config_flow.IoTApiClient",
+            "custom_components.ecoflow_energy.config_flow_options.IoTApiClient",
         ) as mock_cls:
             mock_cls.return_value.get_device_list = AsyncMock(return_value=[
                 {"sn": "SN001", "productName": "Delta 2 Max", "online": 1},
@@ -542,7 +542,7 @@ class TestOptionsFlow:
         """Switching from Standard to Enhanced shows enhanced credentials form."""
         entry = self._create_standard_entry(hass)
         with patch(
-            "custom_components.ecoflow_energy.config_flow.IoTApiClient",
+            "custom_components.ecoflow_energy.config_flow_options.IoTApiClient",
         ) as mock_cls:
             mock_cls.return_value.get_device_list = AsyncMock(return_value=[
                 {"sn": "SN001", "productName": "Delta 2 Max", "online": 1},
@@ -559,7 +559,7 @@ class TestOptionsFlow:
         """Selecting no devices shows error."""
         entry = self._create_standard_entry(hass)
         with patch(
-            "custom_components.ecoflow_energy.config_flow.IoTApiClient",
+            "custom_components.ecoflow_energy.config_flow_options.IoTApiClient",
         ) as mock_cls:
             mock_cls.return_value.get_device_list = AsyncMock(return_value=[
                 {"sn": "SN001", "productName": "Delta 2 Max", "online": 1},
@@ -578,7 +578,7 @@ class TestOptionsFlow:
         """Switching from Enhanced to Standard removes email/password."""
         entry = self._create_enhanced_entry(hass)
         with patch(
-            "custom_components.ecoflow_energy.config_flow.IoTApiClient",
+            "custom_components.ecoflow_energy.config_flow_options.IoTApiClient",
         ) as mock_cls:
             mock_cls.return_value.get_device_list = AsyncMock(return_value=[
                 {"sn": "SN001", "productName": "Delta 2 Max", "online": 1},
@@ -622,14 +622,14 @@ class TestOptionsFlow:
         # No IoTApiClient mock needed - it should not be called
         with (
             patch(
-                "custom_components.ecoflow_energy.config_flow.IoTApiClient",
+                "custom_components.ecoflow_energy.config_flow_options.IoTApiClient",
             ) as mock_cls,
             patch(
-                "custom_components.ecoflow_energy.config_flow.enhanced_login",
+                "custom_components.ecoflow_energy.config_flow_options.enhanced_login",
                 AsyncMock(return_value={"token": "t", "user_id": "uid"}),
             ),
             patch(
-                "custom_components.ecoflow_energy.config_flow.get_app_device_list",
+                "custom_components.ecoflow_energy.config_flow_options.get_app_device_list",
                 AsyncMock(return_value=[]),
             ),
         ):
@@ -645,11 +645,11 @@ class TestOptionsFlow:
         entry = self._create_app_auth_entry(hass)
         with (
             patch(
-                "custom_components.ecoflow_energy.config_flow.enhanced_login",
+                "custom_components.ecoflow_energy.config_flow_options.enhanced_login",
                 AsyncMock(return_value={"token": "t", "user_id": "uid"}),
             ) as mock_login,
             patch(
-                "custom_components.ecoflow_energy.config_flow.get_app_device_list",
+                "custom_components.ecoflow_energy.config_flow_options.get_app_device_list",
                 AsyncMock(
                     return_value=[
                         {
@@ -684,7 +684,7 @@ class TestOptionsFlow:
         """A failed app login keeps the options flow usable with stored devices."""
         entry = self._create_app_auth_entry(hass)
         with patch(
-            "custom_components.ecoflow_energy.config_flow.enhanced_login",
+            "custom_components.ecoflow_energy.config_flow_options.enhanced_login",
             AsyncMock(side_effect=TimeoutError),
         ):
             result = await hass.config_entries.options.async_init(entry.entry_id)
@@ -699,7 +699,7 @@ class TestOptionsFlow:
         """Enhanced login in options flow validates credentials."""
         entry = self._create_standard_entry(hass)
         with patch(
-            "custom_components.ecoflow_energy.config_flow.IoTApiClient",
+            "custom_components.ecoflow_energy.config_flow_options.IoTApiClient",
         ) as mock_cls:
             mock_cls.return_value.get_device_list = AsyncMock(return_value=[
                 {"sn": "SN001", "productName": "Delta 2 Max", "online": 1},
@@ -711,7 +711,7 @@ class TestOptionsFlow:
             )
 
         with patch(
-            "custom_components.ecoflow_energy.config_flow.enhanced_login",
+            "custom_components.ecoflow_energy.config_flow_options.enhanced_login",
             new_callable=AsyncMock,
             return_value=None,
         ):
@@ -728,7 +728,7 @@ class TestOptionsFlow:
         """Successful Enhanced switch persists auth method and app credentials."""
         entry = self._create_standard_entry(hass)
         with patch(
-            "custom_components.ecoflow_energy.config_flow.IoTApiClient",
+            "custom_components.ecoflow_energy.config_flow_options.IoTApiClient",
         ) as mock_cls:
             mock_cls.return_value.get_device_list = AsyncMock(return_value=[
                 {"sn": "SN001", "productName": "Delta 2 Max", "online": 1},
@@ -740,7 +740,7 @@ class TestOptionsFlow:
             )
 
         with patch(
-            "custom_components.ecoflow_energy.config_flow.enhanced_login",
+            "custom_components.ecoflow_energy.config_flow_options.enhanced_login",
             new_callable=AsyncMock,
             return_value={"token": "jwt_token", "user_id": "uid123"},
         ):
@@ -761,7 +761,7 @@ class TestOptionsFlow:
         """Switching to Standard without new keys keeps the stored keys unchanged."""
         entry = self._create_enhanced_entry(hass)
         with patch(
-            "custom_components.ecoflow_energy.config_flow.IoTApiClient",
+            "custom_components.ecoflow_energy.config_flow_options.IoTApiClient",
         ) as mock_cls:
             mock_cls.return_value.get_device_list = AsyncMock(return_value=[
                 {"sn": "SN001", "productName": "Delta 2 Max", "online": 1},
@@ -783,7 +783,7 @@ class TestOptionsFlow:
         """A failed device-list fetch keeps the options form usable with stored devices."""
         entry = self._create_standard_entry(hass)
         with patch(
-            "custom_components.ecoflow_energy.config_flow.IoTApiClient",
+            "custom_components.ecoflow_energy.config_flow_options.IoTApiClient",
         ) as mock_cls:
             mock_cls.return_value.get_device_list = AsyncMock(
                 side_effect=aiohttp.ClientError("boom")
@@ -831,7 +831,7 @@ class TestOptionsDeveloperStep:
         """Helper: switch a keyless Enhanced entry to Standard mode."""
         entry = self._create_keyless_enhanced_entry(hass)
         with patch(
-            "custom_components.ecoflow_energy.config_flow.enhanced_login",
+            "custom_components.ecoflow_energy.config_flow_options.enhanced_login",
             new_callable=AsyncMock,
             return_value=None,
         ):
@@ -855,7 +855,7 @@ class TestOptionsDeveloperStep:
         """Empty access/secret key shows invalid_auth without an API call."""
         _entry, result = await self._advance_to_developer(hass)
         with patch(
-            "custom_components.ecoflow_energy.config_flow.IoTApiClient",
+            "custom_components.ecoflow_energy.config_flow_options.IoTApiClient",
         ) as mock_cls:
             result = await hass.config_entries.options.async_configure(
                 result["flow_id"],
@@ -870,7 +870,7 @@ class TestOptionsDeveloperStep:
         """Valid keys save the options and persist Standard mode credentials."""
         entry, result = await self._advance_to_developer(hass)
         with patch(
-            "custom_components.ecoflow_energy.config_flow.IoTApiClient",
+            "custom_components.ecoflow_energy.config_flow_options.IoTApiClient",
         ) as mock_cls:
             mock_cls.return_value.get_device_list = AsyncMock(return_value=[
                 {"sn": "HJ31FAKE00000001", "productName": "PowerOcean", "online": 1},
@@ -894,7 +894,7 @@ class TestOptionsDeveloperStep:
         """get_device_list returning None shows invalid_auth."""
         _entry, result = await self._advance_to_developer(hass)
         with patch(
-            "custom_components.ecoflow_energy.config_flow.IoTApiClient",
+            "custom_components.ecoflow_energy.config_flow_options.IoTApiClient",
         ) as mock_cls:
             mock_cls.return_value.get_device_list = AsyncMock(return_value=None)
             result = await hass.config_entries.options.async_configure(
@@ -911,7 +911,7 @@ class TestOptionsDeveloperStep:
         """A network error during key validation shows cannot_connect."""
         _entry, result = await self._advance_to_developer(hass)
         with patch(
-            "custom_components.ecoflow_energy.config_flow.IoTApiClient",
+            "custom_components.ecoflow_energy.config_flow_options.IoTApiClient",
         ) as mock_cls:
             mock_cls.return_value.get_device_list = AsyncMock(
                 side_effect=aiohttp.ClientError("boom")
@@ -965,7 +965,7 @@ class TestOptionsEnhancedStepErrors:
         """Both network and parsing errors converge on enhanced_login_failed."""
         entry = self._create_standard_entry(hass)
         with patch(
-            "custom_components.ecoflow_energy.config_flow.IoTApiClient",
+            "custom_components.ecoflow_energy.config_flow_options.IoTApiClient",
         ) as mock_cls:
             mock_cls.return_value.get_device_list = AsyncMock(return_value=[
                 {"sn": "SN001", "productName": "Delta 2 Max", "online": 1},
@@ -977,7 +977,7 @@ class TestOptionsEnhancedStepErrors:
             )
 
         with patch(
-            "custom_components.ecoflow_energy.config_flow.enhanced_login",
+            "custom_components.ecoflow_energy.config_flow_options.enhanced_login",
             new_callable=AsyncMock,
             side_effect=side_effect,
         ):
@@ -1838,21 +1838,21 @@ class TestDeviceLabel:
 
     def test_fallback_to_bare_sn(self) -> None:
         """No name, product_name, or known device type yields the bare SN label."""
-        from custom_components.ecoflow_energy.config_flow import _device_label
+        from custom_components.ecoflow_energy.config_flow_setup import _device_label
 
         label = _device_label({"sn": "HW52FAKE00000001", "online": 1})
         assert label == "HW52FAKE..."
 
     def test_fallback_to_bare_sn_offline(self) -> None:
         """Offline device without name gets the offline suffix on the bare SN."""
-        from custom_components.ecoflow_energy.config_flow import _device_label
+        from custom_components.ecoflow_energy.config_flow_setup import _device_label
 
         label = _device_label({"sn": "HW52FAKE00000001", "online": 0})
         assert label == "HW52FAKE... (offline)"
 
     def test_short_sn_not_truncated(self) -> None:
         """SNs of 8 characters or fewer are used verbatim."""
-        from custom_components.ecoflow_energy.config_flow import _device_label
+        from custom_components.ecoflow_energy.config_flow_setup import _device_label
 
         label = _device_label({"sn": "R351", "online": 1})
         assert label == "R351"
@@ -1899,12 +1899,12 @@ class TestFetchAppDevices:
 
     async def test_login_failure_returns_empty(self, hass: HomeAssistant) -> None:
         """A failed login yields an empty device list."""
-        from custom_components.ecoflow_energy.config_flow import (
+        from custom_components.ecoflow_energy.config_flow_options import (
             _async_fetch_app_devices,
         )
 
         with patch(
-            "custom_components.ecoflow_energy.config_flow.enhanced_login",
+            "custom_components.ecoflow_energy.config_flow_options.enhanced_login",
             new_callable=AsyncMock,
             return_value=None,
         ):
@@ -1915,18 +1915,18 @@ class TestFetchAppDevices:
 
     async def test_empty_raw_devices_returns_empty(self, hass: HomeAssistant) -> None:
         """An empty raw device list yields an empty normalized list."""
-        from custom_components.ecoflow_energy.config_flow import (
+        from custom_components.ecoflow_energy.config_flow_options import (
             _async_fetch_app_devices,
         )
 
         with (
             patch(
-                "custom_components.ecoflow_energy.config_flow.enhanced_login",
+                "custom_components.ecoflow_energy.config_flow_options.enhanced_login",
                 new_callable=AsyncMock,
                 return_value={"token": "jwt_token", "user_id": "uid123"},
             ),
             patch(
-                "custom_components.ecoflow_energy.config_flow.get_app_device_list",
+                "custom_components.ecoflow_energy.config_flow_options.get_app_device_list",
                 new_callable=AsyncMock,
                 return_value=[],
             ),
