@@ -202,3 +202,41 @@ class TestProtobufImportFailure:
                 sys.modules[pb2_key] = saved_module
             if had_attr:
                 setattr(proto_pkg, "ecocharge_pb2", saved_attr)
+
+
+class TestDecoderMalformedInput:
+    """Truncated or oversized frames must never raise."""
+
+    def test_lone_continuation_byte(self):
+        headers, payload = decode_header_message(b"\x80")
+        assert headers == []
+        assert payload is None
+
+    def test_truncated_varint_value(self):
+        # Header tag then a length varint that never terminates
+        headers, payload = decode_header_message(b"\x0a\x80")
+        assert headers == []
+        assert payload is None
+
+    def test_length_exceeds_remaining(self):
+        # Field 1, declared length 5, only 1 byte of content: slice clamps
+        decode_header_message(b"\x0a\x05\x08")
+
+    def test_truncated_fixed32_in_header(self):
+        # Header containing field with wt=5 but only 1 remaining byte
+        decode_header_message(b"\x0a\x02\x2d\x00")
+
+    def test_truncated_fixed64_in_header(self):
+        decode_header_message(b"\x0a\x02\x31\x00")
+
+    def test_oversized_varint(self):
+        # >64-bit varint stops decoding instead of looping/raising
+        headers, payload = decode_header_message(b"\x08" + b"\xff" * 11)
+        assert headers == []
+        assert payload is None
+
+    def test_fuzz_prefixes_of_valid_frame(self):
+        inner = encode_field_varint(1, 1)
+        frame = _build_frame(96, 33, inner)
+        for cut in range(len(frame)):
+            decode_header_message(frame[:cut])

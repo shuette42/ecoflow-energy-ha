@@ -466,3 +466,35 @@ class TestSlavePackMapping:
         assert result["slave2_soc"] == 72.0
         assert result["slave1_voltage_v"] == 52.0
         assert result["slave2_voltage_v"] == 48.0
+
+
+class TestDeltaHttpUnknownEnumDropped:
+    """Unknown enum ints from newer firmware must not reach HA enum sensors."""
+
+    def test_unknown_chg_dsg_state_dropped(self):
+        result = parse_delta_http_quota({"pd.chgDsgState": 9, "pd.soc": 50})
+        assert "chg_dsg_state" not in result
+        assert result["soc"] == 50.0
+
+    def test_unknown_mppt_chg_state_dropped(self):
+        result = parse_delta_http_quota({"mppt.chgState": 7})
+        assert "mppt_chg_state" not in result
+
+    def test_known_ems_chg_state_mapped(self):
+        result = parse_delta_http_quota({"bms_emsStatus.chgState": 1})
+        assert result["ems_chg_state"] == "discharging"
+
+
+class TestCfgAcOutVolParity:
+    """HTTP inv.cfgAcOutVol must land identically to the MQTT path."""
+
+    def test_http_scaling_matches_mqtt(self):
+        from ecoflow_energy.ecoflow.parsers.delta import parse_delta_report
+
+        http = parse_delta_http_quota({"inv.cfgAcOutVol": 230000})
+        mqtt = parse_delta_report(
+            {"typeCode": "invStatus", "params": {"cfgAcOutVol": 230000}}
+        )
+        assert http["ac_cfg_out_vol_v"] == pytest.approx(230.0)
+        assert http["ac_cfg_out_vol_v"] == mqtt["ac_cfg_out_vol_v"]
+        assert "ac_cfg_out_vol_mv" not in http

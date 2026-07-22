@@ -132,11 +132,18 @@ class EcoFlowSensor(CoordinatorEntity[EcoFlowDeviceCoordinator], RestoreSensor):
 
     @property
     def native_value(self) -> float | int | str | None:
-        """Return the sensor value, falling back to restored state."""
-        if self.coordinator.data is not None:
-            val = self.coordinator.data.get(self._definition.key)
-            if val is not None:
-                return self._round_value(val)
+        """Return the sensor value, falling back to restored state.
+
+        A key PRESENT with value None is an explicit clear from the parser
+        (e.g. the inactive Delta 3 remain-time direction) and shows as
+        unknown. Only a MISSING key falls back to the restored value.
+        """
+        data = self.coordinator.data
+        if data is not None and self._definition.key in data:
+            val = data[self._definition.key]
+            if val is None:
+                return None
+            return self._round_value(val)
         return self._restored_value
 
     def _round_value(self, val: float | int | str) -> float | int | str:

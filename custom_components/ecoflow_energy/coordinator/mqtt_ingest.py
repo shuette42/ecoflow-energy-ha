@@ -285,9 +285,8 @@ class MqttIngestMixin:
         from ..ecoflow.proto.decoder import decode_header_message
         from ..ecoflow.parsers.powerocean_proto import remap_bp_keys
 
-        headers, _ = decode_header_message(payload)
-
         try:
+            headers, _ = decode_header_message(payload)
             from ..ecoflow.proto import ecocharge_pb2 as pb2
             from google.protobuf.json_format import MessageToDict
 
@@ -359,7 +358,7 @@ class MqttIngestMixin:
                 continue
             try:
                 pdata = bytes.fromhex(pdata_hex)
-            except (ValueError, Exception):
+            except Exception:
                 continue
 
             if self.device_type == DEVICE_TYPE_SMARTPLUG:

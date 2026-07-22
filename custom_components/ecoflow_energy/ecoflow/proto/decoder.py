@@ -22,10 +22,17 @@ _HEADER_FIELDS = {
 
 
 def _read_varint(mv, i):
-    """Read a variable-length integer from protobuf wire format at position i."""
+    """Read a variable-length integer from protobuf wire format at position i.
+
+    Returns ``(None, len(mv))`` on truncated or oversized (>64-bit) input so
+    callers can stop cleanly instead of raising on malformed frames.
+    """
     shift = 0
     res = 0
+    n = len(mv)
     while True:
+        if i >= n or shift > 63:
+            return None, n
         b = mv[i]
         i += 1
         res |= (b & 0x7F) << shift
@@ -50,13 +57,19 @@ def _decode_single_header(hdr: bytes) -> dict:
     out = {}
     while i < len(mv):
         key, i = _read_varint(mv, i)
+        if key is None:
+            break
         fn, wt = key >> 3, key & 0x07
         name, typ = _HEADER_FIELDS.get(fn, (f"f{fn}", None))
         if wt == 0:
             val, i = _read_varint(mv, i)
+            if val is None:
+                break
             out[name] = int(val)
         elif wt == 2:
             length, i = _read_varint(mv, i)
+            if length is None:
+                break
             sub = mv[i:i + length].tobytes()
             i += length
             if typ == "str":
@@ -66,10 +79,14 @@ def _decode_single_header(hdr: bytes) -> dict:
             else:
                 out[name] = sub.hex()
         elif wt == 5:
+            if i + 4 > len(mv):
+                break
             f = struct.unpack("<f", mv[i:i + 4])[0]
             i += 4
             out[name] = f
         elif wt == 1:
+            if i + 8 > len(mv):
+                break
             out[name] = int.from_bytes(mv[i:i + 8], "little")
             i += 8
         else:
@@ -85,23 +102,33 @@ def decode_header_message(b: bytes) -> tuple[list[dict], bytes | None]:
     i = 0
     while i < len(mv):
         key, i = _read_varint(mv, i)
+        if key is None:
+            break
         fn, wt = key >> 3, key & 0x07
         if fn == 1 and wt == 2:
             length, i = _read_varint(mv, i)
+            if length is None:
+                break
             hdr = mv[i:i + length].tobytes()
             i += length
             headers.append(_decode_single_header(hdr))
         elif fn == 2 and wt == 2:
             length, i = _read_varint(mv, i)
+            if length is None:
+                break
             payload = mv[i:i + length].tobytes()
             i += length
         else:
             if wt == 0:
-                _, i = _read_varint(mv, i)
+                val, i = _read_varint(mv, i)
+                if val is None:
+                    break
             elif wt == 1:
                 i += 8
             elif wt == 2:
                 length, i = _read_varint(mv, i)
+                if length is None:
+                    break
                 i += length
             elif wt == 5:
                 i += 4

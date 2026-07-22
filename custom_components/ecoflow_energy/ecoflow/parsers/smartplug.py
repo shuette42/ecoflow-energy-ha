@@ -16,6 +16,18 @@ from . import _safe_float
 from ..proto_encoding import encode_field_bytes, encode_field_varint, encode_varint
 
 
+def _to_signed64(val: int) -> int:
+    """Interpret a decoded 64-bit varint as a signed int32/int64 value.
+
+    Protobuf encodes negative int32/int64 values as their 64-bit two's
+    complement, so e.g. -5 arrives as 18446744073709551611. Without this
+    conversion a negative temperature would surface as ~1.8e19.
+    """
+    if val >= 1 << 63:
+        val -= 1 << 64
+    return val
+
+
 def parse_smartplug_http_quota(quota_data: dict) -> dict[str, Any]:
     """Parse a Smart Plug GET /quota/all response into flat sensor keys.
 
@@ -133,7 +145,8 @@ _PROTO_HEARTBEAT_FIELDS: dict[int, str] = {
     11: "switchSta",
     12: "brightness",
     13: "maxWatts",
-    34: "cons_watt",
+    # Field 34 (cons_watt) is a signed mirror of the power reading and has
+    # no sensor mapping - intentionally not decoded.
 }
 
 
@@ -145,12 +158,15 @@ def parse_smartplug_proto_heartbeat(pdata: bytes) -> dict[str, Any]:
     """
     fields: dict[str, Any] = {}
     mv = memoryview(pdata)
+    n = len(mv)
     i = 0
-    while i < len(mv):
+    while i < n:
         # Read tag (varint)
         shift = 0
         tag = 0
         while True:
+            if i >= n or shift > 63:
+                return parse_smartplug_report(fields) if fields else {}
             b = mv[i]
             i += 1
             tag |= (b & 0x7F) << shift
@@ -163,6 +179,8 @@ def parse_smartplug_proto_heartbeat(pdata: bytes) -> dict[str, Any]:
             shift = 0
             val = 0
             while True:
+                if i >= n or shift > 63:
+                    return parse_smartplug_report(fields) if fields else {}
                 b = mv[i]
                 i += 1
                 val |= (b & 0x7F) << shift
@@ -174,12 +192,16 @@ def parse_smartplug_proto_heartbeat(pdata: bytes) -> dict[str, Any]:
                 if key == "switchSta":
                     fields[key] = bool(val)
                 else:
-                    fields[key] = val
+                    # Negative int32/int64 values arrive as 64-bit two's
+                    # complement (e.g. temperature below zero).
+                    fields[key] = _to_signed64(val)
         elif wt == 2:
             # Length-delimited: skip
             shift = 0
             length = 0
             while True:
+                if i >= n or shift > 63:
+                    return parse_smartplug_report(fields) if fields else {}
                 b = mv[i]
                 i += 1
                 length |= (b & 0x7F) << shift
@@ -209,6 +231,9 @@ def parse_smartplug_report(data: dict[str, Any]) -> dict[str, Any]:
     """
     # Extract inner payload from envelope
     params = data.get("params") or data.get("param") or data
+    if not isinstance(params, dict):
+        # Malformed envelope (list/str/number payload): nothing to parse.
+        return {}
 
     # If keys have "2_1." prefix, reuse the HTTP parser (same format)
     if any(k.startswith("2_1.") for k in params):
@@ -257,8 +282,12 @@ def _decode_varint_fields(data: bytes) -> dict[int, int]:
         field_num = tag >> 3
         wire_type = tag & 7
         if wire_type == 0:  # varint
-            val, pos = _DecodeVarint(data, pos)
-            fields[field_num] = val
+            try:
+                val, pos = _DecodeVarint(data, pos)
+            except Exception:
+                break
+            # Negative int32/int64 values arrive as 64-bit two's complement.
+            fields[field_num] = _to_signed64(val)
         elif wire_type == 2:  # length-delimited (skip)
             try:
                 length, pos = _DecodeVarint(data, pos)

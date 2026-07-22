@@ -256,3 +256,31 @@ class TestStreamProtoParser:
         assert result is not None
         assert result["ac_outlet_1_enabled"] == 1
         assert result["ac_outlet_2_enabled"] == 0
+
+
+class TestStreamSignedVarint:
+    """Negative int32/int64 varints must decode to negative numbers."""
+
+    def test_negative_varint_batt_temp(self) -> None:
+        # (32, 50) field 9 = batt_temp_c, encoded as 64-bit two's complement
+        inner = encode_field_varint(9, (1 << 64) - 5)  # -5 C
+        result = parse_stream_proto_message(_build_frame(32, 50, bytes(inner)))
+        assert result is not None
+        assert result["batt_temp_c"] == -5
+
+    def test_negative_varint_float_target(self) -> None:
+        # (254, 21) field 518 = batt_w (float target) as negative varint
+        inner = encode_field_varint(518, (1 << 64) - 300)  # -300 W
+        result = parse_stream_proto_message(_build_frame(254, 21, bytes(inner)))
+        assert result is not None
+        assert result["batt_w"] == pytest.approx(-300.0)
+        assert result["batt_discharge_power_w"] == pytest.approx(300.0)
+
+    def test_oversized_varint_returns_none(self) -> None:
+        # Field 9 tag followed by an 11-byte (>64-bit) varint
+        inner = encode_varint((9 << 3) | 0) + b"\xff" * 11
+        assert parse_stream_proto_message(_build_frame(32, 50, inner)) is None
+
+    def test_truncated_inner_returns_none(self) -> None:
+        inner = encode_varint((9 << 3) | 0) + b"\x80"
+        assert parse_stream_proto_message(_build_frame(32, 50, inner)) is None

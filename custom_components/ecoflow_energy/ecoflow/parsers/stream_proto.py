@@ -117,7 +117,11 @@ _STREAM_FIELD_MAP: dict[tuple[int, int], dict[int, tuple[str, str]]] = {
 
 
 def _read_varint(mv: memoryview, pos: int) -> tuple[int, int]:
-    """Decode one protobuf varint from ``mv`` starting at ``pos``."""
+    """Decode one protobuf varint from ``mv`` starting at ``pos``.
+
+    Raises ``ValueError`` on an oversized (>64-bit) varint and ``IndexError``
+    on truncated input; both are caught by the outer parse guard.
+    """
     shift = 0
     value = 0
     while True:
@@ -127,12 +131,18 @@ def _read_varint(mv: memoryview, pos: int) -> tuple[int, int]:
         if not byte & 0x80:
             return value, pos
         shift += 7
+        if shift > 63:
+            raise ValueError("oversized varint")
 
 
 def _decode_scalar(wire_type: int, raw: bytes, scalar_type: str) -> float | int | None:
     """Decode one mapped scalar field into the requested target type."""
     if wire_type == 0:
         value, _ = _read_varint(memoryview(raw), 0)
+        # Negative int32/int64 values arrive as 64-bit two's complement
+        # (e.g. signed power/temperature paths below zero).
+        if value >= 1 << 63:
+            value -= 1 << 64
         return float(value) if scalar_type == _TYPE_FLOAT else int(value)
 
     if wire_type == 5:

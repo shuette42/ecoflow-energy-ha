@@ -557,3 +557,104 @@ class TestSmartPlugSetCommands:
         sn = "HW52TEST5678"
         payload = build_plug_max_watts_payload(2500, device_sn=sn, seq=1)
         assert sn.encode("utf-8") in payload
+
+
+# =========================================================================
+# Signed varint decode + malformed-input hardening
+# =========================================================================
+
+
+def _neg64(value: int) -> int:
+    """Two's-complement 64-bit representation of a negative int."""
+    return (1 << 64) + value
+
+
+class TestSmartPlugSignedVarint:
+    """Negative int32/int64 varints must decode to negative numbers."""
+
+    def test_proto_heartbeat_negative_temperature(self):
+        from ecoflow_energy.ecoflow.parsers.smartplug import (
+            parse_smartplug_proto_heartbeat,
+        )
+        from ecoflow_energy.ecoflow.proto_encoding import encode_field_varint
+
+        pdata = (
+            encode_field_varint(6, _neg64(-5))   # temp = -5 C
+            + encode_field_varint(10, 1500)      # watts = 150.0 W
+        )
+        result = parse_smartplug_proto_heartbeat(bytes(pdata))
+        assert result["temperature_c"] == pytest.approx(-5.0)
+        assert result["power_w"] == pytest.approx(150.0)
+
+    def test_proto_envelope_negative_temperature(self):
+        from ecoflow_energy.ecoflow.proto_encoding import (
+            encode_field_bytes,
+            encode_field_varint,
+        )
+
+        pdata = (
+            encode_field_varint(6, _neg64(-7))
+            + encode_field_varint(10, 100)
+        )
+        header = (
+            encode_field_bytes(1, pdata)
+            + encode_field_varint(8, 2)
+            + encode_field_varint(9, 1)
+        )
+        msg = encode_field_bytes(1, header)
+        result = parse_smartplug_proto(msg)
+        assert result is not None
+        assert result["temperature_c"] == pytest.approx(-7.0)
+        assert result["power_w"] == pytest.approx(10.0)
+
+    def test_real_capture_field34_negative_ignored(self):
+        """Captured frame with negative field 34 still parses positives."""
+        msg = bytes.fromhex(
+            "0a4c0a2150aa0b7084079002d6f4ffffffffffffff01"
+            "e002e2dab3ce06e802901cf002901c1035182020012801"
+            "4002480150215801800103880103ca0110"
+            "485735325a4448345346365738353936"
+        )
+        result = parse_smartplug_proto(msg)
+        assert result is not None
+        assert result["power_w"] == pytest.approx(145.0)
+
+    def test_heartbeat_truncated_varint_no_raise(self):
+        from ecoflow_energy.ecoflow.parsers.smartplug import (
+            parse_smartplug_proto_heartbeat,
+        )
+
+        assert parse_smartplug_proto_heartbeat(b"\x30") == {}
+        assert parse_smartplug_proto_heartbeat(b"\x30\x80") == {}
+        assert parse_smartplug_proto_heartbeat(b"\x80") == {}
+
+    def test_heartbeat_oversized_varint_no_raise(self):
+        from ecoflow_energy.ecoflow.parsers.smartplug import (
+            parse_smartplug_proto_heartbeat,
+        )
+
+        # Field 6 tag followed by an 11-byte (>64-bit) varint
+        assert parse_smartplug_proto_heartbeat(b"\x30" + b"\xff" * 11) == {}
+
+    def test_heartbeat_partial_fields_kept_on_truncation(self):
+        from ecoflow_energy.ecoflow.parsers.smartplug import (
+            parse_smartplug_proto_heartbeat,
+        )
+        from ecoflow_energy.ecoflow.proto_encoding import encode_field_varint
+
+        good = encode_field_varint(10, 1500)  # watts = 150.0 W
+        result = parse_smartplug_proto_heartbeat(bytes(good) + b"\x30\x80")
+        assert result["power_w"] == pytest.approx(150.0)
+
+
+class TestSmartPlugReportEnvelope:
+    """Non-dict envelope payloads must not raise."""
+
+    def test_list_params_returns_empty(self):
+        assert parse_smartplug_report({"params": [1, 2, 3]}) == {}
+
+    def test_str_param_returns_empty(self):
+        assert parse_smartplug_report({"param": "watts"}) == {}
+
+    def test_int_params_returns_empty(self):
+        assert parse_smartplug_report({"params": 42}) == {}

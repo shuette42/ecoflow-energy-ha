@@ -66,7 +66,12 @@ def _apply_enum_mappings(result: dict[str, Any]) -> None:
     """
     for sensor_key, mapping in _PROTO_ENUM_INT.items():
         if sensor_key in result:
-            iv = int(result[sensor_key]) if isinstance(result[sensor_key], (int, float)) else None
+            value = result[sensor_key]
+            if isinstance(value, str) and sensor_key in _PROTO_ENUM_STR:
+                # String value (HTTP-style enum): leave it for the
+                # string-map loop below instead of dropping it here.
+                continue
+            iv = int(value) if isinstance(value, (int, float)) else None
             if iv is not None and iv in mapping:
                 result[sensor_key] = mapping[iv]
             else:
@@ -289,9 +294,14 @@ def flatten_heartbeat(raw: dict[str, Any]) -> dict[str, Any]:
     # which is computed app-side, not sent by the device. We replicate that logic:
     # if any phase voltage > 50V, the grid is energized.
     if "grid_status" not in result:
-        phase_a_vol = result.get("grid_phase_a_voltage_v")
-        if phase_a_vol is not None:
-            result["grid_status"] = "ok" if phase_a_vol > 50.0 else "not_detected"
+        phase_vols = [
+            result.get(f"grid_phase_{label}_voltage_v") for label in ("a", "b", "c")
+        ]
+        known_vols = [v for v in phase_vols if v is not None]
+        if known_vols:
+            result["grid_status"] = (
+                "ok" if any(v > 50.0 for v in known_vols) else "not_detected"
+            )
 
     return result
 

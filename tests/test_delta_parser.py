@@ -284,3 +284,26 @@ class TestDeltaParser:
         result = parse_delta_report(report)
         assert result["slave2_voltage_v"] == 48.0
         assert result["slave2_current_a"] == 2.5
+
+
+class TestDeltaUnknownEnumDropped:
+    """Unknown enum ints from newer firmware must not reach HA enum sensors."""
+
+    def test_unknown_chg_dsg_state_dropped(self):
+        result = parse_delta_report(
+            {"typeCode": "pdStatus", "params": {"chgDsgState": 9, "soc": 50}}
+        )
+        assert "chg_dsg_state" not in result
+        assert result["soc"] == 50.0
+
+    def test_known_chg_dsg_state_mapped(self):
+        result = parse_delta_report(
+            {"typeCode": "pdStatus", "params": {"chgDsgState": 2}}
+        )
+        assert result["chg_dsg_state"] == "charging"
+
+    def test_unknown_charger_type_dropped(self):
+        result = parse_delta_report(
+            {"typeCode": "invStatus", "params": {"chargerType": 42}}
+        )
+        assert "charger_type" not in result
