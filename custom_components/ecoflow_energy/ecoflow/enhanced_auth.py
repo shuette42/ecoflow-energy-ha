@@ -49,7 +49,8 @@ async def enhanced_login(
     Tries multiple API base URLs for resilience.
 
     Returns:
-        dict with ``token`` and ``user_id``, or None on failure.
+        dict with ``token``, ``user_id`` and ``base_url`` (the host that
+        accepted the login), or None on failure.
     """
     payload = {
         "email": email,
@@ -78,7 +79,7 @@ async def enhanced_login(
                     _LOGGER.debug("Login attempt %s: %s", base_url, last_error)
                     continue
                 _LOGGER.debug("Enhanced login OK via %s", base_url)
-                return {"token": token, "user_id": user_id}
+                return {"token": token, "user_id": user_id, "base_url": base_url}
         except (aiohttp.ClientError, TimeoutError) as exc:
             last_error = str(exc)
             _LOGGER.debug("Login attempt %s failed: %s", base_url, exc)

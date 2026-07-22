@@ -308,7 +308,7 @@ class TestGetMqttCredentials:
             result = await client.get_mqtt_credentials()
 
         assert result == expected_creds
-        mock_get.assert_called_once_with(session, "valid_token")
+        mock_get.assert_called_once_with(session, "valid_token", base_url=client._base_url)
 
     @pytest.mark.asyncio
     async def test_no_token_returns_none(self):
@@ -331,6 +331,95 @@ class TestGetMqttCredentials:
             result = await client.get_mqtt_credentials()
 
         assert result is None
+
+
+# ===========================================================================
+# Region Routing
+# ===========================================================================
+
+
+class TestRegionRouting:
+    @pytest.mark.asyncio
+    async def test_login_records_winning_base_url(self):
+        client, session = _make_client()
+
+        with patch(
+            "ecoflow_energy.ecoflow.app_api.enhanced_login",
+            new_callable=AsyncMock,
+            return_value={
+                "token": "jwt_token_123",
+                "user_id": "uid_456",
+                "base_url": "https://api.ecoflow.com",
+            },
+        ):
+            assert await client.login() is True
+
+        assert client._base_url == "https://api.ecoflow.com"
+
+    @pytest.mark.asyncio
+    async def test_device_list_uses_winning_base_url(self):
+        """After a login that succeeded on the global host, the device list
+        request must go to the global host, not the EU default."""
+        client, session = _make_client()
+
+        with patch(
+            "ecoflow_energy.ecoflow.app_api.enhanced_login",
+            new_callable=AsyncMock,
+            return_value={
+                "token": "jwt_token_123",
+                "user_id": "uid_456",
+                "base_url": "https://api.ecoflow.com",
+            },
+        ):
+            await client.login()
+
+        session.get = MagicMock(return_value=_mock_response({"code": "0", "data": {}}))
+        await client.get_device_list()
+
+        url = session.get.call_args[0][0]
+        assert url.startswith("https://api.ecoflow.com/")
+
+    @pytest.mark.asyncio
+    async def test_mqtt_credentials_use_winning_base_url(self):
+        client, session = _make_client()
+
+        with patch(
+            "ecoflow_energy.ecoflow.app_api.enhanced_login",
+            new_callable=AsyncMock,
+            return_value={
+                "token": "jwt_token_123",
+                "user_id": "uid_456",
+                "base_url": "https://api.ecoflow.com",
+            },
+        ):
+            await client.login()
+
+        with patch(
+            "ecoflow_energy.ecoflow.app_api.get_enhanced_credentials",
+            new_callable=AsyncMock,
+            return_value={"certificateAccount": "acct"},
+        ) as mock_get:
+            await client.get_mqtt_credentials()
+
+        mock_get.assert_called_once_with(
+            session, "jwt_token_123", base_url="https://api.ecoflow.com"
+        )
+
+    @pytest.mark.asyncio
+    async def test_login_without_base_url_falls_back_to_default(self):
+        """A login result without base_url (legacy contract) keeps the EU default."""
+        from ecoflow_energy.ecoflow.const import IOT_API_BASE
+
+        client, session = _make_client()
+
+        with patch(
+            "ecoflow_energy.ecoflow.app_api.enhanced_login",
+            new_callable=AsyncMock,
+            return_value={"token": "jwt_token_123", "user_id": "uid_456"},
+        ):
+            await client.login()
+
+        assert client._base_url == IOT_API_BASE
 
 
 # ===========================================================================

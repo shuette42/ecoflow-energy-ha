@@ -38,6 +38,7 @@ class AppApiClient:
         self._password = password
         self._token: str | None = None
         self._user_id: str | None = None
+        self._base_url: str = IOT_API_BASE
 
     @property
     def token(self) -> str | None:
@@ -65,7 +66,10 @@ class AppApiClient:
 
         self._token = result["token"]
         self._user_id = result["user_id"]
-        _LOGGER.debug("App login OK (user_id=%s)", self._user_id)
+        # Remember the host that accepted the login so subsequent calls
+        # (device list, MQTT credentials) hit the same region.
+        self._base_url = result.get("base_url", IOT_API_BASE)
+        _LOGGER.debug("App login OK (user_id=%s, base_url=%s)", self._user_id, self._base_url)
         return True
 
     async def get_device_list(self) -> list[dict[str, Any]]:
@@ -81,7 +85,7 @@ class AppApiClient:
             _LOGGER.debug("App API: no token, cannot fetch device list")
             return []
 
-        url = f"{IOT_API_BASE}{_DEVICE_LIST_PATH}"
+        url = f"{self._base_url}{_DEVICE_LIST_PATH}"
         headers = {"Authorization": f"Bearer {self._token}"}
 
         try:
@@ -121,7 +125,7 @@ class AppApiClient:
             _LOGGER.debug("App API: no token, cannot fetch MQTT credentials")
             return None
 
-        return await get_enhanced_credentials(self._session, self._token)
+        return await get_enhanced_credentials(self._session, self._token, base_url=self._base_url)
 
 
 def _parse_device_response(data: dict[str, Any]) -> list[dict[str, Any]]:
