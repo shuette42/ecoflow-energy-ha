@@ -19,16 +19,29 @@ class EcoFlowWriteGateMixin:
     _last_written_value: Any = None
     _last_written_available: bool | None = None
 
+    async def async_added_to_hass(self) -> None:
+        """Seed the availability sentinel with the state HA writes on add.
+
+        The sentinel must capture what actually reached the state machine,
+        not what the first gate pass observes. If the device is silent while
+        Home Assistant starts, HA writes ``unavailable`` on add; once data
+        resumes with unchanged values, the availability flip is the only
+        difference. A lazily seeded sentinel would classify that flip as
+        "unchanged" and the entity would stay unavailable until its value
+        happens to change.
+        """
+        await super().async_added_to_hass()  # type: ignore[misc]
+        self._last_written_available = self.available  # type: ignore[attr-defined]
+
     def _write_state_if_changed(self, new_value: Any) -> None:
         """Write HA state when the value or the availability changed."""
         new_available = self.available  # type: ignore[attr-defined]
-        if self._last_written_available is None:
-            # First observation: seed the availability sentinel without
-            # forcing a write - HA already wrote the initial state when the
-            # entity was added. Later flips are compared against this seed.
-            self._last_written_available = new_available
         if (
-            new_value == self._last_written_value
+            # Unseeded sentinel (entity not fully added yet): write, never
+            # skip - a spurious write is harmless, a swallowed availability
+            # flip strands the entity.
+            self._last_written_available is not None
+            and new_value == self._last_written_value
             and new_available == self._last_written_available
         ):
             return
