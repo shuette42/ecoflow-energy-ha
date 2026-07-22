@@ -38,7 +38,7 @@ All integration code lives under `custom_components/ecoflow_energy/`:
 ```
 custom_components/ecoflow_energy/
     __init__.py          # HA setup and teardown
-    coordinator.py       # DataUpdateCoordinator (HTTP polling + MQTT push)
+    coordinator/         # DataUpdateCoordinator (HTTP polling + MQTT push), split into focused modules
     config_flow.py       # ConfigFlow and OptionsFlow
     sensor.py            # Sensor entities
     binary_sensor.py     # Binary sensor entities
