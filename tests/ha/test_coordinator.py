@@ -3314,6 +3314,42 @@ class TestBpRemapping:
 
 
 class TestMonotonicFilter:
+    async def test_all_total_increasing_keys_are_guarded(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Every total_increasing sensor key in const.py is monotonic-guarded.
+
+        _MONOTONIC_KEYS is derived from the sensor definitions, so a new
+        total_increasing sensor can never be missed by the guard.
+        """
+        import re as _re
+
+        from custom_components.ecoflow_energy import const as _const
+        from custom_components.ecoflow_energy.coordinator.mqtt_ingest import (
+            MqttIngestMixin,
+        )
+
+        expected: set[str] = set()
+        for name in dir(_const):
+            if not _re.fullmatch(r"[A-Z0-9]+_SENSORS", name):
+                continue
+            for item in getattr(_const, name):
+                if item.state_class == "total_increasing":
+                    expected.add(item.key)
+
+        assert expected, "no total_increasing sensors found - collection broken"
+        assert expected == set(MqttIngestMixin._MONOTONIC_KEYS)
+        # Keys the hand-maintained set used to miss
+        for key in (
+            "slave1_cycles",
+            "slave2_cycles",
+            "batt_charge_capacity_ah",
+            "batt_discharge_capacity_ah",
+        ):
+            assert key in MqttIngestMixin._MONOTONIC_KEYS
+
     async def test_regression_dropped(
         self,
         hass: HomeAssistant,
