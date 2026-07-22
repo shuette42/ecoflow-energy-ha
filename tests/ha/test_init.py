@@ -101,6 +101,84 @@ class TestSetupEntry:
         assert coordinator.enhanced_mode is True
 
 
+class TestPartialSetupCleanup:
+    async def test_failing_second_device_shuts_down_first_coordinator(
+        self,
+        hass: HomeAssistant,
+        mock_iot_api,
+        mock_mqtt_client,
+        mock_http_client,
+    ) -> None:
+        """A failed first refresh must shut down already-created coordinators.
+
+        Without this guarantee, each ConfigEntryNotReady retry would leak a
+        live MQTT client per previously set-up device. HA core provides it:
+        the coordinator registers async_shutdown as an entry on_unload
+        callback, and those callbacks run when setup fails. This test pins
+        that behavior so an HA change or a coordinator refactor that breaks
+        it is caught here.
+        """
+        from homeassistant.exceptions import ConfigEntryNotReady
+
+        second_device = {
+            "sn": "DAEBK5ZZ12340002",
+            "name": "Delta 2 Max B",
+            "product_name": "Delta 2 Max",
+            "device_type": "delta",
+            "online": 1,
+        }
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_ACCESS_KEY: "test_access_key",
+                CONF_SECRET_KEY: "test_secret_key",
+                CONF_MODE: MODE_STANDARD,
+                CONF_DEVICES: [
+                    {
+                        "sn": "DAEBK5ZZ12340001",
+                        "name": "Delta 2 Max A",
+                        "product_name": "Delta 2 Max",
+                        "device_type": "delta",
+                        "online": 1,
+                    },
+                    second_device,
+                ],
+            },
+            unique_id="test_access_key",
+        )
+        entry.add_to_hass(hass)
+
+        refresh_calls = 0
+
+        async def _refresh(self) -> None:
+            nonlocal refresh_calls
+            refresh_calls += 1
+            if refresh_calls == 2:
+                raise ConfigEntryNotReady("second device refresh failed")
+
+        shutdown_mock = AsyncMock()
+
+        with (
+            patch(
+                "custom_components.ecoflow_energy.coordinator.EcoFlowDeviceCoordinator.async_config_entry_first_refresh",
+                autospec=True,
+            ) as mock_refresh,
+            patch(
+                "custom_components.ecoflow_energy.coordinator.EcoFlowDeviceCoordinator.async_shutdown",
+                shutdown_mock,
+            ),
+        ):
+            mock_refresh.side_effect = _refresh
+            result = await hass.config_entries.async_setup(entry.entry_id)
+            await hass.async_block_till_done()
+
+        assert result is False  # setup retried later by HA
+        # One shutdown per created coordinator: the first (already live)
+        # one and the failing one. No coordinator survives a failed setup.
+        assert shutdown_mock.await_count == 2
+
+
 # ===========================================================================
 # async_unload_entry
 # ===========================================================================
