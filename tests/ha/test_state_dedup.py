@@ -129,6 +129,10 @@ class TestSensorDedup:
         # Simulate restore: _restored_value and _last_written_value are both set
         sensor._restored_value = 75.0
         sensor._last_written_value = 75.0
+        # Seed the availability sentinel as async_added_to_hass does; an
+        # unseeded sentinel intentionally forces a write (availability-seed
+        # regression fix), which is not what this dedup test exercises.
+        sensor._last_written_available = sensor.available
 
         # Coordinator delivers the same value as restored
         coordinator.async_set_updated_data({"soc": 75.0})
