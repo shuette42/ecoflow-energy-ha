@@ -790,6 +790,109 @@ class TestFailedSendNoOptimistic:
 
 
 # ===========================================================================
+# Energy integrator seeding from restored HA state
+# ===========================================================================
+
+
+class TestEnergyRestoreSeed:
+    async def test_seed_continues_from_restored_total(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Empty integrator state + restored 10.5 -> integration continues from 10.5."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+        integrator = coordinator._energy_integrator
+        assert integrator.get_total("solar_energy_kwh") is None  # lost state file
+
+        coordinator.seed_energy_total("solar_energy_kwh", 10.5)
+        assert integrator.get_total("solar_energy_kwh") == 10.5
+
+        total = integrator.integrate("solar_energy_kwh", 500.0)
+        assert total is not None
+        assert total >= 10.5  # continues from the seed, not from 0
+
+    async def test_seed_ignores_non_energy_keys(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Cycle counters are total_increasing but not integrator metrics."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+
+        coordinator.seed_energy_total("bms_cycles", 461.0)
+        assert coordinator._energy_integrator.get_total("bms_cycles") is None
+
+    async def test_seed_never_lowers_a_live_total(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """A stale restored value is ignored by the monotonic set_total guard."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+        integrator = coordinator._energy_integrator
+        integrator.set_total("solar_energy_kwh", 20.0)
+
+        coordinator.seed_energy_total("solar_energy_kwh", 10.5)  # stale
+        assert integrator.get_total("solar_energy_kwh") == 20.0
+
+    async def test_sensor_restore_seeds_integrator(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Restoring an energy sensor seeds the coordinator integrator."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+
+        definition = EcoFlowSensorDef(
+            "solar_energy_kwh", "Solar Energy", "kWh", "energy",
+            "total_increasing", "mdi:solar-power",
+        )
+        sensor = EcoFlowSensor(coordinator, definition)
+        sensor.hass = hass
+
+        mock_last = MagicMock()
+        mock_last.native_value = 10.5
+        with (
+            patch.object(CoordinatorEntity, "async_added_to_hass", new_callable=AsyncMock),
+            patch.object(sensor, "async_get_last_sensor_data", new_callable=AsyncMock, return_value=mock_last),
+        ):
+            await sensor.async_added_to_hass()
+
+        assert sensor._restored_value == 10.5
+        assert coordinator._energy_integrator.get_total("solar_energy_kwh") == 10.5
+
+    async def test_sensor_restore_non_energy_does_not_seed(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """A restored measurement sensor never touches the integrator."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+
+        definition = EcoFlowSensorDef(
+            "soc", "SoC", "%", "battery", "measurement", "mdi:battery",
+        )
+        sensor = EcoFlowSensor(coordinator, definition)
+        sensor.hass = hass
+
+        mock_last = MagicMock()
+        mock_last.native_value = 85.0
+        with (
+            patch.object(CoordinatorEntity, "async_added_to_hass", new_callable=AsyncMock),
+            patch.object(sensor, "async_get_last_sensor_data", new_callable=AsyncMock, return_value=mock_last),
+        ):
+            await sensor.async_added_to_hass()
+
+        assert coordinator._energy_integrator.get_total("soc") is None
+
+
+# ===========================================================================
 # Enum sensor restore discard
 # ===========================================================================
 

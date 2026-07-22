@@ -164,6 +164,23 @@ class StateApplyMixin:
         """Flush energy integrator state to disk (non-blocking)."""
         await self.hass.async_add_executor_job(self._energy_integrator.flush)
 
+    def seed_energy_total(self, key: str, total_kwh: float) -> None:
+        """Seed the energy integrator with a restored HA sensor state.
+
+        Recovers energy totals when the integrator state file was lost or
+        corrupted: HA restores the sensor value across restarts, so the
+        integrator continues from the restored total instead of zero.
+        set_total is monotonic-guarded (lower values are ignored), so a
+        stale restored value can never lower a live total. Keys that are
+        not integrator metrics (e.g. cycle counters) are ignored.
+        """
+        energy_keys = set(self._power_to_energy.values()) | {
+            energy_key for _, energy_key in self._energy_from_api
+        }
+        if key not in energy_keys:
+            return
+        self._energy_integrator.set_total(key, total_kwh)
+
     # Battery state derivation parameters (#63).
     # These are class-level so tests can override without touching instance state.
     BATT_WINDOW_S = 180       # 3-minute rolling window

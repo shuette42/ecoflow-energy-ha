@@ -119,6 +119,15 @@ class EcoFlowSensor(
                 return
             self._restored_value = last.native_value
             self._last_written_value = last.native_value
+            # Seed the energy integrator so a lost or corrupt state file
+            # does not reset totals to zero. set_total is monotonic-guarded,
+            # so a stale restored value can never lower a live total.
+            if self._definition.state_class == "total_increasing" and isinstance(
+                last.native_value, (int, float)
+            ):
+                self.coordinator.seed_energy_total(
+                    self._definition.key, float(last.native_value)
+                )
 
     @property
     def device_info(self) -> DeviceInfo:
