@@ -198,15 +198,18 @@ class EcoFlowDeviceCoordinator(
         # Each heartbeat contains only one pack; this map ensures the same
         # physical pack always maps to the same pack{n}_* sensor keys.
         self._bp_sn_to_index: dict[str, int] = {}
-        # Battery charge/discharge state: rolling-average derivation (#63).
-        # State is derived from a 3-minute moving average of signed batt_w,
+        # Battery charge/discharge state: rolling-average derivation (#63, #50).
+        # State is derived from a short moving average of signed batt_w,
         # not the instantaneous value. This filters short oscillations that
         # occur when solar production and house load balance (morning/evening),
         # where instantaneous power swings from +1000W to -300W within seconds.
-        # Min hold time prevents rapid flipping even if the average crosses
-        # a threshold right after a transition.
+        # A confirmation window requires a diverging candidate state to persist
+        # before the transition is committed; min hold time additionally blocks
+        # a new transition right after a commit.
         self._batt_w_samples: list[tuple[float, float]] = []  # (monotonic_ts, batt_w)
         self._batt_state_changed_at: float = 0.0  # monotonic timestamp
+        self._batt_pending_state: str | None = None  # candidate awaiting confirmation
+        self._batt_pending_since: float = 0.0  # monotonic ts when candidate appeared
 
         # Energy integrator for power → kWh Riemann sum (all device types)
         state_path = hass.config.path(f".storage/ecoflow_energy_{self.device_sn}.json")
