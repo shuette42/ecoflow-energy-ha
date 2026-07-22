@@ -1889,6 +1889,57 @@ class TestNormalizeDevices:
         assert len(result) == 1
         assert result[0]["sn"] == "HJ31FAKE00000001"
 
+    def test_normalize_app_devices_reclassifies_unknown_type_by_sn(self) -> None:
+        """An unknown app API device type falls back to SN classification."""
+        from custom_components.ecoflow_energy.config_flow import (
+            EcoFlowEnergyConfigFlow,
+        )
+
+        result = EcoFlowEnergyConfigFlow._normalize_app_devices([
+            {
+                "sn": "HJ31FAKE00000001",
+                "product_name": "",
+                "online": 1,
+                "device_type": "unknown",
+            },
+        ])
+
+        assert result[0]["device_type"] == "powerocean"
+
+    def test_normalize_app_devices_reclassifies_empty_type_by_sn(self) -> None:
+        """An empty app API device type falls back to SN classification."""
+        from custom_components.ecoflow_energy.config_flow import (
+            EcoFlowEnergyConfigFlow,
+        )
+
+        result = EcoFlowEnergyConfigFlow._normalize_app_devices([
+            {
+                "sn": "HJ31FAKE00000001",
+                "product_name": "",
+                "online": 1,
+                "device_type": "",
+            },
+        ])
+
+        assert result[0]["device_type"] == "powerocean"
+
+    def test_normalize_app_devices_reclassifies_none_type_by_sn(self) -> None:
+        """A null app API device type falls back to SN classification."""
+        from custom_components.ecoflow_energy.config_flow import (
+            EcoFlowEnergyConfigFlow,
+        )
+
+        result = EcoFlowEnergyConfigFlow._normalize_app_devices([
+            {
+                "sn": "HJ31FAKE00000001",
+                "product_name": "",
+                "online": 1,
+                "device_type": None,
+            },
+        ])
+
+        assert result[0]["device_type"] == "powerocean"
+
 
 class TestFetchAppDevices:
     """Tests for the module-level _async_fetch_app_devices helper.
