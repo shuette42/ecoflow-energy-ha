@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from homeassistant.const import Platform
 
@@ -439,7 +440,9 @@ DELTA2MAX_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("bms_err_code", "BMS Error Code", None, None, None, "mdi:alert-circle-outline", "diagnostic", disabled_by_default=True),
     EcoFlowSensorDef("mppt_fault_code", "MPPT Fault Code", None, None, None, "mdi:alert-circle-outline", "diagnostic", disabled_by_default=True),
     # --- Slave Battery Pack 1 (expansion) ---
-    EcoFlowSensorDef("slave1_soc", "Slave 1 SoC", "%", "battery", "measurement", "mdi:battery", disabled_by_default=True),
+    # No device_class="battery" on slave SoC: HA picks battery-class
+    # entities for the device-card header, which must stay the main SoC.
+    EcoFlowSensorDef("slave1_soc", "Slave 1 SoC", "%", None, "measurement", "mdi:battery", disabled_by_default=True),
     EcoFlowSensorDef("slave1_soh", "Slave 1 SoH", "%", None, "measurement", "mdi:battery-heart-variant", "diagnostic", disabled_by_default=True),
     EcoFlowSensorDef("slave1_voltage_v", "Slave 1 Voltage", "V", "voltage", "measurement", suggested_display_precision=1, disabled_by_default=True),
     EcoFlowSensorDef("slave1_current_a", "Slave 1 Current", "A", "current", "measurement", suggested_display_precision=2, disabled_by_default=True),
@@ -456,7 +459,7 @@ DELTA2MAX_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("slave1_max_mos_temp_c", "Slave 1 Max MOSFET Temp", "\u00b0C", "temperature", "measurement", "mdi:thermometer-alert", "diagnostic", disabled_by_default=True, suggested_display_precision=1),
     EcoFlowSensorDef("slave1_err_code", "Slave 1 Error Code", None, None, None, "mdi:alert-circle-outline", "diagnostic", disabled_by_default=True),
     # --- Slave Battery Pack 2 (expansion) ---
-    EcoFlowSensorDef("slave2_soc", "Slave 2 SoC", "%", "battery", "measurement", "mdi:battery", disabled_by_default=True),
+    EcoFlowSensorDef("slave2_soc", "Slave 2 SoC", "%", None, "measurement", "mdi:battery", disabled_by_default=True),
     EcoFlowSensorDef("slave2_soh", "Slave 2 SoH", "%", None, "measurement", "mdi:battery-heart-variant", "diagnostic", disabled_by_default=True),
     EcoFlowSensorDef("slave2_voltage_v", "Slave 2 Voltage", "V", "voltage", "measurement", suggested_display_precision=1, disabled_by_default=True),
     EcoFlowSensorDef("slave2_current_a", "Slave 2 Current", "A", "current", "measurement", suggested_display_precision=2, disabled_by_default=True),

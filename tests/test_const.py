@@ -237,19 +237,19 @@ class TestDelta2MaxSensors:
         assert len(slave_keys) == 32, f"Expected 32 slave sensors, got {len(slave_keys)}"
 
     def test_only_soc_sensors_have_battery_device_class(self):
-        """Only actual SoC sensors should have device_class='battery'.
+        """Only the primary SoC sensor should have device_class='battery'.
 
-        SoH and secondary SoC variants (bms_precise_soc, ems_lcd_soc,
-        ems_precise_soc) must NOT use device_class='battery' because HA
-        picks battery-class entities for the device header.
+        SoH, secondary SoC variants (bms_precise_soc, ems_lcd_soc,
+        ems_precise_soc) and slave-pack SoC must NOT use
+        device_class='battery' because HA picks battery-class entities
+        for the device header.
         """
         battery_sensors = [
             s for s in DELTA2MAX_SENSORS if s.device_class == "battery"
         ]
         keys = {s.key for s in battery_sensors}
-        expected = {"soc", "slave1_soc", "slave2_soc"}
-        assert keys == expected, (
-            f"Expected battery device_class on {expected}, "
+        assert keys == {"soc"}, (
+            f"Expected battery device_class only on {{'soc'}}, "
             f"but found: {keys}"
         )
 
@@ -369,6 +369,31 @@ class TestStreamEntities:
                 assert s.device_class != "battery", (
                     f"{s.key} has device_class='battery' but is not the primary SoC"
                 )
+
+
+class TestBatteryDeviceClassSingleton:
+    """At most one battery device_class sensor per device type.
+
+    HA uses the battery-class entity for the device-card header; more
+    than one makes the header pick arbitrarily.
+    """
+
+    def test_at_most_one_battery_device_class_per_device_type(self):
+        import re as _re
+
+        from ecoflow_energy import const as _const
+
+        for name in dir(_const):
+            if not _re.fullmatch(r"[A-Z0-9]+_SENSORS", name):
+                continue
+            sensor_list = getattr(_const, name)
+            battery_keys = [
+                s.key for s in sensor_list if s.device_class == "battery"
+            ]
+            assert len(battery_keys) <= 1, (
+                f"{name} has multiple battery device_class sensors: "
+                f"{battery_keys} - HA uses battery-class for the device header"
+            )
 
 
 class TestBinarySensors:
