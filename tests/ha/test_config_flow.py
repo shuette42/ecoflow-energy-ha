@@ -1061,7 +1061,7 @@ class TestReauthFlow:
             data=entry.data,
         )
         with patch(
-            "custom_components.ecoflow_energy.config_flow.IoTApiClient",
+            "custom_components.ecoflow_energy.config_flow_reauth.IoTApiClient",
         ) as mock_cls:
             mock_cls.return_value.get_mqtt_credentials = AsyncMock(return_value=None)
             result = await hass.config_entries.flow.async_configure(
@@ -1080,7 +1080,7 @@ class TestReauthFlow:
             data=entry.data,
         )
         with patch(
-            "custom_components.ecoflow_energy.config_flow.IoTApiClient",
+            "custom_components.ecoflow_energy.config_flow_reauth.IoTApiClient",
         ) as mock_cls:
             mock_cls.return_value.get_mqtt_credentials = AsyncMock(
                 return_value=MOCK_MQTT_CREDENTIALS
@@ -1103,7 +1103,7 @@ class TestReauthFlow:
             data=entry.data,
         )
         with patch(
-            "custom_components.ecoflow_energy.config_flow.IoTApiClient",
+            "custom_components.ecoflow_energy.config_flow_reauth.IoTApiClient",
         ) as mock_cls:
             mock_cls.return_value.get_mqtt_credentials = AsyncMock(
                 return_value=MOCK_MQTT_CREDENTIALS
@@ -1124,7 +1124,7 @@ class TestReauthFlow:
             data=entry.data,
         )
         with patch(
-            "custom_components.ecoflow_energy.config_flow.IoTApiClient",
+            "custom_components.ecoflow_energy.config_flow_reauth.IoTApiClient",
         ) as mock_cls:
             mock_cls.return_value.get_mqtt_credentials = AsyncMock(
                 return_value=MOCK_MQTT_CREDENTIALS
@@ -1135,7 +1135,7 @@ class TestReauthFlow:
             )
 
         with patch(
-            "custom_components.ecoflow_energy.config_flow.enhanced_login",
+            "custom_components.ecoflow_energy.config_flow_reauth.enhanced_login",
             new_callable=AsyncMock,
             return_value={"token": "new_jwt", "user_id": "new_uid"},
         ):
@@ -1160,7 +1160,7 @@ class TestReauthFlow:
             data=entry.data,
         )
         with patch(
-            "custom_components.ecoflow_energy.config_flow.IoTApiClient",
+            "custom_components.ecoflow_energy.config_flow_reauth.IoTApiClient",
         ) as mock_cls:
             mock_cls.return_value.get_mqtt_credentials = AsyncMock(
                 return_value=MOCK_MQTT_CREDENTIALS
@@ -1171,7 +1171,7 @@ class TestReauthFlow:
             )
 
         with patch(
-            "custom_components.ecoflow_energy.config_flow.enhanced_login",
+            "custom_components.ecoflow_energy.config_flow_reauth.enhanced_login",
             new_callable=AsyncMock,
             return_value=None,
         ):
@@ -1191,7 +1191,7 @@ class TestReauthFlow:
             data=entry.data,
         )
         with patch(
-            "custom_components.ecoflow_energy.config_flow.IoTApiClient",
+            "custom_components.ecoflow_energy.config_flow_reauth.IoTApiClient",
         ) as mock_cls:
             mock_cls.return_value.get_mqtt_credentials = AsyncMock(
                 side_effect=aiohttp.ClientError("Connection failed")
@@ -1442,7 +1442,7 @@ class TestAppAuthReauthFlow:
             data=entry.data,
         )
         with patch(
-            "custom_components.ecoflow_energy.config_flow.enhanced_login",
+            "custom_components.ecoflow_energy.config_flow_reauth.enhanced_login",
             new_callable=AsyncMock,
             return_value={"token": "new_jwt", "user_id": "new_uid"},
         ):
@@ -1465,7 +1465,7 @@ class TestAppAuthReauthFlow:
             data=entry.data,
         )
         with patch(
-            "custom_components.ecoflow_energy.config_flow.enhanced_login",
+            "custom_components.ecoflow_energy.config_flow_reauth.enhanced_login",
             new_callable=AsyncMock,
             return_value=None,
         ):
@@ -1568,6 +1568,14 @@ EXCEPTION_ERROR_CASES = [
     pytest.param(KeyError("missing"), "unknown", id="parse_error"),
 ]
 
+# Module that owns the confirm/enhanced/app steps per flow source. Patch
+# targets must point at the module where the step code looks up its
+# collaborators.
+FLOW_STEP_MODULE = {
+    SOURCE_REAUTH: "custom_components.ecoflow_energy.config_flow_reauth",
+    SOURCE_RECONFIGURE: "custom_components.ecoflow_energy.config_flow",
+}
+
 
 class TestReauthReconfigureExceptions:
     """Exception branches of all reauth and reconfigure steps."""
@@ -1647,10 +1655,10 @@ class TestReauthReconfigureExceptions:
             DOMAIN, context=context, data=data
         )
 
-    async def _pass_confirm_step(self, hass: HomeAssistant, result):
+    async def _pass_confirm_step(self, hass: HomeAssistant, result, source: str):
         """Submit valid developer keys to advance past the confirm step."""
         with patch(
-            "custom_components.ecoflow_energy.config_flow.IoTApiClient",
+            f"{FLOW_STEP_MODULE[source]}.IoTApiClient",
         ) as mock_cls:
             mock_cls.return_value.get_mqtt_credentials = AsyncMock(
                 return_value=MOCK_MQTT_CREDENTIALS
@@ -1680,7 +1688,7 @@ class TestReauthReconfigureExceptions:
         entry = self._create_standard_entry(hass)
         result = await self._init_flow(hass, entry, source)
         with patch(
-            "custom_components.ecoflow_energy.config_flow.IoTApiClient",
+            f"{FLOW_STEP_MODULE[source]}.IoTApiClient",
         ) as mock_cls:
             mock_cls.return_value.get_mqtt_credentials = AsyncMock(
                 side_effect=side_effect
@@ -1712,11 +1720,11 @@ class TestReauthReconfigureExceptions:
         """Exceptions during Enhanced login re-show the enhanced form with an error."""
         entry = self._create_enhanced_entry(hass)
         result = await self._init_flow(hass, entry, source)
-        result = await self._pass_confirm_step(hass, result)
+        result = await self._pass_confirm_step(hass, result, source)
         assert result["step_id"] == step_id
 
         with patch(
-            "custom_components.ecoflow_energy.config_flow.enhanced_login",
+            f"{FLOW_STEP_MODULE[source]}.enhanced_login",
             new_callable=AsyncMock,
             side_effect=side_effect,
         ):
@@ -1750,7 +1758,7 @@ class TestReauthReconfigureExceptions:
         assert result["step_id"] == step_id
 
         with patch(
-            "custom_components.ecoflow_energy.config_flow.enhanced_login",
+            f"{FLOW_STEP_MODULE[source]}.enhanced_login",
             new_callable=AsyncMock,
             side_effect=side_effect,
         ):
@@ -1775,11 +1783,11 @@ class TestReauthReconfigureExceptions:
         """Empty email/password on the enhanced step never calls the login API."""
         entry = self._create_enhanced_entry(hass)
         result = await self._init_flow(hass, entry, source)
-        result = await self._pass_confirm_step(hass, result)
+        result = await self._pass_confirm_step(hass, result, source)
         assert result["step_id"] == step_id
 
         with patch(
-            "custom_components.ecoflow_energy.config_flow.enhanced_login",
+            f"{FLOW_STEP_MODULE[source]}.enhanced_login",
             new_callable=AsyncMock,
         ) as mock_login:
             result = await hass.config_entries.flow.async_configure(
@@ -1807,7 +1815,7 @@ class TestReauthReconfigureExceptions:
         assert result["step_id"] == step_id
 
         with patch(
-            "custom_components.ecoflow_energy.config_flow.enhanced_login",
+            f"{FLOW_STEP_MODULE[source]}.enhanced_login",
             new_callable=AsyncMock,
         ) as mock_login:
             result = await hass.config_entries.flow.async_configure(
