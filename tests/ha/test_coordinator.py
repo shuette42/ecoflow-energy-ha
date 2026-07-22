@@ -3802,7 +3802,7 @@ class TestParseMessageProtobuf:
         )
         topic = "/app/device/property/HW52TEST00000001"
         with patch(
-            "custom_components.ecoflow_energy.coordinator.core.decode_proto_runtime_frame",
+            "custom_components.ecoflow_energy.coordinator.mqtt_ingest.decode_proto_runtime_frame",
             side_effect=RuntimeError("decoder blew up"),
         ):
             result = coordinator._parse_message(topic, b"\x0a\x02\x08\x01")
@@ -3968,7 +3968,7 @@ class TestParseMessageProtobuf:
             mapped={"_is_ems_change": True}, headers=[],
         )
         with patch(
-            "custom_components.ecoflow_energy.coordinator.core."
+            "custom_components.ecoflow_energy.coordinator.mqtt_ingest."
             "decode_proto_runtime_frame",
             return_value=fake_result,
         ):
