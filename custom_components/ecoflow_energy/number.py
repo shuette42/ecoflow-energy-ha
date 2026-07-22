@@ -6,7 +6,7 @@ import logging
 import time
 from typing import Any
 
-from homeassistant.components.number import NumberEntity, NumberMode
+from homeassistant.components.number import NumberMode, RestoreNumber
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -63,9 +63,9 @@ async def async_setup_entry(
 
 
 class EcoFlowNumber(
-    EcoFlowWriteGateMixin, CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity
+    EcoFlowWriteGateMixin, CoordinatorEntity[EcoFlowDeviceCoordinator], RestoreNumber
 ):
-    """An EcoFlow number entity."""
+    """An EcoFlow number entity with state restore across restarts."""
 
     _attr_has_entity_name = True
     _attr_mode = NumberMode.BOX
@@ -86,6 +86,7 @@ class EcoFlowNumber(
         self._attr_native_max_value = definition.max_value
         self._attr_native_step = definition.step
 
+        self._restored_value: float | None = None
         self._last_written_value: float | None = None
         self._optimistic_lock_until: float = 0.0
 
@@ -93,6 +94,30 @@ class EcoFlowNumber(
     def available(self) -> bool:
         """Return True if entity is available."""
         return self.coordinator.device_available and super().available
+
+    async def async_added_to_hass(self) -> None:
+        """Restore the last known value when the entity is added.
+
+        Enhanced Mode devices can take up to two minutes before the first
+        full status frame arrives. Without a restored value HA renders the
+        number as an empty field for that whole window. The restored value
+        is only a placeholder: as soon as live data delivers the key, the
+        live value always wins (see ``native_value``).
+        """
+        await super().async_added_to_hass()
+        data = self.coordinator.data
+        if data is not None and self._definition.state_key in data:
+            return  # live value already present, nothing to restore
+        last = await self.async_get_last_number_data()
+        if last is None or last.native_value is None:
+            return  # nothing restorable (e.g. state was unknown/unavailable)
+        value = float(last.native_value)
+        if value < self._attr_native_min_value or value > self._attr_native_max_value:
+            return  # out-of-range restored values are discarded
+        self._restored_value = value
+        # Seed the write gate so an identical first live frame does not
+        # trigger a redundant recorder write (mirrors the sensor restore).
+        self._last_written_value = value
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -108,10 +133,16 @@ class EcoFlowNumber(
 
     @property
     def native_value(self) -> float | None:
-        """Return the current value."""
-        if self.coordinator.data is None:
-            return None
-        value = self.coordinator.data.get(self._definition.state_key)
+        """Return the current value, falling back to the restored one.
+
+        Only a MISSING key falls back to the restored value. A key present
+        with value None is an explicit clear and shows as unknown. A live
+        value always beats the restored one.
+        """
+        data = self.coordinator.data
+        if data is None or self._definition.state_key not in data:
+            return self._restored_value
+        value = data[self._definition.state_key]
         if value is None:
             return None
         try:

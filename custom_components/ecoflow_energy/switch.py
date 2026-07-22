@@ -16,6 +16,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .ecoflow.delta3_commands import (
@@ -66,9 +67,12 @@ async def async_setup_entry(
 
 
 class EcoFlowSwitch(
-    EcoFlowWriteGateMixin, CoordinatorEntity[EcoFlowDeviceCoordinator], SwitchEntity
+    EcoFlowWriteGateMixin,
+    CoordinatorEntity[EcoFlowDeviceCoordinator],
+    SwitchEntity,
+    RestoreEntity,
 ):
-    """An EcoFlow switch entity with optimistic lock."""
+    """An EcoFlow switch entity with optimistic lock and state restore."""
 
     _attr_has_entity_name = True
 
@@ -88,12 +92,34 @@ class EcoFlowSwitch(
         self._optimistic_value: bool | None = None
         self._optimistic_lock_until: float = 0.0
 
+        self._restored_is_on: bool | None = None
         self._last_written_value: bool | None = None
 
     @property
     def available(self) -> bool:
         """Return True if entity is available."""
         return self.coordinator.device_available and super().available
+
+    async def async_added_to_hass(self) -> None:
+        """Restore the last known on/off state when the entity is added.
+
+        Enhanced Mode devices can take up to two minutes before the first
+        full status frame arrives. Without a restored state HA renders the
+        switch as unknown for that whole window. The restored state is only
+        a placeholder: as soon as live data delivers the key, the live
+        value always wins (see ``is_on``).
+        """
+        await super().async_added_to_hass()
+        data = self.coordinator.data
+        if data is not None and self._definition.state_key in data:
+            return  # live value already present, nothing to restore
+        last = await self.async_get_last_state()
+        if last is None or last.state not in ("on", "off"):
+            return  # discard unavailable/unknown restored states
+        self._restored_is_on = last.state == "on"
+        # Seed the write gate so an identical first live frame does not
+        # trigger a redundant recorder write (mirrors the sensor restore).
+        self._last_written_value = self._restored_is_on
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -105,19 +131,23 @@ class EcoFlowSwitch(
         """Return true if the switch is on.
 
         During the optimistic lock window, returns the locally set value
-        instead of the coordinator data to prevent flicker.
+        instead of the coordinator data to prevent flicker. When the key
+        is missing from the coordinator data (e.g. right after a restart,
+        before the first full status frame), falls back to the restored
+        state. A live value always beats the restored one.
         """
         if time.monotonic() < self._optimistic_lock_until:
             return self._optimistic_value
 
-        if self.coordinator.data is None:
-            return None
-        value = self.coordinator.data.get(self._definition.state_key)
-        if value is None:
-            return None
-        if isinstance(value, (int, float)):
-            return value != 0
-        return bool(value)
+        data = self.coordinator.data
+        if data is not None and self._definition.state_key in data:
+            value = data[self._definition.state_key]
+            if value is None:
+                return None
+            if isinstance(value, (int, float)):
+                return value != 0
+            return bool(value)
+        return self._restored_is_on
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the switch on."""
