@@ -645,3 +645,16 @@ class TestSmartPlugSignedVarint:
         good = encode_field_varint(10, 1500)  # watts = 150.0 W
         result = parse_smartplug_proto_heartbeat(bytes(good) + b"\x30\x80")
         assert result["power_w"] == pytest.approx(150.0)
+
+
+class TestSmartPlugReportEnvelope:
+    """Non-dict envelope payloads must not raise."""
+
+    def test_list_params_returns_empty(self):
+        assert parse_smartplug_report({"params": [1, 2, 3]}) == {}
+
+    def test_str_param_returns_empty(self):
+        assert parse_smartplug_report({"param": "watts"}) == {}
+
+    def test_int_params_returns_empty(self):
+        assert parse_smartplug_report({"params": 42}) == {}

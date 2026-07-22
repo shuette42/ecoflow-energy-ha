@@ -231,6 +231,9 @@ def parse_smartplug_report(data: dict[str, Any]) -> dict[str, Any]:
     """
     # Extract inner payload from envelope
     params = data.get("params") or data.get("param") or data
+    if not isinstance(params, dict):
+        # Malformed envelope (list/str/number payload): nothing to parse.
+        return {}
 
     # If keys have "2_1." prefix, reuse the HTTP parser (same format)
     if any(k.startswith("2_1.") for k in params):
