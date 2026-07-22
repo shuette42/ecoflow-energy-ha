@@ -483,3 +483,18 @@ class TestDeltaHttpUnknownEnumDropped:
     def test_known_ems_chg_state_mapped(self):
         result = parse_delta_http_quota({"bms_emsStatus.chgState": 1})
         assert result["ems_chg_state"] == "discharging"
+
+
+class TestCfgAcOutVolParity:
+    """HTTP inv.cfgAcOutVol must land identically to the MQTT path."""
+
+    def test_http_scaling_matches_mqtt(self):
+        from ecoflow_energy.ecoflow.parsers.delta import parse_delta_report
+
+        http = parse_delta_http_quota({"inv.cfgAcOutVol": 230000})
+        mqtt = parse_delta_report(
+            {"typeCode": "invStatus", "params": {"cfgAcOutVol": 230000}}
+        )
+        assert http["ac_cfg_out_vol_v"] == pytest.approx(230.0)
+        assert http["ac_cfg_out_vol_v"] == mqtt["ac_cfg_out_vol_v"]
+        assert "ac_cfg_out_vol_mv" not in http
