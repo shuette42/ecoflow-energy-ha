@@ -341,6 +341,72 @@ class TestNumberDedup:
 
 
 # ===========================================================================
+# Enum sensors: live values outside the options list
+# ===========================================================================
+
+
+class TestEnumLiveValueGuard:
+    """An out-of-options live value must not reach the state machine."""
+
+    _DEF = EcoFlowSensorDef(
+        "ems_feed_mode", "EMS Feed Mode", None, "enum", None,
+        "mdi:cog", "diagnostic", options=["off", "no_limit", "zero", "limit"],
+    )
+
+    async def test_unknown_live_enum_value_falls_back_to_restored(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+        sensor = EcoFlowSensor(coordinator, self._DEF)
+        sensor._restored_value = "limit"
+
+        # Device delivers an unmapped enum value (e.g. raw HTTP string)
+        coordinator.async_set_updated_data({"ems_feed_mode": "SOME_NEW_MODE"})
+        assert sensor.native_value == "limit"
+
+    async def test_unknown_live_enum_value_without_restore_is_none(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+        sensor = EcoFlowSensor(coordinator, self._DEF)
+
+        coordinator.async_set_updated_data({"ems_feed_mode": 42})
+        assert sensor.native_value is None
+
+    async def test_known_live_enum_value_passes(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+        sensor = EcoFlowSensor(coordinator, self._DEF)
+
+        coordinator.async_set_updated_data({"ems_feed_mode": "zero"})
+        assert sensor.native_value == "zero"
+
+    async def test_explicit_none_stays_none(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """A key PRESENT with None is an explicit clear, not a fallback."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+        sensor = EcoFlowSensor(coordinator, self._DEF)
+        sensor._restored_value = "limit"
+
+        coordinator.async_set_updated_data({"ems_feed_mode": None})
+        assert sensor.native_value is None
+
+
+# ===========================================================================
 # Availability transitions must pass the write gate
 # ===========================================================================
 

@@ -143,6 +143,12 @@ class EcoFlowSensor(
             val = data[self._definition.key]
             if val is None:
                 return None
+            # Enum sensors: a live value outside the options list would make
+            # HA raise ValueError on every state write. Fall back to the
+            # restored value, mirroring the restore-path guard in
+            # async_added_to_hass.
+            if self._definition.options and str(val) not in self._definition.options:
+                return self._restored_value
             return self._round_value(val)
         return self._restored_value
 
