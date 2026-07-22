@@ -153,8 +153,15 @@ class EcoFlowMQTTClient:
             return False
 
     def _on_connect(self, client, userdata, flags, rc, properties=None):
-        """Callback on MQTT connection."""
-        if rc == 0:
+        """Callback on MQTT connection.
+
+        Under paho-mqtt 2.x VERSION2 callbacks ``rc`` is a ReasonCode object
+        (unhashable, MQTT 3.1.1 CONNACK codes mapped to MQTT 5 identifiers:
+        4 -> 134, 5 -> 135). Normalize to int first so dict lookups and
+        comparisons work for both int and ReasonCode inputs.
+        """
+        rc_val = rc.value if hasattr(rc, "value") else rc
+        if rc_val == 0:
             # Subscribe to SET reply topics (all modes) for command acknowledgement tracking
             set_reply_topic = f"/open/{self._cert_account}/{self._device_sn}/set_reply"
             client.subscribe(set_reply_topic, qos=1)
@@ -229,18 +236,26 @@ class EcoFlowMQTTClient:
                 3: "Broker unavailable",
                 4: "Bad username/password",
                 5: "Auth failed (credentials expired?)",
+                134: "Bad username/password",
+                135: "Not authorized (credentials expired?)",
             }
-            reason = rc_reasons.get(rc, "unknown error")
-            if rc == 5:
-                _LOGGER.warning("MQTT connect failed: rc=%s (%s) — scheduling credential refresh", rc, reason)
+            reason = rc_reasons.get(rc_val, "unknown error")
+            auth_failure = rc_val in (4, 5, 134, 135)
+            if auth_failure:
+                _LOGGER.warning("MQTT connect failed: rc=%s (%s) — scheduling credential refresh", rc_val, reason)
             else:
-                _LOGGER.error("MQTT connect failed: rc=%s (%s)", rc, reason)
+                _LOGGER.error("MQTT connect failed: rc=%s (%s)", rc_val, reason)
             self.connected = False
-            if rc == 5 and self._auth_error_handler:
+            if auth_failure and self._auth_error_handler:
                 self._auth_error_handler()
 
     def _on_disconnect(self, client, userdata, disconnect_flags, reason_code, properties):
-        """Callback on MQTT disconnect."""
+        """Callback on MQTT disconnect.
+
+        ``reason_code`` is a ReasonCode object under paho-mqtt 2.x VERSION2
+        callbacks — normalize to int before any comparison.
+        """
+        rc_val = reason_code.value if hasattr(reason_code, "value") else reason_code
         was_connected = self.connected
         self.connected = False
         self._notified_connected = False
@@ -249,23 +264,23 @@ class EcoFlowMQTTClient:
         duration = current_time - self.last_connect_time if self.last_connect_time > 0 else 0
         self.last_disconnect_time = current_time
 
-        if was_connected or reason_code != 0:
+        if was_connected or rc_val != 0:
             # First disconnect is normal (broker-side rotation) - only warn
             # if previous reconnect attempts are already pending (sustained failure)
-            if reason_code != 0 and self.reconnect_attempts > 0:
+            if rc_val != 0 and self.reconnect_attempts > 0:
                 _log = _LOGGER.warning
             else:
                 _log = _LOGGER.debug
             _log(
                 "MQTT disconnect: rc=%s, was_connected=%s, duration=%.1fs, attempts=%d",
-                reason_code, was_connected, duration, self.reconnect_attempts,
+                rc_val, was_connected, duration, self.reconnect_attempts,
             )
 
-        if reason_code != 0:
+        if rc_val != 0:
             self._schedule_reconnect()
 
         if self.status_handler:
-            self.status_handler("disconnected", reason_code, f"Disconnected (rc={reason_code})")
+            self.status_handler("disconnected", rc_val, f"Disconnected (rc={rc_val})")
 
     def _should_attempt_reconnect(self) -> bool:
         """Check if a reconnect attempt should be made. Never gives up permanently."""

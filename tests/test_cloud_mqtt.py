@@ -294,6 +294,41 @@ class TestOnDisconnect:
             client._on_disconnect(mock_paho, None, None, 1, None)
             mock_sched.assert_called_once()
 
+    def test_on_disconnect_reasoncode_normal(self):
+        """ReasonCode 0 (normal disconnection) does not schedule a reconnect."""
+        from paho.mqtt.packettypes import PacketTypes
+        from paho.mqtt.reasoncodes import ReasonCode
+
+        client = _make_client()
+        client.connected = True
+        mock_paho = MagicMock()
+        client.client = mock_paho
+
+        rc = ReasonCode(PacketTypes.DISCONNECT)  # Normal disconnection (0)
+        with patch.object(client, "_schedule_reconnect") as mock_sched:
+            client._on_disconnect(mock_paho, None, None, rc, None)
+            mock_sched.assert_not_called()
+        assert client.connected is False
+
+    def test_on_disconnect_reasoncode_error_schedules_reconnect(self):
+        """A non-zero ReasonCode schedules a reconnect and does not raise."""
+        from paho.mqtt.packettypes import PacketTypes
+        from paho.mqtt.reasoncodes import ReasonCode
+
+        status_handler = MagicMock()
+        client = _make_client(status_handler=status_handler)
+        client.connected = True
+        mock_paho = MagicMock()
+        client.client = mock_paho
+
+        rc = ReasonCode(PacketTypes.DISCONNECT, identifier=135)  # Not authorized
+        with patch.object(client, "_schedule_reconnect") as mock_sched:
+            client._on_disconnect(mock_paho, None, None, rc, None)
+            mock_sched.assert_called_once()
+        # Status handler receives the normalized int, not the ReasonCode object
+        status_handler.assert_called_once()
+        assert status_handler.call_args[0][1] == 135
+
 
 # ===========================================================================
 # Auth Error Handler (rc=5 credential refresh)
@@ -325,17 +360,78 @@ class TestAuthErrorHandler:
         handler.assert_not_called()
         assert client.connected is True
 
-    def test_auth_error_handler_not_called_on_other_rc(self):
-        """Non-5 error codes do NOT call auth_error_handler."""
+    def test_auth_error_handler_called_on_rc4(self):
+        """rc=4 (bad username/password) also triggers the auth_error_handler."""
         handler = MagicMock()
         client = _make_client(auth_error_handler=handler)
         mock_paho = MagicMock()
         client.client = mock_paho
 
-        for rc in [1, 2, 3, 4]:
+        client._on_connect(mock_paho, None, None, 4)
+
+        handler.assert_called_once()
+        assert client.connected is False
+
+    def test_auth_error_handler_not_called_on_other_rc(self):
+        """Non-auth error codes do NOT call auth_error_handler."""
+        handler = MagicMock()
+        client = _make_client(auth_error_handler=handler)
+        mock_paho = MagicMock()
+        client.client = mock_paho
+
+        for rc in [1, 2, 3]:
             handler.reset_mock()
             client._on_connect(mock_paho, None, None, rc)
             handler.assert_not_called()
+
+    def test_auth_error_handler_called_on_reasoncode_135(self):
+        """paho 2.x VERSION2 delivers ReasonCode objects — 135 (Not authorized)
+        must fire the auth-error handler without raising (ReasonCode is unhashable)."""
+        from paho.mqtt.packettypes import PacketTypes
+        from paho.mqtt.reasoncodes import ReasonCode
+
+        handler = MagicMock()
+        client = _make_client(auth_error_handler=handler)
+        mock_paho = MagicMock()
+        client.client = mock_paho
+
+        rc = ReasonCode(PacketTypes.CONNACK, identifier=135)
+        client._on_connect(mock_paho, None, None, rc, None)
+
+        handler.assert_called_once()
+        assert client.connected is False
+
+    def test_auth_error_handler_called_on_reasoncode_134(self):
+        """ReasonCode 134 (bad user name or password) fires the auth-error handler."""
+        from paho.mqtt.packettypes import PacketTypes
+        from paho.mqtt.reasoncodes import ReasonCode
+
+        handler = MagicMock()
+        client = _make_client(auth_error_handler=handler)
+        mock_paho = MagicMock()
+        client.client = mock_paho
+
+        rc = ReasonCode(PacketTypes.CONNACK, identifier=134)
+        client._on_connect(mock_paho, None, None, rc, None)
+
+        handler.assert_called_once()
+        assert client.connected is False
+
+    def test_connect_success_with_reasoncode_0(self):
+        """ReasonCode Success (0) is treated as a successful connect."""
+        from paho.mqtt.packettypes import PacketTypes
+        from paho.mqtt.reasoncodes import ReasonCode
+
+        handler = MagicMock()
+        client = _make_client(auth_error_handler=handler, subscribe_data=False)
+        mock_paho = MagicMock()
+        client.client = mock_paho
+
+        rc = ReasonCode(PacketTypes.CONNACK)  # Success (0)
+        client._on_connect(mock_paho, None, None, rc, None)
+
+        handler.assert_not_called()
+        assert client.connected is True
 
     def test_no_handler_on_rc5_is_safe(self):
         """rc=5 without handler does not crash."""
