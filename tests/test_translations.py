@@ -15,7 +15,9 @@ import re
 from pathlib import Path
 
 TRANSLATIONS_DIR = Path("custom_components/ecoflow_energy/translations")
-CONFIG_FLOW_PATH = Path("custom_components/ecoflow_energy/config_flow.py")
+CONFIG_FLOW_PATHS = sorted(
+    Path("custom_components/ecoflow_energy").glob("config_flow*.py")
+)
 
 EN_PATH = TRANSLATIONS_DIR / "en.json"
 DE_PATH = TRANSLATIONS_DIR / "de.json"
@@ -29,8 +31,11 @@ TRANSLATION_FILES = {"en": EN_PATH, "de": DE_PATH}
 
 
 def _parse_config_flow() -> ast.Module:
-    """Parse config_flow.py into an AST."""
-    return ast.parse(CONFIG_FLOW_PATH.read_text())
+    """Parse config_flow.py and its sibling flow modules into one AST."""
+    merged = ast.Module(body=[], type_ignores=[])
+    for path in CONFIG_FLOW_PATHS:
+        merged.body.extend(ast.parse(path.read_text()).body)
+    return merged
 
 
 def _get_string_value(node: ast.expr) -> str | None:
@@ -70,10 +75,10 @@ def _find_async_show_form_calls(tree: ast.Module) -> list[dict]:
             continue
 
         class_name = node.name
-        if "ConfigFlow" in class_name:
-            flow_type = "config"
-        elif "OptionsFlow" in class_name or "Options" in class_name:
+        if "OptionsFlow" in class_name or "Options" in class_name:
             flow_type = "options"
+        elif "ConfigFlow" in class_name or "FlowMixin" in class_name:
+            flow_type = "config"
         else:
             continue
 
