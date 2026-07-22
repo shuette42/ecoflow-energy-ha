@@ -20,6 +20,7 @@ All notable changes to this project will be documented in this file.
 - Ah battery capacity counters are disabled diagnostic entities. (beta.2)
 
 ### Fixed
+- The Delta 2 Max AC Charge Speed slider now reads and writes the actually configured charging speed. It previously displayed the rated maximum (2400 W), never picked up changes made in the EcoFlow app, and every value written from Home Assistant effectively ended up at 400 W because the command hardcoded the governing parameter. (beta.7)
 - Entities now go unavailable and recover promptly when the connection degrades or comes back. Availability changes with unchanged sensor values were filtered out by the state-write deduplication, so entities could keep showing as available long after the data stream stopped, and a recovery was only reflected once a value happened to change. (beta.7)
 - English installs now show proper connectivity state labels. The WiFi, Ethernet and 4G status sensors displayed raw state keys because the English translation carried state names copied from the grid status sensor. (beta.7)
 - Energy counters survive a lost or corrupted cache file. The totals are re-seeded from the last value Home Assistant restored instead of restarting at zero; a stale restored value can never lower a live total. (beta.7)

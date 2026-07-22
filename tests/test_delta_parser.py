@@ -33,6 +33,26 @@ class TestDeltaParser:
         assert result["ac_out_w"] == 1500.0
         assert result["ac_in_w"] == 200.0
 
+    def test_inv_status_ac_charge_speed(self):
+        """invStatus charge-speed keys map to the configured charge speed (issue #95)."""
+        report = {
+            "typeCode": "invStatus",
+            "params": {"SlowChgWatts": 800, "FastChgWatts": 2400},
+        }
+        result = parse_delta_report(report)
+        assert result["ac_slow_chg_watts"] == 800.0
+        assert result["ac_fast_chg_watts"] == 2400.0
+
+    def test_inv_status_ac_charge_speed_lowercase(self):
+        """Lowercase casing variant of the charge-speed keys is accepted too."""
+        report = {
+            "typeCode": "invStatus",
+            "params": {"slowChgWatts": 200, "fastChgWatts": 2400},
+        }
+        result = parse_delta_report(report)
+        assert result["ac_slow_chg_watts"] == 200.0
+        assert result["ac_fast_chg_watts"] == 2400.0
+
     def test_bms_temp_offset(self):
         """bmsStatus.temp has a +15 offset that must be removed."""
         report = {"typeCode": "bmsStatus", "params": {"temp": 40}}
@@ -124,7 +144,12 @@ class TestDeltaParser:
 
     def test_field_map_coverage(self):
         """All field_map entries must have unique destination keys."""
-        dest_keys = list(DELTA2MAX_FIELD_MAP.values())
+        # Deliberate casing aliases map to the same destination key
+        # (firmware casing of the charge-speed keys is not uniform, #95).
+        casing_aliases = ("invStatus.fastChgWatts", "invStatus.slowChgWatts")
+        dest_keys = [
+            v for k, v in DELTA2MAX_FIELD_MAP.items() if k not in casing_aliases
+        ]
         # Raw keys are never in the output (replaced by processed keys)
         raw_keys = ("batt_temp_raw", "beep_mode_raw", "slave1_temp_raw", "slave2_temp_raw")
         dest_keys_without_raw = [k for k in dest_keys if k not in raw_keys]

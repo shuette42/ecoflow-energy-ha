@@ -86,6 +86,13 @@ DELTA2MAX_FIELD_MAP: dict[str, str] = {
     "invStatus.cfgAcOutVol": "ac_cfg_out_vol_mv",
     "invStatus.chargerType": "charger_type",
     "invStatus.acChgRatedPower": "ac_chg_rated_power_w",
+    # Configured AC charge speed (issue #95). The HTTP quota uses the
+    # capitalized keys (inv.FastChgWatts / inv.SlowChgWatts); both casings
+    # are mapped here since WSS report casing may differ per firmware.
+    "invStatus.FastChgWatts": "ac_fast_chg_watts",
+    "invStatus.SlowChgWatts": "ac_slow_chg_watts",
+    "invStatus.fastChgWatts": "ac_fast_chg_watts",
+    "invStatus.slowChgWatts": "ac_slow_chg_watts",
     "invStatus.errCode": "inv_err_code",
     # --- bmsStatus (bms.*) ---
     "bmsStatus.vol": "batt_voltage_mv",

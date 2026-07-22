@@ -173,6 +173,10 @@ class EcoFlowNumber(
             return
 
         params = {cmd_template["param_key"]: int(value)}
+        # Mirror the value into additional param keys (e.g. acChgCfg sends
+        # the same watts as slowChgWatts and fastChgWatts, issue #95).
+        for extra_key in cmd_template.get("value_params", []):
+            params[extra_key] = int(value)
         if "extra_params" in cmd_template:
             params.update(cmd_template["extra_params"])
 

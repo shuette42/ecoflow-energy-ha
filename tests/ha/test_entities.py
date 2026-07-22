@@ -698,6 +698,40 @@ class TestEcoFlowNumber:
             assert cmd["operateType"] == "upsConfig"
             assert cmd["params"]["maxChgSoc"] == 90
 
+    async def test_ac_charge_speed_reads_configured_speed(self) -> None:
+        """Regression #95: the number binds to the configured charge speed,
+        not the static rated power."""
+        defn = next(d for d in DELTA2MAX_NUMBERS if d.key == "ac_charge_speed")
+        assert defn.state_key == "ac_slow_chg_watts"
+
+    async def test_ac_charge_speed_set_builds_command(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+        mock_iot_api,
+        mock_mqtt_client,
+        mock_http_client,
+    ) -> None:
+        """Regression #95: acChgCfg sends the requested watts as both
+        slowChgWatts and fastChgWatts (no hardcoded 400 W fallback)."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+        await coordinator.async_setup()
+
+        defn = next(d for d in DELTA2MAX_NUMBERS if d.key == "ac_charge_speed")
+        number = EcoFlowNumber(coordinator, defn)
+
+        with patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock) as mock_cmd, \
+             patch.object(number, "async_write_ha_state"):
+            await number.async_set_native_value(800.0)
+            mock_cmd.assert_called_once()
+            cmd = mock_cmd.call_args[0][0]
+            assert cmd["moduleType"] == 3
+            assert cmd["operateType"] == "acChgCfg"
+            assert cmd["params"]["slowChgWatts"] == 800
+            assert cmd["params"]["fastChgWatts"] == 800
+            assert cmd["params"]["chgPauseFlag"] == 0
+
     async def test_smartplug_number_command_templates(self) -> None:
         """All Smart Plug number defs have matching command templates."""
         for defn in SMARTPLUG_NUMBERS:
