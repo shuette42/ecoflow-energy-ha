@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import ssl
+import threading
 import time
 from typing import Callable
 
@@ -81,6 +82,9 @@ class EcoFlowMQTTClient:
         self._notified_connected = False
         self._last_counter_reset_time: float = 0
         self._counter_reset_interval = DEFAULT_COUNTER_RESET_INTERVAL
+        # Guards client swaps (create/connect/force_reconnect/disconnect).
+        # Reentrant: force_reconnect holds it while calling create_client.
+        self._client_lock = threading.RLock()
 
     @property
     def cert_account(self) -> str:
@@ -98,12 +102,27 @@ class EcoFlowMQTTClient:
         return self._wss_mode
 
     def update_credentials(self, account: str, password: str) -> None:
-        """Update stored credentials for next reconnect (e.g. after rc=5)."""
+        """Update stored credentials for next reconnect (e.g. after rc=5).
+
+        Also updates the live Paho client so its internal auto-reconnect
+        uses the fresh credentials instead of retrying stale ones until
+        the next force_reconnect.
+        """
         self._cert_account = account
         self._cert_password = password
+        if self.client is not None:
+            try:
+                self.client.username_pw_set(account, password)
+            except Exception as exc:
+                _LOGGER.debug("MQTT: live credential update failed: %s", exc)
 
     def create_client(self) -> bool:
         """Create and configure the Paho MQTT client."""
+        with self._client_lock:
+            return self._create_client_unlocked()
+
+    def _create_client_unlocked(self) -> bool:
+        """Create the Paho client. Caller must hold ``_client_lock``."""
         try:
             if not self._cert_account or not self._cert_password:
                 _LOGGER.error("MQTT: certificate_account or certificate_password missing")
@@ -288,6 +307,9 @@ class EcoFlowMQTTClient:
             min_delay *= 1.5
         else:
             min_delay *= 2.0
+        # Re-apply the cap: the tier multiplier must not push the effective
+        # delay beyond max_reconnect_delay.
+        min_delay = min(min_delay, self.max_reconnect_delay)
 
         return current_time - self.last_reconnect_time >= min_delay
 
@@ -302,8 +324,19 @@ class EcoFlowMQTTClient:
         """Signal that a reconnect is needed."""
         _LOGGER.debug("MQTT: reconnect scheduled — attempts: %d/%d", self.reconnect_attempts, self.max_reconnect_attempts)
 
+    # send_ping publishes JSON to the same /app/device/property/{sn} topic the
+    # client subscribes to — the broker echoes it back. Marker covers both
+    # compact and default json.dumps spellings.
+    _PING_ECHO_MARKERS = (b'{"command":"ping"', b'{"command": "ping"')
+
     def _on_message(self, client, userdata, msg):
         """Callback for incoming MQTT messages."""
+        if (
+            msg.topic == f"/app/device/property/{self._device_sn}"
+            and msg.payload.startswith(self._PING_ECHO_MARKERS)
+        ):
+            # Broker echo of our own keepalive ping — not device data
+            return
         _LOGGER.debug("MQTT msg: %s (%d bytes) for %s", msg.topic, len(msg.payload), self._device_sn)
         try:
             self.message_handler(msg.topic, msg.payload)
@@ -312,19 +345,20 @@ class EcoFlowMQTTClient:
 
     def connect(self) -> bool:
         """Establish the MQTT connection."""
-        try:
-            if self.is_connected():
+        with self._client_lock:
+            try:
+                if self.is_connected():
+                    return True
+
+                port = MQTT_PORT_WSS if self._wss_mode else MQTT_PORT_TCP
+                keepalive = DEFAULT_WSS_KEEPALIVE if self._wss_mode else DEFAULT_MQTT_KEEPALIVE
+
+                _LOGGER.debug("Connecting to %s:%d (%s)", self._mqtt_host, port, "WSS" if self._wss_mode else "TCP")
+                self.client.connect(self._mqtt_host, port, keepalive)
                 return True
-
-            port = MQTT_PORT_WSS if self._wss_mode else MQTT_PORT_TCP
-            keepalive = DEFAULT_WSS_KEEPALIVE if self._wss_mode else DEFAULT_MQTT_KEEPALIVE
-
-            _LOGGER.debug("Connecting to %s:%d (%s)", self._mqtt_host, port, "WSS" if self._wss_mode else "TCP")
-            self.client.connect(self._mqtt_host, port, keepalive)
-            return True
-        except Exception as exc:
-            _LOGGER.warning("MQTT connection error: %s", exc)
-            return False
+            except Exception as exc:
+                _LOGGER.warning("MQTT connection error: %s", exc)
+                return False
 
     def try_reconnect(self) -> bool:
         """Attempt reconnect if disconnected and backoff has elapsed."""
@@ -347,41 +381,53 @@ class EcoFlowMQTTClient:
 
         Recreates the Paho client instead of manipulating private attributes.
         No blocking sleep — the old connection is torn down synchronously.
+
+        Guarded by a non-blocking lock: overlapping calls (watchdog +
+        credential refresh run in separate executor threads) would orphan
+        a live Paho client with a running network thread. The second
+        caller skips instead.
         """
-        _LOGGER.debug("Force-reconnect: disconnecting and recreating client...")
-        try:
-            self.client.loop_stop()
-        except Exception:
-            pass
-        try:
-            self.client.disconnect()
-        except Exception:
-            pass
-        self.connected = False
-        self.client = None
-
-        # Recreate the client (generates new ClientID for WSS)
-        if not self.create_client():
-            _LOGGER.error("Force-reconnect: client recreation failed")
+        if not self._client_lock.acquire(blocking=False):
+            _LOGGER.debug("Force-reconnect: skipped — another reconnect already in flight")
             return False
-
         try:
-            port = MQTT_PORT_WSS if self._wss_mode else MQTT_PORT_TCP
-            keepalive = DEFAULT_WSS_KEEPALIVE if self._wss_mode else DEFAULT_MQTT_KEEPALIVE
-            self.client.connect(self._mqtt_host, port, keepalive)
-            self.client.loop_start()
-            _LOGGER.debug("Force-reconnect: success at %s:%s (%s)", self._mqtt_host, port, "WSS" if self._wss_mode else "TCP")
-            return True
-        except Exception as exc:
-            _LOGGER.error("Force-reconnect failed: %s", exc)
-            return False
+            _LOGGER.debug("Force-reconnect: disconnecting and recreating client...")
+            try:
+                self.client.loop_stop()
+            except Exception:
+                pass
+            try:
+                self.client.disconnect()
+            except Exception:
+                pass
+            self.connected = False
+            self.client = None
+
+            # Recreate the client (generates new ClientID for WSS)
+            if not self._create_client_unlocked():
+                _LOGGER.error("Force-reconnect: client recreation failed")
+                return False
+
+            try:
+                port = MQTT_PORT_WSS if self._wss_mode else MQTT_PORT_TCP
+                keepalive = DEFAULT_WSS_KEEPALIVE if self._wss_mode else DEFAULT_MQTT_KEEPALIVE
+                self.client.connect(self._mqtt_host, port, keepalive)
+                self.client.loop_start()
+                _LOGGER.debug("Force-reconnect: success at %s:%s (%s)", self._mqtt_host, port, "WSS" if self._wss_mode else "TCP")
+                return True
+            except Exception as exc:
+                _LOGGER.error("Force-reconnect failed: %s", exc)
+                return False
+        finally:
+            self._client_lock.release()
 
     def disconnect(self) -> None:
         """Disconnect the MQTT client."""
-        if self.client:
-            self.client.loop_stop()
-            self.client.disconnect()
-            self.connected = False
+        with self._client_lock:
+            if self.client:
+                self.client.loop_stop()
+                self.client.disconnect()
+                self.connected = False
 
     def start_loop(self) -> None:
         """Start the Paho network loop."""
