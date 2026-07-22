@@ -1101,3 +1101,116 @@ class TestProtoConnectivityViaRemapBpKeys:
         assert result["wifi_status"] == "connected"
         assert result["ethernet_status"] == "disconnected"
         assert result["cellular_status"] == "connected"
+
+
+class TestEnumStringReachability:
+    """String enum values must map via the string tables, not be dropped."""
+
+    def test_string_work_mode_mapped(self):
+        from ecoflow_energy.ecoflow.parsers.powerocean_proto import (
+            _apply_enum_mappings,
+        )
+
+        result = {"ems_work_mode": "WORKMODE_SELFUSE"}
+        _apply_enum_mappings(result)
+        assert result["ems_work_mode"] == "self_use"
+
+    def test_string_pcs_run_state_mapped(self):
+        from ecoflow_energy.ecoflow.parsers.powerocean_proto import (
+            _apply_enum_mappings,
+        )
+
+        result = {"pcs_run_state": "RUNSTA_RUN"}
+        _apply_enum_mappings(result)
+        assert result["pcs_run_state"] == "running"
+
+    def test_int_work_mode_still_mapped(self):
+        from ecoflow_energy.ecoflow.parsers.powerocean_proto import (
+            _apply_enum_mappings,
+        )
+
+        result = {"ems_work_mode": 0}
+        _apply_enum_mappings(result)
+        assert result["ems_work_mode"] == "self_use"
+
+    def test_unknown_int_still_dropped(self):
+        from ecoflow_energy.ecoflow.parsers.powerocean_proto import (
+            _apply_enum_mappings,
+        )
+
+        result = {"ems_work_mode": 99}
+        _apply_enum_mappings(result)
+        assert "ems_work_mode" not in result
+
+
+class TestGridStatusFallbackAllPhases:
+    """Grid detection must consider all three phase voltages."""
+
+    def test_phase_b_energized_when_a_zero(self):
+        from ecoflow_energy.ecoflow.parsers.powerocean_proto import (
+            flatten_heartbeat,
+        )
+
+        raw = {
+            "pcs_load_info": [
+                {"vol": 0.0},
+                {"vol": 230.0},
+                {"vol": 0.0},
+            ]
+        }
+        result = flatten_heartbeat(raw)
+        assert result["grid_status"] == "ok"
+
+    def test_phase_a_missing_phase_c_energized(self):
+        from ecoflow_energy.ecoflow.parsers.powerocean_proto import (
+            flatten_heartbeat,
+        )
+
+        raw = {"pcs_c_phase": {"vol": 231.5}}
+        result = flatten_heartbeat(raw)
+        assert result["grid_status"] == "ok"
+
+    def test_all_phases_low_not_detected(self):
+        from ecoflow_energy.ecoflow.parsers.powerocean_proto import (
+            flatten_heartbeat,
+        )
+
+        raw = {
+            "pcs_load_info": [
+                {"vol": 0.0},
+                {"vol": 0.0},
+                {"vol": 3.2},
+            ]
+        }
+        result = flatten_heartbeat(raw)
+        assert result["grid_status"] == "not_detected"
+
+    def test_no_phase_data_no_grid_status(self):
+        from ecoflow_energy.ecoflow.parsers.powerocean_proto import (
+            flatten_heartbeat,
+        )
+
+        assert "grid_status" not in flatten_heartbeat({})
+
+
+class TestBatteryPackDeterministicNumbering:
+    """Pack numbering must not depend on dict insertion order."""
+
+    @staticmethod
+    def _pack(soc: float) -> str:
+        return json.dumps({"bpSoc": soc, "bpPwr": 100, "bpSoh": 100})
+
+    def test_shuffled_insertion_same_numbering(self):
+        forward = {
+            "bp_addr.AAAA0001": self._pack(11),
+            "bp_addr.BBBB0002": self._pack(22),
+            "bp_addr.CCCC0003": self._pack(33),
+        }
+        reversed_order = dict(reversed(list(forward.items())))
+
+        r1 = _extract_all_battery_packs(forward)
+        r2 = _extract_all_battery_packs(reversed_order)
+        assert r1 == r2
+        assert r1["pack1_soc"] == 11
+        assert r1["pack2_soc"] == 22
+        assert r1["pack3_soc"] == 33

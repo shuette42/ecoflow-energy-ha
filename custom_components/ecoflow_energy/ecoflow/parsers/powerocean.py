@@ -375,9 +375,14 @@ def _extract_all_battery_packs(quota_data: dict) -> dict[str, Any]:
     result: dict[str, Any] = {}
 
     pack_num = 0
-    for key, val in quota_data.items():
-        if not key.startswith("bp_addr.") or key == "bp_addr.updateTime":
-            continue
+    # Sort the bp_addr.{sn} keys so pack numbering is deterministic
+    # regardless of dict insertion order in the API response.
+    pack_keys = sorted(
+        k for k in quota_data
+        if k.startswith("bp_addr.") and k != "bp_addr.updateTime"
+    )
+    for key in pack_keys:
+        val = quota_data[key]
 
         if isinstance(val, str):
             try:
