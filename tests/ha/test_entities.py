@@ -1137,3 +1137,54 @@ class TestAvailabilityPropagation:
 
         coordinator._device_available = True
         assert number.available is True
+
+
+# ===========================================================================
+# Explicit None in coordinator data (parser-side clear)
+# ===========================================================================
+
+
+class TestSensorExplicitNoneClear:
+    """A key present with value None shows unknown; a missing key restores."""
+
+    async def test_present_none_returns_none(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+        coordinator.async_set_updated_data({"chg_remain_time_min": None})
+
+        defn = EcoFlowSensorDef(key="chg_remain_time_min", name="Charge Remaining")
+        sensor = EcoFlowSensor(coordinator, defn)
+        sensor._restored_value = 720
+        assert sensor.native_value is None
+
+    async def test_missing_key_falls_back_to_restored(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+        coordinator.async_set_updated_data({"soc": 85.0})
+
+        defn = EcoFlowSensorDef(key="chg_remain_time_min", name="Charge Remaining")
+        sensor = EcoFlowSensor(coordinator, defn)
+        sensor._restored_value = 720
+        assert sensor.native_value == 720
+
+    async def test_present_value_beats_restored(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+        coordinator.async_set_updated_data({"chg_remain_time_min": 55})
+
+        defn = EcoFlowSensorDef(key="chg_remain_time_min", name="Charge Remaining")
+        sensor = EcoFlowSensor(coordinator, defn)
+        sensor._restored_value = 720
+        assert sensor.native_value == 55
