@@ -5975,3 +5975,54 @@ class TestDeveloperCredentialRefresh:
         assert coordinator.event_log[-1]["type"] == "credential_proactive_fail"
         assert coordinator.event_log[-1]["detail"] == "api failed"
         mock_reauth.assert_not_called()
+
+
+# ===========================================================================
+# Malformed protobuf frames through _parse_message
+# ===========================================================================
+
+
+class TestMalformedProtoMessages:
+    """Garbage or truncated binary frames must return None without raising."""
+
+    _GARBAGE = [
+        b"",
+        b"\x80",
+        b"\x0a\x80",
+        b"\x0a\x05\x08",
+        b"\x0a\x02\x2d\x00",
+        b"\x08" + b"\xff" * 11,
+    ]
+
+    async def test_powerocean_get_reply_garbage(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        topic = "/app/user123/SN001/thing/property/get_reply"
+        for payload in self._GARBAGE:
+            assert coordinator._parse_message(topic, payload) is None
+
+    async def test_device_property_garbage_per_device_type(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        standard_config_entry.add_to_hass(hass)
+        for device in (
+            MOCK_POWEROCEAN_DEVICE,
+            MOCK_DELTA_DEVICE,
+            MOCK_DELTA3_DEVICE,
+            MOCK_SMARTPLUG_DEVICE,
+            MOCK_STREAM_DEVICE,
+        ):
+            coordinator = EcoFlowDeviceCoordinator(
+                hass, standard_config_entry, device
+            )
+            topic = f"/app/device/property/{device['sn']}"
+            for payload in self._GARBAGE:
+                assert coordinator._parse_message(topic, payload) is None
