@@ -159,9 +159,6 @@
       "typec3_w": {
         "name": "Type-C 3"
       },
-      "backup_reserve_soc_pct": {
-        "name": "Backup Reserve Level"
-      },
       "solar_w": {
         "name": "Solar Power"
       },
@@ -1164,22 +1161,22 @@
       "wifi_status": {
         "name": "WiFi Status",
         "state": {
-          "not_detected": "Not Detected",
-          "ok": "OK"
+          "disconnected": "Disconnected",
+          "connected": "Connected"
         }
       },
       "ethernet_status": {
         "name": "Ethernet Status",
         "state": {
-          "not_detected": "Not Detected",
-          "ok": "OK"
+          "disconnected": "Disconnected",
+          "connected": "Connected"
         }
       },
       "cellular_status": {
         "name": "4G Status",
         "state": {
-          "not_detected": "Not Detected",
-          "ok": "OK"
+          "disconnected": "Disconnected",
+          "connected": "Connected"
         }
       },
       "ems_led_brightness": {
@@ -1240,27 +1237,6 @@
       },
       "ac_outlet_2_enabled": {
         "name": "AC Outlet 2"
-      },
-      "ac_out_flow": {
-        "name": "AC output active"
-      },
-      "ac2_out_flow": {
-        "name": "AC output 2 active"
-      },
-      "dc_12v_out_flow": {
-        "name": "12V output active"
-      },
-      "backup_reserve_enabled": {
-        "name": "Backup Reserve"
-      },
-      "xboost_enabled": {
-        "name": "X-Boost"
-      },
-      "beeper_enabled": {
-        "name": "Beeper"
-      },
-      "bypass_out_disabled": {
-        "name": "Bypass Output Disabled"
       }
     },
     "switch": {
