@@ -1303,6 +1303,14 @@ class EcoFlowDeviceCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self.async_set_powerocean_soc(target_backup, app_int)
         )
 
+    def mark_user_surplus_set(self) -> None:
+        """Record a user-initiated surplus/backup change.
+
+        The surplus auto-sync uses this timestamp to suppress stale
+        app-side echoes.
+        """
+        self._last_user_surplus_set_ts = time.monotonic()
+
     async def _async_flush_energy_state(self) -> None:
         """Flush energy integrator state to disk (non-blocking)."""
         await self.hass.async_add_executor_job(self._energy_integrator.flush)

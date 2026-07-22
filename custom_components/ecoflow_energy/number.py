@@ -240,7 +240,7 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
             current_solar = int(self.coordinator.data.get("ems_app_surplus_pct", 100))
             backup = int_value
             solar = max(current_solar, backup)  # enforce backup <= solar
-            self.coordinator._last_user_surplus_set_ts = time.monotonic()
+            self.coordinator.mark_user_surplus_set()
             ok = await self.coordinator.async_set_powerocean_soc_debounced(backup, solar)
             if ok:
                 self._apply_optimistic_number(value)
@@ -250,7 +250,7 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
             current_backup = int(self.coordinator.data.get("ems_discharge_lower_limit_pct", 0))
             solar = int_value
             backup = min(current_backup, solar)  # enforce backup <= solar
-            self.coordinator._last_user_surplus_set_ts = time.monotonic()
+            self.coordinator.mark_user_surplus_set()
             ok = await self.coordinator.async_set_powerocean_soc_debounced(backup, solar)
             if ok:
                 self._apply_optimistic_number(value)
