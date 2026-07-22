@@ -161,8 +161,9 @@ class EcoFlowNumber(
                 "cmdCode": sp_template["cmdCode"],
                 "params": {sp_template["param_key"]: int(value * scale)},
             }
-            await self.coordinator.async_send_set_command(command)
-            self._apply_optimistic_number(value)
+            ok = await self.coordinator.async_send_set_command(command)
+            if ok:
+                self._apply_optimistic_number(value)
             return
 
         # Delta uses moduleType/operateType format
@@ -181,8 +182,9 @@ class EcoFlowNumber(
             "params": params,
         }
 
-        await self.coordinator.async_send_set_command(command)
-        self._apply_optimistic_number(value)
+        ok = await self.coordinator.async_send_set_command(command)
+        if ok:
+            self._apply_optimistic_number(value)
 
 
     def _apply_optimistic_number(self, value: float) -> None:
@@ -196,7 +198,6 @@ class EcoFlowNumber(
 
     async def _async_set_smartplug_proto(self, key: str, value: float) -> bool:
         """Set a SmartPlug number value via WSS Protobuf (app-auth mode)."""
-        int_value = int(value)
         sn = self.coordinator.device_sn
         if key == "led_brightness":
             # User sets 0-100%, device expects 0-1023
@@ -204,7 +205,7 @@ class EcoFlowNumber(
             payload = build_plug_brightness_payload(raw_brightness, device_sn=sn)
             label = "brightness"
         elif key == "max_watts":
-            payload = build_plug_max_watts_payload(int_value, device_sn=sn)
+            payload = build_plug_max_watts_payload(int(value), device_sn=sn)
             label = "max_watts"
         else:
             _LOGGER.warning("No SmartPlug proto SET handler for %s", key)

@@ -128,16 +128,22 @@ class EcoFlowSwitch(
         await self._send_command(False)
 
     async def _send_command(self, turn_on: bool) -> None:
-        """Send a SET command and apply optimistic lock."""
+        """Send a SET command; apply the optimistic lock only on success.
+
+        A failed send must not flip the UI to a state the device never
+        received - the switch would show the wrong state for the whole
+        lock window and then snap back.
+        """
         # SmartPlug app-auth: use protobuf SET (JSON cmdCode only works on /open/ topic)
         if (
             self.coordinator.device_type == DEVICE_TYPE_SMARTPLUG
             and self.coordinator.enhanced_mode
             and self._definition.key == "plug_switch"
         ):
-            self._apply_optimistic(turn_on)
             payload = build_plug_switch_payload(turn_on, device_sn=self.coordinator.device_sn)
-            await self.coordinator.async_send_proto_set_command(payload, "plug_switch")
+            ok = await self.coordinator.async_send_proto_set_command(payload, "plug_switch")
+            if ok:
+                self._apply_optimistic(turn_on)
             return
 
         command = self._build_command(turn_on)
@@ -145,11 +151,12 @@ class EcoFlowSwitch(
             _LOGGER.warning("No command template for %s", self._definition.key)
             return
 
-        self._apply_optimistic(turn_on)
         if self.coordinator.device_type == DEVICE_TYPE_DELTA3:
-            await self.coordinator.async_send_delta3_set(command)
-            return
-        await self.coordinator.async_send_set_command(command)
+            ok = await self.coordinator.async_send_delta3_set(command)
+        else:
+            ok = await self.coordinator.async_send_set_command(command)
+        if ok:
+            self._apply_optimistic(turn_on)
 
     def _apply_optimistic(self, turn_on: bool) -> None:
         """Apply optimistic lock: immediately reflect the new state."""

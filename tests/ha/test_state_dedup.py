@@ -647,6 +647,149 @@ class TestOptimisticDedupSync:
 
 
 # ===========================================================================
+# Failed SET commands must not apply optimistic state
+# ===========================================================================
+
+
+class TestFailedSendNoOptimistic:
+    async def test_switch_failed_send_keeps_state(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """A failed JSON SET leaves the switch state untouched."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+        coordinator.async_set_updated_data({"ac_enabled": 1})
+
+        defn = EcoFlowSwitchDef(key="ac_switch", name="AC Output", state_key="ac_enabled")
+        switch = EcoFlowSwitch(coordinator, defn)
+
+        with (
+            patch.object(
+                coordinator, "async_send_set_command",
+                new_callable=AsyncMock, return_value=False,
+            ),
+            patch.object(switch, "async_write_ha_state") as mock_write,
+        ):
+            await switch._send_command(False)
+
+        assert mock_write.call_count == 0
+        assert switch._optimistic_value is None
+        assert switch.is_on is True  # still the device-reported state
+
+    async def test_switch_failed_proto_send_keeps_state(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """A failed SmartPlug proto SET leaves the switch state untouched."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+        coordinator.device_type = "smartplug"
+        coordinator._enhanced_mode = True
+        coordinator.async_set_updated_data({"switch_state": 1})
+
+        defn = EcoFlowSwitchDef(key="plug_switch", name="Plug", state_key="switch_state")
+        switch = EcoFlowSwitch(coordinator, defn)
+
+        with (
+            patch.object(
+                coordinator, "async_send_proto_set_command",
+                new_callable=AsyncMock, return_value=False,
+            ),
+            patch.object(switch, "async_write_ha_state") as mock_write,
+        ):
+            await switch._send_command(False)
+
+        assert mock_write.call_count == 0
+        assert switch._optimistic_value is None
+        assert switch.is_on is True
+
+    async def test_switch_successful_send_applies_optimistic(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """A successful send still applies the optimistic state."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+        coordinator.async_set_updated_data({"ac_enabled": 1})
+
+        defn = EcoFlowSwitchDef(key="ac_switch", name="AC Output", state_key="ac_enabled")
+        switch = EcoFlowSwitch(coordinator, defn)
+
+        with (
+            patch.object(
+                coordinator, "async_send_set_command",
+                new_callable=AsyncMock, return_value=True,
+            ),
+            patch.object(switch, "async_write_ha_state") as mock_write,
+        ):
+            await switch._send_command(False)
+
+        assert mock_write.call_count == 1
+        assert switch.is_on is False  # optimistic lock active
+
+    async def test_number_failed_send_keeps_state(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """A failed Delta JSON SET leaves the number state untouched."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+        coordinator.async_set_updated_data({"max_charge_soc": 80})
+
+        defn = EcoFlowNumberDef(
+            key="max_charge_soc", name="Max Charge SoC",
+            state_key="max_charge_soc", unit="%",
+        )
+        number = EcoFlowNumber(coordinator, defn)
+
+        with (
+            patch.object(
+                coordinator, "async_send_set_command",
+                new_callable=AsyncMock, return_value=False,
+            ),
+            patch.object(number, "async_write_ha_state") as mock_write,
+        ):
+            await number.async_set_native_value(95.0)
+
+        assert mock_write.call_count == 0
+        assert number.native_value == 80
+
+    async def test_smartplug_number_failed_send_keeps_state(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """A failed SmartPlug JSON SET leaves the number state untouched."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+        coordinator.device_type = "smartplug"
+        coordinator.async_set_updated_data({"max_power_w": 2000})
+
+        defn = EcoFlowNumberDef(
+            key="max_watts", name="Max Power Limit",
+            state_key="max_power_w", unit="W",
+        )
+        number = EcoFlowNumber(coordinator, defn)
+
+        with (
+            patch.object(
+                coordinator, "async_send_set_command",
+                new_callable=AsyncMock, return_value=False,
+            ),
+            patch.object(number, "async_write_ha_state") as mock_write,
+        ):
+            await number.async_set_native_value(1500.0)
+
+        assert mock_write.call_count == 0
+        assert number.native_value == 2000
+
+
+# ===========================================================================
 # Enum sensor restore discard
 # ===========================================================================
 
