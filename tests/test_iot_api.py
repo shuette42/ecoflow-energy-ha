@@ -306,6 +306,14 @@ class TestDeviceList:
         assert result is None
 
     @pytest.mark.asyncio
+    async def test_device_list_empty_list_returns_empty_list(self):
+        """An account with no bound devices returns [], not None (error)."""
+        client, session = _make_client()
+        session.get = MagicMock(return_value=_mock_response({"data": [], "code": "0"}))
+        result = await client.get_device_list()
+        assert result == []
+
+    @pytest.mark.asyncio
     async def test_device_list_network_error_returns_none(self):
         import aiohttp
 

@@ -79,9 +79,10 @@ class IoTApiClient:
                 resp.raise_for_status()
                 body = await resp.json()
                 data = body.get("data")
-                if not data:
+                if data is None:
                     _LOGGER.warning("IoT API device list: empty response — code=%s", body.get("code"))
                     return None
+                # data == [] is a legitimate account with no bound devices
                 return data
         except (aiohttp.ClientError, TimeoutError) as exc:
             _LOGGER.warning("IoT API device list failed — %s", exc)

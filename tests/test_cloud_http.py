@@ -106,6 +106,16 @@ class TestSignature:
         result = dict(client._flatten({"cfgEnergyBackup": {"energyBackupEn": True}}))
         assert result == {"cfgEnergyBackup.energyBackupEn": "true"}
 
+    def test_flatten_none_uses_json_null(self):
+        """None must sign as "null", never Python's "None".
+
+        Same reasoning as booleans: the server recomputes the signature from
+        the JSON body, and json.dumps emits null for None values.
+        """
+        client = self._make_client()
+        result = dict(client._flatten({"cfgValue": None}))
+        assert result == {"cfgValue": "null"}
+
     def test_flatten_keeps_integers_unquoted(self):
         """Guard against the boolean branch swallowing ints (bool subclasses int)."""
         client = self._make_client()

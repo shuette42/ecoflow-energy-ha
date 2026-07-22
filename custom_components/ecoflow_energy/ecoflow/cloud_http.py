@@ -102,6 +102,10 @@ class EcoFlowHTTPQuota:
             # which the server never reconstructs from the body, so the request
             # would fail with 8521 "signature is wrong".
             items.append((parent, "true" if obj else "false"))
+        elif obj is None:
+            # Same reasoning as booleans: json.dumps emits null, str(None)
+            # would sign "None" and the server would reject the signature.
+            items.append((parent, "null"))
         else:
             items.append((parent, str(obj)))
         return items
