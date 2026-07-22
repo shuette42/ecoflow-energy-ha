@@ -20,6 +20,7 @@ All notable changes to this project will be documented in this file.
 - Ah battery capacity counters are disabled diagnostic entities. (beta.2)
 
 ### Fixed
+- Base DELTA 3 ("Classic") is no longer skipped as unsupported in Enhanced mode. The app-auth device list reports this model with an empty productName, unlike the Max Plus, so the existing keyword classification never matched it and it was silently dropped as "no parser available for this model yet" even though the Delta 3 parser handles it fine once routed. Device classification now also recognizes the P321 serial prefix as a Delta 3 device.
 - The Delta 2 Max AC Charge Speed slider now reads and writes the actually configured charging speed. It previously displayed the rated maximum (2400 W), never picked up changes made in the EcoFlow app, and every value written from Home Assistant effectively ended up at 400 W because the command hardcoded the governing parameter. (beta.7)
 - Entities now go unavailable and recover promptly when the connection degrades or comes back. Availability changes with unchanged sensor values were filtered out by the state-write deduplication, so entities could keep showing as available long after the data stream stopped, and a recovery was only reflected once a value happened to change. (beta.7)
 - English installs now show proper connectivity state labels. The WiFi, Ethernet and 4G status sensors displayed raw state keys because the English translation carried state names copied from the grid status sensor. (beta.7)
