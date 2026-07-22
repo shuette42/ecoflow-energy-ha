@@ -112,34 +112,21 @@ class EcoFlowMQTTClient:
             if self._wss_mode:
                 client_id = generate_client_id(self._user_id)
                 _LOGGER.debug("WSS MQTT client (port %d)", MQTT_PORT_WSS)
-                try:
-                    self.client = mqtt.Client(
-                        mqtt.CallbackAPIVersion.VERSION2,
-                        client_id=client_id,
-                        transport="websockets",
-                        clean_session=True,
-                    )
-                except AttributeError:
-                    self.client = mqtt.Client(
-                        client_id=client_id,
-                        transport="websockets",
-                        clean_session=True,
-                    )
+                self.client = mqtt.Client(
+                    mqtt.CallbackAPIVersion.VERSION2,
+                    client_id=client_id,
+                    transport="websockets",
+                    clean_session=True,
+                )
                 self.client.ws_set_options(path=MQTT_WSS_PATH)
             else:
                 client_id = f"ecoflow_ha_{self._device_sn}"
                 _LOGGER.debug("TCP MQTT client (port %d)", MQTT_PORT_TCP)
-                try:
-                    self.client = mqtt.Client(
-                        mqtt.CallbackAPIVersion.VERSION2,
-                        client_id=client_id,
-                        clean_session=True,
-                    )
-                except AttributeError:
-                    self.client = mqtt.Client(
-                        client_id=client_id,
-                        clean_session=True,
-                    )
+                self.client = mqtt.Client(
+                    mqtt.CallbackAPIVersion.VERSION2,
+                    client_id=client_id,
+                    clean_session=True,
+                )
 
             self.client.username_pw_set(self._cert_account, self._cert_password)
             self.client.tls_set(cert_reqs=ssl.CERT_REQUIRED)
