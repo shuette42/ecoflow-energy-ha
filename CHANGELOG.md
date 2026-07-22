@@ -14,6 +14,7 @@ All notable changes to this project will be documented in this file.
 - Remaining charge and discharge time are now reported only while the battery is actually charging or discharging. The device keeps both values populated at all times and parks the inactive one on a placeholder, which would otherwise show a runtime of over 200 hours on an idle unit. (beta.4)
 
 ### Changed
+- Internal restructuring of the device coordinator into smaller, single-purpose modules; no functional or user-facing change. (beta.7)
 - Stream AC Pro is now modeled as an AC-coupled battery: battery charge/discharge energy stays enabled for the Energy Dashboard, while meter-dependent solar/home values remain disabled diagnostics unless an EcoFlow-compatible meter is paired in the app. (beta.2)
 - Ah battery capacity counters are disabled diagnostic entities. (beta.2)
 

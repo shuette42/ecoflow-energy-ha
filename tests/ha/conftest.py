@@ -177,7 +177,7 @@ def app_auth_config_entry() -> MockConfigEntry:
 def mock_iot_api():
     """Patch IoTApiClient to return mock credentials and devices."""
     with patch(
-        "custom_components.ecoflow_energy.coordinator.IoTApiClient",
+        "custom_components.ecoflow_energy.coordinator.setup.IoTApiClient",
     ) as cls:
         instance = cls.return_value
         instance.get_mqtt_credentials = AsyncMock(return_value=MOCK_MQTT_CREDENTIALS)
@@ -190,7 +190,7 @@ def mock_iot_api():
 def mock_mqtt_client():
     """Patch EcoFlowMQTTClient to a no-op mock."""
     with patch(
-        "custom_components.ecoflow_energy.coordinator.EcoFlowMQTTClient",
+        "custom_components.ecoflow_energy.coordinator.setup.EcoFlowMQTTClient",
     ) as cls:
         instance = cls.return_value
         instance.create_client.return_value = True
@@ -212,7 +212,7 @@ def mock_mqtt_client():
 def mock_http_client():
     """Patch EcoFlowHTTPQuota to return mock data."""
     with patch(
-        "custom_components.ecoflow_energy.coordinator.EcoFlowHTTPQuota",
+        "custom_components.ecoflow_energy.coordinator.setup.EcoFlowHTTPQuota",
     ) as cls:
         instance = cls.return_value
         instance.get_quota_all = AsyncMock(return_value={
