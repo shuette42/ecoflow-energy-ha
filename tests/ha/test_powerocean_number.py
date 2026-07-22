@@ -570,6 +570,55 @@ class TestPowerOceanAppSurplusAutoSync:
             await hass.async_block_till_done()
         coordinator.async_set_powerocean_soc.assert_called_once_with(0, 47)
 
+    async def test_non_numeric_app_value_aborts_silently(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """A non-numeric ems_app_surplus_pct aborts the sync without a SET."""
+        coordinator = self._make_coordinator(hass, enhanced_config_entry)
+        coordinator._device_data["ems_app_surplus_pct"] = "abc"
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.time.monotonic",
+            return_value=1000.0,
+        ):
+            coordinator._maybe_schedule_surplus_sync()
+        coordinator.async_set_powerocean_soc.assert_not_called()
+        assert not any(
+            e["type"] == "surplus_auto_sync" for e in coordinator.event_log
+        )
+
+    async def test_non_numeric_ems_value_aborts_silently(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """A non-numeric ems_backup_ratio_pct aborts the sync without a SET."""
+        coordinator = self._make_coordinator(hass, enhanced_config_entry)
+        coordinator._device_data["ems_backup_ratio_pct"] = "n/a"
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.time.monotonic",
+            return_value=1000.0,
+        ):
+            coordinator._maybe_schedule_surplus_sync()
+        coordinator.async_set_powerocean_soc.assert_not_called()
+
+    async def test_non_numeric_backup_limit_falls_back_to_zero(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """A non-numeric discharge-lower-limit falls back to backup=0 and syncs."""
+        coordinator = self._make_coordinator(hass, enhanced_config_entry)
+        coordinator._device_data["ems_discharge_lower_limit_pct"] = "junk"
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.time.monotonic",
+            return_value=1000.0,
+        ):
+            coordinator._maybe_schedule_surplus_sync()
+            await hass.async_block_till_done()
+        coordinator.async_set_powerocean_soc.assert_called_once_with(0, 47)
+
     async def test_apply_data_updates_param_change_ts(
         self,
         hass: HomeAssistant,
