@@ -58,7 +58,7 @@ class TestDeviceTypeRouting:
         assert get_device_type("", "D3M1TEST00000001") == "delta3"
 
     def test_delta3_classic_by_p321_sn_prefix(self) -> None:
-        assert get_device_type("", "P321ZK1APHCH0617") == "delta3"
+        assert get_device_type("", "P321TEST00000001") == "delta3"
 
     def test_delta3_keyword_wins_over_delta(self) -> None:
         # The delta3 keyword check runs before the generic delta check.
