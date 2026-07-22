@@ -158,6 +158,52 @@ class TestCredentialCaching:
         result2 = await client.refresh_credentials()
         assert result2 == creds2
 
+    @pytest.mark.asyncio
+    async def test_forced_refresh_bypasses_rate_limit(self):
+        """refresh_credentials must fetch even inside the 60 s rate-limit window."""
+        client, session = _make_client()
+        creds1 = {"certificateAccount": "user1"}
+        creds2 = {"certificateAccount": "user2"}
+
+        responses = [_mock_response({"data": creds1}), _mock_response({"data": creds2})]
+        session.get = MagicMock(side_effect=lambda *a, **kw: responses.pop(0))
+
+        result1 = await client.get_mqtt_credentials()
+        assert result1 == creds1
+
+        # Still inside the rate-limit window — forced refresh must fetch anyway
+        result2 = await client.refresh_credentials()
+        assert result2 == creds2
+        assert session.get.call_count == 2
+        assert client._cached == creds2
+
+    @pytest.mark.asyncio
+    async def test_failed_forced_refresh_keeps_previous_cache(self):
+        """A failed forced refresh must not destroy the working cache."""
+        import aiohttp
+
+        client, session = _make_client()
+        creds = {"certificateAccount": "user1"}
+
+        calls = [_mock_response({"data": creds}), aiohttp.ClientError("boom")]
+
+        def _side_effect(*args, **kwargs):
+            item = calls.pop(0)
+            if isinstance(item, Exception):
+                raise item
+            return item
+
+        session.get = MagicMock(side_effect=_side_effect)
+
+        result1 = await client.get_mqtt_credentials()
+        assert result1 == creds
+
+        result2 = await client.refresh_credentials()
+        assert result2 is None
+        # Old credentials survive the failed refresh
+        assert client._cached == creds
+        assert await client.get_mqtt_credentials() == creds
+
 
 # ===========================================================================
 # Rate Limit

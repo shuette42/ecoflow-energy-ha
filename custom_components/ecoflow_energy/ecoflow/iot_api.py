@@ -59,10 +59,12 @@ class IoTApiClient:
     async def refresh_credentials(self) -> _Credentials | None:
         """Force a new fetch (e.g. after AUTH error rc=5).
 
-        Respects the rate-limit guard (60 s).
+        Bypasses the rate-limit guard — forced refreshes only happen on
+        auth failure or age-based rotation, both rare. The previous cache
+        is kept until a fetch succeeds, so a failed refresh does not
+        destroy working credentials.
         """
-        self._cached = None
-        return await self._fetch()
+        return await self._fetch(force=True)
 
     async def get_device_list(self) -> list | None:
         """Fetch the list of bound devices.
@@ -112,10 +114,14 @@ class IoTApiClient:
             "sign": sig,
         }
 
-    async def _fetch(self) -> _Credentials | None:
-        """Fetch credentials from the API (with rate-limit guard)."""
+    async def _fetch(self, force: bool = False) -> _Credentials | None:
+        """Fetch credentials from the API (with rate-limit guard).
+
+        ``force=True`` bypasses the rate-limit guard (forced refresh after
+        an auth failure must not be answered from the stale cache).
+        """
         now = time.monotonic()
-        if (now - self._last_fetch_ts) < IOT_MIN_FETCH_INTERVAL_S:
+        if not force and (now - self._last_fetch_ts) < IOT_MIN_FETCH_INTERVAL_S:
             _LOGGER.debug(
                 "IoT API: rate-limited — next fetch in %.0f s",
                 IOT_MIN_FETCH_INTERVAL_S - (now - self._last_fetch_ts),
