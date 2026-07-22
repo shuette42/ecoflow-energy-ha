@@ -41,6 +41,7 @@ from .const import (
 )
 from .coordinator import EcoFlowDeviceCoordinator
 from .ecoflow.parsers.smartplug import build_plug_switch_payload
+from .entity import EcoFlowWriteGateMixin
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -64,7 +65,9 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class EcoFlowSwitch(CoordinatorEntity[EcoFlowDeviceCoordinator], SwitchEntity):
+class EcoFlowSwitch(
+    EcoFlowWriteGateMixin, CoordinatorEntity[EcoFlowDeviceCoordinator], SwitchEntity
+):
     """An EcoFlow switch entity with optimistic lock."""
 
     _attr_has_entity_name = True
@@ -152,8 +155,7 @@ class EcoFlowSwitch(CoordinatorEntity[EcoFlowDeviceCoordinator], SwitchEntity):
         """Apply optimistic lock: immediately reflect the new state."""
         self._optimistic_value = turn_on
         self._optimistic_lock_until = time.monotonic() + OPTIMISTIC_LOCK_S
-        self._last_written_value = turn_on
-        self.async_write_ha_state()
+        self._write_state_always(turn_on)
 
     def _build_command(self, turn_on: bool) -> dict[str, Any] | None:
         """Build a SET command from legacy or declarative templates."""
@@ -193,10 +195,7 @@ class EcoFlowSwitch(CoordinatorEntity[EcoFlowDeviceCoordinator], SwitchEntity):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        new_value = self.is_on
-        if new_value != self._last_written_value:
-            self._last_written_value = new_value
-            self.async_write_ha_state()
+        self._write_state_if_changed(self.is_on)
 
 
 def _get_switch_defs(device_type: str) -> list[EcoFlowSwitchDef]:

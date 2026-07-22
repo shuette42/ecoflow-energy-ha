@@ -2075,6 +2075,64 @@ class TestStaleDetection:
         assert log[-1]["detail"] == "device_available"
         self._cleanup_stale_timer(coordinator)
 
+    async def test_stale_unavailable_transition_notifies_listeners(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Going unavailable pushes an update to entities without new data."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        coordinator._mqtt_client = MagicMock()
+        coordinator._mqtt_client.is_connected.return_value = False
+        coordinator._mqtt_client.try_reconnect.return_value = False
+        coordinator._mqtt_client.reconnect_attempts = 0
+
+        now = 10_000.0
+        with (
+            patch(
+                "custom_components.ecoflow_energy.coordinator.time.monotonic",
+                return_value=now,
+            ),
+            patch.object(coordinator, "async_update_listeners") as mock_notify,
+        ):
+            coordinator._last_mqtt_ts = now - HARD_UNAVAILABLE_S - 5
+            coordinator._check_stale()
+
+        assert coordinator._device_available is False
+        mock_notify.assert_called_once()
+        self._cleanup_stale_timer(coordinator)
+
+    async def test_stale_recovery_transition_notifies_listeners(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Recovery from unavailable pushes an update to entities."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        coordinator._mqtt_client = MagicMock()
+        coordinator._mqtt_client.is_connected.return_value = True
+        coordinator._device_available = False
+        coordinator._last_mqtt_ts = 1000.0
+
+        with (
+            patch(
+                "custom_components.ecoflow_energy.coordinator.time.monotonic",
+                return_value=1005.0,
+            ),
+            patch.object(coordinator, "async_update_listeners") as mock_notify,
+        ):
+            coordinator._check_stale()
+
+        assert coordinator._device_available is True
+        mock_notify.assert_called_once()
+        self._cleanup_stale_timer(coordinator)
+
 
 # ===========================================================================
 # Keepalive (_send_keepalive)

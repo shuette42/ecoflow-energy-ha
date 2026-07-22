@@ -210,6 +210,9 @@ class AvailabilityMixin:
                         source=self._snapshot.source,
                         key_count=0,
                     )
+                    # No data flows while the stream is down, so entities must
+                    # be told about the availability flip explicitly.
+                    self.async_update_listeners()
             else:
                 if not self._device_available:
                     _LOGGER.info(
@@ -219,6 +222,9 @@ class AvailabilityMixin:
                     )
                     self._log_event("stale_recovered", "device_available")
                     self._device_available = True
+                    # Push the recovery to entities even before the next data
+                    # frame arrives, so they return from unavailable promptly.
+                    self.async_update_listeners()
                 self._last_stale_reconnect_ts = 0.0
 
         # Tier 2+3: try MQTT reconnect if disconnected

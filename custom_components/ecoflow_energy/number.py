@@ -30,6 +30,7 @@ from .const import (
     STREAM_NUMBERS,
 )
 from .coordinator import EcoFlowDeviceCoordinator
+from .entity import EcoFlowWriteGateMixin
 from .ecoflow.delta3_commands import (
     build_number_command as build_delta3_number_command,
 )
@@ -61,7 +62,9 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
+class EcoFlowNumber(
+    EcoFlowWriteGateMixin, CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity
+):
     """An EcoFlow number entity."""
 
     _attr_has_entity_name = True
@@ -101,10 +104,7 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
         """Handle updated data from the coordinator."""
         if time.monotonic() < self._optimistic_lock_until:
             return  # ignore incoming data during optimistic lock
-        new_value = self.native_value
-        if new_value != self._last_written_value:
-            self._last_written_value = new_value
-            self.async_write_ha_state()
+        self._write_state_if_changed(self.native_value)
 
     @property
     def native_value(self) -> float | None:
@@ -191,9 +191,8 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
         self.coordinator.set_device_value(state_key, value)
         if self.coordinator.data is not None:
             self.coordinator.data[state_key] = value
-        self._last_written_value = float(value)
         self._optimistic_lock_until = time.monotonic() + 5.0
-        self.async_write_ha_state()
+        self._write_state_always(float(value))
 
     async def _async_set_smartplug_proto(self, key: str, value: float) -> bool:
         """Set a SmartPlug number value via WSS Protobuf (app-auth mode)."""

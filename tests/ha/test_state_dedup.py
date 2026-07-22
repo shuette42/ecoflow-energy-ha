@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -340,6 +341,118 @@ class TestNumberDedup:
 
 
 # ===========================================================================
+# Availability transitions must pass the write gate
+# ===========================================================================
+
+
+class TestAvailabilityWriteGate:
+    """An availability flip with an unchanged value must reach HA."""
+
+    async def test_sensor_writes_on_availability_flip(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+        coordinator.async_set_updated_data({"soc": 85.0})
+
+        defn = EcoFlowSensorDef(key="soc", name="SoC", unit="%")
+        sensor = EcoFlowSensor(coordinator, defn)
+
+        with patch.object(sensor, "async_write_ha_state") as mock_write:
+            sensor._handle_coordinator_update()
+            assert mock_write.call_count == 1  # first write (value)
+            sensor._handle_coordinator_update()
+            assert mock_write.call_count == 1  # deduped
+
+            # Device goes unavailable, value unchanged
+            coordinator._device_available = False
+            sensor._handle_coordinator_update()
+            assert mock_write.call_count == 2
+
+            # Device recovers, value still unchanged
+            coordinator._device_available = True
+            sensor._handle_coordinator_update()
+            assert mock_write.call_count == 3
+
+    async def test_binary_sensor_writes_on_availability_flip(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+        coordinator.async_set_updated_data({"ac_enabled": 1})
+
+        defn = EcoFlowBinarySensorDef(key="ac_enabled", name="AC Enabled")
+        sensor = EcoFlowBinarySensor(coordinator, defn)
+
+        with patch.object(sensor, "async_write_ha_state") as mock_write:
+            sensor._handle_coordinator_update()
+            assert mock_write.call_count == 1
+
+            coordinator._device_available = False
+            sensor._handle_coordinator_update()
+            assert mock_write.call_count == 2
+
+            coordinator._device_available = True
+            sensor._handle_coordinator_update()
+            assert mock_write.call_count == 3
+
+    async def test_switch_writes_on_availability_flip(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+        coordinator.async_set_updated_data({"ac_enabled": 1})
+
+        defn = EcoFlowSwitchDef(key="ac_switch", name="AC Output", state_key="ac_enabled")
+        switch = EcoFlowSwitch(coordinator, defn)
+
+        with patch.object(switch, "async_write_ha_state") as mock_write:
+            switch._handle_coordinator_update()
+            assert mock_write.call_count == 1
+
+            coordinator._device_available = False
+            switch._handle_coordinator_update()
+            assert mock_write.call_count == 2
+
+            coordinator._device_available = True
+            switch._handle_coordinator_update()
+            assert mock_write.call_count == 3
+
+    async def test_number_writes_on_availability_flip(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+        coordinator.async_set_updated_data({"pd.soc": 80})
+
+        defn = EcoFlowNumberDef(
+            key="max_charge_soc", name="Max Charge SoC",
+            state_key="pd.soc", unit="%",
+        )
+        number = EcoFlowNumber(coordinator, defn)
+
+        with patch.object(number, "async_write_ha_state") as mock_write:
+            number._handle_coordinator_update()
+            assert mock_write.call_count == 1
+
+            coordinator._device_available = False
+            number._handle_coordinator_update()
+            assert mock_write.call_count == 2
+
+            coordinator._device_available = True
+            number._handle_coordinator_update()
+            assert mock_write.call_count == 3
+
+
+# ===========================================================================
 # Energy rounding precision
 # ===========================================================================
 
@@ -498,7 +611,7 @@ class TestEnumRestoreDiscard:
         mock_last = MagicMock()
         mock_last.native_value = "0"
         with (
-            patch.object(type(sensor).__mro__[1], "async_added_to_hass", new_callable=AsyncMock),
+            patch.object(CoordinatorEntity, "async_added_to_hass", new_callable=AsyncMock),
             patch.object(sensor, "async_get_last_sensor_data", new_callable=AsyncMock, return_value=mock_last),
         ):
             await sensor.async_added_to_hass()
@@ -524,7 +637,7 @@ class TestEnumRestoreDiscard:
         mock_last = MagicMock()
         mock_last.native_value = "WORKMODE_SELFUSE"
         with (
-            patch.object(type(sensor).__mro__[1], "async_added_to_hass", new_callable=AsyncMock),
+            patch.object(CoordinatorEntity, "async_added_to_hass", new_callable=AsyncMock),
             patch.object(sensor, "async_get_last_sensor_data", new_callable=AsyncMock, return_value=mock_last),
         ):
             await sensor.async_added_to_hass()
@@ -550,7 +663,7 @@ class TestEnumRestoreDiscard:
         mock_last = MagicMock()
         mock_last.native_value = "limit"
         with (
-            patch.object(type(sensor).__mro__[1], "async_added_to_hass", new_callable=AsyncMock),
+            patch.object(CoordinatorEntity, "async_added_to_hass", new_callable=AsyncMock),
             patch.object(sensor, "async_get_last_sensor_data", new_callable=AsyncMock, return_value=mock_last),
         ):
             await sensor.async_added_to_hass()
@@ -575,7 +688,7 @@ class TestEnumRestoreDiscard:
         mock_last = MagicMock()
         mock_last.native_value = 85.0
         with (
-            patch.object(type(sensor).__mro__[1], "async_added_to_hass", new_callable=AsyncMock),
+            patch.object(CoordinatorEntity, "async_added_to_hass", new_callable=AsyncMock),
             patch.object(sensor, "async_get_last_sensor_data", new_callable=AsyncMock, return_value=mock_last),
         ):
             await sensor.async_added_to_hass()
