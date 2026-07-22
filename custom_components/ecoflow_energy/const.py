@@ -495,7 +495,7 @@ DELTA2MAX_SWITCHES: list[EcoFlowSwitchDef] = [
 ]
 
 DELTA2MAX_NUMBERS: list[EcoFlowNumberDef] = [
-    EcoFlowNumberDef("ac_charge_speed", "AC Charge Speed", "ac_chg_rated_power_w", "W", "mdi:lightning-bolt", 200, 2400, 100),
+    EcoFlowNumberDef("ac_charge_speed", "AC Charge Speed", "ac_slow_chg_watts", "W", "mdi:lightning-bolt", 200, 2400, 100),
     EcoFlowNumberDef("max_charge_soc", "Max Charge SoC", "max_charge_soc", "%", "mdi:battery-charging-100", 50, 100, 1),
     EcoFlowNumberDef("min_discharge_soc", "Min Discharge SoC", "min_discharge_soc", "%", "mdi:battery-alert-variant-outline", 0, 30, 1),
     EcoFlowNumberDef("standby_timeout", "Standby Timeout", "standby_timeout_min", "min", "mdi:timer-off-outline", 0, 720, 1),
@@ -839,8 +839,13 @@ NUMBER_COMMANDS: dict[str, dict[str, Any]] = {
     "ac_charge_speed": {
         "moduleType": 3,
         "operateType": "acChgCfg",
-        "param_key": "fastChgWatts",
-        "extra_params": {"slowChgWatts": 400, "chgPauseFlag": 0},
+        # The effective AC charge speed follows slowChgWatts; fastChgWatts is
+        # mirrored to the same value so both charger paths use the user's
+        # setting (issue #95: hardcoding slowChgWatts=400 pinned the device
+        # at 400 W regardless of the requested value).
+        "param_key": "slowChgWatts",
+        "value_params": ["fastChgWatts"],
+        "extra_params": {"chgPauseFlag": 0},
     },
     "max_charge_soc": {
         "moduleType": 2,
