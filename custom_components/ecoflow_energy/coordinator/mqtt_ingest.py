@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 
 from ..const import (
@@ -33,6 +34,25 @@ from ..ecoflow.proto.runtime import decode_proto_runtime_frame
 _LOGGER = logging.getLogger(__name__)
 
 
+def _collect_total_increasing_keys() -> frozenset[str]:
+    """Collect all total_increasing sensor keys from the entity definitions.
+
+    Derived from const.py so the monotonic guard cannot drift from the
+    sensor definitions: any new total_increasing sensor is guarded
+    automatically. Built once at module import; lookups stay O(1).
+    """
+    from .. import const as _const
+
+    keys: set[str] = set()
+    for name in dir(_const):
+        if not re.fullmatch(r"[A-Z0-9]+_SENSORS", name):
+            continue
+        for item in getattr(_const, name):
+            if item.state_class == "total_increasing":
+                keys.add(item.key)
+    return frozenset(keys)
+
+
 class MqttIngestMixin:
     """Mixin providing MQTT message parsing and monotonic enforcement."""
 
@@ -50,23 +70,9 @@ class MqttIngestMixin:
     # Keys with state_class=total_increasing must never decrease.
     # EcoFlow API occasionally returns slightly lower values (e.g. 461→460
     # for battery cycles, or 4408.259→4408.258 kWh for energy). Dropping
-    # these regressions prevents HA Recorder warnings.
-    _MONOTONIC_KEYS: frozenset[str] = frozenset({
-        # PowerOcean
-        "bp_cycles",
-        "solar_energy_kwh", "home_energy_kwh",
-        "grid_import_energy_kwh", "grid_export_energy_kwh",
-        "batt_charge_energy_kwh", "batt_discharge_energy_kwh",
-        # PowerOcean per-pack (cycles + lifetime energy are total_increasing)
-        *(f"pack{n}_cycles" for n in range(1, 6)),
-        *(f"pack{n}_accu_chg_energy_kwh" for n in range(1, 6)),
-        *(f"pack{n}_accu_dsg_energy_kwh" for n in range(1, 6)),
-        # Delta
-        "bms_cycles",
-        "solar2_energy_kwh", "ac_in_energy_kwh", "ac_out_energy_kwh",
-        # Smart Plug
-        "energy_kwh",
-    })
+    # these regressions prevents HA Recorder warnings. The set is derived
+    # from the const.py sensor definitions (single source of truth).
+    _MONOTONIC_KEYS: frozenset[str] = _collect_total_increasing_keys()
 
     def _enforce_monotonic(self, parsed: dict[str, Any]) -> dict[str, Any]:
         """Drop values that would decrease a total_increasing sensor."""

@@ -30,6 +30,7 @@ from .const import (
     STREAM_SENSORS,
 )
 from .coordinator import EcoFlowDeviceCoordinator
+from .entity import EcoFlowWriteGateMixin
 
 # Map string → HA enum
 _STATE_CLASS_MAP = {
@@ -67,7 +68,9 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class EcoFlowSensor(CoordinatorEntity[EcoFlowDeviceCoordinator], RestoreSensor):
+class EcoFlowSensor(
+    EcoFlowWriteGateMixin, CoordinatorEntity[EcoFlowDeviceCoordinator], RestoreSensor
+):
     """An EcoFlow sensor entity with state restore across reloads."""
 
     _attr_has_entity_name = True
@@ -116,6 +119,15 @@ class EcoFlowSensor(CoordinatorEntity[EcoFlowDeviceCoordinator], RestoreSensor):
                 return
             self._restored_value = last.native_value
             self._last_written_value = last.native_value
+            # Seed the energy integrator so a lost or corrupt state file
+            # does not reset totals to zero. set_total is monotonic-guarded,
+            # so a stale restored value can never lower a live total.
+            if self._definition.state_class == "total_increasing" and isinstance(
+                last.native_value, (int, float)
+            ):
+                self.coordinator.seed_energy_total(
+                    self._definition.key, float(last.native_value)
+                )
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -125,10 +137,7 @@ class EcoFlowSensor(CoordinatorEntity[EcoFlowDeviceCoordinator], RestoreSensor):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        new_value = self.native_value
-        if new_value != self._last_written_value:
-            self._last_written_value = new_value
-            self.async_write_ha_state()
+        self._write_state_if_changed(self.native_value)
 
     @property
     def native_value(self) -> float | int | str | None:
@@ -143,6 +152,12 @@ class EcoFlowSensor(CoordinatorEntity[EcoFlowDeviceCoordinator], RestoreSensor):
             val = data[self._definition.key]
             if val is None:
                 return None
+            # Enum sensors: a live value outside the options list would make
+            # HA raise ValueError on every state write. Fall back to the
+            # restored value, mirroring the restore-path guard in
+            # async_added_to_hass.
+            if self._definition.options and str(val) not in self._definition.options:
+                return self._restored_value
             return self._round_value(val)
         return self._restored_value
 
@@ -154,7 +169,9 @@ class EcoFlowSensor(CoordinatorEntity[EcoFlowDeviceCoordinator], RestoreSensor):
         return round(val, precision) if precision > 0 else int(round(val, 0))
 
 
-class EcoFlowDiagnosticSensor(CoordinatorEntity[EcoFlowDeviceCoordinator], SensorEntity):
+class EcoFlowDiagnosticSensor(
+    EcoFlowWriteGateMixin, CoordinatorEntity[EcoFlowDeviceCoordinator], SensorEntity
+):
     """Diagnostic sensor that reads coordinator properties directly."""
 
     _attr_has_entity_name = True
@@ -181,10 +198,7 @@ class EcoFlowDiagnosticSensor(CoordinatorEntity[EcoFlowDeviceCoordinator], Senso
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        new_value = self.native_value
-        if new_value != self._last_written_value:
-            self._last_written_value = new_value
-            self.async_write_ha_state()
+        self._write_state_if_changed(self.native_value)
 
     @property
     def native_value(self) -> str | None:

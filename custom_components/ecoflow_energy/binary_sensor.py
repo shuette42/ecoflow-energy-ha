@@ -28,6 +28,7 @@ from .const import (
     STREAM_BINARY_SENSORS,
 )
 from .coordinator import EcoFlowDeviceCoordinator
+from .entity import EcoFlowWriteGateMixin
 
 _ENTITY_CATEGORY_MAP = {
     "diagnostic": EntityCategory.DIAGNOSTIC,
@@ -53,7 +54,9 @@ async def async_setup_entry(
 
 
 class EcoFlowBinarySensor(
-    CoordinatorEntity[EcoFlowDeviceCoordinator], BinarySensorEntity
+    EcoFlowWriteGateMixin,
+    CoordinatorEntity[EcoFlowDeviceCoordinator],
+    BinarySensorEntity,
 ):
     """An EcoFlow binary sensor entity."""
 
@@ -93,10 +96,7 @@ class EcoFlowBinarySensor(
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        new_value = self.is_on
-        if new_value != self._last_written_value:
-            self._last_written_value = new_value
-            self.async_write_ha_state()
+        self._write_state_if_changed(self.is_on)
 
     @property
     def is_on(self) -> bool | None:

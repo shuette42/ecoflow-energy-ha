@@ -14,7 +14,15 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
-from .const import CONF_DEVICES, CONF_MODE, DATA_SKIPPED_DEVICES, DEVICE_TYPE_DELTA3, DOMAIN
+from .const import (
+    AUTH_METHOD_DEVELOPER,
+    CONF_AUTH_METHOD,
+    CONF_DEVICES,
+    CONF_MODE,
+    DATA_SKIPPED_DEVICES,
+    DEVICE_TYPE_DELTA3,
+    DOMAIN,
+)
 from .coordinator import EcoFlowDeviceCoordinator
 
 REDACTED = "**REDACTED**"
@@ -60,7 +68,7 @@ async def async_get_config_entry_diagnostics(
 
     return {
         "config_entry": {
-            "auth_method": entry.data.get("auth_method", "developer"),
+            "auth_method": entry.data.get(CONF_AUTH_METHOD, AUTH_METHOD_DEVELOPER),
             "mode": entry.data.get(CONF_MODE, "standard"),
             "device_count": len(entry.data.get(CONF_DEVICES, [])),
             "access_key": REDACTED,
@@ -99,7 +107,8 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
         snapshot_age_s = round(now - snapshot.captured_at, 1)
 
     diag: dict[str, Any] = {
-        "device_sn": coordinator.device_sn,
+        # SN prefix only (privacy) - mirrors the skipped-device convention
+        "device_sn": coordinator.device_sn[:4] + "...",
         "device_name": coordinator.device_name,
         "product_name": coordinator.product_name,
         "enhanced_mode": coordinator.enhanced_mode,

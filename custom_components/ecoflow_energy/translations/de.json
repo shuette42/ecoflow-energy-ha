@@ -159,9 +159,6 @@
       "typec3_w": {
         "name": "Type-C 3"
       },
-      "backup_reserve_soc_pct": {
-        "name": "Backup-Reserve Niveau"
-      },
       "solar_w": {
         "name": "Solarleistung"
       },
@@ -1240,27 +1237,6 @@
       },
       "ac_outlet_2_enabled": {
         "name": "AC-Ausgang 2"
-      },
-      "ac_out_flow": {
-        "name": "AC-Ausgang aktiv"
-      },
-      "ac2_out_flow": {
-        "name": "AC-Ausgang 2 aktiv"
-      },
-      "dc_12v_out_flow": {
-        "name": "12V-Ausgang aktiv"
-      },
-      "backup_reserve_enabled": {
-        "name": "Backup-Reserve"
-      },
-      "xboost_enabled": {
-        "name": "X-Boost"
-      },
-      "beeper_enabled": {
-        "name": "Signalton"
-      },
-      "bypass_out_disabled": {
-        "name": "Bypass-Ausgang deaktiviert"
       }
     },
     "switch": {

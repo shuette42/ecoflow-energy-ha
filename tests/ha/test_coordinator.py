@@ -2075,6 +2075,64 @@ class TestStaleDetection:
         assert log[-1]["detail"] == "device_available"
         self._cleanup_stale_timer(coordinator)
 
+    async def test_stale_unavailable_transition_notifies_listeners(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Going unavailable pushes an update to entities without new data."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        coordinator._mqtt_client = MagicMock()
+        coordinator._mqtt_client.is_connected.return_value = False
+        coordinator._mqtt_client.try_reconnect.return_value = False
+        coordinator._mqtt_client.reconnect_attempts = 0
+
+        now = 10_000.0
+        with (
+            patch(
+                "custom_components.ecoflow_energy.coordinator.time.monotonic",
+                return_value=now,
+            ),
+            patch.object(coordinator, "async_update_listeners") as mock_notify,
+        ):
+            coordinator._last_mqtt_ts = now - HARD_UNAVAILABLE_S - 5
+            coordinator._check_stale()
+
+        assert coordinator._device_available is False
+        mock_notify.assert_called_once()
+        self._cleanup_stale_timer(coordinator)
+
+    async def test_stale_recovery_transition_notifies_listeners(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Recovery from unavailable pushes an update to entities."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        coordinator._mqtt_client = MagicMock()
+        coordinator._mqtt_client.is_connected.return_value = True
+        coordinator._device_available = False
+        coordinator._last_mqtt_ts = 1000.0
+
+        with (
+            patch(
+                "custom_components.ecoflow_energy.coordinator.time.monotonic",
+                return_value=1005.0,
+            ),
+            patch.object(coordinator, "async_update_listeners") as mock_notify,
+        ):
+            coordinator._check_stale()
+
+        assert coordinator._device_available is True
+        mock_notify.assert_called_once()
+        self._cleanup_stale_timer(coordinator)
+
 
 # ===========================================================================
 # Keepalive (_send_keepalive)
@@ -3256,6 +3314,42 @@ class TestBpRemapping:
 
 
 class TestMonotonicFilter:
+    async def test_all_total_increasing_keys_are_guarded(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Every total_increasing sensor key in const.py is monotonic-guarded.
+
+        _MONOTONIC_KEYS is derived from the sensor definitions, so a new
+        total_increasing sensor can never be missed by the guard.
+        """
+        import re as _re
+
+        from custom_components.ecoflow_energy import const as _const
+        from custom_components.ecoflow_energy.coordinator.mqtt_ingest import (
+            MqttIngestMixin,
+        )
+
+        expected: set[str] = set()
+        for name in dir(_const):
+            if not _re.fullmatch(r"[A-Z0-9]+_SENSORS", name):
+                continue
+            for item in getattr(_const, name):
+                if item.state_class == "total_increasing":
+                    expected.add(item.key)
+
+        assert expected, "no total_increasing sensors found - collection broken"
+        assert expected == set(MqttIngestMixin._MONOTONIC_KEYS)
+        # Keys the hand-maintained set used to miss
+        for key in (
+            "slave1_cycles",
+            "slave2_cycles",
+            "batt_charge_capacity_ah",
+            "batt_discharge_capacity_ah",
+        ):
+            assert key in MqttIngestMixin._MONOTONIC_KEYS
+
     async def test_regression_dropped(
         self,
         hass: HomeAssistant,

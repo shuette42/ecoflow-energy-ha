@@ -117,7 +117,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
         device_info = {**device_info, "device_type": device_type}
         coordinator = EcoFlowDeviceCoordinator(hass, entry, device_info)
         await coordinator.async_setup()
-        # First refresh — raises ConfigEntryNotReady on failure so HA retries
+        # First refresh — raises ConfigEntryNotReady on failure so HA retries.
+        # Partial-setup cleanup is handled by HA core: the coordinator
+        # registers async_shutdown as an entry on_unload callback, and HA
+        # processes those callbacks when setup fails, so coordinators
+        # created before a failing device do not leak MQTT clients
+        # (guarded by a regression test).
         await coordinator.async_config_entry_first_refresh()
         coordinators[sn] = coordinator
 

@@ -158,7 +158,9 @@ class TestDeviceDiagnostics:
         )
         result = _device_diagnostics(coordinator)
 
-        assert result["device_sn"] == "DAEBK5ZZ12340001"
+        # SN prefix only - a diagnostics dump must not leak the full serial
+        assert result["device_sn"] == "DAEB..."
+        assert "DAEBK5ZZ12340001" not in str(result["device_sn"])
         assert result["device_name"] == "Delta 2 Max"
         assert result["product_name"] == "Delta 2 Max"
         assert result["enhanced_mode"] is False

@@ -41,6 +41,7 @@ from .const import (
 )
 from .coordinator import EcoFlowDeviceCoordinator
 from .ecoflow.parsers.smartplug import build_plug_switch_payload
+from .entity import EcoFlowWriteGateMixin
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -64,7 +65,9 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class EcoFlowSwitch(CoordinatorEntity[EcoFlowDeviceCoordinator], SwitchEntity):
+class EcoFlowSwitch(
+    EcoFlowWriteGateMixin, CoordinatorEntity[EcoFlowDeviceCoordinator], SwitchEntity
+):
     """An EcoFlow switch entity with optimistic lock."""
 
     _attr_has_entity_name = True
@@ -125,16 +128,22 @@ class EcoFlowSwitch(CoordinatorEntity[EcoFlowDeviceCoordinator], SwitchEntity):
         await self._send_command(False)
 
     async def _send_command(self, turn_on: bool) -> None:
-        """Send a SET command and apply optimistic lock."""
+        """Send a SET command; apply the optimistic lock only on success.
+
+        A failed send must not flip the UI to a state the device never
+        received - the switch would show the wrong state for the whole
+        lock window and then snap back.
+        """
         # SmartPlug app-auth: use protobuf SET (JSON cmdCode only works on /open/ topic)
         if (
             self.coordinator.device_type == DEVICE_TYPE_SMARTPLUG
             and self.coordinator.enhanced_mode
             and self._definition.key == "plug_switch"
         ):
-            self._apply_optimistic(turn_on)
             payload = build_plug_switch_payload(turn_on, device_sn=self.coordinator.device_sn)
-            await self.coordinator.async_send_proto_set_command(payload, "plug_switch")
+            ok = await self.coordinator.async_send_proto_set_command(payload, "plug_switch")
+            if ok:
+                self._apply_optimistic(turn_on)
             return
 
         command = self._build_command(turn_on)
@@ -142,18 +151,18 @@ class EcoFlowSwitch(CoordinatorEntity[EcoFlowDeviceCoordinator], SwitchEntity):
             _LOGGER.warning("No command template for %s", self._definition.key)
             return
 
-        self._apply_optimistic(turn_on)
         if self.coordinator.device_type == DEVICE_TYPE_DELTA3:
-            await self.coordinator.async_send_delta3_set(command)
-            return
-        await self.coordinator.async_send_set_command(command)
+            ok = await self.coordinator.async_send_delta3_set(command)
+        else:
+            ok = await self.coordinator.async_send_set_command(command)
+        if ok:
+            self._apply_optimistic(turn_on)
 
     def _apply_optimistic(self, turn_on: bool) -> None:
         """Apply optimistic lock: immediately reflect the new state."""
         self._optimistic_value = turn_on
         self._optimistic_lock_until = time.monotonic() + OPTIMISTIC_LOCK_S
-        self._last_written_value = turn_on
-        self.async_write_ha_state()
+        self._write_state_always(turn_on)
 
     def _build_command(self, turn_on: bool) -> dict[str, Any] | None:
         """Build a SET command from legacy or declarative templates."""
@@ -193,10 +202,7 @@ class EcoFlowSwitch(CoordinatorEntity[EcoFlowDeviceCoordinator], SwitchEntity):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        new_value = self.is_on
-        if new_value != self._last_written_value:
-            self._last_written_value = new_value
-            self.async_write_ha_state()
+        self._write_state_if_changed(self.is_on)
 
 
 def _get_switch_defs(device_type: str) -> list[EcoFlowSwitchDef]:

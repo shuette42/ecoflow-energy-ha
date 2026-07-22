@@ -30,6 +30,7 @@ from .const import (
     STREAM_NUMBERS,
 )
 from .coordinator import EcoFlowDeviceCoordinator
+from .entity import EcoFlowWriteGateMixin
 from .ecoflow.delta3_commands import (
     build_number_command as build_delta3_number_command,
 )
@@ -61,7 +62,9 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
+class EcoFlowNumber(
+    EcoFlowWriteGateMixin, CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity
+):
     """An EcoFlow number entity."""
 
     _attr_has_entity_name = True
@@ -101,10 +104,7 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
         """Handle updated data from the coordinator."""
         if time.monotonic() < self._optimistic_lock_until:
             return  # ignore incoming data during optimistic lock
-        new_value = self.native_value
-        if new_value != self._last_written_value:
-            self._last_written_value = new_value
-            self.async_write_ha_state()
+        self._write_state_if_changed(self.native_value)
 
     @property
     def native_value(self) -> float | None:
@@ -161,8 +161,9 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
                 "cmdCode": sp_template["cmdCode"],
                 "params": {sp_template["param_key"]: int(value * scale)},
             }
-            await self.coordinator.async_send_set_command(command)
-            self._apply_optimistic_number(value)
+            ok = await self.coordinator.async_send_set_command(command)
+            if ok:
+                self._apply_optimistic_number(value)
             return
 
         # Delta uses moduleType/operateType format
@@ -181,8 +182,9 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
             "params": params,
         }
 
-        await self.coordinator.async_send_set_command(command)
-        self._apply_optimistic_number(value)
+        ok = await self.coordinator.async_send_set_command(command)
+        if ok:
+            self._apply_optimistic_number(value)
 
 
     def _apply_optimistic_number(self, value: float) -> None:
@@ -191,13 +193,11 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
         self.coordinator.set_device_value(state_key, value)
         if self.coordinator.data is not None:
             self.coordinator.data[state_key] = value
-        self._last_written_value = float(value)
         self._optimistic_lock_until = time.monotonic() + 5.0
-        self.async_write_ha_state()
+        self._write_state_always(float(value))
 
     async def _async_set_smartplug_proto(self, key: str, value: float) -> bool:
         """Set a SmartPlug number value via WSS Protobuf (app-auth mode)."""
-        int_value = int(value)
         sn = self.coordinator.device_sn
         if key == "led_brightness":
             # User sets 0-100%, device expects 0-1023
@@ -205,7 +205,7 @@ class EcoFlowNumber(CoordinatorEntity[EcoFlowDeviceCoordinator], NumberEntity):
             payload = build_plug_brightness_payload(raw_brightness, device_sn=sn)
             label = "brightness"
         elif key == "max_watts":
-            payload = build_plug_max_watts_payload(int_value, device_sn=sn)
+            payload = build_plug_max_watts_payload(int(value), device_sn=sn)
             label = "max_watts"
         else:
             _LOGGER.warning("No SmartPlug proto SET handler for %s", key)
