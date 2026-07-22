@@ -43,8 +43,8 @@ def build_energy_stream_activate_payload(seq: int = 0) -> bytes:
     header.extend(encode_field_varint(10, len(switch_bytes)))  # dataLen
     header.extend(encode_field_varint(11, 1))            # needAck = 1
     header.extend(encode_field_varint(14, seq))          # seq (timestamp)
-    header.extend(encode_field_varint(16, 3))            # isRwCmd = 3
-    header.extend(encode_field_varint(17, 1))            # isQueue = 1
+    header.extend(encode_field_varint(16, 3))            # version = 3
+    header.extend(encode_field_varint(17, 1))            # payloadVer = 1
 
     # Send_Header_Msg: field 1 = Header (length-delimited)
     return encode_field_bytes(1, bytes(header))
@@ -165,8 +165,8 @@ def build_soc_limit_set_payload(
     header.extend(encode_field_varint(10, len(payload_bytes)))   # dataLen
     header.extend(encode_field_varint(11, 1))                    # needAck = 1
     header.extend(encode_field_varint(14, seq))                  # seq (timestamp)
-    header.extend(encode_field_varint(16, 3))                    # isRwCmd = 3
-    header.extend(encode_field_varint(17, 1))                    # isQueue = 1
+    header.extend(encode_field_varint(16, 3))                    # version = 3
+    header.extend(encode_field_varint(17, 1))                    # payloadVer = 1
 
     # Send_Header_Msg: field 1 = Header (length-delimited)
     return encode_field_bytes(1, bytes(header))
@@ -196,8 +196,8 @@ def _build_powerocean_set_envelope(
       10 data_len
       11 need_ack = 1
       14 seq
-      16 payload_ver = 3 (was: is_rw_cmd)
-      17 is_queue = 1
+      16 version = 3
+      17 payload_ver = 1
       23 from = "ios"                    (NEW: client identifier)
       25 device_sn = SN                  (NEW: target device)
 
@@ -227,8 +227,8 @@ def _build_powerocean_set_envelope(
     header.extend(encode_field_varint(10, len(pdata)))           # data_len
     header.extend(encode_field_varint(11, 1))                    # need_ack
     header.extend(encode_field_varint(14, seq))                  # seq
-    header.extend(encode_field_varint(16, 3))                    # payload_ver
-    header.extend(encode_field_varint(17, 1))                    # is_queue
+    header.extend(encode_field_varint(16, 3))                    # version
+    header.extend(encode_field_varint(17, 1))                    # payload_ver
     header.extend(encode_field_bytes(23, b"ios"))                # from
     if device_sn:
         header.extend(encode_field_bytes(25, device_sn.encode("ascii")))
@@ -451,8 +451,8 @@ def build_delta3_config_write_payload(
     topic - verified against hardware (ack plus readback of the new value).
 
       1  pdata            8  cmd_func = 254   14 seq
-      2  src = 32         9  cmd_id = 17      16 payload_ver = 3
-      3  dest = 2        10  data_len         17 is_queue = 1
+      2  src = 32         9  cmd_id = 17      16 version = 3
+      3  dest = 2        10  data_len         17 payload_ver = 1
       4  d_src = 1       11  need_ack = 1     25 device_sn (string)
       5  d_dest = 1
       7  check_type = 3
@@ -487,8 +487,8 @@ def build_delta3_config_write_payload(
     header.extend(encode_field_varint(10, len(pdata)))       # data_len
     header.extend(encode_field_varint(11, 1))                # need_ack
     header.extend(encode_field_varint(14, seq))              # seq
-    header.extend(encode_field_varint(16, 3))                # payload_ver
-    header.extend(encode_field_varint(17, 1))                # is_queue
+    header.extend(encode_field_varint(16, 3))                # version
+    header.extend(encode_field_varint(17, 1))                # payload_ver
     header.extend(encode_field_bytes(25, device_sn.encode("ascii")))  # deviceSn
 
     return encode_field_bytes(1, bytes(header))
