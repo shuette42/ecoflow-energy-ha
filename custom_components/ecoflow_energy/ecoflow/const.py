@@ -54,6 +54,9 @@ _STREAM_KEYWORDS = ("stream",)
 _SN_PREFIX_MAP = {
     "HJ31": DEVICE_TYPE_POWEROCEAN,
     "HJ32": DEVICE_TYPE_POWEROCEAN,
+    # European PowerOcean variant (#89): verified against live hardware in
+    # Enhanced mode - telemetry matches the EcoFlow app (grid, battery, MPPT).
+    "J32D": DEVICE_TYPE_POWEROCEAN,
     "R351": DEVICE_TYPE_DELTA,
     "R331": DEVICE_TYPE_DELTA,
     "D3M1": DEVICE_TYPE_DELTA3,

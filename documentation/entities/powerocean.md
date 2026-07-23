@@ -1,6 +1,8 @@
 # PowerOcean - Entity Reference
 
-Full list of all entities created for PowerOcean devices (HJ31 series).
+Full list of all entities created for PowerOcean devices (HJ31, HJ32, and J32D series).
+
+> **Note:** PowerOcean variants with serial prefix `J32D` (European variant) are currently not exposed through the EcoFlow Developer API and therefore require Enhanced Mode. In Standard Mode these devices report error 1006 and all entities stay unavailable.
 
 **Totals:** 202 sensors, 1 number control
 

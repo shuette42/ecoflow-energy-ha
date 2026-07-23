@@ -54,6 +54,11 @@ class TestDeviceTypeRouting:
         # not the Delta 2 Max parser (root cause of the #110 report).
         assert get_device_type("DELTA 3 Max Plus", "") == "delta3"
 
+    def test_j32d_powerocean_by_sn_prefix(self) -> None:
+        # European PowerOcean variant (#89): app API returns empty
+        # product_name, so classification relies on the SN prefix.
+        assert get_device_type("", "J32DTEST00000001") == "powerocean"
+
     def test_delta3_by_sn_prefix(self) -> None:
         assert get_device_type("", "D3M1TEST00000001") == "delta3"
 
