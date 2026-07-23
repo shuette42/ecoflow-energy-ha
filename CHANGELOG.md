@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.15.1] - 2026-07-23
+
+### Added
+- Added serial-prefix and display-name support for the additional Stream family models Stream Ultra (BK11), Stream Max (BK41), Stream AC (BK51), and Stream Ultra X (BK61) so they are recognized correctly in Enhanced Mode and shown with their proper model names in Home Assistant.
+
 ## [1.15.0] - 2026-06-14
 
 ### Added

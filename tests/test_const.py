@@ -21,6 +21,7 @@ from ecoflow_energy.const import (
     STREAM_SWITCHES,
     SMARTPLUG_SWITCHES,
     SMARTPLUG_NUMBERS,
+    get_device_name,
     get_device_type,
     get_delta_profile,
 )
