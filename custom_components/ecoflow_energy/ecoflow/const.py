@@ -87,6 +87,14 @@ _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
     "BK61": "Stream Ultra X",
 }
 
+DEVICE_TYPE_DISPLAY_NAMES: dict[str, str] = {
+    DEVICE_TYPE_POWEROCEAN: "PowerOcean",
+    DEVICE_TYPE_DELTA: "Delta 2 Max",
+    DEVICE_TYPE_DELTA3: "Delta 3 Series",
+    DEVICE_TYPE_SMARTPLUG: "Smart Plug",
+    DEVICE_TYPE_STREAM: "Stream",
+}
+
 
 def get_device_name(product_name: str, sn: str = "") -> str:
     """Return a best-effort human-friendly name for the device."""
