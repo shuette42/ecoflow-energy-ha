@@ -49,6 +49,18 @@ class TestDeviceTypeRouting:
     def test_stream_detected_by_bk31_prefix(self) -> None:
         assert get_device_type("", "BK31_TEST_DEVICE") == "stream"
 
+    def test_stream_detected_by_bk11_prefix(self) -> None:
+        assert get_device_type("", "BK11TEST00000001") == "stream"
+
+    def test_stream_detected_by_bk41_prefix(self) -> None:
+        assert get_device_type("", "BK41TEST00000001") == "stream"
+
+    def test_stream_detected_by_bk51_prefix(self) -> None:
+        assert get_device_type("", "BK51TEST00000001") == "stream"
+
+    def test_stream_detected_by_bk61_prefix(self) -> None:
+        assert get_device_type("", "BK61TEST00000001") == "stream"
+
     def test_delta3_by_product_name(self) -> None:
         # "DELTA 3 Max Plus" contains "delta" but must route to delta3,
         # not the Delta 2 Max parser (root cause of the #110 report).
@@ -69,6 +81,13 @@ class TestDeviceTypeRouting:
 
     def test_delta3_classic_by_p321_sn_prefix(self) -> None:
         assert get_device_type("", "P321TEST00000001") == "delta3"
+
+    def test_stream_display_name_by_bk_prefix(self) -> None:
+        assert get_device_name("", "BK11TEST00000001") == "Stream Ultra"
+        assert get_device_name("", "BK31TEST00000001") == "Stream AC Pro"
+        assert get_device_name("", "BK41TEST00000001") == "Stream Max"
+        assert get_device_name("", "BK51TEST00000001") == "Stream AC"
+        assert get_device_name("", "BK61TEST00000001") == "Stream Ultra X"
 
     def test_delta3_keyword_wins_over_delta(self) -> None:
         # The delta3 keyword check runs before the generic delta check.

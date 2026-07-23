@@ -26,6 +26,7 @@ from .const import (
     DEVICE_TYPE_UNKNOWN,
     MODE_ENHANCED,
     MODE_STANDARD,
+    get_device_name,
     get_device_type,
 )
 from .ecoflow.enhanced_auth import enhanced_login, get_app_device_list
@@ -36,9 +37,7 @@ _LOGGER = logging.getLogger(__name__)
 
 def _device_label(device: dict[str, Any]) -> str:
     """Build a human-readable label for a device selection checkbox."""
-    name = device.get("name") or device.get("product_name") or ""
-    if not name:
-        name = DEVICE_TYPE_DISPLAY_NAMES.get(device.get("device_type", ""), "")
+    name = device.get("name") or get_device_name(device.get("product_name") or "", device.get("sn", ""))
     sn = device.get("sn", "")
     sn_short = f"{sn[:8]}..." if len(sn) > 8 else sn
     status = "" if device.get("online", 0) else " (offline)"

@@ -47,6 +47,7 @@ from ..const import (
     STREAM_ENERGY_FROM_API,
     STREAM_POWER_TO_ENERGY,
     get_delta_profile,
+    get_device_name,
 )
 from ..ecoflow.energy_integrator import EnergyIntegrator
 from .availability import AvailabilityMixin
@@ -105,13 +106,13 @@ class EcoFlowDeviceCoordinator(
             from ..const import get_device_type
             stored_type = get_device_type(device_info.get("product_name", ""), self.device_sn)
         self.device_type: str = stored_type
-        display_name = DEVICE_TYPE_DISPLAY_NAMES.get(self.device_type, "")
+        product_name = device_info.get("product_name", "")
         self.device_name: str = (
-            device_info.get("name") or display_name or "EcoFlow Device"
+            device_info.get("name")
+            or get_device_name(product_name, self.device_sn)
+            or "EcoFlow Device"
         )
-        self.product_name: str = (
-            device_info.get("product_name") or display_name or "Unknown"
-        )
+        self.product_name: str = product_name or get_device_name(product_name, self.device_sn) or "Unknown"
         self._sw_version: str = device_info.get("sw_version", "")
         self.delta_profile: str = (
             get_delta_profile(self.product_name, self.device_sn)

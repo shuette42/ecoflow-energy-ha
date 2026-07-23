@@ -1,9 +1,14 @@
 """Protobuf telemetry parser for EcoFlow Stream devices.
 
-Current scope targets BK31 (Stream AC Pro) in app-auth MQTT mode.
-Only fields that have been observed repeatedly in live captures are
-mapped here. The parser is intentionally conservative so we can extend
-it safely as more captures become available.
+Current scope targets BkSeries stream devices in app-auth MQTT mode.
+The parser was derived from the BK31 Stream AC Pro capture and is
+intentionally conservative: only fields observed repeatedly in live
+captures are mapped. The same parser is reused for other BK-series
+device prefixes until hardware-specific differences are identified.
+
+TODO: verify BK11 / BK41 / BK51 / BK61 field layouts against real
+hardware; the current implementation assumes the same protobuf frames
+and field numbers as BK31.
 
 Current field notes from dump analysis:
 - `grid_w` tracks the summed AC grid intake seen in the app "grid

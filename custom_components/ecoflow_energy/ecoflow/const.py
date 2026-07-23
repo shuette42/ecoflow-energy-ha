@@ -66,8 +66,38 @@ _SN_PREFIX_MAP = {
     "D3M1": DEVICE_TYPE_DELTA3,
     "P321": DEVICE_TYPE_DELTA3,
     "HW52": DEVICE_TYPE_SMARTPLUG,
+    # BK-series Stream devices:
+    #  - BK11: Stream Ultra
+    #  - BK31: Stream AC Pro
+    #  - BK41: Stream Max
+    #  - BK51: Stream AC
+    #  - BK61: Stream Ultra X
+    "BK11": DEVICE_TYPE_STREAM,
     "BK31": DEVICE_TYPE_STREAM,
+    "BK41": DEVICE_TYPE_STREAM,
+    "BK51": DEVICE_TYPE_STREAM,
+    "BK61": DEVICE_TYPE_STREAM,
 }
+
+_SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
+    "BK11": "Stream Ultra",
+    "BK31": "Stream AC Pro",
+    "BK41": "Stream Max",
+    "BK51": "Stream AC",
+    "BK61": "Stream Ultra X",
+}
+
+
+def get_device_name(product_name: str, sn: str = "") -> str:
+    """Return a best-effort human-friendly name for the device."""
+    if product_name:
+        return product_name
+    if sn:
+        prefix = sn[:4].upper()
+        if prefix in _SN_PREFIX_DISPLAY_NAMES:
+            return _SN_PREFIX_DISPLAY_NAMES[prefix]
+    device_type = get_device_type(product_name, sn)
+    return DEVICE_TYPE_DISPLAY_NAMES.get(device_type, "")
 
 
 def get_device_type(product_name: str, sn: str = "") -> str:
