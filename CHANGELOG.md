@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
 - Delta 3 Max Plus controls. Both AC outputs, the 12 V output, X-Boost, the buzzer, the bypass lock and the backup reserve can now be switched from Home Assistant, and the charge limit, discharge limit and backup reserve level are adjustable. Every command was verified against a Delta 3 Max Plus before release. (beta.5)
 - Anderson port output power for the Delta 3 Max Plus. (beta.5)
 - Remaining charge and discharge time are now reported only while the battery is actually charging or discharging. The device keeps both values populated at all times and parks the inactive one on a placeholder, which would otherwise show a runtime of over 200 hours on an idle unit. (beta.4)
+- Serial prefix J32D is now recognized as PowerOcean. This European PowerOcean variant reports an empty product name through the app API, so it was previously skipped with "no parser available". Live telemetry was verified against the EcoFlow app on real hardware. Note that this variant currently works in Enhanced mode only, as the EcoFlow Developer API does not expose it (error 1006). (beta.11)
 
 ### Changed
 - Internal restructuring of the device coordinator into smaller, single-purpose modules; no functional or user-facing change. (beta.7)
