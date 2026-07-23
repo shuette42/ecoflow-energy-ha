@@ -107,12 +107,19 @@ class EcoFlowDeviceCoordinator(
             stored_type = get_device_type(device_info.get("product_name", ""), self.device_sn)
         self.device_type: str = stored_type
         product_name = device_info.get("product_name", "")
+        display_name = DEVICE_TYPE_DISPLAY_NAMES.get(self.device_type, "")
         self.device_name: str = (
             device_info.get("name")
             or get_device_name(product_name, self.device_sn)
+            or display_name
             or "EcoFlow Device"
         )
-        self.product_name: str = product_name or get_device_name(product_name, self.device_sn) or "Unknown"
+        self.product_name: str = (
+            product_name
+            or get_device_name(product_name, self.device_sn)
+            or display_name
+            or "Unknown"
+        )
         self._sw_version: str = device_info.get("sw_version", "")
         self.delta_profile: str = (
             get_delta_profile(self.product_name, self.device_sn)

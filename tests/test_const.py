@@ -90,6 +90,23 @@ class TestDeviceTypeRouting:
         assert get_device_name("", "BK51TEST00000001") == "Stream AC (0001)"
         assert get_device_name("", "BK61TEST00000001") == "Stream Ultra X (0001)"
 
+    def test_device_name_prefers_product_name(self) -> None:
+        # A non-empty product name always wins over any prefix-derived name.
+        assert get_device_name("Stream Ultra X", "BK61TEST00000001") == "Stream Ultra X"
+
+    def test_device_name_only_for_stream_prefixes(self) -> None:
+        # The prefix-derived friendly name is Stream-only: every other device
+        # type returns an empty string so callers keep their own fallback.
+        assert get_device_name("", "R351TEST00000001") == ""
+        assert get_device_name("", "HW52FAKE00000001") == ""
+        assert get_device_name("", "J32DTEST00001234") == ""
+        assert get_device_name("", "P321TEST00005678") == ""
+        assert get_device_name("", "") == ""
+
+    def test_stream_display_name_without_numeric_tail(self) -> None:
+        # A non-numeric serial tail drops the suffix rather than guessing.
+        assert get_device_name("", "BK11ABCDXYZ") == "Stream Ultra"
+
     def test_delta3_keyword_wins_over_delta(self) -> None:
         # The delta3 keyword check runs before the generic delta check.
         assert get_device_type("Delta3", "") == "delta3"
