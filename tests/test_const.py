@@ -84,11 +84,11 @@ class TestDeviceTypeRouting:
         assert get_device_type("", "P321TEST00000001") == "delta3"
 
     def test_stream_display_name_by_bk_prefix(self) -> None:
-        assert get_device_name("", "BK11TEST00000001") == "Stream Ultra"
-        assert get_device_name("", "BK31TEST00000001") == "Stream AC Pro"
-        assert get_device_name("", "BK41TEST00000001") == "Stream Max"
-        assert get_device_name("", "BK51TEST00000001") == "Stream AC"
-        assert get_device_name("", "BK61TEST00000001") == "Stream Ultra X"
+        assert get_device_name("", "BK11TEST00000001") == "Stream Ultra (0001)"
+        assert get_device_name("", "BK31TEST00000001") == "Stream AC Pro (0001)"
+        assert get_device_name("", "BK41TEST00000001") == "Stream Max (0001)"
+        assert get_device_name("", "BK51TEST00000001") == "Stream AC (0001)"
+        assert get_device_name("", "BK61TEST00000001") == "Stream Ultra X (0001)"
 
     def test_delta3_keyword_wins_over_delta(self) -> None:
         # The delta3 keyword check runs before the generic delta check.

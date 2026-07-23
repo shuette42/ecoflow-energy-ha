@@ -100,12 +100,28 @@ def get_device_name(product_name: str, sn: str = "") -> str:
     """Return a best-effort human-friendly name for the device."""
     if product_name:
         return product_name
+
+    base_name = ""
     if sn:
         prefix = sn[:4].upper()
         if prefix in _SN_PREFIX_DISPLAY_NAMES:
-            return _SN_PREFIX_DISPLAY_NAMES[prefix]
-    device_type = get_device_type(product_name, sn)
-    return DEVICE_TYPE_DISPLAY_NAMES.get(device_type, "")
+            base_name = _SN_PREFIX_DISPLAY_NAMES[prefix]
+
+    if not base_name:
+        device_type = get_device_type(product_name, sn)
+        base_name = DEVICE_TYPE_DISPLAY_NAMES.get(device_type, "")
+
+    if not sn or not base_name:
+        return base_name
+
+    serial_tail = sn[-4:]
+    if not serial_tail.isdigit():
+        serial_tail = sn[-4:]
+
+    if len(serial_tail) >= 4 and serial_tail.isdigit():
+        return f"{base_name} ({serial_tail})"
+
+    return base_name
 
 
 def get_device_type(product_name: str, sn: str = "") -> str:
