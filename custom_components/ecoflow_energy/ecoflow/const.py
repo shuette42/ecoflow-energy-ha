@@ -57,6 +57,10 @@ _SN_PREFIX_MAP = {
     # European PowerOcean variant (#89): verified against live hardware in
     # Enhanced mode - telemetry matches the EcoFlow app (grid, battery, MPPT).
     "J32D": DEVICE_TYPE_POWEROCEAN,
+    # Single-phase European PowerOcean variant (#89): verified via reporter
+    # diagnostics in Enhanced mode - live data across grid/battery/MPPT;
+    # single-phase unit, so only grid phases A and B carry values.
+    "J32E": DEVICE_TYPE_POWEROCEAN,
     "R351": DEVICE_TYPE_DELTA,
     "R331": DEVICE_TYPE_DELTA,
     "D3M1": DEVICE_TYPE_DELTA3,

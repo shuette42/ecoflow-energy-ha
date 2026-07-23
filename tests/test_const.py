@@ -59,6 +59,11 @@ class TestDeviceTypeRouting:
         # product_name, so classification relies on the SN prefix.
         assert get_device_type("", "J32DTEST00000001") == "powerocean"
 
+    def test_j32e_powerocean_by_sn_prefix(self) -> None:
+        # Single-phase European PowerOcean variant (#89): same empty
+        # product_name behavior as J32D, classified via SN prefix.
+        assert get_device_type("", "J32ETEST00000001") == "powerocean"
+
     def test_delta3_by_sn_prefix(self) -> None:
         assert get_device_type("", "D3M1TEST00000001") == "delta3"
 
