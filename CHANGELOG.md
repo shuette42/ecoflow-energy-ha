@@ -14,6 +14,7 @@ All notable changes to this project will be documented in this file.
 - Remaining charge and discharge time are now reported only while the battery is actually charging or discharging. The device keeps both values populated at all times and parks the inactive one on a placeholder, which would otherwise show a runtime of over 200 hours on an idle unit. (beta.4)
 - Serial prefix J32D is now recognized as PowerOcean. This European PowerOcean variant reports an empty product name through the app API, so it was previously skipped with "no parser available". Live telemetry was verified against the EcoFlow app on real hardware. Note that this variant currently works in Enhanced mode only, as the EcoFlow Developer API does not expose it (error 1006). (beta.11)
 - Serial prefix J32E (PowerOcean Single Phase) is now recognized as PowerOcean. Like J32D, this European variant reports an empty product name through the app API and is not exposed by the EcoFlow Developer API (error 1006), so it requires Enhanced mode. Verified on real hardware with full live telemetry. Single-phase units report only the phases that are physically present. (beta.12)
+- Additional Stream-family models are now recognized in Enhanced Mode and shown with their model names: Stream Ultra (BK11), Stream Max (BK41), Stream AC (BK51), and Stream Ultra X (BK61), alongside the existing Stream AC Pro (BK31). (beta.13)
 
 ### Changed
 - Internal restructuring of the device coordinator into smaller, single-purpose modules; no functional or user-facing change. (beta.7)

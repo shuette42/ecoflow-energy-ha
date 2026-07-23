@@ -14,6 +14,7 @@ from .ecoflow.const import (  # noqa: E402
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
     DEVICE_TYPE_UNKNOWN,
+    get_device_name,
     get_device_type,
 )
 
@@ -86,7 +87,7 @@ DEVICE_TYPE_DISPLAY_NAMES: dict[str, str] = {
     DEVICE_TYPE_DELTA: "Delta 2 Max",
     DEVICE_TYPE_DELTA3: "Delta 3 Series",
     DEVICE_TYPE_SMARTPLUG: "Smart Plug",
-    DEVICE_TYPE_STREAM: "Stream AC Pro",
+    DEVICE_TYPE_STREAM: "Stream",
 }
 
 # Delta write/profile variants.

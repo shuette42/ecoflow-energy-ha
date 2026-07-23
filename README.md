@@ -83,7 +83,7 @@ Power (W), current (A), voltage (V), frequency, temperature · Plug on/off switc
 
 Battery SoC/SoH · signed battery power · battery charge/discharge power · signed AC grid connection power ("Netz-Anschluss": negative=input, positive=output/feed-in) · read-only AC outlet states and outlet power · AC voltage and frequency · battery temperature, capacity and cell voltage diagnostics · LED brightness diagnostics · **Number:** Backup Reserve (3-95%) in Enhanced Mode.
 
-The Stream AC Pro is treated as an AC-coupled battery. House/grid/solar flow values depend on an EcoFlow-paired meter and are disabled by default as diagnostic entities. Individual AC outlets and LED brightness are exposed read-only; the app write path is not yet confirmed for third-party MQTT control.
+The Stream AC Pro is treated as an AC-coupled battery. House/grid/solar flow values depend on an EcoFlow-paired meter and are disabled by default as diagnostic entities. Individual AC outlets and LED brightness are exposed read-only; the app write path is not yet confirmed for third-party MQTT control. The integration also recognizes other Stream-family models in Enhanced Mode, including Stream Ultra (BK11), Stream Max (BK41), Stream AC (BK51), and Stream Ultra X (BK61), and shows their device names accordingly.
 
 </details>
 
@@ -120,7 +120,7 @@ Download the [latest release](https://github.com/shuette42/ecoflow-energy-ha/rel
 
 **Standard Mode** uses the official EcoFlow IoT Developer API. Apply for free API keys at [developer.ecoflow.com](https://developer.ecoflow.com). Note: some European PowerOcean variants (serial numbers starting with `J32D` or `J32E`) are currently not exposed through the Developer API and cannot be linked to an API key (error 1006). These devices work in Enhanced Mode only.
 
-**Enhanced Mode** connects with your EcoFlow email and password. No Developer API keys needed. Faster updates, but this is an unofficial, community-driven protocol that may change without notice.
+**Enhanced Mode** connects with your EcoFlow email and password. No Developer API keys needed. Faster updates, but this is an unofficial, community-driven protocol that may change without notice. Stream-family devices are now recognized by their serial prefixes, including BK11, BK41, BK51, and BK61, so they appear with the correct model names in Home Assistant.
 
 **Upgrading?** See [CHANGELOG.md](CHANGELOG.md) for migration notes. Most upgrades are seamless. v1.13.0 removes the legacy `min_discharge_soc` PowerOcean entity (replaced by `backup_reserve`); after upgrading you may see it as "unavailable" in HA - safe to delete via Settings > Devices & services > Entities.
 

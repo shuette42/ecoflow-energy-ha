@@ -66,8 +66,49 @@ _SN_PREFIX_MAP = {
     "D3M1": DEVICE_TYPE_DELTA3,
     "P321": DEVICE_TYPE_DELTA3,
     "HW52": DEVICE_TYPE_SMARTPLUG,
+    # BK-series Stream devices:
+    #  - BK11: Stream Ultra
+    #  - BK31: Stream AC Pro
+    #  - BK41: Stream Max
+    #  - BK51: Stream AC
+    #  - BK61: Stream Ultra X
+    "BK11": DEVICE_TYPE_STREAM,
     "BK31": DEVICE_TYPE_STREAM,
+    "BK41": DEVICE_TYPE_STREAM,
+    "BK51": DEVICE_TYPE_STREAM,
+    "BK61": DEVICE_TYPE_STREAM,
 }
+
+_SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
+    "BK11": "Stream Ultra",
+    "BK31": "Stream AC Pro",
+    "BK41": "Stream Max",
+    "BK51": "Stream AC",
+    "BK61": "Stream Ultra X",
+}
+
+def get_device_name(product_name: str, sn: str = "") -> str:
+    """Return a human-friendly name for the device.
+
+    A serial-prefix-derived name is only provided for Stream (BK-series)
+    devices, which report an empty product name through the app API. For
+    every other device type the product name is returned when present and
+    an empty string otherwise, so callers keep their existing fallback
+    (device-type display name or bare serial).
+    """
+    if product_name:
+        return product_name
+
+    if not sn:
+        return ""
+    base_name = _SN_PREFIX_DISPLAY_NAMES.get(sn[:4].upper(), "")
+    if not base_name:
+        return ""
+
+    serial_tail = sn[-4:]
+    if len(serial_tail) == 4 and serial_tail.isdigit():
+        return f"{base_name} ({serial_tail})"
+    return base_name
 
 
 def get_device_type(product_name: str, sn: str = "") -> str:

@@ -21,6 +21,7 @@ from ecoflow_energy.const import (
     STREAM_SWITCHES,
     SMARTPLUG_SWITCHES,
     SMARTPLUG_NUMBERS,
+    get_device_name,
     get_device_type,
     get_delta_profile,
 )
@@ -49,6 +50,18 @@ class TestDeviceTypeRouting:
     def test_stream_detected_by_bk31_prefix(self) -> None:
         assert get_device_type("", "BK31_TEST_DEVICE") == "stream"
 
+    def test_stream_detected_by_bk11_prefix(self) -> None:
+        assert get_device_type("", "BK11TEST00000001") == "stream"
+
+    def test_stream_detected_by_bk41_prefix(self) -> None:
+        assert get_device_type("", "BK41TEST00000001") == "stream"
+
+    def test_stream_detected_by_bk51_prefix(self) -> None:
+        assert get_device_type("", "BK51TEST00000001") == "stream"
+
+    def test_stream_detected_by_bk61_prefix(self) -> None:
+        assert get_device_type("", "BK61TEST00000001") == "stream"
+
     def test_delta3_by_product_name(self) -> None:
         # "DELTA 3 Max Plus" contains "delta" but must route to delta3,
         # not the Delta 2 Max parser (root cause of the #110 report).
@@ -69,6 +82,30 @@ class TestDeviceTypeRouting:
 
     def test_delta3_classic_by_p321_sn_prefix(self) -> None:
         assert get_device_type("", "P321TEST00000001") == "delta3"
+
+    def test_stream_display_name_by_bk_prefix(self) -> None:
+        assert get_device_name("", "BK11TEST00000001") == "Stream Ultra (0001)"
+        assert get_device_name("", "BK31TEST00000001") == "Stream AC Pro (0001)"
+        assert get_device_name("", "BK41TEST00000001") == "Stream Max (0001)"
+        assert get_device_name("", "BK51TEST00000001") == "Stream AC (0001)"
+        assert get_device_name("", "BK61TEST00000001") == "Stream Ultra X (0001)"
+
+    def test_device_name_prefers_product_name(self) -> None:
+        # A non-empty product name always wins over any prefix-derived name.
+        assert get_device_name("Stream Ultra X", "BK61TEST00000001") == "Stream Ultra X"
+
+    def test_device_name_only_for_stream_prefixes(self) -> None:
+        # The prefix-derived friendly name is Stream-only: every other device
+        # type returns an empty string so callers keep their own fallback.
+        assert get_device_name("", "R351TEST00000001") == ""
+        assert get_device_name("", "HW52FAKE00000001") == ""
+        assert get_device_name("", "J32DTEST00001234") == ""
+        assert get_device_name("", "P321TEST00005678") == ""
+        assert get_device_name("", "") == ""
+
+    def test_stream_display_name_without_numeric_tail(self) -> None:
+        # A non-numeric serial tail drops the suffix rather than guessing.
+        assert get_device_name("", "BK11ABCDXYZ") == "Stream Ultra"
 
     def test_delta3_keyword_wins_over_delta(self) -> None:
         # The delta3 keyword check runs before the generic delta check.
