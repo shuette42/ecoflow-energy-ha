@@ -118,7 +118,7 @@ Download the [latest release](https://github.com/shuette42/ecoflow-energy-ha/rel
 | **Stability** | Official EcoFlow API - supported and stable | Community-driven - unofficial, use at your own risk |
 | **Best for** | Reliable long-term operation | Real-time monitoring, fast automations, PowerOcean control |
 
-**Standard Mode** uses the official EcoFlow IoT Developer API. Apply for free API keys at [developer.ecoflow.com](https://developer.ecoflow.com). Note: some European PowerOcean variants (serial numbers starting with `J32D`) are currently not exposed through the Developer API and cannot be linked to an API key (error 1006). These devices work in Enhanced Mode only.
+**Standard Mode** uses the official EcoFlow IoT Developer API. Apply for free API keys at [developer.ecoflow.com](https://developer.ecoflow.com). Note: some European PowerOcean variants (serial numbers starting with `J32D` or `J32E`) are currently not exposed through the Developer API and cannot be linked to an API key (error 1006). These devices work in Enhanced Mode only.
 
 **Enhanced Mode** connects with your EcoFlow email and password. No Developer API keys needed. Faster updates, but this is an unofficial, community-driven protocol that may change without notice.
 
@@ -396,7 +396,7 @@ If the devices are not linked to the API key, HTTP polling fails with error 1006
 
 Since v1.8.3, the integration handles this gracefully: error 1006 is logged once with a clear message and does not trigger re-authentication.
 
-**PowerOcean variants with serial prefix `J32D`:** the Developer Portal currently offers no way to link these devices to an API key, so Standard Mode entities stay unavailable (error 1006). This is an EcoFlow API limitation, not a configuration problem. Use Enhanced Mode for these devices - it delivers full real-time data.
+**PowerOcean variants with serial prefix `J32D` or `J32E`:** the Developer Portal currently offers no way to link these devices to an API key, so Standard Mode entities stay unavailable (error 1006). This is an EcoFlow API limitation, not a configuration problem. Use Enhanced Mode for these devices - it delivers full real-time data.
 
 </details>
 
