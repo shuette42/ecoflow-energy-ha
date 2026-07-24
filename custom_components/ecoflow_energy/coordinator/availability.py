@@ -194,15 +194,30 @@ class AvailabilityMixin:
                         if self._mqtt_client is not None
                         else 0
                     )
-                    _LOGGER.warning(
-                        "MQTT stream interrupted for %s [%s] (%.0fs, reconnect_attempts=%d) - "
-                        "marking device unavailable",
+                    # Mirror the MQTT layer's escalation (see the cloud_mqtt
+                    # disconnect handler): a first interruption with no pending
+                    # reconnects is normal broker/device silence and stays at
+                    # INFO, symmetric with the recovery log below. Only a
+                    # sustained failure, where reconnects are already being
+                    # attempted, is a degraded state worth a WARNING. This keeps
+                    # healthy operation free of WARNING noise.
+                    age_str = (
+                        "no data since connect"
+                        if self._last_mqtt_ts <= 0
+                        else f"{age:.0f}s"
+                    )
+                    log = _LOGGER.warning if reconnect_attempts > 0 else _LOGGER.info
+                    log(
+                        "Device %s [%s] became unavailable (%s, reconnect_attempts=%d)",
                         self.device_name,
                         self.device_sn,
-                        age,
+                        age_str,
                         reconnect_attempts,
                     )
-                    self._log_event("stale_unavailable", f"age={age:.0f}s, attempts={reconnect_attempts}")
+                    self._log_event(
+                        "stale_unavailable",
+                        f"age={age_str}, attempts={reconnect_attempts}",
+                    )
                     self._device_available = False
                     self._snapshot = DeviceSnapshot(
                         data={},

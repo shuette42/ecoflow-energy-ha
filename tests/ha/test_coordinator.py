@@ -1915,7 +1915,10 @@ class TestStaleDetection:
         enhanced_config_entry: MockConfigEntry,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """App-auth marks unavailable only after hard unavailable threshold (10 min)."""
+        """App-auth marks unavailable only after hard unavailable threshold (10 min).
+
+        A sustained failure (reconnect attempts already pending) logs a WARNING.
+        """
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
@@ -1923,6 +1926,8 @@ class TestStaleDetection:
         coordinator._mqtt_client = MagicMock()
         coordinator._mqtt_client.is_connected.return_value = False
         coordinator._mqtt_client.try_reconnect.return_value = False
+        # Sustained failure: reconnects already being attempted -> WARNING
+        coordinator._mqtt_client.reconnect_attempts = 5
 
         now = 10_000.0
         with patch(
@@ -1936,7 +1941,52 @@ class TestStaleDetection:
 
             assert coordinator.device_available is False
             assert coordinator.availability_stage == "unavailable"
-        assert "marking device unavailable" in caplog.text
+        assert "became unavailable" in caplog.text
+        assert "reconnect_attempts=5" in caplog.text
+        self._cleanup_stale_timer(coordinator)
+
+    async def test_app_auth_transient_unavailable_logs_info_not_warning(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A transient interruption (no pending reconnects) must not WARN.
+
+        Reproduces a device that connected but has not pushed a frame yet
+        (age is infinite, reconnect_attempts=0). Marking it unavailable is a
+        normal graduated-availability transition and must stay at INFO so the
+        HA log stays free of WARNING noise (zero-noise-logging policy).
+        """
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        coordinator._mqtt_client = MagicMock()
+        coordinator._mqtt_client.is_connected.return_value = True
+        coordinator._mqtt_client.reconnect_attempts = 0
+
+        now = 10_000.0
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.time.monotonic",
+            return_value=now,
+        ):
+            # Never received data -> age is infinite, past the hard threshold
+            coordinator._last_mqtt_ts = 0.0
+            with caplog.at_level("INFO"):
+                coordinator._check_stale()
+
+            assert coordinator.device_available is False
+            assert coordinator.availability_stage == "unavailable"
+
+        assert "became unavailable" in caplog.text
+        assert "no data since connect" in caplog.text
+        # The transition must not be logged at WARNING or above
+        assert not [
+            r for r in caplog.records
+            if r.levelname in ("WARNING", "ERROR", "CRITICAL")
+            and "became unavailable" in r.getMessage()
+        ]
         self._cleanup_stale_timer(coordinator)
 
     async def test_availability_stage_transitions(
@@ -5258,6 +5308,7 @@ class TestAppAuthMode:
         coordinator._mqtt_client = MagicMock()
         coordinator._mqtt_client.is_connected.return_value = False
         coordinator._mqtt_client.try_reconnect.return_value = None
+        coordinator._mqtt_client.reconnect_attempts = 0
 
         # Simulate stale MQTT (no data received)
         coordinator._last_mqtt_ts = 0.0
