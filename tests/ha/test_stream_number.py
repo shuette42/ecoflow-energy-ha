@@ -1,8 +1,9 @@
 """Tests for Stream AC Pro number entities — backup reserve SET via WSS proto.
 
 Covers the SET path that Issue #98 fixed: the Stream backup-reserve number
-must build a protobuf frame on the verified config path (cmd_func=254,
-cmd_id=18) and hand it to the coordinator's proto SET sender.
+must build a protobuf frame on the verified ConfigWrite write path
+(cmd_func=254, cmd_id=17) and hand it to the coordinator's proto SET sender.
+cmd_id=18 is the device reply/ack id, not the write id.
 """
 
 from __future__ import annotations
@@ -40,7 +41,7 @@ class TestStreamNumberDefs:
 
 class TestStreamBackupReserveSet:
     """The number entity routes a value through build_stream_backup_reserve_payload
-    and the coordinator's proto SET sender, with the #98-verified cmd_id=18."""
+    and the coordinator's proto SET sender, with the #98-verified cmd_id=17."""
 
     def _make_entity(
         self, hass, entry,
@@ -56,13 +57,13 @@ class TestStreamBackupReserveSet:
         entity.async_write_ha_state = MagicMock()
         return entity, coordinator
 
-    async def test_set_builds_cmd_id_18_payload(
+    async def test_set_builds_cmd_id_17_payload(
         self,
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """A write on the Stream backup_reserve number sends a proto SET whose
-        header carries cmd_id=18 and field 102 = requested value (#98)."""
+        header carries cmd_id=17 and field 102 = requested value (#98)."""
         entity, coordinator = self._make_entity(hass, enhanced_config_entry)
         coordinator.async_send_proto_set_command = AsyncMock(return_value=True)
 
@@ -73,8 +74,8 @@ class TestStreamBackupReserveSet:
         assert isinstance(payload, bytes)
 
         # Decode the frame at field level (robust against byte-offset drift):
-        # the outer envelope must carry cmd_func=254 / cmd_id=18, and the inner
-        # pdata field 102 must equal the requested value.
+        # the outer envelope must carry cmd_func=254 / cmd_id=17 (ConfigWrite
+        # SET), and the inner pdata field 102 must equal the requested value.
         from custom_components.ecoflow_energy.ecoflow.proto.decoder import (
             decode_header_message,
         )
@@ -83,9 +84,9 @@ class TestStreamBackupReserveSet:
         assert headers, "expected a decodable header frame"
         header = headers[0]
         assert int(header["cmd_func"]) == 254
-        assert int(header["cmd_id"]) == 18
-        # Regression guard for #98: the old ignored cmd_id=17 must never return.
-        assert int(header["cmd_id"]) != 17
+        assert int(header["cmd_id"]) == 17
+        # Regression guard for #98: the reply id 18 must never be used as the SET.
+        assert int(header["cmd_id"]) != 18
         pdata = bytes.fromhex(header["pdata"])
         # field 102, wire-type 0 (varint): tag = (102 << 3) | 0 = 816 -> b"\xb0\x06"
         assert b"\xb0\x06\x32" in pdata  # field 102 = 0x32 = 50
