@@ -4,7 +4,7 @@ Full list of all entities created for PowerOcean devices (HJ31, HJ32, J32D, and 
 
 > **Note:** PowerOcean variants with serial prefix `J32D` or `J32E` (European variants) are currently not exposed through the EcoFlow Developer API and therefore require Enhanced Mode. In Standard Mode these devices report error 1006 and all entities stay unavailable. Single-phase variants (`J32E`) report only the phases that are physically present; the remaining phase entities stay empty.
 
-**Totals:** 202 sensors, 1 number control
+**Totals:** 202 sensors, 2 numbers, 1 select
 
 > Entities marked with *disabled* are available but hidden by default. Enable them in **Settings > Devices > EcoFlow PowerOcean > Entities** (click the filter icon and show disabled entities).
 
@@ -148,11 +148,13 @@ Each battery pack creates 24 sensors (7 core + 17 diagnostic). Pack 1 core senso
 
 ---
 
-## Number Controls
+## Controls
 
-| Entity | Unit | Range | Step | Mode |
-|:---|:---:|:---:|:---:|:---|
-| Min Discharge SoC | % | 0 - 30 | 5 | Enhanced only |
+| Entity | Type | Range / Options | Mode |
+|:---|:---:|:---:|:---|
+| Backup Reserve | Number | 0 - 100 % | Enhanced only |
+| Solar Surplus Threshold | Number | 0 - 100 % | Enhanced only |
+| Work Mode | Select | Self-use / AI Schedule | Enhanced only |
 
 ---
 

@@ -12,4 +12,4 @@ Complete list of all sensors, switches, numbers, and binary sensors per device:
 - [Delta 2 Max](entities/delta-2-max.md) - 94 sensors, 4 binary sensors, 7 switches, 8 numbers
 - [Delta 3 Max Plus](entities/delta-3-max-plus.md) - 20 sensors, 7 switches, 3 numbers
 - [Smart Plug](entities/smart-plug.md) - 11 sensors, 1 binary sensor, 1 switch, 2 numbers
-- Stream (AC Pro, Ultra, Max, AC, Ultra X) - 39 sensors, 2 binary sensors, 1 number (Enhanced Mode). See the [main README](../README.md#supported-devices) for details.
+- Stream (AC Pro, Ultra, Max, AC, Ultra X) - 37 sensors, 2 binary sensors, 1 number (Enhanced Mode). See the [main README](../README.md#supported-devices) for details.

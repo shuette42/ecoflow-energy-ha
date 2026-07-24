@@ -40,12 +40,14 @@
 | | Sensors | Controls | Energy Sensors | Update Rate |
 |:---|:---:|:---:|:---:|:---|
 | **PowerOcean** — Home Battery | 202 | 2 numbers, 1 select (Enhanced only) | 6 (solar, grid, battery, home) | ~30 s standard / ~3 s enhanced |
-| **Delta 2 Max** — Portable Power | 94 | 7 switches, 8 numbers | 4 (solar 1+2, AC in/out) | ~30 s standard / ~2 s enhanced |
+| **Delta 2 Max** — Portable Power | 94 | 7 switches, 8 numbers | 4 (solar 1+2, AC in/out) | ~30 s standard (+ MQTT push) |
 | **Delta 3 Max Plus** — Portable Power | 20 | 7 switches, 3 numbers | - | ~30 s standard / ~2 s enhanced |
 | **Smart Plug** — Switchable Outlet | 11 | 1 switch, 2 numbers | 1 (total energy) | ~30 s standard / ~3 s enhanced |
-| **Stream** (AC Pro, Ultra, Max, AC, Ultra X) — AC-coupled Battery | 39 + 2 binary | 1 number (Enhanced only) | 2 default (battery charge/discharge), 2 optional diagnostic (solar/home) | Enhanced only / ~3 s |
+| **Stream** (AC Pro, Ultra, Max, AC, Ultra X) — AC-coupled Battery | 37 + 2 binary | 1 number (Enhanced only) | 2 default (battery charge/discharge), 2 optional diagnostic (solar/home) | Enhanced only / ~3 s |
 
 > **Tip:** Other Delta-series devices (Delta Pro, Delta 2, etc.) should work automatically with the Delta sensor set. Base Delta 3 (non-Max-Plus) uses the Delta 3 sensor set. All Stream models (Ultra, Max, AC, Ultra X) share the Stream sensor set shown above.
+>
+> **Note:** Every device additionally exposes 2 universal diagnostic sensors (connection status and active mode) that are not included in the sensor counts above.
 
 <details>
 <summary><b>PowerOcean</b> — 3-phase grid, MPPT tracking, multi-pack battery, EMS diagnostics, energy strategy controls</summary>
@@ -67,7 +69,7 @@ The integration enforces the app's `backup_reserve <= solar_surplus_threshold` c
 <details>
 <summary><b>Delta 2 Max</b> — AC/DC/12V switches, charge speed control, real-time MQTT</summary>
 
-Battery SoC/SoH · All input/output power, temperatures, voltages · **Expansion battery packs** (up to 2, disabled by default) · **Switches:** AC, DC, 12V output, beeper, X-Boost, AC auto restart, backup reserve · **Numbers:** AC charge speed (200-2400 W), max/min SoC, standby timeout, screen brightness/timeout, 12V port timeout, backup reserve level · Real-time MQTT push in Standard Mode · ~2 s updates in Enhanced Mode.
+Battery SoC/SoH · All input/output power, temperatures, voltages · **Expansion battery packs** (up to 2, disabled by default) · **Switches:** AC, DC, 12V output, beeper, X-Boost, AC auto restart, backup reserve · **Numbers:** AC charge speed (200-2400 W), max/min SoC, standby timeout, screen brightness/timeout, 12V port timeout, backup reserve level · Real-time MQTT push for faster-than-polling updates.
 
 </details>
 

@@ -174,8 +174,7 @@ Two expansion packs (Slave 1, Slave 2), each with 16 sensors. All disabled by de
 
 ## Notes
 
-- Both Standard Mode (~30s) and Enhanced Mode (~2s) provide all sensors
-- Enhanced Mode adds real-time MQTT push for faster updates
-- Standard Mode also receives MQTT push data alongside HTTP polling
-- All switches and numbers work in both modes
+- Standard Mode polls over HTTP (~30s) and also receives MQTT push data for faster updates
+- App-authenticated (WSS) connections receive the same MQTT push; the ~2-3s protobuf Enhanced Mode is exclusive to PowerOcean
+- All sensors, switches, and numbers work regardless of connection type
 - Delta devices with R331 serial numbers use a slightly different command protocol (detected automatically)
