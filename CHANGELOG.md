@@ -23,6 +23,7 @@ All notable changes to this project will be documented in this file.
 - Ah battery capacity counters are disabled diagnostic entities. (beta.2)
 
 ### Fixed
+- Enhanced mode no longer logs a warning when a device briefly goes silent and its entities turn unavailable. This is a normal step in the graduated availability handling, so it is now logged at info level; a warning is only emitted when reconnect attempts are already failing repeatedly. The log line also reads correctly when a device has sent no data since connecting, instead of showing an infinite age. (beta.15)
 - Switches and numbers now restore their last known state after a Home Assistant restart instead of showing unknown until the first full device status arrives; live device data always replaces the restored value. (beta.10)
 - App API devices reported with an unknown device type are now classified locally using their product name or supported serial-number prefix. (beta.10)
 - Entities no longer stay unavailable indefinitely after a Home Assistant restart that happens while their device is between transmissions. When a device (for example an idle Delta 3) was silent during startup, its entities were written as unavailable and the later recovery was filtered out by the state-write deduplication if the sensor value had not changed, so they never came back without a manual reload. (beta.9)
