@@ -443,7 +443,7 @@ class TestBackupEventSetPayload:
 
 
 # ===========================================================================
-# Stream AC Pro Backup-Reserve SET payload (ConfigWrite field 102, cmd_id=18)
+# Stream AC Pro Backup-Reserve SET payload (ConfigWrite field 102, cmd_id=17)
 # ===========================================================================
 
 
@@ -495,9 +495,11 @@ def _read_test_varint(mv, pos: int):
 
 
 class TestStreamBackupReservePayload:
-    """ConfigWrite { cfg_backup_reverse_soc=102 } in a cmd_func=254/cmd_id=18
-    header on the /app/ WSS topic. The (254, 18) config path is confirmed
-    against observed device report/ack frames (see stream_proto.py)."""
+    """ConfigWrite { cfg_backup_reverse_soc=102 } in a cmd_func=254/cmd_id=17
+    header on the /app/ WSS topic. cmd_id=17 is the ConfigWrite SET; cmd_id=18
+    is the device reply/ack (its field-102 read-back is mapped in
+    stream_proto.py). Observed app MQTT traffic confirms the write goes out on
+    cmd_id=17 with the full ConfigWrite header (see #98)."""
 
     # Dummy SN: 4-char prefix convention, never a real serial.
     SN = "BK31TESTSN0000000"
@@ -513,22 +515,40 @@ class TestStreamBackupReservePayload:
         # Outer wrapper: field 1 (tag=0x0a) length-delimited
         assert payload[0] == 0x0A
 
-    def test_cmd_id_18_present(self):
-        """cmd_id=18 (field 9, varint) must be encoded in the header (#98)."""
+    def test_cmd_id_17_present(self):
+        """cmd_id=17 (field 9, varint) must be encoded in the header (#98)."""
         payload = build_stream_backup_reserve_payload(50, self.SN, seq=1)
         header = _decode_header_fields(payload)
-        assert header[9] == [18]
+        assert header[9] == [17]
 
-    def test_cmd_id_is_not_17_regression(self):
-        """Regression guard for #98: the SET must NOT use the ignored cmd_id 17.
+    def test_cmd_id_is_not_18_regression(self):
+        """Regression guard for #98: the SET must NOT go out on the reply id 18.
 
-        cmd_id=17 was the original bug - the device silently ignored the frame.
-        The only app-verified backup-reserve config path is cmd_id=18.
+        cmd_id=18 was the beta.3 regression - it is the device's reply/ack id,
+        so the device silently ignored the write. The app-verified backup
+        reserve write path is the ConfigWrite SET, cmd_id=17.
         """
         payload = build_stream_backup_reserve_payload(50, self.SN, seq=1)
         header = _decode_header_fields(payload)
-        assert 17 not in header[9]
-        assert header[9] == [18]
+        assert 18 not in header[9]
+        assert header[9] == [17]
+
+    def test_full_config_write_header_present(self):
+        """The SET must carry the complete ConfigWrite header (#98).
+
+        The Stream write reuses the hardware-verified Delta 3 ConfigWrite
+        frame, so the routing/versioning fields that were missing in the
+        earlier frame must all be present with the verified values:
+          4  d_src = 1      7  check_type = 3   17 payload_ver = 1
+          5  d_dest = 1    16  version = 3
+        """
+        payload = build_stream_backup_reserve_payload(50, self.SN, seq=1)
+        header = _decode_header_fields(payload)
+        assert header[4] == [1]    # d_src
+        assert header[5] == [1]    # d_dest
+        assert header[7] == [3]    # check_type
+        assert header[16] == [3]   # version
+        assert header[17] == [1]   # payload_ver
 
     def test_cmd_func_254_present(self):
         """cmd_func=254 (field 8, varint) must be encoded in the header."""
@@ -549,21 +569,23 @@ class TestStreamBackupReservePayload:
         header = _decode_header_fields(payload)
         assert header[25] == [self.SN.encode("ascii")]
 
-    def test_decodes_via_stream_parser(self):
-        """The built frame decodes through the Stream proto parser: the
-        (254, 18) config path reads field 102 as backup_reserve_pct.
+    def test_pdata_field_102_decodes_to_value(self):
+        """The pdata field 102 decodes back to the requested backup value.
 
-        Because the builder now emits cmd_id=18 (the verified config path),
-        the parser recognizes the frame directly - no re-wrapping needed.
+        The SET is emitted on cmd_id=17 (the ConfigWrite write path), so it is
+        deliberately NOT recognized by the (254, 18) reply read-map in
+        stream_proto.py. Verify the write value at the pdata level instead:
+        walk the inner pdata and confirm field 102 (varint) equals 50.
         """
-        from ecoflow_energy.ecoflow.parsers.stream_proto import (
-            parse_stream_proto_message,
-        )
-
         payload = build_stream_backup_reserve_payload(50, self.SN, seq=1)
-        result = parse_stream_proto_message(payload)
-        assert result is not None
-        assert result["backup_reserve_pct"] == 50
+        pdata = memoryview(self._inner_pdata(payload))
+        pos = 0
+        tag, pos = _read_test_varint(pdata, pos)
+        assert (tag >> 3) == 102          # field number
+        assert (tag & 0x07) == 0          # varint wire type
+        value, pos = _read_test_varint(pdata, pos)
+        assert value == 50
+        assert pos == len(pdata)          # field 102 is the only pdata content
 
     def test_field_102_encodes_value(self):
         """Different backup_soc values encode on field 102."""
