@@ -61,6 +61,14 @@ _SN_PREFIX_MAP = {
     # diagnostics in Enhanced mode - live data across grid/battery/MPPT;
     # single-phase unit, so only grid phases A and B carry values.
     "J32E": DEVICE_TYPE_POWEROCEAN,
+    # PowerOcean Plus variants (#88): higher-power 3-phase hybrid units
+    # (e.g. P3-S1, ~25-30 kW). Not exposed through the Developer API, so
+    # Enhanced mode only - same situation as J32D/J32E. Routed to the
+    # PowerOcean parser so entities are created; field layout to be
+    # confirmed via reporter diagnostics on a Plus unit.
+    "R371": DEVICE_TYPE_POWEROCEAN,
+    "R374": DEVICE_TYPE_POWEROCEAN,
+    "HJ3C": DEVICE_TYPE_POWEROCEAN,
     "R351": DEVICE_TYPE_DELTA,
     "R331": DEVICE_TYPE_DELTA,
     "D3M1": DEVICE_TYPE_DELTA3,

@@ -16,6 +16,7 @@ All notable changes to this project will be documented in this file.
 - Serial prefix J32E (PowerOcean Single Phase) is now recognized as PowerOcean. Like J32D, this European variant reports an empty product name through the app API and is not exposed by the EcoFlow Developer API (error 1006), so it requires Enhanced mode. Verified on real hardware with full live telemetry. Single-phase units report only the phases that are physically present. (beta.12)
 - Additional Stream-family models are now recognized in Enhanced Mode and shown with their model names: Stream Ultra (BK11), Stream Max (BK41), Stream AC (BK51), and Stream Ultra X (BK61), alongside the existing Stream AC Pro (BK31). (beta.13)
 - Delta 3 Max Plus now exposes Energy Dashboard sensors for solar, solar 2, AC input, and total output energy, integrated from the live power telemetry (the device reports no native energy counters). The four sensors were verified to register with the correct Energy Dashboard attributes on a real Delta 3 Max Plus. (beta.16)
+- Serial prefixes R371, R374 and HJ3C (PowerOcean Plus) are now recognized as PowerOcean. These higher-power 3-phase hybrid units were previously skipped with "no parser available". Like J32D/J32E they are not exposed through the EcoFlow Developer API and require Enhanced mode; the device is now routed to the PowerOcean parser so entities are created. (beta.17)
 
 ### Changed
 - Internal restructuring of the device coordinator into smaller, single-purpose modules; no functional or user-facing change. (beta.7)

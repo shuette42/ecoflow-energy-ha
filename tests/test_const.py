@@ -79,6 +79,13 @@ class TestDeviceTypeRouting:
         # product_name behavior as J32D, classified via SN prefix.
         assert get_device_type("", "J32ETEST00000001") == "powerocean"
 
+    def test_powerocean_plus_by_sn_prefix(self) -> None:
+        # PowerOcean Plus variants (#88): higher-power 3-phase hybrid units,
+        # Enhanced mode only, classified via SN prefix like J32D/J32E.
+        assert get_device_type("", "R371TEST00000001") == "powerocean"
+        assert get_device_type("", "R374TEST00000001") == "powerocean"
+        assert get_device_type("", "HJ3CTEST00000001") == "powerocean"
+
     def test_delta3_by_sn_prefix(self) -> None:
         assert get_device_type("", "D3M1TEST00000001") == "delta3"
 
