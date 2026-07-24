@@ -10,6 +10,8 @@ from ecoflow_energy.const import (
     DELTA_PROFILE_R351,
     POWEROCEAN_SENSORS,
     DELTA2MAX_SENSORS,
+    DELTA3_SENSORS,
+    DELTA3_POWER_TO_ENERGY,
     SMARTPLUG_SENSORS,
     STREAM_SENSORS,
     STREAM_NUMBERS,
@@ -419,6 +421,38 @@ class TestStreamEntities:
                 assert s.device_class != "battery", (
                     f"{s.key} has device_class='battery' but is not the primary SoC"
                 )
+
+
+class TestDelta3Energy:
+    """Delta 3 Energy Dashboard sensors are integrated from live power keys."""
+
+    ENERGY_KEYS = (
+        "solar_energy_kwh",
+        "solar2_energy_kwh",
+        "ac_in_energy_kwh",
+        "out_energy_kwh",
+    )
+
+    def test_energy_dashboard_sensors_exist(self) -> None:
+        sensors = {s.key: s for s in DELTA3_SENSORS}
+        for key in self.ENERGY_KEYS:
+            assert key in sensors, f"Missing Delta 3 energy sensor: {key}"
+            s = sensors[key]
+            assert s.device_class == "energy", f"{key} must be device_class=energy"
+            assert s.state_class == "total_increasing", f"{key} must be total_increasing"
+            assert s.unit == "kWh", f"{key} must be kWh"
+
+    def test_power_to_energy_mapping(self) -> None:
+        assert DELTA3_POWER_TO_ENERGY == {
+            "pv1_in_w": "solar_energy_kwh",
+            "pv2_in_w": "solar2_energy_kwh",
+            "ac_in_w": "ac_in_energy_kwh",
+            "pow_out_sum_w": "out_energy_kwh",
+        }
+        sensor_keys = {s.key for s in DELTA3_SENSORS}
+        for power_key, energy_key in DELTA3_POWER_TO_ENERGY.items():
+            assert power_key in sensor_keys, f"Source power sensor missing: {power_key}"
+            assert energy_key in sensor_keys, f"Target energy sensor missing: {energy_key}"
 
 
 class TestBatteryDeviceClassSingleton:

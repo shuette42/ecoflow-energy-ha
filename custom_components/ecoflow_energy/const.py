@@ -603,9 +603,10 @@ STREAM_SENSORS: list[EcoFlowSensorDef] = [
 # Telemetry arrives via HTTP quota (Standard mode) or protobuf push
 # (Enhanced mode); both paths produce identical sensor keys. Switches and
 # numbers are defined further below and require Standard mode, because the
-# SET commands go through the official HTTP endpoint. No energy (kWh)
-# sensors yet - the quota exposes no native energy counters (see the
-# delta3_http.py docstring).
+# SET commands go through the official HTTP endpoint. The quota exposes no
+# native energy counters, so the kWh Energy Dashboard sensors are derived
+# from the live power keys via Riemann-sum integration (see
+# DELTA3_POWER_TO_ENERGY and the delta3_http.py docstring).
 
 DELTA3_SENSORS: list[EcoFlowSensorDef] = [
     # --- Battery / SoC ---
@@ -625,6 +626,11 @@ DELTA3_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("typec3_w", "Type-C 3", "W", "power", "measurement", "mdi:usb-c-port", suggested_display_precision=0),
     EcoFlowSensorDef("usb_qc1_w", "USB QC 1", "W", "power", "measurement", "mdi:usb", suggested_display_precision=0),
     EcoFlowSensorDef("usb_qc2_w", "USB QC 2", "W", "power", "measurement", "mdi:usb", suggested_display_precision=0),
+    # --- Energy Dashboard (total_increasing, kWh; derived via Riemann integration) ---
+    EcoFlowSensorDef("solar_energy_kwh", "Solar Energy", "kWh", "energy", "total_increasing", "mdi:solar-power", suggested_display_precision=2),
+    EcoFlowSensorDef("solar2_energy_kwh", "Solar 2 Energy", "kWh", "energy", "total_increasing", "mdi:solar-power", suggested_display_precision=2),
+    EcoFlowSensorDef("ac_in_energy_kwh", "AC Input Energy", "kWh", "energy", "total_increasing", "mdi:power-plug", suggested_display_precision=2),
+    EcoFlowSensorDef("out_energy_kwh", "Output Energy", "kWh", "energy", "total_increasing", "mdi:power-plug-outline", suggested_display_precision=2),
     # --- Duration (minutes; can exceed 12000, no cap) ---
     EcoFlowSensorDef("chg_remain_time_min", "Charge Time Remaining", "min", "duration", "measurement", "mdi:battery-clock", suggested_display_precision=0),
     EcoFlowSensorDef("dsg_remain_time_min", "Discharge Time Remaining", "min", "duration", "measurement", "mdi:battery-clock-outline", suggested_display_precision=0),
@@ -687,6 +693,18 @@ DELTA_POWER_TO_ENERGY: dict[str, str] = {
 }
 
 DELTA_ENERGY_FROM_API: list[tuple[str, str]] = []
+
+# The Delta 3 HTTP quota exposes no native energy counters, so these kWh
+# sensors are integrated from the live power keys. pow_out_sum_w is the
+# aggregate output (AC + DC + USB), giving one clean "output energy" total.
+DELTA3_POWER_TO_ENERGY: dict[str, str] = {
+    "pv1_in_w": "solar_energy_kwh",
+    "pv2_in_w": "solar2_energy_kwh",
+    "ac_in_w": "ac_in_energy_kwh",
+    "pow_out_sum_w": "out_energy_kwh",
+}
+
+DELTA3_ENERGY_FROM_API: list[tuple[str, str]] = []
 
 SMARTPLUG_POWER_TO_ENERGY: dict[str, str] = {
     "power_w": "energy_kwh",

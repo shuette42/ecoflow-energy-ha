@@ -30,9 +30,12 @@ from ..const import (
     AUTH_METHOD_APP,
     AUTH_METHOD_DEVELOPER,
     CONF_AUTH_METHOD,
+    DELTA3_ENERGY_FROM_API,
+    DELTA3_POWER_TO_ENERGY,
     DELTA_ENERGY_FROM_API,
     DELTA_POWER_TO_ENERGY,
     DEVICE_TYPE_DELTA,
+    DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_DISPLAY_NAMES,
     DEVICE_TYPE_SMARTPLUG,
@@ -230,6 +233,9 @@ class EcoFlowDeviceCoordinator(
         elif self.device_type == DEVICE_TYPE_DELTA:
             self._power_to_energy = DELTA_POWER_TO_ENERGY
             self._energy_from_api = DELTA_ENERGY_FROM_API
+        elif self.device_type == DEVICE_TYPE_DELTA3:
+            self._power_to_energy = DELTA3_POWER_TO_ENERGY
+            self._energy_from_api = DELTA3_ENERGY_FROM_API
         elif self.device_type == DEVICE_TYPE_SMARTPLUG:
             self._power_to_energy = SMARTPLUG_POWER_TO_ENERGY
             self._energy_from_api = SMARTPLUG_ENERGY_FROM_API

@@ -12,9 +12,10 @@ and min - there is no deciwatt anywhere in this generation. Values are
 rounded to clean integers (the HTTP quota subset carries no voltage,
 current or temperature fields that would need decimals).
 
-No native energy (Wh/kWh) counters exist in the HTTP quota, so Energy
-Dashboard integration is deferred until the power keys are validated on
-real hardware.
+No native energy (Wh/kWh) counters exist in the HTTP quota. The power
+keys have been validated on real hardware, so the Energy Dashboard
+sensors are derived from them via Riemann-sum integration (see
+DELTA3_POWER_TO_ENERGY in const.py).
 
 Remaining-time quirk: the device keeps both `cmsChgRemTime` and
 `cmsDsgRemTime` populated at all times and parks the direction that is

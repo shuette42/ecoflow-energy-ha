@@ -2,7 +2,7 @@
 
 Full list of all entities created for Delta 3 Max Plus devices (D3M1 series).
 
-**Totals:** 20 sensors, 7 switches, 3 numbers
+**Totals:** 24 sensors, 7 switches, 3 numbers
 
 > Entities marked with *diagnostic* appear in the diagnostics section of the device page.
 
@@ -37,6 +37,17 @@ Full list of all entities created for Delta 3 Max Plus devices (D3M1 series).
 | Type-C 1 / Type-C 2 / Type-C 3 | W | USB-C ports |
 | USB QC 1 / USB QC 2 | W | USB Quick Charge ports |
 
+## Sensors - Energy Dashboard
+
+Integrated from the live power telemetry (the device exposes no native energy counters), so these accumulate over time and can be added to the Home Assistant Energy Dashboard.
+
+| Entity | Unit | Description |
+|:---|:---:|:---|
+| Solar Energy | kWh | Cumulative solar input 1 |
+| Solar 2 Energy | kWh | Cumulative solar input 2 |
+| AC Input Energy | kWh | Cumulative AC charging |
+| Output Energy | kWh | Cumulative total output (AC + DC + USB) |
+
 ---
 
 ## Switches
@@ -67,5 +78,5 @@ Full list of all entities created for Delta 3 Max Plus devices (D3M1 series).
 
 - **Standard Mode (~30 s)** delivers all sensors and controls. Commands go through the official HTTP endpoint.
 - **Enhanced Mode (~2 s)** delivers the same sensors with the same entity IDs, so switching modes keeps history and dashboards intact. Switches and numbers work here as well: commands travel on the live device connection instead of the HTTP endpoint, and the device confirms each one.
-- No energy (kWh) sensors. The device exposes no native energy counters, so nothing is published to the Energy Dashboard.
+- Energy Dashboard sensors (solar, solar 2, AC input, total output) are integrated from the live power telemetry, since the device exposes no native energy counters. Values accumulate over time and start at 0 on a fresh install.
 - Remaining charge and discharge times are only reported while the battery is actually charging or discharging. The device keeps both values populated at all times and parks the inactive one on a placeholder, which would otherwise show a runtime of several hundred hours on an idle unit.

@@ -618,6 +618,9 @@
       "ac_out_energy_kwh": {
         "name": "AC-Ausgangsenergie"
       },
+      "out_energy_kwh": {
+        "name": "Ausgangsenergie"
+      },
       "batt_max_cell_vol_mv": {
         "name": "Zellspannung (max.)"
       },
