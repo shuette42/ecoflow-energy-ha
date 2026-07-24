@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -492,3 +493,128 @@ class TestDeltaThreeRawQuotaCapture:
         assert coordinator.raw_quota_captured_at > 0
         # Field map still empty → no mapped keys leak into device data
         assert result == {}
+
+
+class TestSkippedDeviceRawQuotaDiagnostics:
+    """Raw quota capture for unsupported/skipped devices (issue #135)."""
+
+    DIAG_QUOTA_PATH = (
+        "custom_components.ecoflow_energy.diagnostics.EcoFlowHTTPQuota"
+    )
+    # Fictional Smart Meter serial: a device we do not yet parse.
+    SKIPPED_SN = "SM3ATEST00000001"
+    # A 16-char alphanumeric quota value that looks like a serial and must
+    # be redacted, alongside numeric fields that must be preserved.
+    FAKE_SERIAL_FIELD = "ABCDEFGH12345678"
+
+    def _register_skipped(self, hass: HomeAssistant, entry: MockConfigEntry) -> None:
+        hass.data.setdefault(DATA_SKIPPED_DEVICES, {})[entry.entry_id] = [
+            {
+                "sn_prefix": self.SKIPPED_SN[:4],
+                "sn": self.SKIPPED_SN,
+                "product_name": "Smart Meter",
+                "reason": "no parser available for this device type",
+            }
+        ]
+
+    def _standard_entry(self) -> MockConfigEntry:
+        return MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_ACCESS_KEY: "test_access_key",
+                CONF_SECRET_KEY: "test_secret_key",
+                CONF_MODE: MODE_STANDARD,
+                CONF_DEVICES: [],
+            },
+            unique_id="test_access_key",
+        )
+
+    async def test_with_dev_keys_captures_redacted_quota(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """With developer keys: quota captured, serial redacted, SN hidden."""
+        entry = self._standard_entry()
+        entry.add_to_hass(hass)
+        self._register_skipped(hass, entry)
+
+        # get_quota_all() returns the already-unwrapped flat quota dict —
+        # no code/data envelope. Match the real client contract.
+        quota_response = {
+            "meterSn": self.FAKE_SERIAL_FIELD,
+            "gridWatts": 1234,
+            "gridVol": 230.5,
+        }
+
+        with patch(self.DIAG_QUOTA_PATH) as quota_cls:
+            quota_cls.return_value.get_quota_all = AsyncMock(
+                return_value=quota_response
+            )
+            result = await async_get_config_entry_diagnostics(hass, entry)
+
+        device = result["skipped_devices"][0]
+        assert device["sn_prefix"] == "SM3A"
+        assert "sn" not in device
+        assert "raw_quota" in device
+
+        raw = device["raw_quota"]
+        assert raw["meterSn"] == REDACTED
+        assert raw["gridWatts"] == 1234
+        assert raw["gridVol"] == 230.5
+
+        # Full SN and credential values must never appear in the output.
+        serialized = json.dumps(result)
+        assert self.SKIPPED_SN not in serialized
+        assert "SM3A" in serialized
+        assert "test_access_key" not in serialized
+        assert "test_secret_key" not in serialized
+
+    async def test_without_dev_keys_omits_quota(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """App-auth mode (no dev keys): quota omitted with a note, no crash."""
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_MODE: MODE_STANDARD,
+                CONF_DEVICES: [],
+            },
+            unique_id="app_auth_entry",
+        )
+        entry.add_to_hass(hass)
+        self._register_skipped(hass, entry)
+
+        result = await async_get_config_entry_diagnostics(hass, entry)
+
+        device = result["skipped_devices"][0]
+        assert device["sn_prefix"] == "SM3A"
+        assert "raw_quota" not in device
+        assert "developer credentials required" in device["quota_note"]
+
+    async def test_fetch_exception_is_swallowed(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """A quota fetch raising yields a note, no crash, no leaked detail."""
+        entry = self._standard_entry()
+        entry.add_to_hass(hass)
+        self._register_skipped(hass, entry)
+
+        secret_detail = "boom-secret-detail"
+
+        with patch(self.DIAG_QUOTA_PATH) as quota_cls:
+            quota_cls.return_value.get_quota_all = AsyncMock(
+                side_effect=RuntimeError(secret_detail)
+            )
+            result = await async_get_config_entry_diagnostics(hass, entry)
+
+        device = result["skipped_devices"][0]
+        assert "raw_quota" not in device
+        assert device["quota_note"] == "quota fetch unavailable"
+
+        serialized = json.dumps(result)
+        assert secret_detail not in serialized
+        assert self.SKIPPED_SN not in serialized

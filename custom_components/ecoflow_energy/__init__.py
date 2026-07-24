@@ -110,6 +110,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
             )
             skipped_devices.append({
                 "sn_prefix": sn[:4],
+                # Full SN is carried in-memory only so diagnostics can fetch
+                # this device's raw quota to help add parser support. It is
+                # never persisted and never included in diagnostics output
+                # (only the prefix is exposed there).
+                "sn": sn,
                 "product_name": product_name,
                 "reason": "no parser available for this device type",
             })

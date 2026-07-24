@@ -421,6 +421,114 @@ class TestError1006Handling:
         assert client._logged_1006 is False
 
 
+class TestFullSerialNeverLogged:
+    """A full device serial must never reach the HA logs (only the prefix).
+
+    Unsupported devices commonly return 1006, and the diagnostics feature
+    exists to make users attach their HA log to a GitHub issue — so a full
+    serial in the logs would leak. Every error/status log path is checked.
+    """
+
+    FULL_SN = "SM3ATEST00000001"
+    PREFIX = "SM3A"
+
+    def _make_client(self, session):
+        return EcoFlowHTTPQuota(
+            session=session,
+            access_key="ak",
+            secret_key="sk",
+            device_sn=self.FULL_SN,
+            min_interval=0,
+        )
+
+    def _response(self, payload):
+        resp = AsyncMock()
+        resp.ok = True
+        resp.json = AsyncMock(return_value=payload)
+        return resp
+
+    def _assert_no_full_sn(self, caplog):
+        for record in caplog.records:
+            assert self.FULL_SN not in record.getMessage(), (
+                "full serial leaked into logs: " + record.getMessage()
+            )
+
+    @pytest.mark.asyncio
+    async def test_1006_does_not_log_full_sn(self, caplog):
+        import logging
+
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(
+            return_value=AsyncContextManager(
+                self._response({
+                    "code": "1006",
+                    "message": "current device is not allowed to get device info",
+                })
+            )
+        )
+        client = self._make_client(mock_session)
+
+        with caplog.at_level(logging.DEBUG, logger="ecoflow_energy.ecoflow.cloud_http"):
+            await client.get_quota_all()
+
+        self._assert_no_full_sn(caplog)
+        # The prefix is allowed and expected in the warning.
+        assert any(self.PREFIX in r.getMessage() for r in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_generic_error_code_does_not_log_full_sn(self, caplog):
+        import logging
+
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(
+            return_value=AsyncContextManager(
+                self._response({"code": "1", "message": "invalid param"})
+            )
+        )
+        client = self._make_client(mock_session)
+
+        with caplog.at_level(logging.DEBUG, logger="ecoflow_energy.ecoflow.cloud_http"):
+            await client.get_quota_all()
+
+        self._assert_no_full_sn(caplog)
+
+    @pytest.mark.asyncio
+    async def test_all_attempts_failed_does_not_log_full_sn(self, caplog):
+        import logging
+
+        mock_session = MagicMock()
+        # A network error on every attempt drives the "all attempts failed"
+        # ERROR line.
+        mock_session.get = MagicMock(side_effect=TimeoutError("boom"))
+        client = self._make_client(mock_session)
+
+        with (
+            caplog.at_level(logging.DEBUG, logger="ecoflow_energy.ecoflow.cloud_http"),
+            patch("ecoflow_energy.ecoflow.cloud_http.asyncio.sleep", new=AsyncMock()),
+        ):
+            result = await client.get_quota_all()
+
+        assert result is None
+        self._assert_no_full_sn(caplog)
+
+    @pytest.mark.asyncio
+    async def test_success_does_not_log_full_sn(self, caplog):
+        import logging
+
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(
+            return_value=AsyncContextManager(
+                self._response({"code": "0", "data": {"soc": 85}})
+            )
+        )
+        client = self._make_client(mock_session)
+
+        with caplog.at_level(logging.DEBUG, logger="ecoflow_energy.ecoflow.cloud_http"):
+            await client.get_quota_all()
+
+        self._assert_no_full_sn(caplog)
+
+
 class TestDeadCodeRemoved:
     def test_no_powerocean_quota_keys(self):
         """POWEROCEAN_QUOTA_KEYS was dead code and must be removed."""

@@ -53,6 +53,11 @@ class EcoFlowHTTPQuota:
         self.last_error_code: str | None = None
         self._logged_1006: bool = False
 
+    @property
+    def _sn_display(self) -> str:
+        """SN prefix only for logs — never leak a full serial to HA logs."""
+        return self._device_sn[:4] + "..."
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -197,7 +202,7 @@ class EcoFlowHTTPQuota:
                 await asyncio.sleep(HTTP_RETRY_BACKOFF_S)
 
         self.last_error_code = "network"
-        _LOGGER.error("HTTP: all %d attempts failed for %s", HTTP_RETRIES, self._device_sn)
+        _LOGGER.error("HTTP: all %d attempts failed for %s", HTTP_RETRIES, self._sn_display)
         return None
 
     async def _handle_response(self, resp: aiohttp.ClientResponse) -> dict | None:
@@ -206,14 +211,14 @@ class EcoFlowHTTPQuota:
         code = str(data.get("code"))
 
         if resp.ok and code == "0":
-            _LOGGER.debug("HTTP: quota OK for %s", self._device_sn)
+            _LOGGER.debug("HTTP: quota OK for %s", self._sn_display)
             self.last_error_code = None
             self._logged_1006 = False
             return data.get("data") or {}
 
         # EcoFlow error 8521 is a transient server-side error — retry
         if code == "8521":
-            _LOGGER.debug("HTTP: transient error 8521 for %s — will retry", self._device_sn)
+            _LOGGER.debug("HTTP: transient error 8521 for %s — will retry", self._sn_display)
             raise self._RetryableAPIError(f"code={code}")
 
         # Error 1006: device not linked to API key — not an auth failure (#2)
@@ -223,14 +228,14 @@ class EcoFlowHTTPQuota:
                 _LOGGER.warning(
                     "HTTP: device %s not linked to API key — "
                     "verify device binding at developer.ecoflow.com (code=1006)",
-                    self._device_sn,
+                    self._sn_display,
                 )
                 self._logged_1006 = True
             else:
-                _LOGGER.debug("HTTP: device %s still returns 1006", self._device_sn)
+                _LOGGER.debug("HTTP: device %s still returns 1006", self._sn_display)
             return None
 
         self.last_error_code = code
-        _LOGGER.warning("HTTP: quota code=%s msg=%s (sn=%s)", code, data.get("message"), self._device_sn)
+        _LOGGER.warning("HTTP: quota code=%s msg=%s (sn=%s)", code, data.get("message"), self._sn_display)
         return None
 

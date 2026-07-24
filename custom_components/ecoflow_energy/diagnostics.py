@@ -6,6 +6,7 @@ NEVER exposes credentials (access_key, secret_key, email, password, certificates
 
 from __future__ import annotations
 
+import logging
 import re
 import time
 from datetime import datetime, timezone
@@ -13,17 +14,23 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
     AUTH_METHOD_DEVELOPER,
+    CONF_ACCESS_KEY,
     CONF_AUTH_METHOD,
     CONF_DEVICES,
     CONF_MODE,
+    CONF_SECRET_KEY,
     DATA_SKIPPED_DEVICES,
     DEVICE_TYPE_DELTA3,
     DOMAIN,
 )
 from .coordinator import EcoFlowDeviceCoordinator
+from .ecoflow.cloud_http import EcoFlowHTTPQuota
+
+_LOGGER = logging.getLogger(__name__)
 
 REDACTED = "**REDACTED**"
 
@@ -77,8 +84,73 @@ async def async_get_config_entry_diagnostics(
             "password": REDACTED,
         },
         "devices": devices_diag,
-        "skipped_devices": [dict(item) for item in skipped_devices],
+        "skipped_devices": await _skipped_devices_diagnostics(
+            hass, entry, skipped_devices
+        ),
     }
+
+
+async def _skipped_devices_diagnostics(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    skipped_devices: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Build diagnostics for unsupported/skipped devices.
+
+    For a device we do not yet parse, capture its raw HTTP quota so a parser
+    can be built from real API fields without owning the hardware. The full
+    serial is used only to sign the read-only quota request and is never
+    included in the output — only the SN prefix is exposed. Serial-looking
+    values inside the quota are redacted.
+
+    Requires developer credentials (access key + secret key). In enhanced /
+    app-auth mode those are absent, so the quota is omitted with a note.
+    """
+    access_key = entry.data.get(CONF_ACCESS_KEY)
+    secret_key = entry.data.get(CONF_SECRET_KEY)
+    has_dev_creds = bool(access_key and secret_key)
+    session = async_get_clientsession(hass) if has_dev_creds else None
+
+    result: list[dict[str, Any]] = []
+    for item in skipped_devices:
+        out: dict[str, Any] = {
+            "sn_prefix": item.get("sn_prefix"),
+            "product_name": item.get("product_name"),
+            "reason": item.get("reason"),
+        }
+
+        if not has_dev_creds:
+            out["quota_note"] = (
+                "developer credentials required to capture raw quota "
+                "(device is in enhanced/app-auth mode)"
+            )
+            result.append(out)
+            continue
+
+        sn = item.get("sn")
+        response: dict | None = None
+        if sn:
+            try:
+                client = EcoFlowHTTPQuota(session, access_key, secret_key, sn)
+                response = await client.get_quota_all()
+            except Exception:  # noqa: BLE001
+                # A skipped-device quota fetch failing is expected and not
+                # actionable (unsupported model, transient API error), so it
+                # stays at debug level and never breaks the download. The SN
+                # and any exception detail are deliberately kept out of logs.
+                _LOGGER.debug("Skipped-device quota fetch failed")
+                response = None
+
+        if response is None:
+            out["quota_note"] = "quota fetch unavailable"
+        else:
+            # get_quota_all() already returns the flat quota dict (the client
+            # unwraps the API envelope), so redact and expose it directly.
+            out["raw_quota"] = _redact_serials(response)
+
+        result.append(out)
+
+    return result
 
 
 def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]:
