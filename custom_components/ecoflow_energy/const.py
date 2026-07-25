@@ -25,6 +25,8 @@ DOMAIN = "ecoflow_energy"
 # entry_id and holds coordinators) so a reserved string key cannot
 # collide with an entry_id.
 DATA_SKIPPED_DEVICES = "ecoflow_energy_skipped_devices"
+# Listen-only probes capturing raw data of devices that have no parser yet.
+DATA_DEVICE_PROBES = "ecoflow_energy_device_probes"
 
 PLATFORMS: list[Platform] = [
     Platform.SENSOR,

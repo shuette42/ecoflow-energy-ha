@@ -15,6 +15,7 @@ from .const import (
     CONF_EMAIL,
     CONF_MODE,
     CONF_PASSWORD,
+    DATA_DEVICE_PROBES,
     DATA_SKIPPED_DEVICES,
     DEVICE_TYPE_UNKNOWN,
     DOMAIN,
@@ -23,6 +24,7 @@ from .const import (
     get_device_type,
 )
 from .coordinator import EcoFlowDeviceCoordinator
+from .device_probe import UnroutedDeviceProbe, async_start_probes
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -134,6 +136,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinators
     hass.data.setdefault(DATA_SKIPPED_DEVICES, {})[entry.entry_id] = skipped_devices
 
+    # A skipped device produces no entities and no data path, so the bytes
+    # needed to add support for it can never be collected from a normal
+    # installation. In app-auth mode a listen-only probe captures them for
+    # diagnostics. Standard mode has the raw quota capture instead, and for
+    # the models where the Developer API refuses (error 1006) this is the
+    # only route that exists.
+    if skipped_devices and entry.data.get(CONF_AUTH_METHOD) == AUTH_METHOD_APP:
+        probes = await async_start_probes(
+            hass,
+            skipped_devices,
+            entry.data.get(CONF_EMAIL, ""),
+            entry.data.get(CONF_PASSWORD, ""),
+        )
+        hass.data.setdefault(DATA_DEVICE_PROBES, {})[entry.entry_id] = probes
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     # Reload integration when config entry data changes (e.g. mode switch via Options Flow)
@@ -159,6 +176,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> 
         entry.entry_id, {}
     )
     hass.data.get(DATA_SKIPPED_DEVICES, {}).pop(entry.entry_id, None)
+    probes: list[UnroutedDeviceProbe] = hass.data.get(DATA_DEVICE_PROBES, {}).pop(
+        entry.entry_id, []
+    )
+    for probe in probes:
+        await probe.async_stop()
     for coordinator in coordinators.values():
         await coordinator.async_shutdown()
 

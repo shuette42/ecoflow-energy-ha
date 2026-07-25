@@ -23,6 +23,7 @@ from custom_components.ecoflow_energy.diagnostics import (
     REDACTED,
     _device_diagnostics,
     _redact_serials,
+    _skipped_devices_diagnostics,
     async_get_config_entry_diagnostics,
 )
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
@@ -659,3 +660,92 @@ class TestRawFrameDiagnostics:
         assert frame["hex"] == "0a02ffff"
         assert frame["cmds"] == [{"cmd_func": 96, "cmd_id": 33}]
         assert frame["ts_iso"].startswith("2026-")
+
+
+class TestUnroutedDeviceCapture:
+    """A skipped device's captured frames are the evidence for adding support."""
+
+    def _probe(self, sn: str = "RE11TEST00000001"):
+        probe = MagicMock()
+        probe.device_sn = sn
+        probe.connected = True
+        probe.topics = ["/app/{sn}/thing/property/get_reply"]
+        probe.frames = [{
+            "ts": 1784973604.0,
+            "topic": "get_reply",
+            "size": 120,
+            "format": "proto",
+            "cmds": [{"cmd_func": 96, "cmd_id": 33}],
+            "hex": "0a02ffff",
+        }]
+        return probe
+
+    async def test_capture_is_attached_to_the_matching_device(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        skipped = [{
+            "sn_prefix": "RE11",
+            "sn": "RE11TEST00000001",
+            "product_name": "",
+            "reason": "no parser available for this device type",
+        }]
+
+        result = await _skipped_devices_diagnostics(
+            hass, enhanced_config_entry, skipped, [self._probe()]
+        )
+
+        capture = result[0]["raw_capture"]
+        assert capture["connected"] is True
+        assert capture["frame_count"] == 1
+        assert capture["topics"] == ["/app/{sn}/thing/property/get_reply"]
+        assert capture["frames"][0]["hex"] == "0a02ffff"
+        assert capture["frames"][0]["ts_iso"].startswith("2026-")
+
+    async def test_full_serial_never_reaches_the_output(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        skipped = [{
+            "sn_prefix": "RE11",
+            "sn": "RE11TEST00000001",
+            "product_name": "",
+            "reason": "no parser available for this device type",
+        }]
+
+        result = await _skipped_devices_diagnostics(
+            hass, enhanced_config_entry, skipped, [self._probe()]
+        )
+
+        assert "RE11TEST00000001" not in json.dumps(result)
+
+    async def test_no_probe_means_no_capture_section(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        skipped = [{
+            "sn_prefix": "RE11",
+            "sn": "RE11TEST00000001",
+            "product_name": "",
+            "reason": "no parser available for this device type",
+        }]
+
+        result = await _skipped_devices_diagnostics(
+            hass, enhanced_config_entry, skipped, []
+        )
+
+        assert "raw_capture" not in result[0]
+
+    async def test_probe_for_another_device_is_not_attached(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        skipped = [{
+            "sn_prefix": "RE11",
+            "sn": "RE11TEST00000001",
+            "product_name": "",
+            "reason": "no parser available for this device type",
+        }]
+
+        result = await _skipped_devices_diagnostics(
+            hass, enhanced_config_entry, skipped,
+            [self._probe("SM3ATEST00000001")],
+        )
+
+        assert "raw_capture" not in result[0]

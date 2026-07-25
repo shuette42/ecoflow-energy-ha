@@ -32,7 +32,11 @@ from ..ecoflow.parsers.powerocean import parse_powerocean_http_quota
 from ..ecoflow.parsers.smartplug import parse_smartplug_http_quota, parse_smartplug_report
 from ..ecoflow.parsers.stream_http import parse_stream_quota
 from ..ecoflow.parsers.stream_proto import parse_stream_proto_message
-from ..ecoflow.proto.decoder import decode_header_message
+from ..ecoflow.frame_capture import (
+    build_frame_entry,
+    decode_cmd_headers,
+    is_proto_frame,
+)
 from ..ecoflow.proto.runtime import decode_proto_runtime_frame
 
 _LOGGER = logging.getLogger(__name__)
@@ -133,51 +137,29 @@ class MqttIngestMixin:
         The frame is truncated and the device serial is masked before storage.
         Capture never affects ingest — any failure is swallowed.
         """
-        if not self._enhanced_mode or b"\x0a" not in payload[:4]:
+        if not self._enhanced_mode or not is_proto_frame(payload):
             return
         try:
-            entry: dict[str, Any] = {
-                "ts": time.time(),
-                "topic": "get_reply" if "get_reply" in topic else "property",
-                "size": len(payload),
-                "parsed_keys": len(parsed) if parsed else 0,
-            }
-            try:
-                headers, _ = decode_header_message(payload)
-                entry["cmds"] = [
-                    {"cmd_func": h.get("cmd_func"), "cmd_id": h.get("cmd_id")}
-                    for h in (headers or [])
-                    if isinstance(h, dict)
-                ]
-            except Exception:  # noqa: BLE001
-                entry["cmds"] = []
-            entry["hex"] = self._sanitize_frame(payload)[:RAW_FRAME_MAX_BYTES].hex()
+            entry = build_frame_entry(
+                topic,
+                payload,
+                self._frame_secrets(),
+                RAW_FRAME_MAX_BYTES,
+                parsed_keys=len(parsed) if parsed else 0,
+            )
+            entry["cmds"] = decode_cmd_headers(payload)
             self._raw_frames.append(entry)
         except Exception:  # noqa: BLE001
             _LOGGER.debug("Raw frame capture failed", exc_info=True)
 
-    def _sanitize_frame(self, payload: bytes) -> bytes:
-        """Mask identifying strings inside a raw frame before it is stored.
-
-        Protobuf frames carry the device serial and, on some commands, the
-        account user id as plain ASCII. Both are replaced with a fixed filler
-        of equal length so the byte offsets a parser analysis depends on stay
-        intact.
-        """
-        sanitized = payload
+    def _frame_secrets(self) -> list[str]:
+        """Return the identifiers that must be masked out of a stored frame."""
         secrets = [self.device_sn]
         if self._mqtt_client is not None:
             user_id = getattr(self._mqtt_client, "user_id", None)
             if isinstance(user_id, str):
                 secrets.append(user_id)
-        for secret in secrets:
-            if not secret:
-                continue
-            for variant in {secret, secret.upper(), secret.lower()}:
-                raw = variant.encode("ascii", "ignore")
-                if raw and raw in sanitized:
-                    sanitized = sanitized.replace(raw, b"X" * len(raw))
-        return sanitized
+        return secrets
 
     def _check_delta3_set_ack(self, payload: bytes) -> None:
         """Report a rejected Delta 3 setting (Paho thread).

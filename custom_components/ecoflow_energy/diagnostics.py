@@ -23,6 +23,7 @@ from .const import (
     CONF_DEVICES,
     CONF_MODE,
     CONF_SECRET_KEY,
+    DATA_DEVICE_PROBES,
     DATA_SKIPPED_DEVICES,
     DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_STREAM,
@@ -74,6 +75,7 @@ async def async_get_config_entry_diagnostics(
         devices_diag.append(_device_diagnostics(coordinator))
 
     skipped_devices = hass.data.get(DATA_SKIPPED_DEVICES, {}).get(entry.entry_id, [])
+    probes = hass.data.get(DATA_DEVICE_PROBES, {}).get(entry.entry_id, [])
 
     return {
         "config_entry": {
@@ -87,7 +89,7 @@ async def async_get_config_entry_diagnostics(
         },
         "devices": devices_diag,
         "skipped_devices": await _skipped_devices_diagnostics(
-            hass, entry, skipped_devices
+            hass, entry, skipped_devices, probes
         ),
     }
 
@@ -96,6 +98,7 @@ async def _skipped_devices_diagnostics(
     hass: HomeAssistant,
     entry: ConfigEntry,
     skipped_devices: list[dict[str, Any]],
+    probes: list[Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Build diagnostics for unsupported/skipped devices.
 
@@ -113,6 +116,8 @@ async def _skipped_devices_diagnostics(
     has_dev_creds = bool(access_key and secret_key)
     session = async_get_clientsession(hass) if has_dev_creds else None
 
+    probe_by_sn = {probe.device_sn: probe for probe in (probes or [])}
+
     result: list[dict[str, Any]] = []
     for item in skipped_devices:
         out: dict[str, Any] = {
@@ -120,6 +125,19 @@ async def _skipped_devices_diagnostics(
             "product_name": item.get("product_name"),
             "reason": item.get("reason"),
         }
+
+        probe = probe_by_sn.get(item.get("sn"))
+        if probe is not None:
+            # The app channel is the only route for models the Developer API
+            # refuses (error 1006), so what the probe heard is the whole
+            # evidence base for adding support.
+            out["raw_capture"] = {
+                "connected": probe.connected,
+                "frame_count": len(probe.frames),
+                "topics": probe.topics,
+                "truncated_at_bytes": RAW_FRAME_MAX_BYTES,
+                "frames": _format_event_log(probe.frames),
+            }
 
         if not has_dev_creds:
             out["quota_note"] = (

@@ -188,10 +188,18 @@ def mock_iot_api():
 
 @pytest.fixture
 def mock_mqtt_client():
-    """Patch EcoFlowMQTTClient to a no-op mock."""
-    with patch(
-        "custom_components.ecoflow_energy.coordinator.setup.EcoFlowMQTTClient",
-    ) as cls:
+    """Patch EcoFlowMQTTClient to a no-op mock.
+
+    Both consumers are patched: the coordinator and the listen-only probe
+    that captures raw data of devices without a parser. A setup with a
+    skipped device would otherwise open a real socket.
+    """
+    with (
+        patch("custom_components.ecoflow_energy.device_probe.EcoFlowMQTTClient"),
+        patch(
+            "custom_components.ecoflow_energy.coordinator.setup.EcoFlowMQTTClient",
+        ) as cls,
+    ):
         instance = cls.return_value
         instance.create_client.return_value = True
         instance.connect.return_value = True

@@ -20,6 +20,7 @@ from custom_components.ecoflow_energy.const import (
     CONF_PASSWORD,
     CONF_SECRET_KEY,
     CONF_USER_ID,
+    DATA_DEVICE_PROBES,
     DATA_SKIPPED_DEVICES,
     DEVICE_TYPE_DELTA3,
     DOMAIN,
@@ -787,3 +788,84 @@ class TestAppAuthSetup:
 
         # Standard mode should stay as-is (no auth_type set means developer)
         assert standard_config_entry.data.get(CONF_AUTH_METHOD) != AUTH_METHOD_APP
+
+
+class TestUnroutedDeviceProbeWiring:
+    """A skipped device is the one case where raw capture is the only route."""
+
+    UNSUPPORTED = {
+        "sn": "RE11ZZ1234500001",
+        "name": "Ocean 2",
+        "product_name": "",
+        "device_type": "unknown",
+        "online": 1,
+    }
+
+    def _entry(self, hass: HomeAssistant, auth_method: str) -> MockConfigEntry:
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_AUTH_METHOD: auth_method,
+                CONF_MODE: MODE_ENHANCED,
+                CONF_EMAIL: "test@example.com",
+                CONF_PASSWORD: "test_password",
+                CONF_USER_ID: "uid",
+                CONF_DEVICES: [self.UNSUPPORTED],
+            },
+            unique_id="test@example.com",
+        )
+        entry.add_to_hass(hass)
+        return entry
+
+    async def test_probe_started_and_stopped(
+        self, hass: HomeAssistant, mock_mqtt_client,
+    ) -> None:
+        """Capture runs for the skipped device and is torn down on unload."""
+        entry = self._entry(hass, AUTH_METHOD_APP)
+        probe = MagicMock()
+        probe.async_stop = AsyncMock()
+
+        with patch(
+            "custom_components.ecoflow_energy.async_start_probes",
+            new_callable=AsyncMock,
+            return_value=[probe],
+        ) as mock_start:
+            assert await hass.config_entries.async_setup(entry.entry_id) is True
+            await hass.async_block_till_done()
+
+        mock_start.assert_awaited_once()
+        assert hass.data[DATA_DEVICE_PROBES][entry.entry_id] == [probe]
+
+        assert await hass.config_entries.async_unload(entry.entry_id) is True
+        await hass.async_block_till_done()
+
+        probe.async_stop.assert_awaited_once()
+        assert entry.entry_id not in hass.data.get(DATA_DEVICE_PROBES, {})
+
+    async def test_no_probe_in_standard_mode(
+        self, hass: HomeAssistant, mock_mqtt_client, mock_http_client,
+    ) -> None:
+        """Standard mode has the raw quota route and needs no listener."""
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_AUTH_METHOD: AUTH_METHOD_DEVELOPER,
+                CONF_MODE: MODE_STANDARD,
+                CONF_ACCESS_KEY: "test_ak",
+                CONF_SECRET_KEY: "test_sk",
+                CONF_DEVICES: [self.UNSUPPORTED],
+            },
+            unique_id="test_ak",
+        )
+        entry.add_to_hass(hass)
+
+        with patch(
+            "custom_components.ecoflow_energy.async_start_probes",
+            new_callable=AsyncMock,
+        ) as mock_start:
+            assert await hass.config_entries.async_setup(entry.entry_id) is True
+            await hass.async_block_till_done()
+
+        mock_start.assert_not_awaited()
