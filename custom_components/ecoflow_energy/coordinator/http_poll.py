@@ -11,11 +11,13 @@ from ..const import (
     DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_SMARTPLUG,
+    DEVICE_TYPE_STREAM,
 )
 from ..ecoflow.parsers.delta_http import parse_delta_http_quota
 from ..ecoflow.parsers.delta3_http import parse_delta3_http_quota
 from ..ecoflow.parsers.powerocean import parse_powerocean_http_quota
 from ..ecoflow.parsers.smartplug import parse_smartplug_http_quota
+from ..ecoflow.parsers.stream_http import parse_stream_quota
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -88,6 +90,14 @@ class HttpPollMixin:
             parsed = parse_delta3_http_quota(raw)
         elif self.device_type == DEVICE_TYPE_SMARTPLUG:
             parsed = parse_smartplug_http_quota(raw)
+        elif self.device_type == DEVICE_TYPE_STREAM:
+            # Standard mode delivers flat camelCase JSON. Keep the raw
+            # snapshot for diagnostics: the field map covers the keys seen on
+            # Stream Ultra / Ultra X so far, and beta dumps are what extends
+            # it (#139).
+            self._raw_quota = dict(raw)
+            self._raw_quota_captured_at = time.monotonic()
+            parsed = parse_stream_quota(raw)
         else:
             parsed = raw
         self._enforce_monotonic(parsed)

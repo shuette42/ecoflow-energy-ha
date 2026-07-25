@@ -43,7 +43,7 @@
 | **Delta 2 Max** — Portable Power | 94 | 7 switches, 8 numbers | 4 (solar 1+2, AC in/out) | ~30 s standard (+ MQTT push) |
 | **Delta 3 Max Plus** — Portable Power | 24 | 7 switches, 3 numbers | 4 (solar 1+2, AC in, output) | ~30 s standard / ~2 s enhanced |
 | **Smart Plug** — Switchable Outlet | 11 | 1 switch, 2 numbers | 1 (total energy) | ~30 s standard / ~3 s enhanced |
-| **Stream** (AC Pro, Ultra, Max, AC, Ultra X) — AC-coupled Battery | 37 + 2 binary | 1 number (Enhanced only) | 2 default (battery charge/discharge), 2 optional diagnostic (solar/home) | Enhanced only / ~3 s |
+| **Stream** (AC Pro, Ultra, Max, AC, Ultra X) — AC-coupled Battery | 47 + 2 binary | 1 number (Enhanced only) | 2 default (battery charge/discharge), 6 optional diagnostic (solar/home, PV 1-4) | ~30 s standard / ~3 s enhanced |
 
 > **Tip:** Other Delta-series devices (Delta Pro, Delta 2, etc.) should work automatically with the Delta sensor set. Base Delta 3 (non-Max-Plus) uses the Delta 3 sensor set. All Stream models (Ultra, Max, AC, Ultra X) share the Stream sensor set shown above.
 >

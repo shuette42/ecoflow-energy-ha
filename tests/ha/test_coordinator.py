@@ -4746,10 +4746,10 @@ class TestParseMessageGetReply:
         result = coordinator._parse_powerocean_get_reply(payload)
         assert result is None
 
-    async def test_get_reply_quota_map_unknown_device_returns_raw(
+    async def test_get_reply_quota_map_stream_is_mapped(
         self, hass: HomeAssistant,
     ) -> None:
-        """A device type without a dedicated parser gets the raw quotaMap."""
+        """A Stream get_reply goes through the field map, raw keys are dropped."""
         import json as json_mod
 
         entry = MockConfigEntry(
@@ -4765,11 +4765,11 @@ class TestParseMessageGetReply:
         coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_STREAM_DEVICE)
         topic = "/app/user123/SN001/thing/property/get_reply"
         payload = json_mod.dumps({
-            "data": {"quotaMap": {"someRawKey": 7}}
+            "data": {"quotaMap": {"powGetPv": 518, "someRawKey": 7}}
         }).encode()
 
         result = coordinator._parse_message(topic, payload)
-        assert result == {"someRawKey": 7}
+        assert result == {"pv1_w": 518.0}
 
     async def test_powerocean_proto_get_reply_routed_via_parse_message(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
@@ -6563,3 +6563,94 @@ class TestRawFrameCapture:
         )
 
         assert coordinator.raw_frames == []
+
+
+# ===========================================================================
+# Stream Standard-Mode Quota Routing (#139)
+# ===========================================================================
+
+
+class TestStreamQuotaRouting:
+    """Standard mode used to drop raw camelCase keys into the data store."""
+
+    def _coordinator(self, hass, standard_config_entry):
+        standard_config_entry.add_to_hass(hass)
+        return EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_STREAM_DEVICE
+        )
+
+    async def test_quota_topic_is_mapped(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """A /quota push produces sensor keys, not raw quota keys."""
+        import json as json_mod
+
+        coordinator = self._coordinator(hass, standard_config_entry)
+        payload = json_mod.dumps({
+            "params": {
+                "powGetPv": 518,
+                "powGetPv2": 301,
+                "powGetPvSum": 819,
+                "powGetBpCms": -220,
+                "bmsFaultState": 0,
+            }
+        }).encode()
+
+        result = coordinator._parse_message("/open/cert/SN001/quota", payload)
+
+        assert result["pv1_w"] == 518.0
+        assert result["pv2_w"] == 301.0
+        assert result["solar_w"] == 819.0
+        assert result["batt_discharge_power_w"] == 220.0
+        assert not any(key.startswith("powGet") for key in result)
+        assert "bmsFaultState" not in result
+
+    async def test_enhanced_protobuf_path_is_untouched(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Binary frames still go to the protobuf parser, not the quota map."""
+        coordinator = self._coordinator(hass, standard_config_entry)
+
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.mqtt_ingest."
+            "parse_stream_proto_message",
+            return_value={"soc_pct": 55},
+        ) as mock_proto:
+            result = coordinator._parse_message(
+                f"/app/device/property/{MOCK_STREAM_DEVICE['sn']}",
+                b"\x0a\x02\xff\xff",
+            )
+
+        mock_proto.assert_called_once()
+        assert result == {"soc_pct": 55}
+
+    async def test_unmapped_payload_yields_no_data(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """A payload with only unknown keys must not write an empty snapshot."""
+        import json as json_mod
+
+        coordinator = self._coordinator(hass, standard_config_entry)
+        payload = json_mod.dumps({"params": {"packSn": "BK11TEST00000001"}}).encode()
+
+        assert coordinator._parse_message("/open/cert/SN001/quota", payload) is None
+
+    async def test_per_string_pv_energy_is_integrated(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Each PV string has an Energy Dashboard counter behind it."""
+        for power_key, energy_key in (
+            ("pv1_w", "pv1_energy_kwh"),
+            ("pv2_w", "pv2_energy_kwh"),
+            ("pv3_w", "pv3_energy_kwh"),
+            ("pv4_w", "pv4_energy_kwh"),
+        ):
+            assert STREAM_POWER_TO_ENERGY[power_key] == energy_key

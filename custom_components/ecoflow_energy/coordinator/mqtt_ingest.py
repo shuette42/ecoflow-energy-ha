@@ -30,6 +30,7 @@ from ..ecoflow.parsers.powerocean_proto import (
 )
 from ..ecoflow.parsers.powerocean import parse_powerocean_http_quota
 from ..ecoflow.parsers.smartplug import parse_smartplug_http_quota, parse_smartplug_report
+from ..ecoflow.parsers.stream_http import parse_stream_quota
 from ..ecoflow.parsers.stream_proto import parse_stream_proto_message
 from ..ecoflow.proto.decoder import decode_header_message
 from ..ecoflow.proto.runtime import decode_proto_runtime_frame
@@ -223,6 +224,9 @@ class MqttIngestMixin:
                         return parse_smartplug_http_quota(quota_map)
                     if self.device_type == DEVICE_TYPE_POWEROCEAN:
                         return parse_powerocean_http_quota(quota_map)
+                    if self.device_type == DEVICE_TYPE_STREAM:
+                        parsed = parse_stream_quota(quota_map)
+                        return parsed if parsed else None
                     return quota_map
             except (json.JSONDecodeError, UnicodeDecodeError):
                 pass
@@ -261,6 +265,17 @@ class MqttIngestMixin:
                     if not isinstance(payload_obj, dict):
                         payload_obj = data
                     parsed = parse_delta3_http_quota(payload_obj)
+                    return parsed if parsed else None
+                # Stream in Standard mode: flat camelCase JSON, optionally
+                # wrapped in `param`/`params`. Routed through the field map so
+                # raw quota keys never reach _device_data (#139).
+                if self.device_type == DEVICE_TYPE_STREAM:
+                    payload_obj = data.get("param")
+                    if not isinstance(payload_obj, dict):
+                        payload_obj = data.get("params")
+                    if not isinstance(payload_obj, dict):
+                        payload_obj = data
+                    parsed = parse_stream_quota(payload_obj)
                     return parsed if parsed else None
                 # PowerOcean sends flat {"params": {...}} or flat dicts
                 if data.get("params"):

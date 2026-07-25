@@ -565,6 +565,15 @@ STREAM_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("soc_pct", "Battery SOC", "%", "battery", "measurement", "mdi:battery", suggested_display_precision=0),
     EcoFlowSensorDef("soc_precise_pct", "Battery SOC (Precise)", "%", None, "measurement", "mdi:battery-sync", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
     EcoFlowSensorDef("solar_w", "Solar Power", "W", "power", "measurement", "mdi:solar-power", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    # Per-string PV. Standard mode reports these individually (powGetPv..
+    # powGetPv4); the protobuf stream only carries the sum. Strings 3 and 4 are
+    # off by default because only the larger units populate them.
+    EcoFlowSensorDef("pv1_w", "PV 1 Power", "W", "power", "measurement", "mdi:solar-power-variant", suggested_display_precision=0),
+    EcoFlowSensorDef("pv2_w", "PV 2 Power", "W", "power", "measurement", "mdi:solar-power-variant", suggested_display_precision=0),
+    EcoFlowSensorDef("pv3_w", "PV 3 Power", "W", "power", "measurement", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("pv4_w", "PV 4 Power", "W", "power", "measurement", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("pv_voltage_v", "PV Voltage", "V", "voltage", "measurement", "mdi:flash", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
+    EcoFlowSensorDef("home_from_solar_w", "Home From Solar", "W", "power", "measurement", "mdi:home-lightning-bolt-outline", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("home_w", "Home Power", "W", "power", "measurement", "mdi:home-lightning-bolt", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("grid_w", "Grid Power", "W", "power", "measurement", "mdi:transmission-tower", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("batt_w", "Battery Power", "W", "power", "measurement", "mdi:battery", suggested_display_precision=0),
@@ -573,6 +582,15 @@ STREAM_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("ac_grid_connection_power_w", "AC Grid Connection Power", "W", "power", "measurement", "mdi:transmission-tower", suggested_display_precision=0),
     EcoFlowSensorDef("solar_energy_kwh", "Solar Energy", "kWh", "energy", "total_increasing", "mdi:solar-power", "diagnostic", suggested_display_precision=2, disabled_by_default=True),
     EcoFlowSensorDef("home_energy_kwh", "Home Energy", "kWh", "energy", "total_increasing", "mdi:home-lightning-bolt", "diagnostic", suggested_display_precision=2, disabled_by_default=True),
+    # Per-string PV energy, Riemann-integrated from pv1_w..pv4_w. All four are
+    # off by default: `solar_energy_kwh` already covers the PV total, and a
+    # dashboard that sums the enabled strings would silently under-report on a
+    # unit whose higher strings are disabled. Users who want per-string
+    # tracking enable exactly the strings their unit has.
+    EcoFlowSensorDef("pv1_energy_kwh", "PV 1 Energy", "kWh", "energy", "total_increasing", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=2, disabled_by_default=True),
+    EcoFlowSensorDef("pv2_energy_kwh", "PV 2 Energy", "kWh", "energy", "total_increasing", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=2, disabled_by_default=True),
+    EcoFlowSensorDef("pv3_energy_kwh", "PV 3 Energy", "kWh", "energy", "total_increasing", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=2, disabled_by_default=True),
+    EcoFlowSensorDef("pv4_energy_kwh", "PV 4 Energy", "kWh", "energy", "total_increasing", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=2, disabled_by_default=True),
     EcoFlowSensorDef("batt_charge_energy_kwh", "Battery Charge Energy", "kWh", "energy", "total_increasing", "mdi:battery-charging", suggested_display_precision=2),
     EcoFlowSensorDef("batt_discharge_energy_kwh", "Battery Discharge Energy", "kWh", "energy", "total_increasing", "mdi:battery", suggested_display_precision=2),
     EcoFlowSensorDef("home_from_batt_w", "Home From Battery", "W", "power", "measurement", "mdi:home-battery-outline", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
@@ -724,6 +742,10 @@ SMARTPLUG_ENERGY_FROM_API: list[tuple[str, str]] = []
 # Energy Dashboard.
 STREAM_POWER_TO_ENERGY: dict[str, str] = {
     "solar_w": "solar_energy_kwh",
+    "pv1_w": "pv1_energy_kwh",
+    "pv2_w": "pv2_energy_kwh",
+    "pv3_w": "pv3_energy_kwh",
+    "pv4_w": "pv4_energy_kwh",
     "home_w": "home_energy_kwh",
     "batt_charge_power_w": "batt_charge_energy_kwh",
     "batt_discharge_power_w": "batt_discharge_energy_kwh",

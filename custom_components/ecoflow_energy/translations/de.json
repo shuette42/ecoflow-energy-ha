@@ -1217,6 +1217,36 @@
       },
       "anderson_out_w": {
         "name": "Anderson-Ausgang"
+      },
+      "pv1_w": {
+        "name": "PV 1 Leistung"
+      },
+      "pv2_w": {
+        "name": "PV 2 Leistung"
+      },
+      "pv3_w": {
+        "name": "PV 3 Leistung"
+      },
+      "pv4_w": {
+        "name": "PV 4 Leistung"
+      },
+      "pv_voltage_v": {
+        "name": "PV-Spannung"
+      },
+      "home_from_solar_w": {
+        "name": "Hausverbrauch aus Solar"
+      },
+      "pv1_energy_kwh": {
+        "name": "PV 1 Energie"
+      },
+      "pv2_energy_kwh": {
+        "name": "PV 2 Energie"
+      },
+      "pv3_energy_kwh": {
+        "name": "PV 3 Energie"
+      },
+      "pv4_energy_kwh": {
+        "name": "PV 4 Energie"
       }
     },
     "binary_sensor": {
