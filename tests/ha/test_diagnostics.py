@@ -618,3 +618,44 @@ class TestSkippedDeviceRawQuotaDiagnostics:
         serialized = json.dumps(result)
         assert secret_detail not in serialized
         assert self.SKIPPED_SN not in serialized
+
+
+class TestRawFrameDiagnostics:
+    async def test_no_frames_omits_section(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """A device without captured frames has no raw_frames section."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        assert "raw_frames" not in _device_diagnostics(coordinator)
+
+    async def test_captured_frames_exposed_with_iso_timestamps(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Captured frames reach diagnostics with readable timestamps."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        coordinator._raw_frames.append({
+            "ts": 1784973604.0,
+            "topic": "property",
+            "size": 42,
+            "parsed_keys": 5,
+            "cmds": [{"cmd_func": 96, "cmd_id": 33}],
+            "hex": "0a02ffff",
+        })
+
+        result = _device_diagnostics(coordinator)
+
+        assert result["raw_frames"]["count"] == 1
+        frame = result["raw_frames"]["frames"][0]
+        assert frame["hex"] == "0a02ffff"
+        assert frame["cmds"] == [{"cmd_func": 96, "cmd_id": 33}]
+        assert frame["ts_iso"].startswith("2026-")

@@ -18,6 +18,7 @@ All notable changes to this project will be documented in this file.
 - Delta 3 Max Plus now exposes Energy Dashboard sensors for solar, solar 2, AC input, and total output energy, integrated from the live power telemetry (the device reports no native energy counters). The four sensors were verified to register with the correct Energy Dashboard attributes on a real Delta 3 Max Plus. (beta.16)
 - Serial prefixes R371, R374 and HJ3C (PowerOcean Plus) are now recognized as PowerOcean. These higher-power 3-phase hybrid units were previously skipped with "no parser available". Like J32D/J32E they are not exposed through the EcoFlow Developer API and require Enhanced mode; the device is now routed to the PowerOcean parser so entities are created. (beta.17)
 - Diagnostics now include the raw API quota of devices that are discovered but not yet supported by a parser, so field data for new models can be captured from a standard diagnostics download. Serial numbers are redacted and developer credentials are never exposed. (beta.18)
+- Diagnostics now include the most recent raw device messages received in Enhanced mode, with the serial number masked and each message truncated. Device variants within a serial family do not always use the same telemetry layout, so this makes it possible to check a wrongly decoded device from a diagnostics download alone. (beta.19)
 
 ### Changed
 - Internal restructuring of the device coordinator into smaller, single-purpose modules; no functional or user-facing change. (beta.7)
@@ -26,6 +27,7 @@ All notable changes to this project will be documented in this file.
 - Ah battery capacity counters are disabled diagnostic entities. (beta.2)
 
 ### Fixed
+- Devices that send telemetry slowly no longer end up in a constant reconnect loop in Enhanced mode. When a connected device stayed silent, the integration dropped and rebuilt the whole session every time; it now first repeats the requests it normally sends after connecting, which wakes the device up without tearing down the connection, and only reconnects if that does not help. (beta.19)
 - Enhanced mode no longer logs a warning when a device briefly goes silent and its entities turn unavailable. This is a normal step in the graduated availability handling, so it is now logged at info level; a warning is only emitted when reconnect attempts are already failing repeatedly. The log line also reads correctly when a device has sent no data since connecting, instead of showing an infinite age. (beta.15)
 - Switches and numbers now restore their last known state after a Home Assistant restart instead of showing unknown until the first full device status arrives; live device data always replaces the restored value. (beta.10)
 - App API devices reported with an unknown device type are now classified locally using their product name or supported serial-number prefix. (beta.10)

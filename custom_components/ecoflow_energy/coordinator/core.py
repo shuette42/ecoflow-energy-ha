@@ -45,6 +45,7 @@ from ..const import (
     HTTP_FALLBACK_INTERVAL_S,
     POWEROCEAN_ENERGY_FROM_API,
     POWEROCEAN_POWER_TO_ENERGY,
+    RAW_FRAME_LOG_MAX,
     SMARTPLUG_ENERGY_FROM_API,
     SMARTPLUG_POWER_TO_ENERGY,
     STREAM_ENERGY_FROM_API,
@@ -177,6 +178,9 @@ class EcoFlowDeviceCoordinator(
         self._consecutive_http_failures: int = 0
         self._device_available: bool = True
         self._last_stale_reconnect_ts: float = 0.0
+        # Stale escalation: the cheap remedy (re-send post-connect requests)
+        # runs before the expensive one (force reconnect).
+        self._stale_reactivate_tried: bool = False
         self._last_smartplug_get_all_ts: float = 0.0
         # Surplus auto-sync state (PowerOcean Enhanced Mode):
         # the EcoFlow app sets the slider via cmd_id=112 wire field 4 only,
@@ -205,6 +209,13 @@ class EcoFlowDeviceCoordinator(
         self._credential_obtained_ts: float = 0.0
         self._credential_refresh_unsub: asyncio.TimerHandle | None = None
         self._event_log: deque[dict[str, Any]] = deque(maxlen=50)
+        # Raw protobuf frame ring buffer (app-auth push path). A parser can
+        # only be verified against the bytes a device actually sends, and
+        # device variants sharing a serial family do not necessarily share a
+        # field layout. Frames are captured with the serial masked out and
+        # truncated, so a diagnostics download stays a safe way to report a
+        # mis-decoded device without owning the hardware.
+        self._raw_frames: deque[dict[str, Any]] = deque(maxlen=RAW_FRAME_LOG_MAX)
         # Stable SN → pack index mapping for proto heartbeats (cmd_id=7).
         # Each heartbeat contains only one pack; this map ensures the same
         # physical pack always maps to the same pack{n}_* sensor keys.
@@ -294,6 +305,11 @@ class EcoFlowDeviceCoordinator(
         """Return the MQTT client (or None if not set up)."""
         return self._mqtt_client
 
+
+    @property
+    def raw_frames(self) -> list[dict[str, Any]]:
+        """Return the captured raw protobuf frames for diagnostics export."""
+        return list(self._raw_frames)
 
     @property
     def event_log(self) -> list[dict[str, Any]]:

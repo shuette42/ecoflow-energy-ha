@@ -71,6 +71,12 @@ SMARTPLUG_SOFT_UNAVAILABLE_S = 360.0  # 6 min: SmartPlug tolerates longer gaps
 HARD_UNAVAILABLE_S = 600.0  # 10 min: entities go unavailable
 SMARTPLUG_HARD_UNAVAILABLE_S = 600.0  # 10 min: SmartPlug hard cutoff
 HTTP_FALLBACK_INTERVAL_S = 30
+
+# Raw protobuf frame capture for diagnostics (app-auth push path).
+# Enough frames to cover several push cycles of every command a device sends,
+# truncated so a single oversized frame cannot bloat a diagnostics download.
+RAW_FRAME_LOG_MAX = 24
+RAW_FRAME_MAX_BYTES = 512
 HTTP_SUPPLEMENT_INTERVAL_S = 60  # Enhanced Mode: HTTP supplement poll for detail sensors
 ENERGY_STREAM_KEEPALIVE_S = 20  # Re-send EnergyStreamSwitch every 20s
 QUOTAS_KEEPALIVE_S = 30  # latestQuotas poll interval (app-level keepalive)

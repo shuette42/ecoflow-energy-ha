@@ -169,7 +169,13 @@ class AvailabilityMixin:
             hard_unavailable_s = self._hard_unavailable_s()
 
             if age > stale_threshold_s:
-                # Reconnect attempts: force-reconnect on connected-but-silent
+                # Connected-but-silent escalation. A full reconnect drops the
+                # WSS session and re-runs the whole subscribe handshake, which
+                # is expensive and — on devices that push slowly — happens
+                # every stale interval. Re-sending the post-connect requests
+                # achieves the same wake-up at a fraction of the cost, so it
+                # runs first; the reconnect follows only if the device stays
+                # silent through the next stale interval.
                 now = time.monotonic()
                 if (
                     mqtt_connected
@@ -178,14 +184,30 @@ class AvailabilityMixin:
                     and (now - self._last_stale_reconnect_ts) >= stale_threshold_s
                 ):
                     self._last_stale_reconnect_ts = now
-                    _LOGGER.info(
-                        "MQTT stale for %s [%s] (%.0fs) while connected - forcing reconnect",
-                        self.device_name,
-                        self.device_sn,
-                        age,
-                    )
-                    self._log_event("stale_force_reconnect", f"age={age:.0f}s")
-                    self.hass.async_add_executor_job(self._mqtt_client.force_reconnect)
+                    if not self._stale_reactivate_tried:
+                        self._stale_reactivate_tried = True
+                        _LOGGER.debug(
+                            "MQTT stale for %s [%s] (%.0fs) while connected - "
+                            "re-sending initial requests",
+                            self.device_name,
+                            self.device_sn,
+                            age,
+                        )
+                        self._log_event("stale_reactivate", f"age={age:.0f}s")
+                        self.hass.async_add_executor_job(
+                            self._mqtt_client.resend_initial_requests,
+                        )
+                    else:
+                        _LOGGER.info(
+                            "MQTT stale for %s [%s] (%.0fs) while connected - forcing reconnect",
+                            self.device_name,
+                            self.device_sn,
+                            age,
+                        )
+                        self._log_event("stale_force_reconnect", f"age={age:.0f}s")
+                        self.hass.async_add_executor_job(self._mqtt_client.force_reconnect)
+                        # Next silence starts with the cheap remedy again.
+                        self._stale_reactivate_tried = False
 
                 # Graduated availability: only mark unavailable after hard threshold
                 if self._device_available and age >= hard_unavailable_s:
@@ -241,6 +263,7 @@ class AvailabilityMixin:
                     # frame arrives, so they return from unavailable promptly.
                     self.async_update_listeners()
                 self._last_stale_reconnect_ts = 0.0
+                self._stale_reactivate_tried = False
 
         # Tier 2+3: try MQTT reconnect if disconnected
         if self._mqtt_client is not None and not mqtt_connected:

@@ -506,6 +506,27 @@ class EcoFlowMQTTClient:
         payload = build_device_get_all_payload()
         return self.publish(topic, payload, qos=1)
 
+    def resend_initial_requests(self) -> bool:
+        """Re-send the post-connect request set without dropping the socket.
+
+        Some devices stop pushing telemetry while the WSS session stays up
+        (observed on PowerOcean Plus units, which only answer right after a
+        subscribe). Repeating the post-connect requests restores the data flow
+        at a fraction of the cost of a full reconnect, so the stale handler
+        tries this first and only tears the session down if it does not help.
+
+        Returns True if at least one request was published.
+        """
+        if not self._wss_mode or not self._user_id or not self.is_connected():
+            return False
+
+        sent = False
+        if self._enhanced_mode:
+            sent |= self.send_energy_stream_switch()
+        sent |= self.send_get_all()
+        sent |= self.send_latest_quotas()
+        return sent
+
     def send_ping(self) -> bool:
         """Send a ping heartbeat to the EcoFlow broker."""
         if not self.is_connected():

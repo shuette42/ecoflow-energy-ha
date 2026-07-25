@@ -34,6 +34,8 @@ from custom_components.ecoflow_energy.const import (
     MODE_ENHANCED,
     MODE_STANDARD,
     MQTT_HEALTH_CHECK_INTERVAL_S,
+    RAW_FRAME_LOG_MAX,
+    RAW_FRAME_MAX_BYTES,
     SMARTPLUG_GET_ALL_KEEPALIVE_S,
     SMARTPLUG_SOFT_UNAVAILABLE_S,
     SMARTPLUG_STALE_THRESHOLD_S,
@@ -2061,7 +2063,11 @@ class TestStaleDetection:
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """Connected-but-stale app-auth sessions trigger a forced reconnect."""
+        """Connected-but-stale app-auth sessions trigger a forced reconnect.
+
+        Only after the cheap remedy (re-sending the post-connect requests)
+        has been tried and the device stayed silent.
+        """
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
@@ -2069,14 +2075,62 @@ class TestStaleDetection:
         mock_mqtt = MagicMock()
         mock_mqtt.is_connected.return_value = True
         mock_mqtt.force_reconnect.return_value = True
+        mock_mqtt.reconnect_attempts = 0
         coordinator._mqtt_client = mock_mqtt
-        coordinator._last_mqtt_ts = time.monotonic() - STALE_THRESHOLD_S - 5
+        coordinator._last_mqtt_ts = 1000.0
         coordinator._last_stale_reconnect_ts = 0.0
+        now = 1000.0 + STALE_THRESHOLD_S + 5
+        clock = patch(
+            "custom_components.ecoflow_energy.coordinator.availability.time.monotonic",
+            return_value=now,
+        )
 
-        coordinator._check_stale()
+        # First stale check: re-activation only, session stays up.
+        with clock:
+            coordinator._check_stale()
+        self._cleanup_stale_timer(coordinator)
+        await hass.async_block_till_done()
+
+        mock_mqtt.resend_initial_requests.assert_called_once()
+        mock_mqtt.force_reconnect.assert_not_called()
+        assert coordinator._last_stale_reconnect_ts == now
+
+        # Still silent one stale interval later: escalate to reconnect.
+        coordinator._last_stale_reconnect_ts = 0.0
+        with clock:
+            coordinator._check_stale()
+        self._cleanup_stale_timer(coordinator)
+        await hass.async_block_till_done()
 
         mock_mqtt.force_reconnect.assert_called_once()
-        assert coordinator._last_stale_reconnect_ts > 0.0
+        # The next silence starts with the cheap remedy again.
+        assert coordinator._stale_reactivate_tried is False
+        self._cleanup_stale_timer(coordinator)
+
+    async def test_stale_recovery_resets_escalation(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Recovered data flow resets the escalation state."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        mock_mqtt = MagicMock()
+        mock_mqtt.is_connected.return_value = True
+        coordinator._mqtt_client = mock_mqtt
+        coordinator._stale_reactivate_tried = True
+        coordinator._last_mqtt_ts = 1000.0
+
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.availability.time.monotonic",
+            return_value=1000.0 + 1.0,
+        ):
+            coordinator._check_stale()
+
+        assert coordinator._stale_reactivate_tried is False
+        mock_mqtt.force_reconnect.assert_not_called()
         self._cleanup_stale_timer(coordinator)
 
     async def test_stale_triggers_reconnect(
@@ -5175,6 +5229,8 @@ class TestEventLog:
         coordinator._mqtt_client.reconnect_attempts = 0
         coordinator._last_mqtt_ts = time.monotonic() - STALE_THRESHOLD_S - 10
         coordinator._last_stale_reconnect_ts = 0.0
+        # Re-activation already tried, so this check escalates.
+        coordinator._stale_reactivate_tried = True
 
         coordinator._check_stale()
 
@@ -6379,3 +6435,131 @@ class TestMalformedProtoMessages:
             topic = f"/app/device/property/{device['sn']}"
             for payload in self._GARBAGE:
                 assert coordinator._parse_message(topic, payload) is None
+
+
+# ===========================================================================
+# Raw Frame Capture (diagnostics)
+# ===========================================================================
+
+
+class TestRawFrameCapture:
+    """A device variant can only be diagnosed against the bytes it sends."""
+
+    def _frame(self, sn: str, filler: int = 0) -> bytes:
+        """Build a protobuf-shaped frame that carries the serial in ASCII."""
+        return b"\x0a" + bytes([len(sn)]) + sn.encode() + b"\x00" * filler
+
+    async def test_enhanced_frame_is_captured(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """An Enhanced Mode protobuf frame lands in the ring buffer."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        payload = self._frame(coordinator.device_sn)
+
+        coordinator._on_mqtt_message(
+            f"/app/device/property/{coordinator.device_sn}", payload
+        )
+
+        frames = coordinator.raw_frames
+        assert len(frames) == 1
+        assert frames[0]["size"] == len(payload)
+        assert frames[0]["topic"] == "property"
+        assert frames[0]["parsed_keys"] == 0
+
+    async def test_serial_is_masked_in_captured_frame(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """The serial never reaches the diagnostics buffer, byte count is kept."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        sn = coordinator.device_sn
+
+        coordinator._on_mqtt_message(
+            f"/app/device/property/{sn}", self._frame(sn)
+        )
+
+        captured = bytes.fromhex(coordinator.raw_frames[0]["hex"])
+        assert sn.encode() not in captured
+        assert b"X" * len(sn) in captured
+
+    async def test_frame_is_truncated(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """An oversized frame cannot bloat a diagnostics download."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        payload = self._frame(coordinator.device_sn, filler=RAW_FRAME_MAX_BYTES * 2)
+
+        coordinator._on_mqtt_message(
+            f"/app/device/property/{coordinator.device_sn}", payload
+        )
+
+        frame = coordinator.raw_frames[0]
+        assert len(bytes.fromhex(frame["hex"])) == RAW_FRAME_MAX_BYTES
+        assert frame["size"] == len(payload)
+
+    async def test_ring_buffer_is_bounded(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Only the most recent frames are kept."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        topic = f"/app/device/property/{coordinator.device_sn}"
+
+        for _ in range(RAW_FRAME_LOG_MAX + 5):
+            coordinator._on_mqtt_message(topic, self._frame(coordinator.device_sn))
+
+        assert len(coordinator.raw_frames) == RAW_FRAME_LOG_MAX
+
+    async def test_standard_mode_is_not_captured(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Standard Mode has an HTTP quota path, so no frames are stored."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+
+        coordinator._on_mqtt_message(
+            f"/app/device/property/{coordinator.device_sn}",
+            self._frame(coordinator.device_sn),
+        )
+
+        assert coordinator.raw_frames == []
+
+    async def test_json_payload_is_not_captured(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """JSON pushes expose their keys already and are left out."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+
+        coordinator._on_mqtt_message(
+            f"/app/device/property/{coordinator.device_sn}",
+            b'{"params": {"bpSoc": 50}}',
+        )
+
+        assert coordinator.raw_frames == []

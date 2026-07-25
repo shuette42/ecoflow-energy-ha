@@ -26,6 +26,7 @@ from .const import (
     DATA_SKIPPED_DEVICES,
     DEVICE_TYPE_DELTA3,
     DOMAIN,
+    RAW_FRAME_MAX_BYTES,
 )
 from .coordinator import EcoFlowDeviceCoordinator
 from .ecoflow.cloud_http import EcoFlowHTTPQuota
@@ -210,6 +211,18 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
         "data_key_count": len(data_keys),
         "event_log": _format_event_log(coordinator.event_log),
     }
+
+    # Enhanced Mode: the raw push frames the device sent, with the serial
+    # masked and each frame truncated. Device variants within a serial family
+    # do not always share a field layout, so a mis-decoded variant can only be
+    # diagnosed against the bytes it actually sends.
+    raw_frames = coordinator.raw_frames
+    if raw_frames:
+        diag["raw_frames"] = {
+            "count": len(raw_frames),
+            "truncated_at_bytes": RAW_FRAME_MAX_BYTES,
+            "frames": _format_event_log(raw_frames),
+        }
 
     # Delta 3: the quota field map is community-researched but not yet
     # hardware-verified for every key. Expose the raw HTTP quota key/value

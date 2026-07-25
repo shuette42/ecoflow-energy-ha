@@ -576,3 +576,47 @@ class TestUpdateCredentials:
         client.client = None
         client.update_credentials("new_account", "new_password")  # must not raise
         assert client._cert_account == "new_account"
+
+
+class TestResendInitialRequests:
+    """The cheap remedy for a connected-but-silent session."""
+
+    def _connected_client(self, **kwargs):
+        client = _make_client(wss_mode=True, user_id="user123", **kwargs)
+        client.client = MagicMock()
+        client.client.is_connected.return_value = True
+        client.client.publish.return_value = MagicMock(rc=0)
+        client.connected = True
+        return client
+
+    def test_enhanced_resends_stream_switch_and_requests(self):
+        client = self._connected_client(enhanced_mode=True)
+
+        assert client.resend_initial_requests() is True
+
+        topics = [call.args[0] for call in client.client.publish.call_args_list]
+        assert any(topic.endswith("/thing/property/set") for topic in topics)
+        assert sum(topic.endswith("/thing/property/get") for topic in topics) == 2
+
+    def test_non_enhanced_skips_stream_switch(self):
+        client = self._connected_client(enhanced_mode=False)
+
+        assert client.resend_initial_requests() is True
+
+        topics = [call.args[0] for call in client.client.publish.call_args_list]
+        assert all(not topic.endswith("/thing/property/set") for topic in topics)
+
+    def test_disconnected_client_sends_nothing(self):
+        client = self._connected_client(enhanced_mode=True)
+        client.connected = False
+
+        assert client.resend_initial_requests() is False
+        client.client.publish.assert_not_called()
+
+    def test_tcp_mode_sends_nothing(self):
+        client = _make_client(wss_mode=False, enhanced_mode=True)
+        client.client = MagicMock()
+        client.connected = True
+
+        assert client.resend_initial_requests() is False
+        client.client.publish.assert_not_called()

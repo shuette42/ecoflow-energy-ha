@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from typing import Any
 
 from ..const import (
@@ -13,6 +14,7 @@ from ..const import (
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
+    RAW_FRAME_MAX_BYTES,
 )
 from ..ecoflow.parsers.delta import parse_delta_report
 from ..ecoflow.parsers.delta_http import parse_delta_http_quota
@@ -29,6 +31,7 @@ from ..ecoflow.parsers.powerocean_proto import (
 from ..ecoflow.parsers.powerocean import parse_powerocean_http_quota
 from ..ecoflow.parsers.smartplug import parse_smartplug_http_quota, parse_smartplug_report
 from ..ecoflow.parsers.stream_proto import parse_stream_proto_message
+from ..ecoflow.proto.decoder import decode_header_message
 from ..ecoflow.proto.runtime import decode_proto_runtime_frame
 
 _LOGGER = logging.getLogger(__name__)
@@ -109,8 +112,71 @@ class MqttIngestMixin:
         ):
             return  # Standard Mode (non-Delta/SmartPlug): ignore MQTT data
         parsed = self._parse_message(topic, payload)
+        self._capture_raw_frame(topic, payload, parsed)
         if parsed:
             self.hass.loop.call_soon_threadsafe(self._apply_data, parsed)
+
+    def _capture_raw_frame(
+        self,
+        topic: str,
+        payload: bytes,
+        parsed: dict[str, Any] | None,
+    ) -> None:
+        """Record a protobuf frame for diagnostics (Paho thread).
+
+        Captures what the device actually sent alongside what the parser made
+        of it, so a mis-decoded device variant can be diagnosed from a
+        diagnostics download alone. Only the app-auth push path is captured:
+        the HTTP quota path already exposes its keys verbatim.
+
+        The frame is truncated and the device serial is masked before storage.
+        Capture never affects ingest — any failure is swallowed.
+        """
+        if not self._enhanced_mode or b"\x0a" not in payload[:4]:
+            return
+        try:
+            entry: dict[str, Any] = {
+                "ts": time.time(),
+                "topic": "get_reply" if "get_reply" in topic else "property",
+                "size": len(payload),
+                "parsed_keys": len(parsed) if parsed else 0,
+            }
+            try:
+                headers, _ = decode_header_message(payload)
+                entry["cmds"] = [
+                    {"cmd_func": h.get("cmd_func"), "cmd_id": h.get("cmd_id")}
+                    for h in (headers or [])
+                    if isinstance(h, dict)
+                ]
+            except Exception:  # noqa: BLE001
+                entry["cmds"] = []
+            entry["hex"] = self._sanitize_frame(payload)[:RAW_FRAME_MAX_BYTES].hex()
+            self._raw_frames.append(entry)
+        except Exception:  # noqa: BLE001
+            _LOGGER.debug("Raw frame capture failed", exc_info=True)
+
+    def _sanitize_frame(self, payload: bytes) -> bytes:
+        """Mask identifying strings inside a raw frame before it is stored.
+
+        Protobuf frames carry the device serial and, on some commands, the
+        account user id as plain ASCII. Both are replaced with a fixed filler
+        of equal length so the byte offsets a parser analysis depends on stay
+        intact.
+        """
+        sanitized = payload
+        secrets = [self.device_sn]
+        if self._mqtt_client is not None:
+            user_id = getattr(self._mqtt_client, "user_id", None)
+            if isinstance(user_id, str):
+                secrets.append(user_id)
+        for secret in secrets:
+            if not secret:
+                continue
+            for variant in {secret, secret.upper(), secret.lower()}:
+                raw = variant.encode("ascii", "ignore")
+                if raw and raw in sanitized:
+                    sanitized = sanitized.replace(raw, b"X" * len(raw))
+        return sanitized
 
     def _check_delta3_set_ack(self, payload: bytes) -> None:
         """Report a rejected Delta 3 setting (Paho thread).
