@@ -856,6 +856,64 @@ class TestUnroutedDeviceProbeWiring:
         mock_start.assert_not_awaited()
         assert entry.entry_id not in hass.data.get(DATA_DEVICE_PROBES, {})
 
+    async def test_upgrade_from_a_build_without_the_switch_starts_nothing(
+        self, hass: HomeAssistant, mock_mqtt_client,
+    ) -> None:
+        """An entry created before the switch existed must come up with it off.
+
+        Those installations never agreed to a capture - it simply ran. After
+        the update the absent flag has to read as off, and it must not be
+        written into the entry either: silently materialising it as False
+        would be a config write nobody asked for, on every such installation.
+        """
+        entry = self._entry(hass, AUTH_METHOD_APP, raw_capture=None)
+        assert CONF_RAW_CAPTURE not in entry.data
+
+        with patch(
+            "custom_components.ecoflow_energy.async_start_probes",
+            new_callable=AsyncMock,
+        ) as mock_start:
+            assert await hass.config_entries.async_setup(entry.entry_id) is True
+            await hass.async_block_till_done()
+
+        mock_start.assert_not_awaited()
+        assert CONF_RAW_CAPTURE not in entry.data
+        assert CONF_RAW_CAPTURE_UNTIL not in entry.data
+
+    async def test_probes_from_a_previous_run_are_stopped_on_reload(
+        self, hass: HomeAssistant, mock_mqtt_client,
+    ) -> None:
+        """A capture that was running before the update must not survive it.
+
+        The update path is unload plus setup. Unload stops whatever was
+        running, and the new setup declines to start anything, so an
+        installation that had an unrequested capture ends up with none.
+        """
+        entry = self._entry(hass, AUTH_METHOD_APP)
+        probe = MagicMock()
+        probe.async_stop = AsyncMock()
+
+        with (
+            patch("custom_components.ecoflow_energy.time.time", return_value=FIXED_NOW),
+            patch(
+                "custom_components.ecoflow_energy.async_start_probes",
+                new_callable=AsyncMock,
+                return_value=[probe],
+            ),
+        ):
+            assert await hass.config_entries.async_setup(entry.entry_id) is True
+            await hass.async_block_till_done()
+
+        # Now the switch is gone, as it is for anyone coming from the old build.
+        new_data = dict(entry.data)
+        new_data.pop(CONF_RAW_CAPTURE)
+        new_data.pop(CONF_RAW_CAPTURE_UNTIL)
+        hass.config_entries.async_update_entry(entry, data=new_data)
+        await hass.async_block_till_done()
+
+        probe.async_stop.assert_awaited()
+        assert not hass.data.get(DATA_DEVICE_PROBES, {}).get(entry.entry_id)
+
     async def test_expired_window_does_not_start_and_switches_itself_off(
         self, hass: HomeAssistant, mock_mqtt_client,
     ) -> None:
