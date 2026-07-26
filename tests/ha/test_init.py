@@ -18,6 +18,8 @@ from custom_components.ecoflow_energy.const import (
     CONF_EMAIL,
     CONF_MODE,
     CONF_PASSWORD,
+    CONF_RAW_CAPTURE,
+    CONF_RAW_CAPTURE_UNTIL,
     CONF_SECRET_KEY,
     CONF_USER_ID,
     DATA_DEVICE_PROBES,
@@ -26,9 +28,14 @@ from custom_components.ecoflow_energy.const import (
     DOMAIN,
     MODE_ENHANCED,
     MODE_STANDARD,
+    RAW_CAPTURE_DURATION_S,
 )
 
 from .conftest import MOCK_MQTT_CREDENTIALS, MOCK_POWEROCEAN_DEVICE
+
+# Fixed wall-clock reference. Never compute a deadline from the real clock in
+# a test: on a fresh CI container the arithmetic can land in the past.
+FIXED_NOW = 1_800_000_000.0
 
 
 # ===========================================================================
@@ -801,22 +808,77 @@ class TestUnroutedDeviceProbeWiring:
         "online": 1,
     }
 
-    def _entry(self, hass: HomeAssistant, auth_method: str) -> MockConfigEntry:
+    def _entry(
+        self,
+        hass: HomeAssistant,
+        auth_method: str,
+        *,
+        raw_capture: bool | None = True,
+        capture_until: float | None = None,
+    ) -> MockConfigEntry:
+        data = {
+            CONF_AUTH_METHOD: auth_method,
+            CONF_MODE: MODE_ENHANCED,
+            CONF_EMAIL: "test@example.com",
+            CONF_PASSWORD: "test_password",
+            CONF_USER_ID: "uid",
+            CONF_DEVICES: [self.UNSUPPORTED],
+        }
+        if raw_capture is not None:
+            data[CONF_RAW_CAPTURE] = raw_capture
+            data[CONF_RAW_CAPTURE_UNTIL] = (
+                capture_until
+                if capture_until is not None
+                else FIXED_NOW + RAW_CAPTURE_DURATION_S
+            )
         entry = MockConfigEntry(
             domain=DOMAIN,
             title="EcoFlow Energy",
-            data={
-                CONF_AUTH_METHOD: auth_method,
-                CONF_MODE: MODE_ENHANCED,
-                CONF_EMAIL: "test@example.com",
-                CONF_PASSWORD: "test_password",
-                CONF_USER_ID: "uid",
-                CONF_DEVICES: [self.UNSUPPORTED],
-            },
+            data=data,
             unique_id="test@example.com",
         )
         entry.add_to_hass(hass)
         return entry
+
+    async def test_capture_is_off_unless_switched_on(
+        self, hass: HomeAssistant, mock_mqtt_client,
+    ) -> None:
+        """Nobody gets an extra connection they did not ask for."""
+        entry = self._entry(hass, AUTH_METHOD_APP, raw_capture=None)
+
+        with patch(
+            "custom_components.ecoflow_energy.async_start_probes",
+            new_callable=AsyncMock,
+        ) as mock_start:
+            assert await hass.config_entries.async_setup(entry.entry_id) is True
+            await hass.async_block_till_done()
+
+        mock_start.assert_not_awaited()
+        assert entry.entry_id not in hass.data.get(DATA_DEVICE_PROBES, {})
+
+    async def test_expired_window_does_not_start_and_switches_itself_off(
+        self, hass: HomeAssistant, mock_mqtt_client,
+    ) -> None:
+        """The deadline is wall-clock, so a restart cannot renew it."""
+        entry = self._entry(
+            hass, AUTH_METHOD_APP, capture_until=FIXED_NOW - 1
+        )
+
+        with (
+            patch("custom_components.ecoflow_energy.time.time", return_value=FIXED_NOW),
+            patch(
+                "custom_components.ecoflow_energy.async_start_probes",
+                new_callable=AsyncMock,
+            ) as mock_start,
+        ):
+            assert await hass.config_entries.async_setup(entry.entry_id) is True
+            await hass.async_block_till_done()
+
+        mock_start.assert_not_awaited()
+        # Switched off, not merely ignored - otherwise the options screen
+        # would keep claiming a capture is running.
+        assert entry.data[CONF_RAW_CAPTURE] is False
+        assert CONF_RAW_CAPTURE_UNTIL not in entry.data
 
     async def test_probe_started_and_stopped(
         self, hass: HomeAssistant, mock_mqtt_client,
@@ -826,11 +888,14 @@ class TestUnroutedDeviceProbeWiring:
         probe = MagicMock()
         probe.async_stop = AsyncMock()
 
-        with patch(
-            "custom_components.ecoflow_energy.async_start_probes",
-            new_callable=AsyncMock,
-            return_value=[probe],
-        ) as mock_start:
+        with (
+            patch("custom_components.ecoflow_energy.time.time", return_value=FIXED_NOW),
+            patch(
+                "custom_components.ecoflow_energy.async_start_probes",
+                new_callable=AsyncMock,
+                return_value=[probe],
+            ) as mock_start,
+        ):
             assert await hass.config_entries.async_setup(entry.entry_id) is True
             await hass.async_block_till_done()
 

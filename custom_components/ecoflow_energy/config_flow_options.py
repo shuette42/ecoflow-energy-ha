@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 import aiohttp
@@ -22,11 +23,14 @@ from .const import (
     CONF_EMAIL,
     CONF_MODE,
     CONF_PASSWORD,
+    CONF_RAW_CAPTURE,
+    CONF_RAW_CAPTURE_UNTIL,
     CONF_SECRET_KEY,
     CONF_USER_ID,
     DEVICE_TYPE_DISPLAY_NAMES,
     MODE_ENHANCED,
     MODE_STANDARD,
+    RAW_CAPTURE_DURATION_S,
 )
 from .ecoflow.enhanced_auth import enhanced_login, get_app_device_list
 from .ecoflow.iot_api import IoTApiClient
@@ -118,6 +122,8 @@ class OptionsFlowMixin:
         if user_input is not None:
             new_mode = user_input.get(CONF_MODE, current_mode)
             selected_sns = user_input.get(CONF_DEVICES, current_device_sns)
+            if CONF_RAW_CAPTURE in user_input:
+                self._pending_raw_capture = user_input[CONF_RAW_CAPTURE]
 
             if not selected_sns:
                 errors["base"] = "no_devices"
@@ -149,32 +155,53 @@ class OptionsFlowMixin:
                 for sn in current_device_sns
             }
 
-        return self.async_show_form(
-            step_id="init",
-            data_schema=vol.Schema(
+        schema: dict[Any, Any] = {
+            vol.Required(CONF_MODE, default=current_mode): vol.In(
                 {
-                    vol.Required(CONF_MODE, default=current_mode): vol.In(
-                        {
-                            MODE_STANDARD: "Standard - Official EcoFlow API",
-                            MODE_ENHANCED: "Enhanced - Real-time (~3 s)",
-                        }
-                    ),
-                    vol.Required(
-                        CONF_DEVICES,
-                        default=current_device_sns,
-                    ): SelectSelector(
-                        SelectSelectorConfig(
-                            options=[
-                                {"value": sn, "label": label}
-                                for sn, label in device_options.items()
-                            ],
-                            multiple=True,
-                        )
-                    ),
+                    MODE_STANDARD: "Standard - Official EcoFlow API",
+                    MODE_ENHANCED: "Enhanced - Real-time (~3 s)",
                 }
             ),
+            vol.Required(
+                CONF_DEVICES,
+                default=current_device_sns,
+            ): SelectSelector(
+                SelectSelectorConfig(
+                    options=[
+                        {"value": sn, "label": label}
+                        for sn, label in device_options.items()
+                    ],
+                    multiple=True,
+                )
+            ),
+        }
+
+        # Only offered with account login, because that is the only mode the
+        # capture works in. Deliberately the last field: it is a help-us-out
+        # switch, not a setting anyone needs.
+        if self.config_entry.data.get(CONF_AUTH_METHOD) == AUTH_METHOD_APP:
+            schema[
+                vol.Required(
+                    CONF_RAW_CAPTURE,
+                    default=self._raw_capture_currently_on(),
+                )
+            ] = bool
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(schema),
             errors=errors,
         )
+
+    def _raw_capture_currently_on(self) -> bool:
+        """Return whether the capture is on AND still inside its window.
+
+        An expired window must show as off, otherwise the checkbox claims
+        something is running when nothing is.
+        """
+        if not self.config_entry.data.get(CONF_RAW_CAPTURE):
+            return False
+        return time.time() < self.config_entry.data.get(CONF_RAW_CAPTURE_UNTIL, 0)
 
     async def async_step_developer(
         self, user_input: dict[str, Any] | None = None
@@ -282,6 +309,7 @@ class OptionsFlowMixin:
         new_data = dict(self.config_entry.data)
         new_data[CONF_MODE] = mode
         new_data[CONF_DEVICES] = selected_devices
+        self._apply_raw_capture(new_data)
 
         if mode == MODE_ENHANCED:
             new_data[CONF_AUTH_METHOD] = AUTH_METHOD_APP
@@ -300,3 +328,23 @@ class OptionsFlowMixin:
 
         self.hass.config_entries.async_update_entry(self.config_entry, data=new_data)
         return self.async_create_entry(title="", data={})
+
+    def _apply_raw_capture(self, new_data: dict[str, Any]) -> None:
+        """Write the raw capture flag and, when it is switched on, its deadline.
+
+        A running window is left alone: reopening the options for an unrelated
+        change and saving must not silently extend the capture. Turning it off
+        and on again does start a fresh window, which is a deliberate act.
+        """
+        wanted = getattr(self, "_pending_raw_capture", None)
+        if wanted is None:
+            return
+
+        if not wanted:
+            new_data[CONF_RAW_CAPTURE] = False
+            new_data.pop(CONF_RAW_CAPTURE_UNTIL, None)
+            return
+
+        new_data[CONF_RAW_CAPTURE] = True
+        if not self._raw_capture_currently_on():
+            new_data[CONF_RAW_CAPTURE_UNTIL] = time.time() + RAW_CAPTURE_DURATION_S

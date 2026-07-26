@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -20,14 +21,20 @@ from custom_components.ecoflow_energy.const import (
     CONF_EMAIL,
     CONF_MODE,
     CONF_PASSWORD,
+    CONF_RAW_CAPTURE,
+    CONF_RAW_CAPTURE_UNTIL,
     CONF_SECRET_KEY,
     CONF_USER_ID,
     DOMAIN,
     MODE_ENHANCED,
     MODE_STANDARD,
+    RAW_CAPTURE_DURATION_S,
 )
 
 from .conftest import MOCK_DELTA_DEVICE, MOCK_MQTT_CREDENTIALS, MOCK_POWEROCEAN_DEVICE  # noqa: F401
+
+# Fixed wall-clock reference - never derive a deadline from the real clock.
+FIXED_NOW = 1_800_000_000.0
 
 
 # ===========================================================================
@@ -506,6 +513,127 @@ class TestOptionsFlow:
         )
         entry.add_to_hass(hass)
         return entry
+
+    def _create_capture_entry(
+        self, hass: HomeAssistant, **capture: Any
+    ) -> MockConfigEntry:
+        from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_AUTH_METHOD: AUTH_METHOD_APP,
+                CONF_MODE: MODE_ENHANCED,
+                CONF_EMAIL: "user@example.com",
+                CONF_PASSWORD: "secret",
+                CONF_USER_ID: "uid",
+                CONF_DEVICES: [
+                    {"sn": "SN001", "name": "Delta 2 Max", "product_name": "Delta 2 Max",
+                     "device_type": "delta", "online": 1},
+                ],
+                **capture,
+            },
+            unique_id="user@example.com",
+        )
+        entry.add_to_hass(hass)
+        return entry
+
+    async def _submit_options(
+        self, hass: HomeAssistant, entry: MockConfigEntry, user_input: dict
+    ) -> None:
+        with patch(
+            "custom_components.ecoflow_energy.config_flow_options."
+            "_async_fetch_app_devices",
+            new_callable=AsyncMock,
+            return_value=[],
+        ):
+            result = await hass.config_entries.options.async_init(entry.entry_id)
+            await hass.config_entries.options.async_configure(
+                result["flow_id"], user_input=user_input
+            )
+            await hass.async_block_till_done()
+
+    async def test_raw_capture_defaults_to_off(self, hass: HomeAssistant) -> None:
+        """Nobody gets a capture connection without asking for one."""
+        entry = self._create_capture_entry(hass)
+
+        await self._submit_options(
+            hass, entry, {CONF_MODE: MODE_ENHANCED, CONF_DEVICES: ["SN001"]}
+        )
+
+        assert entry.data.get(CONF_RAW_CAPTURE, False) is False
+
+    async def test_enabling_raw_capture_sets_a_deadline(
+        self, hass: HomeAssistant
+    ) -> None:
+        entry = self._create_capture_entry(hass)
+
+        with patch(
+            "custom_components.ecoflow_energy.config_flow_options.time.time",
+            return_value=FIXED_NOW,
+        ):
+            await self._submit_options(
+                hass,
+                entry,
+                {
+                    CONF_MODE: MODE_ENHANCED,
+                    CONF_DEVICES: ["SN001"],
+                    CONF_RAW_CAPTURE: True,
+                },
+            )
+
+        assert entry.data[CONF_RAW_CAPTURE] is True
+        assert entry.data[CONF_RAW_CAPTURE_UNTIL] == FIXED_NOW + RAW_CAPTURE_DURATION_S
+
+    async def test_saving_again_does_not_extend_a_running_window(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Otherwise an unrelated options change silently renews the capture."""
+        original_deadline = FIXED_NOW + 60
+        entry = self._create_capture_entry(
+            hass,
+            raw_capture=True,
+            raw_capture_until=original_deadline,
+        )
+
+        with patch(
+            "custom_components.ecoflow_energy.config_flow_options.time.time",
+            return_value=FIXED_NOW,
+        ):
+            await self._submit_options(
+                hass,
+                entry,
+                {
+                    CONF_MODE: MODE_ENHANCED,
+                    CONF_DEVICES: ["SN001"],
+                    CONF_RAW_CAPTURE: True,
+                },
+            )
+
+        assert entry.data[CONF_RAW_CAPTURE_UNTIL] == original_deadline
+
+    async def test_switching_it_off_clears_the_deadline(
+        self, hass: HomeAssistant
+    ) -> None:
+        entry = self._create_capture_entry(
+            hass,
+            raw_capture=True,
+            raw_capture_until=FIXED_NOW + 60,
+        )
+
+        await self._submit_options(
+            hass,
+            entry,
+            {
+                CONF_MODE: MODE_ENHANCED,
+                CONF_DEVICES: ["SN001"],
+                CONF_RAW_CAPTURE: False,
+            },
+        )
+
+        assert entry.data[CONF_RAW_CAPTURE] is False
+        assert CONF_RAW_CAPTURE_UNTIL not in entry.data
 
     async def test_options_init_shows_form(self, hass: HomeAssistant) -> None:
         """Options flow shows init form with mode and devices."""

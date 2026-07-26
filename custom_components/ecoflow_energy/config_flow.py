@@ -60,3 +60,6 @@ class EcoFlowOptionsFlow(OptionsFlowMixin, OptionsFlow):
         self._all_devices: list[dict[str, Any]] = []
         self._pending_mode: str = ""
         self._pending_devices: list[str] = []
+        # None means the raw capture checkbox was not part of this submission
+        # (Standard mode does not show it), so the stored value stays as is.
+        self._pending_raw_capture: bool | None = None

@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import logging
+import time
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.event import async_call_later
 
 from .const import (
     AUTH_METHOD_APP,
@@ -15,6 +17,8 @@ from .const import (
     CONF_EMAIL,
     CONF_MODE,
     CONF_PASSWORD,
+    CONF_RAW_CAPTURE,
+    CONF_RAW_CAPTURE_UNTIL,
     DATA_DEVICE_PROBES,
     DATA_SKIPPED_DEVICES,
     DEVICE_TYPE_UNKNOWN,
@@ -32,6 +36,60 @@ type EcoFlowConfigEntry = ConfigEntry
 
 
 CONFIG_VERSION = 3
+
+
+async def _async_raw_capture_active(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Return whether the raw capture is switched on and still within its window.
+
+    The deadline is stored as wall-clock time so it survives restarts: a
+    capture left on before a reboot must not get a fresh 24 hours out of it.
+    An expired window is switched off here rather than merely ignored, so the
+    options screen tells the truth about what is running.
+    """
+    if not entry.data.get(CONF_RAW_CAPTURE):
+        return False
+
+    until = entry.data.get(CONF_RAW_CAPTURE_UNTIL, 0)
+    if time.time() < until:
+        return True
+
+    _LOGGER.info(
+        "Raw capture window for unsupported devices has expired - switching it "
+        "off. Enable it again in the integration options if more data is needed."
+    )
+    _async_disable_raw_capture(hass, entry)
+    return False
+
+
+def _async_disable_raw_capture(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Clear the raw capture flag, which reloads the entry and stops the probes."""
+    new_data = dict(entry.data)
+    new_data[CONF_RAW_CAPTURE] = False
+    new_data.pop(CONF_RAW_CAPTURE_UNTIL, None)
+    hass.config_entries.async_update_entry(entry, data=new_data)
+
+
+def _async_schedule_raw_capture_expiry(
+    hass: HomeAssistant, entry: ConfigEntry
+) -> None:
+    """Switch the capture off when its window closes, without a restart.
+
+    The check at setup only runs on startup and reload. Without this timer a
+    capture enabled on a machine that stays up for weeks would keep its
+    connection open for exactly that long.
+    """
+    remaining = entry.data.get(CONF_RAW_CAPTURE_UNTIL, 0) - time.time()
+    if remaining <= 0:
+        return
+
+    def _expire(_now) -> None:
+        _LOGGER.info(
+            "Raw capture window for unsupported devices has ended - switching "
+            "it off."
+        )
+        _async_disable_raw_capture(hass, entry)
+
+    entry.async_on_unload(async_call_later(hass, remaining, _expire))
 
 
 async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
@@ -142,7 +200,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
     # diagnostics. Standard mode has the raw quota capture instead, and for
     # the models where the Developer API refuses (error 1006) this is the
     # only route that exists.
-    if skipped_devices and entry.data.get(CONF_AUTH_METHOD) == AUTH_METHOD_APP:
+    #
+    # Off by default. The capture helps exactly one person - whoever
+    # volunteered to get a device supported - and costs an extra connection
+    # in everyone else's installation, so it is opt-in and expires on its own.
+    if (
+        skipped_devices
+        and entry.data.get(CONF_AUTH_METHOD) == AUTH_METHOD_APP
+        and await _async_raw_capture_active(hass, entry)
+    ):
         probes = await async_start_probes(
             hass,
             skipped_devices,
@@ -161,6 +227,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
                 await probe.async_stop()
 
         entry.async_on_unload(_stop_orphaned_probes)
+        _async_schedule_raw_capture_expiry(hass, entry)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 

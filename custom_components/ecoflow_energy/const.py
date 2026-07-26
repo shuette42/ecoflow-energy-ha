@@ -46,6 +46,15 @@ CONF_PASSWORD = "password"
 CONF_USER_ID = "user_id"
 CONF_AUTH_METHOD = "auth_method"
 
+# Raw capture for devices without a parser. Off unless the user turns it on,
+# and it turns itself off again: the capture opens an extra connection that
+# serves nobody except the person who volunteered to help add a device, so it
+# must never become a permanent background load in someone's installation.
+CONF_RAW_CAPTURE = "raw_capture"
+CONF_RAW_CAPTURE_UNTIL = "raw_capture_until"
+# Wall-clock, not monotonic: the deadline has to survive a restart.
+RAW_CAPTURE_DURATION_S = 24 * 60 * 60
+
 # Auth methods
 AUTH_METHOD_DEVELOPER = "developer"
 AUTH_METHOD_APP = "app"
