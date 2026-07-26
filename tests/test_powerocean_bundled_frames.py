@@ -4,6 +4,8 @@ import re
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from ecoflow_energy.ecoflow.parsers.powerocean_proto import flatten_heartbeat
 from ecoflow_energy.ecoflow.proto.decoder import decode_header_message
 from ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
@@ -211,6 +213,73 @@ def test_heartbeat_phase_snapshot_zero_fills_and_keeps_extended_power() -> None:
     assert result["grid_phase_b_active_power_w"] == 0.0
     assert result["grid_phase_c_current_a"] == 0.0
     assert result["grid_status"] == "ok"
+
+
+def test_load_info_without_current_does_not_zero_the_phase_readings() -> None:
+    """A container that omits current and power must not overwrite one that has them.
+
+    Values captured from a PowerOcean HJ31 heartbeat: pcs_load_info carries only
+    voltage and frequency, while pcs_a/b/c_phase carries the full set. Filling
+    current and active power from the first container reported 0 W while the
+    device was exporting more than 200 W on phase C.
+    """
+    raw = {
+        "pcs_a_phase": {
+            "vol": 234.89375,
+            "amp": 1.2506706,
+            "act_pwr": -10.124375,
+            "react_pwr": 277.30704,
+            "apparent_pwr": 277.4918,
+        },
+        "pcs_b_phase": {
+            "vol": 234.12477,
+            "amp": 0.75025797,
+            "act_pwr": -118.80214,
+            "react_pwr": 123.4285,
+            "apparent_pwr": 171.31416,
+        },
+        "pcs_c_phase": {
+            "vol": 235.07158,
+            "amp": 1.1480076,
+            "act_pwr": -207.72481,
+            "react_pwr": 158.31601,
+            "apparent_pwr": 261.17725,
+        },
+        "pcs_load_info": [
+            {"vol": 234.89375, "freq": 50.00675},
+            {"vol": 234.12477, "freq": 50.006668},
+            {"vol": 235.07158, "freq": 50.006954},
+        ],
+    }
+
+    result = flatten_heartbeat(raw)
+
+    assert result["grid_phase_a_current_a"] == pytest.approx(1.2506706)
+    assert result["grid_phase_b_current_a"] == pytest.approx(0.75025797)
+    assert result["grid_phase_c_current_a"] == pytest.approx(1.1480076)
+    assert result["grid_phase_a_active_power_w"] == pytest.approx(-10.124375)
+    assert result["grid_phase_b_active_power_w"] == pytest.approx(-118.80214)
+    assert result["grid_phase_c_active_power_w"] == pytest.approx(-207.72481)
+    assert result["grid_phase_c_apparent_power_va"] == pytest.approx(261.17725)
+    assert result["grid_status"] == "ok"
+
+
+def test_load_info_only_phase_reports_zero_and_no_extended_power() -> None:
+    """A phase described only by pcs_load_info still clears omitted scalars.
+
+    Reactive and apparent power exist only in pcs_a/b/c_phase, so a phase that
+    container never described must not gain fabricated values for them.
+    """
+    raw = {"pcs_load_info": [{"vol": 231.4, "freq": 50.01}]}
+
+    result = flatten_heartbeat(raw)
+
+    assert result["grid_phase_a_voltage_v"] == pytest.approx(231.4)
+    assert result["grid_phase_a_current_a"] == 0.0
+    assert result["grid_phase_a_active_power_w"] == 0.0
+    assert "grid_phase_a_reactive_power_var" not in result
+    assert "grid_phase_a_apparent_power_va" not in result
+
 
 def test_multi_header_frame_with_outer_payload_still_decodes() -> None:
     """Several headers plus one outer payload field keep the typed decode.

@@ -313,32 +313,42 @@ def flatten_heartbeat(raw: dict[str, Any]) -> dict[str, Any]:
             if pv_index > 4:
                 break
 
-    # Grid phase data (nested in pcs_load_info[] or pcs_a/b/c_phase).
-    # Existing nested phases are full snapshots, so omitted scalars are zero.
-    # Voltages the device actually reported, collected before the zero-fill
-    # below overwrites the distinction between "sent 0" and "omitted".
+    # Grid phase data. Two containers describe the same three phases and both
+    # can appear in one message, each carrying a different subset:
+    #
+    #   pcs_load_info[]   voltage and frequency
+    #   pcs_a/b/c_phase   voltage, current, active, reactive and apparent power
+    #
+    # A value the device actually sent must never be replaced by a fabricated
+    # zero. Both containers are therefore collected first and a scalar is only
+    # zero-filled when no container reported it, which keeps a phase that drops
+    # to zero from holding a stale reading. On an HJ31 pcs_load_info carries no
+    # current and no power at all, so filling those from it reported 0 W while
+    # the device was exporting over 200 W on a phase.
     reported_vols: list[float] = []
+    collected: dict[str, dict[str, float]] = {}
+
+    def _collect(label: str, phase: dict[str, Any], fields: tuple[tuple[str, str], ...]) -> None:
+        vol = phase.get("vol")
+        if isinstance(vol, (int, float)) and not isinstance(vol, bool):
+            reported_vols.append(float(vol))
+        target = collected.setdefault(label, {})
+        for field, suffix in fields:
+            value = phase.get(field)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                target[suffix] = float(value)
 
     load_info = raw.get("pcs_load_info")
     if isinstance(load_info, list):
         phase_names = ("a", "b", "c")
         for idx, phase in enumerate(load_info[:3]):
             if isinstance(phase, dict):
-                label = phase_names[idx]
-                vol = phase.get("vol")
-                if isinstance(vol, (int, float)) and not isinstance(vol, bool):
-                    reported_vols.append(float(vol))
-                for field, suffix in (
-                    ("vol", "voltage_v"),
-                    ("amp", "current_a"),
-                    ("pwr", "active_power_w"),
-                ):
-                    result[f"grid_phase_{label}_{suffix}"] = float(
-                        phase.get(field, 0.0)
-                    )
+                _collect(
+                    phase_names[idx],
+                    phase,
+                    (("vol", "voltage_v"), ("amp", "current_a"), ("pwr", "active_power_w")),
+                )
 
-    # Fallback/extension: pcs_a/b/c_phase (JTS1PhaseInfo nested messages).
-    # These also carry reactive and apparent power, which pcs_load_info lacks.
     for phase_key, label in (
         ("pcs_a_phase", "a"),
         ("pcs_b_phase", "b"),
@@ -346,19 +356,27 @@ def flatten_heartbeat(raw: dict[str, Any]) -> dict[str, Any]:
     ):
         phase = raw.get(phase_key)
         if isinstance(phase, dict):
-            vol = phase.get("vol")
-            if isinstance(vol, (int, float)) and not isinstance(vol, bool):
-                reported_vols.append(float(vol))
-            for field, suffix in (
-                ("vol", "voltage_v"),
-                ("amp", "current_a"),
-                ("act_pwr", "active_power_w"),
-                ("react_pwr", "reactive_power_var"),
-                ("apparent_pwr", "apparent_power_va"),
-            ):
-                sensor_key = f"grid_phase_{label}_{suffix}"
-                if sensor_key not in result:
-                    result[sensor_key] = float(phase.get(field, 0.0))
+            _collect(
+                label,
+                phase,
+                (
+                    ("vol", "voltage_v"),
+                    ("amp", "current_a"),
+                    ("act_pwr", "active_power_w"),
+                    ("react_pwr", "reactive_power_var"),
+                    ("apparent_pwr", "apparent_power_va"),
+                ),
+            )
+
+    # Zero-fill only what no container reported. Reactive and apparent power
+    # exist solely in pcs_a/b/c_phase, so they are filled only for a phase that
+    # container described.
+    for label, values in collected.items():
+        for suffix in ("voltage_v", "current_a", "active_power_w"):
+            result[f"grid_phase_{label}_{suffix}"] = values.get(suffix, 0.0)
+        if isinstance(raw.get(f"pcs_{label}_phase"), dict):
+            for suffix in ("reactive_power_var", "apparent_power_va"):
+                result[f"grid_phase_{label}_{suffix}"] = values.get(suffix, 0.0)
 
     # Derive grid_status from phase voltage when not set by grid_is_energized.
     # sys_grid_sta is unreliable (always 0). The EcoFlow app uses gridIsEnergized
