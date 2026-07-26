@@ -2,6 +2,7 @@
 
 import re
 from pathlib import Path
+from unittest.mock import patch
 
 from ecoflow_energy.ecoflow.parsers.powerocean_proto import flatten_heartbeat
 from ecoflow_energy.ecoflow.proto.decoder import decode_header_message
@@ -29,14 +30,21 @@ _R374_GET_ALL_FIXTURE = (
 
 def _build_header(
     cmd_func: int,
-    cmd_id: int,
+    cmd_id: int | None,
     pdata: bytes,
     *,
     seq: int | None = None,
     encrypted: bool = False,
+    xor_payload: bool | None = None,
 ) -> bytes:
-    """Build one HeaderMessage repeated-header entry."""
-    if encrypted:
+    """Build one HeaderMessage repeated-header entry.
+
+    `xor_payload` defaults to `encrypted` and can be set to False to produce a
+    header that claims encryption while carrying plaintext.
+    """
+    if xor_payload is None:
+        xor_payload = encrypted
+    if xor_payload:
         assert seq is not None
         key = seq & 0xFF
         pdata = bytes(value ^ key for value in pdata)
@@ -47,7 +55,8 @@ def _build_header(
     if encrypted:
         header.extend(encode_field_varint(6, 1))
     header.extend(encode_field_varint(8, cmd_func))
-    header.extend(encode_field_varint(9, cmd_id))
+    if cmd_id is not None:
+        header.extend(encode_field_varint(9, cmd_id))
     if seq is not None:
         header.extend(encode_field_varint(14, seq))
     return encode_field_bytes(1, bytes(header))
@@ -202,6 +211,94 @@ def test_heartbeat_phase_snapshot_zero_fills_and_keeps_extended_power() -> None:
     assert result["grid_phase_b_active_power_w"] == 0.0
     assert result["grid_phase_c_current_a"] == 0.0
     assert result["grid_status"] == "ok"
+
+def test_multi_header_frame_with_outer_payload_still_decodes() -> None:
+    """Several headers plus one outer payload field keep the typed decode.
+
+    Only the payload field carries data here, so the per-header pass finds
+    nothing and the legacy whole-frame path has to produce the keys.
+    """
+    stream = JTS1EnergyStreamReport(
+        sys_load_pwr=450.0, sys_grid_pwr=-6280.0, mppt_pwr=6730.0, bp_pwr=0.0
+    )
+    frame = (
+        _build_header(96, 33, b"")
+        + _build_header(96, 1, b"")
+        + encode_field_bytes(2, stream.SerializeToString())
+    )
+
+    result = decode_proto_runtime_frame(frame)
+
+    assert result.parse_path == "typed_runtime:energy_stream_report"
+    assert result.parse_reason_code == "typed_source_payload_field"
+    assert {"solar", "home_direct", "grid_raw_f2", "batt_pb"} <= set(result.mapped)
+    assert result.mapped["solar"] == 6730.0
+    assert result.mapped["grid_raw_f2"] == -6280.0
+
+
+def test_invalid_pdata_hex_falls_back_to_full_frame() -> None:
+    """Unusable pdata hex retries the whole frame instead of dropping keys."""
+    stream = JTS1EnergyStreamReport(mppt_pwr=4321.0, sys_load_pwr=120.0)
+    frame = stream.SerializeToString()
+
+    with patch(
+        "ecoflow_energy.ecoflow.proto.runtime.decode_header_message",
+        return_value=([{"cmd_func": 96, "cmd_id": 33, "pdata": "zznothex"}], None),
+    ):
+        result = decode_proto_runtime_frame(frame)
+
+    assert result.parse_reason_code == "typed_source_full_frame_invalid_pdata"
+    assert result.parse_path == "typed_runtime:energy_stream_report"
+    assert result.mapped["solar"] == 4321.0
+
+
+def test_enc_type_flag_with_plaintext_pdata_still_decodes() -> None:
+    """A set encryption flag on plaintext pdata must not cost every key."""
+    stream = JTS1EnergyStreamReport(
+        sys_load_pwr=450.0, sys_grid_pwr=-6280.0, mppt_pwr=6730.0
+    )
+    frame = _build_header(
+        96,
+        33,
+        stream.SerializeToString(),
+        seq=0x1222,
+        encrypted=True,
+        xor_payload=False,
+    ) + _build_header(96, 39, b"", seq=0x1333)
+
+    decoded = decode_proto_runtime_headers(frame)
+
+    assert len(decoded) == 1
+    assert decoded[0].parse_path == "typed_runtime:energy_stream_report"
+    assert decoded[0].mapped["solar"] == 6730.0
+    assert decoded[0].mapped["home_direct"] == 450.0
+    assert decoded[0].mapped["grid_raw_f2"] == -6280.0
+
+
+def test_cmd_func_and_cmd_id_come_from_the_same_header() -> None:
+    """A command tuple is never assembled from two different headers."""
+    other = JTS1EmsPVInvEnergyStreamReport(pv_inv_pwr=987.0)
+    stream = JTS1EnergyStreamReport(mppt_pwr=6730.0, sys_load_pwr=450.0)
+
+    frame = _build_header(96, None, other.SerializeToString()) + _build_header(
+        96, 33, stream.SerializeToString()
+    )
+
+    decoded = decode_proto_runtime_headers(frame)
+
+    assert len(decoded) == 1
+    assert decoded[0].parse_path == "typed_runtime:energy_stream_report"
+    assert decoded[0].mapped["solar"] == 6730.0
+    assert decoded[0].mapped["home_direct"] == 450.0
+
+
+def test_partial_phase_message_does_not_flip_grid_status() -> None:
+    """A phase message without a voltage leaves grid_status alone."""
+    result = flatten_heartbeat({"pcs_a_phase": {"act_pwr": -1350.0}})
+
+    assert result["grid_phase_a_active_power_w"] == -1350.0
+    assert "grid_status" not in result
+
 
 def test_real_r374_get_all_fixture_decodes_all_supported_headers() -> None:
     """The masked real-device bundle keeps all 19 independent headers."""

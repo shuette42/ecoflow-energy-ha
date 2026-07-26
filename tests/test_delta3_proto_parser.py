@@ -18,7 +18,10 @@ from ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
     Delta3CmsHeartbeat,
     Delta3DisplayProperty,
 )
-from ecoflow_energy.ecoflow.proto.runtime import decode_proto_runtime_frame
+from ecoflow_energy.ecoflow.proto.runtime import (
+    decode_proto_runtime_frame,
+    decode_proto_runtime_headers,
+)
 from ecoflow_energy.ecoflow.proto_encoding import (
     encode_field_bytes,
     encode_field_varint,
@@ -296,3 +299,59 @@ class TestRegistryKeysRemainStable:
         frame = _build_frame(254, 22, msg.SerializeToString())
         result = decode_proto_runtime_frame(frame)
         assert result.parse_path == "typed_runtime:no_match"
+
+
+class TestMultiHeaderEnvelope:
+    """The Delta 3 shares the decoder with the bundled PowerOcean replies."""
+
+    def test_delta3_multi_header_envelope_decodes_every_header(self):
+        """Each known header in one envelope yields its own typed result."""
+        display = _build_display_message()
+        heartbeat = Delta3CmsHeartbeat()
+        heartbeat.v1p0.lcd_show_soc = 85
+        heartbeat.v1p3.sys_chg_dsg_state = 2
+
+        frame = (
+            _build_frame(241, 36, b"\x08\x01")
+            + _build_frame(254, 21, display.SerializeToString())
+            + _build_frame(32, 2, heartbeat.SerializeToString())
+        )
+
+        decoded = decode_proto_runtime_headers(frame)
+
+        assert [item.parse_path for item in decoded] == [
+            "typed_runtime:delta3_display_property",
+            "typed_runtime:delta3_cms_heartbeat",
+        ]
+        assert decoded[0].mapped["pow_in_sum_w"] == display.pow_in_sum_w
+        assert decoded[1].mapped["v1p0"]["lcd_show_soc"] == 85
+
+        # The legacy single-result API keeps the whole header list.
+        first = decode_proto_runtime_frame(frame)
+        assert first.parse_path == "typed_runtime:delta3_display_property"
+        assert len(first.headers) == 3
+
+    def test_delta3_multi_header_outer_payload_still_decodes(self):
+        """Headers without pdata still decode from the outer payload field."""
+        display = _build_display_message()
+
+        header = bytearray()
+        header.extend(encode_field_varint(8, 254))
+        header.extend(encode_field_varint(9, 21))
+        frame = (
+            encode_field_bytes(1, bytes(header))
+            + _build_frame(241, 36, b"\x08\x01")
+            + encode_field_bytes(2, display.SerializeToString())
+        )
+
+        result = decode_proto_runtime_frame(frame)
+
+        assert result.parse_path == "typed_runtime:delta3_display_property"
+        assert result.parse_reason_code == "typed_source_payload_field"
+        assert result.mapped["pow_in_sum_w"] == display.pow_in_sum_w
+
+        parsed = parse_delta3_display_property(
+            {k: v for k, v in result.mapped.items() if not k.startswith("_")}
+        )
+        assert parsed["pow_in_sum_w"] == display.pow_in_sum_w
+        assert parsed["ac_in_w"] == display.pow_get_ac_in

@@ -278,8 +278,16 @@ def flatten_heartbeat(raw: dict[str, Any]) -> dict[str, Any]:
 
     _apply_enum_mappings(result)
 
-    # MPPT per-string. PowerOcean Plus spreads its four inputs over more than
-    # one mppt_heart_beat container; the standard units usually provide one.
+    # MPPT per-string. Captured PowerOcean Plus traffic carries one
+    # mppt_heart_beat container holding three mppt_pv entries, so the previous
+    # two-entry cap was what hid the third string. Several containers are still
+    # walked in order because nothing guarantees a single one.
+    #
+    # pv_index is positional across containers: entry order decides which
+    # physical string becomes mppt_pv1..4. A device that changes entry count or
+    # container order between messages would silently remap the sensors. The
+    # captured frames keep a stable order, and the entries carry no identifier
+    # to key on, so position is the only option available.
     mppt_hb = raw.get("mppt_heart_beat")
     pv_index = 1
     if isinstance(mppt_hb, list):
@@ -307,12 +315,19 @@ def flatten_heartbeat(raw: dict[str, Any]) -> dict[str, Any]:
 
     # Grid phase data (nested in pcs_load_info[] or pcs_a/b/c_phase).
     # Existing nested phases are full snapshots, so omitted scalars are zero.
+    # Voltages the device actually reported, collected before the zero-fill
+    # below overwrites the distinction between "sent 0" and "omitted".
+    reported_vols: list[float] = []
+
     load_info = raw.get("pcs_load_info")
     if isinstance(load_info, list):
         phase_names = ("a", "b", "c")
         for idx, phase in enumerate(load_info[:3]):
             if isinstance(phase, dict):
                 label = phase_names[idx]
+                vol = phase.get("vol")
+                if isinstance(vol, (int, float)) and not isinstance(vol, bool):
+                    reported_vols.append(float(vol))
                 for field, suffix in (
                     ("vol", "voltage_v"),
                     ("amp", "current_a"),
@@ -331,6 +346,9 @@ def flatten_heartbeat(raw: dict[str, Any]) -> dict[str, Any]:
     ):
         phase = raw.get(phase_key)
         if isinstance(phase, dict):
+            vol = phase.get("vol")
+            if isinstance(vol, (int, float)) and not isinstance(vol, bool):
+                reported_vols.append(float(vol))
             for field, suffix in (
                 ("vol", "voltage_v"),
                 ("amp", "current_a"),
@@ -346,16 +364,14 @@ def flatten_heartbeat(raw: dict[str, Any]) -> dict[str, Any]:
     # sys_grid_sta is unreliable (always 0). The EcoFlow app uses gridIsEnergized
     # which is computed app-side, not sent by the device. We replicate that logic:
     # if any phase voltage > 50V, the grid is energized.
-    if "grid_status" not in result:
-        phase_vols = [
-            result.get(f"grid_phase_{label}_voltage_v")
-            for label in ("a", "b", "c")
-        ]
-        known_vols = [value for value in phase_vols if value is not None]
-        if known_vols:
-            result["grid_status"] = (
-                "ok" if any(value > 50.0 for value in known_vols) else "not_detected"
-            )
+    #
+    # Only reported voltages count. The zero-fill above writes 0.0 for every
+    # omitted scalar, so a phase message carrying just power would otherwise
+    # report a live grid as "not_detected".
+    if "grid_status" not in result and reported_vols:
+        result["grid_status"] = (
+            "ok" if any(value > 50.0 for value in reported_vols) else "not_detected"
+        )
 
     return result
 

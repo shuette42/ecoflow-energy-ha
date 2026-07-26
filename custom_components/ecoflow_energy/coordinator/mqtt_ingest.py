@@ -367,27 +367,22 @@ class MqttIngestMixin:
         existing single-header HJ31/HJ32 traffic.
         """
         merged: dict[str, Any] = {}
+        # The envelope decode stays guarded because the get_reply caller has no
+        # guard of its own and runs on the Paho thread.
         try:
             results = decode_proto_runtime_headers(payload)
-            if not results:
-                # Compatibility fallback for existing single-frame callers and
-                # tests that provide a pre-decoded runtime result. The normal
-                # path above remains authoritative for real bundled frames.
-                fallback = decode_proto_runtime_frame(payload)
-                if any(
-                    fallback.mapped.get(flag)
-                    for flag in (
-                        "_is_energy_stream",
-                        "_is_pv_inv_energy_stream",
-                        "_is_ems_heartbeat",
-                        "_is_ems_param_change",
-                        "_is_ems_change",
-                        "_is_bp_heartbeat",
-                    )
-                ):
-                    results = [fallback]
+        except Exception:
+            _LOGGER.debug(
+                "PowerOcean protobuf decode error for %s",
+                self.device_sn,
+                exc_info=True,
+            )
+            results = []
 
-            for result in results:
+        # One malformed header must not cost the keys already merged from the
+        # others, so every result is merged under its own guard.
+        for result in results:
+            try:
                 raw = {
                     key: value
                     for key, value in result.mapped.items()
@@ -418,13 +413,13 @@ class MqttIngestMixin:
                                 self.device_sn,
                             )
                         )
-        except Exception:
-            _LOGGER.debug(
-                "PowerOcean protobuf decode error for %s",
-                self.device_sn,
-                exc_info=True,
-            )
-            return None
+            except Exception:
+                _LOGGER.debug(
+                    "PowerOcean protobuf decode error for %s (%s)",
+                    self.device_sn,
+                    result.parse_path,
+                    exc_info=True,
+                )
 
         return merged or None
 
