@@ -2,7 +2,6 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from homeassistant.core import HomeAssistant
 
 from ecoflow_energy.const import RAW_FRAME_LOG_MAX
@@ -99,6 +98,46 @@ class TestListenOnly:
             probe._on_message("/topic", b"\x0a\x01")
 
         assert probe.frames == []
+
+
+class TestConnectSequence:
+    """The probe is useless unless all three client steps run in order.
+
+    ``connect()`` only opens the socket. Without ``start_loop()`` nobody
+    reads it: no CONNACK, no subscribe, no frames - yet the probe reports
+    success and diagnostics show an empty capture, which is
+    indistinguishable from a device that sends nothing.
+    """
+
+    async def test_connect_starts_the_network_loop(self, hass: HomeAssistant) -> None:
+        probe = _probe(hass)
+        probe._client.create_client.return_value = True
+        probe._client.connect.return_value = True
+
+        assert probe._connect() is True
+        assert [call[0] for call in probe._client.method_calls] == [
+            "create_client",
+            "connect",
+            "start_loop",
+        ]
+
+    async def test_no_loop_when_connect_fails(self, hass: HomeAssistant) -> None:
+        probe = _probe(hass)
+        probe._client.create_client.return_value = True
+        probe._client.connect.return_value = False
+
+        assert probe._connect() is False
+        probe._client.start_loop.assert_not_called()
+
+    async def test_nothing_runs_when_client_creation_fails(
+        self, hass: HomeAssistant
+    ) -> None:
+        probe = _probe(hass)
+        probe._client.create_client.return_value = False
+
+        assert probe._connect() is False
+        probe._client.connect.assert_not_called()
+        probe._client.start_loop.assert_not_called()
 
 
 class TestStartProbes:

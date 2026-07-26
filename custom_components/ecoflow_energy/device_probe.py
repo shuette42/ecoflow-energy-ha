@@ -21,6 +21,7 @@ commands, and writes nothing to the device.
 from __future__ import annotations
 
 import logging
+import threading
 from collections import deque
 from typing import Any
 
@@ -57,6 +58,13 @@ class UnroutedDeviceProbe:
         self._user_id = user_id
         self._frames: deque[dict[str, Any]] = deque(maxlen=RAW_FRAME_LOG_MAX)
         self._topics: set[str] = set()
+        # Written on the Paho thread, read on the event loop when diagnostics
+        # are downloaded. On CPython the reads happen to be safe already:
+        # sorted(set) and list(deque) run entirely in C, so no other Python
+        # thread can observe a half-built container. That is an implementation
+        # detail of the GIL, not a property of the code - it does not hold on
+        # a free-threaded build. Cheap enough to not depend on.
+        self._capture_lock = threading.Lock()
         self._client = EcoFlowMQTTClient(
             certificate_account=cert_account,
             certificate_password=cert_password,
@@ -72,7 +80,8 @@ class UnroutedDeviceProbe:
     @property
     def frames(self) -> list[dict[str, Any]]:
         """Return the captured frames for diagnostics export."""
-        return list(self._frames)
+        with self._capture_lock:
+            return list(self._frames)
 
     @property
     def topics(self) -> list[str]:
@@ -81,7 +90,8 @@ class UnroutedDeviceProbe:
         Tells a reader whether the device is silent or simply undecodable,
         which are two very different problems.
         """
-        return sorted(self._topics)
+        with self._capture_lock:
+            return sorted(self._topics)
 
     @property
     def connected(self) -> bool:
@@ -104,10 +114,19 @@ class UnroutedDeviceProbe:
             return False
 
     def _connect(self) -> bool:
-        """Create and start the MQTT client (executor thread)."""
+        """Create and start the MQTT client (executor thread).
+
+        All three steps are required. ``connect()`` only opens the socket;
+        without ``start_loop()`` nobody reads it, so CONNACK is never
+        processed, the subscribe never happens, and not a single frame
+        arrives - while the probe still reports success.
+        """
         if not self._client.create_client():
             return False
-        return self._client.connect()
+        if not self._client.connect():
+            return False
+        self._client.start_loop()
+        return True
 
     async def async_stop(self) -> None:
         """Disconnect the listen-only session."""
@@ -124,24 +143,25 @@ class UnroutedDeviceProbe:
         works fine otherwise.
         """
         try:
-            self._topics.add(topic.replace(self.device_sn, "{sn}"))
             if not is_proto_frame(payload):
                 # JSON pushes are captured too: an unsupported device may
                 # well speak JSON, and its key names are exactly what a
                 # parser would be built from.
-                self._frames.append({
+                entry = {
                     "format": "json",
                     **build_frame_entry(
                         topic, payload, self._secrets(), RAW_FRAME_MAX_BYTES
                     ),
-                })
-                return
-            entry = build_frame_entry(
-                topic, payload, self._secrets(), RAW_FRAME_MAX_BYTES
-            )
-            entry["format"] = "proto"
-            entry["cmds"] = decode_cmd_headers(payload)
-            self._frames.append(entry)
+                }
+            else:
+                entry = build_frame_entry(
+                    topic, payload, self._secrets(), RAW_FRAME_MAX_BYTES
+                )
+                entry["format"] = "proto"
+                entry["cmds"] = decode_cmd_headers(payload)
+            with self._capture_lock:
+                self._topics.add(topic.replace(self.device_sn, "{sn}"))
+                self._frames.append(entry)
         except Exception:  # noqa: BLE001
             _LOGGER.debug("Probe frame capture failed", exc_info=True)
 
