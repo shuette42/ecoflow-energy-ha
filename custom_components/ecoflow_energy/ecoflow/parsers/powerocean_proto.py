@@ -47,9 +47,9 @@ _WORK_STATE_ENUM_INT: dict[str, dict[int, str]] = {
     "ems_work_state": _WORK_STATE_MAP,
 }
 
-_CONNECTIVITY_KEYS: frozenset[str] = frozenset({
-    "wifi_status", "ethernet_status", "cellular_status",
-})
+_CONNECTIVITY_KEYS: frozenset[str] = frozenset(
+    {"wifi_status", "ethernet_status", "cellular_status"}
+)
 
 # WiFi/Ethernet: 0 = connected, non-zero = error/disconnected.
 # 4G (cellular): 1 = connected per observed portal behavior.
@@ -57,7 +57,7 @@ _WIFI_ETH_KEYS: frozenset[str] = frozenset({"wifi_status", "ethernet_status"})
 
 
 def _apply_enum_mappings(result: dict[str, Any]) -> None:
-    """Apply all enum and connectivity mappings to sensor-keyed result dict in place.
+    """Apply all enum and connectivity mappings to sensor-keyed result in place.
 
     Unknown integer values (e.g. firmware adding new states) are dropped
     rather than passed through, because HA's enum sensors raise
@@ -79,13 +79,18 @@ def _apply_enum_mappings(result: dict[str, Any]) -> None:
                 # HA sensor with "not in list of options".
                 _LOGGER.debug(
                     "Unknown enum value for %s: %r (dropped)",
-                    sensor_key, result[sensor_key],
+                    sensor_key,
+                    result[sensor_key],
                 )
                 result.pop(sensor_key, None)
 
     for sensor_key, mapping in _WORK_STATE_ENUM_INT.items():
         if sensor_key in result:
-            iv = int(result[sensor_key]) if isinstance(result[sensor_key], (int, float)) else None
+            iv = (
+                int(result[sensor_key])
+                if isinstance(result[sensor_key], (int, float))
+                else None
+            )
             if iv is not None and iv in mapping:
                 result[sensor_key] = mapping[iv]
             else:
@@ -97,7 +102,11 @@ def _apply_enum_mappings(result: dict[str, Any]) -> None:
 
     for sensor_key in _CONNECTIVITY_KEYS:
         if sensor_key in result:
-            iv = int(result[sensor_key]) if isinstance(result[sensor_key], (int, float)) else 0
+            iv = (
+                int(result[sensor_key])
+                if isinstance(result[sensor_key], (int, float))
+                else 0
+            )
             if sensor_key in _WIFI_ETH_KEYS:
                 result[sensor_key] = "connected" if iv == 0 else "disconnected"
             else:
@@ -111,7 +120,10 @@ def _apply_enum_mappings(result: dict[str, Any]) -> None:
     # grid_is_energized (bool, field 752) overrides sys_grid_sta when present.
     # The EcoFlow app uses gridIsEnergized for the main grid display.
     if "grid_is_energized" in result:
-        result["grid_status"] = "ok" if result.pop("grid_is_energized") else "not_detected"
+        result["grid_status"] = (
+            "ok" if result.pop("grid_is_energized") else "not_detected"
+        )
+
 
 # EnergyStream (fast ~3s updates): proto key -> sensor key
 PROTO_TO_SENSOR: dict[str, str] = {
@@ -200,14 +212,22 @@ BP_PACK_SENSOR_MAP: dict[str, str] = {
 }
 
 # Core battery identity keys: if ANY of these are present in a proto pack
-# dict, the pack is real.  Proto3 MessageToDict omits zero-valued fields,
+# dict, the pack is real. Proto3 MessageToDict omits zero-valued fields,
 # but a real battery always has bp_design_cap/bp_full_cap > 0 and bp_sn
-# non-empty, so at least one key will be present.  An EMS module placeholder
+# non-empty, so at least one key will be present. An EMS module placeholder
 # produces {} (no battery fields at all).
-BP_IDENTITY_KEYS: frozenset[str] = frozenset({
-    "bp_soc", "bp_pwr", "bp_soh", "bp_vol", "bp_cycles",
-    "bp_design_cap", "bp_full_cap", "bp_sn",
-})
+BP_IDENTITY_KEYS: frozenset[str] = frozenset(
+    {
+        "bp_soc",
+        "bp_pwr",
+        "bp_soh",
+        "bp_vol",
+        "bp_cycles",
+        "bp_design_cap",
+        "bp_full_cap",
+        "bp_sn",
+    }
+)
 
 
 def remap_proto_keys(raw: dict[str, Any]) -> dict[str, Any]:
@@ -216,8 +236,7 @@ def remap_proto_keys(raw: dict[str, Any]) -> dict[str, Any]:
     Protobuf outputs: solar, home_direct, batt_pb, grid_raw_f2, soc
     Sensors expect:   solar_w, home_w, batt_w, grid_w, soc_pct
 
-    Also computes derived power splits (grid import/export, batt charge/discharge)
-    to match the HTTP parser output format.
+    Also computes derived power splits (same logic as HTTP parser output).
     """
     result: dict[str, Any] = {}
     for proto_key, value in raw.items():
@@ -239,10 +258,13 @@ def remap_proto_keys(raw: dict[str, Any]) -> dict[str, Any]:
 
 
 def flatten_heartbeat(raw: dict[str, Any]) -> dict[str, Any]:
-    """Extract nested messages from EMS heartbeat (cmd_id=1).
+    """Extract nested messages from an EMS heartbeat (cmd_id=1).
 
-    Extracts: MPPT per-string, grid phase data, and scalar diagnostics.
-    Mirrors the main EcoFlow service's mqtt_primary_pipeline extraction.
+    All MPPT heartbeat containers are flattened in order, exposing up to four
+    physical PV inputs. For nested messages that exist, missing proto3 scalar
+    values are treated as zero because a heartbeat is a full snapshot; this
+    prevents a previous non-zero power/voltage/current value from staying stale
+    when the device sends an explicit zero that MessageToDict omits.
     """
     result: dict[str, Any] = {}
 
@@ -250,44 +272,75 @@ def flatten_heartbeat(raw: dict[str, Any]) -> dict[str, Any]:
     for proto_key, sensor_key in HEARTBEAT_TO_SENSOR.items():
         val = raw.get(proto_key)
         if val is not None:
-            result[sensor_key] = float(val) if isinstance(val, (int, float)) else val
+            result[sensor_key] = (
+                float(val) if isinstance(val, (int, float)) else val
+            )
 
     _apply_enum_mappings(result)
 
-    # MPPT per-string (nested in mppt_heart_beat[0].mppt_pv[])
+    # MPPT per-string. PowerOcean Plus spreads its four inputs over more than
+    # one mppt_heart_beat container; the standard units usually provide one.
     mppt_hb = raw.get("mppt_heart_beat")
-    if isinstance(mppt_hb, list) and mppt_hb:
-        mppt_data = mppt_hb[0] if isinstance(mppt_hb[0], dict) else {}
-        pv_arr = mppt_data.get("mppt_pv", [])
-        for idx, pv in enumerate(pv_arr[:2]):
-            if isinstance(pv, dict):
-                prefix = f"mppt_pv{idx + 1}"
-                for field, suffix in (("pwr", "power_w"), ("vol", "voltage_v"), ("amp", "current_a")):
-                    val = pv.get(field)
-                    if val is not None:
-                        result[f"{prefix}_{suffix}"] = float(val)
+    pv_index = 1
+    if isinstance(mppt_hb, list):
+        for mppt_data in mppt_hb:
+            if not isinstance(mppt_data, dict):
+                continue
+            pv_arr = mppt_data.get("mppt_pv", [])
+            if not isinstance(pv_arr, list):
+                continue
+            for pv in pv_arr:
+                if pv_index > 4:
+                    break
+                if not isinstance(pv, dict):
+                    continue
+                prefix = f"mppt_pv{pv_index}"
+                for field, suffix in (
+                    ("pwr", "power_w"),
+                    ("vol", "voltage_v"),
+                    ("amp", "current_a"),
+                ):
+                    result[f"{prefix}_{suffix}"] = float(pv.get(field, 0.0))
+                pv_index += 1
+            if pv_index > 4:
+                break
 
-    # Grid phase data (nested in pcs_load_info[] or pcs_a/b/c_phase)
+    # Grid phase data (nested in pcs_load_info[] or pcs_a/b/c_phase).
+    # Existing nested phases are full snapshots, so omitted scalars are zero.
     load_info = raw.get("pcs_load_info")
     if isinstance(load_info, list):
         phase_names = ("a", "b", "c")
         for idx, phase in enumerate(load_info[:3]):
             if isinstance(phase, dict):
                 label = phase_names[idx]
-                for field, suffix in (("vol", "voltage_v"), ("amp", "current_a"), ("pwr", "active_power_w")):
-                    val = phase.get(field)
-                    if val is not None:
-                        result[f"grid_phase_{label}_{suffix}"] = float(val)
+                for field, suffix in (
+                    ("vol", "voltage_v"),
+                    ("amp", "current_a"),
+                    ("pwr", "active_power_w"),
+                ):
+                    result[f"grid_phase_{label}_{suffix}"] = float(
+                        phase.get(field, 0.0)
+                    )
 
-    # Fallback: pcs_a/b/c_phase (JTS1PhaseInfo nested messages)
-    for phase_key, label in (("pcs_a_phase", "a"), ("pcs_b_phase", "b"), ("pcs_c_phase", "c")):
+    # Fallback/extension: pcs_a/b/c_phase (JTS1PhaseInfo nested messages).
+    # These also carry reactive and apparent power, which pcs_load_info lacks.
+    for phase_key, label in (
+        ("pcs_a_phase", "a"),
+        ("pcs_b_phase", "b"),
+        ("pcs_c_phase", "c"),
+    ):
         phase = raw.get(phase_key)
         if isinstance(phase, dict):
-            for field, suffix in (("vol", "voltage_v"), ("amp", "current_a"), ("act_pwr", "active_power_w")):
-                if f"grid_phase_{label}_{suffix}" not in result:
-                    val = phase.get(field)
-                    if val is not None:
-                        result[f"grid_phase_{label}_{suffix}"] = float(val)
+            for field, suffix in (
+                ("vol", "voltage_v"),
+                ("amp", "current_a"),
+                ("act_pwr", "active_power_w"),
+                ("react_pwr", "reactive_power_var"),
+                ("apparent_pwr", "apparent_power_va"),
+            ):
+                sensor_key = f"grid_phase_{label}_{suffix}"
+                if sensor_key not in result:
+                    result[sensor_key] = float(phase.get(field, 0.0))
 
     # Derive grid_status from phase voltage when not set by grid_is_energized.
     # sys_grid_sta is unreliable (always 0). The EcoFlow app uses gridIsEnergized
@@ -295,12 +348,13 @@ def flatten_heartbeat(raw: dict[str, Any]) -> dict[str, Any]:
     # if any phase voltage > 50V, the grid is energized.
     if "grid_status" not in result:
         phase_vols = [
-            result.get(f"grid_phase_{label}_voltage_v") for label in ("a", "b", "c")
+            result.get(f"grid_phase_{label}_voltage_v")
+            for label in ("a", "b", "c")
         ]
-        known_vols = [v for v in phase_vols if v is not None]
+        known_vols = [value for value in phase_vols if value is not None]
         if known_vols:
             result["grid_status"] = (
-                "ok" if any(v > 50.0 for v in known_vols) else "not_detected"
+                "ok" if any(value > 50.0 for value in known_vols) else "not_detected"
             )
 
     return result
@@ -311,7 +365,7 @@ def remap_bp_keys(
     bp_sn_to_index: dict[str, int],
     device_sn: str,
 ) -> dict[str, Any]:
-    """Remap battery heartbeat (cmd_id=7) and EMS change (cmd_id=8) keys to sensor keys.
+    """Remap battery heartbeat and EMS change keys to sensor keys.
 
     Args:
         raw: Raw protobuf-decoded dict (mutated: all_packs is popped).
@@ -330,17 +384,20 @@ def remap_bp_keys(
     # rejected idle packs whose power/SoC happened to be zero (#10).
     all_packs = raw.pop("all_packs", [])
     real_packs = [
-        p for p in all_packs
-        if isinstance(p, dict) and any(k in p for k in BP_IDENTITY_KEYS)
+        pack
+        for pack in all_packs
+        if isinstance(pack, dict) and any(key in pack for key in BP_IDENTITY_KEYS)
     ]
     _LOGGER.debug(
         "BP heartbeat for %s: %d pack(s) in message, %d real",
-        device_sn, len(all_packs), len(real_packs),
+        device_sn,
+        len(all_packs),
+        len(real_packs),
     )
     for pos, pack_data in enumerate(real_packs[:5], 1):
         # Stable pack numbering via SN: the device sends one pack per
         # heartbeat, so positional indexing would assign every pack to
-        # pack1.  Using bp_sn as key gives each physical battery a
+        # pack1. Using bp_sn as key gives each physical battery a
         # consistent pack number across messages.
         sn = pack_data.get("bp_sn", "")
         if sn:
@@ -368,17 +425,21 @@ def remap_bp_keys(
 
     # Try battery key mapping first, then EMS change mapping
     for proto_key, value in raw.items():
-        sensor_key = (
-            BP_TO_SENSOR.get(proto_key)
-            or EMS_CHANGE_TO_SENSOR.get(proto_key)
+        sensor_key = BP_TO_SENSOR.get(proto_key) or EMS_CHANGE_TO_SENSOR.get(
+            proto_key
         )
         if sensor_key:
             # Energy totals from EMS change report: Wh -> kWh
-            if sensor_key in ("batt_charge_energy_kwh", "batt_discharge_energy_kwh"):
+            if sensor_key in (
+                "batt_charge_energy_kwh",
+                "batt_discharge_energy_kwh",
+            ):
                 if isinstance(value, (int, float)):
                     result[sensor_key] = float(value) / 1000.0
             else:
-                result[sensor_key] = float(value) if isinstance(value, (int, float)) else value
+                result[sensor_key] = (
+                    float(value) if isinstance(value, (int, float)) else value
+                )
 
     # Apply enum mappings to remapped sensor keys.
     # Map values when present; never inject zero-defaults.

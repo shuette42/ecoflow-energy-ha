@@ -39,6 +39,7 @@ class ProtoRuntimeDecodeResult:
 @dataclass(frozen=True)
 class CmdConfig:
     """Declarative configuration for a protobuf cmd_id."""
+
     msg_class: type
     parse_path: str
     flags: dict[str, bool] = field(default_factory=dict)
@@ -79,6 +80,8 @@ def _build_cmd_registry() -> dict[tuple[int, int], CmdConfig]:
         (96, 39): CmdConfig(
             msg_class=pb2.JTS1EmsPVInvEnergyStreamReport,
             parse_path="typed_runtime:pv_inv_energy_stream",
+            flags={"_is_pv_inv_energy_stream": True},
+            rename={"pv_inv_pwr": "pv_inverter_power_w"},
         ),
         (96, 1): CmdConfig(
             msg_class=pb2.JTS1EmsHeartbeat,
@@ -124,13 +127,17 @@ _FULL_POWER_KEYS = frozenset({"solar", "home_direct", "batt_pb", "grid_raw_f2"})
 
 
 def _empty_mapped() -> dict[str, Any]:
-    """Returns a stable empty mapping skeleton for non-decoded runtime frames."""
+    """Return a stable empty mapping skeleton for non-decoded runtime frames."""
     return {
         "_available_keys": set(),
         "_flat_count": 0,
         "_is_energy_stream": False,
         "_is_energy_stream_report": False,
+        "_is_pv_inv_energy_stream": False,
         "_is_ems_heartbeat": False,
+        "_is_ems_change": False,
+        "_is_ems_param_change": False,
+        "_is_bp_heartbeat": False,
         "_is_full_power_frame": False,
         "_is_delta3_display": False,
         "_is_delta3_cms_heartbeat": False,
@@ -148,7 +155,7 @@ def _header_value(headers: list[dict], key: str) -> Any:
 
 
 def _first_pdata(headers: list[dict]) -> tuple[bytes | None, bool]:
-    """Extract first valid pdata from headers. Returns (pdata_bytes, had_invalid)."""
+    """Extract first valid pdata from headers. Return (pdata_bytes, had_invalid)."""
     had_invalid = False
     for header in headers or []:
         if not isinstance(header, dict):
@@ -166,8 +173,40 @@ def _first_pdata(headers: list[dict]) -> tuple[bytes | None, bool]:
     return None, had_invalid
 
 
-def _typed_runtime_map(headers: list[dict], source: bytes) -> tuple[dict[str, Any], str] | None:
-    """Declarative decode: (cmd_func, cmd_id) -> MessageToDict -> rename -> zero-fill -> flags."""
+def _header_pdata(header: dict[str, Any]) -> tuple[bytes | None, str]:
+    """Return one header's plaintext pdata and the source reason code.
+
+    App-side incremental PowerOcean pushes set ``Enc_type=1`` and XOR the
+    payload with the low byte of the header sequence number. Bundled Get-All
+    replies normally omit ``enc_type`` and carry plaintext pdata. Decryption
+    must therefore happen independently for every header; using the first
+    header's sequence for a whole bundle corrupts every later message.
+    """
+    pdata_hex = header.get("pdata")
+    if not isinstance(pdata_hex, str) or not pdata_hex:
+        return None, "typed_inner_payload_missing"
+    try:
+        pdata = bytes.fromhex(pdata_hex)
+    except ValueError:
+        return None, "typed_source_header_pdata_invalid"
+    if not pdata:
+        return None, "typed_inner_payload_missing"
+
+    if header.get("enc_type") == 1:
+        seq = header.get("seq")
+        if not isinstance(seq, int):
+            return None, "typed_source_header_pdata_missing_seq"
+        xor_key = seq & 0xFF
+        pdata = bytes(value ^ xor_key for value in pdata)
+        return pdata, "typed_source_header_pdata_decrypted"
+
+    return pdata, "typed_source_header_pdata"
+
+
+def _typed_runtime_map(
+    headers: list[dict], source: bytes
+) -> tuple[dict[str, Any], str] | None:
+    """Declarative decode: command tuple -> MessageToDict -> rename -> flags."""
     global _CMD_REGISTRY
     if _CMD_REGISTRY is None:
         _CMD_REGISTRY = _build_cmd_registry()
@@ -241,9 +280,68 @@ def _typed_runtime_map(headers: list[dict], source: bytes) -> tuple[dict[str, An
     return mapped, config.parse_path
 
 
-def decode_proto_runtime_frame(payload_bytes: bytes) -> ProtoRuntimeDecodeResult:
-    """Decode a complete EcoFlow protobuf frame into structured data."""
+def decode_proto_runtime_headers(payload_bytes: bytes) -> list[ProtoRuntimeDecodeResult]:
+    """Decode every typed header in one EcoFlow protobuf envelope.
+
+    A bundled PowerOcean Get-All reply contains many independent headers, while
+    incremental pushes usually contain one or two. Returning one result per
+    recognized header keeps both forms additive and leaves existing single-
+    header devices on the same code path.
+    """
     headers, payload = decode_header_message(payload_bytes)
+
+    global _CMD_REGISTRY
+    if _CMD_REGISTRY is None:
+        _CMD_REGISTRY = _build_cmd_registry()
+    registry = _CMD_REGISTRY or {}
+
+    decoded: list[ProtoRuntimeDecodeResult] = []
+    for header in headers or []:
+        if not isinstance(header, dict):
+            continue
+        cmd_func = header.get("cmd_func")
+        cmd_id = header.get("cmd_id")
+        if (cmd_func, cmd_id) not in registry:
+            continue
+
+        # The legacy single-header envelope may use the outer payload field.
+        # Bundled replies need each header's own pdata instead.
+        if len(headers) == 1 and payload is not None:
+            source = payload
+            reason_code = "typed_source_payload_field"
+        else:
+            source, reason_code = _header_pdata(header)
+            if source is None:
+                continue
+
+        typed = _typed_runtime_map([header], source)
+        if typed is None:
+            continue
+        mapped, parse_path = typed
+        decoded.append(
+            ProtoRuntimeDecodeResult(
+                headers=[header],
+                payload=payload,
+                source=source,
+                mapped=mapped,
+                parse_path=parse_path,
+                parse_reason_code=reason_code,
+            )
+        )
+
+    return decoded
+
+
+def decode_proto_runtime_frame(payload_bytes: bytes) -> ProtoRuntimeDecodeResult:
+    """Decode one EcoFlow protobuf frame, preserving the legacy first result API."""
+    headers, payload = decode_header_message(payload_bytes)
+    decoded = decode_proto_runtime_headers(payload_bytes)
+    if decoded:
+        first = decoded[0]
+        # Keep the complete header list for callers that reuse it for generic
+        # fallbacks. Single-header callers observe exactly the old shape.
+        first.headers = headers
+        return first
 
     cmd_func = _header_value(headers, "cmd_func")
     cmd_id = _header_value(headers, "cmd_id")
@@ -253,43 +351,34 @@ def decode_proto_runtime_frame(payload_bytes: bytes) -> ProtoRuntimeDecodeResult
         _CMD_REGISTRY = _build_cmd_registry()
     typed_eligible = (cmd_func, cmd_id) in (_CMD_REGISTRY or {})
 
-    # Resolve inner payload source for typed decode
-    if payload is not None:
-        typed_source = payload
-        typed_reason_code = "typed_source_payload_field"
-    elif typed_eligible:
-        pdata, had_invalid = _first_pdata(headers)
-        if pdata is not None:
-            typed_source = pdata
-            typed_reason_code = "typed_source_header_pdata"
-        elif had_invalid:
-            typed_source = payload_bytes
-            typed_reason_code = "typed_source_full_frame_invalid_pdata"
+    # Preserve the guarded result for a known single-header command that has
+    # no usable inner payload; empty companion headers in a bundle are simply
+    # skipped by decode_proto_runtime_headers().
+    if typed_eligible:
+        if payload is not None:
+            source = payload
+            reason_code = "typed_source_payload_field"
         else:
+            if headers:
+                source, reason_code = _header_pdata(headers[0])
+            else:
+                source, reason_code = None, "typed_inner_payload_missing"
+        if source is None:
             return ProtoRuntimeDecodeResult(
-                headers=headers, payload=payload, source=b"",
+                headers=headers,
+                payload=payload,
+                source=b"",
                 mapped=_empty_mapped(),
                 parse_path="typed_runtime:guarded_no_inner_payload",
-                parse_reason_code="typed_inner_payload_missing",
+                parse_reason_code=reason_code,
             )
     else:
-        typed_source = payload_bytes
-        typed_reason_code = "typed_source_full_frame"
-
-    typed = _typed_runtime_map(headers, typed_source)
-    if typed is not None:
-        mapped, parse_path = typed
-        return ProtoRuntimeDecodeResult(
-            headers=headers,
-            payload=payload,
-            source=typed_source,
-            mapped=mapped,
-            parse_path=parse_path,
-            parse_reason_code=typed_reason_code,
-        )
+        source = payload if payload is not None else payload_bytes
 
     return ProtoRuntimeDecodeResult(
-        headers=headers, payload=payload, source=typed_source,
+        headers=headers,
+        payload=payload,
+        source=source,
         mapped=_empty_mapped(),
         parse_path="typed_runtime:no_match",
         parse_reason_code="typed_no_match",

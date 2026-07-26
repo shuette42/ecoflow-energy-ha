@@ -22,13 +22,16 @@ from ..ecoflow.parsers.delta3_proto import (
     parse_delta3_cms_heartbeat,
     parse_delta3_display_property,
 )
+from ..ecoflow.parsers.powerocean import parse_powerocean_http_quota
 from ..ecoflow.parsers.powerocean_proto import (
     flatten_heartbeat,
     remap_bp_keys,
     remap_proto_keys,
 )
-from ..ecoflow.parsers.powerocean import parse_powerocean_http_quota
-from ..ecoflow.parsers.smartplug import parse_smartplug_http_quota, parse_smartplug_report
+from ..ecoflow.parsers.smartplug import (
+    parse_smartplug_http_quota,
+    parse_smartplug_report,
+)
 from ..ecoflow.parsers.stream_http import parse_stream_quota
 from ..ecoflow.parsers.stream_proto import parse_stream_proto_message
 from ..ecoflow.frame_capture import (
@@ -36,7 +39,10 @@ from ..ecoflow.frame_capture import (
     decode_cmd_headers,
     is_proto_frame,
 )
-from ..ecoflow.proto.runtime import decode_proto_runtime_frame
+from ..ecoflow.proto.runtime import (
+    decode_proto_runtime_frame,
+    decode_proto_runtime_headers,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -87,16 +93,19 @@ class MqttIngestMixin:
             if key in parsed and key in self._device_data:
                 old = self._device_data[key]
                 new = parsed[key]
-                if isinstance(old, (int, float)) and isinstance(new, (int, float)) and new < old:
+                if (
+                    isinstance(old, (int, float))
+                    and isinstance(new, (int, float))
+                    and new < old
+                ):
                     del parsed[key]
         return parsed
-
 
     def _on_mqtt_message(self, topic: str, payload: bytes) -> None:
         """Handle an incoming MQTT message (Paho thread).
 
         In Standard Mode, MQTT is only used for SET commands — data updates
-        come from HTTP polling.  Exception: Delta and Smart Plug subscribe
+        come from HTTP polling. Exception: Delta and Smart Plug subscribe
         to MQTT push for real-time data alongside HTTP polling (dual-source).
         In Enhanced Mode, MQTT is the primary source.
         """
@@ -214,7 +223,7 @@ class MqttIngestMixin:
             # Proto get_reply: binary protobuf
             if b"\x0a" in payload[:4]:
                 if self.device_type == DEVICE_TYPE_POWEROCEAN:
-                    return self._parse_powerocean_get_reply(payload)
+                    return self._parse_powerocean_proto_frame(payload)
                 if self.device_type == DEVICE_TYPE_STREAM:
                     return parse_stream_proto_message(payload)
                 return self._parse_proto_device_data(payload)
@@ -295,6 +304,9 @@ class MqttIngestMixin:
                 # frame to the Delta 3 parser and drop the Stream telemetry.
                 if self.device_type == DEVICE_TYPE_STREAM:
                     return parse_stream_proto_message(payload)
+                if self.device_type == DEVICE_TYPE_POWEROCEAN:
+                    return self._parse_powerocean_proto_frame(payload)
+
                 result = decode_proto_runtime_frame(payload)
                 raw = {
                     k: v
@@ -336,79 +348,67 @@ class MqttIngestMixin:
                 # decoding the same frame a second time.
                 return self._parse_proto_device_data(payload, result.headers)
             except Exception:
-                _LOGGER.debug("Protobuf decode error for %s", self.device_sn, exc_info=True)
+                _LOGGER.debug(
+                    "Protobuf decode error for %s", self.device_sn, exc_info=True
+                )
             return None
 
         return None
 
-    def _parse_powerocean_get_reply(self, payload: bytes) -> dict[str, Any] | None:
-        """Parse PowerOcean proto get_reply by extracting EmsChangeReport
-        and EmsParamChangeReport sub-messages.
+    def _parse_powerocean_proto_frame(
+        self, payload: bytes
+    ) -> dict[str, Any] | None:
+        """Decode and merge every PowerOcean header in one MQTT envelope.
 
-        The get_reply contains multiple sub-messages, each with its own
-        cmd_func/cmd_id and pdata. We extract cmd_func=96 cmd_id=8
-        (EmsChangeReport, connectivity + enum fields) and cmd_id=13
-        (EmsParamChangeReport, the app-side surplus mirror).
+        Get-All replies contain many independent headers, while normal pushes
+        contain one or two. Each header is decoded with its own command tuple,
+        pdata and sequence number; unsupported and empty companion headers are
+        ignored. This same path therefore covers both bundled replies and the
+        existing single-header HJ31/HJ32 traffic.
         """
-        from ..ecoflow.proto.decoder import decode_header_message
-        from ..ecoflow.parsers.powerocean_proto import remap_bp_keys
+        merged: dict[str, Any] = {}
+        for result in decode_proto_runtime_headers(payload):
+            raw = {
+                key: value
+                for key, value in result.mapped.items()
+                if not key.startswith("_")
+            }
 
-        try:
-            headers, _ = decode_header_message(payload)
-            from ..ecoflow.proto import ecocharge_pb2 as pb2
-            from google.protobuf.json_format import MessageToDict
+            if result.mapped.get("_is_energy_stream"):
+                merged.update(remap_proto_keys(raw))
+                continue
+            if result.mapped.get("_is_pv_inv_energy_stream"):
+                merged.update(raw)
+                continue
+            if result.mapped.get("_is_ems_heartbeat"):
+                merged.update(flatten_heartbeat(raw))
+                continue
+            if result.mapped.get("_is_ems_param_change"):
+                merged.update(raw)
+                continue
+            if (
+                result.mapped.get("_is_ems_change")
+                or result.mapped.get("_is_bp_heartbeat")
+            ):
+                if raw:
+                    merged.update(
+                        remap_bp_keys(
+                            raw,
+                            self._bp_sn_to_index,
+                            self.device_sn,
+                        )
+                    )
 
-            merged: dict[str, Any] = {}
-            for hdr in headers or []:
-                if hdr.get("cmd_func") != 96:
-                    continue
-                cmd_id = hdr.get("cmd_id")
-                pdata_hex = hdr.get("pdata")
-                if cmd_id not in (8, 13):
-                    continue
-                if not isinstance(pdata_hex, str) or not pdata_hex:
-                    continue
-                try:
-                    pdata = bytes.fromhex(pdata_hex)
-                except ValueError:
-                    continue
-                # Generated _pb2 classes are registered via _descriptor_pool
-                # at runtime, which Pyright/Pylance cannot resolve statically.
-                msg_class = (
-                    pb2.JTS1EmsChangeReport if cmd_id == 8  # type: ignore[attr-defined]
-                    else pb2.JTS1EmsParamChangeReport  # type: ignore[attr-defined]
-                )
-                msg = msg_class()
-                msg.ParseFromString(pdata)
-                fields = MessageToDict(msg, preserving_proto_field_name=True)
-                if not fields:
-                    continue
-                if cmd_id == 8 and "ems_word_mode" in fields:
-                    fields["ems_work_mode"] = fields.pop("ems_word_mode")
-                if cmd_id == 13 and "dev_soc" in fields:
-                    fields["ems_app_surplus_pct"] = fields.pop("dev_soc")
-                merged.update(fields)
-            if merged:
-                # remap_bp_keys filters via BP/EMS-change rename tables and
-                # drops anything not listed there. Pull out fields that are
-                # already in sensor-key form (e.g. ems_app_surplus_pct from
-                # cmd_id=13) before remap, then re-add them.
-                passthrough = {}
-                for key in ("ems_app_surplus_pct",):
-                    if key in merged:
-                        passthrough[key] = merged.pop(key)
-                remapped = remap_bp_keys(merged, self._bp_sn_to_index, self.device_sn)
-                remapped.update(passthrough)
-                return remapped
-        except Exception:
-            _LOGGER.debug("PowerOcean get_reply decode error", exc_info=True)
+        return merged or None
 
-        return None
+    def _parse_powerocean_get_reply(self, payload: bytes) -> dict[str, Any] | None:
+        """Backward-compatible wrapper for existing coordinator tests."""
+        return self._parse_powerocean_proto_frame(payload)
 
     def _parse_proto_device_data(
         self, payload: bytes, headers: list[dict[str, Any]] | None = None
     ) -> dict[str, Any] | None:
-        """Parse SmartPlug/Delta protobuf heartbeat via generic wire-format decoder.
+        """Parse SmartPlug/Delta protobuf heartbeat via generic wire decoder.
 
         `headers` may be supplied by a caller that already decoded the frame
         so the header decode does not run twice per message.
@@ -430,10 +430,12 @@ class MqttIngestMixin:
                 continue
 
             if self.device_type == DEVICE_TYPE_SMARTPLUG:
-                from ..ecoflow.parsers.smartplug import parse_smartplug_proto_heartbeat
+                from ..ecoflow.parsers.smartplug import (
+                    parse_smartplug_proto_heartbeat,
+                )
+
                 result = parse_smartplug_proto_heartbeat(pdata)
                 if result:
                     return result
 
         return None
-
