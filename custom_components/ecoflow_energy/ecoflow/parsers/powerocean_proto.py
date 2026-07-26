@@ -265,6 +265,9 @@ def flatten_heartbeat(raw: dict[str, Any]) -> dict[str, Any]:
     values are treated as zero because a heartbeat is a full snapshot; this
     prevents a previous non-zero power/voltage/current value from staying stale
     when the device sends an explicit zero that MessageToDict omits.
+
+    The grid phases are the one exception: two containers describe them and a
+    scalar is only zeroed when neither reported it. See the comment there.
     """
     result: dict[str, Any] = {}
 
@@ -324,14 +327,35 @@ def flatten_heartbeat(raw: dict[str, Any]) -> dict[str, Any]:
     # zero-filled when no container reported it, which keeps a phase that drops
     # to zero from holding a stale reading. On an HJ31 pcs_load_info carries no
     # current and no power at all, so filling those from it reported 0 W while
-    # the device was exporting over 200 W on a phase.
+    # the device was exporting over 200 W on a phase. Both fields exist in the
+    # schema, so an omitted one is indistinguishable from a transmitted zero,
+    # which is why absence must not be read as a measurement.
+    #
+    # On a conflict pcs_a/b/c_phase wins, because it is collected second. That
+    # container is the one that models a phase electrically, so it is the
+    # authoritative source for these sensors. Pinned by
+    # test_phase_container_wins_over_load_info_on_conflict.
+    #
+    # The positional mapping of pcs_load_info entries to A, B and C is an
+    # assumption. The schema carries no phase identifier there. It holds on the
+    # observed hardware and is currently unobservable anyway, because the phase
+    # container overwrites every key the load container can contribute.
     reported_vols: list[float] = []
     collected: dict[str, dict[str, float]] = {}
 
-    def _collect(label: str, phase: dict[str, Any], fields: tuple[tuple[str, str], ...]) -> None:
+    def _collect(
+        label: str,
+        phase: dict[str, Any],
+        fields: tuple[tuple[str, str], ...],
+    ) -> None:
         vol = phase.get("vol")
         if isinstance(vol, (int, float)) and not isinstance(vol, bool):
             reported_vols.append(float(vol))
+        # Created unconditionally, before any field is read. A container that
+        # arrives with every scalar at its proto3 default carries no fields at
+        # all, and that is exactly the dead-grid case whose zeros must still be
+        # written. Moving this into the loop below would silently reintroduce
+        # stale readings.
         target = collected.setdefault(label, {})
         for field, suffix in fields:
             value = phase.get(field)
@@ -346,7 +370,11 @@ def flatten_heartbeat(raw: dict[str, Any]) -> dict[str, Any]:
                 _collect(
                     phase_names[idx],
                     phase,
-                    (("vol", "voltage_v"), ("amp", "current_a"), ("pwr", "active_power_w")),
+                    (
+                        ("vol", "voltage_v"),
+                        ("amp", "current_a"),
+                        ("pwr", "active_power_w"),
+                    ),
                 )
 
     for phase_key, label in (

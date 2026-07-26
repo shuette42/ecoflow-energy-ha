@@ -281,6 +281,55 @@ def test_load_info_only_phase_reports_zero_and_no_extended_power() -> None:
     assert "grid_phase_a_apparent_power_va" not in result
 
 
+def test_phase_container_wins_over_load_info_on_conflict() -> None:
+    """pcs_a/b/c_phase is authoritative when both containers report a scalar.
+
+    Only the phase container models a phase electrically, so it decides. The
+    observed hardware never sends a conflict, which is why this has to be
+    pinned by a test rather than left to the field order.
+    """
+    raw = {
+        "pcs_load_info": [{"vol": 230.0, "amp": 9.9, "freq": 50.0, "pwr": 2200.0}],
+        "pcs_a_phase": {"vol": 231.0, "amp": 1.1, "act_pwr": -207.0},
+    }
+
+    result = flatten_heartbeat(raw)
+
+    assert result["grid_phase_a_voltage_v"] == pytest.approx(231.0)
+    assert result["grid_phase_a_current_a"] == pytest.approx(1.1)
+    assert result["grid_phase_a_active_power_w"] == pytest.approx(-207.0)
+
+
+def test_container_without_any_scalar_still_clears_the_phase() -> None:
+    """A container whose scalars are all at their proto3 default writes zeros.
+
+    This is the dead-grid case. The phase entry is created before any field is
+    read, so an empty container still clears instead of leaving a stale value.
+    """
+    from_phase = flatten_heartbeat({"pcs_a_phase": {}})
+    assert from_phase["grid_phase_a_voltage_v"] == 0.0
+    assert from_phase["grid_phase_a_current_a"] == 0.0
+    assert from_phase["grid_phase_a_active_power_w"] == 0.0
+    assert from_phase["grid_phase_a_reactive_power_var"] == 0.0
+    assert from_phase["grid_phase_a_apparent_power_va"] == 0.0
+    assert "grid_status" not in from_phase
+
+    from_load = flatten_heartbeat({"pcs_load_info": [{}]})
+    assert from_load["grid_phase_a_voltage_v"] == 0.0
+    assert from_load["grid_phase_a_current_a"] == 0.0
+    assert from_load["grid_phase_a_active_power_w"] == 0.0
+    assert "grid_phase_a_reactive_power_var" not in from_load
+
+
+def test_non_numeric_phase_scalar_is_rejected() -> None:
+    """MessageToDict can render a float as "NaN"; it must not reach a sensor."""
+    result = flatten_heartbeat({"pcs_a_phase": {"vol": "NaN", "amp": 1.2}})
+
+    assert result["grid_phase_a_voltage_v"] == 0.0
+    assert result["grid_phase_a_current_a"] == pytest.approx(1.2)
+    assert "grid_status" not in result
+
+
 def test_multi_header_frame_with_outer_payload_still_decodes() -> None:
     """Several headers plus one outer payload field keep the typed decode.
 
