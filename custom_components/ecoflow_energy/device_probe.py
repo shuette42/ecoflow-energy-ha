@@ -38,9 +38,15 @@ class UnroutedDeviceProbe:
     """Listen-only frame capture for one unsupported device.
 
     Deliberately minimal: no keep-alive timers, no re-subscribe logic, no
-    SET path. If the connection drops, the probe stays quiet and whatever
-    was captured before remains available. A diagnostics helper must never
-    become a second, half-maintained coordinator.
+    SET path. A diagnostics helper must never become a second,
+    half-maintained coordinator.
+
+    The connection is opened with ``listen_only=True``, which is what
+    actually holds the no-write promise: the shared client fires get-all
+    and latestQuotas at the device on every connect otherwise. Note that
+    paho reconnects on its own after a drop, so the probe is quiet in the
+    sense that it adds no logic of its own, not in the sense that the
+    socket stays down.
     """
 
     def __init__(
@@ -56,6 +62,7 @@ class UnroutedDeviceProbe:
         self.device_sn = device_sn
         self.product_name = product_name
         self._user_id = user_id
+        self._cert_account = cert_account
         self._frames: deque[dict[str, Any]] = deque(maxlen=RAW_FRAME_LOG_MAX)
         self._topics: set[str] = set()
         # Written on the Paho thread, read on the event loop when diagnostics
@@ -72,9 +79,12 @@ class UnroutedDeviceProbe:
             message_handler=self._on_message,
             user_id=user_id,
             wss_mode=True,
-            # Not PowerOcean-enhanced: that flag activates the energy stream
-            # switch, which is a write to a device we know nothing about.
             enhanced_mode=False,
+            # This is the flag that makes "listen-only" true. enhanced_mode
+            # alone does not: it only suppresses the energy stream switch,
+            # while _on_connect still fires get-all and latestQuotas at the
+            # device on every connect.
+            listen_only=True,
         )
 
     @property
@@ -133,7 +143,9 @@ class UnroutedDeviceProbe:
         try:
             await self.hass.async_add_executor_job(self._client.disconnect)
         except Exception:  # noqa: BLE001
-            _LOGGER.debug("Probe disconnect failed for %s...", self.device_sn[:4])
+            _LOGGER.debug(
+                "Probe disconnect failed for %s...", self.device_sn[:4], exc_info=True
+            )
 
     def _on_message(self, topic: str, payload: bytes) -> None:
         """Capture one frame (Paho thread).
@@ -160,14 +172,32 @@ class UnroutedDeviceProbe:
                 entry["format"] = "proto"
                 entry["cmds"] = decode_cmd_headers(payload)
             with self._capture_lock:
-                self._topics.add(topic.replace(self.device_sn, "{sn}"))
+                self._topics.add(self._mask_topic(topic))
                 self._frames.append(entry)
         except Exception:  # noqa: BLE001
             _LOGGER.debug("Probe frame capture failed", exc_info=True)
 
+    def _mask_topic(self, topic: str) -> str:
+        """Return the topic with every account identifier removed.
+
+        Topics are exported to diagnostics, which users attach to public
+        issue reports. The app topics carry the EcoFlow user id
+        (``/app/{user_id}/{sn}/...``) and the open topics carry the
+        certificate account, so masking the serial alone is not enough.
+        """
+        masked = topic
+        for secret, placeholder in (
+            (self.device_sn, "{sn}"),
+            (self._user_id, "{uid}"),
+            (self._cert_account, "{acct}"),
+        ):
+            if secret:
+                masked = masked.replace(secret, placeholder)
+        return masked
+
     def _secrets(self) -> list[str]:
         """Return the identifiers to mask out of a stored frame."""
-        return [self.device_sn, self._user_id]
+        return [self.device_sn, self._user_id, self._cert_account]
 
 
 async def async_start_probes(

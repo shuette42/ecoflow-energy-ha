@@ -151,6 +151,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
         )
         hass.data.setdefault(DATA_DEVICE_PROBES, {})[entry.entry_id] = probes
 
+        # Probes hold live WSS connections and their own paho threads. If
+        # setup fails after this point, async_unload_entry never runs, so
+        # every HA retry would leave another set of connections behind.
+        # Popping here means the regular unload path wins when it ran, and
+        # this callback only has work to do when it did not.
+        async def _stop_orphaned_probes() -> None:
+            for probe in hass.data.get(DATA_DEVICE_PROBES, {}).pop(entry.entry_id, []):
+                await probe.async_stop()
+
+        entry.async_on_unload(_stop_orphaned_probes)
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     # Reload integration when config entry data changes (e.g. mode switch via Options Flow)

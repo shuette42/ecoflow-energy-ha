@@ -717,9 +717,15 @@ class TestUnroutedDeviceCapture:
 
         assert "RE11TEST00000001" not in json.dumps(result)
 
-    async def test_no_probe_means_no_capture_section(
+    async def test_no_probe_says_so_instead_of_staying_silent(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
     ) -> None:
+        """A failed probe start must be visible, not just absent.
+
+        Omitting the section makes a failed login indistinguishable from a
+        version that has no capture at all, and the reader has no way to
+        tell which one they are looking at.
+        """
         skipped = [{
             "sn_prefix": "RE11",
             "sn": "RE11TEST00000001",
@@ -731,7 +737,8 @@ class TestUnroutedDeviceCapture:
             hass, enhanced_config_entry, skipped, []
         )
 
-        assert "raw_capture" not in result[0]
+        assert result[0]["raw_capture"]["status"] == "no probe running for this device"
+        assert "frames" not in result[0]["raw_capture"]
 
     async def test_probe_for_another_device_is_not_attached(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
@@ -748,4 +755,7 @@ class TestUnroutedDeviceCapture:
             [self._probe("SM3ATEST00000001")],
         )
 
-        assert "raw_capture" not in result[0]
+        # Another device's capture must not be attached here, and the entry
+        # must still state that this device has none of its own.
+        assert result[0]["raw_capture"]["status"] == "no probe running for this device"
+        assert "frames" not in result[0]["raw_capture"]

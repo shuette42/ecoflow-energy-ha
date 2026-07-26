@@ -6,6 +6,7 @@ from homeassistant.core import HomeAssistant
 
 from ecoflow_energy.const import RAW_FRAME_LOG_MAX
 from ecoflow_energy.device_probe import UnroutedDeviceProbe, async_start_probes
+from ecoflow_energy.ecoflow.cloud_mqtt import EcoFlowMQTTClient
 
 SKIPPED_SN = "RE11TEST00000001"
 
@@ -28,11 +29,63 @@ class TestListenOnly:
             )
 
         kwargs = mock_client.call_args.kwargs
-        # enhanced_mode would activate the energy stream switch, which is a
-        # publish to the device.
+        # enhanced_mode alone does NOT make this listen-only: it suppresses
+        # the energy stream switch, while the shared client still fires
+        # get-all and latestQuotas from _on_connect. listen_only is the flag
+        # that holds the promise - see the behaviour test below.
+        assert kwargs["listen_only"] is True
         assert kwargs["enhanced_mode"] is False
         assert kwargs["wss_mode"] is True
         assert kwargs["device_sn"] == SKIPPED_SN
+
+    async def test_connect_callback_transmits_nothing(
+        self, hass: HomeAssistant
+    ) -> None:
+        """The real client, driven through the callback that broke this.
+
+        Asserting constructor kwargs on a mocked client proves nothing about
+        behaviour - that is exactly how the shared client's autonomous
+        get-all/latestQuotas publishes stayed invisible. This drives the
+        actual _on_connect with only the transport mocked.
+        """
+        client = EcoFlowMQTTClient(
+            certificate_account="acc",
+            certificate_password="pw",
+            device_sn=SKIPPED_SN,
+            message_handler=lambda topic, payload: None,
+            user_id="user123",
+            wss_mode=True,
+            enhanced_mode=False,
+            listen_only=True,
+        )
+        paho = MagicMock()
+        client.client = paho
+
+        client._on_connect(paho, None, {}, 0)
+
+        paho.publish.assert_not_called()
+        assert client.publish("/any/topic", b"payload") is False
+
+    async def test_a_normal_connection_still_requests_data(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Guard against the listen-only flag silencing regular devices."""
+        client = EcoFlowMQTTClient(
+            certificate_account="acc",
+            certificate_password="pw",
+            device_sn="HJ31TEST00000001",
+            message_handler=lambda topic, payload: None,
+            user_id="user123",
+            wss_mode=True,
+            enhanced_mode=False,
+        )
+        paho = MagicMock()
+        paho.is_connected.return_value = True
+        client.client = paho
+
+        client._on_connect(paho, None, {}, 0)
+
+        assert paho.publish.called
 
     async def test_proto_frame_is_captured_with_commands(
         self, hass: HomeAssistant
@@ -69,15 +122,31 @@ class TestListenOnly:
         captured = bytes.fromhex(probe.frames[0]["hex"])
         assert SKIPPED_SN.encode() not in captured
 
-    async def test_topics_are_recorded_without_the_serial(
+    async def test_topics_are_recorded_without_any_identifier(
         self, hass: HomeAssistant
     ) -> None:
-        """Which topic delivered tells silence apart from undecodable data."""
+        """Which topic delivered tells silence apart from undecodable data.
+
+        Uses the real app topic layout, which carries the EcoFlow user id
+        ahead of the serial. Topics land in diagnostics, and diagnostics
+        get attached to public issue reports.
+        """
         probe = _probe(hass)
 
-        probe._on_message(f"/app/{SKIPPED_SN}/thing/property/get_reply", b"\x0a\x01")
+        probe._on_message(
+            f"/app/user123/{SKIPPED_SN}/thing/property/get_reply", b"\x0a\x01"
+        )
 
-        assert probe.topics == ["/app/{sn}/thing/property/get_reply"]
+        assert probe.topics == ["/app/{uid}/{sn}/thing/property/get_reply"]
+
+    async def test_certificate_account_is_masked_in_topics(
+        self, hass: HomeAssistant
+    ) -> None:
+        probe = _probe(hass)
+
+        probe._on_message(f"/open/cert_account/{SKIPPED_SN}/quota", b"\x0a\x01")
+
+        assert probe.topics == ["/open/{acct}/{sn}/quota"]
 
     async def test_buffer_is_bounded(self, hass: HomeAssistant) -> None:
         probe = _probe(hass)

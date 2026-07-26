@@ -51,6 +51,7 @@ class EcoFlowMQTTClient:
         wss_mode: bool = True,
         enhanced_mode: bool = False,
         subscribe_data: bool = True,
+        listen_only: bool = False,
         status_handler: Callable | None = None,
         auth_error_handler: Callable[[], None] | None = None,
         max_reconnect_attempts: int = DEFAULT_MAX_RECONNECT_ATTEMPTS,
@@ -79,6 +80,12 @@ class EcoFlowMQTTClient:
         self._wss_mode = wss_mode and bool(user_id)
         self._enhanced_mode = enhanced_mode
         self._subscribe_data = subscribe_data
+        # Hard guarantee that this connection never transmits. Enforced at
+        # publish() so it holds for every path, including the requests
+        # _on_connect fires on its own. Consumers that promise not to write
+        # to a device must set this - passing enhanced_mode=False only
+        # suppresses the energy stream switch, not get-all/latestQuotas.
+        self._listen_only = listen_only
         self._notified_connected = False
         self._last_counter_reset_time: float = 0
         self._counter_reset_interval = DEFAULT_COUNTER_RESET_INTERVAL
@@ -168,12 +175,16 @@ class EcoFlowMQTTClient:
         """
         rc_val = rc.value if hasattr(rc, "value") else rc
         if rc_val == 0:
-            # Subscribe to SET reply topics (all modes) for command acknowledgement tracking
-            set_reply_topic = f"/open/{self._cert_account}/{self._device_sn}/set_reply"
-            client.subscribe(set_reply_topic, qos=1)
-            if self._user_id:
-                app_set_reply = f"/app/{self._user_id}/{self._device_sn}/thing/property/set_reply"
-                client.subscribe(app_set_reply, qos=1)
+            # Subscribe to SET reply topics (all modes) for command acknowledgement tracking.
+            # A listen-only connection sends no commands, so there is nothing to
+            # acknowledge - and skipping these keeps the account identifiers out
+            # of the captured topic list.
+            if not self._listen_only:
+                set_reply_topic = f"/open/{self._cert_account}/{self._device_sn}/set_reply"
+                client.subscribe(set_reply_topic, qos=1)
+                if self._user_id:
+                    app_set_reply = f"/app/{self._user_id}/{self._device_sn}/thing/property/set_reply"
+                    client.subscribe(app_set_reply, qos=1)
 
             if self._subscribe_data:
                 # Subscribe to data topics (Enhanced Mode: MQTT is primary data source)
@@ -199,8 +210,12 @@ class EcoFlowMQTTClient:
             self.connected = True
             self.reconnect_attempts = 0
 
-            # WSS: send initial data requests on (re)connect
-            if self._wss_mode and self._user_id:
+            # WSS: send initial data requests on (re)connect.
+            # These are publishes to the device. They must not fire on a
+            # listen-only connection - publish() would refuse them anyway,
+            # but the energy stream switch below goes straight to the paho
+            # client and would bypass that check.
+            if self._wss_mode and self._user_id and not self._listen_only:
                 if self._enhanced_mode:
                     # Enhanced: EnergyStreamSwitch + get-all + latestQuotas
                     try:
@@ -445,6 +460,10 @@ class EcoFlowMQTTClient:
 
     def publish(self, topic: str, payload: str | bytes, qos: int = 1) -> bool:
         """Publish a message to the EcoFlow cloud broker."""
+        if self._listen_only:
+            # Single choke point: whatever path got here, nothing leaves.
+            _LOGGER.debug("Publish suppressed on listen-only connection (%s)", topic)
+            return False
         if not self.is_connected():
             return False
         try:

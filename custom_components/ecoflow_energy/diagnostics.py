@@ -138,6 +138,18 @@ async def _skipped_devices_diagnostics(
                 "truncated_at_bytes": RAW_FRAME_MAX_BYTES,
                 "frames": _format_event_log(probe.frames),
             }
+        else:
+            # Say so explicitly. A missing section would be indistinguishable
+            # from a version that has no capture at all, and the reader would
+            # have no way to tell that the login or the connection was what
+            # failed.
+            out["raw_capture"] = {
+                "status": "no probe running for this device",
+                "hint": (
+                    "requires EcoFlow account login; the app login or the "
+                    "listen-only connection did not succeed"
+                ),
+            }
 
         if not has_dev_creds:
             out["quota_note"] = (
