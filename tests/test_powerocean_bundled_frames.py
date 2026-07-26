@@ -1,6 +1,10 @@
 """Regression tests for bundled and incremental PowerOcean protobuf frames."""
 
+import re
+from pathlib import Path
+
 from ecoflow_energy.ecoflow.parsers.powerocean_proto import flatten_heartbeat
+from ecoflow_energy.ecoflow.proto.decoder import decode_header_message
 from ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
     JTS1EmsHeartbeat,
     JTS1EmsPVInvEnergyStreamReport,
@@ -13,6 +17,13 @@ from ecoflow_energy.ecoflow.proto.runtime import (
 from ecoflow_energy.ecoflow.proto_encoding import (
     encode_field_bytes,
     encode_field_varint,
+)
+
+_R374_GET_ALL_FIXTURE = (
+    Path(__file__).parent
+    / "fixtures"
+    / "powerocean"
+    / "r374_get_all_masked.bin"
 )
 
 
@@ -191,3 +202,31 @@ def test_heartbeat_phase_snapshot_zero_fills_and_keeps_extended_power() -> None:
     assert result["grid_phase_b_active_power_w"] == 0.0
     assert result["grid_phase_c_current_a"] == 0.0
     assert result["grid_status"] == "ok"
+
+def test_real_r374_get_all_fixture_decodes_all_supported_headers() -> None:
+    """The masked real-device bundle keeps all 19 independent headers."""
+    frame = _R374_GET_ALL_FIXTURE.read_bytes()
+
+    assert len(frame) == 2483
+    assert re.search(rb"R[0-9A-Z]{15}", frame) is None
+    assert re.search(rb"(?<![0-9])[0-9]{16,24}(?![0-9])", frame) is None
+
+    headers, payload = decode_header_message(frame)
+
+    assert payload is None
+    assert len(headers) == 19
+    command_pairs = {
+        (header.get("cmd_func"), header.get("cmd_id"))
+        for header in headers
+    }
+    assert {(96, 1), (96, 8), (96, 33), (96, 39)} <= command_pairs
+
+    decoded = decode_proto_runtime_headers(frame)
+    parse_paths = {result.parse_path for result in decoded}
+
+    assert {
+        "typed_runtime:ems_heartbeat",
+        "typed_runtime:ems_change",
+        "typed_runtime:energy_stream_report",
+    } <= parse_paths
+    assert len(decode_proto_runtime_frame(frame).headers) == 19

@@ -1,0 +1,130 @@
+{
+  "capture_version": 2,
+  "commands": [
+    {
+      "cmd_func": 53,
+      "cmd_id": 113,
+      "pdata_bytes": 156,
+      "seq_low_byte": 229
+    },
+    {
+      "cmd_func": 96,
+      "cmd_id": 22,
+      "seq_low_byte": 229
+    },
+    {
+      "cmd_func": 96,
+      "cmd_id": 9,
+      "pdata_bytes": 34,
+      "seq_low_byte": 229
+    },
+    {
+      "cmd_func": 96,
+      "cmd_id": 1,
+      "pdata_bytes": 444,
+      "seq_low_byte": 229
+    },
+    {
+      "cmd_func": 96,
+      "cmd_id": 3,
+      "pdata_bytes": 40,
+      "seq_low_byte": 229
+    },
+    {
+      "cmd_func": 96,
+      "cmd_id": 33,
+      "pdata_bytes": 30,
+      "seq_low_byte": 229
+    },
+    {
+      "cmd_func": 96,
+      "cmd_id": 8,
+      "pdata_bytes": 313,
+      "seq_low_byte": 229
+    },
+    {
+      "cmd_func": 96,
+      "cmd_id": 16,
+      "pdata_bytes": 840,
+      "seq_low_byte": 229
+    },
+    {
+      "cmd_func": 96,
+      "cmd_id": 17,
+      "pdata_bytes": 247,
+      "seq_low_byte": 229
+    },
+    {
+      "cmd_func": 96,
+      "cmd_id": 10,
+      "seq_low_byte": 229
+    },
+    {
+      "cmd_func": 96,
+      "cmd_id": 39,
+      "seq_low_byte": 229
+    },
+    {
+      "cmd_func": 96,
+      "cmd_id": 11,
+      "pdata_bytes": 8,
+      "seq_low_byte": 229
+    },
+    {
+      "cmd_func": 240,
+      "cmd_id": 2,
+      "seq_low_byte": 229
+    },
+    {
+      "cmd_func": 241,
+      "cmd_id": 1,
+      "pdata_bytes": 3,
+      "seq_low_byte": 229
+    },
+    {
+      "cmd_func": 241,
+      "cmd_id": 1,
+      "pdata_bytes": 3,
+      "seq_low_byte": 229
+    },
+    {
+      "cmd_func": 241,
+      "cmd_id": 1,
+      "pdata_bytes": 3,
+      "seq_low_byte": 229
+    },
+    {
+      "cmd_func": 241,
+      "cmd_id": 5,
+      "pdata_bytes": 54,
+      "seq_low_byte": 229
+    },
+    {
+      "cmd_func": 224,
+      "cmd_id": 1,
+      "seq_low_byte": 229
+    },
+    {
+      "cmd_func": 96,
+      "cmd_id": 14,
+      "seq_low_byte": 229
+    }
+  ],
+  "frame_bytes": 2483,
+  "header_count": 19,
+  "masked_identifier_count": 4,
+  "masked_identifier_lengths": [
+    16,
+    16,
+    16,
+    16
+  ],
+  "privacy": {
+    "account_id_saved_in_metadata": false,
+    "credentials_saved": false,
+    "full_serial_saved_in_metadata": false,
+    "known_identifiers_replaced_equal_length": true,
+    "topic_saved": false
+  },
+  "sha256": "9663864d26273144f8564f284a376ae26ba9dd76056ccf68db63fe85a85dcaf2"
+}
