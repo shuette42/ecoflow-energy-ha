@@ -223,7 +223,7 @@ class MqttIngestMixin:
             # Proto get_reply: binary protobuf
             if b"\x0a" in payload[:4]:
                 if self.device_type == DEVICE_TYPE_POWEROCEAN:
-                    return self._parse_powerocean_proto_frame(payload)
+                    return self._parse_powerocean_get_reply(payload)
                 if self.device_type == DEVICE_TYPE_STREAM:
                     return parse_stream_proto_message(payload)
                 return self._parse_proto_device_data(payload)
@@ -367,37 +367,64 @@ class MqttIngestMixin:
         existing single-header HJ31/HJ32 traffic.
         """
         merged: dict[str, Any] = {}
-        for result in decode_proto_runtime_headers(payload):
-            raw = {
-                key: value
-                for key, value in result.mapped.items()
-                if not key.startswith("_")
-            }
-
-            if result.mapped.get("_is_energy_stream"):
-                merged.update(remap_proto_keys(raw))
-                continue
-            if result.mapped.get("_is_pv_inv_energy_stream"):
-                merged.update(raw)
-                continue
-            if result.mapped.get("_is_ems_heartbeat"):
-                merged.update(flatten_heartbeat(raw))
-                continue
-            if result.mapped.get("_is_ems_param_change"):
-                merged.update(raw)
-                continue
-            if (
-                result.mapped.get("_is_ems_change")
-                or result.mapped.get("_is_bp_heartbeat")
-            ):
-                if raw:
-                    merged.update(
-                        remap_bp_keys(
-                            raw,
-                            self._bp_sn_to_index,
-                            self.device_sn,
-                        )
+        try:
+            results = decode_proto_runtime_headers(payload)
+            if not results:
+                # Compatibility fallback for existing single-frame callers and
+                # tests that provide a pre-decoded runtime result. The normal
+                # path above remains authoritative for real bundled frames.
+                fallback = decode_proto_runtime_frame(payload)
+                if any(
+                    fallback.mapped.get(flag)
+                    for flag in (
+                        "_is_energy_stream",
+                        "_is_pv_inv_energy_stream",
+                        "_is_ems_heartbeat",
+                        "_is_ems_param_change",
+                        "_is_ems_change",
+                        "_is_bp_heartbeat",
                     )
+                ):
+                    results = [fallback]
+
+            for result in results:
+                raw = {
+                    key: value
+                    for key, value in result.mapped.items()
+                    if not key.startswith("_")
+                }
+
+                if result.mapped.get("_is_energy_stream"):
+                    merged.update(remap_proto_keys(raw))
+                    continue
+                if result.mapped.get("_is_pv_inv_energy_stream"):
+                    merged.update(raw)
+                    continue
+                if result.mapped.get("_is_ems_heartbeat"):
+                    merged.update(flatten_heartbeat(raw))
+                    continue
+                if result.mapped.get("_is_ems_param_change"):
+                    merged.update(raw)
+                    continue
+                if (
+                    result.mapped.get("_is_ems_change")
+                    or result.mapped.get("_is_bp_heartbeat")
+                ):
+                    if raw:
+                        merged.update(
+                            remap_bp_keys(
+                                raw,
+                                self._bp_sn_to_index,
+                                self.device_sn,
+                            )
+                        )
+        except Exception:
+            _LOGGER.debug(
+                "PowerOcean protobuf decode error for %s",
+                self.device_sn,
+                exc_info=True,
+            )
+            return None
 
         return merged or None
 
