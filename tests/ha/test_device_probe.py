@@ -1,7 +1,9 @@
 """Tests for the listen-only capture of devices that have no parser yet."""
 
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from homeassistant.core import HomeAssistant
 
 from ecoflow_energy.const import RAW_FRAME_LOG_MAX
@@ -86,6 +88,56 @@ class TestListenOnly:
         client._on_connect(paho, None, {}, 0)
 
         assert paho.publish.called
+
+    async def test_connection_failures_stay_out_of_the_log(
+        self, hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A device with no entities must not produce warnings.
+
+        The probe reuses the shared client, which reports connection
+        trouble at WARNING/ERROR. For an unsupported device none of that is
+        actionable - there is nothing the user could fix and nothing is
+        broken - so it would be pure noise in their log.
+        """
+        client = EcoFlowMQTTClient(
+            certificate_account="acc",
+            certificate_password="pw",
+            device_sn=SKIPPED_SN,
+            message_handler=lambda topic, payload: None,
+            user_id="user123",
+            wss_mode=True,
+            listen_only=True,
+        )
+        paho = MagicMock()
+        client.client = paho
+
+        with caplog.at_level(logging.DEBUG):
+            client._on_connect(paho, None, {}, 5)          # bad credentials
+            client.reconnect_attempts = 3
+            client._on_disconnect(paho, None, None, 7, None)  # sustained failure
+
+        assert [r for r in caplog.records if r.levelno >= logging.WARNING] == []
+        assert any(r.levelno == logging.DEBUG for r in caplog.records)
+
+    async def test_a_normal_connection_still_warns(
+        self, hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """The quiet path must not silence real devices."""
+        client = EcoFlowMQTTClient(
+            certificate_account="acc",
+            certificate_password="pw",
+            device_sn="HJ31TEST00000001",
+            message_handler=lambda topic, payload: None,
+            user_id="user123",
+            wss_mode=True,
+        )
+        paho = MagicMock()
+        client.client = paho
+
+        with caplog.at_level(logging.DEBUG):
+            client._on_connect(paho, None, {}, 5)
+
+        assert [r for r in caplog.records if r.levelno >= logging.WARNING]
 
     async def test_proto_frame_is_captured_with_commands(
         self, hass: HomeAssistant

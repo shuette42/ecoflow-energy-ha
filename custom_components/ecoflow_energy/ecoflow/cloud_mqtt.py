@@ -14,7 +14,7 @@ import logging
 import ssl
 import threading
 import time
-from typing import Callable
+from typing import Any, Callable
 
 import paho.mqtt.client as mqtt
 
@@ -93,6 +93,21 @@ class EcoFlowMQTTClient:
         # Reentrant: force_reconnect holds it while calling create_client.
         self._client_lock = threading.RLock()
 
+    def _log_issue(self, level: str, msg: str, *args: Any) -> None:
+        """Report a connection problem at the level it deserves.
+
+        A listen-only link is a diagnostics aid for a device the
+        integration does not support. Whether it connects changes nothing
+        for the user and there is nothing they could do about it, so its
+        failures belong at debug - a warning would be noise about a device
+        that has no entities in the first place. Everything else keeps its
+        original level.
+        """
+        if self._listen_only:
+            _LOGGER.debug(msg, *args)
+        else:
+            getattr(_LOGGER, level)(msg, *args)
+
     @property
     def cert_account(self) -> str:
         """Return the certificate account used for MQTT authentication."""
@@ -132,7 +147,7 @@ class EcoFlowMQTTClient:
         """Create the Paho client. Caller must hold ``_client_lock``."""
         try:
             if not self._cert_account or not self._cert_password:
-                _LOGGER.error("MQTT: certificate_account or certificate_password missing")
+                self._log_issue("error", "MQTT: certificate_account or certificate_password missing")
                 return False
 
             if self._wss_mode:
@@ -162,7 +177,7 @@ class EcoFlowMQTTClient:
             return True
 
         except Exception as exc:
-            _LOGGER.error("MQTT: client creation failed: %s", exc)
+            self._log_issue("error", "MQTT: client creation failed: %s", exc)
             return False
 
     def _on_connect(self, client, userdata, flags, rc, properties=None):
@@ -263,9 +278,9 @@ class EcoFlowMQTTClient:
             reason = rc_reasons.get(rc_val, "unknown error")
             auth_failure = rc_val in (4, 5, 134, 135)
             if auth_failure:
-                _LOGGER.warning("MQTT connect failed: rc=%s (%s) — scheduling credential refresh", rc_val, reason)
+                self._log_issue("warning", "MQTT connect failed: rc=%s (%s) — scheduling credential refresh", rc_val, reason)
             else:
-                _LOGGER.error("MQTT connect failed: rc=%s (%s)", rc_val, reason)
+                self._log_issue("error", "MQTT connect failed: rc=%s (%s)", rc_val, reason)
             self.connected = False
             if auth_failure and self._auth_error_handler:
                 self._auth_error_handler()
@@ -288,7 +303,7 @@ class EcoFlowMQTTClient:
         if was_connected or rc_val != 0:
             # First disconnect is normal (broker-side rotation) - only warn
             # if previous reconnect attempts are already pending (sustained failure)
-            if rc_val != 0 and self.reconnect_attempts > 0:
+            if rc_val != 0 and self.reconnect_attempts > 0 and not self._listen_only:
                 _log = _LOGGER.warning
             else:
                 _log = _LOGGER.debug
@@ -356,7 +371,7 @@ class EcoFlowMQTTClient:
         try:
             self.message_handler(msg.topic, msg.payload)
         except Exception as exc:
-            _LOGGER.warning("MQTT message handler error for %s: %s", msg.topic, exc)
+            self._log_issue("warning", "MQTT message handler error for %s: %s", msg.topic, exc)
 
     def connect(self) -> bool:
         """Establish the MQTT connection."""
@@ -372,7 +387,7 @@ class EcoFlowMQTTClient:
                 self.client.connect(self._mqtt_host, port, keepalive)
                 return True
             except Exception as exc:
-                _LOGGER.warning("MQTT connection error: %s", exc)
+                self._log_issue("warning", "MQTT connection error: %s", exc)
                 return False
 
     def try_reconnect(self) -> bool:
