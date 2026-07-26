@@ -164,7 +164,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
                 "Skipping unsupported EcoFlow device %s... (%s) - no parser "
                 "available for this model yet. Please open an issue at "
                 "https://github.com/shuette42/ecoflow-energy-ha/issues so "
-                "support can be added",
+                "support can be added. To help with that, switch on the raw "
+                "data capture in the integration options and attach a "
+                "diagnostics download to the issue - it records what the "
+                "device sends and turns itself off again after 24 hours",
                 sn[:4],
                 product_name or "unknown product",
             )

@@ -108,6 +108,20 @@ class EcoFlowMQTTClient:
         else:
             getattr(_LOGGER, level)(msg, *args)
 
+    def _log_retryable(self, msg: str, *args: Any) -> None:
+        """Report a failure that the watchdog is going to retry anyway.
+
+        A single failed reconnect is not a broken integration - a transient
+        DNS hiccup produces one, and the next attempt succeeds. Logging it at
+        ERROR puts a red line in the user's log for something that fixed
+        itself. It only becomes worth reporting once attempts are already
+        piling up, which is the same escalation the disconnect path uses.
+        """
+        if self._listen_only or self.reconnect_attempts == 0:
+            _LOGGER.debug(msg, *args)
+        else:
+            _LOGGER.warning(msg, *args)
+
     @property
     def cert_account(self) -> str:
         """Return the certificate account used for MQTT authentication."""
@@ -435,7 +449,9 @@ class EcoFlowMQTTClient:
 
             # Recreate the client (generates new ClientID for WSS)
             if not self._create_client_unlocked():
-                _LOGGER.error("Force-reconnect: client recreation failed")
+                self._log_retryable(
+                    "Force-reconnect: client recreation failed"
+                )
                 return False
 
             try:
@@ -446,7 +462,7 @@ class EcoFlowMQTTClient:
                 _LOGGER.debug("Force-reconnect: success at %s:%s (%s)", self._mqtt_host, port, "WSS" if self._wss_mode else "TCP")
                 return True
             except Exception as exc:
-                _LOGGER.error("Force-reconnect failed: %s", exc)
+                self._log_retryable("Force-reconnect failed: %s", exc)
                 return False
         finally:
             self._client_lock.release()

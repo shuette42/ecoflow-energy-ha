@@ -1,5 +1,6 @@
 """Tests for EcoFlowMQTTClient — subscribe_data, client creation, reconnect, disconnect."""
 
+import logging
 import time
 from unittest.mock import MagicMock, patch
 
@@ -270,6 +271,44 @@ class TestForceReconnect:
         # create_client will fail (empty credentials)
         result = client.force_reconnect()
         assert result is False
+
+    @patch("ecoflow_energy.ecoflow.cloud_mqtt.mqtt.Client")
+    def test_first_failure_is_not_an_error(self, mock_mqtt_cls, caplog):
+        """A transient DNS hiccup must not put a red line in the user's log.
+
+        The watchdog retries, and the next attempt usually works. ERROR here
+        reports a broken integration for something that fixed itself.
+        """
+        mock_paho = MagicMock()
+        mock_paho.connect.side_effect = OSError("[Errno -3] Try again")
+        mock_mqtt_cls.return_value = mock_paho
+
+        client = _make_client(wss_mode=False)
+        client.client = MagicMock()
+        client.reconnect_attempts = 0
+
+        with caplog.at_level(logging.DEBUG):
+            assert client.force_reconnect() is False
+
+        assert [r for r in caplog.records if r.levelno >= logging.WARNING] == []
+        assert any("Force-reconnect failed" in r.message for r in caplog.records)
+
+    @patch("ecoflow_energy.ecoflow.cloud_mqtt.mqtt.Client")
+    def test_sustained_failure_does_warn(self, mock_mqtt_cls, caplog):
+        """Once attempts pile up it is worth telling the user."""
+        mock_paho = MagicMock()
+        mock_paho.connect.side_effect = OSError("[Errno -3] Try again")
+        mock_mqtt_cls.return_value = mock_paho
+
+        client = _make_client(wss_mode=False)
+        client.client = MagicMock()
+        client.reconnect_attempts = 3
+
+        with caplog.at_level(logging.DEBUG):
+            assert client.force_reconnect() is False
+
+        assert [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert [r for r in caplog.records if r.levelno >= logging.ERROR] == []
 
 
 class TestForceReconnectLock:
