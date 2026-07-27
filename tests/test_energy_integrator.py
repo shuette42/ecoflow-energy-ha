@@ -216,3 +216,115 @@ class TestPersistence:
         # Timestamp preserved as-is (100.0), not reset to now (200.0)
         _, ts, _ = integrator._state["solar"]
         assert ts == pytest.approx(100.0)
+
+
+class TestPlausibilityBounds:
+    """A single implausible reading must not freeze a counter forever (#88).
+
+    Totals are monotonic, so a value that is wrong by orders of magnitude
+    becomes a floor no correct reading can ever pass again. The bounds catch
+    that class of fault at every entry point.
+    """
+
+    # The value a PowerOcean Plus actually reported against a real 2,638.98 kWh.
+    POISONED_KWH = 54_501_280.65
+
+    def test_set_total_rejects_implausible_value(self, integrator):
+        integrator.set_total("solar", 2_638.98)
+        integrator.set_total("solar", self.POISONED_KWH)
+        assert integrator.get_total("solar") == pytest.approx(2_638.98)
+
+    def test_set_total_rejects_infinity_and_nan(self, integrator):
+        integrator.set_total("solar", 100.0)
+        integrator.set_total("solar", float("inf"))
+        integrator.set_total("solar", float("nan"))
+        assert integrator.get_total("solar") == pytest.approx(100.0)
+
+    def test_set_total_rejects_negative(self, integrator):
+        integrator.set_total("solar", 100.0)
+        integrator.set_total("solar", -5.0)
+        assert integrator.get_total("solar") == pytest.approx(100.0)
+
+    def test_set_total_accepts_a_genuinely_large_lifetime_counter(self, integrator):
+        """500 MWh is a plausible decade of production and must pass."""
+        integrator.set_total("solar", 500_000.0)
+        assert integrator.get_total("solar") == pytest.approx(500_000.0)
+
+    def test_integrate_rejects_implausible_power(self, integrator):
+        """A 1e28 W reading was observed while the Plus payload was misdecoded."""
+        integrator._state["solar"] = (12.5, 1000.0, 500.0)
+        with patch(
+            "ecoflow_energy.ecoflow.energy_integrator.time.monotonic",
+            return_value=1030.0,
+        ):
+            result = integrator.integrate("solar", 1e28)
+        assert result == pytest.approx(12.5)
+        assert integrator.get_total("solar") == pytest.approx(12.5)
+
+    def test_integrate_rejects_infinite_power(self, integrator):
+        integrator._state["solar"] = (12.5, 1000.0, 500.0)
+        with patch(
+            "ecoflow_energy.ecoflow.energy_integrator.time.monotonic",
+            return_value=1030.0,
+        ):
+            result = integrator.integrate("solar", float("inf"))
+        assert result == pytest.approx(12.5)
+
+    def test_integrate_still_accepts_a_normal_reading(self, integrator):
+        """The guard must not disturb ordinary integration."""
+        integrator._state["solar"] = (0.0, 1000.0, 1000.0)
+        with patch(
+            "ecoflow_energy.ecoflow.energy_integrator.time.monotonic",
+            return_value=1030.0,
+        ):
+            result = integrator.integrate("solar", 1000.0)
+        assert result == pytest.approx(0.00833, abs=0.001)
+
+    def test_load_state_discards_a_poisoned_total(self, state_file):
+        from pathlib import Path
+
+        Path(state_file).write_text(
+            json.dumps({"solar": [self.POISONED_KWH, 100.0, 0.0], "home": [42.0, 100.0, 0.0]})
+        )
+        with patch(
+            "ecoflow_energy.ecoflow.energy_integrator.time.monotonic",
+            return_value=200.0,
+        ):
+            integrator = EnergyIntegrator(state_file)
+            integrator.load_state()
+
+        assert integrator.get_total("solar") is None
+        assert integrator.get_total("home") == pytest.approx(42.0)
+
+    def test_poisoned_installation_recovers_after_restart(self, state_file):
+        """The end-to-end case from #88, without hand-editing .storage.
+
+        An installation carrying the bad total restarts, the value is dropped,
+        and the next correct reading is accepted instead of being discarded
+        for being lower.
+        """
+        from pathlib import Path
+
+        Path(state_file).write_text(
+            json.dumps({"solar_energy_kwh": [self.POISONED_KWH, 100.0, 0.0]})
+        )
+        with patch(
+            "ecoflow_energy.ecoflow.energy_integrator.time.monotonic",
+            return_value=200.0,
+        ):
+            integrator = EnergyIntegrator(state_file)
+            integrator.load_state()
+            integrator.set_total("solar_energy_kwh", 2_638.98)
+
+        assert integrator.get_total("solar_energy_kwh") == pytest.approx(2_638.98)
+
+    def test_repeated_rejection_warns_once(self, integrator, caplog):
+        """A device stuck on a bad reading must not fill the log."""
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            for _ in range(5):
+                integrator.set_total("solar", self.POISONED_KWH)
+
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert len(warnings) == 1

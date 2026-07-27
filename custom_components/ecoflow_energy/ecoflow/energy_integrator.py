@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import time
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,21 @@ _LOGGER = logging.getLogger(__name__)
 MAX_GAP_S = 420.0  # Skip integration for gaps >7 minutes
 MIN_DELTA_S = 0.1  # Ignore updates faster than 100ms
 SAVE_INTERVAL_S = 60.0  # Save state to disk at most every 60s
+
+# Physical plausibility bounds.
+#
+# A decoding fault can produce readings many orders of magnitude beyond
+# anything a real device delivers. Because totals here are monotonic, a single
+# such value becomes a permanent floor: every correct reading afterwards is
+# lower and gets discarded, so the counter can never recover on its own. That
+# is what happened on a PowerOcean Plus reporting 5.45e7 kWh against an actual
+# 2.6e3 kWh, months after the decoding fault itself had been fixed.
+#
+# The bounds are deliberately far above any real installation rather than
+# tuned per device. They exist to catch the wrong-by-orders-of-magnitude class
+# of fault, not to second-guess a plausible reading.
+MAX_POWER_W = 1_000_000.0  # 1 MW; the largest EcoFlow unit is rated 30 kW
+MAX_TOTAL_KWH = 10_000_000.0  # 10 GWh; 30 kW running flat out for 38 years
 
 
 class EnergyIntegrator:
@@ -38,6 +54,21 @@ class EnergyIntegrator:
         self._dirty: bool = False
         self._last_save_ts: float = 0.0
         self._loaded: bool = False
+        # Metrics already reported as implausible, so a device stuck on a bad
+        # reading warns once instead of on every push.
+        self._rejected: set[str] = set()
+
+    def _reject(self, metric: str, what: str, value: float) -> None:
+        """Report an implausible reading once per metric, then stay quiet."""
+        if metric in self._rejected:
+            _LOGGER.debug("Ignoring implausible %s for %s: %r", what, metric, value)
+            return
+        self._rejected.add(metric)
+        _LOGGER.warning(
+            "Ignoring implausible %s for %s: %r. The energy total is kept at "
+            "its last good value; further occurrences are logged at debug level",
+            what, metric, value,
+        )
 
     # ------------------------------------------------------------------
     # Public API
@@ -66,6 +97,12 @@ class EnergyIntegrator:
         """
         if not self._loaded:
             self.load_state()
+
+        if not math.isfinite(power_w) or abs(power_w) > MAX_POWER_W:
+            self._reject(metric, "power reading", power_w)
+            existing = self._state.get(metric)
+            return existing[0] if existing else None
+
         now = time.monotonic()
 
         if metric in self._state:
@@ -101,6 +138,14 @@ class EnergyIntegrator:
         delta_kwh = abs(avg_power_w * delta_t_s) / 3_600_000.0
         new_total_kwh = total_kwh + delta_kwh
 
+        # A total beyond the ceiling can only come from bad input, and letting
+        # it persist would freeze the counter for good.
+        if new_total_kwh > MAX_TOTAL_KWH:
+            self._reject(metric, "energy total", new_total_kwh)
+            self._state[metric] = (total_kwh, now, power_w)
+            self._dirty = True
+            return total_kwh
+
         self._state[metric] = (new_total_kwh, now, power_w)
         self._dirty = True
         return new_total_kwh
@@ -109,6 +154,18 @@ class EnergyIntegrator:
         """Set total directly from API (monotonic — only if higher)."""
         if not self._loaded:
             self.load_state()
+
+        # Guard before the monotonic comparison, not after: an implausible
+        # value is always higher than the real one, so it would win every time
+        # and then block every correct reading that follows.
+        if (
+            not math.isfinite(total_kwh)
+            or total_kwh < 0
+            or total_kwh > MAX_TOTAL_KWH
+        ):
+            self._reject(metric, "energy total", total_kwh)
+            return
+
         if metric in self._state:
             current = self._state[metric][0]
             if total_kwh < current:
@@ -158,6 +215,20 @@ class EnergyIntegrator:
                 now = time.monotonic()
                 for metric, values in data.items():
                     if isinstance(values, list) and len(values) >= 3:
+                        total = float(values[0])
+                        # An installation that stored an implausible total
+                        # before this guard existed would otherwise stay stuck
+                        # on it forever. Dropping the metric restarts the
+                        # counter, which Home Assistant reads as a counter
+                        # reset - the honest outcome, since the stored value
+                        # was never real.
+                        if not math.isfinite(total) or total > MAX_TOTAL_KWH:
+                            _LOGGER.warning(
+                                "Discarding implausible stored energy total "
+                                "for %s: %r. The counter restarts from zero",
+                                metric, total,
+                            )
+                            continue
                         last_ts = float(values[1])
                         # Migrate epoch timestamps from pre-v1.5.1 state files
                         if last_ts > 1e9:
@@ -170,7 +241,7 @@ class EnergyIntegrator:
                             )
                             last_ts = now
                         self._state[metric] = (
-                            float(values[0]),
+                            total,
                             last_ts,
                             float(values[2]),
                         )
