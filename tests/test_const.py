@@ -201,21 +201,33 @@ class TestPowerOceanSensors:
         ]:
             assert expected in keys, f"Missing Energy Dashboard sensor: {expected}"
 
-    def test_mppt_sensor_definitions_cover_parser_outputs(self):
-        """Every parser-supported MPPT input has a matching HA entity."""
+    def test_mppt_sensor_definitions(self):
+        """Four MPPT strings are defined; only the first two are enabled.
+
+        Strings 3 and 4 exist on PowerOcean Plus only. On every other
+        PowerOcean the parser never emits those keys, so an enabled entity
+        would sit at "unknown" for the lifetime of the installation.
+        """
         sensors = {sensor.key: sensor for sensor in POWEROCEAN_SENSORS}
         for index in range(1, 5):
             for suffix in ("power_w", "voltage_v", "current_a"):
                 assert f"mppt_pv{index}_{suffix}" in sensors
 
         for suffix in ("power_w", "voltage_v", "current_a"):
-            assert sensors[f"mppt_pv3_{suffix}"].disabled_by_default is False
+            assert sensors[f"mppt_pv1_{suffix}"].disabled_by_default is False
+            assert sensors[f"mppt_pv2_{suffix}"].disabled_by_default is False
+            assert sensors[f"mppt_pv3_{suffix}"].disabled_by_default is True
             assert sensors[f"mppt_pv4_{suffix}"].disabled_by_default is True
 
     def test_existing_sensors_count(self):
-        """Original 69 sensors still present (non-pack, non-EMS-extended)."""
+        """Original 63 sensors still present (non-pack, non-EMS-extended)."""
         keys = _extract_sensor_keys("POWEROCEAN_SENSORS")
         non_pack = [k for k in keys if not k.startswith("pack")]
+        mppt_plus = {
+            f"mppt_pv{index}_{suffix}"
+            for index in (3, 4)
+            for suffix in ("power_w", "voltage_v", "current_a")
+        }
         ems_extended = {
             "ems_charge_upper_limit_pct", "ems_discharge_lower_limit_pct",
             "ems_keep_soc_pct", "ems_backup_ratio_pct",
@@ -227,8 +239,18 @@ class TestPowerOceanSensors:
             "pcs_max_input_power_w", "bp_max_charge_power_w",
             "bp_max_discharge_power_w",
         }
-        original = [k for k in non_pack if k not in ems_extended]
-        assert len(original) == 69, f"Expected 69 original sensors, got {len(original)}"
+        original = [
+            k for k in non_pack if k not in ems_extended and k not in mppt_plus
+        ]
+        assert len(original) == 63, f"Expected 63 original sensors, got {len(original)}"
+
+    def test_mppt_plus_sensor_count(self):
+        """6 PowerOcean Plus MPPT sensors (strings 3 and 4)."""
+        keys = _extract_sensor_keys("POWEROCEAN_SENSORS")
+        mppt_plus = [
+            k for k in keys if k.startswith(("mppt_pv3_", "mppt_pv4_"))
+        ]
+        assert len(mppt_plus) == 6, f"Expected 6 Plus MPPT sensors, got {len(mppt_plus)}"
 
     def test_pack_sensors_count(self):
         """120 pack sensors (5 packs x 24 sensors)."""
@@ -261,7 +283,7 @@ class TestPowerOceanSensors:
         assert len(found) == 19, f"Expected 19 EMS extended sensors, got {len(found)}"
 
     def test_total_sensor_count(self):
-        """Total PowerOcean sensors = 69 + 120 + 19 = 208."""
+        """Total PowerOcean sensors = 63 + 6 + 120 + 19 = 208."""
         keys = _extract_sensor_keys("POWEROCEAN_SENSORS")
         assert len(keys) == 208, f"Expected 208 total sensors, got {len(keys)}"
 

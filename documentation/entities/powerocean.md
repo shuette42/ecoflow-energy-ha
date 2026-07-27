@@ -85,12 +85,14 @@ These sensors are pre-configured for the HA Energy Dashboard (`total_increasing`
 | MPPT String 2 Power | W | diagnostic |
 | MPPT String 2 Voltage | V | diagnostic |
 | MPPT String 2 Current | A | diagnostic |
-| MPPT String 3 Power | W | diagnostic |
-| MPPT String 3 Voltage | V | diagnostic |
-| MPPT String 3 Current | A | diagnostic |
+| MPPT String 3 Power | W | diagnostic (disabled) |
+| MPPT String 3 Voltage | V | diagnostic (disabled) |
+| MPPT String 3 Current | A | diagnostic (disabled) |
 | MPPT String 4 Power | W | diagnostic (disabled) |
 | MPPT String 4 Voltage | V | diagnostic (disabled) |
 | MPPT String 4 Current | A | diagnostic (disabled) |
+
+> **MPPT String 3 and 4** only carry data on PowerOcean Plus units (`R371`, `R374`, `HJ3C`), which have more than two PV inputs. They are disabled by default because ordinary PowerOcean units report two strings and would leave these entities empty.
 | PV Inverter Power | W | diagnostic (disabled) |
 
 ## Sensors - EMS / System (diagnostic)

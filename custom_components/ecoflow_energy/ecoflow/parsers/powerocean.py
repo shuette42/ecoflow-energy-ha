@@ -148,12 +148,17 @@ def parse_powerocean_http_quota(quota_data: dict) -> dict[str, Any]:
     # --- Per-pack battery data (all packs → pack{n}_* keys) ---
     result.update(_extract_all_battery_packs(quota_data))
 
-    # --- MPPT per-string (mpptHeartBeat[0].mpptPv[0|1]) ---
+    # --- MPPT per-string (mpptHeartBeat[0].mpptPv[0..3]) ---
+    # The ceiling of four matches the proto parser. Ordinary PowerOcean units
+    # report two entries and are unaffected; Plus units report more but are
+    # currently Enhanced-only, so this path does not see them yet. Keeping both
+    # parsers at the same ceiling means the entity set does not depend on which
+    # transport delivered the data.
     mppt_hb = quota_data.get("mpptHeartBeat")
     if isinstance(mppt_hb, list) and mppt_hb:
         pvs = mppt_hb[0].get("mpptPv") if isinstance(mppt_hb[0], dict) else None
         if isinstance(pvs, list):
-            for i, pv in enumerate(pvs[:2], start=1):
+            for i, pv in enumerate(pvs[:4], start=1):
                 if isinstance(pv, dict):
                     for field, suffix in [("pwr", "power_w"), ("vol", "voltage_v"), ("amp", "current_a")]:
                         if field in pv:

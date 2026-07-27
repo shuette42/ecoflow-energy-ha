@@ -300,6 +300,58 @@ class TestMPPTStrings:
         assert result["mppt_pv1_power_w"] == 2000.0
         assert "mppt_pv2_power_w" not in result
 
+    def test_four_pv_strings_on_plus_hardware(self):
+        data = {
+            "mpptHeartBeat": [
+                {
+                    "mpptPv": [
+                        {"pwr": 1500, "vol": 38.5, "amp": 8.2},
+                        {"pwr": 1200, "vol": 36.0, "amp": 7.1},
+                        {"pwr": 900, "vol": 34.0, "amp": 6.0},
+                        {"pwr": 600, "vol": 32.0, "amp": 5.0},
+                    ]
+                }
+            ]
+        }
+        result = parse_powerocean_http_quota(data)
+        assert result["mppt_pv3_power_w"] == 900.0
+        assert result["mppt_pv4_power_w"] == 600.0
+        assert result["mppt_pv4_current_a"] == 5.0
+
+    def test_mppt_ceiling_matches_entity_definitions(self):
+        """Both parsers stop at string 4, and every key they emit has an entity.
+
+        The ceiling lives in three places (HTTP parser, proto parser,
+        POWEROCEAN_SENSORS). Feeding five strings through both parsers pins
+        them against each other, so raising one without the others fails here
+        instead of silently dropping a string in production.
+        """
+        from ecoflow_energy.const import POWEROCEAN_SENSORS
+        from ecoflow_energy.ecoflow.parsers.powerocean_proto import (
+            flatten_heartbeat,
+        )
+
+        five_strings = [
+            {"pwr": 100.0 * n, "vol": 30.0 + n, "amp": float(n)}
+            for n in range(1, 6)
+        ]
+        http_result = parse_powerocean_http_quota(
+            {"mpptHeartBeat": [{"mpptPv": five_strings}]}
+        )
+        proto_result = flatten_heartbeat(
+            {"mppt_heart_beat": [{"mppt_pv": five_strings}]}
+        )
+
+        defined = {sensor.key for sensor in POWEROCEAN_SENSORS}
+        for result in (http_result, proto_result):
+            emitted = {k for k in result if k.startswith("mppt_pv")}
+            assert emitted == {
+                f"mppt_pv{index}_{suffix}"
+                for index in range(1, 5)
+                for suffix in ("power_w", "voltage_v", "current_a")
+            }
+            assert emitted <= defined
+
     def test_mppt_empty_heartbeat(self):
         result = parse_powerocean_http_quota({"mpptHeartBeat": []})
         assert "mppt_pv1_power_w" not in result
@@ -312,8 +364,8 @@ class TestMPPTStrings:
         result = parse_powerocean_http_quota({"mpptHeartBeat": "invalid"})
         assert "mppt_pv1_power_w" not in result
 
-    def test_mppt_max_two_strings(self):
-        """Only first 2 PV strings are extracted."""
+    def test_mppt_max_four_strings(self):
+        """Only the first 4 PV strings are extracted."""
         data = {
             "mpptHeartBeat": [
                 {
@@ -321,6 +373,8 @@ class TestMPPTStrings:
                         {"pwr": 100},
                         {"pwr": 200},
                         {"pwr": 300},
+                        {"pwr": 400},
+                        {"pwr": 500},
                     ]
                 }
             ]
@@ -328,7 +382,9 @@ class TestMPPTStrings:
         result = parse_powerocean_http_quota(data)
         assert result["mppt_pv1_power_w"] == 100.0
         assert result["mppt_pv2_power_w"] == 200.0
-        assert "mppt_pv3_power_w" not in result
+        assert result["mppt_pv3_power_w"] == 300.0
+        assert result["mppt_pv4_power_w"] == 400.0
+        assert "mppt_pv5_power_w" not in result
 
     def test_mppt_non_numeric_skipped(self):
         data = {
