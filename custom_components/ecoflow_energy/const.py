@@ -245,6 +245,14 @@ POWEROCEAN_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("mppt_pv2_power_w", "MPPT String 2 Power", "W", "power", "measurement", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=0),
     EcoFlowSensorDef("mppt_pv2_voltage_v", "MPPT String 2 Voltage", "V", "voltage", "measurement", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=1),
     EcoFlowSensorDef("mppt_pv2_current_a", "MPPT String 2 Current", "A", "current", "measurement", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=2),
+    # PowerOcean Plus exposes additional live PV inputs. MPPT 3 is confirmed
+    # on R374 hardware; MPPT 4 matches the parser ceiling but stays optional.
+    EcoFlowSensorDef("mppt_pv3_power_w", "MPPT String 3 Power", "W", "power", "measurement", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=0),
+    EcoFlowSensorDef("mppt_pv3_voltage_v", "MPPT String 3 Voltage", "V", "voltage", "measurement", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=1),
+    EcoFlowSensorDef("mppt_pv3_current_a", "MPPT String 3 Current", "A", "current", "measurement", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=2),
+    EcoFlowSensorDef("mppt_pv4_power_w", "MPPT String 4 Power", "W", "power", "measurement", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("mppt_pv4_voltage_v", "MPPT String 4 Voltage", "V", "voltage", "measurement", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
+    EcoFlowSensorDef("mppt_pv4_current_a", "MPPT String 4 Current", "A", "current", "measurement", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=2, disabled_by_default=True),
     EcoFlowSensorDef("grid_phase_a_voltage_v", "Grid Phase A Voltage", "V", "voltage", "measurement", "mdi:transmission-tower", "diagnostic", suggested_display_precision=1),
     EcoFlowSensorDef("grid_phase_b_voltage_v", "Grid Phase B Voltage", "V", "voltage", "measurement", "mdi:transmission-tower", "diagnostic", suggested_display_precision=1),
     EcoFlowSensorDef("grid_phase_c_voltage_v", "Grid Phase C Voltage", "V", "voltage", "measurement", "mdi:transmission-tower", "diagnostic", suggested_display_precision=1),

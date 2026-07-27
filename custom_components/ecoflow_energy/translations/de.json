@@ -307,6 +307,24 @@
       "mppt_pv2_current_a": {
         "name": "PV-Strang 2 Strom"
       },
+      "mppt_pv3_power_w": {
+        "name": "PV-Strang 3 Leistung"
+      },
+      "mppt_pv3_voltage_v": {
+        "name": "PV-Strang 3 Spannung"
+      },
+      "mppt_pv3_current_a": {
+        "name": "PV-Strang 3 Strom"
+      },
+      "mppt_pv4_power_w": {
+        "name": "PV-Strang 4 Leistung"
+      },
+      "mppt_pv4_voltage_v": {
+        "name": "PV-Strang 4 Spannung"
+      },
+      "mppt_pv4_current_a": {
+        "name": "PV-Strang 4 Strom"
+      },
       "grid_phase_a_voltage_v": {
         "name": "Netz Phase A Spannung"
       },

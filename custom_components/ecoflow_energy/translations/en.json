@@ -307,6 +307,24 @@
       "mppt_pv2_current_a": {
         "name": "PV String 2 Current"
       },
+      "mppt_pv3_power_w": {
+        "name": "PV String 3 Power"
+      },
+      "mppt_pv3_voltage_v": {
+        "name": "PV String 3 Voltage"
+      },
+      "mppt_pv3_current_a": {
+        "name": "PV String 3 Current"
+      },
+      "mppt_pv4_power_w": {
+        "name": "PV String 4 Power"
+      },
+      "mppt_pv4_voltage_v": {
+        "name": "PV String 4 Voltage"
+      },
+      "mppt_pv4_current_a": {
+        "name": "PV String 4 Current"
+      },
       "grid_phase_a_voltage_v": {
         "name": "Grid Phase A Voltage"
       },

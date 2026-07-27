@@ -4,7 +4,7 @@ Full list of all entities created for PowerOcean devices (HJ31, HJ32, J32D, and 
 
 > **Note:** PowerOcean variants with serial prefix `J32D` or `J32E` (European variants) are currently not exposed through the EcoFlow Developer API and therefore require Enhanced Mode. In Standard Mode these devices report error 1006 and all entities stay unavailable. Single-phase variants (`J32E`) report only the phases that are physically present; the remaining phase entities stay empty.
 
-**Totals:** 202 sensors, 2 numbers, 1 select
+**Totals:** 208 sensors, 2 numbers, 1 select
 
 > Entities marked with *disabled* are available but hidden by default. Enable them in **Settings > Devices > EcoFlow PowerOcean > Entities** (click the filter icon and show disabled entities).
 
@@ -85,6 +85,12 @@ These sensors are pre-configured for the HA Energy Dashboard (`total_increasing`
 | MPPT String 2 Power | W | diagnostic |
 | MPPT String 2 Voltage | V | diagnostic |
 | MPPT String 2 Current | A | diagnostic |
+| MPPT String 3 Power | W | diagnostic |
+| MPPT String 3 Voltage | V | diagnostic |
+| MPPT String 3 Current | A | diagnostic |
+| MPPT String 4 Power | W | diagnostic (disabled) |
+| MPPT String 4 Voltage | V | diagnostic (disabled) |
+| MPPT String 4 Current | A | diagnostic (disabled) |
 | PV Inverter Power | W | diagnostic (disabled) |
 
 ## Sensors - EMS / System (diagnostic)
