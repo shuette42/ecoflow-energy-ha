@@ -93,7 +93,10 @@ class EnergyIntegrator:
             power_w: Current power in Watts (always ≥ 0 for directional sensors).
 
         Returns:
-            Updated energy total in kWh, or None if skipped.
+            Updated energy total in kWh, or None when this call produced no
+            total: the very first reading for a metric (which only seeds the
+            state) and any rejected reading. Callers must treat None as "leave
+            the sensor alone", never as zero.
         """
         if not self._loaded:
             self.load_state()
@@ -108,10 +111,18 @@ class EnergyIntegrator:
         if metric in self._state:
             total_kwh, last_ts, last_power_w = self._state[metric]
         else:
-            # First reading: seed state, don't integrate yet
+            # First reading: seed the state and report nothing yet.
+            #
+            # Returning 0.0 here would claim a total this call has no basis
+            # for. The caller writes whatever it gets into the sensor, and the
+            # energy sensors are total_increasing: a 0.0 published while Home
+            # Assistant still holds a restored total reads as a meter reset,
+            # and the restored value is then counted a second time when the
+            # next reading brings it back. Reporting None instead leaves the
+            # key absent, which the sensor resolves to its restored value.
             self._state[metric] = (0.0, now, power_w)
             self._dirty = True
-            return 0.0
+            return None
 
         delta_t_s = now - last_ts
 

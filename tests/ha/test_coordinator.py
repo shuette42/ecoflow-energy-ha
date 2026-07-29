@@ -2889,6 +2889,82 @@ class TestApplyData:
             "batt_charge_energy_kwh", 12.5,
         )
 
+    async def test_first_reading_after_state_loss_publishes_nothing(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """A lost energy state file must not publish a fabricated zero.
+
+        The first reading for a metric only seeds the integrator, it produces
+        no total. Publishing 0.0 for it lands on a total_increasing sensor
+        whose restored total Home Assistant still holds, which reads as a
+        meter reset: the restored value is then counted a second time when the
+        next reading brings it back, so the long-term statistics end up at
+        exactly twice the real energy.
+        """
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        # Empty state with nothing to load: the lost-state-file case.
+        coordinator._energy_integrator._loaded = True
+
+        clock = (
+            "custom_components.ecoflow_energy.ecoflow.energy_integrator"
+            ".time.monotonic"
+        )
+        reading = {"solar_w": 3000.0, "batt_charge_power_w": 2000.0}
+
+        with patch(clock, return_value=1000.0):
+            coordinator._integrate_energy(dict(reading))
+
+        # Riemann path and the device-total fallback path alike.
+        assert "solar_energy_kwh" not in coordinator.device_data
+        assert "batt_charge_energy_kwh" not in coordinator.device_data
+
+        # The second reading has a reference point and does publish.
+        with patch(clock, return_value=1030.0):
+            coordinator._integrate_energy(dict(reading))
+
+        assert coordinator.device_data["solar_energy_kwh"] > 0
+        assert coordinator.device_data["batt_charge_energy_kwh"] > 0
+
+    async def test_device_total_keeps_integration_off_the_seed_path(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """A device-reported total seeds the integrator with its own value.
+
+        This is why the fabricated zero cannot occur on the device-total
+        branch: set_total stores the reported total, so a device that later
+        stops sending it switches to integration with a reference point
+        already in place and never reaches the seeding branch.
+        """
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        coordinator._energy_integrator._loaded = True
+
+        clock = (
+            "custom_components.ecoflow_energy.ecoflow.energy_integrator"
+            ".time.monotonic"
+        )
+
+        with patch(clock, return_value=1000.0):
+            coordinator._integrate_energy({"batt_charge_energy_kwh": 6.0})
+
+        state = coordinator._energy_integrator._state["batt_charge_energy_kwh"]
+        assert state[0] == 6.0
+
+        # The device stops reporting the total: integration continues from it.
+        with patch(clock, return_value=1030.0):
+            coordinator._integrate_energy({"batt_charge_power_w": 2000.0})
+
+        assert coordinator.device_data["batt_charge_energy_kwh"] >= 6.0
+
 
 # ===========================================================================
 # Protobuf Key Remapping (_remap_proto_keys) — F-001

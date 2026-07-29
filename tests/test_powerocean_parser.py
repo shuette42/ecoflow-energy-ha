@@ -1270,3 +1270,143 @@ class TestBatteryPackDeterministicNumbering:
         assert r1["pack1_soc"] == 11
         assert r1["pack2_soc"] == 22
         assert r1["pack3_soc"] == 33
+
+
+class TestPercentRangeGuard:
+    """Percentages outside 0-100 are dropped, never clamped.
+
+    An EMS field that was never populated arrives at the unsigned wire
+    maximum. Reported on a PowerOcean Plus: the backup ratio rendered as
+    "4294967295 %". Clamping to 100 would replace a missing reading with a
+    believable wrong one, so the key is removed and the sensor keeps its last
+    valid value instead.
+    """
+
+    UINT32_MAX = 4294967295
+    UINT16_MAX = 65535
+
+    def test_http_backup_ratio_sentinel_dropped(self):
+        data = {"ems_change_report.sysBatBackupRatio": self.UINT32_MAX}
+        assert "ems_backup_ratio_pct" not in parse_powerocean_http_quota(data)
+
+    def test_http_backup_ratio_valid_value_kept(self):
+        data = {"ems_change_report.sysBatBackupRatio": 30}
+        result = parse_powerocean_http_quota(data)
+        assert result["ems_backup_ratio_pct"] == 30.0
+
+    def test_proto_backup_ratio_sentinel_dropped(self):
+        raw = {"sys_bat_backup_ratio": self.UINT32_MAX}
+        result = remap_bp_keys(raw, {}, "TESTSN")
+        assert "ems_backup_ratio_pct" not in result
+
+    def test_proto_backup_ratio_valid_value_kept(self):
+        raw = {"sys_bat_backup_ratio": 30}
+        result = remap_bp_keys(raw, {}, "TESTSN")
+        assert result["ems_backup_ratio_pct"] == 30.0
+
+    @pytest.mark.parametrize("value", [0, 1, 50, 99, 100])
+    def test_valid_range_inclusive_bounds_kept(self, value):
+        raw = {"sys_bat_backup_ratio": value}
+        result = remap_bp_keys(raw, {}, "TESTSN")
+        assert result["ems_backup_ratio_pct"] == float(value)
+
+    @pytest.mark.parametrize("value", [101, UINT16_MAX, UINT32_MAX])
+    def test_above_range_dropped(self, value):
+        raw = {"sys_bat_backup_ratio": value}
+        assert "ems_backup_ratio_pct" not in remap_bp_keys(raw, {}, "TESTSN")
+
+    def test_negative_percentage_dropped(self):
+        data = {"ems_change_report.emsKeepSoc": -1}
+        assert "ems_keep_soc_pct" not in parse_powerocean_http_quota(data)
+
+    def test_sibling_ems_percent_fields_guarded_http(self):
+        """The backup ratio shares its wire block with three more percentages."""
+        data = {
+            "ems_change_report.sysBatChgUpLimit": self.UINT32_MAX,
+            "ems_change_report.sysBatDsgDownLimit": self.UINT32_MAX,
+            "ems_change_report.emsKeepSoc": self.UINT32_MAX,
+            "ems_change_report.emsFeedRatio": self.UINT32_MAX,
+        }
+        result = parse_powerocean_http_quota(data)
+        for key in (
+            "ems_charge_upper_limit_pct",
+            "ems_discharge_lower_limit_pct",
+            "ems_keep_soc_pct",
+            "ems_feed_ratio_pct",
+        ):
+            assert key not in result
+
+    def test_sibling_battery_percent_fields_guarded_proto(self):
+        raw = {
+            "bp_soh": self.UINT32_MAX,
+            "bp_real_soc": self.UINT32_MAX,
+            "bp_real_soh": self.UINT32_MAX,
+            "bp_down_limit_soc": self.UINT32_MAX,
+            "bp_up_limit_soc": self.UINT32_MAX,
+        }
+        result = remap_bp_keys(raw, {}, "TESTSN")
+        for key in (
+            "bp_soh_pct",
+            "bp_real_soc_pct",
+            "bp_real_soh_pct",
+            "bp_down_limit_soc_pct",
+            "bp_up_limit_soc_pct",
+        ):
+            assert key not in result
+
+    def test_sibling_battery_percent_fields_guarded_http(self):
+        data = {
+            "bp_addr.PACK1": {
+                "bpSoh": self.UINT32_MAX,
+                "bpRealSoc": self.UINT32_MAX,
+                "bpCycles": 42,
+            }
+        }
+        result = parse_powerocean_http_quota(data)
+        assert "bp_soh_pct" not in result
+        assert "bp_real_soc_pct" not in result
+        # A non-percentage field in the same pack is untouched.
+        assert result["bp_cycles"] == 42.0
+
+    def test_pack_percentages_guarded(self):
+        data = {
+            "bp_addr.AAAA0001": json.dumps(
+                {"bpSoc": self.UINT32_MAX, "bpSoh": 98, "bpPwr": 100}
+            )
+        }
+        result = parse_powerocean_http_quota(data)
+        assert "pack1_soc" not in result
+        assert result["pack1_soh"] == 98.0
+
+    def test_energy_stream_soc_sentinel_dropped(self):
+        from ecoflow_energy.ecoflow.parsers.powerocean_proto import (
+            remap_proto_keys,
+        )
+
+        result = remap_proto_keys({"soc": self.UINT32_MAX, "solar": 1200.0})
+        assert "soc_pct" not in result
+        # Non-percentage keys in the same message survive.
+        assert result["solar_w"] == 1200.0
+
+    def test_non_percent_field_at_sentinel_is_untouched(self):
+        """The guard applies to percentages only, not to every large value."""
+        data = {"ems_change_report.pcsAcErrCode": self.UINT32_MAX}
+        result = parse_powerocean_http_quota(data)
+        assert result["pcs_ac_error_code"] == float(self.UINT32_MAX)
+
+    def test_discard_is_debug_level_only(self, caplog):
+        """Zero-noise policy: a discarded sentinel is not a user-facing event."""
+        import logging
+
+        caplog.set_level(logging.DEBUG)
+        parse_powerocean_http_quota(
+            {"ems_change_report.sysBatBackupRatio": self.UINT32_MAX}
+        )
+        discards = [
+            record
+            for record in caplog.records
+            if "out-of-range percentage" in record.getMessage()
+        ]
+        assert len(discards) == 1
+        assert discards[0].levelno == logging.DEBUG
+        assert not [r for r in caplog.records if r.levelno >= logging.WARNING]

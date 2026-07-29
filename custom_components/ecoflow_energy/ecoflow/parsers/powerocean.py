@@ -15,9 +15,12 @@ Reference: EcoFlow IoT Developer Platform — PowerOcean section.
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 from . import _safe_float
+
+_LOGGER = logging.getLogger(__name__)
 
 # --- State value mappings (numeric -> enum string) ---
 
@@ -98,6 +101,50 @@ _WORK_STATE_MAP: dict[int, str] = {
     8: "stop",
     9: "maintain",
 }
+
+# Sensor keys this parser and its protobuf counterpart publish with unit "%".
+# Kept in sync with the "%" entries of POWEROCEAN_SENSORS in const.py.
+PERCENT_SENSOR_KEYS: frozenset[str] = frozenset(
+    {
+        "soc_pct",
+        "bp_soh_pct",
+        "bp_real_soc_pct",
+        "bp_real_soh_pct",
+        "bp_down_limit_soc_pct",
+        "bp_up_limit_soc_pct",
+        "ems_feed_ratio_pct",
+        "ems_charge_upper_limit_pct",
+        "ems_discharge_lower_limit_pct",
+        "ems_keep_soc_pct",
+        "ems_backup_ratio_pct",
+    }
+    | {
+        f"pack{index}_{suffix}"
+        for index in range(1, 6)
+        for suffix in ("soc", "soh", "calendar_soh", "cycle_soh")
+    }
+)
+
+
+def drop_invalid_percentages(result: dict[str, Any]) -> None:
+    """Remove percentage keys whose value falls outside 0-100, in place.
+
+    A percentage outside that range is not a reading at all. The EMS leaves a
+    field it never populated at the unsigned wire maximum, so an unavailable
+    value arrives as 4294967295 and used to render verbatim as "4294967295 %".
+
+    The value is dropped rather than clamped on purpose: clamping the wire
+    maximum to 100 would turn a missing reading into a plausible-looking wrong
+    one, which is harder for a user to spot than a gap. Removing the key leaves
+    the sensor on its last valid reading instead.
+    """
+    for key in PERCENT_SENSOR_KEYS.intersection(result):
+        value = result[key]
+        if isinstance(value, (int, float)) and not 0.0 <= value <= 100.0:
+            _LOGGER.debug(
+                "Discarding out-of-range percentage %s=%r", key, value
+            )
+            del result[key]
 
 
 def parse_powerocean_http_quota(quota_data: dict) -> dict[str, Any]:
@@ -200,6 +247,8 @@ def parse_powerocean_http_quota(quota_data: dict) -> dict[str, Any]:
 
     # --- EMS extended fields (from ems_change_report.*) ---
     _extract_ems_extended(quota_data, result)
+
+    drop_invalid_percentages(result)
 
     return result
 

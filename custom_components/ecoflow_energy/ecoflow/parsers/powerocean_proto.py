@@ -21,6 +21,7 @@ from .powerocean import (
     _WORK_MODE_INT_MAP,
     _WORK_MODE_MAP,
     _WORK_STATE_MAP,
+    drop_invalid_percentages,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -253,6 +254,8 @@ def remap_proto_keys(raw: dict[str, Any]) -> dict[str, Any]:
     if batt_w is not None:
         result["batt_charge_power_w"] = batt_w if batt_w > 0.0 else 0.0
         result["batt_discharge_power_w"] = abs(batt_w) if batt_w < 0.0 else 0.0
+
+    drop_invalid_percentages(result)
 
     return result
 
@@ -509,5 +512,7 @@ def remap_bp_keys(
     # so most updates contain only bp_soc or are empty.
     # Injecting defaults would overwrite correct values from HTTP.
     _apply_enum_mappings(result)
+
+    drop_invalid_percentages(result)
 
     return result

@@ -20,10 +20,16 @@ def integrator(state_file):
 
 
 class TestBasicIntegration:
-    def test_first_call_returns_zero(self, integrator):
-        """First reading seeds state, returns 0."""
+    def test_first_call_reports_no_total(self, integrator):
+        """First reading seeds state and reports no total.
+
+        It must not report 0.0: the caller would publish that as the sensor
+        value, and on a total_increasing sensor a zero reads as a meter reset.
+        """
         result = integrator.integrate("solar", 1000.0)
-        assert result == 0.0
+        assert result is None
+        # State is seeded even though nothing is reported.
+        assert integrator._state["solar"][0] == 0.0
 
     def test_second_call_integrates(self, integrator):
         """Second call after time delta produces energy."""
