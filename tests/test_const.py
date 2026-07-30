@@ -520,6 +520,38 @@ class TestBatteryDeviceClassSingleton:
             )
 
 
+class TestEnergySensorPrecision:
+    """kWh sensors must keep sub-kWh resolution.
+
+    suggested_display_precision is applied to the state, not only to the
+    display, so a precision of 0 stores whole kWh and destroys the resolution
+    the device actually reports. On a lifetime counter that makes day-to-day
+    deltas unusable: every reading carries up to 0.5 kWh of rounding, and a
+    delta across several packs accumulates it.
+    """
+
+    def test_no_kwh_sensor_rounds_to_whole_kwh(self):
+        import re as _re
+
+        from ecoflow_energy import const as _const
+
+        offenders = []
+        for name in dir(_const):
+            if not _re.fullmatch(r"[A-Z0-9]+_SENSORS", name):
+                continue
+            for sensor in getattr(_const, name):
+                if (
+                    sensor.unit == "kWh"
+                    and sensor.suggested_display_precision == 0
+                ):
+                    offenders.append(f"{name}.{sensor.key}")
+
+        assert not offenders, (
+            "kWh sensors rounded to whole kWh in the stored state: "
+            f"{offenders} - use a precision of at least 2"
+        )
+
+
 class TestBinarySensors:
     def test_powerocean_binary_sensors(self):
         keys = _extract_sensor_keys("POWEROCEAN_BINARY_SENSORS")
