@@ -55,6 +55,52 @@ custom_components/ecoflow_energy/
 
 The `ecoflow/` subdirectory contains the core library with no Home Assistant dependencies, making it independently testable. Entity platforms use the `CoordinatorEntity` pattern.
 
+## Adding Device Support
+
+Before writing code, decide whether the hardware is really a **new device** or an
+**accessory of one that is already supported**. Getting this wrong is the most
+common reason a device-support PR has to be rebuilt from scratch.
+
+An accessory belongs in the existing parser when the cloud API only exposes its
+data through the main unit. PowerOcean add-ons such as PowerGlow and PowerPulse
+are the clearest example: they show up as separate entries in the account device
+list, but a quota request against their own serial number is rejected with error
+`1006`, and their telemetry appears as extra keys in the PowerOcean quota
+response. Those keys are added to `ecoflow/parsers/powerocean.py` and surfaced as
+additional PowerOcean sensors. A new device type with its own coordinator would
+have nothing to poll.
+
+A genuinely new device type is one whose own serial number answers a quota
+request, or that delivers its own push stream. Those get their own parser under
+`ecoflow/parsers/` and their own entry in the serial-prefix map.
+
+### What a device-support PR must include
+
+- **Read-only first.** Sensors and binary sensors only. Do not add switches,
+  numbers, or selects unless the write command has been confirmed against real
+  firmware, and say in the PR description how it was confirmed. A rejected
+  command code is not a confirmed one.
+- **A fixture test with dummy values.** Build the test payload by hand and use
+  placeholder serials such as `HJ31TEST0001`. Never commit a real serial number,
+  a real API key, or an unedited diagnostics dump.
+- **Proof of scaling.** Do not infer the unit from the field name. The same API
+  mixes watts with deciwatts and watt-hours with kilowatt-hours, sometimes within
+  one response. State in the PR which raw value you saw and what the EcoFlow app
+  displayed at the same moment. A wrong divisor on an energy sensor silently
+  corrupts long-run statistics and cannot be repaired later.
+- **`disabled_by_default=True` for hardware-conditional fields.** If a field only
+  exists on some installations, for example when an optional accessory is
+  attached, the sensor definition must set `disabled_by_default=True` (Home
+  Assistant's `entity_registry_enabled_default=False`). Owners who have the
+  hardware enable it in one click; everyone else is not left with a permanently
+  unavailable entity.
+- **No placeholder zeros.** If a field or its container is missing from the
+  payload, emit no key at all. Never substitute `0.0`. On a `total_increasing`
+  sensor Home Assistant reads a zero as a meter reset and adds the previous total
+  again, which double-counts energy for every affected user. "No value yet" is
+  the absence of the key.
+- **A `CHANGELOG.md` entry** and a green test suite.
+
 ## Pull Request Guidelines
 
 1. **Fork** the repository and create a feature branch from `main`.
