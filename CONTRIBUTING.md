@@ -99,7 +99,18 @@ request, or that delivers its own push stream. Those get their own parser under
   sensor Home Assistant reads a zero as a meter reset and adds the previous total
   again, which double-counts energy for every affected user. "No value yet" is
   the absence of the key.
+- **Translations for every new entity.** Each entity key needs an entry in
+  `strings.json` and in both `translations/en.json` and `translations/de.json`.
+  This is enforced by the test suite in both directions: a key without
+  translations fails, and a translation without a matching key fails as an
+  orphan. Entities with enum states need their state translations too.
+- **Updated device counts.** The sensor counts in `README.md` and in
+  `documentation/entities/` are per device type. If your PR adds sensors, adjust
+  the numbers in the same PR.
 - **A `CHANGELOG.md` entry** and a green test suite.
+
+Adding one sensor therefore touches around eight files, not one. That is normal
+here and not a sign you did something wrong.
 
 ## Pull Request Guidelines
 
