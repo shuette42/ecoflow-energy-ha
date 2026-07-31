@@ -40,6 +40,41 @@ class TestSanitizeFrame:
 
         assert sanitize_frame(payload, ["", ""]) == payload
 
+    def test_unnamed_serials_are_masked_by_shape(self) -> None:
+        """A frame carries serials the caller never knew about.
+
+        Battery packs and attached accessories bring their own serials, and
+        the coordinator can only name the device serial and the account id.
+        Publishing a dump would otherwise expose them.
+        """
+        device_sn = "HJ31TEST00000001"
+        pack_sn = "BP5000TEST000001"
+        payload = (
+            b"\x0a\x10" + device_sn.encode() + b"\x12\x10" + pack_sn.encode()
+        )
+
+        result = sanitize_frame(payload, [device_sn])
+
+        assert device_sn.encode() not in result
+        assert pack_sn.encode() not in result
+        assert len(result) == len(payload)
+
+    def test_masking_preserves_byte_offsets(self) -> None:
+        """Both passes replace by length, so the frame layout is unchanged."""
+        payload = b"\x0a\x10" + b"HJ31TEST00000001" + b"\x18\x2a"
+
+        result = sanitize_frame(payload, ["HJ31TEST00000001"])
+
+        assert result.startswith(b"\x0a\x10")
+        assert result.endswith(b"\x18\x2a")
+        assert len(result) == len(payload)
+
+    def test_short_alphanumeric_runs_survive(self) -> None:
+        """Over-masking would destroy the payload this capture exists for."""
+        payload = b"\x0a\x04ABC1\x12\x02OK"
+
+        assert sanitize_frame(payload, []) == payload
+
 
 class TestIsProtoFrame:
     def test_protobuf_header(self) -> None:

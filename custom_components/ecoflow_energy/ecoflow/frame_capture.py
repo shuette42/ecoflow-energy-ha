@@ -13,6 +13,7 @@ No Home Assistant dependencies - stdlib only.
 
 from __future__ import annotations
 
+import re
 import time
 from typing import Any
 
@@ -21,6 +22,13 @@ from typing import Any
 # field-layout analysis depends on.
 _MASK_BYTE = b"X"
 
+# EcoFlow serials are 16 alphanumeric upper-case characters and appear in
+# frames as plain ASCII. The caller can only name the identifiers it knows,
+# which is the device serial and the account id - a frame also carries the
+# serial of every battery pack and of any attached accessory, and those are
+# nobody's to publish either. This catches them by shape.
+_SERIAL_RUN = re.compile(rb"[A-Z0-9]{15,}")
+
 
 def sanitize_frame(payload: bytes, secrets: list[str]) -> bytes:
     """Mask identifying strings inside a raw frame.
@@ -28,6 +36,12 @@ def sanitize_frame(payload: bytes, secrets: list[str]) -> bytes:
     Protobuf frames carry the device serial and, on some commands, the
     account user id as plain ASCII. Each is replaced by a filler of equal
     length, in every case variant the payload might use.
+
+    Named identifiers are masked first, then anything else shaped like a
+    serial. The second pass matters because a frame also carries the serial
+    of every battery pack and of any attached accessory, and the caller
+    cannot name what it has not discovered yet. Masking preserves length, so
+    byte offsets survive both passes and a field-layout analysis still works.
     """
     sanitized = payload
     for secret in secrets:
@@ -37,7 +51,7 @@ def sanitize_frame(payload: bytes, secrets: list[str]) -> bytes:
             raw = variant.encode("ascii", "ignore")
             if raw and raw in sanitized:
                 sanitized = sanitized.replace(raw, _MASK_BYTE * len(raw))
-    return sanitized
+    return _SERIAL_RUN.sub(lambda m: _MASK_BYTE * len(m.group()), sanitized)
 
 
 def is_proto_frame(payload: bytes) -> bool:
