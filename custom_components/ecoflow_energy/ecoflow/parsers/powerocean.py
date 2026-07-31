@@ -191,6 +191,12 @@ def parse_powerocean_http_quota(quota_data: dict) -> dict[str, Any]:
 
     # --- Optional PowerGlow heating rod (PowerOcean accessory) ---
     # The accessory is exposed through the PowerOcean quota, not its own SN.
+    # The value is plain watts and is passed through unscaled: the EcoFlow app
+    # renders this reading without arithmetic and switches to kW at 1000, which
+    # a deci-watt reading would place at 10000. Neighbouring fields of the same
+    # payload are unscaled too (temperature in whole degrees, tank volume in
+    # litres). Awaiting a non-zero reading from real hardware to confirm the
+    # cloud passes it through unchanged as well.
     if "ems_heating_rod.heatingPower" in quota_data:
         v = _safe_float(quota_data["ems_heating_rod.heatingPower"])
         if v is not None:

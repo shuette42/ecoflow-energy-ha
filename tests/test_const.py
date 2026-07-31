@@ -191,6 +191,9 @@ class TestPowerOceanSensors:
         assert heating_rod_power.device_class == "power"
         assert heating_rod_power.state_class == "measurement"
         assert heating_rod_power.disabled_by_default is True
+        assert heating_rod_power.unit == "W"
+        assert heating_rod_power.entity_category == "diagnostic"
+        assert heating_rod_power.suggested_display_precision == 0
 
     def test_keys_unique(self):
         keys = _extract_sensor_keys("POWEROCEAN_SENSORS")

@@ -145,6 +145,19 @@ class TestPowerGlowHeatingRod:
 
         assert "heating_rod_power_w" not in result
 
+    def test_heating_power_is_passed_through_unscaled(self):
+        """The quota value is watts and reaches the sensor unchanged.
+
+        Every other test on this field runs on zero, which passes through any
+        divisor unchanged and would therefore keep passing if the scaling were
+        silently altered. This one pins the contract at a value that cannot.
+        """
+        result = parse_powerocean_http_quota(
+            {"ems_heating_rod.heatingPower": 1750}
+        )
+
+        assert result["heating_rod_power_w"] == 1750.0
+
 
 # ===========================================================================
 # Battery Pack Extraction
