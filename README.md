@@ -23,42 +23,49 @@
 
 ## Highlights
 
-- **Up to 200 sensors per device** — power, energy, battery packs, temperature, diagnostics
-- **Energy Dashboard ready** — local Riemann-sum kWh with gap detection
-- **Real-time out of the box** — Enhanced Mode: ~2-4 s updates for all devices
-- **Full PowerOcean control** — Backup Reserve, Solar Surplus Threshold, Work Mode (Self-use / AI Schedule)
-- **Delta switches & numbers** — AC/DC output, charge speed, backup reserve, screen settings
-- **Auto-discovery** — all devices bound to your EcoFlow account
-- **4-tier reconnect** — never gives up on the connection
-- **Automatic fallback** — MQTT stale? Transparent switch to HTTP polling (Standard Mode)
-- **Offline tolerance** — mobile devices offline = expected, not an error
+- **Over 200 sensors per device** - power, energy, battery packs, temperature, diagnostics
+- **Energy Dashboard ready** - local Riemann-sum kWh with gap detection
+- **Real-time out of the box** - Enhanced Mode: ~2-4 s updates for all devices
+- **Full PowerOcean control** - Backup Reserve, Solar Surplus Threshold, Work Mode (Self-use / AI Schedule)
+- **Delta switches & numbers** - AC/DC output, charge speed, backup reserve, screen settings
+- **Auto-discovery** - all devices bound to your EcoFlow account
+- **4-tier reconnect** - never gives up on the connection
+- **Automatic fallback** - MQTT stale? Transparent switch to HTTP polling (Standard Mode)
+- **Offline tolerance** - mobile devices offline = expected, not an error
 
 ---
 
 ## Supported Devices
 
-| | Sensors | Controls | Energy Sensors | Update Rate |
-|:---|:---:|:---:|:---:|:---|
-| **PowerOcean** — Home Battery | 208 | 2 numbers, 1 select (Enhanced only) | 6 (solar, grid, battery, home) | ~30 s standard / ~3 s enhanced |
-| **Delta 2 Max** — Portable Power | 94 | 7 switches, 8 numbers | 4 (solar 1+2, AC in/out) | ~30 s standard (+ MQTT push) |
-| **Delta 3 Max Plus** — Portable Power | 24 | 7 switches, 3 numbers | 4 (solar 1+2, AC in, output) | ~30 s standard / ~2 s enhanced |
-| **Smart Plug** — Switchable Outlet | 11 | 1 switch, 2 numbers | 1 (total energy) | ~30 s standard / ~3 s enhanced |
-| **Stream** (AC Pro, Ultra, Max, AC, Ultra X) — AC-coupled Battery | 47 + 2 binary | 1 number (Enhanced only) | 2 default (battery charge/discharge), 6 optional diagnostic (solar/home, PV 1-4) | ~30 s standard / ~3 s enhanced |
+| Device | Serial prefix | Sensors | Controls | Energy Sensors | Update Rate |
+|:---|:---|:---:|:---:|:---:|:---|
+| **PowerOcean** - Home Battery | `HJ31` `HJ32` `J32D`\* `J32E`\* | 208 | 2 numbers, 1 select (Enhanced only) | 6 (solar, grid import/export, battery charge/discharge, home) | ~30 s standard / ~3 s enhanced |
+| **PowerOcean Plus** - 3-phase Hybrid | `R371`\* `R374`\* `HJ3C`\* | 208 | 2 numbers, 1 select (Enhanced only) | 6 (solar, grid import/export, battery charge/discharge, home) | ~3 s enhanced |
+| **Delta 2 Max** - Portable Power | `R351` `R331` | 94 + 4 binary | 7 switches, 8 numbers | 4 (solar 1+2, AC in/out) | ~30 s standard (+ MQTT push) |
+| **Delta 3 Max Plus** - Portable Power | `D3M1` `P321` | 24 | 7 switches, 3 numbers | 4 (solar 1+2, AC in, output) | ~30 s standard / ~2 s enhanced |
+| **Smart Plug** - Switchable Outlet | `HW52` | 11 + 1 binary | 1 switch, 2 numbers | 1 (total energy) | ~30 s standard / ~3 s enhanced |
+| **Stream** - AC-coupled Battery | `BK31` `BK11` `BK41` `BK51` `BK61` | 47 + 2 binary | 1 number (Enhanced only) | 2 default (battery charge/discharge), 6 optional diagnostic (solar/home, PV 1-4) | ~30 s standard / ~3 s enhanced |
 
-> **Tip:** Other Delta-series devices (Delta Pro, Delta 2, etc.) should work automatically with the Delta sensor set. Base Delta 3 (non-Max-Plus) uses the Delta 3 sensor set. All Stream models (Ultra, Max, AC, Ultra X) share the Stream sensor set shown above.
+> **\* Enhanced Mode only.** These serial prefixes cannot currently be linked to an IoT Developer API key, so Standard Mode reports error 1006 and their entities stay unavailable. This is an EcoFlow API limitation, not a configuration problem.
 >
-> **Note:** Every device additionally exposes 2 universal diagnostic sensors (connection status and active mode) that are not included in the sensor counts above.
+> **PowerOcean and PowerOcean Plus share one entity set.** A Plus unit simply reports more of it: per-phase reactive power (var) and apparent power (VA), plus MPPT strings 3 and 4. Those entities exist for every PowerOcean but are disabled by default, because a standard unit never sends them and the entity would sit at "unknown" forever. Enable them under **Settings > Devices & services > Entities** on a Plus device.
+>
+> **Tip:** Other Delta-series devices (Delta Pro, Delta 2, etc.) should work automatically with the Delta sensor set. Base Delta 3 and Delta 3 Plus use the Delta 3 sensor set. All Stream models share the Stream sensor set shown above.
+>
+> **Note:** Sensor counts are the device-specific entity definitions. Every device additionally exposes 2 universal diagnostic sensors (connection status and active mode) that are not included in the counts above. Many sensors are diagnostic and disabled by default.
 
 <details>
-<summary><b>PowerOcean</b> — 3-phase grid, MPPT tracking, multi-pack battery, EMS diagnostics, energy strategy controls</summary>
+<summary><b>PowerOcean</b> and <b>PowerOcean Plus</b> - 3-phase grid, MPPT tracking, multi-pack battery, EMS diagnostics, energy strategy controls</summary>
 
-3-phase grid monitoring (voltage, current, power per phase) · MPPT per-string tracking (up to 4 strings, device-dependent) · **Multi-battery-pack support** (up to 5 BP5000 packs — per-pack SoC, power, SoH, cycles, temperatures, lifetime energy) · Battery diagnostics (cell temps & voltages, MOSFET temps) · EMS state, work mode, feed mode, grid status, power factor · System diagnostics (fault codes, connectivity status, capacity limits)
+3-phase grid monitoring (voltage, current, power per phase) · MPPT per-string tracking (up to 4 strings, device-dependent) · **Multi-battery-pack support** (up to 5 BP5000 packs - per-pack SoC, power, SoH, cycles, temperatures, lifetime energy) · Battery diagnostics (cell temps & voltages, MOSFET temps) · EMS state, work mode, feed mode, grid status, power factor · System diagnostics (fault codes, connectivity status, capacity limits)
+
+**PowerOcean Plus** (`R371`, `R374`, `HJ3C`) are the higher-power 3-phase hybrid units. They use the same entity set as a standard PowerOcean and are supported in Enhanced Mode. Beyond a standard unit they report per-phase **reactive power** (var) and **apparent power** (VA), and drive **MPPT strings 3 and 4**. These entities ship disabled by default so that standard units are not left with permanently empty sensors, so enable the ones you need after adding a Plus device. Field coverage is based on diagnostics from live Plus hardware; if your unit reports a value that no entity picks up, the raw data is available via **Download Diagnostics**.
 
 **Enhanced Mode controls** (verified against the official EcoFlow app, byte-for-byte wire compatible):
 
-- **Backup Reserve** (`number`, 0-100%) — minimum SoC the system keeps in reserve. Same slider as "Backup-Reserve" in the EcoFlow app.
-- **Solar Surplus Threshold** (`number`, 0-100%) — SoC above which surplus solar is routed to controllable devices. Same slider as "Prioritize controllable devices (Beta)" in the app.
-- **Work Mode** (`select`) — Self-use ("Eigenstromversorgung") or AI Schedule ("Intelligenter Modus"). TOU and Backup modes are deferred (require additional sub-parameters).
+- **Backup Reserve** (`number`, 0-100%) - minimum SoC the system keeps in reserve. Same slider as "Backup-Reserve" in the EcoFlow app.
+- **Solar Surplus Threshold** (`number`, 0-100%) - SoC above which surplus solar is routed to controllable devices. Same slider as "Prioritize controllable devices (Beta)" in the app.
+- **Work Mode** (`select`) - Self-use ("Eigenstromversorgung") or AI Schedule ("Intelligenter Modus"). TOU and Backup modes are deferred (require additional sub-parameters).
 
 The integration enforces the app's `backup_reserve <= solar_surplus_threshold` constraint automatically.
 
@@ -67,25 +74,29 @@ The integration enforces the app's `backup_reserve <= solar_surplus_threshold` c
 </details>
 
 <details>
-<summary><b>Delta 2 Max</b> — AC/DC/12V switches, charge speed control, real-time MQTT</summary>
+<summary><b>Delta 2 Max</b> - AC/DC/12V switches, charge speed control, real-time MQTT</summary>
 
 Battery SoC/SoH · All input/output power, temperatures, voltages · **Expansion battery packs** (up to 2, disabled by default) · **Switches:** AC, DC, 12V output, beeper, X-Boost, AC auto restart, backup reserve · **Numbers:** AC charge speed (200-2400 W), max/min SoC, standby timeout, screen brightness/timeout, 12V port timeout, backup reserve level · Real-time MQTT push for faster-than-polling updates.
 
 </details>
 
 <details>
-<summary><b>Smart Plug</b> — power monitoring, plug switch, automation-ready</summary>
+<summary><b>Smart Plug</b> - power monitoring, plug switch, automation-ready</summary>
 
 Power (W), current (A), voltage (V), frequency, temperature · Plug on/off switch · **Numbers:** LED brightness (0-100%), max power limit (0-2500 W) · Real-time MQTT push in Standard Mode · ~3 s updates in Enhanced Mode. Ideal for automating charging (e.g. charge Delta on solar surplus).
 
 </details>
 
 <details>
-<summary><b>Stream AC Pro</b> — AC-coupled battery telemetry and reserve control</summary>
+<summary><b>Stream</b> (AC Pro, Ultra, Max, AC, Ultra X) - AC-coupled battery telemetry, per-string solar, reserve control</summary>
 
-Battery SoC/SoH · signed battery power · battery charge/discharge power · signed AC grid connection power ("Netz-Anschluss": negative=input, positive=output/feed-in) · read-only AC outlet states and outlet power · AC voltage and frequency · battery temperature, capacity and cell voltage diagnostics · LED brightness diagnostics · **Number:** Backup Reserve (3-95%) in Enhanced Mode.
+Battery SoC/SoH · signed battery power · battery charge/discharge power · **per-string solar power (PV 1-4)** · signed AC grid connection power ("Netz-Anschluss": negative=input, positive=output/feed-in) · read-only AC outlet states and outlet power · AC voltage and frequency · battery temperature, capacity and cell voltage diagnostics · LED brightness diagnostics · **Number:** Backup Reserve (3-95%) in Enhanced Mode.
 
-The Stream AC Pro is treated as an AC-coupled battery. House/grid/solar flow values depend on an EcoFlow-paired meter and are disabled by default as diagnostic entities. Individual AC outlets and LED brightness are exposed read-only; the app write path is not yet confirmed for third-party MQTT control. The integration also recognizes other Stream-family models in Enhanced Mode, including Stream Ultra (BK11), Stream Max (BK41), Stream AC (BK51), and Stream Ultra X (BK61), and shows their device names accordingly.
+The Stream is treated as an AC-coupled battery. House, grid and total solar flow values depend on an EcoFlow-paired meter and are disabled by default as diagnostic entities. Individual AC outlets and LED brightness are exposed read-only, since the app write path is not confirmed for third-party control.
+
+**Both modes are supported, and they differ in solar detail.** Standard Mode reads the Stream through the official Developer API (~30 s) and is the only mode that reports **per-string solar**: PV 1 and PV 2 are enabled by default, PV 3 and PV 4 ship disabled because only larger units drive that many strings. Enhanced Mode updates faster (~3 s) but reports solar only as a single total, which itself depends on a paired meter. Both modes create the same entity set, so a device can switch between them without duplicating sensors; the per-string PV entities simply stay empty in Enhanced Mode.
+
+All five models are recognized by serial prefix and appear under their correct model name: Stream AC Pro (`BK31`), Stream Ultra (`BK11`), Stream Max (`BK41`), Stream AC (`BK51`), Stream Ultra X (`BK61`).
 
 </details>
 
@@ -113,20 +124,20 @@ Download the [latest release](https://github.com/shuette42/ecoflow-energy-ha/rel
 | | Standard | Enhanced |
 |:---|:---|:---|
 | **Credentials** | Access Key + Secret Key ([Developer Portal](https://developer.ecoflow.com)) | EcoFlow email + password (same as mobile app) |
-| **Devices** | All supported devices | All supported devices |
+| **Devices** | All except the Enhanced-only serials (`J32D`, `J32E`, `R371`, `R374`, `HJ3C`) | All supported devices |
 | **Update rate** | ~30 s HTTP polling (+ MQTT push for Delta/Smart Plug) | ~2-4 s real-time via WSS MQTT |
 | **Delta / Smart Plug controls** | All switches and numbers | All switches and numbers |
 | **PowerOcean controls** | Read-only sensors only | Full energy strategy controls (Backup Reserve, Solar Surplus Threshold, Work Mode) |
 | **Stability** | Official EcoFlow API - supported and stable | Community-driven - unofficial, use at your own risk |
 | **Best for** | Reliable long-term operation | Real-time monitoring, fast automations, PowerOcean control |
 
-**Standard Mode** uses the official EcoFlow IoT Developer API. Apply for free API keys at [developer.ecoflow.com](https://developer.ecoflow.com). Note: some European PowerOcean variants (serial numbers starting with `J32D` or `J32E`) are currently not exposed through the Developer API and cannot be linked to an API key (error 1006). These devices work in Enhanced Mode only.
+**Standard Mode** uses the official EcoFlow IoT Developer API. Apply for free API keys at [developer.ecoflow.com](https://developer.ecoflow.com). Note: the European PowerOcean variants (`J32D`, `J32E`) and the PowerOcean Plus units (`R371`, `R374`, `HJ3C`) are currently not exposed through the Developer API and cannot be linked to an API key (error 1006). These devices work in Enhanced Mode only.
 
-**Enhanced Mode** connects with your EcoFlow email and password. No Developer API keys needed. Faster updates, but this is an unofficial, community-driven protocol that may change without notice. Stream-family devices are now recognized by their serial prefixes, including BK11, BK41, BK51, and BK61, so they appear with the correct model names in Home Assistant.
+**Enhanced Mode** connects with your EcoFlow email and password. No Developer API keys needed. Faster updates, but this is an unofficial, community-driven protocol based on observed behaviour that may change without notice. Stream-family devices report an empty product name, so they are identified by their serial prefix (`BK11`, `BK31`, `BK41`, `BK51`, `BK61`) and appear under the correct model name in Home Assistant in both modes.
 
 **Upgrading?** See [CHANGELOG.md](CHANGELOG.md) for migration notes. Most upgrades are seamless. v1.13.0 removes the legacy `min_discharge_soc` PowerOcean entity (replaced by `backup_reserve`); after upgrading you may see it as "unavailable" in HA - safe to delete via Settings > Devices & services > Entities.
 
-**Upgrading a Stream AC Pro from v1.15.0?** Two things changed:
+**Ran a Stream on a pre-release build?** Two things changed before the final release:
 - Old experimental outlet switches and raw Wh battery-energy entities may remain in the entity registry. They are safe to delete if shown as unavailable or duplicated; use the kWh Battery Charge Energy and Battery Discharge Energy sensors for the Energy Dashboard.
 - Solar Power, Home Power, and Grid Power are now meter-dependent diagnostics, disabled by default for new installs. Existing installs keep them enabled, so nothing disappears. If your Stream has no EcoFlow-paired meter these report unreliable values and can be disabled under Settings > Devices & services > Entities.
 
@@ -134,10 +145,10 @@ Download the [latest release](https://github.com/shuette42/ecoflow-energy-ha/rel
 
 ## Energy Dashboard
 
-All energy sensors are pre-configured (`state_class: total_increasing`) — just select and go.
+All energy sensors are pre-configured (`state_class: total_increasing`) - just select and go.
 
 <details>
-<summary><b>PowerOcean</b> — Grid, Solar, Battery, Home</summary>
+<summary><b>PowerOcean</b> - Grid, Solar, Battery, Home</summary>
 
 | Dashboard Section | Sensor |
 |:---|:---|
@@ -148,12 +159,12 @@ All energy sensors are pre-configured (`state_class: total_increasing`) — just
 | Battery discharge | **Battery Discharge Energy** (kWh) |
 | Home consumption | **Home Energy** (kWh) |
 
-> Select **Two sensors** for battery power — charge and discharge separately for higher accuracy.
+> Select **Two sensors** for battery power - charge and discharge separately for higher accuracy.
 
 </details>
 
 <details>
-<summary><b>Delta 2 Max</b> — Solar, AC Input, AC Output</summary>
+<summary><b>Delta 2 Max</b> - Solar, AC Input, AC Output</summary>
 
 | Dashboard Section | Sensor |
 |:---|:---|
@@ -165,7 +176,7 @@ All energy sensors are pre-configured (`state_class: total_increasing`) — just
 </details>
 
 <details>
-<summary><b>Smart Plug</b> — Device Energy</summary>
+<summary><b>Smart Plug</b> - Device Energy</summary>
 
 | Dashboard Section | Sensor |
 |:---|:---|
@@ -176,14 +187,14 @@ Add under **Energy > Individual Devices**.
 </details>
 
 <details>
-<summary><b>Stream AC Pro</b> — AC-coupled Battery</summary>
+<summary><b>Stream</b> - AC-coupled Battery</summary>
 
 | Dashboard Section | Sensor |
 |:---|:---|
 | Battery charge | **Battery Charge Energy** (kWh) |
 | Battery discharge | **Battery Discharge Energy** (kWh) |
 
-Solar and home energy sensors exist as diagnostics but are disabled by default because the Stream AC Pro only reports meaningful home/grid/solar flow values when an EcoFlow-compatible meter is paired in the app. For normal AC-coupled battery use, select the two battery energy sensors above.
+Solar and home energy sensors exist as diagnostics but are disabled by default because the Stream only reports meaningful home/grid/solar flow values when an EcoFlow-compatible meter is paired in the app. In Standard Mode a per-string counter (PV 1 Energy to PV 4 Energy) is available as well, also disabled by default because the solar energy sensor already covers the total. For normal AC-coupled battery use, select the two battery energy sensors above.
 
 </details>
 
@@ -248,7 +259,7 @@ automation:
 
 ```yaml
 automation:
-  - alias: "Grid export alert — use surplus"
+  - alias: "Grid export alert - use surplus"
     trigger:
       - platform: numeric_state
         entity_id: sensor.ecoflow_powerocean_grid_export_power
@@ -260,7 +271,7 @@ automation:
           title: "Solar surplus"
           message: >
             Exporting {{ states('sensor.ecoflow_powerocean_grid_export_power') }}W
-            — consider turning on high-load devices
+            - consider turning on high-load devices
 ```
 
 </details>
@@ -384,8 +395,8 @@ Use the integration menu (not the options dialog):
 
 This notification can appear when your IoT Developer API key does not have access to the configured devices. The integration uses two credential sets:
 
-- **Access Key / Secret Key** (IoT Developer Portal) — used for HTTP data polling
-- **Email / Password** (Enhanced Mode only) — used for MQTT real-time data
+- **Access Key / Secret Key** (IoT Developer Portal) - used for HTTP data polling
+- **Email / Password** (Enhanced Mode only) - used for MQTT real-time data
 
 If the devices are not linked to the API key, HTTP polling fails with error 1006 ("device not allowed"). In Enhanced Mode, MQTT data still works fine, but the repeated HTTP errors used to trigger a false re-authentication prompt.
 
@@ -393,7 +404,7 @@ If the devices are not linked to the API key, HTTP polling fails with error 1006
 
 1. Log in at [developer.ecoflow.com](https://developer.ecoflow.com)
 2. Go to "Devices" and verify both your API key and your devices are listed
-3. Make sure the Developer Portal account uses the **same email** as your EcoFlow App account — devices are linked automatically when the accounts match
+3. Make sure the Developer Portal account uses the **same email** as your EcoFlow App account - devices are linked automatically when the accounts match
 4. If the accounts differ, bind the devices manually via their serial numbers
 
 Since v1.8.3, the integration handles this gracefully: error 1006 is logged once with a clear message and does not trigger re-authentication.
@@ -414,7 +425,7 @@ Since v1.8.3, the integration handles this gracefully: error 1006 is logged once
 <details>
 <summary><b>Download diagnostics</b></summary>
 
-**Settings > Devices & Services > EcoFlow Energy > 3-dot menu > Download Diagnostics** — connection status, data freshness, no credentials exposed.
+**Settings > Devices & Services > EcoFlow Energy > 3-dot menu > Download Diagnostics** - connection status, data freshness, no credentials exposed.
 
 </details>
 
@@ -422,9 +433,9 @@ Since v1.8.3, the integration handles this gracefully: error 1006 is logged once
 
 <div align="center">
 
-**MIT License** — [Contributing](https://github.com/shuette42/ecoflow-energy-ha/issues) welcome
+**MIT License** - [Contributing](https://github.com/shuette42/ecoflow-energy-ha/issues) welcome
 
-Made by [huette.ai](https://huette.ai) — When it has to work.
+Made by [huette.ai](https://huette.ai) - When it has to work.
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-support-30D158?style=for-the-badge&logo=buy-me-a-coffee&logoColor=white)](https://www.buymeacoffee.com/shuette)
 
