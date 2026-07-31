@@ -2,12 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.16.0] - 2026-07-31
 
 ### Added
-- PowerOcean: optional Heating Rod Power sensor from the PowerGlow accessory quota field `ems_heating_rod.heatingPower`. The read-only sensor is disabled by default because the accessory is not installed on every PowerOcean system. (Ref #7)
+- PowerOcean: optional Heating Rod Power sensor for systems with a PowerGlow accessory. The heating rod reports its power through the PowerOcean itself rather than as a device of its own, so no separate setup is needed. The sensor is read-only and disabled by default, because most PowerOcean systems have no heating rod attached. Enable it under Settings, Devices, PowerOcean, Entities. Contributed by @Xygen. (Ref #7)
 
-## [1.15.0] - 2026-07-29
+## [1.15.0] - 2026-07-31
 
 ### Added
 - Support for the Stream family: Stream AC Pro (BK31), Stream Ultra (BK11), Stream Max (BK41), Stream AC (BK51) and Stream Ultra X (BK61). Devices are detected automatically and report battery state, power flows, per-outlet state and power, LED brightness as a diagnostic, and a signed AC grid connection power that matches the "Netz-Anschluss" value in the EcoFlow app. The Backup Reserve level can be set from Home Assistant. Stream units are modeled as AC-coupled batteries, so battery charge and discharge energy are available for the Energy Dashboard, while the meter-dependent solar and home energy values stay disabled diagnostics unless an EcoFlow-compatible meter is paired in the app. Battery capacity counters in Ah are disabled diagnostics as well. (Ref #98)
@@ -47,6 +47,7 @@ All notable changes to this project will be documented in this file.
 - The log stays quiet about conditions that resolve on their own. A device that briefly goes silent and turns its entities unavailable is a normal step in the graduated availability handling and is now logged at info level, and a failed reconnect attempt caused by a temporary name resolution failure is no longer an error. Both are reported as warnings once attempts start piling up. The log line about a silent device also reads correctly when the device has sent no data since connecting, instead of showing an infinite age.
 - Smaller fixes: diagnostics downloads now shorten device serial numbers to a 4-character prefix, enum sensors ignore unknown values from the device instead of breaking their state updates, only the main battery SoC drives the device-card header on the Delta 2 Max, and every lifetime counter is covered by the never-decrease guard.
 - Internal parser hardening: malformed or truncated binary frames and unexpected message envelopes are now discarded cleanly instead of raising, work-mode values delivered as text map correctly again, and PowerOcean battery pack numbering no longer depends on the order the cloud returns them.
+- The per-pack lifetime charge and discharge counters on PowerOcean no longer lose their decimals. Both were stored as whole kilowatt hours while every other energy sensor keeps two decimals, so each reading carried up to half a kilowatt hour of rounding. The battery reports these counters to the watt hour, and comparing two days on a three-pack system could therefore be off by several kilowatt hours in either direction, which made the counters unusable for exactly the comparison they are meant for. Existing readings continue upwards from where they are, so no history is lost. (Ref #88)
 - Internal connection hardening: simultaneous reconnect triggers no longer race each other, refreshed credentials are applied to the live connection immediately, and the connection keepalive no longer feeds its own echo back into the data pipeline.
 
 ## [1.14.0] - 2026-05-18

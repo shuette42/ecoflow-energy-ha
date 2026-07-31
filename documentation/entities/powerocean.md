@@ -1,8 +1,12 @@
 # PowerOcean - Entity Reference
 
-Full list of all entities created for PowerOcean devices (HJ31, HJ32, J32D, and J32E series).
+Full list of all entities created for PowerOcean devices.
 
-> **Note:** PowerOcean variants with serial prefix `J32D` or `J32E` (European variants) are currently not exposed through the EcoFlow Developer API and therefore require Enhanced Mode. In Standard Mode these devices report error 1006 and all entities stay unavailable. Single-phase variants (`J32E`) report only the phases that are physically present; the remaining phase entities stay empty.
+**Serial prefixes:** `HJ31`, `HJ32` (standard) · `J32D`, `J32E` (European variants) · `R371`, `R374`, `HJ3C` (PowerOcean Plus). All share the entity set below.
+
+> **Note:** The European variants (`J32D`, `J32E`) and the PowerOcean Plus units (`R371`, `R374`, `HJ3C`) are currently not exposed through the EcoFlow Developer API and therefore require Enhanced Mode. In Standard Mode these devices report error 1006 and all entities stay unavailable. Single-phase variants (`J32E`) report only the phases that are physically present; the remaining phase entities stay empty.
+
+> **PowerOcean Plus** units report more of the same entity set than a standard PowerOcean: per-phase reactive power (var) and apparent power (VA), plus MPPT strings 3 and 4. Those entities are disabled by default, so enable the ones you need after adding a Plus device.
 
 **Totals:** 208 sensors, 2 numbers, 1 select
 
@@ -120,6 +124,8 @@ These sensors are pre-configured for the HA Energy Dashboard (`total_increasing`
 | Total Battery Capacity | System battery capacity | disabled |
 | PCS Max Output/Input Power | Inverter power limits | disabled |
 | Battery Max Charge/Discharge Power | Battery power limits | disabled |
+| Battery Packs Online | Number of packs currently reporting | disabled |
+| Battery Packs Online (EMS) | Pack count as reported by the EMS | disabled |
 
 ## Sensors - Battery Packs (up to 5x BP5000)
 
