@@ -6,6 +6,12 @@ intentionally conservative: only fields observed repeatedly in live
 captures are mapped. The same parser is reused for other BK-series
 device prefixes until hardware-specific differences are identified.
 
+The map is prefix-blind on purpose. A BK01 Stream Micro carries a
+two-string PV front end and no battery, a BK31 carries a battery and no
+PV, and both describe those readings with the same field numbers in the
+same message. Which entities exist is decided per device prefix in
+`const.py`, not by forking this map.
+
 TODO: verify BK11 / BK41 / BK51 / BK61 field layouts against real
 hardware; the current implementation assumes the same protobuf frames
 and field numbers as BK31.
@@ -58,9 +64,20 @@ _STREAM_FIELD_MAP: dict[tuple[int, int], dict[int, tuple[str, str]]] = {
         262: ("soc_pct", _TYPE_INT),  # mirrored SoC
         270: ("max_charge_soc_pct", _TYPE_INT),
         271: ("min_discharge_soc_pct", _TYPE_INT),
-        380: ("ac_outlet_1_enabled", _TYPE_INT),
-        381: ("ac_outlet_2_enabled", _TYPE_INT),
+        # PV string 1 input. Both are floats on the wire; the vendor quota
+        # exposes the same two values as `plugInInfoPvVol` / `plugInInfoPvAmp`,
+        # and `380 * 381` reproduces the PV 1 power in field 361.
+        380: ("pv_voltage_v", _TYPE_FLOAT),
+        381: ("pv_current_a", _TYPE_FLOAT),
+        442: ("pv2_voltage_v", _TYPE_FLOAT),
+        71: ("pv2_current_a", _TYPE_FLOAT),
+        # Per-string PV power. The sum of both equals the grid connection
+        # power in field 616 on units that feed everything into the grid.
+        361: ("pv1_w", _TYPE_FLOAT),
+        70: ("pv2_w", _TYPE_FLOAT),
         461: ("backup_reserve_pct", _TYPE_INT),
+        # Configured feed-in cap in watts (user-changeable in the app).
+        521: ("feed_grid_power_limit_w", _TYPE_INT),
         # Summed AC intake from grid. Charge-dump correlation:
         # grid_w ~= batt_w + home_from_grid_w.
         515: ("grid_w", _TYPE_FLOAT),
@@ -70,13 +87,28 @@ _STREAM_FIELD_MAP: dict[tuple[int, int], dict[int, tuple[str, str]]] = {
         517: ("solar_w", _TYPE_FLOAT),
         # Signed battery power path: positive = charging, negative = discharging.
         518: ("batt_w", _TYPE_FLOAT),
-        602: ("_batt_w_fallback", _TYPE_FLOAT),
+        # WiFi module signal strength in dBm (negative). This is a radio
+        # reading, not a power path: it must never reach a battery key.
+        602: ("wifi_rssi_dbm", _TYPE_FLOAT),
         613: ("ac_voltage_v", _TYPE_FLOAT),
+        614: ("ac_current_a", _TYPE_FLOAT),
         615: ("ac_frequency_hz", _TYPE_FLOAT),
         616: ("grid_connection_power_w", _TYPE_FLOAT),
-        # Mirror fields for the AC outlet enable flags. They carry the same
-        # on/off semantics as 380/381; whichever appears last in the frame
-        # wins, which is harmless because both encode the same boolean state.
+        # Grid connection state, mapped to its enum labels in
+        # _finalize_stream_state.
+        619: ("_grid_connection_state_raw", _TYPE_INT),
+        # Sole source for the AC outlet enable flags on the telemetry frame.
+        # The config-write path carries its own outlet fields, but those hold
+        # the requested target rather than the live relay state and are
+        # deliberately not mapped (same reasoning as LED field 384).
+        #
+        # UNVERIFIED AGAINST HARDWARE: no BK31 telemetry frame exists in this
+        # repo, so that these two carry the live relay state rests on the
+        # protocol definition alone. Fields 380/381 used to feed the same two
+        # keys and were corrected to PV voltage and current; if these two turn
+        # out not to be present on a BK31, both outlet sensors go permanently
+        # stale without anything being logged. A BK31 frame carrying 380/381
+        # but not 980/982 would disprove this and reopen the question.
         980: ("ac_outlet_1_enabled", _TYPE_INT),
         982: ("ac_outlet_2_enabled", _TYPE_INT),
         992: ("sys_grid_connection_power_w", _TYPE_FLOAT),
@@ -112,12 +144,22 @@ _STREAM_FIELD_MAP: dict[tuple[int, int], dict[int, tuple[str, str]]] = {
         50: ("_batt_charge_capacity_mah_total", _TYPE_INT),
         51: ("_batt_discharge_capacity_mah_total", _TYPE_INT),
     },
-    # SET acknowledgement path for backup reserve slider
+    # SET acknowledgement path for backup reserve slider. Only the backup
+    # reserve is read back here: the acknowledgement echoes the requested
+    # target, so any field that also exists on the telemetry frame would
+    # overwrite a live reading with a set-point (see LED field 384).
     (254, 18): {
-        380: ("ac_outlet_1_enabled", _TYPE_INT),
-        381: ("ac_outlet_2_enabled", _TYPE_INT),
         102: ("backup_reserve_pct", _TYPE_INT),
     },
+}
+
+# Grid connection state enum. Values outside this table decode to None so an
+# unknown state can never reach an enum sensor as a raw integer.
+_GRID_CONNECTION_STATE = {
+    0: "invalid",
+    1: "grid_in",
+    2: "not_online",
+    3: "feed_grid",
 }
 
 
@@ -219,10 +261,10 @@ def _finalize_stream_state(parsed: dict[str, Any]) -> dict[str, Any]:
     if "soc_pct" not in result and "soc_precise_pct" in result:
         result["soc_pct"] = result["soc_precise_pct"]
 
-    if "batt_w" not in result and "_batt_w_fallback" in result:
-        result["batt_w"] = float(result["_batt_w_fallback"])
+    grid_state_raw = result.pop("_grid_connection_state_raw", None)
+    if isinstance(grid_state_raw, int):
+        result["grid_connection_state"] = _GRID_CONNECTION_STATE.get(grid_state_raw)
 
-    result.pop("_batt_w_fallback", None)
     batt_voltage_mv = result.pop("_batt_voltage_mv", None)
 
     if isinstance(batt_voltage_mv, (int, float)):
@@ -259,6 +301,43 @@ def _finalize_stream_state(parsed: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def _pdata_candidates(header: dict[str, Any]) -> list[bytes]:
+    """Return the payload bytes to try for one header, most likely first.
+
+    A header with ``enc_type == 1`` carries its payload XOR-masked with the
+    low byte of its own sequence number. The mask is per header: a bundled
+    frame holds several headers with different sequence numbers, so applying
+    one header's key to another header's payload would corrupt it. The
+    untouched bytes stay in the list as a fallback for a device that sets the
+    flag without masking.
+
+    The fallback is only ever reached when the unmasked bytes are not valid
+    protobuf at all. An unmasked payload that parses but carries no mapped
+    field is a complete, successful read of a message we do not map - most of
+    what a Stream Micro sends looks like that - and retrying the masked bytes
+    on top of it would feed random values into live sensors.
+    """
+    pdata_hex = header.get("pdata")
+    if not isinstance(pdata_hex, str) or not pdata_hex:
+        return []
+    try:
+        pdata = bytes.fromhex(pdata_hex)
+    except ValueError:
+        return []
+    if not pdata:
+        return []
+
+    if header.get("enc_type") != 1:
+        return [pdata]
+
+    seq = header.get("seq")
+    if not isinstance(seq, int) or not seq & 0xFF:
+        return [pdata]
+
+    xor_key = seq & 0xFF
+    return [bytes(value ^ xor_key for value in pdata), pdata]
+
+
 def parse_stream_proto_message(payload: bytes) -> dict[str, Any] | None:
     """Parse a Stream protobuf frame into flat sensor keys."""
     try:
@@ -270,14 +349,22 @@ def parse_stream_proto_message(payload: bytes) -> dict[str, Any] | None:
         for header in headers:
             cmd_key = (int(header.get("cmd_func", -1)), int(header.get("cmd_id", -1)))
             field_map = _STREAM_FIELD_MAP.get(cmd_key)
-            pdata_hex = header.get("pdata")
-            if field_map is None or not isinstance(pdata_hex, str) or not pdata_hex:
+            if field_map is None:
                 continue
-            try:
-                pdata = bytes.fromhex(pdata_hex)
-            except ValueError:
-                continue
-            merged.update(_decode_mapped_fields(pdata, field_map))
+            for pdata in _pdata_candidates(header):
+                try:
+                    decoded = _decode_mapped_fields(pdata, field_map)
+                except (IndexError, ValueError):
+                    # Only a payload that is not valid protobuf falls through
+                    # to the next candidate. A clean decode ends the attempt,
+                    # empty or not (see _pdata_candidates).
+                    continue
+                merged.update(decoded)
+                break
+            # A decode error is contained to the message that caused it: the
+            # remaining headers of a bundle still contribute. Before the
+            # per-candidate guard the error reached the frame-level handler
+            # below and discarded the whole bundle.
     except Exception:
         return None
     if not merged:

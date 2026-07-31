@@ -16,20 +16,34 @@ This module fills that gap. In app-auth mode it opens a listen-only MQTT
 connection per skipped device, captures the raw frames into a bounded
 buffer, and hands them to diagnostics. It creates no entities, sends no
 commands, and writes nothing to the device.
+
+The buffer is bucketed by message type rather than being one shared ring.
+A capture runs for up to 24 hours and the frames worth having are the
+rare ones, so a shared ring is the wrong shape: the most frequent message
+type fills it with its own tail and evicts everything a parser would be
+built from. ``TypedFrameBuffer`` gives every message type its own budget
+and keeps one frame per time slot within it, widening the slot as the
+recording grows rather than dropping its start. See that class for the
+full reasoning.
 """
 
 from __future__ import annotations
 
 import logging
 import threading
-from collections import deque
 from typing import Any
 
 from homeassistant.core import HomeAssistant
 
-from .const import RAW_FRAME_LOG_MAX, RAW_FRAME_MAX_BYTES
+from .const import RAW_FRAME_KEYS_MAX, RAW_FRAME_MAX_BYTES, RAW_FRAME_PER_KEY_MAX
 from .ecoflow.cloud_mqtt import EcoFlowMQTTClient
-from .ecoflow.frame_capture import build_frame_entry, decode_cmd_headers, is_proto_frame
+from .ecoflow.frame_capture import (
+    TypedFrameBuffer,
+    build_frame_entry,
+    decode_cmd_headers,
+    frame_key,
+    is_proto_frame,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -63,7 +77,7 @@ class UnroutedDeviceProbe:
         self.product_name = product_name
         self._user_id = user_id
         self._cert_account = cert_account
-        self._frames: deque[dict[str, Any]] = deque(maxlen=RAW_FRAME_LOG_MAX)
+        self._frames = TypedFrameBuffer(RAW_FRAME_KEYS_MAX, RAW_FRAME_PER_KEY_MAX)
         self._topics: set[str] = set()
         # Written on the Paho thread, read on the event loop when diagnostics
         # are downloaded. On CPython the reads happen to be safe already:
@@ -89,9 +103,21 @@ class UnroutedDeviceProbe:
 
     @property
     def frames(self) -> list[dict[str, Any]]:
-        """Return the captured frames for diagnostics export."""
+        """Return the captured frames for diagnostics export, oldest first."""
         with self._capture_lock:
-            return list(self._frames)
+            return self._frames.frames()
+
+    @property
+    def sampling(self) -> dict[str, Any]:
+        """Return what the probe heard versus what it kept.
+
+        A short frame list has two very different causes - a device that
+        says almost nothing, and a device so chatty that the sampling
+        thinned it out - and a reader cannot tell them apart from the
+        frames alone.
+        """
+        with self._capture_lock:
+            return self._frames.stats()
 
     @property
     def topics(self) -> list[str]:
@@ -171,9 +197,13 @@ class UnroutedDeviceProbe:
                 )
                 entry["format"] = "proto"
                 entry["cmds"] = decode_cmd_headers(payload)
+            # Derived before the lock: the key comes from the payload, which
+            # for a JSON push means a mask plus a parse, and the Paho thread
+            # should not hold the lock across that.
+            key = frame_key(entry, payload, self._secrets())
             with self._capture_lock:
                 self._topics.add(self._mask_topic(topic))
-                self._frames.append(entry)
+                self._frames.add(key, entry)
         except Exception:  # noqa: BLE001
             _LOGGER.debug("Probe frame capture failed", exc_info=True)
 

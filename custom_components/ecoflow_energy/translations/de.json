@@ -1264,6 +1264,33 @@
       "pv_voltage_v": {
         "name": "PV-Spannung"
       },
+      "pv_current_a": {
+        "name": "PV-Strom"
+      },
+      "pv2_voltage_v": {
+        "name": "PV 2 Spannung"
+      },
+      "pv2_current_a": {
+        "name": "PV 2 Strom"
+      },
+      "ac_current_a": {
+        "name": "AC-Strom"
+      },
+      "wifi_rssi_dbm": {
+        "name": "WLAN-Signal"
+      },
+      "feed_grid_power_limit_w": {
+        "name": "Einspeisegrenze"
+      },
+      "grid_connection_state": {
+        "name": "Netzanschluss-Status",
+        "state": {
+          "invalid": "Ungültig",
+          "grid_in": "Bezug aus dem Netz",
+          "not_online": "Nicht verbunden",
+          "feed_grid": "Einspeisung ins Netz"
+        }
+      },
       "home_from_solar_w": {
         "name": "Hausverbrauch aus Solar"
       },

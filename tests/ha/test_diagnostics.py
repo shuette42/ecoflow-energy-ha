@@ -741,6 +741,19 @@ class TestUnroutedDeviceCapture:
             "cmds": [{"cmd_func": 96, "cmd_id": 33}],
             "hex": "0a02ffff",
         }]
+        # Mirrors the real probe's sampling report. A bare MagicMock here
+        # would satisfy the export and then fail to serialise, which is not
+        # what the leak assertion below is meant to be testing.
+        probe.sampling = {
+            "frames_seen": 4212,
+            "frames_kept": 1,
+            "span_s": 21598.0,
+            "keys_tracked": 1,
+            "keys_max": 12,
+            "per_key_max": 10,
+            "frames_dropped_key_budget": 0,
+            "per_key": {"get_reply:proto/96.33": {"seen": 4212, "kept": 1}},
+        }
         return probe
 
     async def test_capture_is_attached_to_the_matching_device(

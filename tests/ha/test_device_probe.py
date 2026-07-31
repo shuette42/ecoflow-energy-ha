@@ -1,12 +1,14 @@
 """Tests for the listen-only capture of devices that have no parser yet."""
 
+import itertools
 import logging
+from collections.abc import Iterator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
 
-from ecoflow_energy.const import RAW_FRAME_LOG_MAX
+from ecoflow_energy.const import RAW_FRAME_KEYS_MAX, RAW_FRAME_PER_KEY_MAX
 from ecoflow_energy.device_probe import UnroutedDeviceProbe, async_start_probes
 from ecoflow_energy.ecoflow.cloud_mqtt import EcoFlowMQTTClient
 
@@ -20,6 +22,17 @@ def _probe(hass: HomeAssistant) -> UnroutedDeviceProbe:
             hass, SKIPPED_SN, "Ocean 2", "cert_account", "cert_password", "user123"
         )
     return probe
+
+
+def _fake_clock(step: float) -> Iterator[float]:
+    """Return a stand-in for the capture clock.
+
+    Frame timestamps come from ``time.time()`` inside ``build_frame_entry``.
+    Driving them from a counter keeps the span assertions deterministic -
+    real-clock arithmetic in a test means the assertion measures the
+    machine, not the code.
+    """
+    return itertools.count(1_000_000.0, step)
 
 
 class TestListenOnly:
@@ -200,13 +213,129 @@ class TestListenOnly:
 
         assert probe.topics == ["/open/{acct}/{sn}/quota"]
 
+    async def test_a_rare_message_type_survives_a_long_capture(
+        self, hass: HomeAssistant
+    ) -> None:
+        """The reported failure, end to end.
+
+        A Stream Micro recorded for six hours delivered 24 frames spanning
+        199 seconds, every one of them the same message type. The frames a
+        parser is built from - the battery report, the ones carrying state
+        of charge - had been pushed out by the most frequent push.
+        """
+        probe = _probe(hass)
+        frequent = [{"cmd_func": 254, "cmd_id": 21}]
+        battery = [{"cmd_func": 32, "cmd_id": 50}]
+        counter = itertools.count()
+        clock = _fake_clock(2.0)
+
+        def headers(_payload: bytes) -> list[dict[str, int]]:
+            # One battery report every 200th frame: at a two-second cadence
+            # that is roughly one every seven minutes.
+            return battery if next(counter) % 200 == 0 else frequent
+
+        with (
+            patch("ecoflow_energy.device_probe.decode_cmd_headers", side_effect=headers),
+            patch(
+                "ecoflow_energy.ecoflow.frame_capture.time.time",
+                side_effect=lambda: next(clock),
+            ),
+        ):
+            for _ in range(10_800):  # 6 h at one frame every 2 s
+                probe._on_message("/app/device/property/{sn}", b"\x0a\x01")
+
+        frames = probe.frames
+        kept_cmds = [frame["cmds"][0] for frame in frames]
+        assert {"cmd_func": 32, "cmd_id": 50} in kept_cmds
+        assert {"cmd_func": 254, "cmd_id": 21} in kept_cmds
+        # Both types keep their full span, not their last few minutes.
+        assert frames[-1]["ts"] - frames[0]["ts"] > 6 * 3600 - 5
+
+    async def test_frames_are_exported_oldest_first(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Buckets are internal; a reader sees one chronological stream."""
+        probe = _probe(hass)
+        clock = _fake_clock(1.0)
+        types = itertools.cycle(
+            [
+                [{"cmd_func": 254, "cmd_id": 21}],
+                [{"cmd_func": 32, "cmd_id": 50}],
+                [],
+            ]
+        )
+
+        with (
+            patch(
+                "ecoflow_energy.device_probe.decode_cmd_headers",
+                side_effect=lambda _payload: next(types),
+            ),
+            patch(
+                "ecoflow_energy.ecoflow.frame_capture.time.time",
+                side_effect=lambda: next(clock),
+            ),
+        ):
+            for _ in range(60):
+                probe._on_message("/topic", b"\x0a\x01")
+
+        timestamps = [frame["ts"] for frame in probe.frames]
+        assert timestamps == sorted(timestamps)
+
     async def test_buffer_is_bounded(self, hass: HomeAssistant) -> None:
+        """Neither the frame count nor the number of types may run away."""
+        probe = _probe(hass)
+        counter = itertools.count()
+
+        def headers(_payload: bytes) -> list[dict[str, int]]:
+            # Far more distinct message types than the key budget allows.
+            return [{"cmd_func": 254, "cmd_id": next(counter) % 100}]
+
+        with patch(
+            "ecoflow_energy.device_probe.decode_cmd_headers", side_effect=headers
+        ):
+            for _ in range(5_000):
+                probe._on_message("/topic", b"\x0a\x01")
+
+        sampling = probe.sampling
+        assert sampling["keys_tracked"] == RAW_FRAME_KEYS_MAX
+        assert len(probe.frames) <= RAW_FRAME_KEYS_MAX * RAW_FRAME_PER_KEY_MAX
+        assert all(
+            key["kept"] <= RAW_FRAME_PER_KEY_MAX
+            for key in sampling["per_key"].values()
+        )
+        assert sampling["frames_seen"] == 5_000
+
+    async def test_sampling_reports_what_was_thinned_away(
+        self, hass: HomeAssistant
+    ) -> None:
+        """A short frame list must not look like a silent device."""
         probe = _probe(hass)
 
-        for _ in range(RAW_FRAME_LOG_MAX + 10):
-            probe._on_message("/topic", b"\x0a\x01")
+        with patch(
+            "ecoflow_energy.device_probe.decode_cmd_headers",
+            return_value=[{"cmd_func": 254, "cmd_id": 21}],
+        ):
+            for _ in range(500):
+                probe._on_message("/topic", b"\x0a\x01")
 
-        assert len(probe.frames) == RAW_FRAME_LOG_MAX
+        sampling = probe.sampling
+        assert sampling["frames_seen"] == 500
+        assert sampling["frames_kept"] == len(probe.frames)
+        assert sampling["frames_kept"] < sampling["frames_seen"]
+
+    async def test_json_types_do_not_share_one_bucket(
+        self, hass: HomeAssistant
+    ) -> None:
+        """A JSON device's message types are told apart by their own marker."""
+        probe = _probe(hass)
+
+        for _ in range(200):
+            probe._on_message("/topic", b'{"typeCode": "pdStatus", "soc": 50}')
+        probe._on_message("/topic", b'{"typeCode": "bmsStatus", "temp": 20}')
+
+        payloads = [bytes.fromhex(frame["hex"]) for frame in probe.frames]
+        assert any(b"bmsStatus" in payload for payload in payloads)
+        assert probe.sampling["keys_tracked"] == 2
 
     async def test_capture_failure_never_raises(self, hass: HomeAssistant) -> None:
         """Ingest of a broken frame must not destabilise the installation."""

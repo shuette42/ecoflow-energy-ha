@@ -23,6 +23,7 @@ from .const import (
     DEVICE_TYPE_STREAM,
     DOMAIN,
     EcoFlowBinarySensorDef,
+    filter_defs_for_serial,
     POWEROCEAN_BINARY_SENSORS,
     SMARTPLUG_BINARY_SENSORS,
     STREAM_BINARY_SENSORS,
@@ -46,7 +47,9 @@ async def async_setup_entry(
     entities: list[EcoFlowBinarySensor] = []
 
     for coordinator in coordinators.values():
-        defs = _get_binary_sensor_defs(coordinator.device_type)
+        defs = filter_defs_for_serial(
+            _get_binary_sensor_defs(coordinator.device_type), coordinator.device_sn
+        )
         for defn in defs:
             entities.append(EcoFlowBinarySensor(coordinator, defn))
 

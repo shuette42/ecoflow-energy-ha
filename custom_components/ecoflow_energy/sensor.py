@@ -25,6 +25,7 @@ from .const import (
     DELTA2MAX_SENSORS,
     DELTA3_SENSORS,
     EcoFlowSensorDef,
+    filter_defs_for_serial,
     POWEROCEAN_SENSORS,
     SMARTPLUG_SENSORS,
     STREAM_SENSORS,
@@ -55,7 +56,9 @@ async def async_setup_entry(
     entities: list[SensorEntity] = []
 
     for coordinator in coordinators.values():
-        sensor_defs = _get_sensor_defs(coordinator.device_type)
+        sensor_defs = filter_defs_for_serial(
+            _get_sensor_defs(coordinator.device_type), coordinator.device_sn
+        )
         for sensor_def in sensor_defs:
             if sensor_def.enhanced_only and not coordinator.enhanced_mode:
                 continue

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypeVar
 
 from homeassistant.const import Platform
 
@@ -88,6 +88,15 @@ HTTP_FALLBACK_INTERVAL_S = 30
 # truncated so a single oversized frame cannot bloat a diagnostics download.
 RAW_FRAME_LOG_MAX = 24
 RAW_FRAME_MAX_BYTES = 512
+
+# Unsupported-device probe: budget per message type instead of one shared ring.
+# A device that pushes one message type every two seconds fills a shared ring
+# with its own tail within minutes, and everything a parser is built from is
+# gone. Bucketing by message type makes a rare report compete only with itself.
+# Worst case: 12 * 10 * 512 B = 61 440 B (60 KiB) of frame payload, roughly
+# double that as hex text in the diagnostics download.
+RAW_FRAME_KEYS_MAX = 12
+RAW_FRAME_PER_KEY_MAX = 10
 HTTP_SUPPLEMENT_INTERVAL_S = 60  # Enhanced Mode: HTTP supplement poll for detail sensors
 ENERGY_STREAM_KEEPALIVE_S = 20  # Re-send EnergyStreamSwitch every 20s
 QUOTAS_KEEPALIVE_S = 30  # latestQuotas poll interval (app-level keepalive)
@@ -598,7 +607,14 @@ STREAM_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("pv2_w", "PV 2 Power", "W", "power", "measurement", "mdi:solar-power-variant", suggested_display_precision=0),
     EcoFlowSensorDef("pv3_w", "PV 3 Power", "W", "power", "measurement", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("pv4_w", "PV 4 Power", "W", "power", "measurement", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    # Per-string PV input voltage and current. The key naming follows the
+    # vendor's own asymmetry (plugInInfoPvVol / plugInInfoPv2Vol): the first
+    # string has no index, so the existing pv_voltage_v key stays as it is
+    # and renaming it would orphan the entity for current users.
     EcoFlowSensorDef("pv_voltage_v", "PV Voltage", "V", "voltage", "measurement", "mdi:flash", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
+    EcoFlowSensorDef("pv_current_a", "PV Current", "A", "current", "measurement", "mdi:current-dc", "diagnostic", suggested_display_precision=2, disabled_by_default=True),
+    EcoFlowSensorDef("pv2_voltage_v", "PV 2 Voltage", "V", "voltage", "measurement", "mdi:flash", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
+    EcoFlowSensorDef("pv2_current_a", "PV 2 Current", "A", "current", "measurement", "mdi:current-dc", "diagnostic", suggested_display_precision=2, disabled_by_default=True),
     EcoFlowSensorDef("home_from_solar_w", "Home From Solar", "W", "power", "measurement", "mdi:home-lightning-bolt-outline", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("home_w", "Home Power", "W", "power", "measurement", "mdi:home-lightning-bolt", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("grid_w", "Grid Power", "W", "power", "measurement", "mdi:transmission-tower", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
@@ -635,7 +651,13 @@ STREAM_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("batt_charge_capacity_ah", "Battery Charge Capacity", "Ah", None, "total_increasing", "mdi:battery-plus", "diagnostic", suggested_display_precision=2, disabled_by_default=True),
     EcoFlowSensorDef("batt_discharge_capacity_ah", "Battery Discharge Capacity", "Ah", None, "total_increasing", "mdi:battery-minus", "diagnostic", suggested_display_precision=2, disabled_by_default=True),
     EcoFlowSensorDef("ac_voltage_v", "AC Voltage", "V", "voltage", "measurement", "mdi:sine-wave", suggested_display_precision=1),
+    EcoFlowSensorDef("ac_current_a", "AC Current", "A", "current", "measurement", "mdi:current-ac", suggested_display_precision=2),
     EcoFlowSensorDef("ac_frequency_hz", "AC Frequency", "Hz", "frequency", "measurement", "mdi:sine-wave", suggested_display_precision=2),
+    # Grid tie state and the configured feed-in cap. Both are read-only here:
+    # the cap is changed in the vendor app, we only report what it is set to.
+    EcoFlowSensorDef("grid_connection_state", "Grid Connection State", None, "enum", None, "mdi:transmission-tower", "diagnostic", options=["invalid", "grid_in", "not_online", "feed_grid"]),
+    EcoFlowSensorDef("feed_grid_power_limit_w", "Feed-in Power Limit", "W", "power", "measurement", "mdi:transmission-tower-export", "diagnostic", suggested_display_precision=0),
+    EcoFlowSensorDef("wifi_rssi_dbm", "WiFi Signal", "dBm", "signal_strength", "measurement", "mdi:wifi", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("batt_max_cell_temp_c", "Max Cell Temp", "\u00b0C", "temperature", "measurement", "mdi:thermometer-high", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
     EcoFlowSensorDef("batt_min_cell_temp_c", "Min Cell Temp", "\u00b0C", "temperature", "measurement", "mdi:thermometer-low", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
     EcoFlowSensorDef("batt_max_mos_temp_c", "Max MOSFET Temp", "\u00b0C", "temperature", "measurement", "mdi:thermometer-alert", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
@@ -644,6 +666,107 @@ STREAM_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("backup_reserve_pct", "Backup Reserve", "%", None, "measurement", "mdi:battery-lock", "diagnostic", suggested_display_precision=0),
     EcoFlowSensorDef("batt_charge_discharge_state", "Battery Charge/Discharge State", None, "enum", None, "mdi:battery-sync", "diagnostic", disabled_by_default=True, options=["standby", "discharging", "charging"]),
 ]
+
+
+# The Stream Micro (BK01) is a grid-tie PV inverter: two PV strings, one
+# single-phase grid connection, no battery, no AC outlets. It speaks the same
+# wire format as the rest of the BK series and therefore shares the parser and
+# the entity lists, so the keys it never produces are filtered out here rather
+# than by forking a second device type.
+#
+# The list is deliberately generous. Home Assistant keeps an entity in the
+# registry after a later fix removes it, so a wrongly created entity is
+# permanent for that owner, while a wrongly omitted one is added back in the
+# next release without breaking anything.
+STREAM_MICRO_EXCLUDED_KEYS: frozenset[str] = frozenset({
+    # Battery block: the periodic full telemetry upload carries none of the
+    # battery fields the protocol defines in that same message.
+    "soc_pct",
+    "soc_precise_pct",
+    "bms_soh_pct",
+    "batt_w",
+    "batt_charge_power_w",
+    "batt_discharge_power_w",
+    "batt_charge_energy_kwh",
+    "batt_discharge_energy_kwh",
+    "batt_voltage_v",
+    "batt_temp_c",
+    "batt_design_cap_mah",
+    "batt_remain_cap_mah",
+    "batt_full_cap_mah",
+    "batt_charge_capacity_ah",
+    "batt_discharge_capacity_ah",
+    "batt_max_cell_vol_mv",
+    "batt_min_cell_vol_mv",
+    "batt_max_cell_temp_c",
+    "batt_min_cell_temp_c",
+    "batt_max_mos_temp_c",
+    "batt_charge_discharge_state",
+    # The SoC limits (fields 270/271) are parsed but have no Stream entity of
+    # their own, so there is nothing to exclude for them here.
+    # Backup reserve is a battery control: the read-only sensor and the
+    # number entity that writes it.
+    "backup_reserve_pct",
+    "backup_reserve",
+    # AC outlets: this unit has no sockets to switch or meter.
+    "ac_outlet_1_enabled",
+    "ac_outlet_2_enabled",
+    "ac_outlet_1_w",
+    "ac_outlet_2_w",
+    # System load/grid paths. A microinverter reports what it feeds in, not
+    # a house energy balance, and none of these appear in its uploads.
+    "grid_w",
+    "home_w",
+    "home_energy_kwh",
+    "home_from_batt_w",
+    "home_from_grid_w",
+    "home_from_solar_w",
+    "sys_grid_connection_power_w",
+    # The meter-dependent solar total belongs to that same system path and is
+    # absent from both full uploads. This unit reports its PV through the two
+    # per-string readings instead, which it does keep. Its energy counter is
+    # integrated from the power reading, so leaving the counter in would put a
+    # lifetime total on the device that can never move off zero.
+    "solar_w",
+    "solar_energy_kwh",
+})
+
+# Serial prefix -> entity keys that variant never produces. A prefix absent
+# from this table gets the full entity list of its device type.
+_SN_PREFIX_EXCLUDED_KEYS: dict[str, frozenset[str]] = {
+    "BK01": STREAM_MICRO_EXCLUDED_KEYS,
+}
+
+
+# Any entity definition carrying a ``key`` attribute (sensor, binary sensor,
+# number, switch, select).
+_DefT = TypeVar("_DefT")
+
+
+def excluded_keys_for_serial(device_sn: str) -> frozenset[str]:
+    """Return the entity keys the device behind ``device_sn`` never produces."""
+    if not device_sn:
+        return frozenset()
+    return _SN_PREFIX_EXCLUDED_KEYS.get(device_sn[:4].upper(), frozenset())
+
+
+def filter_defs_for_serial(definitions: list[_DefT], device_sn: str) -> list[_DefT]:
+    """Drop entity definitions a device variant cannot ever populate.
+
+    Applied by the sensor, binary sensor and number platforms next to the
+    ``enhanced_only`` filter. Number definitions read their value from
+    ``state_key``, so both that and ``key`` are matched against the
+    exclusion set.
+    """
+    excluded = excluded_keys_for_serial(device_sn)
+    if not excluded:
+        return list(definitions)
+    return [
+        definition
+        for definition in definitions
+        if definition.key not in excluded
+        and getattr(definition, "state_key", None) not in excluded
+    ]
 
 
 # =====================================================================

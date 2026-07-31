@@ -44,13 +44,16 @@
 | **Delta 2 Max** - Portable Power | `R351` `R331` | 94 + 4 binary | 7 switches, 8 numbers | 4 (solar 1+2, AC in/out) | ~30 s standard (+ MQTT push) |
 | **Delta 3 Max Plus** - Portable Power | `D3M1` `P321` | 24 | 7 switches, 3 numbers | 4 (solar 1+2, AC in, output) | ~30 s standard / ~2 s enhanced |
 | **Smart Plug** - Switchable Outlet | `HW52` | 11 + 1 binary | 1 switch, 2 numbers | 1 (total energy) | ~30 s standard / ~3 s enhanced |
-| **Stream** - AC-coupled Battery | `BK31` `BK11` `BK41` `BK51` `BK61` | 47 + 2 binary | 1 number (Enhanced only) | 2 default (battery charge/discharge), 6 optional diagnostic (solar/home, PV 1-4) | ~30 s standard / ~3 s enhanced |
+| **Stream** - AC-coupled Battery | `BK31` `BK11` `BK41` `BK51` `BK61` | 54 + 2 binary | 1 number (Enhanced only) | 2 default (battery charge/discharge), 6 optional diagnostic (solar/home, PV 1-4) | ~30 s standard / ~3 s enhanced |
+| **Stream Micro** - Grid-tie Inverter | `BK01`\* | 21 | - | 4 optional diagnostic (PV 1-4) | ~3 s enhanced |
 
 > **\* Enhanced Mode only.** These serial prefixes cannot currently be linked to an IoT Developer API key, so Standard Mode reports error 1006 and their entities stay unavailable. This is an EcoFlow API limitation, not a configuration problem.
 >
 > **PowerOcean and PowerOcean Plus share one entity set.** A Plus unit simply reports more of it: per-phase reactive power (var) and apparent power (VA), plus MPPT strings 3 and 4. Those entities exist for every PowerOcean but are disabled by default, because a standard unit never sends them and the entity would sit at "unknown" forever. Enable them under **Settings > Devices & services > Entities** on a Plus device.
 >
-> **Tip:** Other Delta-series devices (Delta Pro, Delta 2, etc.) should work automatically with the Delta sensor set. Base Delta 3 and Delta 3 Plus use the Delta 3 sensor set. All Stream models share the Stream sensor set shown above.
+> **Tip:** Other Delta-series devices (Delta Pro, Delta 2, etc.) should work automatically with the Delta sensor set. Base Delta 3 and Delta 3 Plus use the Delta 3 sensor set. The five AC-coupled Stream models share one sensor set.
+>
+> **The Stream Micro is the exception.** It is a grid-tie inverter with two solar strings and no battery, so it deliberately gets a reduced set: no battery, state of charge, backup reserve or AC outlet entities, because it has none of those and an entity Home Assistant once created stays in the registry forever.
 >
 > **Note:** Sensor counts are the device-specific entity definitions. Every device additionally exposes 2 universal diagnostic sensors (connection status and active mode) that are not included in the counts above. Many sensors are diagnostic and disabled by default.
 
@@ -94,9 +97,20 @@ Battery SoC/SoH · signed battery power · battery charge/discharge power · **p
 
 The Stream is treated as an AC-coupled battery. House, grid and total solar flow values depend on an EcoFlow-paired meter and are disabled by default as diagnostic entities. Individual AC outlets and LED brightness are exposed read-only, since the app write path is not confirmed for third-party control.
 
-**Both modes are supported, and they differ in solar detail.** Standard Mode reads the Stream through the official Developer API (~30 s) and is the only mode that reports **per-string solar**: PV 1 and PV 2 are enabled by default, PV 3 and PV 4 ship disabled because only larger units drive that many strings. Enhanced Mode updates faster (~3 s) but reports solar only as a single total, which itself depends on a paired meter. Both modes create the same entity set, so a device can switch between them without duplicating sensors; the per-string PV entities simply stay empty in Enhanced Mode.
+**Both modes are supported, and they differ in solar detail.** Standard Mode reads the Stream through the official Developer API (~30 s) and reports all four solar strings: PV 1 and PV 2 are enabled by default, PV 3 and PV 4 ship disabled because only larger units drive that many strings. Enhanced Mode updates faster (~3 s) and reports PV 1 and PV 2 plus their input voltage and current, but not strings 3 and 4. Both modes create the same entity set, so a device can switch between them without duplicating sensors.
 
 All five models are recognized by serial prefix and appear under their correct model name: Stream AC Pro (`BK31`), Stream Ultra (`BK11`), Stream Max (`BK41`), Stream AC (`BK51`), Stream Ultra X (`BK61`).
+
+</details>
+
+<details>
+<summary><b>Stream Micro</b> (`BK01`) - grid-tie solar inverter, two strings, no battery</summary>
+
+Per-string solar power, voltage and current for both strings · single-phase grid connection with voltage, current, frequency and power · grid connection state · the feed-in limit configured in the EcoFlow app · WiFi signal strength.
+
+The Stream Micro feeds solar directly into the grid and has no battery and no AC outlets, so it gets a smaller entity set than the rest of the Stream family: no state of charge, no battery power or energy, no backup reserve and no outlet entities. Home Assistant keeps an entity in the registry once it has been created, so entities a device can never fill are not created in the first place.
+
+**Enhanced Mode only.** The Stream Micro is not exposed through the EcoFlow Developer API at all, so it needs the EcoFlow account sign-in.
 
 </details>
 
@@ -133,7 +147,7 @@ Download the [latest release](https://github.com/shuette42/ecoflow-energy-ha/rel
 
 **Standard Mode** uses the official EcoFlow IoT Developer API. Apply for free API keys at [developer.ecoflow.com](https://developer.ecoflow.com). Note: the European PowerOcean variants (`J32D`, `J32E`) and the PowerOcean Plus units (`R371`, `R374`, `HJ3C`) are currently not exposed through the Developer API and cannot be linked to an API key (error 1006). These devices work in Enhanced Mode only.
 
-**Enhanced Mode** connects with your EcoFlow email and password. No Developer API keys needed. Faster updates, but this is an unofficial, community-driven protocol based on observed behaviour that may change without notice. Stream-family devices report an empty product name, so they are identified by their serial prefix (`BK11`, `BK31`, `BK41`, `BK51`, `BK61`) and appear under the correct model name in Home Assistant in both modes.
+**Enhanced Mode** connects with your EcoFlow email and password. No Developer API keys needed. Faster updates, but this is an unofficial, community-driven protocol based on observed behaviour that may change without notice. Stream-family devices report an empty product name, so they are identified by their serial prefix (`BK01`, `BK11`, `BK31`, `BK41`, `BK51`, `BK61`) and appear under the correct model name in Home Assistant in both modes. The Stream Micro (`BK01`) is not exposed through the Developer API at all and therefore needs Enhanced Mode.
 
 **Upgrading?** See [CHANGELOG.md](CHANGELOG.md) for migration notes. Most upgrades are seamless. v1.13.0 removes the legacy `min_discharge_soc` PowerOcean entity (replaced by `backup_reserve`); after upgrading you may see it as "unavailable" in HA - safe to delete via Settings > Devices & services > Entities.
 
@@ -194,7 +208,9 @@ Add under **Energy > Individual Devices**.
 | Battery charge | **Battery Charge Energy** (kWh) |
 | Battery discharge | **Battery Discharge Energy** (kWh) |
 
-Solar and home energy sensors exist as diagnostics but are disabled by default because the Stream only reports meaningful home/grid/solar flow values when an EcoFlow-compatible meter is paired in the app. In Standard Mode a per-string counter (PV 1 Energy to PV 4 Energy) is available as well, also disabled by default because the solar energy sensor already covers the total. For normal AC-coupled battery use, select the two battery energy sensors above.
+Solar and home energy sensors exist as diagnostics but are disabled by default because the Stream only reports meaningful home/grid/solar flow values when an EcoFlow-compatible meter is paired in the app. A per-string counter (PV 1 Energy to PV 4 Energy) is available as well, also disabled by default because the solar energy sensor already covers the total. For normal AC-coupled battery use, select the two battery energy sensors above.
+
+On a **Stream Micro** there is no battery, so solar production is the whole picture: enable **PV 1 Energy** and **PV 2 Energy** and add them under **Solar production**.
 
 </details>
 

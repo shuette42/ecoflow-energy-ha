@@ -75,11 +75,16 @@ _SN_PREFIX_MAP = {
     "P321": DEVICE_TYPE_DELTA3,
     "HW52": DEVICE_TYPE_SMARTPLUG,
     # BK-series Stream devices:
+    #  - BK01: Stream Micro
     #  - BK11: Stream Ultra
     #  - BK31: Stream AC Pro
     #  - BK41: Stream Max
     #  - BK51: Stream AC
     #  - BK61: Stream Ultra X
+    # The Stream Micro (#141) is a grid-tie PV inverter without a battery, so
+    # it shares the Stream parser but gets a reduced entity set (see
+    # STREAM_MICRO_EXCLUDED_KEYS).
+    "BK01": DEVICE_TYPE_STREAM,
     "BK11": DEVICE_TYPE_STREAM,
     "BK31": DEVICE_TYPE_STREAM,
     "BK41": DEVICE_TYPE_STREAM,
@@ -88,6 +93,7 @@ _SN_PREFIX_MAP = {
 }
 
 _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
+    "BK01": "Stream Micro",
     "BK11": "Stream Ultra",
     "BK31": "Stream AC Pro",
     "BK41": "Stream Max",

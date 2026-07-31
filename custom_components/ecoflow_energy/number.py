@@ -23,6 +23,7 @@ from .const import (
     DEVICE_TYPE_STREAM,
     DOMAIN,
     EcoFlowNumberDef,
+    filter_defs_for_serial,
     NUMBER_COMMANDS,
     POWEROCEAN_NUMBERS,
     SMARTPLUG_NUMBER_COMMANDS,
@@ -53,7 +54,9 @@ async def async_setup_entry(
     entities: list[EcoFlowNumber] = []
 
     for coordinator in coordinators.values():
-        defs = _get_number_defs(coordinator.device_type)
+        defs = filter_defs_for_serial(
+            _get_number_defs(coordinator.device_type), coordinator.device_sn
+        )
         for defn in defs:
             if defn.enhanced_only and not coordinator.enhanced_mode:
                 continue

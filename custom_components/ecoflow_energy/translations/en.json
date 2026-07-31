@@ -1264,6 +1264,33 @@
       "pv_voltage_v": {
         "name": "PV Voltage"
       },
+      "pv_current_a": {
+        "name": "PV Current"
+      },
+      "pv2_voltage_v": {
+        "name": "PV 2 Voltage"
+      },
+      "pv2_current_a": {
+        "name": "PV 2 Current"
+      },
+      "ac_current_a": {
+        "name": "AC Current"
+      },
+      "wifi_rssi_dbm": {
+        "name": "WiFi Signal"
+      },
+      "feed_grid_power_limit_w": {
+        "name": "Feed-in Power Limit"
+      },
+      "grid_connection_state": {
+        "name": "Grid Connection State",
+        "state": {
+          "invalid": "Invalid",
+          "grid_in": "Drawing From Grid",
+          "not_online": "Not Connected",
+          "feed_grid": "Feeding Into Grid"
+        }
+      },
       "home_from_solar_w": {
         "name": "Home From Solar"
       },

@@ -184,9 +184,11 @@ def _header_pdata_candidates(header: dict[str, Any]) -> list[tuple[bytes, str]]:
     header's sequence to a whole bundle would corrupt every later message.
 
     The untouched bytes are offered as a second candidate whenever the flag is
-    set. No captured frame in this repo sets ``Enc_type``, so the flag's
-    meaning is unconfirmed; the retry keeps a device that sets it without
-    encrypting from losing every key of the message.
+    set. The XOR reading is confirmed on Stream hardware - every frame of the
+    tracked BK01 capture sets the flag and only decodes once unmasked - but no
+    device on this typed path has been observed setting it, so the retry stays
+    to keep a device that sets the flag without masking from losing every key
+    of the message.
     """
     pdata_hex = header.get("pdata")
     if not isinstance(pdata_hex, str) or not pdata_hex:

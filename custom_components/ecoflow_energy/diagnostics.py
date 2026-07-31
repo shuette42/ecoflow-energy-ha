@@ -140,12 +140,19 @@ async def _skipped_devices_diagnostics(
             # The app channel is the only route for models the Developer API
             # refuses (error 1006), so what the probe heard is the whole
             # evidence base for adding support.
+            #
+            # `sampling` is what makes the frame list readable: the frames are
+            # a sample per message type, not everything that arrived, and
+            # without the counts a thinned six-hour capture and a nearly silent
+            # device look the same.
+            frames = probe.frames
             out["raw_capture"] = {
                 "connected": probe.connected,
-                "frame_count": len(probe.frames),
+                "frame_count": len(frames),
                 "topics": probe.topics,
                 "truncated_at_bytes": RAW_FRAME_MAX_BYTES,
-                "frames": _format_event_log(probe.frames),
+                "sampling": probe.sampling,
+                "frames": _format_event_log(frames),
             }
         else:
             # Say so explicitly. A missing section would be indistinguishable
