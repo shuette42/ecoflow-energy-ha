@@ -178,6 +178,15 @@
       "batt_discharge_power_w": {
         "name": "Battery Discharge Power"
       },
+      "heating_rod_water_temp_c": {
+        "name": "Heating Rod Water Temperature"
+      },
+      "heating_rod_target_power_w": {
+        "name": "Heating Rod Target Power"
+      },
+      "heating_rod_target_temp_c": {
+        "name": "Heating Rod Target Temperature"
+      },
       "heating_rod_power_w": {
         "name": "Heating Rod Power"
       },

@@ -197,10 +197,13 @@ def parse_powerocean_http_quota(quota_data: dict) -> dict[str, Any]:
     # payload are unscaled too (temperature in whole degrees, tank volume in
     # litres). Awaiting a non-zero reading from real hardware to confirm the
     # cloud passes it through unchanged as well.
-    if "ems_heating_rod.heatingPower" in quota_data:
-        v = _safe_float(quota_data["ems_heating_rod.heatingPower"])
-        if v is not None:
-            result["heating_rod_power_w"] = v
+    #
+    # Only the power key is confirmed, by the reporter who has the hardware.
+    # The remaining keys are read under every spelling the accessory could use,
+    # first match wins, and nothing is written when none of them is present. A
+    # spelling that never arrives costs an empty entity that is disabled by
+    # default; a spelling guessed wrong costs a release cycle.
+    _extract_heating_rod(quota_data, result)
 
     # --- Battery pack data (first pack found in bp_addr.*) ---
     _extract_battery_pack(quota_data, result)
@@ -264,6 +267,36 @@ def parse_powerocean_http_quota(quota_data: dict) -> dict[str, Any]:
     drop_invalid_percentages(result)
 
     return result
+
+
+#: Heating rod readings, mapped to the key spellings the accessory may use.
+#: The accessory mirrors one of three client-side objects and they disagree on
+#: some names, so every candidate is tried in order and the first hit wins.
+#: ``targetPower`` and ``targetTemp`` are spelled identically in all three.
+_HEATING_ROD_KEYS: dict[str, tuple[str, ...]] = {
+    "heating_rod_power_w": ("heatingPower",),
+    "heating_rod_water_temp_c": ("curTemp", "currentTemp", "temp"),
+    "heating_rod_target_power_w": ("targetPower",),
+    "heating_rod_target_temp_c": ("targetTemp",),
+}
+
+
+def _extract_heating_rod(quota_data: dict, result: dict) -> None:
+    """Read the PowerGlow heating rod values out of the PowerOcean quota.
+
+    Values are unscaled: watts for power, whole degrees Celsius for
+    temperature. The app's own setpoint range is 10 to 80 degrees, which rules
+    out tenths, and it renders the power reading without arithmetic.
+    """
+    for result_key, candidates in _HEATING_ROD_KEYS.items():
+        for candidate in candidates:
+            quota_key = f"ems_heating_rod.{candidate}"
+            if quota_key not in quota_data:
+                continue
+            value = _safe_float(quota_data[quota_key])
+            if value is not None:
+                result[result_key] = value
+            break
 
 
 def _extract_battery_pack(quota_data: dict, result: dict) -> None:

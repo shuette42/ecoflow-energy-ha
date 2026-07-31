@@ -77,6 +77,13 @@ class HttpPollMixin:
         self._log_event("http_ok", f"keys={len(raw)}")
 
         if self.device_type == DEVICE_TYPE_POWEROCEAN:
+            # Keep the raw quota snapshot for diagnostics. Accessories such as
+            # the PowerGlow heating rod report through the PowerOcean quota
+            # rather than as devices of their own, and their key names are not
+            # documented anywhere. A dump from an owner is the only way to learn
+            # which keys an accessory actually contributes.
+            self._raw_quota = dict(raw)
+            self._raw_quota_captured_at = time.monotonic()
             parsed = parse_powerocean_http_quota(raw)
         elif self.device_type == DEVICE_TYPE_DELTA:
             parsed = parse_delta_http_quota(raw)

@@ -8,7 +8,7 @@ Full list of all entities created for PowerOcean devices.
 
 > **PowerOcean Plus** units report more of the same entity set than a standard PowerOcean: per-phase reactive power (var) and apparent power (VA), plus MPPT strings 3 and 4. Those entities are disabled by default, so enable the ones you need after adding a Plus device.
 
-**Totals:** 209 sensors, 2 numbers, 1 select
+**Totals:** 212 sensors, 2 numbers, 1 select
 
 > Entities marked with *disabled* are available but hidden by default. Enable them in **Settings > Devices > EcoFlow PowerOcean > Entities** (click the filter icon and show disabled entities).
 
@@ -127,6 +127,9 @@ These sensors are pre-configured for the HA Energy Dashboard (`total_increasing`
 | Battery Packs Online | Number of packs currently reporting | disabled |
 | Battery Packs Online (EMS) | Pack count as reported by the EMS | disabled |
 | Heating Rod Power | Power drawn by an attached PowerGlow heating rod, in watts. Reported through the PowerOcean itself, so no separate device is needed. Stays empty on systems without the accessory. | disabled |
+| Heating Rod Water Temperature | Current water temperature at the heating rod, in whole degrees. | disabled |
+| Heating Rod Target Power | The power limit configured for the heating rod. | disabled |
+| Heating Rod Target Temperature | The water temperature the heating rod is set to reach. | disabled |
 
 ## Sensors - Battery Packs (up to 5x BP5000)
 

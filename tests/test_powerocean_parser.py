@@ -145,6 +145,34 @@ class TestPowerGlowHeatingRod:
 
         assert "heating_rod_power_w" not in result
 
+    def test_heating_rod_water_temp_accepts_every_spelling(self):
+        """The accessory may mirror one of three payload shapes.
+
+        They disagree on the temperature key, so all three spellings are read
+        and produce the same entity.
+        """
+        for spelling in ("curTemp", "currentTemp", "temp"):
+            result = parse_powerocean_http_quota(
+                {f"ems_heating_rod.{spelling}": 58}
+            )
+            assert result["heating_rod_water_temp_c"] == 58.0, spelling
+
+    def test_heating_rod_targets_are_read(self):
+        result = parse_powerocean_http_quota(
+            {
+                "ems_heating_rod.targetPower": 3500,
+                "ems_heating_rod.targetTemp": 60,
+            }
+        )
+
+        assert result["heating_rod_target_power_w"] == 3500.0
+        assert result["heating_rod_target_temp_c"] == 60.0
+
+    def test_heating_rod_absent_writes_nothing(self):
+        result = parse_powerocean_http_quota({"emsBpAliveNum": 1})
+
+        assert not [k for k in result if k.startswith("heating_rod_")]
+
     def test_heating_power_is_passed_through_unscaled(self):
         """The quota value is watts and reaches the sensor unchanged.
 

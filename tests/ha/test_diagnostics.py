@@ -381,6 +381,41 @@ class TestDeltaThreeRawQuotaDiagnostics:
         assert result["raw_quota"]["values"]["bpSoc"] == 80
         assert result["raw_quota"]["values"]["meterTotalPower"] == 1234.5
 
+    async def test_powerocean_raw_quota_exposed(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """PowerOcean exposes the raw quota so accessory keys become visible.
+
+        Accessories such as the PowerGlow heating rod report through the
+        PowerOcean quota rather than as devices of their own, and their key
+        names are documented nowhere. Without this section an owner cannot
+        report which keys their accessory contributes.
+        """
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        coordinator._raw_quota = {
+            "bpSoc": 74,
+            "ems_heating_rod.heatingPower": 1750,
+        }
+        coordinator._raw_quota_captured_at = 1000.0
+
+        with patch(
+            "custom_components.ecoflow_energy.diagnostics.time.monotonic",
+            return_value=1002.0,
+        ):
+            result = _device_diagnostics(coordinator)
+
+        assert "raw_quota" in result
+        assert result["raw_quota"]["captured"] is True
+        assert (
+            result["raw_quota"]["values"]["ems_heating_rod.heatingPower"] == 1750
+        )
+        assert result["raw_quota"]["values"]["bpSoc"] == 74
+
     async def test_delta3_raw_quota_redacts_serials(
         self,
         hass: HomeAssistant,

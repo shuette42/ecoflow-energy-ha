@@ -39,8 +39,8 @@
 
 | Device | Serial prefix | Sensors | Controls | Energy Sensors | Update Rate |
 |:---|:---|:---:|:---:|:---:|:---|
-| **PowerOcean** - Home Battery | `HJ31` `HJ32` `J32D`\* `J32E`\* | 209 | 2 numbers, 1 select (Enhanced only) | 6 (solar, grid import/export, battery charge/discharge, home) | ~30 s standard / ~3 s enhanced |
-| **PowerOcean Plus** - 3-phase Hybrid | `R371`\* `R374`\* `HJ3C`\* | 209 | 2 numbers, 1 select (Enhanced only) | 6 (solar, grid import/export, battery charge/discharge, home) | ~3 s enhanced |
+| **PowerOcean** - Home Battery | `HJ31` `HJ32` `J32D`\* `J32E`\* | 212 | 2 numbers, 1 select (Enhanced only) | 6 (solar, grid import/export, battery charge/discharge, home) | ~30 s standard / ~3 s enhanced |
+| **PowerOcean Plus** - 3-phase Hybrid | `R371`\* `R374`\* `HJ3C`\* | 212 | 2 numbers, 1 select (Enhanced only) | 6 (solar, grid import/export, battery charge/discharge, home) | ~3 s enhanced |
 | **Delta 2 Max** - Portable Power | `R351` `R331` | 94 + 4 binary | 7 switches, 8 numbers | 4 (solar 1+2, AC in/out) | ~30 s standard (+ MQTT push) |
 | **Delta 3 Max Plus** - Portable Power | `D3M1` `P321` | 24 | 7 switches, 3 numbers | 4 (solar 1+2, AC in, output) | ~30 s standard / ~2 s enhanced |
 | **Smart Plug** - Switchable Outlet | `HW52` | 11 + 1 binary | 1 switch, 2 numbers | 1 (total energy) | ~30 s standard / ~3 s enhanced |

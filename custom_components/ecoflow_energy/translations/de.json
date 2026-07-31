@@ -178,6 +178,15 @@
       "batt_discharge_power_w": {
         "name": "Batterieentladeleistung"
       },
+      "heating_rod_water_temp_c": {
+        "name": "Heizstab-Wassertemperatur"
+      },
+      "heating_rod_target_power_w": {
+        "name": "Heizstab-Zielleistung"
+      },
+      "heating_rod_target_temp_c": {
+        "name": "Heizstab-Zieltemperatur"
+      },
       "heating_rod_power_w": {
         "name": "Heizstab-Leistung"
       },

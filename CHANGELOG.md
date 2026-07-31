@@ -5,6 +5,8 @@ All notable changes to this project will be documented in this file.
 ## [1.16.0] - 2026-07-31
 
 ### Added
+- PowerOcean: water temperature, target power and target temperature for an attached PowerGlow heating rod, alongside the power reading. All four are read-only, disabled by default, and stay empty on systems without the accessory. The heating rod does not report the same field names on every system, so each reading is looked up under every name the accessory is known to use.
+- PowerOcean diagnostics now include the raw API quota, the same section Delta 3 and Stream already had. Accessories report through the PowerOcean rather than as devices of their own, and their field names are documented nowhere, so a diagnostics download from an owner is the only way to learn what an accessory actually contributes.
 - PowerOcean: optional Heating Rod Power sensor for systems with a PowerGlow accessory. The heating rod reports its power through the PowerOcean itself rather than as a device of its own, so no separate setup is needed. The sensor is read-only and disabled by default, because most PowerOcean systems have no heating rod attached. Enable it under Settings, Devices, PowerOcean, Entities. Contributed by @Xygen. (Ref #7)
 
 ## [1.15.0] - 2026-07-31

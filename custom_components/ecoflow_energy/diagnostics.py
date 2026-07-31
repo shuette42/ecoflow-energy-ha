@@ -26,6 +26,7 @@ from .const import (
     DATA_DEVICE_PROBES,
     DATA_SKIPPED_DEVICES,
     DEVICE_TYPE_DELTA3,
+    DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_STREAM,
     DOMAIN,
     RAW_FRAME_MAX_BYTES,
@@ -255,11 +256,18 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
             "frames": _format_event_log(raw_frames),
         }
 
-    # Delta 3 and Stream: the quota field maps are community-researched but not
-    # yet hardware-verified for every key. Expose the raw quota key/value
-    # snapshot so a diagnostics dump can confirm existing mappings and reveal
-    # keys still to be added. Serial-looking values are redacted.
-    if coordinator.device_type in (DEVICE_TYPE_DELTA3, DEVICE_TYPE_STREAM):
+    # Delta 3, Stream and PowerOcean: the quota field maps are
+    # community-researched but not yet hardware-verified for every key. Expose
+    # the raw quota key/value snapshot so a diagnostics dump can confirm
+    # existing mappings and reveal keys still to be added. For PowerOcean this
+    # is also the only way to see what an attached accessory contributes, since
+    # accessories report through the PowerOcean quota instead of as devices of
+    # their own. Serial-looking values are redacted.
+    if coordinator.device_type in (
+        DEVICE_TYPE_DELTA3,
+        DEVICE_TYPE_STREAM,
+        DEVICE_TYPE_POWEROCEAN,
+    ):
         raw_quota = coordinator.raw_quota
         raw_age_s: float | None = None
         if coordinator.raw_quota_captured_at > 0:
