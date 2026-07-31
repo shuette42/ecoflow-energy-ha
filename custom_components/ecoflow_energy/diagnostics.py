@@ -52,11 +52,19 @@ def _redact_serials(value: Any) -> Any:
     ``powGetAcOutList``) cannot smuggle a serial past redaction. Over-redaction
     of long alphanumeric tokens is accepted by design: a diagnostics dump must
     never leak a device serial.
+
+    Dictionary **keys** are redacted as well. The PowerOcean quota addresses
+    battery packs by serial in the key itself (``bp_addr.<SN>``), so redacting
+    values alone would still publish a serial in a dump users are asked to
+    attach to a public issue.
     """
     if isinstance(value, str):
         return _SERIAL_RE.sub(REDACTED, value)
     if isinstance(value, dict):
-        return {key: _redact_serials(item) for key, item in value.items()}
+        return {
+            _redact_serials(key): _redact_serials(item)
+            for key, item in value.items()
+        }
     if isinstance(value, list):
         return [_redact_serials(item) for item in value]
     return value
@@ -277,7 +285,7 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
             "age_s": raw_age_s,
             "key_count": len(raw_quota),
             "values": {
-                key: _redact_serials(value)
+                _redact_serials(key): _redact_serials(value)
                 for key, value in sorted(raw_quota.items())
             },
         }

@@ -416,6 +416,34 @@ class TestDeltaThreeRawQuotaDiagnostics:
         )
         assert result["raw_quota"]["values"]["bpSoc"] == 74
 
+    async def test_powerocean_raw_quota_redacts_serials_in_keys(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """A serial in the key name must not survive into the dump.
+
+        The PowerOcean quota addresses battery packs by serial in the key
+        itself. Redacting values alone would still publish that serial in a
+        dump users are asked to attach to a public issue.
+        """
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        coordinator._raw_quota = {"bp_addr.HJ31TESTSERIAL01": {"bpSoc": 74}}
+        coordinator._raw_quota_captured_at = 1000.0
+
+        with patch(
+            "custom_components.ecoflow_energy.diagnostics.time.monotonic",
+            return_value=1001.0,
+        ):
+            result = _device_diagnostics(coordinator)
+
+        keys = list(result["raw_quota"]["values"])
+        assert keys == ["bp_addr.**REDACTED**"]
+        assert "HJ31TESTSERIAL01" not in json.dumps(result)
+
     async def test_delta3_raw_quota_redacts_serials(
         self,
         hass: HomeAssistant,

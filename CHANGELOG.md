@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [1.16.0] - 2026-07-31
 
+### Fixed
+- Diagnostics no longer leak a device serial through a key name. Serial numbers were replaced inside values but not inside the key itself, and the PowerOcean quota addresses battery packs by serial in the key (`bp_addr.<serial>`). Anyone attaching a diagnostics download to a public issue would have published that serial. Keys are now redacted the same way values are.
+
 ### Added
 - PowerOcean: water temperature, target power and target temperature for an attached PowerGlow heating rod, alongside the power reading. All four are read-only, disabled by default, and stay empty on systems without the accessory. The heating rod does not report the same field names on every system, so each reading is looked up under every name the accessory is known to use.
 - PowerOcean diagnostics now include the raw API quota, the same section Delta 3 and Stream already had. Accessories report through the PowerOcean rather than as devices of their own, and their field names are documented nowhere, so a diagnostics download from an owner is the only way to learn what an accessory actually contributes.
