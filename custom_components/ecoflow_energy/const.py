@@ -238,6 +238,7 @@ POWEROCEAN_SENSORS: list[EcoFlowSensorDef] = [
     # --- Inverter / PCS Diagnostics ---
     EcoFlowSensorDef("pcs_ac_freq_hz", "Grid Frequency", "Hz", "frequency", "measurement", "mdi:sine-wave", "diagnostic", suggested_display_precision=1),
     EcoFlowSensorDef("ems_bp_alive_num", "Battery Packs Online", None, None, "measurement", "mdi:battery-check", "diagnostic", disabled_by_default=True),
+    EcoFlowSensorDef("heating_rod_power_w", "Heating Rod Power", "W", "power", "measurement", "mdi:water-boiler", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("bp_online_sum", "Battery Packs Online (EMS)", None, None, "measurement", "mdi:battery-check", "diagnostic", disabled_by_default=True),
     EcoFlowSensorDef("mppt_pv1_power_w", "MPPT String 1 Power", "W", "power", "measurement", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=0),
     EcoFlowSensorDef("mppt_pv1_voltage_v", "MPPT String 1 Voltage", "V", "voltage", "measurement", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=1),

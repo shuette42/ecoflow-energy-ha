@@ -1,0 +1,8 @@
+{
+  "bp_addr.HJ31TEST0001": {
+    "bpCycles": 42,
+    "bpSoh": 98,
+    "bpVol": 51.8
+  },
+  "ems_heating_rod.heatingPower": 0
+}

@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- PowerOcean: optional Heating Rod Power sensor from the PowerGlow accessory quota field `ems_heating_rod.heatingPower`. The read-only sensor is disabled by default because the accessory is not installed on every PowerOcean system. (Ref #7)
+
 ## [1.15.0] - 2026-07-29
 
 ### Added

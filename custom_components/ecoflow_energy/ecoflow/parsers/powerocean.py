@@ -189,6 +189,13 @@ def parse_powerocean_http_quota(quota_data: dict) -> dict[str, Any]:
         if v is not None:
             result["ems_bp_alive_num"] = v
 
+    # --- Optional PowerGlow heating rod (PowerOcean accessory) ---
+    # The accessory is exposed through the PowerOcean quota, not its own SN.
+    if "ems_heating_rod.heatingPower" in quota_data:
+        v = _safe_float(quota_data["ems_heating_rod.heatingPower"])
+        if v is not None:
+            result["heating_rod_power_w"] = v
+
     # --- Battery pack data (first pack found in bp_addr.*) ---
     _extract_battery_pack(quota_data, result)
 

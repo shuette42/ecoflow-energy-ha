@@ -178,6 +178,9 @@
       "batt_discharge_power_w": {
         "name": "Batterieentladeleistung"
       },
+      "heating_rod_power_w": {
+        "name": "Heizstab-Leistung"
+      },
       "ac_grid_connection_power_w": {
         "name": "AC-Netzanschlussleistung"
       },

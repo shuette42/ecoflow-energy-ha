@@ -178,6 +178,9 @@
       "batt_discharge_power_w": {
         "name": "Battery Discharge Power"
       },
+      "heating_rod_power_w": {
+        "name": "Heating Rod Power"
+      },
       "ac_grid_connection_power_w": {
         "name": "AC Grid Connection Power"
       },

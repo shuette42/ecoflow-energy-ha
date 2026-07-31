@@ -1,6 +1,7 @@
 """Tests for PowerOcean HTTP quota API response parser."""
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -13,6 +14,9 @@ from ecoflow_energy.ecoflow.parsers.powerocean import (
     _is_real_battery_pack,
 )
 from ecoflow_energy.ecoflow.parsers.powerocean_proto import remap_bp_keys
+
+
+FIXTURES_DIR = Path(__file__).parent / "fixtures" / "powerocean"
 
 
 # ===========================================================================
@@ -115,6 +119,31 @@ class TestEMSData:
     def test_ems_bp_alive_num_missing(self):
         result = parse_powerocean_http_quota({})
         assert "ems_bp_alive_num" not in result
+
+
+class TestPowerGlowHeatingRod:
+    """PowerGlow is an optional accessory reported through PowerOcean quota."""
+
+    def test_heating_power_from_anonymized_fixture(self):
+        quota = json.loads(
+            (FIXTURES_DIR / "powerglow_heating_rod_quota.json").read_text()
+        )
+
+        result = parse_powerocean_http_quota(quota)
+
+        assert result["heating_rod_power_w"] == 0.0
+
+    def test_heating_power_missing_is_not_zero(self):
+        result = parse_powerocean_http_quota({"emsBpAliveNum": 1})
+
+        assert "heating_rod_power_w" not in result
+
+    def test_heating_power_non_numeric_is_skipped(self):
+        result = parse_powerocean_http_quota(
+            {"ems_heating_rod.heatingPower": "unavailable"}
+        )
+
+        assert "heating_rod_power_w" not in result
 
 
 # ===========================================================================

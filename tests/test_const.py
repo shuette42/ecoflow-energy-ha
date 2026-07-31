@@ -184,6 +184,14 @@ def _extract_sensor_keys(var_name: str) -> list[str]:
 
 
 class TestPowerOceanSensors:
+    def test_heating_rod_power_is_optional_and_disabled(self):
+        sensors = {sensor.key: sensor for sensor in POWEROCEAN_SENSORS}
+
+        heating_rod_power = sensors["heating_rod_power_w"]
+        assert heating_rod_power.device_class == "power"
+        assert heating_rod_power.state_class == "measurement"
+        assert heating_rod_power.disabled_by_default is True
+
     def test_keys_unique(self):
         keys = _extract_sensor_keys("POWEROCEAN_SENSORS")
         assert len(keys) > 30, f"Expected 30+ sensors, got {len(keys)}"
@@ -220,7 +228,7 @@ class TestPowerOceanSensors:
             assert sensors[f"mppt_pv4_{suffix}"].disabled_by_default is True
 
     def test_existing_sensors_count(self):
-        """Original 63 sensors still present (non-pack, non-EMS-extended)."""
+        """Core sensor count, excluding optional Plus and extended EMS fields."""
         keys = _extract_sensor_keys("POWEROCEAN_SENSORS")
         non_pack = [k for k in keys if not k.startswith("pack")]
         mppt_plus = {
@@ -242,7 +250,7 @@ class TestPowerOceanSensors:
         original = [
             k for k in non_pack if k not in ems_extended and k not in mppt_plus
         ]
-        assert len(original) == 63, f"Expected 63 original sensors, got {len(original)}"
+        assert len(original) == 64, f"Expected 64 core sensors, got {len(original)}"
 
     def test_mppt_plus_sensor_count(self):
         """6 PowerOcean Plus MPPT sensors (strings 3 and 4)."""
@@ -283,9 +291,9 @@ class TestPowerOceanSensors:
         assert len(found) == 19, f"Expected 19 EMS extended sensors, got {len(found)}"
 
     def test_total_sensor_count(self):
-        """Total PowerOcean sensors = 63 + 6 + 120 + 19 = 208."""
+        """Total PowerOcean sensors = 64 + 6 + 120 + 19 = 209."""
         keys = _extract_sensor_keys("POWEROCEAN_SENSORS")
-        assert len(keys) == 208, f"Expected 208 total sensors, got {len(keys)}"
+        assert len(keys) == 209, f"Expected 209 total sensors, got {len(keys)}"
 
 
     def test_only_soc_has_battery_device_class(self):
