@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.15.0] - 2026-07-29
+## [1.15.0] - 2026-07-31
 
 ### Added
 - Support for the Stream family: Stream AC Pro (BK31), Stream Ultra (BK11), Stream Max (BK41), Stream AC (BK51) and Stream Ultra X (BK61). Devices are detected automatically and report battery state, power flows, per-outlet state and power, LED brightness as a diagnostic, and a signed AC grid connection power that matches the "Netz-Anschluss" value in the EcoFlow app. The Backup Reserve level can be set from Home Assistant. Stream units are modeled as AC-coupled batteries, so battery charge and discharge energy are available for the Energy Dashboard, while the meter-dependent solar and home energy values stay disabled diagnostics unless an EcoFlow-compatible meter is paired in the app. Battery capacity counters in Ah are disabled diagnostics as well. (Ref #98)
