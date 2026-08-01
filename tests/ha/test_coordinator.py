@@ -6627,15 +6627,21 @@ class TestRawFrameCapture:
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """The key budget has to be derived from what one device produces.
+        """The key budget has to hold what a device actually produces.
 
-        Buckets are claimed in arrival order and never evicted. A budget
-        that merely matches the number of message types is therefore spent
-        by the frequent pushes within seconds, and the rare reports - the
-        ones bucketing exists to keep - are dropped at the key gate minutes
-        later, which is the same failure a shared ring had. This pins the
-        headroom: a PowerOcean's own commands, the get-all reply, an
-        unknown command and an accessory report all have to fit.
+        Buckets are claimed in arrival order and never evicted, so a budget
+        that merely matches the number of message types is spent by the
+        frequent pushes within seconds and the rare reports - the ones
+        bucketing exists to keep - are dropped at the key gate minutes
+        later, which is the same failure a shared ring had in a different
+        place.
+
+        The message set replayed here is measured, not assumed: a ten
+        minute listen-only recording of a PowerOcean (HJ31, 2026-08-01)
+        delivered twelve distinct types on `property`, where the decoded
+        command table would have suggested seven. On top of that come the
+        get-all reply on its own topic class, an unmapped command and an
+        accessory report.
         """
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
@@ -6643,31 +6649,36 @@ class TestRawFrameCapture:
         )
         push = f"/app/device/property/{coordinator.device_sn}"
         get_reply = f"/app/user/{coordinator.device_sn}/thing/property/get_reply"
-        # In arrival order: the get-all reply on connect, then the frequent
-        # pushes, then the reports that only show up minutes in.
+        # The twelve types the recording actually delivered, in descending
+        # frequency - the frequent ones claim their buckets first.
+        observed = [
+            (53, 14), (96, 8), (96, 1), (241, 5), (96, 7),
+            (96, 33), (96, 34), (96, 13), (96, 3), (209, 51),
+            (224, 38), (241, 36),
+        ]
         traffic = (
-            [(get_reply, 1)]
-            + [(push, cmd) for cmd in (33, 1, 7, 8, 39)] * 3
-            + [(push, 17), (push, 13)]
-            + [(push, 250)]  # a command with no parser yet
-            + [(push, 251)]  # an attached accessory's own report
+            [(get_reply, 96, 1), (get_reply, 96, 33)]
+            + [(push, func, cmd) for func, cmd in observed] * 3
+            + [(push, 96, 250)]  # a command with no parser yet
+            + [(push, 96, 251)]  # an attached accessory's own report
         )
         cmds = iter(traffic)
 
         def headers(_payload: bytes) -> list[dict[str, int]]:
-            return [{"cmd_func": 96, "cmd_id": next(cmds)[1]}]
+            _topic, func, cmd = next(cmds)
+            return [{"cmd_func": func, "cmd_id": cmd}]
 
         with patch(
             "custom_components.ecoflow_energy.coordinator.mqtt_ingest."
             "decode_cmd_headers",
             side_effect=headers,
         ):
-            for topic, _cmd in traffic:
+            for topic, _func, _cmd in traffic:
                 coordinator._on_mqtt_message(topic, self._frame(coordinator.device_sn))
 
         sampling = coordinator.raw_frame_sampling
         assert sampling["frames_dropped_key_budget"] == 0
-        assert sampling["keys_tracked"] == 10
+        assert sampling["keys_tracked"] == 16
         assert sampling["keys_tracked"] < sampling["keys_max"]
         # The two that arrive last are exactly the ones a tight budget loses.
         assert "property:proto/96.250" in sampling["per_key"]

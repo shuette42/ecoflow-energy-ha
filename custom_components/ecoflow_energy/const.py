@@ -89,25 +89,31 @@ HTTP_FALLBACK_INTERVAL_S = 30
 # as the EMS report arrives minutes apart, so 24 shared slots are the last
 # minute of the frequent one and the rare command is never in a download.
 #
-# The key budget is derived from what one device can actually produce, not
-# picked for size. A PowerOcean emits seven decoded message types on
-# `property` (cmd_func 96, ids 1, 7, 8, 13, 17, 33 and 39), each unknown
-# command it sends becomes a key of its own, and the get-all reply adds the
-# same types again under the `get_reply` topic class. Buckets are claimed in
-# arrival order and never evicted, so a budget that merely matches that count
-# is spent by the frequent pushes within seconds and the rare reports - the
-# ones this bucketing exists to keep - are dropped at the key gate minutes
-# later. Twelve leaves headroom for the unknown command and the accessory
-# report that a capture is usually downloaded for in the first place.
+# The key budget is derived from what one device actually produces, not
+# picked for size, and the number comes from a measurement rather than from
+# the command table: a ten minute listen-only recording of a PowerOcean
+# (HJ31, 2026-08-01) delivered 60 frames in twelve distinct message types on
+# `property` alone - cmd_func 96 with ids 1, 3, 7, 8, 13, 33 and 34, plus
+# 53.14, 241.5, 241.36, 209.51 and 224.38. The decoded command list would
+# have suggested seven. The `get_reply` topic class adds those types a
+# second time, an unmapped command becomes a key of its own, and so does an
+# attached accessory's report.
+#
+# Buckets are claimed in arrival order and never evicted, so a budget that
+# merely matches the observed count is spent by the frequent pushes within
+# seconds, and the rare reports - the ones this bucketing exists to keep -
+# are dropped at the key gate minutes later, which is the failure the shared
+# ring had in a different place. Twenty is the measured twelve plus room for
+# the second topic class and for what a ten minute window did not show.
 #
 # Tightened against the unsupported-device probe below on the per-key axis
 # instead, because that is the axis that costs bytes without costing
 # coverage: three frames still hold the first, one middle and the newest
 # frame of every type. This buffer is not opt-in and not time-limited - it
 # runs on every device in Enhanced Mode for as long as the integration is
-# loaded. Worst case 12 * 3 * 512 B = 18 432 B (18 KiB) of frame payload per
+# loaded. Worst case 20 * 3 * 512 B = 30 720 B (30 KiB) of frame payload per
 # device, roughly double that as hex text in the diagnostics download.
-RAW_FRAME_LOG_KEYS_MAX = 12
+RAW_FRAME_LOG_KEYS_MAX = 20
 RAW_FRAME_LOG_PER_KEY_MAX = 3
 RAW_FRAME_MAX_BYTES = 512
 
