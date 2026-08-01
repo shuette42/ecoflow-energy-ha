@@ -183,6 +183,27 @@ def _extract_sensor_keys(var_name: str) -> list[str]:
     return []
 
 
+# EMS and system-level diagnostics, kept apart from the core sensor count so
+# that adding one does not silently move the core number.
+_PO_EMS_EXTENDED = {
+    "ems_charge_upper_limit_pct", "ems_discharge_lower_limit_pct",
+    "ems_keep_soc_pct", "ems_backup_ratio_pct",
+    "mppt1_fault_code", "mppt2_fault_code",
+    "pcs_ac_error_code", "pcs_dc_error_code", "pcs_ac_warning_code",
+    "wifi_status", "ethernet_status", "cellular_status",
+    "ems_led_brightness", "ems_work_state",
+    "ems_total_battery_capacity_wh", "pcs_max_output_power_w",
+    "pcs_max_input_power_w", "bp_max_charge_power_w",
+    "bp_max_discharge_power_w",
+    # From the EMS change report cmd_id=17 (run state, fault flags, AFCI)
+    # and the two cmd_id=8 fields that had no entity before.
+    "mppt1_warning_code", "mppt2_warning_code",
+    "afci_self_test_result", "ems_self_check_state",
+    "sys_heat_state", "sys_calibration_state", "parallel_mode",
+    "battery_limit_reason", "ems_sg_ready_state",
+}
+
+
 class TestPowerOceanSensors:
     def test_heating_rod_power_is_optional_and_disabled(self):
         sensors = {sensor.key: sensor for sensor in POWEROCEAN_SENSORS}
@@ -239,21 +260,11 @@ class TestPowerOceanSensors:
             for index in (3, 4)
             for suffix in ("power_w", "voltage_v", "current_a")
         }
-        ems_extended = {
-            "ems_charge_upper_limit_pct", "ems_discharge_lower_limit_pct",
-            "ems_keep_soc_pct", "ems_backup_ratio_pct",
-            "mppt1_fault_code", "mppt2_fault_code",
-            "pcs_ac_error_code", "pcs_dc_error_code", "pcs_ac_warning_code",
-            "wifi_status", "ethernet_status", "cellular_status",
-            "ems_led_brightness", "ems_work_state",
-            "ems_total_battery_capacity_wh", "pcs_max_output_power_w",
-            "pcs_max_input_power_w", "bp_max_charge_power_w",
-            "bp_max_discharge_power_w",
-        }
+        ems_extended = _PO_EMS_EXTENDED
         original = [
             k for k in non_pack if k not in ems_extended and k not in mppt_plus
         ]
-        assert len(original) == 67, f"Expected 67 core sensors, got {len(original)}"
+        assert len(original) == 68, f"Expected 68 core sensors, got {len(original)}"
 
     def test_mppt_plus_sensor_count(self):
         """6 PowerOcean Plus MPPT sensors (strings 3 and 4)."""
@@ -277,26 +288,16 @@ class TestPowerOceanSensors:
             assert len(pack_keys) == 24, f"Expected 24 sensors for pack{n}, got {len(pack_keys)}"
 
     def test_ems_extended_count(self):
-        """19 EMS/system extended sensors."""
+        """28 EMS/system extended sensors."""
         keys = _extract_sensor_keys("POWEROCEAN_SENSORS")
-        ems_extended = {
-            "ems_charge_upper_limit_pct", "ems_discharge_lower_limit_pct",
-            "ems_keep_soc_pct", "ems_backup_ratio_pct",
-            "mppt1_fault_code", "mppt2_fault_code",
-            "pcs_ac_error_code", "pcs_dc_error_code", "pcs_ac_warning_code",
-            "wifi_status", "ethernet_status", "cellular_status",
-            "ems_led_brightness", "ems_work_state",
-            "ems_total_battery_capacity_wh", "pcs_max_output_power_w",
-            "pcs_max_input_power_w", "bp_max_charge_power_w",
-            "bp_max_discharge_power_w",
-        }
+        ems_extended = _PO_EMS_EXTENDED
         found = [k for k in keys if k in ems_extended]
-        assert len(found) == 19, f"Expected 19 EMS extended sensors, got {len(found)}"
+        assert len(found) == 28, f"Expected 28 EMS extended sensors, got {len(found)}"
 
     def test_total_sensor_count(self):
-        """Total PowerOcean sensors = 67 + 6 + 120 + 19 = 212."""
+        """Total PowerOcean sensors = 68 + 6 + 120 + 28 = 222."""
         keys = _extract_sensor_keys("POWEROCEAN_SENSORS")
-        assert len(keys) == 212, f"Expected 212 total sensors, got {len(keys)}"
+        assert len(keys) == 222, f"Expected 222 total sensors, got {len(keys)}"
 
 
     def test_only_soc_has_battery_device_class(self):

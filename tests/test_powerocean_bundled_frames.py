@@ -6,9 +6,14 @@ from unittest.mock import patch
 
 import pytest
 
-from ecoflow_energy.ecoflow.parsers.powerocean_proto import flatten_heartbeat
+from ecoflow_energy.ecoflow.parsers.powerocean_proto import (
+    flatten_heartbeat,
+    remap_bp_keys,
+    remap_ems_state_keys,
+)
 from ecoflow_energy.ecoflow.proto.decoder import decode_header_message
 from ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
+    JTS1EmsChangeReport,
     JTS1EmsHeartbeat,
     JTS1EmsPVInvEnergyStreamReport,
     JTS1EnergyStreamReport,
@@ -445,3 +450,136 @@ def test_real_r374_get_all_fixture_decodes_all_supported_headers() -> None:
         "typed_runtime:energy_stream_report",
     } <= parse_paths
     assert len(decode_proto_runtime_frame(frame).headers) == 19
+
+
+def _ems_state_keys(frame: bytes) -> dict[str, object]:
+    """Decode a bundle and return the cmd_id=17 report as sensor keys."""
+    for result in decode_proto_runtime_headers(frame):
+        if result.parse_path == "typed_runtime:ems_state":
+            raw = {
+                key: value
+                for key, value in result.mapped.items()
+                if not key.startswith("_")
+            }
+            return remap_ems_state_keys(raw)
+    raise AssertionError("no cmd_id=17 header in frame")
+
+
+def test_r374_fixture_carries_a_cmd_17_report() -> None:
+    """The Plus bundle holds cmd_id=17 next to cmd_id=8, with no overlap.
+
+    Both ids decode as the same message and carry disjoint fields. Before
+    cmd_id=17 was registered every field in it was dropped, including the
+    whole fault and arc-fault block.
+    """
+    frame = _R374_GET_ALL_FIXTURE.read_bytes()
+
+    paths = [result.parse_path for result in decode_proto_runtime_headers(frame)]
+
+    assert "typed_runtime:ems_state" in paths
+    assert "typed_runtime:ems_change" in paths
+
+
+def test_cmd_17_exposes_the_arc_fault_and_warning_block() -> None:
+    """AFCI flags, MPPT warnings and the self-check states reach sensors."""
+    sensors = _ems_state_keys(_R374_GET_ALL_FIXTURE.read_bytes())
+
+    assert sensors["afci_fault_ch1"] == 0.0
+    assert sensors["afci_fault_ch2"] == 0.0
+    assert sensors["afci_self_test_result"] == 0.0
+    assert sensors["mppt1_warning_code"] == 0.0
+    assert sensors["mppt2_warning_code"] == 0.0
+    assert sensors["battery_line_off"] == 0.0
+    assert sensors["battery_relay_fault"] == 0.0
+    assert sensors["ems_self_check_state"] == 7.0
+    assert sensors["sys_calibration_state"] == 0.0
+    assert sensors["parallel_mode"] == 0.0
+
+
+def test_cmd_17_reports_run_state_and_connectivity() -> None:
+    """Kept because the rest of the same bundle corroborates both."""
+    sensors = _ems_state_keys(_R374_GET_ALL_FIXTURE.read_bytes())
+
+    assert sensors["pcs_run_state"] == "running"
+    assert sensors["wifi_status"] == "connected"
+    assert sensors["cellular_status"] == "disconnected"
+
+
+def test_cmd_17_does_not_write_the_grid_and_battery_state_sensors() -> None:
+    """Its values for those contradict the rest of the same bundle.
+
+    The phase containers in this bundle report 237 V on all three phases
+    and -3725 W of export, while cmd_id=17 says `sys_grid_sta = 0` and
+    `bp_chg_dsg_sta = 2`. Under the cmd_id=8 mapping that would publish
+    "grid not detected" and "discharging" for a grid-exporting unit whose
+    battery power is zero, so cmd_id=17 does not own these keys.
+    """
+    sensors = _ems_state_keys(_R374_GET_ALL_FIXTURE.read_bytes())
+
+    for key in (
+        "grid_status",
+        "batt_charge_discharge_state",
+        "ems_work_state",
+        "bp_online_sum",
+        "soc_pct",
+    ):
+        assert key not in sensors
+
+
+def test_cmd_17_does_not_write_the_lifetime_energy_counters() -> None:
+    """Both are 0 in every observed frame, on a total_increasing sensor."""
+    sensors = _ems_state_keys(_R374_GET_ALL_FIXTURE.read_bytes())
+
+    assert "batt_charge_energy_kwh" not in sensors
+    assert "batt_discharge_energy_kwh" not in sensors
+
+
+def test_zero_lifetime_energy_total_is_not_published() -> None:
+    """A zero counter is "nothing to report", not a meter reading.
+
+    Home Assistant reads a 0 on a total_increasing sensor as a meter reset
+    and books the whole standing total a second time.
+    """
+    report = JTS1EmsChangeReport(bp_total_chg_energy=0, bp_total_dsg_energy=0)
+    frame = _build_bundle(_build_header(96, 8, report.SerializeToString()))
+
+    sensors = _ems_change_keys(frame)
+
+    assert "batt_charge_energy_kwh" not in sensors
+    assert "batt_discharge_energy_kwh" not in sensors
+
+
+def test_non_zero_lifetime_energy_total_is_still_converted() -> None:
+    """The guard drops zeros only - a real counter still becomes kWh."""
+    report = JTS1EmsChangeReport(
+        bp_total_chg_energy=12_500,
+        bp_total_dsg_energy=9_750,
+    )
+    frame = _build_bundle(_build_header(96, 8, report.SerializeToString()))
+
+    sensors = _ems_change_keys(frame)
+
+    assert sensors["batt_charge_energy_kwh"] == 12.5
+    assert sensors["batt_discharge_energy_kwh"] == 9.75
+
+
+def _ems_change_keys(frame: bytes) -> dict[str, object]:
+    """Decode a bundle and return the cmd_id=8 report as sensor keys."""
+    for result in decode_proto_runtime_headers(frame):
+        if result.parse_path == "typed_runtime:ems_change":
+            raw = {
+                key: value
+                for key, value in result.mapped.items()
+                if not key.startswith("_")
+            }
+            return remap_bp_keys(raw, {}, "R374TEST00000001")
+    raise AssertionError("no cmd_id=8 header in frame")
+
+
+def test_cmd_8_now_surfaces_sg_ready_and_the_battery_limit_reason() -> None:
+    """Three fields the device always sent and the schema never decoded."""
+    sensors = _ems_change_keys(_R374_GET_ALL_FIXTURE.read_bytes())
+
+    assert sensors["ems_sg_ready_enabled"] == 0.0
+    assert sensors["ems_sg_ready_state"] == 0.0
+    assert sensors["battery_limit_reason"] == 0.0

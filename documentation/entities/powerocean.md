@@ -15,7 +15,7 @@ Full list of all entities created for PowerOcean devices.
 
 > **PowerOcean Plus** units report more of the same entity set than a standard PowerOcean: per-phase reactive power (var) and apparent power (VA), plus MPPT strings 3 and 4. Those entities are disabled by default, so enable the ones you need after adding a Plus device.
 
-**Totals:** 212 sensors, 2 numbers, 1 select
+**Totals:** 222 sensors, 5 binary sensors, 2 numbers, 1 select
 
 > Entities marked with *disabled* are available but hidden by default. Enable them in **Settings > Devices > EcoFlow PowerOcean > Entities** (click the filter icon and show disabled entities).
 
@@ -137,6 +137,28 @@ These sensors are pre-configured for the HA Energy Dashboard (`total_increasing`
 | Heating Rod Water Temperature | Current water temperature at the heating rod, in whole degrees. | disabled |
 | Heating Rod Target Power | The power limit configured for the heating rod. | disabled |
 | Heating Rod Target Temperature | The water temperature the heating rod is set to reach. | disabled |
+| EMS Max Internal Temp | Highest of the internal temperature probes | enabled |
+| MPPT 1/2 Warning Code | MPPT warnings, separate from the fault codes | disabled |
+| AFCI Self-Test Result | Result of the arc-fault detector self-test | disabled |
+| EMS Self-Check State | Result of the system self-check | disabled |
+| System Heating State | Whether the system is heating itself | disabled |
+| SoC Calibration State | Whether a battery calibration run is active | disabled |
+| Parallel Mode | Parallel-operation topology reported by the unit | disabled |
+| Battery Limit Reason | Why the system is limiting the battery | disabled |
+| SG Ready State | Current SG Ready operating state | disabled |
+
+## Binary Sensors (diagnostic)
+
+These come from the Enhanced Mode telemetry only. All are disabled by default,
+because they say nothing while the system is healthy.
+
+| Entity | Description | Default |
+|:---|:---|:---:|
+| AFCI Fault String 1 | Arc fault detected on solar string 1 | disabled |
+| AFCI Fault String 2 | Arc fault detected on solar string 2 | disabled |
+| Battery Line Disconnected | Battery line reported as disconnected | disabled |
+| Battery Relay Fault | Battery relay failed to close | disabled |
+| SG Ready Enabled | Whether SG Ready is switched on | disabled |
 
 ## Sensors - Battery Packs (up to 5x BP5000)
 

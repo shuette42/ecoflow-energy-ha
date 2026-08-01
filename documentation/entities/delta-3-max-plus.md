@@ -2,7 +2,7 @@
 
 Full list of all entities created for Delta 3 Max Plus devices (D3M1 series).
 
-**Totals:** 24 sensors, 7 switches, 3 numbers
+**Totals:** 46 sensors, 7 switches, 3 numbers
 
 > Entities marked with *diagnostic* appear in the diagnostics section of the device page.
 
@@ -47,6 +47,41 @@ Integrated from the live power telemetry (the device exposes no native energy co
 | Solar 2 Energy | kWh | Cumulative solar input 2 |
 | AC Input Energy | kWh | Cumulative AC charging |
 | Output Energy | kWh | Cumulative total output (AC + DC + USB) |
+
+---
+
+## Sensors - Battery Health (Enhanced Mode only)
+
+These come from the battery management system, which reports them only over the
+live telemetry connection. With developer keys the polled data carries no
+battery health at all, so these entities stay empty in Standard Mode.
+
+The two lifetime energy counters are read from the battery rather than
+calculated from power over time, so they carry the device's own history and can
+be used in the Energy Dashboard without accumulating drift.
+
+| Entity | Unit | Description | Default |
+|:---|:---:|:---|:---:|
+| Battery SoH | % | State of health | enabled |
+| Battery Cycles | - | Charge cycles counted by the battery | enabled |
+| Battery Lifetime Charge Energy | kWh | Energy charged over the battery's life | enabled |
+| Battery Lifetime Discharge Energy | kWh | Energy discharged over the battery's life | enabled |
+| Battery Voltage | V | Pack voltage | enabled |
+| Battery Current | A | Pack current, negative while discharging | enabled |
+| Battery Temp | °C | Pack temperature | enabled |
+| Battery Max/Min Cell Temp | °C | Warmest and coldest cell | disabled |
+| Battery Max/Min MOSFET Temp | °C | MOSFET temperatures | disabled |
+| Battery Max/Min Cell Voltage | mV | Highest and lowest cell voltage | disabled |
+| Battery Cell Voltage Spread | mV | Difference between the two, a balance indicator | disabled |
+| Battery Remaining/Full/Design Capacity | mAh | Capacity values | disabled |
+| Battery Cell Count | - | Cells in series | disabled |
+| Battery Real Health | % | Health before the display rounding | disabled |
+| Battery Calendar Health | % | Ageing attributed to time | disabled |
+| Battery Cycle Health | % | Ageing attributed to use | disabled |
+| Battery Error Code | - | Aggregated BMS error code | disabled |
+
+> Environment temperature is not exposed. The hardware reports the "no sensor
+> fitted" placeholder for it, which would show as -127 °C.
 
 ---
 

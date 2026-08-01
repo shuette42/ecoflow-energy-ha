@@ -259,6 +259,9 @@
       "bp_up_limit_soc_pct": {
         "name": "Battery SOC Limit (Max)"
       },
+      "ems_ntc_temp_max_c": {
+        "name": "EMS Max Internal Temp"
+      },
       "pcs_ac_freq_hz": {
         "name": "Grid Frequency"
       },
@@ -1251,6 +1254,93 @@
       },
       "pv4_energy_kwh": {
         "name": "PV 4 Energy"
+      },
+      "mppt1_warning_code": {
+        "name": "MPPT 1 Warning Code"
+      },
+      "mppt2_warning_code": {
+        "name": "MPPT 2 Warning Code"
+      },
+      "afci_self_test_result": {
+        "name": "AFCI Self-Test Result"
+      },
+      "ems_self_check_state": {
+        "name": "EMS Self-Check State"
+      },
+      "sys_heat_state": {
+        "name": "System Heating State"
+      },
+      "sys_calibration_state": {
+        "name": "SoC Calibration State"
+      },
+      "parallel_mode": {
+        "name": "Parallel Mode"
+      },
+      "battery_limit_reason": {
+        "name": "Battery Limit Reason"
+      },
+      "ems_sg_ready_state": {
+        "name": "SG Ready State"
+      },
+      "bms_accu_chg_energy_kwh": {
+        "name": "Battery Lifetime Charge Energy"
+      },
+      "bms_accu_dsg_energy_kwh": {
+        "name": "Battery Lifetime Discharge Energy"
+      },
+      "bms_voltage_v": {
+        "name": "Battery Voltage"
+      },
+      "bms_current_a": {
+        "name": "Battery Current"
+      },
+      "bms_temp_c": {
+        "name": "Battery Temp"
+      },
+      "bms_max_cell_temp_c": {
+        "name": "Battery Max Cell Temp"
+      },
+      "bms_min_cell_temp_c": {
+        "name": "Battery Min Cell Temp"
+      },
+      "bms_max_mos_temp_c": {
+        "name": "Battery Max MOSFET Temp"
+      },
+      "bms_min_mos_temp_c": {
+        "name": "Battery Min MOSFET Temp"
+      },
+      "bms_max_cell_vol_mv": {
+        "name": "Battery Max Cell Voltage"
+      },
+      "bms_min_cell_vol_mv": {
+        "name": "Battery Min Cell Voltage"
+      },
+      "bms_cell_vol_diff_mv": {
+        "name": "Battery Cell Voltage Spread"
+      },
+      "bms_remain_cap_mah": {
+        "name": "Battery Remaining Capacity"
+      },
+      "bms_full_cap_mah": {
+        "name": "Battery Full Capacity"
+      },
+      "bms_design_cap_mah": {
+        "name": "Battery Design Capacity"
+      },
+      "bms_cell_count": {
+        "name": "Battery Cell Count"
+      },
+      "bms_real_soh_pct": {
+        "name": "Battery Real Health"
+      },
+      "bms_calendar_soh_pct": {
+        "name": "Battery Calendar Health"
+      },
+      "bms_cycle_soh_pct": {
+        "name": "Battery Cycle Health"
+      },
+      "bms_error_code": {
+        "name": "Battery Error Code"
       }
     },
     "binary_sensor": {
@@ -1274,6 +1364,21 @@
       },
       "ac_outlet_2_enabled": {
         "name": "AC Outlet 2"
+      },
+      "afci_fault_ch1": {
+        "name": "AFCI Fault String 1"
+      },
+      "afci_fault_ch2": {
+        "name": "AFCI Fault String 2"
+      },
+      "battery_line_off": {
+        "name": "Battery Line Disconnected"
+      },
+      "battery_relay_fault": {
+        "name": "Battery Relay Fault"
+      },
+      "ems_sg_ready_enabled": {
+        "name": "SG Ready Enabled"
       }
     },
     "switch": {

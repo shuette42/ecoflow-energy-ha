@@ -1,20 +1,24 @@
 """Tests for the Delta 3 protobuf telemetry parser (Enhanced Mode).
 
-Covers the two frames the device pushes on the app connection - the main
-status frame (cmd_func=254, cmd_id=21) and the battery heartbeat
-(cmd_func=32, cmd_id=2) - end to end: encode a realistic frame, run it
-through the runtime decoder, parse it, and compare the resulting sensor
-keys against the HTTP path.
+Covers the three frames the device pushes on the app connection - the
+main status frame (cmd_func=254, cmd_id=21), the battery heartbeat
+(cmd_func=32, cmd_id=2) and the BMS heartbeat (cmd_func=32, cmd_id=50) -
+end to end: encode a realistic frame, run it through the runtime decoder,
+parse it, and compare the resulting sensor keys against the HTTP path.
+The BMS frame is the exception to that last step: it has no HTTP
+counterpart at all.
 """
 
 from __future__ import annotations
 
 from ecoflow_energy.ecoflow.parsers.delta3_http import parse_delta3_http_quota
 from ecoflow_energy.ecoflow.parsers.delta3_proto import (
+    parse_delta3_bms_heartbeat,
     parse_delta3_cms_heartbeat,
     parse_delta3_display_property,
 )
 from ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
+    Delta3BmsHeartbeat,
     Delta3CmsHeartbeat,
     Delta3DisplayProperty,
 )
@@ -264,6 +268,107 @@ class TestCmsHeartbeatFrame:
     def test_empty_heartbeat_yields_nothing(self):
         frame = _build_frame(32, 2, Delta3CmsHeartbeat().SerializeToString())
         assert parse_delta3_cms_heartbeat(_decode(frame)) == {}
+
+
+class TestBmsHeartbeat:
+    """cmd_func=32, cmd_id=50 - the only source of battery health.
+
+    Field values are taken from a live DELTA 3 Max Plus capture, so the
+    scaling assertions below are measurements, not guesses.
+    """
+
+    def _message(self) -> Delta3BmsHeartbeat:
+        msg = Delta3BmsHeartbeat()
+        msg.soc = 99
+        msg.vol = 53_070  # mV, 16 cells at ~3.33 V
+        msg.amp = -70  # mA, discharging into a 3 W load
+        msg.temp = 28
+        msg.design_cap = 40_000
+        msg.remain_cap = 39_522
+        msg.full_cap = 39_995
+        msg.cycles = 1
+        msg.soh = 100
+        msg.max_cell_vol = 3_330
+        msg.min_cell_vol = 3_326
+        msg.max_vol_diff = 4
+        msg.max_cell_temp = 28
+        msg.min_cell_temp = 26
+        msg.max_mos_temp = 28
+        msg.min_mos_temp = 27
+        msg.cell_series_num = 16
+        msg.all_err_code = 0
+        msg.real_soh = 100.0
+        msg.calendar_soh = 88.0
+        msg.cycle_soh = 100.0
+        msg.accu_chg_energy = 2_377  # Wh
+        msg.accu_dsg_energy = 622  # Wh
+        return msg
+
+    def _frame(self) -> bytes:
+        return _build_frame(32, 50, self._message().SerializeToString())
+
+    def test_frame_is_routed_to_the_bms_decoder(self):
+        result = decode_proto_runtime_frame(self._frame())
+        assert result.parse_path == "typed_runtime:delta3_bms_heartbeat"
+        assert result.mapped["_is_delta3_bms_heartbeat"] is True
+
+    def test_health_fields_reach_their_sensors(self):
+        parsed = parse_delta3_bms_heartbeat(_decode(self._frame()))
+        assert parsed["bms_soh_pct"] == 100.0
+        assert parsed["bms_cycles"] == 1.0
+        assert parsed["bms_calendar_soh_pct"] == 88.0
+        assert parsed["bms_cycle_soh_pct"] == 100.0
+        assert parsed["bms_cell_count"] == 16.0
+
+    def test_voltage_and_current_are_scaled_from_milli_units(self):
+        """53070 mV over 16 cells is 53.07 V, and -70 mA is -0.07 A.
+
+        The capture pins both: the cells read ~3327 mV each, and the device
+        reported 3 W of output at that voltage, which is 57 mA.
+        """
+        parsed = parse_delta3_bms_heartbeat(_decode(self._frame()))
+        assert parsed["bms_voltage_v"] == 53.07
+        assert parsed["bms_current_a"] == -0.07
+
+    def test_cell_and_capacity_diagnostics_pass_through_unscaled(self):
+        parsed = parse_delta3_bms_heartbeat(_decode(self._frame()))
+        assert parsed["bms_max_cell_vol_mv"] == 3330.0
+        assert parsed["bms_min_cell_vol_mv"] == 3326.0
+        assert parsed["bms_cell_vol_diff_mv"] == 4.0
+        assert parsed["bms_remain_cap_mah"] == 39522.0
+        assert parsed["bms_full_cap_mah"] == 39995.0
+        assert parsed["bms_design_cap_mah"] == 40000.0
+        assert parsed["bms_max_cell_temp_c"] == 28.0
+        assert parsed["bms_min_cell_temp_c"] == 26.0
+
+    def test_lifetime_counters_are_converted_to_kwh(self):
+        """Read from the BMS, not integrated - the one exception here."""
+        parsed = parse_delta3_bms_heartbeat(_decode(self._frame()))
+        assert parsed["bms_accu_chg_energy_kwh"] == 2.377
+        assert parsed["bms_accu_dsg_energy_kwh"] == 0.622
+
+    def test_zero_lifetime_counter_is_dropped(self):
+        """A zero on a total_increasing sensor reads as a meter reset."""
+        msg = self._message()
+        msg.accu_chg_energy = 0
+        msg.accu_dsg_energy = 0
+        parsed = parse_delta3_bms_heartbeat(_decode(_build_frame(32, 50, msg.SerializeToString())))
+        assert "bms_accu_chg_energy_kwh" not in parsed
+        assert "bms_accu_dsg_energy_kwh" not in parsed
+
+    def test_state_of_charge_is_not_taken_from_this_frame(self):
+        """`cms_batt_soc` owns the SoC; a second writer would fight it.
+
+        The two do not even agree in the capture - 99 here against the
+        display value of 98.8 - so they are not interchangeable.
+        """
+        parsed = parse_delta3_bms_heartbeat(_decode(self._frame()))
+        assert "cms_batt_soc" not in parsed
+        assert not any(key.endswith("soc") for key in parsed)
+
+    def test_empty_heartbeat_yields_nothing(self):
+        frame = _build_frame(32, 50, Delta3BmsHeartbeat().SerializeToString())
+        assert parse_delta3_bms_heartbeat(_decode(frame)) == {}
 
 
 class TestModeParity:

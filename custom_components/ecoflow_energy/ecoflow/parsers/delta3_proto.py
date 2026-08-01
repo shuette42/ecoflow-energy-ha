@@ -6,8 +6,9 @@ those frames carry values we surface:
 
     cmd_func=254, cmd_id=21   main status frame (all contract fields)
     cmd_func=32,  cmd_id=2    battery heartbeat (SoC and SoC limits)
+    cmd_func=32,  cmd_id=50   BMS heartbeat (battery health, see below)
 
-Both use the same field names as the HTTP quota response, just in
+The first two use the same field names as the HTTP quota response, just in
 snake_case instead of camelCase. This module therefore does not
 re-implement any parsing logic: it translates the decoded protobuf field
 names back to their HTTP quota spelling and hands the result to
@@ -156,3 +157,77 @@ def parse_delta3_display_property(fields: dict[str, Any]) -> dict[str, Any]:
 def parse_delta3_cms_heartbeat(fields: dict[str, Any]) -> dict[str, Any]:
     """Parse a decoded Delta 3 battery heartbeat into flat sensor keys."""
     return parse_delta3_http_quota(_translate_cms_heartbeat(fields))
+
+
+# BMS heartbeat (cmd_func=32, cmd_id=50). This frame is the one exception to
+# the rule above: it has no HTTP quota counterpart at all, so there is no
+# quota spelling to translate into and the fields map straight onto sensor
+# keys. Every key is prefixed `bms_` to keep that difference visible - these
+# sensors exist on the protobuf path only and stay unavailable in Standard
+# Mode.
+#
+# proto field -> (sensor key, divisor). A divisor of 1 passes the value
+# through. The unit of every scaled field was confirmed against the same
+# capture: 53070 mV at 16 cells of ~3327 mV, and -70 mA against 3 W of load
+# at 53 V.
+_BMS_SCALED_FIELDS: dict[str, tuple[str, float]] = {
+    "vol": ("bms_voltage_v", 1000.0),
+    "amp": ("bms_current_a", 1000.0),
+    "temp": ("bms_temp_c", 1.0),
+    "soh": ("bms_soh_pct", 1.0),
+    "cycles": ("bms_cycles", 1.0),
+    "real_soh": ("bms_real_soh_pct", 1.0),
+    "calendar_soh": ("bms_calendar_soh_pct", 1.0),
+    "cycle_soh": ("bms_cycle_soh_pct", 1.0),
+    "max_cell_vol": ("bms_max_cell_vol_mv", 1.0),
+    "min_cell_vol": ("bms_min_cell_vol_mv", 1.0),
+    "max_vol_diff": ("bms_cell_vol_diff_mv", 1.0),
+    "max_cell_temp": ("bms_max_cell_temp_c", 1.0),
+    "min_cell_temp": ("bms_min_cell_temp_c", 1.0),
+    "max_mos_temp": ("bms_max_mos_temp_c", 1.0),
+    "min_mos_temp": ("bms_min_mos_temp_c", 1.0),
+    "remain_cap": ("bms_remain_cap_mah", 1.0),
+    "full_cap": ("bms_full_cap_mah", 1.0),
+    "design_cap": ("bms_design_cap_mah", 1.0),
+    "cell_series_num": ("bms_cell_count", 1.0),
+    "all_err_code": ("bms_error_code", 1.0),
+}
+
+# Lifetime counters the BMS keeps itself, in Wh. Unlike every other kWh
+# sensor on this device these are not integrated from power - they are read.
+# A zero is "nothing to report", not a reading, and publishing it on a
+# total_increasing sensor would make Home Assistant book a meter reset.
+_BMS_ENERGY_FIELDS: dict[str, str] = {
+    "accu_chg_energy": "bms_accu_chg_energy_kwh",
+    "accu_dsg_energy": "bms_accu_dsg_energy_kwh",
+}
+
+# Environment-temperature fields are deliberately absent: the DELTA 3 Max
+# Plus reports -127 for both, the standard "no sensor fitted" sentinel, and
+# publishing it would put a plausible-looking -127 °C on a temperature
+# entity.
+#
+# The frame also carries `soc` and `f32_show_soc`. Neither is forwarded:
+# `cms_batt_soc` already owns the state of charge, and a second source
+# updating the same entity from a different frame is exactly the split
+# ownership this integration avoids. The two differ by more than a rounding
+# step in the capture (99 against the display value 98.8), so they are not
+# even interchangeable.
+
+
+def parse_delta3_bms_heartbeat(fields: dict[str, Any]) -> dict[str, Any]:
+    """Parse a decoded Delta 3 BMS heartbeat into flat sensor keys."""
+    result: dict[str, Any] = {}
+
+    for proto_key, (sensor_key, divisor) in _BMS_SCALED_FIELDS.items():
+        value = fields.get(proto_key)
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            continue
+        result[sensor_key] = float(value) / divisor if divisor != 1.0 else float(value)
+
+    for proto_key, sensor_key in _BMS_ENERGY_FIELDS.items():
+        value = fields.get(proto_key)
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0:
+            result[sensor_key] = float(value) / 1000.0
+
+    return result

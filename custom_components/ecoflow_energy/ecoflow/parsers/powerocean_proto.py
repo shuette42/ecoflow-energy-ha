@@ -141,6 +141,9 @@ HEARTBEAT_TO_SENSOR: dict[str, str] = {
     "ems_bp_alive_num": "ems_bp_alive_num",
     "ems_pv_inv_pwr": "pv_inverter_power_w",
     "ems_work_mode": "ems_work_mode",
+    # Hottest of the EMS-internal NTC probes. Already decoded from the
+    # heartbeat (field 81), it simply had no entity.
+    "ems_ntc_temp_max": "ems_ntc_temp_max_c",
 }
 
 # Battery heartbeat (cmd_id=7) key -> sensor key mapping
@@ -184,7 +187,69 @@ EMS_CHANGE_TO_SENSOR: dict[str, str] = {
     "iot_4g_sta": "cellular_status",
     "grid_is_energized": "grid_is_energized",
     "ems_work_state": "ems_work_state",
+    # Previously undecoded, both cmd_id=8 fields.
+    "ems_sg_ready_en": "ems_sg_ready_enabled",
+    "ems_sg_run_stat": "ems_sg_ready_state",
+    "battery_limit_reason": "battery_limit_reason",
 }
+
+# EMS state report (cmd_id=17) key -> sensor key mapping.
+#
+# The device sends this through the same message type as cmd_id=8 but with a
+# completely disjoint field set: a PowerOcean Plus Get-All bundle contains
+# both, 27 fields in cmd 8 and 71 in cmd 17, with zero overlap. It gets its
+# own table rather than sharing the one above, because sharing would silently
+# hand cmd 17 the right to write keys whose cmd-17 meaning is not established.
+#
+# That is not hypothetical. In the R374 bundle the phase containers report
+# 237 V on all three phases and -3725 W of export while cmd 17 reports
+# `sys_grid_sta = 0` and `bp_chg_dsg_sta = 2` - "grid not detected" and
+# "discharging" on a grid-exporting unit whose battery power is zero. Under
+# the cmd-8 table those two values would land on `grid_status` and
+# `batt_charge_discharge_state` and be visibly wrong. The same reasoning
+# excludes `sys_work_sta`, `ems_work_state`, `bp_soc`, `bp_online_sum` and
+# the two lifetime energy counters (0 in every observed frame).
+#
+# Those keys keep their existing owner. Re-add one here only with a capture
+# that shows the cmd-17 value tracking the device state it claims to
+# describe.
+EMS_STATE_TO_SENSOR: dict[str, str] = {
+    # Error and warning codes. These entities already exist, fed by the HTTP
+    # quota in Standard Mode; Enhanced Mode had no source for them at all.
+    "pcs_ac_err_code": "pcs_ac_error_code",
+    "pcs_dc_err_code": "pcs_dc_error_code",
+    "pcs_ac_warning_code": "pcs_ac_warning_code",
+    "mppt1_fault_code": "mppt1_fault_code",
+    "mppt2_fault_code": "mppt2_fault_code",
+    "mppt1_warning_code": "mppt1_warning_code",
+    "mppt2_warning_code": "mppt2_warning_code",
+    # Arc-fault detector and hardware fault flags.
+    "afci_sellf_test_result": "afci_self_test_result",
+    "afci_fault_flag_ch1": "afci_fault_ch1",
+    "afci_fault_flag_ch2": "afci_fault_ch2",
+    "bp_line_off_flag": "battery_line_off",
+    "bat_relay_close_fail_flag": "battery_relay_fault",
+    # Self-check, maintenance and topology states.
+    "sys_heat_stat": "sys_heat_state",
+    "sys_cal_stat": "sys_calibration_state",
+    "parallel_type": "parallel_mode",
+    "ems_sys_self_check_stat": "ems_self_check_state",
+    # Run state and connectivity. Kept because the same bundle corroborates
+    # them: the inverter is running, and the unit is reachable over WiFi.
+    "pcs_run_sta": "pcs_run_state",
+    "wifi_sta_stat": "wifi_status",
+    "eth_wan_stat": "ethernet_status",
+    "iot_4g_sta": "cellular_status",
+}
+
+# Lifetime energy totals. A zero here is never a reading: the counters only
+# ever grow, so the device reports 0 when it has nothing to report. Feeding
+# it into a total_increasing sensor makes Home Assistant read a meter reset
+# and book the whole standing total a second time. The PowerOcean Plus sends
+# exactly this - its cmd_id=17 carries both counters at 0 on every frame.
+_LIFETIME_ENERGY_SENSORS: frozenset[str] = frozenset(
+    {"batt_charge_energy_kwh", "batt_discharge_energy_kwh"}
+)
 
 # Battery pack proto key suffix -> sensor key suffix (for multi-pack extraction)
 BP_PACK_SENSOR_MAP: dict[str, str] = {
@@ -495,11 +560,8 @@ def remap_bp_keys(
         )
         if sensor_key:
             # Energy totals from EMS change report: Wh -> kWh
-            if sensor_key in (
-                "batt_charge_energy_kwh",
-                "batt_discharge_energy_kwh",
-            ):
-                if isinstance(value, (int, float)):
+            if sensor_key in _LIFETIME_ENERGY_SENSORS:
+                if isinstance(value, (int, float)) and value > 0:
                     result[sensor_key] = float(value) / 1000.0
             else:
                 result[sensor_key] = (
@@ -514,5 +576,27 @@ def remap_bp_keys(
     _apply_enum_mappings(result)
 
     drop_invalid_percentages(result)
+
+    return result
+
+
+def remap_ems_state_keys(raw: dict[str, Any]) -> dict[str, Any]:
+    """Remap an EMS state report (cmd_id=17) to sensor keys.
+
+    Deliberately narrower than `remap_bp_keys`: only the fields listed in
+    `EMS_STATE_TO_SENSOR` are surfaced, everything else in the frame is
+    dropped. See the note on that table for why.
+    """
+    result: dict[str, Any] = {}
+
+    for proto_key, value in raw.items():
+        sensor_key = EMS_STATE_TO_SENSOR.get(proto_key)
+        if sensor_key is None:
+            continue
+        result[sensor_key] = (
+            float(value) if isinstance(value, (int, float)) else value
+        )
+
+    _apply_enum_mappings(result)
 
     return result

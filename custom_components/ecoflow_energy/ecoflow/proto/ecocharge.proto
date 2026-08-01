@@ -292,6 +292,24 @@ message JTS1EmsChangeReport {
   oneof _eth_wan_stat { uint32 eth_wan_stat = 224; }
   oneof _wifi_sta_stat { uint32 wifi_sta_stat = 225; }
   oneof _grid_is_energized { bool grid_is_energized = 752; }
+  // Fields below appear in cmd_id=17 only. The two command ids carry
+  // disjoint field sets on the same message: cmd 8 reports configuration
+  // and mode, cmd 17 reports run state, fault flags and the arc-fault
+  // detector. A device that sends both fills this message from both.
+  oneof _sys_heat_stat { uint32 sys_heat_stat = 190; }
+  oneof _mppt1_warning_code { uint32 mppt1_warning_code = 196; }
+  oneof _mppt2_warning_code { uint32 mppt2_warning_code = 197; }
+  oneof _bp_line_off_flag { uint32 bp_line_off_flag = 198; }
+  oneof _bat_relay_close_fail_flag { uint32 bat_relay_close_fail_flag = 201; }
+  oneof _afci_fault_flag_ch1 { uint32 afci_fault_flag_ch1 = 211; }
+  oneof _afci_fault_flag_ch2 { uint32 afci_fault_flag_ch2 = 216; }
+  oneof _afci_sellf_test_result { uint32 afci_sellf_test_result = 220; }
+  oneof _sys_cal_stat { uint32 sys_cal_stat = 223; }
+  oneof _parallel_type { uint32 parallel_type = 233; }
+  // cmd_id=8 only, but absent from the earlier field selection.
+  oneof _ems_sg_ready_en { bool ems_sg_ready_en = 183; }
+  oneof _ems_sg_run_stat { uint32 ems_sg_run_stat = 184; }
+  oneof _battery_limit_reason { uint32 battery_limit_reason = 600; }
 }
 
 // JTS1EmsParamChangeReport (cmd_id=13). Carries the user-tunable parameter
@@ -399,4 +417,42 @@ message Delta3EmsHeartbeatV1P3 {
 message Delta3CmsHeartbeat {
   optional Delta3EmsHeartbeatV1P0 v1p0 = 1;
   optional Delta3EmsHeartbeatV1P3 v1p3 = 2;
+}
+
+// BMS heartbeat (cmd_func=32, cmd_id=50), sent about every 10 s alongside
+// the CMS heartbeat. This is the only frame that carries battery health:
+// state of health, cycle count and the lifetime charge/discharge energy
+// counters the device keeps itself. None of it exists in the HTTP quota,
+// so these keys have no Standard Mode counterpart - see the note in
+// `parsers/delta3_proto.py`.
+//
+// The pack-level arrays (cell_vol, cell_temp, mos_temp) are deliberately
+// left out: they are per-cell debug data, they would add sixteen entities
+// per device, and the min/max pairs below already carry the health signal.
+message Delta3BmsHeartbeat {
+  oneof _soc { uint32 soc = 6; }
+  oneof _vol { uint32 vol = 7; }
+  oneof _amp { int32 amp = 8; }
+  oneof _temp { int32 temp = 9; }
+  oneof _design_cap { uint32 design_cap = 11; }
+  oneof _remain_cap { uint32 remain_cap = 12; }
+  oneof _full_cap { uint32 full_cap = 13; }
+  oneof _cycles { uint32 cycles = 14; }
+  oneof _soh { uint32 soh = 15; }
+  oneof _max_cell_vol { uint32 max_cell_vol = 16; }
+  oneof _min_cell_vol { uint32 min_cell_vol = 17; }
+  oneof _max_cell_temp { int32 max_cell_temp = 18; }
+  oneof _min_cell_temp { int32 min_cell_temp = 19; }
+  oneof _max_mos_temp { int32 max_mos_temp = 20; }
+  oneof _min_mos_temp { int32 min_mos_temp = 21; }
+  oneof _max_vol_diff { uint32 max_vol_diff = 31; }
+  oneof _cell_series_num { uint32 cell_series_num = 32; }
+  oneof _all_err_code { uint32 all_err_code = 48; }
+  oneof _accu_chg_cap { uint32 accu_chg_cap = 50; }
+  oneof _accu_dsg_cap { uint32 accu_dsg_cap = 51; }
+  oneof _real_soh { float real_soh = 52; }
+  oneof _calendar_soh { float calendar_soh = 53; }
+  oneof _cycle_soh { float cycle_soh = 54; }
+  oneof _accu_chg_energy { uint32 accu_chg_energy = 79; }
+  oneof _accu_dsg_energy { uint32 accu_dsg_energy = 80; }
 }

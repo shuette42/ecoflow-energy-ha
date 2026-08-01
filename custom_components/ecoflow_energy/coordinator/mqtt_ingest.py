@@ -19,6 +19,7 @@ from ..ecoflow.parsers.delta import parse_delta_report
 from ..ecoflow.parsers.delta_http import parse_delta_http_quota
 from ..ecoflow.parsers.delta3_http import parse_delta3_http_quota
 from ..ecoflow.parsers.delta3_proto import (
+    parse_delta3_bms_heartbeat,
     parse_delta3_cms_heartbeat,
     parse_delta3_display_property,
 )
@@ -26,6 +27,7 @@ from ..ecoflow.parsers.powerocean import parse_powerocean_http_quota
 from ..ecoflow.parsers.powerocean_proto import (
     flatten_heartbeat,
     remap_bp_keys,
+    remap_ems_state_keys,
     remap_proto_keys,
 )
 from ..ecoflow.parsers.smartplug import (
@@ -323,6 +325,12 @@ class MqttIngestMixin:
                     if result.mapped.get("_is_delta3_cms_heartbeat"):
                         parsed = parse_delta3_cms_heartbeat(raw)
                         return parsed if parsed else None
+                    # The BMS heartbeat has no HTTP counterpart, so it maps
+                    # onto its own `bms_` sensor keys instead of the shared
+                    # quota path.
+                    if result.mapped.get("_is_delta3_bms_heartbeat"):
+                        parsed = parse_delta3_bms_heartbeat(raw)
+                        return parsed if parsed else None
                 if result.mapped.get("_is_energy_stream"):
                     return remap_proto_keys(raw)
                 # Enhanced Mode: heartbeat with nested extraction
@@ -335,6 +343,11 @@ class MqttIngestMixin:
                 # unchanged.
                 if result.mapped.get("_is_ems_param_change"):
                     return raw or None
+                # Enhanced Mode: EMS state report (cmd_id=17). Narrower
+                # mapping than the change report, deliberately so.
+                if result.mapped.get("_is_ems_state"):
+                    parsed = remap_ems_state_keys(raw)
+                    return parsed if parsed else None
                 # Enhanced Mode: change reports and battery heartbeat
                 if (
                     result.mapped.get("_is_ems_change")
@@ -400,6 +413,9 @@ class MqttIngestMixin:
                     continue
                 if result.mapped.get("_is_ems_param_change"):
                     merged.update(raw)
+                    continue
+                if result.mapped.get("_is_ems_state"):
+                    merged.update(remap_ems_state_keys(raw))
                     continue
                 if (
                     result.mapped.get("_is_ems_change")

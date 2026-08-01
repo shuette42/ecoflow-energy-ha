@@ -100,6 +100,16 @@ def _build_cmd_registry() -> dict[tuple[int, int], CmdConfig]:
             flags={"_is_ems_change": True},
             rename={"ems_word_mode": "ems_work_mode"},
         ),
+        # Same message as cmd_id=8, disjoint field set. A PowerOcean Plus
+        # Get-All bundle carries both: cmd 8 the configuration and mode,
+        # cmd 17 the run state, the fault flags and the arc-fault detector.
+        # It carries its own flag because the two ids do not share a sensor
+        # mapping - see `EMS_STATE_TO_SENSOR`.
+        (96, 17): CmdConfig(
+            msg_class=pb2.JTS1EmsChangeReport,
+            parse_path="typed_runtime:ems_state",
+            flags={"_is_ems_state": True},
+        ),
         (96, 13): CmdConfig(
             msg_class=pb2.JTS1EmsParamChangeReport,
             parse_path="typed_runtime:ems_param_change",
@@ -119,6 +129,21 @@ def _build_cmd_registry() -> dict[tuple[int, int], CmdConfig]:
             parse_path="typed_runtime:delta3_cms_heartbeat",
             flags={"_is_delta3_cms_heartbeat": True},
         ),
+        # BMS heartbeat, also every 10 s. Carries the battery health data
+        # (SoH, cycles, lifetime energy counters) that no other frame and no
+        # HTTP quota field reports.
+        #
+        # This tuple is NOT Delta 3 exclusive, and the entry does not make it
+        # so: the Stream family uses (32, 50) for its own battery message,
+        # where field 25 is the precise state of charge rather than a float
+        # SoC. Stream frames never reach this registry because `mqtt_ingest`
+        # routes by device type first - which is exactly the routing contract
+        # in this module's docstring, and the reason it exists.
+        (32, 50): CmdConfig(
+            msg_class=pb2.Delta3BmsHeartbeat,
+            parse_path="typed_runtime:delta3_bms_heartbeat",
+            flags={"_is_delta3_bms_heartbeat": True},
+        ),
     }
 
 
@@ -136,11 +161,13 @@ def _empty_mapped() -> dict[str, Any]:
         "_is_pv_inv_energy_stream": False,
         "_is_ems_heartbeat": False,
         "_is_ems_change": False,
+        "_is_ems_state": False,
         "_is_ems_param_change": False,
         "_is_bp_heartbeat": False,
         "_is_full_power_frame": False,
         "_is_delta3_display": False,
         "_is_delta3_cms_heartbeat": False,
+        "_is_delta3_bms_heartbeat": False,
     }
 
 
