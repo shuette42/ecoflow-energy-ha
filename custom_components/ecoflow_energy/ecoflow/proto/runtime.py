@@ -20,10 +20,17 @@ from typing import Any
 
 from google.protobuf.json_format import MessageToDict
 from google.protobuf.message import DecodeError
+from google.protobuf.unknown_fields import UnknownFieldSet
 
 from .decoder import decode_header_message
 
 _LOGGER = logging.getLogger(__name__)
+
+# Per message, how many undeclared field numbers are reported. A device that
+# sends more than this many fields we do not declare is telling us something
+# other than "one setting is missing", and the first few dozen carry that
+# message just as well.
+_UNKNOWN_FIELDS_MAX = 40
 
 
 @dataclass
@@ -267,6 +274,61 @@ def _typed_map_from_candidates(
     return ranked_fallback
 
 
+def unknown_field_summary(msg: Any) -> dict[int, Any]:
+    """Return the field numbers a message carried but the binding does not declare.
+
+    Protobuf keeps a field it cannot name in the message's unknown-field set
+    instead of discarding it, so a decoded message still knows which numbers
+    arrived. That is the only way to answer "does this device report field N?"
+    for a field nobody has mapped yet: the field map covers what we already
+    know, and everything else is invisible by construction.
+
+    What a value looks like depends on the wire type, and only the scalar
+    types are reported as values:
+
+    - varint, fixed32 and fixed64 come back as the integer on the wire. The
+      semantic type is unknowable here - a fixed32 may be a float and a varint
+      may be signed - so the raw integer is reported and interpreting it is
+      the reader's job.
+    - a length-delimited field is reported **by length only**. Its bytes may
+      be a nested message, but they may equally be a serial number or another
+      identifier, and this summary is built to be pasted into a public issue.
+      Reporting a length keeps the "this field exists" signal without
+      publishing whatever it holds.
+    - a group is reported as its kind. The wire format is deprecated and no
+      EcoFlow message on this path uses it.
+
+    Fields are taken in wire order until the cap, so a message with more
+    undeclared fields than the cap always samples the same ones. Nothing is
+    lost for the purpose this serves - a device reports the same layout on
+    every push, and its incremental pushes carry the higher numbers on their
+    own.
+
+    Nested messages are not descended into: a field undeclared inside a
+    declared sub-message stays invisible. Every field this plan needs sits at
+    the top level of its message, and walking the tree would multiply both the
+    output size and the ways a serial could leak.
+    """
+    summary: dict[int, Any] = {}
+    for entry in UnknownFieldSet(msg):
+        if len(summary) >= _UNKNOWN_FIELDS_MAX:
+            break
+        # A field number can legitimately repeat: a non-packed repeated field
+        # writes one entry per element, and two concatenated messages produce
+        # the same shape. The first occurrence is the sample; later ones only
+        # confirm what the first already reported.
+        if entry.field_number in summary:
+            continue
+        if entry.wire_type in (0, 1, 5):
+            summary[entry.field_number] = entry.data
+        elif entry.wire_type == 2:
+            length = len(entry.data) if isinstance(entry.data, bytes) else 0
+            summary[entry.field_number] = f"{length} bytes"
+        else:
+            summary[entry.field_number] = "group"
+    return summary
+
+
 def _typed_runtime_map(
     headers: list[dict], source: bytes
 ) -> tuple[dict[str, Any], str] | None:
@@ -341,6 +403,19 @@ def _typed_runtime_map(
         ) >= 3
 
     mapped["_flat_count"] = len(fields)
+
+    # 7. Undeclared field numbers, for diagnostics only. Recorded solely when
+    # the message also produced declared fields: protobuf accepts arbitrary
+    # bytes as unknown fields rather than raising, so a payload decoded with
+    # the wrong key (see `_header_pdata_candidates`) yields a message that is
+    # *only* unknown fields. Reporting those would fill the summary with
+    # noise from a candidate the caller is about to discard anyway.
+    if fields:
+        unknown = unknown_field_summary(msg)
+        if unknown:
+            mapped["_unknown_fields"] = unknown
+            mapped["_cmd_key"] = f"{cmd_func}/{cmd_id}"
+
     return mapped, config.parse_path
 
 

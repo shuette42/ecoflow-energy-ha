@@ -52,6 +52,8 @@ from ..const import (
     SMARTPLUG_POWER_TO_ENERGY,
     STREAM_ENERGY_FROM_API,
     STREAM_POWER_TO_ENERGY,
+    UNKNOWN_FIELD_CMDS_MAX,
+    UNKNOWN_FIELD_NUMBERS_MAX,
     get_delta_profile,
     get_device_name,
 )
@@ -231,6 +233,15 @@ class EcoFlowDeviceCoordinator(
         # it is called from the Paho thread while diagnostics read it on the
         # event loop.
         self._raw_frames_lock = threading.Lock()
+        # Field numbers a device sends that the protobuf binding does not
+        # declare, per command. The frame capture above answers "what bytes
+        # arrived" and truncates at 512 of them; this answers "which fields
+        # arrived" for the whole message, which is the question asked when a
+        # control exists in the schema and nobody knows whether the hardware
+        # reports it. Values are scalars or byte counts, never byte content -
+        # see `unknown_field_summary`.
+        self._unknown_proto_fields: dict[str, dict[int, Any]] = {}
+        self._unknown_proto_fields_lock = threading.Lock()
         # Stable SN → pack index mapping for proto heartbeats (cmd_id=7).
         # Each heartbeat contains only one pack; this map ensures the same
         # physical pack always maps to the same pack{n}_* sensor keys.
@@ -349,6 +360,55 @@ class EcoFlowDeviceCoordinator(
         """
         with self._raw_frames_lock:
             return self._raw_frames.frames(), self._raw_frames.stats()
+
+    def record_unknown_proto_fields(
+        self, cmd_key: str, fields: dict[int, Any]
+    ) -> None:
+        """Merge one message's undeclared field numbers into the running set.
+
+        Called from the Paho thread for every decoded push frame. The newest
+        sample wins for a field already seen, so the summary tracks a value
+        that changes rather than freezing whatever arrived first - which
+        matters when a reporter is asked to change a setting in the app and
+        report which number moved.
+
+        Both axes are capped, and the second one is the one that matters: the
+        decoder limits how many numbers a single message contributes, but this
+        summary accumulates over every message for as long as the integration
+        runs. A field number already known keeps updating past the cap, so a
+        full summary still tracks the values it holds - it only stops taking
+        on new numbers.
+        """
+        if not fields:
+            return
+        with self._unknown_proto_fields_lock:
+            known = self._unknown_proto_fields.get(cmd_key)
+            if known is None:
+                # A device sending more command types than this is not the
+                # case this was built for.
+                if len(self._unknown_proto_fields) >= UNKNOWN_FIELD_CMDS_MAX:
+                    return
+                known = {}
+                self._unknown_proto_fields[cmd_key] = known
+            for number, value in fields.items():
+                if number in known:
+                    known[number] = value
+                elif len(known) < UNKNOWN_FIELD_NUMBERS_MAX:
+                    known[number] = value
+
+    @property
+    def unknown_proto_fields(self) -> dict[str, dict[str, Any]]:
+        """Return the undeclared field numbers seen per command, for diagnostics.
+
+        Field numbers are stringified because this ends up in a JSON download,
+        and they are sorted numerically so two dumps from the same device can
+        be diffed by eye.
+        """
+        with self._unknown_proto_fields_lock:
+            return {
+                cmd_key: {str(number): fields[number] for number in sorted(fields)}
+                for cmd_key, fields in sorted(self._unknown_proto_fields.items())
+            }
 
     @property
     def event_log(self) -> list[dict[str, Any]]:

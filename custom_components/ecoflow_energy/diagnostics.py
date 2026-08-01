@@ -303,6 +303,27 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
             },
         }
 
+    # Enhanced Mode: the field numbers the device sent that our protobuf
+    # binding does not declare. A field the binding does not know is dropped
+    # silently before it reaches any sensor, so without this there is no way
+    # to tell a device that does not report a value from one that reports it
+    # into a gap in our schema - and that is the question every "can this be
+    # controlled from Home Assistant" request runs into first.
+    #
+    # Raw frames answer the same question in principle, but they are cut at
+    # 512 bytes and reading field numbers out of a hex dump is not something
+    # to ask of a reporter.
+    unknown_fields = coordinator.unknown_proto_fields
+    if unknown_fields:
+        diag["unknown_proto_fields"] = {
+            "note": (
+                "Field numbers this device sent that the integration does not "
+                "decode, keyed by cmd_func/cmd_id. Scalar values are shown as "
+                "sent; other fields are shown by byte length only."
+            ),
+            "commands": unknown_fields,
+        }
+
     return diag
 
 

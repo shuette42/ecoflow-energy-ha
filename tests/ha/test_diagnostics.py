@@ -18,6 +18,8 @@ from custom_components.ecoflow_energy.const import (
     DATA_SKIPPED_DEVICES,
     DOMAIN,
     MODE_STANDARD,
+    UNKNOWN_FIELD_CMDS_MAX,
+    UNKNOWN_FIELD_NUMBERS_MAX,
 )
 from custom_components.ecoflow_energy.diagnostics import (
     REDACTED,
@@ -864,3 +866,222 @@ class TestUnroutedDeviceCapture:
         # must still state that this device has none of its own.
         assert result[0]["raw_capture"]["status"] == "no probe running for this device"
         assert "frames" not in result[0]["raw_capture"]
+
+
+class TestUnknownProtoFieldDiagnostics:
+    """The field numbers a device sends that the binding does not declare.
+
+    This is the evidence path for "does this hardware report the value a
+    control would read back", which the polled quota cannot answer for a
+    field that only travels on the protobuf push path.
+    """
+
+    async def test_no_unknown_fields_omits_section(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """A device whose fields are all declared has no section."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA3_DEVICE
+        )
+        assert "unknown_proto_fields" not in _device_diagnostics(coordinator)
+
+    async def test_recorded_fields_exposed_sorted(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Field numbers reach diagnostics keyed by command, in order."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA3_DEVICE
+        )
+        coordinator.record_unknown_proto_fields("254/21", {5064: 1000, 96: "8 bytes"})
+        coordinator.record_unknown_proto_fields("254/21", {6396: 1})
+
+        section = _device_diagnostics(coordinator)["unknown_proto_fields"]
+
+        assert list(section["commands"]["254/21"]) == ["96", "5064", "6396"]
+        assert section["commands"]["254/21"]["5064"] == 1000
+
+    async def test_newest_sample_wins(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """A value that changes is tracked, not frozen at first sight.
+
+        A reporter asked to move a setting in the app and dump diagnostics
+        again must see the number move too, otherwise the dump cannot tie a
+        field to a setting.
+        """
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA3_DEVICE
+        )
+        coordinator.record_unknown_proto_fields("254/21", {5064: 1000})
+        coordinator.record_unknown_proto_fields("254/21", {5064: 2400})
+
+        section = _device_diagnostics(coordinator)["unknown_proto_fields"]
+        assert section["commands"]["254/21"]["5064"] == 2400
+
+    async def test_command_count_is_bounded(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """A dict fed from the network does not grow without a bound."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA3_DEVICE
+        )
+        for cmd in range(UNKNOWN_FIELD_CMDS_MAX + 5):
+            coordinator.record_unknown_proto_fields(f"254/{cmd}", {1: 1})
+
+        section = _device_diagnostics(coordinator)["unknown_proto_fields"]
+        assert len(section["commands"]) == UNKNOWN_FIELD_CMDS_MAX
+
+    @staticmethod
+    def _frame(cmd_func: int, cmd_id: int, inner: bytes) -> bytes:
+        """Wrap a message in the header envelope the ingest path expects."""
+        from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
+            encode_field_bytes,
+            encode_field_varint,
+        )
+
+        header = bytearray()
+        header.extend(encode_field_bytes(1, inner))
+        header.extend(encode_field_varint(8, cmd_func))
+        header.extend(encode_field_varint(9, cmd_id))
+        return encode_field_bytes(1, bytes(header))
+
+    async def test_delta3_frame_records_through_the_ingest_path(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """A real frame through `_parse_message` reaches the summary.
+
+        Asserting against the recording method directly would let both sides
+        pass while the two are not wired together at all - deleting the calls
+        in `_parse_message` has to break something.
+        """
+        from custom_components.ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
+            Delta3DisplayProperty,
+        )
+        from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
+            encode_field_varint,
+        )
+
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA3_DEVICE
+        )
+
+        msg = Delta3DisplayProperty()
+        msg.cms_batt_soc = 82.0
+        # 5064 is the AC charge power cap read-back the binding does not
+        # declare - the field this whole path exists to find.
+        inner = msg.SerializeToString() + encode_field_varint(5064, 1000)
+
+        topic = f"/app/device/property/{MOCK_DELTA3_DEVICE['sn']}"
+        parsed = coordinator._parse_message(topic, self._frame(254, 21, inner))
+
+        assert coordinator.unknown_proto_fields == {"254/21": {"5064": 1000}}
+        # The private keys must not travel on into the sensor data - one of
+        # them holds a dict, and a dict as a sensor state is a broken entity.
+        assert parsed is not None
+        assert "_unknown_fields" not in parsed
+        assert "_cmd_key" not in parsed
+
+    async def test_powerocean_bundle_path_records_too(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """PowerOcean decodes through its own bundle path, which also records."""
+        from custom_components.ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
+            JTS1EnergyStreamReport,
+        )
+        from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
+            encode_field_varint,
+        )
+
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+
+        msg = JTS1EnergyStreamReport()
+        msg.bp_soc = 55
+        inner = msg.SerializeToString() + encode_field_varint(4242, 7)
+
+        topic = f"/app/device/property/{MOCK_POWEROCEAN_DEVICE['sn']}"
+        parsed = coordinator._parse_message(topic, self._frame(96, 33, inner))
+
+        assert coordinator.unknown_proto_fields == {"96/33": {"4242": 7}}
+        assert parsed is not None
+        assert "_unknown_fields" not in parsed
+
+    async def test_field_count_per_command_is_bounded(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """The summary stops taking new numbers instead of growing forever.
+
+        This is the axis that actually bounds memory: the decoder caps one
+        message, but the summary accumulates across every message a device
+        sends for as long as the integration is loaded.
+        """
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA3_DEVICE
+        )
+        for base in range(0, UNKNOWN_FIELD_NUMBERS_MAX + 100, 10):
+            coordinator.record_unknown_proto_fields(
+                "254/21", {base + offset: 1 for offset in range(10)}
+            )
+
+        commands = coordinator.unknown_proto_fields["254/21"]
+        assert len(commands) == UNKNOWN_FIELD_NUMBERS_MAX
+
+    async def test_known_field_still_updates_at_the_cap(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """A full summary keeps tracking the values it already holds.
+
+        Otherwise the "change a setting and dump again" workflow silently
+        stops working once the cap is reached.
+        """
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA3_DEVICE
+        )
+        coordinator.record_unknown_proto_fields(
+            "254/21", {number: 1 for number in range(UNKNOWN_FIELD_NUMBERS_MAX)}
+        )
+        coordinator.record_unknown_proto_fields("254/21", {5: 2400, 99999: 1})
+
+        commands = coordinator.unknown_proto_fields["254/21"]
+        assert len(commands) == UNKNOWN_FIELD_NUMBERS_MAX
+        assert commands["5"] == 2400
+        assert "99999" not in commands
+
+    async def test_malformed_mapping_is_ignored(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Capture never costs a message - a bad shape is dropped, not raised."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA3_DEVICE
+        )
+        coordinator._record_unknown_fields({"_unknown_fields": "nonsense"})
+        coordinator._record_unknown_fields({})
+        assert coordinator.unknown_proto_fields == {}

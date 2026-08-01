@@ -117,6 +117,27 @@ RAW_FRAME_LOG_KEYS_MAX = 20
 RAW_FRAME_LOG_PER_KEY_MAX = 3
 RAW_FRAME_MAX_BYTES = 512
 
+# Undeclared protobuf field numbers: how many commands are tracked at once.
+# The same twenty message types the frame capture budgets for would be the
+# consistent number, but only the commands with a typed binding can report
+# unknown fields at all, and no device class has more than a handful of those.
+# Twelve leaves room for a device that surprises us.
+UNKNOWN_FIELD_CMDS_MAX = 12
+
+# And how many distinct field numbers are kept per command. This is the cap
+# that actually bounds the memory: the per-message limit in the decoder only
+# limits one message, and the summary accumulates across every message a
+# device ever sends. Without this a device whose field numbers vary - a fault,
+# or a decode that lands on the wrong message type - adds entries for as long
+# as the integration is loaded, and both the process and the diagnostics
+# download grow with it. Measured: 10 000 messages of 40 varying numbers reach
+# 400 000 entries and a 5 MB download.
+#
+# Two hundred is well above the gap this exists to expose. A Delta 3 status
+# frame declares 306 fields in our binding; a schema gap of more than 200
+# further numbers is not "a setting is missing", it is the wrong binding.
+UNKNOWN_FIELD_NUMBERS_MAX = 200
+
 # Unsupported-device probe: budget per message type instead of one shared ring.
 # A device that pushes one message type every two seconds fills a shared ring
 # with its own tail within minutes, and everything a parser is built from is

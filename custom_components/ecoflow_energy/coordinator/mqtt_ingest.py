@@ -168,6 +168,21 @@ class MqttIngestMixin:
         except Exception:  # noqa: BLE001
             _LOGGER.debug("Raw frame capture failed", exc_info=True)
 
+    def _record_unknown_fields(self, mapped: dict[str, Any]) -> None:
+        """Hand a decoded message's undeclared field numbers to the coordinator.
+
+        Runs on the Paho thread next to the frame capture, and like it must
+        never cost a message: a diagnostics aid that can break ingest is worse
+        than no diagnostics aid.
+        """
+        try:
+            fields = mapped.get("_unknown_fields")
+            cmd_key = mapped.get("_cmd_key")
+            if isinstance(fields, dict) and isinstance(cmd_key, str):
+                self.record_unknown_proto_fields(cmd_key, fields)
+        except Exception:  # noqa: BLE001
+            _LOGGER.debug("Unknown proto field capture failed", exc_info=True)
+
     def _frame_secrets(self) -> list[str]:
         """Return the identifiers that must be masked out of a stored frame."""
         secrets = [self.device_sn]
@@ -316,6 +331,7 @@ class MqttIngestMixin:
                     return self._parse_powerocean_proto_frame(payload)
 
                 result = decode_proto_runtime_frame(payload)
+                self._record_unknown_fields(result.mapped)
                 raw = {
                     k: v
                     for k, v in result.mapped.items()
@@ -402,6 +418,7 @@ class MqttIngestMixin:
         # others, so every result is merged under its own guard.
         for result in results:
             try:
+                self._record_unknown_fields(result.mapped)
                 raw = {
                     key: value
                     for key, value in result.mapped.items()

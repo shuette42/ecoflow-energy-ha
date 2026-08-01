@@ -20,6 +20,7 @@ from ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
     JTS1EnergyStreamReport,
 )
 from ecoflow_energy.ecoflow.proto.runtime import (
+    _UNKNOWN_FIELDS_MAX,
     _build_cmd_registry,
     decode_proto_runtime_frame,
 )
@@ -90,6 +91,69 @@ class TestRuntimeDecoder:
         assert result.mapped["home_direct"] == 0.0
         assert result.mapped["batt_pb"] == 0.0
         assert result.mapped["grid_raw_f2"] == 0.0
+
+    def test_unknown_field_numbers_reported(self):
+        """A field the binding does not declare is reported by its number.
+
+        This is the only signal that a device sends something we have no
+        mapping for - MessageToDict returns declared fields only, so without
+        it an undeclared field is indistinguishable from one the device never
+        sent.
+        """
+        msg = JTS1EnergyStreamReport()
+        msg.bp_soc = 75
+        inner = msg.SerializeToString()
+        # 5064 is the DisplayPropertyUpload field number for the AC charge
+        # power cap - the concrete field this reporting was built for.
+        inner += encode_field_varint(5064, 1000)
+
+        result = decode_proto_runtime_frame(_build_frame(96, 33, inner))
+
+        assert result.mapped["_unknown_fields"] == {5064: 1000}
+        assert result.mapped["_cmd_key"] == "96/33"
+        # Declared fields keep working alongside it.
+        assert result.mapped["soc"] == 75.0
+
+    def test_unknown_length_delimited_field_reports_length_only(self):
+        """A length-delimited field is reported by size, never by content.
+
+        Its bytes may be a nested message, but they may equally be a serial
+        number, and this summary is built to be pasted into a public issue.
+        """
+        msg = JTS1EnergyStreamReport()
+        msg.bp_soc = 50
+        inner = msg.SerializeToString() + encode_field_bytes(4242, b"HJ32TESTSERIAL01")
+
+        result = decode_proto_runtime_frame(_build_frame(96, 33, inner))
+
+        assert result.mapped["_unknown_fields"] == {4242: "16 bytes"}
+        assert "HJ32TESTSERIAL01" not in str(result.mapped)
+
+    def test_unknown_fields_capped(self):
+        """The summary is bounded - a device cannot grow it without limit."""
+        msg = JTS1EnergyStreamReport()
+        msg.bp_soc = 50
+        inner = msg.SerializeToString()
+        for number in range(3000, 3100):
+            inner += encode_field_varint(number, 1)
+
+        result = decode_proto_runtime_frame(_build_frame(96, 33, inner))
+
+        assert len(result.mapped["_unknown_fields"]) == _UNKNOWN_FIELDS_MAX
+
+    def test_unknown_fields_skipped_without_declared_fields(self):
+        """A payload that decodes to unknown fields only is not reported.
+
+        Protobuf accepts arbitrary bytes as unknown fields instead of raising,
+        so a frame decoded with the wrong XOR key produces a message that is
+        entirely unknown fields. Those numbers are noise from a candidate the
+        caller discards.
+        """
+        inner = encode_field_varint(5064, 1000)
+
+        result = decode_proto_runtime_frame(_build_frame(96, 33, inner))
+
+        assert "_unknown_fields" not in result.mapped
 
     def test_ems_change_report_rename(self):
         """cmd_id=8 renames ems_word_mode → ems_work_mode."""
