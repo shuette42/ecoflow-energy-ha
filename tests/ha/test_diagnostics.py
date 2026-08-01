@@ -707,7 +707,7 @@ class TestRawFrameDiagnostics:
         coordinator = EcoFlowDeviceCoordinator(
             hass, standard_config_entry, MOCK_DELTA_DEVICE
         )
-        coordinator._raw_frames.append({
+        coordinator._raw_frames.add("property:proto/96.33", {
             "ts": 1784973604.0,
             "topic": "property",
             "size": 42,
@@ -723,6 +723,35 @@ class TestRawFrameDiagnostics:
         assert frame["hex"] == "0a02ffff"
         assert frame["cmds"] == [{"cmd_func": 96, "cmd_id": 33}]
         assert frame["ts_iso"].startswith("2026-")
+
+    async def test_sampling_counts_are_exposed(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """The frame list is a sample, and a reader has to be able to tell."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        for index in range(30):
+            coordinator._raw_frames.add("property:proto/96.33", {
+                "ts": 1784973604.0 + index * 3,
+                "topic": "property",
+                "size": 42,
+                "hex": "0a02ffff",
+            })
+
+        section = _device_diagnostics(coordinator)["raw_frames"]
+
+        sampling = section["sampling"]
+        assert sampling["frames_seen"] == 30
+        assert sampling["frames_kept"] < 30
+        # The counts only help if they describe the same state of the buffer
+        # as the frame list next to them. Read separately, the capture thread
+        # can add a frame in between and the two disagree.
+        assert sampling["frames_kept"] == section["count"]
+        assert sampling["frames_kept"] == len(section["frames"])
 
 
 class TestUnroutedDeviceCapture:

@@ -252,8 +252,11 @@ class TypedFrameBuffer:
     at worst drops it; the ``latest`` slot keeps the capture current
     either way.
 
-    Not thread-safe by itself. The probe calls it under its capture lock,
-    which is where that discipline already lives.
+    Not thread-safe by itself, and ``add`` is not atomic the way appending
+    to a deque is. Both callers write from the Paho thread and read on the
+    event loop, so each holds a lock of its own around every call: the
+    probe its capture lock, the coordinator its raw-frame lock. A third
+    caller has to bring one too.
     """
 
     def __init__(self, keys_max: int, per_key_max: int) -> None:

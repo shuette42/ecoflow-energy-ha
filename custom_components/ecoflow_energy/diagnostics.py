@@ -263,11 +263,17 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
     # masked and each frame truncated. Device variants within a serial family
     # do not always share a field layout, so a mis-decoded variant can only be
     # diagnosed against the bytes it actually sends.
-    raw_frames = coordinator.raw_frames
+    # One read for both halves: the counts only reconcile against the frame
+    # list if they describe the same state of the buffer.
+    raw_frames, raw_sampling = coordinator.raw_frame_capture()
     if raw_frames:
         diag["raw_frames"] = {
             "count": len(raw_frames),
             "truncated_at_bytes": RAW_FRAME_MAX_BYTES,
+            # Frames are sampled per message type, so the list is a selection
+            # rather than a tail. Without this a reader cannot tell a quiet
+            # device from a thinned-out capture.
+            "sampling": raw_sampling,
             "frames": _format_event_log(raw_frames),
         }
 

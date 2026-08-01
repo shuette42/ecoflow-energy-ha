@@ -39,6 +39,7 @@ from ..ecoflow.parsers.stream_proto import parse_stream_proto_message
 from ..ecoflow.frame_capture import (
     build_frame_entry,
     decode_cmd_headers,
+    frame_key,
     is_proto_frame,
 )
 from ..ecoflow.proto.runtime import (
@@ -150,15 +151,20 @@ class MqttIngestMixin:
         if not self._enhanced_mode or not is_proto_frame(payload):
             return
         try:
+            secrets = self._frame_secrets()
             entry = build_frame_entry(
                 topic,
                 payload,
-                self._frame_secrets(),
+                secrets,
                 RAW_FRAME_MAX_BYTES,
                 parsed_keys=len(parsed) if parsed else 0,
             )
             entry["cmds"] = decode_cmd_headers(payload)
-            self._raw_frames.append(entry)
+            # Derived before the lock: the key comes out of the payload, and
+            # the Paho thread should not hold the lock across that.
+            key = frame_key(entry, payload, secrets)
+            with self._raw_frames_lock:
+                self._raw_frames.add(key, entry)
         except Exception:  # noqa: BLE001
             _LOGGER.debug("Raw frame capture failed", exc_info=True)
 

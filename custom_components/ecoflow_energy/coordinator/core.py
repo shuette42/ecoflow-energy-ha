@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
@@ -45,7 +46,8 @@ from ..const import (
     HTTP_FALLBACK_INTERVAL_S,
     POWEROCEAN_ENERGY_FROM_API,
     POWEROCEAN_POWER_TO_ENERGY,
-    RAW_FRAME_LOG_MAX,
+    RAW_FRAME_LOG_KEYS_MAX,
+    RAW_FRAME_LOG_PER_KEY_MAX,
     SMARTPLUG_ENERGY_FROM_API,
     SMARTPLUG_POWER_TO_ENERGY,
     STREAM_ENERGY_FROM_API,
@@ -54,6 +56,7 @@ from ..const import (
     get_device_name,
 )
 from ..ecoflow.energy_integrator import EnergyIntegrator
+from ..ecoflow.frame_capture import TypedFrameBuffer
 from .availability import AvailabilityMixin
 from .credentials import CredentialsMixin
 from .http_poll import HttpPollMixin
@@ -209,13 +212,25 @@ class EcoFlowDeviceCoordinator(
         self._credential_obtained_ts: float = 0.0
         self._credential_refresh_unsub: asyncio.TimerHandle | None = None
         self._event_log: deque[dict[str, Any]] = deque(maxlen=50)
-        # Raw protobuf frame ring buffer (app-auth push path). A parser can
-        # only be verified against the bytes a device actually sends, and
-        # device variants sharing a serial family do not necessarily share a
-        # field layout. Frames are captured with the serial masked out and
+        # Raw protobuf frame capture (app-auth push path). A parser can only
+        # be verified against the bytes a device actually sends, and device
+        # variants sharing a serial family do not necessarily share a field
+        # layout. Frames are captured with the serial masked out and
         # truncated, so a diagnostics download stays a safe way to report a
         # mis-decoded device without owning the hardware.
-        self._raw_frames: deque[dict[str, Any]] = deque(maxlen=RAW_FRAME_LOG_MAX)
+        #
+        # Bucketed per message type rather than kept in one ring: a device
+        # pushes its live telemetry orders of magnitude more often than a
+        # status report, so a shared buffer answers every download with the
+        # last minute of the frequent message and nothing else. A rare
+        # command now competes only with itself.
+        self._raw_frames = TypedFrameBuffer(
+            RAW_FRAME_LOG_KEYS_MAX, RAW_FRAME_LOG_PER_KEY_MAX
+        )
+        # TypedFrameBuffer.add() is not atomic the way deque.append() was, and
+        # it is called from the Paho thread while diagnostics read it on the
+        # event loop.
+        self._raw_frames_lock = threading.Lock()
         # Stable SN → pack index mapping for proto heartbeats (cmd_id=7).
         # Each heartbeat contains only one pack; this map ensures the same
         # physical pack always maps to the same pack{n}_* sensor keys.
@@ -309,7 +324,31 @@ class EcoFlowDeviceCoordinator(
     @property
     def raw_frames(self) -> list[dict[str, Any]]:
         """Return the captured raw protobuf frames for diagnostics export."""
-        return list(self._raw_frames)
+        with self._raw_frames_lock:
+            return self._raw_frames.frames()
+
+    @property
+    def raw_frame_sampling(self) -> dict[str, Any]:
+        """Return what the capture heard versus what it kept.
+
+        A short frame list has two very different causes - a device that
+        pushes rarely, and one so chatty that the sampling thinned it out -
+        and a reader cannot tell them apart from the frames alone.
+        """
+        with self._raw_frames_lock:
+            return self._raw_frames.stats()
+
+    def raw_frame_capture(self) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        """Return the kept frames and the sampling counts from one read.
+
+        Taken under a single acquisition on purpose. The counts exist so a
+        reader can reconcile the frame list against what the device actually
+        sent, and reading the two halves separately lets the Paho thread add
+        a frame in between - which is exactly the discrepancy the counts are
+        supposed to explain away.
+        """
+        with self._raw_frames_lock:
+            return self._raw_frames.frames(), self._raw_frames.stats()
 
     @property
     def event_log(self) -> list[dict[str, Any]]:

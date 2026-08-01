@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 import struct
 import time
 from datetime import timedelta
@@ -34,7 +35,8 @@ from custom_components.ecoflow_energy.const import (
     MODE_ENHANCED,
     MODE_STANDARD,
     MQTT_HEALTH_CHECK_INTERVAL_S,
-    RAW_FRAME_LOG_MAX,
+    RAW_FRAME_LOG_KEYS_MAX,
+    RAW_FRAME_LOG_PER_KEY_MAX,
     RAW_FRAME_MAX_BYTES,
     SMARTPLUG_GET_ALL_KEEPALIVE_S,
     SMARTPLUG_SOFT_UNAVAILABLE_S,
@@ -6587,22 +6589,172 @@ class TestRawFrameCapture:
         assert len(bytes.fromhex(frame["hex"])) == RAW_FRAME_MAX_BYTES
         assert frame["size"] == len(payload)
 
-    async def test_ring_buffer_is_bounded(
+    async def test_buffer_is_bounded_per_message_type(
         self,
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """Only the most recent frames are kept."""
+        """One message type can never claim more than its own budget."""
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
         topic = f"/app/device/property/{coordinator.device_sn}"
+        sent = RAW_FRAME_LOG_PER_KEY_MAX + 20
+        clock = itertools.count(1_000_000.0, 3.0)
 
-        for _ in range(RAW_FRAME_LOG_MAX + 5):
-            coordinator._on_mqtt_message(topic, self._frame(coordinator.device_sn))
+        with patch(
+            "custom_components.ecoflow_energy.ecoflow.frame_capture.time.time",
+            side_effect=lambda: next(clock),
+        ):
+            for _ in range(sent):
+                coordinator._on_mqtt_message(topic, self._frame(coordinator.device_sn))
 
-        assert len(coordinator.raw_frames) == RAW_FRAME_LOG_MAX
+        frames = coordinator.raw_frames
+        assert len(frames) == RAW_FRAME_LOG_PER_KEY_MAX
+        # The start of the capture survives the thinning; a ring would have
+        # dropped it long before the last frame arrived.
+        assert frames[0]["ts"] == 1_000_000.0
+        # And so does the end, which is the half a reporter looks at after
+        # doing something on the device.
+        assert frames[-1]["ts"] == 1_000_000.0 + (sent - 1) * 3.0
+        sampling = coordinator.raw_frame_sampling
+        assert sampling["frames_seen"] == sent
+        assert sampling["frames_kept"] == len(frames)
+
+    async def test_a_powerocean_message_set_fits_the_key_budget(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """The key budget has to be derived from what one device produces.
+
+        Buckets are claimed in arrival order and never evicted. A budget
+        that merely matches the number of message types is therefore spent
+        by the frequent pushes within seconds, and the rare reports - the
+        ones bucketing exists to keep - are dropped at the key gate minutes
+        later, which is the same failure a shared ring had. This pins the
+        headroom: a PowerOcean's own commands, the get-all reply, an
+        unknown command and an accessory report all have to fit.
+        """
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        push = f"/app/device/property/{coordinator.device_sn}"
+        get_reply = f"/app/user/{coordinator.device_sn}/thing/property/get_reply"
+        # In arrival order: the get-all reply on connect, then the frequent
+        # pushes, then the reports that only show up minutes in.
+        traffic = (
+            [(get_reply, 1)]
+            + [(push, cmd) for cmd in (33, 1, 7, 8, 39)] * 3
+            + [(push, 17), (push, 13)]
+            + [(push, 250)]  # a command with no parser yet
+            + [(push, 251)]  # an attached accessory's own report
+        )
+        cmds = iter(traffic)
+
+        def headers(_payload: bytes) -> list[dict[str, int]]:
+            return [{"cmd_func": 96, "cmd_id": next(cmds)[1]}]
+
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.mqtt_ingest."
+            "decode_cmd_headers",
+            side_effect=headers,
+        ):
+            for topic, _cmd in traffic:
+                coordinator._on_mqtt_message(topic, self._frame(coordinator.device_sn))
+
+        sampling = coordinator.raw_frame_sampling
+        assert sampling["frames_dropped_key_budget"] == 0
+        assert sampling["keys_tracked"] == 10
+        assert sampling["keys_tracked"] < sampling["keys_max"]
+        # The two that arrive last are exactly the ones a tight budget loses.
+        assert "property:proto/96.250" in sampling["per_key"]
+        assert "property:proto/96.251" in sampling["per_key"]
+
+    async def test_frames_beyond_the_key_budget_are_counted_not_hidden(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """A saturated capture must be visible as such in the download.
+
+        Once every bucket is claimed there is nothing left for a new
+        message type, and silently dropping it would make a saturated
+        capture indistinguishable from a complete one.
+        """
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        topic = f"/app/device/property/{coordinator.device_sn}"
+        overflow = 3
+        sent = RAW_FRAME_LOG_KEYS_MAX + overflow
+        cmd_ids = iter(range(sent))
+
+        def headers(_payload: bytes) -> list[dict[str, int]]:
+            return [{"cmd_func": 96, "cmd_id": next(cmd_ids)}]
+
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.mqtt_ingest."
+            "decode_cmd_headers",
+            side_effect=headers,
+        ):
+            for _ in range(sent):
+                coordinator._on_mqtt_message(topic, self._frame(coordinator.device_sn))
+
+        sampling = coordinator.raw_frame_sampling
+        assert sampling["keys_tracked"] == RAW_FRAME_LOG_KEYS_MAX
+        assert sampling["frames_dropped_key_budget"] == overflow
+        # Everything that arrived is still accounted for, kept or not.
+        assert sampling["frames_seen"] == sent
+        assert sampling["frames_kept"] == RAW_FRAME_LOG_KEYS_MAX
+
+    async def test_a_rare_command_survives_the_live_telemetry(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """The reason this buffer is bucketed at all.
+
+        A PowerOcean pushes its live telemetry every few seconds while a
+        command such as the EMS report arrives minutes apart. In a single
+        ring the rare one is gone long before anybody downloads
+        diagnostics, which is why it could not be observed on real
+        hardware even though the device was sending it.
+        """
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        topic = f"/app/device/property/{coordinator.device_sn}"
+        telemetry = [{"cmd_func": 254, "cmd_id": 21}]
+        rare = [{"cmd_func": 254, "cmd_id": 17}]
+        counter = itertools.count()
+        clock = itertools.count(1_000_000.0, 3.0)
+
+        def headers(_payload: bytes) -> list[dict[str, int]]:
+            # One rare command per 100 telemetry pushes.
+            return rare if next(counter) % 100 == 0 else telemetry
+
+        with (
+            patch(
+                "custom_components.ecoflow_energy.coordinator.mqtt_ingest."
+                "decode_cmd_headers",
+                side_effect=headers,
+            ),
+            patch(
+                "custom_components.ecoflow_energy.ecoflow.frame_capture.time.time",
+                side_effect=lambda: next(clock),
+            ),
+        ):
+            for _ in range(500):
+                coordinator._on_mqtt_message(topic, self._frame(coordinator.device_sn))
+
+        kept = [frame["cmds"][0] for frame in coordinator.raw_frames]
+        assert {"cmd_func": 254, "cmd_id": 17} in kept
+        assert {"cmd_func": 254, "cmd_id": 21} in kept
 
     async def test_standard_mode_is_not_captured(
         self,
