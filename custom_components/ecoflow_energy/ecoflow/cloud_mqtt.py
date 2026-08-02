@@ -35,6 +35,13 @@ from .energy_stream import build_energy_stream_activate_payload
 
 _LOGGER = logging.getLogger(__name__)
 
+# How long to wait for the broker to acknowledge a QoS-1 publish. Without
+# this wait, `publish()` reports success as soon as the message sits in the
+# local paho queue, which says nothing about whether it left the machine
+# (issue #185). A half-dead socket accepts writes indefinitely and the
+# device never sees them.
+PUBLISH_ACK_TIMEOUT_S = 5.0
+
 
 class EcoFlowMQTTClient:
     """MQTT client for the EcoFlow cloud broker (WSS + TCP)."""
@@ -499,7 +506,21 @@ class EcoFlowMQTTClient:
             return False
         try:
             result = self.client.publish(topic, payload, qos=qos)
-            return result.rc == 0
+            if result.rc != 0:
+                return False
+            if qos == 0:
+                # Fire and forget - there is nothing to wait for.
+                return True
+            # rc == 0 only means the message was queued locally. Wait for the
+            # broker's PUBACK so a dead socket reports a failure instead of a
+            # write that quietly never arrives.
+            result.wait_for_publish(timeout=PUBLISH_ACK_TIMEOUT_S)
+            return result.is_published()
+        except (RuntimeError, ValueError) as exc:
+            # paho raises RuntimeError when the message can no longer be
+            # delivered (client disconnected, queue dropped) and on timeout.
+            _LOGGER.debug("Publish not acknowledged (%s): %s", topic, exc)
+            return False
         except Exception as exc:
             _LOGGER.error("Publish failed (%s): %s", topic, exc)
             return False

@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.const import (
@@ -139,7 +140,8 @@ class TestEcoFlowSelect:
         entity, coordinator = self._make_entity(hass, enhanced_config_entry)
         coordinator.async_set_powerocean_work_mode = AsyncMock(return_value=False)
 
-        await entity.async_select_option("ai_schedule")
+        with pytest.raises(HomeAssistantError):
+            await entity.async_select_option("ai_schedule")
 
         # Failed SET: optimistic value not applied, current_option stays
         assert coordinator._device_data["ems_work_mode"] == "self_use"

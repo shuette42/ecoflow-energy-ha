@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -676,7 +677,8 @@ class TestFailedSendNoOptimistic:
             ),
             patch.object(switch, "async_write_ha_state") as mock_write,
         ):
-            await switch._send_command(False)
+            with pytest.raises(HomeAssistantError):
+                await switch._send_command(False)
 
         assert mock_write.call_count == 0
         assert switch._optimistic_value is None
@@ -704,7 +706,8 @@ class TestFailedSendNoOptimistic:
             ),
             patch.object(switch, "async_write_ha_state") as mock_write,
         ):
-            await switch._send_command(False)
+            with pytest.raises(HomeAssistantError):
+                await switch._send_command(False)
 
         assert mock_write.call_count == 0
         assert switch._optimistic_value is None
@@ -758,7 +761,8 @@ class TestFailedSendNoOptimistic:
             ),
             patch.object(number, "async_write_ha_state") as mock_write,
         ):
-            await number.async_set_native_value(95.0)
+            with pytest.raises(HomeAssistantError):
+                await number.async_set_native_value(95.0)
 
         assert mock_write.call_count == 0
         assert number.native_value == 80
@@ -787,7 +791,8 @@ class TestFailedSendNoOptimistic:
             ),
             patch.object(number, "async_write_ha_state") as mock_write,
         ):
-            await number.async_set_native_value(1500.0)
+            with pytest.raises(HomeAssistantError):
+                await number.async_set_native_value(1500.0)
 
         assert mock_write.call_count == 0
         assert number.native_value == 2000

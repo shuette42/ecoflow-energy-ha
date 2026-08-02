@@ -31,7 +31,7 @@ from .const import (
     STREAM_NUMBERS,
 )
 from .coordinator import EcoFlowDeviceCoordinator
-from .entity import EcoFlowWriteGateMixin
+from .entity import EcoFlowWriteGateMixin, raise_set_failed, raise_set_unsupported
 from .ecoflow.delta3_commands import (
     build_number_command as build_delta3_number_command,
 )
@@ -165,17 +165,18 @@ class EcoFlowNumber(
             return
         if self.coordinator.device_type == DEVICE_TYPE_STREAM:
             ok = await self._async_set_stream_value(self._definition.key, value)
-            if ok:
-                self._apply_optimistic_number(value)
+            if not ok:
+                raise_set_failed(self.entity_id)
+            self._apply_optimistic_number(value)
             return
         if self.coordinator.device_type == DEVICE_TYPE_DELTA3:
             command = build_delta3_number_command(self._definition.key, value)
             if command is None:
-                _LOGGER.warning("No command template for number %s", self._definition.key)
-                return
+                raise_set_unsupported(self.entity_id)
             ok = await self.coordinator.async_send_delta3_set(command)
-            if ok:
-                self._apply_optimistic_number(value)
+            if not ok:
+                raise_set_failed(self.entity_id)
+            self._apply_optimistic_number(value)
             return
 
         # Smart Plug number commands
@@ -184,8 +185,9 @@ class EcoFlowNumber(
             # App-auth: use protobuf SET (JSON cmdCode only works on /open/ topic)
             if self.coordinator.enhanced_mode:
                 ok = await self._async_set_smartplug_proto(self._definition.key, value)
-                if ok:
-                    self._apply_optimistic_number(value)
+                if not ok:
+                    raise_set_failed(self.entity_id)
+                self._apply_optimistic_number(value)
                 return
 
             # Standard Mode: JSON cmdCode format
@@ -196,15 +198,15 @@ class EcoFlowNumber(
                 "params": {sp_template["param_key"]: int(value * scale)},
             }
             ok = await self.coordinator.async_send_set_command(command)
-            if ok:
-                self._apply_optimistic_number(value)
+            if not ok:
+                raise_set_failed(self.entity_id)
+            self._apply_optimistic_number(value)
             return
 
         # Delta uses moduleType/operateType format
         cmd_template = NUMBER_COMMANDS.get(self._definition.key)
         if cmd_template is None:
-            _LOGGER.warning("No command template for number %s", self._definition.key)
-            return
+            raise_set_unsupported(self.entity_id)
 
         params = {cmd_template["param_key"]: int(value)}
         # Mirror the value into additional param keys (e.g. acChgCfg sends
@@ -221,9 +223,9 @@ class EcoFlowNumber(
         }
 
         ok = await self.coordinator.async_send_set_command(command)
-        if ok:
-            self._apply_optimistic_number(value)
-
+        if not ok:
+            raise_set_failed(self.entity_id)
+        self._apply_optimistic_number(value)
 
     def _apply_optimistic_number(self, value: float) -> None:
         """Apply optimistic lock: immediately reflect the new value."""
@@ -266,8 +268,11 @@ class EcoFlowNumber(
         int_value = int(value)
 
         if self.coordinator.data is None:
-            _LOGGER.warning("No data available yet for %s", self.coordinator.device_sn)
-            return
+            # Both PowerOcean sliders are sent as a pair, so the unchanged
+            # one has to be read from coordinator data. Without data there
+            # is nothing to send, and silently doing nothing would look
+            # like a successful write.
+            raise_set_failed(self.entity_id)
 
         if key == "backup_reserve":
             # Read the current solar-surplus from the user-side mirror
@@ -280,8 +285,9 @@ class EcoFlowNumber(
             solar = max(current_solar, backup)  # enforce backup <= solar
             self.coordinator.mark_user_surplus_set()
             ok = await self.coordinator.async_set_powerocean_soc_debounced(backup, solar)
-            if ok:
-                self._apply_optimistic_number(value)
+            if not ok:
+                raise_set_failed(self.entity_id)
+            self._apply_optimistic_number(value)
             return
 
         if key == "solar_surplus_threshold":
@@ -290,11 +296,12 @@ class EcoFlowNumber(
             backup = min(current_backup, solar)  # enforce backup <= solar
             self.coordinator.mark_user_surplus_set()
             ok = await self.coordinator.async_set_powerocean_soc_debounced(backup, solar)
-            if ok:
-                self._apply_optimistic_number(value)
+            if not ok:
+                raise_set_failed(self.entity_id)
+            self._apply_optimistic_number(value)
             return
 
-        _LOGGER.warning("No PowerOcean SET handler for %s", key)
+        raise_set_unsupported(self.entity_id)
 
     async def _async_set_stream_value(self, key: str, value: float) -> bool:
         """Set a Stream AC Pro number value via WSS Protobuf SET.

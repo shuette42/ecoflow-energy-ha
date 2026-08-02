@@ -450,3 +450,64 @@ class TestLanguageConsistency:
                     f"only in {a}: {all_data[a][step_id] - all_data[b][step_id]}, "
                     f"only in {b}: {all_data[b][step_id] - all_data[a][step_id]}"
                 )
+
+
+# ---------------------------------------------------------------------------
+# Exception messages (raised via HomeAssistantError with a translation key)
+# ---------------------------------------------------------------------------
+
+
+STRINGS_PATH = Path("custom_components/ecoflow_energy/strings.json")
+ENTITY_PATH = Path("custom_components/ecoflow_energy/entity.py")
+
+
+def _raised_translation_keys() -> set[str]:
+    """Collect translation_key values passed to HomeAssistantError in entity.py."""
+    tree = ast.parse(ENTITY_PATH.read_text())
+    keys: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", "")
+        if name != "HomeAssistantError":
+            continue
+        for kw in node.keywords:
+            if kw.arg == "translation_key":
+                value = _get_string_value(kw.value)
+                if value:
+                    keys.add(value)
+    return keys
+
+
+class TestExceptionTranslations:
+    """A raised error the user cannot read is as silent as no error at all."""
+
+    def test_every_raised_key_has_a_message(self):
+        keys = _raised_translation_keys()
+        assert keys, "No HomeAssistantError translation keys found in entity.py"
+
+        for path in (STRINGS_PATH, EN_PATH, DE_PATH):
+            exceptions = json.loads(path.read_text()).get("exceptions", {})
+            missing = keys - set(exceptions)
+            assert not missing, f"{path.name} is missing exception messages: {missing}"
+            for key in keys:
+                assert exceptions[key].get("message"), (
+                    f"{path.name}: exception '{key}' has no message"
+                )
+
+    def test_exception_placeholders_match_across_languages(self):
+        placeholder_re = re.compile(r"\{(\w+)\}")
+        per_lang: dict[str, dict[str, set[str]]] = {}
+        for lang, path in {"en": EN_PATH, "de": DE_PATH}.items():
+            exceptions = json.loads(path.read_text()).get("exceptions", {})
+            per_lang[lang] = {
+                key: set(placeholder_re.findall(content["message"]))
+                for key, content in exceptions.items()
+            }
+
+        for key, en_placeholders in per_lang["en"].items():
+            assert per_lang["de"].get(key) == en_placeholders, (
+                f"Exception '{key}' placeholders differ: "
+                f"en={en_placeholders}, de={per_lang['de'].get(key)}"
+            )

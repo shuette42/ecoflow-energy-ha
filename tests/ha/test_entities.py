@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -444,7 +445,7 @@ class TestEcoFlowSwitch:
         hass: HomeAssistant,
         standard_config_entry: MockConfigEntry,
     ) -> None:
-        """_send_command with unknown key does nothing."""
+        """_send_command with an unknown key reports instead of no-op."""
         standard_config_entry.add_to_hass(hass)
         coordinator = _make_coordinator(hass, standard_config_entry)
 
@@ -452,7 +453,8 @@ class TestEcoFlowSwitch:
         switch = EcoFlowSwitch(coordinator, defn)
 
         with patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock) as mock_cmd:
-            await switch._send_command(True)
+            with pytest.raises(HomeAssistantError):
+                await switch._send_command(True)
             mock_cmd.assert_not_called()
 
     async def test_switch_is_on_none_when_no_data(
@@ -697,6 +699,59 @@ class TestEcoFlowNumber:
             assert cmd["moduleType"] == 2
             assert cmd["operateType"] == "upsConfig"
             assert cmd["params"]["maxChgSoc"] == 90
+
+    async def test_failed_set_raises_and_keeps_device_value(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+        mock_iot_api,
+        mock_mqtt_client,
+        mock_http_client,
+    ) -> None:
+        """A SET that never reached the device is reported, not swallowed.
+
+        Issue #185: the write failed silently, so Home Assistant kept
+        showing the requested value while the device stayed on the old
+        one. The optimistic value must not be applied on failure.
+        """
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+        await coordinator.async_setup()
+        coordinator.data = {"max_charge_soc": 60}
+
+        defn = EcoFlowNumberDef(
+            key="max_charge_soc", name="Max Charge SoC",
+            state_key="max_charge_soc", unit="%",
+            min_value=50, max_value=100, step=1,
+        )
+        number = EcoFlowNumber(coordinator, defn)
+
+        with patch.object(
+            coordinator, "async_send_set_command", new_callable=AsyncMock, return_value=False,
+        ), patch.object(number, "async_write_ha_state"):
+            with pytest.raises(HomeAssistantError):
+                await number.async_set_native_value(50.0)
+
+        assert coordinator.data["max_charge_soc"] == 60
+
+    async def test_unsupported_number_key_raises(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """A number without a command template reports instead of no-op."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, standard_config_entry)
+
+        defn = EcoFlowNumberDef(
+            key="not_a_real_control", name="Nope",
+            state_key="not_a_real_control", unit="%",
+            min_value=0, max_value=100, step=1,
+        )
+        number = EcoFlowNumber(coordinator, defn)
+
+        with pytest.raises(HomeAssistantError):
+            await number.async_set_native_value(42.0)
 
     async def test_ac_charge_speed_reads_configured_speed(self) -> None:
         """Regression #95: the number binds to the configured charge speed,

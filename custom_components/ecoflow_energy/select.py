@@ -25,6 +25,7 @@ from .const import (
     POWEROCEAN_SELECTS,
 )
 from .coordinator import EcoFlowDeviceCoordinator
+from .entity import raise_set_failed, raise_set_unsupported
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -131,17 +132,16 @@ class EcoFlowSelect(CoordinatorEntity[EcoFlowDeviceCoordinator], SelectEntity):
         if self._definition.key == "work_mode":
             wire_value = WORK_MODE_TO_INT.get(option)
             if wire_value is None:
-                _LOGGER.warning("No wire mapping for work-mode option %s", option)
-                return
+                raise_set_unsupported(self.entity_id)
             if self.coordinator.device_type != DEVICE_TYPE_POWEROCEAN:
-                _LOGGER.warning("work_mode select only supports PowerOcean")
-                return
+                raise_set_unsupported(self.entity_id)
             ok = await self.coordinator.async_set_powerocean_work_mode(wire_value)
-            if ok:
-                self._apply_optimistic_select(option)
+            if not ok:
+                raise_set_failed(self.entity_id)
+            self._apply_optimistic_select(option)
             return
 
-        _LOGGER.warning("No SET handler for select %s", self._definition.key)
+        raise_set_unsupported(self.entity_id)
 
     def _apply_optimistic_select(self, option: str) -> None:
         """Apply the optimistic lock so the UI reflects the change immediately."""

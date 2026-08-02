@@ -2,7 +2,35 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, NoReturn
+
+from homeassistant.exceptions import HomeAssistantError
+
+from .const import DOMAIN
+
+
+def raise_set_failed(entity_id: str) -> NoReturn:
+    """Report a SET command that never reached the device.
+
+    A control whose command was not delivered must say so. Returning
+    quietly leaves Home Assistant showing the requested value while the
+    device keeps the old one, and the only trace is a log line the user
+    has no reason to look for (issue #185).
+    """
+    raise HomeAssistantError(
+        translation_domain=DOMAIN,
+        translation_key="set_command_failed",
+        translation_placeholders={"entity": entity_id},
+    )
+
+
+def raise_set_unsupported(entity_id: str) -> NoReturn:
+    """Report a control that has no command template for this device."""
+    raise HomeAssistantError(
+        translation_domain=DOMAIN,
+        translation_key="set_command_unsupported",
+        translation_placeholders={"entity": entity_id},
+    )
 
 
 class EcoFlowWriteGateMixin:

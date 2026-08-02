@@ -1451,5 +1451,13 @@
         }
       }
     }
+  },
+  "exceptions": {
+    "set_command_failed": {
+      "message": "The command for {entity} did not reach the device. Check that the device is connected and try again."
+    },
+    "set_command_unsupported": {
+      "message": "{entity} does not support this command on this device."
+    }
   }
 }

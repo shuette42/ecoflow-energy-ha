@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -112,7 +113,8 @@ class TestStreamBackupReserveSet:
         entity, coordinator = self._make_entity(hass, enhanced_config_entry)
         coordinator.async_send_proto_set_command = AsyncMock(return_value=False)
 
-        await entity.async_set_native_value(60.0)
+        with pytest.raises(HomeAssistantError):
+            await entity.async_set_native_value(60.0)
 
         # SET failed -> original value retained, no optimistic override
         assert coordinator.data["backup_reserve_pct"] == 20

@@ -119,6 +119,52 @@ class TestConnectionStatus:
         assert client.send_energy_stream_switch() is False
 
 
+class TestPublishDelivery:
+    """A queued message is not a delivered message (issue #185)."""
+
+    @staticmethod
+    def _connected_client(publish_result):
+        client = _make_client()
+        client.client = MagicMock()
+        client.client.publish.return_value = publish_result
+        client.is_connected = lambda: True
+        return client
+
+    def test_publish_waits_for_broker_ack(self):
+        info = MagicMock()
+        info.rc = 0
+        info.is_published.return_value = True
+        client = self._connected_client(info)
+
+        assert client.publish("test/topic", "payload") is True
+        info.wait_for_publish.assert_called_once()
+
+    def test_publish_fails_when_broker_never_acks(self):
+        """A half-dead socket accepts the message and never delivers it."""
+        info = MagicMock()
+        info.rc = 0
+        info.wait_for_publish.side_effect = RuntimeError("timed out")
+        client = self._connected_client(info)
+
+        assert client.publish("test/topic", "payload") is False
+
+    def test_publish_fails_when_not_published_after_wait(self):
+        info = MagicMock()
+        info.rc = 0
+        info.is_published.return_value = False
+        client = self._connected_client(info)
+
+        assert client.publish("test/topic", "payload") is False
+
+    def test_qos_zero_does_not_wait(self):
+        info = MagicMock()
+        info.rc = 0
+        client = self._connected_client(info)
+
+        assert client.publish("test/topic", "payload", qos=0) is True
+        info.wait_for_publish.assert_not_called()
+
+
 # ===========================================================================
 # Reconnect Strategy
 # ===========================================================================
@@ -624,7 +670,10 @@ class TestResendInitialRequests:
         client = _make_client(wss_mode=True, user_id="user123", **kwargs)
         client.client = MagicMock()
         client.client.is_connected.return_value = True
-        client.client.publish.return_value = MagicMock(rc=0)
+        # rc=0 queues the message; is_published() is the broker's ack.
+        client.client.publish.return_value = MagicMock(
+            rc=0, **{"is_published.return_value": True}
+        )
         client.connected = True
         return client
 

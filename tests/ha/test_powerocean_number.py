@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -180,7 +181,8 @@ class TestPowerOceanNumberBasic:
         )
         coordinator.async_set_powerocean_soc_debounced = AsyncMock(return_value=False)
 
-        await entity.async_set_native_value(50.0)
+        with pytest.raises(HomeAssistantError):
+            await entity.async_set_native_value(50.0)
 
         coordinator.async_set_powerocean_soc_debounced.assert_called_once_with(50, 100)
         # No optimistic update — original value retained

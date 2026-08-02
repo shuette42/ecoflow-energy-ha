@@ -42,7 +42,7 @@ from .const import (
 )
 from .coordinator import EcoFlowDeviceCoordinator
 from .ecoflow.parsers.smartplug import build_plug_switch_payload
-from .entity import EcoFlowWriteGateMixin
+from .entity import EcoFlowWriteGateMixin, raise_set_failed, raise_set_unsupported
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -172,21 +172,22 @@ class EcoFlowSwitch(
         ):
             payload = build_plug_switch_payload(turn_on, device_sn=self.coordinator.device_sn)
             ok = await self.coordinator.async_send_proto_set_command(payload, "plug_switch")
-            if ok:
-                self._apply_optimistic(turn_on)
+            if not ok:
+                raise_set_failed(self.entity_id)
+            self._apply_optimistic(turn_on)
             return
 
         command = self._build_command(turn_on)
         if command is None:
-            _LOGGER.warning("No command template for %s", self._definition.key)
-            return
+            raise_set_unsupported(self.entity_id)
 
         if self.coordinator.device_type == DEVICE_TYPE_DELTA3:
             ok = await self.coordinator.async_send_delta3_set(command)
         else:
             ok = await self.coordinator.async_send_set_command(command)
-        if ok:
-            self._apply_optimistic(turn_on)
+        if not ok:
+            raise_set_failed(self.entity_id)
+        self._apply_optimistic(turn_on)
 
     def _apply_optimistic(self, turn_on: bool) -> None:
         """Apply optimistic lock: immediately reflect the new state."""

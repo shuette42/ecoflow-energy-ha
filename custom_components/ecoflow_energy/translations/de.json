@@ -1526,5 +1526,13 @@
         }
       }
     }
+  },
+  "exceptions": {
+    "set_command_failed": {
+      "message": "Der Befehl für {entity} hat das Gerät nicht erreicht. Prüfe die Verbindung des Geräts und versuche es erneut."
+    },
+    "set_command_unsupported": {
+      "message": "{entity} unterstützt dieses Kommando auf diesem Gerät nicht."
+    }
   }
 }
