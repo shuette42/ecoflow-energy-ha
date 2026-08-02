@@ -73,6 +73,11 @@ _SN_PREFIX_MAP = {
     "R331": DEVICE_TYPE_DELTA,
     "D3M1": DEVICE_TYPE_DELTA3,
     "P321": DEVICE_TYPE_DELTA3,
+    # Base DELTA 3 (#182): confirmed from a reporter capture in Enhanced mode.
+    # The unit sends the same three frames as a Max Plus (32/2 battery, 32/50
+    # BMS, 254/21 status), and the status frame decodes through the existing
+    # Delta 3 binding with 22 mapped keys, so it needs routing and nothing else.
+    "P231": DEVICE_TYPE_DELTA3,
     "HW52": DEVICE_TYPE_SMARTPLUG,
     # BK-series Stream devices:
     #  - BK01: Stream Micro
@@ -93,6 +98,9 @@ _SN_PREFIX_MAP = {
 }
 
 _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
+    # A base DELTA 3 reports an empty product name through the app API, same
+    # as the BK series below (#182).
+    "P231": "DELTA 3",
     "BK01": "Stream Micro",
     "BK11": "Stream Ultra",
     "BK31": "Stream AC Pro",
@@ -104,9 +112,10 @@ _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
 def get_device_name(product_name: str, sn: str = "") -> str:
     """Return a human-friendly name for the device.
 
-    A serial-prefix-derived name is only provided for Stream (BK-series)
-    devices, which report an empty product name through the app API. For
-    every other device type the product name is returned when present and
+    A serial-prefix-derived name is provided for the device families that
+    report an empty product name through the app API: the Stream (BK-series)
+    units and the base DELTA 3. For the rest the product name is returned
+    when present and
     an empty string otherwise, so callers keep their existing fallback
     (device-type display name or bare serial).
     """

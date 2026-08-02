@@ -460,3 +460,57 @@ class TestMultiHeaderEnvelope:
         )
         assert parsed["pow_in_sum_w"] == display.pow_in_sum_w
         assert parsed["ac_in_w"] == display.pow_get_ac_in
+
+
+class TestAcChargePowerLimit:
+    """Field 209 of the status frame, the app's charge speed slider (#181).
+
+    Identified by direct manipulation rather than inference: a reporter moved
+    the slider from 1000 W to 1200 W between two diagnostics downloads and
+    this field followed exactly, while the rest of the frame stayed put. A
+    second reporter's capture from an unrelated device carries it too.
+    """
+
+    def test_value_reaches_the_sensor_key(self):
+        display = _build_display_message()
+        display.ac_in_chg_pow_max = 1200
+
+        parsed = parse_delta3_display_property(
+            {"ac_in_chg_pow_max": display.ac_in_chg_pow_max}
+        )
+
+        assert parsed["ac_charge_power_limit_w"] == 1200
+
+    def test_absent_field_writes_nothing(self):
+        parsed = parse_delta3_display_property({"pow_in_sum_w": 12.0})
+
+        assert "ac_charge_power_limit_w" not in parsed
+
+    def test_not_claimed_as_a_quota_key(self):
+        """The polled quota never carries this value, so the shared HTTP
+        field map must not list it - that would claim a reach it lacks."""
+        from ecoflow_energy.ecoflow.parsers.delta3_http import DELTA3_HTTP_FIELD_MAP
+
+        assert "acInChgPowMax" not in DELTA3_HTTP_FIELD_MAP
+        assert "ac_charge_power_limit_w" not in DELTA3_HTTP_FIELD_MAP.values()
+
+    def test_real_capture_from_a_base_delta_3(self):
+        """End to end against an untouched reporter frame (#182)."""
+        import json
+        from pathlib import Path
+
+        fixture = (
+            Path(__file__).parent / "fixtures" / "delta3" / "p231_status_frame.json"
+        )
+        frame = bytes.fromhex(json.loads(fixture.read_text())["frame_hex"])
+
+        result = decode_proto_runtime_frame(frame)
+        parsed = parse_delta3_display_property(
+            {k: v for k, v in result.mapped.items() if not k.startswith("_")}
+        )
+
+        assert result.mapped["_is_delta3_display"] is True
+        assert parsed["ac_charge_power_limit_w"] == 1600
+        # The same frame carries the ordinary telemetry, which is what makes
+        # this device a Delta 3 rather than a new device class.
+        assert "cms_batt_soc" in parsed or "soc_pct" in parsed

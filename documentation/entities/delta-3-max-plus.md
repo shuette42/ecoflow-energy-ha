@@ -1,12 +1,13 @@
 # Delta 3 Max Plus - Entity Reference
 
-Full list of all entities created for Delta 3 Max Plus devices (D3M1 series).
+Full list of all entities created for Delta 3 devices. The entity set is shared
+across the generation: Delta 3 Max Plus (`D3M1`, `P321`) and base DELTA 3 (`P231`).
 
-**Totals:** 46 sensors, 7 switches, 3 numbers
+**Totals:** 47 sensors, 7 switches, 3 numbers
 
 > Entities marked with *diagnostic* appear in the diagnostics section of the device page.
 
-> **Other Delta 3 models:** only the Delta 3 Max Plus has been checked against real hardware. Other devices of the Delta 3 generation are recognized and should populate the same entities, but individual fields may be missing. Raw quota diagnostics are available to help extend the mapping.
+> **Other Delta 3 models:** only the Delta 3 Max Plus has been checked against real hardware end to end. A base DELTA 3 (`P231`) was confirmed to push the same three frames and to decode through the same field map, but a smaller unit has fewer ports, so port entities it does not have stay empty. Raw quota diagnostics are available to help extend the mapping.
 
 ---
 
@@ -20,6 +21,7 @@ Full list of all entities created for Delta 3 Max Plus devices (D3M1 series).
 | Discharge Time Remaining | min | Only while discharging, otherwise unavailable |
 | Charge Limit | % | Current charge limit (diagnostic, mirrors the number) |
 | Discharge Limit | % | Current discharge limit (diagnostic, mirrors the number) |
+| AC Charge Power Limit | W | The charge speed set in the EcoFlow app, 200 W to 2400 W (diagnostic, EcoFlow account sign-in only) |
 
 ## Sensors - Power
 

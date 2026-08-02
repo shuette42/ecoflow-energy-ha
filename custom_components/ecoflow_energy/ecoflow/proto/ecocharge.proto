@@ -392,6 +392,13 @@ message Delta3DisplayProperty {
   oneof _cms_min_dsg_soc { uint32 cms_min_dsg_soc = 271; }
   oneof _backup_reverse_soc { uint32 backup_reverse_soc = 461; }
 
+  // AC charge power limit in watts, the value behind the app's charge speed
+  // slider (#181). Identified by direct manipulation rather than from a
+  // single snapshot: a reporter moved the slider from 1000 W to 1200 W and
+  // this field followed exactly, while every other field in the frame stayed
+  // put. App slider range is 200 W to 2400 W.
+  oneof _ac_in_chg_pow_max { uint32 ac_in_chg_pow_max = 209; }
+
   // --- Switch / flag state ---
   oneof _energy_backup_en { bool energy_backup_en = 7; }
   oneof _en_beep { bool en_beep = 195; }

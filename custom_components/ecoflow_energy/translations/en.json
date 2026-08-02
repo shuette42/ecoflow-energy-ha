@@ -466,6 +466,9 @@
       "min_discharge_soc_pct": {
         "name": "Min Discharge SoC"
       },
+      "ac_charge_power_limit_w": {
+        "name": "AC Charge Power Limit"
+      },
       "soc": {
         "name": "SoC"
       },

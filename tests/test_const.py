@@ -92,6 +92,17 @@ class TestDeviceTypeRouting:
     def test_delta3_classic_by_p321_sn_prefix(self) -> None:
         assert get_device_type("", "P321TEST00000001") == "delta3"
 
+    def test_base_delta3_by_p231_sn_prefix(self) -> None:
+        """#182: the base DELTA 3 pushes the same frames as a Max Plus and
+        decodes through the same binding, so it shares the device type."""
+        assert get_device_type("", "P231TEST00000001") == "delta3"
+
+    def test_base_delta3_display_name(self) -> None:
+        # A base DELTA 3 reports an empty product name, same as the BK series.
+        assert get_device_name("", "P231TEST00000001") == "DELTA 3 (0001)"
+        assert get_device_name("", "P231ABCDXYZ") == "DELTA 3"
+        assert get_device_name("DELTA 3 Plus", "P231TEST00000001") == "DELTA 3 Plus"
+
     def test_stream_display_name_by_bk_prefix(self) -> None:
         assert get_device_name("", "BK11TEST00000001") == "Stream Ultra (0001)"
         assert get_device_name("", "BK31TEST00000001") == "Stream AC Pro (0001)"
@@ -103,9 +114,10 @@ class TestDeviceTypeRouting:
         # A non-empty product name always wins over any prefix-derived name.
         assert get_device_name("Stream Ultra X", "BK61TEST00000001") == "Stream Ultra X"
 
-    def test_device_name_only_for_stream_prefixes(self) -> None:
-        # The prefix-derived friendly name is Stream-only: every other device
-        # type returns an empty string so callers keep their own fallback.
+    def test_device_name_only_for_prefixes_without_a_product_name(self) -> None:
+        # The prefix-derived friendly name exists for the families that report
+        # an empty product name (Stream, base DELTA 3). Every other device type
+        # returns an empty string so callers keep their own fallback.
         assert get_device_name("", "R351TEST00000001") == ""
         assert get_device_name("", "HW52FAKE00000001") == ""
         assert get_device_name("", "J32DTEST00001234") == ""

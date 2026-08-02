@@ -42,7 +42,7 @@
 | **PowerOcean** - Home Battery | `HJ31` `HJ32` `J32D`\* `J32E`\* | 222 + 5 binary | 2 numbers, 1 select (Enhanced only) | 6 (solar, grid import/export, battery charge/discharge, home) | ~30 s standard / ~3 s enhanced |
 | **PowerOcean Plus** - 3-phase Hybrid | `R371`\* `R374`\* `HJ3C`\* | 222 + 5 binary | 2 numbers, 1 select (Enhanced only) | 6 (solar, grid import/export, battery charge/discharge, home) | ~3 s enhanced |
 | **Delta 2 Max** - Portable Power | `R351` `R331` | 94 + 4 binary | 7 switches, 8 numbers | 4 (solar 1+2, AC in/out) | ~30 s standard (+ MQTT push) |
-| **Delta 3 Max Plus** - Portable Power | `D3M1` `P321` | 46 | 7 switches, 3 numbers | 4 (solar 1+2, AC in, output) | ~30 s standard / ~2 s enhanced |
+| **Delta 3** - Portable Power | `D3M1` `P321` `P231` | 47 | 7 switches, 3 numbers | 4 (solar 1+2, AC in, output) | ~30 s standard / ~2 s enhanced |
 | **Smart Plug** - Switchable Outlet | `HW52` | 11 + 1 binary | 1 switch, 2 numbers | 1 (total energy) | ~30 s standard / ~3 s enhanced |
 | **Stream** - AC-coupled Battery | `BK31` `BK11` `BK41` `BK51` `BK61` | 54 + 2 binary | 1 number (Enhanced only) | 2 default (battery charge/discharge), 6 optional diagnostic (solar/home, PV 1-4) | ~30 s standard / ~3 s enhanced |
 | **Stream Micro** - Grid-tie Inverter | `BK01`\* | 21 | - | 4 optional diagnostic (PV 1-4) | ~3 s enhanced |

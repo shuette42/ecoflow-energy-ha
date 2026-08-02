@@ -93,6 +93,13 @@ _PROTO_LIST_FIELDS: dict[str, tuple[str, str, str]] = {
 # (e.g. max 80 / min 20) that shows both sources agreeing.
 _HEARTBEAT_SOC_FIELDS: tuple[str, ...] = ("lcd_show_soc", "f32_lcd_show_soc")
 
+# Status-frame fields that exist on the push path only. They bypass the HTTP
+# quota spelling on purpose: the polled quota never carries them, and putting
+# them in the shared field map would claim a reach they do not have (#181).
+_PROTO_ONLY_FIELDS: dict[str, str] = {
+    "ac_in_chg_pow_max": "ac_charge_power_limit_w",
+}
+
 
 def _translate_display_property(fields: dict[str, Any]) -> dict[str, Any]:
     """Map decoded status-frame fields onto their HTTP quota spelling."""
@@ -149,9 +156,21 @@ def _translate_cms_heartbeat(fields: dict[str, Any]) -> dict[str, Any]:
     return quota
 
 
+def _push_only_values(fields: dict[str, Any]) -> dict[str, Any]:
+    """Return the status-frame values that never travel over the quota."""
+    result: dict[str, Any] = {}
+    for proto_key, sensor_key in _PROTO_ONLY_FIELDS.items():
+        value = fields.get(proto_key)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            result[sensor_key] = round(float(value))
+    return result
+
+
 def parse_delta3_display_property(fields: dict[str, Any]) -> dict[str, Any]:
     """Parse a decoded Delta 3 status frame into flat sensor keys."""
-    return parse_delta3_http_quota(_translate_display_property(fields))
+    result = parse_delta3_http_quota(_translate_display_property(fields))
+    result.update(_push_only_values(fields))
+    return result
 
 
 def parse_delta3_cms_heartbeat(fields: dict[str, Any]) -> dict[str, Any]:

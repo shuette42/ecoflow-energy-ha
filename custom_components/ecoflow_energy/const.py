@@ -890,6 +890,10 @@ DELTA3_SENSORS: list[EcoFlowSensorDef] = [
     # --- SoC limits / backup reserve (diagnostic) ---
     EcoFlowSensorDef("max_charge_soc_pct", "Charge Limit", "%", None, "measurement", "mdi:battery-charging-100", "diagnostic", suggested_display_precision=0),
     EcoFlowSensorDef("min_discharge_soc_pct", "Discharge Limit", "%", None, "measurement", "mdi:battery-alert-variant-outline", "diagnostic", suggested_display_precision=0),
+    # --- AC charge power limit (Enhanced Mode only, #181) ---
+    # The value behind the charge speed slider in the app. It travels on the
+    # protobuf push path only, so it stays unavailable with developer keys.
+    EcoFlowSensorDef("ac_charge_power_limit_w", "AC Charge Power Limit", "W", "power", "measurement", "mdi:lightning-bolt", "diagnostic", enhanced_only=True, suggested_display_precision=0),
     # --- Battery health (BMS heartbeat, Enhanced Mode only) ---
     # The BMS frame is the only source for these; the HTTP quota carries no
     # battery health at all, so in Standard Mode they stay unavailable.
