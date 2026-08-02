@@ -208,6 +208,11 @@ class EcoFlowSensorDef:
     suggested_display_precision: int | None = None
     disabled_by_default: bool = False
     options: list[str] | None = None
+    # Optional accessory reading (e.g. the PowerGlow heating rod on a
+    # PowerOcean). The base device exists without it, so the entity is only
+    # created once the device has actually reported the key. See
+    # _watch_for_accessory() in sensor.py.
+    accessory: bool = False
 
 
 @dataclass(frozen=True)
@@ -297,10 +302,12 @@ POWEROCEAN_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("pcs_ac_freq_hz", "Grid Frequency", "Hz", "frequency", "measurement", "mdi:sine-wave", "diagnostic", suggested_display_precision=1),
     EcoFlowSensorDef("ems_ntc_temp_max_c", "EMS Max Internal Temp", "°C", "temperature", "measurement", "mdi:thermometer-alert", "diagnostic", suggested_display_precision=1),
     EcoFlowSensorDef("ems_bp_alive_num", "Battery Packs Online", None, None, "measurement", "mdi:battery-check", "diagnostic", disabled_by_default=True),
-    EcoFlowSensorDef("heating_rod_power_w", "Heating Rod Power", "W", "power", "measurement", "mdi:water-boiler", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
-    EcoFlowSensorDef("heating_rod_water_temp_c", "Heating Rod Water Temperature", "°C", "temperature", "measurement", "mdi:thermometer-water", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
-    EcoFlowSensorDef("heating_rod_target_power_w", "Heating Rod Target Power", "W", "power", "measurement", "mdi:water-boiler", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
-    EcoFlowSensorDef("heating_rod_target_temp_c", "Heating Rod Target Temperature", "°C", "temperature", "measurement", "mdi:thermometer-chevron-up", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    # PowerGlow heating rod: an optional accessory, so these four are created
+    # only after the device has reported them at least once (#7).
+    EcoFlowSensorDef("heating_rod_power_w", "Heating Rod Power", "W", "power", "measurement", "mdi:water-boiler", "diagnostic", suggested_display_precision=0, disabled_by_default=True, accessory=True),
+    EcoFlowSensorDef("heating_rod_water_temp_c", "Heating Rod Water Temperature", "°C", "temperature", "measurement", "mdi:thermometer-water", "diagnostic", suggested_display_precision=0, disabled_by_default=True, accessory=True),
+    EcoFlowSensorDef("heating_rod_target_power_w", "Heating Rod Target Power", "W", "power", "measurement", "mdi:water-boiler", "diagnostic", suggested_display_precision=0, disabled_by_default=True, accessory=True),
+    EcoFlowSensorDef("heating_rod_target_temp_c", "Heating Rod Target Temperature", "°C", "temperature", "measurement", "mdi:thermometer-chevron-up", "diagnostic", suggested_display_precision=0, disabled_by_default=True, accessory=True),
     EcoFlowSensorDef("bp_online_sum", "Battery Packs Online (EMS)", None, None, "measurement", "mdi:battery-check", "diagnostic", disabled_by_default=True),
     EcoFlowSensorDef("mppt_pv1_power_w", "MPPT String 1 Power", "W", "power", "measurement", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=0),
     EcoFlowSensorDef("mppt_pv1_voltage_v", "MPPT String 1 Voltage", "V", "voltage", "measurement", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=1),

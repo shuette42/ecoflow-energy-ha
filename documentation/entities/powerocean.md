@@ -6,12 +6,17 @@ Full list of all entities created for PowerOcean devices.
 
 > **Note:** The European variants (`J32D`, `J32E`) and the PowerOcean Plus units (`R371`, `R374`, `HJ3C`) are currently not exposed through the EcoFlow Developer API and therefore require Enhanced Mode. In Standard Mode these devices report error 1006 and all entities stay unavailable. Single-phase variants (`J32E`) report only the phases that are physically present; the remaining phase entities stay empty.
 
-> **The heating rod readings need Standard Mode.** They are read from the API
-> quota, and that quota is only polled when the integration runs with developer
-> keys. With EcoFlow account sign-in there is no quota poll, so the four heating
-> rod entities exist but stay empty. This also means a PowerGlow attached to a
-> unit that only works in Enhanced Mode (`J32D`, `J32E`, and the PowerOcean Plus
-> prefixes) cannot be read at all today.
+> **The heating rod readings are optional and need Standard Mode.** They belong
+> to the PowerGlow accessory, so they are only created once your system actually
+> reports a heating rod. A PowerOcean without one gets no heating rod entities.
+> The readings come from the API quota, and that quota is only polled when the
+> integration runs with developer keys, so with EcoFlow account sign-in they do
+> not appear. This also means a PowerGlow attached to a unit that only works in
+> Enhanced Mode (`J32D`, `J32E`, and the PowerOcean Plus prefixes) cannot be read
+> at all today. If you ran an earlier 1.16.0 beta, the four entities were created
+> on every PowerOcean; leftover ones are removed automatically as soon as your
+> system reports data without a heating rod, unless you had enabled them, in
+> which case they are kept along with their history.
 
 > **PowerOcean Plus** units report more of the same entity set than a standard PowerOcean: per-phase reactive power (var) and apparent power (VA), plus MPPT strings 3 and 4. Those entities are disabled by default, so enable the ones you need after adding a Plus device.
 
@@ -133,7 +138,7 @@ These sensors are pre-configured for the HA Energy Dashboard (`total_increasing`
 | Battery Max Charge/Discharge Power | Battery power limits | disabled |
 | Battery Packs Online | Number of packs currently reporting | disabled |
 | Battery Packs Online (EMS) | Pack count as reported by the EMS | disabled |
-| Heating Rod Power | Power drawn by an attached PowerGlow heating rod, in watts. Reported through the PowerOcean itself, so no separate device is needed. Stays empty on systems without the accessory, and in Enhanced Mode (see note below). | disabled |
+| Heating Rod Power | Power drawn by an attached PowerGlow heating rod, in watts. Reported through the PowerOcean itself, so no separate device is needed. Only created on systems that report a heating rod (see note above). | disabled |
 | Heating Rod Water Temperature | Current water temperature at the heating rod, in whole degrees. | disabled |
 | Heating Rod Target Power | The power limit configured for the heating rod. | disabled |
 | Heating Rod Target Temperature | The water temperature the heating rod is set to reach. | disabled |
