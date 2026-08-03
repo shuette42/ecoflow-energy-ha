@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from functools import partial
 from typing import Any
 
 from ..const import (
@@ -41,7 +42,7 @@ class SetCommandsMixin:
 
         payload = build_soc_limit_set_payload(max_charge_soc, min_discharge_soc)
         ok = await self.hass.async_add_executor_job(
-            self._mqtt_client.send_proto_set, payload,
+            partial(self._mqtt_client.send_proto_set, payload, wait=True),
         )
         if ok:
             _LOGGER.debug(
@@ -97,7 +98,14 @@ class SetCommandsMixin:
         return True
 
     async def _flush_powerocean_soc(self) -> None:
-        """Send the most recent debounced SoC SET to the device."""
+        """Send the most recent debounced SoC SET to the device.
+
+        The service call returned before this runs, so a failure here can
+        no longer be raised at the caller. What it must not do is leave the
+        sliders showing a value the device never took: both entities applied
+        an optimistic value on the way in, and on failure that value is the
+        only thing left saying the write worked (issue #185).
+        """
         if self._powerocean_soc_debounce_unsub is not None:
             self._powerocean_soc_debounce_unsub.cancel()
             self._powerocean_soc_debounce_unsub = None
@@ -106,7 +114,24 @@ class SetCommandsMixin:
             return
         self._powerocean_soc_pending = None
         backup, solar = pending
-        await self.async_set_powerocean_soc(backup, solar)
+
+        optimistic_keys = ("ems_discharge_lower_limit_pct", "ems_app_surplus_pct")
+        before = {
+            key: self._device_data.get(key)
+            for key in optimistic_keys
+            if key in self._device_data
+        }
+
+        if await self.async_set_powerocean_soc(backup, solar):
+            return
+
+        # Undo the optimistic values so the sliders fall back to whatever
+        # the device last reported rather than to the request that failed.
+        for key, value in before.items():
+            self.set_device_value(key, value)
+            if self.data is not None:
+                self.data[key] = value
+        self.async_update_listeners()
 
     async def async_set_powerocean_soc(
         self, backup_reserve_pct: int, solar_surplus_pct: int,
@@ -141,7 +166,7 @@ class SetCommandsMixin:
             device_sn=self.device_sn,
         )
         ok = await self.hass.async_add_executor_job(
-            self._mqtt_client.send_proto_set, payload,
+            partial(self._mqtt_client.send_proto_set, payload, wait=True),
         )
         label = f"backup={backup_reserve_pct} solar={solar_surplus_pct}"
         if ok:
@@ -174,7 +199,7 @@ class SetCommandsMixin:
 
         payload = build_work_mode_set_payload(work_mode)
         ok = await self.hass.async_add_executor_job(
-            self._mqtt_client.send_proto_set, payload,
+            partial(self._mqtt_client.send_proto_set, payload, wait=True),
         )
         if ok:
             _LOGGER.debug("Work-mode sent: %d (%s)", work_mode, self.device_sn)
@@ -189,17 +214,17 @@ class SetCommandsMixin:
     ) -> bool:
         """Send a protobuf SET command via WSS MQTT."""
         if self._mqtt_client is None or not self._mqtt_client.is_connected():
-            _LOGGER.warning("Cannot send proto SET (%s) - MQTT not connected (%s)", label, self.device_sn)
+            _LOGGER.debug("Cannot send proto SET (%s) - MQTT not connected (%s)", label, self.device_sn)
             return False
 
         ok = await self.hass.async_add_executor_job(
-            self._mqtt_client.send_proto_set, payload,
+            partial(self._mqtt_client.send_proto_set, payload, wait=True),
         )
         if ok:
             _LOGGER.debug("Proto SET sent: %s (%s)", label, self.device_sn)
             self._log_event(f"proto_set_{label}", "ok")
         else:
-            _LOGGER.warning("Proto SET failed: %s (%s)", label, self.device_sn)
+            _LOGGER.debug("Proto SET not delivered: %s (%s)", label, self.device_sn)
             self._log_event(f"proto_set_{label}_fail", "")
         return ok
 
@@ -261,7 +286,7 @@ class SetCommandsMixin:
             return False
 
         ok = await self.hass.async_add_executor_job(
-            self._mqtt_client.send_proto_set, payload
+            partial(self._mqtt_client.send_proto_set, payload, wait=True),
         )
         if not ok:
             _LOGGER.warning("SET failed for %s: not sent", self.device_sn)
@@ -282,7 +307,7 @@ class SetCommandsMixin:
         Payload: {"id": <ts>, "version": "1.0", ...command}
         """
         if self._mqtt_client is None or not self._mqtt_client.is_connected():
-            _LOGGER.warning("Cannot send SET command - MQTT not connected (%s)", self.device_sn)
+            _LOGGER.debug("Cannot send SET command - MQTT not connected (%s)", self.device_sn)
             return False
 
         msg_id = int(time.time() * 1000) % 1_000_000
@@ -299,14 +324,18 @@ class SetCommandsMixin:
         else:
             topic = f"/open/{self._mqtt_client.cert_account}/{self.device_sn}/set"
 
+        # wait=True: the caller reports the outcome to the user, so a
+        # locally queued message is not good enough (issue #185).
         ok = await self.hass.async_add_executor_job(
-            self._mqtt_client.publish, topic, payload, 1,
+            partial(self._mqtt_client.publish, topic, payload, 1, wait=True),
         )
         if ok:
             _LOGGER.debug("SET command sent: %s -> %s", topic, payload[:120])
             self._log_event("set_cmd", f"keys={list(command.keys())[:3]}")
         else:
-            _LOGGER.warning("SET command failed: %s", topic)
+            # The entity raises for the user; a warning here would only
+            # duplicate the error Home Assistant already logs.
+            _LOGGER.debug("SET command not delivered: %s", topic)
             self._log_event("set_cmd_fail", f"keys={list(command.keys())[:3]}")
         return ok
 

@@ -1448,7 +1448,7 @@ class TestSETCommands:
 
         ok = await coordinator.async_send_proto_set_command(b"\x0a\x01", "ac_out")
         assert ok is True
-        mock_mqtt.send_proto_set.assert_called_once_with(b"\x0a\x01")
+        mock_mqtt.send_proto_set.assert_called_once_with(b"\x0a\x01", wait=True)
         assert coordinator.event_log[-1] == {
             "ts": coordinator.event_log[-1]["ts"],
             "type": "proto_set_ac_out",
@@ -1688,7 +1688,7 @@ class TestSETCommands:
                 {"params": {"cfgMaxChgSoc": 80}}
             )
         assert ok is False
-        mock_mqtt.send_proto_set.assert_called_once_with(b"\x0a\x01")
+        mock_mqtt.send_proto_set.assert_called_once_with(b"\x0a\x01", wait=True)
         assert coordinator.event_log[-1]["type"] == "set_cmd_fail"
 
 

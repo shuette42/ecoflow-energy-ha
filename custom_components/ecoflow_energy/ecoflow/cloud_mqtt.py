@@ -40,6 +40,11 @@ _LOGGER = logging.getLogger(__name__)
 # local paho queue, which says nothing about whether it left the machine
 # (issue #185). A half-dead socket accepts writes indefinitely and the
 # device never sees them.
+#
+# Only publishes whose result reaches the user are worth waiting for, and
+# the wait is opt-in for that reason. The acknowledgement is read by paho's
+# network-loop thread, so waiting on that thread - inside `_on_connect`, for
+# instance - can never succeed and costs the full timeout twice per connect.
 PUBLISH_ACK_TIMEOUT_S = 5.0
 
 
@@ -496,8 +501,16 @@ class EcoFlowMQTTClient:
         """Check if the client is connected."""
         return self.connected and self.client is not None and self.client.is_connected()
 
-    def publish(self, topic: str, payload: str | bytes, qos: int = 1) -> bool:
-        """Publish a message to the EcoFlow cloud broker."""
+    def publish(
+        self, topic: str, payload: str | bytes, qos: int = 1, wait: bool = False,
+    ) -> bool:
+        """Publish a message to the EcoFlow cloud broker.
+
+        Set ``wait`` for a publish whose outcome is reported to the user:
+        the return value then means the broker acknowledged the message
+        rather than that paho queued it locally. Never set it on a call
+        made from a paho callback - see PUBLISH_ACK_TIMEOUT_S.
+        """
         if self._listen_only:
             # Single choke point: whatever path got here, nothing leaves.
             _LOGGER.debug("Publish suppressed on listen-only connection (%s)", topic)
@@ -508,24 +521,25 @@ class EcoFlowMQTTClient:
             result = self.client.publish(topic, payload, qos=qos)
             if result.rc != 0:
                 return False
-            if qos == 0:
-                # Fire and forget - there is nothing to wait for.
+            if not wait or qos == 0:
+                # rc == 0 only means paho queued the message locally.
+                # Callers that do not report their outcome accept that.
                 return True
-            # rc == 0 only means the message was queued locally. Wait for the
-            # broker's PUBACK so a dead socket reports a failure instead of a
-            # write that quietly never arrives.
+            # Wait for the broker's PUBACK so a dead socket reports a failure
+            # instead of a write that quietly never arrives. paho does not
+            # raise on timeout - it returns and leaves is_published() False.
             result.wait_for_publish(timeout=PUBLISH_ACK_TIMEOUT_S)
             return result.is_published()
         except (RuntimeError, ValueError) as exc:
-            # paho raises RuntimeError when the message can no longer be
-            # delivered (client disconnected, queue dropped) and on timeout.
+            # paho raises ValueError when the outgoing queue is full and
+            # RuntimeError when the message can no longer be delivered.
             _LOGGER.debug("Publish not acknowledged (%s): %s", topic, exc)
             return False
         except Exception as exc:
             _LOGGER.error("Publish failed (%s): %s", topic, exc)
             return False
 
-    def send_proto_set(self, payload: bytes) -> bool:
+    def send_proto_set(self, payload: bytes, wait: bool = False) -> bool:
         """Send a binary protobuf SET command to the device (WSS only).
 
         Publishes to /app/{user_id}/{sn}/thing/property/set.
@@ -534,7 +548,7 @@ class EcoFlowMQTTClient:
         if not self._wss_mode or not self.is_connected() or not self._user_id:
             return False
         topic = f"/app/{self._user_id}/{self._device_sn}/thing/property/set"
-        return self.publish(topic, payload, qos=1)
+        return self.publish(topic, payload, qos=1, wait=wait)
 
     def send_energy_stream_switch(self) -> bool:
         """Send EnergyStreamSwitch to keep energy_stream_report alive (WSS only)."""

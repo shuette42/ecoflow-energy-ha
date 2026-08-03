@@ -248,8 +248,9 @@ class EcoFlowNumber(
             payload = build_plug_max_watts_payload(int(value), device_sn=sn)
             label = "max_watts"
         else:
-            _LOGGER.warning("No SmartPlug proto SET handler for %s", key)
-            return False
+            # Nothing was ever sent, so "did not reach the device" would be
+            # the wrong thing to tell the user.
+            raise_set_unsupported(self.entity_id)
         return await self.coordinator.async_send_proto_set_command(payload, label)
 
     async def _async_set_powerocean_value(self, value: float) -> None:
@@ -317,12 +318,9 @@ class EcoFlowNumber(
                 payload, label="stream_backup_reserve"
             )
 
-        _LOGGER.warning(
-            "No Stream SET handler for %s (%s)",
-            key,
-            self.coordinator.device_sn,
-        )
-        return False
+        # Nothing was ever sent, so "did not reach the device" would be the
+        # wrong thing to tell the user.
+        raise_set_unsupported(self.entity_id)
 
 
 def _get_number_defs(device_type: str) -> list[EcoFlowNumberDef]:

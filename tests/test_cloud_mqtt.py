@@ -136,33 +136,93 @@ class TestPublishDelivery:
         info.is_published.return_value = True
         client = self._connected_client(info)
 
-        assert client.publish("test/topic", "payload") is True
+        assert client.publish("test/topic", "payload", wait=True) is True
         info.wait_for_publish.assert_called_once()
 
     def test_publish_fails_when_broker_never_acks(self):
-        """A half-dead socket accepts the message and never delivers it."""
-        info = MagicMock()
-        info.rc = 0
-        info.wait_for_publish.side_effect = RuntimeError("timed out")
-        client = self._connected_client(info)
+        """The half-dead socket: paho queues the message and no ack arrives.
 
-        assert client.publish("test/topic", "payload") is False
-
-    def test_publish_fails_when_not_published_after_wait(self):
+        paho does not raise on timeout - `wait_for_publish` returns and
+        leaves `is_published()` False, so that is the decisive check.
+        """
         info = MagicMock()
         info.rc = 0
         info.is_published.return_value = False
         client = self._connected_client(info)
 
-        assert client.publish("test/topic", "payload") is False
+        assert client.publish("test/topic", "payload", wait=True) is False
+
+    def test_publish_fails_when_message_cannot_be_delivered(self):
+        """paho raises for a queue that is full or a dropped message."""
+        info = MagicMock()
+        info.rc = 0
+        info.wait_for_publish.side_effect = RuntimeError("publish failed")
+        client = self._connected_client(info)
+
+        assert client.publish("test/topic", "payload", wait=True) is False
+
+    def test_publish_fails_when_not_queued(self):
+        """A non-zero return code never reaches the wait at all."""
+        info = MagicMock()
+        info.rc = 4
+        client = self._connected_client(info)
+
+        assert client.publish("test/topic", "payload", wait=True) is False
+        info.wait_for_publish.assert_not_called()
+
+    def test_publish_fails_when_queue_is_full(self):
+        info = MagicMock()
+        info.rc = 0
+        info.wait_for_publish.side_effect = ValueError("queue full")
+        client = self._connected_client(info)
+
+        assert client.publish("test/topic", "payload", wait=True) is False
 
     def test_qos_zero_does_not_wait(self):
         info = MagicMock()
         info.rc = 0
         client = self._connected_client(info)
 
-        assert client.publish("test/topic", "payload", qos=0) is True
+        assert client.publish("test/topic", "payload", qos=0, wait=True) is True
         info.wait_for_publish.assert_not_called()
+
+    def test_background_publish_does_not_wait(self):
+        """The ack is read by paho's own network thread.
+
+        Waiting for it from inside a paho callback - which is where the
+        post-connect requests run - can never succeed and costs the full
+        timeout. Background publishes therefore do not wait at all.
+        """
+        info = MagicMock()
+        info.rc = 0
+        client = self._connected_client(info)
+
+        assert client.publish("test/topic", "payload") is True
+        info.wait_for_publish.assert_not_called()
+
+    def test_post_connect_requests_never_wait(self):
+        """send_get_all/send_latest_quotas run on the paho callback thread."""
+        info = MagicMock()
+        info.rc = 0
+        client = self._connected_client(info)
+        client._wss_mode = True
+        client._user_id = "user123"
+
+        assert client.send_get_all() is True
+        assert client.send_latest_quotas() is True
+        info.wait_for_publish.assert_not_called()
+
+    def test_proto_set_waits_when_asked(self):
+        """Entity-initiated proto writes report their outcome, so they wait."""
+        info = MagicMock()
+        info.rc = 0
+        info.is_published.return_value = False
+        client = self._connected_client(info)
+        client._wss_mode = True
+        client._user_id = "user123"
+
+        assert client.send_proto_set(b"\x00", wait=True) is False
+        info.wait_for_publish.assert_called_once()
 
 
 # ===========================================================================
