@@ -984,18 +984,13 @@ DELTA3_NUMBERS: list[EcoFlowNumberDef] = [
     EcoFlowNumberDef("ac_charge_power_limit", "AC Charge Power", "ac_charge_power_limit_w", "W", "mdi:lightning-bolt", 200, 2400, 100, enhanced_only=True),
 ]
 
-# The mode the app pairs with the charge power above. Verified end to end on a
-# DELTA 3 Max Plus: written, reported back by the device, and reversible.
-DELTA3_SELECTS: list[EcoFlowSelectDef] = [
-    EcoFlowSelectDef(
-        "ac_charge_mode",
-        "AC Charge Mode",
-        "ac_charge_mode",
-        ("self_def_pow", "bat_optimal_pow", "silence"),
-        icon="mdi:battery-charging-medium",
-        enhanced_only=True,
-    ),
-]
+# The charge mode deliberately has no entity. It is part of the same wire
+# setting as the power above and travels with every write, but its read-back
+# (status frame field 124) only arrives when the mode changes, not on a cycle:
+# measured over five minutes on a D3M1 without a single report. A select that
+# cannot show what the device is set to fails the read-back gate, so the mode
+# is written and never displayed.
+AC_CHARGE_POWER_STATE_KEY = "ac_charge_power_limit_w"
 
 
 # =====================================================================

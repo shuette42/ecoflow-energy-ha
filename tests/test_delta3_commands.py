@@ -10,12 +10,11 @@ from __future__ import annotations
 import pytest
 
 from custom_components.ecoflow_energy.ecoflow.delta3_commands import (
+    AC_CHARGE_MODE_FIELD,
     DELTA3_NUMBER_PARAMS,
-    DELTA3_SELECT_PARAMS,
     DELTA3_SWITCH_PARAMS,
     build_number_command,
     build_proto_command,
-    build_select_command,
     build_switch_command,
     parse_config_write_ack,
 )
@@ -26,6 +25,35 @@ from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
     encode_field_bytes,
     encode_field_varint,
 )
+
+def _varint_field(pdata: bytes, field_number: int) -> int | None:
+    """Read one varint field out of a pdata blob, or None if it is absent."""
+    i = 0
+    while i < len(pdata):
+        tag = 0
+        shift = 0
+        while i < len(pdata):
+            byte = pdata[i]
+            i += 1
+            tag |= (byte & 0x7F) << shift
+            if not byte & 0x80:
+                break
+            shift += 7
+        if tag & 0x07 != 0:
+            return None
+        value = 0
+        shift = 0
+        while i < len(pdata):
+            byte = pdata[i]
+            i += 1
+            value |= (byte & 0x7F) << shift
+            if not byte & 0x80:
+                break
+            shift += 7
+        if tag >> 3 == field_number:
+            return value
+    return None
+
 
 EXPECTED_ENVELOPE = {
     "cmdId": 17,
@@ -228,11 +256,6 @@ class TestProtoCommands:
             assert build_proto_command(build_switch_command(key, True), self.SN)
         for key in DELTA3_NUMBER_PARAMS:
             assert build_proto_command(build_number_command(key, 10), self.SN)
-        for key, (_, _, options) in DELTA3_SELECT_PARAMS.items():
-            first_option = next(iter(options))
-            assert build_proto_command(
-                build_select_command(key, first_option), self.SN
-            )
 
     def test_unknown_parameter_returns_none(self) -> None:
         command = {"cmdId": 17, "params": {"cfgSomethingElse": 1}}
@@ -245,18 +268,23 @@ class TestProtoCommands:
 
 
 class TestAcCharging:
-    """The AC charge power slider and the mode it depends on.
+    """AC charge power and charge mode are one setting on the wire.
 
-    Bounds come from the app slider on a D3M1 (#111). They are pinned here
-    because a wider range is not a UI detail: the number reaches the device
-    unchanged, and the device is the only thing that can refuse it.
+    Measured on a D3M1 on 2026-08-03: field 54 alone and field 125 alone are
+    both dropped by the device without any answer - no ack, no rejection. The
+    two together are applied and read back within a second. These tests exist
+    so a future refactor cannot quietly split the pair again, because the
+    failure mode is silence rather than an error.
     """
 
     SN = "TEST1234567890"
 
-    def test_power_carries_the_documented_field(self) -> None:
+    def test_power_always_carries_the_mode(self) -> None:
         command = build_number_command("ac_charge_power_limit", 1200)
-        assert command["params"] == {"cfgPlugInInfoAcInChgPowMax": 1200}
+        assert command["params"] == {
+            "cfgPlugInInfoAcInChgPowMax": 1200,
+            "cfgAcInChgMode": 0,
+        }
         assert DELTA3_NUMBER_PARAMS["ac_charge_power_limit"].config_field == 54
 
     @pytest.mark.parametrize(
@@ -269,33 +297,33 @@ class TestAcCharging:
         command = build_number_command("ac_charge_power_limit", requested)
         assert command["params"]["cfgPlugInInfoAcInChgPowMax"] == expected
 
-    @pytest.mark.parametrize(
-        ("option", "wire"),
-        [("self_def_pow", 0), ("bat_optimal_pow", 1), ("silence", 2)],
-    )
-    def test_mode_maps_onto_the_device_enum(self, option: str, wire: int) -> None:
-        command = build_select_command("ac_charge_mode", option)
-        assert command["params"] == {"cfgAcInChgMode": wire}
-
     def test_mode_field_number(self) -> None:
-        _, config_field, _ = DELTA3_SELECT_PARAMS["ac_charge_mode"]
-        assert config_field == 125
+        assert AC_CHARGE_MODE_FIELD == 125
 
-    def test_unknown_option_is_refused(self) -> None:
-        assert build_select_command("ac_charge_mode", "turbo") is None
-
-    def test_unknown_select_is_refused(self) -> None:
-        assert build_select_command("nonexistent", "self_def_pow") is None
-
-    def test_mode_options_match_the_parser_labels(self) -> None:
-        """Read-back and write must speak the same vocabulary."""
-        from custom_components.ecoflow_energy.ecoflow.parsers.delta3_proto import (
-            _AC_CHARGE_MODES,
+    def test_both_fields_reach_one_binary_frame(self) -> None:
+        """The pair must survive into the frame, not just into the params."""
+        frame = build_proto_command(
+            build_number_command("ac_charge_power_limit", 800), self.SN
         )
+        assert frame is not None
+        headers, _ = decode_header_message(frame)
+        pdata = bytes.fromhex(headers[0]["pdata"])
+        assert _varint_field(pdata, 54) == 800
+        assert _varint_field(pdata, 125) == 0
 
-        _, _, options = DELTA3_SELECT_PARAMS["ac_charge_mode"]
-        assert set(options) == set(_AC_CHARGE_MODES.values())
-        assert all(options[label] == wire for wire, label in _AC_CHARGE_MODES.items())
+    def test_fields_are_in_ascending_order(self) -> None:
+        """Matching the app's own serialisation removes one variable."""
+        frame = build_proto_command(
+            build_number_command("ac_charge_power_limit", 1200), self.SN
+        )
+        headers, _ = decode_header_message(frame)
+        pdata = bytes.fromhex(headers[0]["pdata"])
+        assert pdata.index(b"\xb0\x03") < pdata.index(b"\xe8\x07")
+
+    def test_an_unknown_pair_is_refused(self) -> None:
+        """Only groups the device is known to accept may share a frame."""
+        command = {"params": {"cfgBeepEn": True, "cfgXboostEn": True}}
+        assert build_proto_command(command, self.SN) is None
 
 
 class TestConfigWriteAck:

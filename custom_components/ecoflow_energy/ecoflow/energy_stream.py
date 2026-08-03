@@ -437,12 +437,18 @@ def build_delta3_config_write_payload(
     device_sn: str,
     seq: int = 0,
     nested: bool = False,
+    companions: tuple[tuple[int, int], ...] = (),
 ) -> bytes:
     """Build a Delta 3 ConfigWrite SET frame for the app WebSocket channel.
 
-    One frame carries exactly one changed setting: the pdata holds only the
-    field being written, the device keeps everything else untouched. The
-    header replicates the app frame so the device routes it on the /app/
+    A frame normally carries exactly one changed setting: the pdata holds only
+    the field being written, the device keeps everything else untouched. Some
+    settings are the exception and are only processed as a group; `companions`
+    carries the remaining members of such a group. A group frame missing a
+    member is dropped by the device **without any answer at all**, so silence
+    rather than a rejection is the symptom to look for.
+
+    The header replicates the app frame so the device routes it on the /app/
     topic - verified against hardware (ack plus readback of the new value).
 
       1  pdata            8  cmd_func = 254   14 seq
@@ -458,6 +464,8 @@ def build_delta3_config_write_payload(
         device_sn: Device serial number (required for /app/ routing).
         seq: Sequence number (0 = auto-generate from timestamp).
         nested: True for settings wrapped in a submessage (inner field 1).
+        companions: further (field, value) pairs that belong in the same frame.
+            Not combinable with `nested`.
 
     Returns:
         Binary protobuf payload ready to publish on the SET topic.
@@ -468,7 +476,11 @@ def build_delta3_config_write_payload(
     if nested:
         pdata = encode_field_bytes(config_field, encode_field_varint(1, value))
     else:
-        pdata = encode_field_varint(config_field, value)
+        # Ascending field order, which is what the app's protobuf runtime
+        # emits. Whether the device cares is unproven; matching the app costs
+        # nothing and removes one variable.
+        fields = sorted([(config_field, value), *companions])
+        pdata = b"".join(encode_field_varint(f, v) for f, v in fields)
 
     header = bytearray()
     header.extend(encode_field_bytes(1, pdata))              # pdata

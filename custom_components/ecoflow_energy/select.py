@@ -19,15 +19,12 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
-    DELTA3_SELECTS,
-    DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
     DOMAIN,
     EcoFlowSelectDef,
     POWEROCEAN_SELECTS,
 )
 from .coordinator import EcoFlowDeviceCoordinator
-from .ecoflow.delta3_commands import build_select_command as build_delta3_select_command
 from .entity import raise_set_failed, raise_set_unsupported
 
 _LOGGER = logging.getLogger(__name__)
@@ -132,16 +129,6 @@ class EcoFlowSelect(CoordinatorEntity[EcoFlowDeviceCoordinator], SelectEntity):
             )
             return
 
-        if self.coordinator.device_type == DEVICE_TYPE_DELTA3:
-            command = build_delta3_select_command(self._definition.key, option)
-            if command is None:
-                raise_set_unsupported(self.entity_id)
-            ok = await self.coordinator.async_send_delta3_set(command)
-            if not ok:
-                raise_set_failed(self.entity_id)
-            self._apply_optimistic_select(option)
-            return
-
         if self._definition.key == "work_mode":
             wire_value = WORK_MODE_TO_INT.get(option)
             if wire_value is None:
@@ -171,6 +158,4 @@ def _get_select_defs(device_type: str) -> list[EcoFlowSelectDef]:
     """Return select definitions based on device type."""
     if device_type == DEVICE_TYPE_POWEROCEAN:
         return POWEROCEAN_SELECTS
-    if device_type == DEVICE_TYPE_DELTA3:
-        return DELTA3_SELECTS
     return []

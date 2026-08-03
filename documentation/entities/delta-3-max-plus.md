@@ -3,7 +3,7 @@
 Full list of all entities created for Delta 3 devices. The entity set is shared
 across the generation: Delta 3 Max Plus (`D3M1`, `P321`) and base DELTA 3 (`P231`).
 
-**Totals:** 47 sensors, 7 switches, 4 numbers, 1 select
+**Totals:** 47 sensors, 7 switches, 4 numbers
 
 > Entities marked with *diagnostic* appear in the diagnostics section of the device page.
 
@@ -112,18 +112,11 @@ be used in the Energy Dashboard without accumulating drift.
 
 ---
 
-## Selects
-
-| Entity | Options | Description |
-|:---|:---|:---|
-| AC Charge Mode | Custom power, Battery optimised, Silent | How the device decides its grid charging rate. The app presents the charge power slider above under Custom power, so that is the mode to use if you want the wattage honoured. The device accepts and reports a new charge power in the other two modes as well, and whether it follows it there has not been measured |
-
----
-
 ## Notes
 
-- **Standard Mode (~30 s)** delivers all sensors and controls except AC Charge Power and AC Charge Mode. Commands go through the official HTTP endpoint.
-- **AC Charge Power and AC Charge Mode need EcoFlow account sign-in.** The device reports both only on the live connection, never in the polled data, so with developer keys there would be nothing to read the setting back from. A control that cannot confirm what the device actually did is not a control, so these two are not created in that mode.
+- **Standard Mode (~30 s)** delivers all sensors and controls except AC Charge Power. Commands go through the official HTTP endpoint.
+- **AC Charge Power needs EcoFlow account sign-in.** The device reports it only on the live connection, never in the polled data, so with developer keys there would be nothing to read the setting back from.
+- **Setting a charge power switches the device to the app's custom charging mode**, exactly as moving the slider in the app does. The device treats the wattage and the charging mode as one setting and ignores a change to either on its own, so both always travel together. Switching back to Battery optimised or Silent is done in the app: those modes report themselves only when they change, which is too rarely for an entity to show the truth.
 - **Enhanced Mode (~2 s)** delivers the same sensors with the same entity IDs, so switching modes keeps history and dashboards intact. Switches and numbers work here as well: commands travel on the live device connection instead of the HTTP endpoint, and the device confirms each one.
 - Energy Dashboard sensors (solar, solar 2, AC input, total output) are integrated from the live power telemetry, since the device exposes no native energy counters. Values accumulate over time and start at 0 on a fresh install.
 - Remaining charge and discharge times are only reported while the battery is actually charging or discharging. The device keeps both values populated at all times and parks the inactive one on a placeholder, which would otherwise show a runtime of several hundred hours on an idle unit.
