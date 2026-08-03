@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -819,3 +820,113 @@ class TestPowerOceanSocSetDebounce:
         coordinator = self._make_coordinator(hass, enhanced_config_entry)
         await coordinator._flush_powerocean_soc()
         coordinator.async_set_powerocean_soc.assert_not_called()
+
+
+class TestPowerOceanSocRollback:
+    """The rollback that shipped in v1.16.0-beta.10 and did nothing.
+
+    The flush took its "value before the write" snapshot from _device_data,
+    0.3 s after the entity had already written its optimistic value there.
+    Restoring that snapshot restored the value the device had refused, which
+    is the exact #185 symptom the change was meant to end. No test caught it
+    because every flush test mocked the SET to succeed.
+    """
+
+    def _make_coordinator(self, hass, entry, *, set_ok: bool):
+        entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_POWEROCEAN_DEVICE)
+        coordinator._enhanced_mode = True
+        coordinator.async_set_powerocean_soc = AsyncMock(return_value=set_ok)
+        # The device reported these before the user touched anything.
+        coordinator._device_data["ems_discharge_lower_limit_pct"] = 20
+        coordinator._device_data["ems_app_surplus_pct"] = 80
+        coordinator.data = dict(coordinator._device_data)
+        return coordinator
+
+    async def _drag(self, coordinator, backup: int, solar: int) -> None:
+        """Request a value the way the entity does, optimistic write included."""
+        assert await coordinator.async_set_powerocean_soc_debounced(backup, solar)
+        for key, value in (
+            ("ems_discharge_lower_limit_pct", backup),
+            ("ems_app_surplus_pct", solar),
+        ):
+            coordinator.set_device_value(key, value)
+            coordinator.data[key] = value
+
+    async def test_a_failed_write_restores_the_device_value(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        coordinator = self._make_coordinator(hass, enhanced_config_entry, set_ok=False)
+
+        await self._drag(coordinator, 50, 90)
+        await coordinator._flush_powerocean_soc()
+
+        assert coordinator._device_data["ems_discharge_lower_limit_pct"] == 20
+        assert coordinator._device_data["ems_app_surplus_pct"] == 80
+
+    async def test_a_drag_burst_rolls_back_to_the_value_before_the_drag(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Every step of a drag writes optimistically; only the first is real."""
+        coordinator = self._make_coordinator(hass, enhanced_config_entry, set_ok=False)
+
+        for solar in (85, 90, 95, 100):
+            await self._drag(coordinator, 20, solar)
+        await coordinator._flush_powerocean_soc()
+
+        assert coordinator._device_data["ems_app_surplus_pct"] == 80
+
+    async def test_a_successful_write_is_not_rolled_back(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        coordinator = self._make_coordinator(hass, enhanced_config_entry, set_ok=True)
+
+        await self._drag(coordinator, 50, 90)
+        await coordinator._flush_powerocean_soc()
+
+        assert coordinator._device_data["ems_discharge_lower_limit_pct"] == 50
+        assert coordinator._device_data["ems_app_surplus_pct"] == 90
+
+    async def test_a_late_failure_does_not_undo_a_newer_window(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """A slow failing write must not undo a newer one that already landed.
+
+        The first write hangs on a dead connection until its timeout while
+        the user moves the slider again. If the late failure were allowed to
+        roll back, it would replace the newer value with one from before the
+        first drag, and the slider would jump on its own.
+        """
+        coordinator = self._make_coordinator(hass, enhanced_config_entry, set_ok=False)
+        release = asyncio.Event()
+
+        async def _hangs_then_fails(backup: int, solar: int) -> bool:
+            await release.wait()
+            return False
+
+        coordinator.async_set_powerocean_soc = AsyncMock(side_effect=_hangs_then_fails)
+
+        await self._drag(coordinator, 50, 90)
+        in_flight = asyncio.create_task(coordinator._flush_powerocean_soc())
+        await asyncio.sleep(0)  # let the flush reach the hanging write
+
+        # The user drags again; this window opens and applies its value.
+        await self._drag(coordinator, 30, 70)
+
+        release.set()
+        await in_flight
+
+        assert coordinator._device_data["ems_app_surplus_pct"] == 70
+        assert coordinator._device_data["ems_discharge_lower_limit_pct"] == 30
+
+    async def test_rollback_releases_the_optimistic_lock(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Without this the slider shows the refused value for a further 5 s."""
+        coordinator = self._make_coordinator(hass, enhanced_config_entry, set_ok=False)
+        before = coordinator._powerocean_soc_rollback_generation
+
+        await self._drag(coordinator, 50, 90)
+        await coordinator._flush_powerocean_soc()
+
+        assert coordinator._powerocean_soc_rollback_generation > before

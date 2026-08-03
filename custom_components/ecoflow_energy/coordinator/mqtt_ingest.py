@@ -114,8 +114,14 @@ class MqttIngestMixin:
         """
         # SET reply tracking (all modes): log acknowledgement, do not process as data
         if "/set_reply" in topic:
-            _LOGGER.debug("SET reply for %s: %s", self.device_sn, payload[:200])
-            self._log_event("set_reply", f"topic={topic}")
+            _LOGGER.debug("SET reply for %s: %s", self.device_sn[:4], payload[:200])
+            # The topic itself is not loggable: it is
+            # /open/<cert_account>/<sn>/set_reply, so it carries the full
+            # serial and the account identifier, and the event log goes into
+            # a diagnostics download users are asked to attach to public
+            # issues. Only which kind of reply arrived is of any diagnostic
+            # use anyway.
+            self._log_event("set_reply", "topic=set_reply")
             if self.device_type == DEVICE_TYPE_DELTA3:
                 self._check_delta3_set_ack(payload)
             return

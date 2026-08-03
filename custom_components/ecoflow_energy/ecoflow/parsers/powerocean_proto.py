@@ -214,8 +214,12 @@ EMS_CHANGE_TO_SENSOR: dict[str, str] = {
 # that shows the cmd-17 value tracking the device state it claims to
 # describe.
 EMS_STATE_TO_SENSOR: dict[str, str] = {
-    # Error and warning codes. These entities already exist, fed by the HTTP
-    # quota in Standard Mode; Enhanced Mode had no source for them at all.
+    # Error and warning codes. The five PCS and MPPT *fault* codes below also
+    # come out of the HTTP quota, so those entities exist in both modes and
+    # this message is what finally fills them on account sign-in. The two MPPT
+    # *warning* codes are not in the quota at all - they are marked
+    # enhanced_only in const.py, because an entity created in Standard Mode
+    # would have nothing to read.
     "pcs_ac_err_code": "pcs_ac_error_code",
     "pcs_dc_err_code": "pcs_dc_error_code",
     "pcs_ac_warning_code": "pcs_ac_warning_code",

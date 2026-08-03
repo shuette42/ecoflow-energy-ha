@@ -152,6 +152,11 @@ QUOTAS_KEEPALIVE_S = 30  # latestQuotas poll interval (app-level keepalive)
 APP_SURPLUS_SYNC_MIN_INTERVAL_S = 30.0  # min interval between auto-sync SETs that mirror EmsParamChangeReport.dev_soc into the EMS sysBatBackupRatio
 APP_SURPLUS_SYNC_USER_GRACE_S = 5.0  # ignore discrepancy briefly after a user SET to wait for the device echo
 POWEROCEAN_SOC_DEBOUNCE_S = 0.3  # coalesce slider-drag SETs into one frame; the device cannot keep up with 5%-step sets at 100ms cadence and the EMS/App-layer fields desync
+# The two state keys the PowerOcean SoC sliders write. They are sent as one
+# frame, so a failed write has to undo both. Kept next to the debounce window
+# because the snapshot and the rollback have to agree on exactly this pair -
+# they did not in v1.16.0-beta.10, and the rollback restored the failed value.
+POWEROCEAN_SOC_STATE_KEYS = ("ems_discharge_lower_limit_pct", "ems_app_surplus_pct")
 PING_KEEPALIVE_S = 60  # MQTT ping heartbeat interval
 SMARTPLUG_GET_ALL_KEEPALIVE_S = 120.0  # Smart Plug app-auth: periodic full-state refresh
 CREDENTIAL_REFRESH_CHECK_S = 43200.0  # Check every 12h whether credentials need proactive refresh
@@ -223,6 +228,10 @@ class EcoFlowBinarySensorDef:
     icon: str | None = None
     entity_category: str | None = None
     disabled_by_default: bool = False
+    # Same meaning as on the sensor, number and select definitions: the value
+    # only exists on the app channel, so with developer keys the entity would
+    # be created and never fill.
+    enhanced_only: bool = False
 
 
 @dataclass(frozen=True)
@@ -300,7 +309,10 @@ POWEROCEAN_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("bp_up_limit_soc_pct", "Battery Max SOC Limit", "%", None, None, "mdi:battery-high", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     # --- Inverter / PCS Diagnostics ---
     EcoFlowSensorDef("pcs_ac_freq_hz", "Grid Frequency", "Hz", "frequency", "measurement", "mdi:sine-wave", "diagnostic", suggested_display_precision=1),
-    EcoFlowSensorDef("ems_ntc_temp_max_c", "EMS Max Internal Temp", "°C", "temperature", "measurement", "mdi:thermometer-alert", "diagnostic", suggested_display_precision=1),
+    # EMS heartbeat only. PowerOcean has no MQTT push in Standard Mode and the
+    # HTTP quota carries no NTC reading, so with developer keys this would be
+    # a visible sensor that never fills.
+    EcoFlowSensorDef("ems_ntc_temp_max_c", "EMS Max Internal Temp", "°C", "temperature", "measurement", "mdi:thermometer-alert", "diagnostic", enhanced_only=True, suggested_display_precision=1),
     EcoFlowSensorDef("ems_bp_alive_num", "Battery Packs Online", None, None, "measurement", "mdi:battery-check", "diagnostic", disabled_by_default=True),
     # PowerGlow heating rod: an optional accessory, so these four are created
     # only after the device has reported them at least once (#7).
@@ -361,8 +373,10 @@ POWEROCEAN_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("ems_backup_ratio_pct", "EMS Backup Ratio", "%", None, "measurement", "mdi:battery-lock-open", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("mppt1_fault_code", "MPPT 1 Fault Code", None, None, None, "mdi:alert-circle-outline", "diagnostic", disabled_by_default=True),
     EcoFlowSensorDef("mppt2_fault_code", "MPPT 2 Fault Code", None, None, None, "mdi:alert-circle-outline", "diagnostic", disabled_by_default=True),
-    EcoFlowSensorDef("mppt1_warning_code", "MPPT 1 Warning Code", None, None, None, "mdi:alert-outline", "diagnostic", disabled_by_default=True),
-    EcoFlowSensorDef("mppt2_warning_code", "MPPT 2 Warning Code", None, None, None, "mdi:alert-outline", "diagnostic", disabled_by_default=True),
+    # Unlike the fault codes above, the MPPT *warning* codes have no HTTP
+    # quota entry - they ride the protobuf EMS messages only.
+    EcoFlowSensorDef("mppt1_warning_code", "MPPT 1 Warning Code", None, None, None, "mdi:alert-outline", "diagnostic", enhanced_only=True, disabled_by_default=True),
+    EcoFlowSensorDef("mppt2_warning_code", "MPPT 2 Warning Code", None, None, None, "mdi:alert-outline", "diagnostic", enhanced_only=True, disabled_by_default=True),
     EcoFlowSensorDef("pcs_ac_error_code", "PCS AC Error Code", None, None, None, "mdi:alert-circle-outline", "diagnostic", disabled_by_default=True),
     EcoFlowSensorDef("pcs_dc_error_code", "PCS DC Error Code", None, None, None, "mdi:alert-circle-outline", "diagnostic", disabled_by_default=True),
     EcoFlowSensorDef("pcs_ac_warning_code", "PCS AC Warning Code", None, None, None, "mdi:alert-outline", "diagnostic", disabled_by_default=True),
@@ -381,13 +395,17 @@ POWEROCEAN_SENSORS: list[EcoFlowSensorDef] = [
     # verify, so they stay numeric instead of being dressed up as enums with
     # invented labels. All disabled by default - they only matter when
     # something is wrong, and then the user enables them deliberately.
-    EcoFlowSensorDef("afci_self_test_result", "AFCI Self-Test Result", None, None, None, "mdi:flash-alert", "diagnostic", disabled_by_default=True),
-    EcoFlowSensorDef("ems_self_check_state", "EMS Self-Check State", None, None, None, "mdi:clipboard-check-outline", "diagnostic", disabled_by_default=True),
-    EcoFlowSensorDef("sys_heat_state", "System Heating State", None, None, None, "mdi:radiator", "diagnostic", disabled_by_default=True),
-    EcoFlowSensorDef("sys_calibration_state", "SoC Calibration State", None, None, None, "mdi:tune-variant", "diagnostic", disabled_by_default=True),
-    EcoFlowSensorDef("parallel_mode", "Parallel Mode", None, None, None, "mdi:call-split", "diagnostic", disabled_by_default=True),
-    EcoFlowSensorDef("battery_limit_reason", "Battery Limit Reason", None, None, None, "mdi:battery-alert", "diagnostic", disabled_by_default=True),
-    EcoFlowSensorDef("ems_sg_ready_state", "SG Ready State", None, None, None, "mdi:home-lightning-bolt", "diagnostic", disabled_by_default=True),
+    # All of these ride the protobuf EMS messages (cmd 8 and cmd 17), which
+    # only exist on the app channel - hence enhanced_only. Disabled by default
+    # is not enough on its own: it only delays the empty sensor until somebody
+    # enables it, and by then the registry entry is permanent.
+    EcoFlowSensorDef("afci_self_test_result", "AFCI Self-Test Result", None, None, None, "mdi:flash-alert", "diagnostic", enhanced_only=True, disabled_by_default=True),
+    EcoFlowSensorDef("ems_self_check_state", "EMS Self-Check State", None, None, None, "mdi:clipboard-check-outline", "diagnostic", enhanced_only=True, disabled_by_default=True),
+    EcoFlowSensorDef("sys_heat_state", "System Heating State", None, None, None, "mdi:radiator", "diagnostic", enhanced_only=True, disabled_by_default=True),
+    EcoFlowSensorDef("sys_calibration_state", "SoC Calibration State", None, None, None, "mdi:tune-variant", "diagnostic", enhanced_only=True, disabled_by_default=True),
+    EcoFlowSensorDef("parallel_mode", "Parallel Mode", None, None, None, "mdi:call-split", "diagnostic", enhanced_only=True, disabled_by_default=True),
+    EcoFlowSensorDef("battery_limit_reason", "Battery Limit Reason", None, None, None, "mdi:battery-alert", "diagnostic", enhanced_only=True, disabled_by_default=True),
+    EcoFlowSensorDef("ems_sg_ready_state", "SG Ready State", None, None, None, "mdi:home-lightning-bolt", "diagnostic", enhanced_only=True, disabled_by_default=True),
 ]
 
 
@@ -440,11 +458,13 @@ for _pack_num in range(1, 6):
 POWEROCEAN_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
     # Fault flags from the EMS change report (cmd_id=17). Off is the normal
     # state; each one turns on only when the device reports that condition.
-    EcoFlowBinarySensorDef("afci_fault_ch1", "AFCI Fault String 1", "problem", "mdi:flash-alert", "diagnostic", disabled_by_default=True),
-    EcoFlowBinarySensorDef("afci_fault_ch2", "AFCI Fault String 2", "problem", "mdi:flash-alert", "diagnostic", disabled_by_default=True),
-    EcoFlowBinarySensorDef("battery_line_off", "Battery Line Disconnected", "problem", "mdi:power-plug-off", "diagnostic", disabled_by_default=True),
-    EcoFlowBinarySensorDef("battery_relay_fault", "Battery Relay Fault", "problem", "mdi:electric-switch", "diagnostic", disabled_by_default=True),
-    EcoFlowBinarySensorDef("ems_sg_ready_enabled", "SG Ready Enabled", None, "mdi:home-lightning-bolt-outline", "diagnostic", disabled_by_default=True),
+    # That report is protobuf on the app channel, so all five are
+    # enhanced_only - with developer keys they would never leave "unknown".
+    EcoFlowBinarySensorDef("afci_fault_ch1", "AFCI Fault String 1", "problem", "mdi:flash-alert", "diagnostic", disabled_by_default=True, enhanced_only=True),
+    EcoFlowBinarySensorDef("afci_fault_ch2", "AFCI Fault String 2", "problem", "mdi:flash-alert", "diagnostic", disabled_by_default=True, enhanced_only=True),
+    EcoFlowBinarySensorDef("battery_line_off", "Battery Line Disconnected", "problem", "mdi:power-plug-off", "diagnostic", disabled_by_default=True, enhanced_only=True),
+    EcoFlowBinarySensorDef("battery_relay_fault", "Battery Relay Fault", "problem", "mdi:electric-switch", "diagnostic", disabled_by_default=True, enhanced_only=True),
+    EcoFlowBinarySensorDef("ems_sg_ready_enabled", "SG Ready Enabled", None, "mdi:home-lightning-bolt-outline", "diagnostic", disabled_by_default=True, enhanced_only=True),
 ]
 
 POWEROCEAN_NUMBERS: list[EcoFlowNumberDef] = [
@@ -896,32 +916,38 @@ DELTA3_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("ac_charge_power_limit_w", "AC Charge Power Limit", "W", "power", "measurement", "mdi:lightning-bolt", "diagnostic", enhanced_only=True, suggested_display_precision=0),
     # --- Battery health (BMS heartbeat, Enhanced Mode only) ---
     # The BMS frame is the only source for these; the HTTP quota carries no
-    # battery health at all, so in Standard Mode they stay unavailable.
+    # battery health at all, so with developer keys they never get a value.
+    # Hence enhanced_only on every one: without it the entity is created and
+    # stays empty forever, and an empty sensor claims a reading is on its way
+    # when it is not. Registry entries outlive the fix, so the flag has to be
+    # right the first time.
     # Same keys the Delta 2 Max and the Stream already use, on purpose: one
     # translation, one meaning, one entity name across the device families.
-    EcoFlowSensorDef("bms_soh_pct", "Battery SoH", "%", None, "measurement", "mdi:battery-heart-variant", suggested_display_precision=0),
-    EcoFlowSensorDef("bms_cycles", "Battery Cycles", None, None, "total_increasing", "mdi:counter"),
+    # Those two families keep their own definitions without the flag, because
+    # their HTTP parsers do carry battery health.
+    EcoFlowSensorDef("bms_soh_pct", "Battery SoH", "%", None, "measurement", "mdi:battery-heart-variant", enhanced_only=True, suggested_display_precision=0),
+    EcoFlowSensorDef("bms_cycles", "Battery Cycles", None, None, "total_increasing", "mdi:counter", enhanced_only=True),
     # Lifetime counters read from the BMS, not integrated from power.
-    EcoFlowSensorDef("bms_accu_chg_energy_kwh", "Battery Lifetime Charge Energy", "kWh", "energy", "total_increasing", "mdi:battery-charging", suggested_display_precision=2),
-    EcoFlowSensorDef("bms_accu_dsg_energy_kwh", "Battery Lifetime Discharge Energy", "kWh", "energy", "total_increasing", "mdi:battery", suggested_display_precision=2),
-    EcoFlowSensorDef("bms_voltage_v", "Battery Voltage", "V", "voltage", "measurement", "mdi:flash-triangle", "diagnostic", suggested_display_precision=2),
-    EcoFlowSensorDef("bms_current_a", "Battery Current", "A", "current", "measurement", "mdi:current-dc", "diagnostic", suggested_display_precision=2),
-    EcoFlowSensorDef("bms_temp_c", "Battery Temp", "°C", "temperature", "measurement", "mdi:thermometer", "diagnostic", suggested_display_precision=0),
-    EcoFlowSensorDef("bms_max_cell_temp_c", "Battery Max Cell Temp", "°C", "temperature", "measurement", "mdi:thermometer-chevron-up", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
-    EcoFlowSensorDef("bms_min_cell_temp_c", "Battery Min Cell Temp", "°C", "temperature", "measurement", "mdi:thermometer-chevron-down", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
-    EcoFlowSensorDef("bms_max_mos_temp_c", "Battery Max MOSFET Temp", "°C", "temperature", "measurement", "mdi:thermometer-alert", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
-    EcoFlowSensorDef("bms_min_mos_temp_c", "Battery Min MOSFET Temp", "°C", "temperature", "measurement", "mdi:thermometer-alert", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
-    EcoFlowSensorDef("bms_max_cell_vol_mv", "Battery Max Cell Voltage", "mV", "voltage", "measurement", "mdi:sine-wave", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
-    EcoFlowSensorDef("bms_min_cell_vol_mv", "Battery Min Cell Voltage", "mV", "voltage", "measurement", "mdi:sine-wave", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
-    EcoFlowSensorDef("bms_cell_vol_diff_mv", "Battery Cell Voltage Spread", "mV", "voltage", "measurement", "mdi:arrow-expand-vertical", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
-    EcoFlowSensorDef("bms_remain_cap_mah", "Battery Remaining Capacity", "mAh", None, "measurement", "mdi:battery-clock", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
-    EcoFlowSensorDef("bms_full_cap_mah", "Battery Full Capacity", "mAh", None, "measurement", "mdi:battery", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
-    EcoFlowSensorDef("bms_design_cap_mah", "Battery Design Capacity", "mAh", None, "measurement", "mdi:battery-outline", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
-    EcoFlowSensorDef("bms_cell_count", "Battery Cell Count", None, None, None, "mdi:counter", "diagnostic", disabled_by_default=True),
-    EcoFlowSensorDef("bms_real_soh_pct", "Battery Real Health", "%", None, "measurement", "mdi:battery-heart-variant", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
-    EcoFlowSensorDef("bms_calendar_soh_pct", "Battery Calendar Health", "%", None, "measurement", "mdi:calendar-heart", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
-    EcoFlowSensorDef("bms_cycle_soh_pct", "Battery Cycle Health", "%", None, "measurement", "mdi:battery-sync-outline", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
-    EcoFlowSensorDef("bms_error_code", "Battery Error Code", None, None, None, "mdi:alert-circle-outline", "diagnostic", disabled_by_default=True),
+    EcoFlowSensorDef("bms_accu_chg_energy_kwh", "Battery Lifetime Charge Energy", "kWh", "energy", "total_increasing", "mdi:battery-charging", enhanced_only=True, suggested_display_precision=2),
+    EcoFlowSensorDef("bms_accu_dsg_energy_kwh", "Battery Lifetime Discharge Energy", "kWh", "energy", "total_increasing", "mdi:battery", enhanced_only=True, suggested_display_precision=2),
+    EcoFlowSensorDef("bms_voltage_v", "Battery Voltage", "V", "voltage", "measurement", "mdi:flash-triangle", "diagnostic", enhanced_only=True, suggested_display_precision=2),
+    EcoFlowSensorDef("bms_current_a", "Battery Current", "A", "current", "measurement", "mdi:current-dc", "diagnostic", enhanced_only=True, suggested_display_precision=2),
+    EcoFlowSensorDef("bms_temp_c", "Battery Temp", "°C", "temperature", "measurement", "mdi:thermometer", "diagnostic", enhanced_only=True, suggested_display_precision=0),
+    EcoFlowSensorDef("bms_max_cell_temp_c", "Battery Max Cell Temp", "°C", "temperature", "measurement", "mdi:thermometer-chevron-up", "diagnostic", enhanced_only=True, suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("bms_min_cell_temp_c", "Battery Min Cell Temp", "°C", "temperature", "measurement", "mdi:thermometer-chevron-down", "diagnostic", enhanced_only=True, suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("bms_max_mos_temp_c", "Battery Max MOSFET Temp", "°C", "temperature", "measurement", "mdi:thermometer-alert", "diagnostic", enhanced_only=True, suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("bms_min_mos_temp_c", "Battery Min MOSFET Temp", "°C", "temperature", "measurement", "mdi:thermometer-alert", "diagnostic", enhanced_only=True, suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("bms_max_cell_vol_mv", "Battery Max Cell Voltage", "mV", "voltage", "measurement", "mdi:sine-wave", "diagnostic", enhanced_only=True, suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("bms_min_cell_vol_mv", "Battery Min Cell Voltage", "mV", "voltage", "measurement", "mdi:sine-wave", "diagnostic", enhanced_only=True, suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("bms_cell_vol_diff_mv", "Battery Cell Voltage Spread", "mV", "voltage", "measurement", "mdi:arrow-expand-vertical", "diagnostic", enhanced_only=True, suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("bms_remain_cap_mah", "Battery Remaining Capacity", "mAh", None, "measurement", "mdi:battery-clock", "diagnostic", enhanced_only=True, suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("bms_full_cap_mah", "Battery Full Capacity", "mAh", None, "measurement", "mdi:battery", "diagnostic", enhanced_only=True, suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("bms_design_cap_mah", "Battery Design Capacity", "mAh", None, "measurement", "mdi:battery-outline", "diagnostic", enhanced_only=True, suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("bms_cell_count", "Battery Cell Count", None, None, None, "mdi:counter", "diagnostic", enhanced_only=True, disabled_by_default=True),
+    EcoFlowSensorDef("bms_real_soh_pct", "Battery Real Health", "%", None, "measurement", "mdi:battery-heart-variant", "diagnostic", enhanced_only=True, suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("bms_calendar_soh_pct", "Battery Calendar Health", "%", None, "measurement", "mdi:calendar-heart", "diagnostic", enhanced_only=True, suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("bms_cycle_soh_pct", "Battery Cycle Health", "%", None, "measurement", "mdi:battery-sync-outline", "diagnostic", enhanced_only=True, suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("bms_error_code", "Battery Error Code", None, None, None, "mdi:alert-circle-outline", "diagnostic", enhanced_only=True, disabled_by_default=True),
 ]
 
 # The Delta 3 controls read back from the same fields a binary sensor would

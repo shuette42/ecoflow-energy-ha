@@ -1085,3 +1085,64 @@ class TestUnknownProtoFieldDiagnostics:
         coordinator._record_unknown_fields({"_unknown_fields": "nonsense"})
         coordinator._record_unknown_fields({})
         assert coordinator.unknown_proto_fields == {}
+
+
+class TestEventLogSerialLeak:
+    """The third serial leak of the 1.16.0 cycle, and the pass that ends the class.
+
+    The set_reply topic is /open/<cert_account>/<sn>/set_reply, so every
+    device write used to put a full serial and the account identifier into
+    the event log - a section of a diagnostics download that users are asked
+    to attach to public issues, and one that no redaction pass touched.
+    """
+
+    async def test_set_reply_event_records_no_topic_identifiers(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """The point fix: the serial never enters the log in the first place."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        sn = MOCK_DELTA_DEVICE["sn"]
+
+        coordinator._on_mqtt_message(f"/open/9876543210123456/{sn}/set_reply", b"{}")
+
+        assert coordinator.event_log, "the acknowledgement must still be recorded"
+        detail = coordinator.event_log[-1]["detail"]
+        assert sn not in detail
+        assert "9876543210123456" not in detail
+
+    async def test_diagnostics_redact_an_event_log_serial(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+        mock_iot_api,
+        mock_mqtt_client,
+        mock_http_client,
+    ) -> None:
+        """The structural fix: a serial planted anywhere is caught on the way out.
+
+        Written against the section rather than the caller on purpose. The
+        point fix above closes the one path that is known today; this one has
+        to keep holding for a path somebody adds next year without thinking
+        about redaction at all.
+        """
+        standard_config_entry.add_to_hass(hass)
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.EcoFlowDeviceCoordinator.async_config_entry_first_refresh",
+            new_callable=AsyncMock,
+        ):
+            await hass.config_entries.async_setup(standard_config_entry.entry_id)
+            await hass.async_block_till_done()
+
+        coordinators = hass.data[DOMAIN][standard_config_entry.entry_id]
+        coordinator = next(iter(coordinators.values()))
+        sn = MOCK_DELTA_DEVICE["sn"]
+        coordinator._log_event("set_reply", f"topic=/open/acct/{sn}/set_reply")
+
+        result = await async_get_config_entry_diagnostics(hass, standard_config_entry)
+
+        assert sn not in json.dumps(result)

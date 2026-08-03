@@ -51,6 +51,8 @@ async def async_setup_entry(
             _get_binary_sensor_defs(coordinator.device_type), coordinator.device_sn
         )
         for defn in defs:
+            if defn.enhanced_only and not coordinator.enhanced_mode:
+                continue
             entities.append(EcoFlowBinarySensor(coordinator, defn))
 
     async_add_entities(entities)

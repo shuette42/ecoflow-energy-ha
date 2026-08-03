@@ -1,6 +1,8 @@
 """Tests for the shared raw-frame capture helpers."""
 
-from typing import Any
+import signal
+from contextlib import contextmanager
+from typing import Any, Iterator
 
 from ecoflow_energy.ecoflow.frame_capture import (
     TypedFrameBuffer,
@@ -23,6 +25,27 @@ def _entry(offset: float, **extra: Any) -> dict[str, Any]:
     span assertions below mean the same thing on every machine.
     """
     return {"ts": _T0 + offset, "topic": "property", "format": "proto", **extra}
+
+
+@contextmanager
+def _must_finish_within(seconds: int) -> Iterator[None]:
+    """Fail instead of hanging forever.
+
+    The defect these guard against is a loop that never terminates, so an
+    assertion cannot express it: without a deadline the test run itself
+    would hang and CI would time out with no clue which test did it.
+    """
+
+    def _expired(signum: int, frame: Any) -> None:
+        raise AssertionError(f"did not finish within {seconds}s")
+
+    previous = signal.signal(signal.SIGALRM, _expired)
+    signal.alarm(seconds)
+    try:
+        yield
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous)
 
 
 class TestSanitizeFrame:
@@ -371,6 +394,45 @@ class TestTypedFrameBuffer:
             buffer.add("property:proto/254.21", _entry(i * 2.0))
 
         assert buffer.stats()["span_s"] == 21_598.0
+
+    def test_a_clock_step_backwards_does_not_hang(self) -> None:
+        """A single NTP correction backwards used to hang the Paho thread.
+
+        A frame older than the bucket's first one took a negative slot, and
+        _thin_to_slots only compares each frame against its predecessor, so
+        the pattern [0, -1, 0] survived every doubling of the slot width and
+        the loop in _sample widened forever. These are the coordinator's own
+        buffer settings, where the budget leaves room for two samples.
+        """
+        buffer = TypedFrameBuffer(keys_max=20, per_key_max=3)
+
+        with _must_finish_within(5):
+            for offset in (0.0, -1.0, 0.5, 1.0, 1.5):
+                buffer.add("property:proto/254.21", _entry(offset))
+
+        assert len(buffer.frames()) <= 3
+
+    def test_an_oscillating_clock_does_not_hang(self) -> None:
+        """NTP flutter steps in both directions, repeatedly."""
+        buffer = TypedFrameBuffer(keys_max=12, per_key_max=10)
+
+        with _must_finish_within(5):
+            for i in range(200):
+                offset = float(i) + (-2.0 if i % 3 == 0 else 0.0)
+                buffer.add("property:proto/254.21", _entry(offset))
+
+        assert len(buffer.frames()) <= 10
+
+    def test_a_frame_older_than_the_first_shares_the_oldest_slot(self) -> None:
+        """Clamping keeps the early frame competing, it does not discard it."""
+        buffer = TypedFrameBuffer(keys_max=4, per_key_max=4)
+
+        for offset in (0.0, -5.0, 10.0, 20.0, 30.0, 40.0):
+            buffer.add("property:proto/254.21", _entry(offset))
+
+        kept = [frame["ts"] - _T0 for frame in buffer.frames()]
+        assert kept == sorted(kept)
+        assert kept[-1] == 40.0
 
     def test_an_empty_capture_reports_no_span(self) -> None:
         assert TypedFrameBuffer(keys_max=4, per_key_max=4).stats() == {

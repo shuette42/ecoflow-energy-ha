@@ -92,6 +92,12 @@ class EcoFlowNumber(
         self._restored_value: float | None = None
         self._last_written_value: float | None = None
         self._optimistic_lock_until: float = 0.0
+        # Seeded from the coordinator rather than from zero: an entity added
+        # after a rollback already happened must not read that rollback as
+        # one of its own.
+        self._seen_rollback_generation: int = getattr(
+            coordinator, "_powerocean_soc_rollback_generation", 0
+        )
 
     @property
     def available(self) -> bool:
@@ -130,7 +136,17 @@ class EcoFlowNumber(
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        if time.monotonic() < self._optimistic_lock_until:
+        rollback = getattr(
+            self.coordinator, "_powerocean_soc_rollback_generation", 0
+        )
+        if rollback != self._seen_rollback_generation:
+            # A write of ours was rejected and the coordinator restored the
+            # device value. Holding the optimistic lock now would keep showing
+            # the value the device refused, and on a dead connection no later
+            # update would ever correct it.
+            self._seen_rollback_generation = rollback
+            self._optimistic_lock_until = 0.0
+        elif time.monotonic() < self._optimistic_lock_until:
             return  # ignore incoming data during optimistic lock
         self._write_state_if_changed(self.native_value)
 

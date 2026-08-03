@@ -247,10 +247,13 @@ class TypedFrameBuffer:
     empties out within minutes, which is how the first attempt at this
     fix failed its own test.
 
-    Slots are measured on frame timestamps, which are wall clock. A clock
-    step backwards can only make a frame land in an earlier slot, which
-    at worst drops it; the ``latest`` slot keeps the capture current
-    either way.
+    Slots are measured on frame timestamps, which are wall clock, so an
+    NTP correction can hand a frame a timestamp older than the bucket's
+    first one. Such a frame shares slot 0 with the oldest frame instead of
+    getting a slot of its own below zero. That is not cosmetic: widening
+    merges neighbouring slots, and a below-zero slot sitting between two
+    zero slots is a pattern no widening can merge, so the loop that widens
+    until the budget holds would never reach it.
 
     Not thread-safe by itself, and ``add`` is not atomic the way appending
     to a deque is. Both callers write from the Paho thread and read on the
@@ -304,7 +307,22 @@ class TypedFrameBuffer:
                 if bucket.slot_s > 0
                 else max(span / self._samples_max, _MIN_SLOT_S)
             )
+            before = len(bucket.samples)
+            widest = max(
+                _entry_ts(item[1]) - bucket.first_ts for item in bucket.samples
+            )
             bucket.samples = _thin_to_slots(bucket.samples, bucket)
+            if len(bucket.samples) >= before and bucket.slot_s > max(
+                widest, _MIN_SLOT_S
+            ):
+                # Unreachable while slots stay non-negative and monotonic in
+                # the timestamp: once a slot is wider than the whole span,
+                # every sample falls into slot 0 and thinning leaves one. It
+                # stays as a backstop because the alternative is a loop that
+                # never ends, on the Paho thread and under the caller's lock,
+                # which stops ingest outright and blocks the next diagnostics
+                # read behind the same lock.
+                del bucket.samples[0]
 
     def frames(self) -> list[dict[str, Any]]:
         """Return every kept frame, oldest first.
@@ -359,7 +377,11 @@ def _slot(item: tuple[int, dict[str, Any]], bucket: _Bucket) -> int:
     if bucket.slot_s <= 0:
         # Every frame gets its own slot until the budget is first exceeded.
         return item[0]
-    return int((_entry_ts(item[1]) - bucket.first_ts) // bucket.slot_s)
+    # Clamped at zero: a frame older than the bucket's first one would other-
+    # wise take a negative slot, and _thin_to_slots compares each frame only
+    # against its predecessor, so [0, -1, 0] survives every doubling.
+    offset = _entry_ts(item[1]) - bucket.first_ts
+    return int(offset // bucket.slot_s) if offset > 0 else 0
 
 
 def _thin_to_slots(

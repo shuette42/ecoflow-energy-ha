@@ -86,7 +86,7 @@ async def async_get_config_entry_diagnostics(
     skipped_devices = hass.data.get(DATA_SKIPPED_DEVICES, {}).get(entry.entry_id, [])
     probes = hass.data.get(DATA_DEVICE_PROBES, {}).get(entry.entry_id, [])
 
-    return {
+    diagnostics = {
         "config_entry": {
             "auth_method": entry.data.get(CONF_AUTH_METHOD, AUTH_METHOD_DEVELOPER),
             "mode": entry.data.get(CONF_MODE, "standard"),
@@ -101,6 +101,13 @@ async def async_get_config_entry_diagnostics(
             hass, entry, skipped_devices, probes
         ),
     }
+    # One redaction pass over everything, on the way out. Each section used to
+    # redact itself, which works only for the paths somebody remembered: three
+    # leaks in one release cycle were all in a section next to the one being
+    # changed, and the last of them published the full serial and the account
+    # id of every device write through the event log. A section added later
+    # is covered here whether or not its author thought about it.
+    return _redact_serials(diagnostics)
 
 
 async def _skipped_devices_diagnostics(

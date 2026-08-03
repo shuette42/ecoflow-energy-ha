@@ -11,6 +11,7 @@ from typing import Any
 from ..const import (
     AUTH_METHOD_APP,
     POWEROCEAN_SOC_DEBOUNCE_S,
+    POWEROCEAN_SOC_STATE_KEYS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -88,6 +89,19 @@ class SetCommandsMixin:
             )
             return False
 
+        if self._powerocean_soc_pending is None:
+            # A window is opening. This is the last moment the device values
+            # are still in _device_data: the caller applies its optimistic
+            # value the instant this returns True, so a snapshot taken later
+            # - in the flush, as the first version of this did - captures the
+            # requested value and "rolling back" to it changes nothing.
+            self._powerocean_soc_generation += 1
+            self._powerocean_soc_before = {
+                key: self._device_data.get(key)
+                for key in POWEROCEAN_SOC_STATE_KEYS
+                if key in self._device_data
+            }
+
         self._powerocean_soc_pending = (backup_reserve_pct, solar_surplus_pct)
         if self._powerocean_soc_debounce_unsub is not None:
             self._powerocean_soc_debounce_unsub.cancel()
@@ -114,15 +128,16 @@ class SetCommandsMixin:
             return
         self._powerocean_soc_pending = None
         backup, solar = pending
-
-        optimistic_keys = ("ems_discharge_lower_limit_pct", "ems_app_surplus_pct")
-        before = {
-            key: self._device_data.get(key)
-            for key in optimistic_keys
-            if key in self._device_data
-        }
+        generation = self._powerocean_soc_generation
+        before = dict(self._powerocean_soc_before)
 
         if await self.async_set_powerocean_soc(backup, solar):
+            return
+
+        if generation != self._powerocean_soc_generation:
+            # A newer window opened while this write was in flight. Whatever
+            # it did is more recent than this failure, so undoing on top of it
+            # would replace a current value with a stale one.
             return
 
         # Undo the optimistic values so the sliders fall back to whatever
@@ -131,6 +146,10 @@ class SetCommandsMixin:
             self.set_device_value(key, value)
             if self.data is not None:
                 self.data[key] = value
+        # The entities hold a 5 s optimistic lock and would ignore the update
+        # below; on a dead connection no further update follows to correct
+        # them, so the failed value would simply stay on screen.
+        self._powerocean_soc_rollback_generation += 1
         self.async_update_listeners()
 
     async def async_set_powerocean_soc(
