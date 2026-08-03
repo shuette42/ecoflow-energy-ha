@@ -50,6 +50,16 @@ _DELTA3_KEYWORDS = ("delta 3", "delta3")
 _DELTA_KEYWORDS = ("delta",)
 _SMARTPLUG_KEYWORDS = ("smart plug", "smartplug")
 _STREAM_KEYWORDS = ("stream",)
+# Checked before every other list. These names contain a keyword from one of
+# the lists above as a substring while belonging to a different product line,
+# and the match is by substring with no word boundary. "PowerStream" contains
+# "stream", so a PowerStream microinverter was classified as a Stream battery
+# and given its full entity set, which then stayed empty for good: the device
+# connected, reported nothing this parser understands, and settled on stale
+# (#188). Landing in DEVICE_TYPE_UNKNOWN instead is the honest outcome - the
+# user gets the unsupported-device notice and can contribute a raw capture,
+# which is the path that leads to real support.
+_NOT_THIS_FAMILY_KEYWORDS = ("powerstream", "power stream")
 
 _SN_PREFIX_MAP = {
     "HJ31": DEVICE_TYPE_POWEROCEAN,
@@ -148,6 +158,9 @@ def get_device_type(product_name: str, sn: str = "") -> str:
     DEVICE_TYPE_SMARTPLUG, DEVICE_TYPE_STREAM, or DEVICE_TYPE_UNKNOWN.
     """
     name = (product_name or "").lower()
+    for kw in _NOT_THIS_FAMILY_KEYWORDS:
+        if kw in name:
+            return DEVICE_TYPE_UNKNOWN
     for kw in _POWEROCEAN_KEYWORDS:
         if kw in name:
             return DEVICE_TYPE_POWEROCEAN

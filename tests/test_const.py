@@ -49,6 +49,24 @@ class TestDeltaProfileRouting:
 
 
 class TestDeviceTypeRouting:
+    def test_powerstream_is_not_a_stream(self) -> None:
+        """"PowerStream" contains "stream", and the match is by substring.
+
+        A PowerStream microinverter was classified as a Stream battery and
+        given its whole entity set. It connected, reported nothing this
+        parser understands and settled on stale, so the owner saw a full
+        device with 54 readings that could never fill (#188). Unsupported is
+        the honest answer and the one that leads somewhere: it asks for a
+        capture instead of pretending.
+        """
+        assert get_device_type("PowerStream", "HW51TEST00000001") == "unknown"
+        assert get_device_type("Power Stream", "HW51TEST00000001") == "unknown"
+
+    def test_the_real_stream_family_still_routes(self) -> None:
+        """The guard above must not cost the devices it sits in front of."""
+        for name in ("Stream AC Pro", "Stream Micro", "Stream Ultra", "STREAM AC"):
+            assert get_device_type(name, "") == "stream", name
+
     def test_stream_detected_by_bk31_prefix(self) -> None:
         assert get_device_type("", "BK31_TEST_DEVICE") == "stream"
 
