@@ -119,9 +119,15 @@ class MqttIngestMixin:
             # /open/<cert_account>/<sn>/set_reply, so it carries the full
             # serial and the account identifier, and the event log goes into
             # a diagnostics download users are asked to attach to public
-            # issues. Only which kind of reply arrived is of any diagnostic
-            # use anyway.
-            self._log_event("set_reply", "topic=set_reply")
+            # issues.
+            #
+            # Which broker answered is kept, because that is the question this
+            # log exists for: a write goes out on the app channel, so an
+            # acknowledgement arriving only on the open channel is a finding
+            # rather than a detail. The channel is in the topic prefix and
+            # carries no identifier of its own.
+            channel = "app" if topic.startswith("/app/") else "open"
+            self._log_event("set_reply", f"topic={channel}/set_reply")
             if self.device_type == DEVICE_TYPE_DELTA3:
                 self._check_delta3_set_ack(payload)
             return
@@ -211,13 +217,13 @@ class MqttIngestMixin:
             return
         if ack.applied:
             _LOGGER.debug(
-                "Setting applied on %s (field %s)", self.device_sn, ack.action_id
+                "Setting applied on %s (field %s)", self.device_sn[:4], ack.action_id
             )
             return
         _LOGGER.warning(
             "Device %s rejected a setting (field %s, status %s) - "
             "the change was not applied",
-            self.device_sn,
+            self.device_sn[:4],
             ack.action_id,
             ack.config_ok,
         )
@@ -390,7 +396,7 @@ class MqttIngestMixin:
                 return self._parse_proto_device_data(payload, result.headers)
             except Exception:
                 _LOGGER.debug(
-                    "Protobuf decode error for %s", self.device_sn, exc_info=True
+                    "Protobuf decode error for %s", self.device_sn[:4], exc_info=True
                 )
             return None
 
@@ -415,7 +421,7 @@ class MqttIngestMixin:
         except Exception:
             _LOGGER.debug(
                 "PowerOcean protobuf decode error for %s",
-                self.device_sn,
+                self.device_sn[:4],
                 exc_info=True,
             )
             results = []
@@ -461,7 +467,7 @@ class MqttIngestMixin:
             except Exception:
                 _LOGGER.debug(
                     "PowerOcean protobuf decode error for %s (%s)",
-                    self.device_sn,
+                    self.device_sn[:4],
                     result.parse_path,
                     exc_info=True,
                 )

@@ -44,6 +44,17 @@ REDACTED = "**REDACTED**"
 # unanchored so serials embedded in longer strings are caught too.
 _SERIAL_RE = re.compile(r"[A-Z0-9]{15,}")
 
+# Values under these keys are captured protobuf frames, hex-encoded. They are
+# masked at capture time by sanitize_frame, which preserves length so the
+# frame stays decodable, and they must not be run through the pattern above a
+# second time. Hex digits 0-9 are inside [A-Z0-9], so any run of fifteen or
+# more hex characters that happens to carry no a-f matches it. Measured
+# against this repo's own fixtures when the whole payload was first passed
+# through redaction: 25 of 25 captured frames came out corrupted. That is the
+# artefact device support is built from, so destroying it is worse than the
+# leak the pass exists to prevent.
+_PRE_SANITIZED_KEYS = frozenset({"hex", "frame_hex"})
+
 
 def _redact_serials(value: Any) -> Any:
     """Redact values that look like EcoFlow serial numbers.
@@ -57,12 +68,16 @@ def _redact_serials(value: Any) -> Any:
     battery packs by serial in the key itself (``bp_addr.<SN>``), so redacting
     values alone would still publish a serial in a dump users are asked to
     attach to a public issue.
+
+    Captured frames are the one exception, see ``_PRE_SANITIZED_KEYS``.
     """
     if isinstance(value, str):
         return _SERIAL_RE.sub(REDACTED, value)
     if isinstance(value, dict):
         return {
-            _redact_serials(key): _redact_serials(item)
+            _redact_serials(key): (
+                item if key in _PRE_SANITIZED_KEYS else _redact_serials(item)
+            )
             for key, item in value.items()
         }
     if isinstance(value, list):

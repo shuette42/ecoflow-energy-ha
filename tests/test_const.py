@@ -63,7 +63,12 @@ class TestDeviceTypeRouting:
         assert get_device_type("Power Stream", "HW51TEST00000001") == "unknown"
 
     def test_the_real_stream_family_still_routes(self) -> None:
-        """The guard above must not cost the devices it sits in front of."""
+        """The guard above must not cost the devices it sits in front of.
+
+        A guard, not a regression detector: it passes on the code before the
+        PowerStream fix too. It is here so that a future addition to the
+        not-this-family list cannot quietly swallow a real Stream.
+        """
         for name in ("Stream AC Pro", "Stream Micro", "Stream Ultra", "STREAM AC"):
             assert get_device_type(name, "") == "stream", name
 
@@ -689,7 +694,12 @@ class TestModeReach:
         )
 
     def test_the_flag_is_not_applied_where_a_source_exists(self) -> None:
-        """The opposite error: hiding an entity that Standard Mode could fill."""
+        """The opposite error: hiding an entity that Standard Mode could fill.
+
+        A guard, not a regression detector: it passes before this change as
+        well, because the error it looks for was never made. It earns its
+        place by making the next batch of flags cheap to trust.
+        """
         wrongly_hidden: list[str] = []
 
         for list_name, defs, parser_file in _STANDARD_MODE_SOURCES:

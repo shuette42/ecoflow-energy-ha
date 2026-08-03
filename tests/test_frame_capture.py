@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from typing import Any, Iterator
 
 from ecoflow_energy.ecoflow.frame_capture import (
+    _slot,
     TypedFrameBuffer,
     build_frame_entry,
     frame_key,
@@ -413,26 +414,50 @@ class TestTypedFrameBuffer:
         assert len(buffer.frames()) <= 3
 
     def test_an_oscillating_clock_does_not_hang(self) -> None:
-        """NTP flutter steps in both directions, repeatedly."""
-        buffer = TypedFrameBuffer(keys_max=12, per_key_max=10)
+        """A guard, not a regression test - and labelled as one deliberately.
+
+        The proven regression detector is the single backwards step above,
+        which hangs on the unfixed code. This one does not: no oscillating
+        sequence tried against the pre-fix implementation reproduced the hang,
+        at either the coordinator's budget or the probe's. It stays because a
+        clock moving both ways repeatedly is what a machine without a real
+        time clock actually does, and a future change to the slot geometry
+        could break it where the single step still passes.
+
+        The offsets deliberately start above their own minimum: the first
+        frame sets ``first_ts``, so a sequence beginning at its lowest value
+        never produces a frame before the start of the recording at all.
+        """
+        buffer = TypedFrameBuffer(keys_max=20, per_key_max=3)
+        offsets = [0.0] + [(-1.0 if i % 2 else float(i)) for i in range(1, 40)]
+        assert min(offsets) < offsets[0], "frames must fall before first_ts"
 
         with _must_finish_within(5):
-            for i in range(200):
-                offset = float(i) + (-2.0 if i % 3 == 0 else 0.0)
+            for offset in offsets:
                 buffer.add("property:proto/254.21", _entry(offset))
 
-        assert len(buffer.frames()) <= 10
+        assert len(buffer.frames()) <= 3
 
     def test_a_frame_older_than_the_first_shares_the_oldest_slot(self) -> None:
-        """Clamping keeps the early frame competing, it does not discard it."""
-        buffer = TypedFrameBuffer(keys_max=4, per_key_max=4)
+        """The clamp itself, not just the absence of a hang.
 
-        for offset in (0.0, -5.0, 10.0, 20.0, 30.0, 40.0):
-            buffer.add("property:proto/254.21", _entry(offset))
+        Asserting only ordering would pass without the clamp: the point is
+        that a frame before the start of the recording lands in slot 0
+        alongside the oldest one instead of taking a slot of its own below
+        zero, which is the shape no widening can merge.
+        """
+        key = "property:proto/254.21"
+        buffer = TypedFrameBuffer(keys_max=4, per_key_max=3)
+        # Enough frames that the budget was exceeded at least once, so the
+        # bucket has a real slot width. Before that every frame gets its own
+        # slot by arrival order and the clamp has nothing to act on.
+        for offset in (0.0, 10.0, 20.0, 30.0, 40.0, 50.0):
+            buffer.add(key, _entry(offset))
+        bucket = buffer._buckets[key]
+        assert bucket.slot_s > 0, "precondition: slot geometry must be active"
 
-        kept = [frame["ts"] - _T0 for frame in buffer.frames()]
-        assert kept == sorted(kept)
-        assert kept[-1] == 40.0
+        assert _slot((998, _entry(0.0)), bucket) == 0
+        assert _slot((999, _entry(-5.0)), bucket) == 0
 
     def test_an_empty_capture_reports_no_span(self) -> None:
         assert TypedFrameBuffer(keys_max=4, per_key_max=4).stats() == {

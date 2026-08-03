@@ -33,10 +33,10 @@ class SetCommandsMixin:
         2 fields: charge upper limit and discharge lower limit.
         """
         if not self._enhanced_mode:
-            _LOGGER.warning("SoC limit SET requires Enhanced Mode (%s)", self.device_sn)
+            _LOGGER.warning("SoC limit SET requires Enhanced Mode (%s)", self.device_sn[:4])
             return False
         if self._mqtt_client is None or not self._mqtt_client.is_connected():
-            _LOGGER.warning("Cannot send SoC limits - MQTT not connected (%s)", self.device_sn)
+            _LOGGER.warning("Cannot send SoC limits - MQTT not connected (%s)", self.device_sn[:4])
             return False
 
         from ..ecoflow.energy_stream import build_soc_limit_set_payload
@@ -48,11 +48,11 @@ class SetCommandsMixin:
         if ok:
             _LOGGER.debug(
                 "SoC limits sent: max=%d, min=%d (%s)",
-                max_charge_soc, min_discharge_soc, self.device_sn,
+                max_charge_soc, min_discharge_soc, self.device_sn[:4],
             )
             self._log_event("set_soc_limits", f"max={max_charge_soc}, min={min_discharge_soc}")
         else:
-            _LOGGER.warning("SoC limits SET failed (%s)", self.device_sn)
+            _LOGGER.warning("SoC limits SET failed (%s)", self.device_sn[:4])
             self._log_event("set_soc_limits_fail", f"max={max_charge_soc}, min={min_discharge_soc}")
         return ok
 
@@ -78,7 +78,7 @@ class SetCommandsMixin:
         """
         if not self._enhanced_mode:
             _LOGGER.warning(
-                "PowerOcean SoC SET requires Enhanced Mode (%s)", self.device_sn,
+                "PowerOcean SoC SET requires Enhanced Mode (%s)", self.device_sn[:4],
             )
             return False
         if backup_reserve_pct > solar_surplus_pct:
@@ -89,13 +89,19 @@ class SetCommandsMixin:
             )
             return False
 
-        if self._powerocean_soc_pending is None:
-            # A window is opening. This is the last moment the device values
+        if not self._powerocean_soc_cycle_open:
+            # A cycle is opening. This is the last moment the device values
             # are still in _device_data: the caller applies its optimistic
             # value the instant this returns True, so a snapshot taken later
             # - in the flush, as the first version of this did - captures the
             # requested value and "rolling back" to it changes nothing.
+            #
+            # The gate is the open cycle, not the pending value. The flush
+            # clears the pending value when it starts, so a drag arriving
+            # while its write is still in flight would look like a fresh
+            # window and snapshot the failing write's optimistic values.
             self._powerocean_soc_generation += 1
+            self._powerocean_soc_cycle_open = True
             self._powerocean_soc_before = {
                 key: self._device_data.get(key)
                 for key in POWEROCEAN_SOC_STATE_KEYS
@@ -131,21 +137,48 @@ class SetCommandsMixin:
         generation = self._powerocean_soc_generation
         before = dict(self._powerocean_soc_before)
 
-        if await self.async_set_powerocean_soc(backup, solar):
-            return
+        try:
+            delivered = await self.async_set_powerocean_soc(backup, solar)
+        except Exception:  # noqa: BLE001
+            # Anything unexpected here would otherwise skip the rollback and
+            # leave the optimistic value standing, which is the failure this
+            # whole path exists to prevent.
+            _LOGGER.debug("PowerOcean SoC flush raised", exc_info=True)
+            delivered = False
 
         if generation != self._powerocean_soc_generation:
-            # A newer window opened while this write was in flight. Whatever
-            # it did is more recent than this failure, so undoing on top of it
-            # would replace a current value with a stale one.
+            # A newer cycle opened while this write was in flight. It owns the
+            # outcome now: undoing on top of it would replace a current value
+            # with a stale one, and closing its cycle would let the next drag
+            # snapshot this write's optimistic values.
+            return
+
+        if delivered:
+            # The device took these, so they are what a later failure has to
+            # fall back to. Reading _device_data again would be wrong when a
+            # newer drag has already written its own optimistic value there.
+            self._powerocean_soc_before = {
+                POWEROCEAN_SOC_STATE_KEYS[0]: backup,
+                POWEROCEAN_SOC_STATE_KEYS[1]: solar,
+            }
+            self._powerocean_soc_cycle_open = False
             return
 
         # Undo the optimistic values so the sliders fall back to whatever
         # the device last reported rather than to the request that failed.
-        for key, value in before.items():
-            self.set_device_value(key, value)
-            if self.data is not None:
-                self.data[key] = value
+        for key in POWEROCEAN_SOC_STATE_KEYS:
+            if key in before:
+                self.set_device_value(key, before[key])
+                if self.data is not None:
+                    self.data[key] = before[key]
+            else:
+                # The device had never reported this key, so there is nothing
+                # to fall back to. Dropping it shows unknown, which is true;
+                # leaving it would publish the value the device refused.
+                self._device_data.pop(key, None)
+                if self.data is not None:
+                    self.data.pop(key, None)
+        self._powerocean_soc_cycle_open = False
         # The entities hold a 5 s optimistic lock and would ignore the update
         # below; on a dead connection no further update follows to correct
         # them, so the failed value would simply stay on screen.
@@ -164,10 +197,10 @@ class SetCommandsMixin:
         and is silently ignored by the device for backup-reserve changes.
         """
         if not self._enhanced_mode:
-            _LOGGER.warning("PowerOcean SoC SET requires Enhanced Mode (%s)", self.device_sn)
+            _LOGGER.warning("PowerOcean SoC SET requires Enhanced Mode (%s)", self.device_sn[:4])
             return False
         if self._mqtt_client is None or not self._mqtt_client.is_connected():
-            _LOGGER.warning("Cannot send PowerOcean SoC - MQTT not connected (%s)", self.device_sn)
+            _LOGGER.warning("Cannot send PowerOcean SoC - MQTT not connected (%s)", self.device_sn[:4])
             return False
         if backup_reserve_pct > solar_surplus_pct:
             _LOGGER.warning(
@@ -189,10 +222,10 @@ class SetCommandsMixin:
         )
         label = f"backup={backup_reserve_pct} solar={solar_surplus_pct}"
         if ok:
-            _LOGGER.debug("PowerOcean SoC sent: %s (%s)", label, self.device_sn)
+            _LOGGER.debug("PowerOcean SoC sent: %s (%s)", label, self.device_sn[:4])
             self._log_event("set_powerocean_soc", label)
         else:
-            _LOGGER.warning("PowerOcean SoC SET failed: %s (%s)", label, self.device_sn)
+            _LOGGER.warning("PowerOcean SoC SET failed: %s (%s)", label, self.device_sn[:4])
             self._log_event("set_powerocean_soc_fail", label)
         return ok
 
@@ -205,12 +238,12 @@ class SetCommandsMixin:
         """
         if not self._enhanced_mode:
             _LOGGER.warning(
-                "Work-mode SET requires Enhanced Mode (%s)", self.device_sn,
+                "Work-mode SET requires Enhanced Mode (%s)", self.device_sn[:4],
             )
             return False
         if self._mqtt_client is None or not self._mqtt_client.is_connected():
             _LOGGER.warning(
-                "Cannot send work-mode - MQTT not connected (%s)", self.device_sn,
+                "Cannot send work-mode - MQTT not connected (%s)", self.device_sn[:4],
             )
             return False
 
@@ -221,10 +254,10 @@ class SetCommandsMixin:
             partial(self._mqtt_client.send_proto_set, payload, wait=True),
         )
         if ok:
-            _LOGGER.debug("Work-mode sent: %d (%s)", work_mode, self.device_sn)
+            _LOGGER.debug("Work-mode sent: %d (%s)", work_mode, self.device_sn[:4])
             self._log_event("set_work_mode", str(work_mode))
         else:
-            _LOGGER.warning("Work-mode SET failed: %d (%s)", work_mode, self.device_sn)
+            _LOGGER.warning("Work-mode SET failed: %d (%s)", work_mode, self.device_sn[:4])
             self._log_event("set_work_mode_fail", str(work_mode))
         return ok
 
@@ -233,17 +266,17 @@ class SetCommandsMixin:
     ) -> bool:
         """Send a protobuf SET command via WSS MQTT."""
         if self._mqtt_client is None or not self._mqtt_client.is_connected():
-            _LOGGER.debug("Cannot send proto SET (%s) - MQTT not connected (%s)", label, self.device_sn)
+            _LOGGER.debug("Cannot send proto SET (%s) - MQTT not connected (%s)", label, self.device_sn[:4])
             return False
 
         ok = await self.hass.async_add_executor_job(
             partial(self._mqtt_client.send_proto_set, payload, wait=True),
         )
         if ok:
-            _LOGGER.debug("Proto SET sent: %s (%s)", label, self.device_sn)
+            _LOGGER.debug("Proto SET sent: %s (%s)", label, self.device_sn[:4])
             self._log_event(f"proto_set_{label}", "ok")
         else:
-            _LOGGER.debug("Proto SET not delivered: %s (%s)", label, self.device_sn)
+            _LOGGER.debug("Proto SET not delivered: %s (%s)", label, self.device_sn[:4])
             self._log_event(f"proto_set_{label}_fail", "")
         return ok
 
@@ -262,18 +295,18 @@ class SetCommandsMixin:
             _LOGGER.warning(
                 "Cannot apply setting for %s - no write channel available "
                 "(no HTTP client for this entry)",
-                self.device_sn,
+                self.device_sn[:4],
             )
             return False
 
         result = await self._http_client.set_quota(command)
         params = command.get("params", {})
         if result is None:
-            _LOGGER.warning("SET failed for %s: no response", self.device_sn)
+            _LOGGER.warning("SET failed for %s: no response", self.device_sn[:4])
             self._log_event("set_cmd_fail", f"params={list(params)[:3]}")
             return False
 
-        _LOGGER.debug("SET applied for %s: %s", self.device_sn, params)
+        _LOGGER.debug("SET applied for %s: %s", self.device_sn[:4], params)
         self._log_event("set_cmd", f"params={list(params)[:3]}")
         # The device needs a moment before the change shows up in the quota.
         # The entity holds an optimistic value until then, so a plain refresh
@@ -289,7 +322,7 @@ class SetCommandsMixin:
         if self._mqtt_client is None or not self._mqtt_client.is_connected():
             _LOGGER.warning(
                 "Cannot apply setting for %s - device connection is down",
-                self.device_sn,
+                self.device_sn[:4],
             )
             self._log_event("set_cmd_fail", f"params={list(params)[:3]}")
             return False
@@ -298,7 +331,7 @@ class SetCommandsMixin:
         if payload is None:
             _LOGGER.warning(
                 "Cannot apply setting for %s - unsupported control %s",
-                self.device_sn,
+                self.device_sn[:4],
                 list(params)[:3],
             )
             self._log_event("set_cmd_fail", f"params={list(params)[:3]}")
@@ -308,11 +341,11 @@ class SetCommandsMixin:
             partial(self._mqtt_client.send_proto_set, payload, wait=True),
         )
         if not ok:
-            _LOGGER.warning("SET failed for %s: not sent", self.device_sn)
+            _LOGGER.warning("SET failed for %s: not sent", self.device_sn[:4])
             self._log_event("set_cmd_fail", f"params={list(params)[:3]}")
             return False
 
-        _LOGGER.debug("SET sent for %s: %s", self.device_sn, params)
+        _LOGGER.debug("SET sent for %s: %s", self.device_sn[:4], params)
         self._log_event("set_cmd", f"params={list(params)[:3]}")
         # The device echoes the new value on its own report stream, so the
         # entity only has to hold its optimistic value until then.
@@ -326,7 +359,7 @@ class SetCommandsMixin:
         Payload: {"id": <ts>, "version": "1.0", ...command}
         """
         if self._mqtt_client is None or not self._mqtt_client.is_connected():
-            _LOGGER.debug("Cannot send SET command - MQTT not connected (%s)", self.device_sn)
+            _LOGGER.debug("Cannot send SET command - MQTT not connected (%s)", self.device_sn[:4])
             return False
 
         msg_id = int(time.time() * 1000) % 1_000_000

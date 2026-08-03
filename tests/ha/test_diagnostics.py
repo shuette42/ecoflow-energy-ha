@@ -29,6 +29,7 @@ from custom_components.ecoflow_energy.diagnostics import (
     async_get_config_entry_diagnostics,
 )
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
+from custom_components.ecoflow_energy.ecoflow.frame_capture import build_frame_entry
 
 from .conftest import (
     MOCK_DELTA_DEVICE,
@@ -1146,3 +1147,64 @@ class TestEventLogSerialLeak:
         result = await async_get_config_entry_diagnostics(hass, standard_config_entry)
 
         assert sn not in json.dumps(result)
+
+
+class TestRedactionDoesNotEatTheEvidence:
+    """The redaction pass must not destroy what diagnostics exist for.
+
+    Running the whole payload through serial redaction looked safe: hex dumps
+    are lowercase and the pattern wants uppercase. But hex digits 0-9 are
+    inside [A-Z0-9], so any run of fifteen or more hex characters carrying no
+    a-f matches it. Against this repo's own fixtures that corrupted 25 of 25
+    captured frames - the artefact every device added this year was built
+    from, quietly replaced by REDACTED.
+    """
+
+    def test_a_captured_frame_survives_the_pass(self) -> None:
+        # Long enough to contain digit-only runs, which is what triggered it.
+        frame_hex = "0a370a12c7768a219733bf641062af33b754414113301002182020012801"
+        payload = {"raw_frames": {"frames": [{"hex": frame_hex, "topic": "property"}]}}
+
+        result = _redact_serials(payload)
+
+        assert result["raw_frames"]["frames"][0]["hex"] == frame_hex
+
+    def test_a_frame_carrying_a_masked_serial_stays_decodable(self) -> None:
+        """The guaranteed case, not the statistical one.
+
+        sanitize_frame masks a serial with a run of 0x58 bytes, which is "58"
+        per byte in hex: a 16 character serial becomes 32 consecutive digits
+        and matches the pattern every single time. Nearly every PowerOcean
+        frame carries the serial, so this was not an edge case for them. What
+        came out was not even valid hex, and the byte offsets that
+        sanitize_frame deliberately preserves were gone with it.
+        """
+        sn = "HJ31TEST00000001"
+        payload = b"\x0a\x30\x12\x10" + sn.encode() + b"\x1a\x08\x08\x01\x10\x02"
+        entry = build_frame_entry(
+            "/app/device/property/x", payload, [sn], 512, parsed_keys=3
+        )
+        original = entry["hex"]
+
+        result = _redact_serials({"raw_frames": {"frames": [entry]}})
+        kept = result["raw_frames"]["frames"][0]["hex"]
+
+        assert kept == original
+        assert len(kept) == len(original)
+        bytes.fromhex(kept)  # raises if the pass broke the encoding
+        # The serial is gone because capture masked it, not because of this pass.
+        assert sn not in json.dumps(result)
+
+    def test_a_serial_beside_a_frame_is_still_redacted(self) -> None:
+        """The exemption is for the frame value, not for its neighbours."""
+        payload = {
+            "raw_frames": {
+                "frames": [
+                    {"hex": "0a370a12c7768a2197331002182020012801", "sn": "HJ31TEST00000001"}
+                ]
+            }
+        }
+
+        result = _redact_serials(payload)
+
+        assert "HJ31TEST00000001" not in json.dumps(result)
