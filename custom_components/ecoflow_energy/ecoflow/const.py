@@ -54,6 +54,13 @@ _STREAM_KEYWORDS = ("stream",)
 _SN_PREFIX_MAP = {
     "HJ31": DEVICE_TYPE_POWEROCEAN,
     "HJ32": DEVICE_TYPE_POWEROCEAN,
+    # PowerOcean gateway variant (#165). Unlike every other prefix here this
+    # one rests on a third-party report rather than on a capture from a user
+    # of this integration, so the field layout is assumed rather than shown.
+    # Routing it costs nothing if the assumption holds and produces a
+    # diagnosable device if it does not - which beats "unsupported device"
+    # either way, because that state carries no information at all.
+    "HJ35": DEVICE_TYPE_POWEROCEAN,
     # European PowerOcean variant (#89): verified against live hardware in
     # Enhanced mode - telemetry matches the EcoFlow app (grid, battery, MPPT).
     "J32D": DEVICE_TYPE_POWEROCEAN,

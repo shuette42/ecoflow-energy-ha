@@ -2,7 +2,7 @@
 
 Full list of all entities created for PowerOcean devices.
 
-**Serial prefixes:** `HJ31`, `HJ32` (standard) · `J32D`, `J32E` (European variants) · `R371`, `R374`, `HJ3C` (PowerOcean Plus). All share the entity set below.
+**Serial prefixes:** `HJ31`, `HJ32`, `HJ35` (standard) · `J32D`, `J32E` (European variants) · `R371`, `R374`, `HJ3C` (PowerOcean Plus). All share the entity set below.
 
 > **Note:** The European variants (`J32D`, `J32E`) and the PowerOcean Plus units (`R371`, `R374`, `HJ3C`) are currently not exposed through the EcoFlow Developer API and therefore require Enhanced Mode. In Standard Mode these devices report error 1006 and all entities stay unavailable. Single-phase variants (`J32E`) report only the phases that are physically present; the remaining phase entities stay empty.
 

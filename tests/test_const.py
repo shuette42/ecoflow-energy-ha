@@ -86,6 +86,11 @@ class TestDeviceTypeRouting:
         assert get_device_type("", "R374TEST00000001") == "powerocean"
         assert get_device_type("", "HJ3CTEST00000001") == "powerocean"
 
+    def test_hj35_powerocean_by_sn_prefix(self) -> None:
+        # PowerOcean gateway variant (#165), routed on a third-party report
+        # rather than a capture from an owner of this integration.
+        assert get_device_type("", "HJ35TEST00000001") == "powerocean"
+
     def test_delta3_by_sn_prefix(self) -> None:
         assert get_device_type("", "D3M1TEST00000001") == "delta3"
 
