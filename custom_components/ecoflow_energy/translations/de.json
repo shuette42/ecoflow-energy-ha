@@ -1515,6 +1515,9 @@
       },
       "min_discharge_soc": {
         "name": "Entladegrenze"
+      },
+      "ac_charge_power_limit": {
+        "name": "AC-Ladeleistung"
       }
     },
     "select": {
@@ -1523,6 +1526,14 @@
         "state": {
           "self_use": "Eigenstromversorgung",
           "ai_schedule": "Intelligenter Modus"
+        }
+      },
+      "ac_charge_mode": {
+        "name": "AC-Lademodus",
+        "state": {
+          "self_def_pow": "Benutzerdefiniert",
+          "bat_optimal_pow": "Batterieoptimiert",
+          "silence": "Leise"
         }
       }
     }

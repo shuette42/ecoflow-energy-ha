@@ -100,6 +100,18 @@ _PROTO_ONLY_FIELDS: dict[str, str] = {
     "ac_in_chg_pow_max": "ac_charge_power_limit_w",
 }
 
+# AC charge mode, same push-only reach as the fields above. The wire value is
+# the AC_IN_CHG_MODE enum; it is translated here rather than in the entity so
+# the sensor key carries a label instead of a number that means nothing on its
+# own. An unlisted value is dropped: a select showing an option the device did
+# not report is worse than one showing nothing.
+_AC_CHARGE_MODE_KEY = "ac_charge_mode"
+_AC_CHARGE_MODES: dict[int, str] = {
+    0: "self_def_pow",
+    1: "bat_optimal_pow",
+    2: "silence",
+}
+
 
 def _translate_display_property(fields: dict[str, Any]) -> dict[str, Any]:
     """Map decoded status-frame fields onto their HTTP quota spelling."""
@@ -163,6 +175,12 @@ def _push_only_values(fields: dict[str, Any]) -> dict[str, Any]:
         value = fields.get(proto_key)
         if isinstance(value, (int, float)) and not isinstance(value, bool):
             result[sensor_key] = round(float(value))
+
+    mode = fields.get("ac_in_chg_mode")
+    if isinstance(mode, int) and not isinstance(mode, bool):
+        label = _AC_CHARGE_MODES.get(mode)
+        if label is not None:
+            result[_AC_CHARGE_MODE_KEY] = label
     return result
 
 

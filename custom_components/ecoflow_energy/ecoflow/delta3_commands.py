@@ -78,12 +78,32 @@ DELTA3_NUMBER_PARAMS: dict[str, Delta3Number] = {
     "backup_reserve_soc": Delta3Number("cfgBackupReverseSoc", 0, 50, 102),
     "max_charge_soc": Delta3Number("cfgMaxChgSoc", 50, 100, 33),
     "min_discharge_soc": Delta3Number("cfgMinDsgSoc", 0, 30, 34),
+    # AC charge power. The bounds are the app slider's own, read off a D3M1
+    # (#111), and confirmed by the read-back sitting at exactly 200 on a second
+    # unit. They are not treated as hard truth: a different firmware may allow
+    # more, so a device rejection (ConfigWriteAck) stays the authority.
+    "ac_charge_power_limit": Delta3Number("cfgPlugInInfoAcInChgPowMax", 200, 2400, 54),
+}
+
+# Select controls: entity key -> (params key, ConfigWrite field, option map).
+# The option labels are the ones the parser produces from AC_IN_CHG_MODE, so
+# read-back and write speak the same vocabulary.
+DELTA3_SELECT_PARAMS: dict[str, tuple[str, int, dict[str, int]]] = {
+    "ac_charge_mode": (
+        "cfgAcInChgMode",
+        125,
+        {"self_def_pow": 0, "bat_optimal_pow": 1, "silence": 2},
+    ),
 }
 
 # Reverse lookup for the binary path: JSON params key -> ConfigWrite field.
 _PARAMS_KEY_TO_FIELD: dict[str, int] = {
     **{entry.params_key: entry.config_field for entry in DELTA3_SWITCH_PARAMS.values()},
     **{entry.params_key: entry.config_field for entry in DELTA3_NUMBER_PARAMS.values()},
+    **{
+        params_key: config_field
+        for params_key, config_field, _ in DELTA3_SELECT_PARAMS.values()
+    },
 }
 
 # ConfigWriteAck: cmd_func 254 / cmd_id 18, config_ok == 1 means "applied".
@@ -133,6 +153,22 @@ def build_number_command(entity_key: str, value: float) -> dict[str, Any] | None
         return None
     clamped = max(entry.minimum, min(entry.maximum, int(round(value))))
     return _envelope({entry.params_key: clamped})
+
+
+def build_select_command(entity_key: str, option: str) -> dict[str, Any] | None:
+    """Build a SET command for a Delta 3 select.
+
+    Returns None for an unknown key or an option the device has no value for,
+    so the caller reports a failure instead of sending something arbitrary.
+    """
+    entry = DELTA3_SELECT_PARAMS.get(entity_key)
+    if entry is None:
+        return None
+    params_key, _, options = entry
+    wire_value = options.get(option)
+    if wire_value is None:
+        return None
+    return _envelope({params_key: wire_value})
 
 
 def build_proto_command(

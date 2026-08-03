@@ -3,7 +3,7 @@
 Full list of all entities created for Delta 3 devices. The entity set is shared
 across the generation: Delta 3 Max Plus (`D3M1`, `P321`) and base DELTA 3 (`P231`).
 
-**Totals:** 47 sensors, 7 switches, 3 numbers
+**Totals:** 47 sensors, 7 switches, 4 numbers, 1 select
 
 > Entities marked with *diagnostic* appear in the diagnostics section of the device page.
 
@@ -108,12 +108,22 @@ be used in the Energy Dashboard without accumulating drift.
 | Backup Reserve Level | % | 0 - 50 | 1 | Reserve SoC kept for backup |
 | Charge Limit | % | 50 - 100 | 1 | Stop charging at this level |
 | Discharge Limit | % | 0 - 30 | 1 | Stop discharging at this level |
+| AC Charge Power | W | 200 - 2400 | 100 | How fast to charge from the grid, the same setting as the charge speed slider in the EcoFlow app |
+
+---
+
+## Selects
+
+| Entity | Options | Description |
+|:---|:---|:---|
+| AC Charge Mode | Custom power, Battery optimised, Silent | How the device decides its grid charging rate. The app presents the charge power slider above under Custom power, so that is the mode to use if you want the wattage honoured. The device accepts and reports a new charge power in the other two modes as well, and whether it follows it there has not been measured |
 
 ---
 
 ## Notes
 
-- **Standard Mode (~30 s)** delivers all sensors and controls. Commands go through the official HTTP endpoint.
+- **Standard Mode (~30 s)** delivers all sensors and controls except AC Charge Power and AC Charge Mode. Commands go through the official HTTP endpoint.
+- **AC Charge Power and AC Charge Mode need EcoFlow account sign-in.** The device reports both only on the live connection, never in the polled data, so with developer keys there would be nothing to read the setting back from. A control that cannot confirm what the device actually did is not a control, so these two are not created in that mode.
 - **Enhanced Mode (~2 s)** delivers the same sensors with the same entity IDs, so switching modes keeps history and dashboards intact. Switches and numbers work here as well: commands travel on the live device connection instead of the HTTP endpoint, and the device confirms each one.
 - Energy Dashboard sensors (solar, solar 2, AC input, total output) are integrated from the live power telemetry, since the device exposes no native energy counters. Values accumulate over time and start at 0 on a fresh install.
 - Remaining charge and discharge times are only reported while the battery is actually charging or discharging. The device keeps both values populated at all times and parks the inactive one on a placeholder, which would otherwise show a runtime of several hundred hours on an idle unit.

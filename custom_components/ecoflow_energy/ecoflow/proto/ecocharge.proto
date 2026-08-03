@@ -399,6 +399,12 @@ message Delta3DisplayProperty {
   // put. App slider range is 200 W to 2400 W.
   oneof _ac_in_chg_pow_max { uint32 ac_in_chg_pow_max = 209; }
 
+  // AC charge mode: 0 = custom power, 1 = battery-optimised, 2 = silent.
+  // The read-back for the charge speed slider above: the slider only takes
+  // effect in custom mode, so the two belong together. Observed at 0 on a
+  // DELTA 3 Max Plus whose app sat in custom mode with an active slider.
+  oneof _ac_in_chg_mode { uint32 ac_in_chg_mode = 124; }
+
   // --- Switch / flag state ---
   oneof _energy_backup_en { bool energy_backup_en = 7; }
   oneof _en_beep { bool en_beep = 195; }

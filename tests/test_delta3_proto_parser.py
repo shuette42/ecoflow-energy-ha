@@ -514,3 +514,53 @@ class TestAcChargePowerLimit:
         # The same frame carries the ordinary telemetry, which is what makes
         # this device a Delta 3 rather than a new device class.
         assert "cms_batt_soc" in parsed or "soc_pct" in parsed
+
+
+class TestAcChargeMode:
+    """Field 124 of the status frame, the read-back for the charge mode.
+
+    The mode decides whether the charge power above does anything, so the two
+    were shipped together. Read off a DELTA 3 Max Plus that reported 0 while
+    its app sat in custom mode with an active slider.
+    """
+
+    def test_each_mode_reaches_the_sensor_key(self):
+        for wire, label in ((0, "self_def_pow"), (1, "bat_optimal_pow"), (2, "silence")):
+            display = _build_display_message()
+            display.ac_in_chg_mode = wire
+
+            parsed = parse_delta3_display_property(
+                {"ac_in_chg_mode": display.ac_in_chg_mode}
+            )
+
+            assert parsed["ac_charge_mode"] == label
+
+    def test_zero_survives_the_proto3_omission(self):
+        """Custom mode is the zero value, and it is the mode that matters."""
+        display = _build_display_message()
+        display.ac_in_chg_mode = 0
+
+        decoded = type(display).FromString(display.SerializeToString())
+
+        assert decoded.HasField("ac_in_chg_mode")
+        assert parse_delta3_display_property(
+            {"ac_in_chg_mode": decoded.ac_in_chg_mode}
+        )["ac_charge_mode"] == "self_def_pow"
+
+    def test_unknown_mode_writes_nothing(self):
+        """A select showing an option the device did not report is worse than
+        one showing nothing."""
+        parsed = parse_delta3_display_property({"ac_in_chg_mode": 7})
+
+        assert "ac_charge_mode" not in parsed
+
+    def test_absent_field_writes_nothing(self):
+        parsed = parse_delta3_display_property({"pow_in_sum_w": 12.0})
+
+        assert "ac_charge_mode" not in parsed
+
+    def test_not_claimed_as_a_quota_key(self):
+        from ecoflow_energy.ecoflow.parsers.delta3_http import DELTA3_HTTP_FIELD_MAP
+
+        assert "acInChgMode" not in DELTA3_HTTP_FIELD_MAP
+        assert "ac_charge_mode" not in DELTA3_HTTP_FIELD_MAP.values()

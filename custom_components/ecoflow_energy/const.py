@@ -975,6 +975,26 @@ DELTA3_NUMBERS: list[EcoFlowNumberDef] = [
     EcoFlowNumberDef("backup_reserve_soc", "Backup Reserve Level", "backup_reserve_soc_pct", "%", "mdi:battery-lock", 0, 50, 1),
     EcoFlowNumberDef("max_charge_soc", "Charge Limit", "max_charge_soc_pct", "%", "mdi:battery-charging-100", 50, 100, 1),
     EcoFlowNumberDef("min_discharge_soc", "Discharge Limit", "min_discharge_soc_pct", "%", "mdi:battery-alert-variant-outline", 0, 30, 1),
+    # AC charge power. Push path only: the polled quota never carries this
+    # field, so it exists on account sign-in and nowhere else. Ships with the
+    # charge mode below because the app puts this slider under its custom
+    # power mode; a write was accepted and reported back in battery-optimised
+    # mode too, so "only works in custom mode" is the app's framing rather
+    # than a measured property of the device.
+    EcoFlowNumberDef("ac_charge_power_limit", "AC Charge Power", "ac_charge_power_limit_w", "W", "mdi:lightning-bolt", 200, 2400, 100, enhanced_only=True),
+]
+
+# The mode the app pairs with the charge power above. Verified end to end on a
+# DELTA 3 Max Plus: written, reported back by the device, and reversible.
+DELTA3_SELECTS: list[EcoFlowSelectDef] = [
+    EcoFlowSelectDef(
+        "ac_charge_mode",
+        "AC Charge Mode",
+        "ac_charge_mode",
+        ("self_def_pow", "bat_optimal_pow", "silence"),
+        icon="mdi:battery-charging-medium",
+        enhanced_only=True,
+    ),
 ]
 
 

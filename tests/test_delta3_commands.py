@@ -11,9 +11,11 @@ import pytest
 
 from custom_components.ecoflow_energy.ecoflow.delta3_commands import (
     DELTA3_NUMBER_PARAMS,
+    DELTA3_SELECT_PARAMS,
     DELTA3_SWITCH_PARAMS,
     build_number_command,
     build_proto_command,
+    build_select_command,
     build_switch_command,
     parse_config_write_ack,
 )
@@ -226,6 +228,11 @@ class TestProtoCommands:
             assert build_proto_command(build_switch_command(key, True), self.SN)
         for key in DELTA3_NUMBER_PARAMS:
             assert build_proto_command(build_number_command(key, 10), self.SN)
+        for key, (_, _, options) in DELTA3_SELECT_PARAMS.items():
+            first_option = next(iter(options))
+            assert build_proto_command(
+                build_select_command(key, first_option), self.SN
+            )
 
     def test_unknown_parameter_returns_none(self) -> None:
         command = {"cmdId": 17, "params": {"cfgSomethingElse": 1}}
@@ -235,6 +242,60 @@ class TestProtoCommands:
         """One frame carries exactly one setting."""
         command = {"cmdId": 17, "params": {"cfgBeepEn": True, "cfgXboostEn": True}}
         assert build_proto_command(command, self.SN) is None
+
+
+class TestAcCharging:
+    """The AC charge power slider and the mode it depends on.
+
+    Bounds come from the app slider on a D3M1 (#111). They are pinned here
+    because a wider range is not a UI detail: the number reaches the device
+    unchanged, and the device is the only thing that can refuse it.
+    """
+
+    SN = "TEST1234567890"
+
+    def test_power_carries_the_documented_field(self) -> None:
+        command = build_number_command("ac_charge_power_limit", 1200)
+        assert command["params"] == {"cfgPlugInInfoAcInChgPowMax": 1200}
+        assert DELTA3_NUMBER_PARAMS["ac_charge_power_limit"].config_field == 54
+
+    @pytest.mark.parametrize(
+        ("requested", "expected"),
+        [(0, 200), (199, 200), (200, 200), (2400, 2400), (3000, 2400)],
+    )
+    def test_power_is_clamped_to_the_app_range(
+        self, requested: int, expected: int
+    ) -> None:
+        command = build_number_command("ac_charge_power_limit", requested)
+        assert command["params"]["cfgPlugInInfoAcInChgPowMax"] == expected
+
+    @pytest.mark.parametrize(
+        ("option", "wire"),
+        [("self_def_pow", 0), ("bat_optimal_pow", 1), ("silence", 2)],
+    )
+    def test_mode_maps_onto_the_device_enum(self, option: str, wire: int) -> None:
+        command = build_select_command("ac_charge_mode", option)
+        assert command["params"] == {"cfgAcInChgMode": wire}
+
+    def test_mode_field_number(self) -> None:
+        _, config_field, _ = DELTA3_SELECT_PARAMS["ac_charge_mode"]
+        assert config_field == 125
+
+    def test_unknown_option_is_refused(self) -> None:
+        assert build_select_command("ac_charge_mode", "turbo") is None
+
+    def test_unknown_select_is_refused(self) -> None:
+        assert build_select_command("nonexistent", "self_def_pow") is None
+
+    def test_mode_options_match_the_parser_labels(self) -> None:
+        """Read-back and write must speak the same vocabulary."""
+        from custom_components.ecoflow_energy.ecoflow.parsers.delta3_proto import (
+            _AC_CHARGE_MODES,
+        )
+
+        _, _, options = DELTA3_SELECT_PARAMS["ac_charge_mode"]
+        assert set(options) == set(_AC_CHARGE_MODES.values())
+        assert all(options[label] == wire for wire, label in _AC_CHARGE_MODES.items())
 
 
 class TestConfigWriteAck:

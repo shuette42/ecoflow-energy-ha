@@ -1440,6 +1440,9 @@
       },
       "max_watts": {
         "name": "Max Power Limit"
+      },
+      "ac_charge_power_limit": {
+        "name": "AC Charge Power"
       }
     },
     "select": {
@@ -1448,6 +1451,14 @@
         "state": {
           "self_use": "Self-use",
           "ai_schedule": "AI Schedule"
+        }
+      },
+      "ac_charge_mode": {
+        "name": "AC Charge Mode",
+        "state": {
+          "self_def_pow": "Custom power",
+          "bat_optimal_pow": "Battery optimised",
+          "silence": "Silent"
         }
       }
     }
