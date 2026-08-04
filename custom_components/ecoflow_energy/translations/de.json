@@ -1555,6 +1555,9 @@
     "set_command_failed": {
       "message": "Der Befehl für {entity} hat das Gerät nicht erreicht. Prüfe die Verbindung des Geräts und versuche es erneut."
     },
+    "set_command_not_ready": {
+      "message": "{entity} kann noch nicht gesetzt werden - das Gerät hat seine aktuelle Einstellung noch nicht gemeldet. Bitte gleich noch einmal versuchen."
+    },
     "set_command_unsupported": {
       "message": "{entity} unterstützt dieses Kommando auf diesem Gerät nicht."
     }

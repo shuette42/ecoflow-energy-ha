@@ -144,7 +144,11 @@ range of 5 % to 95 %, which is what the app's own slider allows even though its
 scale is drawn from 0 to 100.
 
 Changing either half of a port's setting sends both, because the device treats
-them as one value. The other two ports are never touched by a write.
+them as one value. The other two ports are never touched by a write. The half
+you did not change is taken from what the device last reported, so right after
+a restart - before the first status frame arrives - a change is refused with a
+note to try again in a moment. Guessing the other half there would overwrite a
+setting made in the app.
 
 ---
 

@@ -149,16 +149,17 @@ def port_priority_soc_bounds(
 
     Falls back to the widest range the anchors allow when a limit has not been
     reported yet, which keeps a slider usable instead of pinning it shut.
+
+    The anchors keep the range from ever inverting, whatever the device
+    reports: the lower end can never exceed 30 + 5 and the upper end can never
+    fall below 50 - 5, so upper > lower by at least ten points. No clamp is
+    needed here, and adding one would hide an anchor change that broke it.
     """
-    lower_source = (
-        min_discharge_soc if isinstance(min_discharge_soc, int) else 0
-    )
-    upper_source = (
-        max_charge_soc if isinstance(max_charge_soc, int) else 100
-    )
+    lower_source = min_discharge_soc if isinstance(min_discharge_soc, int) else 0
+    upper_source = max_charge_soc if isinstance(max_charge_soc, int) else 100
     lower = min(lower_source, PORT_PRIORITY_LOWER_ANCHOR) + PORT_PRIORITY_SOC_MARGIN
     upper = max(upper_source, PORT_PRIORITY_UPPER_ANCHOR) - PORT_PRIORITY_SOC_MARGIN
-    return lower, max(lower, upper)
+    return lower, upper
 
 
 def encode_port_priority_item(port_type: int, limited: bool, cutoff_soc: int) -> bytes:

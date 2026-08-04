@@ -45,7 +45,12 @@ from .const import (
 )
 from .coordinator import EcoFlowDeviceCoordinator
 from .ecoflow.parsers.smartplug import build_plug_switch_payload
-from .entity import EcoFlowWriteGateMixin, raise_set_failed, raise_set_unsupported
+from .entity import (
+    EcoFlowWriteGateMixin,
+    raise_set_failed,
+    raise_set_not_ready,
+    raise_set_unsupported,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -217,16 +222,19 @@ class EcoFlowSwitch(
         The wire item holds the flag and the cutoff together, so the cutoff has
         to travel even when only the flag changed. It comes from the last
         read-back rather than from a default: inventing one here would silently
-        move a threshold the user set in the app.
+        move a threshold the user set in the app. Until the device has reported
+        the cutoff the write is refused as not-ready rather than as
+        unsupported: it is a window of at most one status frame, not a device
+        limitation.
         """
         _, cutoff_key = port_priority_keys(stem)
-        cutoff = self.coordinator.data.get(cutoff_key)
+        cutoff = (self.coordinator.data or {}).get(cutoff_key)
         if not isinstance(cutoff, (int, float)) or isinstance(cutoff, bool):
             _LOGGER.debug(
                 "Port priority write for %s skipped - no cutoff reported yet",
                 self.entity_id,
             )
-            return None
+            raise_set_not_ready(self.entity_id)
         return build_port_priority_command(stem, turn_on, int(cutoff))
 
     def _build_command(self, turn_on: bool) -> dict[str, Any] | None:

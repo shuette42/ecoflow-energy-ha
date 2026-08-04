@@ -837,6 +837,12 @@ STREAM_MICRO_EXCLUDED_KEYS: frozenset[str] = frozenset({
 # menu entry when the serial starts with D3M or D51 and hides it otherwise, so
 # a base DELTA 3 (P231) and a P321 never get it - the entities would be created
 # and stay empty forever.
+#
+# The table below is a denylist, which means a Delta 3 prefix added later gets
+# port priority by default - the wrong default for exactly this feature. A test
+# pins every non-D3M Delta 3 prefix to this set, so adding a prefix to the
+# device-type map without deciding here fails CI rather than shipping entities
+# that can never fill.
 DELTA3_PORT_PRIORITY_KEYS: frozenset[str] = frozenset(
     {
         "port_priority_ac1_switch",
@@ -879,9 +885,9 @@ def excluded_keys_for_serial(device_sn: str) -> frozenset[str]:
 def filter_defs_for_serial(definitions: list[_DefT], device_sn: str) -> list[_DefT]:
     """Drop entity definitions a device variant cannot ever populate.
 
-    Applied by the sensor, binary sensor and number platforms next to the
-    ``enhanced_only`` filter. Number definitions read their value from
-    ``state_key``, so both that and ``key`` are matched against the
+    Applied by the sensor, binary sensor, number and switch platforms next to
+    the ``enhanced_only`` filter. Number and switch definitions read their
+    value from ``state_key``, so both that and ``key`` are matched against the
     exclusion set.
     """
     excluded = excluded_keys_for_serial(device_sn)

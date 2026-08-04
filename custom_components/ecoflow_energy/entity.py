@@ -33,6 +33,23 @@ def raise_set_unsupported(entity_id: str) -> NoReturn:
     )
 
 
+def raise_set_not_ready(entity_id: str) -> NoReturn:
+    """Report a write that needs a device value the device has not sent yet.
+
+    Some settings travel as one wire value with two halves, so writing one
+    half means resending the other. Until the device has reported that other
+    half there is nothing to resend, and guessing it would change a setting
+    the user never touched. This is a temporary state that clears with the
+    next status frame - saying "not supported" instead would send the user
+    looking for a device limitation that does not exist.
+    """
+    raise HomeAssistantError(
+        translation_domain=DOMAIN,
+        translation_key="set_command_not_ready",
+        translation_placeholders={"entity": entity_id},
+    )
+
+
 class EcoFlowWriteGateMixin:
     """State-write gate shared by all EcoFlow entity platforms.
 

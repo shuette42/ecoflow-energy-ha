@@ -2,10 +2,9 @@
 
 Every value pinned here was read off a D3M1 on 2026-08-04, with the EcoFlow
 app open on the port priority screen at the same moment, so the wire meaning
-is anchored to a state a human could see rather than to a guess.
-
-Capture: docs/captures/d3m1-portprio-20260804T084100.json and
-docs/captures/d3m1-portprio-bounds-20260804T090000.json.
+is anchored to a state a human could see rather than to a guess. Two states
+were recorded: the screen as it opened, and the screen after each cutoff
+slider had been dragged to both of its ends.
 """
 
 from __future__ import annotations
@@ -15,9 +14,11 @@ import pytest
 from custom_components.ecoflow_energy.const import (
     DELTA3_NUMBERS,
     DELTA3_SWITCHES,
+    DEVICE_TYPE_DELTA3,
     excluded_keys_for_serial,
     filter_defs_for_serial,
 )
+from custom_components.ecoflow_energy.ecoflow.const import _SN_PREFIX_MAP
 from custom_components.ecoflow_energy.ecoflow.delta3_commands import (
     PORT_PRIORITY_FIELD,
     build_port_priority_command,
@@ -34,13 +35,15 @@ from custom_components.ecoflow_energy.ecoflow.proto.decoder import (
     decode_header_message,
 )
 
-# The opening state of the 08:41 capture. The app showed AC 1 essential, AC 2
+# The opening state of the first capture. The app showed AC 1 essential, AC 2
 # non-essential at 30 %, DC essential - and exactly one item carries the
 # enable flag, which is what proves the flag means "non-essential".
 OPENING_LIST_HEX = "0a04100118230a04100218050a0608011003181e"
 
-# The last frame of the 09:00 capture, after the cutoff slider was dragged to
+# The last frame of the second capture, after the cutoff slider was dragged to
 # each end: AC 1 stopped at 5, AC 2 at 95, while the scale still read 0-100.
+# This is the only evidence tying `port_priority_soc_bounds` to the device
+# rather than to the formula, so it is asserted rather than just recorded.
 BOUNDS_LIST_HEX = "0a04100118230a060801100218050a0608011003185f"
 
 
@@ -139,10 +142,39 @@ class TestBounds:
     def test_missing_limits_fall_back_to_the_widest_range(self) -> None:
         assert port_priority_soc_bounds(None, None) == (5, 95)
 
-    def test_upper_never_falls_below_lower(self) -> None:
-        lower, upper = port_priority_soc_bounds(50, 30)
+    def test_the_formula_reproduces_the_slider_ends_the_device_reported(
+        self,
+    ) -> None:
+        """The bounds capture, not the formula, is what pins these numbers.
 
-        assert upper >= lower
+        Both sliders were dragged to their extremes with the battery limits at
+        their defaults; whatever the device stored is what the app allowed.
+        """
+        result = parse_delta3_display_property(_display_fields(BOUNDS_LIST_HEX))
+        lower, upper = port_priority_soc_bounds(100, 0)
+
+        assert result["port_priority_ac1_cutoff_soc"] == lower == 5
+        assert result["port_priority_ac2_cutoff_soc"] == upper == 95
+
+    @pytest.mark.parametrize(
+        ("max_charge", "min_discharge"),
+        [(100, 0), (80, 20), (40, 60), (50, 30), (None, None), (0, 100)],
+    )
+    def test_the_anchors_keep_the_range_from_inverting(
+        self, max_charge: int | None, min_discharge: int | None
+    ) -> None:
+        """No clamp guards this, so the anchors have to carry it themselves.
+
+        Lower can never exceed 30 + 5 and upper can never fall below 50 - 5.
+        Moving either anchor past the other would silently produce a slider
+        with no usable range, so the invariant is asserted rather than fixed
+        up at runtime.
+        """
+        lower, upper = port_priority_soc_bounds(max_charge, min_discharge)
+
+        assert lower <= 35
+        assert upper >= 45
+        assert upper > lower
 
 
 class TestWriter:
@@ -236,6 +268,32 @@ class TestVariantGating:
 
         assert "port_priority_ac1_cutoff_soc" in excluded
         assert "port_priority_active" in excluded
+
+    def test_every_non_d3m_delta3_prefix_is_denied(self) -> None:
+        """The gate is a denylist, so a new prefix defaults to *included*.
+
+        That is the wrong default for a feature the app only offers on part
+        of the family: a Delta 3 prefix added to the device-type map without
+        a decision here would create seven entities that can never fill. This
+        pins the decision to CI instead of to whoever remembers.
+        """
+        delta3_prefixes = {
+            prefix
+            for prefix, device_type in _SN_PREFIX_MAP.items()
+            if device_type == DEVICE_TYPE_DELTA3
+        }
+        undecided = {
+            prefix
+            for prefix in delta3_prefixes
+            if not prefix.startswith("D3M")
+            and not excluded_keys_for_serial(prefix + "X" * 12)
+        }
+
+        assert not undecided, (
+            f"Delta 3 prefixes {sorted(undecided)} would get port priority "
+            "entities by default - add them to _SN_PREFIX_EXCLUDED_KEYS or "
+            "confirm the app offers the setting on them."
+        )
 
 
 class TestEntityReach:

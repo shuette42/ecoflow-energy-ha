@@ -31,7 +31,12 @@ from .const import (
     STREAM_NUMBERS,
 )
 from .coordinator import EcoFlowDeviceCoordinator
-from .entity import EcoFlowWriteGateMixin, raise_set_failed, raise_set_unsupported
+from .entity import (
+    EcoFlowWriteGateMixin,
+    raise_set_failed,
+    raise_set_not_ready,
+    raise_set_unsupported,
+)
 from .ecoflow.delta3_commands import (
     build_number_command as build_delta3_number_command,
     build_port_priority_command,
@@ -205,16 +210,18 @@ class EcoFlowNumber(
         Both halves of the wire item travel together, so the flag has to come
         along. It is read back rather than assumed - writing a default here
         would move a port between essential and non-essential as a side effect
-        of changing a threshold.
+        of changing a threshold. Until the device has reported the flag the
+        write is refused as not-ready rather than as unsupported: it is a
+        window of at most one status frame, not a device limitation.
         """
         limited_key, _ = port_priority_keys(stem)
-        limited = self.coordinator.data.get(limited_key)
+        limited = (self.coordinator.data or {}).get(limited_key)
         if not isinstance(limited, bool):
             _LOGGER.debug(
                 "Port priority write for %s skipped - port state not reported yet",
                 self.entity_id,
             )
-            return None
+            raise_set_not_ready(self.entity_id)
         lower, upper = self._port_priority_bounds()
         clamped = max(lower, min(upper, int(round(value))))
         return build_port_priority_command(stem, limited, clamped)
