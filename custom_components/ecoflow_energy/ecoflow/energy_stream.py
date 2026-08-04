@@ -438,6 +438,7 @@ def build_delta3_config_write_payload(
     seq: int = 0,
     nested: bool = False,
     companions: tuple[tuple[int, int], ...] = (),
+    submessage: bytes | None = None,
 ) -> bytes:
     """Build a Delta 3 ConfigWrite SET frame for the app WebSocket channel.
 
@@ -466,6 +467,10 @@ def build_delta3_config_write_payload(
         nested: True for settings wrapped in a submessage (inner field 1).
         companions: further (field, value) pairs that belong in the same frame.
             Not combinable with `nested`.
+        submessage: pre-encoded body for settings whose value is a message
+            rather than a scalar, written as the length-delimited value of
+            `config_field`. `value` is ignored when this is given. Not
+            combinable with `nested` or `companions`.
 
     Returns:
         Binary protobuf payload ready to publish on the SET topic.
@@ -473,7 +478,9 @@ def build_delta3_config_write_payload(
     if seq == 0:
         seq = int(time.time() * 1000) & 0x7FFFFFFF
 
-    if nested:
+    if submessage is not None:
+        pdata = encode_field_bytes(config_field, submessage)
+    elif nested:
         pdata = encode_field_bytes(config_field, encode_field_varint(1, value))
     else:
         # Ascending field order, which is what the app's protobuf runtime

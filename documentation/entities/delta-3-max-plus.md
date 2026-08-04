@@ -3,7 +3,8 @@
 Full list of all entities created for Delta 3 devices. The entity set is shared
 across the generation: Delta 3 Max Plus (`D3M1`, `P321`) and base DELTA 3 (`P231`).
 
-**Totals:** 47 sensors, 7 switches, 4 numbers
+**Totals:** 47 sensors, 7 switches, 4 numbers. Units whose serial starts with
+`D3M` add the port priority set: 3 switches, 3 numbers and 1 binary sensor.
 
 > Entities marked with *diagnostic* appear in the diagnostics section of the device page.
 
@@ -98,6 +99,9 @@ be used in the Energy Dashboard without accumulating drift.
 | X-Boost | X-Boost for high-power appliances |
 | Beeper | Device buzzer |
 | Bypass Output Disabled | Block pass-through output while charging from AC |
+| AC 1 non-essential | Mark the first AC outlet group as non-essential |
+| AC 2 non-essential | Mark the second AC outlet group as non-essential |
+| DC non-essential | Mark the DC output as non-essential |
 
 ---
 
@@ -109,6 +113,38 @@ be used in the Energy Dashboard without accumulating drift.
 | Charge Limit | % | 50 - 100 | 1 | Stop charging at this level |
 | Discharge Limit | % | 0 - 30 | 1 | Stop discharging at this level |
 | AC Charge Power | W | 200 - 2400 | 100 | How fast to charge from the grid, the same setting as the charge speed slider in the EcoFlow app |
+| AC 1 cutoff level | % | dynamic | 1 | Battery level at which a non-essential AC 1 stops being powered |
+| AC 2 cutoff level | % | dynamic | 1 | Battery level at which a non-essential AC 2 stops being powered |
+| DC cutoff level | % | dynamic | 1 | Battery level at which a non-essential DC output stops being powered |
+
+---
+
+## Port priority
+
+Available on units whose serial starts with `D3M`, matching where the EcoFlow
+app offers the setting. It needs EcoFlow account sign-in: the device reports
+these values on the live connection only.
+
+Each output port is either essential or non-essential. Non-essential ports stop
+being powered once the battery falls to their own cutoff level, which leaves
+more runtime for the essential ones. The switch is on when a port is
+non-essential, which is the wording the wire uses.
+
+The feature only engages when the unit runs on battery or solar with no AC or
+grid input and no smart generator or microinverter connected. The **Port
+Priority Active** binary sensor reports whether it is currently in effect, so on
+a grid-connected unit it stays off - the settings still apply, they are simply
+not in play yet.
+
+The cutoff range is not fixed. The device derives it from the battery's own
+charge and discharge limits, and so does this integration: the lower end is the
+discharge limit (capped at 30) plus 5, the upper end is the charge limit (at
+least 50) minus 5. With the limits at their defaults of 0 and 100 that gives a
+range of 5 % to 95 %, which is what the app's own slider allows even though its
+scale is drawn from 0 to 100.
+
+Changing either half of a port's setting sends both, because the device treats
+them as one value. The other two ports are never touched by a write.
 
 ---
 

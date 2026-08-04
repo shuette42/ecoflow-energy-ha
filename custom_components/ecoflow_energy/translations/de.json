@@ -1436,6 +1436,9 @@
       },
       "ems_sg_ready_enabled": {
         "name": "SG Ready aktiviert"
+      },
+      "port_priority_active": {
+        "name": "Anschlusspriorität aktiv"
       }
     },
     "switch": {
@@ -1477,6 +1480,15 @@
       },
       "bypass_out_disable_switch": {
         "name": "Bypass-Ausgang gesperrt"
+      },
+      "port_priority_ac1_switch": {
+        "name": "AC 1 nicht wesentlich"
+      },
+      "port_priority_ac2_switch": {
+        "name": "AC 2 nicht wesentlich"
+      },
+      "port_priority_dc_switch": {
+        "name": "DC nicht wesentlich"
       }
     },
     "number": {
@@ -1518,6 +1530,15 @@
       },
       "ac_charge_power_limit": {
         "name": "AC-Ladeleistung"
+      },
+      "port_priority_ac1_soc": {
+        "name": "AC 1 Abschaltgrenze"
+      },
+      "port_priority_ac2_soc": {
+        "name": "AC 2 Abschaltgrenze"
+      },
+      "port_priority_dc_soc": {
+        "name": "DC Abschaltgrenze"
       }
     },
     "select": {

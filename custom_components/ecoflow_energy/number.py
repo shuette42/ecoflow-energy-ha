@@ -34,8 +34,11 @@ from .coordinator import EcoFlowDeviceCoordinator
 from .entity import EcoFlowWriteGateMixin, raise_set_failed, raise_set_unsupported
 from .ecoflow.delta3_commands import (
     build_number_command as build_delta3_number_command,
+    build_port_priority_command,
+    port_priority_soc_bounds,
 )
 from .ecoflow.energy_stream import build_stream_backup_reserve_payload
+from .ecoflow.parsers.delta3_proto import port_priority_keys
 from .ecoflow.parsers.smartplug import (
     build_plug_brightness_payload,
     build_plug_max_watts_payload,
@@ -121,7 +124,7 @@ class EcoFlowNumber(
         if last is None or last.native_value is None:
             return  # nothing restorable (e.g. state was unknown/unavailable)
         value = float(last.native_value)
-        if value < self._attr_native_min_value or value > self._attr_native_max_value:
+        if value < self.native_min_value or value > self.native_max_value:
             return  # out-of-range restored values are discarded
         self._restored_value = value
         # Seed the write gate so an identical first live frame does not
@@ -173,6 +176,56 @@ class EcoFlowNumber(
         except (TypeError, ValueError):
             return None
 
+    @property
+    def native_min_value(self) -> float:
+        """Return the lower bound, narrowed for port priority cutoffs."""
+        if self._port_priority_stem() is None:
+            return self._attr_native_min_value
+        return float(self._port_priority_bounds()[0])
+
+    @property
+    def native_max_value(self) -> float:
+        """Return the upper bound, narrowed for port priority cutoffs."""
+        if self._port_priority_stem() is None:
+            return self._attr_native_max_value
+        return float(self._port_priority_bounds()[1])
+
+    def _port_priority_stem(self) -> str | None:
+        """Return the port stem for a port priority cutoff, else None."""
+        key = self._definition.key
+        if key.startswith("port_priority_") and key.endswith("_soc"):
+            return key[len("port_priority_") : -len("_soc")]
+        return None
+
+    def _build_port_priority_command(
+        self, stem: str, value: float
+    ) -> dict[str, Any] | None:
+        """Build a cutoff write, carrying the port's current essential flag.
+
+        Both halves of the wire item travel together, so the flag has to come
+        along. It is read back rather than assumed - writing a default here
+        would move a port between essential and non-essential as a side effect
+        of changing a threshold.
+        """
+        limited_key, _ = port_priority_keys(stem)
+        limited = self.coordinator.data.get(limited_key)
+        if not isinstance(limited, bool):
+            _LOGGER.debug(
+                "Port priority write for %s skipped - port state not reported yet",
+                self.entity_id,
+            )
+            return None
+        lower, upper = self._port_priority_bounds()
+        clamped = max(lower, min(upper, int(round(value))))
+        return build_port_priority_command(stem, limited, clamped)
+
+    def _port_priority_bounds(self) -> tuple[int, int]:
+        """Return the cutoff bounds derived from the device's battery limits."""
+        data = self.coordinator.data or {}
+        return port_priority_soc_bounds(
+            data.get("max_charge_soc_pct"), data.get("min_discharge_soc_pct")
+        )
+
     async def async_set_native_value(self, value: float) -> None:
         """Set a new value via the EcoFlow IoT API."""
         # PowerOcean uses protobuf SET via Enhanced Mode (WSS)
@@ -186,7 +239,11 @@ class EcoFlowNumber(
             self._apply_optimistic_number(value)
             return
         if self.coordinator.device_type == DEVICE_TYPE_DELTA3:
-            command = build_delta3_number_command(self._definition.key, value)
+            stem = self._port_priority_stem()
+            if stem is not None:
+                command = self._build_port_priority_command(stem, value)
+            else:
+                command = build_delta3_number_command(self._definition.key, value)
             if command is None:
                 raise_set_unsupported(self.entity_id)
             ok = await self.coordinator.async_send_delta3_set(command)

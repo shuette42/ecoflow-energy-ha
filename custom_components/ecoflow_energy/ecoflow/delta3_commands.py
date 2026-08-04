@@ -29,6 +29,7 @@ from typing import Any, NamedTuple
 
 from .energy_stream import build_delta3_config_write_payload
 from .proto.decoder import decode_header_message
+from .proto_encoding import encode_field_bytes, encode_field_varint
 
 # Shared envelope. `dirSrc` follows the HTTP examples in the official docs; the
 # MQTT example spells it `dirSoc`, which reads like a typo in the vendor docs
@@ -105,6 +106,89 @@ DELTA3_NUMBER_PARAMS: dict[str, Delta3Number] = {
     # more, so a device rejection (ConfigWriteAck) stays the authority.
     AC_CHARGE_POWER_KEY: Delta3Number("cfgPlugInInfoAcInChgPowMax", 200, 2400, 54),
 }
+
+
+# --- Port priority: one item per write ---------------------------------------
+#
+# ConfigWrite field 376 carries a PowerOutagesList, whose only field is a
+# repeated PowerOutageItem. The app writes exactly one item per user action
+# even though the device reports all three ports back, and this follows it:
+# sending an item per port would be an untested shape, and the read-back
+# refreshes every port anyway.
+#
+# Item fields: 1 = non-essential flag, 2 = port type, 3 = cutoff SoC.
+PORT_PRIORITY_FIELD = 376
+PORT_PRIORITY_PARAMS_KEY = "cfgPowerOutagesList"
+_PORT_ITEM_FIELD = 1
+_PORT_ITEM_ENABLE = 1
+_PORT_ITEM_TYPE = 2
+_PORT_ITEM_MIN_SOC = 3
+
+# entity stem -> POWER_OUTAGE_PORT enum value, from the app's own port list.
+PORT_PRIORITY_PORT_TYPES: dict[str, int] = {"dc": 1, "ac1": 2, "ac2": 3}
+
+# The cutoff bounds are not fixed. The app derives them from the battery's own
+# charge and discharge limits:
+#
+#     lower = min(min_discharge_soc, 30) + 5
+#     upper = max(max_charge_soc, 50) - 5
+#
+# Confirmed on a D3M1 on 2026-08-04: with the limits at 0 and 100 the slider
+# stopped at 5 and 95 respectively, while its scale still read 0 % to 100 %.
+# Whether the device enforces the same range or only the app does is unknown,
+# so the integration clamps identically rather than finding out on hardware.
+PORT_PRIORITY_SOC_MARGIN = 5
+PORT_PRIORITY_LOWER_ANCHOR = 30
+PORT_PRIORITY_UPPER_ANCHOR = 50
+
+
+def port_priority_soc_bounds(
+    max_charge_soc: int | None, min_discharge_soc: int | None
+) -> tuple[int, int]:
+    """Return the (lower, upper) cutoff bounds for the given battery limits.
+
+    Falls back to the widest range the anchors allow when a limit has not been
+    reported yet, which keeps a slider usable instead of pinning it shut.
+    """
+    lower_source = (
+        min_discharge_soc if isinstance(min_discharge_soc, int) else 0
+    )
+    upper_source = (
+        max_charge_soc if isinstance(max_charge_soc, int) else 100
+    )
+    lower = min(lower_source, PORT_PRIORITY_LOWER_ANCHOR) + PORT_PRIORITY_SOC_MARGIN
+    upper = max(upper_source, PORT_PRIORITY_UPPER_ANCHOR) - PORT_PRIORITY_SOC_MARGIN
+    return lower, max(lower, upper)
+
+
+def encode_port_priority_item(port_type: int, limited: bool, cutoff_soc: int) -> bytes:
+    """Encode one PowerOutagesList entry, ready for ConfigWrite field 376."""
+    item = encode_field_varint(_PORT_ITEM_ENABLE, int(bool(limited)))
+    item += encode_field_varint(_PORT_ITEM_TYPE, int(port_type))
+    item += encode_field_varint(_PORT_ITEM_MIN_SOC, int(cutoff_soc))
+    return encode_field_bytes(_PORT_ITEM_FIELD, item)
+
+
+def build_port_priority_command(
+    stem: str, limited: bool, cutoff_soc: int
+) -> dict[str, Any] | None:
+    """Build a SET command for one port of the port priority list.
+
+    Both values always travel together: the wire item carries the flag and the
+    cutoff in one message, so writing either one means sending both.
+    """
+    port_type = PORT_PRIORITY_PORT_TYPES.get(stem)
+    if port_type is None:
+        return None
+    return _envelope(
+        {
+            PORT_PRIORITY_PARAMS_KEY: {
+                "portType": port_type,
+                "limited": bool(limited),
+                "cutoffSoc": int(cutoff_soc),
+            }
+        }
+    )
 
 
 # Reverse lookup for the binary path: JSON params key -> ConfigWrite field.
@@ -229,6 +313,23 @@ def build_proto_command(
     if len(params) != 1:
         return None
     params_key, raw_value = next(iter(params.items()))
+
+    if params_key == PORT_PRIORITY_PARAMS_KEY:
+        if not isinstance(raw_value, dict):
+            return None
+        port_type = raw_value.get("portType")
+        cutoff = raw_value.get("cutoffSoc")
+        if not isinstance(port_type, int) or not isinstance(cutoff, int):
+            return None
+        return build_delta3_config_write_payload(
+            PORT_PRIORITY_FIELD,
+            0,
+            device_sn,
+            seq=seq,
+            submessage=encode_port_priority_item(
+                port_type, bool(raw_value.get("limited")), cutoff
+            ),
+        )
 
     if params_key == DELTA3_ENERGY_BACKUP_PARAMS_KEY:
         if not isinstance(raw_value, dict):

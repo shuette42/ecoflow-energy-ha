@@ -410,6 +410,31 @@ message Delta3DisplayProperty {
   oneof _en_beep { bool en_beep = 195; }
   oneof _xboost_en { bool xboost_en = 25; }
   oneof _bypass_out_disable { bool bypass_out_disable = 146; }
+
+  // Port priority. Each output port can be marked non-essential, in which case
+  // it stops being powered once the battery falls to its own threshold. The
+  // read-back always carries all three ports even when one changed; the write
+  // carries exactly one. `port_enable` true means non-essential - the port has
+  // a cutoff - and false means essential, which is the proto3 default and so
+  // arrives as an absent field.
+  oneof _power_outages_list { Delta3PowerOutagesList power_outages_list = 968; }
+
+  // 1 means port priority is currently in effect, any other value means it is
+  // not. It only engages when there is no AC or grid input and no smart
+  // generator or microinverter is connected, so 2 is the everyday value.
+  oneof _power_outages_active_flag { uint32 power_outages_active_flag = 1279; }
+}
+
+// Port priority payload, shared by the read-back (field 968) and the write
+// (ConfigWrite field 376). Port type: 1 = DC, 2 = AC 1, 3 = AC 2.
+message Delta3PowerOutageItem {
+  oneof _power_outage_port_enable { bool power_outage_port_enable = 1; }
+  oneof _power_outage_port_type { uint32 power_outage_port_type = 2; }
+  oneof _power_outage_min_soc { uint32 power_outage_min_soc = 3; }
+}
+
+message Delta3PowerOutagesList {
+  repeated Delta3PowerOutageItem power_outage_item = 1;
 }
 
 // Battery-side heartbeat (cmd_func=32, cmd_id=2), sent every 10 s. Two

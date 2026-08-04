@@ -20,8 +20,10 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .ecoflow.delta3_commands import (
+    build_port_priority_command,
     build_switch_command as build_delta3_switch_command,
 )
+from .ecoflow.parsers.delta3_proto import port_priority_keys
 from .const import (
     DELTA2MAX_SWITCHES,
     DELTA3_SWITCHES,
@@ -32,6 +34,7 @@ from .const import (
     DEVICE_TYPE_STREAM,
     DOMAIN,
     EcoFlowSwitchDef,
+    filter_defs_for_serial,
     SMARTPLUG_SWITCH_COMMANDS,
     SMARTPLUG_SWITCHES,
     STREAM_SWITCHES,
@@ -59,8 +62,12 @@ async def async_setup_entry(
     entities: list[EcoFlowSwitch] = []
 
     for coordinator in coordinators.values():
-        defs = _get_switch_defs(coordinator.device_type)
+        defs = filter_defs_for_serial(
+            _get_switch_defs(coordinator.device_type), coordinator.device_sn
+        )
         for defn in defs:
+            if defn.enhanced_only and not coordinator.enhanced_mode:
+                continue
             entities.append(EcoFlowSwitch(coordinator, defn))
 
     async_add_entities(entities)
@@ -195,9 +202,39 @@ class EcoFlowSwitch(
         self._optimistic_lock_until = time.monotonic() + OPTIMISTIC_LOCK_S
         self._write_state_always(turn_on)
 
+    def _port_priority_stem(self) -> str | None:
+        """Return the port stem for a port priority switch, else None."""
+        key = self._definition.key
+        if key.startswith("port_priority_") and key.endswith("_switch"):
+            return key[len("port_priority_") : -len("_switch")]
+        return None
+
+    def _build_port_priority_command(
+        self, stem: str, turn_on: bool
+    ) -> dict[str, Any] | None:
+        """Build a port priority write, carrying the port's current cutoff.
+
+        The wire item holds the flag and the cutoff together, so the cutoff has
+        to travel even when only the flag changed. It comes from the last
+        read-back rather than from a default: inventing one here would silently
+        move a threshold the user set in the app.
+        """
+        _, cutoff_key = port_priority_keys(stem)
+        cutoff = self.coordinator.data.get(cutoff_key)
+        if not isinstance(cutoff, (int, float)) or isinstance(cutoff, bool):
+            _LOGGER.debug(
+                "Port priority write for %s skipped - no cutoff reported yet",
+                self.entity_id,
+            )
+            return None
+        return build_port_priority_command(stem, turn_on, int(cutoff))
+
     def _build_command(self, turn_on: bool) -> dict[str, Any] | None:
         """Build a SET command from legacy or declarative templates."""
         if self.coordinator.device_type == DEVICE_TYPE_DELTA3:
+            stem = self._port_priority_stem()
+            if stem is not None:
+                return self._build_port_priority_command(stem, turn_on)
             return build_delta3_switch_command(self._definition.key, turn_on)
 
         if self.coordinator.device_type == DEVICE_TYPE_DELTA:

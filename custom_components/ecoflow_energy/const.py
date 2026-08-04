@@ -240,6 +240,10 @@ class EcoFlowSwitchDef:
     name: str
     state_key: str
     icon: str | None = None
+    # Same meaning as on the sensor, binary sensor and number definitions: the
+    # read-back only exists on the app channel, so with developer keys the
+    # switch would be created and never learn the device's actual position.
+    enhanced_only: bool = False
 
 
 @dataclass(frozen=True)
@@ -829,10 +833,34 @@ STREAM_MICRO_EXCLUDED_KEYS: frozenset[str] = frozenset({
     "solar_energy_kwh",
 })
 
+# Port priority exists on part of the Delta 3 family only. The app shows the
+# menu entry when the serial starts with D3M or D51 and hides it otherwise, so
+# a base DELTA 3 (P231) and a P321 never get it - the entities would be created
+# and stay empty forever.
+DELTA3_PORT_PRIORITY_KEYS: frozenset[str] = frozenset(
+    {
+        "port_priority_ac1_switch",
+        "port_priority_ac2_switch",
+        "port_priority_dc_switch",
+        "port_priority_ac1_soc",
+        "port_priority_ac2_soc",
+        "port_priority_dc_soc",
+        "port_priority_ac1_limited",
+        "port_priority_ac2_limited",
+        "port_priority_dc_limited",
+        "port_priority_ac1_cutoff_soc",
+        "port_priority_ac2_cutoff_soc",
+        "port_priority_dc_cutoff_soc",
+        "port_priority_active",
+    }
+)
+
 # Serial prefix -> entity keys that variant never produces. A prefix absent
 # from this table gets the full entity list of its device type.
 _SN_PREFIX_EXCLUDED_KEYS: dict[str, frozenset[str]] = {
     "BK01": STREAM_MICRO_EXCLUDED_KEYS,
+    "P321": DELTA3_PORT_PRIORITY_KEYS,
+    "P231": DELTA3_PORT_PRIORITY_KEYS,
 }
 
 
@@ -952,8 +980,15 @@ DELTA3_SENSORS: list[EcoFlowSensorDef] = [
 
 # The Delta 3 controls read back from the same fields a binary sensor would
 # expose, so a read-only twin for every switch would just double the entity
-# count. Kept empty rather than deleted: the platform still asks for a list.
-DELTA3_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = []
+# count. The one entry here is not a twin of anything: it reports whether port
+# priority is currently in effect, which the device decides on its own and no
+# control can set.
+DELTA3_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
+    # Only true while the unit runs off battery or solar with no AC input and
+    # no smart generator attached, so on a grid-connected device this stays
+    # off. Diagnostic rather than a headline reading for exactly that reason.
+    EcoFlowBinarySensorDef("port_priority_active", "Port Priority Active", None, "mdi:priority-high", "diagnostic", enhanced_only=True),
+]
 
 # Controls. Every switch reads back from the same field the read-only entity
 # above uses, so the device state stays the single source of truth. The params
@@ -967,6 +1002,18 @@ DELTA3_SWITCHES: list[EcoFlowSwitchDef] = [
     EcoFlowSwitchDef("xboost_switch", "X-Boost", "xboost_enabled", "mdi:lightning-bolt"),
     EcoFlowSwitchDef("beeper_switch", "Beeper", "beeper_enabled", "mdi:volume-high"),
     EcoFlowSwitchDef("bypass_out_disable_switch", "Bypass Output Disabled", "bypass_out_disabled", "mdi:transmission-tower-off"),
+    # Port priority. On means the port is non-essential and gets switched off
+    # once the battery falls to its cutoff below; off means essential, which is
+    # what the wire calls false. The switch follows the wire rather than the
+    # app's wording, because an inverted control here cuts power to the wrong
+    # outlets during an outage.
+    #
+    # Push path only, like the AC charge power: the polled quota carries none
+    # of this, so with developer keys the switch could be flipped but never
+    # show where the device actually stands.
+    EcoFlowSwitchDef("port_priority_ac1_switch", "AC 1 Non-Essential", "port_priority_ac1_limited", "mdi:power-plug-off-outline", enhanced_only=True),
+    EcoFlowSwitchDef("port_priority_ac2_switch", "AC 2 Non-Essential", "port_priority_ac2_limited", "mdi:power-plug-off-outline", enhanced_only=True),
+    EcoFlowSwitchDef("port_priority_dc_switch", "DC Non-Essential", "port_priority_dc_limited", "mdi:power-plug-off-outline", enhanced_only=True),
 ]
 
 # Ranges are the vendor's own bounds, not our choice. Backup reserve tops out at
@@ -982,6 +1029,13 @@ DELTA3_NUMBERS: list[EcoFlowNumberDef] = [
     # mode too, so "only works in custom mode" is the app's framing rather
     # than a measured property of the device.
     EcoFlowNumberDef("ac_charge_power_limit", "AC Charge Power", "ac_charge_power_limit_w", "W", "mdi:lightning-bolt", 200, 2400, 100, enhanced_only=True),
+    # Port priority cutoffs. The bounds below are the widest the app's own
+    # formula can produce; the entity narrows them at runtime from the two
+    # battery limits (see `port_priority_soc_bounds`). Push path only, same
+    # reason as the switches above.
+    EcoFlowNumberDef("port_priority_ac1_soc", "AC 1 Cutoff Level", "port_priority_ac1_cutoff_soc", "%", "mdi:battery-off-outline", 5, 95, 1, enhanced_only=True),
+    EcoFlowNumberDef("port_priority_ac2_soc", "AC 2 Cutoff Level", "port_priority_ac2_cutoff_soc", "%", "mdi:battery-off-outline", 5, 95, 1, enhanced_only=True),
+    EcoFlowNumberDef("port_priority_dc_soc", "DC Cutoff Level", "port_priority_dc_cutoff_soc", "%", "mdi:battery-off-outline", 5, 95, 1, enhanced_only=True),
 ]
 
 # The charge mode deliberately has no entity. It is part of the same wire
