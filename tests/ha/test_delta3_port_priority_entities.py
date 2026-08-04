@@ -382,3 +382,118 @@ class TestSwitchPlatformGating:
         keys = await self._setup(hass, device)
 
         assert keys == {d.key for d in defs}
+
+
+class TestWritesInSuccession:
+    """Two entities write the same wire item, so order must not lose a change.
+
+    The switch and the cutoff number both send a full PowerOutageItem. Each
+    takes the half it does not own from the coordinator store, so a write that
+    does not seed its own half there leaves the next write reading a stale
+    value - and the device would be told to undo the change that just
+    succeeded. The optimistic lock does not help: it suppresses incoming
+    device data, not what a sibling entity reads.
+    """
+
+    async def test_switch_then_number_keeps_the_new_flag(
+        self, hass: HomeAssistant
+    ) -> None:
+        """The classic sequence: flip a port, then move its slider."""
+        coordinator, _ = _coordinator(hass, DELTA3_MAX_PLUS, REPORTED)
+        switch = _switch(coordinator, "port_priority_ac1_switch")
+        number = _number(coordinator, "port_priority_ac1_soc")
+
+        await switch.async_turn_on()          # AC 1 -> non-essential
+        await number.async_set_native_value(25)  # ... before the device echoes
+
+        sent = coordinator.async_send_delta3_set.call_args[0][0]
+        item = sent["params"]["cfgPowerOutagesList"]
+
+        assert item["limited"] is True, "the slider undid the switch"
+        assert item["cutoffSoc"] == 25
+        assert item["portType"] == 2
+
+    async def test_number_then_switch_keeps_the_new_cutoff(
+        self, hass: HomeAssistant
+    ) -> None:
+        """The mirror image, which already worked - pinned so it stays that way."""
+        coordinator, _ = _coordinator(hass, DELTA3_MAX_PLUS, REPORTED)
+        switch = _switch(coordinator, "port_priority_ac2_switch")
+        number = _number(coordinator, "port_priority_ac2_soc")
+
+        await number.async_set_native_value(20)
+        await switch.async_turn_off()
+
+        item = coordinator.async_send_delta3_set.call_args[0][0]["params"][
+            "cfgPowerOutagesList"
+        ]
+
+        assert item["cutoffSoc"] == 20, "the switch undid the slider"
+        assert item["limited"] is False
+
+    async def test_a_write_touches_only_its_own_port(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Seeding the store must not disturb the other two ports."""
+        coordinator, _ = _coordinator(hass, DELTA3_MAX_PLUS, REPORTED)
+        switch = _switch(coordinator, "port_priority_dc_switch")
+
+        await switch.async_turn_on()
+
+        for key, value in REPORTED.items():
+            if key.startswith("port_priority_dc_"):
+                continue
+            assert coordinator.data[key] == value
+
+
+class TestDerivedBoundsArePublished:
+    """The cutoff bounds move with the battery limits, so HA must see them."""
+
+    async def test_a_limit_change_publishes_the_new_bounds(
+        self, hass: HomeAssistant
+    ) -> None:
+        """HA snapshots min/max on a state write, and the value did not move.
+
+        Without an explicit write the frontend keeps offering the old range:
+        cutoffs the service call then rejects, or cutoffs it would now accept
+        but the slider will not reach.
+        """
+        coordinator, _ = _coordinator(hass, DELTA3_MAX_PLUS, REPORTED)
+        number = _number(coordinator, "port_priority_ac1_soc")
+        number._handle_coordinator_update()
+        number.async_write_ha_state.reset_mock()
+
+        assert (number.native_min_value, number.native_max_value) == (5, 95)
+
+        coordinator._device_data.update(
+            {"max_charge_soc_pct": 80, "min_discharge_soc_pct": 20}
+        )
+        coordinator.async_set_updated_data(dict(coordinator._device_data))
+        number._handle_coordinator_update()
+
+        assert (number.native_min_value, number.native_max_value) == (25, 75)
+        assert number.async_write_ha_state.called
+
+    async def test_unchanged_limits_do_not_force_a_write(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Zero-noise: a push that changes nothing must stay silent."""
+        coordinator, _ = _coordinator(hass, DELTA3_MAX_PLUS, REPORTED)
+        number = _number(coordinator, "port_priority_ac1_soc")
+        number._handle_coordinator_update()
+        number.async_write_ha_state.reset_mock()
+
+        coordinator.async_set_updated_data(dict(coordinator._device_data))
+        number._handle_coordinator_update()
+
+        assert not number.async_write_ha_state.called
+
+    async def test_a_plain_number_never_reports_moving_bounds(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Only port priority cutoffs derive their range."""
+        coordinator, _ = _coordinator(hass, DELTA3_MAX_PLUS, REPORTED)
+        number = _number(coordinator, "max_charge_soc")
+
+        assert number._bounds_moved() is False
+        assert (number.native_min_value, number.native_max_value) == (50, 100)

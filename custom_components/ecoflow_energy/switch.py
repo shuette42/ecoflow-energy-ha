@@ -199,6 +199,18 @@ class EcoFlowSwitch(
             ok = await self.coordinator.async_send_set_command(command)
         if not ok:
             raise_set_failed(self.entity_id)
+        if self._port_priority_stem() is not None:
+            # The cutoff number reads this flag from the shared store when it
+            # builds its own write, because the wire item carries both halves.
+            # Seed the store with the flag just sent - until the device echoes
+            # it back, a slider move would otherwise read the stale flag and
+            # silently revert this switch. The number path seeds its cutoff
+            # the same way (see `_apply_optimistic_number`); the next 968
+            # read-back overwrites the seed with device truth either way.
+            state_key = self._definition.state_key
+            self.coordinator.set_device_value(state_key, turn_on)
+            if self.coordinator.data is not None:
+                self.coordinator.data[state_key] = turn_on
         self._apply_optimistic(turn_on)
 
     def _apply_optimistic(self, turn_on: bool) -> None:

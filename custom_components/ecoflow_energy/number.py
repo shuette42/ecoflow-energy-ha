@@ -99,6 +99,7 @@ class EcoFlowNumber(
 
         self._restored_value: float | None = None
         self._last_written_value: float | None = None
+        self._last_written_bounds: tuple[int, int] | None = None
         self._optimistic_lock_until: float = 0.0
         # Seeded from the coordinator rather than from zero: an entity added
         # after a rollback already happened must not read that rollback as
@@ -156,6 +157,17 @@ class EcoFlowNumber(
             self._optimistic_lock_until = 0.0
         elif time.monotonic() < self._optimistic_lock_until:
             return  # ignore incoming data during optimistic lock
+        if self._bounds_moved():
+            # Home Assistant snapshots min/max into the state machine only on
+            # a state write, and the gate skips writes when the value did not
+            # move. A battery-limit change would otherwise leave stale bounds
+            # published: the frontend then offers cutoffs the service call
+            # rejects, or refuses cutoffs that became legal. Checked after the
+            # lock on purpose - the next push (about a second later) catches
+            # up, and writing mid-lock could resurface the bounced value the
+            # lock exists to suppress.
+            self._write_state_always(self.native_value)
+            return
         self._write_state_if_changed(self.native_value)
 
     @property
@@ -232,6 +244,20 @@ class EcoFlowNumber(
         return port_priority_soc_bounds(
             data.get("max_charge_soc_pct"), data.get("min_discharge_soc_pct")
         )
+
+    def _bounds_moved(self) -> bool:
+        """Return True after recording a change of the derived slider bounds.
+
+        Only port priority cutoffs have derived bounds; every other number
+        keeps its declared range and never reports a move.
+        """
+        if self._port_priority_stem() is None:
+            return False
+        bounds = self._port_priority_bounds()
+        if bounds == self._last_written_bounds:
+            return False
+        self._last_written_bounds = bounds
+        return True
 
     async def async_set_native_value(self, value: float) -> None:
         """Set a new value via the EcoFlow IoT API."""
