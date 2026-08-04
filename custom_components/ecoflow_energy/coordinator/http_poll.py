@@ -13,6 +13,7 @@ from ..const import (
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
 )
+from ..ecoflow.firmware import extract_firmware_versions
 from ..ecoflow.parsers.delta_http import parse_delta_http_quota
 from ..ecoflow.parsers.delta3_http import parse_delta3_http_quota
 from ..ecoflow.parsers.powerocean import parse_powerocean_http_quota
@@ -75,6 +76,11 @@ class HttpPollMixin:
         self._consecutive_http_failures = 0
         self._device_available = True
         self._log_event("http_ok", f"keys={len(raw)}")
+
+        # Firmware, before any device-specific parsing: the quota is the only
+        # endpoint that carries a revision at all, and which subsystems report
+        # one differs per device family rather than per parser.
+        self._firmware = extract_firmware_versions(raw)
 
         if self.device_type == DEVICE_TYPE_POWEROCEAN:
             # Keep the raw quota snapshot for diagnostics. Accessories such as

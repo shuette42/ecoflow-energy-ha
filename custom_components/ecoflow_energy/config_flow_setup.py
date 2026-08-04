@@ -288,6 +288,12 @@ class SetupFlowMixin:
             product_name = dev.get("productName", dev.get("deviceName", "Unknown"))
             online = dev.get("online", 0)
             device_type = get_device_type(product_name, sn)
+            # Measured 2026-08-04 against a five-device account: the Developer
+            # API device list returns sn, deviceName, productName and online -
+            # no revision field under any name. The lookup stays because it
+            # costs nothing and would pick the value up if EcoFlow ever adds
+            # it, but nothing may assume it is populated. The quota carries
+            # revisions on some device families; see ecoflow/firmware.py.
             sw_version = dev.get("firmwareVersion", dev.get("softwareVersion", ""))
             devices.append(
                 {
@@ -327,6 +333,11 @@ class SetupFlowMixin:
                     "product_name": product_name,
                     "device_type": device_type,
                     "online": 1 if online else 0,
+                    # The app device list carries createTime, deviceFlag,
+                    # model, productSkuId and productType - no revision field
+                    # either (measured 2026-08-04). Account sign-in therefore
+                    # has no firmware source at all: Enhanced Mode never polls
+                    # the quota, and the protobuf stream does not carry one.
                     "sw_version": "",
                 }
             )

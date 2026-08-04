@@ -171,6 +171,10 @@ class EcoFlowDeviceCoordinator(
         # confirm existing mappings and surface keys still to be added.
         self._raw_quota: dict[str, Any] = {}
         self._raw_quota_captured_at: float = 0.0
+        # Firmware revisions read from the quota, per subsystem. Neither device
+        # list endpoint reports one, so this is the only source we have - and
+        # only in Standard Mode, since Enhanced Mode never polls the quota.
+        self._firmware: dict[str, dict[str, Any]] = {}
         self._keepalive_unsub: asyncio.TimerHandle | None = None
         self._stale_check_unsub: asyncio.TimerHandle | None = None
         self._quotas_unsub: asyncio.TimerHandle | None = None
@@ -325,6 +329,11 @@ class EcoFlowDeviceCoordinator(
     def raw_quota_captured_at(self) -> float:
         """Return monotonic timestamp of the raw quota capture (0 = never)."""
         return self._raw_quota_captured_at
+
+    @property
+    def firmware(self) -> dict[str, dict[str, Any]]:
+        """Return firmware revisions per subsystem (empty if none reported)."""
+        return self._firmware
 
     def set_device_value(self, key: str, value: Any) -> None:
         """Set a single value in the persistent device data store.

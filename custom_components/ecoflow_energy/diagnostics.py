@@ -278,6 +278,15 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
         },
         "data_keys": data_keys,
         "data_key_count": len(data_keys),
+        # Firmware revisions the quota reported, per subsystem. Empty in
+        # Enhanced Mode (no quota poll) and on device families that report no
+        # revision at all - PowerOcean sends 347 quota keys and none is a
+        # version. Those owners have to read it off the EcoFlow app, which is
+        # what the bug report template asks for.
+        # Redacted like every other quota-derived section: the PowerOcean quota
+        # addresses battery packs by serial in the key itself, and a subsystem
+        # revision could arrive under such a key.
+        "firmware": _redact_serials(coordinator.firmware),
         "event_log": _format_event_log(coordinator.event_log),
     }
 

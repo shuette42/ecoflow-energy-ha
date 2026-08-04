@@ -31,9 +31,25 @@ body:
       label: Device Type
       options:
         - PowerOcean
+        - PowerOcean Plus
         - Delta 2 Max
+        - Delta 3 Max Plus
         - Smart Plug
+        - Stream
+        - Stream Micro
         - Other / Multiple
+    validations:
+      required: true
+
+  - type: input
+    id: device_firmware
+    attributes:
+      label: Device Firmware Version
+      description: >
+        Open the EcoFlow app, select the device, then Settings (gear icon) ->
+        About / Device Info. Copy the firmware version shown there. Home
+        Assistant does not display it, because the EcoFlow API does not send it.
+      placeholder: "e.g. v5.1.37.10"
     validations:
       required: true
 

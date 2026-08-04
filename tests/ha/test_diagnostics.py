@@ -344,6 +344,75 @@ class TestDeviceDiagnostics:
         assert entry["ts_iso"].endswith("+00:00")
 
 
+class TestFirmwareDiagnostics:
+    """The firmware section is what tells a bug report which revision ran."""
+
+    async def test_firmware_section_present_when_quota_reports_one(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        coordinator._firmware = {
+            "pd.sysVer": {"raw": 16975450, "decoded": "v1.3.6.90"},
+        }
+
+        result = _device_diagnostics(coordinator)
+
+        assert result["firmware"]["pd.sysVer"]["decoded"] == "v1.3.6.90"
+        assert result["firmware"]["pd.sysVer"]["raw"] == 16975450
+
+    async def test_firmware_section_empty_when_device_reports_none(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """An empty section is the honest answer for PowerOcean.
+
+        Its quota carries no revision under any key, so the section must be
+        present and empty rather than absent - a reader has to be able to tell
+        "device reports none" from "we forgot to collect it".
+        """
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+
+        result = _device_diagnostics(coordinator)
+
+        assert result["firmware"] == {}
+
+    async def test_firmware_keys_redact_serials(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """A revision addressed by battery pack serial must not leak it.
+
+        The PowerOcean quota puts pack serials into the key itself, and users
+        are asked to attach diagnostics to public issues.
+        """
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        coordinator._firmware = {
+            "bp_addr.HJ31TESTSERIAL02.sysVer": {
+                "raw": 16975450,
+                "decoded": "v1.3.6.90",
+            },
+        }
+
+        result = _device_diagnostics(coordinator)
+
+        key = next(iter(result["firmware"]))
+        assert "HJ31TESTSERIAL02" not in key
+        assert result["firmware"][key]["decoded"] == "v1.3.6.90"
+
+
 class TestDeltaThreeRawQuotaDiagnostics:
     async def test_non_delta3_has_no_raw_quota_section(
         self,

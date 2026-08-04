@@ -1075,6 +1075,53 @@ class TestHTTPPolling:
         assert coordinator.snapshot.source == "http"
         assert coordinator.snapshot.key_count == len(coordinator.device_data)
 
+    async def test_http_update_collects_firmware(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """A quota that carries revisions leaves them on the coordinator.
+
+        The quota is the only endpoint that reports a firmware version at all -
+        neither device list does - so a poll is the one chance to pick it up.
+        """
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        coordinator._http_client = MagicMock()
+        coordinator._http_client.get_quota_all = AsyncMock(return_value={
+            "pd.soc": 75,
+            "pd.sysVer": 16975450,
+            "inv.sysVer": 33554523,
+        })
+
+        await coordinator._async_update_data()
+
+        assert coordinator.firmware["pd.sysVer"]["decoded"] == "v1.3.6.90"
+        assert coordinator.firmware["inv.sysVer"]["decoded"] == "v2.0.0.91"
+        assert "pd.soc" not in coordinator.firmware
+
+    async def test_http_update_firmware_stays_empty_for_powerocean(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """PowerOcean sends no revision in its quota, so the map stays empty."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        coordinator._http_client = MagicMock()
+        coordinator._http_client.get_quota_all = AsyncMock(return_value={
+            "bpSoc": 85,
+            "ems_change_report.pcs10minOverVol": 253.0,
+        })
+
+        await coordinator._async_update_data()
+
+        assert coordinator.firmware == {}
+
     async def test_http_update_smartplug(
         self,
         hass: HomeAssistant,
