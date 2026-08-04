@@ -136,6 +136,11 @@ Priority Active** binary sensor reports whether it is currently in effect, so on
 a grid-connected unit it stays off - the settings still apply, they are simply
 not in play yet.
 
+That sensor turns on as soon as the AC input drops, not when a port is actually
+switched off, and the device reports the change within about a second. It is
+therefore usable as a fast mains-failure trigger for automations, independently
+of whether any port ever reaches its cutoff.
+
 The cutoff range is not fixed. The device derives it from the battery's own
 charge and discharge limits, and so does this integration: the lower end is the
 discharge limit (capped at 30) plus 5, the upper end is the charge limit (at

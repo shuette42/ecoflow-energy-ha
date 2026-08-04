@@ -420,8 +420,10 @@ message Delta3DisplayProperty {
   oneof _power_outages_list { Delta3PowerOutagesList power_outages_list = 968; }
 
   // 1 means port priority is currently in effect, any other value means it is
-  // not. It only engages when there is no AC or grid input and no smart
-  // generator or microinverter is connected, so 2 is the everyday value.
+  // not. It engages when there is no AC or grid input and no smart generator
+  // or microinverter is connected, so 2 is the everyday value. Confirmed in
+  // both directions by cutting mains ahead of a D3M1: it arrives as a change
+  // push within a second, not only in the two-minute full upload.
   oneof _power_outages_active_flag { uint32 power_outages_active_flag = 1279; }
 }
 

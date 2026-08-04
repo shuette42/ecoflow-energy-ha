@@ -123,9 +123,12 @@ PORT_PRIORITY_TYPES: dict[int, str] = {
 _PORT_PRIORITY_ACTIVE_KEY = "port_priority_active"
 
 # The device reports port priority as being in effect with exactly this value;
-# every other value means it is not. Taken from the app's own check rather than
-# from an observation - the state only occurs during a real outage, so a
-# capture on a grid-connected unit can only ever show the inactive side of it.
+# every other value means it is not. Observed in both directions on a D3M1 on
+# 2026-08-04 by cutting mains ahead of the unit: the flag went to 1 in the same
+# frame that reported the AC input at 0 W, and back to 2 when mains returned.
+# The state of charge never came near any port's cutoff during that run, which
+# settles what "active" means - the feature engages when there is no AC input,
+# not when a port is actually dropped.
 _PORT_PRIORITY_ACTIVE_VALUE = 1
 
 

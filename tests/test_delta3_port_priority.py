@@ -90,7 +90,9 @@ class TestParser:
             )["port_priority_active"]
             is True
         )
-        # 2 is what a grid-connected unit reports; the app treats it as off.
+        # Both values were observed on a D3M1 by cutting mains ahead of the
+        # unit: 1 arrived in the same frame that reported the AC input at 0 W,
+        # 2 came back when mains returned.
         assert (
             parse_delta3_display_property(
                 _display_fields(OPENING_LIST_HEX, active_flag=2)
