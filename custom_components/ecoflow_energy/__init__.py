@@ -160,16 +160,37 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
             # One WARNING per unsupported device per setup: the user sees
             # the device in the EcoFlow account but gets no entities, so
             # this degradation must be visible and actionable.
+            #
+            # The instruction has to match the mode, because the two modes
+            # reach the device's raw data by different routes and only one
+            # of them has a switch. On account sign-in the capture checkbox
+            # exists (config_flow_options renders it for AUTH_METHOD_APP
+            # only) and is the sole route. With developer keys there is no
+            # checkbox at all, and none is needed: a diagnostics download
+            # already fetches the raw HTTP quota of a device we do not parse.
+            # Telling that user to look for a switch sends them after a
+            # control their config flow never shows.
+            if entry.data.get(CONF_AUTH_METHOD) == AUTH_METHOD_APP:
+                how_to_help = (
+                    "switch on the raw data capture in the integration "
+                    "options and attach a diagnostics download to the issue "
+                    "- it records what the device sends and turns itself "
+                    "off again after 24 hours"
+                )
+            else:
+                how_to_help = (
+                    "attach a diagnostics download to the issue - it fetches "
+                    "the raw data this device reports on the way out, nothing "
+                    "needs to be switched on first"
+                )
             _LOGGER.warning(
                 "Skipping unsupported EcoFlow device %s... (%s) - no parser "
                 "available for this model yet. Please open an issue at "
                 "https://github.com/shuette42/ecoflow-energy-ha/issues so "
-                "support can be added. To help with that, switch on the raw "
-                "data capture in the integration options and attach a "
-                "diagnostics download to the issue - it records what the "
-                "device sends and turns itself off again after 24 hours",
+                "support can be added. To help with that, %s",
                 sn[:4],
                 product_name or "unknown product",
+                how_to_help,
             )
             skipped_devices.append({
                 "sn_prefix": sn[:4],

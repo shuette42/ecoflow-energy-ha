@@ -539,6 +539,178 @@ class TestUnsupportedDeviceSkip:
         assert skipped[0]["sn_prefix"] == "BK21"
         assert skipped[0]["product_name"] == "Smart Meter"
 
+    async def test_unsupported_device_hint_matches_account_signin(
+        self,
+        hass: HomeAssistant,
+        mock_mqtt_client,
+        caplog,
+    ) -> None:
+        """Account sign-in: the hint points at the capture switch, which exists there."""
+        unsupported_device = {
+            "sn": "BK21TEST00000001",
+            "name": "Smart Meter",
+            "product_name": "Smart Meter",
+            "device_type": "unknown",
+            "online": 1,
+        }
+
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_AUTH_METHOD: AUTH_METHOD_APP,
+                CONF_MODE: MODE_ENHANCED,
+                CONF_EMAIL: "test@example.com",
+                CONF_PASSWORD: "test_password",
+                CONF_USER_ID: "uid",
+                CONF_DEVICES: [unsupported_device],
+            },
+            unique_id="test@example.com",
+        )
+        entry.add_to_hass(hass)
+
+        mock_app_api = MagicMock()
+        mock_app_api.login = AsyncMock(return_value=True)
+        mock_app_api.user_id = "uid"
+        mock_app_api.get_mqtt_credentials = AsyncMock(return_value={
+            "userName": "app-user",
+            "password": "app-pass",
+        })
+
+        import logging
+        caplog.set_level(logging.WARNING)
+
+        with (
+            patch(
+                "custom_components.ecoflow_energy.ecoflow.app_api.AppApiClient",
+                return_value=mock_app_api,
+            ),
+            patch(
+                "custom_components.ecoflow_energy.coordinator.EcoFlowDeviceCoordinator.async_config_entry_first_refresh",
+                new_callable=AsyncMock,
+            ),
+        ):
+            await hass.config_entries.async_setup(entry.entry_id)
+            await hass.async_block_till_done()
+
+        message = next(
+            r.getMessage() for r in caplog.records
+            if r.levelno == logging.WARNING and "Skipping unsupported" in r.message
+        )
+        assert "switch on the raw data capture" in message
+
+    async def test_unsupported_device_hint_omits_switch_with_developer_keys(
+        self,
+        hass: HomeAssistant,
+        mock_mqtt_client,
+        caplog,
+    ) -> None:
+        """Developer keys: no capture switch is rendered, so the hint must not name one.
+
+        The options flow renders the capture checkbox for account sign-in
+        only. A hint that tells a developer-key user to switch it on sends
+        them looking for a control their config flow never shows, which is
+        what #188 reported. The diagnostics download already carries the raw
+        HTTP quota of an unparsed device in this mode, so there is nothing to
+        turn on.
+        """
+        unsupported_device = {
+            "sn": "BK21TEST00000001",
+            "name": "Smart Meter",
+            "product_name": "Smart Meter",
+            "device_type": "unknown",
+            "online": 1,
+        }
+
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_AUTH_METHOD: AUTH_METHOD_DEVELOPER,
+                CONF_ACCESS_KEY: "test_ak",
+                CONF_SECRET_KEY: "test_sk",
+                CONF_MODE: MODE_STANDARD,
+                CONF_DEVICES: [unsupported_device],
+            },
+            unique_id="test_ak",
+        )
+        entry.add_to_hass(hass)
+
+        import logging
+        caplog.set_level(logging.WARNING)
+
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.EcoFlowDeviceCoordinator.async_config_entry_first_refresh",
+            new_callable=AsyncMock,
+        ):
+            await hass.config_entries.async_setup(entry.entry_id)
+            await hass.async_block_till_done()
+
+        message = next(
+            r.getMessage() for r in caplog.records
+            if r.levelno == logging.WARNING and "Skipping unsupported" in r.message
+        )
+        assert "switch on the raw data capture" not in message
+        assert "nothing needs to be switched on first" in message
+        # The route that does work in this mode is still named.
+        assert "diagnostics download" in message
+
+    async def test_unsupported_device_hint_keys_on_auth_not_mode(
+        self,
+        hass: HomeAssistant,
+        mock_mqtt_client,
+        caplog,
+    ) -> None:
+        """Enhanced Mode on developer keys still gets the developer hint.
+
+        Mode and auth method are separate: an Enhanced entry without email
+        and password keeps AUTH_METHOD_DEVELOPER, and the options flow keys
+        the capture checkbox on the auth method alone. Branching the hint on
+        the mode instead would pass every test where the two line up and
+        re-create #188 for exactly this entry.
+        """
+        unsupported_device = {
+            "sn": "BK21TEST00000001",
+            "name": "Smart Meter",
+            "product_name": "Smart Meter",
+            "device_type": "unknown",
+            "online": 1,
+        }
+
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_AUTH_METHOD: AUTH_METHOD_DEVELOPER,
+                CONF_ACCESS_KEY: "test_ak",
+                CONF_SECRET_KEY: "test_sk",
+                # Enhanced without credentials for the app path: the
+                # auto-upgrade in async_setup_entry needs email AND password,
+                # so this entry stays on developer keys.
+                CONF_MODE: MODE_ENHANCED,
+                CONF_DEVICES: [unsupported_device],
+            },
+            unique_id="test_ak",
+        )
+        entry.add_to_hass(hass)
+
+        import logging
+        caplog.set_level(logging.WARNING)
+
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.EcoFlowDeviceCoordinator.async_config_entry_first_refresh",
+            new_callable=AsyncMock,
+        ):
+            await hass.config_entries.async_setup(entry.entry_id)
+            await hass.async_block_till_done()
+
+        message = next(
+            r.getMessage() for r in caplog.records
+            if r.levelno == logging.WARNING and "Skipping unsupported" in r.message
+        )
+        assert entry.data[CONF_AUTH_METHOD] == AUTH_METHOD_DEVELOPER
+        assert "switch on the raw data capture" not in message
+
     async def test_skipped_devices_cleared_on_unload(
         self,
         hass: HomeAssistant,
