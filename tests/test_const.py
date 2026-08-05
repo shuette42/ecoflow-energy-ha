@@ -102,6 +102,12 @@ class TestDeviceTypeRouting:
         # product_name behavior as J32D, classified via SN prefix.
         assert get_device_type("", "J32ETEST00000001") == "powerocean"
 
+    def test_j32b_powerocean_by_sn_prefix(self) -> None:
+        # PowerOcean variant (#194): a raw capture from the reporter unit
+        # carries a cmd_func 96 frame, which is the PowerOcean command
+        # family, so the unit is routed to the PowerOcean parser.
+        assert get_device_type("", "J32BTEST00000001") == "powerocean"
+
     def test_powerocean_plus_by_sn_prefix(self) -> None:
         # PowerOcean Plus variants (#88): higher-power 3-phase hybrid units,
         # Enhanced mode only, classified via SN prefix like J32D/J32E.

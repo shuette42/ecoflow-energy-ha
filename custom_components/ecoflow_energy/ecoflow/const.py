@@ -78,6 +78,14 @@ _SN_PREFIX_MAP = {
     # diagnostics in Enhanced mode - live data across grid/battery/MPPT;
     # single-phase unit, so only grid phases A and B carry values.
     "J32E": DEVICE_TYPE_POWEROCEAN,
+    # PowerOcean variant (#194): shown by a raw capture from a reporter unit,
+    # which carries a cmd_func 96 / cmd_id 1 frame - the EMS heartbeat this
+    # integration already decodes. That command family is PowerOcean only;
+    # the Delta 3 generation uses 254. The capture also holds frames on
+    # 254/32, 53/14 and 241/36, none of which is registered, so the unit
+    # reports more than the PowerOcean parser reads. Routing it delivers
+    # what the parser understands today rather than nothing at all.
+    "J32B": DEVICE_TYPE_POWEROCEAN,
     # PowerOcean Plus variants (#88): higher-power 3-phase hybrid units
     # (e.g. P3-S1, ~25-30 kW). Not exposed through the Developer API, so
     # Enhanced mode only - same situation as J32D/J32E. Routed to the
