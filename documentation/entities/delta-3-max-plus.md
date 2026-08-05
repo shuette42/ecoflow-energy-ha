@@ -3,8 +3,9 @@
 Full list of all entities created for Delta 3 devices. The entity set is shared
 across the generation: Delta 3 Max Plus (`D3M1`, `P321`) and base DELTA 3 (`P231`).
 
-**Totals:** 47 sensors, 7 switches, 4 numbers. Units whose serial starts with
-`D3M` add the port priority set: 3 switches, 3 numbers and 1 binary sensor.
+**Totals:** 47 sensors, 7 switches, 4 numbers, 1 select. Units whose serial
+starts with `D3M` add the port priority set: 3 switches, 3 numbers and 1 binary
+sensor.
 
 > Entities marked with *diagnostic* appear in the diagnostics section of the device page.
 
@@ -116,6 +117,22 @@ be used in the Energy Dashboard without accumulating drift.
 | AC 1 cutoff level | % | dynamic | 1 | Battery level at which a non-essential AC 1 stops being powered |
 | AC 2 cutoff level | % | dynamic | 1 | Battery level at which a non-essential AC 2 stops being powered |
 | DC cutoff level | % | dynamic | 1 | Battery level at which a non-essential DC output stops being powered |
+
+---
+
+## Selects
+
+| Entity | Options | Description |
+|:---|:---|:---|
+| Screen Timeout | 10 s, 30 s, 1 min, 5 min, 30 min, Never | How long the display stays lit after the last interaction. The same setting as "LCD screen timeout" under automatic shutdown in the EcoFlow app. Enhanced Mode only |
+
+**There is no way to switch the display off.** The device has no such command,
+and the EcoFlow app has no such control either - the shortest timeout is as
+close as it gets. Turning the brightness down to zero does not do it: that is a
+backlight level and the panel stays lit at the bottom of the range.
+
+Note that **Never** means the screen never switches off, not that it is never
+on. It is the last option for that reason, with the shortest timeout first.
 
 ---
 

@@ -7,6 +7,7 @@ import time
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import async_call_later
 
 from .const import (
@@ -115,8 +116,45 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
     return True
 
 
+# Entities that shipped once and were then withdrawn. Home Assistant keeps a
+# registry entry for every entity it has ever seen, and nothing removes one when
+# its definition disappears from the code - it simply stays, permanently
+# unavailable, on the device page of everyone who ran the release that had it.
+#
+# Matched by the suffix of the unique id, which is `<serial>_<entity key>`, so
+# one line covers every device that carried the entity.
+#
+# `ac_charge_mode` was a Delta 3 select in v1.16.0-beta.11 and beta.12. It was
+# withdrawn because the device reports its charge mode only when that mode
+# changes, which is far too rarely for a control that has to show where the
+# device stands.
+_WITHDRAWN_ENTITY_SUFFIXES: tuple[str, ...] = ("_ac_charge_mode",)
+
+
+def _async_remove_withdrawn_entities(
+    hass: HomeAssistant, entry: ConfigEntry
+) -> None:
+    """Drop registry entries for entities this integration no longer offers.
+
+    Runs before the platforms are set up, so a withdrawn entity never briefly
+    reappears. Removing a registry entry does not touch recorded history; the
+    statistics of a deleted entity stay until the user clears them, which is
+    the same behaviour as renaming one.
+    """
+    registry = er.async_get(hass)
+    for existing in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if not existing.unique_id.endswith(_WITHDRAWN_ENTITY_SUFFIXES):
+            continue
+        _LOGGER.debug(
+            "Removing withdrawn entity %s", existing.entity_id
+        )
+        registry.async_remove(existing.entity_id)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> bool:
     """Set up EcoFlow Energy from a config entry."""
+    _async_remove_withdrawn_entities(hass, entry)
+
     # Auto-upgrade: Enhanced Mode entries with email+password -> app-auth.
     # This lets existing Enhanced users benefit from the app-auth path
     # (no Developer Keys needed for MQTT) without manual reconfiguration.

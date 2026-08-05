@@ -1548,6 +1548,17 @@
           "self_use": "Self-use",
           "ai_schedule": "AI Schedule"
         }
+      },
+      "screen_timeout": {
+        "name": "Screen Timeout",
+        "state": {
+          "10_seconds": "10 s",
+          "30_seconds": "30 s",
+          "1_minute": "1 min",
+          "5_minutes": "5 min",
+          "30_minutes": "30 min",
+          "never": "Never"
+        }
       }
     }
   },

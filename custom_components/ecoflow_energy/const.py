@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Any, TypeVar
 
 from homeassistant.const import Platform
@@ -268,6 +270,12 @@ class EcoFlowSelectDef:
     options: tuple[str, ...]
     icon: str | None = None
     enhanced_only: bool = False
+    # Wire value -> option, for settings the device reports as a number rather
+    # than as a label. The parser keeps the raw value so a diagnostics download
+    # shows what the device actually said; the translation lives here. A value
+    # outside the map leaves the entity unknown, which is the honest state for
+    # a setting some other client put out of range.
+    value_map: Mapping[int, str] | None = None
 
 
 # =====================================================================
@@ -1042,6 +1050,42 @@ DELTA3_NUMBERS: list[EcoFlowNumberDef] = [
     EcoFlowNumberDef("port_priority_ac1_soc", "AC 1 Cutoff Level", "port_priority_ac1_cutoff_soc", "%", "mdi:battery-off-outline", 5, 95, 1, enhanced_only=True),
     EcoFlowNumberDef("port_priority_ac2_soc", "AC 2 Cutoff Level", "port_priority_ac2_cutoff_soc", "%", "mdi:battery-off-outline", 5, 95, 1, enhanced_only=True),
     EcoFlowNumberDef("port_priority_dc_soc", "DC Cutoff Level", "port_priority_dc_cutoff_soc", "%", "mdi:battery-off-outline", 5, 95, 1, enhanced_only=True),
+]
+
+# LCD screen timeout. The six steps are the app's own list, in the app's order,
+# and the wire values behind them were read off a D3M1 rather than guessed.
+#
+# Zero is "never", not "off". Three other rows on the same app page read "Never"
+# and carry 0 on the wire, so a user reaching for a dark panel must not be able
+# to pick 0 by mistake - hence it is labelled and sits last, where the app puts
+# it. There is no value that switches the screen off outright; the shortest
+# timeout is as close as the device gets.
+DELTA3_SCREEN_TIMEOUT_VALUES: Mapping[int, str] = MappingProxyType(
+    {
+        10: "10_seconds",
+        30: "30_seconds",
+        60: "1_minute",
+        300: "5_minutes",
+        1800: "30_minutes",
+        0: "never",
+    }
+)
+DELTA3_SCREEN_TIMEOUT_KEY = "screen_timeout"
+DELTA3_SCREEN_TIMEOUT_STATE_KEY = "screen_off_time_sec"
+
+DELTA3_SELECTS: list[EcoFlowSelectDef] = [
+    # Push path only: the polled quota carries no screen field at all, and the
+    # official Delta 3 HTTP documentation has none either. Without this flag the
+    # entity would exist on developer keys and never read or write.
+    EcoFlowSelectDef(
+        DELTA3_SCREEN_TIMEOUT_KEY,
+        "Screen Timeout",
+        DELTA3_SCREEN_TIMEOUT_STATE_KEY,
+        tuple(DELTA3_SCREEN_TIMEOUT_VALUES.values()),
+        icon="mdi:monitor-off",
+        enhanced_only=True,
+        value_map=DELTA3_SCREEN_TIMEOUT_VALUES,
+    ),
 ]
 
 # The charge mode deliberately has no entity. It is part of the same wire

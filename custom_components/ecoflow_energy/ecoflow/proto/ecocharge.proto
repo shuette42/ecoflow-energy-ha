@@ -405,6 +405,17 @@ message Delta3DisplayProperty {
   // DELTA 3 Max Plus whose app sat in custom mode with an active slider.
   oneof _ac_in_chg_mode { uint32 ac_in_chg_mode = 124; }
 
+  // LCD backlight timeout in seconds, the app's "LCD screen timeout" under
+  // automatic shutdown. Six fixed steps: 10, 30, 60, 300, 1800 and 0, where 0
+  // is the app's "Never" and means the screen stays lit - not the reverse.
+  // That reading is not an assumption: a screenshot of the app's own settings
+  // page was held against a capture taken minutes earlier on the same D3M1,
+  // and all five rows of that page matched their fields, three of them
+  // reading "Never" against a wire value of 0. There is no field anywhere in
+  // this family that switches the panel off outright, and the app offers no
+  // such control either.
+  oneof _screen_off_time { uint32 screen_off_time = 18; }
+
   // --- Switch / flag state ---
   oneof _energy_backup_en { bool energy_backup_en = 7; }
   oneof _en_beep { bool en_beep = 195; }

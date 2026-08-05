@@ -1,15 +1,23 @@
 """Select platform for EcoFlow Energy.
 
-Currently used for PowerOcean Work Mode selection (Self-use, AI Schedule).
-Implements the same optimistic-lock pattern as switch.py and number.py:
-after a SET, the local state is updated immediately and MQTT updates for
-the same key are ignored for 5 seconds.
+Two settings so far: the PowerOcean work mode (self-use, AI schedule) and the
+Delta 3 LCD screen timeout. Both use the same optimistic-lock pattern as
+switch.py and number.py - after a SET the local state is updated immediately
+and device updates for the same key are ignored for five seconds.
+
+The two differ in what the device reports back. The work mode arrives as a
+label the parser has already resolved; the screen timeout arrives as a number
+of seconds, because the parser keeps the device's own vocabulary so that a
+diagnostics download shows what was actually said. A definition carrying a
+`value_map` is of the second kind, and everything that reads or writes state
+for it works in wire values rather than labels.
 """
 
 from __future__ import annotations
 
 import logging
 import time
+from typing import Any
 
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
@@ -19,12 +27,15 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
+    DELTA3_SELECTS,
+    DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
     DOMAIN,
     EcoFlowSelectDef,
     POWEROCEAN_SELECTS,
 )
 from .coordinator import EcoFlowDeviceCoordinator
+from .ecoflow.delta3_commands import build_select_command as build_delta3_select_command
 from .entity import raise_set_failed, raise_set_unsupported
 
 _LOGGER = logging.getLogger(__name__)
@@ -113,6 +124,14 @@ class EcoFlowSelect(CoordinatorEntity[EcoFlowDeviceCoordinator], SelectEntity):
         value = self.coordinator.data.get(self._definition.state_key)
         if value is None:
             return None
+        # Some settings are reported as a number rather than as a label. The
+        # parser keeps the raw value, so translate it here. A value the device
+        # reports outside the known set leaves the entity unknown rather than
+        # showing a neighbouring option that is not what is actually set.
+        if self._definition.value_map is not None:
+            if isinstance(value, bool) or not isinstance(value, int):
+                return None
+            return self._definition.value_map.get(value)
         # Coordinator stores the human-readable enum label (e.g. "self_use").
         # If it's not in our exposed options, return None so the UI shows
         # an empty selection rather than an invalid one.
@@ -141,14 +160,55 @@ class EcoFlowSelect(CoordinatorEntity[EcoFlowDeviceCoordinator], SelectEntity):
             self._apply_optimistic_select(option)
             return
 
+        if self.coordinator.device_type == DEVICE_TYPE_DELTA3:
+            wire_value = self._wire_value(option)
+            if wire_value is None:
+                raise_set_unsupported(self.entity_id)
+            command = build_delta3_select_command(self._definition.key, wire_value)
+            if command is None:
+                raise_set_unsupported(self.entity_id)
+            ok = await self.coordinator.async_send_delta3_set(command)
+            if not ok:
+                raise_set_failed(self.entity_id)
+            self._apply_optimistic_select(option)
+            return
+
         raise_set_unsupported(self.entity_id)
 
+    def _wire_value(self, option: str) -> int | None:
+        """Return the device value behind an option label."""
+        value_map = self._definition.value_map
+        if value_map is None:
+            return None
+        for wire, label in value_map.items():
+            if label == option:
+                return wire
+        return None
+
     def _apply_optimistic_select(self, option: str) -> None:
-        """Apply the optimistic lock so the UI reflects the change immediately."""
+        """Apply the optimistic lock so the UI reflects the change immediately.
+
+        The coordinator keeps the value in the shape the device reports it, not
+        the label, so that the optimistic write and the push that follows it are
+        the same kind of thing. Otherwise the label would sit in the data until
+        the next push and `current_option` would try to map a label as if it
+        were a wire value.
+
+        The stored value is derived from the option here rather than passed in,
+        so a caller cannot store None by forgetting an argument.
+        """
         state_key = self._definition.state_key
-        self.coordinator.set_device_value(state_key, option)
+        stored: Any = option
+        if self._definition.value_map is not None:
+            wire_value = self._wire_value(option)
+            if wire_value is None:
+                # Cannot happen after the option check above; storing the label
+                # would poison a key the rest of the entity reads as an int.
+                return
+            stored = wire_value
+        self.coordinator.set_device_value(state_key, stored)
         if self.coordinator.data is not None:
-            self.coordinator.data[state_key] = option
+            self.coordinator.data[state_key] = stored
         self._optimistic_value = option
         self._optimistic_lock_until = time.monotonic() + OPTIMISTIC_LOCK_S
         self.async_write_ha_state()
@@ -158,4 +218,6 @@ def _get_select_defs(device_type: str) -> list[EcoFlowSelectDef]:
     """Return select definitions based on device type."""
     if device_type == DEVICE_TYPE_POWEROCEAN:
         return POWEROCEAN_SELECTS
+    if device_type == DEVICE_TYPE_DELTA3:
+        return DELTA3_SELECTS
     return []

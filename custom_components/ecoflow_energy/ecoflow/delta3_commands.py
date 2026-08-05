@@ -108,6 +108,22 @@ DELTA3_NUMBER_PARAMS: dict[str, Delta3Number] = {
 }
 
 
+# --- LCD screen timeout ------------------------------------------------------
+#
+# ConfigWrite field 12, read back as status-frame field 18, in seconds. Verified
+# on a D3M1 on 2026-08-05: a write of 30 was acknowledged with config_ok=1 after
+# 0.23 s and reported back on field 18 as 30 after 2.16 s; restoring 10 behaved
+# the same way.
+#
+# Only the app's own six steps are offered. Whether the device accepts an
+# arbitrary value such as 47 has never been measured, and a ConfigWrite it will
+# not process is dropped without any answer at all - so an unmeasured value
+# would fail silently rather than visibly.
+SCREEN_TIMEOUT_KEY = "screen_timeout"
+SCREEN_TIMEOUT_PARAMS_KEY = "cfgScreenOffTime"
+SCREEN_TIMEOUT_FIELD = 12
+
+
 # --- Port priority: one item per write ---------------------------------------
 #
 # ConfigWrite field 376 carries a PowerOutagesList, whose only field is a
@@ -197,6 +213,7 @@ _PARAMS_KEY_TO_FIELD: dict[str, int] = {
     **{entry.params_key: entry.config_field for entry in DELTA3_SWITCH_PARAMS.values()},
     **{entry.params_key: entry.config_field for entry in DELTA3_NUMBER_PARAMS.values()},
     AC_CHARGE_MODE_PARAMS_KEY: AC_CHARGE_MODE_FIELD,
+    SCREEN_TIMEOUT_PARAMS_KEY: SCREEN_TIMEOUT_FIELD,
 }
 
 # ConfigWriteAck: cmd_func 254 / cmd_id 18, config_ok == 1 means "applied".
@@ -255,6 +272,17 @@ def build_number_command(entity_key: str, value: float) -> dict[str, Any] | None
             }
         )
     return _envelope({entry.params_key: clamped})
+
+
+def build_select_command(entity_key: str, wire_value: int) -> dict[str, Any] | None:
+    """Build a SET command for a Delta 3 select.
+
+    The caller resolves the option label to its wire value, because the option
+    list and the values behind it belong together in one place.
+    """
+    if entity_key != SCREEN_TIMEOUT_KEY:
+        return None
+    return _envelope({SCREEN_TIMEOUT_PARAMS_KEY: int(wire_value)})
 
 
 # Parameter sets that legitimately travel in one frame. Anything not listed

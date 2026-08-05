@@ -98,6 +98,11 @@ _HEARTBEAT_SOC_FIELDS: tuple[str, ...] = ("lcd_show_soc", "f32_lcd_show_soc")
 # them in the shared field map would claim a reach they do not have (#181).
 _PROTO_ONLY_FIELDS: dict[str, str] = {
     "ac_in_chg_pow_max": "ac_charge_power_limit_w",
+    # LCD backlight timeout in seconds. Reported raw rather than as the app's
+    # label, so a diagnostics download shows what the device actually said even
+    # when the value is not one of the six steps the app offers. The entity does
+    # the labelling.
+    "screen_off_time": "screen_off_time_sec",
 }
 
 # AC charge mode, same push-only reach as the fields above. The wire value is

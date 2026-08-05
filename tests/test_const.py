@@ -10,6 +10,7 @@ from ecoflow_energy.const import (
     DELTA_PROFILE_R351,
     POWEROCEAN_SENSORS,
     DELTA2MAX_SENSORS,
+    DELTA3_SELECTS,
     DELTA3_SENSORS,
     DELTA3_POWER_TO_ENERGY,
     SMARTPLUG_SENSORS,
@@ -635,6 +636,9 @@ _DYNAMIC_KEY_FAMILIES = ("pack", "mppt_pv", "grid_phase_")
 # the 1.16.0 betas. Each entry is (definition list, Standard-Mode parser).
 _STANDARD_MODE_SOURCES = (
     ("DELTA3_SENSORS", DELTA3_SENSORS, "delta3_http.py"),
+    # Controls belong here too. A select that Standard Mode cannot read is the
+    # same failure as a sensor it cannot fill, with a write on top.
+    ("DELTA3_SELECTS", DELTA3_SELECTS, "delta3_http.py"),
     ("POWEROCEAN_SENSORS", POWEROCEAN_SENSORS, "powerocean.py"),
     ("POWEROCEAN_BINARY_SENSORS", POWEROCEAN_BINARY_SENSORS, "powerocean.py"),
 )
