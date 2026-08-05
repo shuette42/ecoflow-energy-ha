@@ -768,3 +768,40 @@ class TestResendInitialRequests:
 
         assert client.resend_initial_requests() is False
         client.client.publish.assert_not_called()
+
+
+class TestMaskTopic:
+    """Topics reach the log, and the log reaches public issues.
+
+    Every EcoFlow topic carries the serial, and the app and open topics carry
+    the user id or the certificate account on top. Reporters are asked to turn
+    on debug logging and attach the result, so an unmasked topic publishes all
+    three.
+    """
+
+    def test_app_topic_masks_serial_and_user_id(self):
+        client = _make_client(user_id="9876543210", wss_mode=True)
+        masked = client.mask_topic("/app/9876543210/TEST1234SN/thing/property/set")
+
+        assert masked == "/app/{uid}/{sn}/thing/property/set"
+
+    def test_open_topic_masks_serial_and_cert_account(self):
+        client = _make_client()
+        masked = client.mask_topic("/open/test_account/TEST1234SN/set_reply")
+
+        assert masked == "/open/{acct}/{sn}/set_reply"
+
+    def test_property_topic_masks_serial(self):
+        client = _make_client()
+
+        assert client.mask_topic("/app/device/property/TEST1234SN") == (
+            "/app/device/property/{sn}"
+        )
+
+    def test_empty_identifiers_are_not_substituted(self):
+        """An empty user id must not turn every empty string into {uid}."""
+        client = _make_client(user_id="")
+
+        assert client.mask_topic("/app/device/property/TEST1234SN") == (
+            "/app/device/property/{sn}"
+        )

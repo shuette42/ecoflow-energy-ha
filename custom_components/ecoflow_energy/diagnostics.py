@@ -56,7 +56,7 @@ _SERIAL_RE = re.compile(r"[A-Z0-9]{15,}")
 _PRE_SANITIZED_KEYS = frozenset({"hex", "frame_hex"})
 
 
-def _redact_serials(value: Any) -> Any:
+def _redact_serials(value: Any, aliases: dict[str, str] | None = None) -> Any:
     """Redact values that look like EcoFlow serial numbers.
 
     Recurses into dict and list values so nested quota structures (e.g.
@@ -69,19 +69,39 @@ def _redact_serials(value: Any) -> Any:
     values alone would still publish a serial in a dump users are asked to
     attach to a public issue.
 
+    Distinct serials get distinct placeholders. Replacing all of them with one
+    constant made two battery packs collapse onto the same redacted key, and a
+    dict comprehension keeps only the last one - so a system with two packs
+    reported one, silently, in the artefact used to answer questions about how
+    many packs it has. The first serial seen keeps the bare marker so the
+    common single-serial case reads as before; every further distinct serial
+    is numbered. The mapping lives for one redaction pass, so the same serial
+    reads the same throughout a dump and nothing carries over between dumps.
+
     Captured frames are the one exception, see ``_PRE_SANITIZED_KEYS``.
     """
+    if aliases is None:
+        aliases = {}
     if isinstance(value, str):
-        return _SERIAL_RE.sub(REDACTED, value)
+
+        def _alias(match: re.Match[str]) -> str:
+            serial = match.group(0)
+            if serial not in aliases:
+                aliases[serial] = (
+                    REDACTED if not aliases else f"**REDACTED-{len(aliases) + 1}**"
+                )
+            return aliases[serial]
+
+        return _SERIAL_RE.sub(_alias, value)
     if isinstance(value, dict):
         return {
-            _redact_serials(key): (
-                item if key in _PRE_SANITIZED_KEYS else _redact_serials(item)
+            _redact_serials(key, aliases): (
+                item if key in _PRE_SANITIZED_KEYS else _redact_serials(item, aliases)
             )
             for key, item in value.items()
         }
     if isinstance(value, list):
-        return [_redact_serials(item) for item in value]
+        return [_redact_serials(item, aliases) for item in value]
     return value
 
 

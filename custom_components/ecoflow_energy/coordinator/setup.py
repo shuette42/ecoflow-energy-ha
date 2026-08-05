@@ -62,13 +62,13 @@ class SetupMixin:
         password = self._entry.data.get(CONF_PASSWORD, "")
 
         if not email or not password:
-            _LOGGER.error("App-auth: missing credentials for %s", self.device_sn)
+            _LOGGER.error("App-auth: missing credentials for %s", self.device_sn[:4])
             self._entry.async_start_reauth(self.hass)
             return
 
         app_api = AppApiClient(session, email, password)
         if not await app_api.login():
-            _LOGGER.warning("App-auth: login failed for %s - triggering re-authentication", self.device_sn)
+            _LOGGER.warning("App-auth: login failed for %s - triggering re-authentication", self.device_sn[:4])
             self._entry.async_start_reauth(self.hass)
             return
 
@@ -81,7 +81,7 @@ class SetupMixin:
         # Fetch portal MQTT credentials (AES-decrypted app-* creds)
         creds = await app_api.get_mqtt_credentials()
         if creds is None:
-            _LOGGER.error("App-auth: failed to fetch MQTT credentials for %s", self.device_sn)
+            _LOGGER.error("App-auth: failed to fetch MQTT credentials for %s", self.device_sn[:4])
             self._entry.async_start_reauth(self.hass)
             return
 
@@ -117,7 +117,7 @@ class SetupMixin:
 
         _LOGGER.debug(
             "App-auth setup complete for %s (enhanced=%s)",
-            self.device_sn, self._enhanced_mode,
+            self.device_sn[:4], self._enhanced_mode,
         )
 
     async def _setup_developer_auth(self, session: Any) -> None:
@@ -126,7 +126,7 @@ class SetupMixin:
         secret_key = self._entry.data.get(CONF_SECRET_KEY)
 
         if not access_key or not secret_key:
-            _LOGGER.error("Developer API keys missing for %s - triggering re-authentication", self.device_sn)
+            _LOGGER.error("Developer API keys missing for %s - triggering re-authentication", self.device_sn[:4])
             self._entry.async_start_reauth(self.hass)
             return
 
@@ -167,12 +167,12 @@ class SetupMixin:
         if subscribe_mqtt:
             _LOGGER.debug(
                 "Standard Mode + MQTT push: HTTP every %ds + MQTT real-time for %s",
-                HTTP_FALLBACK_INTERVAL_S, self.device_sn,
+                HTTP_FALLBACK_INTERVAL_S, self.device_sn[:4],
             )
         else:
             _LOGGER.debug(
                 "Standard Mode: HTTP polling every %ds for %s",
-                HTTP_FALLBACK_INTERVAL_S, self.device_sn,
+                HTTP_FALLBACK_INTERVAL_S, self.device_sn[:4],
             )
 
     def _start_mqtt(self) -> None:
@@ -183,13 +183,13 @@ class SetupMixin:
             if self._mqtt_client.connect():
                 self._mqtt_client.start_loop()
                 mode_label = "WSS Enhanced" if self._enhanced_mode else "TCP Standard"
-                _LOGGER.info("MQTT started for %s (%s)", self.device_sn, mode_label)
+                _LOGGER.info("MQTT started for %s (%s)", self.device_sn[:4], mode_label)
                 self._log_event("mqtt_connect", mode_label)
             else:
-                _LOGGER.error("MQTT connect failed for %s", self.device_sn)
+                _LOGGER.error("MQTT connect failed for %s", self.device_sn[:4])
                 self._log_event("mqtt_disconnect", "connect failed")
         else:
-            _LOGGER.error("MQTT client creation failed for %s", self.device_sn)
+            _LOGGER.error("MQTT client creation failed for %s", self.device_sn[:4])
             self._log_event("mqtt_disconnect", "client creation failed")
 
     async def async_shutdown(self) -> None:

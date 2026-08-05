@@ -134,6 +134,27 @@ class EcoFlowMQTTClient:
         else:
             _LOGGER.warning(msg, *args)
 
+    def mask_topic(self, topic: str) -> str:
+        """Return a topic with the serial and the account identifiers removed.
+
+        Every EcoFlow topic carries at least the device serial, and the app
+        and open topics carry the user id or the certificate account as well.
+        Reporters are routinely asked to enable debug logging and attach the
+        result to a public issue, so a logged topic publishes all three - the
+        same leak class the diagnostics export was fixed for, one layer out.
+        Mirrors ``EcoFlowDeviceProbe._mask_topic``, which does this for the
+        topics stored in a diagnostics download.
+        """
+        masked = topic
+        for secret, placeholder in (
+            (self._device_sn, "{sn}"),
+            (self._user_id, "{uid}"),
+            (self._cert_account, "{acct}"),
+        ):
+            if secret:
+                masked = masked.replace(secret, placeholder)
+        return masked
+
     @property
     def cert_account(self) -> str:
         """Return the certificate account used for MQTT authentication."""
@@ -240,7 +261,11 @@ class EcoFlowMQTTClient:
 
                 if not self._notified_connected:
                     self._notified_connected = True
-                    _LOGGER.debug("MQTT connected — data topics: %s | %s | set_reply", topic_json, topic_pb)
+                    _LOGGER.debug(
+                    "MQTT connected — data topics: %s | %s | set_reply",
+                    self.mask_topic(topic_json),
+                    self.mask_topic(topic_pb),
+                )
             else:
                 # Standard Mode: no data subscriptions, MQTT is for SET commands only
                 if not self._notified_connected:
@@ -393,11 +418,21 @@ class EcoFlowMQTTClient:
         ):
             # Broker echo of our own keepalive ping — not device data
             return
-        _LOGGER.debug("MQTT msg: %s (%d bytes) for %s", msg.topic, len(msg.payload), self._device_sn)
+        _LOGGER.debug(
+            "MQTT msg: %s (%d bytes) for %s",
+            self.mask_topic(msg.topic),
+            len(msg.payload),
+            self._device_sn[:4],
+        )
         try:
             self.message_handler(msg.topic, msg.payload)
         except Exception as exc:
-            self._log_issue("warning", "MQTT message handler error for %s: %s", msg.topic, exc)
+            self._log_issue(
+                "warning",
+                "MQTT message handler error for %s: %s",
+                self.mask_topic(msg.topic),
+                exc,
+            )
 
     def connect(self) -> bool:
         """Establish the MQTT connection."""
@@ -513,7 +548,10 @@ class EcoFlowMQTTClient:
         """
         if self._listen_only:
             # Single choke point: whatever path got here, nothing leaves.
-            _LOGGER.debug("Publish suppressed on listen-only connection (%s)", topic)
+            _LOGGER.debug(
+                "Publish suppressed on listen-only connection (%s)",
+                self.mask_topic(topic),
+            )
             return False
         if not self.is_connected():
             return False
@@ -533,10 +571,10 @@ class EcoFlowMQTTClient:
         except (RuntimeError, ValueError) as exc:
             # paho raises ValueError when the outgoing queue is full and
             # RuntimeError when the message can no longer be delivered.
-            _LOGGER.debug("Publish not acknowledged (%s): %s", topic, exc)
+            _LOGGER.debug("Publish not acknowledged (%s): %s", self.mask_topic(topic), exc)
             return False
         except Exception as exc:
-            _LOGGER.error("Publish failed (%s): %s", topic, exc)
+            _LOGGER.error("Publish failed (%s): %s", self.mask_topic(topic), exc)
             return False
 
     def send_proto_set(self, payload: bytes, wait: bool = False) -> bool:

@@ -382,12 +382,19 @@ class SetCommandsMixin:
             partial(self._mqtt_client.publish, topic, payload, 1, wait=True),
         )
         if ok:
-            _LOGGER.debug("SET command sent: %s -> %s", topic, payload[:120])
+            _LOGGER.debug(
+                "SET command sent: %s -> %s",
+                self._mqtt_client.mask_topic(topic),
+                payload[:120],
+            )
             self._log_event("set_cmd", f"keys={list(command.keys())[:3]}")
         else:
             # The entity raises for the user; a warning here would only
             # duplicate the error Home Assistant already logs.
-            _LOGGER.debug("SET command not delivered: %s", topic)
+            _LOGGER.debug(
+                "SET command not delivered: %s",
+                self._mqtt_client.mask_topic(topic),
+            )
             self._log_event("set_cmd_fail", f"keys={list(command.keys())[:3]}")
         return ok
 

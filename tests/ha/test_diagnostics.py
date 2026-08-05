@@ -598,6 +598,40 @@ class TestRedactSerials:
         out = _redact_serials({"a": {"b": "D3M1TESTAAAABBBB"}})
         assert out == {"a": {"b": REDACTED}}
 
+    def test_two_serials_do_not_collapse_onto_one_key(self) -> None:
+        """A second battery pack must survive redaction.
+
+        One shared placeholder made both `bp_addr.<sn>` keys identical, and
+        the dict comprehension kept only the last - a two-pack system read as
+        a one-pack system in the dump used to answer exactly that question.
+        """
+        out = _redact_serials(
+            {
+                "bp_addr.HJ31TESTSERIAL01": {"bpSoc": 74},
+                "bp_addr.HJ31TESTSERIAL02": {"bpSoc": 71},
+            }
+        )
+        assert len(out) == 2
+        assert out["bp_addr.**REDACTED**"] == {"bpSoc": 74}
+        assert out["bp_addr.**REDACTED-2**"] == {"bpSoc": 71}
+
+    def test_same_serial_reads_the_same_throughout_one_pass(self) -> None:
+        out = _redact_serials(
+            {
+                "a": "HJ31TESTSERIAL01",
+                "b": {"c": "HJ31TESTSERIAL02"},
+                "d": ["HJ31TESTSERIAL01"],
+            }
+        )
+        assert out["a"] == REDACTED
+        assert out["b"]["c"] == "**REDACTED-2**"
+        assert out["d"] == [REDACTED]
+
+    def test_placeholders_do_not_leak_the_serial(self) -> None:
+        out = _redact_serials(["HJ31TESTSERIAL01", "HJ31TESTSERIAL02"])
+        assert "HJ31TESTSERIAL01" not in json.dumps(out)
+        assert "HJ31TESTSERIAL02" not in json.dumps(out)
+
     def test_list_recurses(self) -> None:
         out = _redact_serials(["D3M1TESTAAAABBBB", 42, "ok"])
         assert out == [REDACTED, 42, "ok"]

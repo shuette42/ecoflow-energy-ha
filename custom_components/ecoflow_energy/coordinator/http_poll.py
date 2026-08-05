@@ -68,7 +68,7 @@ class HttpPollMixin:
             if self._consecutive_http_failures == 5 and not mqtt_active:
                 _LOGGER.warning(
                     "HTTP quota failed %d consecutive times for %s — triggering re-authentication",
-                    self._consecutive_http_failures, self.device_sn,
+                    self._consecutive_http_failures, self.device_sn[:4],
                 )
                 self._entry.async_start_reauth(self.hass)
             return dict(self._device_data)

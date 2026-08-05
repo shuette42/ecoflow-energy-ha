@@ -142,7 +142,7 @@ class StateApplyMixin:
         self._last_app_surplus_sync_ts = now
         _LOGGER.info(
             "PowerOcean surplus auto-sync (%s): app=%d ems=%d -> SET both=%d",
-            self.device_sn, app_int, ems_int, app_int,
+            self.device_sn[:4], app_int, ems_int, app_int,
         )
         self._log_event(
             "surplus_auto_sync",
@@ -269,7 +269,7 @@ class StateApplyMixin:
                 _LOGGER.debug(
                     "Battery state for %s: avg(%ds)=%.1fW pending %s "
                     "(was %s, commit in %ds, n=%d)",
-                    self.device_sn,
+                    self.device_sn[:4],
                     self.BATT_WINDOW_S,
                     avg,
                     derived,
@@ -288,7 +288,7 @@ class StateApplyMixin:
         _LOGGER.debug(
             "Battery state for %s: avg(%ds)=%.1fW -> %s "
             "(was %s, held %.0fs, confirmed %.0fs, n=%d)",
-            self.device_sn,
+            self.device_sn[:4],
             self.BATT_WINDOW_S,
             avg,
             derived,
