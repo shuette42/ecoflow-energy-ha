@@ -103,6 +103,12 @@ _PROTO_ONLY_FIELDS: dict[str, str] = {
     # when the value is not one of the six steps the app offers. The entity does
     # the labelling.
     "screen_off_time": "screen_off_time_sec",
+    # The four idle shutdowns, in minutes - a different unit from the screen
+    # timeout above, inside the same frame. Same reasoning for keeping them raw.
+    "dev_standby_time": "dev_standby_time_min",
+    "ac_standby_time": "ac_standby_time_min",
+    "ac2_standby_time": "ac2_standby_time_min",
+    "dc_standby_time": "dc_standby_time_min",
 }
 
 # AC charge mode, same push-only reach as the fields above. The wire value is

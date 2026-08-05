@@ -1559,6 +1559,58 @@
           "30_minutes": "30 min",
           "never": "Nie"
         }
+      },
+      "device_idle_shutdown": {
+        "name": "Geräte-Abschaltung bei Leerlauf",
+        "state": {
+          "30_minutes": "30 min",
+          "1_hour": "1 h",
+          "2_hours": "2 h",
+          "4_hours": "4 h",
+          "6_hours": "6 h",
+          "12_hours": "12 h",
+          "24_hours": "24 h",
+          "never": "Nie"
+        }
+      },
+      "ac1_idle_shutdown": {
+        "name": "AC 1 Abschaltung bei Leerlauf",
+        "state": {
+          "30_minutes": "30 min",
+          "1_hour": "1 h",
+          "2_hours": "2 h",
+          "4_hours": "4 h",
+          "6_hours": "6 h",
+          "12_hours": "12 h",
+          "24_hours": "24 h",
+          "never": "Nie"
+        }
+      },
+      "ac2_idle_shutdown": {
+        "name": "AC 2 Abschaltung bei Leerlauf",
+        "state": {
+          "30_minutes": "30 min",
+          "1_hour": "1 h",
+          "2_hours": "2 h",
+          "4_hours": "4 h",
+          "6_hours": "6 h",
+          "12_hours": "12 h",
+          "24_hours": "24 h",
+          "never": "Nie"
+        }
+      },
+      "dc_idle_shutdown": {
+        "name": "12 V Abschaltung bei Leerlauf",
+        "state": {
+          "30_minutes": "30 min",
+          "1_hour": "1 h",
+          "2_hours": "2 h",
+          "4_hours": "4 h",
+          "6_hours": "6 h",
+          "12_hours": "12 h",
+          "24_hours": "24 h",
+          "never": "Nie"
+        }
       }
     }
   },

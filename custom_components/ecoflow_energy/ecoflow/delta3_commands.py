@@ -48,6 +48,13 @@ class Delta3Switch(NamedTuple):
     config_field: int    # ConfigWrite field number on the app channel
 
 
+class Delta3Select(NamedTuple):
+    """One stepped control whose options are fixed by the vendor app."""
+
+    params_key: str
+    config_field: int
+
+
 class Delta3Number(NamedTuple):
     """One numeric control, with its vendor bounds and both wire representations."""
 
@@ -122,6 +129,25 @@ DELTA3_NUMBER_PARAMS: dict[str, Delta3Number] = {
 SCREEN_TIMEOUT_KEY = "screen_timeout"
 SCREEN_TIMEOUT_PARAMS_KEY = "cfgScreenOffTime"
 SCREEN_TIMEOUT_FIELD = 12
+
+
+# --- Idle shutdowns ----------------------------------------------------------
+#
+# Four settings from the same app page, all in minutes, all writable the same
+# way. They switch an output - or the whole unit - off after the configured span
+# with no load connected and no activity, which is the vendor's own description
+# and the reason they are called idle shutdowns here rather than timeouts.
+#
+# The field numbers are close together and easy to transpose, which is why each
+# one has its own payload test asserting the exact number rather than a shared
+# parametrized one over the table below.
+DELTA3_SELECT_FIELDS: dict[str, Delta3Select] = {
+    SCREEN_TIMEOUT_KEY: Delta3Select(SCREEN_TIMEOUT_PARAMS_KEY, SCREEN_TIMEOUT_FIELD),
+    "device_idle_shutdown": Delta3Select("cfgDevStandbyTime", 13),
+    "ac1_idle_shutdown": Delta3Select("cfgAcStandbyTime", 10),
+    "ac2_idle_shutdown": Delta3Select("cfgAc2StandbyTime", 572),
+    "dc_idle_shutdown": Delta3Select("cfgDcStandbyTime", 11),
+}
 
 
 # --- Port priority: one item per write ---------------------------------------
@@ -213,7 +239,7 @@ _PARAMS_KEY_TO_FIELD: dict[str, int] = {
     **{entry.params_key: entry.config_field for entry in DELTA3_SWITCH_PARAMS.values()},
     **{entry.params_key: entry.config_field for entry in DELTA3_NUMBER_PARAMS.values()},
     AC_CHARGE_MODE_PARAMS_KEY: AC_CHARGE_MODE_FIELD,
-    SCREEN_TIMEOUT_PARAMS_KEY: SCREEN_TIMEOUT_FIELD,
+    **{entry.params_key: entry.config_field for entry in DELTA3_SELECT_FIELDS.values()},
 }
 
 # ConfigWriteAck: cmd_func 254 / cmd_id 18, config_ok == 1 means "applied".
@@ -280,9 +306,10 @@ def build_select_command(entity_key: str, wire_value: int) -> dict[str, Any] | N
     The caller resolves the option label to its wire value, because the option
     list and the values behind it belong together in one place.
     """
-    if entity_key != SCREEN_TIMEOUT_KEY:
+    entry = DELTA3_SELECT_FIELDS.get(entity_key)
+    if entry is None:
         return None
-    return _envelope({SCREEN_TIMEOUT_PARAMS_KEY: int(wire_value)})
+    return _envelope({entry.params_key: int(wire_value)})
 
 
 # Parameter sets that legitimately travel in one frame. Anything not listed

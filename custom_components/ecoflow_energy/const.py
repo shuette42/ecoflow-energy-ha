@@ -1073,10 +1073,43 @@ DELTA3_SCREEN_TIMEOUT_VALUES: Mapping[int, str] = MappingProxyType(
 DELTA3_SCREEN_TIMEOUT_KEY = "screen_timeout"
 DELTA3_SCREEN_TIMEOUT_STATE_KEY = "screen_off_time_sec"
 
+# The four idle shutdowns from the same app page, in minutes. Every one of them
+# offers the identical eight steps, read off all four pages of the app.
+#
+# The unit is settled rather than inferred: the 12 V DC page had "2 h" ticked
+# while its field read 120, and two hours is 120 minutes. Note that it differs
+# from the screen timeout above, which is seconds, in the same frame.
+#
+# These are idle shutdowns, not timers. The app's own description on each page:
+# the output switches off when no load is connected and no activity is seen for
+# the configured span. A load that keeps drawing keeps its output alive.
+DELTA3_IDLE_SHUTDOWN_VALUES: Mapping[int, str] = MappingProxyType(
+    {
+        30: "30_minutes",
+        60: "1_hour",
+        120: "2_hours",
+        240: "4_hours",
+        360: "6_hours",
+        720: "12_hours",
+        1440: "24_hours",
+        0: "never",
+    }
+)
+
+# key -> (entity name, state key, icon). The names say what powers down and that
+# it is idle-triggered; the app calls them "timeout", which describes the
+# mechanism and not the effect.
+DELTA3_IDLE_SHUTDOWNS: tuple[tuple[str, str, str, str], ...] = (
+    ("device_idle_shutdown", "Device Idle Shutdown", "dev_standby_time_min", "mdi:power-off"),
+    ("ac1_idle_shutdown", "AC 1 Idle Shutdown", "ac_standby_time_min", "mdi:power-socket-de"),
+    ("ac2_idle_shutdown", "AC 2 Idle Shutdown", "ac2_standby_time_min", "mdi:power-socket-de"),
+    ("dc_idle_shutdown", "12 V Idle Shutdown", "dc_standby_time_min", "mdi:car-battery"),
+)
+
 DELTA3_SELECTS: list[EcoFlowSelectDef] = [
-    # Push path only: the polled quota carries no screen field at all, and the
-    # official Delta 3 HTTP documentation has none either. Without this flag the
-    # entity would exist on developer keys and never read or write.
+    # Push path only: the polled quota carries no screen or standby field at all,
+    # and the official Delta 3 HTTP documentation has none either. Without this
+    # flag the entities would exist on developer keys and never read or write.
     EcoFlowSelectDef(
         DELTA3_SCREEN_TIMEOUT_KEY,
         "Screen Timeout",
@@ -1085,6 +1118,18 @@ DELTA3_SELECTS: list[EcoFlowSelectDef] = [
         icon="mdi:monitor-off",
         enhanced_only=True,
         value_map=DELTA3_SCREEN_TIMEOUT_VALUES,
+    ),
+    *(
+        EcoFlowSelectDef(
+            key,
+            name,
+            state_key,
+            tuple(DELTA3_IDLE_SHUTDOWN_VALUES.values()),
+            icon=icon,
+            enhanced_only=True,
+            value_map=DELTA3_IDLE_SHUTDOWN_VALUES,
+        )
+        for key, name, state_key, icon in DELTA3_IDLE_SHUTDOWNS
     ),
 ]
 

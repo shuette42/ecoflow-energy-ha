@@ -3,7 +3,7 @@
 Full list of all entities created for Delta 3 devices. The entity set is shared
 across the generation: Delta 3 Max Plus (`D3M1`, `P321`) and base DELTA 3 (`P231`).
 
-**Totals:** 47 sensors, 7 switches, 4 numbers, 1 select. Units whose serial
+**Totals:** 47 sensors, 7 switches, 4 numbers, 5 selects. Units whose serial
 starts with `D3M` add the port priority set: 3 switches, 3 numbers and 1 binary
 sensor.
 
@@ -125,14 +125,32 @@ be used in the Energy Dashboard without accumulating drift.
 | Entity | Options | Description |
 |:---|:---|:---|
 | Screen Timeout | 10 s, 30 s, 1 min, 5 min, 30 min, Never | How long the display stays lit after the last interaction. The same setting as "LCD screen timeout" under automatic shutdown in the EcoFlow app. Enhanced Mode only |
+| Device Idle Shutdown | 30 min, 1 h, 2 h, 4 h, 6 h, 12 h, 24 h, Never | Powers the whole unit down after this long with no load connected and no activity. Enhanced Mode only |
+| AC 1 Idle Shutdown | same | Switches off AC outlet 1 under the same condition. Enhanced Mode only |
+| AC 2 Idle Shutdown | same | Switches off AC outlet 2 under the same condition. Enhanced Mode only |
+| 12 V Idle Shutdown | same | Switches off the 12 V DC group under the same condition. Enhanced Mode only |
+
+These five are the EcoFlow app's whole "automatic shutdown" page. **Never means
+it never switches off**, on all of them - it is the last option in each list,
+with the shortest span first.
+
+### The screen
 
 **There is no way to switch the display off.** The device has no such command,
 and the EcoFlow app has no such control either - the shortest timeout is as
 close as it gets. Turning the brightness down to zero does not do it: that is a
 backlight level and the panel stays lit at the bottom of the range.
 
-Note that **Never** means the screen never switches off, not that it is never
-on. It is the last option for that reason, with the shortest timeout first.
+### The four idle shutdowns
+
+They are **idle** shutdowns rather than timers: the device only switches an
+output off when it detects no load connected and no activity for the configured
+span. Something that keeps drawing power keeps its output alive.
+
+Worth knowing before automating them: a load the device does not detect as one -
+a trickle charger, or a standby draw below its threshold - looks like nothing
+connected, and the output goes away. That is how the device behaves in the app
+too, not something this integration adds.
 
 ---
 

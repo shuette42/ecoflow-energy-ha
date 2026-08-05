@@ -416,6 +416,23 @@ message Delta3DisplayProperty {
   // such control either.
   oneof _screen_off_time { uint32 screen_off_time = 18; }
 
+  // The four idle shutdowns from the same app page, in minutes. Each one powers
+  // its output - or the whole unit - down after the configured span with no load
+  // connected and no activity, which is the app's own wording and the reason
+  // these are not plain timers.
+  //
+  // All four offer the same eight steps: 30, 60, 120, 240, 360, 720, 1440 and 0,
+  // where 0 is "Never". The unit is settled rather than inferred: a screenshot
+  // of the 12 V DC page with "2 h" ticked was held against a capture in which
+  // field 20 read 120, and two hours is 120 minutes.
+  //
+  // Note the unit differs from screen_off_time above, which is seconds, inside
+  // this one message.
+  oneof _dev_standby_time { uint32 dev_standby_time = 17; }
+  oneof _ac_standby_time { uint32 ac_standby_time = 19; }
+  oneof _dc_standby_time { uint32 dc_standby_time = 20; }
+  oneof _ac2_standby_time { uint32 ac2_standby_time = 1460; }
+
   // --- Switch / flag state ---
   oneof _energy_backup_en { bool energy_backup_en = 7; }
   oneof _en_beep { bool en_beep = 195; }

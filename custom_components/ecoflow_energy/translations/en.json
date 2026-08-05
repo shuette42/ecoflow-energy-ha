@@ -1559,6 +1559,58 @@
           "30_minutes": "30 min",
           "never": "Never"
         }
+      },
+      "device_idle_shutdown": {
+        "name": "Device Idle Shutdown",
+        "state": {
+          "30_minutes": "30 min",
+          "1_hour": "1 h",
+          "2_hours": "2 h",
+          "4_hours": "4 h",
+          "6_hours": "6 h",
+          "12_hours": "12 h",
+          "24_hours": "24 h",
+          "never": "Never"
+        }
+      },
+      "ac1_idle_shutdown": {
+        "name": "AC 1 Idle Shutdown",
+        "state": {
+          "30_minutes": "30 min",
+          "1_hour": "1 h",
+          "2_hours": "2 h",
+          "4_hours": "4 h",
+          "6_hours": "6 h",
+          "12_hours": "12 h",
+          "24_hours": "24 h",
+          "never": "Never"
+        }
+      },
+      "ac2_idle_shutdown": {
+        "name": "AC 2 Idle Shutdown",
+        "state": {
+          "30_minutes": "30 min",
+          "1_hour": "1 h",
+          "2_hours": "2 h",
+          "4_hours": "4 h",
+          "6_hours": "6 h",
+          "12_hours": "12 h",
+          "24_hours": "24 h",
+          "never": "Never"
+        }
+      },
+      "dc_idle_shutdown": {
+        "name": "12 V Idle Shutdown",
+        "state": {
+          "30_minutes": "30 min",
+          "1_hour": "1 h",
+          "2_hours": "2 h",
+          "4_hours": "4 h",
+          "6_hours": "6 h",
+          "12_hours": "12 h",
+          "24_hours": "24 h",
+          "never": "Never"
+        }
       }
     }
   },
