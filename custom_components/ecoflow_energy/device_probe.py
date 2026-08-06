@@ -266,12 +266,14 @@ class UnroutedDeviceProbe:
         async def _run() -> None:
             await self.hass.async_add_executor_job(self._reconnect)
 
-        # A background task rather than a loose executor job: Home Assistant
-        # owns it, cancels it at shutdown, and it is visible while it runs.
-        # A bare async_add_executor_job started from a callback is tracked by
-        # nobody, which is both untidy at shutdown and a race in any test
-        # that waits for the work to land.
-        self.hass.async_create_background_task(
+        # A tracked task rather than a loose executor job. An executor job
+        # started from a callback belongs to nobody: shutdown does not wait
+        # for it and neither can a test, which is a race rather than a
+        # tolerable one - it passed on the development machine and failed on
+        # CI. A background task would have the same problem, since Home
+        # Assistant deliberately does not wait for those either. One
+        # reconnect attempt is short enough to be worth waiting for.
+        self.hass.async_create_task(
             _run(), f"ecoflow probe reconnect {self.device_sn[:4]}", eager_start=True
         )
 
