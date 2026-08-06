@@ -301,12 +301,14 @@ class TestDerivedValues:
         assert result["max_grid_input_power_w"] == 1200
 
     def test_the_ceiling_fields_are_not_a_user_limit(self) -> None:
-        """f10.5 and f10.6 track the account ceiling, not a setting.
+        """Neither f10.5 nor f10.6 is a user setting, for different reasons.
 
         `.6` sat at the same 2500 as the input limit for as long as nobody
         touched the setting, which is what made it look like the source. It
         did not follow that limit to 1200 and back, and it has moved only
-        once ever, when the ceiling was raised from 600.
+        once ever, when the ceiling was raised from 600, so it behaves like
+        that ceiling. `.5` is unexplained: 600 at the old ceiling and 800
+        after, matching no setting visible in the app.
         """
         inner = _sub(10, encode_field_varint(5, 800) + encode_field_varint(6, 2500))
         assert parse_stream_ac5000_message(_build_frame(254, 39, bytes(inner))) is None
@@ -518,7 +520,24 @@ class TestCaptureReplay:
             )
         assert len(empty_cmds) < len(frames) / 2
         for cmds in empty_cmds:
-            assert cmds in (((32, 2),), ((254, 40),), ((254, 39),)), cmds
+            assert cmds in (((254, 40),), ((254, 39),)), cmds
+
+    def test_every_battery_heartbeat_frame_yields_the_soc_limits(self) -> None:
+        """A 32/2 frame is the fast source, so none of them may parse empty.
+
+        The allowance above used to cover 32/2 because nothing in it was
+        mapped. Now that both SoC limits ride there, a frame carrying it has
+        to produce them, and this fails if the mapping is ever dropped again.
+        """
+        seen = 0
+        for frame in _load(PUSHES):
+            if [(c["cmd_func"], c["cmd_id"]) for c in frame["cmds"]] != [(32, 2)]:
+                continue
+            seen += 1
+            parsed = parse_stream_ac5000_message(bytes.fromhex(frame["hex"])) or {}
+            assert "max_charge_soc_pct" in parsed
+            assert "min_discharge_soc_pct" in parsed
+        assert seen >= 1
 
     def test_no_solar_entity_data_on_a_unit_without_pv(self) -> None:
         """Most frames must not carry solar, or the gating never holds off."""
