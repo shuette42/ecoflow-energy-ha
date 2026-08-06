@@ -5294,6 +5294,36 @@ class TestEventLog:
         assert len(log) == 1
         assert log[0]["type"] == "set_reply"
 
+    async def test_set_reply_debug_line_masks_the_serial_before_truncating(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """The reply body echoes the full serial, and debug logs go public.
+
+        The serial is placed across the 200-byte truncation point on purpose:
+        truncating first would leave a head fragment too short for the
+        shape-based mask to recognize, so only the masked-then-truncated
+        order keeps the line clean.
+        """
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        sn = MOCK_DELTA_DEVICE["sn"]
+        # Pad so the serial starts at byte 190 and the cut lands inside it.
+        payload = b'{"pad":"' + b"x" * 174 + b'","sn":"' + sn.encode() + b'"}'
+        assert payload.index(sn.encode()) == 190
+
+        with caplog.at_level("DEBUG"):
+            coordinator._on_mqtt_message(
+                f"/open/cert_account/{sn}/set_reply", payload
+            )
+
+        assert sn not in caplog.text
+        assert sn[:10] not in caplog.text
+
     async def test_stale_detection_logs_event(
         self,
         hass: HomeAssistant,

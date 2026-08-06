@@ -901,10 +901,10 @@ def excluded_keys_for_serial(device_sn: str) -> frozenset[str]:
 def filter_defs_for_serial(definitions: list[_DefT], device_sn: str) -> list[_DefT]:
     """Drop entity definitions a device variant cannot ever populate.
 
-    Applied by the sensor, binary sensor, number and switch platforms next to
-    the ``enhanced_only`` filter. Number and switch definitions read their
-    value from ``state_key``, so both that and ``key`` are matched against the
-    exclusion set.
+    Applied by the sensor, binary sensor, number, switch and select platforms
+    next to the ``enhanced_only`` filter. Number, switch and select
+    definitions read their value from ``state_key``, so both that and ``key``
+    are matched against the exclusion set.
     """
     excluded = excluded_keys_for_serial(device_sn)
     if not excluded:

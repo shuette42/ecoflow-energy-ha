@@ -190,6 +190,53 @@ class TestStreamProtoParser:
         assert result["batt_charge_capacity_ah"] == pytest.approx(5.503, rel=1e-5)
         assert result["batt_discharge_capacity_ah"] == pytest.approx(15.27, rel=1e-5)
 
+    def test_zero_capacity_totals_are_not_published(self) -> None:
+        """A factory-new or reset BMS reports 0 on both lifetime counters.
+
+        The protocol declares fields 50/51 with explicit presence, so the
+        zero arrives on the wire instead of being omitted. Both sensors are
+        total_increasing, and Home Assistant reads a 0 there as a meter
+        reset, booking the standing total a second time - the key has to be
+        absent, not 0.0 and not None.
+        """
+        aux = bytearray()
+        aux.extend(_encode_fixed32_field(25, 21.2))
+        aux.extend(encode_field_varint(32, 0))
+        aux.extend(encode_field_varint(50, 0))
+        aux.extend(encode_field_varint(51, 0))
+
+        result = parse_stream_proto_message(_build_frame(32, 50, bytes(aux)))
+
+        assert result is not None
+        assert result["soc_precise_pct"] == pytest.approx(21.2, rel=1e-5)
+        assert "batt_charge_capacity_ah" not in result
+        assert "batt_discharge_capacity_ah" not in result
+
+    def test_nonzero_capacity_totals_still_publish_scaled(self) -> None:
+        """The zero guard must not eat a real reading."""
+        aux = bytearray()
+        aux.extend(encode_field_varint(50, 5503))
+        aux.extend(encode_field_varint(51, 15270))
+
+        result = parse_stream_proto_message(_build_frame(32, 50, bytes(aux)))
+
+        assert result is not None
+        assert result["batt_charge_capacity_ah"] == pytest.approx(5.503, rel=1e-5)
+        assert result["batt_discharge_capacity_ah"] == pytest.approx(15.27, rel=1e-5)
+
+    def test_zero_precise_totals_do_not_fall_back_to_a_zero_rounded_value(
+        self,
+    ) -> None:
+        """Field 32 is the fallback source and reports 0 in the same state."""
+        aux = bytearray()
+        aux.extend(_encode_fixed32_field(25, 21.2))
+        aux.extend(encode_field_varint(32, 0))
+
+        result = parse_stream_proto_message(_build_frame(32, 50, bytes(aux)))
+
+        assert result is not None
+        assert "batt_charge_capacity_ah" not in result
+
     def test_parse_grid_connection_without_battery_power(self) -> None:
         inner = _encode_fixed32_field(992, 304.15)
 

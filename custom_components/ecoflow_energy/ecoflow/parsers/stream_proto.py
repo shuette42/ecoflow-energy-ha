@@ -274,12 +274,20 @@ def _finalize_stream_state(parsed: dict[str, Any]) -> dict[str, Any]:
     discharge_capacity_mah = result.pop("_batt_discharge_capacity_mah_total", None)
     charge_capacity_rounded = result.pop("_batt_charge_capacity_ah_rounded", None)
 
-    if isinstance(charge_capacity_mah, (int, float)):
+    # Lifetime capacity counters the BMS keeps itself. A zero is "nothing to
+    # report", not a reading: the protocol declares these fields with explicit
+    # presence, so a factory-new or reset BMS sends the 0 instead of omitting
+    # it, and publishing it on a total_increasing sensor would make Home
+    # Assistant book a meter reset and count the standing total twice.
+    if isinstance(charge_capacity_mah, (int, float)) and charge_capacity_mah > 0:
         result["batt_charge_capacity_ah"] = float(charge_capacity_mah) / 1000.0
-    elif isinstance(charge_capacity_rounded, (int, float)):
+    elif (
+        isinstance(charge_capacity_rounded, (int, float))
+        and charge_capacity_rounded > 0
+    ):
         result["batt_charge_capacity_ah"] = float(charge_capacity_rounded)
 
-    if isinstance(discharge_capacity_mah, (int, float)):
+    if isinstance(discharge_capacity_mah, (int, float)) and discharge_capacity_mah > 0:
         result["batt_discharge_capacity_ah"] = float(discharge_capacity_mah) / 1000.0
 
     grid_connection = result.get("sys_grid_connection_power_w")

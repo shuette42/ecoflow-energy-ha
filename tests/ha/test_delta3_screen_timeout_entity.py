@@ -17,7 +17,7 @@ tests/test_delta3_screen_timeout.py.
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
@@ -298,6 +298,27 @@ class TestPlatformGating:
         that exists, accepts a change, and shows nothing back.
         """
         assert DELTA3_SCREEN_TIMEOUT_KEY not in await self._setup(hass, enhanced=False)
+
+    async def test_a_serial_variant_exclusion_drops_the_select(
+        self, hass: HomeAssistant
+    ) -> None:
+        """The variant filter has to gate selects like every other platform.
+
+        No exclusion set names a select key today, so the case is constructed
+        here rather than asserted on an empty intersection. It is not
+        hypothetical for long: registry entries are permanent, so the first
+        Delta 3 variant without a screen timeout would ship five dead selects
+        that no later release can take back.
+        """
+        with patch.dict(
+            "custom_components.ecoflow_energy.const._SN_PREFIX_EXCLUDED_KEYS",
+            {"D3M1": frozenset({DELTA3_SCREEN_TIMEOUT_KEY})},
+        ):
+            keys = await self._setup(hass)
+
+        assert DELTA3_SCREEN_TIMEOUT_KEY not in keys
+        # The exclusion is precise: the remaining selects survive.
+        assert keys
 
     async def test_delta3_defs_are_the_delta3_list(self) -> None:
         assert _get_select_defs(DEVICE_TYPE_DELTA3) is DELTA3_SELECTS

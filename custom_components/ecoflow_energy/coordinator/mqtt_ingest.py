@@ -41,6 +41,7 @@ from ..ecoflow.frame_capture import (
     decode_cmd_headers,
     frame_key,
     is_proto_frame,
+    sanitize_frame,
 )
 from ..ecoflow.proto.runtime import (
     decode_proto_runtime_frame,
@@ -114,7 +115,15 @@ class MqttIngestMixin:
         """
         # SET reply tracking (all modes): log acknowledgement, do not process as data
         if "/set_reply" in topic:
-            _LOGGER.debug("SET reply for %s: %s", self.device_sn[:4], payload[:200])
+            # The reply body echoes the full serial in Standard Mode, and
+            # reporters attach debug logs to public issues. Masked first and
+            # truncated second, so the cut can never leave a serial fragment
+            # too short for the mask to recognize.
+            _LOGGER.debug(
+                "SET reply for %s: %s",
+                self.device_sn[:4],
+                sanitize_frame(payload, [self.device_sn])[:200],
+            )
             # The topic itself is not loggable: it is
             # /open/<cert_account>/<sn>/set_reply, so it carries the full
             # serial and the account identifier, and the event log goes into

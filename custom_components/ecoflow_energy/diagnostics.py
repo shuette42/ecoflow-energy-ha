@@ -157,7 +157,8 @@ async def _skipped_devices_diagnostics(
     can be built from real API fields without owning the hardware. The full
     serial is used only to sign the read-only quota request and is never
     included in the output — only the SN prefix is exposed. Serial-looking
-    values inside the quota are redacted.
+    values inside the quota are redacted by the single pass on the way out
+    of ``async_get_config_entry_diagnostics``.
 
     Requires developer credentials (access key + secret key). In enhanced /
     app-auth mode those are absent, so the quota is omitted with a note.
@@ -244,8 +245,9 @@ async def _skipped_devices_diagnostics(
             out["quota_note"] = "quota fetch unavailable"
         else:
             # get_quota_all() already returns the flat quota dict (the client
-            # unwraps the API envelope), so redact and expose it directly.
-            out["raw_quota"] = _redact_serials(response)
+            # unwraps the API envelope), so expose it directly. Serials in it
+            # are caught by the single redaction pass on the way out.
+            out["raw_quota"] = response
 
         result.append(out)
 
@@ -312,10 +314,11 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
         # revision at all - PowerOcean sends 347 quota keys and none is a
         # version. Those owners have to read it off the EcoFlow app, which is
         # what the bug report template asks for.
-        # Redacted like every other quota-derived section: the PowerOcean quota
-        # addresses battery packs by serial in the key itself, and a subsystem
-        # revision could arrive under such a key.
-        "firmware": _redact_serials(coordinator.firmware),
+        # The PowerOcean quota addresses battery packs by serial in the key
+        # itself, and a subsystem revision could arrive under such a key -
+        # covered, like every quota-derived section, by the single redaction
+        # pass on the way out.
+        "firmware": coordinator.firmware,
         "event_log": _format_event_log(coordinator.event_log),
     }
 
@@ -343,7 +346,7 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
     # existing mappings and reveal keys still to be added. For PowerOcean this
     # is also the only way to see what an attached accessory contributes, since
     # accessories report through the PowerOcean quota instead of as devices of
-    # their own. Serial-looking values are redacted.
+    # their own.
     if coordinator.device_type in (
         DEVICE_TYPE_DELTA3,
         DEVICE_TYPE_STREAM,
@@ -357,10 +360,12 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
             "captured": bool(raw_quota),
             "age_s": raw_age_s,
             "key_count": len(raw_quota),
-            "values": {
-                _redact_serials(key): _redact_serials(value)
-                for key, value in sorted(raw_quota.items())
-            },
+            # Deliberately not redacted here: a per-key call hands every
+            # serial a fresh alias map, so two battery pack keys collapsed
+            # onto the same placeholder and the comprehension silently kept
+            # only the last pack. The pass on the way out threads one alias
+            # map through the whole dump instead.
+            "values": dict(sorted(raw_quota.items())),
         }
 
     # Enhanced Mode: the field numbers the device sent that our protobuf

@@ -33,6 +33,7 @@ from .const import (
     DOMAIN,
     EcoFlowSelectDef,
     POWEROCEAN_SELECTS,
+    filter_defs_for_serial,
 )
 from .coordinator import EcoFlowDeviceCoordinator
 from .ecoflow.delta3_commands import build_select_command as build_delta3_select_command
@@ -64,7 +65,9 @@ async def async_setup_entry(
     entities: list[EcoFlowSelect] = []
 
     for coordinator in coordinators.values():
-        defs = _get_select_defs(coordinator.device_type)
+        defs = filter_defs_for_serial(
+            _get_select_defs(coordinator.device_type), coordinator.device_sn
+        )
         for defn in defs:
             if defn.enhanced_only and not coordinator.enhanced_mode:
                 continue

@@ -13,6 +13,7 @@ from ..const import (
     POWEROCEAN_SOC_DEBOUNCE_S,
     POWEROCEAN_SOC_STATE_KEYS,
 )
+from ..ecoflow.frame_capture import sanitize_frame
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -382,10 +383,15 @@ class SetCommandsMixin:
             partial(self._mqtt_client.publish, topic, payload, 1, wait=True),
         )
         if ok:
+            # The command body is what makes a failed write debuggable, but it
+            # carries the full serial (the Smart Plug JSON has an "sn" field),
+            # and reporters attach debug logs to public issues. Masked first
+            # and truncated second, so the cut can never leave a serial
+            # fragment too short for the mask to recognize.
             _LOGGER.debug(
                 "SET command sent: %s -> %s",
                 self._mqtt_client.mask_topic(topic),
-                payload[:120],
+                sanitize_frame(payload.encode(), [self.device_sn]).decode()[:120],
             )
             self._log_event("set_cmd", f"keys={list(command.keys())[:3]}")
         else:

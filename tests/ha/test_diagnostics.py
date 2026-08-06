@@ -393,7 +393,8 @@ class TestFirmwareDiagnostics:
         """A revision addressed by battery pack serial must not leak it.
 
         The PowerOcean quota puts pack serials into the key itself, and users
-        are asked to attach diagnostics to public issues.
+        are asked to attach diagnostics to public issues. Asserted against the
+        full download, because that is where the single redaction pass runs.
         """
         standard_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
@@ -405,12 +406,16 @@ class TestFirmwareDiagnostics:
                 "decoded": "v1.3.6.90",
             },
         }
+        hass.data.setdefault(DOMAIN, {})[standard_config_entry.entry_id] = {
+            coordinator.device_sn: coordinator
+        }
 
-        result = _device_diagnostics(coordinator)
+        result = await async_get_config_entry_diagnostics(hass, standard_config_entry)
 
-        key = next(iter(result["firmware"]))
+        firmware = result["devices"][0]["firmware"]
+        key = next(iter(firmware))
         assert "HJ31TESTSERIAL02" not in key
-        assert result["firmware"][key]["decoded"] == "v1.3.6.90"
+        assert firmware[key]["decoded"] == "v1.3.6.90"
 
 
 class TestDeltaThreeRawQuotaDiagnostics:
@@ -497,7 +502,9 @@ class TestDeltaThreeRawQuotaDiagnostics:
 
         The PowerOcean quota addresses battery packs by serial in the key
         itself. Redacting values alone would still publish that serial in a
-        dump users are asked to attach to a public issue.
+        dump users are asked to attach to a public issue. Asserted against
+        the full download, because that is where the single redaction pass
+        runs.
         """
         standard_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
@@ -505,23 +512,57 @@ class TestDeltaThreeRawQuotaDiagnostics:
         )
         coordinator._raw_quota = {"bp_addr.HJ31TESTSERIAL01": {"bpSoc": 74}}
         coordinator._raw_quota_captured_at = 1000.0
+        hass.data.setdefault(DOMAIN, {})[standard_config_entry.entry_id] = {
+            coordinator.device_sn: coordinator
+        }
 
-        with patch(
-            "custom_components.ecoflow_energy.diagnostics.time.monotonic",
-            return_value=1001.0,
-        ):
-            result = _device_diagnostics(coordinator)
+        result = await async_get_config_entry_diagnostics(hass, standard_config_entry)
 
-        keys = list(result["raw_quota"]["values"])
+        keys = list(result["devices"][0]["raw_quota"]["values"])
         assert keys == ["bp_addr.**REDACTED**"]
         assert "HJ31TESTSERIAL01" not in json.dumps(result)
+
+    async def test_powerocean_two_pack_serial_keys_stay_distinct(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Both packs must survive the dump, under distinct placeholder keys.
+
+        Redacting inside the section handed every key its own fresh alias
+        map, so two `bp_addr.<sn>` keys collapsed onto the same placeholder
+        and the dict comprehension kept only the last pack - a two-pack
+        system read as a one-pack system in the artefact used to answer
+        exactly that question.
+        """
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        coordinator._raw_quota = {
+            "bp_addr.HJ31TESTSERIAL01": {"bpSoc": 74},
+            "bp_addr.HJ31TESTSERIAL02": {"bpSoc": 71},
+        }
+        coordinator._raw_quota_captured_at = 1000.0
+        hass.data.setdefault(DOMAIN, {})[standard_config_entry.entry_id] = {
+            coordinator.device_sn: coordinator
+        }
+
+        result = await async_get_config_entry_diagnostics(hass, standard_config_entry)
+
+        values = result["devices"][0]["raw_quota"]["values"]
+        assert values["bp_addr.**REDACTED**"] == {"bpSoc": 74}
+        assert values["bp_addr.**REDACTED-2**"] == {"bpSoc": 71}
+        serialized = json.dumps(result)
+        assert "HJ31TESTSERIAL01" not in serialized
+        assert "HJ31TESTSERIAL02" not in serialized
 
     async def test_delta3_raw_quota_redacts_serials(
         self,
         hass: HomeAssistant,
         standard_config_entry: MockConfigEntry,
     ) -> None:
-        """Serial-looking raw quota values are redacted."""
+        """Serial-looking raw quota values are redacted in the download."""
         standard_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, standard_config_entry, MOCK_DELTA3_DEVICE
@@ -531,10 +572,15 @@ class TestDeltaThreeRawQuotaDiagnostics:
             "bpSoc": 80,
         }
         coordinator._raw_quota_captured_at = 1000.0
-        result = _device_diagnostics(coordinator)
+        hass.data.setdefault(DOMAIN, {})[standard_config_entry.entry_id] = {
+            coordinator.device_sn: coordinator
+        }
 
-        assert result["raw_quota"]["values"]["sn"] == REDACTED
-        assert result["raw_quota"]["values"]["bpSoc"] == 80
+        result = await async_get_config_entry_diagnostics(hass, standard_config_entry)
+
+        values = result["devices"][0]["raw_quota"]["values"]
+        assert values["sn"] == REDACTED
+        assert values["bpSoc"] == 80
 
     async def test_delta3_raw_quota_redacts_nested_and_embedded_serials(
         self,
@@ -556,9 +602,13 @@ class TestDeltaThreeRawQuotaDiagnostics:
             "bpSoc": 80,
         }
         coordinator._raw_quota_captured_at = 1000.0
-        result = _device_diagnostics(coordinator)
+        hass.data.setdefault(DOMAIN, {})[standard_config_entry.entry_id] = {
+            coordinator.device_sn: coordinator
+        }
 
-        values = result["raw_quota"]["values"]
+        result = await async_get_config_entry_diagnostics(hass, standard_config_entry)
+
+        values = result["devices"][0]["raw_quota"]["values"]
         assert values["nested"]["deviceSn"] == REDACTED
         assert REDACTED in values["meta"]
         assert "D3M1TESTAAAABBBB" not in values["meta"]
