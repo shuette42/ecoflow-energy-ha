@@ -189,7 +189,13 @@ async def _skipped_devices_diagnostics(
             # device look the same.
             frames = probe.frames
             out["raw_capture"] = {
-                "connected": probe.connected,
+                # `connection` carries the whole story of the link, including
+                # why it is down. A bare "connected: false" was the entire
+                # report before, and an empty capture then had no readable
+                # cause - the recording looked like a device that says
+                # nothing, which a listen-only session demonstrably is not
+                # (a device at rest sends a frame every couple of seconds).
+                **probe.connection,
                 "frame_count": len(frames),
                 "topics": probe.topics,
                 "truncated_at_bytes": RAW_FRAME_MAX_BYTES,
@@ -203,9 +209,12 @@ async def _skipped_devices_diagnostics(
             # failed.
             out["raw_capture"] = {
                 "status": "no probe running for this device",
+                # A probe that failed to connect is kept and reports its own
+                # reason above, so this branch now means one thing only: the
+                # account login never got far enough to start one.
                 "hint": (
-                    "requires EcoFlow account login; the app login or the "
-                    "listen-only connection did not succeed"
+                    "requires EcoFlow account login; signing in or fetching "
+                    "the connection credentials did not succeed"
                 ),
             }
 

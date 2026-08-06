@@ -1052,6 +1052,65 @@ class TestUnroutedDeviceProbeWiring:
         assert CONF_RAW_CAPTURE not in entry.data
         assert CONF_RAW_CAPTURE_UNTIL not in entry.data
 
+    async def test_a_running_capture_gets_a_watchdog(
+        self, hass: HomeAssistant, mock_mqtt_client,
+    ) -> None:
+        """Without it the recording ends at the first dropped session.
+
+        The capture runs for up to 24 hours and its client cannot rebuild a
+        session on its own - the broker refuses a client id it has already
+        seen. Nothing else drives a reconnect for a device that was skipped,
+        so the timer is what makes a long capture worth switching on.
+        """
+        entry = self._entry(hass, AUTH_METHOD_APP)
+        probe = MagicMock()
+        probe.async_stop = AsyncMock()
+
+        with (
+            patch("custom_components.ecoflow_energy.time.time", return_value=FIXED_NOW),
+            patch(
+                "custom_components.ecoflow_energy.async_start_probes",
+                new_callable=AsyncMock,
+                return_value=[probe],
+            ),
+            patch(
+                "custom_components.ecoflow_energy.async_start_probe_watchdog"
+            ) as mock_watchdog,
+        ):
+            assert await hass.config_entries.async_setup(entry.entry_id) is True
+            await hass.async_block_till_done()
+
+        mock_watchdog.assert_called_once_with(hass, [probe])
+
+        # And it has to go when the entry does, or an expired capture keeps
+        # a timer alive for the rest of the Home Assistant process.
+        unsub = mock_watchdog.return_value
+        await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()
+        unsub.assert_called_once()
+
+    async def test_no_watchdog_without_probes(
+        self, hass: HomeAssistant, mock_mqtt_client,
+    ) -> None:
+        """Nothing to keep alive means no timer."""
+        entry = self._entry(hass, AUTH_METHOD_APP)
+
+        with (
+            patch("custom_components.ecoflow_energy.time.time", return_value=FIXED_NOW),
+            patch(
+                "custom_components.ecoflow_energy.async_start_probes",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch(
+                "custom_components.ecoflow_energy.async_start_probe_watchdog"
+            ) as mock_watchdog,
+        ):
+            assert await hass.config_entries.async_setup(entry.entry_id) is True
+            await hass.async_block_till_done()
+
+        mock_watchdog.assert_not_called()
+
     async def test_probes_from_a_previous_run_are_stopped_on_reload(
         self, hass: HomeAssistant, mock_mqtt_client,
     ) -> None:

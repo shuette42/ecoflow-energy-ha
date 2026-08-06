@@ -866,7 +866,18 @@ class TestUnroutedDeviceCapture:
     def _probe(self, sn: str = "RE11TEST00000001"):
         probe = MagicMock()
         probe.device_sn = sn
-        probe.connected = True
+        # Mirrors the real probe's connection report. The export spreads it
+        # into the section, so a bare MagicMock here would not survive the
+        # spread at all.
+        probe.connection = {
+            "connected": True,
+            "ever_connected": True,
+            "connect_attempts": 1,
+            "sessions": 1,
+            "disconnects": 0,
+            "capture_age_s": 21600,
+            "verdict": "listening",
+        }
         probe.topics = ["/app/{sn}/thing/property/get_reply"]
         probe.frames = [{
             "ts": 1784973604.0,
@@ -907,6 +918,7 @@ class TestUnroutedDeviceCapture:
 
         capture = result[0]["raw_capture"]
         assert capture["connected"] is True
+        assert capture["verdict"] == "listening"
         assert capture["frame_count"] == 1
         assert capture["topics"] == ["/app/{sn}/thing/property/get_reply"]
         assert capture["frames"][0]["hex"] == "0a02ffff"

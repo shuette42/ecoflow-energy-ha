@@ -148,6 +148,14 @@ UNKNOWN_FIELD_NUMBERS_MAX = 200
 # double that as hex text in the diagnostics download.
 RAW_FRAME_KEYS_MAX = 12
 RAW_FRAME_PER_KEY_MAX = 10
+
+# How often the capture checks that its listen-only session is still up. The
+# broker refuses a client id that has already been used, so a dropped session
+# can only be restored by building a new one, and nothing else does that for a
+# device that has no coordinator. Sixty seconds is well inside what the client
+# backs off to on repeated failure, so the check costs nothing when the link is
+# healthy and does not add a second retry schedule of its own.
+PROBE_WATCHDOG_INTERVAL_S = 60
 HTTP_SUPPLEMENT_INTERVAL_S = 60  # Enhanced Mode: HTTP supplement poll for detail sensors
 ENERGY_STREAM_KEEPALIVE_S = 20  # Re-send EnergyStreamSwitch every 20s
 QUOTAS_KEEPALIVE_S = 30  # latestQuotas poll interval (app-level keepalive)

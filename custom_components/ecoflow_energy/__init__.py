@@ -29,7 +29,11 @@ from .const import (
     get_device_type,
 )
 from .coordinator import EcoFlowDeviceCoordinator
-from .device_probe import UnroutedDeviceProbe, async_start_probes
+from .device_probe import (
+    UnroutedDeviceProbe,
+    async_start_probe_watchdog,
+    async_start_probes,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -278,6 +282,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
             entry.data.get(CONF_PASSWORD, ""),
         )
         hass.data.setdefault(DATA_DEVICE_PROBES, {})[entry.entry_id] = probes
+
+        # The capture runs for up to 24 hours and every session in that
+        # window gets dropped at some point. Its client cannot rebuild one
+        # on its own - the broker refuses a client id it has already seen -
+        # so without this the recording ends at the first drop and usually
+        # arrives empty.
+        if probes:
+            entry.async_on_unload(async_start_probe_watchdog(hass, probes))
 
         # Probes hold live WSS connections and their own paho threads. If
         # setup fails after this point, async_unload_entry never runs, so
