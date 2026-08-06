@@ -22,6 +22,7 @@ from .const import (
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
+    DEVICE_TYPE_STREAM_AC5000,
     DOMAIN,
     DELTA2MAX_SENSORS,
     DELTA3_SENSORS,
@@ -30,6 +31,7 @@ from .const import (
     POWEROCEAN_SENSORS,
     SMARTPLUG_SENSORS,
     STREAM_SENSORS,
+    STREAMAC5000_SENSORS,
 )
 from .coordinator import EcoFlowDeviceCoordinator
 from .entity import EcoFlowWriteGateMixin
@@ -314,4 +316,6 @@ def _get_sensor_defs(device_type: str) -> list[EcoFlowSensorDef]:
         return SMARTPLUG_SENSORS
     if device_type == DEVICE_TYPE_STREAM:
         return STREAM_SENSORS
+    if device_type == DEVICE_TYPE_STREAM_AC5000:
+        return STREAMAC5000_SENSORS
     return []

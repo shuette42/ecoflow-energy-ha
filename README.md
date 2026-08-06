@@ -46,12 +46,15 @@
 | **Smart Plug** - Switchable Outlet | `HW52` | 11 + 1 binary | 1 switch, 2 numbers | 1 (total energy) | ~30 s standard / ~3 s enhanced |
 | **Stream** - AC-coupled Battery | `BK31` `BK11` `BK41` `BK51` `BK61` | 54 + 2 binary | 1 number (Enhanced only) | 2 default (battery charge/discharge), 6 optional diagnostic (solar/home, PV 1-4) | ~30 s standard / ~3 s enhanced |
 | **Stream Micro** - Grid-tie Inverter | `BK01`\* | 21 | - | 4 optional diagnostic (PV 1-4) | ~3 s enhanced |
+| **STREAM AC 5000** - AC-coupled Battery | `ES22`\* | 52 + 2 binary | - | 4 default (grid import/export, battery charge/discharge), 2 optional diagnostic (home, solar) | ~2 s enhanced |
 
 > **\* Enhanced Mode only.** These serial prefixes cannot currently be linked to an IoT Developer API key, so Standard Mode reports error 1006 and their entities stay unavailable. This is an EcoFlow API limitation, not a configuration problem.
 >
 > **PowerOcean and PowerOcean Plus share one entity set.** A Plus unit simply reports more of it: per-phase reactive power (var) and apparent power (VA), plus MPPT strings 3 and 4. Those entities exist for every PowerOcean but are disabled by default, because a standard unit never sends them and the entity would sit at "unknown" forever. Enable them under **Settings > Devices & services > Entities** on a Plus device.
 >
 > **Tip:** Other Delta-series devices (Delta Pro, Delta 2, etc.) should work automatically with the Delta sensor set. Base Delta 3 and Delta 3 Plus use the Delta 3 sensor set. The five AC-coupled Stream models share one sensor set.
+>
+> **The STREAM AC 5000 is not a Stream.** It shares the name and nothing else: it sends none of the BK-series telemetry messages, so it has its own parser and its own entity set. Its solar and per-phase meter entities are created only once the device reports them, because whether a unit has PV on the EcoFlow and which smart meter is linked are installation choices rather than model differences.
 >
 > **The Stream Micro is the exception.** It is a grid-tie inverter with two solar strings and no battery, so it deliberately gets a reduced set: no battery, state of charge, backup reserve or AC outlet entities, because it has none of those and an entity Home Assistant once created stays in the registry forever.
 >

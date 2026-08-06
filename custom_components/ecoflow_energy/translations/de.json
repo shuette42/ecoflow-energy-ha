@@ -1398,6 +1398,29 @@
       },
       "bms_error_code": {
         "name": "Batterie-Fehlercode"
+      },
+      "work_mode": {
+        "name": "Betriebsmodus",
+        "state": {
+          "self_powered": "Eigenverbrauch",
+          "intelligent_plus": "Intelligenter Modus+",
+          "custom": "Benutzerdefiniert"
+        }
+      },
+      "scheduled_discharge_power_w": {
+        "name": "Geplante Entladeleistung"
+      },
+      "scheduled_charge_power_w": {
+        "name": "Geplante Ladeleistung"
+      },
+      "max_grid_output_power_w": {
+        "name": "Max. Netzeinspeiseleistung"
+      },
+      "max_grid_input_power_w": {
+        "name": "Max. Netzbezugsleistung"
+      },
+      "scheduled_charge_soc_target": {
+        "name": "Geplanter Ziel-Ladestand"
       }
     },
     "binary_sensor": {
@@ -1439,6 +1462,12 @@
       },
       "port_priority_active": {
         "name": "Anschlusspriorität aktiv"
+      },
+      "backup_reserve_enabled": {
+        "name": "Notstromreserve"
+      },
+      "backup_socket_enabled": {
+        "name": "Notstromsteckdose"
       }
     },
     "switch": {

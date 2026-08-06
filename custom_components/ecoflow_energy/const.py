@@ -15,6 +15,7 @@ from .ecoflow.const import (  # noqa: E402
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
+    DEVICE_TYPE_STREAM_AC5000,
     DEVICE_TYPE_UNKNOWN,
     get_device_name,
     get_device_type,
@@ -178,6 +179,7 @@ DEVICE_TYPE_DISPLAY_NAMES: dict[str, str] = {
     DEVICE_TYPE_DELTA3: "Delta 3 Series",
     DEVICE_TYPE_SMARTPLUG: "Smart Plug",
     DEVICE_TYPE_STREAM: "Stream",
+    DEVICE_TYPE_STREAM_AC5000: "STREAM AC 5000",
 }
 
 # Delta write/profile variants.
@@ -786,6 +788,94 @@ STREAM_SENSORS: list[EcoFlowSensorDef] = [
 ]
 
 
+# =====================================================================
+# STREAM AC 5000 (ES22) sensor definitions
+# =====================================================================
+
+# The list name must stay a single run of A-Z0-9 before the suffix.
+# test_entity_translations.py, test_const.py and _collect_total_increasing_keys
+# in mqtt_ingest.py all discover these lists with `[A-Z0-9]+_SENSORS`, which
+# cannot span an underscore. Named STREAM_AC5000_SENSORS it would be skipped
+# by every one of them, including the monotonic guard, and no test would fail.
+STREAMAC5000_SENSORS: list[EcoFlowSensorDef] = [
+    EcoFlowSensorDef("soc_pct", "Battery SOC", "%", "battery", "measurement", "mdi:battery", suggested_display_precision=0),
+    EcoFlowSensorDef("soc_precise_pct", "Battery SOC (Precise)", "%", None, "measurement", "mdi:battery-sync", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
+    # The BMS pack reading, about two points above the system SoC above.
+    EcoFlowSensorDef("bms_precise_soc", "BMS SoC", "%", None, "measurement", "mdi:battery-heart-outline", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
+    EcoFlowSensorDef("bms_soh_pct", "Battery SoH", "%", None, "measurement", "mdi:battery-heart-variant", suggested_display_precision=0),
+    # --- battery power ---
+    EcoFlowSensorDef("batt_w", "Battery Power", "W", "power", "measurement", "mdi:battery", suggested_display_precision=0),
+    EcoFlowSensorDef("batt_charge_power_w", "Battery Charge Power", "W", "power", "measurement", "mdi:battery-charging", suggested_display_precision=0),
+    EcoFlowSensorDef("batt_discharge_power_w", "Battery Discharge Power", "W", "power", "measurement", "mdi:battery", suggested_display_precision=0),
+    EcoFlowSensorDef("batt_charge_discharge_state", "Battery Charge/Discharge State", None, "enum", None, "mdi:battery-sync", "diagnostic", disabled_by_default=True, options=["standby", "discharging", "charging"]),
+    # --- power flow ---
+    EcoFlowSensorDef("home_w", "Home Power", "W", "power", "measurement", "mdi:home-lightning-bolt", suggested_display_precision=0),
+    # Signed: positive draws from the grid, negative feeds into it. Present
+    # only while a smart meter is linked in the EcoFlow app.
+    EcoFlowSensorDef("grid_w", "Grid Power", "W", "power", "measurement", "mdi:transmission-tower", suggested_display_precision=0),
+    EcoFlowSensorDef("grid_import_power_w", "Grid Import Power", "W", "power", "measurement", "mdi:transmission-tower-export", suggested_display_precision=0),
+    EcoFlowSensorDef("grid_export_power_w", "Grid Export Power", "W", "power", "measurement", "mdi:transmission-tower-import", suggested_display_precision=0),
+    EcoFlowSensorDef("home_from_batt_w", "Home From Battery", "W", "power", "measurement", "mdi:home-battery-outline", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("home_from_grid_w", "Home From Grid", "W", "power", "measurement", "mdi:home-import-outline", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    # Solar is accessory-gated rather than listed per prefix: whether a unit
+    # has PV on the EcoFlow itself is a wiring choice, not a model difference.
+    EcoFlowSensorDef("solar_w", "Solar Power", "W", "power", "measurement", "mdi:solar-power", suggested_display_precision=0, accessory=True),
+    EcoFlowSensorDef("home_from_solar_w", "Home From Solar", "W", "power", "measurement", "mdi:home-lightning-bolt-outline", "diagnostic", suggested_display_precision=0, disabled_by_default=True, accessory=True),
+    # --- smart meter, EcoFlow P1 variant only ---
+    # A Tibber Pulse reports a single total, so these stay absent there.
+    EcoFlowSensorDef("grid_phase_a_active_power_w", "Grid Phase A Power", "W", "power", "measurement", "mdi:transmission-tower", "diagnostic", suggested_display_precision=0, disabled_by_default=True, accessory=True),
+    EcoFlowSensorDef("grid_phase_b_active_power_w", "Grid Phase B Power", "W", "power", "measurement", "mdi:transmission-tower", "diagnostic", suggested_display_precision=0, disabled_by_default=True, accessory=True),
+    EcoFlowSensorDef("grid_phase_c_active_power_w", "Grid Phase C Power", "W", "power", "measurement", "mdi:transmission-tower", "diagnostic", suggested_display_precision=0, disabled_by_default=True, accessory=True),
+    EcoFlowSensorDef("grid_phase_a_voltage_v", "Grid Phase A Voltage", "V", "voltage", "measurement", "mdi:sine-wave", "diagnostic", suggested_display_precision=1, disabled_by_default=True, accessory=True),
+    EcoFlowSensorDef("grid_phase_b_voltage_v", "Grid Phase B Voltage", "V", "voltage", "measurement", "mdi:sine-wave", "diagnostic", suggested_display_precision=1, disabled_by_default=True, accessory=True),
+    EcoFlowSensorDef("grid_phase_c_voltage_v", "Grid Phase C Voltage", "V", "voltage", "measurement", "mdi:sine-wave", "diagnostic", suggested_display_precision=1, disabled_by_default=True, accessory=True),
+    EcoFlowSensorDef("grid_phase_a_current_a", "Grid Phase A Current", "A", "current", "measurement", "mdi:current-ac", "diagnostic", suggested_display_precision=2, disabled_by_default=True, accessory=True),
+    EcoFlowSensorDef("grid_phase_b_current_a", "Grid Phase B Current", "A", "current", "measurement", "mdi:current-ac", "diagnostic", suggested_display_precision=2, disabled_by_default=True, accessory=True),
+    EcoFlowSensorDef("grid_phase_c_current_a", "Grid Phase C Current", "A", "current", "measurement", "mdi:current-ac", "diagnostic", suggested_display_precision=2, disabled_by_default=True, accessory=True),
+    EcoFlowSensorDef("ac_frequency_hz", "AC Frequency", "Hz", "frequency", "measurement", "mdi:sine-wave", "diagnostic", suggested_display_precision=2, disabled_by_default=True, accessory=True),
+    # --- configuration readback ---
+    EcoFlowSensorDef("work_mode", "Work Mode", None, "enum", None, "mdi:cog-outline", "diagnostic", options=["self_powered", "intelligent_plus", "custom"]),
+    EcoFlowSensorDef("max_charge_soc_pct", "Charge Limit", "%", None, "measurement", "mdi:battery-charging-high", "diagnostic", suggested_display_precision=0),
+    EcoFlowSensorDef("min_discharge_soc_pct", "Discharge Limit", "%", None, "measurement", "mdi:battery-arrow-down", "diagnostic", suggested_display_precision=0),
+    EcoFlowSensorDef("backup_reserve_pct", "Backup Reserve", "%", None, "measurement", "mdi:battery-lock", "diagnostic", suggested_display_precision=0),
+    # The two account-level limits, named as the app names them. Raising the
+    # output limit needs a request to EcoFlow; the input limit is settable in
+    # the app. A task power above either is accepted and then clamped.
+    EcoFlowSensorDef("max_grid_output_power_w", "Max Grid-tied Output Power", "W", "power", "measurement", "mdi:transmission-tower-export", "diagnostic", suggested_display_precision=0),
+    EcoFlowSensorDef("max_grid_input_power_w", "Max Grid Input Power", "W", "power", "measurement", "mdi:transmission-tower-import", "diagnostic", suggested_display_precision=0),
+    EcoFlowSensorDef("scheduled_discharge_power_w", "Scheduled Discharge Power", "W", "power", "measurement", "mdi:calendar-clock", "diagnostic", suggested_display_precision=0),
+    EcoFlowSensorDef("scheduled_charge_power_w", "Scheduled Charge Power", "W", "power", "measurement", "mdi:calendar-clock", "diagnostic", suggested_display_precision=0),
+    # The charge task's own SoC target, shown in the app as "Charge limit".
+    # Exposed because a power write has to preserve it, so it is worth being
+    # able to see what will be preserved.
+    EcoFlowSensorDef("scheduled_charge_soc_target", "Scheduled Charge Target SoC", "%", None, "measurement", "mdi:battery-clock", "diagnostic", suggested_display_precision=0),
+    # --- battery diagnostics ---
+    EcoFlowSensorDef("batt_voltage_v", "Battery Voltage", "V", "voltage", "measurement", "mdi:flash-triangle", suggested_display_precision=1),
+    EcoFlowSensorDef("bms_current_a", "Battery Current", "A", "current", "measurement", "mdi:current-dc", "diagnostic", suggested_display_precision=2, disabled_by_default=True),
+    EcoFlowSensorDef("batt_temp_c", "Battery Temp", "°C", "temperature", "measurement", "mdi:thermometer", suggested_display_precision=1),
+    EcoFlowSensorDef("batt_max_cell_temp_c", "Max Cell Temp", "°C", "temperature", "measurement", "mdi:thermometer-high", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
+    EcoFlowSensorDef("batt_min_cell_temp_c", "Min Cell Temp", "°C", "temperature", "measurement", "mdi:thermometer-low", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
+    EcoFlowSensorDef("batt_max_mos_temp_c", "Max MOSFET Temp", "°C", "temperature", "measurement", "mdi:thermometer-alert", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
+    EcoFlowSensorDef("batt_max_cell_vol_mv", "Max Cell Voltage", "mV", "voltage", "measurement", "mdi:flash-triangle-outline", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("batt_min_cell_vol_mv", "Min Cell Voltage", "mV", "voltage", "measurement", "mdi:flash-triangle-outline", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("batt_design_cap_mah", "Design Capacity", "mAh", None, "measurement", "mdi:battery", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("batt_full_cap_mah", "Full Capacity", "mAh", None, "measurement", "mdi:battery", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("batt_remain_cap_mah", "Remaining Capacity", "mAh", None, "measurement", "mdi:battery-50", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    # --- Energy Dashboard (total_increasing, kWh) ---
+    EcoFlowSensorDef("batt_charge_energy_kwh", "Battery Charge Energy", "kWh", "energy", "total_increasing", "mdi:battery-charging", suggested_display_precision=2),
+    EcoFlowSensorDef("batt_discharge_energy_kwh", "Battery Discharge Energy", "kWh", "energy", "total_increasing", "mdi:battery", suggested_display_precision=2),
+    EcoFlowSensorDef("grid_import_energy_kwh", "Grid Import Energy", "kWh", "energy", "total_increasing", "mdi:transmission-tower-export", suggested_display_precision=2),
+    EcoFlowSensorDef("grid_export_energy_kwh", "Grid Export Energy", "kWh", "energy", "total_increasing", "mdi:transmission-tower-import", suggested_display_precision=2),
+    EcoFlowSensorDef("home_energy_kwh", "Home Energy", "kWh", "energy", "total_increasing", "mdi:home-lightning-bolt", "diagnostic", suggested_display_precision=2, disabled_by_default=True),
+    EcoFlowSensorDef("solar_energy_kwh", "Solar Energy", "kWh", "energy", "total_increasing", "mdi:solar-power", "diagnostic", suggested_display_precision=2, disabled_by_default=True, accessory=True),
+]
+
+STREAMAC5000_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
+    EcoFlowBinarySensorDef("backup_reserve_enabled", "Backup Reserve", None, "mdi:battery-lock", "diagnostic"),
+    EcoFlowBinarySensorDef("backup_socket_enabled", "Backup Socket", None, "mdi:power-socket-eu", "diagnostic"),
+]
+
+
 # The Stream Micro (BK01) is a grid-tie PV inverter: two PV strings, one
 # single-phase grid connection, no battery, no AC outlets. It speaks the same
 # wire format as the rest of the BK series and therefore shares the parser and
@@ -1209,6 +1299,19 @@ STREAM_POWER_TO_ENERGY: dict[str, str] = {
 }
 
 STREAM_ENERGY_FROM_API: list[tuple[str, str]] = []
+
+STREAMAC5000_POWER_TO_ENERGY: dict[str, str] = {
+    "solar_w": "solar_energy_kwh",
+    "home_w": "home_energy_kwh",
+    "batt_charge_power_w": "batt_charge_energy_kwh",
+    "batt_discharge_power_w": "batt_discharge_energy_kwh",
+    # This device reports the grid split as separate flow edges, so import and
+    # export each get an honest counter instead of one signed total.
+    "grid_import_power_w": "grid_import_energy_kwh",
+    "grid_export_power_w": "grid_export_energy_kwh",
+}
+
+STREAMAC5000_ENERGY_FROM_API: list[tuple[str, str]] = []
 
 
 # ===========================================================================

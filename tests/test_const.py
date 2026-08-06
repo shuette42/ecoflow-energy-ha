@@ -170,6 +170,21 @@ class TestDeviceTypeRouting:
     def test_delta2_max_unchanged(self) -> None:
         assert get_device_type("DELTA 2 Max", "R351TEST00000001") == "delta"
 
+    def test_stream_ac5000_by_es22_prefix(self) -> None:
+        # STREAM AC 5000 (#177): its own device type, not the BK-series
+        # Stream one - it shares no telemetry command with them.
+        assert get_device_type("", "ES22TEST00000001") == "stream_ac5000"
+
+    def test_stream_ac5000_display_name(self) -> None:
+        # Reports an empty product name through the app API.
+        assert get_device_name("", "ES22TEST00000001") == "STREAM AC 5000 (0001)"
+
+    def test_sn_prefix_wins_over_a_matching_product_name(self) -> None:
+        # "STREAM AC 5000" contains the BK-series "stream" keyword. The
+        # prefix is exact evidence, so it decides even when the product
+        # name is populated and would match a different family.
+        assert get_device_type("STREAM AC 5000", "ES22TEST00000001") == "stream_ac5000"
+
     def test_bk21_smart_meter_stays_unknown(self) -> None:
         # Smart Meter support is deferred: it must remain unknown so it
         # shows up as a visible skip, not silently mapped to a wrong parser.
