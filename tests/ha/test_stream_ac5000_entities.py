@@ -41,11 +41,14 @@ from custom_components.ecoflow_energy.ecoflow.const import (
     get_device_name,
     get_device_type,
 )
+from custom_components.ecoflow_energy.number import async_setup_entry as number_setup
+from custom_components.ecoflow_energy.select import async_setup_entry as select_setup
 from custom_components.ecoflow_energy.sensor import (
     _get_sensor_defs,
     _reported,
     async_setup_entry as sensor_setup,
 )
+from custom_components.ecoflow_energy.switch import async_setup_entry as switch_setup
 
 ES22_DEVICE: dict[str, Any] = {
     "sn": "ES22TEST00000001",
@@ -154,6 +157,53 @@ class TestStreamAC5000EntitySet:
         keys = await _setup_keys(hass, binary_sensor_setup)
 
         assert keys == {"backup_reserve_enabled", "backup_socket_enabled"}
+
+    async def test_controls(self, hass: HomeAssistant) -> None:
+        assert await _setup_keys(hass, number_setup) == {
+            "max_discharging_power",
+            "max_grid_charging_power",
+            "max_charge_soc_pct",
+            "min_discharge_soc_pct",
+            "backup_reserve",
+        }
+        assert await _setup_keys(hass, select_setup) == {"work_mode"}
+
+    async def test_switches(self, hass: HomeAssistant) -> None:
+        """Both were captured from the app, so both are writable."""
+        assert await _setup_keys(hass, switch_setup) == {
+            "backup_reserve_switch",
+            "backup_socket_switch",
+        }
+
+
+class TestStreamAC5000TaskReadback:
+    """A setpoint number must not outlive the task it reports."""
+
+    async def test_a_deleted_task_clears_its_setpoint(
+        self, hass: HomeAssistant
+    ) -> None:
+        entry = _entry(ES22_DEVICE)
+        entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, ES22_DEVICE)
+        hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
+            ES22_DEVICE["sn"]: coordinator
+        }
+        created: list[Any] = []
+        await number_setup(hass, entry, created.extend)
+        number = next(
+            entity
+            for entity in created
+            if entity._definition.key == "max_discharging_power"
+        )
+        # A value the entity would otherwise fall back to, which is what the
+        # restore path leaves behind after a reload.
+        number._restored_value = 1200.0
+
+        coordinator.async_set_updated_data({"scheduled_discharge_power_w": 1200})
+        assert number.native_value == 1200
+
+        coordinator.async_set_updated_data({"scheduled_discharge_power_w": None})
+        assert number.native_value is None
 
 
 class TestStreamAC5000Definitions:

@@ -1521,6 +1521,9 @@
       },
       "port_priority_dc_switch": {
         "name": "DC non-essential"
+      },
+      "backup_socket_switch": {
+        "name": "Backup Socket"
       }
     },
     "number": {
@@ -1571,6 +1574,18 @@
       },
       "port_priority_dc_soc": {
         "name": "DC cutoff level"
+      },
+      "max_charge_soc_pct": {
+        "name": "Max Charge SoC"
+      },
+      "min_discharge_soc_pct": {
+        "name": "Min Discharge SoC"
+      },
+      "max_discharging_power": {
+        "name": "Max Discharging Power"
+      },
+      "max_grid_charging_power": {
+        "name": "Max Grid Charging Power"
       }
     },
     "select": {
@@ -1578,7 +1593,10 @@
         "name": "Work Mode",
         "state": {
           "self_use": "Self-use",
-          "ai_schedule": "AI Schedule"
+          "ai_schedule": "AI Schedule",
+          "self_powered": "Self-powered",
+          "intelligent_plus": "Intelligent Mode+",
+          "custom": "Custom"
         }
       },
       "screen_timeout": {
@@ -1655,6 +1673,9 @@
     },
     "set_command_unsupported": {
       "message": "{entity} does not support this command on this device."
+    },
+    "set_value_rejected": {
+      "message": "{entity} cannot be set to that value: {reason}"
     }
   }
 }

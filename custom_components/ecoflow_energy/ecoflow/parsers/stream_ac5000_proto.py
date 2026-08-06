@@ -128,6 +128,10 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
         # Deliberately unmapped: `32/2` is the source, and this file has
         # already had the limits taken from the wrong one of three.
         # --- scheduled task readback ---
+        # Tasks are written on config field 39 and read back here on `f40`.
+        # The grammar is identical on both sides, only the top-level number
+        # differs, and it is the one config field that changes number between
+        # write and readback.
         # One task per frame, and the device rotates through them, so these
         # land as per-kind keys that merge across frames rather than as a list
         # that each frame would overwrite. `.1` echoes the last operation and

@@ -1521,6 +1521,9 @@
       },
       "port_priority_dc_switch": {
         "name": "DC nicht wesentlich"
+      },
+      "backup_socket_switch": {
+        "name": "Notstromsteckdose"
       }
     },
     "number": {
@@ -1571,6 +1574,18 @@
       },
       "port_priority_dc_soc": {
         "name": "DC Abschaltgrenze"
+      },
+      "max_charge_soc_pct": {
+        "name": "Max. Ladestand"
+      },
+      "min_discharge_soc_pct": {
+        "name": "Min. Entladestand"
+      },
+      "max_discharging_power": {
+        "name": "Max. Entladeleistung"
+      },
+      "max_grid_charging_power": {
+        "name": "Max. Netzladeleistung"
       }
     },
     "select": {
@@ -1578,7 +1593,10 @@
         "name": "Betriebsmodus",
         "state": {
           "self_use": "Eigenstromversorgung",
-          "ai_schedule": "Intelligenter Modus"
+          "ai_schedule": "Intelligenter Modus",
+          "self_powered": "Eigenverbrauch",
+          "intelligent_plus": "Intelligenter Modus+",
+          "custom": "Benutzerdefiniert"
         }
       },
       "screen_timeout": {
@@ -1655,6 +1673,9 @@
     },
     "set_command_unsupported": {
       "message": "{entity} unterstützt dieses Kommando auf diesem Gerät nicht."
+    },
+    "set_value_rejected": {
+      "message": "{entity} kann nicht auf diesen Wert gesetzt werden: {reason}"
     }
   }
 }
