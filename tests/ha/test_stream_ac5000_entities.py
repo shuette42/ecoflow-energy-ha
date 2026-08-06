@@ -27,18 +27,24 @@ from custom_components.ecoflow_energy.const import (
     CONF_MODE,
     CONF_PASSWORD,
     CONF_USER_ID,
+    DEVICE_TYPE_STREAM,
     DEVICE_TYPE_STREAM_AC5000,
     DOMAIN,
     MODE_ENHANCED,
+    STREAM_MICRO_EXCLUDED_KEYS,
     STREAMAC5000_POWER_TO_ENERGY,
     STREAMAC5000_SENSORS,
+    filter_defs_for_serial,
 )
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
 from custom_components.ecoflow_energy.ecoflow.const import (
     get_device_name,
     get_device_type,
 )
-from custom_components.ecoflow_energy.sensor import async_setup_entry as sensor_setup
+from custom_components.ecoflow_energy.sensor import (
+    _get_sensor_defs,
+    async_setup_entry as sensor_setup,
+)
 
 ES22_DEVICE: dict[str, Any] = {
     "sn": "ES22TEST00000001",
@@ -52,7 +58,6 @@ ES22_DEVICE: dict[str, Any] = {
 # EcoFlow P1 meter instead of a single-total meter such as a Tibber Pulse.
 ACCESSORY_KEYS = {
     "solar_w",
-    "solar_energy_kwh",
     "home_from_solar_w",
     "ac_frequency_hz",
     "grid_phase_a_active_power_w",
@@ -152,6 +157,11 @@ class TestStreamAC5000EntitySet:
 
 
 class TestStreamAC5000Definitions:
+    def test_documented_totals(self) -> None:
+        """The counts the README and the entity reference publish."""
+        assert len(STREAMAC5000_SENSORS) == 51
+        assert len(STREAMAC5000_POWER_TO_ENERGY) == 5
+
     def test_exactly_one_battery_device_class(self) -> None:
         battery = [s for s in STREAMAC5000_SENSORS if s.device_class == "battery"]
         assert [s.key for s in battery] == ["soc_pct"]
@@ -168,8 +178,52 @@ class TestStreamAC5000Definitions:
                 assert definition.state_class == "total_increasing", definition.key
 
     def test_an_accessory_energy_counter_follows_its_power_source(self) -> None:
-        """solar_energy_kwh is integrated from solar_w, so gating one without
-        the other would create a counter that can never move."""
+        """An energy counter is integrated from its power reading, so gating
+        one without the other would create a counter that can never move."""
         by_key = {s.key: s for s in STREAMAC5000_SENSORS}
         for power_key, energy_key in STREAMAC5000_POWER_TO_ENERGY.items():
             assert by_key[energy_key].accessory == by_key[power_key].accessory, energy_key
+
+    def test_the_solar_reading_has_no_lifetime_counter(self) -> None:
+        """The reading stays, the counter does not.
+
+        This device works its solar figure out from the house flows and
+        reports one on a unit with no PV wired to it at all, as frames 25 and
+        26 of the push capture show. A total_increasing counter only ever
+        counts up and cannot be corrected afterwards, so integrating an
+        inferred figure would credit the Energy Dashboard with production
+        that never happened. `solar_w` carries the same information and can
+        simply be ignored.
+        """
+        keys = {s.key for s in STREAMAC5000_SENSORS}
+        assert "solar_w" in keys
+        assert "solar_energy_kwh" not in keys
+        assert "solar_w" not in STREAMAC5000_POWER_TO_ENERGY
+
+
+class TestBKSeriesSetIsUntouched:
+    """The BK-series entity set must not move because of this device.
+
+    An ES22 gets its own list precisely so the BK series keeps the set it
+    was released with. The failure this guards against is subtractive: an
+    ES22-only key added to `STREAM_SENSORS` instead, then excluded again per
+    prefix, would create entities on every Stream in the field that can never
+    fill, and Home Assistant keeps an entity once it exists. The Stream Micro
+    (BK01) is the one prefix that legitimately gets less, and it gets it
+    through `filter_defs_for_serial`, not through a shorter list.
+    """
+
+    def test_the_stream_list_keeps_its_size(self) -> None:
+        assert len(_get_sensor_defs(DEVICE_TYPE_STREAM)) == 54
+
+    def test_bk01_still_gets_the_micro_reduced_set(self) -> None:
+        defs = _get_sensor_defs(DEVICE_TYPE_STREAM)
+        micro = filter_defs_for_serial(defs, "BK01TEST00000001")
+
+        assert len(micro) == 21
+        assert not {d.key for d in micro} & STREAM_MICRO_EXCLUDED_KEYS
+
+    def test_every_other_stream_prefix_gets_the_whole_set(self) -> None:
+        defs = _get_sensor_defs(DEVICE_TYPE_STREAM)
+
+        assert filter_defs_for_serial(defs, "BK31TEST00000001") == list(defs)

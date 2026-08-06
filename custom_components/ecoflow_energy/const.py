@@ -800,8 +800,11 @@ STREAM_SENSORS: list[EcoFlowSensorDef] = [
 STREAMAC5000_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("soc_pct", "Battery SOC", "%", "battery", "measurement", "mdi:battery", suggested_display_precision=0),
     EcoFlowSensorDef("soc_precise_pct", "Battery SOC (Precise)", "%", None, "measurement", "mdi:battery-sync", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
-    # The BMS pack reading, about two points above the system SoC above.
-    EcoFlowSensorDef("bms_precise_soc", "BMS SoC", "%", None, "measurement", "mdi:battery-heart-outline", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
+    # The BMS pack reading, about two points above the system SoC above. Keyed
+    # apart from the Delta family's `bms_precise_soc`, which is the same
+    # reading under a key that predates the `_pct` convention every other
+    # percentage here follows.
+    EcoFlowSensorDef("bms_soc_precise_pct", "BMS SoC", "%", None, "measurement", "mdi:battery-heart-outline", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
     EcoFlowSensorDef("bms_soh_pct", "Battery SoH", "%", None, "measurement", "mdi:battery-heart-variant", suggested_display_precision=0),
     # --- battery power ---
     EcoFlowSensorDef("batt_w", "Battery Power", "W", "power", "measurement", "mdi:battery", suggested_display_precision=0),
@@ -867,7 +870,12 @@ STREAMAC5000_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("grid_import_energy_kwh", "Grid Import Energy", "kWh", "energy", "total_increasing", "mdi:transmission-tower-export", suggested_display_precision=2),
     EcoFlowSensorDef("grid_export_energy_kwh", "Grid Export Energy", "kWh", "energy", "total_increasing", "mdi:transmission-tower-import", suggested_display_precision=2),
     EcoFlowSensorDef("home_energy_kwh", "Home Energy", "kWh", "energy", "total_increasing", "mdi:home-lightning-bolt", "diagnostic", suggested_display_precision=2, disabled_by_default=True),
-    EcoFlowSensorDef("solar_energy_kwh", "Solar Energy", "kWh", "energy", "total_increasing", "mdi:solar-power", "diagnostic", suggested_display_precision=2, disabled_by_default=True, accessory=True),
+    # No solar energy counter. This device derives its solar figure from the
+    # house flows and reports one on a unit with no PV wired to it at all, so
+    # integrating it would credit the Energy Dashboard with production that
+    # never happened. A total_increasing counter only goes up and cannot be
+    # corrected afterwards, while the instantaneous `solar_w` reading carries
+    # the same information and can simply be ignored.
 ]
 
 STREAMAC5000_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
@@ -1301,7 +1309,10 @@ STREAM_POWER_TO_ENERGY: dict[str, str] = {
 STREAM_ENERGY_FROM_API: list[tuple[str, str]] = []
 
 STREAMAC5000_POWER_TO_ENERGY: dict[str, str] = {
-    "solar_w": "solar_energy_kwh",
+    # `solar_w` is deliberately absent: the device infers that figure from the
+    # house flows and reports it with no PV wired to it, so integrating it
+    # would write production that never happened into a counter that only ever
+    # counts up. See the note on the sensor list.
     "home_w": "home_energy_kwh",
     "batt_charge_power_w": "batt_charge_energy_kwh",
     "batt_discharge_power_w": "batt_discharge_energy_kwh",

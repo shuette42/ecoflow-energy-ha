@@ -478,6 +478,9 @@
       "bms_precise_soc": {
         "name": "Präziser Ladezustand"
       },
+      "bms_soc_precise_pct": {
+        "name": "Präziser Ladezustand"
+      },
       "watts_in_sum": {
         "name": "Eingang Gesamt"
       },

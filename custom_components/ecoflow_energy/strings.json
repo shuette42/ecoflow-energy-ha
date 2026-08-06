@@ -424,6 +424,9 @@
       "bms_precise_soc": {
         "name": "Precise SoC"
       },
+      "bms_soc_precise_pct": {
+        "name": "Precise SoC"
+      },
       "watts_in_sum": {
         "name": "Input Total"
       },

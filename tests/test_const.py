@@ -28,6 +28,11 @@ from ecoflow_energy.const import (
     get_device_type,
     get_delta_profile,
 )
+from ecoflow_energy.ecoflow.const import (
+    _NOT_THIS_FAMILY_KEYWORDS,
+    _SN_PREFIX_DISPLAY_NAMES,
+    _SN_PREFIX_MAP,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -184,6 +189,33 @@ class TestDeviceTypeRouting:
         # prefix is exact evidence, so it decides even when the product
         # name is populated and would match a different family.
         assert get_device_type("STREAM AC 5000", "ES22TEST00000001") == "stream_ac5000"
+
+    def test_a_known_prefix_wins_over_the_not_this_family_guard(self) -> None:
+        """Stating the cost of that ordering, so the two tests below have a
+        reason to exist.
+
+        The prefix is consulted first, which means the guard only ever runs
+        for a serial the prefix map does not know.
+        """
+        assert get_device_type("PowerStream", "ES22TEST00000001") == "stream_ac5000"
+
+    def test_the_powerstream_prefix_stays_out_of_the_map(self) -> None:
+        """A PowerStream reports HW51 and only HW52 is mapped, which is the
+        whole reason the #188 guard still fires after the reorder."""
+        assert "HW51" not in _SN_PREFIX_MAP
+        assert get_device_type("PowerStream", "HW51TEST00000001") == "unknown"
+
+    def test_no_mapped_prefix_belongs_to_a_guarded_family(self) -> None:
+        """A prefix added for a device the guard rejects would silently
+        reinstate #188: the map answers before the guard is consulted, so the
+        unsupported-device notice that asks for a capture never appears."""
+        for prefix, device_type in _SN_PREFIX_MAP.items():
+            name = _SN_PREFIX_DISPLAY_NAMES.get(prefix, "").lower()
+            for keyword in _NOT_THIS_FAMILY_KEYWORDS:
+                assert keyword not in name, (
+                    f"{prefix} routes to {device_type} but names itself "
+                    f"'{name}', which the not-this-family guard rejects"
+                )
 
     def test_bk21_smart_meter_stays_unknown(self) -> None:
         # Smart Meter support is deferred: it must remain unknown so it

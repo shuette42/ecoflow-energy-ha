@@ -74,8 +74,17 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
         "12.6": ("home_from_grid_w", _TYPE_FLOAT, 1),
         "12.7": ("_grid_to_batt_w", _TYPE_FLOAT, 1),
         # Never observed; position inferred from the surrounding edges.
-        # Kept out of the zero-fill below so a wrong guess creates no entity.
+        # Staying out of the zero-fill below only keeps a frame that omits
+        # field 8 from reporting a zero. It does not contain the guess: a unit
+        # that does send field 8 creates `home_from_solar_w` from whatever it
+        # holds, and Home Assistant keeps an accessory entity in the registry
+        # once it exists, so a wrong position here is a wrong reading that
+        # never goes away.
         "12.8": ("home_from_solar_w", _TYPE_FLOAT, 1),
+        # Never observed either, and inferred the same way. It reaches no
+        # entity and no derivation: `_finalize` drops it, because the only
+        # value it could feed is the battery term. See there for what would
+        # have to arrive before it counts again.
         "12.9": ("_solar_to_batt_w", _TYPE_FLOAT, 1),
         "12.10": ("_solar_to_grid_w", _TYPE_FLOAT, 1),
         # --- meter block, Tibber Pulse variant (source id 4) ---
@@ -101,14 +110,23 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
         # 2500 when the limit was raised, and `.1` alone dropped to 2400 when
         # the output limit was set to 2400. `f10.2` and `f33.11` stayed at
         # 2500 throughout, so those are the hardware ceiling instead.
+        # That was a live session, and it is the whole of the evidence: in both
+        # captures shipped with the tests `.1`, `.5` and `.6` all read 600, so
+        # nothing in this repo tells the three apart. Re-deriving the anchor
+        # means moving the limit in the app again, not re-reading the fixtures.
         "10.1": ("max_grid_output_power_w", _TYPE_INT, 1),
         "10.6": ("max_grid_input_power_w", _TYPE_INT, 1),
         "25": ("_work_mode_raw", _TYPE_INT, 1),
         "29.1": ("max_charge_soc_pct", _TYPE_INT, 1),
         "29.2": ("min_discharge_soc_pct", _TYPE_INT, 1),
-        # The app's backup socket control, written on config field 19.
+        # The app's backup socket control, written on config field 19. It read
+        # 0 in every captured frame, so the switched-on branch has never been
+        # seen on hardware; only the tests exercise it.
         "19.1": ("_backup_socket_enabled_raw", _TYPE_INT, 1),
         "30.1": ("_backup_reserve_enabled_raw", _TYPE_INT, 1),
+        # Constant 40 across both captures, matching the reserve the app
+        # showed at the time. One matching value is what this rests on, not a
+        # value followed while it moved, and the fixtures cannot show more.
         "30.2": ("backup_reserve_pct", _TYPE_INT, 1),
         "33.6": ("soc_precise_pct", _TYPE_FLOAT, 1),
         # --- scheduled task readback ---
@@ -135,12 +153,15 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
     # the account limit was raised to 2500 W, while the output limit was set
     # to 2400 W, and while the discharge task ran at 1400 W. They are neither
     # the limits nor the task powers, so their meaning is unknown.
-    (32, 2): {
-        # The same limits `254/39 f29` carries, confirmed at a non-default
-        # 90/15 against an app screenshot.
-        "1.7": ("max_charge_soc_pct", _TYPE_INT, 1),
-        "1.21": ("min_discharge_soc_pct", _TYPE_INT, 1),
-    },
+    # `32/2 f1.7` and `f1.21` hold the same SoC limits `254/39 f29` carries,
+    # confirmed at a non-default 90/15 against an app screenshot, and are
+    # deliberately not mapped. Both frames arrive on the same channel, so two
+    # mappings would be two sources writing one entity, which is the shape
+    # that made the Stream LED readback flap (`stream_proto.py`, the (254, 18)
+    # note). The command is not registered at all because these two are the
+    # only fields in it this parser understands; the moment it carries a key
+    # nothing else reports, it comes back with that key alone.
+    #
     # Field numbers and key names match the (32, 50) block in
     # `stream_proto.py`: it is the same BMS heartbeat.
     (32, 50): {
@@ -159,7 +180,7 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
         # Not soc_precise_pct: this is the BMS pack SoC and runs about two
         # points above the system SoC the app shows (20.93 vs 18.63 in the
         # same second).
-        "25": ("bms_precise_soc", _TYPE_FLOAT, 1),
+        "25": ("bms_soc_precise_pct", _TYPE_FLOAT, 1),
     },
 }
 
@@ -453,7 +474,7 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
     batt_to_grid = result.pop("_batt_to_grid_w", None)
     grid_to_batt = result.pop("_grid_to_batt_w", None)
     solar_to_grid = result.pop("_solar_to_grid_w", None)
-    solar_to_batt = result.pop("_solar_to_batt_w", None)
+    result.pop("_solar_to_batt_w", None)
     home_from_grid = result.get("home_from_grid_w")
     home_from_batt = result.get("home_from_batt_w")
 
@@ -469,10 +490,16 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
     # being numbers means this frame carried `f12`; an absent group leaves
     # `batt_w` out so the coordinator keeps the last value.
     if all(isinstance(v, (int, float)) for v in (home_from_batt, batt_to_grid, grid_to_batt)):
-        into = float(grid_to_batt)
-        if isinstance(solar_to_batt, (int, float)):
-            into += float(solar_to_batt)
-        result["batt_w"] = into - (float(home_from_batt) + float(batt_to_grid))
+        # A solar-to-battery edge would belong in this sum, and `f12.9` is the
+        # inferred position for it. It is left out because no frame of either
+        # capture carries field 9, and because `batt_w` reaches
+        # `batt_charge_power_w` and from there a total_increasing counter: a
+        # term added there in error inflates a total that only ever goes up.
+        # A capture carrying field 9 while the app shows solar charging the
+        # battery is what puts it back into this line.
+        result["batt_w"] = float(grid_to_batt) - (
+            float(home_from_batt) + float(batt_to_grid)
+        )
 
     _finalize_task(result)
 

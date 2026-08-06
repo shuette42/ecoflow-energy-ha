@@ -184,14 +184,33 @@ class TestDerivedValues:
             ({"from_grid": 599.6}, 599.6),
             ({"to_home": 593.0}, -593.0),
             ({"to_grid": 200.0, "to_home": 393.0}, -593.0),
-            ({"from_solar": 400.0, "from_grid": 100.0}, 500.0),
-            ({"from_solar": 400.0, "to_home": 150.0}, 250.0),
             ({}, 0.0),
         ],
     )
     def test_battery_power_comes_from_the_edges(
         self, edges: dict[str, float], batt_w: float
     ) -> None:
+        result = parse_stream_ac5000_message(_build_frame(254, 39, bytes(_edges(**edges))))
+        assert result is not None
+        assert result["batt_w"] == pytest.approx(batt_w, rel=1e-5)
+
+    @pytest.mark.parametrize(
+        ("edges", "batt_w"),
+        [
+            ({"from_solar": 400.0, "from_grid": 100.0}, 100.0),
+            ({"from_solar": 400.0, "to_home": 150.0}, -150.0),
+        ],
+    )
+    def test_the_inferred_solar_to_battery_edge_stays_out_of_the_sum(
+        self, edges: dict[str, float], batt_w: float
+    ) -> None:
+        """`f12.9` is a guessed position and battery power feeds a counter.
+
+        No frame of either capture carries field 9, so the mapping rests on
+        the surrounding edges alone. Counting it would flow through
+        `batt_charge_power_w` into a total_increasing counter, which cannot be
+        corrected once it has counted too much.
+        """
         result = parse_stream_ac5000_message(_build_frame(254, 39, bytes(_edges(**edges))))
         assert result is not None
         assert result["batt_w"] == pytest.approx(batt_w, rel=1e-5)
@@ -316,7 +335,7 @@ class TestDerivedValues:
             _build_frame(32, 50, bytes(_encode_fixed32_field(25, 20.93)))
         )
         assert bms is not None
-        assert bms["bms_precise_soc"] == pytest.approx(20.93, rel=1e-4)
+        assert bms["bms_soc_precise_pct"] == pytest.approx(20.93, rel=1e-4)
         assert "soc_precise_pct" not in bms
 
 
@@ -328,12 +347,15 @@ class TestSocLimits:
         assert result["max_charge_soc_pct"] == 90
         assert result["min_discharge_soc_pct"] == 15
 
-    def test_same_limits_from_the_battery_heartbeat(self) -> None:
+    def test_the_battery_heartbeat_is_not_a_second_source(self) -> None:
+        """`32/2 f1.7` and `f1.21` hold the same limits and stay unmapped.
+
+        Both frames reach the same entity on the same channel, so mapping
+        both would be two sources writing one value - the shape that made the
+        Stream LED readback flap. `254/39 f29` is the one that carries them.
+        """
         inner = _sub(1, encode_field_varint(7, 90) + encode_field_varint(21, 15))
-        result = parse_stream_ac5000_message(_build_frame(32, 2, bytes(inner)))
-        assert result is not None
-        assert result["max_charge_soc_pct"] == 90
-        assert result["min_discharge_soc_pct"] == 15
+        assert parse_stream_ac5000_message(_build_frame(32, 2, bytes(inner))) is None
 
     def test_scheduled_discharge_setpoint_is_read_back(self) -> None:
         """f40.1.9.1 followed every setpoint written during a control test."""
@@ -466,9 +488,11 @@ class TestCaptureReplay:
     def test_push_frames_parse_or_carry_nothing_we_map(self) -> None:
         """A push yields nothing when every block in it is unmapped.
 
-        254/40 always qualifies. A 254/39 does when it carries only the pack
-        blocks `f38`/`f44` (duplicates of 32/50) or `f50`, which is what an
-        idle unit sends once it drops the flow matrix.
+        254/40 always qualifies, and so does 32/2, whose only two fields
+        duplicate the SoC limits `254/39 f29` already carries. A 254/39 does
+        when it carries only the pack blocks `f38`/`f44` (duplicates of 32/50)
+        or `f50`, which is what an idle unit sends once it drops the flow
+        matrix.
         """
         frames = _load(PUSHES)
         assert len(frames) >= 20
@@ -481,7 +505,7 @@ class TestCaptureReplay:
             )
         assert len(empty_cmds) < len(frames) / 2
         for cmds in empty_cmds:
-            assert cmds in (((254, 40),), ((254, 39),)), cmds
+            assert cmds in (((32, 2),), ((254, 40),), ((254, 39),)), cmds
 
     def test_no_solar_entity_data_on_a_unit_without_pv(self) -> None:
         """Most frames must not carry solar, or the gating never holds off."""
@@ -491,6 +515,21 @@ class TestCaptureReplay:
         ]
         with_solar = [p for p in parsed if "solar_w" in p]
         assert len(with_solar) < len(parsed) / 2
+
+    def test_a_unit_without_pv_still_reports_a_solar_figure(self) -> None:
+        """Two frames of the capture read 62 W of solar on a PV-less unit.
+
+        The device works that figure out from the house flows and the app
+        shows the same number, so the reading is parsed as reported. This
+        pins what the parser does with it and nothing more: it is the
+        device's inference, which is why the live reading exists and the
+        lifetime counter that would integrate it does not.
+        """
+        frames = _load(PUSHES)
+        for index in (25, 26):
+            parsed = parse_stream_ac5000_message(bytes.fromhex(frames[index]["hex"]))
+            assert parsed is not None, index
+            assert parsed["solar_w"] == pytest.approx(62.0), index
 
     def test_home_equals_the_edges_into_home(self) -> None:
         """The identity the flow matrix has to preserve, on real frames."""
