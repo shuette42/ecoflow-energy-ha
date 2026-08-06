@@ -92,6 +92,36 @@ class TestListenOnly:
         paho.publish.assert_not_called()
         assert client.publish("/any/topic", b"payload") is False
 
+    async def test_a_rebuilt_session_still_transmits_nothing(
+        self, hass: HomeAssistant
+    ) -> None:
+        """The no-write promise has to survive the watchdog's reconnect.
+
+        ``force_reconnect`` throws the paho client away and builds a new
+        one. The promise lives on the wrapper (``_listen_only``), not on
+        the paho instance - this pins that, so it cannot quietly move to
+        somewhere a rebuild would reset.
+        """
+        client = EcoFlowMQTTClient(
+            certificate_account="acc",
+            certificate_password="pw",
+            device_sn=SKIPPED_SN,
+            message_handler=lambda topic, payload: None,
+            user_id="user123",
+            wss_mode=True,
+            enhanced_mode=False,
+            listen_only=True,
+        )
+        client.client = MagicMock()
+
+        with patch("ecoflow_energy.ecoflow.cloud_mqtt.mqtt.Client") as paho_cls:
+            fresh = paho_cls.return_value
+            assert client.force_reconnect() is True
+            client._on_connect(fresh, None, {}, 0)
+
+        fresh.publish.assert_not_called()
+        assert client.publish("/any/topic", b"payload") is False
+
     async def test_a_normal_connection_still_requests_data(
         self, hass: HomeAssistant
     ) -> None:
@@ -460,6 +490,48 @@ class TestStayingConnected:
 
         probe._client.try_reconnect.assert_not_called()
 
+    async def test_a_stopped_probe_is_not_reconnected(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Unload stops the probes before the timer is cancelled.
+
+        Home Assistant runs the entry's on_unload callbacks - the timer's
+        cancel among them - only after async_unload_entry returns, and
+        async_unload_entry awaits in between. A tick landing in one of
+        those awaits finds the session down (it was just disconnected)
+        and, without the guard, rebuilds it into a connection nothing
+        ever tears down.
+        """
+        probe = _probe(hass)
+        probe._client.is_connected.return_value = False
+        await probe.async_stop()
+
+        probe.async_check_connection()
+        await hass.async_block_till_done()
+
+        probe._client.try_reconnect.assert_not_called()
+
+    async def test_a_stop_landing_mid_attempt_still_ends_disconnected(
+        self, hass: HomeAssistant
+    ) -> None:
+        """A reconnect already past the guard re-checks after its attempt.
+
+        The stop's own disconnect can run before the attempt builds its
+        fresh session, in which case the stop misses it. The attempt has
+        to notice the stop afterwards and tear its own work down again.
+        """
+        probe = _probe(hass)
+        probe._client.is_connected.return_value = False
+
+        def stop_lands_mid_attempt() -> bool:
+            probe._stopped = True
+            return True
+
+        probe._client.try_reconnect.side_effect = stop_lands_mid_attempt
+        probe._reconnect()
+
+        probe._client.disconnect.assert_called_once()
+
 
 class TestConnectionReport:
     """An empty capture has to say why it is empty.
@@ -511,6 +583,11 @@ class TestConnectionReport:
         assert report["sessions"] == 1
         assert report["disconnects"] == 1
         assert "connected earlier" in report["verdict"]
+        # The client's own wording, not the CONNACK table: disconnect codes
+        # are a different namespace, and captioning a drop with connect-
+        # refusal language ("Bad username/password" for a lost link) would
+        # mislead exactly the reader this report exists for.
+        assert report["last_rc_reason"] == "Disconnected (rc=7)"
 
     async def test_ages_are_reported_from_the_capture_clock(
         self, hass: HomeAssistant

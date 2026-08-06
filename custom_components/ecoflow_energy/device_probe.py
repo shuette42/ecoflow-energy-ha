@@ -35,7 +35,7 @@ import time
 from datetime import timedelta
 from typing import Any
 
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.helpers.event import async_track_time_interval
 
 from .const import (
@@ -44,7 +44,6 @@ from .const import (
     RAW_FRAME_MAX_BYTES,
     RAW_FRAME_PER_KEY_MAX,
 )
-from .ecoflow.cloud_mqtt import CONNECT_REASONS as _CONNECT_REASONS
 from .ecoflow.cloud_mqtt import EcoFlowMQTTClient
 from .ecoflow.frame_capture import (
     TypedFrameBuffer,
@@ -104,6 +103,15 @@ class UnroutedDeviceProbe:
         # detail of the GIL, not a property of the code - it does not hold on
         # a free-threaded build. Cheap enough to not depend on.
         self._capture_lock = threading.Lock()
+        # Set once the probe is told to stop, checked on every reconnect
+        # path. Without it the watchdog can resurrect a probe mid-unload:
+        # the timer's cancel runs in the entry's on_unload callbacks, which
+        # Home Assistant processes only after async_unload_entry returns,
+        # and async_unload_entry awaits in between - a tick landing in one
+        # of those awaits would find the session down (it was just
+        # disconnected) and rebuild it, leaving a live connection and a
+        # paho thread that nothing ever tears down.
+        self._stopped = False
         # Connection history. Written from the paho thread via the status
         # callback, read on the event loop when diagnostics are downloaded,
         # so it shares the capture lock rather than relying on the GIL.
@@ -218,8 +226,18 @@ class UnroutedDeviceProbe:
             "arrived while it was up"
         )
 
-    def _on_status(self, status: str, rc: int, _message: str) -> None:
-        """Record a connection event (paho thread)."""
+    def _on_status(self, status: str, rc: int, message: str) -> None:
+        """Record a connection event (paho thread).
+
+        The client's message is stored as-is: it words each event in the
+        vocabulary that fits it (CONNACK reasons for a refused connect,
+        "Disconnected (rc=N)" for a drop). Re-deriving the words here from
+        the CONNACK table would caption disconnects with connect-refusal
+        language - disconnect reason codes are a different namespace, and
+        under paho 2.x a routine drop arrives as 128 or 141, which that
+        table cannot name. The messages contain no device or account
+        identifiers, which is what makes storing them export-safe.
+        """
         with self._capture_lock:
             if status == "connected":
                 self._connects += 1
@@ -231,7 +249,7 @@ class UnroutedDeviceProbe:
                     self._disconnects += 1
                     self._last_disconnect_at = time.time()
                 self._last_rc = rc
-                self._last_reason = _CONNECT_REASONS.get(rc, "unknown")
+                self._last_reason = message
 
     def async_check_connection(self) -> None:
         """Reconnect if the session has dropped (event loop).
@@ -242,7 +260,7 @@ class UnroutedDeviceProbe:
         own and never gives up for good, which is exactly the behaviour a
         24 hour capture needs.
         """
-        if self._client.is_connected():
+        if self._stopped or self._client.is_connected():
             return
 
         async def _run() -> None:
@@ -259,7 +277,15 @@ class UnroutedDeviceProbe:
 
     def _reconnect(self) -> None:
         """Run one reconnect attempt (executor thread)."""
+        if self._stopped:
+            return
         try:
+            # Counted per attempt handed to the client, which may still hold
+            # one back briefly under its own backoff - so this reads as "how
+            # often a connect was driven", slightly above the number of
+            # connects actually tried. The alternative (counting only what
+            # the client let through) would make a link retried all day look
+            # like one never tried, which is the worse lie.
             with self._capture_lock:
                 self._connect_calls += 1
             self._client.try_reconnect()
@@ -267,6 +293,20 @@ class UnroutedDeviceProbe:
             _LOGGER.debug(
                 "Probe reconnect failed for %s...", self.device_sn[:4], exc_info=True
             )
+        if self._stopped:
+            # A stop landed while the attempt ran. The flag is set before the
+            # stop's disconnect starts, so reaching this line means whatever
+            # the attempt just built may have been missed by that disconnect
+            # - tear it down again. Disconnecting twice is harmless; leaving
+            # a session up with no owner is not.
+            try:
+                self._client.disconnect()
+            except Exception:  # noqa: BLE001
+                _LOGGER.debug(
+                    "Probe post-stop disconnect failed for %s...",
+                    self.device_sn[:4],
+                    exc_info=True,
+                )
 
     async def async_start(self) -> bool:
         """Connect and subscribe. Returns False if the connection failed.
@@ -301,7 +341,13 @@ class UnroutedDeviceProbe:
         return True
 
     async def async_stop(self) -> None:
-        """Disconnect the listen-only session."""
+        """Disconnect the listen-only session.
+
+        The flag goes up before the disconnect starts: any reconnect that
+        checks it afterwards backs off, and one already past the check
+        re-checks after its attempt and tears its own work down again.
+        """
+        self._stopped = True
         try:
             await self.hass.async_add_executor_job(self._client.disconnect)
         except Exception:  # noqa: BLE001
@@ -434,7 +480,7 @@ async def async_start_probes(
 
 def async_start_probe_watchdog(
     hass: HomeAssistant, probes: list[UnroutedDeviceProbe]
-) -> Any:
+) -> CALLBACK_TYPE:
     """Keep the listen-only sessions alive for the length of the capture.
 
     Returns the unsubscribe callback. A capture runs for up to 24 hours

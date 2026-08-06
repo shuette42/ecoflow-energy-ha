@@ -47,9 +47,12 @@ _LOGGER = logging.getLogger(__name__)
 # instance - can never succeed and costs the full timeout twice per connect.
 PUBLISH_ACK_TIMEOUT_S = 5.0
 
-# CONNACK return codes in words. Module level because the listen-only capture
-# reports the reason into a diagnostics download, and a second copy of this
-# table there would drift from this one.
+# CONNACK return codes in words. These words travel: the status handler
+# passes them to the listen-only capture, which exports them verbatim into a
+# diagnostics download. That is also why every message handed to a
+# status_handler must stay free of serials, account ids and topics - it may
+# end up attached to a public issue. The table applies to CONNACK only;
+# disconnect reason codes are a different namespace and are not named here.
 CONNECT_REASONS = {
     1: "Protocol version rejected",
     2: "ClientID rejected",
@@ -543,8 +546,16 @@ class EcoFlowMQTTClient:
             self.client.loop_stop()
 
     def is_connected(self) -> bool:
-        """Check if the client is connected."""
-        return self.connected and self.client is not None and self.client.is_connected()
+        """Check if the client is connected.
+
+        Reads a local reference: ``self.client`` is swapped to ``None`` by
+        ``force_reconnect`` on an executor thread, and re-reading the
+        attribute between the None-check and the call would raise on
+        whatever thread asked - the event loop, when diagnostics or the
+        probe watchdog are the caller.
+        """
+        client = self.client
+        return self.connected and client is not None and client.is_connected()
 
     def publish(
         self, topic: str, payload: str | bytes, qos: int = 1, wait: bool = False,
