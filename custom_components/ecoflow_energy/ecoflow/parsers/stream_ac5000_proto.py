@@ -116,8 +116,6 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
         "10.1": ("max_grid_output_power_w", _TYPE_INT, 1),
         "10.2": ("max_grid_input_power_w", _TYPE_INT, 1),
         "25": ("_work_mode_raw", _TYPE_INT, 1),
-        "29.1": ("max_charge_soc_pct", _TYPE_INT, 1),
-        "29.2": ("min_discharge_soc_pct", _TYPE_INT, 1),
         # The app's backup socket control, written on config field 19.
         "19.1": ("_backup_socket_enabled_raw", _TYPE_INT, 1),
         "30.1": ("_backup_reserve_enabled_raw", _TYPE_INT, 1),
@@ -141,21 +139,23 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
         # `f50.1.4` (signed battery power) is not mapped: the whole `f50` block
         # stops being sent when the unit idles, so it latches at its last
         # active value. `_finalize` derives the battery term from the edges.
+        #
+        # `f29.1`/`f29.2` (the SoC limits) are not mapped either: this block
+        # rides only in the full-state frame, while `32/2` below carries the
+        # same pair in every frame it sends.
     },
     # `254/40 f22` looks like a pair of power limits in milliwatts (600000 and
     # 1200000) and is deliberately not mapped: both stayed exactly there while
     # the account limit was raised to 2500 W, while the output limit was set
     # to 2400 W, and while the discharge task ran at 1400 W. They are neither
     # the limits nor the task powers, so their meaning is unknown.
-    # `32/2 f1.7` and `f1.21` hold the same SoC limits `254/39 f29` carries,
-    # confirmed at a non-default 90/15 against an app screenshot, and are
-    # deliberately not mapped. Both frames arrive on the same channel, so two
-    # mappings would be two sources writing one entity, which is the shape
-    # that made the Stream LED readback flap (`stream_proto.py`, the (254, 18)
-    # note). The command is not registered at all because these two are the
-    # only fields in it this parser understands; the moment it carries a key
-    # nothing else reports, it comes back with that key alone.
-    #
+    # Same field numbers as the Delta 3 CMS heartbeat, where these two stay
+    # unmapped because their meaning was never seen away from the default. On
+    # an ES22 they follow the app, so here they are the SoC limits.
+    (32, 2): {
+        "1.7": ("max_charge_soc_pct", _TYPE_INT, 1),
+        "1.21": ("min_discharge_soc_pct", _TYPE_INT, 1),
+    },
     # Field numbers and key names match the (32, 50) block in
     # `stream_proto.py`: it is the same BMS heartbeat.
     (32, 50): {

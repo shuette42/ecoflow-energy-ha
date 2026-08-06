@@ -353,22 +353,24 @@ class TestDerivedValues:
 
 
 class TestSocLimits:
-    def test_limits_from_the_config_block(self) -> None:
-        inner = _sub(29, encode_field_varint(1, 90) + encode_field_varint(2, 15))
-        result = parse_stream_ac5000_message(_build_frame(254, 39, bytes(inner)))
+    def test_limits_from_the_battery_heartbeat(self) -> None:
+        inner = _sub(1, encode_field_varint(7, 90) + encode_field_varint(21, 15))
+        result = parse_stream_ac5000_message(_build_frame(32, 2, bytes(inner)))
         assert result is not None
         assert result["max_charge_soc_pct"] == 90
         assert result["min_discharge_soc_pct"] == 15
 
-    def test_the_battery_heartbeat_is_not_a_second_source(self) -> None:
-        """`32/2 f1.7` and `f1.21` hold the same limits and stay unmapped.
+    def test_the_config_block_is_not_a_second_source(self) -> None:
+        """`254/39 f29` holds the same limits and stays unmapped.
 
         Both frames reach the same entity on the same channel, so mapping
-        both would be two sources writing one value - the shape that made the
-        Stream LED readback flap. `254/39 f29` is the one that carries them.
+        both would be two sources writing one value, the shape that made the
+        Stream LED readback flap. `f29` is the one left out because it rides
+        only in the full-state frame, so a limit changed in the app would
+        take minutes to arrive rather than seconds.
         """
-        inner = _sub(1, encode_field_varint(7, 90) + encode_field_varint(21, 15))
-        assert parse_stream_ac5000_message(_build_frame(32, 2, bytes(inner))) is None
+        inner = _sub(29, encode_field_varint(1, 90) + encode_field_varint(2, 15))
+        assert parse_stream_ac5000_message(_build_frame(254, 39, bytes(inner))) is None
 
     def test_scheduled_discharge_setpoint_is_read_back(self) -> None:
         """f40.1.9.1 followed every setpoint written during a control test."""
@@ -501,11 +503,9 @@ class TestCaptureReplay:
     def test_push_frames_parse_or_carry_nothing_we_map(self) -> None:
         """A push yields nothing when every block in it is unmapped.
 
-        254/40 always qualifies, and so does 32/2, whose only two fields
-        duplicate the SoC limits `254/39 f29` already carries. A 254/39 does
-        when it carries only the pack blocks `f38`/`f44` (duplicates of 32/50)
-        or `f50`, which is what an idle unit sends once it drops the flow
-        matrix.
+        254/40 always qualifies. A 254/39 does when it carries only the pack
+        blocks `f38`/`f44` (duplicates of 32/50) or `f50`, which is what an
+        idle unit sends once it drops the flow matrix.
         """
         frames = _load(PUSHES)
         assert len(frames) >= 20
