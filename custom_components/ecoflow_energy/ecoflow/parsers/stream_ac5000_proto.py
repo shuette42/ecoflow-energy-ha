@@ -1,9 +1,12 @@
 """Protobuf telemetry parser for the EcoFlow STREAM AC 5000 (ES22).
 
 Derived from a 1239-frame capture of a live ES22 in app-auth MQTT mode
-(2026-08-03) plus the reporter diagnostics on issue #177. Only fields
-checked against the frames themselves or against the EcoFlow app are
-mapped.
+(2026-08-03) plus the reporter diagnostics on issue #177. Every field is
+checked against the frames themselves or against the EcoFlow app, with
+two exceptions that are marked where they stand: `12.8` and `12.9` were
+never observed and their positions are inferred from the edges around
+them. `12.9` reaches nothing, `12.8` would create an entity on the first
+unit that sends it.
 
 Despite the product name this cannot share `stream_proto.py`: an ES22
 sends no `254/21` frame, its telemetry is `254/39` and `254/40`, and it
