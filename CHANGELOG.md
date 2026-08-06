@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.16.0] - 2026-07-31
+## [1.16.0] - 2026-08-06
 
 ### Fixed
 - A Stream could reset its two lifetime battery capacity readings and make the long-term statistics count the standing total a second time. The battery management system reports how much charge has passed through the pack since the beginning, and it reports a zero when there is nothing to report yet, which is what a factory-new pack sends and what a pack whose management system has been reset sends. The protocol declares those two fields in a way that puts the zero on the wire rather than leaving it out, so the zero arrived and was published on a reading that only ever counts up. Home Assistant reads a value of zero on such a reading as a meter change and adds the old total to everything that follows. Both readings are diagnostic and switched off by default, so this only reaches installations that turned them on. A zero is now treated as what it means, nothing to report, and the reading stays empty until the pack has something to say.
