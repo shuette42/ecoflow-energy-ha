@@ -3,10 +3,11 @@
 Derived from a 1239-frame capture of a live ES22 in app-auth MQTT mode
 (2026-08-03) plus the reporter diagnostics on issue #177. Every field is
 checked against the frames themselves or against the EcoFlow app, with
-two exceptions that are marked where they stand: `12.8` and `12.9` were
-never observed and their positions are inferred from the edges around
-them. `12.9` reaches nothing, `12.8` would create an entity on the first
-unit that sends it.
+one exception that is marked where it stands: `12.8` was never observed
+and its position is inferred from the edges around it, so it would create
+an entity from a guess on the first unit that sends it. The fixtures come
+from a unit with no PV wired to the EcoFlow, so a field being absent from
+them is not evidence that it is never sent.
 
 Despite the product name this cannot share `stream_proto.py`: an ES22
 sends no `254/21` frame, its telemetry is `254/39` and `254/40`, and it
@@ -84,10 +85,12 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
         # once it exists, so a wrong position here is a wrong reading that
         # never goes away.
         "12.8": ("home_from_solar_w", _TYPE_FLOAT, 1),
-        # Never observed either, and inferred the same way. It reaches no
-        # entity and no derivation: `_finalize` drops it, because the only
-        # value it could feed is the battery term. See there for what would
-        # have to arrive before it counts again.
+        # Confirmed on PV hardware in issue #177, three readings: 1552 against
+        # `f11.4` = 3104 halved, 1482, and 46 in the 12:19 frame where the
+        # battery took 47 W out of 2.86 kW of solar. Absent from the fixtures
+        # because that unit has no PV. Internal, not published: publishing it
+        # would create a solar entity on every frame and defeat the accessory
+        # gating. It feeds the battery term in `_finalize`.
         "12.9": ("_solar_to_batt_w", _TYPE_FLOAT, 1),
         "12.10": ("_solar_to_grid_w", _TYPE_FLOAT, 1),
         # --- meter block, Tibber Pulse variant (source id 4) ---
@@ -477,7 +480,7 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
     batt_to_grid = result.pop("_batt_to_grid_w", None)
     grid_to_batt = result.pop("_grid_to_batt_w", None)
     solar_to_grid = result.pop("_solar_to_grid_w", None)
-    result.pop("_solar_to_batt_w", None)
+    solar_to_batt = result.pop("_solar_to_batt_w", None)
     home_from_grid = result.get("home_from_grid_w")
     home_from_batt = result.get("home_from_batt_w")
 
@@ -493,16 +496,18 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
     # being numbers means this frame carried `f12`; an absent group leaves
     # `batt_w` out so the coordinator keeps the last value.
     if all(isinstance(v, (int, float)) for v in (home_from_batt, batt_to_grid, grid_to_batt)):
-        # A solar-to-battery edge would belong in this sum, and `f12.9` is the
-        # inferred position for it. It is left out because no frame of either
-        # capture carries field 9, and because `batt_w` reaches
-        # `batt_charge_power_w` and from there a total_increasing counter: a
-        # term added there in error inflates a total that only ever goes up.
-        # A capture carrying field 9 while the app shows solar charging the
-        # battery is what puts it back into this line.
-        result["batt_w"] = float(grid_to_batt) - (
-            float(home_from_batt) + float(batt_to_grid)
-        )
+        # `f12.9` is the solar-to-battery edge and belongs in this sum. It is
+        # absent from the fixtures only because the unit they came from has no
+        # PV wired to the EcoFlow; on issue #177 it is confirmed three times on
+        # a unit that has: 1552 against `f11.4` = 3104 halved, 1482, and the
+        # 12:19 frame reading 46 while the battery took 47 W out of 2.86 kW of
+        # solar, where the opposite assignment would have required 2860.
+        # Leaving it out costs a PV owner the whole solar charge: battery power
+        # would read zero while the pack fills.
+        into = float(grid_to_batt)
+        if isinstance(solar_to_batt, (int, float)):
+            into += float(solar_to_batt)
+        result["batt_w"] = into - (float(home_from_batt) + float(batt_to_grid))
 
     _finalize_task(result)
 

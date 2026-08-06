@@ -197,19 +197,22 @@ class TestDerivedValues:
     @pytest.mark.parametrize(
         ("edges", "batt_w"),
         [
-            ({"from_solar": 400.0, "from_grid": 100.0}, 100.0),
-            ({"from_solar": 400.0, "to_home": 150.0}, -150.0),
+            ({"from_solar": 400.0, "from_grid": 100.0}, 500.0),
+            ({"from_solar": 400.0, "to_home": 150.0}, 250.0),
+            ({"from_solar": 46.0}, 46.0),
         ],
     )
-    def test_the_inferred_solar_to_battery_edge_stays_out_of_the_sum(
+    def test_the_solar_to_battery_edge_counts_towards_battery_power(
         self, edges: dict[str, float], batt_w: float
     ) -> None:
-        """`f12.9` is a guessed position and battery power feeds a counter.
+        """`f12.9` is solar charging the pack and belongs in the sum.
 
-        No frame of either capture carries field 9, so the mapping rests on
-        the surrounding edges alone. Counting it would flow through
-        `batt_charge_power_w` into a total_increasing counter, which cannot be
-        corrected once it has counted too much.
+        It is absent from both fixtures only because the unit they came from
+        has no PV wired to the EcoFlow. Issue #177 confirms it three times on
+        a unit that has, the clearest being a frame where the battery took
+        47 W out of 2.86 kW of solar and field 9 read 46. Dropping it would
+        report zero battery power to a PV owner while the pack fills, and the
+        charge counter would miss the whole solar contribution.
         """
         result = parse_stream_ac5000_message(_build_frame(254, 39, bytes(_edges(**edges))))
         assert result is not None
