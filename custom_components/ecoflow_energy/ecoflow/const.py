@@ -36,6 +36,9 @@ DEVICE_TYPE_DELTA = "delta"
 DEVICE_TYPE_DELTA3 = "delta3"
 DEVICE_TYPE_SMARTPLUG = "smartplug"
 DEVICE_TYPE_STREAM = "stream"
+# Carries the Stream name but not the Stream protocol: no 254/21 frame, and
+# nested submessages where the BK series uses flat scalars.
+DEVICE_TYPE_STREAM_AC5000 = "stream_ac5000"
 DEVICE_TYPE_UNKNOWN = "unknown"
 
 # Keywords used to classify devices from productName strings.
@@ -120,6 +123,9 @@ _SN_PREFIX_MAP = {
     "BK41": DEVICE_TYPE_STREAM,
     "BK51": DEVICE_TYPE_STREAM,
     "BK61": DEVICE_TYPE_STREAM,
+    # STREAM AC 5000 (#177): verified against live hardware in Enhanced mode,
+    # cross-checked against the app and an independent Tibber Pulse meter.
+    "ES22": DEVICE_TYPE_STREAM_AC5000,
 }
 
 _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
@@ -132,6 +138,7 @@ _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
     "BK41": "Stream Max",
     "BK51": "Stream AC",
     "BK61": "Stream Ultra X",
+    "ES22": "STREAM AC 5000",
 }
 
 def get_device_name(product_name: str, sn: str = "") -> str:
@@ -160,11 +167,21 @@ def get_device_name(product_name: str, sn: str = "") -> str:
 
 
 def get_device_type(product_name: str, sn: str = "") -> str:
-    """Classify a device based on its productName string or SN prefix.
+    """Classify a device based on its SN prefix or productName string.
 
     Returns DEVICE_TYPE_POWEROCEAN, DEVICE_TYPE_DELTA, DEVICE_TYPE_DELTA3,
-    DEVICE_TYPE_SMARTPLUG, DEVICE_TYPE_STREAM, or DEVICE_TYPE_UNKNOWN.
+    DEVICE_TYPE_SMARTPLUG, DEVICE_TYPE_STREAM, DEVICE_TYPE_STREAM_AC5000, or
+    DEVICE_TYPE_UNKNOWN.
     """
+    # The prefix is exact evidence, the product name a substring guess, so
+    # the prefix wins. Every prefix mapped before this ordering existed
+    # agreed with its keyword anyway; an ES22 would not, since "STREAM AC
+    # 5000" matches the BK-series keyword.
+    if sn:
+        prefix = sn[:4].upper()
+        if prefix in _SN_PREFIX_MAP:
+            return _SN_PREFIX_MAP[prefix]
+
     name = (product_name or "").lower()
     for kw in _NOT_THIS_FAMILY_KEYWORDS:
         if kw in name:
@@ -184,8 +201,4 @@ def get_device_type(product_name: str, sn: str = "") -> str:
     for kw in _STREAM_KEYWORDS:
         if kw in name:
             return DEVICE_TYPE_STREAM
-    if sn:
-        prefix = sn[:4].upper()
-        if prefix in _SN_PREFIX_MAP:
-            return _SN_PREFIX_MAP[prefix]
     return DEVICE_TYPE_UNKNOWN

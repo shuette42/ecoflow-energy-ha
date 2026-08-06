@@ -41,6 +41,7 @@ from ..const import (
     DEVICE_TYPE_DISPLAY_NAMES,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
+    DEVICE_TYPE_STREAM_AC5000,
     DEVICE_TYPE_UNKNOWN,
     DOMAIN,
     HTTP_FALLBACK_INTERVAL_S,
@@ -52,6 +53,8 @@ from ..const import (
     SMARTPLUG_POWER_TO_ENERGY,
     STREAM_ENERGY_FROM_API,
     STREAM_POWER_TO_ENERGY,
+    STREAMAC5000_ENERGY_FROM_API,
+    STREAMAC5000_POWER_TO_ENERGY,
     UNKNOWN_FIELD_CMDS_MAX,
     UNKNOWN_FIELD_NUMBERS_MAX,
     get_delta_profile,
@@ -301,6 +304,9 @@ class EcoFlowDeviceCoordinator(
         elif self.device_type == DEVICE_TYPE_STREAM:
             self._power_to_energy = STREAM_POWER_TO_ENERGY
             self._energy_from_api = STREAM_ENERGY_FROM_API
+        elif self.device_type == DEVICE_TYPE_STREAM_AC5000:
+            self._power_to_energy = STREAMAC5000_POWER_TO_ENERGY
+            self._energy_from_api = STREAMAC5000_ENERGY_FROM_API
         else:
             self._power_to_energy = {}
             self._energy_from_api = []

@@ -21,12 +21,14 @@ from .const import (
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
+    DEVICE_TYPE_STREAM_AC5000,
     DOMAIN,
     EcoFlowBinarySensorDef,
     filter_defs_for_serial,
     POWEROCEAN_BINARY_SENSORS,
     SMARTPLUG_BINARY_SENSORS,
     STREAM_BINARY_SENSORS,
+    STREAMAC5000_BINARY_SENSORS,
 )
 from .coordinator import EcoFlowDeviceCoordinator
 from .entity import EcoFlowWriteGateMixin
@@ -133,4 +135,6 @@ def _get_binary_sensor_defs(
         return SMARTPLUG_BINARY_SENSORS
     if device_type == DEVICE_TYPE_STREAM:
         return STREAM_BINARY_SENSORS
+    if device_type == DEVICE_TYPE_STREAM_AC5000:
+        return STREAMAC5000_BINARY_SENSORS
     return []

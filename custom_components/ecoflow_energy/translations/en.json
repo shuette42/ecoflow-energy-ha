@@ -1398,6 +1398,29 @@
       },
       "bms_error_code": {
         "name": "Battery Error Code"
+      },
+      "work_mode": {
+        "name": "Work Mode",
+        "state": {
+          "self_powered": "Self-powered",
+          "intelligent_plus": "Intelligent Mode+",
+          "custom": "Custom"
+        }
+      },
+      "scheduled_discharge_power_w": {
+        "name": "Scheduled Discharge Power"
+      },
+      "scheduled_charge_power_w": {
+        "name": "Scheduled Charge Power"
+      },
+      "max_grid_output_power_w": {
+        "name": "Max Grid-tied Output Power"
+      },
+      "max_grid_input_power_w": {
+        "name": "Max Grid Input Power"
+      },
+      "scheduled_charge_soc_target": {
+        "name": "Scheduled Charge Target SoC"
       }
     },
     "binary_sensor": {
@@ -1439,6 +1462,12 @@
       },
       "port_priority_active": {
         "name": "Port priority active"
+      },
+      "backup_reserve_enabled": {
+        "name": "Backup Reserve"
+      },
+      "backup_socket_enabled": {
+        "name": "Backup Socket"
       }
     },
     "switch": {
