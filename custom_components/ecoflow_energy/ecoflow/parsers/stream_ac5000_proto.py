@@ -126,6 +126,10 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
         "30.1": ("_backup_reserve_enabled_raw", _TYPE_INT, 1),
         "30.2": ("backup_reserve_pct", _TYPE_INT, 1),
         "33.6": ("soc_precise_pct", _TYPE_FLOAT, 1),
+        # `f33.7` and `f33.8` are a third copy of the SoC limits, reading 90
+        # and 20 in the same get-all that carries them on `32/2` and on `f29`.
+        # Deliberately unmapped: `32/2` is the source, and this file has
+        # already had the limits taken from the wrong one of three.
         # --- scheduled task readback ---
         # One task per frame, and the device rotates through them, so these
         # land as per-kind keys that merge across frames rather than as a list
