@@ -159,12 +159,41 @@ class TestFlowEdges:
         assert "grid_import_power_w" not in result
         assert "grid_export_power_w" not in result
 
-    def test_solar_edges_are_not_zero_filled(self) -> None:
-        """Reporting them on every frame would defeat the accessory gating."""
-        inner = _sub(12, encode_field_varint(4, 500))
+    def test_the_solar_to_home_edge_is_not_mapped(self) -> None:
+        """Field 8 appears in no captured frame, so its position is a guess.
+
+        An inferred position reaching an accessory entity is a wrong reading
+        Home Assistant keeps forever.
+        """
+        inner = _sub(12, encode_field_varint(4, 500) + encode_field_varint(8, 700))
         result = parse_stream_ac5000_message(_build_frame(254, 39, bytes(inner)))
         assert result is not None
         assert "home_from_solar_w" not in result
+
+    def test_solar_falls_to_zero_instead_of_latching(self) -> None:
+        """The node total is filled, so sunset reports 0 rather than nothing.
+
+        Nothing deletes a key that stops arriving, so a solar reading left
+        out of the fill held its last daylight value until sunrise. The
+        entity is still kept off units without PV, by requiring a non-zero
+        reading before it is created rather than by withholding the zero.
+        """
+        daylight = _sub(11, encode_field_varint(1, 2000) + encode_field_varint(9, 1556))
+        result = parse_stream_ac5000_message(_build_frame(254, 39, bytes(daylight)))
+        assert result is not None
+        assert result["solar_w"] == pytest.approx(1556.0)
+
+        night = _sub(11, encode_field_varint(1, 2000))
+        result = parse_stream_ac5000_message(_build_frame(254, 39, bytes(night)))
+        assert result is not None
+        assert result["solar_w"] == 0.0
+
+    def test_an_absent_node_group_still_reports_no_solar(self) -> None:
+        """The fill needs its container: no `f11`, no statement about solar."""
+        inner = _sub(12, encode_field_varint(4, 500))
+        result = parse_stream_ac5000_message(_build_frame(254, 39, bytes(inner)))
+        assert result is not None
+        assert "solar_w" not in result
 
     def test_export_sums_the_two_outbound_edges(self) -> None:
         inner = _sub(

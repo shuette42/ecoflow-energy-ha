@@ -46,7 +46,7 @@
 | **Smart Plug** - Switchable Outlet | `HW52` | 11 + 1 binary | 1 switch, 2 numbers | 1 (total energy) | ~30 s standard / ~3 s enhanced |
 | **Stream** - AC-coupled Battery | `BK31` `BK11` `BK41` `BK51` `BK61` | 54 + 2 binary | 1 number (Enhanced only) | 2 default (battery charge/discharge), 6 optional diagnostic (solar/home, PV 1-4) | ~30 s standard / ~3 s enhanced |
 | **Stream Micro** - Grid-tie Inverter | `BK01`\* | 21 | - | 4 optional diagnostic (PV 1-4) | ~3 s enhanced |
-| **STREAM AC 5000** - AC-coupled Battery | `ES22`\* | 51 + 2 binary | - | 4 default (grid import/export, battery charge/discharge), 1 optional diagnostic (home) | ~2 s enhanced |
+| **STREAM AC 5000** - AC-coupled Battery | `ES22`\* | 50 + 2 binary | - | 4 default (grid import/export, battery charge/discharge), 1 optional diagnostic (home) | ~2 s enhanced |
 
 > **\* Enhanced Mode only.** These serial prefixes cannot currently be linked to an IoT Developer API key, so Standard Mode reports error 1006 and their entities stay unavailable. This is an EcoFlow API limitation, not a configuration problem.
 >

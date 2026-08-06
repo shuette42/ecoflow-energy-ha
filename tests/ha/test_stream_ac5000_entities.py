@@ -43,6 +43,7 @@ from custom_components.ecoflow_energy.ecoflow.const import (
 )
 from custom_components.ecoflow_energy.sensor import (
     _get_sensor_defs,
+    _reported,
     async_setup_entry as sensor_setup,
 )
 
@@ -58,7 +59,6 @@ ES22_DEVICE: dict[str, Any] = {
 # EcoFlow P1 meter instead of a single-total meter such as a Tibber Pulse.
 ACCESSORY_KEYS = {
     "solar_w",
-    "home_from_solar_w",
     "ac_frequency_hz",
     "grid_phase_a_active_power_w",
     "grid_phase_b_active_power_w",
@@ -159,7 +159,7 @@ class TestStreamAC5000EntitySet:
 class TestStreamAC5000Definitions:
     def test_documented_totals(self) -> None:
         """The counts the README and the entity reference publish."""
-        assert len(STREAMAC5000_SENSORS) == 51
+        assert len(STREAMAC5000_SENSORS) == 50
         assert len(STREAMAC5000_POWER_TO_ENERGY) == 5
 
     def test_exactly_one_battery_device_class(self) -> None:
@@ -183,6 +183,42 @@ class TestStreamAC5000Definitions:
         by_key = {s.key: s for s in STREAMAC5000_SENSORS}
         for power_key, energy_key in STREAMAC5000_POWER_TO_ENERGY.items():
             assert by_key[energy_key].accessory == by_key[power_key].accessory, energy_key
+
+    def test_a_zero_does_not_announce_an_accessory(self) -> None:
+        """The gate itself, not just the flag that switches it on."""
+
+        class _Stub:
+            device_data = {"solar_w": 0.0, "grid_phase_a_active_power_w": 0.0}
+            data: dict[str, Any] = {}
+
+        stub = _Stub()
+        assert _reported(stub, "solar_w") is True
+        assert _reported(stub, "solar_w", needs_nonzero=True) is False
+        stub.device_data["solar_w"] = 1556.0
+        assert _reported(stub, "solar_w", needs_nonzero=True) is True
+        # A key without the flag is unaffected by its own zero.
+        assert _reported(stub, "grid_phase_a_active_power_w") is True
+        assert _reported(stub, "missing_key", needs_nonzero=True) is False
+
+    def test_the_solar_reading_waits_for_a_non_zero_value(self) -> None:
+        """It is published as a zero, so presence alone cannot gate it.
+
+        The node total is zero-filled to stop the reading latching at its
+        last daylight value overnight. That fill would otherwise announce
+        solar on the first frame of every unit, so the entity waits for a
+        reading that is actually solar.
+        """
+        by_key = {d.key: d for d in STREAMAC5000_SENSORS}
+        solar = by_key["solar_w"]
+        assert solar.accessory is True
+        assert solar.accessory_needs_nonzero is True
+
+    def test_only_solar_needs_a_non_zero_reading(self) -> None:
+        """A meter phase may legitimately sit at zero and must not wait."""
+        for definition in STREAMAC5000_SENSORS:
+            if definition.key == "solar_w":
+                continue
+            assert definition.accessory_needs_nonzero is False, definition.key
 
     def test_the_solar_reading_has_no_lifetime_counter(self) -> None:
         """The reading stays, the counter does not.

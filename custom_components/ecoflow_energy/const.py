@@ -230,6 +230,12 @@ class EcoFlowSensorDef:
     # created once the device has actually reported the key. See
     # _watch_for_accessory() in sensor.py.
     accessory: bool = False
+    # Create the accessory entity only once the reading has been non-zero.
+    # Needed where the key must be published as an explicit zero to keep it
+    # from latching: without this, the first zero would create the entity on
+    # every device. Only set it where zero genuinely means "not fitted", never
+    # where zero is a legitimate reading.
+    accessory_needs_nonzero: bool = False
 
 
 @dataclass(frozen=True)
@@ -822,8 +828,7 @@ STREAMAC5000_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("home_from_grid_w", "Home From Grid", "W", "power", "measurement", "mdi:home-import-outline", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     # Solar is accessory-gated rather than listed per prefix: whether a unit
     # has PV on the EcoFlow itself is a wiring choice, not a model difference.
-    EcoFlowSensorDef("solar_w", "Solar Power", "W", "power", "measurement", "mdi:solar-power", suggested_display_precision=0, accessory=True),
-    EcoFlowSensorDef("home_from_solar_w", "Home From Solar", "W", "power", "measurement", "mdi:home-lightning-bolt-outline", "diagnostic", suggested_display_precision=0, disabled_by_default=True, accessory=True),
+    EcoFlowSensorDef("solar_w", "Solar Power", "W", "power", "measurement", "mdi:solar-power", suggested_display_precision=0, accessory=True, accessory_needs_nonzero=True),
     # --- smart meter, EcoFlow P1 variant only ---
     # A Tibber Pulse reports a single total, so these stay absent there.
     EcoFlowSensorDef("grid_phase_a_active_power_w", "Grid Phase A Power", "W", "power", "measurement", "mdi:transmission-tower", "diagnostic", suggested_display_precision=0, disabled_by_default=True, accessory=True),

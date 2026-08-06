@@ -77,14 +77,11 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
         "12.5": ("_batt_to_grid_w", _TYPE_FLOAT, 1),
         "12.6": ("home_from_grid_w", _TYPE_FLOAT, 1),
         "12.7": ("_grid_to_batt_w", _TYPE_FLOAT, 1),
-        # Never observed; position inferred from the surrounding edges.
-        # Staying out of the zero-fill below only keeps a frame that omits
-        # field 8 from reporting a zero. It does not contain the guess: a unit
-        # that does send field 8 creates `home_from_solar_w` from whatever it
-        # holds, and Home Assistant keeps an accessory entity in the registry
-        # once it exists, so a wrong position here is a wrong reading that
-        # never goes away.
-        "12.8": ("home_from_solar_w", _TYPE_FLOAT, 1),
+        # Field 8 would be solar to home by position, and it appears in none
+        # of the 1239 captured frames. It is not mapped: an inferred position
+        # reaching an accessory entity is a wrong reading Home Assistant keeps
+        # forever, and the reporter with PV on issue #177 is the one whose
+        # capture can settle it. Map it when that capture shows it.
         # Confirmed on PV hardware in issue #177, three readings: 1552 against
         # `f11.4` = 3104 halved, 1482, and 46 in the 12:19 frame where the
         # battery took 47 W out of 2.86 kW of solar. Absent from the fixtures
@@ -186,13 +183,19 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
 # would keep reporting its last power forever. It applies only when the group
 # is present; an absent `f12`, which is 116 of 355 pushes, means unchanged.
 #
-# The solar edges stay out, since filling them would report the key on every
-# frame and defeat their accessory gating in const.py.
+# `11.9` is filled for the same reason and needs one more step. It is the
+# solar node total, and holding it out of the fill was how the solar entity
+# was kept off units without PV. But the fill is also the only thing that
+# turns an omitted scalar into a real zero, and nothing deletes a key that
+# stops arriving, so on a unit with PV the reading held its last daylight
+# value all night. It is filled here, and `solar_w` carries
+# `accessory_needs_nonzero` in const.py so the entity still waits for a
+# reading that is actually solar.
 _ZERO_FILL_PATHS: dict[tuple[int, int], tuple[str, ...]] = {
     # `40.1.3` is the task's enabled flag, and disabling a task in the app made
     # it disappear rather than read 0, so its absence inside a present task is
     # what "disabled" looks like on the wire.
-    (254, 39): ("12.4", "12.5", "12.6", "12.7", "40.1.3"),
+    (254, 39): ("11.9", "12.4", "12.5", "12.6", "12.7", "40.1.3"),
 }
 
 # (parent group, the child that carries its content, marker key) per command.

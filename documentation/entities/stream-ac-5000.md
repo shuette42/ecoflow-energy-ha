@@ -6,7 +6,7 @@ Full list of all entities created for the STREAM AC 5000.
 
 **This is not the Stream entity set.** Despite the shared product name, an `ES22` speaks a different protocol from the BK-series Stream devices: it sends none of their telemetry messages and describes power as a flow matrix rather than as individual readings. It therefore has its own device type, parser and entity list. See [Stream](stream.md) for the BK series.
 
-**Totals:** 51 sensors, 2 binary sensors
+**Totals:** 50 sensors, 2 binary sensors
 
 > Entities marked with *disabled* are available but hidden by default. Enable them in **Settings > Devices > EcoFlow STREAM AC 5000 > Entities** (click the filter icon and show disabled entities).
 
@@ -40,7 +40,6 @@ Full list of all entities created for the STREAM AC 5000.
 | Home From Battery | W | diagnostic | disabled | House load covered by the battery |
 | Home From Grid | W | diagnostic | disabled | House load covered by the grid |
 | Solar Power | W | - | *accessory* | The solar figure the device derives for itself, which on an installation with separate PV is its inference rather than a measurement of that system. See the note below |
-| Home From Solar | W | diagnostic | *accessory*, disabled | House load covered by solar |
 
 ## Sensors - Smart Meter
 
