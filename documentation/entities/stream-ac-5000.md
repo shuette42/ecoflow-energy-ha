@@ -63,8 +63,8 @@ The settings that also have a control read back here, so an automation can see w
 | Max Charge SoC | % | diagnostic | enabled | Upper SoC limit set in the app |
 | Min Discharge SoC | % | diagnostic | enabled | Lower SoC limit set in the app |
 | Backup Reserve | % | diagnostic | enabled | Reserve level held for a power cut |
-| Max Grid-tied Output Power | W | diagnostic | enabled | Account-level output limit. Raised by asking EcoFlow. A task power above it is clamped, not refused |
-| Max Grid Input Power | W | diagnostic | enabled | Account-level input limit, settable in the app |
+| Max Grid-tied Output Power | W | diagnostic | enabled | The app's "Max grid-tied output power". Its ceiling is raised by asking EcoFlow. A task power above the setting is clamped, not refused |
+| Max Grid Input Power | W | diagnostic | enabled | The app's "Max grid input power", the charge-side limit |
 | Scheduled Discharge Power | W | diagnostic | enabled | Power setpoint of the discharge task, mirrors the Max Discharging Power number |
 | Scheduled Charge Power | W | diagnostic | enabled | Power setpoint of the charge task, mirrors the Max Grid Charging Power number |
 | Scheduled Charge Target SoC | % | diagnostic | enabled | The charge task's own SoC target, shown in the app as "Charge limit". Preserved on every power write |

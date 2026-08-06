@@ -111,28 +111,16 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
         "16.16": ("_meter_net_w", _TYPE_FLOAT, 1),
         # --- configuration readback ---
         # The two power limits the app calls "Max grid-tied output power" and
-        # "Max grid input power". Identified by watching them follow the app:
-        # both read 600 while the account was limited to 600 W, both became
-        # 2500 when the limit was raised, and `.1` alone dropped to 2400 when
-        # the output limit was set to 2400. `f10.2` and `f33.11` stayed at
-        # 2500 throughout, so those are the hardware ceiling instead.
-        # That was a live session, and it is the whole of the evidence: in both
-        # captures shipped with the tests `.1`, `.5` and `.6` all read 600, so
-        # nothing in this repo tells the three apart. Re-deriving the anchor
-        # means moving the limit in the app again, not re-reading the fixtures.
+        # "Max grid input power". `.5` and `.6` hold values that look like
+        # these and are not: both track the account ceiling, not the setting.
         "10.1": ("max_grid_output_power_w", _TYPE_INT, 1),
-        "10.6": ("max_grid_input_power_w", _TYPE_INT, 1),
+        "10.2": ("max_grid_input_power_w", _TYPE_INT, 1),
         "25": ("_work_mode_raw", _TYPE_INT, 1),
         "29.1": ("max_charge_soc_pct", _TYPE_INT, 1),
         "29.2": ("min_discharge_soc_pct", _TYPE_INT, 1),
-        # The app's backup socket control, written on config field 19. It read
-        # 0 in every captured frame, so the switched-on branch has never been
-        # seen on hardware; only the tests exercise it.
+        # The app's backup socket control, written on config field 19.
         "19.1": ("_backup_socket_enabled_raw", _TYPE_INT, 1),
         "30.1": ("_backup_reserve_enabled_raw", _TYPE_INT, 1),
-        # Constant 40 across both captures, matching the reserve the app
-        # showed at the time. One matching value is what this rests on, not a
-        # value followed while it moved, and the fixtures cannot show more.
         "30.2": ("backup_reserve_pct", _TYPE_INT, 1),
         "33.6": ("soc_precise_pct", _TYPE_FLOAT, 1),
         # --- scheduled task readback ---

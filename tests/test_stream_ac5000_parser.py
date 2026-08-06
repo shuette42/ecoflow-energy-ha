@@ -291,15 +291,25 @@ class TestDerivedValues:
         assert result["grid_w"] == pytest.approx(-2.0, rel=1e-5)
 
     def test_account_power_limits(self) -> None:
-        """f10.1 and f10.6 are the limits the app calls max grid-tied output
-        and max grid input. Identified by watching them follow the app: both
-        read 600 under a 600 W account limit, both became 2500 when it was
-        raised, and .1 alone became 2400 when the output limit was set there."""
-        inner = _sub(10, encode_field_varint(1, 2400) + encode_field_varint(6, 2500))
+        """f10.1 and f10.2 are the limits the app calls max grid-tied output
+        and max grid input. Each was moved in the app on its own and read back
+        at the value set, in both directions."""
+        inner = _sub(10, encode_field_varint(1, 2400) + encode_field_varint(2, 1200))
         result = parse_stream_ac5000_message(_build_frame(254, 39, bytes(inner)))
         assert result is not None
         assert result["max_grid_output_power_w"] == 2400
-        assert result["max_grid_input_power_w"] == 2500
+        assert result["max_grid_input_power_w"] == 1200
+
+    def test_the_ceiling_fields_are_not_a_user_limit(self) -> None:
+        """f10.5 and f10.6 track the account ceiling, not a setting.
+
+        `.6` sat at the same 2500 as the input limit for as long as nobody
+        touched the setting, which is what made it look like the source. It
+        did not follow that limit to 1200 and back, and it has moved only
+        once ever, when the ceiling was raised from 600.
+        """
+        inner = _sub(10, encode_field_varint(5, 800) + encode_field_varint(6, 2500))
+        assert parse_stream_ac5000_message(_build_frame(254, 39, bytes(inner))) is None
 
     def test_the_milliwatt_pair_is_not_mapped(self) -> None:
         """254/40 f22 reads 600000/1200000 and stayed there while the account
