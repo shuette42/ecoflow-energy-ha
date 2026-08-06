@@ -244,7 +244,18 @@ class UnroutedDeviceProbe:
         """
         if self._client.is_connected():
             return
-        self.hass.async_add_executor_job(self._reconnect)
+
+        async def _run() -> None:
+            await self.hass.async_add_executor_job(self._reconnect)
+
+        # A background task rather than a loose executor job: Home Assistant
+        # owns it, cancels it at shutdown, and it is visible while it runs.
+        # A bare async_add_executor_job started from a callback is tracked by
+        # nobody, which is both untidy at shutdown and a race in any test
+        # that waits for the work to land.
+        self.hass.async_create_background_task(
+            _run(), f"ecoflow probe reconnect {self.device_sn[:4]}", eager_start=True
+        )
 
     def _reconnect(self) -> None:
         """Run one reconnect attempt (executor thread)."""
