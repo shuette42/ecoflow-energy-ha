@@ -846,9 +846,10 @@ STREAMAC5000_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("max_charge_soc_pct", "Charge Limit", "%", None, "measurement", "mdi:battery-charging-high", "diagnostic", suggested_display_precision=0),
     EcoFlowSensorDef("min_discharge_soc_pct", "Discharge Limit", "%", None, "measurement", "mdi:battery-arrow-down", "diagnostic", suggested_display_precision=0),
     EcoFlowSensorDef("backup_reserve_pct", "Backup Reserve", "%", None, "measurement", "mdi:battery-lock", "diagnostic", suggested_display_precision=0),
-    # The two account-level limits, named as the app names them. Raising the
-    # output limit needs a request to EcoFlow; the input limit is settable in
-    # the app. A task power above either is accepted and then clamped.
+    # The two power limits, named as the app names them. The output limit is
+    # an account-level ceiling and raising it needs a request to EcoFlow; the
+    # input limit is an ordinary setting in the app. A task power above either
+    # is accepted and then clamped.
     EcoFlowSensorDef("max_grid_output_power_w", "Max Grid-tied Output Power", "W", "power", "measurement", "mdi:transmission-tower-export", "diagnostic", suggested_display_precision=0),
     EcoFlowSensorDef("max_grid_input_power_w", "Max Grid Input Power", "W", "power", "measurement", "mdi:transmission-tower-import", "diagnostic", suggested_display_precision=0),
     EcoFlowSensorDef("scheduled_discharge_power_w", "Scheduled Discharge Power", "W", "power", "measurement", "mdi:calendar-clock", "diagnostic", suggested_display_precision=0),

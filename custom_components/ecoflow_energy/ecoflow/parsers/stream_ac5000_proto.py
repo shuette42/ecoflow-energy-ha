@@ -109,7 +109,12 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
         # --- configuration readback ---
         # The two power limits the app calls "Max grid-tied output power" and
         # "Max grid input power". `.5` and `.6` hold values that look like
-        # these and are not: both track the account ceiling, not the setting.
+        # these and are not, for different reasons: `.6` behaves like a
+        # ceiling, having moved once across four days of captures, when the
+        # account limit went from 600 to 2500, and through neither user
+        # change. `.5` is simply unexplained, 600 at that ceiling and 800
+        # after it rose, matching no setting visible in the app. Both stay
+        # unmapped.
         "10.1": ("max_grid_output_power_w", _TYPE_INT, 1),
         "10.2": ("max_grid_input_power_w", _TYPE_INT, 1),
         "25": ("_work_mode_raw", _TYPE_INT, 1),
@@ -118,6 +123,10 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
         "30.1": ("_backup_reserve_enabled_raw", _TYPE_INT, 1),
         "30.2": ("backup_reserve_pct", _TYPE_INT, 1),
         "33.6": ("soc_precise_pct", _TYPE_FLOAT, 1),
+        # `f33.7` and `f33.8` are a third copy of the SoC limits, reading 90
+        # and 20 in the same get-all that carries them on `32/2` and on `f29`.
+        # Deliberately unmapped: `32/2` is the source, and this file has
+        # already had the limits taken from the wrong one of three.
         # --- scheduled task readback ---
         # One task per frame, and the device rotates through them, so these
         # land as per-kind keys that merge across frames rather than as a list
@@ -146,9 +155,11 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
     # the account limit was raised to 2500 W, while the output limit was set
     # to 2400 W, and while the discharge task ran at 1400 W. They are neither
     # the limits nor the task powers, so their meaning is unknown.
-    # Same field numbers as the Delta 3 CMS heartbeat, where these two stay
-    # unmapped because their meaning was never seen away from the default. On
-    # an ES22 they follow the app, so here they are the SoC limits.
+    #
+    # `32/2 f1.7` and `f1.21` carry the same field numbers as the Delta 3 CMS
+    # heartbeat, where that pair stays unmapped because its meaning was never
+    # seen away from the default. On an ES22 both follow the app, so here they
+    # are the SoC limits.
     (32, 2): {
         "1.7": ("max_charge_soc_pct", _TYPE_INT, 1),
         "1.21": ("min_discharge_soc_pct", _TYPE_INT, 1),
