@@ -260,7 +260,7 @@ class EcoFlowDeviceCoordinator(
         self._raw_frames_lock = threading.Lock()
         # Field numbers a device sends that the protobuf binding does not
         # declare, per command. The frame capture above answers "what bytes
-        # arrived" and truncates at 512 of them; this answers "which fields
+        # arrived" up to a per-frame byte budget; this answers "which fields
         # arrived" for the whole message, which is the question asked when a
         # control exists in the schema and nobody knows whether the hardware
         # reports it. Values are scalars or byte counts, never byte content -

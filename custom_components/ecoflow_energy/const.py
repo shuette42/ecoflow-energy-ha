@@ -114,11 +114,34 @@ HTTP_FALLBACK_INTERVAL_S = 30
 # coverage: three frames still hold the first, one middle and the newest
 # frame of every type. This buffer is not opt-in and not time-limited - it
 # runs on every device in Enhanced Mode for as long as the integration is
-# loaded. Worst case 20 * 3 * 512 B = 30 720 B (30 KiB) of frame payload per
-# device, roughly double that as hex text in the diagnostics download.
+# loaded.
+#
+# The byte budget is decided per frame, from what the frame carries. A flat
+# 512 B kept every incremental push whole and cut every bundled full state
+# to a third: nineteen such frames across three STREAM AC 5000 downloads,
+# each 1434 to 1448 B in six messages, each stored as 512 B. Two thirds of
+# the device's state never reached a download, and the fields above the cut
+# were then read as fields the device does not send.
+#
+# Worst case with the split: 20 * 3 * 2048 B = 122 880 B (120 KiB) of frame
+# payload per device, roughly double that as hex text in the download, and
+# only for a device that bundles on all twenty of its message types.
+# A device that never bundles is bounded at 20 * 3 * 1024 B = 61 440 B
+# (60 KiB). A budget is a ceiling rather than an allocation, so a device
+# whose frames stay under 512 B stores exactly what it stored before.
 RAW_FRAME_LOG_KEYS_MAX = 20
 RAW_FRAME_LOG_PER_KEY_MAX = 3
-RAW_FRAME_MAX_BYTES = 512
+# One message, or none that decoded. The largest single-message frames in
+# the corpus are 587 B on a Delta 3 and 527 B on a PowerOcean, both above
+# the 512 B this replaces - so both were being cut, in silence, on devices
+# nobody was looking at.
+RAW_FRAME_MAX_BYTES = 1024
+# Several messages in one frame. The widest bundle ever recorded here is
+# 1465 B (the tracked STREAM AC 5000 get_reply fixture; the reporter
+# downloads ran 1434 to 1448 B), so this carries it with room for a variant
+# that says more. A device that outgrows it is no longer silent about it:
+# the entry says `truncated`.
+RAW_FRAME_BUNDLE_MAX_BYTES = 2048
 
 # Undeclared protobuf field numbers: how many commands are tracked at once.
 # The same twenty message types the frame capture budgets for would be the
@@ -145,8 +168,16 @@ UNKNOWN_FIELD_NUMBERS_MAX = 200
 # A device that pushes one message type every two seconds fills a shared ring
 # with its own tail within minutes, and everything a parser is built from is
 # gone. Bucketing by message type makes a rare report compete only with itself.
-# Worst case: 12 * 10 * 512 B = 61 440 B (60 KiB) of frame payload, roughly
-# double that as hex text in the diagnostics download.
+#
+# Same per-frame budget as above, and this is the buffer that proved it was
+# needed: the three STREAM AC 5000 captures came through here.
+# Worst case 12 * 10 * 2048 B = 245 760 B (240 KiB) of frame payload, roughly
+# double that as hex text in the download.
+# A device that never bundles is bounded at 12 * 10 * 1024 B = 122 880 B
+# (120 KiB). What it costs in practice is far below either: the busiest of
+# the three captures holds 25 515 B of frame where the flat 512 B cap kept
+# 13 481 B, and it is the whole evidence base for a device the Developer API
+# refuses.
 RAW_FRAME_KEYS_MAX = 12
 RAW_FRAME_PER_KEY_MAX = 10
 

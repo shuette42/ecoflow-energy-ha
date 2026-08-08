@@ -14,6 +14,7 @@ from ..const import (
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
     DEVICE_TYPE_STREAM_AC5000,
+    RAW_FRAME_BUNDLE_MAX_BYTES,
     RAW_FRAME_MAX_BYTES,
 )
 from ..ecoflow.parsers.delta import parse_delta_report
@@ -41,6 +42,7 @@ from ..ecoflow.parsers.stream_proto import parse_stream_proto_message
 from ..ecoflow.frame_capture import (
     build_frame_entry,
     decode_cmd_headers,
+    frame_budget,
     frame_key,
     is_proto_frame,
     sanitize_frame,
@@ -175,14 +177,18 @@ class MqttIngestMixin:
             return
         try:
             secrets = self._frame_secrets()
+            # Decoded before the entry is built, not after: how many messages
+            # the frame carries is what decides its byte budget. One decode
+            # either way, and the headers still end up in the entry.
+            cmds = decode_cmd_headers(payload)
             entry = build_frame_entry(
                 topic,
                 payload,
                 secrets,
-                RAW_FRAME_MAX_BYTES,
+                frame_budget(cmds, RAW_FRAME_MAX_BYTES, RAW_FRAME_BUNDLE_MAX_BYTES),
                 parsed_keys=len(parsed) if parsed else 0,
             )
-            entry["cmds"] = decode_cmd_headers(payload)
+            entry["cmds"] = cmds
             # Derived before the lock: the key comes out of the payload, and
             # the Paho thread should not hold the lock across that.
             key = frame_key(entry, payload, secrets)

@@ -40,6 +40,7 @@ from homeassistant.helpers.event import async_track_time_interval
 
 from .const import (
     PROBE_WATCHDOG_INTERVAL_S,
+    RAW_FRAME_BUNDLE_MAX_BYTES,
     RAW_FRAME_KEYS_MAX,
     RAW_FRAME_MAX_BYTES,
     RAW_FRAME_PER_KEY_MAX,
@@ -49,6 +50,7 @@ from .ecoflow.frame_capture import (
     TypedFrameBuffer,
     build_frame_entry,
     decode_cmd_headers,
+    frame_budget,
     frame_key,
     is_proto_frame,
 )
@@ -369,6 +371,12 @@ class UnroutedDeviceProbe:
                 # JSON pushes are captured too: an unsupported device may
                 # well speak JSON, and its key names are exactly what a
                 # parser would be built from.
+                #
+                # A JSON payload carries no message headers to count, so it
+                # gets the single-message budget rather than a bundle budget
+                # it cannot demonstrate it needs. The largest JSON frame in
+                # the capture corpus is 122 B, well inside it, and a device
+                # that outgrows it says so through `truncated`.
                 entry = {
                     "format": "json",
                     **build_frame_entry(
@@ -376,11 +384,17 @@ class UnroutedDeviceProbe:
                     ),
                 }
             else:
+                # Decoded first: the message count decides the byte budget,
+                # and the headers are wanted in the entry either way.
+                cmds = decode_cmd_headers(payload)
                 entry = build_frame_entry(
-                    topic, payload, self._secrets(), RAW_FRAME_MAX_BYTES
+                    topic,
+                    payload,
+                    self._secrets(),
+                    frame_budget(cmds, RAW_FRAME_MAX_BYTES, RAW_FRAME_BUNDLE_MAX_BYTES),
                 )
                 entry["format"] = "proto"
-                entry["cmds"] = decode_cmd_headers(payload)
+                entry["cmds"] = cmds
             # Derived before the lock: the key comes from the payload, which
             # for a JSON push means a mask plus a parse, and the Paho thread
             # should not hold the lock across that.

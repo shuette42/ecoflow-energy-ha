@@ -14,6 +14,7 @@ from pytest_homeassistant_custom_component.common import async_fire_time_changed
 from ecoflow_energy.const import (
     PROBE_WATCHDOG_INTERVAL_S,
     RAW_FRAME_KEYS_MAX,
+    RAW_FRAME_MAX_BYTES,
     RAW_FRAME_PER_KEY_MAX,
 )
 from ecoflow_energy.device_probe import (
@@ -22,8 +23,37 @@ from ecoflow_energy.device_probe import (
     async_start_probes,
 )
 from ecoflow_energy.ecoflow.cloud_mqtt import EcoFlowMQTTClient
+from ecoflow_energy.ecoflow.proto_encoding import (
+    encode_field_bytes,
+    encode_field_varint,
+)
 
 SKIPPED_SN = "RE11TEST00000001"
+
+
+def _header(cmd_func: int, cmd_id: int, pdata: bytes) -> bytes:
+    """Build one repeated-header entry of a protobuf frame."""
+    header = bytearray()
+    header.extend(encode_field_bytes(1, pdata))
+    header.extend(encode_field_varint(8, cmd_func))
+    header.extend(encode_field_varint(9, cmd_id))
+    return encode_field_bytes(1, bytes(header))
+
+
+def _bundled_frame(total: int, *commands: tuple[int, int]) -> bytes:
+    """Build a frame of exactly `total` bytes carrying `commands`.
+
+    Padding goes inside the last message: filler appended after the last
+    header is not a valid tag and the frame would stop decoding, which would
+    change the very thing the budget is derived from.
+    """
+    prefix = b"".join(_header(func, ident, bytes(160)) for func, ident in commands[:-1])
+    func, ident = commands[-1]
+    for pad in range(total):
+        frame = prefix + _header(func, ident, bytes(pad))
+        if len(frame) == total:
+            return frame
+    raise AssertionError(f"no frame of exactly {total} B for {commands}")
 
 
 def _probe(hass: HomeAssistant) -> UnroutedDeviceProbe:
@@ -389,6 +419,44 @@ class TestListenOnly:
             probe._on_message("/topic", b"\x0a\x01")
 
         assert probe.frames == []
+
+    async def test_a_bundled_frame_reaches_the_download_whole(
+        self, hass: HomeAssistant
+    ) -> None:
+        """This buffer is the whole evidence base for an unsupported device.
+
+        A STREAM AC 5000 answers a get with about 1440 B in six messages.
+        Nineteen such frames arrived through this path across three reporter
+        downloads and every one of them was stored as its first 512 B, so
+        two thirds of the device's state was never in the artefact its
+        support was being designed from.
+        """
+        probe = _probe(hass)
+        payload = _bundled_frame(
+            1440, (32, 50), (254, 39), (254, 40), (53, 77), (50, 2), (32, 2)
+        )
+
+        probe._on_message("/topic", payload)
+
+        frame = probe.frames[0]
+        assert frame["size"] == 1440
+        assert len(bytes.fromhex(frame["hex"])) == 1440
+        assert "truncated" not in frame
+        assert len(frame["cmds"]) == 6
+
+    async def test_a_single_message_frame_is_still_capped_and_says_so(
+        self, hass: HomeAssistant
+    ) -> None:
+        """The ceiling did not go away, it just applies where it belongs."""
+        probe = _probe(hass)
+        payload = _bundled_frame(1400, (254, 39))
+
+        probe._on_message("/topic", payload)
+
+        frame = probe.frames[0]
+        assert frame["size"] == 1400
+        assert len(bytes.fromhex(frame["hex"])) == RAW_FRAME_MAX_BYTES
+        assert frame["truncated"] is True
 
 
 class TestConnectSequence:

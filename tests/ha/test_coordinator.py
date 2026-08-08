@@ -181,6 +181,24 @@ def _build_proto_frame(cmd_func: int, cmd_id: int, inner: bytes) -> bytes:
     return encode_field_bytes(1, bytes(header))
 
 
+def _build_bundled_frame(total: int, *commands: tuple[int, int]) -> bytes:
+    """Build a frame of exactly `total` bytes carrying several messages.
+
+    Padding goes inside the last message rather than after the last header:
+    trailing filler is not a valid tag, and a frame that stops decoding would
+    take the message count with it.
+    """
+    prefix = b"".join(
+        _build_proto_frame(func, ident, bytes(160)) for func, ident in commands[:-1]
+    )
+    func, ident = commands[-1]
+    for pad in range(total):
+        frame = prefix + _build_proto_frame(func, ident, bytes(pad))
+        if len(frame) == total:
+            return frame
+    raise AssertionError(f"no frame of exactly {total} B for {commands}")
+
+
 # ===========================================================================
 # Coordinator Initialization
 # ===========================================================================
@@ -6665,6 +6683,40 @@ class TestRawFrameCapture:
         frame = coordinator.raw_frames[0]
         assert len(bytes.fromhex(frame["hex"])) == RAW_FRAME_MAX_BYTES
         assert frame["size"] == len(payload)
+        # And the entry says so. The mismatch between `size` and the stored
+        # hex always carried the same information, and three STREAM AC 5000
+        # downloads were analysed without anyone reading it that way.
+        assert frame["truncated"] is True
+
+    async def test_a_bundled_frame_is_kept_whole(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """A frame carrying the full state must survive the capture.
+
+        A STREAM AC 5000 answers a get with one frame of about 1440 B in six
+        messages. Under a flat 512 B cap the download held its first third,
+        and the fields in the missing part were then read as fields the
+        device does not send.
+        """
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        payload = _build_bundled_frame(
+            1440, (32, 50), (254, 39), (254, 40), (53, 77), (50, 2), (32, 2)
+        )
+
+        coordinator._on_mqtt_message(
+            f"/app/device/property/{coordinator.device_sn}", payload
+        )
+
+        frame = coordinator.raw_frames[0]
+        assert frame["size"] == 1440
+        assert len(bytes.fromhex(frame["hex"])) == 1440
+        assert "truncated" not in frame
+        assert len(frame["cmds"]) == 6
 
     async def test_buffer_is_bounded_per_message_type(
         self,

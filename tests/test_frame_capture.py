@@ -4,19 +4,55 @@ import signal
 from contextlib import contextmanager
 from typing import Any, Iterator
 
+from ecoflow_energy.const import RAW_FRAME_BUNDLE_MAX_BYTES, RAW_FRAME_MAX_BYTES
 from ecoflow_energy.ecoflow.frame_capture import (
     _slot,
     TypedFrameBuffer,
     build_frame_entry,
+    decode_cmd_headers,
+    frame_budget,
     frame_key,
     is_proto_frame,
     sanitize_frame,
+)
+from ecoflow_energy.ecoflow.proto_encoding import (
+    encode_field_bytes,
+    encode_field_varint,
 )
 
 
 # Frame timestamps are wall clock. Tests offset from a fixed epoch instead of
 # starting at zero, so they exercise the same value range the capture sees.
 _T0 = 1_785_000_000.0
+
+# The six commands a STREAM AC 5000 bundles into one get_reply, in the order
+# the reporter captures show them.
+_ES22_BUNDLE = ((32, 50), (254, 39), (254, 40), (53, 77), (50, 2), (32, 2))
+
+
+def _header(cmd_func: int, cmd_id: int, pdata: bytes) -> bytes:
+    """Build one repeated-header entry of a protobuf frame."""
+    header = bytearray()
+    header.extend(encode_field_bytes(1, pdata))
+    header.extend(encode_field_varint(8, cmd_func))
+    header.extend(encode_field_varint(9, cmd_id))
+    return encode_field_bytes(1, bytes(header))
+
+
+def _frame_of(total: int, *commands: tuple[int, int]) -> bytes:
+    """Build a decodable frame of exactly `total` bytes.
+
+    Padding goes into the last message's payload rather than after the last
+    header, because a trailing run of filler is not a valid tag and the whole
+    frame would stop decoding - which would test the wrong thing.
+    """
+    prefix = b"".join(_header(func, ident, bytes(160)) for func, ident in commands[:-1])
+    func, ident = commands[-1]
+    for pad in range(total):
+        frame = prefix + _header(func, ident, bytes(pad))
+        if len(frame) == total:
+            return frame
+    raise AssertionError(f"no frame of exactly {total} B for {commands}")
 
 
 def _entry(offset: float, **extra: Any) -> dict[str, Any]:
@@ -156,6 +192,119 @@ class TestBuildFrameEntry:
     def test_parsed_keys_optional(self) -> None:
         assert "parsed_keys" not in build_frame_entry("/t", b"\x0a", [], 8)
         assert build_frame_entry("/t", b"\x0a", [], 8, parsed_keys=3)["parsed_keys"] == 3
+
+    def test_a_cut_frame_says_so(self) -> None:
+        """The mismatch was always derivable and nobody derived it."""
+        entry = build_frame_entry("/t", b"\x0a" + b"\x00" * 999, [], 16)
+
+        assert entry["truncated"] is True
+
+    def test_a_whole_frame_carries_no_marker(self) -> None:
+        """Absent, not False: an entry says nothing unless it was cut."""
+        entry = build_frame_entry("/t", b"\x0a" + b"\x00" * 10, [], 512)
+
+        assert "truncated" not in entry
+
+    def test_a_serial_past_the_old_cap_is_masked(self) -> None:
+        """Masking runs over the whole frame, not over the first 512 B.
+
+        The larger budget stores bytes that used to be discarded, so a serial
+        sitting a kilobyte into a bundle is now published unless the mask
+        reaches it. This frame stays under its budget, so it proves the mask
+        has no length assumption; the ordering against truncation is pinned
+        by the straddle case below.
+        """
+        sn = "ES22TEST00000001"
+        payload = b"\x0a" + b"\x00" * 700 + sn.encode() + b"\x00" * 700
+
+        entry = build_frame_entry("/t", payload, [sn], RAW_FRAME_BUNDLE_MAX_BYTES)
+
+        stored = bytes.fromhex(entry["hex"])
+        assert len(stored) == len(payload)
+        assert sn.encode() not in stored
+        assert b"X" * len(sn) in stored
+
+    def test_a_serial_cut_by_the_budget_leaves_no_fragment(self) -> None:
+        """Masked first, truncated second - and this is the case that proves it.
+
+        A serial straddling the cut is the only frame that tells the two
+        orderings apart. Masked first, the cut lands inside a run of filler
+        and the stored frame ends in mask bytes. Truncated first, the stored
+        frame ends in the front half of a real serial - a fragment too short
+        for the shape-based pass to ever catch, in a download users attach
+        to public issues.
+        """
+        sn = "ES22TEST00000001"
+        budget = 64
+        # The serial starts 8 bytes before the cut, so exactly half of it
+        # falls inside the stored window.
+        payload = b"\x0a" + b"\x00" * (budget - 1 - 8) + sn.encode() + b"\x00" * 40
+
+        entry = build_frame_entry("/t", payload, [sn], budget)
+
+        stored = bytes.fromhex(entry["hex"])
+        assert entry["truncated"] is True
+        assert len(stored) == budget
+        assert sn[:8].encode() not in stored
+        assert stored.endswith(b"X" * 8)
+
+
+class TestFrameBudget:
+    """How much of a frame is kept follows from what the frame carries."""
+
+    def test_a_single_message_gets_the_message_budget(self) -> None:
+        cmds = [{"cmd_func": 254, "cmd_id": 39}]
+
+        assert frame_budget(cmds, 1024, 2048) == 1024
+
+    def test_an_undecoded_frame_gets_the_message_budget(self) -> None:
+        """Nothing proves it carries more than one message."""
+        assert frame_budget([], 1024, 2048) == 1024
+
+    def test_a_bundle_gets_the_bundle_budget(self) -> None:
+        cmds = [{"cmd_func": 32, "cmd_id": 50}, {"cmd_func": 254, "cmd_id": 39}]
+
+        assert frame_budget(cmds, 1024, 2048) == 2048
+
+    def test_the_stream_ac5000_get_reply_survives_whole(self) -> None:
+        """The frame this whole split exists for.
+
+        Reporter captures put it at 1434 to 1448 B in six messages, and the
+        flat 512 B cap stored a third of it - the last three messages and the
+        config block of the full-state message were simply gone, in a download
+        that said nothing about it.
+        """
+        payload = _frame_of(1440, *_ES22_BUNDLE)
+        cmds = decode_cmd_headers(payload)
+
+        entry = build_frame_entry(
+            "/app/device/property/x",
+            payload,
+            [],
+            frame_budget(cmds, RAW_FRAME_MAX_BYTES, RAW_FRAME_BUNDLE_MAX_BYTES),
+        )
+
+        assert len(cmds) == 6
+        assert entry["size"] == 1440
+        assert len(bytes.fromhex(entry["hex"])) == 1440
+        assert "truncated" not in entry
+
+    def test_a_single_message_frame_above_the_budget_is_cut_and_marked(self) -> None:
+        """The ceiling still exists; it just says when it applies."""
+        payload = _frame_of(1100, (254, 39))
+        cmds = decode_cmd_headers(payload)
+
+        entry = build_frame_entry(
+            "/app/device/property/x",
+            payload,
+            [],
+            frame_budget(cmds, RAW_FRAME_MAX_BYTES, RAW_FRAME_BUNDLE_MAX_BYTES),
+        )
+
+        assert len(cmds) == 1
+        assert entry["size"] == 1100
+        assert len(bytes.fromhex(entry["hex"])) == RAW_FRAME_MAX_BYTES
+        assert entry["truncated"] is True
 
 
 class TestFrameKey:

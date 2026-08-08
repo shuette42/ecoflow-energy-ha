@@ -18,6 +18,8 @@ from custom_components.ecoflow_energy.const import (
     DATA_SKIPPED_DEVICES,
     DOMAIN,
     MODE_STANDARD,
+    RAW_FRAME_BUNDLE_MAX_BYTES,
+    RAW_FRAME_MAX_BYTES,
     UNKNOWN_FIELD_CMDS_MAX,
     UNKNOWN_FIELD_NUMBERS_MAX,
 )
@@ -875,6 +877,12 @@ class TestRawFrameDiagnostics:
         result = _device_diagnostics(coordinator)
 
         assert result["raw_frames"]["count"] == 1
+        # A pair, not a flat number: one figure would describe neither kind
+        # of frame, and a silent revert to the flat cap has to fail here.
+        assert result["raw_frames"]["truncated_at_bytes"] == {
+            "message": RAW_FRAME_MAX_BYTES,
+            "bundle": RAW_FRAME_BUNDLE_MAX_BYTES,
+        }
         frame = result["raw_frames"]["frames"][0]
         assert frame["hex"] == "0a02ffff"
         assert frame["cmds"] == [{"cmd_func": 96, "cmd_id": 33}]
@@ -970,6 +978,12 @@ class TestUnroutedDeviceCapture:
         assert capture["connected"] is True
         assert capture["verdict"] == "listening"
         assert capture["frame_count"] == 1
+        # Same pair as the routed-device section: both sections describe the
+        # same budget split, and a reader of either has to see both figures.
+        assert capture["truncated_at_bytes"] == {
+            "message": RAW_FRAME_MAX_BYTES,
+            "bundle": RAW_FRAME_BUNDLE_MAX_BYTES,
+        }
         assert capture["topics"] == ["/app/{sn}/thing/property/get_reply"]
         assert capture["frames"][0]["hex"] == "0a02ffff"
         assert capture["frames"][0]["ts_iso"].startswith("2026-")

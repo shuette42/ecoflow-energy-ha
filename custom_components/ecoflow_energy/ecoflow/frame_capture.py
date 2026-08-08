@@ -68,6 +68,28 @@ def is_proto_frame(payload: bytes) -> bool:
     return b"\x0a" in payload[:4]
 
 
+def frame_budget(cmds: list[Any], message_max: int, bundle_max: int) -> int:
+    """Return how many bytes of a frame to keep.
+
+    The two kinds of frame a device sends differ by an order of magnitude,
+    so one number for both is the wrong shape. A change is pushed as a
+    single message - 41 to 587 B across every capture in the corpus - while
+    the answer to a get bundles the whole state into one frame: 1434 to
+    1465 B in six messages on a STREAM AC 5000, 1009 B in two on a
+    PowerOcean. A budget that fits the pushes cuts every bundle, and the
+    bundle is the frame a field layout is read from.
+
+    Deciding per frame rather than raising one constant keeps the cost
+    where the bytes are: a device that never bundles is bounded by
+    ``message_max``, and only a frame that demonstrably carries several
+    messages may claim ``bundle_max``.
+
+    A frame whose headers did not decode counts as one message. Nothing
+    proves it carries more, and the entry says it was cut if it was.
+    """
+    return bundle_max if len(cmds) > 1 else message_max
+
+
 def build_frame_entry(
     topic: str,
     payload: bytes,
@@ -79,15 +101,27 @@ def build_frame_entry(
 
     The frame is masked first and truncated second, so truncation can
     never cut a mask in half and leave a fragment of a serial behind.
-    `size` reports the original length, which is what tells a reader that
-    a frame was longer than the stored hex.
+    `size` reports the original length.
+
+    A cut frame carries ``truncated``. `size` alone technically said the
+    same thing - it disagrees with the length of the stored hex - but
+    nobody read it that way: three STREAM AC 5000 downloads went through
+    analysis with their full-state frames cut to a third, and the missing
+    fields were reported as fields the device does not send. A flag that
+    has to be derived is a flag that gets missed, so this one is written
+    down. It is absent rather than false on a whole frame, which also
+    dates the entry: a capture whose frames never carry the key predates
+    the marker and has to be checked by hand.
     """
+    sanitized = sanitize_frame(payload, secrets)
     entry: dict[str, Any] = {
         "ts": time.time(),
         "topic": "get_reply" if "get_reply" in topic else "property",
         "size": len(payload),
-        "hex": sanitize_frame(payload, secrets)[:max_bytes].hex(),
+        "hex": sanitized[:max_bytes].hex(),
     }
+    if len(sanitized) > max_bytes:
+        entry["truncated"] = True
     if parsed_keys is not None:
         entry["parsed_keys"] = parsed_keys
     return entry

@@ -29,6 +29,7 @@ from .const import (
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_STREAM,
     DOMAIN,
+    RAW_FRAME_BUNDLE_MAX_BYTES,
     RAW_FRAME_MAX_BYTES,
 )
 from .coordinator import EcoFlowDeviceCoordinator
@@ -54,6 +55,20 @@ _SERIAL_RE = re.compile(r"[A-Z0-9]{15,}")
 # artefact device support is built from, so destroying it is worse than the
 # leak the pass exists to prevent.
 _PRE_SANITIZED_KEYS = frozenset({"hex", "frame_hex"})
+
+# How much of a frame is kept, by what the frame carries: a bundle of several
+# messages gets the larger budget, everything else the smaller one. Reported
+# as a pair rather than a single number because one number would describe
+# neither kind of frame correctly.
+#
+# The shape also dates the capture. Downloads up to v1.16.0 carry a plain
+# integer here and mark nothing per frame, so a cut frame in one of those can
+# only be found by comparing `size` against the length of `hex`. From here on
+# a cut frame says `truncated` itself.
+_FRAME_BUDGETS = {
+    "message": RAW_FRAME_MAX_BYTES,
+    "bundle": RAW_FRAME_BUNDLE_MAX_BYTES,
+}
 
 
 def _redact_serials(value: Any, aliases: dict[str, str] | None = None) -> Any:
@@ -199,7 +214,7 @@ async def _skipped_devices_diagnostics(
                 **probe.connection,
                 "frame_count": len(frames),
                 "topics": probe.topics,
-                "truncated_at_bytes": RAW_FRAME_MAX_BYTES,
+                "truncated_at_bytes": _FRAME_BUDGETS,
                 "sampling": probe.sampling,
                 "frames": _format_event_log(frames),
             }
@@ -332,7 +347,7 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
     if raw_frames:
         diag["raw_frames"] = {
             "count": len(raw_frames),
-            "truncated_at_bytes": RAW_FRAME_MAX_BYTES,
+            "truncated_at_bytes": _FRAME_BUDGETS,
             # Frames are sampled per message type, so the list is a selection
             # rather than a tail. Without this a reader cannot tell a quiet
             # device from a thinned-out capture.
@@ -375,9 +390,9 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
     # into a gap in our schema - and that is the question every "can this be
     # controlled from Home Assistant" request runs into first.
     #
-    # Raw frames answer the same question in principle, but they are cut at
-    # 512 bytes and reading field numbers out of a hex dump is not something
-    # to ask of a reporter.
+    # Raw frames answer the same question in principle, but a frame can
+    # outgrow its byte budget, and reading field numbers out of a hex dump
+    # is not something to ask of a reporter.
     unknown_fields = coordinator.unknown_proto_fields
     if unknown_fields:
         diag["unknown_proto_fields"] = {

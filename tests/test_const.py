@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
 
 from ecoflow_energy.const import (
@@ -24,6 +25,12 @@ from ecoflow_energy.const import (
     STREAM_SWITCHES,
     SMARTPLUG_SWITCHES,
     SMARTPLUG_NUMBERS,
+    RAW_FRAME_BUNDLE_MAX_BYTES,
+    RAW_FRAME_KEYS_MAX,
+    RAW_FRAME_LOG_KEYS_MAX,
+    RAW_FRAME_LOG_PER_KEY_MAX,
+    RAW_FRAME_MAX_BYTES,
+    RAW_FRAME_PER_KEY_MAX,
     get_device_name,
     get_device_type,
     get_delta_profile,
@@ -789,3 +796,63 @@ class TestModeReach:
             "marked Enhanced-only although the Standard-Mode parser names them:\n  "
             + "\n  ".join(wrongly_hidden)
         )
+
+
+class TestFrameCaptureFootprint:
+    """The stated worst case has to be the one the constants produce.
+
+    The frame capture comments are the only place the memory cost of the
+    buffers is written down, and the only reason anyone can audit them. A
+    comment that says 30 KiB next to constants that produce 120 KiB is worse
+    than no comment, because it is trusted.
+    """
+
+    # "20 * 3 * 2048 B = 122 880 B (120 KiB)" - thousands are spaced, so the
+    # result is read back with its spaces removed.
+    _ARITHMETIC = re.compile(
+        r"(\d+) \* (\d+) \* (\d+) B = ([\d ]+?) B \((\d+) KiB\)"
+    )
+
+    def _statements(self) -> list[tuple[int, int, int, int, int]]:
+        source = (REPO_ROOT / "custom_components/ecoflow_energy/const.py").read_text()
+        return [
+            (
+                int(keys),
+                int(per_key),
+                int(budget),
+                int(total.replace(" ", "")),
+                int(kib),
+            )
+            for keys, per_key, budget, total, kib in self._ARITHMETIC.findall(source)
+        ]
+
+    def test_every_worst_case_multiplies_out(self) -> None:
+        statements = self._statements()
+
+        assert statements, "no footprint arithmetic found in const.py"
+        for keys, per_key, budget, total, kib in statements:
+            assert keys * per_key * budget == total
+            assert total == kib * 1024
+
+    def test_every_worst_case_uses_the_real_constants(self) -> None:
+        """A comment may only multiply numbers the code actually holds."""
+        buffers = {
+            (RAW_FRAME_LOG_KEYS_MAX, RAW_FRAME_LOG_PER_KEY_MAX),
+            (RAW_FRAME_KEYS_MAX, RAW_FRAME_PER_KEY_MAX),
+        }
+        budgets = {RAW_FRAME_MAX_BYTES, RAW_FRAME_BUNDLE_MAX_BYTES}
+
+        for keys, per_key, budget, _total, _kib in self._statements():
+            assert (keys, per_key) in buffers
+            assert budget in budgets
+
+    def test_both_buffers_state_their_worst_case(self) -> None:
+        """Neither buffer may lose its figure to an edit of the other."""
+        stated = {(keys, per_key) for keys, per_key, *_ in self._statements()}
+
+        assert (RAW_FRAME_LOG_KEYS_MAX, RAW_FRAME_LOG_PER_KEY_MAX) in stated
+        assert (RAW_FRAME_KEYS_MAX, RAW_FRAME_PER_KEY_MAX) in stated
+
+    def test_the_bundle_budget_is_the_larger_one(self) -> None:
+        """Inverted, the split would cut exactly the frames it exists for."""
+        assert RAW_FRAME_BUNDLE_MAX_BYTES > RAW_FRAME_MAX_BYTES
