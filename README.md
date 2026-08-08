@@ -398,6 +398,15 @@ automation:
 </details>
 
 <details>
+<summary><b>Devices stay unavailable and the log shows repeated reconnects</b></summary>
+
+EcoFlow serves accounts from more than one region, and the server for your account is named in the credentials the integration fetches at sign-in. Versions before 1.17.0 ignored that and always used the European address, so an account served elsewhere was refused with nothing said about why: the connection opens, the server closes it again, and the cycle repeats.
+
+If you see that pattern, update to 1.17.0 or newer. A diagnostics download reports the address in use under `mqtt_status` > `broker`, which is the fastest way to tell this apart from a credential problem.
+
+</details>
+
+<details>
 <summary><b>Update credentials (manual re-auth)</b></summary>
 
 Use the integration menu (not the options dialog):
