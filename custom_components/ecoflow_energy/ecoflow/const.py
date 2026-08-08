@@ -89,6 +89,16 @@ _SN_PREFIX_MAP = {
     # reports more than the PowerOcean parser reads. Routing it delivers
     # what the parser understands today rather than nothing at all.
     "J32B": DEVICE_TYPE_POWEROCEAN,
+    # Single-phase 5 kW hybrid inverter, European (#225). Routed on the same
+    # evidence as J32B and rather more of it: a reporter capture holds 44
+    # command frames, of which the EMS heartbeat `96/8` alone accounts for 17
+    # and `96/1`, `96/7` and `96/13` for six more. All four are already
+    # decoded, so this unit reports live data into the existing parser rather
+    # than merely being recognised. The capture also carries `96/11`, `96/26`,
+    # `96/34`, `254/32`, `53/14`, `241/5` and `241/36`, none registered, so it
+    # says more than the parser reads - the same situation as every other
+    # PowerOcean variant here.
+    "J327": DEVICE_TYPE_POWEROCEAN,
     # PowerOcean Plus variants (#88): higher-power 3-phase hybrid units
     # (e.g. P3-S1, ~25-30 kW). Not exposed through the Developer API, so
     # Enhanced mode only - same situation as J32D/J32E. Routed to the
