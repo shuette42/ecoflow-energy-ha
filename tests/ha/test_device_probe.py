@@ -657,9 +657,11 @@ class TestConnectionReport:
         report = probe.connection
         assert report["refusals"] == 1
         assert report["last_refusal_rc"] == 5
-        assert "Auth failed" in report["last_refusal_reason"]
-        assert "refused the login" in report["verdict"]
-        assert "mqtt-e.ecoflow.com:8084" in report["verdict"]
+        assert report["last_refusal_reason"] == "Auth failed (credentials expired?)"
+        assert report["verdict"] == (
+            "never connected - mqtt-e.ecoflow.com:8084 refused the login "
+            "(rc=5, Auth failed (credentials expired?))"
+        )
         # The drop counters stay honest alongside it.
         assert report["disconnects"] == 50
         assert report["last_rc"] == 128
