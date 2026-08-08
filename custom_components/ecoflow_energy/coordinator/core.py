@@ -341,6 +341,17 @@ class EcoFlowDeviceCoordinator(
         """Return firmware revisions per subsystem (empty if none reported)."""
         return self._firmware
 
+    @property
+    def energy_state(self) -> dict[str, tuple[float, float, float]]:
+        """Return the running energy integrator state, for diagnostics.
+
+        The live state, not the file the integrator persists to. The file is
+        written at most once a minute, so a reader of the file can be a minute
+        behind - and a section that exists to explain a counter standing still
+        must not itself report a stale number.
+        """
+        return self._energy_integrator.state_snapshot()
+
     def set_device_value(self, key: str, value: Any) -> None:
         """Set a single value in the persistent device data store.
 

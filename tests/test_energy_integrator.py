@@ -2,6 +2,7 @@
 
 import json
 import time
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -17,6 +18,52 @@ def state_file(tmp_path):
 @pytest.fixture
 def integrator(state_file):
     return EnergyIntegrator(state_file)
+
+
+class TestStateSnapshot:
+    """The read-only view diagnostics reports from."""
+
+    def test_snapshot_reports_the_running_state_not_the_file(self, integrator, state_file):
+        """Nothing has been flushed, so the file does not exist yet."""
+        integrator._state["solar"] = (5.0, 1000.0, 250.0)
+        with patch(
+            "ecoflow_energy.ecoflow.energy_integrator.time.monotonic",
+            return_value=1030.0,
+        ):
+            integrator.integrate("solar", 250.0)
+
+        snapshot = integrator.state_snapshot()
+
+        assert not Path(state_file).exists()
+        assert snapshot["solar"][0] > 5.0
+        assert snapshot["solar"][1] == 1030.0
+        assert snapshot["solar"][2] == 250.0
+
+    def test_snapshot_includes_a_metric_that_never_produced_a_total(self, integrator):
+        """A seeded-once metric is the case a diagnostics reader is after."""
+        assert integrator.integrate("solar", 400.0) is None
+
+        snapshot = integrator.state_snapshot()
+
+        assert snapshot["solar"][0] == 0.0
+        assert snapshot["solar"][2] == 400.0
+
+    def test_snapshot_is_a_copy(self, integrator):
+        """A reader must not be able to disturb the running totals."""
+        integrator._state["solar"] = (5.0, 1000.0, 250.0)
+
+        snapshot = integrator.state_snapshot()
+        snapshot["solar"] = (999.0, 0.0, 0.0)
+        snapshot["invented"] = (1.0, 0.0, 0.0)
+
+        assert integrator.get_total("solar") == 5.0
+        assert "invented" not in integrator._state
+
+    def test_snapshot_does_not_read_from_disk(self, integrator, state_file):
+        """Diagnostics runs on the event loop - it must not touch the file."""
+        Path(state_file).write_text(json.dumps({"solar": [999.0, 1.0, 1.0]}))
+
+        assert integrator.state_snapshot() == {}
 
 
 class TestBasicIntegration:

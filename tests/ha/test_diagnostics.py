@@ -635,6 +635,237 @@ class TestDeltaThreeRawQuotaDiagnostics:
         assert result["raw_quota"]["age_s"] is None
 
 
+class TestEnergyIntegratorDiagnostics:
+    """Why a kWh counter sits near zero, answerable from a download (#177).
+
+    Three numbers per counter settle it: whether the metric exists at all,
+    what power was last integrated into it, and how long ago. Before this,
+    the only copy lived in a JSON file inside the configuration folder and a
+    reporter had to be talked through finding it.
+    """
+
+    async def test_metrics_report_total_power_and_age(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        coordinator._energy_integrator._state = {
+            "solar_energy_kwh": (18.696950613807584, 1000.0, 150.0),
+            "batt_charge_energy_kwh": (2.5, 600.0, 0.0),
+        }
+
+        with patch(
+            "custom_components.ecoflow_energy.diagnostics.time.monotonic",
+            return_value=1004.2,
+        ):
+            section = _device_diagnostics(coordinator)["energy_integrator"]
+
+        solar = section["metrics"]["solar_energy_kwh"]
+        assert solar["total_kwh"] == 18.696951
+        assert solar["last_power_w"] == 150.0
+        assert solar["age_s"] == 4.2
+
+        # The second counter has not been touched in over six minutes, and
+        # that has to be readable next to the first one without arithmetic.
+        assert section["metrics"]["batt_charge_energy_kwh"]["age_s"] == 404.2
+        assert "note" in section
+
+    async def test_stored_monotonic_timestamp_never_reaches_the_output(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """784722 seconds since an arbitrary epoch tells a reader nothing.
+
+        Worse, it reads like a wall clock and is not one. The age replaces
+        it rather than sitting beside it.
+        """
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        coordinator._energy_integrator._state = {
+            "solar_energy_kwh": (18.7, 784722.222677657, 150.0),
+        }
+
+        with patch(
+            "custom_components.ecoflow_energy.diagnostics.time.monotonic",
+            return_value=784726.0,
+        ):
+            section = _device_diagnostics(coordinator)["energy_integrator"]
+
+        assert "784722" not in json.dumps(section)
+        assert section["metrics"]["solar_energy_kwh"]["age_s"] == 3.8
+
+    async def test_metric_seeded_once_and_never_integrated_again(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """The whole point of the section, in one test.
+
+        A counter that took one reading and then never another is the case
+        somebody opens the download to ask about, and it is invisible from
+        the sensor: the entity shows a total of zero either way. It has to
+        appear here, and its age has to be the real time since that one
+        reading rather than a number that resets when the download is taken.
+        A section listing only counters above zero would hide it entirely.
+        """
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        # What integrate() leaves behind on a first reading: state seeded at
+        # the current monotonic time, no total reported. Marked loaded so the
+        # seeding does not go near the state file, since diagnostics runs on
+        # the event loop.
+        integrator = coordinator._energy_integrator
+        integrator._loaded = True
+        with patch(
+            "custom_components.ecoflow_energy.ecoflow.energy_integrator.time.monotonic",
+            return_value=1000.0,
+        ):
+            assert integrator.integrate("solar_energy_kwh", 150.0) is None
+
+        # Nine hours later, with no further reading in between.
+        with patch(
+            "custom_components.ecoflow_energy.diagnostics.time.monotonic",
+            return_value=1000.0 + 9 * 3600,
+        ):
+            section = _device_diagnostics(coordinator)["energy_integrator"]
+
+        metric = section["metrics"]["solar_energy_kwh"]
+        assert metric["total_kwh"] == 0.0
+        assert metric["last_power_w"] == 150.0
+        # Real elapsed time since the one reading, not the moment of the dump.
+        assert metric["age_s"] == 32400.0
+
+    async def test_a_creeping_total_is_not_rounded_down_to_zero(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Zero and almost-zero are different answers to the same question.
+
+        One integration step at 150 W over three seconds is 0.000125 kWh.
+        Rounded to the two places used elsewhere in this integration, a
+        counter that is slowly moving is indistinguishable from one that has
+        never moved at all.
+        """
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        coordinator._energy_integrator._state = {
+            "solar_energy_kwh": (0.000125, 1000.0, 150.0),
+        }
+
+        with patch(
+            "custom_components.ecoflow_energy.diagnostics.time.monotonic",
+            return_value=1003.0,
+        ):
+            section = _device_diagnostics(coordinator)["energy_integrator"]
+
+        assert section["metrics"]["solar_energy_kwh"]["total_kwh"] == 0.000125
+
+    async def test_section_present_and_empty_when_nothing_integrated(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """"This device integrates nothing" is an answer, not a missing section.
+
+        An absent section cannot be told apart from a download taken with a
+        version that never had one.
+        """
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+
+        section = _device_diagnostics(coordinator)["energy_integrator"]
+
+        assert section["metrics"] == {}
+        assert section["note"]
+
+    async def test_malformed_state_entry_does_not_break_the_download(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """One unreadable counter must not cost the whole file."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        coordinator._energy_integrator._state = {
+            "broken_energy_kwh": ("not", "a", "number"),
+            "short_energy_kwh": (1.0,),
+            "solar_energy_kwh": (18.7, 1000.0, 150.0),
+        }
+
+        with patch(
+            "custom_components.ecoflow_energy.diagnostics.time.monotonic",
+            return_value=1002.0,
+        ):
+            section = _device_diagnostics(coordinator)["energy_integrator"]
+
+        # Named, not dropped: an absent metric would read as "no such counter".
+        assert "error" in section["metrics"]["broken_energy_kwh"]
+        assert "error" in section["metrics"]["short_energy_kwh"]
+        assert section["metrics"]["solar_energy_kwh"]["total_kwh"] == 18.7
+
+    async def test_missing_integrator_leaves_an_empty_section(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Diagnostics never raises, whatever state the coordinator is in."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        del coordinator._energy_integrator
+
+        result = _device_diagnostics(coordinator)
+
+        assert result["energy_integrator"]["metrics"] == {}
+        assert result["device_name"] == "Delta 2 Max"
+
+    async def test_metric_names_go_through_the_redaction_pass(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """The section is inside the single pass, not built after it.
+
+        Energy metric names are static and carry no serial today. This is
+        here so the section keeps that guarantee if a per-device metric key
+        is ever introduced - and so nobody moves the section outside the pass
+        without something failing.
+        """
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        coordinator._energy_integrator._state = {
+            "pack_HJ31TESTSERIAL01_energy_kwh": (3.0, 1000.0, 20.0),
+        }
+        hass.data.setdefault(DOMAIN, {})[standard_config_entry.entry_id] = {
+            coordinator.device_sn: coordinator
+        }
+
+        result = await async_get_config_entry_diagnostics(hass, standard_config_entry)
+
+        metrics = result["devices"][0]["energy_integrator"]["metrics"]
+        assert list(metrics) == ["pack_**REDACTED**_energy_kwh"]
+        assert "HJ31TESTSERIAL01" not in json.dumps(result)
+
+
 class TestRedactSerials:
     """Unit coverage for the recursive, unanchored serial redactor."""
 

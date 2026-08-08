@@ -70,6 +70,29 @@ _FRAME_BUDGETS = {
     "bundle": RAW_FRAME_BUNDLE_MAX_BYTES,
 }
 
+# What the three numbers behind each energy counter mean, and how to read
+# them together. Written for whoever opens the download - a maintainer months
+# from now, or a reporter who was asked to attach it.
+_ENERGY_NOTE = (
+    "Energy counters this integration derives from power readings, as they "
+    "stand now rather than as last written to disk. `total_kwh` is the "
+    "running total, `last_power_w` the reading last integrated into it, and "
+    "`age_s` how long ago that happened. A total near zero with a small "
+    "`age_s` means the device reports little or no power; the same total with "
+    "a large `age_s` means the power reading stopped arriving. An age counts "
+    "from the last reading or from the last host reboot, whichever is later, "
+    "since the clock behind it restarts with the host. Counters the device "
+    "reports as a total of its own appear here too, and for those "
+    "`last_power_w` says nothing."
+)
+
+# Six decimal places, and not fewer. The question this section answers is
+# whether a counter is at a true zero (seeded once, never integrated again) or
+# creeping up in tiny steps, and one integration step at 150 W over three
+# seconds is 0.000125 kWh. Rounding to the two places used elsewhere would
+# collapse exactly the distinction the section exists for.
+_ENERGY_TOTAL_DIGITS = 6
+
 
 def _redact_serials(value: Any, aliases: dict[str, str] | None = None) -> Any:
     """Redact values that look like EcoFlow serial numbers.
@@ -269,6 +292,49 @@ async def _skipped_devices_diagnostics(
     return result
 
 
+def _energy_integrator_diagnostics(
+    coordinator: EcoFlowDeviceCoordinator, now: float
+) -> dict[str, Any]:
+    """Report every energy counter the integrator holds, with its age.
+
+    Every metric in the state is listed, including one whose total is still
+    zero. A metric that was seeded once and never integrated again is the
+    interesting case - a section showing only counters that are running would
+    hide precisely the ones somebody is asking about.
+
+    `age_s` replaces the stored timestamp rather than accompanying it. That
+    timestamp comes from `time.monotonic()`, whose epoch is arbitrary, so the
+    raw value tells a reader nothing on its own and invites being misread as
+    a wall clock. Every other age in this file is reported the same way.
+
+    Never raises: a diagnostics download is what a reporter has been asked for
+    when something is already wrong, and losing the whole file over one
+    unreadable counter would be the worst possible moment for it.
+    """
+    try:
+        state = coordinator.energy_state
+        items = sorted(state.items())
+    except Exception:  # noqa: BLE001
+        _LOGGER.debug("Energy integrator state unavailable for diagnostics")
+        return {"note": _ENERGY_NOTE, "metrics": {}}
+
+    metrics: dict[str, Any] = {}
+    for metric, values in items:
+        try:
+            total_kwh, last_ts, last_power_w = values
+            metrics[metric] = {
+                "total_kwh": round(float(total_kwh), _ENERGY_TOTAL_DIGITS),
+                "last_power_w": round(float(last_power_w), 1),
+                "age_s": round(now - float(last_ts), 1),
+            }
+        except (TypeError, ValueError):
+            # Name the metric anyway. Dropping it would read as "this counter
+            # does not exist", which is a different answer entirely.
+            metrics[metric] = {"error": "state entry could not be read"}
+
+    return {"note": _ENERGY_NOTE, "metrics": metrics}
+
+
 def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]:
     """Build diagnostics dict for one device — no credentials."""
     now = time.monotonic()
@@ -334,6 +400,11 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
         # covered, like every quota-derived section, by the single redaction
         # pass on the way out.
         "firmware": coordinator.firmware,
+        # Always present, even with no metrics at all. An absent section
+        # cannot be told apart from a version that never had one, and "this
+        # device integrates nothing" is itself the answer to a question about
+        # a kWh sensor that will not move.
+        "energy_integrator": _energy_integrator_diagnostics(coordinator, now),
         "event_log": _format_event_log(coordinator.event_log),
     }
 

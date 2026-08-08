@@ -215,6 +215,20 @@ class EnergyIntegrator:
             return self._state[metric][0]
         return None
 
+    def state_snapshot(self) -> dict[str, tuple[float, float, float]]:
+        """Return a copy of the running state, keyed by metric.
+
+        Each value is the same triple that gets persisted:
+        ``(total_kwh, last_monotonic_ts, last_power_w)``.
+
+        Read-only by construction - the dict is a copy and the values are
+        tuples, so a reader cannot disturb the totals. Deliberately does not
+        load from disk: this reports what the integrator is doing now, and
+        the file is only written every ``SAVE_INTERVAL_S``, so a snapshot
+        taken from it can be a minute behind the running counters.
+        """
+        return dict(self._state)
+
     # ------------------------------------------------------------------
     # Persistence
     # ------------------------------------------------------------------
