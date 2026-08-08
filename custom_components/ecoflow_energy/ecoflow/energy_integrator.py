@@ -8,7 +8,7 @@ Ported from EcoFlow main repo (src/service/logic/energy_integrator.py).
 Features:
 - Trapezoidal integration (average of last + current power)
 - Gap detection: skip integration for gaps >7 minutes
-- Jump detection: use min(last, current) for >50% power changes
+- Plausibility bounds: a reading wrong by orders of magnitude is rejected
 - Monotonic: totals never decrease
 - Persistent: state survives HA restarts via JSON file
 """
@@ -136,14 +136,35 @@ class EnergyIntegrator:
         if delta_t_s < MIN_DELTA_S:
             return total_kwh
 
-        # Jump detection: >50% change → use conservative lower bound
-        power_diff = abs(power_w - last_power_w)
-        power_avg = (abs(last_power_w) + abs(power_w)) / 2.0
-
-        if power_avg > 0 and (power_diff / power_avg) > 0.5:
-            avg_power_w = min(abs(last_power_w), abs(power_w))
-        else:
-            avg_power_w = (last_power_w + power_w) / 2.0
+        # Trapezoidal rule: the interval is credited with the mean of the two
+        # readings that bound it.
+        #
+        # A change of more than 50% used to be credited with
+        # min(last, current) instead, on the reasoning that a large step makes
+        # the straight line between the readings untrustworthy, so the least
+        # the interval could have been is the safe answer. It is not the safe
+        # answer, it is the lowest one. When a load steps at an unknown moment
+        # inside the interval, the mean of the endpoints is the expected
+        # energy. Each switching edge can be off by at most half an interval
+        # at the load's power, the on-edge errs opposite to the off-edge, and
+        # neither direction is favoured, so over many cycles the errors cancel
+        # on average instead of piling up. Taking the minimum lost both halves
+        # outright.
+        #
+        # Where one of the two readings is zero the minimum is zero, so the
+        # interval contributed nothing at all. That is how a STREAM AC 5000
+        # came to report four energy counters at zero next to correct live
+        # power (#177): its readings are edges of a sparse flow matrix, an
+        # edge that is not flowing is a real zero, and the readings alternate
+        # between zero and a value all day. Any metric that returns to zero
+        # between samples was losing energy the same way, in proportion to how
+        # often it did so.
+        #
+        # A single spurious spike is the one thing the minimum did guard
+        # against. It now costs one interval at the spike's own value, which
+        # the bounds above cap; the wrong-by-orders-of-magnitude class that
+        # froze a counter for good in #88 is still rejected outright.
+        avg_power_w = (last_power_w + power_w) / 2.0
 
         # Energy = Power × Time (W → kWh)
         delta_kwh = abs(avg_power_w * delta_t_s) / 3_600_000.0

@@ -8,6 +8,16 @@ from unittest.mock import patch
 import pytest
 
 from ecoflow_energy.ecoflow.energy_integrator import EnergyIntegrator
+from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (
+    parse_stream_ac5000_message,
+)
+
+ES22_CAPTURE = (
+    Path(__file__).parent
+    / "fixtures"
+    / "stream_ac5000"
+    / "es22_push_capture_masked.json"
+)
 
 
 @pytest.fixture
@@ -18,6 +28,38 @@ def state_file(tmp_path):
 @pytest.fixture
 def integrator(state_file):
     return EnergyIntegrator(state_file)
+
+
+def _drive(integrator, readings, *, metric="m", dt=30.0, start=1000.0):
+    """Feed readings into the integrator ``dt`` apart on a mocked clock.
+
+    The clock is mocked rather than offset from the real one: a fresh CI
+    container has an uptime of seconds, so arithmetic against the real
+    monotonic clock can go negative there and nowhere else.
+    """
+    now = start
+    for reading in readings:
+        with patch(
+            "ecoflow_energy.ecoflow.energy_integrator.time.monotonic",
+            return_value=now,
+        ):
+            integrator.integrate(metric, reading)
+        now += dt
+    return integrator.get_total(metric)
+
+
+def _trapezoid_kwh(readings, dt=30.0):
+    """The energy the trapezoidal rule assigns to a series of readings.
+
+    Each interval contributes the mean of the two readings bounding it. This
+    is the rule the integrator is being held to, written out, so the tests
+    assert against it rather than against a number copied from a past run.
+    """
+    watt_seconds = sum(
+        (first + second) / 2.0 * dt
+        for first, second in zip(readings, readings[1:])
+    )
+    return watt_seconds / 3_600_000.0
 
 
 class TestStateSnapshot:
@@ -116,16 +158,81 @@ class TestGapDetection:
         assert result == 5.0  # No change
 
 
-class TestJumpDetection:
-    def test_large_jump_uses_minimum(self, integrator):
-        """When power changes >50%, use min(last, current)."""
-        # 100W → 1000W is a >50% jump
-        integrator._state["solar"] = (0.0, time.monotonic() - 30, 100.0)
-        result = integrator.integrate("solar", 1000.0)
-        # Should use min(100, 1000) = 100W, not average
-        # 100W * 30s / 3600000 ≈ 0.000833 kWh
-        assert result is not None
-        assert result < 0.005  # Much less than if it used average
+class TestPowerChanges:
+    """Every interval is credited with the mean of the readings bounding it.
+
+    A change of more than 50% was once credited with min(last, current)
+    instead. Where either reading was zero that minimum was zero, so the
+    interval contributed nothing and any metric that kept returning to zero
+    counted nothing at all (#177).
+    """
+
+    SAMPLES = 240
+
+    @pytest.mark.parametrize(
+        ("readings",),
+        [
+            pytest.param([2000.0] * SAMPLES, id="held-steady"),
+            pytest.param(
+                [0.0 if n % 2 else 2000.0 for n in range(SAMPLES)],
+                id="alternating-with-zero",
+            ),
+            pytest.param(
+                [0.0 if n % 3 else 2000.0 for n in range(SAMPLES)],
+                id="two-zeros-then-a-value",
+            ),
+            pytest.param(
+                [1800.0 if n % 2 else 2000.0 for n in range(SAMPLES)],
+                id="oscillating-above-zero",
+            ),
+            pytest.param(
+                [100.0 if n % 2 else 2000.0 for n in range(SAMPLES)],
+                id="swinging-hard-between-two-nonzero-values",
+            ),
+        ],
+    )
+    def test_a_pattern_counts_its_full_trapezoid(self, integrator, readings):
+        """The two patterns that touch zero used to count exactly nothing.
+
+        The hard nonzero swing is the case that fails if the minimum comes
+        back with only the zero endpoints special-cased: 100 W next to
+        2000 W is a change of more than half with neither reading zero, and
+        the minimum credited it at 100 W instead of the mean.
+        """
+        counted = _drive(integrator, readings)
+
+        assert counted == pytest.approx(_trapezoid_kwh(readings))
+
+    def test_alternating_counts_the_same_as_its_mean_held_steady(self, integrator, state_file):
+        """Half the time at 2000 W is the same energy as all of it at 1000 W.
+
+        Stated as an equivalence rather than a total, because the point is not
+        what the number is but that switching a load on and off does not make
+        its energy disappear.
+        """
+        alternating = [0.0 if n % 2 else 2000.0 for n in range(self.SAMPLES)]
+        steady = [1000.0] * self.SAMPLES
+
+        counted = _drive(integrator, alternating)
+        reference = _drive(EnergyIntegrator(state_file + ".ref"), steady)
+
+        assert counted == pytest.approx(reference)
+
+    def test_an_isolated_pulse_counts_one_interval_at_its_own_power(self, integrator):
+        """A reading seen once between two zeros is worth one interval.
+
+        This is the assertion that fails if the zero-discarding minimum comes
+        back: it credited both halves of the pulse at min(0, 2000) = 0.
+        """
+        counted = _drive(integrator, [0.0, 2000.0, 0.0], dt=30.0)
+
+        assert counted == pytest.approx(2000.0 * 30.0 / 3_600_000.0)
+
+    def test_a_reading_that_stays_at_zero_adds_nothing(self, integrator):
+        """The fix must not invent energy where the device reports none."""
+        counted = _drive(integrator, [0.0] * 10)
+
+        assert counted == 0.0
 
 
 class TestSetTotal:
@@ -381,3 +488,45 @@ class TestPlausibilityBounds:
 
         warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
         assert len(warnings) == 1
+
+
+class TestStreamAc5000Readings:
+    """The readings from the device on #177, end to end into a counter.
+
+    Real frames from that unit, through the parser, into the integrator. The
+    capture holds one frame per distinct shape rather than a continuous
+    recording, so the interval between them is chosen here and the totals are
+    not the device's own energy. What the capture does carry is the shape that
+    broke the counters: readings that sit at zero and then jump to a value.
+    """
+
+    @staticmethod
+    def _readings(key):
+        frames = json.loads(ES22_CAPTURE.read_text())["frames"]
+        values = []
+        for frame in frames:
+            parsed = parse_stream_ac5000_message(bytes.fromhex(frame["hex"]))
+            if not parsed:
+                continue
+            value = parsed.get(key)
+            if isinstance(value, (int, float)):
+                values.append(float(value))
+        return values
+
+    @pytest.mark.parametrize(
+        "key", ["grid_export_power_w", "batt_discharge_power_w"]
+    )
+    def test_a_counter_climbs_on_readings_that_pass_through_zero(
+        self, integrator, key
+    ):
+        """Both counters read 0,00 on the reporter's dashboard all day."""
+        readings = self._readings(key)
+
+        # The capture has to contain the shape for this to prove anything.
+        assert any(value == 0.0 for value in readings)
+        assert any(value > 0.0 for value in readings)
+
+        counted = _drive(integrator, readings)
+
+        assert counted == pytest.approx(_trapezoid_kwh(readings))
+        assert counted > 0.0
