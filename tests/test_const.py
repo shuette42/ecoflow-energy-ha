@@ -683,6 +683,159 @@ class TestEnergySensorPrecision:
         )
 
 
+# Sensors that carry a numeric value but deliberately hold no precision, with
+# the reason. Anything added here is a decision someone made on purpose, which
+# is the point: the test below refuses the silent version of that decision.
+_PRECISION_WAIVED = {
+    "pcs_power_factor": (
+        "a ratio between 0 and 1, so any whole-number rounding erases it"
+    ),
+}
+
+# Key endings that can only ever name a whole number: a fault or error code, a
+# cycle counter, a cell count, a number of packs. None of them has a fractional
+# reading on any device or firmware, so all of them round to 0 places.
+_INTEGER_ONLY_SUFFIXES = (
+    "_code",
+    "_cycles",
+    "_count",
+    "_alive_num",
+    "_online_sum",
+)
+
+
+class TestIntegerSensorPrecision:
+    """Whole-number sensors must say so, or they are shown with a decimal.
+
+    The mirror image of the kWh rule above. Every parser in this integration
+    converts what it reads to a float (`_safe_float`, or `float(value)` in the
+    Delta MQTT path), so a cycle count of 412 reaches the entity as 412.0.
+    `_round_value` in sensor.py only casts back to int when a precision of 0
+    is set, and without it Home Assistant stores and shows "412.0" for a
+    counter that cannot have a fractional part (#220).
+
+    A count is the case where this is most obviously wrong: "3.0 battery
+    packs" is not a rounding artefact a user can ignore, it reads as though
+    the number could have been 3.5.
+    """
+
+    def _sensor_lists(self):
+        # Keyed on content, not on the variable name: a list whose elements
+        # are sensor definitions is a sensor list. A name pattern would
+        # silently skip a future `STREAM_MICRO_SENSORS`-style list, and a
+        # silently skipped list is exactly the regression this class exists
+        # to refuse.
+        from ecoflow_energy import const as _const
+
+        for name in dir(_const):
+            value = getattr(_const, name)
+            if (
+                isinstance(value, list)
+                and value
+                and all(
+                    isinstance(item, _const.EcoFlowSensorDef) for item in value
+                )
+            ):
+                yield name, value
+
+    def test_discovery_sees_every_known_sensor_list(self):
+        """The discovery above must never quietly find nothing.
+
+        If a refactor renames the definition class or turns the lists into
+        tuples, `_sensor_lists` would yield an empty set and every test in
+        this class would pass vacuously. Pinning the known lists as a floor
+        turns that silence into a failure; new lists are picked up without
+        being named here.
+        """
+        found = {name for name, _sensors in self._sensor_lists()}
+        expected = {
+            "POWEROCEAN_SENSORS",
+            "DELTA2MAX_SENSORS",
+            "SMARTPLUG_SENSORS",
+            "STREAM_SENSORS",
+            "STREAMAC5000_SENSORS",
+            "DELTA3_SENSORS",
+        }
+        missing = expected - found
+        assert not missing, (
+            f"sensor list discovery no longer sees {sorted(missing)}; "
+            "the precision rules below are not being checked against them"
+        )
+
+    def test_counters_and_codes_round_to_whole_numbers(self):
+        """The rule itself, keyed on what the sensor is rather than on a count.
+
+        A new `mppt3_fault_code` or `pack6_cycles` added without the attribute
+        fails here, and so does one that regresses to a fractional precision.
+        Naming is the only signal available at definition level, but it is a
+        reliable one for this family: every key ending this way is a code or a
+        tally, and none of them is enum-backed.
+        """
+        offenders = []
+        for list_name, sensors in self._sensor_lists():
+            for sensor in sensors:
+                if not sensor.key.endswith(_INTEGER_ONLY_SUFFIXES):
+                    continue
+                if sensor.options:
+                    # Resolves to a translated string, so it has no numeric
+                    # display for a precision to apply to.
+                    continue
+                if sensor.suggested_display_precision != 0:
+                    offenders.append(
+                        f"{list_name}.{sensor.key} "
+                        f"(precision={sensor.suggested_display_precision})"
+                    )
+
+        assert not offenders, (
+            "these sensors can only hold whole numbers but do not round to "
+            "one, so Home Assistant shows them with a decimal:\n  "
+            + "\n  ".join(offenders)
+            + "\n  add suggested_display_precision=0"
+        )
+
+    def test_every_numeric_sensor_states_its_precision(self):
+        """No numeric sensor may leave its precision to whatever the parser did.
+
+        Broader than the suffix rule and the reason #220 covered 42 definitions
+        rather than the three that were reported: an unset precision means the
+        stored state is whatever float the parser happened to produce. A sensor
+        that genuinely needs fractional digits belongs in _PRECISION_WAIVED with
+        its reason, so the next reader can see it was chosen and not forgotten.
+        """
+        undeclared = []
+        for list_name, sensors in self._sensor_lists():
+            for sensor in sensors:
+                if sensor.suggested_display_precision is not None:
+                    continue
+                if sensor.options:
+                    continue
+                if sensor.key in _PRECISION_WAIVED:
+                    continue
+                undeclared.append(f"{list_name}.{sensor.key}")
+
+        assert not undeclared, (
+            "numeric sensors without a display precision:\n  "
+            + "\n  ".join(undeclared)
+            + "\n  set suggested_display_precision, or waive it in "
+            "_PRECISION_WAIVED with a reason"
+        )
+
+    def test_the_waiver_list_stays_honest(self):
+        """A waiver for a sensor that no longer exists, or that has since been
+        given a precision, is a stale exemption that would hide the next one."""
+        by_key = {
+            sensor.key: sensor
+            for _name, sensors in self._sensor_lists()
+            for sensor in sensors
+        }
+
+        for waived in _PRECISION_WAIVED:
+            assert waived in by_key, f"{waived} is waived but no longer defined"
+            assert by_key[waived].suggested_display_precision is None, (
+                f"{waived} now declares a precision and no longer needs a waiver"
+            )
+
+
 class TestBinarySensors:
     def test_powerocean_binary_sensors(self):
         keys = _extract_sensor_keys("POWEROCEAN_BINARY_SENSORS")
