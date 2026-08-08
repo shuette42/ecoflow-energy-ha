@@ -45,6 +45,7 @@ from .const import (
     RAW_FRAME_MAX_BYTES,
     RAW_FRAME_PER_KEY_MAX,
 )
+from .ecoflow.broker import BrokerAddress, broker_from_credentials
 from .ecoflow.cloud_mqtt import EcoFlowMQTTClient
 from .ecoflow.frame_capture import (
     TypedFrameBuffer,
@@ -90,8 +91,10 @@ class UnroutedDeviceProbe:
         cert_account: str,
         cert_password: str,
         user_id: str,
+        broker: BrokerAddress | None = None,
     ) -> None:
         self.hass = hass
+        broker = broker or broker_from_credentials(None, wss_mode=True)
         self.device_sn = device_sn
         self.product_name = product_name
         self._user_id = user_id
@@ -123,6 +126,15 @@ class UnroutedDeviceProbe:
         self._disconnects = 0
         self._last_rc: int | None = None
         self._last_reason = ""
+        # A refused login and a dropped link are different events with
+        # different reason-code namespaces, and the refusal is the one that
+        # explains an empty capture. Kept apart because the link drops that
+        # follow a refusal would otherwise overwrite it - which is how a
+        # capture ends up reporting "Disconnected (rc=128)" for a session
+        # that was never established (issue #184).
+        self._refusals = 0
+        self._last_refusal_rc: int | None = None
+        self._last_refusal_reason = ""
         self._last_connect_at: float | None = None
         self._last_disconnect_at: float | None = None
         self._client = EcoFlowMQTTClient(
@@ -131,6 +143,9 @@ class UnroutedDeviceProbe:
             device_sn=device_sn,
             message_handler=self._on_message,
             user_id=user_id,
+            mqtt_host=broker.host,
+            mqtt_port=broker.port,
+            wss_path=broker.path,
             wss_mode=True,
             enhanced_mode=False,
             # This is the flag that makes "listen-only" true. enhanced_mode
@@ -185,9 +200,13 @@ class UnroutedDeviceProbe:
             established = self._connects
             last_rc = self._last_rc
             last_reason = self._last_reason
+            refusals = self._refusals
+            refusal_rc = self._last_refusal_rc
+            refusal_reason = self._last_refusal_reason
             last_connect_at = self._last_connect_at
             last_disconnect_at = self._last_disconnect_at
             out: dict[str, Any] = {
+                "broker": self._client.broker,
                 "connected": self._client.is_connected(),
                 "ever_connected": established > 0,
                 "connect_attempts": self._connect_calls,
@@ -196,6 +215,10 @@ class UnroutedDeviceProbe:
                 "capture_age_s": round(now - self._started_at),
             }
 
+        if refusals:
+            out["refusals"] = refusals
+            out["last_refusal_rc"] = refusal_rc
+            out["last_refusal_reason"] = refusal_reason
         if last_rc is not None:
             out["last_rc"] = last_rc
             out["last_rc_reason"] = last_reason
@@ -215,14 +238,24 @@ class UnroutedDeviceProbe:
         """
         if state["connected"]:
             return "listening"
+        broker = state["broker"]
         if not state["ever_connected"]:
+            if state.get("refusals"):
+                return (
+                    f"never connected - {broker} refused the login "
+                    f"(rc={state.get('last_refusal_rc')}, "
+                    f"{state.get('last_refusal_reason', 'unknown')})"
+                )
             rc = state.get("last_rc")
             if rc:
+                # No CONNACK ever arrived: the link went away while the login
+                # was in flight. A broker that will not serve these
+                # credentials at all looks exactly like this.
                 return (
-                    f"never connected - the broker refused the session "
-                    f"(rc={rc}, {state.get('last_rc_reason', 'unknown')})"
+                    f"never connected - {broker} closed the link before "
+                    f"answering the login (rc={rc})"
                 )
-            return "never connected - no reply from the broker"
+            return f"never connected - no reply from {broker}"
         return (
             "connected earlier and is down now - the frames below are what "
             "arrived while it was up"
@@ -250,6 +283,10 @@ class UnroutedDeviceProbe:
                 if status == "disconnected":
                     self._disconnects += 1
                     self._last_disconnect_at = time.time()
+                elif status == "connect_failed":
+                    self._refusals += 1
+                    self._last_refusal_rc = rc
+                    self._last_refusal_reason = message
                 self._last_rc = rc
                 self._last_reason = message
 
@@ -466,6 +503,11 @@ async def async_start_probes(
     if not cert_account or not cert_password:
         return []
 
+    # Same response, same account: the broker it names is the one these
+    # credentials are valid at, which is not the built-in default for every
+    # region (issue #184).
+    broker = broker_from_credentials(creds, wss_mode=True)
+
     probes: list[UnroutedDeviceProbe] = []
     for item in skipped_devices:
         sn = item.get("sn")
@@ -478,6 +520,7 @@ async def async_start_probes(
             cert_account,
             cert_password,
             user_id,
+            broker=broker,
         )
         started = await probe.async_start()
         # Kept either way. A probe dropped here leaves the diagnostics

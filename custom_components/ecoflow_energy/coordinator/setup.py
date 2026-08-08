@@ -24,6 +24,7 @@ from ..const import (
     DEVICE_TYPE_STREAM,
     HTTP_FALLBACK_INTERVAL_S,
 )
+from ..ecoflow.broker import broker_from_credentials
 from ..ecoflow.cloud_http import EcoFlowHTTPQuota
 from ..ecoflow.cloud_mqtt import EcoFlowMQTTClient
 from ..ecoflow.iot_api import IoTApiClient
@@ -87,6 +88,10 @@ class SetupMixin:
 
         cert_account = creds.get("certificateAccount") or creds.get("userName", "")
         cert_password = creds.get("certificatePassword") or creds.get("password", "")
+        # The response names the broker these credentials belong to. An
+        # account served outside the region the built-in default points at
+        # gets refused there, without ever saying why (issue #184).
+        broker = broker_from_credentials(creds, wss_mode=True)
 
         self._mqtt_client = EcoFlowMQTTClient(
             certificate_account=cert_account,
@@ -94,6 +99,9 @@ class SetupMixin:
             device_sn=self.device_sn,
             message_handler=self._on_mqtt_message,
             user_id=user_id,
+            mqtt_host=broker.host,
+            mqtt_port=broker.port,
+            wss_path=broker.path,
             wss_mode=True,
             enhanced_mode=(self._enhanced_mode and self.device_type == DEVICE_TYPE_POWEROCEAN),
             auth_error_handler=self._on_mqtt_auth_error,
@@ -150,12 +158,15 @@ class SetupMixin:
         if creds is not None:
             cert_account = creds.get("certificateAccount", "")
             cert_password = creds.get("certificatePassword", "")
+            broker = broker_from_credentials(creds, wss_mode=False)
             self._mqtt_client = EcoFlowMQTTClient(
                 certificate_account=cert_account,
                 certificate_password=cert_password,
                 device_sn=self.device_sn,
                 message_handler=self._on_mqtt_message,
                 user_id="",
+                mqtt_host=broker.host,
+                mqtt_port=broker.port,
                 wss_mode=False,
                 subscribe_data=subscribe_mqtt,
                 auth_error_handler=(

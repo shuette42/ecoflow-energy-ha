@@ -18,6 +18,7 @@ from typing import Any, Callable
 
 import paho.mqtt.client as mqtt
 
+from .broker import BrokerAddress
 from .clientid import generate_client_id
 from .const import (
     DEFAULT_COUNTER_RESET_INTERVAL,
@@ -76,6 +77,8 @@ class EcoFlowMQTTClient:
         *,
         user_id: str = "",
         mqtt_host: str = MQTT_HOST,
+        mqtt_port: int | None = None,
+        wss_path: str = MQTT_WSS_PATH,
         wss_mode: bool = True,
         enhanced_mode: bool = False,
         subscribe_data: bool = True,
@@ -90,7 +93,6 @@ class EcoFlowMQTTClient:
         self._cert_password = certificate_password
         self._device_sn = device_sn
         self._user_id = user_id
-        self._mqtt_host = mqtt_host
         self.message_handler = message_handler
         self.status_handler = status_handler
 
@@ -106,6 +108,19 @@ class EcoFlowMQTTClient:
 
         self._auth_error_handler = auth_error_handler
         self._wss_mode = wss_mode and bool(user_id)
+        # Resolved after _wss_mode, which decides the default port: the
+        # caller may hand over a WSS-capable user id and still end up on
+        # TCP. The address is kept as one value and rebound as a whole,
+        # because it is written from the event loop when credentials are
+        # refreshed and read on an executor thread at connect time, and a
+        # host from before a change paired with a port from after it would
+        # be an address that never existed. A lock is the wrong tool here:
+        # the reconnect path already holds one across a blocking connect.
+        self._broker = BrokerAddress(
+            mqtt_host,
+            mqtt_port or (MQTT_PORT_WSS if self._wss_mode else MQTT_PORT_TCP),
+            wss_path,
+        )
         self._enhanced_mode = enhanced_mode
         self._subscribe_data = subscribe_data
         # Hard guarantee that this connection never transmits. Enforced at
@@ -182,6 +197,16 @@ class EcoFlowMQTTClient:
         return self._user_id
 
     @property
+    def broker(self) -> str:
+        """Return ``host:port`` of the broker this client talks to.
+
+        Exported by the listen-only capture. A capture that never connected
+        is unreadable without it: the reason the broker gave is the same
+        whether the address was wrong or the credentials were.
+        """
+        return str(self._broker)
+
+    @property
     def wss_mode(self) -> bool:
         """Return whether this client uses WSS (True) or TCP (False)."""
         return self._wss_mode
@@ -201,6 +226,23 @@ class EcoFlowMQTTClient:
             except Exception as exc:
                 _LOGGER.debug("MQTT: live credential update failed: %s", exc)
 
+    def update_broker(self, broker: BrokerAddress) -> bool:
+        """Adopt a broker address from a refreshed credential response.
+
+        Returns whether it differs from the one in use. Credentials are
+        re-fetched several times over a long-running session, and each
+        answer names the broker those credentials are valid at. Keeping the
+        address from setup while adopting the new account and password
+        would leave the client dialling a server the credentials no longer
+        belong to, and the failure mode is the silent one this whole change
+        exists to end: the connection is refused and nothing says why.
+        """
+        if broker == self._broker:
+            return False
+        _LOGGER.debug("MQTT: broker changed to %s", broker)
+        self._broker = broker
+        return True
+
     def create_client(self) -> bool:
         """Create and configure the Paho MQTT client."""
         with self._client_lock:
@@ -215,17 +257,17 @@ class EcoFlowMQTTClient:
 
             if self._wss_mode:
                 client_id = generate_client_id(self._user_id)
-                _LOGGER.debug("WSS MQTT client (port %d)", MQTT_PORT_WSS)
+                _LOGGER.debug("WSS MQTT client (%s)", self.broker)
                 self.client = mqtt.Client(
                     mqtt.CallbackAPIVersion.VERSION2,
                     client_id=client_id,
                     transport="websockets",
                     clean_session=True,
                 )
-                self.client.ws_set_options(path=MQTT_WSS_PATH)
+                self.client.ws_set_options(path=self._broker.path)
             else:
                 client_id = f"ecoflow_ha_{self._device_sn}"
-                _LOGGER.debug("TCP MQTT client (port %d)", MQTT_PORT_TCP)
+                _LOGGER.debug("TCP MQTT client (%s)", self.broker)
                 self.client = mqtt.Client(
                     mqtt.CallbackAPIVersion.VERSION2,
                     client_id=client_id,
@@ -454,11 +496,11 @@ class EcoFlowMQTTClient:
                 if self.is_connected():
                     return True
 
-                port = MQTT_PORT_WSS if self._wss_mode else MQTT_PORT_TCP
                 keepalive = DEFAULT_WSS_KEEPALIVE if self._wss_mode else DEFAULT_MQTT_KEEPALIVE
 
-                _LOGGER.debug("Connecting to %s:%d (%s)", self._mqtt_host, port, "WSS" if self._wss_mode else "TCP")
-                self.client.connect(self._mqtt_host, port, keepalive)
+                _LOGGER.debug("Connecting to %s (%s)", self.broker, "WSS" if self._wss_mode else "TCP")
+                broker = self._broker
+                self.client.connect(broker.host, broker.port, keepalive)
                 return True
             except Exception as exc:
                 self._log_issue("warning", "MQTT connection error: %s", exc)
@@ -515,11 +557,11 @@ class EcoFlowMQTTClient:
                 return False
 
             try:
-                port = MQTT_PORT_WSS if self._wss_mode else MQTT_PORT_TCP
                 keepalive = DEFAULT_WSS_KEEPALIVE if self._wss_mode else DEFAULT_MQTT_KEEPALIVE
-                self.client.connect(self._mqtt_host, port, keepalive)
+                broker = self._broker
+                self.client.connect(broker.host, broker.port, keepalive)
                 self.client.loop_start()
-                _LOGGER.debug("Force-reconnect: success at %s:%s (%s)", self._mqtt_host, port, "WSS" if self._wss_mode else "TCP")
+                _LOGGER.debug("Force-reconnect: success at %s (%s)", self.broker, "WSS" if self._wss_mode else "TCP")
                 return True
             except Exception as exc:
                 self._log_retryable("Force-reconnect failed: %s", exc)

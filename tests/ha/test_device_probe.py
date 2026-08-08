@@ -22,6 +22,7 @@ from ecoflow_energy.device_probe import (
     async_start_probe_watchdog,
     async_start_probes,
 )
+from ecoflow_energy.ecoflow.broker import BrokerAddress
 from ecoflow_energy.ecoflow.cloud_mqtt import EcoFlowMQTTClient
 from ecoflow_energy.ecoflow.proto_encoding import (
     encode_field_bytes,
@@ -58,7 +59,11 @@ def _bundled_frame(total: int, *commands: tuple[int, int]) -> bytes:
 
 def _probe(hass: HomeAssistant) -> UnroutedDeviceProbe:
     with patch("ecoflow_energy.device_probe.EcoFlowMQTTClient") as mock_client:
-        mock_client.return_value = MagicMock()
+        client = MagicMock()
+        # Every connection report names the broker it is reporting about,
+        # so the stand-in has to answer that like the real client does.
+        client.broker = "mqtt-e.ecoflow.com:8084"
+        mock_client.return_value = client
         probe = UnroutedDeviceProbe(
             hass, SKIPPED_SN, "Ocean 2", "cert_account", "cert_password", "user123"
         )
@@ -625,6 +630,101 @@ class TestConnectionReport:
         assert "Auth failed" in report["last_rc_reason"]
         assert "never connected" in report["verdict"]
 
+    async def test_report_names_the_broker(self, hass: HomeAssistant) -> None:
+        """Which broker refused is half the answer (#184)."""
+        probe = _probe(hass)
+        probe._client.is_connected.return_value = False
+
+        assert probe.connection["broker"] == "mqtt-e.ecoflow.com:8084"
+
+    async def test_a_refusal_survives_the_drops_that_follow(
+        self, hass: HomeAssistant
+    ) -> None:
+        """The refusal explains the empty capture, the drops do not.
+
+        Paho reports a failed login and then keeps retrying, and every
+        retry ends in a disconnect callback. Storing only the last event
+        buries the one reason worth reading under thousands of copies of
+        "Disconnected (rc=128)".
+        """
+        probe = _probe(hass)
+        probe._client.is_connected.return_value = False
+
+        probe._on_status("connect_failed", 5, "Auth failed (credentials expired?)")
+        for _ in range(50):
+            probe._on_status("disconnected", 128, "Disconnected (rc=128)")
+
+        report = probe.connection
+        assert report["refusals"] == 1
+        assert report["last_refusal_rc"] == 5
+        assert "Auth failed" in report["last_refusal_reason"]
+        assert "refused the login" in report["verdict"]
+        assert "mqtt-e.ecoflow.com:8084" in report["verdict"]
+        # The drop counters stay honest alongside it.
+        assert report["disconnects"] == 50
+        assert report["last_rc"] == 128
+
+    async def test_a_refusal_does_not_survive_a_session_that_then_worked(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Once a session existed, the verdict is about losing it.
+
+        The refusal count stays visible, because a link that had to be
+        refused before it connected is worth seeing, but it must not
+        caption a capture that did collect frames.
+        """
+        probe = _probe(hass)
+        probe._client.is_connected.return_value = False
+
+        probe._on_status("connect_failed", 5, "Auth failed")
+        probe._on_status("connected", 0, "Connected")
+        probe._on_status("disconnected", 128, "Disconnected (rc=128)")
+
+        report = probe.connection
+        assert report["ever_connected"] is True
+        assert report["refusals"] == 1
+        assert report["verdict"] == (
+            "connected earlier and is down now - the frames below are what "
+            "arrived while it was up"
+        )
+
+    async def test_the_probe_reports_the_address_it_was_built_with(
+        self, hass: HomeAssistant
+    ) -> None:
+        """End to end through the real client, not through a stand-in."""
+        probe = UnroutedDeviceProbe(
+            hass,
+            SKIPPED_SN,
+            "Ocean 2",
+            "cert_account",
+            "cert_password",
+            "user123",
+            BrokerAddress("mqtt-a.ecoflow.com", 8085, "/mqtt-us"),
+        )
+
+        assert probe.connection["broker"] == "mqtt-a.ecoflow.com:8085"
+
+    async def test_a_link_that_dies_before_connack_is_not_called_a_refusal(
+        self, hass: HomeAssistant
+    ) -> None:
+        """What #184 actually looked like: no CONNACK ever arrived.
+
+        Calling that "the broker refused the session" invents a refusal
+        nobody sent, and points the reader at the credentials when the
+        address is just as likely.
+        """
+        probe = _probe(hass)
+        probe._client.is_connected.return_value = False
+
+        probe._on_status("disconnected", 128, "Disconnected (rc=128)")
+
+        report = probe.connection
+        assert "refusals" not in report
+        assert report["verdict"] == (
+            "never connected - mqtt-e.ecoflow.com:8084 closed the link "
+            "before answering the login (rc=128)"
+        )
+
     async def test_no_reply_at_all_is_distinguishable(
         self, hass: HomeAssistant
     ) -> None:
@@ -635,7 +735,10 @@ class TestConnectionReport:
         report = probe.connection
         assert report["ever_connected"] is False
         assert "last_rc" not in report
-        assert report["verdict"] == "never connected - no reply from the broker"
+        assert (
+            report["verdict"]
+            == "never connected - no reply from mqtt-e.ecoflow.com:8084"
+        )
 
     async def test_a_lost_session_reads_as_lost_not_as_never(
         self, hass: HomeAssistant
@@ -762,6 +865,41 @@ class TestStartProbes:
             SKIPPED_SN,
             "SM3ATEST00000001",
         ]
+
+    async def test_probe_connects_to_the_broker_the_account_was_given(
+        self, hass: HomeAssistant
+    ) -> None:
+        """A capture aimed at the wrong region never connects (#184)."""
+        api = MagicMock()
+        api.login = AsyncMock(return_value=True)
+        api.get_mqtt_credentials = AsyncMock(
+            return_value={
+                "certificateAccount": "acc",
+                "certificatePassword": "pw",
+                "url": "mqtt-a.ecoflow.com",
+                "port": 8085,
+                "path": "/mqtt-us",
+            }
+        )
+        api.user_id = "user123"
+
+        with (
+            patch("ecoflow_energy.ecoflow.app_api.AppApiClient", return_value=api),
+            patch.object(
+                UnroutedDeviceProbe, "async_start", AsyncMock(return_value=True)
+            ),
+            patch(
+                "ecoflow_energy.device_probe.EcoFlowMQTTClient"
+            ) as mock_client,
+        ):
+            await async_start_probes(
+                hass, [{"sn": SKIPPED_SN, "product_name": ""}], "a@b.c", "pw"
+            )
+
+        kwargs = mock_client.call_args.kwargs
+        assert kwargs["mqtt_host"] == "mqtt-a.ecoflow.com"
+        assert kwargs["mqtt_port"] == 8085
+        assert kwargs["wss_path"] == "/mqtt-us"
 
     async def test_device_without_serial_is_skipped(
         self, hass: HomeAssistant

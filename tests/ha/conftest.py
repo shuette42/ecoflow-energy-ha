@@ -208,6 +208,12 @@ def mock_mqtt_client():
         instance.disconnect.return_value = None
         instance.cert_account = "test_cert_account"
         instance.wss_mode = False
+        # A string, because diagnostics serialises it, and False, because a
+        # credential refresh only forces a reconnect when the address
+        # actually moved. A MagicMock is truthy and would make every
+        # refresh look like a region change.
+        instance.broker = "mqtt-e.ecoflow.com:8883"
+        instance.update_broker.return_value = False
         instance.last_connect_time = 0
         instance.reconnect_attempts = 0
         instance.publish.return_value = True

@@ -374,6 +374,14 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
             "uptime_s": mqtt_uptime_s,
             "reconnect_attempts": mqtt_reconnect_attempts,
             "wss_mode": mqtt_client.wss_mode if mqtt_client else False,
+            # Which server this device is actually dialling. The address
+            # comes from the account's own credentials, so an account
+            # served from another region uses a different one - and when
+            # that goes wrong the device simply never comes online, which
+            # looks the same from the outside as a device with nothing to
+            # say (issue #184). The unsupported-device capture reports the
+            # same field; a supported device needs it just as much.
+            "broker": mqtt_client.broker if mqtt_client else None,
         },
         "data_freshness": {
             "last_mqtt_age_s": last_mqtt_age_s,

@@ -2422,6 +2422,98 @@ class TestEnhancedSetup:
         # Cleanup
         await coordinator.async_shutdown()
 
+    async def test_enhanced_setup_uses_the_broker_from_the_credentials(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+        mock_mqtt_client,
+    ) -> None:
+        """Accounts outside the default region get their own broker (#184).
+
+        Connecting to the built-in host with credentials issued elsewhere
+        fails without a CONNACK, which reads exactly like a device with
+        nothing to say.
+        """
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        with (
+            patch(
+                "custom_components.ecoflow_energy.ecoflow.app_api.AppApiClient",
+            ) as cls,
+            patch(
+                "custom_components.ecoflow_energy.coordinator.setup."
+                "EcoFlowMQTTClient",
+            ) as client_cls,
+        ):
+            instance = cls.return_value
+            instance.login = AsyncMock(return_value=True)
+            instance.user_id = "user123"
+            instance.get_mqtt_credentials = AsyncMock(
+                return_value={
+                    "userName": "acc",
+                    "password": "pw",
+                    "url": "mqtt-a.ecoflow.com",
+                    "port": 8085,
+                    "path": "/mqtt-us",
+                }
+            )
+
+            await coordinator.async_setup()
+
+        kwargs = client_cls.call_args.kwargs
+        assert kwargs["mqtt_host"] == "mqtt-a.ecoflow.com"
+        assert kwargs["mqtt_port"] == 8085
+        assert kwargs["wss_path"] == "/mqtt-us"
+
+        await coordinator.async_shutdown()
+
+    async def test_developer_setup_uses_the_broker_from_the_credentials(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+        mock_mqtt_client,
+        mock_http_client,
+    ) -> None:
+        """Standard Mode reads the same field, on its own transport (#184).
+
+        The developer API answers with ``protocol: mqtts``, so this is also
+        the case that proves the transport is never taken from the
+        response: no websocket path is passed at all.
+        """
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        with (
+            patch(
+                "custom_components.ecoflow_energy.coordinator.setup.IoTApiClient",
+            ) as api_cls,
+            patch(
+                "custom_components.ecoflow_energy.coordinator.setup."
+                "EcoFlowMQTTClient",
+            ) as client_cls,
+        ):
+            api_cls.return_value.get_mqtt_credentials = AsyncMock(
+                return_value={
+                    "certificateAccount": "acc",
+                    "certificatePassword": "pw",
+                    "url": "mqtt-a.ecoflow.com",
+                    "port": "1884",
+                    "protocol": "mqtts",
+                }
+            )
+            await coordinator.async_setup()
+
+        kwargs = client_cls.call_args.kwargs
+        assert kwargs["mqtt_host"] == "mqtt-a.ecoflow.com"
+        assert kwargs["mqtt_port"] == 1884
+        assert kwargs["wss_mode"] is False
+        assert "wss_path" not in kwargs
+
+        await coordinator.async_shutdown()
+
     async def test_enhanced_setup_credential_failure(
         self,
         hass: HomeAssistant,
@@ -5827,6 +5919,11 @@ class TestAppAuthMode:
         coordinator._auth_method = AUTH_METHOD_APP
         coordinator._mqtt_client = MagicMock()
         coordinator._mqtt_client.cert_account = "old-account"
+        coordinator._mqtt_client.wss_mode = False
+        # The address is unchanged unless a test says otherwise. A bare
+        # MagicMock is truthy, which would make every refresh look like the
+        # account had been moved to another server.
+        coordinator._mqtt_client.update_broker.return_value = False
         return coordinator, entry
 
     async def test_reactive_refresh_missing_credentials_triggers_reauth(
@@ -6385,6 +6482,11 @@ class TestDeveloperCredentialRefresh:
         coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_DELTA_DEVICE)
         coordinator._mqtt_client = MagicMock()
         coordinator._mqtt_client.cert_account = "old-account"
+        coordinator._mqtt_client.wss_mode = False
+        # The address is unchanged unless a test says otherwise. A bare
+        # MagicMock is truthy, which would make every refresh look like the
+        # account had been moved to another server.
+        coordinator._mqtt_client.update_broker.return_value = False
         return coordinator
 
     async def test_reactive_refresh_without_mqtt_client_is_noop(
@@ -6479,6 +6581,66 @@ class TestDeveloperCredentialRefresh:
 
         coordinator._mqtt_client.update_credentials.assert_not_called()
         assert coordinator.event_log == []
+
+    async def test_refresh_adopts_a_broker_that_moved(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """A rotated certificate can name a different server (#184).
+
+        Adopting the new credentials while keeping the old address is the
+        one combination that cannot work, so a moved address forces a
+        reconnect exactly like a changed account does.
+        """
+        coordinator = self._coordinator(hass, standard_config_entry)
+        coordinator._mqtt_client.update_broker.return_value = True
+        coordinator._iot_api = MagicMock()
+        coordinator._iot_api.refresh_credentials = AsyncMock(return_value={
+            "certificateAccount": "old-account",
+            "certificatePassword": "rotated-password",
+            "url": "mqtt-a.ecoflow.com",
+            "port": 8085,
+            "protocol": "mqtts",
+        })
+
+        with (
+            patch.object(hass, "async_add_executor_job") as mock_exec,
+            patch(
+                "custom_components.ecoflow_energy.coordinator.time.monotonic",
+                return_value=6000.0,
+            ),
+        ):
+            await coordinator._proactive_credential_refresh()
+
+        coordinator._mqtt_client.update_broker.assert_called_once_with(
+            ("mqtt-a.ecoflow.com", 8085, "/mqtt")
+        )
+        mock_exec.assert_called_once_with(
+            coordinator._mqtt_client.force_reconnect
+        )
+
+    async def test_reactive_refresh_adopts_the_broker_too(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """The path taken after an auth failure reads the same field."""
+        coordinator = self._coordinator(hass, standard_config_entry)
+        coordinator._iot_api = MagicMock()
+        coordinator._iot_api.refresh_credentials = AsyncMock(return_value={
+            "certificateAccount": "new-account",
+            "certificatePassword": "pw",
+            "url": "mqtt-a.ecoflow.com",
+            "port": 8085,
+            "protocol": "mqtts",
+        })
+
+        await coordinator._refresh_mqtt_credentials()
+
+        coordinator._mqtt_client.update_broker.assert_called_once_with(
+            ("mqtt-a.ecoflow.com", 8085, "/mqtt")
+        )
 
     async def test_proactive_refresh_same_account_no_reconnect(
         self,

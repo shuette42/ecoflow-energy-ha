@@ -14,12 +14,31 @@ from ..const import (
     CREDENTIAL_MAX_AGE_S,
     CREDENTIAL_REFRESH_CHECK_S,
 )
+from ..ecoflow.broker import broker_from_credentials
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class CredentialsMixin:
     """Mixin providing reactive and proactive MQTT credential refresh."""
+
+    def _adopt_broker(self, credentials: dict | None) -> bool:
+        """Take the broker address out of a refreshed credential response.
+
+        Every one of these responses names the server its credentials are
+        valid at, and the account that gets a new certificate can get a new
+        server with it. Adopting the credentials while keeping the address
+        from setup is the one combination that cannot work, and it fails
+        the way this whole class of bug fails: refused, silently, forever
+        (issue #184). Returns whether the address changed, which the
+        proactive path uses to decide on a reconnect.
+        """
+        if self._mqtt_client is None:
+            return False
+        broker = broker_from_credentials(
+            credentials, wss_mode=self._mqtt_client.wss_mode
+        )
+        return self._mqtt_client.update_broker(broker)
 
     # ------------------------------------------------------------------
     # Delta MQTT auth error handling (credential refresh on rc=5)
@@ -64,6 +83,7 @@ class CredentialsMixin:
                 cert_account = creds.get("certificateAccount") or creds.get("userName", "")
                 cert_password = creds.get("certificatePassword") or creds.get("password", "")
                 self._mqtt_client.update_credentials(cert_account, cert_password)
+                self._adopt_broker(creds)
                 self._credential_obtained_ts = time.monotonic()
                 self._log_event("credential_refresh_ok", "app-auth")
                 _LOGGER.debug("App-auth MQTT credentials refreshed for %s", self.device_sn[:4])
@@ -81,6 +101,7 @@ class CredentialsMixin:
                     creds.get("certificateAccount", ""),
                     creds.get("certificatePassword", ""),
                 )
+                self._adopt_broker(creds)
                 self._credential_obtained_ts = time.monotonic()
                 self._log_event("credential_refresh_ok", "developer-auth")
                 _LOGGER.debug("MQTT credentials refreshed for %s", self.device_sn[:4])
@@ -155,9 +176,10 @@ class CredentialsMixin:
                 cert_account = creds.get("certificateAccount") or creds.get("userName", "")
                 cert_password = creds.get("certificatePassword") or creds.get("password", "")
                 self._mqtt_client.update_credentials(cert_account, cert_password)
+                broker_changed = self._adopt_broker(creds)
                 self._credential_obtained_ts = time.monotonic()
                 self._log_event("credential_proactive_ok", "app-auth")
-                if cert_account != old_account:
+                if cert_account != old_account or broker_changed:
                     _LOGGER.debug("Proactive refresh: credentials changed for %s - force reconnect", self.device_sn[:4])
                     self.hass.async_add_executor_job(self._mqtt_client.force_reconnect)
             else:
@@ -170,9 +192,10 @@ class CredentialsMixin:
                 cert_account = creds.get("certificateAccount", "")
                 cert_password = creds.get("certificatePassword", "")
                 self._mqtt_client.update_credentials(cert_account, cert_password)
+                broker_changed = self._adopt_broker(creds)
                 self._credential_obtained_ts = time.monotonic()
                 self._log_event("credential_proactive_ok", "developer-auth")
-                if cert_account != old_account:
+                if cert_account != old_account or broker_changed:
                     _LOGGER.debug("Proactive refresh: credentials changed for %s - force reconnect", self.device_sn[:4])
                     self.hass.async_add_executor_job(self._mqtt_client.force_reconnect)
             else:

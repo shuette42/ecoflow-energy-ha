@@ -88,6 +88,59 @@ class TestClientCreation:
         assert client.create_client() is False
 
 
+class TestBrokerAddress:
+    """The address the credentials name, not a compile-time constant (#184)."""
+
+    def test_defaults_stay_the_built_in_broker(self):
+        client = _make_client(wss_mode=True, user_id="user123")
+        assert client.broker == "mqtt-e.ecoflow.com:8084"
+
+    def test_tcp_default_port(self):
+        client = _make_client(wss_mode=False)
+        assert client.broker == "mqtt-e.ecoflow.com:8883"
+
+    def test_wss_falls_back_to_tcp_port_without_user_id(self):
+        """No user id means no WSS, so the WSS port would be wrong."""
+        client = _make_client(wss_mode=True, user_id="")
+        assert client.broker.endswith(":8883")
+
+    @patch("ecoflow_energy.ecoflow.cloud_mqtt.mqtt.Client")
+    def test_connect_uses_the_given_host_and_port(self, mock_mqtt_cls):
+        mock_mqtt_cls.return_value = MagicMock()
+        client = _make_client(
+            wss_mode=True,
+            user_id="user123",
+            mqtt_host="mqtt-a.ecoflow.com",
+            mqtt_port=8085,
+            wss_path="/mqtt-us",
+        )
+        client.create_client()
+        client.connect()
+
+        client.client.connect.assert_called_once()
+        host, port, _keepalive = client.client.connect.call_args[0]
+        assert (host, port) == ("mqtt-a.ecoflow.com", 8085)
+        client.client.ws_set_options.assert_called_once_with(path="/mqtt-us")
+        assert client.broker == "mqtt-a.ecoflow.com:8085"
+
+    @patch("ecoflow_energy.ecoflow.cloud_mqtt.mqtt.Client")
+    def test_force_reconnect_keeps_the_address(self, mock_mqtt_cls):
+        """A reconnect that fell back to the default would be silent."""
+        mock_mqtt_cls.return_value = MagicMock()
+        client = _make_client(
+            wss_mode=True,
+            user_id="user123",
+            mqtt_host="mqtt-a.ecoflow.com",
+            mqtt_port=8085,
+        )
+        client.create_client()
+
+        assert client.force_reconnect() is True
+
+        host, port, _keepalive = client.client.connect.call_args[0]
+        assert (host, port) == ("mqtt-a.ecoflow.com", 8085)
+
+
 class TestConnectionStatus:
     def test_not_connected_by_default(self):
         client = _make_client()
