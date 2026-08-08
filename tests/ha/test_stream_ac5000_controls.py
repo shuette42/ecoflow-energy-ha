@@ -282,7 +282,7 @@ class TestPowerSetpoints:
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
     ) -> None:
         coordinator = _coordinator(hass, enhanced_config_entry)
-        entity = _number(coordinator, "max_discharging_power")
+        entity = _number(coordinator, "scheduled_discharge_power_w")
 
         await entity.async_set_native_value(300)
 
@@ -303,7 +303,7 @@ class TestPowerSetpoints:
         coordinator = _coordinator(
             hass, enhanced_config_entry, data={"work_mode": "custom"}
         )
-        entity = _number(coordinator, "max_discharging_power")
+        entity = _number(coordinator, "scheduled_discharge_power_w")
 
         await entity.async_set_native_value(500)
 
@@ -326,7 +326,7 @@ class TestPowerSetpoints:
             "scheduled_charge_soc_target": None,
         }
         coordinator = _coordinator(hass, enhanced_config_entry, data=cleared)
-        entity = _number(coordinator, "max_discharging_power")
+        entity = _number(coordinator, "scheduled_discharge_power_w")
 
         await entity.async_set_native_value(500)
 
@@ -341,7 +341,7 @@ class TestPowerSetpoints:
     ) -> None:
         data = dict(REPORTED, scheduled_discharge_enabled=False)
         coordinator = _coordinator(hass, enhanced_config_entry, data=data)
-        entity = _number(coordinator, "max_discharging_power")
+        entity = _number(coordinator, "scheduled_discharge_power_w")
 
         await entity.async_set_native_value(300)
 
@@ -358,7 +358,7 @@ class TestPowerSetpoints:
             scheduled_discharge_end_min=630,
         )
         coordinator = _coordinator(hass, enhanced_config_entry, data=data)
-        entity = _number(coordinator, "max_discharging_power")
+        entity = _number(coordinator, "scheduled_discharge_power_w")
 
         await entity.async_set_native_value(300)
 
@@ -372,7 +372,7 @@ class TestPowerSetpoints:
         """It decides what charging does, so a power change must not reset it."""
         data = dict(REPORTED, scheduled_charge_soc_target=80)
         coordinator = _coordinator(hass, enhanced_config_entry, data=data)
-        entity = _number(coordinator, "max_grid_charging_power")
+        entity = _number(coordinator, "scheduled_charge_power_w")
 
         await entity.async_set_native_value(600)
 
@@ -385,7 +385,7 @@ class TestPowerSetpoints:
     ) -> None:
         """A charge task names the device it applies to, a discharge one does not."""
         coordinator = _coordinator(hass, enhanced_config_entry)
-        entity = _number(coordinator, "max_grid_charging_power")
+        entity = _number(coordinator, "scheduled_charge_power_w")
 
         await entity.async_set_native_value(600)
 
@@ -398,7 +398,7 @@ class TestPowerSetpoints:
     ) -> None:
         """A 0 W discharge task parks the battery; no task at all does not."""
         coordinator = _coordinator(hass, enhanced_config_entry)
-        entity = _number(coordinator, "max_discharging_power")
+        entity = _number(coordinator, "scheduled_discharge_power_w")
 
         await entity.async_set_native_value(0)
 
@@ -411,7 +411,7 @@ class TestPowerSetpoints:
         """Two whole-day tasks overlap and the device then acts on neither."""
         data = dict(REPORTED, scheduled_charge_power_w=600)
         coordinator = _coordinator(hass, enhanced_config_entry, data=data)
-        entity = _number(coordinator, "max_discharging_power")
+        entity = _number(coordinator, "scheduled_discharge_power_w")
 
         await entity.async_set_native_value(300)
 
@@ -427,9 +427,56 @@ class TestPowerSetpoints:
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
     ) -> None:
         coordinator = _coordinator(hass, enhanced_config_entry)
-        entity = _number(coordinator, "max_discharging_power")
+        entity = _number(coordinator, "scheduled_discharge_power_w")
 
         await entity.async_set_native_value(300)
+
+        assert len(coordinator.async_send_proto_set_command.call_args_list) == 1
+
+    async def test_the_removed_task_stops_being_reported(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """The device never retracts a deleted task, so this has to.
+
+        It stops mentioning the task instead, and the parser's clear-everything
+        branch needs an empty task list, which the replacement task prevents.
+        """
+        data = dict(
+            REPORTED,
+            scheduled_charge_power_w=600,
+            scheduled_charge_enabled=True,
+            scheduled_charge_start_min=0,
+            scheduled_charge_end_min=1439,
+            scheduled_charge_soc_target=80,
+        )
+        coordinator = _coordinator(hass, enhanced_config_entry, data=data)
+        entity = _number(coordinator, "scheduled_discharge_power_w")
+
+        await entity.async_set_native_value(300)
+
+        for key in (
+            "scheduled_charge_power_w",
+            "scheduled_charge_enabled",
+            "scheduled_charge_start_min",
+            "scheduled_charge_end_min",
+        ):
+            assert coordinator.data[key] is None
+            assert coordinator.device_data[key] is None
+        # The app's charge limit. Clearing it too would reset a task set to
+        # stop at 80% into charging to 100% on the next charge write.
+        assert coordinator.data["scheduled_charge_soc_target"] == 80
+        assert coordinator.data["scheduled_discharge_power_w"] == 300
+
+    async def test_a_removed_task_is_not_removed_twice(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        data = dict(REPORTED, scheduled_charge_power_w=600)
+        coordinator = _coordinator(hass, enhanced_config_entry, data=data)
+        entity = _number(coordinator, "scheduled_discharge_power_w")
+
+        await entity.async_set_native_value(300)
+        coordinator.async_send_proto_set_command.reset_mock()
+        await entity.async_set_native_value(400)
 
         assert len(coordinator.async_send_proto_set_command.call_args_list) == 1
 
@@ -440,12 +487,14 @@ class TestPowerSetpoints:
         data = dict(REPORTED, scheduled_charge_power_w=600)
         coordinator = _coordinator(hass, enhanced_config_entry, data=data)
         coordinator.async_send_proto_set_command.return_value = False
-        entity = _number(coordinator, "max_discharging_power")
+        entity = _number(coordinator, "scheduled_discharge_power_w")
 
         with pytest.raises(HomeAssistantError):
             await entity.async_set_native_value(300)
 
         assert len(coordinator.async_send_proto_set_command.call_args_list) == 1
+        # The task may well still be there, so it stays reported.
+        assert coordinator.data["scheduled_charge_power_w"] == 600
 
     async def test_warns_when_the_mode_cannot_act_on_it(
         self,
@@ -456,7 +505,7 @@ class TestPowerSetpoints:
         """The write succeeds and the device ignores it, which is worth saying."""
         data = dict(REPORTED, work_mode="self_powered")
         coordinator = _coordinator(hass, enhanced_config_entry, data=data)
-        entity = _number(coordinator, "max_discharging_power")
+        entity = _number(coordinator, "scheduled_discharge_power_w")
 
         await entity.async_set_native_value(300)
 
@@ -470,7 +519,7 @@ class TestPowerSetpoints:
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         coordinator = _coordinator(hass, enhanced_config_entry)
-        entity = _number(coordinator, "max_discharging_power")
+        entity = _number(coordinator, "scheduled_discharge_power_w")
 
         await entity.async_set_native_value(300)
 
@@ -481,7 +530,7 @@ class TestPowerSetpoints:
     ) -> None:
         coordinator = _coordinator(hass, enhanced_config_entry)
         coordinator.async_send_proto_set_command = AsyncMock(return_value=False)
-        entity = _number(coordinator, "max_discharging_power")
+        entity = _number(coordinator, "scheduled_discharge_power_w")
 
         with pytest.raises(HomeAssistantError):
             await entity.async_set_native_value(300)

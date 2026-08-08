@@ -924,8 +924,8 @@ STREAMAC5000_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
 # {1: on/off, 2: reserve %}, so the switch and the number below write it
 # together the way the SoC limits do. Field 19 is the backup socket.
 STREAMAC5000_SWITCHES: list[EcoFlowSwitchDef] = [
-    EcoFlowSwitchDef("backup_reserve_switch", "Backup Reserve", "backup_reserve_enabled", "mdi:battery-lock"),
-    EcoFlowSwitchDef("backup_socket_switch", "Backup Socket", "backup_socket_enabled", "mdi:power-socket-eu"),
+    EcoFlowSwitchDef("backup_reserve_switch", "Backup Reserve", "backup_reserve_enabled", "mdi:battery-lock", enhanced_only=True),
+    EcoFlowSwitchDef("backup_socket_switch", "Backup Socket", "backup_socket_enabled", "mdi:power-socket-eu", enhanced_only=True),
 ]
 
 # All app-channel only: the device is not reachable through the Developer API,
@@ -939,16 +939,17 @@ STREAMAC5000_SWITCHES: list[EcoFlowSwitchDef] = [
 # Output Power and Max Grid Input Power sensors for an optimiser to read and
 # respect, and the output one additionally has an account ceiling that only
 # EcoFlow can raise.
+#
+# Each is keyed and named after the state key it writes, so the control and the
+# sensor reporting it back read the same. That rules out the shared
+# `max_charge_soc` / `min_discharge_soc` number keys, translated "Max Charge
+# SoC" and "Discharge limit", because correcting those renames the entity for
+# every Delta 3 and PowerOcean owner. It also rules out the app's "Max
+# discharging power" and "Max grid charging power", which are a maximum only
+# while a smart meter is linked.
 STREAMAC5000_NUMBERS: list[EcoFlowNumberDef] = [
-    EcoFlowNumberDef("max_discharging_power", "Max Discharging Power", "scheduled_discharge_power_w", "W", "mdi:battery-arrow-down-outline", 0, 2500, 50, enhanced_only=True),
-    EcoFlowNumberDef("max_grid_charging_power", "Max Grid Charging Power", "scheduled_charge_power_w", "W", "mdi:battery-arrow-up-outline", 0, 2500, 50, enhanced_only=True),
-    # Keyed after their own state keys rather than reusing the shared
-    # `max_charge_soc` / `min_discharge_soc` number keys. Those two are
-    # translated "Max Charge SoC" and "Discharge limit", so reusing them would
-    # put two differently-worded names on one pair of settings, and correcting
-    # the shared translation would rename the entity for every Delta 3 and
-    # PowerOcean owner. This way each number carries the same name as the
-    # sensor that reports it back.
+    EcoFlowNumberDef("scheduled_discharge_power_w", "Scheduled Discharge Power", "scheduled_discharge_power_w", "W", "mdi:battery-arrow-down-outline", 0, 2500, 50, enhanced_only=True),
+    EcoFlowNumberDef("scheduled_charge_power_w", "Scheduled Charge Power", "scheduled_charge_power_w", "W", "mdi:battery-arrow-up-outline", 0, 2500, 50, enhanced_only=True),
     EcoFlowNumberDef("max_charge_soc_pct", "Max Charge SoC", "max_charge_soc_pct", "%", "mdi:battery-charging-high", 50, 100, 1, enhanced_only=True),
     EcoFlowNumberDef("min_discharge_soc_pct", "Min Discharge SoC", "min_discharge_soc_pct", "%", "mdi:battery-arrow-down", 0, 50, 1, enhanced_only=True),
     EcoFlowNumberDef("backup_reserve", "Backup Reserve", "backup_reserve_pct", "%", "mdi:battery-lock", 0, 100, 5, enhanced_only=True),

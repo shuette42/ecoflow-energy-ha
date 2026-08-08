@@ -496,8 +496,8 @@ class EcoFlowNumber(
                 payload, label="stream_ac5000_backup_reserve"
             )
 
-        if key in ("max_grid_charging_power", "max_discharging_power"):
-            kind = "charge" if key == "max_grid_charging_power" else "discharge"
+        if key in ("scheduled_charge_power_w", "scheduled_discharge_power_w"):
+            kind = "charge" if key == "scheduled_charge_power_w" else "discharge"
             other = "discharge" if kind == "charge" else "charge"
             # One task, always. Charge and discharge are separate tasks and
             # both cover the whole day, so leaving the other kind in place
@@ -513,12 +513,32 @@ class EcoFlowNumber(
                     label=f"stream_ac5000_{other}_task_remove",
                 ):
                     return False
+                self._clear_stream_ac5000_task(other)
             payload = self._build_stream_ac5000_task(kind, int(value), device_sn, data)
             return await self.coordinator.async_send_proto_set_command(
                 payload, label=f"stream_ac5000_{kind}_power"
             )
 
         raise_set_unsupported(self.entity_id)
+
+    def _clear_stream_ac5000_task(self, kind: str) -> None:
+        """Forget a task this integration has just removed.
+
+        The device stops mentioning a deleted task rather than reporting it
+        empty, and the parser's clear-everything branch only fires on an empty
+        task list, which the replacement task keeps it from being. So nothing
+        would ever retract these values and the setpoint entity would go on
+        showing a task that no longer exists.
+
+        `scheduled_charge_soc_target` deliberately survives: it is the app's
+        charge limit, the next charge write reads it back, and clearing it
+        would reset a task set to stop at 80% into charging to 100%.
+        """
+        for suffix in ("power_w", "enabled", "start_min", "end_min"):
+            state_key = f"scheduled_{kind}_{suffix}"
+            self.coordinator.set_device_value(state_key, None)
+            if self.coordinator.data is not None:
+                self.coordinator.data[state_key] = None
 
     def _build_stream_ac5000_task(
         self, kind: str, power_w: int, device_sn: str, data: dict[str, Any]
