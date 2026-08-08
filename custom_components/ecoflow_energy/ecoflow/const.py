@@ -95,11 +95,22 @@ _SN_PREFIX_MAP = {
     # PowerOcean parser so entities are created; field layout to be
     # confirmed via reporter diagnostics on a Plus unit.
     "R371": DEVICE_TYPE_POWEROCEAN,
+    # PowerOcean Plus 20kW. It sits between the 15kW `R371` and the 30kW
+    # `R374` in the app's device registry, on the same product type and the
+    # same `product_smart_re_307` family stem as both. (#205)
+    "R372": DEVICE_TYPE_POWEROCEAN,
     "R374": DEVICE_TYPE_POWEROCEAN,
     "HJ3C": DEVICE_TYPE_POWEROCEAN,
     "R351": DEVICE_TYPE_DELTA,
     "R331": DEVICE_TYPE_DELTA,
     "D3M1": DEVICE_TYPE_DELTA3,
+    # DELTA 3 Max, the variant below the Max Plus. The app's own device
+    # registry puts it in the same product family as the three prefixes
+    # above and below: `product_ps_delta_delta_3_m` against `_m_p` for the
+    # Max Plus, `_c` for the Classic and the bare stem for the base unit.
+    # It has no port priority, which is why it is listed in
+    # `_SN_PREFIX_EXCLUDED_KEYS`. (#216)
+    "D3N1": DEVICE_TYPE_DELTA3,
     "P321": DEVICE_TYPE_DELTA3,
     # Base DELTA 3 (#182): confirmed from a reporter capture in Enhanced mode.
     # The unit sends the same three frames as a Max Plus (32/2 battery, 32/50

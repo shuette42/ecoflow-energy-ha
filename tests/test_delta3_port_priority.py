@@ -250,8 +250,13 @@ class TestVariantGating:
 
         assert self.PORT_PRIORITY_SWITCHES <= keys
 
-    @pytest.mark.parametrize("serial", ["P231TEST00000001", "P321TEST00000001"])
+    @pytest.mark.parametrize(
+        "serial",
+        ["P231TEST00000001", "P321TEST00000001", "D3N1TEST00000001"],
+    )
     def test_other_delta3_variants_do_not(self, serial: str) -> None:
+        """The DELTA 3 Max is here because the app gates the menu on a
+        serial starting D3M or D51, and D3N1 is neither."""
         switch_keys = {d.key for d in filter_defs_for_serial(DELTA3_SWITCHES, serial)}
         number_keys = {d.key for d in filter_defs_for_serial(DELTA3_NUMBERS, serial)}
 

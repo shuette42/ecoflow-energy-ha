@@ -1,7 +1,7 @@
 # Delta 3 Max Plus - Entity Reference
 
 Full list of all entities created for Delta 3 devices. The entity set is shared
-across the generation: Delta 3 Max Plus (`D3M1`, `P321`) and base DELTA 3 (`P231`).
+across the generation: Delta 3 Max Plus (`D3M1`, `P321`), DELTA 3 Max (`D3N1`) and base DELTA 3 (`P231`).
 
 **Totals:** 47 sensors, 7 switches, 4 numbers, 5 selects. Units whose serial
 starts with `D3M` add the port priority set: 3 switches, 3 numbers and 1 binary
@@ -9,7 +9,7 @@ sensor.
 
 > Entities marked with *diagnostic* appear in the diagnostics section of the device page.
 
-> **Other Delta 3 models:** only the Delta 3 Max Plus has been checked against real hardware end to end. A base DELTA 3 (`P231`) was confirmed to push the same three frames and to decode through the same field map, but a smaller unit has fewer ports, so port entities it does not have stay empty. Raw quota diagnostics are available to help extend the mapping.
+> **Other Delta 3 models:** only the Delta 3 Max Plus has been checked against real hardware end to end. A base DELTA 3 (`P231`) was confirmed to push the same three frames and to decode through the same field map, but a smaller unit has fewer ports, so port entities it does not have stay empty. The DELTA 3 Max (`D3N1`) is recognized on the strength of the product family it belongs to rather than a capture, so the same applies to it and a confirmation from an owner is welcome. It does not get the port priority controls, because the EcoFlow app offers that menu only on serials starting `D3M` or `D51`. Raw quota diagnostics are available to help extend the mapping.
 
 ---
 

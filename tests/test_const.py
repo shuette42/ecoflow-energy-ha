@@ -137,6 +137,24 @@ class TestDeviceTypeRouting:
         decodes through the same binding, so it shares the device type."""
         assert get_device_type("", "P231TEST00000001") == "delta3"
 
+    def test_delta3_max_by_d3n1_sn_prefix(self) -> None:
+        """#216: the DELTA 3 Max sits in the same product family as the three
+        Delta 3 prefixes already routed here.
+
+        The app's own device registry names it `product_ps_delta_delta_3_m`,
+        against `_m_p` for the Max Plus, `_c` for the Classic and the bare
+        stem for the base unit. All four are the same line.
+        """
+        assert get_device_type("", "D3N1TEST00000001") == "delta3"
+
+    def test_powerocean_plus_20kw_by_r372_sn_prefix(self) -> None:
+        """#205: the 20kW Plus sits between the 15kW R371 and the 30kW R374.
+
+        Same product type and same `product_smart_re_307` family stem as both
+        of its neighbours, which are supported.
+        """
+        assert get_device_type("", "R372TEST00000001") == "powerocean"
+
     def test_base_delta3_display_name(self) -> None:
         # A base DELTA 3 reports an empty product name, same as the BK series.
         assert get_device_name("", "P231TEST00000001") == "DELTA 3 (0001)"

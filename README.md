@@ -40,9 +40,9 @@
 | Device | Serial prefix | Sensors | Controls | Energy Sensors | Update Rate |
 |:---|:---|:---:|:---:|:---:|:---|
 | **PowerOcean** - Home Battery | `HJ31` `HJ32` `HJ35` `J32B` `J32D`\* `J32E`\* | 222 + 5 binary | 2 numbers, 1 select (Enhanced only) | 6 (solar, grid import/export, battery charge/discharge, home) | ~30 s standard / ~3 s enhanced |
-| **PowerOcean Plus** - 3-phase Hybrid | `R371`\* `R374`\* `HJ3C`\* | 222 + 5 binary | 2 numbers, 1 select (Enhanced only) | 6 (solar, grid import/export, battery charge/discharge, home) | ~3 s enhanced |
+| **PowerOcean Plus** - 3-phase Hybrid | `R371`\* `R372`\* `R374`\* `HJ3C`\* | 222 + 5 binary | 2 numbers, 1 select (Enhanced only) | 6 (solar, grid import/export, battery charge/discharge, home) | ~3 s enhanced |
 | **Delta 2 Max** - Portable Power | `R351` `R331` | 94 + 4 binary | 7 switches, 8 numbers | 4 (solar 1+2, AC in/out) | ~30 s standard (+ MQTT push) |
-| **Delta 3** - Portable Power | `D3M1` `P321` `P231` | 47 | 7 switches, 4 numbers, 5 selects (selects and 1 number Enhanced only); `D3M` serials add 3 switches, 3 numbers and 1 binary sensor for port priority | 4 (solar 1+2, AC in, output) | ~30 s standard / ~2 s enhanced |
+| **Delta 3** - Portable Power | `D3M1` `D3N1` `P321` `P231` | 47 | 7 switches, 4 numbers, 5 selects (selects and 1 number Enhanced only); `D3M` serials add 3 switches, 3 numbers and 1 binary sensor for port priority | 4 (solar 1+2, AC in, output) | ~30 s standard / ~2 s enhanced |
 | **Smart Plug** - Switchable Outlet | `HW52` | 11 + 1 binary | 1 switch, 2 numbers | 1 (total energy) | ~30 s standard / ~3 s enhanced |
 | **Stream** - AC-coupled Battery | `BK31` `BK11` `BK41` `BK51` `BK61` | 54 + 2 binary | 1 number (Enhanced only) | 2 default (battery charge/discharge), 6 optional diagnostic (solar/home, PV 1-4) | ~30 s standard / ~3 s enhanced |
 | **Stream Micro** - Grid-tie Inverter | `BK01`\* | 21 | - | 4 optional diagnostic (PV 1-4) | ~3 s enhanced |
@@ -65,7 +65,7 @@
 
 3-phase grid monitoring (voltage, current, power per phase) · MPPT per-string tracking (up to 4 strings, device-dependent) · **Multi-battery-pack support** (up to 5 BP5000 packs - per-pack SoC, power, SoH, cycles, temperatures, lifetime energy) · Battery diagnostics (cell temps & voltages, MOSFET temps) · EMS state, work mode, feed mode, grid status, power factor · System diagnostics (fault codes, connectivity status, capacity limits)
 
-**PowerOcean Plus** (`R371`, `R374`, `HJ3C`) are the higher-power 3-phase hybrid units. They use the same entity set as a standard PowerOcean and are supported in Enhanced Mode. Beyond a standard unit they report per-phase **reactive power** (var) and **apparent power** (VA), and drive **MPPT strings 3 and 4**. These entities ship disabled by default so that standard units are not left with permanently empty sensors, so enable the ones you need after adding a Plus device. Field coverage is based on diagnostics from live Plus hardware; if your unit reports a value that no entity picks up, the raw data is available via **Download Diagnostics**.
+**PowerOcean Plus** (`R371`, `R372`, `R374`, `HJ3C`) are the higher-power 3-phase hybrid units. They use the same entity set as a standard PowerOcean and are supported in Enhanced Mode. Beyond a standard unit they report per-phase **reactive power** (var) and **apparent power** (VA), and drive **MPPT strings 3 and 4**. These entities ship disabled by default so that standard units are not left with permanently empty sensors, so enable the ones you need after adding a Plus device. Field coverage is based on diagnostics from live Plus hardware; if your unit reports a value that no entity picks up, the raw data is available via **Download Diagnostics**.
 
 **Enhanced Mode controls** (verified against the official EcoFlow app, byte-for-byte wire compatible):
 
@@ -141,14 +141,14 @@ Download the [latest release](https://github.com/shuette42/ecoflow-energy-ha/rel
 | | Standard | Enhanced |
 |:---|:---|:---|
 | **Credentials** | Access Key + Secret Key ([Developer Portal](https://developer.ecoflow.com)) | EcoFlow email + password (same as mobile app) |
-| **Devices** | All except the Enhanced-only serials (`J32D`, `J32E`, `R371`, `R374`, `HJ3C`) | All supported devices |
+| **Devices** | All except the Enhanced-only serials (`J32D`, `J32E`, `R371`, `R372`, `R374`, `HJ3C`) | All supported devices |
 | **Update rate** | ~30 s HTTP polling (+ MQTT push for Delta/Smart Plug) | ~2-4 s real-time via WSS MQTT |
 | **Delta / Smart Plug controls** | All switches and numbers | All switches and numbers |
 | **PowerOcean controls** | Read-only sensors only | Full energy strategy controls (Backup Reserve, Solar Surplus Threshold, Work Mode) |
 | **Stability** | Official EcoFlow API - supported and stable | Community-driven - unofficial, use at your own risk |
 | **Best for** | Reliable long-term operation | Real-time monitoring, fast automations, PowerOcean control |
 
-**Standard Mode** uses the official EcoFlow IoT Developer API. Apply for free API keys at [developer.ecoflow.com](https://developer.ecoflow.com). Note: the European PowerOcean variants (`J32D`, `J32E`) and the PowerOcean Plus units (`R371`, `R374`, `HJ3C`) are currently not exposed through the Developer API and cannot be linked to an API key (error 1006). These devices work in Enhanced Mode only.
+**Standard Mode** uses the official EcoFlow IoT Developer API. Apply for free API keys at [developer.ecoflow.com](https://developer.ecoflow.com). Note: the European PowerOcean variants (`J32D`, `J32E`) and the PowerOcean Plus units (`R371`, `R372`, `R374`, `HJ3C`) are currently not exposed through the Developer API and cannot be linked to an API key (error 1006). These devices work in Enhanced Mode only.
 
 **Enhanced Mode** connects with your EcoFlow email and password. No Developer API keys needed. Faster updates, but this is an unofficial, community-driven protocol based on observed behaviour that may change without notice. Stream-family devices report an empty product name, so they are identified by their serial prefix (`BK01`, `BK11`, `BK31`, `BK41`, `BK51`, `BK61`) and appear under the correct model name in Home Assistant in both modes. The Stream Micro (`BK01`) is not exposed through the Developer API at all and therefore needs Enhanced Mode.
 
