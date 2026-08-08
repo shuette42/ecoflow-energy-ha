@@ -1,11 +1,15 @@
 """Select platform for EcoFlow Energy.
 
-Two settings so far: the PowerOcean work mode (self-use, AI schedule) and the
-Delta 3 LCD screen timeout. Both use the same optimistic-lock pattern as
-switch.py and number.py - after a SET the local state is updated immediately
-and device updates for the same key are ignored for five seconds.
+Three settings so far: the PowerOcean work mode (self-use, AI schedule), the
+STREAM AC 5000 work mode, and the Delta 3 LCD screen timeout. All use the same
+optimistic-lock pattern as switch.py and number.py - after a SET the local
+state is updated immediately and device updates for the same key are ignored
+for five seconds.
 
-The two differ in what the device reports back. The work mode arrives as a
+The two work modes share the entity key and nothing else: their modes and
+their wire values are unrelated, so each has its own branch.
+
+They also differ in what the device reports back. A work mode arrives as a
 label the parser has already resolved; the screen timeout arrives as a number
 of seconds, because the parser keeps the device's own vocabulary so that a
 diagnostics download shows what was actually said. A definition carrying a
@@ -30,13 +34,18 @@ from .const import (
     DELTA3_SELECTS,
     DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
+    DEVICE_TYPE_STREAM_AC5000,
     DOMAIN,
     EcoFlowSelectDef,
     POWEROCEAN_SELECTS,
+    STREAMAC5000_SELECTS,
     filter_defs_for_serial,
 )
 from .coordinator import EcoFlowDeviceCoordinator
 from .ecoflow.delta3_commands import build_select_command as build_delta3_select_command
+from .ecoflow.stream_ac5000_commands import (
+    build_work_mode_payload as build_stream_ac5000_work_mode_payload,
+)
 from .entity import raise_set_failed, raise_set_unsupported
 
 _LOGGER = logging.getLogger(__name__)
@@ -152,6 +161,20 @@ class EcoFlowSelect(CoordinatorEntity[EcoFlowDeviceCoordinator], SelectEntity):
             return
 
         if self._definition.key == "work_mode":
+            if self.coordinator.device_type == DEVICE_TYPE_STREAM_AC5000:
+                # A different device family with its own modes, so it does not
+                # share the PowerOcean wire values.
+                payload = build_stream_ac5000_work_mode_payload(
+                    option, self.coordinator.device_sn
+                )
+                ok = await self.coordinator.async_send_proto_set_command(
+                    payload, label="stream_ac5000_work_mode"
+                )
+                if not ok:
+                    raise_set_failed(self.entity_id)
+                self._apply_optimistic_select(option)
+                return
+
             wire_value = WORK_MODE_TO_INT.get(option)
             if wire_value is None:
                 raise_set_unsupported(self.entity_id)
@@ -223,4 +246,6 @@ def _get_select_defs(device_type: str) -> list[EcoFlowSelectDef]:
         return POWEROCEAN_SELECTS
     if device_type == DEVICE_TYPE_DELTA3:
         return DELTA3_SELECTS
+    if device_type == DEVICE_TYPE_STREAM_AC5000:
+        return STREAMAC5000_SELECTS
     return []

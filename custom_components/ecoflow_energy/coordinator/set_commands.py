@@ -14,8 +14,18 @@ from ..const import (
     POWEROCEAN_SOC_STATE_KEYS,
 )
 from ..ecoflow.frame_capture import sanitize_frame
+from ..entity import as_known_int
 
 _LOGGER = logging.getLogger(__name__)
+
+
+class DeviceValueNotReported(Exception):
+    """A write needs a value the device has not reported yet.
+
+    Raised where the value is read rather than where the user-facing error is
+    built, because the read has to happen inside the write lock. Platforms
+    translate it into `raise_set_not_ready`.
+    """
 
 
 class SetCommandsMixin:
@@ -261,6 +271,185 @@ class SetCommandsMixin:
             _LOGGER.warning("Work-mode SET failed: %d (%s)", work_mode, self.device_sn[:4])
             self._log_event("set_work_mode_fail", str(work_mode))
         return ok
+
+    # ------------------------------------------------------------------
+    # STREAM AC 5000 config writes (254/38)
+    #
+    # Each one reads what the device currently reports before it can send,
+    # so the read and the send are one operation under
+    # `_stream_ac5000_config_lock`. A caller that read first and sent after
+    # would interleave with the other entity writing the same config field.
+    # The values sent are seeded into the store before the lock is released,
+    # for the same reason: a waiter deciding what to send must not see the
+    # state from before the write it is queued behind.
+    # ------------------------------------------------------------------
+
+    async def async_set_stream_ac5000_soc_limits(
+        self, *, charge: int | None = None, discharge: int | None = None,
+    ) -> bool:
+        """Write config field 29, which holds both SoC limits.
+
+        The limit not being changed travels at its current value. Pass the one
+        being set; the other is read here.
+        """
+        from ..ecoflow.stream_ac5000_commands import build_soc_limits_payload
+
+        async with self._stream_ac5000_config_lock:
+            data = self.data or {}
+            if charge is None:
+                charge = as_known_int(data.get("max_charge_soc_pct"))
+            if discharge is None:
+                discharge = as_known_int(data.get("min_discharge_soc_pct"))
+            if charge is None or discharge is None:
+                raise DeviceValueNotReported("SoC limits")
+            # Raises ValueError on a pair the device would refuse.
+            payload = build_soc_limits_payload(charge, discharge, self.device_sn)
+            if not await self.async_send_proto_set_command(
+                payload, label="stream_ac5000_soc_limits"
+            ):
+                return False
+            self._seed_stream_ac5000(
+                max_charge_soc_pct=charge, min_discharge_soc_pct=discharge
+            )
+            return True
+
+    async def async_set_stream_ac5000_backup_reserve(
+        self, *, enabled: bool | None = None, reserve_pct: int | None = None,
+    ) -> bool:
+        """Write config field 30, which holds the on/off flag and the level.
+
+        The switch owns the flag and a number owns the level, so this is the
+        one config write whose two halves live on different platforms.
+        """
+        from ..ecoflow.stream_ac5000_commands import build_backup_reserve_payload
+
+        async with self._stream_ac5000_config_lock:
+            data = self.data or {}
+            if enabled is None:
+                enabled = data.get("backup_reserve_enabled")
+            if reserve_pct is None:
+                reserve_pct = as_known_int(data.get("backup_reserve_pct"))
+            if not isinstance(enabled, bool) or reserve_pct is None:
+                raise DeviceValueNotReported("backup reserve")
+            payload = build_backup_reserve_payload(
+                enabled, reserve_pct, self.device_sn
+            )
+            if not await self.async_send_proto_set_command(
+                payload, label="stream_ac5000_backup_reserve"
+            ):
+                return False
+            self._seed_stream_ac5000(
+                backup_reserve_enabled=enabled, backup_reserve_pct=reserve_pct
+            )
+            return True
+
+    async def async_set_stream_ac5000_task_power(
+        self, kind: str, power_w: int,
+    ) -> bool:
+        """Replace the scheduled task with one of `kind` at `power_w`.
+
+        This device has no direct power setpoint: a scheduled task is the
+        setpoint. Charge and discharge are separate whole-day tasks, so the
+        other kind is removed before the new one is written, or the device
+        sees overlapping time periods and acts on neither.
+        """
+        from ..ecoflow.stream_ac5000_commands import (
+            MINUTES_PER_DAY,
+            TASK_REMOVE,
+            build_task_payload,
+        )
+
+        other = "discharge" if kind == "charge" else "charge"
+        async with self._stream_ac5000_config_lock:
+            data = self.data or {}
+            if as_known_int(data.get(f"scheduled_{other}_power_w")) is not None:
+                if not await self.async_send_proto_set_command(
+                    build_task_payload(
+                        other, 0, MINUTES_PER_DAY - 1, 0, self.device_sn,
+                        operation=TASK_REMOVE,
+                    ),
+                    label=f"stream_ac5000_{other}_task_remove",
+                ):
+                    # The task may well still be there, so writing the new one
+                    # would leave exactly the overlapping pair.
+                    return False
+                self._clear_stream_ac5000_task(other)
+            payload = self._build_stream_ac5000_task(kind, power_w, data)
+            if not await self.async_send_proto_set_command(
+                payload, label=f"stream_ac5000_{kind}_power"
+            ):
+                return False
+            self._seed_stream_ac5000(**{f"scheduled_{kind}_power_w": power_w})
+            return True
+
+    def _seed_stream_ac5000(self, **values: Any) -> None:
+        """Record values just sent, in both the store and the snapshot."""
+        for key, value in values.items():
+            self.set_device_value(key, value)
+            if self.data is not None:
+                self.data[key] = value
+
+    def _clear_stream_ac5000_task(self, kind: str) -> None:
+        """Forget a task this integration has just removed.
+
+        The device stops mentioning a deleted task rather than reporting it
+        empty, and the parser's clear-everything branch only fires on an empty
+        task list, which the replacement task keeps it from being. So nothing
+        would ever retract these values and the setpoint entity would go on
+        showing a task that no longer exists.
+
+        `scheduled_charge_soc_target` deliberately survives: it is the app's
+        charge limit, the next charge write reads it back, and clearing it
+        would reset a task set to stop at 80% into charging to 100%.
+        """
+        for suffix in ("power_w", "enabled", "start_min", "end_min"):
+            state_key = f"scheduled_{kind}_{suffix}"
+            self.set_device_value(state_key, None)
+            if self.data is not None:
+                self.data[state_key] = None
+
+    def _build_stream_ac5000_task(
+        self, kind: str, power_w: int, data: dict[str, Any]
+    ) -> bytes:
+        """Build the task frame that carries a power setpoint.
+
+        It is always a whole-day, enabled task, so the value asked for is the
+        value that acts. The only thing carried over from a reported task is
+        the charge target SoC, which decides what charging does rather than
+        whether it happens.
+
+        Zero is a real setpoint, not an absence: a 0 W discharge task parks the
+        battery, while removing every task leaves it on its own 200 W base
+        output.
+        """
+        from ..ecoflow.stream_ac5000_commands import (
+            MINUTES_PER_DAY,
+            TASK_ADD,
+            TASK_UPDATE,
+            build_task_payload,
+        )
+
+        mode = data.get("work_mode")
+        if mode is not None and mode != "custom":
+            _LOGGER.warning(
+                "Setting the %s power on %s while it is in %s mode: a "
+                "scheduled task is only acted on in custom mode, so the "
+                "device will accept this and may do nothing with it",
+                kind, self.device_sn[:4], mode,
+            )
+
+        reported = as_known_int(data.get(f"scheduled_{kind}_power_w")) is not None
+        soc_target = data.get("scheduled_charge_soc_target")
+        return build_task_payload(
+            kind,
+            0,
+            MINUTES_PER_DAY - 1,
+            power_w,
+            self.device_sn,
+            enabled=True,
+            operation=TASK_UPDATE if reported else TASK_ADD,
+            charge_soc_target=soc_target if isinstance(soc_target, int) else 100,
+        )
 
     async def async_send_proto_set_command(
         self, payload: bytes, label: str,

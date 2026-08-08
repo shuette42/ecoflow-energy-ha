@@ -920,6 +920,45 @@ STREAMAC5000_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
     EcoFlowBinarySensorDef("backup_socket_enabled", "Backup Socket", None, "mdi:power-socket-eu", "diagnostic"),
 ]
 
+# Both captured from the app: config field 30 carries the backup reserve as
+# {1: on/off, 2: reserve %}, so the switch and the number below write it
+# together the way the SoC limits do. Field 19 is the backup socket.
+STREAMAC5000_SWITCHES: list[EcoFlowSwitchDef] = [
+    EcoFlowSwitchDef("backup_reserve_switch", "Backup Reserve", "backup_reserve_enabled", "mdi:battery-lock", enhanced_only=True),
+    EcoFlowSwitchDef("backup_socket_switch", "Backup Socket", "backup_socket_enabled", "mdi:power-socket-eu", enhanced_only=True),
+]
+
+# All app-channel only: the device is not reachable through the Developer API,
+# so with developer keys these would be created and never work.
+#
+# The two power controls write a scheduled task, which is this device's power
+# setpoint. Bounds are the model's rated 2500 W, a constant rather than a
+# reading: the app's own limits sit at or below it and are not enforced here,
+# because a setpoint above one is acknowledged and then silently clamped by the
+# device rather than rejected. Those limits are exposed as the Max Grid-tied
+# Output Power and Max Grid Input Power sensors for an optimiser to read and
+# respect, and the output one additionally has an account ceiling that only
+# EcoFlow can raise.
+#
+# Each is keyed and named after the state key it writes, so the control and the
+# sensor reporting it back read the same. That rules out the shared
+# `max_charge_soc` / `min_discharge_soc` number keys, translated "Max Charge
+# SoC" and "Discharge limit", because correcting those renames the entity for
+# every Delta 3 and PowerOcean owner. It also rules out the app's "Max
+# discharging power" and "Max grid charging power", which are a maximum only
+# while a smart meter is linked.
+STREAMAC5000_NUMBERS: list[EcoFlowNumberDef] = [
+    EcoFlowNumberDef("scheduled_discharge_power_w", "Scheduled Discharge Power", "scheduled_discharge_power_w", "W", "mdi:battery-arrow-down-outline", 0, 2500, 50, enhanced_only=True),
+    EcoFlowNumberDef("scheduled_charge_power_w", "Scheduled Charge Power", "scheduled_charge_power_w", "W", "mdi:battery-arrow-up-outline", 0, 2500, 50, enhanced_only=True),
+    EcoFlowNumberDef("max_charge_soc_pct", "Max Charge SoC", "max_charge_soc_pct", "%", "mdi:battery-charging-high", 50, 100, 1, enhanced_only=True),
+    EcoFlowNumberDef("min_discharge_soc_pct", "Min Discharge SoC", "min_discharge_soc_pct", "%", "mdi:battery-arrow-down", 0, 50, 1, enhanced_only=True),
+    EcoFlowNumberDef("backup_reserve", "Backup Reserve", "backup_reserve_pct", "%", "mdi:battery-lock", 0, 100, 5, enhanced_only=True),
+]
+
+STREAMAC5000_SELECTS: list[EcoFlowSelectDef] = [
+    EcoFlowSelectDef("work_mode", "Work Mode", "work_mode", ("self_powered", "intelligent_plus", "custom"), "mdi:cog-outline", enhanced_only=True),
+]
+
 
 # The Stream Micro (BK01) is a grid-tie PV inverter: two PV strings, one
 # single-phase grid connection, no battery, no AC outlets. It speaks the same

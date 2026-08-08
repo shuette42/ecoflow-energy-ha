@@ -21,6 +21,7 @@ from .const import (
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
+    DEVICE_TYPE_STREAM_AC5000,
     DOMAIN,
     EcoFlowNumberDef,
     filter_defs_for_serial,
@@ -29,12 +30,14 @@ from .const import (
     SMARTPLUG_NUMBER_COMMANDS,
     SMARTPLUG_NUMBERS,
     STREAM_NUMBERS,
+    STREAMAC5000_NUMBERS,
 )
-from .coordinator import EcoFlowDeviceCoordinator
+from .coordinator import DeviceValueNotReported, EcoFlowDeviceCoordinator
 from .entity import (
     EcoFlowWriteGateMixin,
     raise_set_failed,
     raise_set_not_ready,
+    raise_set_rejected,
     raise_set_unsupported,
 )
 from .ecoflow.delta3_commands import (
@@ -271,6 +274,14 @@ class EcoFlowNumber(
                 raise_set_failed(self.entity_id)
             self._apply_optimistic_number(value)
             return
+        if self.coordinator.device_type == DEVICE_TYPE_STREAM_AC5000:
+            ok = await self._async_set_stream_ac5000_value(
+                self._definition.key, value
+            )
+            if not ok:
+                raise_set_failed(self.entity_id)
+            self._apply_optimistic_number(value)
+            return
         if self.coordinator.device_type == DEVICE_TYPE_DELTA3:
             stem = self._port_priority_stem()
             if stem is not None:
@@ -428,6 +439,44 @@ class EcoFlowNumber(
         # wrong thing to tell the user.
         raise_set_unsupported(self.entity_id)
 
+    async def _async_set_stream_ac5000_value(self, key: str, value: float) -> bool:
+        """Set a STREAM AC 5000 number via a 254/38 config write.
+
+        Every one of these reads a value the device reported before it can
+        send: two of the config fields hold two settings each, and a power
+        setpoint is a remove-then-write across two frames. The coordinator
+        owns those sequences so they cannot interleave with each other.
+        """
+        try:
+            if key == "max_charge_soc_pct":
+                return await self.coordinator.async_set_stream_ac5000_soc_limits(
+                    charge=int(value)
+                )
+            if key == "min_discharge_soc_pct":
+                return await self.coordinator.async_set_stream_ac5000_soc_limits(
+                    discharge=int(value)
+                )
+            if key == "backup_reserve":
+                return await self.coordinator.async_set_stream_ac5000_backup_reserve(
+                    reserve_pct=int(value)
+                )
+            if key in ("scheduled_charge_power_w", "scheduled_discharge_power_w"):
+                kind = "charge" if key == "scheduled_charge_power_w" else "discharge"
+                return await self.coordinator.async_set_stream_ac5000_task_power(
+                    kind, int(value)
+                )
+        except DeviceValueNotReported:
+            # Sending a guessed counterpart would change a setting the user did
+            # not touch. Temporary, so not "unsupported".
+            raise_set_not_ready(self.entity_id)
+        except ValueError as err:
+            # The device holds both SoC limits in one field and refuses a pair
+            # where they cross. Both entity ranges reach 50, so the user can
+            # ask for exactly that.
+            raise_set_rejected(self.entity_id, str(err))
+
+        raise_set_unsupported(self.entity_id)
+
 
 def _get_number_defs(device_type: str) -> list[EcoFlowNumberDef]:
     """Return number definitions based on device type."""
@@ -441,4 +490,6 @@ def _get_number_defs(device_type: str) -> list[EcoFlowNumberDef]:
         return STREAM_NUMBERS
     if device_type == DEVICE_TYPE_DELTA3:
         return DELTA3_NUMBERS
+    if device_type == DEVICE_TYPE_STREAM_AC5000:
+        return STREAMAC5000_NUMBERS
     return []

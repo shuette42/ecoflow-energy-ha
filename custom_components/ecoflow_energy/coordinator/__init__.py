@@ -6,5 +6,10 @@
 import time  # noqa: F401
 
 from .core import DeviceSnapshot, EcoFlowDeviceCoordinator
+from .set_commands import DeviceValueNotReported
 
-__all__ = ["DeviceSnapshot", "EcoFlowDeviceCoordinator"]
+__all__ = [
+    "DeviceSnapshot",
+    "DeviceValueNotReported",
+    "EcoFlowDeviceCoordinator",
+]

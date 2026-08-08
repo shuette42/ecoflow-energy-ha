@@ -32,23 +32,29 @@ from .const import (
     DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
+    DEVICE_TYPE_STREAM_AC5000,
     DOMAIN,
     EcoFlowSwitchDef,
     filter_defs_for_serial,
     SMARTPLUG_SWITCH_COMMANDS,
     SMARTPLUG_SWITCHES,
     STREAM_SWITCHES,
+    STREAMAC5000_SWITCHES,
     SWITCH_COMMANDS_R331,
     SWITCH_COMMANDS_R351,
     SWITCH_DECLARATIVE_R331,
     SWITCH_DECLARATIVE_R351,
 )
-from .coordinator import EcoFlowDeviceCoordinator
+from .coordinator import DeviceValueNotReported, EcoFlowDeviceCoordinator
+from .ecoflow.stream_ac5000_commands import (
+    build_backup_socket_payload as build_stream_ac5000_backup_socket_payload,
+)
 from .ecoflow.parsers.smartplug import build_plug_switch_payload
 from .entity import (
     EcoFlowWriteGateMixin,
     raise_set_failed,
     raise_set_not_ready,
+    raise_set_rejected,
     raise_set_unsupported,
 )
 
@@ -189,6 +195,13 @@ class EcoFlowSwitch(
             self._apply_optimistic(turn_on)
             return
 
+        if self.coordinator.device_type == DEVICE_TYPE_STREAM_AC5000:
+            ok = await self._async_set_stream_ac5000(turn_on)
+            if not ok:
+                raise_set_failed(self.entity_id)
+            self._apply_optimistic(turn_on)
+            return
+
         command = self._build_command(turn_on)
         if command is None:
             raise_set_unsupported(self.entity_id)
@@ -212,6 +225,34 @@ class EcoFlowSwitch(
             if self.coordinator.data is not None:
                 self.coordinator.data[state_key] = turn_on
         self._apply_optimistic(turn_on)
+
+    async def _async_set_stream_ac5000(self, turn_on: bool) -> bool:
+        """Send one of the two STREAM AC 5000 switches as a config write."""
+        device_sn = self.coordinator.device_sn
+        key = self._definition.key
+
+        if key == "backup_socket_switch":
+            payload = build_stream_ac5000_backup_socket_payload(turn_on, device_sn)
+            return await self.coordinator.async_send_proto_set_command(
+                payload, label="stream_ac5000_backup_socket"
+            )
+
+        if key == "backup_reserve_switch":
+            # Config field 30 holds the on/off and the reserve level, so the
+            # level the user set has to travel with the switch. The number
+            # entity owns that level, so this is the one config write whose
+            # two halves sit on different platforms and the coordinator is
+            # the only place that can serialise them.
+            try:
+                return await self.coordinator.async_set_stream_ac5000_backup_reserve(
+                    enabled=turn_on
+                )
+            except DeviceValueNotReported:
+                raise_set_not_ready(self.entity_id)
+            except ValueError as err:
+                raise_set_rejected(self.entity_id, str(err))
+
+        raise_set_unsupported(self.entity_id)
 
     def _apply_optimistic(self, turn_on: bool) -> None:
         """Apply optimistic lock: immediately reflect the new state."""
@@ -303,6 +344,8 @@ def _get_switch_defs(device_type: str) -> list[EcoFlowSwitchDef]:
         return STREAM_SWITCHES
     if device_type == DEVICE_TYPE_DELTA3:
         return DELTA3_SWITCHES
+    if device_type == DEVICE_TYPE_STREAM_AC5000:
+        return STREAMAC5000_SWITCHES
     return []
 
 

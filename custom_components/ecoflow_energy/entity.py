@@ -50,6 +50,44 @@ def raise_set_not_ready(entity_id: str) -> NoReturn:
     )
 
 
+def raise_set_rejected(entity_id: str, reason: str) -> NoReturn:
+    """Report a value this device will not accept, before anything is sent.
+
+    Some settings constrain each other: a discharge limit has to stay below
+    the charge limit, for instance. A builder that refuses such a pair raises
+    ``ValueError``, which Home Assistant renders as "Unknown error" with a
+    traceback. The user asked for something the device cannot do, which is
+    worth saying plainly.
+    """
+    raise HomeAssistantError(
+        translation_domain=DOMAIN,
+        translation_key="set_value_rejected",
+        translation_placeholders={"entity": entity_id, "reason": reason},
+    )
+
+
+def as_known_int(value: Any) -> int | None:
+    """Return an integral setting as an int, or None if it is not known.
+
+    Settings that constrain each other have to be read back out of the
+    coordinator before they can be written together, and the value found
+    there may be a float: Home Assistant hands ``number.set_value`` a float,
+    and the optimistic write stores exactly that for the lock window and
+    until the device echoes the change. A strict ``isinstance(v, int)`` on
+    the counterpart therefore fails for several seconds after any number
+    write, turning a value that is merely in flight into a refused write.
+
+    A None here means "not reported yet", so it pairs with
+    ``raise_set_not_ready`` rather than ``raise_set_unsupported``.
+
+    ``bool`` is excluded because it is an ``int`` in Python and never a
+    percentage.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return int(value) if float(value).is_integer() else None
+
+
 class EcoFlowWriteGateMixin:
     """State-write gate shared by all EcoFlow entity platforms.
 

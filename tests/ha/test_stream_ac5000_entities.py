@@ -10,6 +10,8 @@ fill it is permanent for that owner.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
 from homeassistant.core import HomeAssistant
@@ -32,8 +34,11 @@ from custom_components.ecoflow_energy.const import (
     DOMAIN,
     MODE_ENHANCED,
     STREAM_MICRO_EXCLUDED_KEYS,
+    STREAMAC5000_NUMBERS,
     STREAMAC5000_POWER_TO_ENERGY,
+    STREAMAC5000_SELECTS,
     STREAMAC5000_SENSORS,
+    STREAMAC5000_SWITCHES,
     filter_defs_for_serial,
 )
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
@@ -41,11 +46,14 @@ from custom_components.ecoflow_energy.ecoflow.const import (
     get_device_name,
     get_device_type,
 )
+from custom_components.ecoflow_energy.number import async_setup_entry as number_setup
+from custom_components.ecoflow_energy.select import async_setup_entry as select_setup
 from custom_components.ecoflow_energy.sensor import (
     _get_sensor_defs,
     _reported,
     async_setup_entry as sensor_setup,
 )
+from custom_components.ecoflow_energy.switch import async_setup_entry as switch_setup
 
 ES22_DEVICE: dict[str, Any] = {
     "sn": "ES22TEST00000001",
@@ -155,6 +163,57 @@ class TestStreamAC5000EntitySet:
 
         assert keys == {"backup_reserve_enabled", "backup_socket_enabled"}
 
+    async def test_controls(self, hass: HomeAssistant) -> None:
+        assert await _setup_keys(hass, number_setup) == {
+            "scheduled_discharge_power_w",
+            "scheduled_charge_power_w",
+            "max_charge_soc_pct",
+            "min_discharge_soc_pct",
+            "backup_reserve",
+        }
+        assert await _setup_keys(hass, select_setup) == {"work_mode"}
+
+    async def test_switches(self, hass: HomeAssistant) -> None:
+        """Both were captured from the app, so both are writable.
+
+        Enhanced Mode only, like every other control here, which is what this
+        entry is.
+        """
+        assert await _setup_keys(hass, switch_setup) == {
+            "backup_reserve_switch",
+            "backup_socket_switch",
+        }
+
+
+class TestStreamAC5000TaskReadback:
+    """A setpoint number must not outlive the task it reports."""
+
+    async def test_a_deleted_task_clears_its_setpoint(
+        self, hass: HomeAssistant
+    ) -> None:
+        entry = _entry(ES22_DEVICE)
+        entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, ES22_DEVICE)
+        hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
+            ES22_DEVICE["sn"]: coordinator
+        }
+        created: list[Any] = []
+        await number_setup(hass, entry, created.extend)
+        number = next(
+            entity
+            for entity in created
+            if entity._definition.key == "scheduled_discharge_power_w"
+        )
+        # A value the entity would otherwise fall back to, which is what the
+        # restore path leaves behind after a reload.
+        number._restored_value = 1200.0
+
+        coordinator.async_set_updated_data({"scheduled_discharge_power_w": 1200})
+        assert number.native_value == 1200
+
+        coordinator.async_set_updated_data({"scheduled_discharge_power_w": None})
+        assert number.native_value is None
+
 
 class TestStreamAC5000Definitions:
     def test_documented_totals(self) -> None:
@@ -235,6 +294,39 @@ class TestStreamAC5000Definitions:
         assert "solar_w" in keys
         assert "solar_energy_kwh" not in keys
         assert "solar_w" not in STREAMAC5000_POWER_TO_ENERGY
+
+    def test_every_control_is_enhanced_only(self) -> None:
+        """This device has no Developer API at all, so with developer keys a
+        control would be created that can neither write nor read back."""
+        for definition in (
+            *STREAMAC5000_NUMBERS,
+            *STREAMAC5000_SWITCHES,
+            *STREAMAC5000_SELECTS,
+        ):
+            assert definition.enhanced_only is True, definition.key
+
+    def test_a_control_is_named_after_the_reading_it_writes(self) -> None:
+        """One value, one wording.
+
+        Home Assistant gives a number no description field, so its name is the
+        only text an owner reads while dragging the slider. A control and the
+        sensor reporting the same value under a different name reads as two
+        settings.
+        """
+        translations = json.loads(
+            (
+                Path(__file__).parents[2]
+                / "custom_components/ecoflow_energy/translations/en.json"
+            ).read_text(encoding="utf-8")
+        )["entity"]
+        sensor_keys = {s.key for s in STREAMAC5000_SENSORS}
+        for definition in STREAMAC5000_NUMBERS:
+            if definition.state_key not in sensor_keys:
+                continue
+            assert (
+                translations["number"][definition.key]["name"]
+                == translations["sensor"][definition.state_key]["name"]
+            ), definition.key
 
 
 class TestBKSeriesSetIsUntouched:
