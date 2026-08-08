@@ -32,10 +32,9 @@ from .const import (
     STREAM_NUMBERS,
     STREAMAC5000_NUMBERS,
 )
-from .coordinator import EcoFlowDeviceCoordinator
+from .coordinator import DeviceValueNotReported, EcoFlowDeviceCoordinator
 from .entity import (
     EcoFlowWriteGateMixin,
-    as_known_int,
     raise_set_failed,
     raise_set_not_ready,
     raise_set_rejected,
@@ -48,15 +47,6 @@ from .ecoflow.delta3_commands import (
 )
 from .ecoflow.energy_stream import build_stream_backup_reserve_payload
 from .ecoflow.parsers.delta3_proto import port_priority_keys
-from .ecoflow.stream_ac5000_commands import (
-    MINUTES_PER_DAY,
-    TASK_ADD,
-    TASK_REMOVE,
-    TASK_UPDATE,
-    build_backup_reserve_payload as build_stream_ac5000_backup_reserve_payload,
-    build_soc_limits_payload as build_stream_ac5000_soc_limits_payload,
-    build_task_payload as build_stream_ac5000_task_payload,
-)
 from .ecoflow.parsers.smartplug import (
     build_plug_brightness_payload,
     build_plug_max_watts_payload,
@@ -450,132 +440,42 @@ class EcoFlowNumber(
         raise_set_unsupported(self.entity_id)
 
     async def _async_set_stream_ac5000_value(self, key: str, value: float) -> bool:
-        """Set a STREAM AC 5000 number via a 254/38 config write."""
-        device_sn = self.coordinator.device_sn
-        data = self.coordinator.data or {}
+        """Set a STREAM AC 5000 number via a 254/38 config write.
 
-        if key in ("max_charge_soc_pct", "min_discharge_soc_pct"):
-            # Config field 29 holds both limits, so the one that is not being
-            # changed has to travel with it at its current value.
+        Every one of these reads a value the device reported before it can
+        send: two of the config fields hold two settings each, and a power
+        setpoint is a remove-then-write across two frames. The coordinator
+        owns those sequences so they cannot interleave with each other.
+        """
+        try:
             if key == "max_charge_soc_pct":
-                charge = int(value)
-                discharge = as_known_int(data.get("min_discharge_soc_pct"))
-            else:
-                charge = as_known_int(data.get("max_charge_soc_pct"))
-                discharge = int(value)
-            if charge is None or discharge is None:
-                # Sending a guessed counterpart would change a setting the
-                # user did not touch. Temporary, so not "unsupported".
-                raise_set_not_ready(self.entity_id)
-            try:
-                payload = build_stream_ac5000_soc_limits_payload(
-                    charge, discharge, device_sn
+                return await self.coordinator.async_set_stream_ac5000_soc_limits(
+                    charge=int(value)
                 )
-            except ValueError as err:
-                # The device holds both limits in one field and refuses a pair
-                # where they cross. Both entity ranges reach 50, so the user
-                # can ask for exactly that.
-                raise_set_rejected(self.entity_id, str(err))
-            return await self.coordinator.async_send_proto_set_command(
-                payload, label="stream_ac5000_soc_limits"
-            )
-
-        if key == "backup_reserve":
-            # Config field 30 holds the on/off flag as well, so the current
-            # flag travels with the level.
-            enabled = data.get("backup_reserve_enabled")
-            if not isinstance(enabled, bool):
-                raise_set_not_ready(self.entity_id)
-            try:
-                payload = build_stream_ac5000_backup_reserve_payload(
-                    enabled, int(value), device_sn
+            if key == "min_discharge_soc_pct":
+                return await self.coordinator.async_set_stream_ac5000_soc_limits(
+                    discharge=int(value)
                 )
-            except ValueError as err:
-                raise_set_rejected(self.entity_id, str(err))
-            return await self.coordinator.async_send_proto_set_command(
-                payload, label="stream_ac5000_backup_reserve"
-            )
-
-        if key in ("scheduled_charge_power_w", "scheduled_discharge_power_w"):
-            kind = "charge" if key == "scheduled_charge_power_w" else "discharge"
-            other = "discharge" if kind == "charge" else "charge"
-            # One task, always. Charge and discharge are separate tasks and
-            # both cover the whole day, so leaving the other kind in place
-            # gives the device two overlapping schedules; the app calls that
-            # "Overlapping time periods" and the device acts on neither.
-            # Removed before the new one is written, so the pair never exists.
-            if as_known_int(data.get(f"scheduled_{other}_power_w")) is not None:
-                if not await self.coordinator.async_send_proto_set_command(
-                    build_stream_ac5000_task_payload(
-                        other, 0, MINUTES_PER_DAY - 1, 0, device_sn,
-                        operation=TASK_REMOVE,
-                    ),
-                    label=f"stream_ac5000_{other}_task_remove",
-                ):
-                    return False
-                self._clear_stream_ac5000_task(other)
-            payload = self._build_stream_ac5000_task(kind, int(value), device_sn, data)
-            return await self.coordinator.async_send_proto_set_command(
-                payload, label=f"stream_ac5000_{kind}_power"
-            )
+            if key == "backup_reserve":
+                return await self.coordinator.async_set_stream_ac5000_backup_reserve(
+                    reserve_pct=int(value)
+                )
+            if key in ("scheduled_charge_power_w", "scheduled_discharge_power_w"):
+                kind = "charge" if key == "scheduled_charge_power_w" else "discharge"
+                return await self.coordinator.async_set_stream_ac5000_task_power(
+                    kind, int(value)
+                )
+        except DeviceValueNotReported:
+            # Sending a guessed counterpart would change a setting the user did
+            # not touch. Temporary, so not "unsupported".
+            raise_set_not_ready(self.entity_id)
+        except ValueError as err:
+            # The device holds both SoC limits in one field and refuses a pair
+            # where they cross. Both entity ranges reach 50, so the user can
+            # ask for exactly that.
+            raise_set_rejected(self.entity_id, str(err))
 
         raise_set_unsupported(self.entity_id)
-
-    def _clear_stream_ac5000_task(self, kind: str) -> None:
-        """Forget a task this integration has just removed.
-
-        The device stops mentioning a deleted task rather than reporting it
-        empty, and the parser's clear-everything branch only fires on an empty
-        task list, which the replacement task keeps it from being. So nothing
-        would ever retract these values and the setpoint entity would go on
-        showing a task that no longer exists.
-
-        `scheduled_charge_soc_target` deliberately survives: it is the app's
-        charge limit, the next charge write reads it back, and clearing it
-        would reset a task set to stop at 80% into charging to 100%.
-        """
-        for suffix in ("power_w", "enabled", "start_min", "end_min"):
-            state_key = f"scheduled_{kind}_{suffix}"
-            self.coordinator.set_device_value(state_key, None)
-            if self.coordinator.data is not None:
-                self.coordinator.data[state_key] = None
-
-    def _build_stream_ac5000_task(
-        self, kind: str, power_w: int, device_sn: str, data: dict[str, Any]
-    ) -> bytes:
-        """Build the task frame that carries a power setpoint.
-
-        This device has no direct power setpoint: a scheduled task is the
-        setpoint, so a power write is a task write. It is always a whole-day,
-        enabled task, so the value asked for is the value that acts. The only
-        thing carried over from a reported task is the charge target SoC, which
-        decides what charging does rather than whether it happens.
-
-        Zero is a real setpoint, not an absence: a 0 W discharge task parks the
-        battery, while removing every task leaves it on its own 200 W base
-        output.
-        """
-        mode = data.get("work_mode")
-        if mode is not None and mode != "custom":
-            _LOGGER.warning(
-                "Setting the %s power on %s while it is in %s mode: a "
-                "scheduled task is only acted on in custom mode, so the "
-                "device will accept this and may do nothing with it",
-                kind, device_sn[:4], mode,
-            )
-
-        reported = as_known_int(data.get(f"scheduled_{kind}_power_w")) is not None
-        soc_target = data.get("scheduled_charge_soc_target")
-        return build_stream_ac5000_task_payload(
-            kind,
-            0,
-            MINUTES_PER_DAY - 1,
-            power_w,
-            device_sn,
-            enabled=True,
-            operation=TASK_UPDATE if reported else TASK_ADD,
-            charge_soc_target=soc_target if isinstance(soc_target, int) else 100,
-        )
 
 
 def _get_number_defs(device_type: str) -> list[EcoFlowNumberDef]:

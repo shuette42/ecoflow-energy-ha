@@ -29,13 +29,18 @@ Data shape:
 - ``f40.1.9.1`` discharge task setpoint. It followed every value written
   during a control test (600, 500, 0, 200, 700, 900, 300, 600 W), so it
   is a readback and not a static config echo.
+- ``f40.1.8.3.3`` charge task setpoint, a readback on the same evidence:
+  it carried 691 W and then 598 W within two seconds of each being
+  written, on a whole-day window ending at minute 1439, which only this
+  integration writes.
 
 Not mapped: ``f50.1.4`` latches at rest (see the field map); ``f38.1`` and
 ``f44`` repeat pack readings `32/50` already carries, and mapping both
 makes the keys flap; ``f38.1.3``/``f44.2`` look like a cycle count but
-read 497, 499 and 1311 within minutes; ``f33.9`` sat at 600 throughout so
-the scheduled *charge* power is unconfirmed; ``50/2`` thresholds do not
-track the app limits and ``53/77`` is a constant.
+read 497, 499 and 1311 within minutes; ``f33.9`` sat at 600 throughout and
+is not the scheduled charge power, which reads back on ``f40.1.8.3.3``;
+``50/2`` thresholds do not track the app limits and ``53/77`` is a
+constant.
 """
 
 from __future__ import annotations

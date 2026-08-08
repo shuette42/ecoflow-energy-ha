@@ -10,6 +10,7 @@ really a rewrite of a scheduled task.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -22,7 +23,10 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.ecoflow_energy.const import (
     STREAMAC5000_NUMBERS,
     STREAMAC5000_SELECTS,
+    STREAMAC5000_SWITCHES,
 )
+from custom_components.ecoflow_energy.ecoflow.stream_ac5000_commands import TASK_REMOVE
+from custom_components.ecoflow_energy.switch import EcoFlowSwitch
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
 from custom_components.ecoflow_energy.ecoflow.proto.decoder import (
     decode_header_message,
@@ -100,6 +104,41 @@ def _config_field(pdata: bytes) -> int:
     """pdata always opens with field 1 naming the config field being written."""
     assert pdata[0] == 0x08
     return pdata[1]
+
+
+def _switch(coordinator: EcoFlowDeviceCoordinator, key: str) -> EcoFlowSwitch:
+    defn = next(d for d in STREAMAC5000_SWITCHES if d.key == key)
+    entity = EcoFlowSwitch(coordinator, defn)
+    entity.async_write_ha_state = MagicMock()
+    return entity
+
+
+def _suspending_sender(coordinator: EcoFlowDeviceCoordinator) -> list[bytes]:
+    """Replace the sender with one that yields, and collect the pdata it sent.
+
+    An `AsyncMock` completes without ever handing control back to the event
+    loop, so two concurrent writes could not interleave against one and a race
+    test would pass whether or not the sequence is serialised.
+    """
+    sent: list[bytes] = []
+
+    async def send(payload: bytes, label: str) -> bool:
+        headers, _ = decode_header_message(payload)
+        sent.append(bytes.fromhex(headers[0]["pdata"]))
+        await asyncio.sleep(0)
+        return True
+
+    coordinator.async_send_proto_set_command = send
+    return sent
+
+
+def _task_op_and_kind(pdata: bytes) -> tuple[int, int]:
+    """Read `39.1.1` operation and `39.1.2` task type out of a task write."""
+    for operation in (1, 2, 3):
+        for kind in (1, 2):
+            if bytes([0x08, operation, 0x10, kind]) in pdata:
+                return operation, kind
+    raise AssertionError("not a scheduled-task frame")
 
 
 class TestWorkModeSelect:
@@ -536,3 +575,94 @@ class TestPowerSetpoints:
             await entity.async_set_native_value(300)
 
         assert coordinator.data["scheduled_discharge_power_w"] == 600
+
+
+class TestConcurrentWrites:
+    """Two controls writing one config field at the same moment.
+
+    Home Assistant runs service calls to different entities as concurrent
+    tasks, and every write on this device reads what the device currently
+    reports before it can build its frame. Interleaved, each one acts on the
+    state from before the other's write.
+    """
+
+    @pytest.mark.parametrize("first", ["charge", "discharge"])
+    async def test_two_power_writes_never_leave_two_tasks(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry, first: str
+    ) -> None:
+        """The pair the remove-then-write sequence exists to prevent.
+
+        Interleaved, the discharge write removes the charge task while the
+        charge write is deciding it has no sibling to remove, and both then
+        write. The device reports overlapping time periods and acts on
+        neither, while both entities report success.
+
+        Both starting orders are covered because only one of them is harmful,
+        and nothing decides which one Home Assistant runs.
+        """
+        data = {
+            "work_mode": "custom",
+            "scheduled_charge_power_w": 600,
+            "scheduled_charge_enabled": True,
+            "scheduled_charge_start_min": 0,
+            "scheduled_charge_end_min": 1439,
+        }
+        coordinator = _coordinator(hass, enhanced_config_entry, data=data)
+        sent = _suspending_sender(coordinator)
+
+        writes = [
+            _number(coordinator, "scheduled_charge_power_w").async_set_native_value(700),
+            _number(coordinator, "scheduled_discharge_power_w").async_set_native_value(300),
+        ]
+        if first == "discharge":
+            writes.reverse()
+        await asyncio.gather(*writes)
+
+        held = {1}  # the charge task the device starts with
+        for pdata in sent:
+            operation, kind = _task_op_and_kind(pdata)
+            if operation == TASK_REMOVE:
+                held.discard(kind)
+            else:
+                held.add(kind)
+            assert len(held) <= 1, "the device was left holding both tasks"
+        assert len(held) == 1
+
+    async def test_two_soc_limit_writes_keep_both_changes(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """Field 29 holds both limits, so the loser's change is reverted.
+
+        Interleaved, each write carries the other's value from before it was
+        changed, and whichever frame lands second undoes the first.
+        """
+        coordinator = _coordinator(hass, enhanced_config_entry)
+        sent = _suspending_sender(coordinator)
+
+        await asyncio.gather(
+            _number(coordinator, "max_charge_soc_pct").async_set_native_value(85),
+            _number(coordinator, "min_discharge_soc_pct").async_set_native_value(20),
+        )
+
+        # field 29 = {1: charge, 2: discharge}
+        assert sent[-1].endswith(bytes([0x08, 85, 0x10, 20]))
+
+    async def test_the_reserve_switch_and_its_level_keep_both_changes(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """Field 30's two halves sit on two platforms.
+
+        A per-platform lock could not cover this one, which is why the
+        serialisation belongs to the coordinator.
+        """
+        data = dict(REPORTED, backup_reserve_enabled=False, backup_reserve_pct=30)
+        coordinator = _coordinator(hass, enhanced_config_entry, data=data)
+        sent = _suspending_sender(coordinator)
+
+        await asyncio.gather(
+            _number(coordinator, "backup_reserve").async_set_native_value(60),
+            _switch(coordinator, "backup_reserve_switch").async_turn_on(),
+        )
+
+        # field 30 = {1: on/off, 2: level}
+        assert sent[-1].endswith(bytes([0x08, 1, 0x10, 60]))

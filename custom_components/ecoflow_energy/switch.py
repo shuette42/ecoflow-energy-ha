@@ -45,15 +45,13 @@ from .const import (
     SWITCH_DECLARATIVE_R331,
     SWITCH_DECLARATIVE_R351,
 )
-from .coordinator import EcoFlowDeviceCoordinator
+from .coordinator import DeviceValueNotReported, EcoFlowDeviceCoordinator
 from .ecoflow.stream_ac5000_commands import (
-    build_backup_reserve_payload as build_stream_ac5000_backup_reserve_payload,
     build_backup_socket_payload as build_stream_ac5000_backup_socket_payload,
 )
 from .ecoflow.parsers.smartplug import build_plug_switch_payload
 from .entity import (
     EcoFlowWriteGateMixin,
-    as_known_int,
     raise_set_failed,
     raise_set_not_ready,
     raise_set_rejected,
@@ -241,21 +239,18 @@ class EcoFlowSwitch(
 
         if key == "backup_reserve_switch":
             # Config field 30 holds the on/off and the reserve level, so the
-            # level the user set has to travel with the switch.
-            reserve = as_known_int(
-                (self.coordinator.data or {}).get("backup_reserve_pct")
-            )
-            if reserve is None:
-                raise_set_not_ready(self.entity_id)
+            # level the user set has to travel with the switch. The number
+            # entity owns that level, so this is the one config write whose
+            # two halves sit on different platforms and the coordinator is
+            # the only place that can serialise them.
             try:
-                payload = build_stream_ac5000_backup_reserve_payload(
-                    turn_on, reserve, device_sn
+                return await self.coordinator.async_set_stream_ac5000_backup_reserve(
+                    enabled=turn_on
                 )
+            except DeviceValueNotReported:
+                raise_set_not_ready(self.entity_id)
             except ValueError as err:
                 raise_set_rejected(self.entity_id, str(err))
-            return await self.coordinator.async_send_proto_set_command(
-                payload, label="stream_ac5000_backup_reserve"
-            )
 
         raise_set_unsupported(self.entity_id)
 
