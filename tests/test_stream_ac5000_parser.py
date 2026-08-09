@@ -20,6 +20,7 @@ from ecoflow_energy.ecoflow.proto_encoding import (
 FIXTURES = Path(__file__).parent / "fixtures" / "stream_ac5000"
 GET_REPLY = FIXTURES / "es22_get_reply_masked.json"
 PUSHES = FIXTURES / "es22_push_capture_masked.json"
+ES21_PUSHES = FIXTURES / "es21_push_capture_masked.json"
 
 
 def _encode_fixed32_field(field_number: int, value: float) -> bytes:
@@ -616,12 +617,57 @@ class TestCaptureReplay:
                     assert value >= 0, f"{key} = {value}"
 
     def test_fixtures_carry_no_identifier(self) -> None:
-        """Guards the fixtures themselves, not the parser."""
+        """Guards the fixtures themselves, not the parser.
+
+        The floor is 10, not 15: a meter UUID is exactly 12 characters, and
+        one slipped through an earlier, longer-only version of this guard
+        into the ES21 capture before it was caught and masked by hand.
+        """
         import re
 
-        for path in (GET_REPLY, PUSHES):
+        for path in (GET_REPLY, PUSHES, ES21_PUSHES):
             for frame in _load(path):
                 raw = bytes.fromhex(frame["hex"])
-                runs = [m for m in re.findall(rb"[A-Z0-9]{15,}", raw) if set(m) != {ord("X")}]
+                runs = [m for m in re.findall(rb"[A-Z0-9]{10,}", raw) if set(m) != {ord("X")}]
                 assert not runs, f"{path.name}: {runs}"
                 assert "{sn}" in frame["topic"]
+
+    def test_es21_reports_the_es22_command_shapes(self) -> None:
+        """The STREAM 5000 (ES21) capture matches ES22's field layout.
+
+        Same four (cmd_func, cmd_id) pairs, same header shape, so it decodes
+        through the same parser and yields the same kind of keys - this is
+        the evidence the two share a device type rather than merely a name.
+        """
+        seen_cmds = set()
+        decoded_any = False
+        for frame in _load(ES21_PUSHES):
+            for cmd in frame["cmds"]:
+                seen_cmds.add((cmd["cmd_func"], cmd["cmd_id"]))
+            parsed = parse_stream_ac5000_message(bytes.fromhex(frame["hex"]))
+            if parsed:
+                decoded_any = True
+        assert seen_cmds <= {(254, 39), (254, 40), (32, 2), (32, 50)}
+        assert decoded_any
+
+    def test_es21_battery_heartbeat_yields_the_soc_limits(self) -> None:
+        """Same assertion as the ES22 32/2 test, replayed on the sibling."""
+        seen = 0
+        for frame in _load(ES21_PUSHES):
+            if [(c["cmd_func"], c["cmd_id"]) for c in frame["cmds"]] != [(32, 2)]:
+                continue
+            seen += 1
+            parsed = parse_stream_ac5000_message(bytes.fromhex(frame["hex"])) or {}
+            assert "max_charge_soc_pct" in parsed
+            assert "min_discharge_soc_pct" in parsed
+        assert seen >= 1
+
+    def test_es21_bms_heartbeat_decodes_battery_diagnostics(self) -> None:
+        for frame in _load(ES21_PUSHES):
+            if [(c["cmd_func"], c["cmd_id"]) for c in frame["cmds"]] != [(32, 50)]:
+                continue
+            parsed = parse_stream_ac5000_message(bytes.fromhex(frame["hex"])) or {}
+            for key in ("batt_temp_c", "bms_soh_pct", "batt_voltage_v"):
+                assert key in parsed, key
+            return
+        pytest.fail("no 32/50 frame in the ES21 fixture")

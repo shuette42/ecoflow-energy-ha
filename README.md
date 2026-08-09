@@ -46,7 +46,7 @@
 | **Smart Plug** - Switchable Outlet | `HW52` | 11 + 1 binary | 1 switch, 2 numbers | 1 (total energy) | ~30 s standard / ~3 s enhanced |
 | **Stream** - AC-coupled Battery | `BK31` `BK11` `BK41` `BK51` `BK61` | 54 + 2 binary | 1 number (Enhanced only) | 2 default (battery charge/discharge), 6 optional diagnostic (solar/home, PV 1-4) | ~30 s standard / ~3 s enhanced |
 | **Stream Micro** - Grid-tie Inverter | `BK01`\* | 21 | - | 4 optional diagnostic (PV 1-4) | ~3 s enhanced |
-| **STREAM AC 5000** - AC-coupled Battery | `ES22`\* | 50 + 2 binary | 2 switches, 5 numbers, 1 select (Enhanced only) | 4 default (grid import/export, battery charge/discharge), 1 optional diagnostic (home) | ~2 s enhanced |
+| **STREAM AC 5000 / STREAM 5000** - AC-coupled Battery | `ES21`\* `ES22`\* | 50 + 2 binary | 2 switches, 5 numbers, 1 select (Enhanced only) | 4 default (grid import/export, battery charge/discharge), 1 optional diagnostic (home) | ~2 s enhanced |
 
 > **\* Enhanced Mode only.** These serial prefixes cannot currently be linked to an IoT Developer API key, so Standard Mode reports error 1006 and their entities stay unavailable. This is an EcoFlow API limitation, not a configuration problem.
 >
@@ -55,6 +55,8 @@
 > **Tip:** Other Delta-series devices (Delta Pro, Delta 2, etc.) should work automatically with the Delta sensor set. Base Delta 3 and Delta 3 Plus use the Delta 3 sensor set. The five AC-coupled Stream models share one sensor set.
 >
 > **The STREAM AC 5000 is not a Stream.** It shares the name and nothing else: it sends none of the BK-series telemetry messages, so it has its own parser and its own entity set. Its solar and per-phase meter entities are created only once the device reports them, because whether a unit has PV on the EcoFlow and which smart meter is linked are installation choices rather than model differences. Its solar reading is a figure the device derives for itself, so on an installation with separate PV it is the EcoFlow's inference rather than a measurement of that system, which is why there is no lifetime solar counter for it.
+>
+> **The STREAM 5000 (`ES21`) is the STREAM AC 5000's sibling with native solar input.** It gets its own device type, because "AC 5000" specifically names the AC-only variant and would be a wrong name for a unit with DC/PV input - but it shares everything else: a capture from a live unit matches the STREAM AC 5000's protocol byte for byte (same command frames, same field layout), so both device types run through the same parser and the same entity set. The one real difference, that this model has solar panels wired to it directly, needs no special handling beyond that: the solar entity already waits for the device to actually report a reading before it is created, which is exactly what "has PV wired to it" looks like from the parser's side. There is still no lifetime solar counter, because the underlying reading is worked out from house-flow math on both models, not read off a dedicated PV meter.
 >
 > **The Stream Micro is the exception.** It is a grid-tie inverter with two solar strings and no battery, so it deliberately gets a reduced set: no battery, state of charge, backup reserve or AC outlet entities, because it has none of those and an entity Home Assistant once created stays in the registry forever.
 >

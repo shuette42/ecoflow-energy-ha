@@ -20,6 +20,7 @@ from custom_components.ecoflow_energy.const import (
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
+    DEVICE_TYPE_STREAM_5000,
     DEVICE_TYPE_STREAM_AC5000,
     DOMAIN,
     EcoFlowBinarySensorDef,
@@ -102,6 +103,11 @@ class TestSensorDefsRouting:
     def test_stream_ac5000_sensors(self) -> None:
         assert _get_sensor_defs(DEVICE_TYPE_STREAM_AC5000) is STREAMAC5000_SENSORS
 
+    def test_stream_5000_sensors(self) -> None:
+        # STREAM 5000 (ES21) is its own device type but shares the AC 5000's
+        # entity set - same object, not a copy.
+        assert _get_sensor_defs(DEVICE_TYPE_STREAM_5000) is STREAMAC5000_SENSORS
+
     def test_unknown_sensors_empty(self):
         assert _get_sensor_defs("unknown") == []
 
@@ -119,6 +125,12 @@ class TestBinarySensorDefsRouting:
     def test_stream_ac5000_binary_sensors(self):
         assert (
             _get_binary_sensor_defs(DEVICE_TYPE_STREAM_AC5000)
+            is STREAMAC5000_BINARY_SENSORS
+        )
+
+    def test_stream_5000_binary_sensors(self):
+        assert (
+            _get_binary_sensor_defs(DEVICE_TYPE_STREAM_5000)
             is STREAMAC5000_BINARY_SENSORS
         )
 

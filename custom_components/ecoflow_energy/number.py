@@ -21,6 +21,7 @@ from .const import (
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
+    DEVICE_TYPE_STREAM_5000,
     DEVICE_TYPE_STREAM_AC5000,
     DOMAIN,
     EcoFlowNumberDef,
@@ -274,7 +275,7 @@ class EcoFlowNumber(
                 raise_set_failed(self.entity_id)
             self._apply_optimistic_number(value)
             return
-        if self.coordinator.device_type == DEVICE_TYPE_STREAM_AC5000:
+        if self.coordinator.device_type in (DEVICE_TYPE_STREAM_AC5000, DEVICE_TYPE_STREAM_5000):
             ok = await self._async_set_stream_ac5000_value(
                 self._definition.key, value
             )
@@ -490,6 +491,6 @@ def _get_number_defs(device_type: str) -> list[EcoFlowNumberDef]:
         return STREAM_NUMBERS
     if device_type == DEVICE_TYPE_DELTA3:
         return DELTA3_NUMBERS
-    if device_type == DEVICE_TYPE_STREAM_AC5000:
+    if device_type in (DEVICE_TYPE_STREAM_AC5000, DEVICE_TYPE_STREAM_5000):
         return STREAMAC5000_NUMBERS
     return []

@@ -39,6 +39,19 @@ DEVICE_TYPE_STREAM = "stream"
 # Carries the Stream name but not the Stream protocol: no 254/21 frame, and
 # nested submessages where the BK series uses flat scalars.
 DEVICE_TYPE_STREAM_AC5000 = "stream_ac5000"
+# STREAM 5000 (ES21): the AC 5000's sibling, distinguished by native solar
+# input the AC 5000 lacks. Kept as its own device type rather than folded
+# into DEVICE_TYPE_STREAM_AC5000 above, even though the two are the same
+# protocol - a capture from an ES21 matches the ES22 field layout byte for
+# byte, down to the same four (cmd_func, cmd_id) pairs and the same
+# sub-field numbers throughout - because "AC 5000" specifically names the
+# AC-only variant, and reusing that constant for a unit with DC/PV input
+# would make the name actively wrong rather than merely generic. Every
+# dispatch site that branches on DEVICE_TYPE_STREAM_AC5000 has to check for
+# this type too, which is the price of keeping the name accurate; see
+# mqtt_ingest.py, coordinator/core.py and the platform files' entity-def
+# dispatchers.
+DEVICE_TYPE_STREAM_5000 = "stream_5000"
 DEVICE_TYPE_UNKNOWN = "unknown"
 
 # Keywords used to classify devices from productName strings.
@@ -147,6 +160,12 @@ _SN_PREFIX_MAP = {
     # STREAM AC 5000 (#177): verified against live hardware in Enhanced mode,
     # cross-checked against the app and an independent Tibber Pulse meter.
     "ES22": DEVICE_TYPE_STREAM_AC5000,
+    # STREAM 5000, the sibling with native solar input ports that ES22 lacks.
+    # Its own device type despite speaking the identical protocol (same four
+    # command frames, same header shape, same field numbers throughout, from
+    # a capture of a live unit) - see the comment on DEVICE_TYPE_STREAM_5000
+    # for why the two are kept apart rather than sharing DEVICE_TYPE_STREAM_AC5000.
+    "ES21": DEVICE_TYPE_STREAM_5000,
 }
 
 _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
@@ -160,6 +179,7 @@ _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
     "BK51": "Stream AC",
     "BK61": "Stream Ultra X",
     "ES22": "STREAM AC 5000",
+    "ES21": "STREAM 5000",
 }
 
 def get_device_name(product_name: str, sn: str = "") -> str:
@@ -191,8 +211,8 @@ def get_device_type(product_name: str, sn: str = "") -> str:
     """Classify a device based on its SN prefix or productName string.
 
     Returns DEVICE_TYPE_POWEROCEAN, DEVICE_TYPE_DELTA, DEVICE_TYPE_DELTA3,
-    DEVICE_TYPE_SMARTPLUG, DEVICE_TYPE_STREAM, DEVICE_TYPE_STREAM_AC5000, or
-    DEVICE_TYPE_UNKNOWN.
+    DEVICE_TYPE_SMARTPLUG, DEVICE_TYPE_STREAM, DEVICE_TYPE_STREAM_AC5000,
+    DEVICE_TYPE_STREAM_5000, or DEVICE_TYPE_UNKNOWN.
     """
     # The prefix is exact evidence, the product name a substring guess, so
     # the prefix wins. Every prefix mapped before this ordering existed

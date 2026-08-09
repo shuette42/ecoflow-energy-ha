@@ -216,6 +216,17 @@ class TestDeviceTypeRouting:
         # Reports an empty product name through the app API.
         assert get_device_name("", "ES22TEST00000001") == "STREAM AC 5000 (0001)"
 
+    def test_stream_5000_by_es21_prefix(self) -> None:
+        # STREAM 5000: the ES22 sibling with native solar input. Its own
+        # device type - "AC 5000" specifically names the AC-only variant -
+        # even though a capture matches the ES22 field layout byte for byte
+        # and both route to the same parser.
+        assert get_device_type("", "ES21TEST00000001") == "stream_5000"
+
+    def test_stream_5000_display_name(self) -> None:
+        # Reports an empty product name through the app API, same as ES22.
+        assert get_device_name("", "ES21TEST00000001") == "STREAM 5000 (0001)"
+
     def test_sn_prefix_wins_over_a_matching_product_name(self) -> None:
         # "STREAM AC 5000" contains the BK-series "stream" keyword. The
         # prefix is exact evidence, so it decides even when the product

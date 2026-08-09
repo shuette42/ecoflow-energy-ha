@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- The EcoFlow STREAM 5000 (serial prefix `ES21`) is supported. It gets its own device type rather than reusing the STREAM AC 5000's, because "AC 5000" specifically names the AC-only variant and this device has solar panels wired to it directly, which the AC 5000 does not - a name shared with a unit that has DC input would be actively wrong, not just generic. It shares everything else with the STREAM AC 5000: the same parser and the same entity set, both device types routed to the identical code, because a capture from a live `ES21` matches the `ES22` field layout byte for byte - the same four command frames, the same header shape, and the same sub-field numbers throughout the battery heartbeat and the SoC-limit pair - which is the evidence this is the same protocol rather than a merely similar one. The Solar Power sensor needed no new code for this: it was already accessory-gated to wait for a real reading before being created rather than gated by serial prefix, the same design that already covers a STREAM AC 5000 whose owner links or unlinks a smart meter. There is still no lifetime solar energy counter for either model, because the underlying reading is worked out from house-flow math rather than read off a dedicated PV meter on both, and a `total_increasing` counter fed by an inference can't be corrected once it's wrong. It needs the EcoFlow account sign-in, like its sibling, since neither device is reachable through the Developer API.
+
 ## [1.17.0] - 2026-08-06
 
 ### Added

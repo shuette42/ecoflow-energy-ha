@@ -21,6 +21,7 @@ from .const import (
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
+    DEVICE_TYPE_STREAM_5000,
     DEVICE_TYPE_STREAM_AC5000,
     DOMAIN,
     EcoFlowBinarySensorDef,
@@ -135,6 +136,6 @@ def _get_binary_sensor_defs(
         return SMARTPLUG_BINARY_SENSORS
     if device_type == DEVICE_TYPE_STREAM:
         return STREAM_BINARY_SENSORS
-    if device_type == DEVICE_TYPE_STREAM_AC5000:
+    if device_type in (DEVICE_TYPE_STREAM_AC5000, DEVICE_TYPE_STREAM_5000):
         return STREAMAC5000_BINARY_SENSORS
     return []

@@ -22,6 +22,7 @@ from .const import (
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
+    DEVICE_TYPE_STREAM_5000,
     DEVICE_TYPE_STREAM_AC5000,
     DOMAIN,
     DELTA2MAX_SENSORS,
@@ -334,6 +335,6 @@ def _get_sensor_defs(device_type: str) -> list[EcoFlowSensorDef]:
         return SMARTPLUG_SENSORS
     if device_type == DEVICE_TYPE_STREAM:
         return STREAM_SENSORS
-    if device_type == DEVICE_TYPE_STREAM_AC5000:
+    if device_type in (DEVICE_TYPE_STREAM_AC5000, DEVICE_TYPE_STREAM_5000):
         return STREAMAC5000_SENSORS
     return []

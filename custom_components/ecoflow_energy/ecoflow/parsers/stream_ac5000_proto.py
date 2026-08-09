@@ -9,6 +9,19 @@ an entity from a guess on the first unit that sends it. The fixtures come
 from a unit with no PV wired to the EcoFlow, so a field being absent from
 them is not evidence that it is never sent.
 
+An ES21 capture matches this field layout exactly: the same four
+`(cmd_func, cmd_id)` pairs, the same header shape, and the same sub-field
+numbers throughout, including the BMS heartbeat and the SoC-limit pair. The
+two models differ in whether solar is physically wired to the unit (ES21
+has native PV input, ES22 does not), which `solar_w`'s accessory gating
+already handles without a model-specific branch. ES21 and ES22 are still
+two distinct device types (`DEVICE_TYPE_STREAM_5000` and
+`DEVICE_TYPE_STREAM_AC5000` in `ecoflow/const.py`), because "AC 5000"
+specifically names the AC-only variant and would be a wrong name for a unit
+with DC/PV input - both types are routed to this same
+`parse_stream_ac5000_message` entry point, and every caller that
+dispatches on the device type has to check for both.
+
 Despite the product name this cannot share `stream_proto.py`: an ES22
 sends no `254/21` frame, its telemetry is `254/39` and `254/40`, and it
 nests power readings where the BK series uses flat scalars. Only `32/50`

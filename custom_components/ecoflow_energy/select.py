@@ -34,6 +34,7 @@ from .const import (
     DELTA3_SELECTS,
     DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
+    DEVICE_TYPE_STREAM_5000,
     DEVICE_TYPE_STREAM_AC5000,
     DOMAIN,
     EcoFlowSelectDef,
@@ -161,7 +162,7 @@ class EcoFlowSelect(CoordinatorEntity[EcoFlowDeviceCoordinator], SelectEntity):
             return
 
         if self._definition.key == "work_mode":
-            if self.coordinator.device_type == DEVICE_TYPE_STREAM_AC5000:
+            if self.coordinator.device_type in (DEVICE_TYPE_STREAM_AC5000, DEVICE_TYPE_STREAM_5000):
                 # A different device family with its own modes, so it does not
                 # share the PowerOcean wire values.
                 payload = build_stream_ac5000_work_mode_payload(
@@ -246,6 +247,6 @@ def _get_select_defs(device_type: str) -> list[EcoFlowSelectDef]:
         return POWEROCEAN_SELECTS
     if device_type == DEVICE_TYPE_DELTA3:
         return DELTA3_SELECTS
-    if device_type == DEVICE_TYPE_STREAM_AC5000:
+    if device_type in (DEVICE_TYPE_STREAM_AC5000, DEVICE_TYPE_STREAM_5000):
         return STREAMAC5000_SELECTS
     return []

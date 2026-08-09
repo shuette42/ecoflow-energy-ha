@@ -1,10 +1,12 @@
-# STREAM AC 5000 - Entity Reference
+# STREAM AC 5000 / STREAM 5000 - Entity Reference
 
-Full list of all entities created for the STREAM AC 5000.
+Full list of all entities created for the STREAM AC 5000 and its sibling the STREAM 5000.
 
-**Models:** STREAM AC 5000 (`ES22`).
+**Models:** STREAM AC 5000 (`ES22`), STREAM 5000 (`ES21`).
 
-**This is not the Stream entity set.** Despite the shared product name, an `ES22` speaks a different protocol from the BK-series Stream devices: it sends none of their telemetry messages and describes power as a flow matrix rather than as individual readings. It therefore has its own device type, parser and entity list. See [Stream](stream.md) for the BK series.
+**This is not the Stream entity set.** Despite the shared product name, `ES21`/`ES22` speak a different protocol from the BK-series Stream devices: they send none of their telemetry messages and describe power as a flow matrix rather than as individual readings. They therefore have their own device types, parser and entity list. See [Stream](stream.md) for the BK series.
+
+**STREAM AC 5000 and STREAM 5000 are two device types that share one parser and one entity set.** A capture from a live `ES21` matches the `ES22` field layout byte for byte, so both run through the same code. They stay two device types rather than one because "AC 5000" specifically names the AC-only variant, and reusing it for a unit with native DC/PV input would be a wrong name rather than merely a generic one. The one hardware difference between them, native solar input on the `ES21`, needs no separate entity list even so: the Solar Power sensor is accessory-gated (see below) and simply waits for a real reading, which is what having PV wired to the unit produces.
 
 **Totals:** 50 sensors, 2 binary sensors, 2 switches, 5 numbers, 1 select
 

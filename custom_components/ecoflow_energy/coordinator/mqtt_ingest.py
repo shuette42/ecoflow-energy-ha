@@ -13,6 +13,7 @@ from ..const import (
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
+    DEVICE_TYPE_STREAM_5000,
     DEVICE_TYPE_STREAM_AC5000,
     RAW_FRAME_BUNDLE_MAX_BYTES,
     RAW_FRAME_MAX_BYTES,
@@ -278,7 +279,7 @@ class MqttIngestMixin:
                     return self._parse_powerocean_get_reply(payload)
                 if self.device_type == DEVICE_TYPE_STREAM:
                     return parse_stream_proto_message(payload)
-                if self.device_type == DEVICE_TYPE_STREAM_AC5000:
+                if self.device_type in (DEVICE_TYPE_STREAM_AC5000, DEVICE_TYPE_STREAM_5000):
                     return parse_stream_ac5000_message(payload)
                 return self._parse_proto_device_data(payload)
             return None
@@ -358,9 +359,9 @@ class MqttIngestMixin:
                 # frame to the Delta 3 parser and drop the Stream telemetry.
                 if self.device_type == DEVICE_TYPE_STREAM:
                     return parse_stream_proto_message(payload)
-                # Same reason: an ES22 shares (32, 2) and (32, 50) with the
-                # Delta 3 generation but means different things by them.
-                if self.device_type == DEVICE_TYPE_STREAM_AC5000:
+                # Same reason: an ES21/ES22 shares (32, 2) and (32, 50) with
+                # the Delta 3 generation but means different things by them.
+                if self.device_type in (DEVICE_TYPE_STREAM_AC5000, DEVICE_TYPE_STREAM_5000):
                     return parse_stream_ac5000_message(payload)
                 if self.device_type == DEVICE_TYPE_POWEROCEAN:
                     return self._parse_powerocean_proto_frame(payload)

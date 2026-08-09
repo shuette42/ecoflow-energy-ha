@@ -32,6 +32,7 @@ from .const import (
     DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
+    DEVICE_TYPE_STREAM_5000,
     DEVICE_TYPE_STREAM_AC5000,
     DOMAIN,
     EcoFlowSwitchDef,
@@ -195,7 +196,7 @@ class EcoFlowSwitch(
             self._apply_optimistic(turn_on)
             return
 
-        if self.coordinator.device_type == DEVICE_TYPE_STREAM_AC5000:
+        if self.coordinator.device_type in (DEVICE_TYPE_STREAM_AC5000, DEVICE_TYPE_STREAM_5000):
             ok = await self._async_set_stream_ac5000(turn_on)
             if not ok:
                 raise_set_failed(self.entity_id)
@@ -344,7 +345,7 @@ def _get_switch_defs(device_type: str) -> list[EcoFlowSwitchDef]:
         return STREAM_SWITCHES
     if device_type == DEVICE_TYPE_DELTA3:
         return DELTA3_SWITCHES
-    if device_type == DEVICE_TYPE_STREAM_AC5000:
+    if device_type in (DEVICE_TYPE_STREAM_AC5000, DEVICE_TYPE_STREAM_5000):
         return STREAMAC5000_SWITCHES
     return []
 
