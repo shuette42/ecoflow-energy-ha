@@ -13,6 +13,7 @@ import pytest
 from ecoflow_energy.ecoflow.proto.decoder import decode_header_message
 from ecoflow_energy.ecoflow.stream_ac5000_commands import (
     TASK_ADD,
+    TASK_REMOVE,
     TASK_UPDATE,
     WORK_MODES,
     build_backup_reserve_payload,
@@ -231,3 +232,43 @@ class TestTask:
             build_task_payload("both", 0, 1380, 600, SN)
         with pytest.raises(ValueError):
             build_task_payload("discharge", 0, 1380, 600, SN, operation=9)
+
+    def test_the_task_number_defaults_to_the_kind(self) -> None:
+        """Which is what keeps the two tasks written here from colliding."""
+        charge = bytes.fromhex(_pdata(build_task_payload("charge", 780, 960, 600, SN, seq=1)))
+        discharge = bytes.fromhex(
+            _pdata(build_task_payload("discharge", 0, 1380, 600, SN, seq=1))
+        )
+
+        assert bytes.fromhex("1001") in charge
+        assert bytes.fromhex("1002") in discharge
+
+    def test_an_observed_number_overrides_the_kind_but_not_the_power_block(self) -> None:
+        """A removal has to name the task the device knows.
+
+        The number and the power block are decided separately: the number is
+        whatever the device reported, and the block still follows `kind`, or a
+        discharge removal would carry no discharge power to remove.
+        """
+        pdata = bytes.fromhex(
+            _pdata(
+                build_task_payload(
+                    "discharge", 0, 1439, 0, SN,
+                    operation=TASK_REMOVE, task_slot=1, seq=1,
+                )
+            )
+        )
+
+        # operation 3 (remove) carrying the observed number 1, not the kind's 2
+        assert bytes.fromhex("08031001") in pdata
+        # field 9, length 2, holding field 1 = 0: still a discharge block
+        assert bytes.fromhex("4a020800") in pdata
+
+    def test_an_unknown_kind_is_still_rejected_with_a_number_given(self) -> None:
+        with pytest.raises(ValueError):
+            build_task_payload("both", 0, 1380, 600, SN, task_slot=1)
+
+    @pytest.mark.parametrize("slot", [0, -1, 70000])
+    def test_an_out_of_range_task_number_is_rejected(self, slot: int) -> None:
+        with pytest.raises(ValueError):
+            build_task_payload("discharge", 0, 1380, 600, SN, task_slot=slot)
