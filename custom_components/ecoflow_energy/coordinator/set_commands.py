@@ -431,10 +431,23 @@ class SetCommandsMixin:
         async with self._device_config_lock:
             data = self.data or {}
             if as_known_int(data.get(f"scheduled_{other}_power_w")) is not None:
+                # `39.1.2` goes out as the device last reported it for this task
+                # rather than as the number derived from the kind. The two agree
+                # in every frame this integration wrote, and they did not agree
+                # once the app got involved: on 2026-08-08 the app removed the
+                # charge task numbered 1 and added its discharge task at 1 in
+                # the same frame. If that number is the task's slot, a removal
+                # naming the derived one names no task, and what is left
+                # standing is the overlapping pair the removal exists to
+                # prevent. Where nothing has been observed, the derived number
+                # is sent, which is what every removal before this one carried.
                 if not await self.async_send_proto_set_command(
                     build_task_payload(
                         other, 0, MINUTES_PER_DAY - 1, 0, self.device_sn,
                         operation=TASK_REMOVE,
+                        task_slot=as_known_int(
+                            data.get(f"scheduled_{other}_task_slot")
+                        ),
                     ),
                     label=f"stream_ac5000_{other}_task_remove",
                 ):
@@ -451,7 +464,13 @@ class SetCommandsMixin:
             return True
 
     def _seed_device_values(self, **values: Any) -> None:
-        """Record values just sent, in both the store and the snapshot."""
+        """Record values just sent, in both the store and the snapshot.
+
+        A STREAM AC 5000 task's own number is deliberately never seeded. The
+        device decides where a new task lands, so a guess here would put a
+        fabricated number into the next removal. The real one arrives in the
+        readback in seconds.
+        """
         for key, value in values.items():
             self.set_device_value(key, value)
             if self.data is not None:
@@ -470,7 +489,7 @@ class SetCommandsMixin:
         charge limit, the next charge write reads it back, and clearing it
         would reset a task set to stop at 80% into charging to 100%.
         """
-        for suffix in ("power_w", "enabled", "start_min", "end_min"):
+        for suffix in ("power_w", "enabled", "start_min", "end_min", "task_slot"):
             state_key = f"scheduled_{kind}_{suffix}"
             self.set_device_value(state_key, None)
             if self.data is not None:
@@ -489,6 +508,11 @@ class SetCommandsMixin:
         Zero is a real setpoint, not an absence: a 0 W discharge task parks the
         battery, while removing every task leaves it on its own 200 W base
         output.
+
+        An update names the number the device reported for this kind, for the
+        same reason a removal does. It is only ever known when this kind's power
+        was reported, which is exactly when the operation is an update, so an
+        add is never affected.
         """
         from ..ecoflow.stream_ac5000_commands import (
             MINUTES_PER_DAY,
@@ -517,6 +541,7 @@ class SetCommandsMixin:
             enabled=True,
             operation=TASK_UPDATE if reported else TASK_ADD,
             charge_soc_target=soc_target if isinstance(soc_target, int) else 100,
+            task_slot=as_known_int(data.get(f"scheduled_{kind}_task_slot")),
         )
 
     async def async_send_proto_set_command(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import struct
 from pathlib import Path
 
@@ -21,6 +22,7 @@ FIXTURES = Path(__file__).parent / "fixtures" / "stream_ac5000"
 GET_REPLY = FIXTURES / "es22_get_reply_masked.json"
 PUSHES = FIXTURES / "es22_push_capture_masked.json"
 ES21_PV = FIXTURES / "es21_pv_masked.json"
+TASK_FRAMES = FIXTURES / "es22_task_frames_masked.json"
 
 
 def _encode_fixed32_field(field_number: int, value: float) -> bytes:
@@ -443,7 +445,155 @@ class TestScheduledTasks:
         assert result["scheduled_charge_power_w"] == 600
         assert result["scheduled_charge_start_min"] == 780
         assert result["scheduled_charge_end_min"] == 960
+        assert result["scheduled_charge_task_slot"] == 1
         assert "scheduled_discharge_power_w" not in result
+
+    def test_a_frame_carrying_two_tasks_reports_both(self) -> None:
+        """`f40` is the whole list and `40.1` repeats, one block per task.
+
+        Decoded into one flat result the second block overwrites the first, so
+        the frame of 2026-08-03 22:21:59 reported its 1400 W discharge task and
+        lost the 1800 W charge task standing beside it. A task the parser
+        cannot see is a task the write path never removes.
+        """
+        per_device = (
+            encode_field_bytes(1, b"ES22TEST00000001")
+            + encode_field_varint(2, 100)
+            + encode_field_varint(3, 1800)
+        )
+        charge = (
+            encode_field_varint(2, 1)
+            + encode_field_varint(3, 1)
+            + _sub(7, encode_varint((1020 << 16) | 180))
+            + _sub(8, encode_field_varint(1, 1) + _sub(3, per_device))
+        )
+        discharge = (
+            encode_field_varint(2, 2)
+            + encode_field_varint(3, 1)
+            + _sub(7, encode_varint((120 << 16) | 1080))
+            + _sub(9, encode_field_varint(1, 1400))
+        )
+        result = parse_stream_ac5000_message(
+            _build_frame(254, 39, bytes(_sub(40, _sub(1, charge) + _sub(1, discharge))))
+        )
+        assert result is not None
+        assert result["scheduled_charge_power_w"] == 1800
+        assert result["scheduled_charge_soc_target"] == 100
+        assert result["scheduled_charge_start_min"] == 180
+        assert result["scheduled_charge_end_min"] == 1020
+        assert result["scheduled_charge_task_slot"] == 1
+        assert result["scheduled_discharge_power_w"] == 1400
+        assert result["scheduled_discharge_start_min"] == 1080
+        assert result["scheduled_discharge_end_min"] == 120
+        assert result["scheduled_discharge_task_slot"] == 2
+
+    def test_a_zero_watt_charge_task_reads_as_zero_not_as_nothing(self) -> None:
+        """A task at 0 W sends its container and omits the watts.
+
+        Observed between 19:52 and 19:55 on 2026-08-08, with the device idle
+        under exactly that task: `.8.3` carried the serial and the target SoC
+        and no `.3.3` at all. Read as "no power reported" the parked charge
+        task was invisible, so the write path never removed it and every later
+        discharge write landed on top of it.
+        """
+        per_device = encode_field_bytes(1, b"ES22TEST00000001") + encode_field_varint(2, 100)
+        charge = (
+            encode_field_varint(2, 1)
+            + encode_field_varint(3, 1)
+            + _sub(7, encode_varint((1439 << 16) | 0))
+            + _sub(8, encode_field_varint(1, 1) + _sub(3, per_device))
+        )
+        discharge = (
+            encode_field_varint(2, 2)
+            + encode_field_varint(3, 1)
+            + _sub(7, encode_varint((1439 << 16) | 0))
+            + _sub(9, encode_field_varint(1, 297))
+        )
+        result = parse_stream_ac5000_message(
+            _build_frame(254, 39, bytes(_sub(40, _sub(1, charge) + _sub(1, discharge))))
+        )
+        assert result is not None
+        assert result["scheduled_charge_power_w"] == 0
+        assert result["scheduled_charge_soc_target"] == 100
+        assert result["scheduled_discharge_power_w"] == 297
+
+    def test_a_zero_watt_discharge_task_reads_as_zero(self) -> None:
+        """The same fill on the discharge side.
+
+        This one has been seen sending its zero explicitly, so the fill is a
+        no-op there. It is a `setdefault`, so an explicit value always wins.
+        """
+        task = encode_field_varint(2, 2) + encode_field_varint(3, 1) + _sub(9, b"")
+        result = parse_stream_ac5000_message(
+            _build_frame(254, 39, bytes(_sub(40, _sub(1, task))))
+        )
+        assert result is not None
+        assert result["scheduled_discharge_power_w"] == 0
+
+    def test_a_discharge_task_numbered_one_is_read_as_discharge(self) -> None:
+        """`40.1.2` is the task's number in the app's list, not what it does.
+
+        On 2026-08-08 at 16:01 one app frame removed the charge task numbered 1
+        and added a discharge task numbered 1 in the same breath. Read as a
+        kind, that filed an 800 W discharge task under charge, found no charge
+        power in it and published no power at all.
+        """
+        task = (
+            encode_field_varint(2, 1)
+            + encode_field_varint(3, 1)
+            + _sub(7, encode_varint((360 << 16) | 120))
+            + _sub(9, encode_field_varint(1, 800))
+        )
+        result = parse_stream_ac5000_message(
+            _build_frame(254, 39, bytes(_sub(40, _sub(1, task))))
+        )
+        assert result is not None
+        assert result["scheduled_discharge_power_w"] == 800
+        assert result["scheduled_discharge_task_slot"] == 1
+        assert result["scheduled_discharge_start_min"] == 120
+        assert result["scheduled_discharge_end_min"] == 360
+        assert not [key for key in result if key.startswith("scheduled_charge_")]
+
+    def test_a_charge_task_numbered_two_is_read_as_charge(self) -> None:
+        """The mirror, so the rule is not re-derived in one direction only."""
+        per_device = (
+            encode_field_bytes(1, b"ES22TEST00000001")
+            + encode_field_varint(2, 80)
+            + encode_field_varint(3, 900)
+        )
+        task = (
+            encode_field_varint(2, 2)
+            + encode_field_varint(3, 1)
+            + _sub(7, encode_varint((1439 << 16) | 0))
+            + _sub(8, encode_field_varint(1, 1) + _sub(3, per_device))
+        )
+        result = parse_stream_ac5000_message(
+            _build_frame(254, 39, bytes(_sub(40, _sub(1, task))))
+        )
+        assert result is not None
+        assert result["scheduled_charge_power_w"] == 900
+        assert result["scheduled_charge_soc_target"] == 80
+        assert result["scheduled_charge_task_slot"] == 2
+        assert not [key for key in result if key.startswith("scheduled_discharge_")]
+
+    def test_two_tasks_of_one_kind_report_the_last(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """The keys hold one task per kind and the write path removes one.
+
+        A second task of the same kind therefore survives a setpoint write.
+        Pinned and logged rather than left undefined.
+        """
+        first = encode_field_varint(2, 1) + _sub(9, encode_field_varint(1, 300))
+        second = encode_field_varint(2, 2) + _sub(9, encode_field_varint(1, 700))
+        with caplog.at_level(logging.DEBUG):
+            result = parse_stream_ac5000_message(
+                _build_frame(254, 39, bytes(_sub(40, _sub(1, first) + _sub(1, second))))
+            )
+        assert result is not None
+        assert result["scheduled_discharge_power_w"] == 700
+        assert result["scheduled_discharge_task_slot"] == 2
+        assert "more than one discharge task" in caplog.text
 
     def test_disabled_task_reports_disabled(self) -> None:
         """Disabling a task in the app dropped f40.1.3 rather than sending 0."""
@@ -454,9 +604,30 @@ class TestScheduledTasks:
         assert result is not None
         assert result["scheduled_discharge_enabled"] is False
 
-    def test_task_without_a_kind_is_dropped(self) -> None:
-        """Which task a power belongs to cannot be guessed."""
+    def test_a_task_with_no_number_is_still_read_from_its_block(self) -> None:
+        """Which task a power belongs to is what the container says.
+
+        This used to assert the whole task was dropped, on the reading that
+        `40.1.2` was the only thing that could name a kind. A task carrying a
+        discharge power is a discharge task whether or not it is numbered, and
+        treating it as unreadable is how a live task went unseen. The number is
+        simply absent, because none was observed.
+        """
         task = _sub(9, encode_field_varint(1, 500))
+        result = parse_stream_ac5000_message(
+            _build_frame(254, 39, bytes(_sub(40, _sub(1, task))))
+        )
+        assert result is not None
+        assert result["scheduled_discharge_power_w"] == 500
+        assert "scheduled_discharge_task_slot" not in result
+
+    def test_a_task_with_neither_power_block_is_dropped(self) -> None:
+        """Nothing says what a task with no power container does."""
+        task = (
+            encode_field_varint(2, 1)
+            + encode_field_varint(3, 1)
+            + _sub(7, encode_varint((360 << 16) | 120))
+        )
         result = parse_stream_ac5000_message(
             _build_frame(254, 39, bytes(_sub(40, _sub(1, task))))
         )
@@ -477,6 +648,7 @@ class TestScheduledTasks:
             assert result[f"scheduled_{kind}_enabled"] is None
             assert result[f"scheduled_{kind}_start_min"] is None
             assert result[f"scheduled_{kind}_end_min"] is None
+            assert result[f"scheduled_{kind}_task_slot"] is None
         assert result["scheduled_charge_soc_target"] is None
 
     def test_absent_task_block_clears_nothing(self) -> None:
@@ -513,6 +685,53 @@ class TestRejectsGarbage:
 
 class TestCaptureReplay:
     """Replay of the real masked captures through the production entry point."""
+
+    def test_a_real_two_task_frame_reports_both_tasks(self) -> None:
+        """The 2026-08-03 22:21:59 get_reply, two app-created tasks in one f40.
+
+        Read flat this frame reported its discharge task alone and lost the
+        1800 W charge task standing beside it.
+        """
+        frame = _load(TASK_FRAMES)[0]
+        result = parse_stream_ac5000_message(bytes.fromhex(frame["hex"]))
+        assert result is not None
+        assert result["scheduled_charge_power_w"] == 1800
+        assert result["scheduled_charge_start_min"] == 180
+        assert result["scheduled_charge_end_min"] == 1020
+        assert result["scheduled_charge_task_slot"] == 1
+        assert result["scheduled_discharge_power_w"] == 1400
+        assert result["scheduled_discharge_start_min"] == 1080
+        assert result["scheduled_discharge_end_min"] == 120
+        assert result["scheduled_discharge_task_slot"] == 2
+
+    def test_a_real_parked_charge_task_reports_zero_watts(self) -> None:
+        """The 2026-08-08 19:52:31 get_reply, the frame from the incident.
+
+        The charge task sat at 0 W and sent no `.8.3.3` at all, so it read as
+        a task with no power, and the write path removes the opposite task only
+        when its power is a known number. The device held both tasks and
+        delivered neither.
+        """
+        frame = _load(TASK_FRAMES)[1]
+        result = parse_stream_ac5000_message(bytes.fromhex(frame["hex"]))
+        assert result is not None
+        assert result["scheduled_charge_power_w"] == 0
+        assert result["scheduled_charge_soc_target"] == 100
+        assert result["scheduled_charge_end_min"] == 1439
+        assert result["scheduled_discharge_power_w"] == 297
+        assert result["scheduled_discharge_end_min"] == 1439
+
+    def test_the_captured_single_task_reads_as_a_charge_task(self) -> None:
+        """Both older fixtures hold one charge task, and neither asserted it."""
+        for path in (GET_REPLY, PUSHES):
+            reported = [
+                parse_stream_ac5000_message(bytes.fromhex(frame["hex"])) or {}
+                for frame in _load(path)
+            ]
+            charge = [r for r in reported if "scheduled_charge_power_w" in r]
+            assert charge, path.name
+            assert all(r["scheduled_charge_power_w"] == 600 for r in charge)
+            assert all("scheduled_discharge_power_w" not in r for r in reported)
 
     def test_get_reply_bundle_decodes_every_command(self) -> None:
         frame = _load(GET_REPLY)[0]
@@ -620,7 +839,7 @@ class TestCaptureReplay:
         """Guards the fixtures themselves, not the parser."""
         import re
 
-        for path in (GET_REPLY, PUSHES):
+        for path in (GET_REPLY, PUSHES, TASK_FRAMES):
             for frame in _load(path):
                 raw = bytes.fromhex(frame["hex"])
                 runs = [m for m in re.findall(rb"[A-Z0-9]{15,}", raw) if set(m) != {ord("X")}]

@@ -26,13 +26,20 @@ Data shape:
   (seen down to -419 W). ``f16`` is the EcoFlow P1 variant with per-phase
   readings and the net in `.16`. A unit reports one or the other.
 - Battery power is derived from the ``f12`` edges, positive is charge.
+- ``f40`` the device's whole scheduled-task list, one ``f40.1`` per task.
+  A frame that carries it carries every task, so it repeats, and each
+  task is decoded on its own: see `_REPEATED_GROUPS`.
 - ``f40.1.9.1`` discharge task setpoint. It followed every value written
   during a control test (600, 500, 0, 200, 700, 900, 300, 600 W), so it
   is a readback and not a static config echo.
 - ``f40.1.8.3.3`` charge task setpoint, a readback on the same evidence:
   it carried 691 W and then 598 W within two seconds of each being
   written, on a whole-day window ending at minute 1439, which only this
-  integration writes.
+  integration writes. It is absent when the task is set to 0 W, which is
+  a real setpoint on this device rather than an absence: see the task
+  zero fill.
+- What a task does is read from which of those two containers it carries,
+  never from ``f40.1.2``: see `_TASK_BLOCKS`.
 
 Not mapped: ``f50.1.4`` latches at rest (see the field map); ``f38.1`` and
 ``f44`` repeat pack readings `32/50` already carries, and mapping both
@@ -45,11 +52,14 @@ constant.
 
 from __future__ import annotations
 
+import logging
 import struct
 from math import isfinite
 from typing import Any
 
 from ..proto.decoder import decode_header_message
+
+_LOGGER = logging.getLogger(__name__)
 
 _TYPE_INT = "int"
 _TYPE_FLOAT = "float"
@@ -205,12 +215,17 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
         # The grammar is identical on both sides, only the top-level number
         # differs, and it is the one config field that changes number between
         # write and readback.
-        # One task per frame, and the device rotates through them, so these
-        # land as per-kind keys that merge across frames rather than as a list
-        # that each frame would overwrite. `.1` echoes the last operation and
-        # `.4` flips every few seconds with no change to the task, so neither
-        # is mapped.
-        "40.1.2": ("_task_kind_raw", _TYPE_INT, 1),
+        # `f40` is the list and `40.1` is one task in it, so `40.1` repeats and
+        # is decoded a task at a time. `.1` echoes the last operation and `.4`
+        # flips every few seconds with no change to the task, so neither is
+        # mapped.
+        #
+        # `.2` is the task's number in the app's own list on the evidence there
+        # is, not what the task does. Nothing here interprets it. It is carried
+        # through to a removal or an update unchanged, because those frames have
+        # to name the task the device knows rather than one numbered from the
+        # kind. See `_TASK_BLOCKS` for the frames that settled it.
+        "40.1.2": ("_task_slot_raw", _TYPE_INT, 1),
         "40.1.3": ("_task_enabled_raw", _TYPE_INT, 1),
         "40.1.7": ("_task_window_raw", _TYPE_PACKED, 1),
         # `.2` is the task's target SoC, shown in the app as "Charge limit".
@@ -301,9 +316,15 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
 # `accessory_needs_nonzero` in const.py so the entity still waits for a
 # reading that is actually solar.
 _ZERO_FILL_PATHS: dict[tuple[int, int], tuple[str, ...]] = {
-    # `40.1.3` is the task's enabled flag, and disabling a task in the app made
-    # it disappear rather than read 0, so its absence inside a present task is
-    # what "disabled" looks like on the wire.
+    # `40.1.3` is deliberately absent here. It is the task's enabled flag, and
+    # it used to be filled at frame level, back when a frame carried one task.
+    # With `40.1` collected as repeated blocks the fill can no longer reach the
+    # task it was written for: `_walk` marks the group seen before the
+    # repeated-collect branch, so a frame-level entry would deposit
+    # `_task_enabled_raw` in the output instead, and nothing pops it again. The
+    # reading itself is unchanged and now runs per task, in
+    # `_TASK_ZERO_FILL_PATHS`, where an absent flag inside a present task is
+    # still what "disabled" looks like on the wire.
     (254, 39): (
         "11.9",
         "12.2",
@@ -311,7 +332,6 @@ _ZERO_FILL_PATHS: dict[tuple[int, int], tuple[str, ...]] = {
         "12.5",
         "12.6",
         "12.7",
-        "40.1.3",
         # The `f50.1` group arrives on every unit, with or without PV, so
         # filling on it would hand a PV-less ES22 five keys reading 0 W.
         # That is what `accessory_needs_nonzero` on all five definitions
@@ -328,6 +348,55 @@ _ZERO_FILL_PATHS: dict[tuple[int, int], tuple[str, ...]] = {
         "50.1.12",
     ),
 }
+
+# The same rule inside one task, applied per task rather than per frame: a
+# container in one task says nothing about the next.
+#
+# `40.1.3` is the task's enabled flag, and disabling a task in the app made it
+# disappear rather than read 0. The two power fields behave the same way and
+# matter more. A charge task set to 0 W sends its `.8` container with the
+# serial and the target SoC in it and no `.3.3` at all, seen between 19:52 and
+# 19:55 on 2026-08-08 with the device sitting idle under exactly that task.
+# Reading that as "no power reported" is what hid a parked charge task: the
+# write path removes the opposite task only when its power is a known number,
+# so an unseen task was never removed and every later write landed on top of
+# it. The discharge side has been seen sending its zero explicitly, so there
+# the fill is a no-op, because an explicit value wins over a `setdefault`.
+_TASK_ZERO_FILL_PATHS: tuple[str, ...] = ("40.1.3", "40.1.8.3.3", "40.1.9.1")
+
+# Declared groups that can arrive more than once in one message, and the key
+# each occurrence's raw bytes are collected under.
+#
+# Decoded flat, two tasks leave only the last: the frame of 2026-08-03 22:21:59
+# carried an 1800 W charge task at 03:00-17:00 and a 1400 W discharge task at
+# 18:00-02:00, and the parser reported the discharge task alone for the four
+# minutes both stood. A task the parser cannot see is a task the write path
+# never removes, and two whole-day tasks are the overlap this device answers by
+# doing nothing at all.
+#
+# Collecting the bytes rather than splitting the decode inline also gives each
+# task its own set of seen groups, which the kind rule below depends on.
+_REPEATED_GROUPS: dict[tuple[int, int], dict[str, str]] = {
+    (254, 39): {"40.1": "_task_blocks"},
+}
+
+# kind -> the container that carries that kind's power. What a task does is
+# read from which container it carries, never from `40.1.2`.
+#
+# `40.1.2` does not say: on 2026-08-03 the app held a charge task numbered 1
+# and a discharge task numbered 2, and on 2026-08-08 at 16:01 one app frame
+# removed the charge task numbered 1 and added a discharge task numbered 1 in
+# the same breath. Read as a kind, that second one filed an 800 W discharge
+# task under charge, found no charge power in it and published no power at all,
+# while the charge setpoint went on reporting a task that no longer existed.
+# Across the captures `.2` reads 1 on 75 charge tasks and on 5 discharge ones.
+#
+# It is the container and not the watts inside it because a task at 0 W omits
+# the watts: see `_TASK_ZERO_FILL_PATHS`.
+_TASK_BLOCKS: tuple[tuple[str, str], ...] = (
+    ("charge", "40.1.8"),
+    ("discharge", "40.1.9"),
+)
 
 # (parent group, the child that carries its content, marker key) per command.
 # A declared group arriving with no bytes is the device stating the collection
@@ -369,11 +438,15 @@ _ES22_TREE: dict[tuple[int, int], dict[int, Any]] = {
     cmd: _compile(field_map) for cmd, field_map in _ES22_FIELD_MAP.items()
 }
 
-# group path -> (sensor key, zero value) once that group is seen. The zero
-# keeps the field's own type: an int field filled with 0.0 would read as a
-# float everywhere downstream.
-_ZERO_FILL_KEYS: dict[tuple[int, int], dict[str, tuple[tuple[str, Any], ...]]] = {
-    cmd: {
+def _zero_fill_keys(
+    cmd: tuple[int, int], paths: tuple[str, ...]
+) -> dict[str, tuple[tuple[str, Any], ...]]:
+    """group path -> (sensor key, zero value) for every filled path under it.
+
+    The zero keeps the field's own type: an int field filled with 0.0 would
+    read as a float everywhere downstream.
+    """
+    return {
         group: tuple(
             (
                 _ES22_FIELD_MAP[cmd][path][0],
@@ -384,8 +457,18 @@ _ZERO_FILL_KEYS: dict[tuple[int, int], dict[str, tuple[tuple[str, Any], ...]]] =
         )
         for group in {path.rsplit(".", 1)[0] for path in paths}
     }
-    for cmd, paths in _ZERO_FILL_PATHS.items()
+
+
+_ZERO_FILL_KEYS: dict[tuple[int, int], dict[str, tuple[tuple[str, Any], ...]]] = {
+    cmd: _zero_fill_keys(cmd, paths) for cmd, paths in _ZERO_FILL_PATHS.items()
 }
+_TASK_ZERO_FILL_KEYS = _zero_fill_keys((254, 39), _TASK_ZERO_FILL_PATHS)
+
+# The subtree one task block is decoded against, and the prefix its paths keep,
+# so a path inside a task reads the same here as in the field map. Navigated
+# out of the compiled tree rather than compiled again, so it cannot drift.
+_TASK_TREE: dict[int, Any] = _ES22_TREE[(254, 39)][40][1]
+_TASK_PREFIX = "40.1."
 
 
 def _read_varint(mv: memoryview, pos: int) -> tuple[int, int]:
@@ -467,12 +550,20 @@ def _walk(
     result: dict[str, Any],
     seen_groups: set[str],
     prefix: str = "",
+    repeated: dict[str, str] | None = None,
 ) -> None:
     """Decode the declared paths of ``payload`` into ``result``.
 
     Undeclared fields are skipped by length and never entered, so a string
     or a packed array cannot be mistaken for a submessage.
+
+    A group named in ``repeated`` is collected as raw bytes rather than
+    decoded here. One flat result can only hold the last occurrence of a
+    path, and one shared set of seen groups cannot say which occurrence
+    carried which container, so a group that repeats is decoded one
+    occurrence at a time by the caller.
     """
+    repeated = repeated or {}
     mv = memoryview(payload)
     pos = 0
     while pos < len(mv):
@@ -490,8 +581,13 @@ def _walk(
             # difference, not something to guess at.
             if wire_type != 2:
                 continue
-            seen_groups.add(f"{prefix}{field_num}")
-            _walk(raw, child, result, seen_groups, f"{prefix}{field_num}.")
+            path = f"{prefix}{field_num}"
+            seen_groups.add(path)
+            collect = repeated.get(path)
+            if collect is not None:
+                result.setdefault(collect, []).append(raw)
+                continue
+            _walk(raw, child, result, seen_groups, f"{path}.", repeated)
             continue
 
         sensor_key, scalar_type, scale = child
@@ -501,64 +597,125 @@ def _walk(
         result[sensor_key] = value * scale if scale != 1 else value
 
 
-# Every key one task readback can produce, in the order the two kinds are
-# built above, so an empty task list can clear all of them.
+def _decode_task(block: bytes) -> dict[str, Any]:
+    """Decode one `40.1` task block on its own.
+
+    Its own result and its own set of seen groups: a power container in one
+    task says nothing about the next, and sharing either is what made a frame
+    carrying two tasks report one. The prefix is kept so the paths read the
+    same as everywhere else in this file.
+
+    The seen set starts holding `40.1` because that block is what is being
+    decoded, which is what lets the enabled flag fill.
+
+    A block that will not decode costs its own task and no more, the same way
+    a bad header does not take the rest of a bundle with it.
+    """
+    task: dict[str, Any] = {}
+    seen: set[str] = {"40.1"}
+    try:
+        _walk(block, _TASK_TREE, task, seen, _TASK_PREFIX)
+    except (IndexError, ValueError):
+        return {}
+    for group, defaults in _TASK_ZERO_FILL_KEYS.items():
+        if group not in seen:
+            continue
+        for key, zero in defaults:
+            task.setdefault(key, zero)
+    task["_task_kinds"] = tuple(kind for kind, group in _TASK_BLOCKS if group in seen)
+    return task
+
+
+# Every key one task list readback can produce, in the order the two kinds are
+# built below, so an empty task list can clear all of them.
 _TASK_KEYS: tuple[str, ...] = (
     "scheduled_charge_power_w",
     "scheduled_charge_soc_target",
     "scheduled_charge_enabled",
     "scheduled_charge_start_min",
     "scheduled_charge_end_min",
+    "scheduled_charge_task_slot",
     "scheduled_discharge_power_w",
     "scheduled_discharge_enabled",
     "scheduled_discharge_start_min",
     "scheduled_discharge_end_min",
+    "scheduled_discharge_task_slot",
 )
 
 
 def _finalize_task(result: dict[str, Any]) -> None:
-    """Turn one task readback into the keys the control side writes back.
+    """Turn one task list readback into the keys the control side writes back.
 
-    A frame carries a single task and the device cycles through them, so each
-    kind gets its own keys and the coordinator's own merge keeps the other
-    kind's values. The start, end and enabled keys have no entity: they exist
-    so a power write can rebuild the task it is changing instead of inventing
-    a window.
+    `f40` is the device's task list and each `40.1` inside it is one task. The
+    blocks are decoded one at a time because two flattened into one result
+    leave only the last, and because the containers inside them are how a
+    task's kind is read.
 
-    That merge is also why an empty task list has to clear every key at once:
-    deleting the last task in the app stops the readback rather than zeroing
-    it, so the setpoint entities would otherwise keep reporting a task the
-    device no longer has.
+    That kind comes from which power container the task carries, never from
+    `40.1.2`. See `_TASK_BLOCKS` for what `.2` turned out to be.
+
+    A task at 0 W omits its watts and sends the container alone, so the
+    container is also what the zero fill keys off. Publishing nothing there is
+    not a safe default on this device: the write path removes the opposite task
+    only when its power is a known number, so a power that goes missing is a
+    task that is never removed and then written on top of.
+
+    Each kind gets its own keys and the coordinator's own merge keeps the other
+    kind's values across the frames that carry no `f40` at all, which is most
+    of them. That merge is why an empty task list has to clear every key at
+    once: deleting the last task in the app stops the readback rather than
+    zeroing it, so the setpoint entities would otherwise keep reporting a task
+    the device no longer has.
+
+    The start, end, enabled and slot keys have no entity. The slot is read so a
+    removal or an update can name the task the device knows; the other three
+    are reported for a diagnostics download and nothing reads them back.
     """
     task_list_empty = result.pop("_task_list_empty", False)
-    kind_raw = result.pop("_task_kind_raw", None)
-    enabled_raw = result.pop("_task_enabled_raw", None)
-    window_raw = result.pop("_task_window_raw", None)
-    charge_power = result.pop("_task_charge_power_w", None)
-    charge_soc_target = result.pop("_task_charge_soc_target", None)
-    discharge_power = result.pop("_task_discharge_power_w", None)
+    blocks = result.pop("_task_blocks", None) or ()
 
-    kind = {1: "charge", 2: "discharge"}.get(kind_raw) if isinstance(kind_raw, int) else None
-    if kind is None:
-        if task_list_empty:
-            # None is an explicit clear: both platforms show it as unknown and
-            # stop falling back to the value they restored at startup.
-            for key in _TASK_KEYS:
-                result[key] = None
+    published: set[str] = set()
+    for task in (_decode_task(block) for block in blocks):
+        for kind in task.get("_task_kinds", ()):
+            if kind in published:
+                # The device can hold more than one task of a kind and these
+                # keys hold one, so the last in the list is what is reported.
+                # The write path removes one task per kind too, so a second one
+                # would survive a setpoint write. Worth seeing in a log until
+                # there is a reason to model it.
+                _LOGGER.debug(
+                    "ES22 task list carries more than one %s task, "
+                    "reporting the last of them",
+                    kind,
+                )
+            published.add(kind)
+
+            power = task.get(f"_task_{kind}_power_w")
+            if isinstance(power, int):
+                result[f"scheduled_{kind}_power_w"] = power
+            if kind == "charge":
+                soc_target = task.get("_task_charge_soc_target")
+                if isinstance(soc_target, int):
+                    result["scheduled_charge_soc_target"] = soc_target
+            slot_raw = task.get("_task_slot_raw")
+            if isinstance(slot_raw, int):
+                result[f"scheduled_{kind}_task_slot"] = slot_raw
+            enabled_raw = task.get("_task_enabled_raw")
+            if isinstance(enabled_raw, int):
+                result[f"scheduled_{kind}_enabled"] = bool(enabled_raw)
+            window_raw = task.get("_task_window_raw")
+            if isinstance(window_raw, int):
+                # One varint: start in the low 16 bits, end in the high 16,
+                # both minutes since midnight.
+                result[f"scheduled_{kind}_start_min"] = window_raw & 0xFFFF
+                result[f"scheduled_{kind}_end_min"] = (window_raw >> 16) & 0xFFFF
+
+    if published or not task_list_empty:
         return
-
-    power = charge_power if kind == "charge" else discharge_power
-    if isinstance(power, int):
-        result[f"scheduled_{kind}_power_w"] = power
-    if kind == "charge" and isinstance(charge_soc_target, int):
-        result["scheduled_charge_soc_target"] = charge_soc_target
-    if isinstance(enabled_raw, int):
-        result[f"scheduled_{kind}_enabled"] = bool(enabled_raw)
-    if isinstance(window_raw, int):
-        # One varint: start in the low 16 bits, end in the high 16, both
-        # minutes since midnight.
-        result[f"scheduled_{kind}_start_min"] = window_raw & 0xFFFF
-        result[f"scheduled_{kind}_end_min"] = (window_raw >> 16) & 0xFFFF
+    # None is an explicit clear: both platforms show it as unknown and stop
+    # falling back to the value they restored at startup.
+    for key in _TASK_KEYS:
+        result[key] = None
 
 
 def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
@@ -755,7 +912,13 @@ def parse_stream_ac5000_message(payload: bytes) -> dict[str, Any] | None:
                 decoded: dict[str, Any] = {}
                 seen_groups: set[str] = set()
                 try:
-                    _walk(pdata, tree, decoded, seen_groups)
+                    _walk(
+                        pdata,
+                        tree,
+                        decoded,
+                        seen_groups,
+                        repeated=_REPEATED_GROUPS.get(cmd_key),
+                    )
                 except (IndexError, ValueError):
                     # Only a payload that is not valid protobuf falls through
                     # to the next candidate. A clean decode ends the attempt,

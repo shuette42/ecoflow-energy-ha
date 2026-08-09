@@ -199,13 +199,21 @@ def build_task_payload(
     operation: int = TASK_UPDATE,
     charge_soc_target: int = 100,
     seq: int = 0,
+    task_slot: int | None = None,
 ) -> bytes:
     """Build a scheduled-task SET frame (config field 39).
 
     Grammar read off the app's own writes:
 
         39.1.1  operation: 1 add, 2 update, 3 remove
-        39.1.2  task type: 1 charge, 2 discharge
+        39.1.2  the task's number in the app's list. Read off the app's own
+                writes as 1 for charge and 2 for discharge, which is what this
+                builder sends by default and what keeps the two tasks this
+                integration writes from colliding. It is more likely a slot
+                than a type: on 2026-08-08 the app removed the charge task
+                numbered 1 and added a discharge task numbered 1 in one frame.
+                `task_slot` overrides it so a removal or an update can name the
+                number the device reported rather than one derived from `kind`.
         39.1.3  enabled, 39.1.4 its inverse, 39.1.5 always 1
         39.1.7  window: a packed varint, start in the low 16 bits and end in
                 the high 16, both minutes since midnight
@@ -235,6 +243,8 @@ def build_task_payload(
     task_type = _TASK_KINDS.get(kind)
     if task_type is None:
         raise ValueError(f"kind must be charge or discharge, got {kind!r}")
+    if task_slot is not None and not 0 < task_slot <= 0xFFFF:
+        raise ValueError(f"task_slot must be 1..65535, got {task_slot}")
     if operation not in (TASK_ADD, TASK_UPDATE, TASK_REMOVE):
         raise ValueError(f"operation must be 1, 2 or 3, got {operation}")
     if not 0 <= start_min < MINUTES_PER_DAY or not 0 < end_min <= MINUTES_PER_DAY:
@@ -250,7 +260,7 @@ def build_task_payload(
 
     task = bytearray()
     task.extend(encode_field_varint(1, operation))
-    task.extend(encode_field_varint(2, task_type))
+    task.extend(encode_field_varint(2, task_type if task_slot is None else task_slot))
     task.extend(encode_field_varint(3, 1 if enabled else 0))
     task.extend(encode_field_varint(4, 0 if enabled else 1))
     task.extend(encode_field_varint(5, 1))

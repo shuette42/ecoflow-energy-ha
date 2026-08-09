@@ -11,6 +11,8 @@ really a rewrite of a scheduled task.
 from __future__ import annotations
 
 import asyncio
+import json
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -39,7 +41,18 @@ from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
 from custom_components.ecoflow_energy.number import EcoFlowNumber
 from custom_components.ecoflow_energy.select import EcoFlowSelect
 
+from custom_components.ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (
+    parse_stream_ac5000_message,
+)
+
 from .test_stream_ac5000_entities import ES22_DEVICE
+
+TASK_FRAMES = (
+    Path(__file__).parent.parent
+    / "fixtures"
+    / "stream_ac5000"
+    / "es22_task_frames_masked.json"
+)
 
 # A task the device already reports: discharge, 00:00-23:00, 600 W.
 REPORTED: dict[str, Any] = {
@@ -462,6 +475,85 @@ class TestPowerSetpoints:
         write = _pdata_of(sent[1])
         assert bytes([0x08, 2, 0x10, 2]) in write
 
+    async def test_a_parked_charge_task_from_a_real_frame_is_removed_first(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """The whole chain from the 2026-08-08 incident, on the real frame.
+
+        An optimiser parked this device with a 0 W charge task. A task at 0 W
+        omits its watts, so the readback carried no power for it, so every
+        later discharge write skipped the removal and landed on top of it. The
+        device sat at its 200 W base output for 39 minutes while Home Assistant
+        reported success on every write.
+
+        Driven from the captured frame rather than from a hand-written state,
+        because the defect was in what the frame decodes to. Seeding the state
+        directly would pass either way.
+        """
+        frames = json.loads(TASK_FRAMES.read_text(encoding="utf-8"))["frames"]
+        parsed = parse_stream_ac5000_message(bytes.fromhex(frames[1]["hex"]))
+        assert parsed is not None
+        coordinator = _coordinator(
+            hass, enhanced_config_entry, data=dict(parsed, work_mode="custom")
+        )
+        entity = _number(coordinator, "scheduled_discharge_power_w")
+
+        await entity.async_set_native_value(300)
+
+        sent = coordinator.async_send_proto_set_command.call_args_list
+        assert len(sent) == 2, "the parked charge task was not removed"
+        # operation 3 (remove) naming task 1, the parked charge task
+        assert bytes([0x08, 3, 0x10, 1]) in _pdata_of(sent[0])
+
+    async def test_the_removal_names_the_number_the_device_reported(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """The app numbers tasks its own way, so the derived number can miss.
+
+        On 2026-08-08 it removed the charge task numbered 1 and added its
+        discharge task at 1 in the same frame.
+        """
+        data = dict(
+            REPORTED, scheduled_charge_power_w=600, scheduled_charge_task_slot=2
+        )
+        coordinator = _coordinator(hass, enhanced_config_entry, data=data)
+        entity = _number(coordinator, "scheduled_discharge_power_w")
+
+        await entity.async_set_native_value(300)
+
+        sent = coordinator.async_send_proto_set_command.call_args_list
+        # operation 3 (remove) naming 2, the number reported, not the kind's 1
+        assert bytes([0x08, 3, 0x10, 2]) in _pdata_of(sent[0])
+
+    async def test_the_update_names_the_number_the_device_reported(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """Same argument as the removal, on the frame that replaces the task."""
+        data = dict(REPORTED, scheduled_discharge_task_slot=1)
+        coordinator = _coordinator(hass, enhanced_config_entry, data=data)
+        entity = _number(coordinator, "scheduled_discharge_power_w")
+
+        await entity.async_set_native_value(300)
+
+        # operation 2 (update) naming 1, the number reported, not the kind's 2
+        assert bytes([0x08, 2, 0x10, 1]) in _last_pdata(coordinator)
+
+    async def test_an_add_is_never_given_a_number_to_reuse(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """A number is only ever known when this kind's power was reported.
+
+        That is exactly when the operation is an update, so an add always falls
+        back to the number derived from the kind.
+        """
+        coordinator = _coordinator(hass, enhanced_config_entry, data={"work_mode": "custom"})
+        entity = _number(coordinator, "scheduled_charge_power_w")
+
+        await entity.async_set_native_value(300)
+
+        # operation 1 (add), type 1 (charge)
+        assert bytes([0x08, 1, 0x10, 1]) in _last_pdata(coordinator)
+
     async def test_nothing_is_removed_when_there_is_no_other_task(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
     ) -> None:
@@ -487,6 +579,7 @@ class TestPowerSetpoints:
             scheduled_charge_start_min=0,
             scheduled_charge_end_min=1439,
             scheduled_charge_soc_target=80,
+            scheduled_charge_task_slot=1,
         )
         coordinator = _coordinator(hass, enhanced_config_entry, data=data)
         entity = _number(coordinator, "scheduled_discharge_power_w")
@@ -498,6 +591,7 @@ class TestPowerSetpoints:
             "scheduled_charge_enabled",
             "scheduled_charge_start_min",
             "scheduled_charge_end_min",
+            "scheduled_charge_task_slot",
         ):
             assert coordinator.data[key] is None
             assert coordinator.device_data[key] is None
