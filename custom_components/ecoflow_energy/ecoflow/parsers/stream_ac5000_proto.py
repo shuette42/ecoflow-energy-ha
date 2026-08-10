@@ -159,14 +159,25 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
         # rides only in the full-state frame, while `32/2` below carries the
         # same pair in every frame it sends.
     },
-    # An ES21 (STREAM 5000, #231) sends two further containers on `254/40`,
-    # `f60` and `f62`, which an ES22 does not. They are not mapped. The only
-    # recording available holds a single `254/40` frame, so every field in it
-    # is constant and nothing can be told apart: a value that never moves
-    # carries no evidence of what it means. Its owner expects solar strings on
-    # this device, and `f60` is the wide container, but naming a field from one
-    # still frame is how a plausible number reaches an entity that is wrong
-    # forever. Identifying them needs a recording taken while the values move.
+    # `254/40 f60`, `f61` and `f62` are not mapped, on either model. An earlier
+    # version of this comment called `f60` and `f62` ES21-only, on the strength
+    # of the one ES21 frame available and no check against what was already
+    # here. The ES22 captures carry 30 frames of `254/40` holding all three,
+    # with values that move across two decades, so the difference was never
+    # real.
+    #
+    # Movement is not the missing piece either. Correlating those 30 frames
+    # against every reading this parser already produces yields only artefacts:
+    # `f60.34` through `f60.41` sit at a constant 1584, and a constant divided
+    # by a near-constant battery voltage returns a stable ratio that means
+    # nothing. What is missing is an anchor - a value read off the app or an
+    # independent meter at a known moment - which is how the flow model in this
+    # file was settled in the first place.
+    #
+    # The ES21 reporter expects solar strings among them, and his unit is the
+    # one to ask: it has PV wired directly to it, while the ES22 these captures
+    # come from infers its solar figure. That difference, not the movement, is
+    # what makes his recording worth having.
     #
     # `254/40 f22` looks like a pair of power limits in milliwatts (600000 and
     # 1200000) and is deliberately not mapped: both stayed exactly there while
