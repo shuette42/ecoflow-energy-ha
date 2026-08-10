@@ -1,5 +1,6 @@
 """Coordinator-level regression tests for bundled PowerOcean frames."""
 
+import base64
 from unittest.mock import patch
 
 import pytest
@@ -250,6 +251,46 @@ def test_one_bad_header_keeps_the_rest_of_the_bundle() -> None:
     assert parsed["solar_w"] == 6730.0
     assert parsed["home_w"] == 450.0
     assert "pcs_ac_freq_hz" not in parsed
+
+
+def _inventory_frame(*pack_sns: bytes) -> bytes:
+    """Build a cmd_id=3 module inventory frame from literal wire field numbers.
+
+    Not serialized through `JTS1ErrorChangeReport` on purpose: a payload built
+    by the binding it is decoded with would follow any renumbering of the
+    binding, and the test would keep passing while the wire meaning moved.
+    """
+    parts = [
+        encode_field_bytes(1, encode_field_bytes(1, b"EMSMODULEFAKE001")),
+        encode_field_bytes(2, encode_field_bytes(1, b"PCSMODULEFAKE002")),
+    ]
+    parts.extend(
+        encode_field_bytes(3, encode_field_bytes(1, sn)) for sn in pack_sns
+    )
+    return _build_header(96, 3, b"".join(parts))
+
+
+def _pack_heartbeat_frame(serial: bytes, soc: int) -> bytes:
+    message = JTS1BpHeartbeatReport()
+    pack = message.bp_heart_beat.add()
+    pack.bp_sn = serial
+    pack.bp_soc = soc
+    pack.bp_design_cap = 4000
+    return _build_header(96, 7, message.SerializeToString())
+
+
+def test_module_inventory_produces_no_sensor_values() -> None:
+    """The frame carries serials and nothing measurable."""
+    parser = _PowerOceanParser()
+
+    parsed = parser._parse_powerocean_proto_frame(
+        _inventory_frame(b"BPTESTPACK000001", b"BPTESTPACK000002")
+    )
+
+    assert parsed is None
+
+
+
 
 
 def test_empty_pv_inv_companion_does_not_zero_heartbeat_value() -> None:

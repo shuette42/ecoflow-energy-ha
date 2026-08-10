@@ -117,6 +117,14 @@ def _build_cmd_registry() -> dict[tuple[int, int], CmdConfig]:
             parse_path="typed_runtime:ems_state",
             flags={"_is_ems_state": True},
         ),
+        # Module inventory. Carries the serial of the EMS module, the PCS
+        # module and every battery pack, and no measurement at all - it is
+        # registered for the pack order it establishes, not for a sensor.
+        (96, 3): CmdConfig(
+            msg_class=pb2.JTS1ErrorChangeReport,
+            parse_path="typed_runtime:error_change",
+            flags={"_is_error_change": True},
+        ),
         (96, 13): CmdConfig(
             msg_class=pb2.JTS1EmsParamChangeReport,
             parse_path="typed_runtime:ems_param_change",
@@ -170,6 +178,7 @@ def _empty_mapped() -> dict[str, Any]:
         "_is_ems_change": False,
         "_is_ems_state": False,
         "_is_ems_param_change": False,
+        "_is_error_change": False,
         "_is_bp_heartbeat": False,
         "_is_full_power_frame": False,
         "_is_delta3_display": False,

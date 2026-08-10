@@ -274,6 +274,54 @@ message JTS1BpHeartbeatReport {
   repeated JTS1BpStaReport bp_heart_beat = 1;
 }
 
+// --- Module inventory / error change report (cmd_func=96, cmd_id=3) ---
+//
+// The command family calls this an error change report, and every entry can
+// carry an error code. On live hardware it reads as an inventory instead:
+// one entry for the EMS module, which is the unit's own serial, one for the
+// PCS module, and one per battery pack. Four recordings of the same HJ31
+// taken across three days carry the identical 80 byte payload, byte for
+// byte, with all four serials present.
+//
+// No entity comes from this message, and in particular no error entity. Not
+// one of the observed entries sets an error code, so a fault sensor here
+// would be built on a field nobody has yet seen carry a value.
+//
+// It is decoded so that a fault, if one ever arrives, is readable at all.
+// An unregistered command reaches a diagnostics download as raw bytes and
+// nothing else, so a module reporting an error today would say so in a file
+// nobody can read. The serials it carries are masked out of diagnostics as
+// device identifiers, so they are not the reason this is here.
+//
+// The pack order it also establishes was measured and buys nothing. Numbering
+// is assigned in arrival order of the battery heartbeats, and the get-all
+// bundle at connect carries a heartbeat listing every pack at once - one
+// millisecond after this message, on the hardware it was measured on. See
+// PLAN-076.
+message JTS1ErrorCode {
+  // The command family declares these two as alternatives, one entry
+  // carrying either a serial or a code. Every observed entry carried a
+  // serial and not one carried a code, so what a reporting module looks
+  // like is unknown here and nothing downstream reads the code. Both carry
+  // explicit presence so that a zero, whenever one first arrives, is
+  // distinguishable from an absent field rather than silently dropped by
+  // proto3.
+  optional bytes module_sn = 1;
+  optional uint32 err_code = 2;
+}
+
+message JTS1ErrorChangeReport {
+  optional JTS1ErrorCode ems_err_code = 1;
+  optional JTS1ErrorCode pcs_err_code = 2;
+  // Repeated, although the command family declares this field inside a oneof
+  // together with field 1. That declaration cannot describe the wire: every
+  // observed payload carries field 3 twice in one message, once per battery
+  // pack, and a oneof member may appear at most once. Read as repeated, the
+  // payload decodes cleanly and the pack order survives; read as declared,
+  // the second pack would overwrite the first and the order would be lost.
+  repeated JTS1ErrorCode bp_err_code = 3;
+}
+
 // --- EMS Change Report (cmd_func=96, cmd_id=8) ---
 // All fields use oneof wrappers to preserve proto3 zero-values.
 // Without oneof, proto3 omits fields with value 0 during serialization,

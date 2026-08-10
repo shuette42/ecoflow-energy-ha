@@ -529,10 +529,18 @@ def remap_bp_keys(
         len(real_packs),
     )
     for pos, pack_data in enumerate(real_packs[:5], 1):
-        # Stable pack numbering via SN: the device sends one pack per
-        # heartbeat, so positional indexing would assign every pack to
-        # pack1. Using bp_sn as key gives each physical battery a
-        # consistent pack number across messages.
+        # Stable pack numbering via SN. Mid-session the device sends one
+        # pack per heartbeat, so positional indexing would assign every pack
+        # to pack1; using bp_sn as key gives each physical battery a
+        # consistent number across messages.
+        #
+        # The get-all bundle at connect is the exception and reads the other
+        # way: one heartbeat there carries every pack at once, measured on
+        # live hardware as "2 pack(s) in message, 2 real". That is also the
+        # only moment the map is empty, so on a healthy connect the numbering
+        # is settled by this one message rather than accumulated over
+        # minutes. Do not read the mid-session behaviour as the general rule -
+        # PLAN-076 built a whole mechanism on that misreading.
         sn = pack_data.get("bp_sn", "")
         if sn:
             if sn not in bp_sn_to_index:

@@ -800,7 +800,7 @@ class TestSafeFloat:
 class TestMultiBatteryPack:
     """Tests for per-pack battery extraction (pack{n}_* keys)."""
 
-    # Real probe data structure (2 packs from HJ31ZDH4ZF7H0170)
+    # Shape of a real two-pack reading; the serials are invented.
     PACK1_DATA = {
         "bpPwr": 2486.4836, "bpSoc": 76, "bpSoh": 100,
         "bpCycles": 464, "bpVol": 54.671, "bpAmp": 45.48085,
@@ -832,8 +832,8 @@ class TestMultiBatteryPack:
     def _two_pack_data(self):
         """Build quota_data with 2 battery packs (dict form)."""
         return {
-            "bp_addr.HJ32ZDH5ZG190227": dict(self.PACK1_DATA),
-            "bp_addr.HJ32ZDH5ZG190278": dict(self.PACK2_DATA),
+            "bp_addr.HJ32TEST00000001": dict(self.PACK1_DATA),
+            "bp_addr.HJ32TEST00000002": dict(self.PACK2_DATA),
         }
 
     def test_extract_two_packs(self):
@@ -975,8 +975,8 @@ class TestMultiBatteryPack:
         """Phantom/empty pack at position 0 is skipped - real packs start at 1."""
         data = {
             "bp_addr.PHANTOM_EMS": {},  # empty entry (EMS module)
-            "bp_addr.HJ32ZDH5ZG190227": dict(self.PACK1_DATA),
-            "bp_addr.HJ32ZDH5ZG190278": dict(self.PACK2_DATA),
+            "bp_addr.HJ32TEST00000001": dict(self.PACK1_DATA),
+            "bp_addr.HJ32TEST00000002": dict(self.PACK2_DATA),
         }
         result = _extract_all_battery_packs(data)
         # Real packs numbered 1 and 2 (phantom skipped)

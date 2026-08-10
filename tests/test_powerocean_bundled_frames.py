@@ -1,5 +1,6 @@
 """Regression tests for bundled and incremental PowerOcean protobuf frames."""
 
+import base64
 import re
 from pathlib import Path
 from unittest.mock import patch
@@ -13,6 +14,7 @@ from ecoflow_energy.ecoflow.parsers.powerocean_proto import (
 )
 from ecoflow_energy.ecoflow.proto.decoder import decode_header_message
 from ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
+    JTS1BpHeartbeatReport,
     JTS1EmsChangeReport,
     JTS1EmsHeartbeat,
     JTS1EmsPVInvEnergyStreamReport,
@@ -574,6 +576,70 @@ def _ems_change_keys(frame: bytes) -> dict[str, object]:
             }
             return remap_bp_keys(raw, {}, "R374TEST00000001")
     raise AssertionError("no cmd_id=8 header in frame")
+
+
+def _inventory_pdata(
+    ems_sn: bytes,
+    pcs_sn: bytes,
+    *pack_sns: bytes,
+) -> bytes:
+    """Build a module inventory payload from literal wire field numbers.
+
+    Deliberately not built from `JTS1ErrorChangeReport`. A payload serialized
+    by the same binding it is decoded with proves only that the binding agrees
+    with itself: renumber a field in `ecocharge.proto` and both sides move
+    together, so the assertions stay green while the wire meaning is gone.
+    The field numbers here are literals taken from the observed frame layout -
+    1 for the EMS module, 2 for the PCS module, 3 once per battery pack.
+    """
+    parts = [
+        encode_field_bytes(1, encode_field_bytes(1, ems_sn)),
+        encode_field_bytes(2, encode_field_bytes(1, pcs_sn)),
+    ]
+    parts.extend(
+        encode_field_bytes(3, encode_field_bytes(1, sn)) for sn in pack_sns
+    )
+    return b"".join(parts)
+
+
+def _b64(raw: bytes) -> str:
+    """Return what MessageToDict renders a `bytes` field as."""
+    return base64.b64encode(raw).decode()
+
+
+def test_module_inventory_decodes_every_serial_in_its_role() -> None:
+    """cmd_id=3 names the EMS module, the PCS module and both packs, in order.
+
+    The observed HJ31 payload is 80 bytes: four 16-character serials, each
+    wrapped in its own sub-message, with field 3 appearing twice. Field 3 is
+    declared repeated for exactly that reason - the command family puts it in
+    a oneof, where a second occurrence would overwrite the first.
+    """
+    payload = _inventory_pdata(
+        b"EMSMODULEFAKE001",
+        b"PCSMODULEFAKE002",
+        b"BPTESTPACK000001",
+        b"BPTESTPACK000002",
+    )
+    assert len(payload) == 80
+
+    decoded = decode_proto_runtime_headers(_build_header(96, 3, payload))
+
+    assert len(decoded) == 1
+    assert decoded[0].parse_path == "typed_runtime:error_change"
+    mapped = decoded[0].mapped
+    assert mapped["_is_error_change"] is True
+    assert mapped["ems_err_code"] == {"module_sn": _b64(b"EMSMODULEFAKE001")}
+    assert mapped["pcs_err_code"] == {"module_sn": _b64(b"PCSMODULEFAKE002")}
+    assert mapped["bp_err_code"] == [
+        {"module_sn": _b64(b"BPTESTPACK000001")},
+        {"module_sn": _b64(b"BPTESTPACK000002")},
+    ]
+
+
+
+
+
 
 
 def test_cmd_8_now_surfaces_sg_ready_and_the_battery_limit_reason() -> None:
