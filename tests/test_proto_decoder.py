@@ -340,9 +340,13 @@ class TestPowerOceanCorpusFields:
     def test_per_string_pv_power_sums_to_the_total(self) -> None:
         """The physical relation, not the schema, is what this checks.
 
-        pv1 and pv2 are separate strings feeding one total. If either field
-        number were wrong, the sum would not land on mppt_pwr - which is why
-        this asserts the sum rather than the individual values.
+        pv1 and pv2 are separate strings feeding one total, so a field number
+        pointing at something that is not a string power fails the sum.
+
+        What the sum cannot catch is 6 and 7 swapped with each other - it is
+        symmetric in the two. The single-string case below is what pins their
+        order, because that payload carries field 6 alone: under a swap it
+        would report pv2 present and pv1 absent. Read the two together.
         """
         report = JTS1EnergyStreamReport()
         report.ParseFromString(self._ENERGY_STREAM_PAYLOAD)
@@ -360,6 +364,38 @@ class TestPowerOceanCorpusFields:
     _SINGLE_STRING_PAYLOAD = bytes.fromhex(
         "0d0000c3431500a01bc51d0000344528643500003445"
     )
+
+    def test_the_pv_inverter_field_stays_undeclared(self) -> None:
+        """Declaring field 8 here would be a third source for one value.
+
+        The command family lists pv_inv_pwr at 8, but cmd_id=39 already
+        carries that quantity under a rename to pv_inverter_power_w, and the
+        heartbeat's ems_pv_inv_pwr maps to the same key. A third path with no
+        rename would land beside them under the raw name. Fields 9 and 10
+        appear in no recorded frame at all.
+        """
+        declared = {f.number for f in JTS1EnergyStreamReport.DESCRIPTOR.fields}
+
+        assert declared == {1, 2, 3, 4, 5, 6, 7}
+
+    def test_no_field_name_means_two_numbers_across_commands(self) -> None:
+        """One name, one field number - device data is a single flat dict.
+
+        Every command's output merges into one dict per device, so a name
+        reused at a different number in another message silently overwrites.
+        bp_soc is the one pre-existing case and is excluded deliberately:
+        both really are the battery charge level.
+        """
+        from ecoflow_energy.ecoflow.proto.runtime import _build_cmd_registry
+
+        seen: dict[str, set[int]] = {}
+        for config in _build_cmd_registry().values():
+            for field in config.msg_class.DESCRIPTOR.fields:
+                seen.setdefault(field.name, set()).add(field.number)
+
+        clashes = {n: v for n, v in seen.items() if len(v) > 1 and n != "bp_soc"}
+
+        assert not clashes, f"one name at two field numbers: {clashes}"
 
     def test_an_absent_string_is_not_a_zero(self) -> None:
         report = JTS1EnergyStreamReport()

@@ -50,12 +50,17 @@ def _captured_frames(node: Any) -> Iterator[str]:
     """Yield every stored frame payload, wherever a fixture keeps it.
 
     Capture fixtures differ in shape by the device family that produced them,
-    so the hex string is looked up by key rather than by path.
+    so the hex string is looked up by key rather than by path. Every fixture
+    tracked today uses `hex`; the probe scripts under scripts/probe/ write
+    `payload_hex` instead, and a fixture taken from one of those captures
+    would otherwise slip past the sweep in silence - the guard below only
+    fires when no frame is found anywhere at all.
     """
     if isinstance(node, dict):
-        payload = node.get("hex")
-        if isinstance(payload, str):
-            yield payload
+        for key in ("hex", "payload_hex", "payload_hex_masked"):
+            payload = node.get(key)
+            if isinstance(payload, str):
+                yield payload
         for value in node.values():
             yield from _captured_frames(value)
     elif isinstance(node, list):
@@ -1047,9 +1052,14 @@ class TestFrameCaptureFootprint:
 
         The tracked fixtures top out at 1465 B, which is the number the 2048 B
         cap was derived from - so a fixture-derived assertion would have passed
-        throughout and caught nothing. The device that outgrew it is one whose
-        capture cannot be committed, because the serial sits inside the frame
-        bytes. Hence the figure lives here with its provenance instead.
+        throughout and caught nothing.
+
+        Nor can the frame that outgrew it become a fixture. Not because of its
+        serial: masking is length-preserving and a masked bundle fixture
+        already exists. Because under the old cap its bytes past 2048 were
+        never captured at all - what survives is a 2048 B prefix beside a
+        recorded size of 2906. The figure therefore lives here, with its
+        provenance, until a download taken under the new cap can replace it.
         """
         assert RAW_FRAME_BUNDLE_MAX_BYTES >= self._WIDEST_OBSERVED_BUNDLE
 

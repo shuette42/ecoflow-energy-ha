@@ -636,10 +636,23 @@ class TestPowerOceanGetAllSurvivesTheBudget:
 
     _OBSERVED_GET_ALL_BYTES = 2906
 
+    # Offset of the second serial, chosen to sit above the budget this
+    # commit replaced. Bytes past 2048 are the ones a PowerOcean download
+    # never contained before, so they are the ones whose masking was never
+    # witnessed by any test.
+    _TAIL_SERIAL_AT = 2500
+
     def _bundle(self, size: int, sn: str) -> bytes:
-        """A multi-command frame of exactly `size` bytes, serial included."""
+        """A multi-command frame of exactly `size` bytes, serial included.
+
+        The serial appears twice: once in the head, where every budget ever
+        reached, and once in the tail that only the raised budget exports.
+        """
         head = b"\x0a" + b"\x00" * 40 + sn.encode()
-        return head + b"\x2d" + b"\x00" * (size - len(head) - 1)
+        body = bytearray(b"\x2d" + b"\x00" * (size - len(head) - 1))
+        at = self._TAIL_SERIAL_AT - len(head)
+        body[at : at + len(sn)] = sn.encode()
+        return head + bytes(body)
 
     def test_the_measured_get_all_is_stored_whole(self) -> None:
         sn = "HJ31TEST00000001"
@@ -656,14 +669,27 @@ class TestPowerOceanGetAllSurvivesTheBudget:
         assert entry["size"] == self._OBSERVED_GET_ALL_BYTES
         assert len(bytes.fromhex(entry["hex"])) == self._OBSERVED_GET_ALL_BYTES
 
-    def test_the_serial_is_still_masked_at_that_size(self) -> None:
-        """A larger budget stores bytes the old one discarded."""
+    def test_the_serial_is_still_masked_in_the_newly_exported_tail(self) -> None:
+        """The bytes this commit newly exports are the untested ones.
+
+        Masking runs over the whole payload before truncation, so a serial in
+        the head is masked under any budget - an assertion about it would have
+        passed before this change and proves nothing about it. The serial that
+        matters sits past 2048, in the region a PowerOcean download never
+        carried until the budget was raised. This repo has shipped two serial
+        leaks into downloads users attach to public issues; both were in a
+        region nobody was asserting over.
+        """
         sn = "HJ31TEST00000001"
         payload = self._bundle(self._OBSERVED_GET_ALL_BYTES, sn)
+        assert payload.count(sn.encode()) == 2
+        assert payload.index(sn.encode(), 2048) > 2048
 
         entry = build_frame_entry("/t", payload, [sn], RAW_FRAME_BUNDLE_MAX_BYTES)
 
-        assert sn.encode() not in bytes.fromhex(entry["hex"])
+        stored = bytes.fromhex(entry["hex"])
+        assert len(stored) == self._OBSERVED_GET_ALL_BYTES
+        assert sn.encode() not in stored
 
     def test_a_single_push_is_not_given_the_bundle_budget(self) -> None:
         """The split still holds: one command, one message budget."""

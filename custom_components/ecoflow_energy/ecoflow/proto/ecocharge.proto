@@ -81,11 +81,16 @@ message JTS1EnergyStreamReport {
   // the richer mppt_heart_beat container on cmd_id=1, which also carries
   // voltage and current. They are declared so they stop being reported as
   // undecoded field numbers on every PowerOcean download.
+  //
+  // The command family also lists pv_inv_pwr at 8, pv3_pwr at 9 and
+  // other_pv_pwr at 10. Those stay undeclared on purpose. None appears in
+  // any of the 44 recorded frames of this command, and the first would be a
+  // third source for a quantity two commands already feed: cmd_id=39 carries
+  // it under a rename to pv_inverter_power_w, and the heartbeat's
+  // ems_pv_inv_pwr maps to that same key. Declaring it here would add the
+  // value a third time, under a fourth name, with no rename to reconcile it.
   optional float pv1_pwr = 6;
   optional float pv2_pwr = 7;
-  optional float pv_inv_pwr = 8;
-  optional float pv3_pwr = 9;
-  optional float other_pv_pwr = 10;
 }
 
 // --- PV Inverter Energy Stream Report (cmd_func=96, cmd_id=39) ---
