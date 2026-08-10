@@ -71,6 +71,21 @@ message JTS1EnergyStreamReport {
   float mppt_pwr = 3;
   float bp_pwr = 4;
   uint32 bp_soc = 5;
+  // Per-string PV power, alongside the mppt_pwr total above. Confirmed on a
+  // PowerOcean with two strings: pv1_pwr + pv2_pwr matched mppt_pwr in 37 of
+  // 37 pushes, largest deviation 10 W. Declared with explicit presence
+  // because a string produces a real 0 W whenever it is dark or unwired, and
+  // an omitted zero would read as a string that is not there.
+  //
+  // No entity comes from these. Per-string power is already published from
+  // the richer mppt_heart_beat container on cmd_id=1, which also carries
+  // voltage and current. They are declared so they stop being reported as
+  // undecoded field numbers on every PowerOcean download.
+  optional float pv1_pwr = 6;
+  optional float pv2_pwr = 7;
+  optional float pv_inv_pwr = 8;
+  optional float pv3_pwr = 9;
+  optional float other_pv_pwr = 10;
 }
 
 // --- PV Inverter Energy Stream Report (cmd_func=96, cmd_id=39) ---
@@ -310,6 +325,68 @@ message JTS1EmsChangeReport {
   oneof _ems_sg_ready_en { bool ems_sg_ready_en = 183; }
   oneof _ems_sg_run_stat { uint32 ems_sg_run_stat = 184; }
   oneof _battery_limit_reason { uint32 battery_limit_reason = 600; }
+
+  // Grid-protection thresholds and their trip times, as commissioned in the
+  // inverter. Read off a live single-phase unit: 253.0 / 287.5 V over-voltage
+  // against 207.0 / 103.5 V under-voltage, 50.5 Hz over against 48.0 Hz under,
+  // trip times of 500 and 1000 ms. Installer configuration that does not move,
+  // so none of it becomes an entity. Declared because a device that sends them
+  // otherwise reports forty undecoded field numbers on every download, which
+  // buries the numbers that are genuinely unknown.
+  oneof _meter_connect_stat { uint32 meter_connect_stat = 30; }
+  oneof _pcs_over_vol1 { float pcs_over_vol1 = 31; }
+  oneof _pcs_over_vol2 { float pcs_over_vol2 = 32; }
+  oneof _pcs_over_vol3 { float pcs_over_vol3 = 33; }
+  oneof _pcs_over_vol_time1 { uint32 pcs_over_vol_time1 = 34; }
+  oneof _pcs_over_vol_time2 { uint32 pcs_over_vol_time2 = 35; }
+  oneof _pcs_over_vol_time3 { uint32 pcs_over_vol_time3 = 36; }
+  oneof _pcs_low_vol1 { float pcs_low_vol1 = 37; }
+  oneof _pcs_low_vol2 { float pcs_low_vol2 = 38; }
+  oneof _pcs_low_vol3 { float pcs_low_vol3 = 39; }
+  oneof _pcs_low_vol_time1 { uint32 pcs_low_vol_time1 = 40; }
+  oneof _pcs_low_vol_time2 { uint32 pcs_low_vol_time2 = 41; }
+  oneof _pcs_low_vol_time3 { uint32 pcs_low_vol_time3 = 42; }
+  oneof _pcs_over_vol_recover { float pcs_over_vol_recover = 43; }
+  oneof _pcs_low_vol_recover { float pcs_low_vol_recover = 44; }
+  oneof _pcs_vol_recover_time { uint32 pcs_vol_recover_time = 45; }
+  oneof _pcs_10min_over_vol { float pcs_10min_over_vol = 46; }
+  oneof _pcs_10min_over_vol_time { uint32 pcs_10min_over_vol_time = 47; }
+  oneof _pcs_over_freq1 { float pcs_over_freq1 = 48; }
+  oneof _pcs_over_freq2 { float pcs_over_freq2 = 49; }
+  oneof _pcs_over_freq_time1 { uint32 pcs_over_freq_time1 = 50; }
+  oneof _pcs_over_freq_time2 { uint32 pcs_over_freq_time2 = 51; }
+  oneof _pcs_low_freq1 { float pcs_low_freq1 = 52; }
+  oneof _pcs_low_freq2 { float pcs_low_freq2 = 53; }
+  oneof _pcs_low_freq_time1 { uint32 pcs_low_freq_time1 = 54; }
+  oneof _pcs_low_freq_time2 { uint32 pcs_low_freq_time2 = 55; }
+  oneof _pcs_over_freq_recover { float pcs_over_freq_recover = 56; }
+  oneof _pcs_low_freq_recover { float pcs_low_freq_recover = 57; }
+  oneof _pcs_freq_recover_time { uint32 pcs_freq_recover_time = 58; }
+  oneof _pcs_hvrt_lvrt_switch { uint32 pcs_hvrt_lvrt_switch = 59; }
+  oneof _pcs_over_vol_ride_through_start1 { float pcs_over_vol_ride_through_start1 = 60; }
+  oneof _pcs_over_vol_ride_through_start2 { float pcs_over_vol_ride_through_start2 = 61; }
+  oneof _pcs_over_vol_ride_through_protect_time1 { uint32 pcs_over_vol_ride_through_protect_time1 = 62; }
+  oneof _pcs_over_vol_ride_through_protect_time2 { uint32 pcs_over_vol_ride_through_protect_time2 = 63; }
+  oneof _pcs_low_vol_ride_through_start1 { float pcs_low_vol_ride_through_start1 = 64; }
+  oneof _pcs_low_vol_ride_through_start2 { float pcs_low_vol_ride_through_start2 = 65; }
+  oneof _pcs_low_vol_ride_through_start3 { float pcs_low_vol_ride_through_start3 = 66; }
+  oneof _pcs_low_vol_ride_through_protect_time1 { uint32 pcs_low_vol_ride_through_protect_time1 = 67; }
+  oneof _pcs_low_vol_ride_through_protect_time2 { uint32 pcs_low_vol_ride_through_protect_time2 = 68; }
+  oneof _pcs_low_vol_ride_through_protect_time3 { uint32 pcs_low_vol_ride_through_protect_time3 = 69; }
+
+  // IEEE 2030.5 is the utility-to-inverter control standard. A unit enrolled
+  // in a network operator's scheme reports the state of that control link,
+  // and one single-phase inverter sends these two fields five times a second
+  // and nothing else on this command. Until they were declared, its most
+  // frequent message parsed clean and empty.
+  //
+  // No entity yet: the entity list is static per device type, so every
+  // PowerOcean owner would get a sensor only an enrolled unit can populate.
+  // Declaring them first means the next download from any unit shows whether
+  // this is one installation or a whole region.
+  oneof _ieee20305_connect_stat { uint32 ieee20305_connect_stat = 612; }
+  oneof _ieee20305_ctrl_stat { uint32 ieee20305_ctrl_stat = 613; }
+  oneof _ieee20305_last_ctrl_timestamp { uint32 ieee20305_last_ctrl_timestamp = 614; }
 }
 
 // JTS1EmsParamChangeReport (cmd_id=13). Carries the user-tunable parameter

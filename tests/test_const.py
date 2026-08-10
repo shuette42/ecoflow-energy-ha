@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import ast
+import json
 import re
 from pathlib import Path
+from typing import Any, Iterator
 
 from ecoflow_energy.const import (
     DELTA_PROFILE_R331,
@@ -42,6 +44,23 @@ from ecoflow_energy.ecoflow.const import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _captured_frames(node: Any) -> Iterator[str]:
+    """Yield every stored frame payload, wherever a fixture keeps it.
+
+    Capture fixtures differ in shape by the device family that produced them,
+    so the hex string is looked up by key rather than by path.
+    """
+    if isinstance(node, dict):
+        payload = node.get("hex")
+        if isinstance(payload, str):
+            yield payload
+        for value in node.values():
+            yield from _captured_frames(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from _captured_frames(value)
 
 
 class TestDeltaProfileRouting:
@@ -1016,3 +1035,35 @@ class TestFrameCaptureFootprint:
     def test_the_bundle_budget_is_the_larger_one(self) -> None:
         """Inverted, the split would cut exactly the frames it exists for."""
         assert RAW_FRAME_BUNDLE_MAX_BYTES > RAW_FRAME_MAX_BYTES
+
+    # The widest get-all measured on real hardware, in bytes. A PowerOcean
+    # (J327, issue #225) bundled 2906 B where the cap stood at 2048, and the
+    # eight command types in the tail reached the download as names with no
+    # bytes behind them.
+    _WIDEST_OBSERVED_BUNDLE = 2906
+
+    def test_the_bundle_budget_carries_the_widest_observed_get_all(self) -> None:
+        """The cap is sized by hardware, not by what happens to be committed.
+
+        The tracked fixtures top out at 1465 B, which is the number the 2048 B
+        cap was derived from - so a fixture-derived assertion would have passed
+        throughout and caught nothing. The device that outgrew it is one whose
+        capture cannot be committed, because the serial sits inside the frame
+        bytes. Hence the figure lives here with its provenance instead.
+        """
+        assert RAW_FRAME_BUNDLE_MAX_BYTES >= self._WIDEST_OBSERVED_BUNDLE
+
+    def test_the_bundle_budget_carries_every_tracked_fixture(self) -> None:
+        """Whatever a fixture holds must survive the cap whole."""
+        widest = 0
+        offender = ""
+        for path in sorted((REPO_ROOT / "tests/fixtures").rglob("*.json")):
+            for frame in _captured_frames(json.loads(path.read_text())):
+                size = len(frame) // 2
+                if size > widest:
+                    widest, offender = size, path.name
+
+        assert widest, "no captured frames found under tests/fixtures"
+        assert RAW_FRAME_BUNDLE_MAX_BYTES >= widest, (
+            f"{offender} holds a {widest} B frame the cap would cut"
+        )

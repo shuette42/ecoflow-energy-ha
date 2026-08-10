@@ -123,12 +123,13 @@ HTTP_FALLBACK_INTERVAL_S = 30
 # the device's state never reached a download, and the fields above the cut
 # were then read as fields the device does not send.
 #
-# Worst case with the split: 20 * 3 * 2048 B = 122 880 B (120 KiB) of frame
+# Worst case with the split: 20 * 3 * 4096 B = 245 760 B (240 KiB) of frame
 # payload per device, roughly double that as hex text in the download, and
 # only for a device that bundles on all twenty of its message types.
 # A device that never bundles is bounded at 20 * 3 * 1024 B = 61 440 B
 # (60 KiB). A budget is a ceiling rather than an allocation, so a device
-# whose frames stay under 512 B stores exactly what it stored before.
+# whose frames stay under 512 B stores exactly what it stored before, and a
+# real PowerOcean bundles on one message type rather than twenty.
 RAW_FRAME_LOG_KEYS_MAX = 20
 RAW_FRAME_LOG_PER_KEY_MAX = 3
 # One message, or none that decoded. The largest single-message frames in
@@ -136,12 +137,21 @@ RAW_FRAME_LOG_PER_KEY_MAX = 3
 # the 512 B this replaces - so both were being cut, in silence, on devices
 # nobody was looking at.
 RAW_FRAME_MAX_BYTES = 1024
-# Several messages in one frame. The widest bundle ever recorded here is
-# 1465 B (the tracked STREAM AC 5000 get_reply fixture; the reporter
-# downloads ran 1434 to 1448 B), so this carries it with room for a variant
-# that says more. A device that outgrows it is no longer silent about it:
-# the entry says `truncated`.
-RAW_FRAME_BUNDLE_MAX_BYTES = 2048
+# Several messages in one frame. Sized against the widest get-all observed,
+# not against the widest one known when the constant was written: 2048 B came
+# from a 1465 B STREAM AC 5000 fixture and a PowerOcean bundles far more. One
+# J327 download (#225) carried a 2906 B get_reply, 42 percent past that cap,
+# and the eight command types in its tail - 96/10, 96/11, 96/13, 96/14,
+# 96/22, 224/1, 240/2, 241/1 - reached the download only as names in the
+# frame's own `cmds` list, with no bytes behind them. A third of that
+# device's command surface was invisible in the file whose purpose is to
+# show it.
+#
+# The truncation was never silent - the entry says `truncated` - but a flag
+# that fires on every PowerOcean get-all is a cap set too low, not a warning.
+# 4096 B carries the observed 2906 B with room for a unit that reports more
+# packs or more strings.
+RAW_FRAME_BUNDLE_MAX_BYTES = 4096
 
 # Undeclared protobuf field numbers: how many commands are tracked at once.
 # The same twenty message types the frame capture budgets for would be the
@@ -171,8 +181,10 @@ UNKNOWN_FIELD_NUMBERS_MAX = 200
 #
 # Same per-frame budget as above, and this is the buffer that proved it was
 # needed: the three STREAM AC 5000 captures came through here.
-# Worst case 12 * 10 * 2048 B = 245 760 B (240 KiB) of frame payload, roughly
-# double that as hex text in the download.
+# Worst case 12 * 10 * 4096 B = 491 520 B (480 KiB) of frame payload, roughly
+# double that as hex text in the download. That ceiling doubled when the
+# bundle budget did, and it is reached only by a device that bundles every
+# one of its twelve message types at full width - none observed does.
 # A device that never bundles is bounded at 12 * 10 * 1024 B = 122 880 B
 # (120 KiB). What it costs in practice is far below either: the busiest of
 # the three captures holds 25 515 B of frame where the flat 512 B cap kept

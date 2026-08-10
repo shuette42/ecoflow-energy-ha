@@ -304,3 +304,67 @@ class TestDecoderMalformedInput:
         frame = _build_frame(96, 33, inner)
         for cut in range(len(frame)):
             decode_header_message(frame[:cut])
+
+
+class TestPowerOceanCorpusFields:
+    """Fields a PowerOcean sends that the binding used to leave undeclared.
+
+    Both payloads below are the inner bytes of real frames, taken from
+    listen-only recordings. They carry no serial - that lives in the envelope,
+    which is not part of what is asserted here. Constructing the payloads with
+    the same binding under test would prove only that protobuf round-trips.
+    """
+
+    # cmd_func 96 / cmd_id 8 from a single-phase inverter enrolled in a grid
+    # operator's control scheme. The entire message, six bytes: field 612
+    # varint 1, field 613 varint 1. Before these were declared it parsed to a
+    # valid, empty message - and this is the message that unit sends most.
+    _IEEE_PAYLOAD = bytes.fromhex("a02601a82601")
+
+    # cmd_func 96 / cmd_id 33 from a two-string PowerOcean at midday.
+    _ENERGY_STREAM_PAYLOAD = bytes.fromhex(
+        "0d00c0a844150020dac51d0028024628643500c05f453d00209445"
+    )
+
+    def test_grid_control_status_decodes(self) -> None:
+        report = JTS1EmsChangeReport()
+        report.ParseFromString(self._IEEE_PAYLOAD)
+
+        assert report.ieee20305_connect_stat == 1
+        assert report.ieee20305_ctrl_stat == 1
+        assert {f.name for f, _ in report.ListFields()} == {
+            "ieee20305_connect_stat",
+            "ieee20305_ctrl_stat",
+        }
+
+    def test_per_string_pv_power_sums_to_the_total(self) -> None:
+        """The physical relation, not the schema, is what this checks.
+
+        pv1 and pv2 are separate strings feeding one total. If either field
+        number were wrong, the sum would not land on mppt_pwr - which is why
+        this asserts the sum rather than the individual values.
+        """
+        report = JTS1EnergyStreamReport()
+        report.ParseFromString(self._ENERGY_STREAM_PAYLOAD)
+
+        assert report.HasField("pv1_pwr")
+        assert report.HasField("pv2_pwr")
+        assert report.pv1_pwr > 0
+        assert report.pv2_pwr > 0
+        assert abs(report.pv1_pwr + report.pv2_pwr - report.mppt_pwr) <= 10.0
+
+    # The same command from a single-string unit. It omits pv2 rather than
+    # sending a zero, which is why pv1 and pv2 are declared with explicit
+    # presence: without it, "no second string" and "second string at 0 W"
+    # would be the same message.
+    _SINGLE_STRING_PAYLOAD = bytes.fromhex(
+        "0d0000c3431500a01bc51d0000344528643500003445"
+    )
+
+    def test_an_absent_string_is_not_a_zero(self) -> None:
+        report = JTS1EnergyStreamReport()
+        report.ParseFromString(self._SINGLE_STRING_PAYLOAD)
+
+        assert report.HasField("pv1_pwr")
+        assert not report.HasField("pv2_pwr")
+        assert report.pv1_pwr == report.mppt_pwr
