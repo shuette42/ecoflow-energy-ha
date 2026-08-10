@@ -1073,6 +1073,32 @@ def excluded_keys_for_serial(device_sn: str) -> frozenset[str]:
     return _SN_PREFIX_EXCLUDED_KEYS.get(device_sn[:4].upper(), frozenset())
 
 
+# Serial prefixes whose STREAM AC 5000 controls have been confirmed on
+# hardware. Every write this integration sends to that family is a
+# byte-for-byte reproduction of a frame captured from an ES22, and a power
+# setpoint writes a scheduled task into a real battery rather than flipping a
+# display setting. Reading the same telemetry is no evidence that the same
+# config write is accepted, so a variant reads until one of its own frames
+# says otherwise.
+#
+# This is an allowlist on purpose, the inverse of DELTA3_PORT_PRIORITY_KEYS
+# above: a prefix added later gets no controls until someone decides here,
+# which is the safe default for a write and the wrong one for a read.
+#
+# The exclusion table below cannot carry this. It matches on entity keys, and
+# all eight control state keys are also sensor keys, so excluding them would
+# take the read-only sensors with them - including the two SoC limits an ES21
+# demonstrably reports.
+STREAM_AC5000_CONTROL_PREFIXES: frozenset[str] = frozenset({"ES22"})
+
+
+def supports_stream_ac5000_controls(device_sn: str) -> bool:
+    """Return whether this STREAM AC 5000 variant may be written to."""
+    if not device_sn:
+        return False
+    return device_sn[:4].upper() in STREAM_AC5000_CONTROL_PREFIXES
+
+
 def filter_defs_for_serial(definitions: list[_DefT], device_sn: str) -> list[_DefT]:
     """Drop entity definitions a device variant cannot ever populate.
 

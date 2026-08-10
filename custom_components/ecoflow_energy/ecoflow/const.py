@@ -147,6 +147,14 @@ _SN_PREFIX_MAP = {
     # STREAM AC 5000 (#177): verified against live hardware in Enhanced mode,
     # cross-checked against the app and an independent Tibber Pulse meter.
     "ES22": DEVICE_TYPE_STREAM_AC5000,
+    # STREAM 5000 (#231). Same product type as the ES22 above (396) on a
+    # different model number, and a capture from a live unit sends the same
+    # four telemetry families: 254/39, 254/40, 32/2 and 32/50. Replayed
+    # through the ES22 parser unchanged those frames yield 26 readings whose
+    # flow model closes, so this is the same parser rather than a guess from
+    # the shared name. Controls are a separate question and stay off, see
+    # STREAM_AC5000_CONTROL_PREFIXES in ../const.py.
+    "ES21": DEVICE_TYPE_STREAM_AC5000,
 }
 
 _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
@@ -160,6 +168,7 @@ _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
     "BK51": "Stream AC",
     "BK61": "Stream Ultra X",
     "ES22": "STREAM AC 5000",
+    "ES21": "STREAM 5000",
 }
 
 def get_device_name(product_name: str, sn: str = "") -> str:

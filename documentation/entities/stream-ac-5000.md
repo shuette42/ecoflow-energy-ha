@@ -2,7 +2,9 @@
 
 Full list of all entities created for the STREAM AC 5000.
 
-**Models:** STREAM AC 5000 (`ES22`).
+**Models:** STREAM AC 5000 (`ES22`), STREAM 5000 (`ES21`).
+
+**The STREAM 5000 gets the sensors and binary sensors, not the controls.** It is the same product on a different model number and sends the same telemetry, so every reading below applies to it. The switches, numbers and select do not: each of those rebuilds a frame captured from an AC 5000, and no recording from a STREAM 5000 has confirmed it accepts them. A power setpoint writes a scheduled task into the battery, so the difference is not cosmetic. A recording from one of these units is what turns them on.
 
 **This is not the Stream entity set.** Despite the shared product name, an `ES22` speaks a different protocol from the BK-series Stream devices: it sends none of their telemetry messages and describes power as a flow matrix rather than as individual readings. It therefore has its own device type, parser and entity list. See [Stream](stream.md) for the BK series.
 

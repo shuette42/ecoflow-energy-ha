@@ -47,6 +47,7 @@
 | **Stream** - AC-coupled Battery | `BK31` `BK11` `BK41` `BK51` `BK61` | 54 + 2 binary | 1 number (Enhanced only) | 2 default (battery charge/discharge), 6 optional diagnostic (solar/home, PV 1-4) | ~30 s standard / ~3 s enhanced |
 | **Stream Micro** - Grid-tie Inverter | `BK01`\* | 21 | - | 4 optional diagnostic (PV 1-4) | ~3 s enhanced |
 | **STREAM AC 5000** - AC-coupled Battery | `ES22`\* | 50 + 2 binary | 2 switches, 5 numbers, 1 select (Enhanced only) | 4 default (grid import/export, battery charge/discharge), 1 optional diagnostic (home) | ~2 s enhanced |
+| **STREAM 5000** - AC-coupled Battery | `ES21`\* | 50 + 2 binary | none yet, see below | 4 default (grid import/export, battery charge/discharge), 1 optional diagnostic (home) | ~2 s enhanced |
 
 > **\* Enhanced Mode only.** These serial prefixes cannot currently be linked to an IoT Developer API key, so Standard Mode reports error 1006 and their entities stay unavailable. This is an EcoFlow API limitation, not a configuration problem.
 >
@@ -55,6 +56,8 @@
 > **Tip:** Other Delta-series devices (Delta Pro, Delta 2, etc.) should work automatically with the Delta sensor set. Base Delta 3 and Delta 3 Plus use the Delta 3 sensor set. The five AC-coupled Stream models share one sensor set.
 >
 > **The STREAM AC 5000 is not a Stream.** It shares the name and nothing else: it sends none of the BK-series telemetry messages, so it has its own parser and its own entity set. Its solar and per-phase meter entities are created only once the device reports them, because whether a unit has PV on the EcoFlow and which smart meter is linked are installation choices rather than model differences. Its solar reading is a figure the device derives for itself, so on an installation with separate PV it is the EcoFlow's inference rather than a measurement of that system, which is why there is no lifetime solar counter for it.
+>
+> **The STREAM 5000 reads but is not driven.** It is the same product as the STREAM AC 5000 on a different model number, and a recording from one shows it sending the same four telemetry messages, so it gets the same readings from the same parser. It does not get the controls. Every write this integration sends to that family is a rebuild of a frame captured from an AC 5000, and a power setpoint writes a scheduled task into the battery rather than flipping a display setting, so reading alike is not enough to assume writing alike. If you own one, a recording from your unit is what turns the controls on. The device also reports two blocks of readings this parser does not map yet, which is where its solar strings most likely sit.
 >
 > **The Stream Micro is the exception.** It is a grid-tie inverter with two solar strings and no battery, so it deliberately gets a reduced set: no battery, state of charge, backup reserve or AC outlet entities, because it has none of those and an entity Home Assistant once created stays in the registry forever.
 >

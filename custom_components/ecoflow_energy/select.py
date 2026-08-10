@@ -40,6 +40,7 @@ from .const import (
     POWEROCEAN_SELECTS,
     STREAMAC5000_SELECTS,
     filter_defs_for_serial,
+    supports_stream_ac5000_controls,
 )
 from .coordinator import EcoFlowDeviceCoordinator
 from .ecoflow.delta3_commands import build_select_command as build_delta3_select_command
@@ -75,7 +76,8 @@ async def async_setup_entry(
 
     for coordinator in coordinators.values():
         defs = filter_defs_for_serial(
-            _get_select_defs(coordinator.device_type), coordinator.device_sn
+            _get_select_defs(coordinator.device_type, coordinator.device_sn),
+            coordinator.device_sn,
         )
         for defn in defs:
             if defn.enhanced_only and not coordinator.enhanced_mode:
@@ -240,12 +242,18 @@ class EcoFlowSelect(CoordinatorEntity[EcoFlowDeviceCoordinator], SelectEntity):
         self.async_write_ha_state()
 
 
-def _get_select_defs(device_type: str) -> list[EcoFlowSelectDef]:
-    """Return select definitions based on device type."""
+def _get_select_defs(device_type: str, device_sn: str = "") -> list[EcoFlowSelectDef]:
+    """Return select definitions based on device type.
+
+    ``device_sn`` gates the STREAM AC 5000 controls, which are confirmed on
+    one variant of that family only. See STREAM_AC5000_CONTROL_PREFIXES.
+    """
     if device_type == DEVICE_TYPE_POWEROCEAN:
         return POWEROCEAN_SELECTS
     if device_type == DEVICE_TYPE_DELTA3:
         return DELTA3_SELECTS
     if device_type == DEVICE_TYPE_STREAM_AC5000:
+        if not supports_stream_ac5000_controls(device_sn):
+            return []
         return STREAMAC5000_SELECTS
     return []

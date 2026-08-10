@@ -159,6 +159,15 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
         # rides only in the full-state frame, while `32/2` below carries the
         # same pair in every frame it sends.
     },
+    # An ES21 (STREAM 5000, #231) sends two further containers on `254/40`,
+    # `f60` and `f62`, which an ES22 does not. They are not mapped. The only
+    # recording available holds a single `254/40` frame, so every field in it
+    # is constant and nothing can be told apart: a value that never moves
+    # carries no evidence of what it means. Its owner expects solar strings on
+    # this device, and `f60` is the wide container, but naming a field from one
+    # still frame is how a plausible number reaches an entity that is wrong
+    # forever. Identifying them needs a recording taken while the values move.
+    #
     # `254/40 f22` looks like a pair of power limits in milliwatts (600000 and
     # 1200000) and is deliberately not mapped: both stayed exactly there while
     # the account limit was raised to 2500 W, while the output limit was set

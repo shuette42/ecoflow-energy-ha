@@ -36,6 +36,7 @@ from .const import (
     DOMAIN,
     EcoFlowSwitchDef,
     filter_defs_for_serial,
+    supports_stream_ac5000_controls,
     SMARTPLUG_SWITCH_COMMANDS,
     SMARTPLUG_SWITCHES,
     STREAM_SWITCHES,
@@ -74,7 +75,8 @@ async def async_setup_entry(
 
     for coordinator in coordinators.values():
         defs = filter_defs_for_serial(
-            _get_switch_defs(coordinator.device_type), coordinator.device_sn
+            _get_switch_defs(coordinator.device_type, coordinator.device_sn),
+            coordinator.device_sn,
         )
         for defn in defs:
             if defn.enhanced_only and not coordinator.enhanced_mode:
@@ -334,8 +336,12 @@ class EcoFlowSwitch(
         self._write_state_if_changed(self.is_on)
 
 
-def _get_switch_defs(device_type: str) -> list[EcoFlowSwitchDef]:
-    """Return switch definitions based on device type."""
+def _get_switch_defs(device_type: str, device_sn: str = "") -> list[EcoFlowSwitchDef]:
+    """Return switch definitions based on device type.
+
+    ``device_sn`` gates the STREAM AC 5000 controls, which are confirmed on
+    one variant of that family only. See STREAM_AC5000_CONTROL_PREFIXES.
+    """
     if device_type == DEVICE_TYPE_DELTA:
         return DELTA2MAX_SWITCHES
     if device_type == DEVICE_TYPE_SMARTPLUG:
@@ -345,6 +351,8 @@ def _get_switch_defs(device_type: str) -> list[EcoFlowSwitchDef]:
     if device_type == DEVICE_TYPE_DELTA3:
         return DELTA3_SWITCHES
     if device_type == DEVICE_TYPE_STREAM_AC5000:
+        if not supports_stream_ac5000_controls(device_sn):
+            return []
         return STREAMAC5000_SWITCHES
     return []
 
