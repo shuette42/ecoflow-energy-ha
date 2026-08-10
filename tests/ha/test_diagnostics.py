@@ -1,4 +1,4 @@
-"""Functional tests for diagnostics — runtime output verification."""
+"""Functional tests for diagnostics - runtime output verification."""
 
 from __future__ import annotations
 
@@ -103,7 +103,7 @@ class TestConfigEntryDiagnostics:
     ) -> None:
         """Diagnostics handles missing coordinators gracefully."""
         standard_config_entry.add_to_hass(hass)
-        # Don't set up the integration — no coordinators in hass.data
+        # Don't set up the integration - no coordinators in hass.data
         result = await async_get_config_entry_diagnostics(hass, standard_config_entry)
         assert result["devices"] == []
         assert result["skipped_devices"] == []
@@ -253,7 +253,7 @@ class TestDeviceDiagnostics:
         hass: HomeAssistant,
         standard_config_entry: MockConfigEntry,
     ) -> None:
-        """Standard Mode is not a fallback — http_fallback_active is False."""
+        """Standard Mode is not a fallback - http_fallback_active is False."""
         standard_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, standard_config_entry, MOCK_DELTA_DEVICE
@@ -992,7 +992,7 @@ class TestSkippedDeviceRawQuotaDiagnostics:
         entry.add_to_hass(hass)
         self._register_skipped(hass, entry)
 
-        # get_quota_all() returns the already-unwrapped flat quota dict —
+        # get_quota_all() returns the already-unwrapped flat quota dict -
         # no code/data envelope. Match the real client contract.
         quota_response = {
             "meterSn": self.FAKE_SERIAL_FIELD,

@@ -248,7 +248,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
         device_info = {**device_info, "device_type": device_type}
         coordinator = EcoFlowDeviceCoordinator(hass, entry, device_info)
         await coordinator.async_setup()
-        # First refresh — raises ConfigEntryNotReady on failure so HA retries.
+        # First refresh - raises ConfigEntryNotReady on failure so HA retries.
         # Partial-setup cleanup is handled by HA core: the coordinator
         # registers async_shutdown as an entry on_unload callback, and HA
         # processes those callbacks when setup fails, so coordinators
@@ -313,7 +313,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
 
 async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Reload the integration when the config entry is updated."""
-    _LOGGER.debug("Config entry updated — reloading EcoFlow Energy")
+    _LOGGER.debug("Config entry updated - reloading EcoFlow Energy")
     await hass.config_entries.async_reload(entry.entry_id)
 
 

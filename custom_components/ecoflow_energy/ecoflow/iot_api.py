@@ -2,7 +2,7 @@
 
 Provides MQTT credentials via /iot-open/sign/certification
 and device listing via /iot-open/sign/device/list.
-Uses aiohttp for async HTTP — HA provides the ClientSession.
+Uses aiohttp for async HTTP - HA provides the ClientSession.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ _Credentials = dict[str, Any]
 
 
 class IoTApiClient:
-    """IoT Developer API — HMAC-SHA256 signed async client.
+    """IoT Developer API - HMAC-SHA256 signed async client.
 
     Uses /iot-open/sign/certification to fetch MQTT credentials.
     Memory cache with rate-limit guard (max 1 fetch / 60 s).
@@ -50,7 +50,7 @@ class IoTApiClient:
 
         Returns:
             dict with certificateAccount, certificatePassword,
-            url, port, protocol — or None on error.
+            url, port, protocol - or None on error.
         """
         if self._cached is not None:
             return self._cached
@@ -59,7 +59,7 @@ class IoTApiClient:
     async def refresh_credentials(self) -> _Credentials | None:
         """Force a new fetch (e.g. after AUTH error rc=5).
 
-        Bypasses the rate-limit guard — forced refreshes only happen on
+        Bypasses the rate-limit guard - forced refreshes only happen on
         auth failure or age-based rotation, both rare. The previous cache
         is kept until a fetch succeeds, so a failed refresh does not
         destroy working credentials.
@@ -80,12 +80,12 @@ class IoTApiClient:
                 body = await resp.json()
                 data = body.get("data")
                 if data is None:
-                    _LOGGER.warning("IoT API device list: empty response — code=%s", body.get("code"))
+                    _LOGGER.warning("IoT API device list: empty response - code=%s", body.get("code"))
                     return None
                 # data == [] is a legitimate account with no bound devices
                 return data
         except (aiohttp.ClientError, TimeoutError) as exc:
-            _LOGGER.warning("IoT API device list failed — %s", exc)
+            _LOGGER.warning("IoT API device list failed - %s", exc)
             return None
 
     @staticmethod
@@ -124,7 +124,7 @@ class IoTApiClient:
         now = time.monotonic()
         if not force and (now - self._last_fetch_ts) < IOT_MIN_FETCH_INTERVAL_S:
             _LOGGER.debug(
-                "IoT API: rate-limited — next fetch in %.0f s",
+                "IoT API: rate-limited - next fetch in %.0f s",
                 IOT_MIN_FETCH_INTERVAL_S - (now - self._last_fetch_ts),
             )
             return self._cached
@@ -143,7 +143,7 @@ class IoTApiClient:
                 body = await resp.json()
                 data = body.get("data")
                 if not data:
-                    _LOGGER.warning("IoT API: empty response — code=%s", body.get("code"))
+                    _LOGGER.warning("IoT API: empty response - code=%s", body.get("code"))
                     return None
                 self._cached = data
                 _LOGGER.debug(
@@ -153,5 +153,5 @@ class IoTApiClient:
                 )
                 return data
         except (aiohttp.ClientError, TimeoutError) as exc:
-            _LOGGER.warning("IoT API: fetch failed — %s", exc)
+            _LOGGER.warning("IoT API: fetch failed - %s", exc)
             return None

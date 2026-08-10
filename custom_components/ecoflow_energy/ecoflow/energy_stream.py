@@ -31,7 +31,7 @@ def build_energy_stream_activate_payload(seq: int = 0) -> bytes:
     # EnergyStreamSwitch: field 1 = true (emsOpenEnergyStream)
     switch_bytes = encode_field_varint(1, 1)
 
-    # Header — portal-exact field order:
+    # Header - portal-exact field order:
     header = bytearray()
     header.extend(encode_field_bytes(1, switch_bytes))   # pdata as field 1 (nested)
     header.extend(encode_field_varint(2, 32))            # src = 32 (Client/App)
@@ -147,13 +147,13 @@ def build_soc_limit_set_payload(
         seq = int(time.time() * 1000) & 0x7FFFFFFF
 
     # SysBatChgDsgSet: field 1 = sys_bat_chg_up_limit, field 2 = sys_bat_dsg_down_limit
-    # Only 2 fields — firmware does not reliably accept the payload with 4 fields.
+    # Only 2 fields - firmware does not reliably accept the payload with 4 fields.
     payload_bytes = (
         encode_field_varint(1, max_charge_soc)
         + encode_field_varint(2, min_discharge_soc)
     )
 
-    # Header — portal-exact field order (same as EnergyStreamSwitch, cmd_id=112):
+    # Header - portal-exact field order (same as EnergyStreamSwitch, cmd_id=112):
     header = bytearray()
     header.extend(encode_field_bytes(1, payload_bytes))          # pdata
     header.extend(encode_field_varint(2, 32))                    # src = 32 (Client/App)

@@ -48,7 +48,7 @@ class KeepaliveMixin:
             )
 
     # ------------------------------------------------------------------
-    # latestQuotas poll (Enhanced Mode — app-level keepalive, every 30s)
+    # latestQuotas poll (Enhanced Mode - app-level keepalive, every 30s)
     # ------------------------------------------------------------------
 
     def _schedule_quotas_poll(self) -> None:
@@ -84,7 +84,7 @@ class KeepaliveMixin:
             )
 
     # ------------------------------------------------------------------
-    # Ping heartbeat (Enhanced Mode — MQTT-level keepalive, every 60s)
+    # Ping heartbeat (Enhanced Mode - MQTT-level keepalive, every 60s)
     # ------------------------------------------------------------------
 
     def _schedule_ping(self) -> None:

@@ -1,4 +1,4 @@
-"""Tests for diagnostics — verifies no credentials are exposed."""
+"""Tests for diagnostics - verifies no credentials are exposed."""
 
 import json
 import re
@@ -19,7 +19,7 @@ def test_diagnostics_redacts_credentials():
 
     # Email/password are never needed by diagnostics and must never be
     # referenced. Access/secret key ARE read (read-only) to sign the raw
-    # quota request for unsupported devices, so they are allowed here — the
+    # quota request for unsupported devices, so they are allowed here - the
     # runtime tests prove their values never reach the output.
     for conf_name in ("CONF_EMAIL", "CONF_PASSWORD"):
         assert conf_name not in source, f"{conf_name} must not appear in diagnostics.py"

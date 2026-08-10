@@ -55,7 +55,7 @@ class EcoFlowHTTPQuota:
 
     @property
     def _sn_display(self) -> str:
-        """SN prefix only for logs — never leak a full serial to HA logs."""
+        """SN prefix only for logs - never leak a full serial to HA logs."""
         return self._device_sn[:4] + "..."
 
     # ------------------------------------------------------------------
@@ -65,7 +65,7 @@ class EcoFlowHTTPQuota:
     async def get_quota_all(self) -> dict | None:
         """Fetch all quotas via GET /iot-open/sign/device/quota/all?sn=...
 
-        No request body — SN is passed as query parameter.
+        No request body - SN is passed as query parameter.
         Response: {"code": "0", "data": {"pd.soc": 83, "inv.outputWatts": 0, ...}}
         """
         if not self._check_rate_limit():
@@ -216,17 +216,17 @@ class EcoFlowHTTPQuota:
             self._logged_1006 = False
             return data.get("data") or {}
 
-        # EcoFlow error 8521 is a transient server-side error — retry
+        # EcoFlow error 8521 is a transient server-side error - retry
         if code == "8521":
-            _LOGGER.debug("HTTP: transient error 8521 for %s — will retry", self._sn_display)
+            _LOGGER.debug("HTTP: transient error 8521 for %s - will retry", self._sn_display)
             raise self._RetryableAPIError(f"code={code}")
 
-        # Error 1006: device not linked to API key — not an auth failure (#2)
+        # Error 1006: device not linked to API key - not an auth failure (#2)
         if code == "1006":
             self.last_error_code = "1006"
             if not self._logged_1006:
                 _LOGGER.warning(
-                    "HTTP: device %s not linked to API key — "
+                    "HTTP: device %s not linked to API key - "
                     "verify device binding at developer.ecoflow.com (code=1006)",
                     self._sn_display,
                 )

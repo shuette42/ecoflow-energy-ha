@@ -67,7 +67,7 @@ def _build_cmd_registry() -> dict[tuple[int, int], CmdConfig]:
     try:
         from . import ecocharge_pb2 as pb2
     except ImportError:
-        _LOGGER.warning("Failed to import protobuf module — Enhanced Mode will not work")
+        _LOGGER.warning("Failed to import protobuf module - Enhanced Mode will not work")
         return {}
 
     return {

@@ -112,7 +112,7 @@ class MqttIngestMixin:
     def _on_mqtt_message(self, topic: str, payload: bytes) -> None:
         """Handle an incoming MQTT message (Paho thread).
 
-        In Standard Mode, MQTT is only used for SET commands — data updates
+        In Standard Mode, MQTT is only used for SET commands - data updates
         come from HTTP polling. Exception: Delta and Smart Plug subscribe
         to MQTT push for real-time data alongside HTTP polling (dual-source).
         In Enhanced Mode, MQTT is the primary source.
@@ -171,7 +171,7 @@ class MqttIngestMixin:
         the HTTP quota path already exposes its keys verbatim.
 
         The frame is truncated and the device serial is masked before storage.
-        Capture never affects ingest — any failure is swallowed.
+        Capture never affects ingest - any failure is swallowed.
         """
         if not self._enhanced_mode or not is_proto_frame(payload):
             return

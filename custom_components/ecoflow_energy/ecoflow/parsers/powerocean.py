@@ -9,7 +9,7 @@ The /quota/all response contains 300+ keys including:
 - EMS data: emsBpAliveNum, ems_change_report.*, energy_stream.*
 - PV data: mpptHeartBeat[].mpptPv[]
 
-Reference: EcoFlow IoT Developer Platform — PowerOcean section.
+Reference: EcoFlow IoT Developer Platform - PowerOcean section.
 """
 
 from __future__ import annotations
@@ -468,7 +468,7 @@ def _extract_all_battery_packs(quota_data: dict) -> dict[str, Any]:
     """Extract per-pack battery data from all bp_addr.{SN} keys.
 
     Maps each pack to pack{n}_* sensor keys (n = 1..5).
-    Existing bp_* sensors are NOT affected — this produces separate keys.
+    Existing bp_* sensors are NOT affected - this produces separate keys.
     Phantom/empty entries (no core battery fields) are skipped so that
     numbering starts at 1 for the first real battery pack.
     """
@@ -503,7 +503,7 @@ def _extract_all_battery_packs(quota_data: dict) -> dict[str, Any]:
 
         prefix = f"pack{pack_num}"
 
-        # Core + diagnostic fields (no scaling needed — verified from probe data)
+        # Core + diagnostic fields (no scaling needed - verified from probe data)
         _field_map = {
             "bpSoc": f"{prefix}_soc",
             "bpPwr": f"{prefix}_power_w",

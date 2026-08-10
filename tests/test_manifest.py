@@ -1,4 +1,4 @@
-"""Tests for manifest.json — validates HACS/hassfest requirements."""
+"""Tests for manifest.json - validates HACS/hassfest requirements."""
 
 import json
 from pathlib import Path
@@ -19,7 +19,7 @@ class TestManifest:
         assert m["domain"] == "ecoflow_energy"
 
     def test_iot_class_is_cloud_push(self):
-        """Enhanced Mode + Delta MQTT push — iot_class reflects primary data source."""
+        """Enhanced Mode + Delta MQTT push - iot_class reflects primary data source."""
         m = _load_manifest()
         assert m["iot_class"] == "cloud_push", (
             f"iot_class must be 'cloud_push', got '{m['iot_class']}'"
@@ -38,11 +38,11 @@ class TestManifest:
         m = _load_manifest()
         for req in m["requirements"]:
             assert "pycryptodome" not in req.lower(), (
-                f"pycryptodome must not be in requirements — use cryptography instead (found: {req})"
+                f"pycryptodome must not be in requirements - use cryptography instead (found: {req})"
             )
 
     def test_requirements_does_not_redeclare_paho_mqtt(self):
-        """paho-mqtt ships with HA core via the `mqtt` integration — must not be redeclared here."""
+        """paho-mqtt ships with HA core via the `mqtt` integration - must not be redeclared here."""
         m = _load_manifest()
         for req in m["requirements"]:
             assert "paho-mqtt" not in req.lower(), (
@@ -50,7 +50,7 @@ class TestManifest:
             )
 
     def test_requirements_does_not_redeclare_protobuf(self):
-        """protobuf ships with HA core via several core integrations — must not be redeclared here."""
+        """protobuf ships with HA core via several core integrations - must not be redeclared here."""
         m = _load_manifest()
         for req in m["requirements"]:
             assert "protobuf" not in req.lower(), (

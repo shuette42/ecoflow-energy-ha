@@ -2,7 +2,7 @@
 
 The ecoflow/ sub-package (core library) has no HA dependencies and can be
 tested standalone.  We add its parent to sys.path so tests can import
-``ecoflow_energy.ecoflow.*`` — but the HA integration modules
+``ecoflow_energy.ecoflow.*`` - but the HA integration modules
 (coordinator, config_flow, sensor, …) are NOT importable here because
 they require homeassistant.
 

@@ -9,13 +9,13 @@ Energy Dashboard ready. Two modes: official API or real-time app connection.
 
 ## What you get
 
-- **Up to 200 sensors per device** — power, energy, battery packs, temperature, diagnostics
-- **Energy Dashboard ready** — local Riemann-sum kWh with gap detection
-- **Real-time updates** — Enhanced Mode pushes data every 2-4 seconds
-- **Full PowerOcean control** — Backup Reserve, Solar Surplus Threshold, Work Mode, all verified against the official EcoFlow app
-- **Delta switches & numbers** — AC/DC output, charge speed, backup reserve, screen settings
-- **Smart Plug** — power monitoring, on/off switch, max power limit
-- **Auto-discovery** — picks up every device bound to your EcoFlow account
+- **Up to 200 sensors per device** - power, energy, battery packs, temperature, diagnostics
+- **Energy Dashboard ready** - local Riemann-sum kWh with gap detection
+- **Real-time updates** - Enhanced Mode pushes data every 2-4 seconds
+- **Full PowerOcean control** - Backup Reserve, Solar Surplus Threshold, Work Mode, all verified against the official EcoFlow app
+- **Delta switches & numbers** - AC/DC output, charge speed, backup reserve, screen settings
+- **Smart Plug** - power monitoring, on/off switch, max power limit
+- **Auto-discovery** - picks up every device bound to your EcoFlow account
 
 ## Supported devices
 

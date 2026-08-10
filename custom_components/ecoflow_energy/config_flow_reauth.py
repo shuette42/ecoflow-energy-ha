@@ -64,13 +64,13 @@ class ReauthFlowMixin:
                 if creds is None:
                     errors["base"] = "invalid_auth"
                 else:
-                    # Credentials valid — check if Enhanced Mode needs second step
+                    # Credentials valid - check if Enhanced Mode needs second step
                     if reauth_entry.data.get(CONF_MODE) == MODE_ENHANCED:
                         self._access_key = access_key
                         self._secret_key = secret_key
                         return await self.async_step_reauth_enhanced()
 
-                    # Standard Mode — update entry and finish
+                    # Standard Mode - update entry and finish
                     new_data = dict(reauth_entry.data)
                     new_data[CONF_ACCESS_KEY] = access_key
                     new_data[CONF_SECRET_KEY] = secret_key

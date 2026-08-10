@@ -31,7 +31,7 @@ class HttpPollMixin:
     # ------------------------------------------------------------------
 
     async def _async_update_data(self) -> dict[str, Any]:
-        """HTTP polling — primary source in Standard Mode, fallback in Enhanced.
+        """HTTP polling - primary source in Standard Mode, fallback in Enhanced.
 
         PowerOcean: POST /iot-open/sign/device/quota (with quotas array)
         Delta:      GET  /iot-open/sign/device/quota/all?sn=...
@@ -41,12 +41,12 @@ class HttpPollMixin:
         if self._http_client is None:
             return self._device_data
 
-        # All device types use GET /quota/all — returns the most complete data
+        # All device types use GET /quota/all - returns the most complete data
         raw = await self._http_client.get_quota_all()
         if not raw:
             error_code = self._http_client.last_error_code
 
-            # Error 1006 = device not linked to API key — config issue, not auth (#2)
+            # Error 1006 = device not linked to API key - config issue, not auth (#2)
             if error_code == "1006":
                 self._log_event("http_1006", "device not linked to API key")
                 return dict(self._device_data)
@@ -67,7 +67,7 @@ class HttpPollMixin:
             mqtt_active = self._enhanced_mode and self._last_mqtt_ts > 0.0
             if self._consecutive_http_failures == 5 and not mqtt_active:
                 _LOGGER.warning(
-                    "HTTP quota failed %d consecutive times for %s — triggering re-authentication",
+                    "HTTP quota failed %d consecutive times for %s - triggering re-authentication",
                     self._consecutive_http_failures, self.device_sn[:4],
                 )
                 self._entry.async_start_reauth(self.hass)

@@ -1,7 +1,7 @@
 """EcoFlow Portal WSS MQTT ClientID Generator.
 
 Generates MQTT client IDs for the WSS connection to the EcoFlow broker (port 8084).
-Must be called on every connect/reconnect — old client IDs are rejected after disconnect.
+Must be called on every connect/reconnect - old client IDs are rejected after disconnect.
 
 Reverse-engineered from: main.9d3dab6f.js (ef-device-user-jt_v2.7.9)
 """
@@ -54,7 +54,7 @@ BT = [
 def generate_client_id(user_id: str) -> str:
     """Generate a valid MQTT ClientID for EcoFlow Portal WSS (port 8084).
 
-    A new ClientID is required on every connect/reconnect — the broker
+    A new ClientID is required on every connect/reconnect - the broker
     rejects old ClientIDs after disconnect.
 
     Args:

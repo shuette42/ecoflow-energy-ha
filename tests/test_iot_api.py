@@ -1,4 +1,4 @@
-"""Tests for IoTApiClient — signature, caching, rate-limit, device list."""
+"""Tests for IoTApiClient - signature, caching, rate-limit, device list."""
 
 import hashlib
 import hmac
@@ -152,7 +152,7 @@ class TestCredentialCaching:
         result1 = await client.get_mqtt_credentials()
         assert result1 == creds1
 
-        # Force refresh — but rate-limit will block (< 60s)
+        # Force refresh - but rate-limit will block (< 60s)
         # Reset _last_fetch_ts to bypass rate limit
         client._last_fetch_ts = 0.0
         result2 = await client.refresh_credentials()
@@ -171,7 +171,7 @@ class TestCredentialCaching:
         result1 = await client.get_mqtt_credentials()
         assert result1 == creds1
 
-        # Still inside the rate-limit window — forced refresh must fetch anyway
+        # Still inside the rate-limit window - forced refresh must fetch anyway
         result2 = await client.refresh_credentials()
         assert result2 == creds2
         assert session.get.call_count == 2

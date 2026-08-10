@@ -194,7 +194,7 @@ async def _skipped_devices_diagnostics(
     For a device we do not yet parse, capture its raw HTTP quota so a parser
     can be built from real API fields without owning the hardware. The full
     serial is used only to sign the read-only quota request and is never
-    included in the output — only the SN prefix is exposed. Serial-looking
+    included in the output - only the SN prefix is exposed. Serial-looking
     values inside the quota are redacted by the single pass on the way out
     of ``async_get_config_entry_diagnostics``.
 
@@ -336,7 +336,7 @@ def _energy_integrator_diagnostics(
 
 
 def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]:
-    """Build diagnostics dict for one device — no credentials."""
+    """Build diagnostics dict for one device - no credentials."""
     now = time.monotonic()
 
     mqtt_client = coordinator.mqtt_client

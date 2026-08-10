@@ -1,7 +1,7 @@
 """EcoFlow Cloud MQTT client (Paho-based).
 
 Manages WSS (port 8084) and TCP (port 8883) connections to the EcoFlow broker.
-Configuration via constructor — no global config imports.
+Configuration via constructor - no global config imports.
 
 Threading note: Paho runs its own network thread.  In HA, bridge callbacks
 to the event loop with ``hass.loop.call_soon_threadsafe()``.
@@ -320,7 +320,7 @@ class EcoFlowMQTTClient:
                 if not self._notified_connected:
                     self._notified_connected = True
                     _LOGGER.debug(
-                    "MQTT connected — data topics: %s | %s | set_reply",
+                    "MQTT connected - data topics: %s | %s | set_reply",
                     self.mask_topic(topic_json),
                     self.mask_topic(topic_pb),
                 )
@@ -328,7 +328,7 @@ class EcoFlowMQTTClient:
                 # Standard Mode: no data subscriptions, MQTT is for SET commands only
                 if not self._notified_connected:
                     self._notified_connected = True
-                    _LOGGER.debug("MQTT connected — SET-only mode (set_reply subscribed)")
+                    _LOGGER.debug("MQTT connected - SET-only mode (set_reply subscribed)")
 
             self.last_connect_time = time.monotonic()
             self.connected = True
@@ -378,7 +378,7 @@ class EcoFlowMQTTClient:
             reason = CONNECT_REASONS.get(rc_val, "unknown error")
             auth_failure = rc_val in (4, 5, 134, 135)
             if auth_failure:
-                self._log_issue("warning", "MQTT connect failed: rc=%s (%s) — scheduling credential refresh", rc_val, reason)
+                self._log_issue("warning", "MQTT connect failed: rc=%s (%s) - scheduling credential refresh", rc_val, reason)
             else:
                 self._log_issue("error", "MQTT connect failed: rc=%s (%s)", rc_val, reason)
             self.connected = False
@@ -395,7 +395,7 @@ class EcoFlowMQTTClient:
         """Callback on MQTT disconnect.
 
         ``reason_code`` is a ReasonCode object under paho-mqtt 2.x VERSION2
-        callbacks — normalize to int before any comparison.
+        callbacks - normalize to int before any comparison.
         """
         rc_val = reason_code.value if hasattr(reason_code, "value") else reason_code
         was_connected = self.connected
@@ -432,7 +432,7 @@ class EcoFlowMQTTClient:
             if (current_time - self._last_counter_reset_time) >= self._counter_reset_interval:
                 self._last_counter_reset_time = current_time
                 self.reconnect_attempts = 0
-                _LOGGER.debug("MQTT: counter reset after %ds — starting new cycle", self._counter_reset_interval)
+                _LOGGER.debug("MQTT: counter reset after %ds - starting new cycle", self._counter_reset_interval)
             else:
                 return False
 
@@ -458,10 +458,10 @@ class EcoFlowMQTTClient:
 
     def _schedule_reconnect(self):
         """Signal that a reconnect is needed."""
-        _LOGGER.debug("MQTT: reconnect scheduled — attempts: %d/%d", self.reconnect_attempts, self.max_reconnect_attempts)
+        _LOGGER.debug("MQTT: reconnect scheduled - attempts: %d/%d", self.reconnect_attempts, self.max_reconnect_attempts)
 
     # send_ping publishes JSON to the same /app/device/property/{sn} topic the
-    # client subscribes to — the broker echoes it back. Marker covers both
+    # client subscribes to - the broker echoes it back. Marker covers both
     # compact and default json.dumps spellings.
     _PING_ECHO_MARKERS = (b'{"command":"ping"', b'{"command": "ping"')
 
@@ -471,7 +471,7 @@ class EcoFlowMQTTClient:
             msg.topic == f"/app/device/property/{self._device_sn}"
             and msg.payload.startswith(self._PING_ECHO_MARKERS)
         ):
-            # Broker echo of our own keepalive ping — not device data
+            # Broker echo of our own keepalive ping - not device data
             return
         _LOGGER.debug(
             "MQTT msg: %s (%d bytes) for %s",
@@ -526,7 +526,7 @@ class EcoFlowMQTTClient:
         """Force disconnect + reconnect with new ClientID (WSS).
 
         Recreates the Paho client instead of manipulating private attributes.
-        No blocking sleep — the old connection is torn down synchronously.
+        No blocking sleep - the old connection is torn down synchronously.
 
         Guarded by a non-blocking lock: overlapping calls (watchdog +
         credential refresh run in separate executor threads) would orphan
@@ -534,7 +534,7 @@ class EcoFlowMQTTClient:
         caller skips instead.
         """
         if not self._client_lock.acquire(blocking=False):
-            _LOGGER.debug("Force-reconnect: skipped — another reconnect already in flight")
+            _LOGGER.debug("Force-reconnect: skipped - another reconnect already in flight")
             return False
         try:
             _LOGGER.debug("Force-reconnect: disconnecting and recreating client...")

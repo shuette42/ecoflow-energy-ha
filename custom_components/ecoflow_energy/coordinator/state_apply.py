@@ -25,7 +25,7 @@ class StateApplyMixin:
         now = time.monotonic()
         self._last_mqtt_ts = now
         self._device_available = True
-        # MQTT data proves credentials are valid — prevent false reauth (#2)
+        # MQTT data proves credentials are valid - prevent false reauth (#2)
         self._consecutive_http_failures = 0
         # Rate-limited event log: at most once per 60s to avoid flooding the deque
         if now - self._last_mqtt_event_ts > 60:
@@ -321,10 +321,10 @@ class StateApplyMixin:
         # API totals: prefer over Riemann sum (more accurate when available)
         for power_key, energy_key in self._energy_from_api:
             if energy_key in parsed:
-                # API provided a total — use it (already set by parser)
+                # API provided a total - use it (already set by parser)
                 self._energy_integrator.set_total(energy_key, parsed[energy_key])
             else:
-                # No API total — integrate from power
+                # No API total - integrate from power
                 power_w = parsed.get(power_key)
                 if power_w is not None:
                     total = self._energy_integrator.integrate(energy_key, abs(power_w))

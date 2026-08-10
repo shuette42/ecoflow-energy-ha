@@ -1,4 +1,4 @@
-"""Tests for Stream AC Pro number entities — backup reserve SET via WSS proto.
+"""Tests for Stream AC Pro number entities - backup reserve SET via WSS proto.
 
 Covers the SET path that Issue #98 fixed: the Stream backup-reserve number
 must build a protobuf frame on the verified ConfigWrite write path

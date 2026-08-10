@@ -1,4 +1,4 @@
-"""Tests for EcoFlowHTTPQuota — signature, rate limiting, dead code removal."""
+"""Tests for EcoFlowHTTPQuota - signature, rate limiting, dead code removal."""
 
 import asyncio
 import hashlib
@@ -303,7 +303,7 @@ class TestError8521Retry:
 
         result = await client.get_quota_all()
         assert result is None
-        # Only called once — no retry for non-8521 errors
+        # Only called once - no retry for non-8521 errors
         assert mock_session.get.call_count == 1
 
 
@@ -321,7 +321,7 @@ class AsyncContextManager:
 
 
 class TestError1006Handling:
-    """Error 1006 (device not linked to API key) — config issue, not auth (#2)."""
+    """Error 1006 (device not linked to API key) - config issue, not auth (#2)."""
 
     def _make_1006_response(self):
         resp = AsyncMock()
@@ -362,7 +362,7 @@ class TestError1006Handling:
 
     @pytest.mark.asyncio
     async def test_1006_not_retried(self):
-        """Error 1006 is not retried — only one HTTP call."""
+        """Error 1006 is not retried - only one HTTP call."""
         mock_session = MagicMock()
         mock_session.get = MagicMock(
             return_value=AsyncContextManager(self._make_1006_response())
@@ -425,7 +425,7 @@ class TestFullSerialNeverLogged:
     """A full device serial must never reach the HA logs (only the prefix).
 
     Unsupported devices commonly return 1006, and the diagnostics feature
-    exists to make users attach their HA log to a GitHub issue — so a full
+    exists to make users attach their HA log to a GitHub issue - so a full
     serial in the logs would leak. Every error/status log path is checked.
     """
 

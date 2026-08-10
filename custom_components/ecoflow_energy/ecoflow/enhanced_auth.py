@@ -1,4 +1,4 @@
-"""Enhanced Mode authentication — login + optional AES-CFB credential decryption.
+"""Enhanced Mode authentication - login + optional AES-CFB credential decryption.
 
 Primary path: IoT Developer API provides MQTT credentials directly.
 Fallback path: Portal login → JWT → AES-encrypted credentials → decrypt.
@@ -32,7 +32,7 @@ _ENHANCED_CERT_PATH = "/iot-auth/enterprise-development/user/certification"
 # Constant IV extracted from EcoFlow Portal JS bundle (module 78829)
 _AES_IV = b"ojsajkqjwk1w2dfg"
 
-# EcoFlow has regional API endpoints — try EU first, then global fallback
+# EcoFlow has regional API endpoints - try EU first, then global fallback
 _AUTH_BASE_URLS = [
     IOT_API_BASE,                  # https://api-e.ecoflow.com (EU)
     "https://api.ecoflow.com",     # global fallback
@@ -96,7 +96,7 @@ async def get_enhanced_credentials(
 ) -> dict[str, Any] | None:
     """Fetch and decrypt Enhanced Mode MQTT credentials (Portal path).
 
-    This is a fallback — the primary path uses IoT Developer API credentials.
+    This is a fallback - the primary path uses IoT Developer API credentials.
 
     Returns:
         dict with ``certificateAccount``, ``certificatePassword``, etc.

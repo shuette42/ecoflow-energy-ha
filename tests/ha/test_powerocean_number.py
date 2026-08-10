@@ -1,4 +1,4 @@
-"""Tests for PowerOcean number entities — SoC limit SET via Enhanced Mode."""
+"""Tests for PowerOcean number entities - SoC limit SET via Enhanced Mode."""
 
 from __future__ import annotations
 
@@ -186,7 +186,7 @@ class TestPowerOceanNumberBasic:
             await entity.async_set_native_value(50.0)
 
         coordinator.async_set_powerocean_soc_debounced.assert_called_once_with(50, 100)
-        # No optimistic update — original value retained
+        # No optimistic update - original value retained
         assert coordinator.data["ems_discharge_lower_limit_pct"] == 0
 
     async def test_native_value_reads_state_key(
@@ -541,7 +541,7 @@ class TestPowerOceanAppSurplusAutoSync:
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """If the most recent EmsParamChangeReport arrived BEFORE the user
-        pushed a new value in HA, the auto-sync must not fire — the
+        pushed a new value in HA, the auto-sync must not fire - the
         ParamChange's dev_soc value is the obsolete app-side mirror that
         the user has already superseded."""
         coordinator = self._make_coordinator(hass, enhanced_config_entry)
@@ -684,7 +684,7 @@ class TestPowerOceanAppSurplusAutoSync:
     ) -> None:
         """Frames that do not carry `ems_app_surplus_pct` (e.g. a regular
         EmsChangeReport for sysBatBackupRatio) must leave the timestamp
-        alone — only the ParamChange path proves the app-side value is
+        alone - only the ParamChange path proves the app-side value is
         fresh."""
         coordinator = self._make_coordinator(hass, enhanced_config_entry)
         coordinator._last_ems_param_change_ts = 1234.0

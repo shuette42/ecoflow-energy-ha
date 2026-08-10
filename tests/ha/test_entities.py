@@ -1,4 +1,4 @@
-"""Tests for EcoFlow entity platforms — sensor, binary_sensor, switch, number."""
+"""Tests for EcoFlow entity platforms - sensor, binary_sensor, switch, number."""
 
 from __future__ import annotations
 

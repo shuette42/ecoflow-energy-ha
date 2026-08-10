@@ -65,7 +65,7 @@ class OptionsFlowMixin:
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Main options step — change mode and device selection."""
+        """Main options step - change mode and device selection."""
         errors: dict[str, str] = {}
 
         current_mode = self.config_entry.data.get(CONF_MODE, MODE_STANDARD)

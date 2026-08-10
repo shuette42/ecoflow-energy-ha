@@ -279,7 +279,7 @@ class TestSwitchDedup:
             patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock),
             patch.object(switch, "async_write_ha_state") as mock_write,
         ):
-            # _send_command always writes — it bypasses _handle_coordinator_update
+            # _send_command always writes - it bypasses _handle_coordinator_update
             await switch._send_command(False)
             assert mock_write.call_count == 1
 
@@ -611,7 +611,7 @@ class TestOptimisticDedupSync:
             assert mock_write.call_count == 1
             assert switch._last_written_value is False
 
-            # Coordinator tick during lock window — is_on still returns False (lock active).
+            # Coordinator tick during lock window - is_on still returns False (lock active).
             # Because _last_written_value is already False, no second write.
             with patch("time.monotonic", return_value=1001.0):  # still within 5 s lock
                 switch._handle_coordinator_update()

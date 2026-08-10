@@ -225,7 +225,7 @@ class TestMQTTReportWithDirectFields:
         assert result["led_brightness"] == pytest.approx(100.0)  # 1023 -> 100%
 
     def test_max_watts_no_scaling(self):
-        """maxWatts has no scaling — consistent with HTTP parser."""
+        """maxWatts has no scaling - consistent with HTTP parser."""
         result = parse_smartplug_report({"maxWatts": 2500})
         assert result["max_power_w"] == 2500.0
 

@@ -144,7 +144,7 @@ class EcoFlowDeviceCoordinator(
         enhanced_mode = entry.data.get(CONF_AUTH_METHOD) == AUTH_METHOD_APP
 
         # Standard Mode: HTTP polling every 30s (primary data source)
-        # Enhanced Mode: MQTT push only — protobuf carries all sensor data
+        # Enhanced Mode: MQTT push only - protobuf carries all sensor data
         #   (power, battery, MPPT, grid phases, EMS state).
         #   HTTP fallback activates only when MQTT is stale (>35s).
         poll_interval = (
@@ -205,7 +205,7 @@ class EcoFlowDeviceCoordinator(
         self._last_user_surplus_set_ts: float = 0.0
         # Timestamp of the most recent EmsParamChangeReport (cmd_id=13) that
         # carried a `dev_soc` field. The auto-sync only acts on frames newer
-        # than the last user SET — stale ParamChange frames (e.g. an EMS
+        # than the last user SET - stale ParamChange frames (e.g. an EMS
         # echo of a value the user has since superseded in HA) would
         # otherwise pull HA back to the obsolete app-side value.
         self._last_ems_param_change_ts: float = 0.0

@@ -78,7 +78,7 @@ class EnergyIntegrator:
         """Load persisted state from disk (blocking I/O).
 
         Call from an executor job to avoid blocking the HA event loop.
-        Safe to call multiple times — only loads once.
+        Safe to call multiple times - only loads once.
         """
         if self._loaded:
             return
@@ -183,7 +183,7 @@ class EnergyIntegrator:
         return new_total_kwh
 
     def set_total(self, metric: str, total_kwh: float) -> None:
-        """Set total directly from API (monotonic — only if higher)."""
+        """Set total directly from API (monotonic - only if higher)."""
         if not self._loaded:
             self.load_state()
 

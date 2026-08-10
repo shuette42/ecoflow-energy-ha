@@ -1,4 +1,4 @@
-"""Tests for entity definitions in const.py — uniqueness and completeness."""
+"""Tests for entity definitions in const.py - uniqueness and completeness."""
 
 from __future__ import annotations
 
@@ -265,7 +265,7 @@ def _extract_sensor_keys(var_name: str) -> list[str]:
     Uses runtime import for lists that are dynamically extended (e.g. pack sensors),
     falls back to AST extraction for lists defined purely as literals.
     """
-    # Runtime approach — covers dynamically extended lists
+    # Runtime approach - covers dynamically extended lists
     _RUNTIME_MAP = {
         "POWEROCEAN_SENSORS": POWEROCEAN_SENSORS,
         "DELTA2MAX_SENSORS": DELTA2MAX_SENSORS,

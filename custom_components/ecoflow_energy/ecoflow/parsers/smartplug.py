@@ -42,7 +42,7 @@ def parse_smartplug_http_quota(quota_data: dict) -> dict[str, Any]:
     # --- Core measurements ---
     _prefix = "2_1."
 
-    # Power (deci-W → W) — API returns value in 0.1 W units
+    # Power (deci-W → W) - API returns value in 0.1 W units
     if f"{_prefix}watts" in quota_data:
         v = _safe_float(quota_data[f"{_prefix}watts"])
         if v is not None:
@@ -91,7 +91,7 @@ def parse_smartplug_http_quota(quota_data: dict) -> dict[str, Any]:
         if v is not None:
             result["max_power_w"] = v
 
-    # Max current (deci-A → A) — API returns value in 0.1 A units
+    # Max current (deci-A → A) - API returns value in 0.1 A units
     if f"{_prefix}maxCur" in quota_data:
         v = _safe_float(quota_data[f"{_prefix}maxCur"])
         if v is not None:
@@ -116,7 +116,7 @@ def parse_smartplug_http_quota(quota_data: dict) -> dict[str, Any]:
 #   current: mA → A      (/1000)
 #   volt:    V → V        (1)
 #   maxCur:  deci-A → A   (/10)
-#   maxWatts: W → W       (1)  — no scaling in HTTP parser
+#   maxWatts: W → W       (1) - no scaling in HTTP parser
 _MQTT_FIELD_MAP: dict[str, tuple[str, float]] = {
     "watts": ("power_w", 0.1),
     "current": ("current_a", 0.001),
@@ -225,8 +225,8 @@ def parse_smartplug_report(data: dict[str, Any]) -> dict[str, Any]:
     """Parse a Smart Plug MQTT report message.
 
     MQTT reports may arrive in different envelope formats:
-    1. {"params": {"2_1.watts": 150, ...}} — same keys as HTTP quota
-    2. {"param": {"watts": 150, ...}} — direct field names (cmdId/cmdFunc format)
+    1. {"params": {"2_1.watts": 150, ...}} - same keys as HTTP quota
+    2. {"param": {"watts": 150, ...}} - direct field names (cmdId/cmdFunc format)
     3. Direct dict with field names
     """
     # Extract inner payload from envelope
@@ -239,7 +239,7 @@ def parse_smartplug_report(data: dict[str, Any]) -> dict[str, Any]:
     if any(k.startswith("2_1.") for k in params):
         return parse_smartplug_http_quota(params)
 
-    # Direct field names — apply same scaling as HTTP parser
+    # Direct field names - apply same scaling as HTTP parser
     result: dict[str, Any] = {}
 
     for api_key, (sensor_key, scale) in _MQTT_FIELD_MAP.items():

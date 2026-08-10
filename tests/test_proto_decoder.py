@@ -79,7 +79,7 @@ class TestRuntimeDecoder:
         assert result.mapped["_is_full_power_frame"] is True
 
     def test_energy_stream_zero_fill(self):
-        """Proto3 omits 0.0 — runtime decoder must zero-fill power fields."""
+        """Proto3 omits 0.0 - runtime decoder must zero-fill power fields."""
         msg = JTS1EnergyStreamReport()
         msg.bp_soc = 50
         # All power fields are 0.0 (proto3 omits them)

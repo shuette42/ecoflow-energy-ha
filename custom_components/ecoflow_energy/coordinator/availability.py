@@ -171,7 +171,7 @@ class AvailabilityMixin:
             if age > stale_threshold_s:
                 # Connected-but-silent escalation. A full reconnect drops the
                 # WSS session and re-runs the whole subscribe handshake, which
-                # is expensive and — on devices that push slowly — happens
+                # is expensive and - on devices that push slowly - happens
                 # every stale interval. Re-sending the post-connect requests
                 # achieves the same wake-up at a fraction of the cost, so it
                 # runs first; the reconnect follows only if the device stays

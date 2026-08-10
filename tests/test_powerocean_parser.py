@@ -972,7 +972,7 @@ class TestMultiBatteryPack:
         assert result["pack2_power_w"] == pytest.approx(2529.1938)
 
     def test_phantom_empty_pack_skipped(self):
-        """Phantom/empty pack at position 0 is skipped — real packs start at 1."""
+        """Phantom/empty pack at position 0 is skipped - real packs start at 1."""
         data = {
             "bp_addr.PHANTOM_EMS": {},  # empty entry (EMS module)
             "bp_addr.HJ32ZDH5ZG190227": dict(self.PACK1_DATA),
@@ -1006,7 +1006,7 @@ class TestMultiBatteryPack:
         assert result["bp_cycles"] == 42.0
 
     def test_aggregate_bp_phantom_only(self):
-        """Only phantom packs — no aggregate sensors produced."""
+        """Only phantom packs - no aggregate sensors produced."""
         data = {"bp_addr.PHANTOM": {}}
         result = {}
         _extract_battery_pack(data, result)

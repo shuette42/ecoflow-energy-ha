@@ -1,4 +1,4 @@
-"""Tests for EcoFlow Protobuf encoder — EnergyStreamSwitch and SoC limit SET."""
+"""Tests for EcoFlow Protobuf encoder - EnergyStreamSwitch and SoC limit SET."""
 
 import pytest
 

@@ -6,7 +6,7 @@ flat sensor keys matching DELTA2MAX_SENSORS in const.py.
 The HTTP API returns keys in "module.field" format (e.g. "pd.soc"),
 different from MQTT which uses "typeCode" format (e.g. "pdStatus").
 
-Reference: EcoFlow IoT Developer Platform — DELTA 2 MAX section.
+Reference: EcoFlow IoT Developer Platform - DELTA 2 MAX section.
 """
 
 from __future__ import annotations

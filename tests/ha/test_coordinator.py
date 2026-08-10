@@ -1,4 +1,4 @@
-"""Tests for EcoFlowDeviceCoordinator — setup, data flow, stale detection, shutdown."""
+"""Tests for EcoFlowDeviceCoordinator - setup, data flow, stale detection, shutdown."""
 
 from __future__ import annotations
 
@@ -2210,7 +2210,7 @@ class TestStaleDetection:
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
-        # Don't call async_setup — just set up a mock MQTT client directly
+        # Don't call async_setup - just set up a mock MQTT client directly
         mock_mqtt = MagicMock()
         mock_mqtt.is_connected.return_value = False
         mock_mqtt.try_reconnect.return_value = False
@@ -2577,7 +2577,7 @@ class TestApplyData:
         coordinator._consecutive_http_failures = 4
         coordinator._device_available = False
 
-        # MQTT data arrives — proves credentials are valid
+        # MQTT data arrives - proves credentials are valid
         coordinator._apply_data({"soc": 85})
 
         assert coordinator._consecutive_http_failures == 0
@@ -2618,7 +2618,7 @@ class TestApplyData:
         # First call: sets baseline (no energy yet)
         coordinator._apply_data({"solar_w": 3000, "home_w": 1500})
         # Backdate the integrator's internal timestamp to simulate elapsed time
-        # (same pattern as tests/test_energy_integrator.py — manipulate _state directly)
+        # (same pattern as tests/test_energy_integrator.py - manipulate _state directly)
         for metric in ("solar_energy_kwh", "home_energy_kwh"):
             if metric in coordinator._energy_integrator._state:
                 total, _ts, power = coordinator._energy_integrator._state[metric]
@@ -3126,7 +3126,7 @@ class TestApplyData:
 
 
 # ===========================================================================
-# Protobuf Key Remapping (_remap_proto_keys) — F-001
+# Protobuf Key Remapping (_remap_proto_keys) - F-001
 # ===========================================================================
 
 
@@ -3230,7 +3230,7 @@ class TestProtoKeyRemapping:
 
 
 # ===========================================================================
-# Heartbeat Nested Extraction (_flatten_heartbeat) — MPPT, Grid Phases
+# Heartbeat Nested Extraction (_flatten_heartbeat) - MPPT, Grid Phases
 # ===========================================================================
 
 
@@ -3578,7 +3578,7 @@ class TestBpRemapping:
         }
         result = remap_bp_keys(raw, coordinator._bp_sn_to_index, coordinator.device_sn)
 
-        # Phantom skipped — real packs are pack1 and pack2
+        # Phantom skipped - real packs are pack1 and pack2
         assert result["pack1_soc"] == 76.0
         assert result["pack1_power_w"] == 2486.48
         assert result["pack2_soc"] == 74.0
@@ -3590,7 +3590,7 @@ class TestBpRemapping:
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """All packs are empty dicts (EMS module placeholders) — no pack sensors produced."""
+        """All packs are empty dicts (EMS module placeholders) - no pack sensors produced."""
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
@@ -3626,7 +3626,7 @@ class TestBpRemapping:
         # Per-pack values extracted by _remap_bp_keys
         assert parsed["pack1_remain_watth"] == 2400.0
         assert parsed["pack2_remain_watth"] == 2600.0
-        # Aggregate is NOT in _remap_bp_keys output — it's computed in _apply_data
+        # Aggregate is NOT in _remap_bp_keys output - it's computed in _apply_data
         assert "bp_remain_watth" not in parsed
 
         # _apply_data computes the aggregate from accumulated device_data
@@ -3698,7 +3698,7 @@ class TestBpRemapping:
                 {"bp_soc": 76, "bp_pwr": 2486.48, "bp_vol": 54.671,
                  "bp_design_cap": 100000, "bp_full_cap": 100000,
                  "bp_remain_watth": 3891.2},
-                # Pack 2: idle — proto3 omits bp_soc=0, bp_pwr=0.0 but
+                # Pack 2: idle - proto3 omits bp_soc=0, bp_pwr=0.0 but
                 # bp_design_cap/bp_full_cap are >0 so they survive MessageToDict
                 {"bp_design_cap": 100000, "bp_full_cap": 100000,
                  "bp_remain_watth": 2000.0},
@@ -3706,7 +3706,7 @@ class TestBpRemapping:
         }
         parsed = remap_bp_keys(raw, coordinator._bp_sn_to_index, coordinator.device_sn)
 
-        # Both packs recognized — idle pack is NOT filtered
+        # Both packs recognized - idle pack is NOT filtered
         assert parsed["pack1_soc"] == 76.0
         assert parsed["pack1_remain_watth"] == pytest.approx(3891.2)
         assert parsed["pack2_remain_watth"] == 2000.0
@@ -3738,7 +3738,7 @@ class TestBpRemapping:
         coordinator._apply_data(msg1)
         assert coordinator.device_data["pack1_remain_watth"] == 2400.0
 
-        # Second heartbeat: Pack B reports (SN=BBB) — different SN → pack2
+        # Second heartbeat: Pack B reports (SN=BBB) - different SN → pack2
         msg2 = remap_bp_keys({
             "all_packs": [
                 {"bp_sn": "BBB", "bp_soc": 74, "bp_pwr": 2529,
@@ -3856,7 +3856,7 @@ class TestBpRemapping:
 
 
 # ===========================================================================
-# Monotonic Filter (_enforce_monotonic) — total_increasing regression guard
+# Monotonic Filter (_enforce_monotonic) - total_increasing regression guard
 # ===========================================================================
 
 

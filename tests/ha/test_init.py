@@ -529,7 +529,7 @@ class TestUnsupportedDeviceSkip:
             if r.levelno == logging.WARNING and "Skipping unsupported" in r.message
         ]
         assert len(warnings) == 1
-        # SN prefix only (privacy) — full serial must not leak
+        # SN prefix only (privacy) - full serial must not leak
         assert "BK21" in warnings[0].getMessage()
         assert "BK21TEST00000001" not in warnings[0].getMessage()
 

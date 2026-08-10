@@ -1,4 +1,4 @@
-"""Tests for EcoFlowMQTTClient — subscribe_data, client creation, reconnect, disconnect."""
+"""Tests for EcoFlowMQTTClient - subscribe_data, client creation, reconnect, disconnect."""
 
 import logging
 import time
@@ -40,7 +40,7 @@ class TestSubscribeDataFlag:
         # Simulate successful connection (rc=0)
         client._on_connect(mock_paho, None, None, 0)
 
-        # Must subscribe to set_reply only — no data topics
+        # Must subscribe to set_reply only - no data topics
         topics_subscribed = [call[0][0] for call in mock_paho.subscribe.call_args_list]
         assert len(topics_subscribed) == 1
         assert "/set_reply" in topics_subscribed[0]
@@ -75,7 +75,7 @@ class TestClientCreation:
         assert client._wss_mode is False
 
     def test_wss_mode_requires_user_id(self):
-        """WSS mode needs user_id — without it, falls back to TCP."""
+        """WSS mode needs user_id - without it, falls back to TCP."""
         client = _make_client(wss_mode=True, user_id="")
         assert client._wss_mode is False
 
@@ -541,7 +541,7 @@ class TestPingEchoFilter:
         handler.assert_called_once_with("/app/device/property/TEST1234SN", payload)
 
     def test_ping_marker_on_other_topic_not_dropped(self):
-        """The filter is topic-scoped — same marker on another topic passes through."""
+        """The filter is topic-scoped - same marker on another topic passes through."""
         handler = MagicMock()
         client = _make_client(message_handler=handler)
 
@@ -686,7 +686,7 @@ class TestAuthErrorHandler:
             handler.assert_not_called()
 
     def test_auth_error_handler_called_on_reasoncode_135(self):
-        """paho 2.x VERSION2 delivers ReasonCode objects — 135 (Not authorized)
+        """paho 2.x VERSION2 delivers ReasonCode objects - 135 (Not authorized)
         must fire the auth-error handler without raising (ReasonCode is unhashable)."""
         from paho.mqtt.packettypes import PacketTypes
         from paho.mqtt.reasoncodes import ReasonCode

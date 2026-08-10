@@ -24,6 +24,10 @@ All notable changes to this project will be documented in this file.
 - A diagnostics download now contains the whole of the message a device sends when it is asked for its full state. Every captured message was kept only up to its first 512 bytes. That was enough for the small updates a device pushes as things change, but not for the one message that carries everything at once: on a STREAM AC 5000 that message is around 1440 bytes and holds six parts, so two thirds of it, including several settings, never reached the download. Nothing in the file said it had been shortened either, and that is what turned a size limit into wrong answers: settings the device does report were read as settings it does not have, and the owner was asked to confirm something the download had thrown away. How much of a message is kept now depends on what the message carries, so a full state arrives whole while an ordinary update costs no more space than before, and anything that still had to be shortened now says so. This changes nothing about your devices or your entities, only what a support download is worth. (Ref #177)
 - A charge or discharge limit changed in the EcoFlow app took minutes to reach Home Assistant instead of seconds. The device reports both limits on two different messages, and the one being read only appears in the full state dump it sends when asked, which happens on connect and seldom after that. The other message carries them continuously. Measured on hardware over one thirteen-minute window: the continuous message carried the limits 83 times, the state dump 4, and a limit changed in the app showed up 4 minutes 27 seconds later than it needed to. The limits are now taken from the message that actually carries them, and the state dump stays unmapped, so there is still exactly one source for the value. (Ref #177)
 
+### Changed
+
+- Log messages write an aside with a plain hyphen instead of a long dash. Purely cosmetic, and noted only because these lines are written into your Home Assistant log rather than kept here. Nothing about what is logged, when, or at which level changes, and no text you see in the interface is affected.
+
 ## [1.16.0] - 2026-08-06
 
 ### Added
@@ -174,7 +178,7 @@ All notable changes to this project will be documented in this file.
 - PowerOcean `number.solar_surplus_threshold` value not applied in the EcoFlow app. The fix in beta.2 wrote the surplus percentage only to wire field 3 (`sys_bat_backup_ratio`), which the device's EMS reads. The EcoFlow app, however, reads the value from a separate cloud-quota key (`socDev` / `dev_soc`, wire field 4). The two fields are independent views of the same logical slider and must be written together; otherwise the app and the device drift apart. The payload now writes both wire fields in a single `SysBatChgDsgSet`, keeping HA, the device EMS, and the EcoFlow app aligned. Verified against live cloud quota: writing surplus=33 propagates `sys_bat_backup_ratio=33`, `socDev=33`, and `dev_soc=33` simultaneously. (beta.4)
 - PowerOcean `number.solar_surplus_threshold` did not reflect changes made in the EcoFlow app. The app sends `cmd_id=112` over MQTT but only includes wire field 4 (`dev_soc`), which leaves the EMS-side `sys_bat_backup_ratio` (wire field 3) on the previous threshold; HA observes the EMS field and stayed out of sync. The device does mirror the app's value back via `cmd_id=13` `EmsParamChangeReport` field 10. The proto decoder now handles `cmd_id=13` (`JTS1EmsParamChangeReport`) and exposes `dev_soc` as `ems_app_surplus_pct`. Whenever this differs from `ems_backup_ratio_pct`, the coordinator pushes a corrective both-field SET so the EMS catches up to whatever the app set, keeping HA, app, and device aligned. The auto-sync respects a 30 s throttle and a 5 s grace period after a user-initiated SET so it does not race the device echo. (beta.4)
 - PowerOcean SoC sliders (`number.solar_surplus_threshold` and `number.backup_reserve`) sent one MQTT SET per 5 %-step while the user dragged the slider in HA, producing 5-10 SETs in <1 s. The PowerOcean firmware cannot keep wire field 3 (EMS) and field 4 (App-Layer) in sync at that cadence, so the two fields drifted apart and HA, the EcoFlow app, and the device EMS ended up showing different values for the same slider. SET delivery is now coalesced through a 300 ms debouncer in the coordinator: every Number-Entity call updates the pending (backup, solar) pair and resets a timer, so only the final value reaches the device. The optimistic UI value is still applied immediately, so the slider feels responsive. (beta.5)
-- PowerOcean `number.solar_surplus_threshold` slider was pulled back to a previous value about 30 s after the user set a new value in HA. The auto-sync from beta.4 reissued a both-field SET whenever the cached `ems_app_surplus_pct` (from `EmsParamChangeReport`) differed from `ems_backup_ratio_pct`, but it did not check whether the ParamChange frame that produced the cached app value was actually fresh. After a drag-race left the device's app-layer field stuck on a stale value, the auto-sync would dutifully reissue that obsolete value, dragging HA back to it. The auto-sync now records the timestamp of every incoming ParamChange and only fires when that timestamp is more recent than the last user SET — so genuine app-side changes still trigger a sync, but a stale frame can no longer override the user's HA SET. (beta.6)
+- PowerOcean `number.solar_surplus_threshold` slider was pulled back to a previous value about 30 s after the user set a new value in HA. The auto-sync from beta.4 reissued a both-field SET whenever the cached `ems_app_surplus_pct` (from `EmsParamChangeReport`) differed from `ems_backup_ratio_pct`, but it did not check whether the ParamChange frame that produced the cached app value was actually fresh. After a drag-race left the device's app-layer field stuck on a stale value, the auto-sync would dutifully reissue that obsolete value, dragging HA back to it. The auto-sync now records the timestamp of every incoming ParamChange and only fires when that timestamp is more recent than the last user SET - so genuine app-side changes still trigger a sync, but a stale frame can no longer override the user's HA SET. (beta.6)
 - PowerOcean `number.solar_surplus_threshold` showed 90 instead of 100 when the user set 100 in either HA or the EcoFlow app. Live diagnosis revealed that the two cmd_id=112 wire fields are semantically different: `dev_soc` (field 4 / cloud-quota `socDev`) is the user-facing slider value the EcoFlow app reads and writes, while `sys_bat_backup_ratio` (field 3) is a derived EMS status that the device internally clamps at edge cases (notably 100 %, where it caps at 90). HA was reading the EMS-side value and therefore showed the clamped state instead of the user's intent. The slider now sources from `ems_app_surplus_pct` (the user-side mirror), matching what the EcoFlow app shows. The SET still writes both fields so the EMS follows the user value where it can; at the 0 %/100 % edges the auto-sync no longer schedules futile reissues since the EMS-side divergence is by design at those boundaries. (beta.7)
 
 ### Removed
@@ -310,20 +314,20 @@ All notable changes to this project will be documented in this file.
 ## [1.8.3] - 2026-03-31
 
 ### Fixed
-- HTTP error 1006 ("device not linked to API key") no longer triggers false re-authentication — classified as a configuration issue with an actionable log message instead of counting toward the auth failure threshold (#2)
+- HTTP error 1006 ("device not linked to API key") no longer triggers false re-authentication - classified as a configuration issue with an actionable log message instead of counting toward the auth failure threshold (#2)
 - Enhanced Mode: HTTP fallback failures no longer trigger re-authentication when MQTT is actively delivering data (#2)
 - Error 1006 logged once per device with clear guidance instead of repeating every 30 seconds
 
 ## [1.8.2] - 2026-03-31
 
 ### Fixed
-- PowerOcean Enhanced Mode: stable per-pack sensor numbering via battery serial number — each physical pack now consistently maps to the same `pack{n}_*` sensors across heartbeats, fixing Pack 2 sensors not updating (#10)
+- PowerOcean Enhanced Mode: stable per-pack sensor numbering via battery serial number - each physical pack now consistently maps to the same `pack{n}_*` sensors across heartbeats, fixing Pack 2 sensors not updating (#10)
 
 ## [1.8.1] - 2026-03-31
 
 ### Fixed
-- PowerOcean Enhanced Mode: idle battery packs no longer falsely filtered as phantoms — replaced numeric non-zero check with identity key presence check (bp_soc, bp_design_cap, bp_sn, etc.) so packs with zero power/SoC are still recognized (#10)
-- PowerOcean Enhanced Mode: aggregate `bp_remain_watth` now computed from accumulated device data instead of per-message — partial heartbeats (single pack reporting) no longer cause the total to revert to one pack's value (#10)
+- PowerOcean Enhanced Mode: idle battery packs no longer falsely filtered as phantoms - replaced numeric non-zero check with identity key presence check (bp_soc, bp_design_cap, bp_sn, etc.) so packs with zero power/SoC are still recognized (#10)
+- PowerOcean Enhanced Mode: aggregate `bp_remain_watth` now computed from accumulated device data instead of per-message - partial heartbeats (single pack reporting) no longer cause the total to revert to one pack's value (#10)
 
 ## [1.8.0] - 2026-03-31
 
@@ -333,7 +337,7 @@ All notable changes to this project will be documented in this file.
 - Optimistic writes (switch, number) now sync dedup state to prevent one redundant write on the next coordinator tick
 
 ### Fixed
-- MQTT fallback logging reduced from WARNING to INFO: transient stale/recovery transitions are self-healing and no longer clutter the HA log — both "switching to HTTP fallback" and "MQTT recovered" now log at INFO level as a matched pair
+- MQTT fallback logging reduced from WARNING to INFO: transient stale/recovery transitions are self-healing and no longer clutter the HA log - both "switching to HTTP fallback" and "MQTT recovered" now log at INFO level as a matched pair
 
 ## [1.7.1] - 2026-03-31
 
@@ -345,16 +349,16 @@ All notable changes to this project will be documented in this file.
 ## [1.7.0] - 2026-03-31
 
 ### Fixed
-- PowerOcean: SoC limit 0% now correctly synced in both directions — `optional` proto3 field presence on `sys_bat_dsg_down_limit` and `sys_bat_chg_up_limit` ensures `MessageToDict` includes zero values instead of silently omitting them
-- PowerOcean: "Battery Remaining Capacity" (`bp_remain_watth`) now shows total capacity across all battery packs instead of only Pack 1 — affects both Standard Mode (HTTP) and Enhanced Mode (Protobuf) (#10)
+- PowerOcean: SoC limit 0% now correctly synced in both directions - `optional` proto3 field presence on `sys_bat_dsg_down_limit` and `sys_bat_chg_up_limit` ensures `MessageToDict` includes zero values instead of silently omitting them
+- PowerOcean: "Battery Remaining Capacity" (`bp_remain_watth`) now shows total capacity across all battery packs instead of only Pack 1 - affects both Standard Mode (HTTP) and Enhanced Mode (Protobuf) (#10)
 
 ### Removed
-- Temporary workarounds from v1.6.5–v1.6.8 (proto3 global flag, optimistic lock, zero-fill, HTTP sync loop) — all replaced by proper `optional` field presence
+- Temporary workarounds from v1.6.5–v1.6.8 (proto3 global flag, optimistic lock, zero-fill, HTTP sync loop) - all replaced by proper `optional` field presence
 
 ## [1.6.7] - 2026-03-31
 
 ### Fixed
-- PowerOcean: Min Discharge SoC 0% now persists permanently — optimistic value is written to `_device_data` so it survives coordinator refresh cycles (proto3 omits zero-valued fields from MQTT readback, but the merge no longer overwrites the SET value)
+- PowerOcean: Min Discharge SoC 0% now persists permanently - optimistic value is written to `_device_data` so it survives coordinator refresh cycles (proto3 omits zero-valued fields from MQTT readback, but the merge no longer overwrites the SET value)
 
 ### Removed
 - Temporary 10-second optimistic lock from v1.6.6 (no longer needed)
@@ -362,25 +366,25 @@ All notable changes to this project will be documented in this file.
 ## [1.6.6] - 2026-03-31
 
 ### Fixed
-- Revert `always_print_fields_with_no_presence` from v1.6.5 — it flooded all proto fields with default 0, overwriting real sensor values
+- Revert `always_print_fields_with_no_presence` from v1.6.5 - it flooded all proto fields with default 0, overwriting real sensor values
 - PowerOcean: number entities now use a 10-second optimistic lock after SET commands to prevent proto3 zero-omission readback from reverting the displayed value
 
 ## [1.6.5] - 2026-03-31
 
 ### Fixed
-- Proto3 zero-value readback: `MessageToDict` now includes fields with value 0 — previously, setting Min Discharge SoC to 0% was accepted by the device but HA reverted to the previous value because the proto3 decoder omitted zero-valued fields
+- Proto3 zero-value readback: `MessageToDict` now includes fields with value 0 - previously, setting Min Discharge SoC to 0% was accepted by the device but HA reverted to the previous value because the proto3 decoder omitted zero-valued fields
 
 ## [1.6.4] - 2026-03-31
 
 ### Fixed
-- PowerOcean: revert to 2-field SysBatChgDsgSet payload (charge upper + discharge lower only) — the 4-field version from v1.6.1 caused the device to reject discharge lower limit value 0
-- Proto3 zero-value readback: `MessageToDict` now includes fields with value 0 — previously, setting Min Discharge SoC to 0% was accepted by the device but HA reverted to the previous value because the proto3 decoder omitted zero-valued fields
+- PowerOcean: revert to 2-field SysBatChgDsgSet payload (charge upper + discharge lower only) - the 4-field version from v1.6.1 caused the device to reject discharge lower limit value 0
+- Proto3 zero-value readback: `MessageToDict` now includes fields with value 0 - previously, setting Min Discharge SoC to 0% was accepted by the device but HA reverted to the previous value because the proto3 decoder omitted zero-valued fields
 
 ## [1.6.3] - 2026-03-31
 
 ### Fixed
-- PowerOcean: revert proto field swap from v1.6.2 — both values were broken after swap
-- PowerOcean: remove Max Charge SoC number entity — device firmware does not reliably accept charge upper limit via SysBatChgDsgSet (requires portal traffic capture for further investigation)
+- PowerOcean: revert proto field swap from v1.6.2 - both values were broken after swap
+- PowerOcean: remove Max Charge SoC number entity - device firmware does not reliably accept charge upper limit via SysBatChgDsgSet (requires portal traffic capture for further investigation)
 
 ### Changed
 - PowerOcean: SoC control reduced to Min Discharge SoC only (Enhanced Mode) until charge limit SET protocol is verified
@@ -389,17 +393,17 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 - PowerOcean: swap proto field order in SysBatChgDsgSet - device reads field 1 as discharge lower and field 2 as charge upper (opposite of proto definition labels)
-- PowerOcean: fix dev_soc lookup in SET payload — was reading unmapped key, now uses coordinator-mapped `soc_pct`
+- PowerOcean: fix dev_soc lookup in SET payload - was reading unmapped key, now uses coordinator-mapped `soc_pct`
 
 ## [1.6.1] - 2026-03-31
 
 ### Fixed
-- PowerOcean: Max Charge SoC SET now includes all 4 required protobuf fields (charge upper, discharge lower, backup ratio, device SoC) — previously only 2 fields were sent, causing the device to silently reject the charge limit change
+- PowerOcean: Max Charge SoC SET now includes all 4 required protobuf fields (charge upper, discharge lower, backup ratio, device SoC) - previously only 2 fields were sent, causing the device to silently reject the charge limit change
 
 ## [1.6.0] - 2026-03-30
 
 ### Added
-- PowerOcean: battery SoC limit control — Max Charge SoC (50–100%) and Min Discharge SoC (0–30%) as number entities (Enhanced Mode only)
+- PowerOcean: battery SoC limit control - Max Charge SoC (50–100%) and Min Discharge SoC (0–30%) as number entities (Enhanced Mode only)
 - PowerOcean: SysBatChgDsgSet protobuf SET command (cmd_func=96, cmd_id=112) for real-time SoC limit adjustment via WSS
 
 ### Changed
@@ -414,7 +418,7 @@ All notable changes to this project will be documented in this file.
 ## [1.5.2] - 2026-03-30
 
 ### Fixed
-- Sensor precision: `native_value` now rounds numeric values based on `suggested_display_precision` — power sensors show integers (e.g. "2347 W"), energy sensors show 2 decimal places (e.g. "15.23 kWh")
+- Sensor precision: `native_value` now rounds numeric values based on `suggested_display_precision` - power sensors show integers (e.g. "2347 W"), energy sensors show 2 decimal places (e.g. "15.23 kWh")
 
 ### Changed
 - Diagnostics: event log capacity increased from 20 to 50 entries for better support troubleshooting
@@ -422,9 +426,9 @@ All notable changes to this project will be documented in this file.
 ## [1.5.1] - 2026-03-30
 
 ### Fixed
-- PowerOcean: battery pack numbering now starts at "Pack 1" instead of "Pack 2" — phantom/empty API entries (EMS module) are skipped before numbering (#5)
+- PowerOcean: battery pack numbering now starts at "Pack 1" instead of "Pack 2" - phantom/empty API entries (EMS module) are skipped before numbering (#5)
 - PowerOcean: aggregate battery sensors (bp_*) now correctly select the first real battery pack, not a phantom entry
-- PowerOcean: Enhanced Mode (Protobuf) now delivers multi-pack data correctly — previously silently discarded by internal key filter
+- PowerOcean: Enhanced Mode (Protobuf) now delivers multi-pack data correctly - previously silently discarded by internal key filter
 - Config flow: narrowed exception handling with OSError coverage for SSL/socket errors
 
 ### Note for multi-pack users
@@ -448,7 +452,7 @@ All notable changes to this project will be documented in this file.
 ## [1.5.0] - 2026-03-30
 
 ### Added
-- PowerOcean: multi-battery-pack support — per-pack sensors for up to 5 BP5000 packs (120 new sensors, 7 enabled for Pack 1)
+- PowerOcean: multi-battery-pack support - per-pack sensors for up to 5 BP5000 packs (120 new sensors, 7 enabled for Pack 1)
 - PowerOcean: 19 additional EMS/system diagnostic sensors (SoC limits, fault codes, connectivity, system capabilities)
 - PowerOcean: lifetime energy counters per battery pack (accumulated charge/discharge kWh)
 - PowerOcean: multi-pack data in Enhanced Mode (Protobuf heartbeat extracts all packs)
@@ -458,7 +462,7 @@ All notable changes to this project will be documented in this file.
 ### Added
 - Delta 2 Max: beeper, X-Boost, AC auto restart, backup reserve switches (4 new)
 - Delta 2 Max: screen brightness, screen timeout, 12V port timeout, backup reserve level numbers (4 new)
-- Delta 2 Max: expansion battery pack support — 32 sensors for up to 2 slave packs (disabled by default)
+- Delta 2 Max: expansion battery pack support - 32 sensors for up to 2 slave packs (disabled by default)
 
 ### Changed
 - Delta 2 Max: X-Boost promoted from read-only binary sensor to controllable switch
@@ -493,13 +497,13 @@ All notable changes to this project will be documented in this file.
 ## [1.3.1] - 2026-03-29
 
 ### Added
-- Reconfigure flow — update API credentials via Settings > Integrations > EcoFlow Energy > Reconfigure
-- Entity availability tracking — entities show "unavailable" when device is unreachable
+- Reconfigure flow - update API credentials via Settings > Integrations > EcoFlow Energy > Reconfigure
+- Entity availability tracking - entities show "unavailable" when device is unreachable
 - Optimistic state update for number entities (charge speed, SoC limits)
-- `suggested_display_precision` for all sensors — cleaner UI values
-- `disabled_by_default` for diagnostic sensors — less overwhelming for new users
+- `suggested_display_precision` for all sensors - cleaner UI values
+- `disabled_by_default` for diagnostic sensors - less overwhelming for new users
 - Entity categories for diagnostic binary sensors
-- `configuration_url` in device info — clickable link on device page
+- `configuration_url` in device info - clickable link on device page
 - German translations for re-authentication and reconfigure flows
 
 ### Fixed
@@ -517,13 +521,13 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - Modernized OptionsFlow to use current Home Assistant pattern
 - Modernize type hints: `Optional[X]` → `X | None`, `Dict`/`List`/`Tuple` → builtins across all source files
-- Centralize `_safe_float()` into shared parser module — removes 3 duplicate definitions
+- Centralize `_safe_float()` into shared parser module - removes 3 duplicate definitions
 - Add missing return type hints to MQTT client and proto decoder methods
 - Replace bare `except Exception` with specific exception types in proto decoder and runtime
 - Unify parser return types to `dict[str, Any]` for consistency
 
 ### Fixed
-- Downgrade MQTT auth error (rc=5) log from ERROR to WARNING — auto-recovery follows
+- Downgrade MQTT auth error (rc=5) log from ERROR to WARNING - auto-recovery follows
 - Downgrade transient MQTT message handler and connection errors to appropriate log levels
 - Remove unused typing imports
 
@@ -536,12 +540,12 @@ All notable changes to this project will be documented in this file.
 ## [1.2.7] - 2026-03-28
 
 ### Fixed
-- Remove license badge from README — renders as "?" in HACS due to image proxy limitations
+- Remove license badge from README - renders as "?" in HACS due to image proxy limitations
 
 ## [1.2.6] - 2026-03-28
 
 ### Fixed
-- Revert homeassistant field in manifest — not allowed for custom integrations (hassfest rejects it)
+- Revert homeassistant field in manifest - not allowed for custom integrations (hassfest rejects it)
 
 ## [1.2.4] - 2026-03-28
 
@@ -556,18 +560,18 @@ All notable changes to this project will be documented in this file.
 ## [1.2.2] - 2026-03-28
 
 ### Fixed
-- README uses pure markdown only — no HTML tables or emoji shortcodes that HACS cannot render
+- README uses pure markdown only - no HTML tables or emoji shortcodes that HACS cannot render
 
 ## [1.2.1] - 2026-03-28
 
 ### Changed
-- README redesigned for HACS store rendering — hero screenshots, feature grid, compact structure, standard markdown for full compatibility
+- README redesigned for HACS store rendering - hero screenshots, feature grid, compact structure, standard markdown for full compatibility
 
 ## [1.2.0] - 2026-03-28
 
 ### Added
-- Energy Dashboard support for Delta 2 Max — 4 kWh sensors (solar, solar 2, AC input, AC output) via Riemann sum integration
-- Energy Dashboard support for Smart Plug — 1 kWh energy sensor via Riemann sum integration
+- Energy Dashboard support for Delta 2 Max - 4 kWh sensors (solar, solar 2, AC input, AC output) via Riemann sum integration
+- Energy Dashboard support for Smart Plug - 1 kWh energy sensor via Riemann sum integration
 - Entity translations for all 135 entities (English + German) using HA translation_key system
 - Firmware version display in HA device page (extracted from API response)
 
@@ -580,7 +584,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 - Smart Plug: `watts` unit corrected from raw to deciWatt (/10) per API spec "0.1 W"
-- Delta 2 Max: MPPT fields scaling corrected per API spec — `outWatts`, `carOutWatts`, `pv2InWatts` (/10), `dcdc12vWatts`, `pv2InAmp` (/100), `dcdc12vVol`, `pv2MpptTemp` (/10)
+- Delta 2 Max: MPPT fields scaling corrected per API spec - `outWatts`, `carOutWatts`, `pv2InWatts` (/10), `dcdc12vWatts`, `pv2InAmp` (/100), `dcdc12vVol`, `pv2MpptTemp` (/10)
 
 ### Added
 - Smart Plug: `maxCur` field parsed (deciAmpere → Ampere)
@@ -590,17 +594,17 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 - HTTP API nonce format corrected to 6-digit numeric per EcoFlow API spec (was 16-char alphanumeric, causing intermittent signature errors on some backend servers)
-- MQTT keepalive reduced from 120s to 60s — prevents broker disconnect due to ~200s inactivity timeout with insufficient PINGREQ frequency
+- MQTT keepalive reduced from 120s to 60s - prevents broker disconnect due to ~200s inactivity timeout with insufficient PINGREQ frequency
 
 ## [1.1.0] - 2026-03-27
 
 ### Added
-- **Delta 2 Max MQTT push** — real-time data via IoT MQTT subscription alongside HTTP polling (dual-source)
+- **Delta 2 Max MQTT push** - real-time data via IoT MQTT subscription alongside HTTP polling (dual-source)
 - MQTT credential refresh on AUTH error (rc=5) with rate-limited retry
 
 ### Fixed
-- HTTP API nonce collision causing `code=8521 signature is wrong` — nonce upgraded from 6-digit numeric to 16-char alphanumeric (matching IoT API client)
-- HA Recorder warnings for `total_increasing` sensors (battery cycles, energy totals) — monotonic filter drops micro-regressions from API
+- HTTP API nonce collision causing `code=8521 signature is wrong` - nonce upgraded from 6-digit numeric to 16-char alphanumeric (matching IoT API client)
+- HA Recorder warnings for `total_increasing` sensors (battery cycles, energy totals) - monotonic filter drops micro-regressions from API
 
 ### Changed
 - Delta devices now subscribe to `/open/.../quota` MQTT topic for event-driven updates (~1–30 s)
@@ -612,8 +616,8 @@ All notable changes to this project will be documented in this file.
 - **PowerOcean** support with 57 sensors and Energy Dashboard integration (6 energy sensors)
 - **Delta 2 Max** support with 58 sensors, 5 binary sensors, 3 switches, 4 number entities
 - **Smart Plug** support with 9 sensors, 1 binary sensor, 1 switch
-- **Standard Mode** — official IoT Developer API, HTTP polling every ~30 s
-- **Enhanced Mode** — unofficial WSS MQTT push with ~3 s real-time updates (PowerOcean only)
+- **Standard Mode** - official IoT Developer API, HTTP polling every ~30 s
+- **Enhanced Mode** - unofficial WSS MQTT push with ~3 s real-time updates (PowerOcean only)
 - Auto-discovery of all devices bound to EcoFlow account
 - Energy Dashboard ready sensors (`total_increasing` for solar, grid, battery, home)
 - Riemann-sum energy integration with persistent state and gap/jump detection
