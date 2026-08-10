@@ -619,3 +619,58 @@ class TestTypedFrameBuffer:
             "frames_dropped_key_budget": 0,
             "per_key": {},
         }
+
+
+class TestPowerOceanGetAllSurvivesTheBudget:
+    """The size that raised the bundle cap, pinned against the real path.
+
+    A PowerOcean answers a full-state request with one bundled frame. The
+    measured one (#225) is 2906 B, against a cap that stood at 2048, and the
+    eight message types in its tail reached the diagnostics download as names
+    with no bytes behind them.
+
+    The frame itself cannot become a fixture - the serial sits in the envelope
+    of a live unit. What is reproduced here is its shape and its size, driven
+    through the same two functions the ingest path calls.
+    """
+
+    _OBSERVED_GET_ALL_BYTES = 2906
+
+    def _bundle(self, size: int, sn: str) -> bytes:
+        """A multi-command frame of exactly `size` bytes, serial included."""
+        head = b"\x0a" + b"\x00" * 40 + sn.encode()
+        return head + b"\x2d" + b"\x00" * (size - len(head) - 1)
+
+    def test_the_measured_get_all_is_stored_whole(self) -> None:
+        sn = "HJ31TEST00000001"
+        payload = self._bundle(self._OBSERVED_GET_ALL_BYTES, sn)
+        budget = frame_budget(
+            [{"cmd_func": 96, "cmd_id": 1}, {"cmd_func": 96, "cmd_id": 8}],
+            RAW_FRAME_MAX_BYTES,
+            RAW_FRAME_BUNDLE_MAX_BYTES,
+        )
+
+        entry = build_frame_entry("/t", payload, [sn], budget)
+
+        assert "truncated" not in entry
+        assert entry["size"] == self._OBSERVED_GET_ALL_BYTES
+        assert len(bytes.fromhex(entry["hex"])) == self._OBSERVED_GET_ALL_BYTES
+
+    def test_the_serial_is_still_masked_at_that_size(self) -> None:
+        """A larger budget stores bytes the old one discarded."""
+        sn = "HJ31TEST00000001"
+        payload = self._bundle(self._OBSERVED_GET_ALL_BYTES, sn)
+
+        entry = build_frame_entry("/t", payload, [sn], RAW_FRAME_BUNDLE_MAX_BYTES)
+
+        assert sn.encode() not in bytes.fromhex(entry["hex"])
+
+    def test_a_single_push_is_not_given_the_bundle_budget(self) -> None:
+        """The split still holds: one command, one message budget."""
+        budget = frame_budget(
+            [{"cmd_func": 96, "cmd_id": 8}],
+            RAW_FRAME_MAX_BYTES,
+            RAW_FRAME_BUNDLE_MAX_BYTES,
+        )
+
+        assert budget == RAW_FRAME_MAX_BYTES
