@@ -31,6 +31,7 @@ from .const import (
     MODE_ENHANCED,
     MODE_STANDARD,
     RAW_CAPTURE_DURATION_S,
+    get_device_name,
 )
 from .ecoflow.enhanced_auth import enhanced_login, get_app_device_list
 from .ecoflow.iot_api import IoTApiClient
@@ -150,8 +151,14 @@ class OptionsFlowMixin:
                 d["sn"]: d.get("device_type", "")
                 for d in self.config_entry.data.get(CONF_DEVICES, [])
             }
+            # Prefix-derived name first, same order as _device_label: the
+            # type table alone would label an ES21 "STREAM AC 5000" and a
+            # P231 "Delta 3 Series" whenever this fallback branch renders.
             device_options = {
-                sn: f"{DEVICE_TYPE_DISPLAY_NAMES.get(stored.get(sn, ''), sn[:12])} ({sn[:12]})"
+                sn: (
+                    f"{get_device_name('', sn) or DEVICE_TYPE_DISPLAY_NAMES.get(stored.get(sn, ''), sn[:12])}"
+                    f" ({sn[:12]})"
+                )
                 for sn in current_device_sns
             }
 

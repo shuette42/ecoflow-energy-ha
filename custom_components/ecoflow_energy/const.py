@@ -1086,9 +1086,9 @@ def excluded_keys_for_serial(device_sn: str) -> frozenset[str]:
 # which is the safe default for a write and the wrong one for a read.
 #
 # The exclusion table below cannot carry this. It matches on entity keys, and
-# all eight control state keys are also sensor keys, so excluding them would
-# take the read-only sensors with them - including the two SoC limits an ES21
-# demonstrably reports.
+# every control state key is also the key of a read entity (six sensors, two
+# binary sensors), so excluding them would take the read-only entities with
+# them - including the two SoC limits an ES21 demonstrably reports.
 STREAM_AC5000_CONTROL_PREFIXES: frozenset[str] = frozenset({"ES22"})
 
 

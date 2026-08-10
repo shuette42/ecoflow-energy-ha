@@ -150,10 +150,12 @@ _SN_PREFIX_MAP = {
     # STREAM 5000 (#231). Same product type as the ES22 above (396) on a
     # different model number, and a capture from a live unit sends the same
     # four telemetry families: 254/39, 254/40, 32/2 and 32/50. Replayed
-    # through the ES22 parser unchanged those frames yield 26 readings whose
-    # flow model closes, so this is the same parser rather than a guess from
-    # the shared name. Controls are a separate question and stay off, see
-    # STREAM_AC5000_CONTROL_PREFIXES in ../const.py.
+    # through the ES22 parser unchanged those frames yield 26 readings that
+    # agree across independent message families - the home node total matches
+    # the sum of the flow edges feeding it, the grid meter matches the export
+    # derived from those edges - so this is the same parser rather than a
+    # guess from the shared name. Controls are a separate question and stay
+    # off, see STREAM_AC5000_CONTROL_PREFIXES in ../const.py.
     "ES21": DEVICE_TYPE_STREAM_AC5000,
 }
 

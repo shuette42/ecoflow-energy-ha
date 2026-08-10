@@ -16,6 +16,9 @@ import pytest
 
 from ecoflow_energy.const import (
     STREAM_AC5000_CONTROL_PREFIXES,
+    STREAMAC5000_NUMBERS,
+    STREAMAC5000_SELECTS,
+    STREAMAC5000_SWITCHES,
     supports_stream_ac5000_controls,
 )
 from ecoflow_energy.ecoflow.const import (
@@ -74,17 +77,20 @@ class TestReadPath:
     """The captured frames decode with the ES22 parser, unchanged."""
 
     def test_every_captured_frame_is_understood(self) -> None:
-        # 254/40 is the one family this parser maps nothing from: its two
-        # containers (f60, f62) are unidentified, see the parser docstring.
-        decoded = {
-            (f["cmds"][0]["cmd_func"], f["cmds"][0]["cmd_id"]): parse_stream_ac5000_message(
-                bytes.fromhex(f["hex"])
-            )
-            for f in _frames()
-        }
-        assert decoded[(32, 50)], "BMS heartbeat produced nothing"
-        assert decoded[(32, 2)], "SoC limit frame produced nothing"
-        assert decoded[(254, 39)], "telemetry frame produced nothing"
+        # Frame by frame rather than keyed by command: three of the six
+        # frames are 254/39 deltas, and a dict would keep only the last,
+        # letting the other two regress to None unnoticed.
+        for frame in _frames():
+            cmd = (frame["cmds"][0]["cmd_func"], frame["cmds"][0]["cmd_id"])
+            parsed = parse_stream_ac5000_message(bytes.fromhex(frame["hex"]))
+            if cmd == (254, 40):
+                # The one family this parser maps nothing from: its
+                # containers (f60-f62) are unidentified on either model,
+                # see the parser docstring. Pinned so mapping them later
+                # is a conscious change here too.
+                assert parsed is None
+            else:
+                assert parsed, f"frame {cmd} produced nothing"
 
     @pytest.mark.parametrize(
         "key",
@@ -106,16 +112,26 @@ class TestReadPath:
         assert key in _parse_all()
 
     def test_the_flow_model_closes(self) -> None:
-        """What leaves the battery reaches the house and the grid.
+        """Readings from independent message families agree with each other.
 
         This is the check that separates "the bytes parsed" from "the parser
-        belongs to this device". A wrong field map still yields numbers.
+        belongs to this device", and both sides of each comparison must come
+        from different wire fields for it to check anything. The derived
+        battery keys are deliberately not used here: `batt_discharge_power_w`
+        is built in `_finalize` from the same `f12` edges an identity would
+        compare it against, so that identity holds by construction even with
+        a wrong field map.
         """
         state = _parse_all()
-        out_of_battery = state["batt_discharge_power_w"]
-        into_house = state["home_from_batt_w"]
-        onto_grid = state["grid_export_power_w"]
-        assert abs(out_of_battery - (into_house + onto_grid)) <= 2
+        # The `f11.1` home node total against the `f12` edges feeding home.
+        home_total = state["home_w"]
+        home_edges = state["home_from_batt_w"] + state["home_from_grid_w"]
+        assert abs(home_total - home_edges) <= 10
+        # The grid meter block (`f15.3`) against the balance derived from
+        # the `f12` grid edges. A swapped edge pair flips the sign here.
+        grid_meter = state["grid_w"]
+        grid_edges = state["grid_import_power_w"] - state["grid_export_power_w"]
+        assert abs(grid_meter - grid_edges) <= 2
 
     def test_the_soc_limits_are_a_usable_range(self) -> None:
         state = _parse_all()
@@ -147,10 +163,17 @@ class TestControlsStayOff:
         assert get_defs(DEVICE_TYPE_STREAM_AC5000, ES21_SN) == []
 
     @pytest.mark.parametrize(
-        "get_defs", [_get_number_defs, _get_switch_defs, _get_select_defs]
+        ("get_defs", "expected"),
+        [
+            (_get_number_defs, STREAMAC5000_NUMBERS),
+            (_get_switch_defs, STREAMAC5000_SWITCHES),
+            (_get_select_defs, STREAMAC5000_SELECTS),
+        ],
     )
-    def test_an_es22_keeps_its_controls(self, get_defs) -> None:
-        assert get_defs(DEVICE_TYPE_STREAM_AC5000, ES22_SN)
+    def test_an_es22_keeps_its_controls(self, get_defs, expected) -> None:
+        # Identity, not truthiness: a getter that lost part of the list
+        # would still be truthy.
+        assert get_defs(DEVICE_TYPE_STREAM_AC5000, ES22_SN) is expected
 
     def test_an_unknown_serial_gets_no_controls(self) -> None:
         # The default matters more than the ES21 case: it is what a prefix
