@@ -415,8 +415,11 @@ class TestPowerOceanParamChangeReport:
     one nested block, verified free of ASCII fragments before it was copied
     here.
 
-    This message is rare by design: it fires when a parameter moves, so a
-    ten minute recording holds none and the whole repo holds one.
+    What triggers this message is not established. Three recordings of the
+    same system hold it twice and once not at all, both times byte for byte
+    identical, at 16.5 s of 600 and 114 s of 150 - so neither on connect nor
+    on a parameter moving, since nothing moved. Treat it as rare and
+    unpredictable rather than as change-driven.
     """
 
     _PAYLOAD = bytes.fromhex(
@@ -435,8 +438,10 @@ class TestPowerOceanParamChangeReport:
         35 A here against 63 A on a second unit is what shows these are per
         installation rather than one constant decoded twice.
         """
-        assert self._report().breaker_capacity_max == 35
-        assert self._report().breaker_enable_state is True
+        report = self._report()
+
+        assert report.breaker_capacity_max == 35
+        assert report.breaker_enable_state is True
 
     def test_the_peak_shaving_block_decodes_to_six_values(self) -> None:
         """A 27 byte block that used to be reported as a bare field number."""
@@ -461,6 +466,11 @@ class TestPowerOceanParamChangeReport:
         assert report.HasField("ems_peak_shaving_report")
         assert report.HasField("smart_ctrl")
         assert report.smart_ctrl is False
+        # The other half of the claim: the two declared fields this frame
+        # does not carry read as absent, not as another zero. Without both
+        # directions the test name promises a contrast it never shows.
+        assert not report.HasField("kraken_register_status")
+        assert not report.HasField("kraken_switch")
 
     def test_the_unverified_fields_stay_undeclared(self) -> None:
         """Nested shapes are not guessed from an empty or absent field.

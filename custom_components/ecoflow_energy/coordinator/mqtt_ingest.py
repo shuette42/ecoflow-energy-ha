@@ -394,10 +394,14 @@ class MqttIngestMixin:
                 if result.mapped.get("_is_ems_heartbeat"):
                     return flatten_heartbeat(raw)
                 # Enhanced Mode: param change report (cmd_id=13) carries
-                # only `ems_app_surplus_pct` (renamed from `dev_soc`). This
-                # field has no entry in the BP/EMS-change rename tables and
-                # would be dropped by remap_bp_keys, so pass it through
-                # unchanged.
+                # `ems_app_surplus_pct` (renamed from `dev_soc`) plus the
+                # declared parameter fields - breaker rating, peak shaving
+                # block, mode flags. None of them maps to an entity, and none
+                # has an entry in the BP/EMS-change rename tables, so the
+                # whole dict passes through unchanged. That pass-through is
+                # what puts their names into device data and therefore into
+                # the diagnostics key list - do not narrow it to the surplus
+                # field without moving that job somewhere else.
                 if result.mapped.get("_is_ems_param_change"):
                     return raw or None
                 # Enhanced Mode: EMS state report (cmd_id=17). Narrower

@@ -182,6 +182,45 @@ def test_hj31_single_header_key_set_matches_legacy(
     assert set(parsed) == expected_keys
 
 
+def test_param_change_real_frame_passes_every_declared_field_through() -> None:
+    """The captured 96/13 frame reaches the coordinator with all its keys.
+
+    The payload is the real 56-byte frame from the hj31 recordings, so this
+    covers the three things a synthetic dev_soc-only frame cannot: a bool
+    that is present but False survives the MessageToDict conversion (this
+    message is the first on the typed path to carry bools), the nested peak
+    shaving block arrives as one named dict, and the dev_soc rename still
+    applies with thirteen new neighbours in the same message.
+    """
+    payload = bytes.fromhex(
+        "08001000180020002800300038234001506458006d0000000072"
+        "1b080015000000001d0000000025000000002d0000000035000000007a00"
+    )
+
+    parsed = _PowerOceanParser()._parse_powerocean_proto_frame(
+        _build_header(96, 13, payload)
+    )
+
+    assert parsed is not None
+    # Presence semantics: switched-off is a False in the dict, not a gap.
+    assert parsed["smart_ctrl"] is False
+    assert parsed["breaker_capacity_max"] == 35
+    assert parsed["breaker_enable_state"] is True
+    assert parsed["ems_app_surplus_pct"] == 100
+    assert parsed["ems_peak_shaving_report"] == {
+        "peak_shaving_status": 0,
+        "peak_shaving_max_power": 0.0,
+        "peak_shaving_energy": 0.0,
+        "peak_shaving_soc": 0.0,
+        "peak_shaving_times": 0.0,
+        "peak_shaving_control_energy": 0.0,
+    }
+    # The raw name must not survive the rename, and internal bookkeeping
+    # keys must not leak into device data.
+    assert "dev_soc" not in parsed
+    assert not any(key.startswith("_") for key in parsed)
+
+
 def test_hj31_single_header_unknown_command_yields_nothing() -> None:
     """An unregistered command tuple produces no sensor keys at all."""
     frame = _build_header(96, 99, b"\x08\x01")
