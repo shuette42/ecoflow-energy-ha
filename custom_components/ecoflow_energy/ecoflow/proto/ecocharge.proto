@@ -403,8 +403,69 @@ message JTS1EmsChangeReport {
 //
 // Only `dev_soc` is decoded for now; other fields are documented for
 // future use but not parsed.
+// Peak shaving state, carried inside the parameter change report at field 14.
+// Decoded from a 27 byte block on a live PowerOcean: every field present,
+// every value zero, which is what a system with peak shaving switched off
+// reports. The status is an enum in the command family
+// (0 no task, 1 task exists, 2 task active) and is read as its number here,
+// for the same reason as the other enums in this file.
+message JTS1EmsPeakShavingReport {
+  optional uint32 peak_shaving_status = 1;
+  optional float peak_shaving_max_power = 2;
+  optional float peak_shaving_energy = 3;
+  optional float peak_shaving_soc = 4;
+  optional float peak_shaving_times = 5;
+  optional float peak_shaving_control_energy = 6;
+}
+
 message JTS1EmsParamChangeReport {
+  // The user-tunable parameters this report actually carries. All observed
+  // on live hardware: field 7 reads 35 on one unit and 63 on another, which
+  // is the main breaker rating in amps and the evidence that these are per
+  // installation rather than a constant decoded twice. The rest read zero on
+  // a system with none of the features configured.
+  //
+  // No entity comes from any of them. The breaker rating is a commissioning
+  // value that does not move, and everything else is zero until somebody
+  // switches a feature on. They are declared so a download names them instead
+  // of listing bare field numbers.
+  oneof _smart_ctrl { bool smart_ctrl = 1; }
+  oneof _energy_efficient_enable { bool energy_efficient_enable = 2; }
+  oneof _sys_zone { uint32 sys_zone = 3; }
+  oneof _sys_time_tab { uint32 sys_time_tab = 4; }
+  oneof _bp_burst { bool bp_burst = 5; }
+  oneof _lower_power_stat { bool lower_power_stat = 6; }
+  oneof _breaker_capacity_max { uint32 breaker_capacity_max = 7; }
+  oneof _breaker_enable_state { bool breaker_enable_state = 8; }
   oneof _dev_soc { uint32 dev_soc = 10; }
+  oneof _sys_switch_bit { uint32 sys_switch_bit = 11; }
+  oneof _tou_offset { float tou_offset = 13; }
+  oneof _ems_peak_shaving_report {
+    JTS1EmsPeakShavingReport ems_peak_shaving_report = 14;
+  }
+  oneof _kraken_register_status { uint32 kraken_register_status = 18; }
+  oneof _kraken_switch { uint32 kraken_switch = 19; }
+
+  // Deliberately absent, and each for its own reason.
+  //
+  // 9 `timer_task` and 22 `timer_heating_task` are the scheduled tasks, and
+  // they are the reason this message is interesting at all. Neither appears
+  // in any recording held here: this is a *change* report, it fires when a
+  // parameter moves, and no unit recorded so far had a schedule changed while
+  // listening. Declaring their nested tree from zero observations would mean
+  // a future frame decoding into a plausible shape nobody has checked.
+  //
+  // 15 `ems_all_peak_task_report` and 17 `solar_Array` are the same risk one
+  // step milder: both were seen, both as empty submessages. Zero bytes prove
+  // the field exists, not what is inside it. Protobuf does not reject a wrong
+  // submessage shape - it fills what matches and hides the rest as unknown -
+  // so a guess here fails silently and convincingly.
+  //
+  // 12 `modbus_online_status` and 16 `alarm_reset_count` were never observed.
+  //
+  // Fields 20 and 21 arrive on one unit carrying 2500.0 and 3300.0, and the
+  // command family names no field at either number on this message. Power
+  // limits by magnitude, unidentified, left alone.
 }
 
 // --- Delta 3 generation (portable power stations) ---

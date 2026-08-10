@@ -16,6 +16,7 @@ from ecoflow_energy.ecoflow.proto_encoding import (
 from ecoflow_energy.ecoflow.proto.decoder import decode_header_message
 from ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
     JTS1EmsChangeReport,
+    JTS1EmsParamChangeReport,
     JTS1EmsHeartbeat,
     JTS1EnergyStreamReport,
 )
@@ -404,3 +405,72 @@ class TestPowerOceanCorpusFields:
         assert report.HasField("pv1_pwr")
         assert not report.HasField("pv2_pwr")
         assert report.pv1_pwr == report.mppt_pwr
+
+
+class TestPowerOceanParamChangeReport:
+    """cmd_func 96 / cmd_id 13, the parameter change report.
+
+    The payload is the inner bytes of a real frame from a listen-only
+    recording. It carries no identifier - 56 bytes of varints, one float and
+    one nested block, verified free of ASCII fragments before it was copied
+    here.
+
+    This message is rare by design: it fires when a parameter moves, so a
+    ten minute recording holds none and the whole repo holds one.
+    """
+
+    _PAYLOAD = bytes.fromhex(
+        "08001000180020002800300038234001506458006d0000000072"
+        "1b080015000000001d0000000025000000002d0000000035000000007a00"
+    )
+
+    def _report(self) -> JTS1EmsParamChangeReport:
+        report = JTS1EmsParamChangeReport()
+        report.ParseFromString(self._PAYLOAD)
+        return report
+
+    def test_the_breaker_rating_is_read(self) -> None:
+        """The one value in this message that is neither zero nor a default.
+
+        35 A here against 63 A on a second unit is what shows these are per
+        installation rather than one constant decoded twice.
+        """
+        assert self._report().breaker_capacity_max == 35
+        assert self._report().breaker_enable_state is True
+
+    def test_the_peak_shaving_block_decodes_to_six_values(self) -> None:
+        """A 27 byte block that used to be reported as a bare field number."""
+        peak = self._report().ems_peak_shaving_report
+
+        assert peak.peak_shaving_status == 0
+        assert peak.peak_shaving_max_power == 0.0
+        assert peak.peak_shaving_energy == 0.0
+        assert peak.peak_shaving_soc == 0.0
+        assert peak.peak_shaving_times == 0.0
+        assert peak.peak_shaving_control_energy == 0.0
+
+    def test_switched_off_is_not_the_same_as_absent(self) -> None:
+        """Every value here is zero, so presence is the only signal left.
+
+        Without explicit presence a system with peak shaving off would be
+        indistinguishable from one that never reported the block at all, and
+        the zeros above would prove nothing.
+        """
+        report = self._report()
+
+        assert report.HasField("ems_peak_shaving_report")
+        assert report.HasField("smart_ctrl")
+        assert report.smart_ctrl is False
+
+    def test_the_unverified_fields_stay_undeclared(self) -> None:
+        """Nested shapes are not guessed from an empty or absent field.
+
+        9 and 22 are the scheduled tasks and appear in no recording. 15 and
+        17 were seen only as empty submessages. Protobuf fills what matches a
+        declared shape and hides the rest, so a wrong guess here would decode
+        convincingly rather than fail.
+        """
+        declared = {f.number for f in JTS1EmsParamChangeReport.DESCRIPTOR.fields}
+
+        assert declared == {1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 13, 14, 18, 19}
+        assert not declared & {9, 12, 15, 16, 17, 20, 21, 22}
