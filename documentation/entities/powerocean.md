@@ -2,9 +2,9 @@
 
 Full list of all entities created for PowerOcean devices.
 
-**Serial prefixes:** `HJ31`, `HJ32`, `HJ35` (standard) · `J32B`, `J32D`, `J32E` (European variants) · `R371`, `R372`, `R374`, `HJ3C` (PowerOcean Plus). All share the entity set below.
+**Serial prefixes:** `HJ31`, `HJ32`, `HJ35` (standard) · `J32B`, `J327`, `J32D`, `J32E` (European variants) · `R371`, `R372`, `R374`, `HJ3C` (PowerOcean Plus). All share the entity set below.
 
-> **Note:** The European variants (`J32D`, `J32E`) and the PowerOcean Plus units (`R371`, `R372`, `R374`, `HJ3C`) are currently not exposed through the EcoFlow Developer API and therefore require Enhanced Mode. In Standard Mode these devices report error 1006 and all entities stay unavailable. Single-phase variants (`J32E`) report only the phases that are physically present; the remaining phase entities stay empty. Whether `J32B` can be linked to an API key has not been tested, so Standard Mode is unproven for that prefix.
+> **Note:** The European variants (`J327`, `J32D`, `J32E`) and the PowerOcean Plus units (`R371`, `R372`, `R374`, `HJ3C`) are currently not exposed through the EcoFlow Developer API and therefore require Enhanced Mode. In Standard Mode these devices report error 1006 and all entities stay unavailable. Single-phase variants (`J327`, `J32E`) report only the phases that are physically present; the remaining phase entities stay empty. Whether `J32B` can be linked to an API key has not been tested, so Standard Mode is unproven for that prefix.
 
 > **The heating rod readings are optional and need Standard Mode.** They belong
 > to the PowerGlow accessory, so they are only created once your system actually
@@ -12,7 +12,7 @@ Full list of all entities created for PowerOcean devices.
 > The readings come from the API quota, and that quota is only polled when the
 > integration runs with developer keys, so with EcoFlow account sign-in they do
 > not appear. This also means a PowerGlow attached to a unit that only works in
-> Enhanced Mode (`J32D`, `J32E`, and the PowerOcean Plus prefixes) cannot be read
+> Enhanced Mode (`J327`, `J32D`, `J32E`, and the PowerOcean Plus prefixes) cannot be read
 > at all today. If you ran an earlier 1.16.0 beta, the four entities were created
 > on every PowerOcean; leftover ones are removed automatically as soon as your
 > system reports data without a heating rod, unless you had enabled them, in
