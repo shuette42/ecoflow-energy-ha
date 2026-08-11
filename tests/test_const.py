@@ -591,7 +591,7 @@ class TestStreamEntities:
 
     def test_switch_defs_unique(self) -> None:
         keys = _extract_sensor_keys("STREAM_SWITCHES")
-        assert keys == []
+        assert keys == ["ac_outlet_1_switch", "ac_outlet_2_switch"]
 
     def test_binary_sensor_defs_unique(self) -> None:
         keys = _extract_sensor_keys("STREAM_BINARY_SENSORS")

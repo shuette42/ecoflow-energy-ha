@@ -771,7 +771,10 @@ STREAM_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
     EcoFlowBinarySensorDef("ac_outlet_2_enabled", "AC Outlet 2", "power", "mdi:power-socket-eu"),
 ]
 
-STREAM_SWITCHES: list[EcoFlowSwitchDef] = []
+STREAM_SWITCHES: list[EcoFlowSwitchDef] = [
+    EcoFlowSwitchDef("ac_outlet_1_switch", "AC Outlet 1", "ac_outlet_1_enabled", "mdi:power-socket-eu", enhanced_only=True),
+    EcoFlowSwitchDef("ac_outlet_2_switch", "AC Outlet 2", "ac_outlet_2_enabled", "mdi:power-socket-eu", enhanced_only=True),
+]
 
 SMARTPLUG_NUMBERS: list[EcoFlowNumberDef] = [
     EcoFlowNumberDef("led_brightness", "LED Brightness", "led_brightness", "%", "mdi:brightness-6", 0, 100, 5),
@@ -1134,6 +1137,11 @@ STREAM_AC5000_CONTROL_PREFIXES: frozenset[str] = frozenset({"ES22"})
 # until one of its own frames says otherwise. Same allowlist reasoning as
 # STREAM_AC5000_CONTROL_PREFIXES above: a prefix added later gets no controls
 # until someone decides here.
+#
+# The outlet switches and the SoC limits share this one gate rather than
+# holding a set each. Both were confirmed on the same hardware by the same
+# evidence, so two sets would be two names for one fact and would have to be
+# kept in step by hand.
 STREAM_CONTROL_PREFIXES: frozenset[str] = frozenset({"BK31"})
 
 

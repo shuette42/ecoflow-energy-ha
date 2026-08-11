@@ -1440,6 +1440,12 @@
       },
       "backup_socket_switch": {
         "name": "Backup Socket"
+      },
+      "ac_outlet_1_switch": {
+        "name": "AC Outlet 1"
+      },
+      "ac_outlet_2_switch": {
+        "name": "AC Outlet 2"
       }
     },
     "number": {

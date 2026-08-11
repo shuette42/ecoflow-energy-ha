@@ -523,7 +523,9 @@ def build_delta3_config_write_payload(
             rather than a scalar, written as the length-delimited value of
             `config_field`. `value` is ignored when this is given. Not
             combinable with `nested` or `companions`.
-        source: optional app source for header field 23, for example ``ios``.
+        source: optional app identifier for header field 23, for example
+            ``ios``. The Stream AC Pro frames carry it because the captures
+            they were reproduced from did; the Delta 3 frames omit it.
 
     Returns:
         Binary protobuf payload ready to publish on the SET topic.
@@ -561,6 +563,24 @@ def build_delta3_config_write_payload(
     header.extend(encode_field_bytes(25, device_sn.encode("ascii")))  # deviceSn
 
     return encode_field_bytes(1, bytes(header))
+
+
+def build_stream_ac_outlet_payload(
+    outlet: int,
+    enabled: bool,
+    device_sn: str,
+    seq: int = 0,
+) -> bytes:
+    """Build a Stream AC Pro AC outlet ConfigWrite frame."""
+    if outlet not in (1, 2):
+        raise ValueError(f"outlet must be 1 or 2, got {outlet}")
+    return build_delta3_config_write_payload(
+        config_field=380 if outlet == 1 else 381,
+        value=int(enabled),
+        device_sn=device_sn,
+        seq=seq,
+        source="ios",
+    )
 
 
 def build_energy_stream_deactivate_payload(seq: int = 0) -> bytes:

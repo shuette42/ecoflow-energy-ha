@@ -72,3 +72,9 @@ scripts/
 # Match files with any extension and whole output directories, not just .json.
 probe_output_*
 probe_output_*/
+
+# Local mitmproxy/protocol captures
+dumps/
+*.mitm
+mitm-flows*.dump
+ecoflow-mqtt-decoded*.json

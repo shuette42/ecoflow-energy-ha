@@ -1524,6 +1524,12 @@
       },
       "backup_socket_switch": {
         "name": "Notstromsteckdose"
+      },
+      "ac_outlet_1_switch": {
+        "name": "AC-Ausgang 1"
+      },
+      "ac_outlet_2_switch": {
+        "name": "AC-Ausgang 2"
       }
     },
     "number": {

@@ -10,10 +10,12 @@ from ecoflow_energy.ecoflow.energy_stream import (
     build_feed_power_set_payload,
     build_powerocean_soc_set_payload,
     build_soc_limit_set_payload,
+    build_stream_ac_outlet_payload,
     build_stream_backup_reserve_payload,
     build_stream_soc_limits_payload,
     build_work_mode_set_payload,
 )
+from ecoflow_energy.ecoflow.proto.decoder import decode_header_message
 from ecoflow_energy.ecoflow.proto_encoding import (
     encode_field_bytes,
     encode_field_varint,
@@ -703,3 +705,31 @@ class TestStreamSocLimitsPayload:
             build_stream_soc_limits_payload(
                 95, 20, 23, self.SN, seq=1, timestamp=timestamp
             )
+
+
+class TestStreamAcOutletPayload:
+    """ConfigWrite AC outlet fields confirmed from app MQTT captures."""
+
+    SN = "BK31TESTSN0000000"
+
+    def test_ac_outlet_1_on_field_380(self):
+        payload = build_stream_ac_outlet_payload(1, True, self.SN, seq=1)
+        assert b"\x40\xfe\x01" in payload
+        assert b"\x48\x11" in payload
+        assert b"\xe0\x17\x01" in payload
+        assert b"\xba\x01\x03ios" in payload
+        headers, _ = decode_header_message(payload)
+        assert headers[0]["from"] == "ios"
+        assert headers[0]["data_len"] == 3
+
+    def test_ac_outlet_2_on_field_381(self):
+        payload = build_stream_ac_outlet_payload(2, True, self.SN, seq=1)
+        assert b"\xe8\x17\x01" in payload
+
+    def test_ac_outlet_off_encodes_zero(self):
+        payload = build_stream_ac_outlet_payload(1, False, self.SN, seq=1)
+        assert b"\xe0\x17\x00" in payload
+
+    def test_rejects_invalid_outlet(self):
+        with pytest.raises(ValueError):
+            build_stream_ac_outlet_payload(3, True, self.SN, seq=1)

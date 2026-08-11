@@ -37,6 +37,7 @@ from .const import (
     EcoFlowSwitchDef,
     filter_defs_for_serial,
     supports_stream_ac5000_controls,
+    supports_stream_controls,
     SMARTPLUG_SWITCH_COMMANDS,
     SMARTPLUG_SWITCHES,
     STREAM_SWITCHES,
@@ -47,6 +48,7 @@ from .const import (
     SWITCH_DECLARATIVE_R351,
 )
 from .coordinator import DeviceValueNotReported, EcoFlowDeviceCoordinator
+from .ecoflow.energy_stream import build_stream_ac_outlet_payload
 from .ecoflow.stream_ac5000_commands import (
     build_backup_socket_payload as build_stream_ac5000_backup_socket_payload,
 )
@@ -204,6 +206,26 @@ class EcoFlowSwitch(
             self._apply_optimistic(turn_on)
             return
 
+        if (
+            self.coordinator.device_type == DEVICE_TYPE_STREAM
+            and self.coordinator.enhanced_mode
+            and self._definition.key in ("ac_outlet_1_switch", "ac_outlet_2_switch")
+        ):
+            outlet = 1 if self._definition.key == "ac_outlet_1_switch" else 2
+            payload = build_stream_ac_outlet_payload(
+                outlet,
+                turn_on,
+                device_sn=self.coordinator.device_sn,
+            )
+            ok = await self.coordinator.async_send_proto_set_command(
+                payload,
+                f"stream_ac_outlet_{outlet}",
+            )
+            if not ok:
+                raise_set_failed(self.entity_id)
+            self._apply_optimistic(turn_on)
+            return
+
         command = self._build_command(turn_on)
         if command is None:
             raise_set_unsupported(self.entity_id)
@@ -347,6 +369,8 @@ def _get_switch_defs(device_type: str, device_sn: str = "") -> list[EcoFlowSwitc
     if device_type == DEVICE_TYPE_SMARTPLUG:
         return SMARTPLUG_SWITCHES
     if device_type == DEVICE_TYPE_STREAM:
+        if not supports_stream_controls(device_sn):
+            return []
         return STREAM_SWITCHES
     if device_type == DEVICE_TYPE_DELTA3:
         return DELTA3_SWITCHES

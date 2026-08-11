@@ -131,7 +131,12 @@ class TestSwitchDefsRouting:
         assert _get_switch_defs(DEVICE_TYPE_DELTA) is DELTA2MAX_SWITCHES
 
     def test_stream_switches(self) -> None:
-        assert _get_switch_defs(DEVICE_TYPE_STREAM) is STREAM_SWITCHES
+        """The outlet switches sit behind the same write gate as the limits,
+        so an empty serial withholds them exactly as it does there: a write
+        with no serial cannot be addressed anyway."""
+        assert _get_switch_defs(DEVICE_TYPE_STREAM) == []
+        assert _get_switch_defs(DEVICE_TYPE_STREAM, "BK31TEST00000001") is STREAM_SWITCHES
+        assert _get_switch_defs(DEVICE_TYPE_STREAM, "BK11TEST00000001") == []
 
     def test_powerocean_switches_empty(self):
         assert _get_switch_defs(DEVICE_TYPE_POWEROCEAN) == []
@@ -1070,6 +1075,57 @@ class TestEcoFlowNumber:
         # field 102, wire-type 0 (varint): tag = (102 << 3) | 0 = 816 -> b"\xb0\x06"
         assert b"\xb0\x06\x50" in pdata  # field 102 = 0x50 = 80
         assert coordinator.device_data["backup_reserve_pct"] == 80.0
+
+    async def test_stream_ac_outlet_switch_set(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Stream AC outlet switches use confirmed ConfigWrite fields 380/381."""
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                "auth_method": "app",
+                "mode": "enhanced",
+                "email": "stream-test@example.invalid",
+                "password": "not-a-real-password",
+                "user_id": "user123",
+                "devices": [MOCK_STREAM_DEVICE],
+            },
+            unique_id="stream-test@example.invalid",
+        )
+        entry.add_to_hass(hass)
+        coordinator = _make_coordinator(hass, entry, MOCK_STREAM_DEVICE)
+        coordinator.async_set_updated_data({"ac_outlet_1_enabled": 0})
+
+        defn = EcoFlowSwitchDef(
+            key="ac_outlet_1_switch",
+            name="AC Outlet 1",
+            state_key="ac_outlet_1_enabled",
+            icon="mdi:power-socket-eu",
+        )
+        switch = EcoFlowSwitch(coordinator, defn)
+
+        with (
+            patch.object(coordinator, "async_send_proto_set_command", new_callable=AsyncMock, return_value=True) as mock_cmd,
+            patch.object(switch, "async_write_ha_state"),
+        ):
+            await switch.async_turn_on()
+
+        mock_cmd.assert_awaited_once()
+        payload = mock_cmd.call_args.args[0]
+        from custom_components.ecoflow_energy.ecoflow.proto.decoder import (
+            decode_header_message,
+        )
+
+        headers, _ = decode_header_message(payload)
+        assert headers, "expected a decodable header frame"
+        header = headers[0]
+        assert int(header["cmd_func"]) == 254
+        assert int(header["cmd_id"]) == 17
+        assert header["from"] == "ios"
+        pdata = bytes.fromhex(header["pdata"])
+        assert b"\xe0\x17\x01" in pdata
 
 # ===========================================================================
 # EcoFlowDiagnosticSensor
