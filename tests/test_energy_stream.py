@@ -11,6 +11,7 @@ from ecoflow_energy.ecoflow.energy_stream import (
     build_powerocean_soc_set_payload,
     build_soc_limit_set_payload,
     build_stream_backup_reserve_payload,
+    build_stream_soc_limits_payload,
     build_work_mode_set_payload,
 )
 from ecoflow_energy.ecoflow.proto_encoding import (
@@ -629,3 +630,54 @@ class TestStreamBackupReservePayload:
             build_stream_backup_reserve_payload(150, self.SN)
         with pytest.raises(ValueError):
             build_stream_backup_reserve_payload(-1, self.SN)
+
+
+class TestStreamSocLimitsPayload:
+    """Grouped Stream SoC fields confirmed from an app MQTT capture."""
+
+    SN = "BK31TESTSN0000000"
+
+    def test_matches_the_confirmed_group_shape(self):
+        payload = build_stream_soc_limits_payload(
+            95, 20, 23, self.SN, seq=1, timestamp=1_723_456_789
+        )
+        header = _decode_header_fields(payload)
+        pdata = header[1][0]
+
+        assert header[8] == [254]
+        assert header[9] == [17]
+        assert header[23] == [b"ios"]
+        assert pdata == b"".join(
+            (
+                encode_field_varint(6, 1_723_456_789),
+                encode_field_varint(33, 95),
+                encode_field_varint(34, 20),
+                encode_field_varint(102, 23),
+            )
+        )
+
+    @pytest.mark.parametrize(
+        ("charge", "discharge", "backup"),
+        [
+            (101, 20, 23),
+            (95, -1, 23),
+            (95, 20, 101),
+            (19, 20, 23),
+            (95, 20, 22),
+            (22, 20, 23),
+        ],
+    )
+    def test_rejects_invalid_or_unsafe_groups(
+        self, charge: int, discharge: int, backup: int
+    ) -> None:
+        with pytest.raises(ValueError):
+            build_stream_soc_limits_payload(
+                charge, discharge, backup, self.SN, seq=1, timestamp=1
+            )
+
+    @pytest.mark.parametrize("timestamp", [-1, 0x1_0000_0000])
+    def test_rejects_non_uint32_timestamp(self, timestamp: int) -> None:
+        with pytest.raises(ValueError):
+            build_stream_soc_limits_payload(
+                95, 20, 23, self.SN, seq=1, timestamp=timestamp
+            )

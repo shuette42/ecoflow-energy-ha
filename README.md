@@ -44,7 +44,7 @@
 | **Delta 2 Max** - Portable Power | `R351` `R331` | 94 + 4 binary | 7 switches, 8 numbers | 4 (solar 1+2, AC in/out) | ~30 s standard (+ MQTT push) |
 | **Delta 3** - Portable Power | `D3M1` `D3N1` `P321` `P231` | 47 | 7 switches, 4 numbers, 5 selects (selects and 1 number Enhanced only); `D3M` serials add 3 switches, 3 numbers and 1 binary sensor for port priority | 4 (solar 1+2, AC in, output) | ~30 s standard / ~2 s enhanced |
 | **Smart Plug** - Switchable Outlet | `HW52` | 11 + 1 binary | 1 switch, 2 numbers | 1 (total energy) | ~30 s standard / ~3 s enhanced |
-| **Stream** - AC-coupled Battery | `BK31` `BK11` `BK41` `BK51` `BK61` | 54 + 2 binary | 1 number (Enhanced only) | 2 default (battery charge/discharge), 6 optional diagnostic (solar/home, PV 1-4) | ~30 s standard / ~3 s enhanced |
+| **Stream** - AC-coupled Battery | `BK31` `BK11` `BK41` `BK51` `BK61` | 54 + 2 binary | 1 number; `BK31` adds 2 numbers (Enhanced only) | 2 default (battery charge/discharge), 6 optional diagnostic (solar/home, PV 1-4) | ~30 s standard / ~3 s enhanced |
 | **Stream Micro** - Grid-tie Inverter | `BK01`\* | 21 | - | 4 optional diagnostic (PV 1-4) | ~3 s enhanced |
 | **STREAM AC 5000** - AC-coupled Battery | `ES22`\* | 50 + 2 binary | 2 switches, 5 numbers, 1 select (Enhanced only) | 4 default (grid import/export, battery charge/discharge), 1 optional diagnostic (home) | ~2 s enhanced |
 | **STREAM 5000** - AC-coupled Battery | `ES21`\* | 50 + 2 binary | none yet, see below | 4 default (grid import/export, battery charge/discharge), 1 optional diagnostic (home) | ~2 s enhanced |
@@ -99,11 +99,11 @@ Power (W), current (A), voltage (V), frequency, temperature · Plug on/off switc
 <details>
 <summary><b>Stream</b> (AC Pro, Ultra, Max, AC, Ultra X) - AC-coupled battery telemetry, per-string solar, reserve control</summary>
 
-Battery SoC/SoH · signed battery power · battery charge/discharge power · **per-string solar power (PV 1-4)** · signed AC grid connection power ("Netz-Anschluss": negative=input, positive=output/feed-in) · read-only AC outlet states and outlet power · AC voltage and frequency · battery temperature, capacity and cell voltage diagnostics · LED brightness diagnostics · **Number:** Backup Reserve (3-95%) in Enhanced Mode.
+Battery SoC/SoH · signed battery power · battery charge/discharge power · **per-string solar power (PV 1-4)** · signed AC grid connection power ("Netz-Anschluss": negative=input, positive=output/feed-in) · read-only AC outlet states and outlet power · AC voltage and frequency · battery temperature, capacity and cell voltage diagnostics · LED brightness diagnostics · **Numbers:** Backup Reserve (3-95%), plus Charge Limit and Discharge Limit on the Stream AC Pro (`BK31`) in Enhanced Mode.
 
-The Stream is treated as an AC-coupled battery. House, grid and total solar flow values depend on an EcoFlow-paired meter and are disabled by default as diagnostic entities. Individual AC outlets and LED brightness are exposed read-only, since the app write path is not confirmed for third-party control.
+The Stream is treated as an AC-coupled battery. House, grid and total solar flow values depend on an EcoFlow-paired meter and are disabled by default as diagnostic entities. Individual AC outlets and LED brightness are exposed read-only, since the app write path is not confirmed for third-party control. The AC Pro limit controls reproduce the app's grouped ConfigWrite containing its timestamp, charge limit, discharge limit and backup reserve. Raising the discharge limit also raises backup reserve to at least three percentage points above it, matching the behavior confirmed on hardware; lowering the discharge limit leaves backup reserve unchanged.
 
-**Both modes are supported, and they differ in solar detail.** Standard Mode reads the Stream through the official Developer API (~30 s) and reports all four solar strings: PV 1 and PV 2 are enabled by default, PV 3 and PV 4 ship disabled because only larger units drive that many strings. Enhanced Mode updates faster (~3 s) and reports PV 1 and PV 2 plus their input voltage and current, but not strings 3 and 4. Both modes create the same entity set, so a device can switch between them without duplicating sensors.
+**Both modes are supported, and they differ in solar detail.** Standard Mode reads the Stream through the official Developer API (~30 s) and reports all four solar strings: PV 1 and PV 2 are enabled by default, PV 3 and PV 4 ship disabled because only larger units drive that many strings. Enhanced Mode updates faster (~3 s) and reports PV 1 and PV 2 plus their input voltage and current, but not strings 3 and 4. Both modes create the same sensor set, while writable numbers require Enhanced Mode.
 
 All five models are recognized by serial prefix and appear under their correct model name: Stream AC Pro (`BK31`), Stream Ultra (`BK11`), Stream Max (`BK41`), Stream AC (`BK51`), Stream Ultra X (`BK61`).
 
@@ -148,6 +148,7 @@ Download the [latest release](https://github.com/shuette42/ecoflow-energy-ha/rel
 | **Update rate** | ~30 s HTTP polling (+ MQTT push for Delta/Smart Plug) | ~2-4 s real-time via WSS MQTT |
 | **Delta / Smart Plug controls** | All switches and numbers | All switches and numbers |
 | **PowerOcean controls** | Read-only sensors only | Full energy strategy controls (Backup Reserve, Solar Surplus Threshold, Work Mode) |
+| **Stream AC Pro controls** | Not available | Charge Limit, Discharge Limit and Backup Reserve |
 | **Stability** | Official EcoFlow API - supported and stable | Community-driven - unofficial, use at your own risk |
 | **Best for** | Reliable long-term operation | Real-time monitoring, fast automations, PowerOcean control |
 

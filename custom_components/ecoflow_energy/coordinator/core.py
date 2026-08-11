@@ -244,6 +244,11 @@ class EcoFlowDeviceCoordinator(
         # their own, leaving the overlapping pair the removal exists to
         # prevent, and the paired fields lose one of the two changes.
         self._stream_ac5000_config_lock = asyncio.Lock()
+        # A BK-series SoC-limit write carries charge limit, discharge limit
+        # and backup reserve together. Serialize the read-modify-write cycle
+        # so simultaneous number service calls cannot restore stale companion
+        # values over one another.
+        self._stream_soc_config_lock = asyncio.Lock()
         self._credential_obtained_ts: float = 0.0
         self._credential_refresh_unsub: asyncio.TimerHandle | None = None
         self._event_log: deque[dict[str, Any]] = deque(maxlen=50)

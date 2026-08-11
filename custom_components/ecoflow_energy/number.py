@@ -32,6 +32,7 @@ from .const import (
     STREAM_NUMBERS,
     STREAMAC5000_NUMBERS,
     supports_stream_ac5000_controls,
+    supports_stream_soc_limit_controls,
 )
 from .coordinator import DeviceValueNotReported, EcoFlowDeviceCoordinator
 from .entity import (
@@ -46,7 +47,6 @@ from .ecoflow.delta3_commands import (
     build_port_priority_command,
     port_priority_soc_bounds,
 )
-from .ecoflow.energy_stream import build_stream_backup_reserve_payload
 from .ecoflow.parsers.delta3_proto import port_priority_keys
 from .ecoflow.parsers.smartplug import (
     build_plug_brightness_payload,
@@ -430,12 +430,22 @@ class EcoFlowNumber(
         this). Stream numbers are sent as protobuf ConfigWrite frames.
         """
         if key == "backup_reserve":
-            payload = build_stream_backup_reserve_payload(
-                int(value), self.coordinator.device_sn
+            return await self.coordinator.async_set_stream_backup_reserve(
+                int(value)
             )
-            return await self.coordinator.async_send_proto_set_command(
-                payload, label="stream_backup_reserve"
-            )
+        if key in ("stream_charge_limit", "stream_discharge_limit"):
+            try:
+                if key == "stream_charge_limit":
+                    return await self.coordinator.async_set_stream_soc_limits(
+                        charge=int(value)
+                    )
+                return await self.coordinator.async_set_stream_soc_limits(
+                    discharge=int(value)
+                )
+            except DeviceValueNotReported:
+                raise_set_not_ready(self.entity_id)
+            except ValueError as err:
+                raise_set_rejected(self.entity_id, str(err))
 
         # Nothing was ever sent, so "did not reach the device" would be the
         # wrong thing to tell the user.
@@ -493,6 +503,13 @@ def _get_number_defs(device_type: str, device_sn: str = "") -> list[EcoFlowNumbe
     if device_type == DEVICE_TYPE_SMARTPLUG:
         return SMARTPLUG_NUMBERS
     if device_type == DEVICE_TYPE_STREAM:
+        if device_sn and not supports_stream_soc_limit_controls(device_sn):
+            return [
+                definition
+                for definition in STREAM_NUMBERS
+                if definition.key
+                not in {"stream_charge_limit", "stream_discharge_limit"}
+            ]
         return STREAM_NUMBERS
     if device_type == DEVICE_TYPE_DELTA3:
         return DELTA3_NUMBERS

@@ -273,6 +273,81 @@ class SetCommandsMixin:
         return ok
 
     # ------------------------------------------------------------------
+    # Stream BK-series SoC config writes (254/17)
+    # ------------------------------------------------------------------
+
+    async def async_set_stream_soc_limits(
+        self, *, charge: int | None = None, discharge: int | None = None,
+    ) -> bool:
+        """Write the grouped Stream charge/discharge limit configuration.
+
+        The app sends charge limit, discharge limit and backup reserve in one
+        frame. The untouched values must therefore come from live telemetry,
+        never defaults. Hardware also keeps backup reserve at least three
+        percentage points above the discharge limit: raising the latter moves
+        the reserve up, while lowering it leaves the reserve unchanged.
+        """
+        from ..ecoflow.energy_stream import build_stream_soc_limits_payload
+
+        async with self._stream_soc_config_lock:
+            data = self.data or {}
+            current_charge = as_known_int(data.get("max_charge_soc_pct"))
+            current_discharge = as_known_int(data.get("min_discharge_soc_pct"))
+            backup = as_known_int(data.get("backup_reserve_pct"))
+            if (
+                current_charge is None
+                or current_discharge is None
+                or backup is None
+            ):
+                raise DeviceValueNotReported("Stream SoC limits")
+
+            requested_charge = current_charge if charge is None else charge
+            requested_discharge = (
+                current_discharge if discharge is None else discharge
+            )
+            if discharge is not None:
+                backup = max(backup, requested_discharge + 3)
+
+            payload = build_stream_soc_limits_payload(
+                requested_charge,
+                requested_discharge,
+                backup,
+                self.device_sn,
+            )
+            if not await self.async_send_proto_set_command(
+                payload, label="stream_soc_limits"
+            ):
+                return False
+            self._seed_stream_values(
+                max_charge_soc_pct=requested_charge,
+                min_discharge_soc_pct=requested_discharge,
+                backup_reserve_pct=backup,
+            )
+            return True
+
+    async def async_set_stream_backup_reserve(self, reserve_pct: int) -> bool:
+        """Write Stream backup reserve without racing a grouped limit write."""
+        from ..ecoflow.energy_stream import build_stream_backup_reserve_payload
+
+        async with self._stream_soc_config_lock:
+            payload = build_stream_backup_reserve_payload(
+                reserve_pct, self.device_sn
+            )
+            if not await self.async_send_proto_set_command(
+                payload, label="stream_backup_reserve"
+            ):
+                return False
+            self._seed_stream_values(backup_reserve_pct=reserve_pct)
+            return True
+
+    def _seed_stream_values(self, **values: Any) -> None:
+        """Record Stream configuration values before releasing its lock."""
+        for key, value in values.items():
+            self.set_device_value(key, value)
+            if self.data is not None:
+                self.data[key] = value
+
+    # ------------------------------------------------------------------
     # STREAM AC 5000 config writes (254/38)
     #
     # Each one reads what the device currently reports before it can send,
@@ -592,4 +667,3 @@ class SetCommandsMixin:
             )
             self._log_event("set_cmd_fail", f"keys={list(command.keys())[:3]}")
         return ok
-

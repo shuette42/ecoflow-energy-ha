@@ -431,6 +431,62 @@ def build_stream_backup_reserve_payload(
     )
 
 
+def build_stream_soc_limits_payload(
+    max_charge_soc: int,
+    min_discharge_soc: int,
+    backup_soc: int,
+    device_sn: str,
+    seq: int = 0,
+    timestamp: int | None = None,
+) -> bytes:
+    """Build the grouped Stream AC Pro charge/discharge-limit SET frame.
+
+    A live app capture showed these values travelling as one ConfigWrite
+    pdata: field 6 is the Unix timestamp, 33 is the upper charge limit, 34 is
+    the lower discharge limit and 102 is backup reserve. The iOS source header
+    is part of that confirmed frame as well.
+    """
+    for name, value in (
+        ("max_charge_soc", max_charge_soc),
+        ("min_discharge_soc", min_discharge_soc),
+        ("backup_soc", backup_soc),
+    ):
+        if not 0 <= value <= 100:
+            raise ValueError(f"{name} must be 0..100, got {value}")
+    if min_discharge_soc > max_charge_soc:
+        raise ValueError(
+            f"min_discharge_soc ({min_discharge_soc}) must be <= "
+            f"max_charge_soc ({max_charge_soc})"
+        )
+    if backup_soc < min_discharge_soc + 3:
+        raise ValueError(
+            f"backup_soc ({backup_soc}) must be at least three points above "
+            f"min_discharge_soc ({min_discharge_soc})"
+        )
+    if backup_soc > max_charge_soc:
+        raise ValueError(
+            f"backup_soc ({backup_soc}) must be <= max_charge_soc "
+            f"({max_charge_soc})"
+        )
+    if timestamp is None:
+        timestamp = int(time.time())
+    if not 0 <= timestamp <= 0xFFFFFFFF:
+        raise ValueError(f"timestamp must be a uint32, got {timestamp}")
+
+    return build_delta3_config_write_payload(
+        config_field=33,
+        value=max_charge_soc,
+        device_sn=device_sn,
+        seq=seq,
+        companions=(
+            (6, timestamp),
+            (34, min_discharge_soc),
+            (102, backup_soc),
+        ),
+        source="ios",
+    )
+
+
 def build_delta3_config_write_payload(
     config_field: int,
     value: int,
@@ -439,6 +495,7 @@ def build_delta3_config_write_payload(
     nested: bool = False,
     companions: tuple[tuple[int, int], ...] = (),
     submessage: bytes | None = None,
+    source: str | None = None,
 ) -> bytes:
     """Build a Delta 3 ConfigWrite SET frame for the app WebSocket channel.
 
@@ -471,6 +528,7 @@ def build_delta3_config_write_payload(
             rather than a scalar, written as the length-delimited value of
             `config_field`. `value` is ignored when this is given. Not
             combinable with `nested` or `companions`.
+        source: optional app source for header field 23, for example ``ios``.
 
     Returns:
         Binary protobuf payload ready to publish on the SET topic.
@@ -503,6 +561,8 @@ def build_delta3_config_write_payload(
     header.extend(encode_field_varint(14, seq))              # seq
     header.extend(encode_field_varint(16, 3))                # version
     header.extend(encode_field_varint(17, 1))                # payload_ver
+    if source is not None:
+        header.extend(encode_field_bytes(23, source.encode("ascii")))  # from
     header.extend(encode_field_bytes(25, device_sn.encode("ascii")))  # deviceSn
 
     return encode_field_bytes(1, bytes(header))

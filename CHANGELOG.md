@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.18.0] - 2026-08-12
+
+### Added
+- Stream AC Pro (`BK31`) charge and discharge limit controls in Enhanced Mode. The grouped ConfigWrite is reproduced from live app MQTT traffic with fields `6`, `33`, `34` and `102` plus the required `from="ios"` header. Both Home Assistant controls were then exercised on live AC Pro hardware and confirmed in the EcoFlow app and subsequent device telemetry. The controls preserve every setting the user did not change and refuse to write until all companion values have been reported. Raising the discharge limit moves Backup Reserve to three percentage points above it when necessary, matching the device's observed safety behavior; lowering it leaves the reserve unchanged. Other BK-series models remain read-only because this write has only been confirmed on AC Pro firmware.
+
 ## [1.17.0] - 2026-08-06
 
 ### Added

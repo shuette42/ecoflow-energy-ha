@@ -1449,6 +1449,12 @@
       "max_charge_soc": {
         "name": "Max Charge SoC"
       },
+      "stream_charge_limit": {
+        "name": "Charge Limit"
+      },
+      "stream_discharge_limit": {
+        "name": "Discharge Limit"
+      },
       "backup_reserve": {
         "name": "Backup Reserve"
       },

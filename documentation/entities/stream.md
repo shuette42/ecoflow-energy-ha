@@ -2,15 +2,15 @@
 
 Full list of all entities created for Stream devices.
 
-**Models:** Stream AC Pro (`BK31`), Stream Ultra (`BK11`), Stream Max (`BK41`), Stream AC (`BK51`), Stream Ultra X (`BK61`). All five share the entity set below.
+**Models:** Stream AC Pro (`BK31`), Stream Ultra (`BK11`), Stream Max (`BK41`), Stream AC (`BK51`), Stream Ultra X (`BK61`). All five share the sensor and binary-sensor set below; the hardware-confirmed charge/discharge controls are limited to the AC Pro.
 
 **The Stream Micro (`BK01`) does not.** It is a grid-tie inverter with two solar strings and no battery, and it gets a reduced set. See [Stream Micro (BK01)](#stream-micro-bk01) at the end of this page.
 
-**Totals:** 54 sensors, 2 binary sensors, 1 number
+**Totals:** 54 sensors, 2 binary sensors, 1 number. Stream AC Pro (`BK31`) adds 2 numbers.
 
 > Entities marked with *disabled* are available but hidden by default. Enable them in **Settings > Devices > EcoFlow Stream > Entities** (click the filter icon and show disabled entities).
 
-> **Both modes are supported.** Standard Mode polls the official Developer API (~30 s), Enhanced Mode uses the real-time connection (~3 s). Both create the same entities. The difference is solar detail: Standard Mode reports all four strings, Enhanced Mode reports PV 1 and PV 2 plus their input voltage and current.
+> **Both modes are supported.** Standard Mode polls the official Developer API (~30 s), Enhanced Mode uses the real-time connection (~3 s). Both create the same sensors. Writable numbers require Enhanced Mode. The other difference is solar detail: Standard Mode reports all four strings, Enhanced Mode reports PV 1 and PV 2 plus their input voltage and current.
 
 ---
 
@@ -119,9 +119,15 @@ None. The AC outlets are exposed read-only as binary sensors, because the write 
 
 ## Numbers
 
-| Entity | Unit | Range | Step | Description |
-|:---|:---:|:---:|:---:|:---|
-| Backup Reserve | % | 3 - 95 | 1 | Minimum SoC the system keeps in reserve. **Enhanced Mode only.** |
+| Entity | Unit | Range | Step | Models | Description |
+|:---|:---:|:---:|:---:|:---|:---|
+| Charge Limit | % | 3 - 100 | 1 | Stream AC Pro (`BK31`) | Maximum charging SoC. **Enhanced Mode only.** |
+| Discharge Limit | % | 0 - 95 | 1 | Stream AC Pro (`BK31`) | Minimum discharging SoC. **Enhanced Mode only.** |
+| Backup Reserve | % | 3 - 95 | 1 | All battery Stream models | Minimum SoC the system keeps in reserve. **Enhanced Mode only.** |
+
+The AC Pro sends both limits and backup reserve as one grouped setting. A write is available only after all three values have arrived from the device, so the integration never substitutes defaults for settings the user did not change. Raising Discharge Limit also raises Backup Reserve to at least three percentage points above it, as observed on live hardware. Lowering Discharge Limit leaves Backup Reserve unchanged. A combination where the values cross is rejected instead of silently changing another setting.
+
+The capture baseline showed Charge Limit 95%, Discharge Limit 20% and Backup Reserve 23% in the app, matching raw ConfigWrite fields `33=95`, `34=20` and `102=23`. Both Home Assistant controls were exercised on the live AC Pro. Raising Discharge Limit to 21% produced live telemetry `min_discharge_soc_pct=21` and moved Backup Reserve to 24%; lowering the limit again left the reserve at 24%. The device's immediate reply can identify field `33` even when field `34` changed, so subsequent live telemetry is treated as the authoritative confirmation.
 
 ---
 

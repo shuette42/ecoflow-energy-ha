@@ -222,12 +222,16 @@ class TestStreamAcProKeepsItsEntities:
 
         assert keys == {"ac_outlet_1_enabled", "ac_outlet_2_enabled"}
 
-    async def test_backup_reserve_number_still_created(
+    async def test_stream_numbers_still_created(
         self, hass: HomeAssistant
     ) -> None:
         keys = await _setup_keys(hass, BK31_DEVICE, number_setup)
 
-        assert keys == {"backup_reserve"}
+        assert keys == {
+            "stream_charge_limit",
+            "stream_discharge_limit",
+            "backup_reserve",
+        }
 
 
 @pytest.mark.parametrize("key", sorted(STREAM_MICRO_EXCLUDED_KEYS))

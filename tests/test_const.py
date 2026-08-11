@@ -599,7 +599,11 @@ class TestStreamEntities:
 
     def test_number_defs_unique(self) -> None:
         keys = _extract_sensor_keys("STREAM_NUMBERS")
-        assert keys == ["backup_reserve"]
+        assert keys == [
+            "stream_charge_limit",
+            "stream_discharge_limit",
+            "backup_reserve",
+        ]
 
     def test_only_soc_has_battery_device_class(self) -> None:
         """Only the primary soc_pct should have device_class='battery'.
