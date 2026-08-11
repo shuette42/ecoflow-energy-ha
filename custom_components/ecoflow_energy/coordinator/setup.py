@@ -218,6 +218,7 @@ class SetupMixin:
         self._ping_unsub = None
         self._stale_check_unsub = None
         self._credential_refresh_unsub = None
+        self._powerocean_soc_debounce_unsub = None
         if self._mqtt_client is not None:
             await self.hass.async_add_executor_job(self._mqtt_client.disconnect)
             self._mqtt_client = None
