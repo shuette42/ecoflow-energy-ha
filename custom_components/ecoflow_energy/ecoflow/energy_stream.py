@@ -482,6 +482,23 @@ def build_stream_soc_limits_payload(
     )
 
 
+def build_stream_led_brightness_payload(
+    brightness_pct: int,
+    device_sn: str,
+    seq: int = 0,
+) -> bytes:
+    """Build the hardware-confirmed Stream AC Pro LED ConfigWrite frame."""
+    if not 0 <= brightness_pct <= 100:
+        raise ValueError(f"brightness_pct must be 0..100, got {brightness_pct}")
+    return build_delta3_config_write_payload(
+        config_field=384,
+        value=brightness_pct,
+        device_sn=device_sn,
+        seq=seq,
+        source="ios",
+    )
+
+
 def build_delta3_config_write_payload(
     config_field: int,
     value: int,

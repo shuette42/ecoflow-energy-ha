@@ -820,6 +820,7 @@ SMARTPLUG_NUMBERS: list[EcoFlowNumberDef] = [
 STREAM_NUMBERS: list[EcoFlowNumberDef] = [
     EcoFlowNumberDef("stream_charge_limit", "Charge Limit", "max_charge_soc_pct", "%", "mdi:battery-charging-100", 3, 100, 1, enhanced_only=True),
     EcoFlowNumberDef("stream_discharge_limit", "Discharge Limit", "min_discharge_soc_pct", "%", "mdi:battery-arrow-down", 0, 95, 1, enhanced_only=True),
+    EcoFlowNumberDef("led_brightness", "LED Brightness", "led_brightness", "%", "mdi:brightness-6", 0, 100, 5, enhanced_only=True),
     EcoFlowNumberDef("backup_reserve", "Backup Reserve", "backup_reserve_pct", "%", "mdi:battery-lock", 3, 95, 1, enhanced_only=True),
 ]
 
@@ -1217,10 +1218,9 @@ STREAM_AC5000_CONTROL_PREFIXES: frozenset[str] = frozenset({"ES22"})
 # STREAM_AC5000_CONTROL_PREFIXES above: a prefix added later gets no controls
 # until someone decides here.
 #
-# The outlet switches and the SoC limits share this one gate rather than
-# holding a set each. Both were confirmed on the same hardware by the same
-# evidence, so two sets would be two names for one fact and would have to be
-# kept in step by hand.
+# The outlet switches, SoC limits and LED brightness share this one gate rather
+# than holding a set each. All were confirmed on the same hardware, so separate
+# sets would be several names for one fact and would have to stay in step.
 STREAM_CONTROL_PREFIXES: frozenset[str] = frozenset({"BK31"})
 
 

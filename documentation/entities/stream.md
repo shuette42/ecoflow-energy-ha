@@ -2,11 +2,11 @@
 
 Full list of all entities created for Stream devices.
 
-**Models:** Stream AC Pro (`BK31`), Stream Ultra (`BK11`), Stream Max (`BK41`), Stream AC (`BK51`), Stream Ultra X (`BK61`). All five share the sensor and binary-sensor set below; the hardware-confirmed charge/discharge controls are limited to the AC Pro.
+**Models:** Stream AC Pro (`BK31`), Stream Ultra (`BK11`), Stream Max (`BK41`), Stream AC (`BK51`), Stream Ultra X (`BK61`). All five share the sensor and binary-sensor set below; the hardware-confirmed writable controls are limited to the AC Pro.
 
 **The Stream Micro (`BK01`) does not.** It is a grid-tie inverter with two solar strings and no battery, and it gets a reduced set. See [Stream Micro (BK01)](#stream-micro-bk01) at the end of this page.
 
-**Totals:** 54 sensors, 2 binary sensors, 1 number. Stream AC Pro (`BK31`) adds 2 numbers.
+**Totals:** 54 sensors, 2 binary sensors, 1 number. Stream AC Pro (`BK31`) adds 3 numbers.
 
 > Entities marked with *disabled* are available but hidden by default. Enable them in **Settings > Devices > EcoFlow Stream > Entities** (click the filter icon and show disabled entities).
 
@@ -123,11 +123,14 @@ None. The AC outlets are exposed read-only as binary sensors, because the write 
 |:---|:---:|:---:|:---:|:---|:---|
 | Charge Limit | % | 3 - 100 | 1 | Stream AC Pro (`BK31`) | Maximum charging SoC. **Enhanced Mode only.** |
 | Discharge Limit | % | 0 - 95 | 1 | Stream AC Pro (`BK31`) | Minimum discharging SoC. **Enhanced Mode only.** |
+| LED Brightness | % | 0 - 100 | 5 | Stream AC Pro (`BK31`) | LED brightness. **Enhanced Mode only.** |
 | Backup Reserve | % | 3 - 95 | 1 | All battery Stream models | Minimum SoC the system keeps in reserve. **Enhanced Mode only.** |
 
 The AC Pro holds both limits and Backup Reserve as one grouped setting, so every write carries all three. The two values you did not change are sent back exactly as the device last reported them, never as a default, and a write is refused until all three have arrived. A combination where the limits cross is rejected instead of silently changing another setting.
 
 The capture baseline showed Charge Limit 95%, Discharge Limit 20% and Backup Reserve 23% in the app, matching raw ConfigWrite fields `33=95`, `34=20` and `102=23`. Both Home Assistant controls were then exercised on the live AC Pro and confirmed in the EcoFlow app and in the telemetry the device sent afterwards. The device's immediate reply can name field `33` even when field `34` was the value that changed, so it is the telemetry that follows, not the reply, that confirms a write.
+
+The LED control reproduces the hardware-confirmed app ConfigWrite field `384` with its `from="ios"` header. The immediate reply carries the requested target, so only the subsequent live telemetry field `994` is treated as the actual brightness state.
 
 ---
 

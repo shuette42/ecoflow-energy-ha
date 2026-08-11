@@ -126,19 +126,21 @@ class TestPrefixFilterHelper:
         """The backup reserve number is keyed `backup_reserve` but reads
         `backup_reserve_pct`; both must be caught.
 
-        The charge and discharge limits are not this table's job. They never
-        reach a Micro because the prefix allowlist in `_get_number_defs`
-        withholds them from every serial except the AC Pro, which is why
+        The AC Pro controls are not this table's job. They never reach a Micro
+        because the prefix allowlist in `_get_number_defs` withholds them from
+        every serial except the AC Pro, which is why
         `test_no_backup_reserve_number` sees no numbers at all on a BK01.
         """
-        from custom_components.ecoflow_energy.const import STREAM_NUMBERS
+        from custom_components.ecoflow_energy.number import _get_number_defs
 
-        kept = filter_defs_for_serial(STREAM_NUMBERS, "BK01TEST00000001")
+        micro_defs = _get_number_defs(DEVICE_TYPE_STREAM, "BK01TEST00000001")
+        ac_pro_defs = _get_number_defs(DEVICE_TYPE_STREAM, "BK31TEST00000001")
+        kept = filter_defs_for_serial(micro_defs, "BK01TEST00000001")
 
         assert "backup_reserve" not in {definition.key for definition in kept}
-        assert filter_defs_for_serial(STREAM_NUMBERS, "BK31TEST00000001") == list(
-            STREAM_NUMBERS
-        )
+        assert filter_defs_for_serial(
+            ac_pro_defs, "BK31TEST00000001"
+        ) == list(ac_pro_defs)
 
 
 class TestStreamMicroEntitySet:
@@ -238,6 +240,7 @@ class TestStreamAcProKeepsItsEntities:
         assert keys == {
             "stream_charge_limit",
             "stream_discharge_limit",
+            "led_brightness",
             "backup_reserve",
         }
 

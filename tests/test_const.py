@@ -616,6 +616,7 @@ class TestStreamEntities:
         assert keys == [
             "stream_charge_limit",
             "stream_discharge_limit",
+            "led_brightness",
             "backup_reserve",
         ]
 

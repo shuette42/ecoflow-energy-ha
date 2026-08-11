@@ -12,6 +12,7 @@ from ecoflow_energy.ecoflow.energy_stream import (
     build_soc_limit_set_payload,
     build_stream_ac_outlet_payload,
     build_stream_backup_reserve_payload,
+    build_stream_led_brightness_payload,
     build_stream_soc_limits_payload,
     build_work_mode_set_payload,
 )
@@ -632,6 +633,27 @@ class TestStreamBackupReservePayload:
             build_stream_backup_reserve_payload(150, self.SN)
         with pytest.raises(ValueError):
             build_stream_backup_reserve_payload(-1, self.SN)
+
+
+class TestStreamLedBrightnessPayload:
+    """Hardware-confirmed LED ConfigWrite shape from the AC Pro app path."""
+
+    SN = "BK31TESTSN0000000"
+
+    @pytest.mark.parametrize("brightness", [0, 10, 70, 100])
+    def test_field_384_and_ios_source(self, brightness: int) -> None:
+        payload = build_stream_led_brightness_payload(brightness, self.SN, seq=1)
+        header = _decode_header_fields(payload)
+
+        assert header[8] == [254]
+        assert header[9] == [17]
+        assert header[23] == [b"ios"]
+        assert header[1] == [encode_field_varint(384, brightness)]
+
+    @pytest.mark.parametrize("brightness", [-1, 101])
+    def test_rejects_out_of_range(self, brightness: int) -> None:
+        with pytest.raises(ValueError):
+            build_stream_led_brightness_payload(brightness, self.SN, seq=1)
 
 
 class TestStreamSocLimitsPayload:

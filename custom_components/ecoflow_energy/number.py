@@ -47,6 +47,7 @@ from .ecoflow.delta3_commands import (
     build_port_priority_command,
     port_priority_soc_bounds,
 )
+from .ecoflow.energy_stream import build_stream_led_brightness_payload
 from .ecoflow.parsers.delta3_proto import port_priority_keys
 from .ecoflow.parsers.smartplug import (
     build_plug_brightness_payload,
@@ -446,6 +447,13 @@ class EcoFlowNumber(
                 raise_set_not_ready(self.entity_id)
             except ValueError as err:
                 raise_set_rejected(self.entity_id, str(err))
+        if key == "led_brightness":
+            payload = build_stream_led_brightness_payload(
+                int(value), self.coordinator.device_sn
+            )
+            return await self.coordinator.async_send_proto_set_command(
+                payload, label="stream_led_brightness"
+            )
 
         # Nothing was ever sent, so "did not reach the device" would be the
         # wrong thing to tell the user.
@@ -510,7 +518,11 @@ def _get_number_defs(device_type: str, device_sn: str = "") -> list[EcoFlowNumbe
                 definition
                 for definition in STREAM_NUMBERS
                 if definition.key
-                not in {"stream_charge_limit", "stream_discharge_limit"}
+                not in {
+                    "stream_charge_limit",
+                    "stream_discharge_limit",
+                    "led_brightness",
+                }
             ]
         return STREAM_NUMBERS
     if device_type == DEVICE_TYPE_DELTA3:

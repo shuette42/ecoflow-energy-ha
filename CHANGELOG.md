@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.18.0] - 2026-08-17
+
+### Added
+- Stream AC Pro (`BK31`) LED Brightness control in Enhanced Mode. The number reproduces the app's ConfigWrite field `384` with the required `from="ios"` header. The complete path was confirmed on live AC Pro hardware with the standalone app-auth probe: the device accepted the write and subsequently reported the changed brightness through live field `994`. Its immediate reply is deliberately not used as state because it carries only the requested target. Other BK-series models retain their read-only brightness sensor until their firmware accepts and reports the same write path.
+
 ## [1.17.0] - 2026-08-06
 
 ### Added

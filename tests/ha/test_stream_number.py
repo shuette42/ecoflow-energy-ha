@@ -61,7 +61,11 @@ BK31_DEVICE: dict[str, Any] = {
     "online": 1,
 }
 
-_SOC_LIMIT_KEYS = {"stream_charge_limit", "stream_discharge_limit"}
+_AC_PRO_NUMBER_KEYS = {
+    "stream_charge_limit",
+    "stream_discharge_limit",
+    "led_brightness",
+}
 
 
 class TestStreamNumberDefs:
@@ -70,13 +74,14 @@ class TestStreamNumberDefs:
         keys = {d.key for d in defs}
         assert "backup_reserve" in keys
 
-    def test_soc_limit_controls_are_bk31_only(self):
+    def test_ac_pro_controls_are_bk31_only(self):
         bk31 = _get_number_defs(DEVICE_TYPE_STREAM, "BK31TEST00000001")
         other = _get_number_defs(DEVICE_TYPE_STREAM, "BK11TEST00000001")
 
         assert {definition.key for definition in bk31} == {
             "stream_charge_limit",
             "stream_discharge_limit",
+            "led_brightness",
             "backup_reserve",
         }
         assert {definition.key for definition in other} == {"backup_reserve"}
@@ -91,14 +96,20 @@ class TestStreamNumberDefs:
             assert keys == {"backup_reserve"}, serial
 
     @pytest.mark.parametrize(
-        ("key", "state_key", "minimum", "maximum"),
+        ("key", "state_key", "minimum", "maximum", "step"),
         [
-            ("stream_charge_limit", "max_charge_soc_pct", 3, 100),
-            ("stream_discharge_limit", "min_discharge_soc_pct", 0, 95),
+            ("stream_charge_limit", "max_charge_soc_pct", 3, 100, 1),
+            ("stream_discharge_limit", "min_discharge_soc_pct", 0, 95, 1),
+            ("led_brightness", "led_brightness", 0, 100, 5),
         ],
     )
-    def test_soc_limit_ranges_match_the_documented_values(
-        self, key: str, state_key: str, minimum: int, maximum: int
+    def test_ac_pro_number_ranges_match_the_documented_values(
+        self,
+        key: str,
+        state_key: str,
+        minimum: int,
+        maximum: int,
+        step: int,
     ) -> None:
         """documentation/entities/stream.md publishes these ranges, and a
         number carries no description, so the range is the only guard rail a
@@ -108,15 +119,13 @@ class TestStreamNumberDefs:
         assert definition.state_key == state_key
         assert definition.min_value == minimum
         assert definition.max_value == maximum
-        assert definition.step == 1
+        assert definition.step == step
         assert definition.unit == "%"
         assert definition.enhanced_only is True
 
 
 class TestStreamNumberPlatformSetup:
-    """The limits are Enhanced Mode only, and Standard Mode is where that has
-    to hold: the grouped ConfigWrite goes out over the app connection, which
-    Standard Mode does not have."""
+    """AC Pro write entities are available in Enhanced Mode only."""
 
     @staticmethod
     def _entry(mode: str) -> MockConfigEntry:
@@ -161,17 +170,17 @@ class TestStreamNumberPlatformSetup:
             if hasattr(entity, "_definition")
         }
 
-    async def test_enhanced_mode_creates_both_limits(
+    async def test_enhanced_mode_creates_ac_pro_numbers(
         self, hass: HomeAssistant
     ) -> None:
-        assert _SOC_LIMIT_KEYS <= await self._setup_keys(hass, MODE_ENHANCED)
+        assert _AC_PRO_NUMBER_KEYS <= await self._setup_keys(hass, MODE_ENHANCED)
 
-    async def test_standard_mode_creates_neither_limit(
+    async def test_standard_mode_creates_no_write_numbers(
         self, hass: HomeAssistant
     ) -> None:
         keys = await self._setup_keys(hass, MODE_STANDARD)
 
-        assert keys.isdisjoint(_SOC_LIMIT_KEYS)
+        assert keys.isdisjoint(_AC_PRO_NUMBER_KEYS)
         assert "backup_reserve" not in keys
 
 
@@ -253,6 +262,60 @@ class TestStreamBackupReserveSet:
 
         # SET failed -> original value retained, no optimistic override
         assert coordinator.data["backup_reserve_pct"] == 20
+
+
+class TestStreamLedBrightnessSet:
+    """The LED number writes field 384 and reads state from live field 994."""
+
+    def _make_entity(
+        self, hass: HomeAssistant, entry: MockConfigEntry
+    ) -> tuple[EcoFlowNumber, EcoFlowDeviceCoordinator]:
+        entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_STREAM_DEVICE)
+        coordinator._device_data = {"led_brightness": 70}
+        coordinator.async_set_updated_data(dict(coordinator._device_data))
+        definition = next(
+            item for item in STREAM_NUMBERS if item.key == "led_brightness"
+        )
+        entity = EcoFlowNumber(coordinator, definition)
+        entity.async_write_ha_state = MagicMock()
+        return entity, coordinator
+
+    async def test_set_builds_captured_field_384_frame(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        entity, coordinator = self._make_entity(hass, enhanced_config_entry)
+        coordinator.async_send_proto_set_command = AsyncMock(return_value=True)
+
+        await entity.async_set_native_value(10)
+
+        from custom_components.ecoflow_energy.ecoflow.proto.decoder import (
+            decode_header_message,
+        )
+
+        payload = coordinator.async_send_proto_set_command.call_args.args[0]
+        headers, _ = decode_header_message(payload)
+        header = headers[0]
+        assert int(header["cmd_func"]) == 254
+        assert int(header["cmd_id"]) == 17
+        assert header["from"] == "ios"
+        assert bytes.fromhex(header["pdata"]) == b"\x80\x18\x0a"
+        assert coordinator.data["led_brightness"] == 10
+
+    async def test_failed_set_keeps_live_value(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        entity, coordinator = self._make_entity(hass, enhanced_config_entry)
+        coordinator.async_send_proto_set_command = AsyncMock(return_value=False)
+
+        with pytest.raises(HomeAssistantError):
+            await entity.async_set_native_value(10)
+
+        assert coordinator.data["led_brightness"] == 70
 
 
 class TestStreamSocLimitSet:
