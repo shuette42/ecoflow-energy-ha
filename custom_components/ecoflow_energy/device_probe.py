@@ -40,6 +40,7 @@ from homeassistant.helpers.event import async_track_time_interval
 
 from .const import (
     PROBE_WATCHDOG_INTERVAL_S,
+    RAW_FRAME_BUNDLE_HARD_CAP,
     RAW_FRAME_BUNDLE_MAX_BYTES,
     RAW_FRAME_KEYS_MAX,
     RAW_FRAME_MAX_BYTES,
@@ -428,7 +429,12 @@ class UnroutedDeviceProbe:
                     topic,
                     payload,
                     self._secrets(),
-                    frame_budget(cmds, RAW_FRAME_MAX_BYTES, RAW_FRAME_BUNDLE_MAX_BYTES),
+                    frame_budget(
+                        cmds,
+                        RAW_FRAME_MAX_BYTES,
+                        RAW_FRAME_BUNDLE_MAX_BYTES,
+                        RAW_FRAME_BUNDLE_HARD_CAP,
+                    ),
                 )
                 entry["format"] = "proto"
                 entry["cmds"] = cmds

@@ -27,6 +27,7 @@ from ecoflow_energy.const import (
     STREAM_SWITCHES,
     SMARTPLUG_SWITCHES,
     SMARTPLUG_NUMBERS,
+    RAW_FRAME_BUNDLE_HARD_CAP,
     RAW_FRAME_BUNDLE_MAX_BYTES,
     RAW_FRAME_KEYS_MAX,
     RAW_FRAME_LOG_KEYS_MAX,
@@ -1024,7 +1025,11 @@ class TestFrameCaptureFootprint:
             (RAW_FRAME_LOG_KEYS_MAX, RAW_FRAME_LOG_PER_KEY_MAX),
             (RAW_FRAME_KEYS_MAX, RAW_FRAME_PER_KEY_MAX),
         }
-        budgets = {RAW_FRAME_MAX_BYTES, RAW_FRAME_BUNDLE_MAX_BYTES}
+        budgets = {
+            RAW_FRAME_MAX_BYTES,
+            RAW_FRAME_BUNDLE_MAX_BYTES,
+            RAW_FRAME_BUNDLE_HARD_CAP,
+        }
 
         for keys, per_key, budget, _total, _kib in self._statements():
             assert (keys, per_key) in buffers
@@ -1062,6 +1067,37 @@ class TestFrameCaptureFootprint:
         provenance, until a download taken under the new cap can replace it.
         """
         assert RAW_FRAME_BUNDLE_MAX_BYTES >= self._WIDEST_OBSERVED_BUNDLE
+
+    # The widest bundle measured on real hardware, in bytes, and how many
+    # messages it carried. An Ocean 2 (RE11, issue #145) bundles its battery
+    # report as 12 to 14 messages at 4956 to 5899 B; all nine in a 16 hour
+    # capture were cut at 4096. Same provenance problem as the figure above:
+    # what survives of that frame is a 4096 B prefix beside a recorded size,
+    # so it cannot become a fixture until a download taken under this budget
+    # replaces it.
+    _WIDEST_OBSERVED_BUNDLE_BYTES = 5899
+    _WIDEST_OBSERVED_BUNDLE_MESSAGES = 14
+
+    def test_the_cap_is_above_the_floor(self) -> None:
+        """Inverted, the cap would undo the floor for every bundle."""
+        assert RAW_FRAME_BUNDLE_HARD_CAP > RAW_FRAME_BUNDLE_MAX_BYTES
+
+    def test_the_widest_observed_bundle_survives_whole(self) -> None:
+        """Both halves have to hold, not just the cap.
+
+        The width claim carries this frame and the cap has to leave it alone.
+        Asserting only against the cap would pass with a message budget of
+        one byte.
+        """
+        budget = min(
+            RAW_FRAME_BUNDLE_HARD_CAP,
+            max(
+                RAW_FRAME_BUNDLE_MAX_BYTES,
+                self._WIDEST_OBSERVED_BUNDLE_MESSAGES * RAW_FRAME_MAX_BYTES,
+            ),
+        )
+
+        assert budget >= self._WIDEST_OBSERVED_BUNDLE_BYTES
 
     def test_the_bundle_budget_carries_every_tracked_fixture(self) -> None:
         """Whatever a fixture holds must survive the cap whole."""

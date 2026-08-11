@@ -4,7 +4,11 @@ import signal
 from contextlib import contextmanager
 from typing import Any, Iterator
 
-from ecoflow_energy.const import RAW_FRAME_BUNDLE_MAX_BYTES, RAW_FRAME_MAX_BYTES
+from ecoflow_energy.const import (
+    RAW_FRAME_BUNDLE_HARD_CAP,
+    RAW_FRAME_BUNDLE_MAX_BYTES,
+    RAW_FRAME_MAX_BYTES,
+)
 from ecoflow_energy.ecoflow.frame_capture import (
     _slot,
     TypedFrameBuffer,
@@ -255,16 +259,65 @@ class TestFrameBudget:
     def test_a_single_message_gets_the_message_budget(self) -> None:
         cmds = [{"cmd_func": 254, "cmd_id": 39}]
 
-        assert frame_budget(cmds, 1024, 2048) == 1024
+        assert frame_budget(cmds, 1024, 2048, 8192) == 1024
 
     def test_an_undecoded_frame_gets_the_message_budget(self) -> None:
         """Nothing proves it carries more than one message."""
-        assert frame_budget([], 1024, 2048) == 1024
+        assert frame_budget([], 1024, 2048, 8192) == 1024
 
     def test_a_bundle_gets_the_bundle_budget(self) -> None:
         cmds = [{"cmd_func": 32, "cmd_id": 50}, {"cmd_func": 254, "cmd_id": 39}]
 
-        assert frame_budget(cmds, 1024, 2048) == 2048
+        assert frame_budget(cmds, 1024, 2048, 8192) == 2048
+
+    def test_a_wide_bundle_claims_one_message_budget_per_message(self) -> None:
+        """What a fixed bundle number cannot do: follow the frame's own width."""
+        cmds = [{"cmd_func": 254, "cmd_id": 46}] * 14
+
+        assert frame_budget(cmds, 1024, 4096, 65536) == 14 * 1024
+
+    def test_the_cap_bounds_the_claim(self) -> None:
+        cmds = [{"cmd_func": 254, "cmd_id": 46}] * 40
+
+        assert frame_budget(cmds, 1024, 4096, 16384) == 16384
+
+    def test_a_narrow_bundle_keeps_the_floor(self) -> None:
+        """Two wide messages were covered before this and stay covered.
+
+        Their own width says nothing here - only the count is known at this
+        point - so a budget of count alone would have cut a two-message frame
+        to half of what it kept before.
+        """
+        cmds = [{"cmd_func": 96, "cmd_id": 1}, {"cmd_func": 96, "cmd_id": 8}]
+
+        assert frame_budget(cmds, 1024, 4096, 16384) == 4096
+
+    def test_the_ocean2_battery_report_survives_whole(self) -> None:
+        """The frame this change exists for.
+
+        The first RE11 capture (#145) holds nine of these across 16 hours, 12
+        to 14 messages at 4956 to 5899 B, and the 4096 B bundle budget cut
+        every single one. This is the widest of them.
+        """
+        payload = _frame_of(5899, *(((254, 46),) * 14))
+        cmds = decode_cmd_headers(payload)
+
+        entry = build_frame_entry(
+            "/app/device/property/x",
+            payload,
+            [],
+            frame_budget(
+                cmds,
+                RAW_FRAME_MAX_BYTES,
+                RAW_FRAME_BUNDLE_MAX_BYTES,
+                RAW_FRAME_BUNDLE_HARD_CAP,
+            ),
+        )
+
+        assert len(cmds) == 14
+        assert entry["size"] == 5899
+        assert len(bytes.fromhex(entry["hex"])) == 5899
+        assert "truncated" not in entry
 
     def test_the_stream_ac5000_get_reply_survives_whole(self) -> None:
         """The frame this whole split exists for.
@@ -281,7 +334,12 @@ class TestFrameBudget:
             "/app/device/property/x",
             payload,
             [],
-            frame_budget(cmds, RAW_FRAME_MAX_BYTES, RAW_FRAME_BUNDLE_MAX_BYTES),
+            frame_budget(
+                cmds,
+                RAW_FRAME_MAX_BYTES,
+                RAW_FRAME_BUNDLE_MAX_BYTES,
+                RAW_FRAME_BUNDLE_HARD_CAP,
+            ),
         )
 
         assert len(cmds) == 6
@@ -298,7 +356,12 @@ class TestFrameBudget:
             "/app/device/property/x",
             payload,
             [],
-            frame_budget(cmds, RAW_FRAME_MAX_BYTES, RAW_FRAME_BUNDLE_MAX_BYTES),
+            frame_budget(
+                cmds,
+                RAW_FRAME_MAX_BYTES,
+                RAW_FRAME_BUNDLE_MAX_BYTES,
+                RAW_FRAME_BUNDLE_HARD_CAP,
+            ),
         )
 
         assert len(cmds) == 1
@@ -661,6 +724,7 @@ class TestPowerOceanGetAllSurvivesTheBudget:
             [{"cmd_func": 96, "cmd_id": 1}, {"cmd_func": 96, "cmd_id": 8}],
             RAW_FRAME_MAX_BYTES,
             RAW_FRAME_BUNDLE_MAX_BYTES,
+            RAW_FRAME_BUNDLE_HARD_CAP,
         )
 
         entry = build_frame_entry("/t", payload, [sn], budget)
@@ -697,6 +761,7 @@ class TestPowerOceanGetAllSurvivesTheBudget:
             [{"cmd_func": 96, "cmd_id": 8}],
             RAW_FRAME_MAX_BYTES,
             RAW_FRAME_BUNDLE_MAX_BYTES,
+            RAW_FRAME_BUNDLE_HARD_CAP,
         )
 
         assert budget == RAW_FRAME_MAX_BYTES

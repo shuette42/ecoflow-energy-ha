@@ -68,7 +68,9 @@ def is_proto_frame(payload: bytes) -> bool:
     return b"\x0a" in payload[:4]
 
 
-def frame_budget(cmds: list[Any], message_max: int, bundle_max: int) -> int:
+def frame_budget(
+    cmds: list[Any], message_max: int, bundle_max: int, bundle_cap: int
+) -> int:
     """Return how many bytes of a frame to keep.
 
     The two kinds of frame a device sends differ by an order of magnitude,
@@ -82,12 +84,24 @@ def frame_budget(cmds: list[Any], message_max: int, bundle_max: int) -> int:
     Deciding per frame rather than raising one constant keeps the cost
     where the bytes are: a device that never bundles is bounded by
     ``message_max``, and only a frame that demonstrably carries several
-    messages may claim ``bundle_max``.
+    messages may claim more.
+
+    How much more follows from the frame as well. A fixed bundle budget was
+    too small twice, most recently against an Ocean 2 whose battery report
+    bundles 12 to 14 messages at 4956 to 5899 B - every bundle in a 16 hour
+    capture cut, and the count moving between frames on the same unit. A
+    bundle of n messages may therefore claim n message budgets, so the
+    budget grows with the width the frame itself declares rather than with
+    the next device that surprises us. ``bundle_max`` stays as the floor,
+    because a narrow bundle of wide messages was already covered by it and
+    must not come out worse, and ``bundle_cap`` bounds the claim.
 
     A frame whose headers did not decode counts as one message. Nothing
     proves it carries more, and the entry says it was cut if it was.
     """
-    return bundle_max if len(cmds) > 1 else message_max
+    if len(cmds) <= 1:
+        return message_max
+    return min(bundle_cap, max(bundle_max, len(cmds) * message_max))
 
 
 def build_frame_entry(

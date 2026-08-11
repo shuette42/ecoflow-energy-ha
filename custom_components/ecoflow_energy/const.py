@@ -123,9 +123,10 @@ HTTP_FALLBACK_INTERVAL_S = 30
 # the device's state never reached a download, and the fields above the cut
 # were then read as fields the device does not send.
 #
-# Worst case with the split: 20 * 3 * 4096 B = 245 760 B (240 KiB) of frame
+# Worst case with the split: 20 * 3 * 16384 B = 983 040 B (960 KiB) of frame
 # payload per device, roughly double that as hex text in the download, and
-# only for a device that bundles on all twenty of its message types.
+# only for a device that bundles on all twenty of its message types, each of
+# them sixteen messages wide.
 # A device that never bundles is bounded at 20 * 3 * 1024 B = 61 440 B
 # (60 KiB). A budget is a ceiling rather than an allocation, so a device
 # whose frames stay under 512 B stores exactly what it stored before, and a
@@ -151,7 +152,26 @@ RAW_FRAME_MAX_BYTES = 1024
 # that fires on every PowerOcean get-all is a cap set too low, not a warning.
 # 4096 B carries the observed 2906 B with room for a unit that reports more
 # packs or more strings.
+#
+# It is a floor rather than the whole answer. This constant has now been too
+# small twice - 2048 raised to 4096 after #225, and 4096 cut every bundle an
+# Ocean 2 sends - because a fixed number cannot know how many messages a frame
+# carries. The first RE11 capture (#145, 16 h) holds nine bundles of 12 to 14
+# messages at 4956 to 5899 B, every one of them cut, and the message count
+# moves from frame to frame on the same unit.
 RAW_FRAME_BUNDLE_MAX_BYTES = 4096
+# So a frame that demonstrably carries n messages may claim n message budgets,
+# and this caps that claim. A bundle is a get-all rather than a stream, so the
+# number of messages in it is the honest measure of how wide the device's
+# state is; raising the floor again would only move the next cut to the next
+# device.
+#
+# 16384 B is sixteen messages at full single-message width, against the widest
+# bundle observed anywhere: 14 messages averaging 421 B. A device would have to
+# both bundle wider than any seen and fill every message to the ceiling to
+# reach it. The worst cases it sets are written down at the two buffers that
+# carry them, below.
+RAW_FRAME_BUNDLE_HARD_CAP = 16384
 
 # Undeclared protobuf field numbers: how many commands are tracked at once.
 # The same twenty message types the frame capture budgets for would be the
@@ -181,10 +201,12 @@ UNKNOWN_FIELD_NUMBERS_MAX = 200
 #
 # Same per-frame budget as above, and this is the buffer that proved it was
 # needed: the three STREAM AC 5000 captures came through here.
-# Worst case 12 * 10 * 4096 B = 491 520 B (480 KiB) of frame payload, roughly
-# double that as hex text in the download. That ceiling doubled when the
-# bundle budget did, and it is reached only by a device that bundles every
-# one of its twelve message types at full width - none observed does.
+# Worst case 12 * 10 * 16384 B = 1 966 080 B (1920 KiB) of frame payload,
+# roughly double that as hex text in the download. That ceiling rose with the
+# bundle budget twice, and it is reached only by a device that bundles every
+# one of its twelve message types at full width - none observed does. The
+# widest real capture is the RE11 one that forced the last raise: 53 KiB of
+# frame across nine bundles, on one bundling message type out of four.
 # A device that never bundles is bounded at 12 * 10 * 1024 B = 122 880 B
 # (120 KiB). What it costs in practice is far below either: the busiest of
 # the three captures holds 25 515 B of frame where the flat 512 B cap kept

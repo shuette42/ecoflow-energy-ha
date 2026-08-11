@@ -14,6 +14,7 @@ from ..const import (
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
     DEVICE_TYPE_STREAM_AC5000,
+    RAW_FRAME_BUNDLE_HARD_CAP,
     RAW_FRAME_BUNDLE_MAX_BYTES,
     RAW_FRAME_MAX_BYTES,
 )
@@ -212,7 +213,12 @@ class MqttIngestMixin:
                 topic,
                 payload,
                 secrets,
-                frame_budget(cmds, RAW_FRAME_MAX_BYTES, RAW_FRAME_BUNDLE_MAX_BYTES),
+                frame_budget(
+                    cmds,
+                    RAW_FRAME_MAX_BYTES,
+                    RAW_FRAME_BUNDLE_MAX_BYTES,
+                    RAW_FRAME_BUNDLE_HARD_CAP,
+                ),
                 parsed_keys=len(parsed) if parsed else 0,
             )
             entry["cmds"] = cmds
