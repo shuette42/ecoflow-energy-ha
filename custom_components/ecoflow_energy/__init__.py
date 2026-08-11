@@ -6,7 +6,8 @@ import logging
 import time
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.const import EVENT_HOMEASSISTANT_STOP
+from homeassistant.core import Event, HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import async_call_later
 
@@ -259,6 +260,28 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinators
     hass.data.setdefault(DATA_SKIPPED_DEVICES, {})[entry.entry_id] = skipped_devices
+
+    # Home Assistant does not unload config entries when it stops. It fires
+    # this event, waits for the listeners, and then closes the event loop -
+    # so without a listener here the MQTT clients are never disconnected and
+    # their paho threads go on delivering into a loop that is gone. Measured
+    # on a live installation before this existed: 21 warnings from five
+    # clients over ten seconds, on every restart, about a condition no user
+    # can act on. A reload never showed it, because a reload does unload the
+    # entry.
+    #
+    # Both lists are read when the event fires rather than captured now: if
+    # the entry was unloaded first, the shutdown already happened and popped
+    # them, and this finds nothing left to do.
+    async def _async_stop_connections(_event: Event) -> None:
+        for coordinator in hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).values():
+            await coordinator.async_shutdown()
+        for probe in hass.data.get(DATA_DEVICE_PROBES, {}).get(entry.entry_id, []):
+            await probe.async_stop()
+
+    entry.async_on_unload(
+        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, _async_stop_connections)
+    )
 
     # A skipped device produces no entities and no data path, so the bytes
     # needed to add support for it can never be collected from a normal

@@ -155,7 +155,34 @@ class MqttIngestMixin:
         parsed = self._parse_message(topic, payload)
         self._capture_raw_frame(topic, payload, parsed)
         if parsed:
+            self._dispatch_to_loop(parsed)
+
+    def _dispatch_to_loop(self, parsed: dict[str, Any]) -> None:
+        """Hand parsed data to the event loop, or drop it during shutdown.
+
+        This runs on the paho thread, which outlives the event loop: Home
+        Assistant fires its stop event, waits, then closes the loop, and a
+        device pushing every two seconds will land in that window. The
+        dispatch then raises ``RuntimeError: Event loop is closed``, which
+        the client reports as a warning about something no user can act on.
+
+        Both guards are needed. The flag and the closed-loop check cover the
+        ordinary case, and the ``RuntimeError`` covers the race between
+        asking whether the loop is closed and posting to it - the answer can
+        change in between, and there is no way to hold the loop open across
+        those two lines from this thread.
+        """
+        if self._shutdown or self.hass.loop.is_closed():
+            return
+        try:
             self.hass.loop.call_soon_threadsafe(self._apply_data, parsed)
+        except RuntimeError:
+            # Only ever "Event loop is closed" here - call_soon_threadsafe
+            # raises nothing else once the arguments are in hand.
+            _LOGGER.debug(
+                "Dropped a message for %s: the event loop closed mid-dispatch",
+                self.device_sn[:4],
+            )
 
     def _capture_raw_frame(
         self,

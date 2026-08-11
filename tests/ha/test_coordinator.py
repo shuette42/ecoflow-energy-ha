@@ -780,6 +780,90 @@ class TestMessageParsing:
             assert args[0] == coordinator._apply_data
             assert args[1]["soc"] == 85.0
 
+    async def test_shutdown_drops_message_instead_of_dispatching(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """A message arriving after shutdown is dropped, not posted to the loop.
+
+        The paho thread outlives the event loop: Home Assistant fires its stop
+        event, waits, then closes the loop, and a device pushing every two
+        seconds lands in that window. Posting there raises "Event loop is
+        closed", which reached the user's log as a warning about something no
+        one can act on - 21 of them per restart on a live installation.
+        """
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        import json
+
+        topic = "/open/cert/SN001/quota"
+        payload = json.dumps({"typeCode": "pdStatus", "params": {"soc": 85}}).encode()
+
+        coordinator._shutdown = True
+        with patch.object(coordinator.hass.loop, "call_soon_threadsafe") as mock_csf:
+            coordinator._on_mqtt_message(topic, payload)
+            mock_csf.assert_not_called()
+
+    async def test_closed_loop_drops_message_instead_of_dispatching(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """A closed loop is checked before dispatch, even without the flag.
+
+        The shutdown flag is set by our own teardown. A loop can also be gone
+        without it - the stop listener runs per config entry, and anything
+        that closed the loop first leaves the flag untouched.
+        """
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        import json
+
+        topic = "/open/cert/SN001/quota"
+        payload = json.dumps({"typeCode": "pdStatus", "params": {"soc": 85}}).encode()
+
+        with (
+            patch.object(coordinator.hass.loop, "is_closed", return_value=True),
+            patch.object(coordinator.hass.loop, "call_soon_threadsafe") as mock_csf,
+        ):
+            coordinator._on_mqtt_message(topic, payload)
+            mock_csf.assert_not_called()
+
+    async def test_loop_closing_mid_dispatch_is_swallowed(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """The race between asking and posting does not reach the log.
+
+        Both guards report a loop that is open, and it closes before the post
+        lands. There is no way to hold it open across those two lines from the
+        paho thread, so the exception is the only thing left to handle.
+        """
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        import json
+
+        topic = "/open/cert/SN001/quota"
+        payload = json.dumps({"typeCode": "pdStatus", "params": {"soc": 85}}).encode()
+
+        with patch.object(
+            coordinator.hass.loop,
+            "call_soon_threadsafe",
+            side_effect=RuntimeError("Event loop is closed"),
+        ):
+            # Must not raise: the caller is cloud_mqtt's message handler, and
+            # an exception there is what produced the warning in the first
+            # place.
+            coordinator._on_mqtt_message(topic, payload)
+
     async def test_smartplug_mqtt_data_processed(
         self,
         hass: HomeAssistant,
