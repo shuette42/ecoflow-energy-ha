@@ -212,10 +212,11 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
     # independent meter at a known moment - which is how the flow model in this
     # file was settled in the first place.
     #
-    # The ES21 reporter expects solar strings among them, and his unit is the
-    # one to ask: it has PV wired directly to it, while the ES22 these captures
-    # come from infers its solar figure. That difference, not the movement, is
-    # what makes his recording worth having.
+    # The ES21 reporter expected the solar strings among them. They are not
+    # here: they sit on `254/39 f50.1` and are mapped above, found by asking
+    # that reporter for a capture from a unit with PV wired directly to it
+    # and an app reading to anchor it against. What is left in these three
+    # blocks is still unidentified.
     #
     # `254/40 f22` looks like a pair of power limits in milliwatts (600000 and
     # 1200000) and is deliberately not mapped: both stayed exactly there while
