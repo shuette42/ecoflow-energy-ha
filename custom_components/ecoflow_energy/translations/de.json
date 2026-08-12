@@ -1258,6 +1258,9 @@
       "anderson_out_w": {
         "name": "Anderson-Ausgang"
       },
+      "pv_total_w": {
+        "name": "PV Gesamtleistung"
+      },
       "pv1_w": {
         "name": "PV 1 Leistung"
       },
