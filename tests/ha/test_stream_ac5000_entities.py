@@ -67,6 +67,11 @@ ES22_DEVICE: dict[str, Any] = {
 # EcoFlow P1 meter instead of a single-total meter such as a Tibber Pulse.
 ACCESSORY_KEYS = {
     "solar_w",
+    "pv_total_w",
+    "pv1_w",
+    "pv2_w",
+    "pv3_w",
+    "pv4_w",
     "ac_frequency_hz",
     "grid_phase_a_active_power_w",
     "grid_phase_b_active_power_w",
@@ -218,7 +223,7 @@ class TestStreamAC5000TaskReadback:
 class TestStreamAC5000Definitions:
     def test_documented_totals(self) -> None:
         """The counts the README and the entity reference publish."""
-        assert len(STREAMAC5000_SENSORS) == 51
+        assert len(STREAMAC5000_SENSORS) == 56
         assert len(STREAMAC5000_POWER_TO_ENERGY) == 5
 
     def test_exactly_one_battery_device_class(self) -> None:

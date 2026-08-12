@@ -917,6 +917,25 @@ STREAMAC5000_SENSORS: list[EcoFlowSensorDef] = [
     # Solar is accessory-gated rather than listed per prefix: whether a unit
     # has PV on the EcoFlow itself is a wiring choice, not a model difference.
     EcoFlowSensorDef("solar_w", "Solar Power", "W", "power", "measurement", "mdi:solar-power", suggested_display_precision=0, accessory=True, accessory_needs_nonzero=True),
+    # --- PV strings, direct MPPT reading ---
+    # Key and display names follow the BK series (Stream Ultra / Ultra X):
+    # `pvN_w` / "PV N Power". These sit alongside Solar Power above rather
+    # than replacing it - that one is the device's own inference from the
+    # house flows, these are the MPPT reading.
+    #
+    # Accessory-gated, because only a unit with PV wired to the EcoFlow
+    # reports the block at all. Unlike the BK series all four strings are
+    # enabled and none of them waits for a non-zero value: there the
+    # definitions exist on every unit, so strings 3 and 4 are hidden to keep
+    # them off units that have two. Here the gate already does that, and
+    # stacking either flag on top would hide a string the device is actively
+    # reporting - a string sitting at 0 is the device saying it is unwired or
+    # idle, which is worth showing.
+    EcoFlowSensorDef("pv_total_w", "PV Total Power", "W", "power", "measurement", "mdi:solar-power", suggested_display_precision=0, accessory=True),
+    EcoFlowSensorDef("pv1_w", "PV 1 Power", "W", "power", "measurement", "mdi:solar-power-variant", suggested_display_precision=0, accessory=True),
+    EcoFlowSensorDef("pv2_w", "PV 2 Power", "W", "power", "measurement", "mdi:solar-power-variant", suggested_display_precision=0, accessory=True),
+    EcoFlowSensorDef("pv3_w", "PV 3 Power", "W", "power", "measurement", "mdi:solar-power-variant", suggested_display_precision=0, accessory=True),
+    EcoFlowSensorDef("pv4_w", "PV 4 Power", "W", "power", "measurement", "mdi:solar-power-variant", suggested_display_precision=0, accessory=True),
     # --- smart meter, EcoFlow P1 variant only ---
     # A Tibber Pulse reports a single total, so these stay absent there.
     EcoFlowSensorDef("grid_phase_a_active_power_w", "Grid Phase A Power", "W", "power", "measurement", "mdi:transmission-tower", "diagnostic", suggested_display_precision=0, disabled_by_default=True, accessory=True),

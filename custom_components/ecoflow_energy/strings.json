@@ -1201,6 +1201,9 @@
       "bp_max_discharge_power_w": {
         "name": "Battery Discharge Power (Max)"
       },
+      "pv_total_w": {
+        "name": "PV Total Power"
+      },
       "pv1_w": {
         "name": "PV 1 Power"
       },

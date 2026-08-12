@@ -124,6 +124,44 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
         "16.12": ("grid_phase_c_current_a", _TYPE_FLOAT, 1),
         "16.15": ("ac_frequency_hz", _TYPE_FLOAT, 1),
         "16.16": ("_meter_net_w", _TYPE_FLOAT, 1),
+        # --- PV strings, direct MPPT reading (`f50.1`) ---
+        # Separate from `solar_w` (`f11.9`) and deliberately left beside it
+        # rather than merged into it: that one is the figure the device works
+        # out from the house flows and reports even with no PV wired to it,
+        # these come off the MPPT itself. Key and display names follow the BK
+        # series (Stream Ultra / Ultra X): `pvN_w` / "PV N Power".
+        #
+        # Confirmed on ES21 diagnostics captures (issue #231): `.3` equals the
+        # sum of `.9` through `.12` to the last decimal on every settled
+        # frame (54.62 + 78.92 + 364.24 + 369.71 = 867.49), across fourteen
+        # frames from four captures on separate days, totals 332 W to 868 W.
+        # All four string positions are checked against what the EcoFlow app
+        # showed at the same moment: 55, 79, 365 and 365 W against 54.62,
+        # 78.92, 364.24 and 369.71.
+        #
+        # `.9` is the one that took a second capture. It is absent from every
+        # frame of the first, where the sum of `.10` through `.12` alone
+        # already equalled `.3` exactly - that unit's string 1 was producing
+        # nothing - and it appears carrying 41 W and then 55 W once that
+        # string wakes up, with the four-way sum still exact. That is also
+        # the evidence for the fill below: a string producing nothing is
+        # omitted rather than sent as a zero.
+        #
+        # `.1` is the device serial; `.2`, `.4`, `.5`, `.6` and `.7` are
+        # unmapped: `.4` runs above the total and `.6`/`.7` are negative.
+        #
+        # `.3` doubles as the marker for the whole block. Every unit sends
+        # `f50.1`, but only one with PV sends `.3` and the strings: the ES22
+        # captures and the first ES21 frames carry fields 1, 2, 4, 5, 6, 7
+        # and nothing more. That is why the string fill in `_finalize` keys
+        # on `.3` rather than going in `_ZERO_FILL_PATHS`, which keys on the
+        # enclosing group and would invent four 0 W strings on every unit
+        # that has no PV at all.
+        "50.1.3": ("pv_total_w", _TYPE_FLOAT, 1),
+        "50.1.9": ("pv1_w", _TYPE_FLOAT, 1),
+        "50.1.10": ("pv2_w", _TYPE_FLOAT, 1),
+        "50.1.11": ("pv3_w", _TYPE_FLOAT, 1),
+        "50.1.12": ("pv4_w", _TYPE_FLOAT, 1),
         # --- configuration readback ---
         # The two power limits the app calls "Max grid-tied output power" and
         # "Max grid input power". `.5` and `.6` hold values that look like
@@ -250,6 +288,9 @@ _ZERO_FILL_PATHS: dict[tuple[int, int], tuple[str, ...]] = {
     # what "disabled" looks like on the wire.
     (254, 39): ("11.9", "12.4", "12.5", "12.6", "12.7", "40.1.3"),
 }
+
+# The four PV strings, filled together off the MPPT total in `_finalize`.
+_PV_STRING_KEYS: tuple[str, ...] = ("pv1_w", "pv2_w", "pv3_w", "pv4_w")
 
 # (parent group, the child that carries its content, marker key) per command.
 # A declared group arriving with no bytes is the device stating the collection
@@ -502,6 +543,18 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
     socket_raw = result.pop("_backup_socket_enabled_raw", None)
     if isinstance(socket_raw, int):
         result["backup_socket_enabled"] = bool(socket_raw)
+
+    # A reported PV total means this unit has an MPPT, so every string it did
+    # not mention is producing nothing rather than unknown. That is measured,
+    # not assumed: in the captures where string 1 sits idle the field is
+    # absent and the other three sum to the total exactly, and when it starts
+    # producing the field appears and the four-way sum is still exact.
+    # Without this the idle string would have no key at all, so no entity
+    # would ever be created for it. Keyed on the total rather than on the
+    # enclosing group because every unit sends the group, PV or not.
+    if isinstance(result.get("pv_total_w"), (int, float)):
+        for key in _PV_STRING_KEYS:
+            result.setdefault(key, 0.0)
 
     batt_voltage_mv = result.pop("_batt_voltage_mv", None)
     if isinstance(batt_voltage_mv, (int, float)):
