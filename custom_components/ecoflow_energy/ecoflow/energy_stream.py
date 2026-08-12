@@ -443,8 +443,13 @@ def build_stream_soc_limits_payload(
 
     A live app capture showed these values travelling as one ConfigWrite
     pdata: field 6 is the Unix timestamp, 33 is the upper charge limit, 34 is
-    the lower discharge limit and 102 is backup reserve. The iOS source header
-    is part of that confirmed frame as well.
+    the lower discharge limit and 102 is backup reserve. The same capture
+    carried an `ios` source header, which is reproduced here.
+
+    Only what the wire format itself requires is rejected: percentages outside
+    0..100, a discharge limit above the charge limit, and a timestamp that is
+    not a uint32. Any further relation between the three values would be a
+    claim about device behaviour that no capture supports.
     """
     for name, value in (
         ("max_charge_soc", max_charge_soc),
@@ -457,16 +462,6 @@ def build_stream_soc_limits_payload(
         raise ValueError(
             f"min_discharge_soc ({min_discharge_soc}) must be <= "
             f"max_charge_soc ({max_charge_soc})"
-        )
-    if backup_soc < min_discharge_soc + 3:
-        raise ValueError(
-            f"backup_soc ({backup_soc}) must be at least three points above "
-            f"min_discharge_soc ({min_discharge_soc})"
-        )
-    if backup_soc > max_charge_soc:
-        raise ValueError(
-            f"backup_soc ({backup_soc}) must be <= max_charge_soc "
-            f"({max_charge_soc})"
         )
     if timestamp is None:
         timestamp = int(time.time())

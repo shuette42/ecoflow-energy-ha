@@ -1534,10 +1534,10 @@
         "name": "Max. Ladezustand"
       },
       "stream_charge_limit": {
-        "name": "Ladegrenzwert"
+        "name": "Ladegrenze"
       },
       "stream_discharge_limit": {
-        "name": "Entladegrenzwert"
+        "name": "Entladegrenze"
       },
       "backup_reserve": {
         "name": "Backup-Reserve"

@@ -236,19 +236,21 @@ class EcoFlowDeviceCoordinator(
         # Set when a rollback lands, so the two sliders drop their optimistic
         # lock instead of sitting on a value the device refused for 5 s.
         self._powerocean_soc_rollback_generation: int = 0
-        # Every ES22 config write reads the device's current state before it
-        # sends: three config fields each hold two settings, and a power
-        # setpoint is a remove-then-write across two frames. Home Assistant
-        # runs service calls to different entities concurrently, so without
-        # this two power writes each remove the other's task and then write
-        # their own, leaving the overlapping pair the removal exists to
-        # prevent, and the paired fields lose one of the two changes.
-        self._stream_ac5000_config_lock = asyncio.Lock()
-        # A BK-series SoC-limit write carries charge limit, discharge limit
-        # and backup reserve together. Serialize the read-modify-write cycle
-        # so simultaneous number service calls cannot restore stale companion
-        # values over one another.
-        self._stream_soc_config_lock = asyncio.Lock()
+        # Serializes every config write that has to read the device's current
+        # state before it can build its frame. One coordinator drives one
+        # device, so the ES22 and BK-series sequences can never both be in
+        # flight here and share the one lock.
+        #
+        # On an ES22 three config fields each hold two settings and a power
+        # setpoint is a remove-then-write across two frames. On a BK-series
+        # Stream the SoC-limit write carries charge limit, discharge limit and
+        # backup reserve together. Home Assistant runs service calls to
+        # different entities concurrently, so without this two power writes
+        # each remove the other's task and then write their own, leaving the
+        # overlapping pair the removal exists to prevent, and the grouped
+        # fields lose one of the two changes by restoring a stale companion
+        # over it.
+        self._device_config_lock = asyncio.Lock()
         self._credential_obtained_ts: float = 0.0
         self._credential_refresh_unsub: asyncio.TimerHandle | None = None
         self._event_log: deque[dict[str, Any]] = deque(maxlen=50)

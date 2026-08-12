@@ -663,17 +663,39 @@ class TestStreamSocLimitsPayload:
             (95, -1, 23),
             (95, 20, 101),
             (19, 20, 23),
-            (95, 20, 22),
-            (22, 20, 23),
         ],
     )
-    def test_rejects_invalid_or_unsafe_groups(
+    def test_rejects_groups_the_wire_format_cannot_carry(
         self, charge: int, discharge: int, backup: int
     ) -> None:
         with pytest.raises(ValueError):
             build_stream_soc_limits_payload(
                 charge, discharge, backup, self.SN, seq=1, timestamp=1
             )
+
+    @pytest.mark.parametrize(
+        ("charge", "discharge", "backup"),
+        [
+            (95, 20, 20),
+            (95, 20, 3),
+            (22, 20, 23),
+            (100, 0, 100),
+        ],
+    )
+    def test_accepts_any_in_range_combination_of_the_three(
+        self, charge: int, discharge: int, backup: int
+    ) -> None:
+        """Backup reserve travels as a companion, and nothing observed relates
+        it to either limit. Inventing a relation here would refuse writes the
+        device accepts."""
+        payload = build_stream_soc_limits_payload(
+            charge, discharge, backup, self.SN, seq=1, timestamp=1
+        )
+        pdata = _decode_header_fields(payload)[1][0]
+
+        assert encode_field_varint(33, charge) in pdata
+        assert encode_field_varint(34, discharge) in pdata
+        assert encode_field_varint(102, backup) in pdata
 
     @pytest.mark.parametrize("timestamp", [-1, 0x1_0000_0000])
     def test_rejects_non_uint32_timestamp(self, timestamp: int) -> None:

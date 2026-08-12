@@ -32,7 +32,7 @@ from .const import (
     STREAM_NUMBERS,
     STREAMAC5000_NUMBERS,
     supports_stream_ac5000_controls,
-    supports_stream_soc_limit_controls,
+    supports_stream_controls,
 )
 from .coordinator import DeviceValueNotReported, EcoFlowDeviceCoordinator
 from .entity import (
@@ -493,8 +493,10 @@ class EcoFlowNumber(
 def _get_number_defs(device_type: str, device_sn: str = "") -> list[EcoFlowNumberDef]:
     """Return number definitions based on device type.
 
-    ``device_sn`` gates the STREAM AC 5000 controls, which are confirmed on
-    one variant of that family only. See STREAM_AC5000_CONTROL_PREFIXES.
+    ``device_sn`` gates the STREAM AC 5000 and Stream controls, each confirmed
+    on one variant of its family only. See STREAM_AC5000_CONTROL_PREFIXES and
+    STREAM_CONTROL_PREFIXES. Both gates are closed on an empty serial: a write
+    entity that cannot be tied to a confirmed model is not created.
     """
     if device_type == DEVICE_TYPE_DELTA:
         return DELTA2MAX_NUMBERS
@@ -503,7 +505,7 @@ def _get_number_defs(device_type: str, device_sn: str = "") -> list[EcoFlowNumbe
     if device_type == DEVICE_TYPE_SMARTPLUG:
         return SMARTPLUG_NUMBERS
     if device_type == DEVICE_TYPE_STREAM:
-        if device_sn and not supports_stream_soc_limit_controls(device_sn):
+        if not supports_stream_controls(device_sn):
             return [
                 definition
                 for definition in STREAM_NUMBERS

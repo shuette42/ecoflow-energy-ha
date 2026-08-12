@@ -1030,12 +1030,10 @@ STREAM_MICRO_EXCLUDED_KEYS: frozenset[str] = frozenset({
     "batt_min_cell_temp_c",
     "batt_max_mos_temp_c",
     "batt_charge_discharge_state",
-    # SoC limits and backup reserve are battery controls. Match both number
-    # keys and their telemetry state keys so none can leak onto the Micro.
-    "stream_charge_limit",
-    "stream_discharge_limit",
-    "max_charge_soc_pct",
-    "min_discharge_soc_pct",
+    # The SoC limits (fields 270/271) are parsed but have no Stream entity of
+    # their own, so there is nothing to exclude for them here.
+    # Backup reserve is a battery control: the read-only sensor and the
+    # number entity that writes it.
     "backup_reserve_pct",
     "backup_reserve",
     # AC outlets: this unit has no sockets to switch or meter.
@@ -1129,10 +1127,14 @@ def excluded_keys_for_serial(device_sn: str) -> frozenset[str]:
 # them - including the two SoC limits an ES21 demonstrably reports.
 STREAM_AC5000_CONTROL_PREFIXES: frozenset[str] = frozenset({"ES22"})
 
-# The grouped SoC-limit ConfigWrite has been confirmed end to end on a Stream
-# AC Pro only. Shared BK telemetry does not prove that another model accepts
-# the same write fields or safety constraints.
-STREAM_SOC_LIMIT_CONTROL_PREFIXES: frozenset[str] = frozenset({"BK31"})
+# Serial prefixes whose Stream (BK-series) writes have been confirmed on
+# hardware. Every config write this integration sends to that family was
+# reproduced from a frame captured on a Stream AC Pro and then exercised on
+# one, so a variant that merely reports the same telemetry stays read-only
+# until one of its own frames says otherwise. Same allowlist reasoning as
+# STREAM_AC5000_CONTROL_PREFIXES above: a prefix added later gets no controls
+# until someone decides here.
+STREAM_CONTROL_PREFIXES: frozenset[str] = frozenset({"BK31"})
 
 
 def supports_stream_ac5000_controls(device_sn: str) -> bool:
@@ -1142,11 +1144,11 @@ def supports_stream_ac5000_controls(device_sn: str) -> bool:
     return device_sn[:4].upper() in STREAM_AC5000_CONTROL_PREFIXES
 
 
-def supports_stream_soc_limit_controls(device_sn: str) -> bool:
-    """Return whether this Stream variant has confirmed SoC-limit writes."""
+def supports_stream_controls(device_sn: str) -> bool:
+    """Return whether this Stream variant may be written to."""
     if not device_sn:
         return False
-    return device_sn[:4].upper() in STREAM_SOC_LIMIT_CONTROL_PREFIXES
+    return device_sn[:4].upper() in STREAM_CONTROL_PREFIXES
 
 
 def filter_defs_for_serial(definitions: list[_DefT], device_sn: str) -> list[_DefT]:

@@ -1,14 +1,23 @@
-"""Tests for Stream AC Pro number entities - backup reserve SET via WSS proto.
+"""Tests for the Stream (BK-series) number entities and their SET paths.
 
-Covers the SET path that Issue #98 fixed: the Stream backup-reserve number
+Two write paths are covered. Backup reserve is the one Issue #98 fixed: it
 must build a protobuf frame on the verified ConfigWrite write path
 (cmd_func=254, cmd_id=17) and hand it to the coordinator's proto SET sender.
 cmd_id=18 is the device reply/ack id, not the write id.
+
+The charge and discharge limits are the second. The device holds them
+together with backup reserve as one grouped setting, so the two values a
+write does not change travel with it and must come from live telemetry rather
+than from a default. Both limits are Enhanced Mode only and confirmed on the
+Stream AC Pro alone, so the entity set is pinned per serial prefix here: Home
+Assistant keeps an entity in the registry after a later release stops creating
+it, which makes a wrongly created write entity permanent for that owner.
 """
 
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -18,7 +27,19 @@ from homeassistant.exceptions import HomeAssistantError
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.const import (
+    AUTH_METHOD_APP,
+    CONF_ACCESS_KEY,
+    CONF_AUTH_METHOD,
+    CONF_DEVICES,
+    CONF_EMAIL,
+    CONF_MODE,
+    CONF_PASSWORD,
+    CONF_SECRET_KEY,
+    CONF_USER_ID,
     DEVICE_TYPE_STREAM,
+    DOMAIN,
+    MODE_ENHANCED,
+    MODE_STANDARD,
     STREAM_NUMBERS,
     filter_defs_for_serial,
 )
@@ -27,16 +48,23 @@ from custom_components.ecoflow_energy.ecoflow.proto_encoding import encode_field
 from custom_components.ecoflow_energy.number import (
     EcoFlowNumber,
     _get_number_defs,
+    async_setup_entry as number_setup,
 )
 
 from .conftest import MOCK_STREAM_DEVICE
 
+BK31_DEVICE: dict[str, Any] = {
+    "sn": "BK31TEST00000001",
+    "name": "Stream AC Pro",
+    "product_name": "Stream AC Pro",
+    "device_type": DEVICE_TYPE_STREAM,
+    "online": 1,
+}
+
+_SOC_LIMIT_KEYS = {"stream_charge_limit", "stream_discharge_limit"}
+
 
 class TestStreamNumberDefs:
-    def test_stream_returns_stream_numbers(self):
-        defs = _get_number_defs(DEVICE_TYPE_STREAM)
-        assert defs is STREAM_NUMBERS
-
     def test_stream_has_backup_reserve(self):
         defs = _get_number_defs(DEVICE_TYPE_STREAM)
         keys = {d.key for d in defs}
@@ -53,6 +81,98 @@ class TestStreamNumberDefs:
         }
         assert {definition.key for definition in other} == {"backup_reserve"}
         assert filter_defs_for_serial(other, "BK01TEST00000001") == []
+
+    def test_an_unknown_serial_gets_no_write_entities(self):
+        """Fail closed: a serial that cannot be tied to a confirmed model must
+        not unlock a write. An empty serial is the case that matters, because
+        it is what every caller that has no device to hand passes."""
+        for serial in ("", "0000", "BK31"[::-1]):
+            keys = {d.key for d in _get_number_defs(DEVICE_TYPE_STREAM, serial)}
+            assert keys == {"backup_reserve"}, serial
+
+    @pytest.mark.parametrize(
+        ("key", "state_key", "minimum", "maximum"),
+        [
+            ("stream_charge_limit", "max_charge_soc_pct", 3, 100),
+            ("stream_discharge_limit", "min_discharge_soc_pct", 0, 95),
+        ],
+    )
+    def test_soc_limit_ranges_match_the_documented_values(
+        self, key: str, state_key: str, minimum: int, maximum: int
+    ) -> None:
+        """documentation/entities/stream.md publishes these ranges, and a
+        number carries no description, so the range is the only guard rail a
+        user sees while dragging it."""
+        definition = next(item for item in STREAM_NUMBERS if item.key == key)
+
+        assert definition.state_key == state_key
+        assert definition.min_value == minimum
+        assert definition.max_value == maximum
+        assert definition.step == 1
+        assert definition.unit == "%"
+        assert definition.enhanced_only is True
+
+
+class TestStreamNumberPlatformSetup:
+    """The limits are Enhanced Mode only, and Standard Mode is where that has
+    to hold: the grouped ConfigWrite goes out over the app connection, which
+    Standard Mode does not have."""
+
+    @staticmethod
+    def _entry(mode: str) -> MockConfigEntry:
+        if mode == MODE_ENHANCED:
+            return MockConfigEntry(
+                domain=DOMAIN,
+                title="EcoFlow Energy",
+                data={
+                    CONF_AUTH_METHOD: AUTH_METHOD_APP,
+                    CONF_MODE: MODE_ENHANCED,
+                    CONF_EMAIL: "test@example.com",
+                    CONF_PASSWORD: "test_password",
+                    CONF_USER_ID: "user123",
+                    CONF_DEVICES: [BK31_DEVICE],
+                },
+                unique_id="test@example.com",
+            )
+        return MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_ACCESS_KEY: "test_ak",
+                CONF_SECRET_KEY: "test_sk",
+                CONF_MODE: MODE_STANDARD,
+                CONF_DEVICES: [BK31_DEVICE],
+            },
+            unique_id="test_ak",
+        )
+
+    async def _setup_keys(self, hass: HomeAssistant, mode: str) -> set[str]:
+        entry = self._entry(mode)
+        entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, BK31_DEVICE)
+        hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
+            BK31_DEVICE["sn"]: coordinator
+        }
+        created: list[Any] = []
+        await number_setup(hass, entry, created.extend)
+        return {
+            entity._definition.key
+            for entity in created
+            if hasattr(entity, "_definition")
+        }
+
+    async def test_enhanced_mode_creates_both_limits(
+        self, hass: HomeAssistant
+    ) -> None:
+        assert _SOC_LIMIT_KEYS <= await self._setup_keys(hass, MODE_ENHANCED)
+
+    async def test_standard_mode_creates_neither_limit(
+        self, hass: HomeAssistant
+    ) -> None:
+        keys = await self._setup_keys(hass, MODE_STANDARD)
+
+        assert keys.isdisjoint(_SOC_LIMIT_KEYS)
+        assert "backup_reserve" not in keys
 
 
 class TestStreamBackupReserveSet:
@@ -186,40 +306,49 @@ class TestStreamSocLimitSet:
         assert encode_field_varint(102, 23) in pdata
         assert coordinator.data["max_charge_soc_pct"] == 90
 
-    async def test_raising_discharge_moves_backup_to_three_points_above(
+    async def test_a_write_reaches_the_persistent_store_too(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
     ) -> None:
+        """The snapshot alone is not enough. A queued second write reads the
+        store to decide what its companions should be, and the store is what
+        survives the next coordinator refresh, so a value seeded only into
+        `data` is restored to its old reading a moment later."""
+        _, coordinator = self._make_entity(
+            hass, enhanced_config_entry, "stream_charge_limit"
+        )
+
+        # Deliberately not through the entity: that one writes the store
+        # itself as its optimistic update, so it would pass whether or not
+        # the coordinator seeded anything. The waiter this seed exists for
+        # calls the coordinator directly.
+        assert await coordinator.async_set_stream_soc_limits(charge=90)
+
+        assert coordinator._device_data["max_charge_soc_pct"] == 90
+        assert coordinator._device_data["min_discharge_soc_pct"] == 20
+        assert coordinator._device_data["backup_reserve_pct"] == 23
+
+    @pytest.mark.parametrize("requested", [21, 19])
+    async def test_a_discharge_write_leaves_backup_exactly_as_reported(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+        requested: int,
+    ) -> None:
+        """Backup reserve is a companion here, not a derived value. Both
+        directions send back the reading the device last gave, because any
+        rule relating the two would be a claim about the device that no
+        capture supports."""
         entity, coordinator = self._make_entity(
             hass, enhanced_config_entry, "stream_discharge_limit"
         )
 
-        await entity.async_set_native_value(21)
+        await entity.async_set_native_value(requested)
 
         _header, pdata = self._sent_pdata(coordinator)
-        assert encode_field_varint(34, 21) in pdata
-        assert encode_field_varint(102, 24) in pdata
-        assert coordinator.data["min_discharge_soc_pct"] == 21
-        assert coordinator.data["backup_reserve_pct"] == 24
-
-    async def test_lowering_discharge_does_not_lower_backup(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
-    ) -> None:
-        entity, coordinator = self._make_entity(
-            hass,
-            enhanced_config_entry,
-            "stream_discharge_limit",
-            {
-                "max_charge_soc_pct": 95,
-                "min_discharge_soc_pct": 21,
-                "backup_reserve_pct": 24,
-            },
-        )
-
-        await entity.async_set_native_value(20)
-
-        _header, pdata = self._sent_pdata(coordinator)
-        assert encode_field_varint(34, 20) in pdata
-        assert encode_field_varint(102, 24) in pdata
+        assert encode_field_varint(34, requested) in pdata
+        assert encode_field_varint(102, 23) in pdata
+        assert coordinator.data["min_discharge_soc_pct"] == requested
+        assert coordinator.data["backup_reserve_pct"] == 23
 
     async def test_missing_companion_is_not_guessed(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
@@ -237,15 +366,17 @@ class TestStreamSocLimitSet:
         assert err.value.translation_key == "set_command_not_ready"
         coordinator.async_send_proto_set_command.assert_not_called()
 
-    async def test_rejects_a_charge_limit_below_backup(
+    async def test_rejects_limits_that_cross(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
     ) -> None:
+        """Both entity ranges overlap, so a user can ask for a charge limit
+        below the discharge limit the device is holding."""
         entity, coordinator = self._make_entity(
             hass, enhanced_config_entry, "stream_charge_limit"
         )
 
         with pytest.raises(HomeAssistantError) as err:
-            await entity.async_set_native_value(22)
+            await entity.async_set_native_value(19)
 
         assert err.value.translation_key == "set_value_rejected"
         coordinator.async_send_proto_set_command.assert_not_called()
@@ -294,4 +425,4 @@ class TestStreamSocLimitSet:
         pdata = bytes.fromhex(headers[0]["pdata"])
         assert encode_field_varint(33, 90) in pdata
         assert encode_field_varint(34, 21) in pdata
-        assert encode_field_varint(102, 24) in pdata
+        assert encode_field_varint(102, 23) in pdata

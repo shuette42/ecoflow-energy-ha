@@ -149,7 +149,11 @@ class TestNumberDefsRouting:
         assert _get_number_defs(DEVICE_TYPE_POWEROCEAN) is POWEROCEAN_NUMBERS
 
     def test_stream_numbers(self) -> None:
-        assert _get_number_defs(DEVICE_TYPE_STREAM) is STREAM_NUMBERS
+        """Without a serial the write-gated limits are withheld, so this is
+        the reduced list rather than STREAM_NUMBERS itself."""
+        keys = {d.key for d in _get_number_defs(DEVICE_TYPE_STREAM)}
+        assert keys == {"backup_reserve"}
+        assert {d.key for d in STREAM_NUMBERS} > keys
 
 
 # ===========================================================================
