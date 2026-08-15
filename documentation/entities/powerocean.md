@@ -18,9 +18,19 @@ Full list of all entities created for PowerOcean devices.
 > system reports data without a heating rod, unless you had enabled them, in
 > which case they are kept along with their history.
 
+> **The wallbox readings are optional and need Enhanced Mode.** They belong to
+> a PowerPulse wallbox coupled to your PowerOcean, so they are only created once
+> your system actually reports a charging session. A PowerOcean without a
+> wallbox gets no wallbox entities. Coupled to a PowerOcean the wallbox reports
+> its session through the PowerOcean rather than on its own, and that message
+> does not reach the Developer API, so it needs the EcoFlow account sign-in. All
+> five readings describe the **current charging session** and reset when the next
+> one starts, so the session energy is not a meter and is not meant for the
+> Energy Dashboard. There are no wallbox controls.
+
 > **PowerOcean Plus** units report more of the same entity set than a standard PowerOcean: per-phase reactive power (var) and apparent power (VA), plus MPPT strings 3 and 4. Those entities are disabled by default, so enable the ones you need after adding a Plus device.
 
-**Totals:** 222 sensors, 5 binary sensors, 2 numbers, 1 select
+**Totals:** 227 sensors, 5 binary sensors, 2 numbers, 1 select
 
 > Entities marked with *disabled* are available but hidden by default. Enable them in **Settings > Devices > EcoFlow PowerOcean > Entities** (click the filter icon and show disabled entities).
 
@@ -151,6 +161,20 @@ These sensors are pre-configured for the HA Energy Dashboard (`total_increasing`
 | Parallel Mode | Parallel-operation topology reported by the unit | disabled |
 | Battery Limit Reason | Why the system is limiting the battery | disabled |
 | SG Ready State | Current SG Ready operating state | disabled |
+
+## Sensors - PowerPulse Wallbox (accessory, Enhanced Mode)
+
+Created only once a coupled wallbox reports a charging session. See the note at the top.
+
+| Entity | Description | Default |
+|---|---|---|
+| Wallbox Charging Power | Power currently going into the vehicle, in watts | enabled |
+| Wallbox Session Energy | Energy delivered in the current charging session, in watt hours. Resets when the next session starts, so it is not a lifetime counter | enabled |
+| Wallbox Session Duration | How long the current session has been running, in seconds | enabled |
+| Wallbox Charging Status | Available, preparing, charging, paused by charger, paused by vehicle, finishing, or fault | enabled |
+| Wallbox Vehicle | The vehicle the charger has recognized. Empty until a car is identified | enabled |
+
+---
 
 ## Binary Sensors (diagnostic)
 

@@ -715,3 +715,43 @@ message Delta3BmsHeartbeat {
   oneof _accu_chg_energy { uint32 accu_chg_energy = 79; }
   oneof _accu_dsg_energy { uint32 accu_dsg_energy = 80; }
 }
+
+// --- PowerPulse wallbox, reported by the PowerOcean on cmd_func 209 ---
+//
+// The PowerOcean forwards the charging session of an attached PowerPulse. Only
+// the fields two reporter captures actually carry are declared here; the
+// message definition has more, and undeclared numbers are reported as unknown
+// fields rather than guessed at.
+//
+// Verified against a session recorded on 2026-08-12 (issue #245): field 11
+// equals field 16 minus field 15 in every frame, and the energy in field 9
+// divided by the elapsed time matches field 8 to within one percent across two
+// independent windows.
+
+enum EVChgSts {
+  EV_CHG_STS_NONE = 0;
+  EV_CHG_STS_AVAILABLE = 1;
+  EV_CHG_STS_PREPARING = 2;
+  EV_CHG_STS_CHARGING = 3;
+  EV_CHG_STS_SUSPENDED_EVSE = 4;
+  EV_CHG_STS_SUSPENDED_EV = 5;
+  EV_CHG_STS_FINISHING = 6;
+  EV_CHG_STS_FAULTED = 9;
+}
+
+message EVChargingParamReport {
+  oneof _ev_sn { string ev_sn = 1; }
+  oneof _ev_plug_and_play { uint32 ev_plug_and_play = 5; }
+  oneof _charging_status { EVChgSts charging_status = 6; }
+  oneof _ev_pwr { float ev_pwr = 8; }
+  oneof _ev_charging_energy { float ev_charging_energy = 9; }
+  oneof _work_mode { uint32 work_mode = 10; }
+  oneof _order_time { uint32 order_time = 11; }
+  oneof _order_state { uint32 order_state = 12; }
+  oneof _default_vehicle_id { string default_vehicle_id = 13; }
+  oneof _charge_vehicle_id { string charge_vehicle_id = 14; }
+  oneof _order_start_timestamp { fixed32 order_start_timestamp = 15; }
+  oneof _order_end_timestamp { fixed32 order_end_timestamp = 16; }
+  oneof _use_grid_first { uint32 use_grid_first = 17; }
+  oneof _switch_bits { uint32 switch_bits = 18; }
+}

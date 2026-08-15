@@ -1424,6 +1424,31 @@
       },
       "scheduled_charge_soc_target": {
         "name": "Geplanter Ziel-Ladestand"
+      },
+      "ev_charge_power_w": {
+        "name": "Wallbox-Ladeleistung"
+      },
+      "ev_session_energy_wh": {
+        "name": "Wallbox-Ladeenergie"
+      },
+      "ev_session_duration_s": {
+        "name": "Wallbox-Ladedauer"
+      },
+      "ev_vehicle_id": {
+        "name": "Wallbox-Fahrzeug"
+      },
+      "ev_charge_status": {
+        "name": "Wallbox-Ladestatus",
+        "state": {
+          "none": "Kein Status",
+          "available": "Bereit",
+          "preparing": "Vorbereitung",
+          "charging": "Lädt",
+          "suspended_charger": "Pausiert durch Wallbox",
+          "suspended_vehicle": "Pausiert durch Fahrzeug",
+          "finishing": "Beendet",
+          "faulted": "Störung"
+        }
       }
     },
     "binary_sensor": {

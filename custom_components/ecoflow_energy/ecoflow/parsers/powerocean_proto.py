@@ -592,6 +592,70 @@ def remap_bp_keys(
     return result
 
 
+# --- PowerPulse wallbox (cmd_func 209) ---
+
+# Only fields with both a name from the message definition and a check against
+# the reporter's own session are listed. `switch_bits`, `work_mode` and the
+# undeclared field numbers above 30 stay unread on purpose: they move, but
+# nothing observed says what they mean, and a sensor named after a guess is
+# worse than no sensor. See PLAN-079.
+EV_CHARGING_TO_SENSOR: dict[str, str] = {
+    "ev_pwr": "ev_charge_power_w",
+    "ev_charging_energy": "ev_session_energy_wh",
+    "order_time": "ev_session_duration_s",
+    "charging_status": "ev_charge_status",
+    "charge_vehicle_id": "ev_vehicle_id",
+}
+
+# The charging status arrives as the enum's own name.
+_EV_CHARGE_STATUS_MAP: dict[str, str] = {
+    "EV_CHG_STS_NONE": "none",
+    "EV_CHG_STS_AVAILABLE": "available",
+    "EV_CHG_STS_PREPARING": "preparing",
+    "EV_CHG_STS_CHARGING": "charging",
+    "EV_CHG_STS_SUSPENDED_EVSE": "suspended_charger",
+    "EV_CHG_STS_SUSPENDED_EV": "suspended_vehicle",
+    "EV_CHG_STS_FINISHING": "finishing",
+    "EV_CHG_STS_FAULTED": "faulted",
+}
+
+# What the charger reports before a car has been recognized. It is a string
+# field, so the placeholder arrives as text rather than as an absent field.
+_EV_NO_VEHICLE = "-1"
+
+
+def remap_ev_charging_keys(raw: dict[str, Any]) -> dict[str, Any]:
+    """Remap a PowerPulse charging report (cmd_func 209, cmd_id 8).
+
+    The frame describes one charging session, not a lifetime total: when a new
+    session opens, power, energy, duration and the timestamps reset together.
+    Nothing here is therefore a meter, and no key is fed to a total_increasing
+    sensor.
+    """
+    result: dict[str, Any] = {}
+
+    for proto_key, value in raw.items():
+        sensor_key = EV_CHARGING_TO_SENSOR.get(proto_key)
+        if sensor_key is None:
+            continue
+        if sensor_key == "ev_charge_status":
+            mapped = _EV_CHARGE_STATUS_MAP.get(str(value))
+            # An unknown state would crash the enum sensor with "not in list
+            # of options", so it is dropped rather than passed through.
+            if mapped is not None:
+                result[sensor_key] = mapped
+            continue
+        if sensor_key == "ev_vehicle_id":
+            text = str(value)
+            result[sensor_key] = None if text == _EV_NO_VEHICLE else text
+            continue
+        result[sensor_key] = (
+            float(value) if isinstance(value, (int, float)) else value
+        )
+
+    return result
+
+
 def remap_ems_state_keys(raw: dict[str, Any]) -> dict[str, Any]:
     """Remap an EMS state report (cmd_id=17) to sensor keys.
 

@@ -48,6 +48,20 @@ HEATING_ROD_KEYS = {
     "heating_rod_target_temp_c",
 }
 
+# The PowerPulse wallbox is the second accessory to use the same gate
+# (PLAN-079). It is listed here so the assertions below stay a statement about
+# which readings are optional, rather than a count that any new definition
+# silently changes.
+WALLBOX_KEYS = {
+    "ev_charge_power_w",
+    "ev_session_energy_wh",
+    "ev_session_duration_s",
+    "ev_charge_status",
+    "ev_vehicle_id",
+}
+
+ACCESSORY_KEYS = HEATING_ROD_KEYS | WALLBOX_KEYS
+
 
 def _entry(devices: list[dict[str, Any]] | None = None) -> MockConfigEntry:
     """Build an Enhanced-mode entry for one or more PowerOceans."""
@@ -95,13 +109,13 @@ class TestDefinitions:
         marked = {
             sensor.key for sensor in POWEROCEAN_SENSORS if sensor.accessory
         }
-        assert marked == HEATING_ROD_KEYS
+        assert HEATING_ROD_KEYS <= marked
 
     def test_no_other_powerocean_sensor_is_gated(self) -> None:
         """A gated definition without a matching parser key would never be
-        created at all, so the flag stays limited to the accessory."""
-        gated = [sensor for sensor in POWEROCEAN_SENSORS if sensor.accessory]
-        assert len(gated) == 4
+        created at all, so the flag stays limited to the accessories."""
+        gated = {sensor.key for sensor in POWEROCEAN_SENSORS if sensor.accessory}
+        assert gated == ACCESSORY_KEYS
 
 
 class TestGating:

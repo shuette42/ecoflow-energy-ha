@@ -459,6 +459,16 @@ POWEROCEAN_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("ems_feed_power_limit_w", "Feed Power Limit", "W", "power", "measurement", "mdi:transmission-tower-export", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("ems_feed_ratio_pct", "Feed Ratio", "%", None, "measurement", "mdi:percent", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("batt_charge_discharge_state", "Battery Charge/Discharge State", None, "enum", None, "mdi:battery-sync", "diagnostic", options=["standby", "discharging", "charging"]),
+    # --- PowerPulse wallbox (accessory) ---
+    # Forwarded by the PowerOcean on cmd_func 209, so these only exist once a
+    # wallbox has actually reported. Every value describes the current
+    # charging session and resets when the next one opens - which is why the
+    # session energy is `total` and never `total_increasing`.
+    EcoFlowSensorDef("ev_charge_power_w", "Wallbox Charging Power", "W", "power", "measurement", "mdi:ev-station", None, enhanced_only=True, suggested_display_precision=0, accessory=True),
+    EcoFlowSensorDef("ev_session_energy_wh", "Wallbox Session Energy", "Wh", "energy", "total", "mdi:ev-plug-type2", None, enhanced_only=True, suggested_display_precision=0, accessory=True),
+    EcoFlowSensorDef("ev_session_duration_s", "Wallbox Session Duration", "s", "duration", "measurement", "mdi:timer-outline", "diagnostic", enhanced_only=True, suggested_display_precision=0, accessory=True),
+    EcoFlowSensorDef("ev_charge_status", "Wallbox Charging Status", None, "enum", None, "mdi:ev-station", None, enhanced_only=True, accessory=True, options=["none", "available", "preparing", "charging", "suspended_charger", "suspended_vehicle", "finishing", "faulted"]),
+    EcoFlowSensorDef("ev_vehicle_id", "Wallbox Vehicle", None, None, None, "mdi:car-electric", "diagnostic", enhanced_only=True, accessory=True),
     # --- EMS / System extended sensors (diagnostic, disabled by default) ---
     EcoFlowSensorDef("ems_charge_upper_limit_pct", "EMS Charge Upper Limit", "%", None, "measurement", "mdi:battery-charging-high", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("ems_discharge_lower_limit_pct", "EMS Discharge Lower Limit", "%", None, "measurement", "mdi:battery-alert-variant-outline", "diagnostic", suggested_display_precision=0, disabled_by_default=True),

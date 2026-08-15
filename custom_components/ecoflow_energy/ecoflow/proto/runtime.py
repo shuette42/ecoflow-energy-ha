@@ -131,6 +131,16 @@ def _build_cmd_registry() -> dict[tuple[int, int], CmdConfig]:
             flags={"_is_ems_param_change": True},
             rename={"dev_soc": "ems_app_surplus_pct"},
         ),
+        # PowerPulse wallbox, forwarded by the PowerOcean it is coupled to.
+        # The same session also travels on (209, 33) and (209, 34), and a
+        # third time inside a (241, 5) bundle. Only this one is registered:
+        # it is the only frame carrying power, energy, duration and state
+        # together, so the four cannot drift apart. See PLAN-079.
+        (209, 8): CmdConfig(
+            msg_class=pb2.EVChargingParamReport,
+            parse_path="typed_runtime:ev_charging_param",
+            flags={"_is_ev_charging_param": True},
+        ),
         # --- Delta 3 generation ---
         # Main status frame: full every 120 s, incremental about every 2 s.
         (254, 21): CmdConfig(

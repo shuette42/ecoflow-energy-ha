@@ -31,6 +31,7 @@ from ..ecoflow.parsers.powerocean_proto import (
     flatten_heartbeat,
     remap_bp_keys,
     remap_ems_state_keys,
+    remap_ev_charging_keys,
     remap_proto_keys,
 )
 from ..ecoflow.parsers.smartplug import (
@@ -442,6 +443,12 @@ class MqttIngestMixin:
                 if result.mapped.get("_is_ems_state"):
                     parsed = remap_ems_state_keys(raw)
                     return parsed if parsed else None
+                # Enhanced Mode: PowerPulse wallbox session, forwarded by the
+                # PowerOcean. A system with no wallbox never sends this frame,
+                # so the sensors stay absent rather than empty.
+                if result.mapped.get("_is_ev_charging_param"):
+                    parsed = remap_ev_charging_keys(raw)
+                    return parsed if parsed else None
                 # Enhanced Mode: change reports and battery heartbeat
                 if (
                     result.mapped.get("_is_ems_change")
@@ -511,6 +518,9 @@ class MqttIngestMixin:
                     continue
                 if result.mapped.get("_is_ems_state"):
                     merged.update(remap_ems_state_keys(raw))
+                    continue
+                if result.mapped.get("_is_ev_charging_param"):
+                    merged.update(remap_ev_charging_keys(raw))
                     continue
                 if (
                     result.mapped.get("_is_ems_change")

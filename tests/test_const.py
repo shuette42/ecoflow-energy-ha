@@ -413,7 +413,11 @@ class TestPowerOceanSensors:
             assert sensors[f"mppt_pv4_{suffix}"].disabled_by_default is True
 
     def test_existing_sensors_count(self):
-        """Core sensor count, excluding optional Plus and extended EMS fields."""
+        """Core sensor count, excluding optional Plus and extended EMS fields.
+
+        Includes the accessory readings (heating rod, wallbox): they are
+        defined on the PowerOcean and gated at entity creation, not here.
+        """
         keys = _extract_sensor_keys("POWEROCEAN_SENSORS")
         non_pack = [k for k in keys if not k.startswith("pack")]
         mppt_plus = {
@@ -425,7 +429,7 @@ class TestPowerOceanSensors:
         original = [
             k for k in non_pack if k not in ems_extended and k not in mppt_plus
         ]
-        assert len(original) == 68, f"Expected 68 core sensors, got {len(original)}"
+        assert len(original) == 73, f"Expected 73 core sensors, got {len(original)}"
 
     def test_mppt_plus_sensor_count(self):
         """6 PowerOcean Plus MPPT sensors (strings 3 and 4)."""
@@ -456,9 +460,9 @@ class TestPowerOceanSensors:
         assert len(found) == 28, f"Expected 28 EMS extended sensors, got {len(found)}"
 
     def test_total_sensor_count(self):
-        """Total PowerOcean sensors = 68 + 6 + 120 + 28 = 222."""
+        """Total PowerOcean sensors = 73 + 6 + 120 + 28 = 227."""
         keys = _extract_sensor_keys("POWEROCEAN_SENSORS")
-        assert len(keys) == 222, f"Expected 222 total sensors, got {len(keys)}"
+        assert len(keys) == 227, f"Expected 227 total sensors, got {len(keys)}"
 
 
     def test_only_soc_has_battery_device_class(self):
@@ -735,6 +739,10 @@ class TestEnergySensorPrecision:
 _PRECISION_WAIVED = {
     "pcs_power_factor": (
         "a ratio between 0 and 1, so any whole-number rounding erases it"
+    ),
+    "ev_vehicle_id": (
+        "the wallbox reports the vehicle as a string, so there is no number "
+        "to round - the charger sends '653', not 653"
     ),
 }
 
