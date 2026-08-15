@@ -165,6 +165,16 @@ class TestDeviceTypeRouting:
         # rather than a capture from an owner of this integration.
         assert get_device_type("", "HJ35TEST00000001") == "powerocean"
 
+    def test_hj37_powerocean_by_sn_prefix(self) -> None:
+        """#245: three-phase PowerOcean variant.
+
+        Two raw captures from the reporter unit carry the EMS heartbeat, the
+        battery pack heartbeat, the EMS change report, the energy stream
+        report and the PV inverter stream - all five already decoded, so the
+        prefix routes live data rather than only creating a device.
+        """
+        assert get_device_type("", "HJ37TEST00000001") == "powerocean"
+
     def test_delta3_by_sn_prefix(self) -> None:
         assert get_device_type("", "D3M1TEST00000001") == "delta3"
 

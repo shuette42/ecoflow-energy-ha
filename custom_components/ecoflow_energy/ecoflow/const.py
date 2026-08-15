@@ -74,6 +74,16 @@ _SN_PREFIX_MAP = {
     # diagnosable device if it does not - which beats "unsupported device"
     # either way, because that state carries no information at all.
     "HJ35": DEVICE_TYPE_POWEROCEAN,
+    # Three-phase PowerOcean variant (#245). Two raw captures from the same
+    # reporter unit carry `96/1`, `96/7`, `96/8`, `96/33` and `96/39` - the EMS
+    # heartbeat, the battery pack heartbeat, the EMS change report, the energy
+    # stream report that holds the core power readings, and the PV inverter
+    # stream. All five are decoded today, so this unit reports live data into
+    # the existing parser rather than merely being recognised. The captures
+    # also hold `96/34`, `53/14`, `53/113`, `241/5`, `224/38` and the `209`
+    # family, none of which is registered - as with every other PowerOcean
+    # variant here, the device says more than the parser reads.
+    "HJ37": DEVICE_TYPE_POWEROCEAN,
     # European PowerOcean variant (#89): verified against live hardware in
     # Enhanced mode - telemetry matches the EcoFlow app (grid, battery, MPPT).
     "J32D": DEVICE_TYPE_POWEROCEAN,
