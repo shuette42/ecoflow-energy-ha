@@ -7268,3 +7268,61 @@ class TestStreamQuotaRouting:
             ("pv4_w", "pv4_energy_kwh"),
         ):
             assert STREAM_POWER_TO_ENERGY[power_key] == energy_key
+
+
+class TestLinkedUnitPower:
+    """Per-unit battery power is claimed by serial, never by position."""
+
+    ES22_DEVICE: dict[str, Any] = {
+        "sn": "ES22TESTUNITAAAA",
+        "name": "STREAM AC 5000",
+        "product_name": "STREAM AC 5000",
+        "device_type": "stream_ac5000",
+        "online": 1,
+    }
+
+    def _coordinator(self, hass, entry):
+        entry.add_to_hass(hass)
+        return EcoFlowDeviceCoordinator(hass, entry, self.ES22_DEVICE)
+
+    async def test_own_entry_becomes_the_sensor_value(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        coordinator = self._coordinator(hass, enhanced_config_entry)
+        parsed = {
+            "_unit_batt_w_by_sn": {"ES22TESTUNITAAAA": 689.0, "ES22TESTUNITBBBB": 0.0},
+        }
+        coordinator._apply_data(parsed)
+        assert coordinator.data["unit_batt_w"] == 689.0
+        assert coordinator._unit_power_stats == {
+            "units_listed": 2,
+            "own_unit_matched": True,
+        }
+
+    async def test_a_foreign_entry_is_never_published(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """The neighbour's reading must not land on this device's page."""
+        coordinator = self._coordinator(hass, enhanced_config_entry)
+        coordinator._apply_data({"_unit_batt_w_by_sn": {"ES22TESTUNITBBBB": 689.0}})
+        assert "unit_batt_w" not in coordinator.data
+        assert coordinator._unit_power_stats == {
+            "units_listed": 1,
+            "own_unit_matched": False,
+        }
+
+    async def test_the_private_key_never_reaches_the_state(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        coordinator = self._coordinator(hass, enhanced_config_entry)
+        coordinator._apply_data({"_unit_batt_w_by_sn": {"ES22TESTUNITAAAA": 12.0}})
+        assert "_unit_batt_w_by_sn" not in coordinator.data
+
+    async def test_a_frame_without_the_block_leaves_the_value_standing(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """The container is incremental, so an absent block means unchanged."""
+        coordinator = self._coordinator(hass, enhanced_config_entry)
+        coordinator._apply_data({"_unit_batt_w_by_sn": {"ES22TESTUNITAAAA": 689.0}})
+        coordinator._apply_data({"soc_pct": 76})
+        assert coordinator.data["unit_batt_w"] == 689.0

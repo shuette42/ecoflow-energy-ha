@@ -8,7 +8,7 @@ Full list of all entities created for the STREAM AC 5000.
 
 **This is not the Stream entity set.** Despite the shared product name, an `ES22` speaks a different protocol from the BK-series Stream devices: it sends none of their telemetry messages and describes power as a flow matrix rather than as individual readings. It therefore has its own device type, parser and entity list. See [Stream](stream.md) for the BK series.
 
-**Totals:** 50 sensors, 2 binary sensors, 2 switches, 5 numbers, 1 select
+**Totals:** 51 sensors, 2 binary sensors, 2 switches, 5 numbers, 1 select
 
 > Entities marked with *disabled* are available but hidden by default. Enable them in **Settings > Devices > EcoFlow STREAM AC 5000 > Entities** (click the filter icon and show disabled entities).
 
@@ -22,11 +22,12 @@ Full list of all entities created for the STREAM AC 5000.
 
 | Entity | Unit | Category | Default | Description |
 |:---|:---:|:---:|:---:|:---|
-| Battery SOC | % | - | enabled | State of charge, as shown in the app |
-| Battery SOC (Precise) | % | diagnostic | disabled | High-resolution system SoC |
-| Precise SoC | % | diagnostic | disabled | Pack-level SoC, straight from the BMS. Runs about two points above Battery SOC (Precise) directly above it, which is the system figure and the one the app shows. The two names are easy to confuse; prefer the system one unless you specifically want the pack reading |
+| Battery SOC | % | - | enabled | State of charge, as shown in the app. With units linked this is the system figure, the mean across them |
+| Battery SOC (Precise) | % | diagnostic | disabled | This unit's own state of charge, at higher resolution. On a single unit it tracks Battery SOC above; with units linked the two differ, and the app shows this one under the unit's name |
+| Precise SoC | % | diagnostic | disabled | Pack-level SoC, straight from the BMS, and also this unit's own rather than the system figure. It runs slightly above Battery SOC (Precise) directly above it. The two names are easy to confuse |
 | Battery SoH | % | - | enabled | State of health |
-| Battery Power | W | - | enabled | Signed battery power (positive = charging, negative = discharging) |
+| Battery Power | W | - | enabled | Signed battery power (positive = charging, negative = discharging). With units linked this is the system figure, the sum across them |
+| Unit Battery Power | W | diagnostic | disabled | This unit's own share of the battery power above. On a single unit it repeats that reading, which is why it is off by default |
 | Battery Charge Power | W | - | enabled | Charging power (always >= 0) |
 | Battery Discharge Power | W | - | enabled | Discharging power (always >= 0) |
 | Battery Charge/Discharge State | - | diagnostic | disabled | `standby`, `charging` or `discharging` |
@@ -172,4 +173,5 @@ Max Charge SoC and Min Discharge SoC are one setting on the wire, so changing ei
 - **Cycle count is not reported.** One field looks like one but was observed at 497, 499 and 1311 within minutes, so it is left out rather than exposed as a counter that would read as a meter reset.
 - **Deleting one task of several leaves its last values behind, deleting the last one clears them.** The device reports one task per message and simply stops mentioning a task that no longer exists, which is indistinguishable from not having mentioned it yet, so a task deleted in the app leaves the Scheduled Charge or Scheduled Discharge Power reading at its last value until a task of that kind is reported again. Writing a power setpoint recreates the task, so the value becomes true again at that point. When the last task goes, the device sends an empty task block instead of no block at all, and that is unambiguous: all nine scheduled-task readings go to unknown.
 - **A task deleted from Home Assistant clears immediately**, because the integration knows what it deleted and does not wait for a readback that will never come. Writing one power setpoint removes the other kind's task first, since two whole-day tasks overlap and the device then acts on neither, and the removed kind's power, window and enabled readings go to unknown at that point. The charge task's SoC target survives, so a task set to stop at 80% does not quietly become one that charges to 100%.
+- **Linked units are reported as one system.** EcoFlow allows several of these on one account, and the device then describes them as a single battery: Battery SOC is the mean across the units and Battery Power their sum, which is what the app calls System SOC. Each unit still gets its own device page with the full entity set, and the readings that come from its own battery hardware are already its own there: Battery Voltage, Battery Temp, Battery Current, the cell values, Remaining Capacity, and the state of charge under Battery SOC (Precise). Unit Battery Power adds the one figure that was missing, and both it and the precise state of charge are off by default because on a single unit they repeat the system reading. If a unit's own entry never arrives its Unit Battery Power stays empty rather than showing a neighbour's value, and a diagnostics download says which of the two cases it is under `linked_units`.
 - **Battery Power is derived from the flow matrix**, not taken from the device's own live battery field. That field stops being sent the moment the unit goes idle and holds its last active value, so it reports a charge or discharge that has already stopped. The flow edges do not have that problem.

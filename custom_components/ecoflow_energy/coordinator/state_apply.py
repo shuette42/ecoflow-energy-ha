@@ -11,12 +11,43 @@ from ..const import (
     APP_SURPLUS_SYNC_USER_GRACE_S,
     DEVICE_TYPE_POWEROCEAN,
 )
+from ..ecoflow.parsers.stream_ac5000_proto import UNIT_POWER_BY_SN_KEY
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class StateApplyMixin:
     """Mixin applying parsed data to coordinator state."""
+
+    def _resolve_unit_power(self, parsed: dict[str, Any]) -> None:
+        """Take this unit's own entry out of a STREAM per-unit block.
+
+        Two or three STREAM units linked on one account are reported as one
+        system: the state of charge is their mean and the battery power their
+        sum. The device also sends the underlying per-unit readings, each
+        stamped with the serial it belongs to, and this picks out the one that
+        is ours.
+
+        A foreign entry is never published here. Both units have their own
+        coordinator, their own connection and their own device page, so a
+        reading is either this device's or it is not shown - handing it to
+        another coordinator would give one value two sources, and on the only
+        capture that exists just one of the two streams carried the block at
+        all. What that leaves is visible in diagnostics rather than guessed at:
+        if the block lists units and none of them is this one, the counters
+        below say so.
+        """
+        entries = parsed.pop(UNIT_POWER_BY_SN_KEY, None)
+        if not isinstance(entries, dict) or not entries:
+            return
+
+        own = entries.get(self.device_sn)
+        self._unit_power_stats = {
+            "units_listed": len(entries),
+            "own_unit_matched": own is not None,
+        }
+        if own is not None:
+            parsed["unit_batt_w"] = own
 
     def _apply_data(self, parsed: dict[str, Any]) -> None:
         """Apply parsed data and notify listeners (HA event loop)."""
@@ -43,6 +74,7 @@ class StateApplyMixin:
         # whose value the user has since superseded.
         if "ems_app_surplus_pct" in parsed:
             self._last_ems_param_change_ts = now
+        self._resolve_unit_power(parsed)
         self._device_data.update(parsed)
 
         # Re-aggregate bp_remain_watth from accumulated device_data (#10).

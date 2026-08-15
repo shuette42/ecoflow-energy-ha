@@ -218,7 +218,7 @@ class TestStreamAC5000TaskReadback:
 class TestStreamAC5000Definitions:
     def test_documented_totals(self) -> None:
         """The counts the README and the entity reference publish."""
-        assert len(STREAMAC5000_SENSORS) == 50
+        assert len(STREAMAC5000_SENSORS) == 51
         assert len(STREAMAC5000_POWER_TO_ENERGY) == 5
 
     def test_exactly_one_battery_device_class(self) -> None:

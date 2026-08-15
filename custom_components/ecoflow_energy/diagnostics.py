@@ -416,6 +416,16 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
         "event_log": _format_event_log(coordinator.event_log),
     }
 
+    # STREAM units linked on one account report every figure for the system
+    # and the per-unit readings underneath, each stamped with a serial. Two
+    # different situations leave the per-unit sensor empty - the device sends
+    # no such block, or it sends one that never names this unit - and they
+    # need opposite fixes. The counters name which one it is. No serial is
+    # carried here, only how many the block held.
+    linked_units = coordinator.linked_unit_stats
+    if linked_units is not None:
+        diag["linked_units"] = linked_units
+
     # Enhanced Mode: the raw push frames the device sent, with the serial
     # masked and each frame truncated. Device variants within a serial family
     # do not always share a field layout, so a mis-decoded variant can only be

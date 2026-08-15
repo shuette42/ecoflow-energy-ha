@@ -209,6 +209,12 @@ class EcoFlowDeviceCoordinator(
         # echo of a value the user has since superseded in HA) would
         # otherwise pull HA back to the obsolete app-side value.
         self._last_ems_param_change_ts: float = 0.0
+        # What the last STREAM per-unit block held: how many linked units it
+        # listed, and whether one of them was this device. Diagnostics only.
+        # A serial that never matches is the one failure this feature can have
+        # that looks exactly like a device that does not send the block, and
+        # nothing else in a diagnostics download tells the two apart.
+        self._unit_power_stats: dict[str, Any] | None = None
         # Debounce state for the PowerOcean SoC SET. HA Number-Entity sliders
         # send one SET per 5%-step during a mouse drag, which arrives at the
         # device at ~100 ms cadence. The device cannot keep all SETs in sync
@@ -355,6 +361,14 @@ class EcoFlowDeviceCoordinator(
     def firmware(self) -> dict[str, dict[str, Any]]:
         """Return firmware revisions per subsystem (empty if none reported)."""
         return self._firmware
+
+    @property
+    def linked_unit_stats(self) -> dict[str, Any] | None:
+        """Return what the last STREAM per-unit block held, or None if unseen.
+
+        For diagnostics. Carries counts only, never a serial.
+        """
+        return None if self._unit_power_stats is None else dict(self._unit_power_stats)
 
     @property
     def energy_state(self) -> dict[str, tuple[float, float, float]]:

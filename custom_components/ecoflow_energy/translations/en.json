@@ -451,6 +451,9 @@
       "soc_precise_pct": {
         "name": "Battery SOC (Precise)"
       },
+      "unit_batt_w": {
+        "name": "Unit Battery Power"
+      },
       "ac_voltage_v": {
         "name": "AC Voltage"
       },

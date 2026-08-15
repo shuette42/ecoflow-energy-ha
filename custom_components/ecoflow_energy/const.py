@@ -886,10 +886,13 @@ STREAM_SENSORS: list[EcoFlowSensorDef] = [
 STREAMAC5000_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("soc_pct", "Battery SOC", "%", "battery", "measurement", "mdi:battery", suggested_display_precision=0),
     EcoFlowSensorDef("soc_precise_pct", "Battery SOC (Precise)", "%", None, "measurement", "mdi:battery-sync", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
-    # The BMS pack reading, about two points above the system SoC above. Keyed
-    # apart from the Delta family's `bms_precise_soc`, which is the same
-    # reading under a key that predates the `_pct` convention every other
-    # percentage here follows.
+    # The BMS pack reading, slightly above the one above it. Both are this
+    # unit's own reading rather than the system figure `soc_pct` carries: on a
+    # two-unit installation they read 65.4 and 87.2 against a system 76, so
+    # the earlier note here that this one sits "about two points above the
+    # system SoC" described a single-unit coincidence. Keyed apart from the
+    # Delta family's `bms_precise_soc`, which is the same reading under a key
+    # that predates the `_pct` convention every other percentage here follows.
     EcoFlowSensorDef("bms_soc_precise_pct", "BMS SoC", "%", None, "measurement", "mdi:battery-heart-outline", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
     EcoFlowSensorDef("bms_soh_pct", "Battery SoH", "%", None, "measurement", "mdi:battery-heart-variant", suggested_display_precision=0),
     # --- battery power ---
@@ -897,6 +900,11 @@ STREAMAC5000_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("batt_charge_power_w", "Battery Charge Power", "W", "power", "measurement", "mdi:battery-charging", suggested_display_precision=0),
     EcoFlowSensorDef("batt_discharge_power_w", "Battery Discharge Power", "W", "power", "measurement", "mdi:battery", suggested_display_precision=0),
     EcoFlowSensorDef("batt_charge_discharge_state", "Battery Charge/Discharge State", None, "enum", None, "mdi:battery-sync", "diagnostic", disabled_by_default=True, options=["standby", "discharging", "charging"]),
+    # This unit's own share of the battery power above, which is a system
+    # figure whenever units are linked. Off by default for the same reason
+    # `soc_precise_pct` is: on a single-unit installation, the one the vast
+    # majority of owners have, it repeats the system reading exactly.
+    EcoFlowSensorDef("unit_batt_w", "Unit Battery Power", "W", "power", "measurement", "mdi:battery-outline", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     # --- power flow ---
     EcoFlowSensorDef("home_w", "Home Power", "W", "power", "measurement", "mdi:home-lightning-bolt", suggested_display_precision=0),
     # Signed: positive draws from the grid, negative feeds into it. Present

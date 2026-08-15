@@ -451,6 +451,9 @@
       "soc_precise_pct": {
         "name": "Batterie Ladezustand (präzise)"
       },
+      "unit_batt_w": {
+        "name": "Batterieleistung dieser Einheit"
+      },
       "ac_voltage_v": {
         "name": "AC-Spannung"
       },

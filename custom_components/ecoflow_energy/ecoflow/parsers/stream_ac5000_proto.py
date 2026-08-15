@@ -58,6 +58,19 @@ _TYPE_FLOAT = "float"
 _TYPE_PACKED = "packed"
 _FLOAT_ZERO_EPS = 1e-6
 
+# The telemetry command that carries the per-unit block below.
+_CMD_TELEMETRY = (254, 39)
+# `f54` holds one `.1` entry per linked unit: `.1` the unit serial, `.2` its
+# state of charge in percent, `.4` its battery power in half-watts.
+_UNIT_BLOCK_FIELD = 54
+_UNIT_ENTRY_FIELD = 1
+_UNIT_SERIAL_FIELD = 1
+_UNIT_POWER_FIELD = 4
+_UNIT_POWER_SCALE = 0.5
+# Key the coordinator consumes and removes: the serial decides which unit a
+# reading belongs to, and only the coordinator knows which serial it is.
+UNIT_POWER_BY_SN_KEY = "_unit_batt_w_by_sn"
+
 # f11 node totals arrive in half-watt units.
 _HALF_WATT = 0.5
 
@@ -553,6 +566,67 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def _iter_fields(payload: bytes) -> list[tuple[int, int, bytes]]:
+    """Return one entry per top-level field: (number, wire type, raw bytes).
+
+    Repeats are kept. `_walk` cannot be used for the per-unit block because
+    it writes each declared path into one dict key, so a repeated block
+    would leave only whichever entry came last.
+    """
+    fields: list[tuple[int, int, bytes]] = []
+    mv = memoryview(payload)
+    pos = 0
+    while pos < len(mv):
+        tag, pos = _read_varint(mv, pos)
+        wire_type = tag & 0x07
+        raw, pos = _read_field(mv, pos, wire_type)
+        fields.append((tag >> 3, wire_type, raw))
+    return fields
+
+
+def _read_unit_entries(payload: bytes) -> dict[str, float]:
+    """Return battery power in watts per unit serial, from the `f54` block.
+
+    Linked STREAM units report one entry per unit here, each stamped with
+    that unit's serial. On a single-unit installation the block holds one
+    entry whose value is the system reading, which is what all three ES22
+    captures from single-unit accounts show.
+
+    `f54.1.4` is in half-watts, the same scale as the system field `11.4`,
+    and the two agree: across the six frames of the two-unit capture the
+    entries sum to that field within 34 W, and the `f54.1.2` states of
+    charge average to `11.5` exactly. `f50.1` mirrors both as floats and is
+    not read here, for the reason the field map already gives - that block
+    stops being sent when a unit idles and latches at its last active
+    value, while `f54` was observed going to 0 and staying there.
+
+    An entry is taken only when it carries both a serial-shaped string and
+    a power value. A frame that omits the power leaves the previous reading
+    standing, which is how every incremental field in this container works.
+    """
+    entries: dict[str, float] = {}
+    for number, wire_type, raw in _iter_fields(payload):
+        if number != _UNIT_BLOCK_FIELD or wire_type != 2:
+            continue
+        for entry_num, entry_wire, entry_raw in _iter_fields(raw):
+            if entry_num != _UNIT_ENTRY_FIELD or entry_wire != 2:
+                continue
+            serial: str | None = None
+            power: int | None = None
+            for num, wire, value in _iter_fields(entry_raw):
+                if num == _UNIT_SERIAL_FIELD and wire == 2:
+                    text = value.decode("ascii", "ignore")
+                    if len(text) == len(value) and text.isalnum() and text.isupper():
+                        serial = text
+                elif num == _UNIT_POWER_FIELD and wire == 0:
+                    decoded = _decode_scalar(0, value, _TYPE_INT)
+                    if isinstance(decoded, int):
+                        power = decoded
+            if serial and power is not None:
+                entries[serial] = float(power) * _UNIT_POWER_SCALE
+    return entries
+
+
 def _pdata_candidates(header: dict[str, Any]) -> list[bytes]:
     """Return the payload bytes to try for one header, most likely first.
 
@@ -612,6 +686,10 @@ def parse_stream_ac5000_message(payload: bytes) -> dict[str, Any] | None:
                 for parent, child, marker in _EMPTY_GROUP_CLEARS.get(cmd_key, ()):
                     if parent in seen_groups and child not in seen_groups:
                         decoded[marker] = True
+                if cmd_key == _CMD_TELEMETRY:
+                    unit_entries = _read_unit_entries(pdata)
+                    if unit_entries:
+                        decoded[UNIT_POWER_BY_SN_KEY] = unit_entries
                 merged.update(decoded)
                 break
             # A decode error is contained to the message that caused it: the

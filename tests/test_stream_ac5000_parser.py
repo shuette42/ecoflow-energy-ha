@@ -625,3 +625,138 @@ class TestCaptureReplay:
                 runs = [m for m in re.findall(rb"[A-Z0-9]{15,}", raw) if set(m) != {ord("X")}]
                 assert not runs, f"{path.name}: {runs}"
                 assert "{sn}" in frame["topic"]
+
+
+TWO_UNITS = FIXTURES / "es22_two_units_masked.json"
+
+
+def _node_half_watts(pdata: bytes) -> int | None:
+    """Read `f11.4`, the battery node total in half-watts, straight off a payload.
+
+    The parser deliberately leaves this field unmapped, so the test reads it
+    itself rather than comparing against a value derived from other fields.
+    """
+    from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import _iter_fields
+
+    for number, wire_type, raw in _iter_fields(pdata):
+        if number != 11 or wire_type != 2:
+            continue
+        for num, wire, value in _iter_fields(raw):
+            if num == 4 and wire == 0:
+                total = shift = 0
+                for byte in value:
+                    total |= (byte & 0x7F) << shift
+                    shift += 7
+                return total
+    return None
+
+
+def _unit_entry(serial: bytes, *, soc: int, half_watts: int) -> bytes:
+    """Build one `f54.1` entry: serial, state of charge, power in half-watts."""
+    return _sub(
+        1,
+        encode_field_bytes(1, serial)
+        + encode_field_varint(2, soc)
+        + encode_field_varint(4, half_watts),
+    )
+
+
+class TestLinkedUnitBlock:
+    """`f54` carries one entry per linked unit, each stamped with its serial."""
+
+    def test_two_entries_survive_each_other(self) -> None:
+        """The block repeats, so a walker that keys by path would keep one."""
+        block = _sub(
+            54,
+            _unit_entry(b"ES22TESTUNITAAAA", soc=87, half_watts=0)
+            + _unit_entry(b"ES22TESTUNITBBBB", soc=65, half_watts=1378),
+        )
+        result = parse_stream_ac5000_message(_build_frame(254, 39, bytes(block)))
+        assert result is not None
+        assert result["_unit_batt_w_by_sn"] == {
+            "ES22TESTUNITAAAA": 0.0,
+            "ES22TESTUNITBBBB": 689.0,
+        }
+
+    def test_single_unit_installation_reports_one_entry(self) -> None:
+        block = _sub(54, _unit_entry(b"ES22TESTUNITAAAA", soc=76, half_watts=1356))
+        result = parse_stream_ac5000_message(_build_frame(254, 39, bytes(block)))
+        assert result is not None
+        assert result["_unit_batt_w_by_sn"] == {"ES22TESTUNITAAAA": 678.0}
+
+    def test_entry_without_a_power_value_is_not_reported(self) -> None:
+        """An absent field means unchanged here, so it must not read as zero."""
+        entry = _sub(1, encode_field_bytes(1, b"ES22TESTUNITAAAA") + encode_field_varint(2, 87))
+        result = parse_stream_ac5000_message(_build_frame(254, 39, bytes(_sub(54, entry))))
+        assert result is None or "_unit_batt_w_by_sn" not in result
+
+    def test_entry_without_a_serial_is_not_reported(self) -> None:
+        entry = _sub(1, encode_field_varint(2, 87) + encode_field_varint(4, 1378))
+        result = parse_stream_ac5000_message(_build_frame(254, 39, bytes(_sub(54, entry))))
+        assert result is None or "_unit_batt_w_by_sn" not in result
+
+    def test_absent_block_produces_no_key(self) -> None:
+        result = parse_stream_ac5000_message(
+            _build_frame(254, 39, bytes(_edges(from_grid=100.0)))
+        )
+        assert result is not None
+        assert "_unit_batt_w_by_sn" not in result
+
+    def test_real_two_unit_payloads_split_into_two_units(self) -> None:
+        """The reporter's own frames, with the two masked serials made distinct.
+
+        The last frame is the one his app screenshot pins down: 0 W on the unit
+        reading 87 percent and 689 W on the one reading 65 percent.
+        """
+        from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import _read_unit_entries
+
+        fixture = json.loads(TWO_UNITS.read_text(encoding="utf-8"))
+        unit_a, unit_b = fixture["unit_a"], fixture["unit_b"]
+        seen = []
+        for frame in fixture["frames"]:
+            entries = _read_unit_entries(bytes.fromhex(frame["pdata_hex"]))
+            assert set(entries) == {unit_a, unit_b}, frame["ts"]
+            seen.append(entries)
+        assert len(seen) == 6
+        assert seen[-1] == {unit_a: 0.0, unit_b: 689.0}
+
+    def test_real_payload_entries_sum_to_the_system_reading(self) -> None:
+        """Per-unit and system battery power come from different fields.
+
+        They are only the same quantity if they agree, so this checks the sum
+        on every frame of the capture rather than trusting the one moment the
+        app screenshot covers.
+
+        The target is the node field `f11.4`, which shares both the scale and
+        the derivation with the entries. The parser's own `batt_w` is not
+        comparable at this precision: it is derived from the `f12` flow edges
+        instead, and on this capture the two disagree by up to 54 W within a
+        single frame.
+        """
+        from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import _read_unit_entries
+
+        checked = 0
+        fixture = json.loads(TWO_UNITS.read_text(encoding="utf-8"))
+        for frame in fixture["frames"]:
+            pdata = bytes.fromhex(frame["pdata_hex"])
+            system = _node_half_watts(pdata)
+            if system is None:
+                continue
+            total = sum(_read_unit_entries(pdata).values())
+            assert abs(total - system / 2) <= 35, f"{frame['ts']}: {total} vs {system / 2}"
+            checked += 1
+        assert checked == 6
+
+    def test_fixture_carries_no_real_identifier(self) -> None:
+        import re
+
+        fixture = json.loads(TWO_UNITS.read_text(encoding="utf-8"))
+        allowed = {fixture["unit_a"].encode(), fixture["unit_b"].encode()}
+        for frame in fixture["frames"]:
+            raw = bytes.fromhex(frame["pdata_hex"])
+            runs = [
+                run
+                for run in re.findall(rb"[A-Z0-9]{15,}", raw)
+                if set(run) != {ord("X")} and run not in allowed
+            ]
+            assert not runs, runs
