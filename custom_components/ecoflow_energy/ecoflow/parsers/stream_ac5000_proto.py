@@ -687,7 +687,12 @@ def parse_stream_ac5000_message(payload: bytes) -> dict[str, Any] | None:
                     if parent in seen_groups and child not in seen_groups:
                         decoded[marker] = True
                 if cmd_key == _CMD_TELEMETRY:
-                    unit_entries = _read_unit_entries(pdata)
+                    try:
+                        unit_entries = _read_unit_entries(pdata)
+                    except (IndexError, ValueError):
+                        # A malformed per-unit block costs its own reading,
+                        # never the telemetry that already decoded cleanly.
+                        unit_entries = {}
                     if unit_entries:
                         decoded[UNIT_POWER_BY_SN_KEY] = unit_entries
                 merged.update(decoded)

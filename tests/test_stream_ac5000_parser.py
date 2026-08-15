@@ -702,6 +702,14 @@ class TestLinkedUnitBlock:
         assert result is not None
         assert "_unit_batt_w_by_sn" not in result
 
+    def test_malformed_block_does_not_discard_the_decoded_telemetry(self) -> None:
+        """A broken per-unit block costs its own reading and nothing else."""
+        entry = _sub(1, b"\x2b")  # field 5, wire type 3 - not decodable
+        payload = bytes(_edges(from_grid=100.0)) + bytes(_sub(54, entry))
+        result = parse_stream_ac5000_message(_build_frame(254, 39, payload))
+        assert result is not None
+        assert "_unit_batt_w_by_sn" not in result
+
     def test_real_two_unit_payloads_split_into_two_units(self) -> None:
         """The reporter's own frames, with the two masked serials made distinct.
 
