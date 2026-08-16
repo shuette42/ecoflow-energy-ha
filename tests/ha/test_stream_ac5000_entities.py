@@ -226,6 +226,21 @@ class TestStreamAC5000Definitions:
         assert len(STREAMAC5000_SENSORS) == 56
         assert len(STREAMAC5000_POWER_TO_ENERGY) == 5
 
+    def test_the_pv_strings_wait_for_a_non_zero_reading(self) -> None:
+        """The `f50.1` group arrives on every unit of the family, PV or not.
+
+        The parser fills all five to 0 W whenever it does, which is what
+        stops them latching overnight. Gating on the key alone would then
+        create five entities on every ES22.
+        """
+        pv_keys = {"pv_total_w", "pv1_w", "pv2_w", "pv3_w", "pv4_w"}
+        found = {d.key for d in STREAMAC5000_SENSORS if d.key in pv_keys}
+        assert found == pv_keys
+        for definition in STREAMAC5000_SENSORS:
+            if definition.key in pv_keys:
+                assert definition.accessory, definition.key
+                assert definition.accessory_needs_nonzero, definition.key
+
     def test_exactly_one_battery_device_class(self) -> None:
         battery = [s for s in STREAMAC5000_SENSORS if s.device_class == "battery"]
         assert [s.key for s in battery] == ["soc_pct"]
@@ -277,10 +292,16 @@ class TestStreamAC5000Definitions:
         assert solar.accessory is True
         assert solar.accessory_needs_nonzero is True
 
-    def test_only_solar_needs_a_non_zero_reading(self) -> None:
-        """A meter phase may legitimately sit at zero and must not wait."""
+    def test_only_the_zero_filled_readings_wait_for_a_non_zero_value(self) -> None:
+        """A meter phase may legitimately sit at zero and must not wait.
+
+        The solar and PV keys are the ones the parser zero-fills, so their
+        presence says nothing about whether the hardware is there. Every
+        other accessory key is created as soon as it is reported.
+        """
+        zero_filled = {"solar_w", "pv_total_w", "pv1_w", "pv2_w", "pv3_w", "pv4_w"}
         for definition in STREAMAC5000_SENSORS:
-            if definition.key == "solar_w":
+            if definition.key in zero_filled:
                 continue
             assert definition.accessory_needs_nonzero is False, definition.key
 

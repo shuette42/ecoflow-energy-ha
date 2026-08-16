@@ -20,6 +20,7 @@ from ecoflow_energy.ecoflow.proto_encoding import (
 FIXTURES = Path(__file__).parent / "fixtures" / "stream_ac5000"
 GET_REPLY = FIXTURES / "es22_get_reply_masked.json"
 PUSHES = FIXTURES / "es22_push_capture_masked.json"
+ES21_PV = FIXTURES / "es21_pv_masked.json"
 
 
 def _encode_fixed32_field(field_number: int, value: float) -> bytes:
@@ -768,3 +769,85 @@ class TestLinkedUnitBlock:
                 if set(run) != {ord("X")} and run not in allowed
             ]
             assert not runs, runs
+
+
+class TestPvStrings:
+    """The MPPT block on `254/39 f50.1`, against the ES21 owner's capture.
+
+    The reporter downloaded the diagnostics moments after noting his app:
+    strings 1 to 4 at 0, 34, 50 and 102 W, third-party solar 80 W, app solar
+    total 265 W. See `docs/captures/es21-20260816T072152.json`.
+    """
+
+    @staticmethod
+    def _at(stamp: str) -> dict:
+        """The parsed frame whose ISO timestamp starts with ``stamp``."""
+        for frame in _load(ES21_PV):
+            if frame["ts_iso"].startswith(stamp):
+                parsed = parse_stream_ac5000_message(bytes.fromhex(frame["hex"]))
+                if parsed:
+                    return parsed
+        raise AssertionError(f"no parsed frame at {stamp}")
+
+    def test_no_identifier_survived_masking(self) -> None:
+        """The fixture ships in a public repo, so it carries no real device."""
+        blob = ES21_PV.read_text(encoding="utf-8").lower()
+        assert "2cbcbba60c94" not in blob
+
+    def test_the_strings_match_the_app_reading(self) -> None:
+        """The frame closest before the moment he read his app."""
+        parsed = self._at("2026-08-16T07:21:30")
+        assert parsed["pv_total_w"] == pytest.approx(195.91, abs=0.01)
+        assert parsed["pv2_w"] == pytest.approx(36.57, abs=0.01)
+        assert parsed["pv3_w"] == pytest.approx(55.32, abs=0.01)
+        assert parsed["pv4_w"] == pytest.approx(104.02, abs=0.01)
+        # String 1 was idle throughout the capture and the app showed 0 W.
+        # The field is absent, and the fill is what turns that into a reading.
+        assert parsed["pv1_w"] == 0.0
+        # The third-party figure is a different quantity, not the total.
+        assert parsed["solar_w"] == pytest.approx(81.0)
+
+    def test_the_total_equals_the_sum_of_the_strings(self) -> None:
+        """The identity the block has to preserve, on every real frame."""
+        checked = 0
+        for frame in _load(ES21_PV):
+            parsed = parse_stream_ac5000_message(bytes.fromhex(frame["hex"])) or {}
+            total = parsed.get("pv_total_w")
+            if total is None or total == 0.0:
+                continue
+            strings = sum(parsed[f"pv{n}_w"] for n in (1, 2, 3, 4))
+            assert strings == pytest.approx(total, abs=0.01), frame["ts_iso"]
+            checked += 1
+        assert checked >= 7
+
+    def test_the_strings_fall_to_zero_instead_of_latching(self) -> None:
+        """After sunset the block arrives without the total or any string.
+
+        Keyed on the total rather than on the group, the fill would leave all
+        five holding their last daylight reading until sunrise. Both frames
+        here carry `f50.1`, one a full get-all and one a delta.
+        """
+        daylight = self._at("2026-08-15T07:34:19")
+        assert daylight["pv_total_w"] == pytest.approx(310.96, abs=0.01)
+
+        for stamp in ("2026-08-15T22:15:26", "2026-08-16T00:27:49"):
+            night = self._at(stamp)
+            for key in ("pv_total_w", "pv1_w", "pv2_w", "pv3_w", "pv4_w"):
+                assert night[key] == 0.0, (stamp, key)
+
+    def test_a_unit_without_pv_never_reports_a_string(self) -> None:
+        """The gate rests on a non-zero reading, so a zero may not be one.
+
+        The ES22 these captures come from has no PV wired to it and still
+        sends `f50.1`, which is why the fill hands it five zeros. If any of
+        them ever read non-zero, five entities would appear on every unit of
+        the family.
+        """
+        seen = 0
+        for frame in _load(PUSHES) + _load(GET_REPLY):
+            parsed = parse_stream_ac5000_message(bytes.fromhex(frame["hex"])) or {}
+            for key in ("pv_total_w", "pv1_w", "pv2_w", "pv3_w", "pv4_w"):
+                if key in parsed:
+                    assert parsed[key] == 0.0, (frame["ts_iso"], key)
+                    seen += 1
+        assert seen >= 5

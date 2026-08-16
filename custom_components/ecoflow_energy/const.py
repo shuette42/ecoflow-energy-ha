@@ -923,19 +923,20 @@ STREAMAC5000_SENSORS: list[EcoFlowSensorDef] = [
     # than replacing it - that one is the device's own inference from the
     # house flows, these are the MPPT reading.
     #
-    # Accessory-gated, because only a unit with PV wired to the EcoFlow
-    # reports the block at all. Unlike the BK series all four strings are
-    # enabled and none of them waits for a non-zero value: there the
-    # definitions exist on every unit, so strings 3 and 4 are hidden to keep
-    # them off units that have two. Here the gate already does that, and
-    # stacking either flag on top would hide a string the device is actively
-    # reporting - a string sitting at 0 is the device saying it is unwired or
-    # idle, which is worth showing.
-    EcoFlowSensorDef("pv_total_w", "PV Total Power", "W", "power", "measurement", "mdi:solar-power", suggested_display_precision=0, accessory=True),
-    EcoFlowSensorDef("pv1_w", "PV 1 Power", "W", "power", "measurement", "mdi:solar-power-variant", suggested_display_precision=0, accessory=True),
-    EcoFlowSensorDef("pv2_w", "PV 2 Power", "W", "power", "measurement", "mdi:solar-power-variant", suggested_display_precision=0, accessory=True),
-    EcoFlowSensorDef("pv3_w", "PV 3 Power", "W", "power", "measurement", "mdi:solar-power-variant", suggested_display_precision=0, accessory=True),
-    EcoFlowSensorDef("pv4_w", "PV 4 Power", "W", "power", "measurement", "mdi:solar-power-variant", suggested_display_precision=0, accessory=True),
+    # Accessory-gated on a non-zero reading, not on the key appearing. The
+    # `f50.1` group arrives on every unit of this family, and the parser fills
+    # all five to 0 W whenever it does, which is what stops them latching
+    # overnight - so the key alone says nothing about whether there is PV. A
+    # string that has produced once keeps its entity and reads 0 W at night;
+    # a string that never produces never becomes an entity, which is the same
+    # side the BK series takes by hiding its strings 3 and 4 by default. All
+    # four are enabled here rather than hidden, because on this family the
+    # gate has already established the string is real.
+    EcoFlowSensorDef("pv_total_w", "PV Total Power", "W", "power", "measurement", "mdi:solar-power", suggested_display_precision=0, accessory=True, accessory_needs_nonzero=True),
+    EcoFlowSensorDef("pv1_w", "PV 1 Power", "W", "power", "measurement", "mdi:solar-power-variant", suggested_display_precision=0, accessory=True, accessory_needs_nonzero=True),
+    EcoFlowSensorDef("pv2_w", "PV 2 Power", "W", "power", "measurement", "mdi:solar-power-variant", suggested_display_precision=0, accessory=True, accessory_needs_nonzero=True),
+    EcoFlowSensorDef("pv3_w", "PV 3 Power", "W", "power", "measurement", "mdi:solar-power-variant", suggested_display_precision=0, accessory=True, accessory_needs_nonzero=True),
+    EcoFlowSensorDef("pv4_w", "PV 4 Power", "W", "power", "measurement", "mdi:solar-power-variant", suggested_display_precision=0, accessory=True, accessory_needs_nonzero=True),
     # --- smart meter, EcoFlow P1 variant only ---
     # A Tibber Pulse reports a single total, so these stay absent there.
     EcoFlowSensorDef("grid_phase_a_active_power_w", "Grid Phase A Power", "W", "power", "measurement", "mdi:transmission-tower", "diagnostic", suggested_display_precision=0, disabled_by_default=True, accessory=True),

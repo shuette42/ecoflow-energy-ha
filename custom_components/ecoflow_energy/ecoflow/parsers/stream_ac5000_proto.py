@@ -125,38 +125,41 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
         "16.15": ("ac_frequency_hz", _TYPE_FLOAT, 1),
         "16.16": ("_meter_net_w", _TYPE_FLOAT, 1),
         # --- PV strings, direct MPPT reading (`f50.1`) ---
-        # Separate from `solar_w` (`f11.9`) and deliberately left beside it
-        # rather than merged into it: that one is the figure the device works
-        # out from the house flows and reports even with no PV wired to it,
-        # these come off the MPPT itself. Key and display names follow the BK
-        # series (Stream Ultra / Ultra X): `pvN_w` / "PV N Power".
+        # A different quantity from `solar_w` (`f11.9`), not a second source
+        # for it: the EcoFlow app shows the unit's own strings and a separate
+        # third-party figure side by side and adds them for its solar total.
+        # In the 07:21:30 frame of the ES21 capture the strings total 195.91 W
+        # while `f11.9` reads 81, against an app showing 34, 50 and 102 for
+        # the strings and 80 for the third-party figure, totalling 265. Key
+        # and display names follow the BK series (Stream Ultra / Ultra X):
+        # `pvN_w` / "PV N Power".
         #
-        # Confirmed on ES21 diagnostics captures (issue #231): `.3` equals the
-        # sum of `.9` through `.12` to the last decimal on every settled
-        # frame (54.62 + 78.92 + 364.24 + 369.71 = 867.49), across fourteen
-        # frames from four captures on separate days, totals 332 W to 868 W.
-        # All four string positions are checked against what the EcoFlow app
-        # showed at the same moment: 55, 79, 365 and 365 W against 54.62,
-        # 78.92, 364.24 and 369.71.
+        # From the ES21 capture on issue #231, stored as
+        # `docs/captures/es21-20260816T072152.json`. `.3` equals the sum of
+        # `.9` through `.12` exactly in all 7 of its frames that carry `.3`,
+        # totals 28.52 W to 310.96 W. The reporter noted his app at the end of
+        # that capture and the two frames either side of the moment bracket
+        # every value he read: strings 2, 3 and 4 at 36.57 / 55.32 / 104.02
+        # and at 27.39 / 49.02 / 98.07 against 34 / 50 / 102 in the app.
         #
-        # `.9` is the one that took a second capture. It is absent from every
-        # frame of the first, where the sum of `.10` through `.12` alone
-        # already equalled `.3` exactly - that unit's string 1 was producing
-        # nothing - and it appears carrying 41 W and then 55 W once that
-        # string wakes up, with the four-way sum still exact. That is also
-        # the evidence for the fill below: a string producing nothing is
-        # omitted rather than sent as a zero.
+        # `.9` is not confirmed by a reading of its own. It is absent from
+        # every frame of that capture, where `.10` through `.12` alone already
+        # equal `.3` exactly, and the app showed string 1 at 0 W throughout.
+        # Its position is read from the order of the fields and nothing more,
+        # which is why it is stated here rather than left implied.
         #
         # `.1` is the device serial; `.2`, `.4`, `.5`, `.6` and `.7` are
-        # unmapped: `.4` runs above the total and `.6`/`.7` are negative.
+        # unmapped. `.4` is worth a note: it equals `.3` minus `.7` in all 6
+        # frames that carry it, including the 00:27 night frame where it
+        # reads 1999 against `.7` = -1999 with `.3` absent. That is the
+        # arithmetic saying an absent `.3` is zero rather than unknown, which
+        # is what `_ZERO_FILL_PATHS` below acts on. The meaning of `.7` is
+        # still open.
         #
-        # `.3` doubles as the marker for the whole block. Every unit sends
-        # `f50.1`, but only one with PV sends `.3` and the strings: the ES22
-        # captures and the first ES21 frames carry fields 1, 2, 4, 5, 6, 7
-        # and nothing more. That is why the string fill in `_finalize` keys
-        # on `.3` rather than going in `_ZERO_FILL_PATHS`, which keys on the
-        # enclosing group and would invent four 0 W strings on every unit
-        # that has no PV at all.
+        # `f11.3` is the same MPPT total in half-watts (203 / 173 / 34 / 28 /
+        # 308 against 195.91 / 174.48 / 34.24 / 28.52 / 310.96 in the same
+        # frames) and stays unmapped for that reason: two wire fields feeding
+        # one key makes it flap, the way `f38.1` and `f44` do against 32/50.
         "50.1.3": ("pv_total_w", _TYPE_FLOAT, 1),
         "50.1.9": ("pv1_w", _TYPE_FLOAT, 1),
         "50.1.10": ("pv2_w", _TYPE_FLOAT, 1),
@@ -287,11 +290,29 @@ _ZERO_FILL_PATHS: dict[tuple[int, int], tuple[str, ...]] = {
     # `40.1.3` is the task's enabled flag, and disabling a task in the app made
     # it disappear rather than read 0, so its absence inside a present task is
     # what "disabled" looks like on the wire.
-    (254, 39): ("11.9", "12.4", "12.5", "12.6", "12.7", "40.1.3"),
+    (254, 39): (
+        "11.9",
+        "12.4",
+        "12.5",
+        "12.6",
+        "12.7",
+        "40.1.3",
+        # The `f50.1` group arrives on every unit, with or without PV, so
+        # filling on it would hand a PV-less ES22 five keys reading 0 W.
+        # That is what `accessory_needs_nonzero` on all five definitions
+        # is for: the keys exist, the entities do not, until a string has
+        # actually produced. Filling on the group rather than on `.3` is
+        # what closes the night: at 22:15 and again at 00:27 the capture
+        # carries `f50.1` with neither `.3` nor a string in it, in a full
+        # get-all as well as in a delta, so keying the fill on `.3` would
+        # leave all five holding their last daylight reading until dawn.
+        "50.1.3",
+        "50.1.9",
+        "50.1.10",
+        "50.1.11",
+        "50.1.12",
+    ),
 }
-
-# The four PV strings, filled together off the MPPT total in `_finalize`.
-_PV_STRING_KEYS: tuple[str, ...] = ("pv1_w", "pv2_w", "pv3_w", "pv4_w")
 
 # (parent group, the child that carries its content, marker key) per command.
 # A declared group arriving with no bytes is the device stating the collection
@@ -544,18 +565,6 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
     socket_raw = result.pop("_backup_socket_enabled_raw", None)
     if isinstance(socket_raw, int):
         result["backup_socket_enabled"] = bool(socket_raw)
-
-    # A reported PV total means this unit has an MPPT, so every string it did
-    # not mention is producing nothing rather than unknown. That is measured,
-    # not assumed: in the captures where string 1 sits idle the field is
-    # absent and the other three sum to the total exactly, and when it starts
-    # producing the field appears and the four-way sum is still exact.
-    # Without this the idle string would have no key at all, so no entity
-    # would ever be created for it. Keyed on the total rather than on the
-    # enclosing group because every unit sends the group, PV or not.
-    if isinstance(result.get("pv_total_w"), (int, float)):
-        for key in _PV_STRING_KEYS:
-            result.setdefault(key, 0.0)
 
     batt_voltage_mv = result.pop("_batt_voltage_mv", None)
     if isinstance(batt_voltage_mv, (int, float)):

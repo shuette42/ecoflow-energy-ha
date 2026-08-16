@@ -42,11 +42,11 @@ Full list of all entities created for the STREAM AC 5000.
 | Grid Export Power | W | - | enabled | Power fed into the grid, derived from the flow matrix |
 | Home From Battery | W | diagnostic | disabled | House load covered by the battery |
 | Home From Grid | W | diagnostic | disabled | House load covered by the grid |
-| Solar Power | W | - | *accessory* | The solar figure the device derives for itself, which on an installation with separate PV is its inference rather than a measurement of that system. See the note below |
+| Solar Power | W | - | *accessory* | The solar the app reports separately from this unit's own strings, which it shows as a third-party figure and adds to the PV strings for its solar total. On a unit with no PV wired to the EcoFlow this is the whole solar reading. See the note below |
 
 ## Sensors - PV Strings
 
-The MPPT reading, separate from Solar Power above: that one is the figure the device works out from the house flows, these come off the panels. Only a unit with PV wired to the EcoFlow reports them at all. A string reading 0 W is the device saying it is unwired or idle, so it is shown rather than hidden.
+The MPPT reading, and a different quantity from Solar Power above. The EcoFlow app shows the unit's own strings and a separate third-party figure side by side, and adds them for the solar total it displays. Each of these five appears once that string has actually produced something, so a unit with no PV on the EcoFlow gains none of them and a string that is never wired does not become an entity reading zero forever. Once a string has its entity it keeps it, and reads 0 W overnight rather than holding the last daylight value.
 
 | Entity | Unit | Category | Default | Description |
 |:---|:---:|:---:|:---:|:---|
