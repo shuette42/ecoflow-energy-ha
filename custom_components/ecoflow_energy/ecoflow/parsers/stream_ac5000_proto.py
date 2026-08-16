@@ -91,6 +91,20 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
         # house export to a solar node.
         "11.9": ("solar_w", _TYPE_FLOAT, 1),
         # --- flow matrix edges (watts) ---
+        # The MPPT-to-battery edge, and the only `f12` field that belongs
+        # to the string block rather than to the third-party solar node.
+        # It exists only on a unit with PV wired to the EcoFlow: field 2
+        # appears in no `f12` of the four ES22 captures, while `.9` and
+        # `.10` carry the third-party node on both models. On the ES21
+        # capture the battery node closes on it in all 5 frames that have
+        # it, `.2` plus `.9` plus `.7` less `.4` and `.5` against `f11.4`
+        # halved: 203+81+1 = 285 = 570/2, 173+78+1 = 252 = 504/2, and
+        # 308+130 = 438 = 876/2. Left out, a PV owner loses the whole
+        # solar charge from the battery reading: two of those frames read
+        # 34 W and 28 W into the pack and reported 0.
+        # `f12.1` also appears on that unit and stays unmapped: it does
+        # not close any node balance in the frames available.
+        "12.2": ("_mppt_to_batt_w", _TYPE_FLOAT, 1),
         "12.4": ("home_from_batt_w", _TYPE_FLOAT, 1),
         "12.5": ("_batt_to_grid_w", _TYPE_FLOAT, 1),
         "12.6": ("home_from_grid_w", _TYPE_FLOAT, 1),
@@ -292,6 +306,7 @@ _ZERO_FILL_PATHS: dict[tuple[int, int], tuple[str, ...]] = {
     # what "disabled" looks like on the wire.
     (254, 39): (
         "11.9",
+        "12.2",
         "12.4",
         "12.5",
         "12.6",
@@ -586,6 +601,7 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
     # group was seen".
     batt_to_grid = result.pop("_batt_to_grid_w", None)
     grid_to_batt = result.pop("_grid_to_batt_w", None)
+    mppt_to_batt = result.pop("_mppt_to_batt_w", None)
     solar_to_grid = result.pop("_solar_to_grid_w", None)
     solar_to_batt = result.pop("_solar_to_batt_w", None)
     home_from_grid = result.get("home_from_grid_w")
@@ -614,6 +630,10 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
         into = float(grid_to_batt)
         if isinstance(solar_to_batt, (int, float)):
             into += float(solar_to_batt)
+        # `f12.2` is the same edge for the unit's own strings, and it is zero
+        # on a unit that has none, so adding it costs the ES22 nothing.
+        if isinstance(mppt_to_batt, (int, float)):
+            into += float(mppt_to_batt)
         result["batt_w"] = into - (float(home_from_batt) + float(batt_to_grid))
 
     _finalize_task(result)

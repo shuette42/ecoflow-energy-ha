@@ -26,7 +26,7 @@ Full list of all entities created for the STREAM AC 5000.
 | Battery SOC (Precise) | % | diagnostic | disabled | This unit's own state of charge, at higher resolution. On a single unit it tracks Battery SOC above; with units linked the two differ, and the app shows this one under the unit's name |
 | Precise SoC | % | diagnostic | disabled | Pack-level SoC, straight from the BMS, and also this unit's own rather than the system figure. It runs slightly above Battery SOC (Precise) directly above it. The two names are easy to confuse |
 | Battery SoH | % | - | enabled | State of health |
-| Battery Power | W | - | enabled | Signed battery power (positive = charging, negative = discharging). With units linked this is the system figure, the sum across them |
+| Battery Power | W | - | enabled | Signed battery power (positive = charging, negative = discharging), derived from the flows the device reports, including the charge from its own PV strings where it has them. With units linked this is the system figure, the sum across them |
 | Unit Battery Power | W | diagnostic | disabled | This unit's own share of the battery power above. On a single unit it repeats that reading, which is why it is off by default |
 | Battery Charge Power | W | - | enabled | Charging power (always >= 0) |
 | Battery Discharge Power | W | - | enabled | Discharging power (always >= 0) |

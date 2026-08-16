@@ -835,6 +835,37 @@ class TestPvStrings:
             for key in ("pv_total_w", "pv1_w", "pv2_w", "pv3_w", "pv4_w"):
                 assert night[key] == 0.0, (stamp, key)
 
+    def test_battery_power_carries_the_charge_from_the_unit_own_strings(self) -> None:
+        """`f12.2` is the MPPT-to-battery edge and belongs in the sum.
+
+        Each figure here is the battery node total the same frame reports on
+        `f11.4`, halved, which the parser does not read: 570, 504, 68, 56 and
+        876. Without the edge the first two read 82 and 79, and the two dawn
+        frames reported 0 W while the pack was taking 34 W and 28 W of solar.
+        """
+        expected = {
+            "2026-08-15T07:34:19": 438.0,
+            "2026-08-16T06:56:30": 34.0,
+            "2026-08-16T06:58:46": 28.0,
+            "2026-08-16T07:21:30": 285.0,
+            "2026-08-16T07:21:52": 252.0,
+        }
+        seen = {}
+        for frame in _load(ES21_PV):
+            parsed = parse_stream_ac5000_message(bytes.fromhex(frame["hex"])) or {}
+            stamp = frame["ts_iso"][:19]
+            if stamp in expected and "batt_w" in parsed:
+                seen[stamp] = parsed["batt_w"]
+        assert seen.keys() == expected.keys()
+        for stamp, value in expected.items():
+            assert seen[stamp] == pytest.approx(value, abs=0.01), stamp
+
+    def test_the_mppt_edge_is_absent_on_a_unit_without_pv(self) -> None:
+        """The ES22 sends no `f12.2`, so the fill may only ever add zero."""
+        for frame in _load(PUSHES) + _load(GET_REPLY):
+            parsed = parse_stream_ac5000_message(bytes.fromhex(frame["hex"])) or {}
+            assert "_mppt_to_batt_w" not in parsed, frame["ts_iso"]
+
     def test_a_unit_without_pv_never_reports_a_string(self) -> None:
         """The gate rests on a non-zero reading, so a zero may not be one.
 
