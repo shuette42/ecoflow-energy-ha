@@ -138,19 +138,8 @@ class TestReadPath:
         assert 0 <= state["min_discharge_soc_pct"] < state["max_charge_soc_pct"] <= 100
 
 
-class TestNoIdentifiersInTheFixture:
-    """The fixture ships in a public repo and carries a real device's bytes."""
-
-    def test_no_identifier_survived_masking(self) -> None:
-        raw = b"".join(bytes.fromhex(f["hex"]) for f in _frames())
-        text = raw.decode("latin1")
-        # Three separate shapes, because one regex per shape is what the
-        # older guard got wrong: its [A-Z0-9]{15,} could never match a
-        # lowercase dashed UUID it was believed to cover.
-        assert not re.search(r"[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}", text)
-        assert not re.search(r"(?:[0-9A-F]{2}[:-]){5}[0-9A-F]{2}", text)
-        for run in re.findall(r"[0-9A-Za-z]{6,}", text):
-            assert set(run) == {"X"}, f"unmasked identifier-shaped run: {run}"
+# The identifier guard for this fixture, and every other one, is in
+# `test_fixture_identifiers.py`.
 
 
 class TestControlsStayOff:

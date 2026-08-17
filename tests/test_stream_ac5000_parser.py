@@ -835,16 +835,11 @@ class TestCaptureReplay:
                 if isinstance(value, (int, float)):
                     assert value >= 0, f"{key} = {value}"
 
-    def test_fixtures_carry_no_identifier(self) -> None:
-        """Guards the fixtures themselves, not the parser."""
-        import re
 
-        for path in (GET_REPLY, PUSHES, TASK_FRAMES):
-            for frame in _load(path):
-                raw = bytes.fromhex(frame["hex"])
-                runs = [m for m in re.findall(rb"[A-Z0-9]{15,}", raw) if set(m) != {ord("X")}]
-                assert not runs, f"{path.name}: {runs}"
-                assert "{sn}" in frame["topic"]
+# The identifier guard lives in `test_fixture_identifiers.py`, one check over
+# the whole fixture tree. It used to sit here with a `[A-Z0-9]{15,}` pattern
+# that could not match a lowercase dashed UUID, and it only covered the three
+# fixtures somebody remembered to list.
 
 
 TWO_UNITS = FIXTURES / "es22_two_units_masked.json"
