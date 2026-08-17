@@ -98,11 +98,14 @@
     "step": {
       "init": {
         "title": "EcoFlow Energy Optionen",
-        "description": "**Standard** - Offizielle EcoFlow IoT API. Von EcoFlow unterstützt. Updates alle 10-30 Sekunden.\n\n**Enhanced** - Community-basierte Echtzeit-Verbindung. Updates alle ~3 Sekunden. Inoffiziell - Nutzung auf eigene Verantwortung.\n\nBeim Wechsel des Modus werden ggf. neue Zugangsdaten benötigt.\n\n**Rohdaten-Aufzeichnung** ist nur sinnvoll, wenn du ein Gerät besitzt, das diese Integration noch nicht unterstützt, und beim Hinzufügen helfen möchtest. Sie öffnet je nicht unterstütztem Gerät eine zusätzliche Verbindung, die nur mithört, zeichnet auf, was das Gerät sendet, und legt es in den Diagnose-Download. An das Gerät wird nie etwas gesendet. Nach 24 Stunden schaltet sie sich selbst ab und kann so nicht versehentlich anbleiben.",
+        "description": "**Standard** - Offizielle EcoFlow IoT API. Von EcoFlow unterstützt. Updates alle 10-30 Sekunden.\n\n**Enhanced** - Community-basierte Echtzeit-Verbindung. Updates alle ~3 Sekunden. Inoffiziell - Nutzung auf eigene Verantwortung.\n\nBeim Wechsel des Modus werden ggf. neue Zugangsdaten benötigt.",
         "data": {
           "mode": "Verbindungsmodus",
           "devices": "Geräte",
-          "raw_capture": "Rohdaten nicht unterstützter Geräte in die Diagnose aufnehmen (endet nach 24 Stunden)"
+          "raw_capture": "24 Stunden lang zusätzliche Diagnosedaten aufzeichnen"
+        },
+        "data_description": {
+          "raw_capture": "Behält mehr der Rohdaten, die deine Geräte senden, und zeichnet jedes Gerät auf, das diese Integration noch nicht unterstützt. Nur sinnvoll, wenn in einem GitHub-Issue danach gefragt wurde, denn die Daten helfen nur zusammen mit einem Diagnose-Download. An deine Geräte wird nie etwas gesendet, und die Aufzeichnung endet nach 24 Stunden von selbst."
         }
       },
       "developer": {

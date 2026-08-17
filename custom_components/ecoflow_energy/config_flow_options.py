@@ -32,6 +32,7 @@ from .const import (
     MODE_STANDARD,
     RAW_CAPTURE_DURATION_S,
     get_device_name,
+    raw_capture_window_open,
 )
 from .ecoflow.enhanced_auth import enhanced_login, get_app_device_list
 from .ecoflow.iot_api import IoTApiClient
@@ -184,7 +185,10 @@ class OptionsFlowMixin:
         }
 
         # Only offered with account login, because that is the only mode the
-        # capture works in. Deliberately the last field: it is a help-us-out
+        # capture works in - it records the protobuf push stream, and Standard
+        # Mode has none. In that mode it always does something: it deepens the
+        # frame buffer of every supported device as well as recording the ones
+        # with no parser. Deliberately the last field: it is a help-us-out
         # switch, not a setting anyone needs.
         if self.config_entry.data.get(CONF_AUTH_METHOD) == AUTH_METHOD_APP:
             schema[
@@ -204,11 +208,11 @@ class OptionsFlowMixin:
         """Return whether the capture is on AND still inside its window.
 
         An expired window must show as off, otherwise the checkbox claims
-        something is running when nothing is.
+        something is running when nothing is. Shares its definition with
+        setup and with the coordinator's buffer depth, so the checkbox cannot
+        drift away from what is actually recording.
         """
-        if not self.config_entry.data.get(CONF_RAW_CAPTURE):
-            return False
-        return time.time() < self.config_entry.data.get(CONF_RAW_CAPTURE_UNTIL, 0)
+        return raw_capture_window_open(self.config_entry.data)
 
     async def async_step_developer(
         self, user_input: dict[str, Any] | None = None

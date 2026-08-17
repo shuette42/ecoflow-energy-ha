@@ -49,6 +49,7 @@ from ..const import (
     POWEROCEAN_POWER_TO_ENERGY,
     RAW_FRAME_LOG_KEYS_MAX,
     RAW_FRAME_LOG_PER_KEY_MAX,
+    RAW_FRAME_PER_KEY_MAX,
     SMARTPLUG_ENERGY_FROM_API,
     SMARTPLUG_POWER_TO_ENERGY,
     STREAM_ENERGY_FROM_API,
@@ -59,6 +60,7 @@ from ..const import (
     UNKNOWN_FIELD_NUMBERS_MAX,
     get_delta_profile,
     get_device_name,
+    raw_capture_window_open,
 )
 from ..ecoflow.energy_integrator import EnergyIntegrator
 from ..ecoflow.frame_capture import TypedFrameBuffer
@@ -272,8 +274,27 @@ class EcoFlowDeviceCoordinator(
         # status report, so a shared buffer answers every download with the
         # last minute of the frequent message and nothing else. A rare
         # command now competes only with itself.
+        #
+        # Two depths, and which one applies is what the volunteer opt-in
+        # decides. The shallow one is what every installation pays for as
+        # long as it is loaded, so it stays at three frames per message type.
+        # The deep one is what somebody asked for, bounded by the same 24 h
+        # window that bounds the probe, and it is the depth the field work on
+        # this hardware was actually done at: the three STREAM AC 5000
+        # captures that produced its parser hold five to eight frames of the
+        # one message type nobody had decoded, where the shallow buffer had
+        # kept three.
+        #
+        # No wiring for the flip. Writing the flag calls async_update_entry,
+        # whose update listener (registered in __init__.py) reloads the entry
+        # and builds a new coordinator, so the depth is read once here and
+        # never has to change underneath a live buffer. Do not add a second
+        # path that resizes one.
         self._raw_frames = TypedFrameBuffer(
-            RAW_FRAME_LOG_KEYS_MAX, RAW_FRAME_LOG_PER_KEY_MAX
+            RAW_FRAME_LOG_KEYS_MAX,
+            RAW_FRAME_PER_KEY_MAX
+            if raw_capture_window_open(entry.data)
+            else RAW_FRAME_LOG_PER_KEY_MAX,
         )
         # TypedFrameBuffer.add() is not atomic the way deque.append() was, and
         # it is called from the Paho thread while diagnostics read it on the

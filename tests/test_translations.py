@@ -427,6 +427,38 @@ class TestLanguageConsistency:
                 f"only in {b}: {all_step_ids[b] - all_step_ids[a]}"
             )
 
+    def test_options_data_and_description_keys_match_across_languages(self):
+        """A field's help text has to exist in every language or in none.
+
+        `data` is already covered by the schema test, which asserts that every
+        schema field has a label. Nothing covered `data_description`, so a
+        help text added in English only would have shipped as a field that
+        explains itself to some users and not to others.
+        """
+        for section in ("data", "data_description"):
+            all_keys: dict[str, dict[str, set[str]]] = {}
+            for lang, path in TRANSLATION_FILES.items():
+                steps = _get_options_steps(_load_translations(path))
+                all_keys[lang] = {
+                    sid: set(content.get(section, {}).keys())
+                    for sid, content in steps.items()
+                    if isinstance(content, dict)
+                }
+
+            langs = list(all_keys.keys())
+            for i in range(len(langs) - 1):
+                a, b = langs[i], langs[i + 1]
+                for step_id in all_keys[a]:
+                    if step_id not in all_keys[b]:
+                        continue  # covered by step_ids_match test
+                    assert all_keys[a][step_id] == all_keys[b][step_id], (
+                        f"Options step '{step_id}' {section} keys differ between "
+                        f"{a} and {b}: only in {a}: "
+                        f"{all_keys[a][step_id] - all_keys[b][step_id]}, "
+                        f"only in {b}: "
+                        f"{all_keys[b][step_id] - all_keys[a][step_id]}"
+                    )
+
     def test_config_data_keys_match_across_languages(self):
         """Each config step's data dict keys should match across languages."""
         all_data: dict[str, dict[str, set[str]]] = {}

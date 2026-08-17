@@ -20,6 +20,8 @@ from custom_components.ecoflow_energy.const import (
     CONF_EMAIL,
     CONF_MODE,
     CONF_PASSWORD,
+    CONF_RAW_CAPTURE,
+    CONF_RAW_CAPTURE_UNTIL,
     CONF_USER_ID,
     CREDENTIAL_MAX_AGE_S,
     DEVICE_TYPE_DELTA,
@@ -38,6 +40,7 @@ from custom_components.ecoflow_energy.const import (
     RAW_FRAME_LOG_KEYS_MAX,
     RAW_FRAME_LOG_PER_KEY_MAX,
     RAW_FRAME_MAX_BYTES,
+    RAW_FRAME_PER_KEY_MAX,
     SMARTPLUG_GET_ALL_KEEPALIVE_S,
     SMARTPLUG_SOFT_UNAVAILABLE_S,
     SMARTPLUG_STALE_THRESHOLD_S,
@@ -7177,6 +7180,132 @@ class TestRawFrameCapture:
         )
 
         assert coordinator.raw_frames == []
+
+
+class TestRawFrameCaptureDepth:
+    """What the volunteer opt-in buys on a device that has a parser.
+
+    The buffer runs on every Enhanced Mode device either way. The option only
+    decides how many frames per message type it keeps, which is the axis the
+    field work on the ES2x family needed: those parsers were built from eight
+    to ten frames of one message type, where the always-on depth keeps three.
+    """
+
+    NOW = 1_800_000_000.0
+
+    def _entry(self, **capture: float | bool) -> MockConfigEntry:
+        return MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_AUTH_METHOD: AUTH_METHOD_APP,
+                CONF_MODE: MODE_ENHANCED,
+                CONF_EMAIL: "test@example.com",
+                CONF_PASSWORD: "test_password",
+                CONF_USER_ID: "user123",
+                CONF_DEVICES: [MOCK_POWEROCEAN_DEVICE],
+                **capture,
+            },
+            unique_id="test@example.com",
+        )
+
+    def _per_key_max(self, hass: HomeAssistant, entry: MockConfigEntry) -> int:
+        entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_POWEROCEAN_DEVICE)
+        return coordinator.raw_frame_capture()[1]["per_key_max"]
+
+    async def test_an_open_window_deepens_the_buffer(
+        self, hass: HomeAssistant
+    ) -> None:
+        """The flag has to reach the buffer, not just the options screen."""
+        entry = self._entry(
+            raw_capture=True, raw_capture_until=self.NOW + 3600
+        )
+
+        with patch(
+            "custom_components.ecoflow_energy.const.time.time",
+            return_value=self.NOW,
+        ):
+            assert self._per_key_max(hass, entry) == RAW_FRAME_PER_KEY_MAX
+
+    async def test_without_the_flag_the_buffer_stays_shallow(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Nobody pays for a deeper download without asking for it."""
+        with patch(
+            "custom_components.ecoflow_energy.const.time.time",
+            return_value=self.NOW,
+        ):
+            assert self._per_key_max(hass, self._entry()) == (
+                RAW_FRAME_LOG_PER_KEY_MAX
+            )
+
+    async def test_an_expired_window_does_not_deepen_the_buffer(
+        self, hass: HomeAssistant
+    ) -> None:
+        """The deadline is what counts, not the boolean beside it.
+
+        A flag left set past its deadline must not keep a deeper buffer alive:
+        the window is what bounds the memory and the download size, so an
+        expired one has to read as off here too.
+        """
+        entry = self._entry(raw_capture=True, raw_capture_until=self.NOW - 1)
+
+        with patch(
+            "custom_components.ecoflow_energy.const.time.time",
+            return_value=self.NOW,
+        ):
+            assert self._per_key_max(hass, entry) == RAW_FRAME_LOG_PER_KEY_MAX
+
+    async def test_the_deeper_buffer_actually_keeps_more_frames(
+        self, hass: HomeAssistant
+    ) -> None:
+        """The depth is not decoration - the extra frames reach the download.
+
+        A supported device's frames come through the coordinator, so this is
+        the same path a diagnostics download reads. Ten frames of one message
+        type arrive; the shallow buffer keeps three of them and the deep one
+        keeps all ten.
+
+        The frames are stamped a second apart, which is what makes this a
+        test of the depth rather than of the thinning policy. Pushed in a
+        tight loop they all carry the same millisecond, land in one sampling
+        slot, and the shallow buffer legitimately keeps two - the first frame
+        and the newest. That is the buffer working as designed and says
+        nothing about the option under test.
+        """
+        payload = b"\x0a\x10" + b"SN".ljust(16, b"0")
+        counts = {}
+        for entry, label in (
+            (self._entry(), "shallow"),
+            (
+                self._entry(raw_capture=True, raw_capture_until=self.NOW + 3600),
+                "deep",
+            ),
+        ):
+            entry.add_to_hass(hass)
+            coordinator = EcoFlowDeviceCoordinator(
+                hass, entry, MOCK_POWEROCEAN_DEVICE
+            )
+            topic = f"/app/device/property/{coordinator.device_sn}"
+            with (
+                patch(
+                    "custom_components.ecoflow_energy.const.time.time",
+                    return_value=self.NOW,
+                ),
+                patch(
+                    "custom_components.ecoflow_energy.ecoflow.frame_capture.time.time",
+                    side_effect=itertools.count(self.NOW, 1.0),
+                ),
+            ):
+                for _ in range(RAW_FRAME_PER_KEY_MAX):
+                    coordinator._on_mqtt_message(topic, payload)
+            counts[label] = len(coordinator.raw_frames)
+
+        assert counts == {
+            "shallow": RAW_FRAME_LOG_PER_KEY_MAX,
+            "deep": RAW_FRAME_PER_KEY_MAX,
+        }
 
 
 # ===========================================================================

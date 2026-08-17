@@ -459,6 +459,8 @@ Since v1.8.3, the integration handles this gracefully: error 1006 is logged once
 
 **Settings > Devices & Services > EcoFlow Energy > 3-dot menu > Download Diagnostics** - connection status, data freshness, no credentials exposed.
 
+In Enhanced Mode the download also carries a sample of the raw messages your devices send, including devices that are already supported - a supported device is not a dead end for improving it. The **Record extra diagnostic data for 24 hours** option in the integration options only makes that sample deeper, so switch it on when an issue asks for it and take the download while it is still running. It stops by itself after 24 hours and never sends anything to your devices.
+
 </details>
 
 ---

@@ -7,7 +7,7 @@ import time
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP
-from homeassistant.core import Event, HomeAssistant
+from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import async_call_later
 
@@ -28,6 +28,7 @@ from .const import (
     MODE_ENHANCED,
     PLATFORMS,
     get_device_type,
+    raw_capture_window_open,
 )
 from .coordinator import EcoFlowDeviceCoordinator
 from .device_probe import (
@@ -51,17 +52,18 @@ async def _async_raw_capture_active(hass: HomeAssistant, entry: ConfigEntry) -> 
     capture left on before a reboot must not get a fresh 24 hours out of it.
     An expired window is switched off here rather than merely ignored, so the
     options screen tells the truth about what is running.
+
+    The check itself is `raw_capture_window_open`; this adds the one side
+    effect that needs the config entry.
     """
+    if raw_capture_window_open(entry.data):
+        return True
     if not entry.data.get(CONF_RAW_CAPTURE):
         return False
 
-    until = entry.data.get(CONF_RAW_CAPTURE_UNTIL, 0)
-    if time.time() < until:
-        return True
-
     _LOGGER.info(
-        "Raw capture window for unsupported devices has expired - switching it "
-        "off. Enable it again in the integration options if more data is needed."
+        "The raw data capture window has expired - switching it off. Enable it "
+        "again in the integration options if more data is needed."
     )
     _async_disable_raw_capture(hass, entry)
     return False
@@ -88,11 +90,14 @@ def _async_schedule_raw_capture_expiry(
     if remaining <= 0:
         return
 
+    # `@callback` is load-bearing, not decoration. Without it Home Assistant
+    # classifies the timer's action as a blocking function and runs it in the
+    # executor, and the config write inside it is not thread-safe - the write
+    # is reported as unsafe and the window never actually closes. It went
+    # unnoticed because no test had ever let the timer fire.
+    @callback
     def _expire(_now) -> None:
-        _LOGGER.info(
-            "Raw capture window for unsupported devices has ended - switching "
-            "it off."
-        )
+        _LOGGER.info("The raw data capture window has ended - switching it off.")
         _async_disable_raw_capture(hass, entry)
 
     entry.async_on_unload(async_call_later(hass, remaining, _expire))
@@ -185,6 +190,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
     _LOGGER.debug(
         "EcoFlow Energy: %d device(s) configured (Enhanced: %d, Standard: %d)",
         len(devices), enhanced_count, standard_count,
+    )
+
+    # Read before the loop, because the coordinators built inside it read the
+    # same window to pick their frame-buffer depth. The check has a side
+    # effect - an expired flag is switched off - and a coordinator created
+    # before that happened would keep a deep buffer for a window that closed.
+    capture_on = (
+        entry.data.get(CONF_AUTH_METHOD) == AUTH_METHOD_APP
+        and await _async_raw_capture_active(hass, entry)
     )
 
     skipped_devices: list[dict[str, str]] = []
@@ -290,14 +304,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
     # the models where the Developer API refuses (error 1006) this is the
     # only route that exists.
     #
+    # Only a skipped device gets a probe. A device with a parser already has a
+    # coordinator on the same stream, so its frames are recorded there - the
+    # opt-in deepens that buffer instead of opening a second session, and a
+    # supported device must never cost one.
+    #
     # Off by default. The capture helps exactly one person - whoever
-    # volunteered to get a device supported - and costs an extra connection
-    # in everyone else's installation, so it is opt-in and expires on its own.
-    if (
-        skipped_devices
-        and entry.data.get(CONF_AUTH_METHOD) == AUTH_METHOD_APP
-        and await _async_raw_capture_active(hass, entry)
-    ):
+    # volunteered - and costs an extra connection plus a larger diagnostics
+    # download, so it is opt-in and expires on its own.
+    if capture_on and skipped_devices:
         probes = await async_start_probes(
             hass,
             skipped_devices,
@@ -324,6 +339,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
                 await probe.async_stop()
 
         entry.async_on_unload(_stop_orphaned_probes)
+
+    # Bound to the window, not to the probes. The deeper frame buffers run on
+    # every configured device, so an account whose devices are all supported
+    # has a capture to end as well - and before this it never reached the
+    # expiry path at all, which left the flag switched on for good and the
+    # options screen showing a capture nothing would stop.
+    if capture_on:
         _async_schedule_raw_capture_expiry(hass, entry)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

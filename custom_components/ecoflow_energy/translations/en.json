@@ -98,11 +98,14 @@
     "step": {
       "init": {
         "title": "EcoFlow Energy Options",
-        "description": "**Standard** - Official EcoFlow IoT API. Supported by EcoFlow. Updates every 10-30 seconds.\n\n**Enhanced** - Community-driven real-time connection. Updates every ~3 seconds. Unofficial - use at your own risk.\n\nSwitching modes may require new credentials.\n\n**Raw data capture** is only useful if you own a device this integration does not support yet and you want to help add it. It opens one extra listen-only connection per unsupported device, records what the device sends, and puts it into the diagnostics download. Nothing is ever sent to the device. It switches itself off after 24 hours, so it cannot stay on by accident.",
+        "description": "**Standard** - Official EcoFlow IoT API. Supported by EcoFlow. Updates every 10-30 seconds.\n\n**Enhanced** - Community-driven real-time connection. Updates every ~3 seconds. Unofficial - use at your own risk.\n\nSwitching modes may require new credentials.",
         "data": {
           "mode": "Connection Mode",
           "devices": "Devices",
-          "raw_capture": "Send raw data of unsupported devices to diagnostics (off after 24 hours)"
+          "raw_capture": "Record extra diagnostic data for 24 hours"
+        },
+        "data_description": {
+          "raw_capture": "Keeps more of the raw messages your devices send, and records any device this integration does not support yet. Only worth switching on if it was asked for in a GitHub issue, since the data is only useful attached to a diagnostics download. Nothing is ever sent to your devices, and the recording stops by itself after 24 hours."
         }
       },
       "developer": {

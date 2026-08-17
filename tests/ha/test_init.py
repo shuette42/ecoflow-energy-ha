@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_fire_time_changed,
+)
 
 from custom_components.ecoflow_energy.const import (
     AUTH_METHOD_APP,
@@ -30,6 +35,7 @@ from custom_components.ecoflow_energy.const import (
     MODE_ENHANCED,
     MODE_STANDARD,
     RAW_CAPTURE_DURATION_S,
+    RAW_FRAME_PER_KEY_MAX,
 )
 
 from .conftest import MOCK_MQTT_CREDENTIALS, MOCK_POWEROCEAN_DEVICE
@@ -1304,3 +1310,216 @@ class TestUnroutedDeviceProbeWiring:
             await hass.async_block_till_done()
 
         mock_start.assert_not_awaited()
+
+
+class TestRawCaptureWithoutASkippedDevice:
+    """The capture also serves an account whose devices are all supported.
+
+    Those devices already have a coordinator on the same push stream, so the
+    opt-in deepens that recording instead of opening a session. Everything
+    here is about an entry with no skipped device at all, which used to leave
+    the whole capture path unreached.
+    """
+
+    def _entry(
+        self, hass: HomeAssistant, *, capture_until: float
+    ) -> MockConfigEntry:
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_AUTH_METHOD: AUTH_METHOD_APP,
+                CONF_MODE: MODE_ENHANCED,
+                CONF_EMAIL: "test@example.com",
+                CONF_PASSWORD: "test_password",
+                CONF_USER_ID: "user123",
+                CONF_DEVICES: [MOCK_POWEROCEAN_DEVICE],
+                CONF_RAW_CAPTURE: True,
+                CONF_RAW_CAPTURE_UNTIL: capture_until,
+            },
+            unique_id="test@example.com",
+        )
+        entry.add_to_hass(hass)
+        return entry
+
+    async def test_a_supported_device_never_gets_a_probe_session(
+        self, hass: HomeAssistant, mock_mqtt_client, mock_enhanced_auth,
+    ) -> None:
+        """Deepening a buffer must never cost an extra connection.
+
+        This is the promise the opt-in makes on a supported device: it keeps
+        more of what the coordinator already receives. A probe would be a
+        second session on the same stream, and the broker refuses a client id
+        it has already seen, so it is not merely wasteful.
+        """
+        entry = self._entry(hass, capture_until=FIXED_NOW + RAW_CAPTURE_DURATION_S)
+
+        with (
+            patch(
+                "custom_components.ecoflow_energy.coordinator."
+                "EcoFlowDeviceCoordinator.async_config_entry_first_refresh",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "custom_components.ecoflow_energy.async_start_probes",
+                new_callable=AsyncMock,
+            ) as mock_start,
+        ):
+            assert await hass.config_entries.async_setup(entry.entry_id) is True
+            await hass.async_block_till_done()
+
+        assert hass.data[DATA_SKIPPED_DEVICES][entry.entry_id] == []
+        mock_start.assert_not_awaited()
+        assert not hass.data.get(DATA_DEVICE_PROBES, {}).get(entry.entry_id)
+
+    async def test_a_probe_covers_only_the_device_with_no_parser(
+        self, hass: HomeAssistant, mock_mqtt_client, mock_enhanced_auth,
+    ) -> None:
+        """The window being open is not what decides that a probe starts.
+
+        This is the pair of the test above and the one that discriminates. An
+        open window now reaches the whole capture path rather than only the
+        probe block, so the two conditions have to stay separate: the depth
+        follows the window, the probe follows the absence of a parser. Widen
+        the probe to the window alone and a supported device gains a second
+        session on a stream it is already reading, which the broker answers by
+        dropping the first one.
+        """
+        unsupported = {
+            "sn": "RE11ZZ1234500001",
+            "name": "Ocean 2",
+            "product_name": "",
+            "device_type": "unknown",
+            "online": 1,
+        }
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_AUTH_METHOD: AUTH_METHOD_APP,
+                CONF_MODE: MODE_ENHANCED,
+                CONF_EMAIL: "test@example.com",
+                CONF_PASSWORD: "test_password",
+                CONF_USER_ID: "user123",
+                CONF_DEVICES: [MOCK_POWEROCEAN_DEVICE, unsupported],
+                CONF_RAW_CAPTURE: True,
+                CONF_RAW_CAPTURE_UNTIL: FIXED_NOW + RAW_CAPTURE_DURATION_S,
+            },
+            unique_id="test@example.com",
+        )
+        entry.add_to_hass(hass)
+
+        with (
+            patch(
+                "custom_components.ecoflow_energy.coordinator."
+                "EcoFlowDeviceCoordinator.async_config_entry_first_refresh",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "custom_components.ecoflow_energy.const.time.time",
+                return_value=FIXED_NOW,
+            ),
+            patch(
+                "custom_components.ecoflow_energy.async_start_probes",
+                new_callable=AsyncMock,
+                return_value=[],
+            ) as mock_start,
+        ):
+            assert await hass.config_entries.async_setup(entry.entry_id) is True
+            await hass.async_block_till_done()
+
+        mock_start.assert_awaited_once()
+        probed = [item["sn"] for item in mock_start.await_args.args[1]]
+        assert probed == [unsupported["sn"]]
+
+        # And the supported device took the other route: a coordinator on the
+        # stream it already had, with its buffer deepened rather than a second
+        # connection opened.
+        coordinators = hass.data[DOMAIN][entry.entry_id]
+        assert list(coordinators) == [MOCK_POWEROCEAN_DEVICE["sn"]]
+        assert (
+            coordinators[MOCK_POWEROCEAN_DEVICE["sn"]].raw_frame_capture()[1][
+                "per_key_max"
+            ]
+            == RAW_FRAME_PER_KEY_MAX
+        )
+
+    async def test_the_window_still_ends_on_its_own(
+        self, hass: HomeAssistant, mock_mqtt_client, mock_enhanced_auth,
+    ) -> None:
+        """Otherwise the flag stays on for good on such an account.
+
+        The expiry used to be reached only inside the probe block, so an entry
+        with nothing but supported devices never scheduled it: the checkbox
+        went on reporting a capture that nothing was going to stop.
+        """
+        entry = self._entry(hass, capture_until=FIXED_NOW + 60)
+
+        with (
+            patch(
+                "custom_components.ecoflow_energy.coordinator."
+                "EcoFlowDeviceCoordinator.async_config_entry_first_refresh",
+                new_callable=AsyncMock,
+            ),
+            # Freezes the clock for both readers at once, which is what this
+            # target actually does: the integration imports the stdlib module
+            # rather than the name, so patching it here replaces
+            # ``time.time`` process-wide and the window predicate in
+            # ``const`` sees the same value. Worth stating, because the string
+            # reads as module-scoped and is not - a later narrowing to a
+            # genuinely per-module patch would leave the predicate on the real
+            # clock, and the deadlines in this class sit in the future against
+            # it.
+            patch(
+                "custom_components.ecoflow_energy.time.time",
+                return_value=FIXED_NOW,
+            ),
+        ):
+            assert await hass.config_entries.async_setup(entry.entry_id) is True
+            await hass.async_block_till_done()
+
+        assert entry.data[CONF_RAW_CAPTURE] is True
+
+        with patch(
+            "custom_components.ecoflow_energy.coordinator."
+            "EcoFlowDeviceCoordinator.async_config_entry_first_refresh",
+            new_callable=AsyncMock,
+        ):
+            async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=61))
+            await hass.async_block_till_done()
+
+        assert entry.data[CONF_RAW_CAPTURE] is False
+        assert CONF_RAW_CAPTURE_UNTIL not in entry.data
+
+    async def test_an_expired_window_is_switched_off_at_setup(
+        self, hass: HomeAssistant, mock_mqtt_client, mock_enhanced_auth,
+    ) -> None:
+        """A restart past the deadline has to clear the flag here too.
+
+        The check sat behind the "has a skipped device" condition, so on this
+        entry it was never reached and a flag left set survived every restart.
+        """
+        entry = self._entry(hass, capture_until=FIXED_NOW - 1)
+
+        with (
+            patch(
+                "custom_components.ecoflow_energy.coordinator."
+                "EcoFlowDeviceCoordinator.async_config_entry_first_refresh",
+                new_callable=AsyncMock,
+            ),
+            # Freezes ``time.time`` process-wide, as above: the target names a
+            # module attribute on the stdlib module object, not a per-module
+            # copy. Needed either way, because the deadline here is
+            # ``FIXED_NOW - 1``, which is still in the future against the real
+            # clock - unpatched, this test would read its expired window as
+            # open and fail rather than pass vacuously.
+            patch(
+                "custom_components.ecoflow_energy.const.time.time",
+                return_value=FIXED_NOW,
+            ),
+        ):
+            assert await hass.config_entries.async_setup(entry.entry_id) is True
+            await hass.async_block_till_done()
+
+        assert entry.data[CONF_RAW_CAPTURE] is False
+        assert CONF_RAW_CAPTURE_UNTIL not in entry.data

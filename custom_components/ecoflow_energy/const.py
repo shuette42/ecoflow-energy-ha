@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
@@ -49,14 +50,32 @@ CONF_PASSWORD = "password"
 CONF_USER_ID = "user_id"
 CONF_AUTH_METHOD = "auth_method"
 
-# Raw capture for devices without a parser. Off unless the user turns it on,
-# and it turns itself off again: the capture opens an extra connection that
-# serves nobody except the person who volunteered to help add a device, so it
-# must never become a permanent background load in someone's installation.
+# The volunteer capture. Off unless the user turns it on, and it turns itself
+# off again: it costs an extra listen-only connection per device without a
+# parser, and a deeper frame buffer for every device that has one, so it must
+# never become a permanent background load in someone's installation.
 CONF_RAW_CAPTURE = "raw_capture"
 CONF_RAW_CAPTURE_UNTIL = "raw_capture_until"
 # Wall-clock, not monotonic: the deadline has to survive a restart.
 RAW_CAPTURE_DURATION_S = 24 * 60 * 60
+
+
+def raw_capture_window_open(data: Mapping[str, Any]) -> bool:
+    """Return whether the volunteer capture is on and inside its window.
+
+    One definition for three readers - setup, the options form and the
+    coordinator's buffer depth. The boolean alone is not the answer: a window
+    that has passed its deadline reads as closed here even while the flag is
+    still stored, which is what keeps a stale flag from acting.
+
+    Pure on purpose. Switching an expired flag off is a side effect that
+    belongs to setup, which owns the config entry, not to a predicate three
+    callers share.
+    """
+    if not data.get(CONF_RAW_CAPTURE):
+        return False
+    return time.time() < data.get(CONF_RAW_CAPTURE_UNTIL, 0)
+
 
 # Auth methods
 AUTH_METHOD_DEVELOPER = "developer"

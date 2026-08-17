@@ -14,12 +14,16 @@ from custom_components.ecoflow_energy.const import (
     CONF_ACCESS_KEY,
     CONF_DEVICES,
     CONF_MODE,
+    CONF_RAW_CAPTURE,
+    CONF_RAW_CAPTURE_UNTIL,
     CONF_SECRET_KEY,
     DATA_SKIPPED_DEVICES,
     DOMAIN,
     MODE_STANDARD,
     RAW_FRAME_BUNDLE_MAX_BYTES,
+    RAW_FRAME_LOG_PER_KEY_MAX,
     RAW_FRAME_MAX_BYTES,
+    RAW_FRAME_PER_KEY_MAX,
     UNKNOWN_FIELD_CMDS_MAX,
     UNKNOWN_FIELD_NUMBERS_MAX,
 )
@@ -1147,6 +1151,57 @@ class TestRawFrameDiagnostics:
         # can add a frame in between and the two disagree.
         assert sampling["frames_kept"] == section["count"]
         assert sampling["frames_kept"] == len(section["frames"])
+
+    @pytest.mark.parametrize(
+        ("capture", "expected"),
+        [
+            (False, RAW_FRAME_LOG_PER_KEY_MAX),
+            (True, RAW_FRAME_PER_KEY_MAX),
+        ],
+        ids=["always_on_depth", "volunteer_depth"],
+    )
+    async def test_sampling_names_the_depth_that_produced_the_download(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+        capture: bool,
+        expected: int,
+    ) -> None:
+        """A reader has to be able to tell the two depths apart.
+
+        A supported device records either way, so a short frame list has one
+        more possible cause than before: the opt-in was off. Without this
+        figure in the download nothing distinguishes that from a quiet device.
+        """
+        now = 1_800_000_000.0
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                **enhanced_config_entry.data,
+                CONF_RAW_CAPTURE: capture,
+                CONF_RAW_CAPTURE_UNTIL: now + 3600,
+            },
+            unique_id="depth@example.com",
+        )
+        entry.add_to_hass(hass)
+
+        with patch(
+            "custom_components.ecoflow_energy.const.time.time", return_value=now
+        ):
+            coordinator = EcoFlowDeviceCoordinator(
+                hass, entry, MOCK_POWEROCEAN_DEVICE
+            )
+        coordinator._raw_frames.add("property:proto/96.33", {
+            "ts": 1784973604.0,
+            "topic": "property",
+            "size": 42,
+            "hex": "0a02ffff",
+        })
+
+        section = _device_diagnostics(coordinator)["raw_frames"]
+
+        assert section["sampling"]["per_key_max"] == expected
 
 
 class TestUnroutedDeviceCapture:
