@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any
+from dataclasses import replace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -315,6 +316,55 @@ class TestStreamLedBrightnessSet:
         with pytest.raises(HomeAssistantError):
             await entity.async_set_native_value(10)
 
+        assert coordinator.data["led_brightness"] == 70
+
+    async def test_the_write_goes_out_under_the_device_config_lock(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Every Stream config write shares one lock, this one included.
+
+        The lock is what keeps a grouped write from reading the device state
+        while another write is in flight. A writer outside it is invisible to
+        that queue, so the guard is that the frame is built and sent while the
+        lock is held, not merely that a frame is sent.
+        """
+        entity, coordinator = self._make_entity(hass, enhanced_config_entry)
+        held: list[bool] = []
+
+        async def _record(*_args, **_kwargs):
+            held.append(coordinator._device_config_lock.locked())
+            return True
+
+        coordinator.async_send_proto_set_command = AsyncMock(side_effect=_record)
+
+        await entity.async_set_native_value(10)
+
+        assert held == [True]
+
+    async def test_a_value_the_device_cannot_take_is_reported_as_rejected(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """The builder's range guard must not surface as a raw ValueError.
+
+        Home Assistant filters out-of-bounds service calls before the entity
+        sees them, so this is unreachable from the slider today. It is guarded
+        because the sibling limit controls translate the same failure, and an
+        untranslated one would reach the user as an unhandled exception rather
+        than as a rejected write.
+        """
+        entity, coordinator = self._make_entity(hass, enhanced_config_entry)
+        coordinator.async_send_proto_set_command = AsyncMock(return_value=True)
+        entity._definition = replace(entity._definition, max_value=120)
+
+        with pytest.raises(HomeAssistantError) as err:
+            await entity.async_set_native_value(120)
+
+        assert not isinstance(err.value, ValueError)
+        coordinator.async_send_proto_set_command.assert_not_called()
         assert coordinator.data["led_brightness"] == 70
 
 

@@ -338,6 +338,25 @@ class SetCommandsMixin:
             self._seed_device_values(backup_reserve_pct=reserve_pct)
             return True
 
+    async def async_set_stream_led_brightness(self, brightness_pct: int) -> bool:
+        """Write Stream LED brightness without racing another config write.
+
+        This one reads nothing and seeds nothing: no other write consumes
+        `led_brightness`, and the device reports the live value back on its
+        own. It still takes the lock, so that every Stream config write goes
+        out through one place. An exception here would be the only writer
+        that a future grouped write could not see queued behind it.
+        """
+        from ..ecoflow.energy_stream import build_stream_led_brightness_payload
+
+        async with self._device_config_lock:
+            payload = build_stream_led_brightness_payload(
+                brightness_pct, self.device_sn
+            )
+            return await self.async_send_proto_set_command(
+                payload, label="stream_led_brightness"
+            )
+
     # ------------------------------------------------------------------
     # STREAM AC 5000 config writes (254/38)
     #
