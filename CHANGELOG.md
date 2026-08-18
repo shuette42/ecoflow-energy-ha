@@ -41,6 +41,8 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- On the STREAM AC 5000 and STREAM 5000 (`ES22`/`ES21`), Solar Power is now called Third-Party Solar Power. The reading never was the unit's own solar: the EcoFlow app splits its solar figure into the unit's strings and a separate "Other" row, and this sensor carries the "Other" row. A screenshot from a STREAM 5000 owner shows that row at 80 W while his four strings read 0, 34, 50 and 102 W, and the recorded frames either side of that moment carry 81 and 78 W against a string sum of 196 and 174 W. The app adds its own note there, that third-party solar is not detected accurately and the figure is what remains of the house's solar after home consumption, so it is an inference rather than a measurement. Since the PV String sensors arrived beside it, the old name invited you to reconcile two numbers that were never meant to match. On a unit with no PV wired to the EcoFlow the reading is unchanged and still covers all the solar there is. Only the name and the description change: the entity keeps its identity, so history, dashboards and automations carry on untouched. (Ref #258, #231)
+
 - Log messages write an aside with a plain hyphen instead of a long dash. Purely cosmetic, and noted only because these lines are written into your Home Assistant log rather than kept here. Nothing about what is logged, when, or at which level changes, and no text you see in the interface is affected.
 
 ## [1.16.0] - 2026-08-06

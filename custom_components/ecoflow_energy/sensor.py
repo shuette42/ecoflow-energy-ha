@@ -196,7 +196,10 @@ class EcoFlowSensor(
         super().__init__(coordinator)
         self._definition = definition
         self._attr_unique_id = f"{coordinator.device_sn}_{definition.key}"
-        self._attr_translation_key = definition.key
+        # The key is the identity, the translation key only the label. They are
+        # the same for almost every sensor; a definition sets them apart where
+        # one reading needs a different name on a different device.
+        self._attr_translation_key = definition.translation_key or definition.key
         self._attr_native_unit_of_measurement = definition.unit
         self._attr_icon = definition.icon
         self._restored_value: float | int | str | None = None

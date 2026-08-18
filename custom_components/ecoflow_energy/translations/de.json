@@ -166,6 +166,9 @@
       "solar_w": {
         "name": "Solarleistung"
       },
+      "third_party_solar_w": {
+        "name": "Solarleistung Dritter"
+      },
       "home_w": {
         "name": "Hausverbrauch"
       },

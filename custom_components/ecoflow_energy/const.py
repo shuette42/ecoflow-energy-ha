@@ -309,6 +309,13 @@ class EcoFlowSensorDef:
     suggested_display_precision: int | None = None
     disabled_by_default: bool = False
     options: list[str] | None = None
+    # Display name lookup, where it must differ from the key. The key stays the
+    # entity's identity - it builds the unique_id, so changing it would orphan
+    # every existing entity - while the translation decides only the label. Set
+    # this where one reading means different things on different devices, as
+    # `solar_w` does: the unit's own MPPT power on a PowerOcean, the app's
+    # inferred third-party figure on an ES2x. Defaults to the key.
+    translation_key: str | None = None
     # Optional accessory reading (e.g. the PowerGlow heating rod on a
     # PowerOcean). The base device exists without it, so the entity is only
     # created once the device has actually reported the key. See
@@ -935,7 +942,22 @@ STREAMAC5000_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("home_from_grid_w", "Home From Grid", "W", "power", "measurement", "mdi:home-import-outline", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     # Solar is accessory-gated rather than listed per prefix: whether a unit
     # has PV on the EcoFlow itself is a wiring choice, not a model difference.
-    EcoFlowSensorDef("solar_w", "Solar Power", "W", "power", "measurement", "mdi:solar-power", suggested_display_precision=0, accessory=True, accessory_needs_nonzero=True),
+    #
+    # Labelled as the third-party figure, not as the unit's own solar. The app
+    # splits its solar panel into the unit's own strings and an "Other" row,
+    # and adds the two for the total it shows. In the 08:21 screenshot on
+    # issue #258 that row reads 80 W while the four strings read 0, 34, 50 and
+    # 102, and the two frames either side of that moment carry `f11.9` at 81
+    # and 78 against a string sum of 195.91 and 174.48. The app's own notice
+    # on that row says third-party solar is not accurately detected and that
+    # the figure is what remains after offsetting home consumption, so this is
+    # the device's inference rather than a measurement.
+    #
+    # The name still holds on a unit with no PV wired to the EcoFlow, where
+    # this figure is the whole solar reading: those panels are third-party by
+    # the same definition. The key stays `solar_w` - renaming it would orphan
+    # the entity for everyone who already has it.
+    EcoFlowSensorDef("solar_w", "Third-Party Solar Power", "W", "power", "measurement", "mdi:solar-power", suggested_display_precision=0, translation_key="third_party_solar_w", accessory=True, accessory_needs_nonzero=True),
     # --- PV strings, direct MPPT reading ---
     # Key and display names follow the BK series (Stream Ultra / Ultra X):
     # `pvN_w` / "PV N Power". These sit alongside Solar Power above rather

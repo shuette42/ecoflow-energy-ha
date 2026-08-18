@@ -163,6 +163,56 @@ class TestStreamAC5000EntitySet:
         # Still nothing for the meter variant this unit does not have.
         assert "grid_phase_a_active_power_w" not in keys
 
+    async def test_solar_is_labelled_as_the_third_party_figure(
+        self, hass: HomeAssistant
+    ) -> None:
+        """`solar_w` keeps its identity and is named for what it carries.
+
+        The reading is the app's "Other" row, its own inference from the house
+        flows, not the unit's strings - those are the `pvN_w` sensors beside
+        it. The label has to say so while the key stays put, or every owner
+        loses the entity's history to a rename.
+        """
+        entry = _entry(ES22_DEVICE)
+        entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, ES22_DEVICE)
+        coordinator.async_set_updated_data({"solar_w": 81.0})
+        hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
+            ES22_DEVICE["sn"]: coordinator
+        }
+
+        created: list[Any] = []
+        await sensor_setup(hass, entry, created.extend)
+        solar = next(
+            entity
+            for entity in created
+            if getattr(entity, "_definition", None) is not None
+            and entity._definition.key == "solar_w"
+        )
+
+        assert solar.unique_id == f"{ES22_DEVICE['sn']}_solar_w"
+        assert solar.translation_key == "third_party_solar_w"
+
+        label = json.loads(
+            Path(
+                "custom_components/ecoflow_energy/translations/en.json"
+            ).read_text()
+        )["entity"]["sensor"][solar.translation_key]["name"]
+        assert label == "Third-Party Solar Power"
+
+    async def test_powerocean_solar_keeps_the_plain_label(self) -> None:
+        """The split is local to the ES2x, where the reading is inferred.
+
+        On a PowerOcean the same key carries the unit's own MPPT power, so it
+        must keep the plain name. Without this, a translation_key added to the
+        shared definition list would rename it there too and nothing would
+        catch it.
+        """
+        from custom_components.ecoflow_energy.const import POWEROCEAN_SENSORS
+
+        solar = next(d for d in POWEROCEAN_SENSORS if d.key == "solar_w")
+        assert solar.translation_key is None
+
     async def test_binary_sensor(self, hass: HomeAssistant) -> None:
         keys = await _setup_keys(hass, binary_sensor_setup)
 

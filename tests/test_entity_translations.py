@@ -42,6 +42,27 @@ def _collect(pattern: str) -> dict[str, object]:
     return defs
 
 
+def _labels(pattern: str) -> set[str]:
+    """The names the translation file must carry for definitions matching `pattern`.
+
+    A definition may point its label at a different entry than its key, so
+    that one reading can be named differently on different devices without
+    changing the key that builds its unique_id. Both tests below follow the
+    label rather than the key, or a split definition would read as a missing
+    translation on one side and an orphan entry on the other.
+
+    This walks every list rather than reusing the deduplicated `_collect`
+    output: a key shared by several device types keeps only its first
+    definition there, which is exactly the one that has no split.
+    """
+    labels: set[str] = set()
+    for name in dir(C):
+        if re.fullmatch(pattern, name) and isinstance(getattr(C, name), list):
+            for item in getattr(C, name):
+                labels.add(getattr(item, "translation_key", None) or item.key)
+    return labels
+
+
 SENSOR_DEFS = _collect(r"[A-Z0-9]+_SENSORS")
 BINARY_SENSOR_DEFS = _collect(r"[A-Z0-9]+_BINARY_SENSORS")
 SWITCH_DEFS = _collect(r"[A-Z0-9]+_SWITCHES")
@@ -49,11 +70,11 @@ NUMBER_DEFS = _collect(r"[A-Z0-9]+_NUMBERS")
 SELECT_DEFS = _collect(r"[A-Z0-9]+_SELECTS")
 
 PLATFORM_KEYS = {
-    "sensor": set(SENSOR_DEFS) | DIAGNOSTIC_SENSOR_KEYS,
-    "binary_sensor": set(BINARY_SENSOR_DEFS),
-    "switch": set(SWITCH_DEFS),
-    "number": set(NUMBER_DEFS),
-    "select": set(SELECT_DEFS),
+    "sensor": _labels(r"[A-Z0-9]+_SENSORS") | DIAGNOSTIC_SENSOR_KEYS,
+    "binary_sensor": _labels(r"[A-Z0-9]+_BINARY_SENSORS"),
+    "switch": _labels(r"[A-Z0-9]+_SWITCHES"),
+    "number": _labels(r"[A-Z0-9]+_NUMBERS"),
+    "select": _labels(r"[A-Z0-9]+_SELECTS"),
 }
 
 

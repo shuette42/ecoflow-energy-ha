@@ -139,6 +139,9 @@
       "solar_w": {
         "name": "Solar Power"
       },
+      "third_party_solar_w": {
+        "name": "Third-Party Solar Power"
+      },
       "home_w": {
         "name": "Home Power"
       },
