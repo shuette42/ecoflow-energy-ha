@@ -1574,13 +1574,13 @@
         "name": "AC-Ladegeschwindigkeit"
       },
       "max_charge_soc": {
-        "name": "Max. Ladezustand"
+        "name": "Max. Lade-SoC"
       },
       "stream_charge_limit": {
-        "name": "Ladegrenze"
+        "name": "Max. Lade-SoC"
       },
       "stream_discharge_limit": {
-        "name": "Entladegrenze"
+        "name": "Min. Entlade-SoC"
       },
       "backup_reserve": {
         "name": "Backup-Reserve"
@@ -1610,7 +1610,7 @@
         "name": "Max. Leistungsgrenze"
       },
       "min_discharge_soc": {
-        "name": "Entladegrenze"
+        "name": "Min. Entlade-SoC"
       },
       "ac_charge_power_limit": {
         "name": "AC-Ladeleistung"
@@ -1625,10 +1625,10 @@
         "name": "DC Abschaltgrenze"
       },
       "max_charge_soc_pct": {
-        "name": "Max. Ladestand"
+        "name": "Max. Lade-SoC"
       },
       "min_discharge_soc_pct": {
-        "name": "Min. Entladestand"
+        "name": "Min. Entlade-SoC"
       },
       "scheduled_discharge_power_w": {
         "name": "Geplante Entladeleistung"

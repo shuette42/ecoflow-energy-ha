@@ -1376,6 +1376,34 @@
       },
       "scheduled_charge_soc_target": {
         "name": "Scheduled Charge Target SoC"
+      },
+      "ev_charge_power_w": {
+        "name": "Wallbox Charging Power"
+      },
+      "ev_session_energy_wh": {
+        "name": "Wallbox Session Energy"
+      },
+      "ev_session_duration_s": {
+        "name": "Wallbox Session Duration"
+      },
+      "ev_vehicle_id": {
+        "name": "Wallbox Vehicle"
+      },
+      "ev_charge_status": {
+        "name": "Wallbox Charging Status",
+        "state": {
+          "none": "None",
+          "available": "Available",
+          "preparing": "Preparing",
+          "charging": "Charging",
+          "suspended_charger": "Paused by Charger",
+          "suspended_vehicle": "Paused by Vehicle",
+          "finishing": "Finishing",
+          "faulted": "Fault"
+        }
+      },
+      "unit_batt_w": {
+        "name": "Unit Battery Power"
       }
     },
     "binary_sensor": {
@@ -1465,10 +1493,10 @@
         "name": "Max Charge SoC"
       },
       "stream_charge_limit": {
-        "name": "Charge Limit"
+        "name": "Max Charge SoC"
       },
       "stream_discharge_limit": {
-        "name": "Discharge Limit"
+        "name": "Min Discharge SoC"
       },
       "backup_reserve": {
         "name": "Backup Reserve"

@@ -818,8 +818,8 @@ SMARTPLUG_NUMBERS: list[EcoFlowNumberDef] = [
 ]
 
 STREAM_NUMBERS: list[EcoFlowNumberDef] = [
-    EcoFlowNumberDef("stream_charge_limit", "Charge Limit", "max_charge_soc_pct", "%", "mdi:battery-charging-100", 3, 100, 1, enhanced_only=True),
-    EcoFlowNumberDef("stream_discharge_limit", "Discharge Limit", "min_discharge_soc_pct", "%", "mdi:battery-arrow-down", 0, 95, 1, enhanced_only=True),
+    EcoFlowNumberDef("stream_charge_limit", "Max Charge SoC", "max_charge_soc_pct", "%", "mdi:battery-charging-100", 3, 100, 1, enhanced_only=True),
+    EcoFlowNumberDef("stream_discharge_limit", "Min Discharge SoC", "min_discharge_soc_pct", "%", "mdi:battery-arrow-down", 0, 95, 1, enhanced_only=True),
     EcoFlowNumberDef("led_brightness", "LED Brightness", "led_brightness", "%", "mdi:brightness-6", 0, 100, 5, enhanced_only=True),
     EcoFlowNumberDef("backup_reserve", "Backup Reserve", "backup_reserve_pct", "%", "mdi:battery-lock", 3, 95, 1, enhanced_only=True),
 ]
@@ -993,8 +993,8 @@ STREAMAC5000_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("ac_frequency_hz", "AC Frequency", "Hz", "frequency", "measurement", "mdi:sine-wave", "diagnostic", suggested_display_precision=2, disabled_by_default=True, accessory=True),
     # --- configuration readback ---
     EcoFlowSensorDef("work_mode", "Work Mode", None, "enum", None, "mdi:cog-outline", "diagnostic", options=["self_powered", "intelligent_plus", "custom"]),
-    EcoFlowSensorDef("max_charge_soc_pct", "Charge Limit", "%", None, "measurement", "mdi:battery-charging-high", "diagnostic", suggested_display_precision=0),
-    EcoFlowSensorDef("min_discharge_soc_pct", "Discharge Limit", "%", None, "measurement", "mdi:battery-arrow-down", "diagnostic", suggested_display_precision=0),
+    EcoFlowSensorDef("max_charge_soc_pct", "Max Charge SoC", "%", None, "measurement", "mdi:battery-charging-high", "diagnostic", suggested_display_precision=0),
+    EcoFlowSensorDef("min_discharge_soc_pct", "Min Discharge SoC", "%", None, "measurement", "mdi:battery-arrow-down", "diagnostic", suggested_display_precision=0),
     EcoFlowSensorDef("backup_reserve_pct", "Backup Reserve", "%", None, "measurement", "mdi:battery-lock", "diagnostic", suggested_display_precision=0),
     # The two power limits, named as the app names them. The output limit is
     # an account-level ceiling and raising it needs a request to EcoFlow; the
@@ -1060,12 +1060,13 @@ STREAMAC5000_SWITCHES: list[EcoFlowSwitchDef] = [
 # EcoFlow can raise.
 #
 # Each is keyed and named after the state key it writes, so the control and the
-# sensor reporting it back read the same. That rules out the shared
-# `max_charge_soc` / `min_discharge_soc` number keys, translated "Max Charge
-# SoC" and "Discharge limit", because correcting those renames the entity for
-# every Delta 3 and PowerOcean owner. It also rules out the app's "Max
-# discharging power" and "Max grid charging power", which are a maximum only
-# while a smart meter is linked.
+# sensor reporting it back read the same. The keys stay separate from the shared
+# `max_charge_soc` / `min_discharge_soc` ones, because a key change would move
+# the entity id for every Delta 3 and PowerOcean owner. The displayed names were
+# unified across all of them instead: one value carries one name, and a label
+# costs nobody their history. It also rules out the app's "Max discharging
+# power" and "Max grid charging power", which are a maximum only while a smart
+# meter is linked.
 STREAMAC5000_NUMBERS: list[EcoFlowNumberDef] = [
     EcoFlowNumberDef("scheduled_discharge_power_w", "Scheduled Discharge Power", "scheduled_discharge_power_w", "W", "mdi:battery-arrow-down-outline", 0, 2500, 50, enhanced_only=True),
     EcoFlowNumberDef("scheduled_charge_power_w", "Scheduled Charge Power", "scheduled_charge_power_w", "W", "mdi:battery-arrow-up-outline", 0, 2500, 50, enhanced_only=True),
@@ -1298,8 +1299,8 @@ DELTA3_SENSORS: list[EcoFlowSensorDef] = [
     # --- State (enum) ---
     EcoFlowSensorDef("chg_dsg_state", "Charge/Discharge State", None, "enum", None, "mdi:battery-charging", options=["idle", "discharging", "charging"]),
     # --- SoC limits / backup reserve (diagnostic) ---
-    EcoFlowSensorDef("max_charge_soc_pct", "Charge Limit", "%", None, "measurement", "mdi:battery-charging-100", "diagnostic", suggested_display_precision=0),
-    EcoFlowSensorDef("min_discharge_soc_pct", "Discharge Limit", "%", None, "measurement", "mdi:battery-alert-variant-outline", "diagnostic", suggested_display_precision=0),
+    EcoFlowSensorDef("max_charge_soc_pct", "Max Charge SoC", "%", None, "measurement", "mdi:battery-charging-100", "diagnostic", suggested_display_precision=0),
+    EcoFlowSensorDef("min_discharge_soc_pct", "Min Discharge SoC", "%", None, "measurement", "mdi:battery-alert-variant-outline", "diagnostic", suggested_display_precision=0),
     # --- AC charge power limit (Enhanced Mode only, #181) ---
     # The value behind the charge speed slider in the app. It travels on the
     # protobuf push path only, so it stays unavailable with developer keys.
@@ -1382,8 +1383,8 @@ DELTA3_SWITCHES: list[EcoFlowSwitchDef] = [
 # 50 and the charge limit cannot go below 50.
 DELTA3_NUMBERS: list[EcoFlowNumberDef] = [
     EcoFlowNumberDef("backup_reserve_soc", "Backup Reserve Level", "backup_reserve_soc_pct", "%", "mdi:battery-lock", 0, 50, 1),
-    EcoFlowNumberDef("max_charge_soc", "Charge Limit", "max_charge_soc_pct", "%", "mdi:battery-charging-100", 50, 100, 1),
-    EcoFlowNumberDef("min_discharge_soc", "Discharge Limit", "min_discharge_soc_pct", "%", "mdi:battery-alert-variant-outline", 0, 30, 1),
+    EcoFlowNumberDef("max_charge_soc", "Max Charge SoC", "max_charge_soc_pct", "%", "mdi:battery-charging-100", 50, 100, 1),
+    EcoFlowNumberDef("min_discharge_soc", "Min Discharge SoC", "min_discharge_soc_pct", "%", "mdi:battery-alert-variant-outline", 0, 30, 1),
     # AC charge power. Push path only: the polled quota never carries this
     # field, so it exists on account sign-in and nowhere else. Ships with the
     # charge mode below because the app puts this slider under its custom

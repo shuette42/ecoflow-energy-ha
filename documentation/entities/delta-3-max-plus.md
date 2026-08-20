@@ -21,8 +21,8 @@ sensor.
 | Charge/Discharge State | - | `idle`, `charging` or `discharging` |
 | Charge Time Remaining | min | Only while charging, otherwise unavailable |
 | Discharge Time Remaining | min | Only while discharging, otherwise unavailable |
-| Charge Limit | % | Current charge limit (diagnostic, mirrors the number) |
-| Discharge Limit | % | Current discharge limit (diagnostic, mirrors the number) |
+| Max Charge SoC | % | Current charge limit (diagnostic, mirrors the number) |
+| Min Discharge SoC | % | Current discharge limit (diagnostic, mirrors the number) |
 | AC Charge Power Limit | W | The charge speed set in the EcoFlow app, 200 W to 2400 W (diagnostic, EcoFlow account sign-in only) |
 
 ## Sensors - Power
@@ -111,8 +111,8 @@ be used in the Energy Dashboard without accumulating drift.
 | Entity | Unit | Range | Step | Description |
 |:---|:---:|:---:|:---:|:---|
 | Backup Reserve Level | % | 0 - 50 | 1 | Reserve SoC kept for backup |
-| Charge Limit | % | 50 - 100 | 1 | Stop charging at this level |
-| Discharge Limit | % | 0 - 30 | 1 | Stop discharging at this level |
+| Max Charge SoC | % | 50 - 100 | 1 | Stop charging at this level |
+| Min Discharge SoC | % | 0 - 30 | 1 | Stop discharging at this level |
 | AC Charge Power | W | 200 - 2400 | 100 | How fast to charge from the grid, the same setting as the charge speed slider in the EcoFlow app |
 | AC 1 cutoff level | % | dynamic | 1 | Battery level at which a non-essential AC 1 stops being powered |
 | AC 2 cutoff level | % | dynamic | 1 | Battery level at which a non-essential AC 2 stops being powered |

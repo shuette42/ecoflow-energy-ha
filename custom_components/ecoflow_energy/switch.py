@@ -48,10 +48,6 @@ from .const import (
     SWITCH_DECLARATIVE_R351,
 )
 from .coordinator import DeviceValueNotReported, EcoFlowDeviceCoordinator
-from .ecoflow.energy_stream import build_stream_ac_outlet_payload
-from .ecoflow.stream_ac5000_commands import (
-    build_backup_socket_payload as build_stream_ac5000_backup_socket_payload,
-)
 from .ecoflow.parsers.smartplug import build_plug_switch_payload
 from .entity import (
     EcoFlowWriteGateMixin,
@@ -212,15 +208,7 @@ class EcoFlowSwitch(
             and self._definition.key in ("ac_outlet_1_switch", "ac_outlet_2_switch")
         ):
             outlet = 1 if self._definition.key == "ac_outlet_1_switch" else 2
-            payload = build_stream_ac_outlet_payload(
-                outlet,
-                turn_on,
-                device_sn=self.coordinator.device_sn,
-            )
-            ok = await self.coordinator.async_send_proto_set_command(
-                payload,
-                f"stream_ac_outlet_{outlet}",
-            )
+            ok = await self.coordinator.async_set_stream_ac_outlet(outlet, turn_on)
             if not ok:
                 raise_set_failed(self.entity_id)
             self._apply_optimistic(turn_on)
@@ -251,14 +239,16 @@ class EcoFlowSwitch(
         self._apply_optimistic(turn_on)
 
     async def _async_set_stream_ac5000(self, turn_on: bool) -> bool:
-        """Send one of the two STREAM AC 5000 switches as a config write."""
-        device_sn = self.coordinator.device_sn
+        """Send one of the two STREAM AC 5000 switches as a config write.
+
+        Both halves go out through the coordinator so they queue behind any
+        other config write to this device rather than beside it.
+        """
         key = self._definition.key
 
         if key == "backup_socket_switch":
-            payload = build_stream_ac5000_backup_socket_payload(turn_on, device_sn)
-            return await self.coordinator.async_send_proto_set_command(
-                payload, label="stream_ac5000_backup_socket"
+            return await self.coordinator.async_set_stream_ac5000_backup_socket(
+                turn_on
             )
 
         if key == "backup_reserve_switch":

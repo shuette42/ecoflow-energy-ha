@@ -1577,10 +1577,10 @@
         "name": "Max Charge SoC"
       },
       "stream_charge_limit": {
-        "name": "Charge Limit"
+        "name": "Max Charge SoC"
       },
       "stream_discharge_limit": {
-        "name": "Discharge Limit"
+        "name": "Min Discharge SoC"
       },
       "backup_reserve": {
         "name": "Backup Reserve"
@@ -1610,7 +1610,7 @@
         "name": "Max Power Limit"
       },
       "min_discharge_soc": {
-        "name": "Discharge limit"
+        "name": "Min Discharge SoC"
       },
       "ac_charge_power_limit": {
         "name": "AC Charge Power"

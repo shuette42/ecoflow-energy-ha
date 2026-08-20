@@ -2,10 +2,10 @@
 
 Derived from a 1239-frame capture of a live ES22 in app-auth MQTT mode
 (2026-08-03) plus the reporter diagnostics on issue #177. Every field is
-checked against the frames themselves or against the EcoFlow app, with
-one exception that is marked where it stands: `12.8` was never observed
-and its position is inferred from the edges around it, so it would create
-an entity from a guess on the first unit that sends it. The fixtures come
+checked against the frames themselves or against the EcoFlow app. Nothing
+here rests on an inferred position: `12.8` would be solar to home by the
+order of its neighbours, was never observed, and is therefore left out of
+the map rather than mapped on the strength of that order. The fixtures come
 from a unit with no PV wired to the EcoFlow, so a field being absent from
 them is not evidence that it is never sent.
 
@@ -119,11 +119,13 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
         "12.5": ("_batt_to_grid_w", _TYPE_FLOAT, 1),
         "12.6": ("home_from_grid_w", _TYPE_FLOAT, 1),
         "12.7": ("_grid_to_batt_w", _TYPE_FLOAT, 1),
-        # Field 8 would be solar to home by position, and it appears in none
-        # of the 1239 captured frames. It is not mapped: an inferred position
-        # reaching an accessory entity is a wrong reading Home Assistant keeps
-        # forever, and the reporter with PV on issue #177 is the one whose
-        # capture can settle it. Map it when that capture shows it.
+        # Field 8 is deliberately absent from this map. It would be solar to
+        # home by position, and it appears in none of the 1239 captured frames:
+        # an inferred position reaching an accessory entity is a wrong reading
+        # Home Assistant keeps forever. Map it when a capture shows it.
+        #
+        # 12.9 below is the opposite case, and the two paragraphs are about
+        # different fields.
         # Confirmed on PV hardware in issue #177, three readings: 1552 against
         # `f11.4` = 3104 halved, 1482, and 46 in the 12:19 frame where the
         # battery took 47 W out of 2.86 kW of solar. Absent from the fixtures
@@ -166,11 +168,16 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
         # every value he read: strings 2, 3 and 4 at 36.57 / 55.32 / 104.02
         # and at 27.39 / 49.02 / 98.07 against 34 / 50 / 102 in the app.
         #
-        # `.9` is not confirmed by a reading of its own. It is absent from
-        # every frame of that capture, where `.10` through `.12` alone already
-        # equal `.3` exactly, and the app showed string 1 at 0 W throughout.
-        # Its position is read from the order of the fields and nothing more,
-        # which is why it is stated here rather than left implied.
+        # `.9` carries a reading of its own, but is not anchored to the app.
+        # In the 16.08. capture it was absent from every frame, where `.10`
+        # through `.12` alone already equalled `.3` exactly and the app showed
+        # string 1 at 0 W throughout. The 17.08. capture from the same unit
+        # has one frame that carries it: `.9` = 38.126 with `.10` to `.12` at
+        # 102.023 / 167.662 / 38.802, summing to 346.613 against `.3` =
+        # 346.613, exact. So the field is a real fourth term of the total
+        # rather than a position inferred from its neighbours. What is still
+        # missing is an app reading taken at that moment, which is what would
+        # say the term belongs to string 1 rather than to another of the four.
         #
         # `.1` is the device serial; `.2`, `.4`, `.5`, `.6` and `.7` are
         # unmapped. `.4` is worth a note: it equals `.3` minus `.7` in all 6

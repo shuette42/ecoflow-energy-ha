@@ -513,15 +513,17 @@ def _get_number_defs(device_type: str, device_sn: str = "") -> list[EcoFlowNumbe
         return SMARTPLUG_NUMBERS
     if device_type == DEVICE_TYPE_STREAM:
         if not supports_stream_controls(device_sn):
+            # An allowlist, not a denylist. `backup_reserve` predates the control
+            # gate and exists on every Stream, so removing it would orphan
+            # registrations owners already have. Everything else stays out until
+            # a capture from that prefix confirms the write, which means a number
+            # added to STREAM_NUMBERS later reaches only BK31 until someone
+            # deliberately lists it here. Named the other way round, a new control
+            # would land on unconfirmed prefixes by default.
             return [
                 definition
                 for definition in STREAM_NUMBERS
-                if definition.key
-                not in {
-                    "stream_charge_limit",
-                    "stream_discharge_limit",
-                    "led_brightness",
-                }
+                if definition.key in {"backup_reserve"}
             ]
         return STREAM_NUMBERS
     if device_type == DEVICE_TYPE_DELTA3:

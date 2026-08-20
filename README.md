@@ -55,7 +55,7 @@
 >
 > **Tip:** Other Delta-series devices (Delta Pro, Delta 2, etc.) should work automatically with the Delta sensor set. Base Delta 3 and Delta 3 Plus use the Delta 3 sensor set. The five AC-coupled Stream models share one sensor set.
 >
-> **The STREAM AC 5000 is not a Stream.** It shares the name and nothing else: it sends none of the BK-series telemetry messages, so it has its own parser and its own entity set. Its solar and per-phase meter entities are created only once the device reports them, because whether a unit has PV on the EcoFlow and which smart meter is linked are installation choices rather than model differences. Its Third-Party Solar Power reading is the figure the app reports separately from the unit's own strings, and on a unit with PV wired to the EcoFlow the PV String entities carry those strings alongside it. Neither has a lifetime counter yet: an energy total is only worth having once the reading behind it is settled, and the position of the first string still rests on the order of the fields rather than on a reading of its own.
+> **The STREAM AC 5000 is not a Stream.** It shares the name and nothing else: it sends none of the BK-series telemetry messages, so it has its own parser and its own entity set. Its solar and per-phase meter entities are created only once the device reports them, because whether a unit has PV on the EcoFlow and which smart meter is linked are installation choices rather than model differences. Its Third-Party Solar Power reading is the figure the app reports separately from the unit's own strings, and on a unit with PV wired to the EcoFlow the PV String entities carry those strings alongside it. Neither has a lifetime counter yet: an energy total is only worth having once the reading behind it is settled, and the first string is not fully settled. It now has a reading of its own and the four strings add up to the total the device reports exactly, so the field is real; what is still missing is an app reading taken at the same moment to confirm the value belongs to string 1 rather than to another of the four.
 >
 > **The STREAM 5000 reads but is not driven.** It is the same product as the STREAM AC 5000 on a different model number, and a recording from one shows it sending the same four telemetry messages, so it gets the same readings from the same parser. It does not get the controls. Every write this integration sends to that family is a rebuild of a frame captured from an AC 5000, and a power setpoint writes a scheduled task into the battery rather than flipping a display setting, so reading alike is not enough to assume writing alike. If you own one, a recording from your unit is what turns the controls on. Both models report their solar strings, added from a capture taken alongside the EcoFlow app on a unit with PV wired directly to it. Three further blocks of readings stay unmapped on both; identifying those needs the same thing, a recording paired with what the app shows at that moment.
 >
@@ -69,6 +69,11 @@
 3-phase grid monitoring (voltage, current, power per phase) · MPPT per-string tracking (up to 4 strings, device-dependent) · **Multi-battery-pack support** (up to 5 BP5000 packs - per-pack SoC, power, SoH, cycles, temperatures, lifetime energy) · Battery diagnostics (cell temps & voltages, MOSFET temps) · EMS state, work mode, feed mode, grid status, power factor · System diagnostics (fault codes, connectivity status, capacity limits)
 
 **PowerOcean Plus** (`R371`, `R372`, `R374`, `HJ3C`) are the higher-power 3-phase hybrid units. They use the same entity set as a standard PowerOcean and are supported in Enhanced Mode. Beyond a standard unit they report per-phase **reactive power** (var) and **apparent power** (VA), and drive **MPPT strings 3 and 4**. These entities ship disabled by default so that standard units are not left with permanently empty sensors, so enable the ones you need after adding a Plus device. Field coverage is based on diagnostics from live Plus hardware; if your unit reports a value that no entity picks up, the raw data is available via **Download Diagnostics**.
+
+**Accessories.** Two PowerOcean add-ons report through the PowerOcean itself rather than as devices of their own, so their entities sit on the PowerOcean device page and are created only once the accessory actually reports:
+
+- **PowerPulse wallbox** (`C376`) - charging power, the energy and the duration of the running session, the charging state and which vehicle the charger recognized. Enhanced Mode only: the readings travel on the PowerOcean's real-time stream.
+- **PowerGlow heating rod** - water temperature, heating power and its status. Standard Mode only: these values arrive with the polled data, so an account sign-in does not reach them.
 
 **Enhanced Mode controls** (verified against the official EcoFlow app, byte-for-byte wire compatible):
 
@@ -99,7 +104,7 @@ Power (W), current (A), voltage (V), frequency, temperature · Plug on/off switc
 <details>
 <summary><b>Stream</b> (AC Pro, Ultra, Max, AC, Ultra X) - AC-coupled battery telemetry, per-string solar, reserve control</summary>
 
-Battery SoC/SoH · signed battery power · battery charge/discharge power · **per-string solar power (PV 1-4)** · signed AC grid connection power ("Netz-Anschluss": negative=input, positive=output/feed-in) · AC outlet states and per-outlet power · AC voltage and frequency · battery temperature, capacity and cell voltage diagnostics · LED brightness diagnostics · **Numbers:** Backup Reserve (3-95%), plus Charge Limit, Discharge Limit and LED Brightness on the Stream AC Pro (`BK31`) in Enhanced Mode · **Stream AC Pro switches:** AC outlets 1 and 2 in Enhanced Mode.
+Battery SoC/SoH · signed battery power · battery charge/discharge power · **per-string solar power (PV 1-4)** · signed AC grid connection power ("Netz-Anschluss": negative=input, positive=output/feed-in) · AC outlet states and per-outlet power · AC voltage and frequency · battery temperature, capacity and cell voltage diagnostics · LED brightness diagnostics · **Numbers:** Backup Reserve (3-95%), plus Max Charge SoC, Min Discharge SoC and LED Brightness on the Stream AC Pro (`BK31`) in Enhanced Mode · **Stream AC Pro switches:** AC outlets 1 and 2 in Enhanced Mode.
 
 The Stream is treated as an AC-coupled battery. House, grid and total solar flow values depend on an EcoFlow-paired meter and are disabled by default as diagnostic entities. The hardware-confirmed AC Pro LED number reproduces the app's ConfigWrite field `384` with its `from="ios"` header; only subsequent live telemetry field `994` is treated as the actual brightness state. The AC Pro limit controls reproduce the app's grouped ConfigWrite containing its timestamp, charge limit, discharge limit and backup reserve. Raising the discharge limit also raises backup reserve to at least three percentage points above it, matching the behavior confirmed on hardware; lowering the discharge limit leaves backup reserve unchanged. The outlet switches reproduce the app's confirmed ConfigWrite fields `380` and `381` plus its required `from="ios"` header; live telemetry reports the relay states through fields `980`/`982` and per-outlet power through `1210`/`1211`.
 
@@ -117,6 +122,32 @@ Per-string solar power, voltage and current for both strings · single-phase gri
 The Stream Micro feeds solar directly into the grid and has no battery and no AC outlets, so it gets a smaller entity set than the rest of the Stream family: no state of charge, no battery power or energy, no backup reserve and no outlet entities. Home Assistant keeps an entity in the registry once it has been created, so entities a device can never fill are not created in the first place.
 
 **Enhanced Mode only.** The Stream Micro is not exposed through the EcoFlow Developer API at all, so it needs the EcoFlow account sign-in.
+
+</details>
+
+<details>
+<summary><b>Delta 3</b> (Max Plus, and the base and Plus models) - AC charge control, port priority, screen and idle shutdowns</summary>
+
+Battery SoC and its precise reading · input and output power per port · solar input on both strings · AC input and output · temperatures, voltages and cycle count · four energy counters (solar 1 and 2, AC in, output).
+
+**Switches and numbers:** AC and DC output, X-Boost, beeper, backup reserve and its level, charge and discharge limits, AC charge power. `D3M` serials add port priority for three ports, each with its own cutoff, and a binary sensor reporting which port is currently served.
+
+**Enhanced Mode only:** the screen timeout, the four idle shutdowns (AC, DC, car and unit), the AC charge power and the port priority cutoffs. These settings never appear in the polled data, so they need the EcoFlow account sign-in. Everything else works in both modes.
+
+</details>
+
+<details>
+<summary><b>STREAM AC 5000</b> (`ES22`) and <b>STREAM 5000</b> (`ES21`) - flow-matrix telemetry, scheduled power setpoints</summary>
+
+Despite the name these are not Stream devices. They send none of the BK-series messages and report power as a matrix of flows between grid, battery, house and solar rather than as separate readings, so they have their own parser and their own entity set: 56 sensors and 2 binary sensors.
+
+Battery state and per-unit readings on a linked installation · grid import and export, each counting in one direction so the Energy Dashboard can use them · house consumption · the unit's own PV strings (PV 1-4 and their total) where panels are wired to the EcoFlow · Third-Party Solar Power, which is the app's separate "Other" figure and not a measurement of your strings · per-phase smart meter readings where a meter is linked in the app.
+
+**Controls, STREAM AC 5000 only:** work mode, both SoC limits, backup reserve and its level, the app's backup socket, and a scheduled charge and discharge power setpoint. A setpoint on this device writes a whole-day task rather than flipping a switch, and whether a smart meter is linked in the app decides whether it acts as a ceiling or as an absolute power command - worth knowing before automating it.
+
+**The STREAM 5000 reads but is not driven.** It gets the same readings from the same parser, and no controls: every write to this family is a rebuild of a frame captured from an AC 5000, and reading alike is not evidence of writing alike. A recording from an `ES21` unit is what turns the controls on.
+
+**Enhanced Mode only.** Neither model is reachable through the Developer API.
 
 </details>
 
@@ -144,15 +175,16 @@ Download the [latest release](https://github.com/shuette42/ecoflow-energy-ha/rel
 | | Standard | Enhanced |
 |:---|:---|:---|
 | **Credentials** | Access Key + Secret Key ([Developer Portal](https://developer.ecoflow.com)) | EcoFlow email + password (same as mobile app) |
-| **Devices** | All except the Enhanced-only serials (`J327`, `J32D`, `J32E`, `R371`, `R372`, `R374`, `HJ3C`) | All supported devices |
+| **Devices** | All except the Enhanced-only serials (`J327`, `J32D`, `J32E`, `R371`, `R372`, `R374`, `HJ3C`, `BK01`, `ES21`, `ES22`) | All supported devices |
 | **Update rate** | ~30 s HTTP polling (+ MQTT push for Delta/Smart Plug) | ~2-4 s real-time via WSS MQTT |
-| **Delta / Smart Plug controls** | All switches and numbers | All switches and numbers |
+| **Delta 2 Max / Smart Plug controls** | All switches and numbers | All switches and numbers |
+| **Delta 3 controls** | Switches and most numbers; the screen and idle shutdowns and the AC charge power need Enhanced Mode | All switches, numbers and selects |
 | **PowerOcean controls** | Read-only sensors only | Full energy strategy controls (Backup Reserve, Solar Surplus Threshold, Work Mode) |
-| **Stream AC Pro controls** | Not available | Charge Limit, Discharge Limit, LED Brightness, Backup Reserve and AC outlet switches |
+| **Stream AC Pro controls** | Not available | Max Charge SoC, Min Discharge SoC, LED Brightness, Backup Reserve and AC outlet switches |
 | **Stability** | Official EcoFlow API - supported and stable | Community-driven - unofficial, use at your own risk |
 | **Best for** | Reliable long-term operation | Real-time monitoring, fast automations, PowerOcean control |
 
-**Standard Mode** uses the official EcoFlow IoT Developer API. Apply for free API keys at [developer.ecoflow.com](https://developer.ecoflow.com). Note: the European PowerOcean variants (`J327`, `J32D`, `J32E`) and the PowerOcean Plus units (`R371`, `R372`, `R374`, `HJ3C`) are currently not exposed through the Developer API and cannot be linked to an API key (error 1006). These devices work in Enhanced Mode only.
+**Standard Mode** uses the official EcoFlow IoT Developer API. Apply for free API keys at [developer.ecoflow.com](https://developer.ecoflow.com). Note: the European PowerOcean variants (`J327`, `J32D`, `J32E`), the PowerOcean Plus units (`R371`, `R372`, `R374`, `HJ3C`), the Stream Micro (`BK01`) and both STREAM 5000 models (`ES21`, `ES22`) are currently not exposed through the Developer API and cannot be linked to an API key (error 1006). These devices work in Enhanced Mode only.
 
 **Enhanced Mode** connects with your EcoFlow email and password. No Developer API keys needed. Faster updates, but this is an unofficial, community-driven protocol based on observed behaviour that may change without notice. Stream-family devices report an empty product name, so they are identified by their serial prefix (`BK01`, `BK11`, `BK31`, `BK41`, `BK51`, `BK61`) and appear under the correct model name in Home Assistant in both modes. The Stream Micro (`BK01`) is not exposed through the Developer API at all and therefore needs Enhanced Mode.
 

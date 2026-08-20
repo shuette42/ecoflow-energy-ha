@@ -272,3 +272,18 @@ class TestTask:
     def test_an_out_of_range_task_number_is_rejected(self, slot: int) -> None:
         with pytest.raises(ValueError):
             build_task_payload("discharge", 0, 1380, 600, SN, task_slot=slot)
+
+
+def test_work_mode_write_and_read_tables_are_inverses() -> None:
+    """The mode a write sends must be the mode a read reports back.
+
+    `WORK_MODES` turns a Home Assistant option into a wire value; the parser's
+    `_WORK_MODE` turns that wire value back into the option. They are two hand
+    written tables in two files describing one fact, so nothing but this
+    assertion stops an edit to one of them from making a written mode read back
+    as a different mode - silently, and hidden for the length of the optimistic
+    lock.
+    """
+    from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import _WORK_MODE
+
+    assert {value: option for option, value in WORK_MODES.items()} == _WORK_MODE

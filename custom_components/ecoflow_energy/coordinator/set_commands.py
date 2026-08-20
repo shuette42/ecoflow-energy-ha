@@ -357,6 +357,55 @@ class SetCommandsMixin:
                 payload, label="stream_led_brightness"
             )
 
+    async def async_set_stream_ac_outlet(self, outlet: int, turn_on: bool) -> bool:
+        """Write a Stream AC outlet without racing another config write.
+
+        Same reasoning as the LED brightness write above: this one reads
+        nothing, so no update can be lost today. It goes through the lock so
+        that every Stream config write leaves from one place, and a future
+        grouped write sees it queued rather than in flight beside it.
+        """
+        from ..ecoflow.energy_stream import build_stream_ac_outlet_payload
+
+        async with self._device_config_lock:
+            payload = build_stream_ac_outlet_payload(
+                outlet, turn_on, device_sn=self.device_sn
+            )
+            return await self.async_send_proto_set_command(
+                payload, f"stream_ac_outlet_{outlet}"
+            )
+
+    async def async_set_stream_ac5000_work_mode(self, option: str) -> bool:
+        """Write the STREAM AC 5000 work mode under the config lock.
+
+        The mode decides whether the two power setpoints act at all, so a
+        setpoint write landing between this frame and the device's echo would
+        act against the mode it is replacing.
+        """
+        from ..ecoflow.stream_ac5000_commands import (
+            build_work_mode_payload as build_stream_ac5000_work_mode_payload,
+        )
+
+        async with self._device_config_lock:
+            payload = build_stream_ac5000_work_mode_payload(option, self.device_sn)
+            return await self.async_send_proto_set_command(
+                payload, label="stream_ac5000_work_mode"
+            )
+
+    async def async_set_stream_ac5000_backup_socket(self, turn_on: bool) -> bool:
+        """Write the STREAM AC 5000 backup socket under the config lock."""
+        from ..ecoflow.stream_ac5000_commands import (
+            build_backup_socket_payload as build_stream_ac5000_backup_socket_payload,
+        )
+
+        async with self._device_config_lock:
+            payload = build_stream_ac5000_backup_socket_payload(
+                turn_on, self.device_sn
+            )
+            return await self.async_send_proto_set_command(
+                payload, label="stream_ac5000_backup_socket"
+            )
+
     # ------------------------------------------------------------------
     # STREAM AC 5000 config writes (254/38)
     #

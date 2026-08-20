@@ -44,9 +44,6 @@ from .const import (
 )
 from .coordinator import EcoFlowDeviceCoordinator
 from .ecoflow.delta3_commands import build_select_command as build_delta3_select_command
-from .ecoflow.stream_ac5000_commands import (
-    build_work_mode_payload as build_stream_ac5000_work_mode_payload,
-)
 from .entity import raise_set_failed, raise_set_unsupported
 
 _LOGGER = logging.getLogger(__name__)
@@ -166,11 +163,8 @@ class EcoFlowSelect(CoordinatorEntity[EcoFlowDeviceCoordinator], SelectEntity):
             if self.coordinator.device_type == DEVICE_TYPE_STREAM_AC5000:
                 # A different device family with its own modes, so it does not
                 # share the PowerOcean wire values.
-                payload = build_stream_ac5000_work_mode_payload(
-                    option, self.coordinator.device_sn
-                )
-                ok = await self.coordinator.async_send_proto_set_command(
-                    payload, label="stream_ac5000_work_mode"
+                ok = await self.coordinator.async_set_stream_ac5000_work_mode(
+                    option
                 )
                 if not ok:
                     raise_set_failed(self.entity_id)

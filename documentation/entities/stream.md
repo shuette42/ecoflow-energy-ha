@@ -121,14 +121,14 @@ None. The AC outlets are exposed read-only as binary sensors, because the write 
 
 | Entity | Unit | Range | Step | Models | Description |
 |:---|:---:|:---:|:---:|:---|:---|
-| Charge Limit | % | 3 - 100 | 1 | Stream AC Pro (`BK31`) | Maximum charging SoC. **Enhanced Mode only.** |
-| Discharge Limit | % | 0 - 95 | 1 | Stream AC Pro (`BK31`) | Minimum discharging SoC. **Enhanced Mode only.** |
+| Max Charge SoC | % | 3 - 100 | 1 | Stream AC Pro (`BK31`) | Maximum charging SoC. **Enhanced Mode only.** |
+| Min Discharge SoC | % | 0 - 95 | 1 | Stream AC Pro (`BK31`) | Minimum discharging SoC. **Enhanced Mode only.** |
 | LED Brightness | % | 0 - 100 | 5 | Stream AC Pro (`BK31`) | LED brightness. **Enhanced Mode only.** |
 | Backup Reserve | % | 3 - 95 | 1 | All battery Stream models | Minimum SoC the system keeps in reserve. **Enhanced Mode only.** |
 
 The AC Pro holds both limits and Backup Reserve as one grouped setting, so every write carries all three. The two values you did not change are sent back exactly as the device last reported them, never as a default, and a write is refused until all three have arrived. A combination where the limits cross is rejected instead of silently changing another setting.
 
-The capture baseline showed Charge Limit 95%, Discharge Limit 20% and Backup Reserve 23% in the app, matching raw ConfigWrite fields `33=95`, `34=20` and `102=23`. Both Home Assistant controls were then exercised on the live AC Pro and confirmed in the EcoFlow app and in the telemetry the device sent afterwards. The device's immediate reply can name field `33` even when field `34` was the value that changed, so it is the telemetry that follows, not the reply, that confirms a write.
+The capture baseline showed Max Charge SoC 95%, Min Discharge SoC 20% and Backup Reserve 23% in the app, matching raw ConfigWrite fields `33=95`, `34=20` and `102=23`. Both Home Assistant controls were then exercised on the live AC Pro and confirmed in the EcoFlow app and in the telemetry the device sent afterwards. The device's immediate reply can name field `33` even when field `34` was the value that changed, so it is the telemetry that follows, not the reply, that confirms a write.
 
 The LED control reproduces the hardware-confirmed app ConfigWrite field `384` with its `from="ios"` header. The immediate reply carries the requested target, so only the subsequent live telemetry field `994` is treated as the actual brightness state.
 
