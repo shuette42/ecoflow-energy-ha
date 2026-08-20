@@ -23,6 +23,7 @@ from ..const import (
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
     HTTP_FALLBACK_INTERVAL_S,
+    raw_capture_window_open,
 )
 from ..ecoflow.broker import broker_from_credentials
 from ..ecoflow.cloud_http import EcoFlowHTTPQuota
@@ -105,6 +106,10 @@ class SetupMixin:
             wss_mode=True,
             enhanced_mode=(self._enhanced_mode and self.device_type == DEVICE_TYPE_POWEROCEAN),
             auth_error_handler=self._on_mqtt_auth_error,
+            # Read once here, like the buffer depth in core.py: writing the
+            # flag reloads the entry and builds a new client, so it never has
+            # to change underneath a live subscription.
+            capture_writes=raw_capture_window_open(self.config_entry.data),
         )
 
         self._credential_obtained_ts = time.monotonic()

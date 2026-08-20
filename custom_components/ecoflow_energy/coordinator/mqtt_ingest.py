@@ -147,6 +147,17 @@ class MqttIngestMixin:
                 self._check_delta3_set_ack(payload)
             return
 
+        # A write, published by the vendor app and delivered to us because we
+        # subscribed while the capture window is open. It is recorded and then
+        # dropped, deliberately and without exception: a value somebody asked
+        # the device for is not a value the device reported, and letting one
+        # into the parser would publish a request as if it were a reading.
+        # The check sits after `/set_reply` above, which returns first.
+        if topic.endswith("/thing/property/set"):
+            self._capture_raw_frame(topic, payload, None)
+            self._log_event("app_write", "topic=app/set")
+            return
+
         if not self._enhanced_mode and self.device_type not in (
             DEVICE_TYPE_DELTA,
             DEVICE_TYPE_DELTA3,

@@ -83,6 +83,7 @@ class EcoFlowMQTTClient:
         enhanced_mode: bool = False,
         subscribe_data: bool = True,
         listen_only: bool = False,
+        capture_writes: bool = False,
         status_handler: Callable | None = None,
         auth_error_handler: Callable[[], None] | None = None,
         max_reconnect_attempts: int = DEFAULT_MAX_RECONNECT_ATTEMPTS,
@@ -91,6 +92,11 @@ class EcoFlowMQTTClient:
     ) -> None:
         self._cert_account = certificate_account
         self._cert_password = certificate_password
+        # Subscribing to the topic the vendor app writes on. Off unless the
+        # raw capture window is open, because it is only ever wanted as
+        # evidence. Subscribing is not publishing: the listen-only guarantee
+        # is untouched by it.
+        self._capture_writes = capture_writes
         self._device_sn = device_sn
         self._user_id = user_id
         self.message_handler = message_handler
@@ -316,6 +322,20 @@ class EcoFlowMQTTClient:
                 if self._user_id:
                     topic_reply = f"/app/{self._user_id}/{self._device_sn}/thing/property/get_reply"
                     client.subscribe(topic_reply, qos=1)
+
+                    if self._capture_writes:
+                        # The topic the vendor app publishes its writes on.
+                        # The broker delivers them to every subscriber, so
+                        # watching one is the only way to learn what a device
+                        # accepts without guessing at the envelope. Nothing is
+                        # ever published here from this branch, and the frames
+                        # are captured rather than parsed: a value an owner
+                        # asked for is not a value the device reported.
+                        topic_write = (
+                            f"/app/{self._user_id}/{self._device_sn}"
+                            "/thing/property/set"
+                        )
+                        client.subscribe(topic_write, qos=1)
 
                 if not self._notified_connected:
                     self._notified_connected = True

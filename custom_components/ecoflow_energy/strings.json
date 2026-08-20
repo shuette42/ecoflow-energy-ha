@@ -105,7 +105,7 @@
           "raw_capture": "Record extra diagnostic data for 24 hours"
         },
         "data_description": {
-          "raw_capture": "Keeps more of the raw messages your devices send, and records any device this integration does not support yet. Only worth switching on if it was asked for in a GitHub issue, since the data is only useful attached to a diagnostics download. Nothing is ever sent to your devices, and the recording stops by itself after 24 hours."
+          "raw_capture": "Keeps more of the raw messages your devices send, records any device this integration does not support yet, and records the settings the EcoFlow app writes to your devices while it runs. That last one is how a control gets built for a model nobody here owns: changing the setting in the app once, with this on, shows what the device accepts. Only worth switching on if it was asked for in a GitHub issue, since the data is only useful attached to a diagnostics download. Nothing is ever sent to your devices, and the recording stops by itself after 24 hours."
         }
       },
       "developer": {

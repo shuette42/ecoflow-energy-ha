@@ -858,3 +858,36 @@ class TestMaskTopic:
         assert client.mask_topic("/app/device/property/TEST1234SN") == (
             "/app/device/property/{sn}"
         )
+
+
+class TestAppWriteSubscription:
+    """The set topic is subscribed only while a capture window is open.
+
+    It exists to record what the vendor app writes, which is the only way to
+    learn what a device accepts without guessing at the envelope. It is off by
+    default because it is wanted as evidence and not as a running cost, and
+    subscribing is not publishing: the listen-only guarantee is untouched.
+    """
+
+    def _topics(self, **kwargs) -> list[str]:
+        with patch("ecoflow_energy.ecoflow.cloud_mqtt.mqtt.Client") as mock_cls:
+            mock_paho = MagicMock()
+            mock_cls.return_value = mock_paho
+            client = _make_client(wss_mode=True, user_id="user123", **kwargs)
+            client.client = mock_paho
+            client._on_connect(mock_paho, None, None, 0)
+            return [call[0][0] for call in mock_paho.subscribe.call_args_list]
+
+    def test_off_by_default(self):
+        assert not any(t.endswith("/thing/property/set") for t in self._topics())
+
+    def test_subscribed_when_capturing(self):
+        topics = self._topics(capture_writes=True)
+        assert any(t.endswith("/thing/property/set") for t in topics)
+
+    def test_capturing_does_not_drop_the_data_topics(self):
+        """The evidence subscription is additive, never a swap."""
+        plain = self._topics()
+        capturing = self._topics(capture_writes=True)
+        assert set(plain) <= set(capturing)
+        assert len(capturing) == len(plain) + 1

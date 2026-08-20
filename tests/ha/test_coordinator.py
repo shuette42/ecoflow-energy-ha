@@ -7455,3 +7455,99 @@ class TestLinkedUnitPower:
         coordinator._apply_data({"_unit_batt_w_by_sn": {"ES22TESTUNITAAAA": 689.0}})
         coordinator._apply_data({"soc_pct": 76})
         assert coordinator.data["unit_batt_w"] == 689.0
+
+
+class TestAppWriteCapture:
+    """Frames the vendor app writes, recorded as evidence and never parsed.
+
+    The capture exists because the integration cannot otherwise learn what a
+    device accepts: both ES21 recordings on file carry read traffic only, and
+    no `254/38` at all, because the set topic was never subscribed. Watching a
+    real app write is the only way to see the envelope without guessing.
+    """
+
+    def _frame(self, sn: str) -> bytes:
+        return b"\x0a" + bytes([len(sn)]) + sn.encode()
+
+    def _write_topic(self, coordinator) -> str:
+        return f"/app/user123/{coordinator.device_sn}/thing/property/set"
+
+    async def test_a_write_is_captured(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+
+        coordinator._on_mqtt_message(
+            self._write_topic(coordinator), self._frame(coordinator.device_sn)
+        )
+
+        frames = coordinator.raw_frames
+        assert len(frames) == 1
+        assert frames[0]["topic"] == "set"
+
+    async def test_a_write_never_reaches_the_parser(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """The point of the whole feature, and the one way it could do harm.
+
+        A value somebody asked the device for is not a value the device
+        reported. If a write reached the parser, a request would be published
+        as a reading and an entity would show a setting the device may have
+        refused.
+        """
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        before = dict(coordinator._device_data)
+
+        with patch.object(
+            coordinator, "_parse_message", side_effect=AssertionError("parsed")
+        ):
+            coordinator._on_mqtt_message(
+                self._write_topic(coordinator), self._frame(coordinator.device_sn)
+            )
+
+        assert coordinator._device_data == before
+
+    async def test_a_set_reply_is_not_a_write(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """`set_reply` is the device answering, and must not land in the bucket."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+
+        coordinator._on_mqtt_message(
+            f"/app/user123/{coordinator.device_sn}/thing/property/set_reply",
+            self._frame(coordinator.device_sn),
+        )
+
+        assert coordinator.raw_frames == []
+
+    async def test_a_write_keeps_its_own_bucket(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """Telemetry outnumbers writes by orders of magnitude on a live unit.
+
+        The write has to survive a run of reports carrying the same message
+        type, or the capture would reliably lose the one frame it was opened
+        for.
+        """
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        payload = self._frame(coordinator.device_sn)
+
+        coordinator._on_mqtt_message(self._write_topic(coordinator), payload)
+        for _ in range(200):
+            coordinator._on_mqtt_message(
+                f"/app/device/property/{coordinator.device_sn}", payload
+            )
+
+        assert any(f["topic"] == "set" for f in coordinator.raw_frames)

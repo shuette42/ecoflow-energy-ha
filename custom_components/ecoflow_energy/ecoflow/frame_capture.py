@@ -104,6 +104,25 @@ def frame_budget(
     return min(bundle_cap, max(bundle_max, len(cmds) * message_max))
 
 
+def _topic_class(topic: str) -> str:
+    """Return the bucket a topic belongs to: report, full dump, or write.
+
+    Three classes rather than two. `frame_key` puts the class in front of
+    the message type, so a write gets its own bucket and cannot be crowded
+    out of the capture by telemetry - which outnumbers it by four orders of
+    magnitude on a live device.
+
+    `set_reply` is not a write. It is the device answering one, it is
+    handled before a frame ever reaches here, and it must not fall into the
+    write bucket if that order ever changes.
+    """
+    if "get_reply" in topic:
+        return "get_reply"
+    if topic.endswith("/set"):
+        return "set"
+    return "property"
+
+
 def build_frame_entry(
     topic: str,
     payload: bytes,
@@ -130,7 +149,7 @@ def build_frame_entry(
     sanitized = sanitize_frame(payload, secrets)
     entry: dict[str, Any] = {
         "ts": time.time(),
-        "topic": "get_reply" if "get_reply" in topic else "property",
+        "topic": _topic_class(topic),
         "size": len(payload),
         "hex": sanitized[:max_bytes].hex(),
     }
