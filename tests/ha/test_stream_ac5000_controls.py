@@ -760,3 +760,36 @@ class TestConcurrentWrites:
 
         # field 30 = {1: on/off, 2: level}
         assert sent[-1].endswith(bytes([0x08, 1, 0x10, 60]))
+
+
+class TestBackupSocketSwitch:
+    """The one config write on this device that reads nothing before sending.
+
+    It goes through the coordinator like every other config write here, so the
+    lock can serialise it against a write that does read first. That routing is
+    what these two cover: the frame has to arrive at the wire unchanged by it.
+    """
+
+    async def test_turning_it_on_writes_config_field_19(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        coordinator = _coordinator(hass, enhanced_config_entry)
+        entity = _switch(coordinator, "backup_socket_switch")
+
+        await entity.async_turn_on()
+
+        header, pdata = _sent(coordinator)
+        assert int(header["cmd_func"]) == 254
+        assert int(header["cmd_id"]) == 38
+        assert _config_field(pdata) == 19
+        assert pdata[-1] == 1
+
+    async def test_a_failed_write_raises(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        coordinator = _coordinator(hass, enhanced_config_entry)
+        coordinator.async_send_proto_set_command = AsyncMock(return_value=False)
+        entity = _switch(coordinator, "backup_socket_switch")
+
+        with pytest.raises(HomeAssistantError):
+            await entity.async_turn_on()
