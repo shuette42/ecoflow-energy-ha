@@ -2,15 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.18.0] - unreleased
+## [1.18.0] - 2026-08-20
 
 ### Added
 
 - The raw data capture now records the settings the EcoFlow app writes to a device, alongside the reports it was already keeping. It could not before, and not because nobody asked: the integration never subscribed to the topic the app publishes writes on, so a capture could run for a day while its owner changed every setting in the app and none of it would appear. That is the missing half of every question about controls on a model nobody here owns. Reading a device tells you what it reports; only watching a real write tells you what it accepts, and until now that needed a script, a checkout and an EcoFlow login rather than a switch in the options. Both STREAM 5000 recordings on file show the gap exactly: read traffic only, not one write frame between them, which is why that model has readings and no controls. The frames are recorded and then dropped rather than parsed, deliberately: a value somebody asked a device for is not a value the device reported, and letting one through would publish a request as a reading. They keep their own place in the capture, because reports outnumber writes by four orders of magnitude on a live unit and would otherwise crowd out the one frame the capture was opened for. Nothing is published from this path, the recording still stops by itself after 24 hours, and the option's description now says what it collects. (Ref #231)
-
-### Fixed
-
-### Changed
 
 ## [1.17.0] - 2026-08-20
 
