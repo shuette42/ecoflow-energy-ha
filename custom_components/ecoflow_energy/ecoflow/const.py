@@ -39,6 +39,9 @@ DEVICE_TYPE_STREAM = "stream"
 # Carries the Stream name but not the Stream protocol: no 254/21 frame, and
 # nested submessages where the BK series uses flat scalars.
 DEVICE_TYPE_STREAM_AC5000 = "stream_ac5000"
+# Microinverter, not a battery. Shares nothing with the Stream line but the
+# five letters in the middle of its name (#230).
+DEVICE_TYPE_POWERSTREAM = "powerstream"
 DEVICE_TYPE_UNKNOWN = "unknown"
 
 # Keywords used to classify devices from productName strings.
@@ -53,16 +56,13 @@ _DELTA3_KEYWORDS = ("delta 3", "delta3")
 _DELTA_KEYWORDS = ("delta",)
 _SMARTPLUG_KEYWORDS = ("smart plug", "smartplug")
 _STREAM_KEYWORDS = ("stream",)
-# Checked before every other list. These names contain a keyword from one of
-# the lists above as a substring while belonging to a different product line,
-# and the match is by substring with no word boundary. "PowerStream" contains
-# "stream", so a PowerStream microinverter was classified as a Stream battery
-# and given its full entity set, which then stayed empty for good: the device
-# connected, reported nothing this parser understands, and settled on stale
-# (#188). Landing in DEVICE_TYPE_UNKNOWN instead is the honest outcome - the
-# user gets the unsupported-device notice and can contribute a raw capture,
-# which is the path that leads to real support.
-_NOT_THIS_FAMILY_KEYWORDS = ("powerstream", "power stream")
+# Checked before the Stream list, and the order is the whole point. The match
+# is by substring with no word boundary, so "PowerStream" contains "stream":
+# in the other order a microinverter is classified as a Stream battery and
+# given its full entity set, which then stays empty for good, which is exactly
+# what #188 reported. Until this parser existed the same ordering was used to
+# route the name to DEVICE_TYPE_UNKNOWN instead.
+_POWERSTREAM_KEYWORDS = ("powerstream", "power stream")
 
 _SN_PREFIX_MAP = {
     "HJ31": DEVICE_TYPE_POWEROCEAN,
@@ -167,6 +167,13 @@ _SN_PREFIX_MAP = {
     # guess from the shared name. Controls are a separate question and stay
     # off, see STREAM_AC5000_CONTROL_PREFIXES in ../const.py.
     "ES21": DEVICE_TYPE_STREAM_AC5000,
+    # PowerStream microinverter (#230, capture from #188). Standard Mode
+    # only: the whole device arrives as flat JSON under the `20_1.`
+    # namespace, and the reporter capture closes the unit's own power
+    # balance exactly, so the field map rests on arithmetic rather than on
+    # the field names. Mapping the prefix is what makes the name check below
+    # the second line of defence instead of the only one.
+    "HW51": DEVICE_TYPE_POWERSTREAM,
 }
 
 _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
@@ -212,8 +219,8 @@ def get_device_type(product_name: str, sn: str = "") -> str:
     """Classify a device based on its SN prefix or productName string.
 
     Returns DEVICE_TYPE_POWEROCEAN, DEVICE_TYPE_DELTA, DEVICE_TYPE_DELTA3,
-    DEVICE_TYPE_SMARTPLUG, DEVICE_TYPE_STREAM, DEVICE_TYPE_STREAM_AC5000, or
-    DEVICE_TYPE_UNKNOWN.
+    DEVICE_TYPE_SMARTPLUG, DEVICE_TYPE_STREAM, DEVICE_TYPE_STREAM_AC5000,
+    DEVICE_TYPE_POWERSTREAM, or DEVICE_TYPE_UNKNOWN.
     """
     # The prefix is exact evidence, the product name a substring guess, so
     # the prefix wins. Every prefix mapped before this ordering existed
@@ -225,9 +232,9 @@ def get_device_type(product_name: str, sn: str = "") -> str:
             return _SN_PREFIX_MAP[prefix]
 
     name = (product_name or "").lower()
-    for kw in _NOT_THIS_FAMILY_KEYWORDS:
+    for kw in _POWERSTREAM_KEYWORDS:
         if kw in name:
-            return DEVICE_TYPE_UNKNOWN
+            return DEVICE_TYPE_POWERSTREAM
     for kw in _POWEROCEAN_KEYWORDS:
         if kw in name:
             return DEVICE_TYPE_POWEROCEAN

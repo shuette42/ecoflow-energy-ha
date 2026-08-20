@@ -1461,6 +1461,37 @@
           "finishing": "Beendet",
           "faulted": "Störung"
         }
+      },
+      "inv_output_w": {
+        "name": "Wechselrichter-Ausgangsleistung"
+      },
+      "inv_output_energy_kwh": {
+        "name": "Wechselrichter-Ausgangsenergie"
+      },
+      "plug_total_w": {
+        "name": "Smart-Plug-Lastleistung"
+      },
+      "permanent_watts_w": {
+        "name": "Eigene Grundlast"
+      },
+      "lower_limit_pct": {
+        "name": "Entladegrenze"
+      },
+      "upper_limit_pct": {
+        "name": "Ladegrenze"
+      },
+      "rated_power_w": {
+        "name": "Nennleistung"
+      },
+      "pv1_voltage_v": {
+        "name": "PV 1 Spannung"
+      },
+      "supply_priority": {
+        "name": "Versorgungspriorität",
+        "state": {
+          "power_supply": "Verbrauch bevorzugen",
+          "battery_storage": "Speicher bevorzugen"
+        }
       }
     },
     "binary_sensor": {

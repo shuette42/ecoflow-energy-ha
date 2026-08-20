@@ -10,6 +10,7 @@ from ..const import (
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
+    DEVICE_TYPE_POWERSTREAM,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
 )
@@ -17,6 +18,7 @@ from ..ecoflow.firmware import extract_firmware_versions
 from ..ecoflow.parsers.delta_http import parse_delta_http_quota
 from ..ecoflow.parsers.delta3_http import parse_delta3_http_quota
 from ..ecoflow.parsers.powerocean import parse_powerocean_http_quota
+from ..ecoflow.parsers.powerstream_http import parse_powerstream_quota
 from ..ecoflow.parsers.smartplug import parse_smartplug_http_quota
 from ..ecoflow.parsers.stream_http import parse_stream_quota
 
@@ -111,6 +113,14 @@ class HttpPollMixin:
             self._raw_quota = dict(raw)
             self._raw_quota_captured_at = time.monotonic()
             parsed = parse_stream_quota(raw)
+        elif self.device_type == DEVICE_TYPE_POWERSTREAM:
+            # Keep the raw snapshot for diagnostics. The field map rests on a
+            # single reporter capture with an idle battery and empty history
+            # counters, so the keys it leaves unmapped are exactly the ones a
+            # second dump from a busier unit would settle (#230).
+            self._raw_quota = dict(raw)
+            self._raw_quota_captured_at = time.monotonic()
+            parsed = parse_powerstream_quota(raw)
         else:
             parsed = raw
         self._enforce_monotonic(parsed)

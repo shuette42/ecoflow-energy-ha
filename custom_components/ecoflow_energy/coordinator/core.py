@@ -38,6 +38,7 @@ from ..const import (
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
+    DEVICE_TYPE_POWERSTREAM,
     DEVICE_TYPE_DISPLAY_NAMES,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
@@ -47,6 +48,8 @@ from ..const import (
     HTTP_FALLBACK_INTERVAL_S,
     POWEROCEAN_ENERGY_FROM_API,
     POWEROCEAN_POWER_TO_ENERGY,
+    POWERSTREAM_ENERGY_FROM_API,
+    POWERSTREAM_POWER_TO_ENERGY,
     RAW_FRAME_LOG_KEYS_MAX,
     RAW_FRAME_LOG_PER_KEY_MAX,
     RAW_FRAME_PER_KEY_MAX,
@@ -349,6 +352,9 @@ class EcoFlowDeviceCoordinator(
         elif self.device_type == DEVICE_TYPE_STREAM_AC5000:
             self._power_to_energy = STREAMAC5000_POWER_TO_ENERGY
             self._energy_from_api = STREAMAC5000_ENERGY_FROM_API
+        elif self.device_type == DEVICE_TYPE_POWERSTREAM:
+            self._power_to_energy = POWERSTREAM_POWER_TO_ENERGY
+            self._energy_from_api = POWERSTREAM_ENERGY_FROM_API
         else:
             self._power_to_energy = {}
             self._energy_from_api = []

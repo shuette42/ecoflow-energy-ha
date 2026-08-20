@@ -20,6 +20,7 @@ from .const import (
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
+    DEVICE_TYPE_POWERSTREAM,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
     DEVICE_TYPE_STREAM_AC5000,
@@ -29,6 +30,7 @@ from .const import (
     EcoFlowSensorDef,
     filter_defs_for_serial,
     POWEROCEAN_SENSORS,
+    POWERSTREAM_SENSORS,
     SMARTPLUG_SENSORS,
     STREAM_SENSORS,
     STREAMAC5000_SENSORS,
@@ -339,4 +341,6 @@ def _get_sensor_defs(device_type: str) -> list[EcoFlowSensorDef]:
         return STREAM_SENSORS
     if device_type == DEVICE_TYPE_STREAM_AC5000:
         return STREAMAC5000_SENSORS
+    if device_type == DEVICE_TYPE_POWERSTREAM:
+        return POWERSTREAM_SENSORS
     return []

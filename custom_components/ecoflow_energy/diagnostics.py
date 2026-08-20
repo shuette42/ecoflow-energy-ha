@@ -27,6 +27,7 @@ from .const import (
     DATA_SKIPPED_DEVICES,
     DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
+    DEVICE_TYPE_POWERSTREAM,
     DEVICE_TYPE_STREAM,
     DOMAIN,
     RAW_FRAME_BUNDLE_MAX_BYTES,
@@ -455,6 +456,7 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
         DEVICE_TYPE_DELTA3,
         DEVICE_TYPE_STREAM,
         DEVICE_TYPE_POWEROCEAN,
+        DEVICE_TYPE_POWERSTREAM,
     ):
         raw_quota = coordinator.raw_quota
         raw_age_s: float | None = None

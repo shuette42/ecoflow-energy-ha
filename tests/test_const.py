@@ -39,9 +39,9 @@ from ecoflow_energy.const import (
     get_delta_profile,
 )
 from ecoflow_energy.ecoflow.const import (
-    _NOT_THIS_FAMILY_KEYWORDS,
-    _SN_PREFIX_DISPLAY_NAMES,
+    _POWERSTREAM_KEYWORDS,
     _SN_PREFIX_MAP,
+    _STREAM_KEYWORDS,
 )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -91,21 +91,24 @@ class TestDeviceTypeRouting:
         """"PowerStream" contains "stream", and the match is by substring.
 
         A PowerStream microinverter was classified as a Stream battery and
-        given its whole entity set. It connected, reported nothing this
+        given its whole entity set. It connected, reported nothing that
         parser understands and settled on stale, so the owner saw a full
-        device with 54 readings that could never fill (#188). Unsupported is
-        the honest answer and the one that leads somewhere: it asks for a
-        capture instead of pretending.
+        device with 54 readings that could never fill (#188). It has its own
+        parser now, and the ordering that used to route the name to
+        `unknown` is the same ordering that routes it here (#230): get it
+        wrong and the Stream keyword answers first, exactly as before.
         """
-        assert get_device_type("PowerStream", "HW51TEST00000001") == "unknown"
-        assert get_device_type("Power Stream", "HW51TEST00000001") == "unknown"
+        assert get_device_type("PowerStream", "HW51TEST00000001") == "powerstream"
+        assert get_device_type("Power Stream", "") == "powerstream"
+        assert get_device_type("STREAM AC Pro", "") == "stream"
+        assert get_device_type("Power Stream", "HW51TEST00000001") == "powerstream"
 
     def test_the_real_stream_family_still_routes(self) -> None:
-        """The guard above must not cost the devices it sits in front of.
+        """The check above must not cost the devices it sits in front of.
 
         A guard, not a regression detector: it passes on the code before the
         PowerStream fix too. It is here so that a future addition to the
-        not-this-family list cannot quietly swallow a real Stream.
+        PowerStream keyword list cannot quietly swallow a real Stream.
         """
         for name in ("Stream AC Pro", "Stream Micro", "Stream Ultra", "STREAM AC"):
             assert get_device_type(name, "") == "stream", name
@@ -257,32 +260,30 @@ class TestDeviceTypeRouting:
         # name is populated and would match a different family.
         assert get_device_type("STREAM AC 5000", "ES22TEST00000001") == "stream_ac5000"
 
-    def test_a_known_prefix_wins_over_the_not_this_family_guard(self) -> None:
-        """Stating the cost of that ordering, so the two tests below have a
-        reason to exist.
+    def test_a_known_prefix_wins_over_the_product_name(self) -> None:
+        """Stating the cost of that ordering, so the test below has a reason
+        to exist.
 
-        The prefix is consulted first, which means the guard only ever runs
-        for a serial the prefix map does not know.
+        The prefix is consulted first, which means the name check only ever
+        runs for a serial the prefix map does not know.
         """
         assert get_device_type("PowerStream", "ES22TEST00000001") == "stream_ac5000"
 
-    def test_the_powerstream_prefix_stays_out_of_the_map(self) -> None:
-        """A PowerStream reports HW51 and only HW52 is mapped, which is the
-        whole reason the #188 guard still fires after the reorder."""
-        assert "HW51" not in _SN_PREFIX_MAP
-        assert get_device_type("PowerStream", "HW51TEST00000001") == "unknown"
+    def test_the_powerstream_prefix_is_mapped(self) -> None:
+        """A PowerStream reports HW51, the Smart Plug next to it HW52."""
+        assert _SN_PREFIX_MAP["HW51"] == "powerstream"
+        assert _SN_PREFIX_MAP["HW52"] == "smartplug"
 
-    def test_no_mapped_prefix_belongs_to_a_guarded_family(self) -> None:
-        """A prefix added for a device the guard rejects would silently
-        reinstate #188: the map answers before the guard is consulted, so the
-        unsupported-device notice that asks for a capture never appears."""
-        for prefix, device_type in _SN_PREFIX_MAP.items():
-            name = _SN_PREFIX_DISPLAY_NAMES.get(prefix, "").lower()
-            for keyword in _NOT_THIS_FAMILY_KEYWORDS:
-                assert keyword not in name, (
-                    f"{prefix} routes to {device_type} but names itself "
-                    f"'{name}', which the not-this-family guard rejects"
-                )
+    def test_the_powerstream_keyword_is_checked_before_the_stream_one(self) -> None:
+        """The keyword lists are substring matches with no word boundary, so
+        "PowerStream" matches both. Order is the only thing separating them,
+        and getting it wrong is #188 verbatim."""
+        for powerstream_keyword in _POWERSTREAM_KEYWORDS:
+            assert any(
+                stream_keyword in powerstream_keyword
+                for stream_keyword in _STREAM_KEYWORDS
+            ), powerstream_keyword
+            assert get_device_type(powerstream_keyword, "") == "powerstream"
 
     def test_bk21_smart_meter_stays_unknown(self) -> None:
         # Smart Meter support is deferred: it must remain unknown so it

@@ -11,6 +11,7 @@ from ..const import (
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
+    DEVICE_TYPE_POWERSTREAM,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
     DEVICE_TYPE_STREAM_AC5000,
@@ -39,6 +40,7 @@ from ..ecoflow.parsers.smartplug import (
     parse_smartplug_report,
 )
 from ..ecoflow.parsers.stream_ac5000_proto import parse_stream_ac5000_message
+from ..ecoflow.parsers.powerstream_http import parse_powerstream_quota
 from ..ecoflow.parsers.stream_http import parse_stream_quota
 from ..ecoflow.parsers.stream_proto import parse_stream_proto_message
 from ..ecoflow.frame_capture import (
@@ -365,6 +367,20 @@ class MqttIngestMixin:
                     if not isinstance(payload_obj, dict):
                         payload_obj = data
                     parsed = parse_stream_quota(payload_obj)
+                    return parsed if parsed else None
+                # PowerStream in Standard mode: the vendor documents the
+                # report as cmdId 1 / cmdFunc 20 carrying the same `20_1.`
+                # keys the HTTP quota has, so it goes through the same field
+                # map. HTTP polling stays the source that is confirmed on
+                # hardware; this only shortens the wait between polls when
+                # the device does push (#230).
+                if self.device_type == DEVICE_TYPE_POWERSTREAM:
+                    payload_obj = data.get("param")
+                    if not isinstance(payload_obj, dict):
+                        payload_obj = data.get("params")
+                    if not isinstance(payload_obj, dict):
+                        payload_obj = data
+                    parsed = parse_powerstream_quota(payload_obj)
                     return parsed if parsed else None
                 # PowerOcean sends flat {"params": {...}} or flat dicts
                 if data.get("params"):

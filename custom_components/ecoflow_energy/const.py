@@ -14,6 +14,7 @@ from .ecoflow.const import (  # noqa: E402
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
+    DEVICE_TYPE_POWERSTREAM,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
     DEVICE_TYPE_STREAM_AC5000,
@@ -264,6 +265,7 @@ DEVICE_TYPE_DISPLAY_NAMES: dict[str, str] = {
     DEVICE_TYPE_SMARTPLUG: "Smart Plug",
     DEVICE_TYPE_STREAM: "Stream",
     DEVICE_TYPE_STREAM_AC5000: "STREAM AC 5000",
+    DEVICE_TYPE_POWERSTREAM: "PowerStream",
 }
 
 # Delta write/profile variants.
@@ -1491,6 +1493,58 @@ DELTA3_SELECTS: list[EcoFlowSelectDef] = [
 AC_CHARGE_POWER_STATE_KEY = "ac_charge_power_limit_w"
 
 
+
+# =====================================================================
+# PowerStream microinverter sensor definitions
+# =====================================================================
+
+# Standard Mode only. Every reading below comes from the `20_1.` HTTP quota
+# and is scaled per the arithmetic in powerstream_http.py; the readings that
+# the capture could not settle - currents, the history counters, the remaining
+# times, the status enums - are absent on purpose rather than by oversight.
+POWERSTREAM_SENSORS: list[EcoFlowSensorDef] = [
+    # --- Production ---
+    EcoFlowSensorDef("solar_w", "Solar Power", "W", "power", "measurement", "mdi:solar-power", suggested_display_precision=0),
+    EcoFlowSensorDef("pv1_w", "PV 1 Power", "W", "power", "measurement", "mdi:solar-power-variant", suggested_display_precision=0),
+    EcoFlowSensorDef("pv2_w", "PV 2 Power", "W", "power", "measurement", "mdi:solar-power-variant", suggested_display_precision=0),
+    EcoFlowSensorDef("inv_output_w", "Inverter Output Power", "W", "power", "measurement", "mdi:flash", suggested_display_precision=0),
+    # Signed, negative while the unit exports. There is no import/export split
+    # here: the capture only ever shows this unit exporting, so which quantity
+    # a positive value would describe is unknown, and two energy counters built
+    # on that guess would be worse than none.
+    EcoFlowSensorDef("grid_w", "Grid Power", "W", "power", "measurement", "mdi:transmission-tower", suggested_display_precision=0),
+    EcoFlowSensorDef("plug_total_w", "Smart Plug Load Power", "W", "power", "measurement", "mdi:power-plug", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    # --- Battery ---
+    EcoFlowSensorDef("soc_pct", "Battery SOC", "%", "battery", "measurement", "mdi:battery", suggested_display_precision=0),
+    # Positive = charging, taken from the field name rather than from an
+    # observation: the battery was idle for the whole capture. Deliberately
+    # absent from POWERSTREAM_POWER_TO_ENERGY until an owner confirms it.
+    EcoFlowSensorDef("batt_w", "Battery Power", "W", "power", "measurement", "mdi:battery-charging", suggested_display_precision=0),
+    EcoFlowSensorDef("batt_voltage_v", "Battery Voltage", "V", "voltage", "measurement", "mdi:flash-triangle", "diagnostic", suggested_display_precision=1),
+    EcoFlowSensorDef("batt_temp_c", "Battery Temp", "\u00b0C", "temperature", "measurement", "mdi:thermometer", "diagnostic", suggested_display_precision=1),
+    # --- Settings the device reports back ---
+    EcoFlowSensorDef("permanent_watts_w", "Custom Load Power", "W", "power", "measurement", "mdi:home-lightning-bolt", "diagnostic", suggested_display_precision=0),
+    EcoFlowSensorDef("lower_limit_pct", "Discharge Limit", "%", None, "measurement", "mdi:battery-arrow-down", "diagnostic", suggested_display_precision=0),
+    EcoFlowSensorDef("upper_limit_pct", "Charge Limit", "%", None, "measurement", "mdi:battery-charging-100", "diagnostic", suggested_display_precision=0),
+    EcoFlowSensorDef("supply_priority", "Power Supply Priority", None, "enum", None, "mdi:priority-high", "diagnostic", options=["power_supply", "battery_storage"]),
+    EcoFlowSensorDef("led_brightness", "LED Brightness", "%", None, "measurement", "mdi:brightness-6", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("rated_power_w", "Rated Power", "W", "power", None, "mdi:flash-alert", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    # --- Electrical diagnostics ---
+    EcoFlowSensorDef("ac_voltage_v", "AC Voltage", "V", "voltage", "measurement", "mdi:sine-wave", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
+    EcoFlowSensorDef("ac_frequency_hz", "AC Frequency", "Hz", "frequency", "measurement", "mdi:sine-wave", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
+    EcoFlowSensorDef("pv1_voltage_v", "PV 1 Voltage", "V", "voltage", "measurement", "mdi:flash", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
+    EcoFlowSensorDef("pv2_voltage_v", "PV 2 Voltage", "V", "voltage", "measurement", "mdi:flash", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
+    EcoFlowSensorDef("wifi_rssi_dbm", "WiFi Signal", "dBm", "signal_strength", "measurement", "mdi:wifi", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    # --- Energy Dashboard (Riemann-integrated, kWh) ---
+    EcoFlowSensorDef("solar_energy_kwh", "Solar Energy", "kWh", "energy", "total_increasing", "mdi:solar-power", suggested_display_precision=2),
+    EcoFlowSensorDef("inv_output_energy_kwh", "Inverter Output Energy", "kWh", "energy", "total_increasing", "mdi:flash", suggested_display_precision=2),
+    # Per-string energy, off by default for the same reason as on the Stream:
+    # `solar_energy_kwh` already carries the PV total, and a dashboard summing
+    # the enabled strings would under-report on a unit with one panel.
+    EcoFlowSensorDef("pv1_energy_kwh", "PV 1 Energy", "kWh", "energy", "total_increasing", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=2, disabled_by_default=True),
+    EcoFlowSensorDef("pv2_energy_kwh", "PV 2 Energy", "kWh", "energy", "total_increasing", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=2, disabled_by_default=True),
+]
+
 # =====================================================================
 # Power → Energy mappings (Riemann sum integration per device type)
 # =====================================================================
@@ -1566,6 +1620,21 @@ STREAMAC5000_POWER_TO_ENERGY: dict[str, str] = {
 }
 
 STREAMAC5000_ENERGY_FROM_API: list[tuple[str, str]] = []
+
+# The PowerStream quota carries `history*` counters that all read 0 in the only
+# capture available, so nothing is known about them and the kWh sensors are
+# integrated from the live power keys instead. `grid_w` and `batt_w` are both
+# absent on purpose: the grid figure is signed with no observed import case,
+# and the battery sign is taken from a field name rather than from a reading.
+# Either one feeding a monotonic counter would be unrecoverable once wrong.
+POWERSTREAM_POWER_TO_ENERGY: dict[str, str] = {
+    "solar_w": "solar_energy_kwh",
+    "pv1_w": "pv1_energy_kwh",
+    "pv2_w": "pv2_energy_kwh",
+    "inv_output_w": "inv_output_energy_kwh",
+}
+
+POWERSTREAM_ENERGY_FROM_API: list[tuple[str, str]] = []
 
 
 # ===========================================================================

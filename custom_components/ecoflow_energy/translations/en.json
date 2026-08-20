@@ -1461,6 +1461,37 @@
           "finishing": "Finishing",
           "faulted": "Fault"
         }
+      },
+      "inv_output_w": {
+        "name": "Inverter Output Power"
+      },
+      "inv_output_energy_kwh": {
+        "name": "Inverter Output Energy"
+      },
+      "plug_total_w": {
+        "name": "Smart Plug Load Power"
+      },
+      "permanent_watts_w": {
+        "name": "Custom Load Power"
+      },
+      "lower_limit_pct": {
+        "name": "Discharge Limit"
+      },
+      "upper_limit_pct": {
+        "name": "Charge Limit"
+      },
+      "rated_power_w": {
+        "name": "Rated Power"
+      },
+      "pv1_voltage_v": {
+        "name": "PV 1 Voltage"
+      },
+      "supply_priority": {
+        "name": "Power Supply Priority",
+        "state": {
+          "power_supply": "Prioritize Power Supply",
+          "battery_storage": "Prioritize Battery Storage"
+        }
       }
     },
     "binary_sensor": {

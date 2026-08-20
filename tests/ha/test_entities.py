@@ -19,6 +19,7 @@ from custom_components.ecoflow_energy.const import (
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_SMARTPLUG,
+    DEVICE_TYPE_POWERSTREAM,
     DEVICE_TYPE_STREAM,
     DEVICE_TYPE_STREAM_AC5000,
     DOMAIN,
@@ -32,6 +33,7 @@ from custom_components.ecoflow_energy.const import (
     STREAM_BINARY_SENSORS,
     STREAM_SWITCHES,
     STREAM_NUMBERS,
+    POWERSTREAM_SENSORS,
     STREAM_SENSORS,
     STREAMAC5000_BINARY_SENSORS,
     STREAMAC5000_SENSORS,
@@ -102,6 +104,9 @@ class TestSensorDefsRouting:
     def test_stream_ac5000_sensors(self) -> None:
         assert _get_sensor_defs(DEVICE_TYPE_STREAM_AC5000) is STREAMAC5000_SENSORS
 
+    def test_powerstream_sensors(self) -> None:
+        assert _get_sensor_defs(DEVICE_TYPE_POWERSTREAM) is POWERSTREAM_SENSORS
+
     def test_unknown_sensors_empty(self):
         assert _get_sensor_defs("unknown") == []
 
@@ -121,6 +126,15 @@ class TestBinarySensorDefsRouting:
             _get_binary_sensor_defs(DEVICE_TYPE_STREAM_AC5000)
             is STREAMAC5000_BINARY_SENSORS
         )
+
+    def test_powerstream_has_no_controls_or_binary_sensors(self) -> None:
+        """The PowerStream is read-only. EcoFlow documents five settings it
+        accepts, none of them confirmed on hardware here, so nothing that
+        writes is registered for it (#230)."""
+        assert _get_binary_sensor_defs(DEVICE_TYPE_POWERSTREAM) == []
+        assert _get_switch_defs(DEVICE_TYPE_POWERSTREAM) == []
+        assert _get_switch_defs(DEVICE_TYPE_POWERSTREAM, "HW51TEST00000001") == []
+        assert _get_number_defs(DEVICE_TYPE_POWERSTREAM) == []
 
     def test_unknown_binary_sensors_empty(self):
         assert _get_binary_sensor_defs("unknown") == []

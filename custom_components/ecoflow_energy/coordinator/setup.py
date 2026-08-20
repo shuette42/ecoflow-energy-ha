@@ -20,6 +20,7 @@ from ..const import (
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
+    DEVICE_TYPE_POWERSTREAM,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
     HTTP_FALLBACK_INTERVAL_S,
@@ -150,12 +151,15 @@ class SetupMixin:
         )
 
         # Standard Mode: HTTP polling is the primary data source.
-        # MQTT is for SET commands only - except Delta and Smart Plug,
-        # which also subscribe to the IoT MQTT /quota topic for
-        # real-time push alongside HTTP polling.
+        # MQTT is for SET commands only - except Delta, Smart Plug, Stream
+        # and PowerStream, which also subscribe to the IoT MQTT /quota topic
+        # for real-time push alongside HTTP polling. A subscription that
+        # stays silent costs nothing here: with developer keys the HTTP poll
+        # is the primary source and a stale MQTT only keeps it running.
         subscribe_mqtt = self.device_type in (
             DEVICE_TYPE_DELTA,
             DEVICE_TYPE_DELTA3,
+            DEVICE_TYPE_POWERSTREAM,
             DEVICE_TYPE_SMARTPLUG,
             DEVICE_TYPE_STREAM,
         )
