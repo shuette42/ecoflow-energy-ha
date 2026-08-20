@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.17.0] - 2026-08-06
+## [1.17.0] - 2026-08-20
 
 ### Added
 - The Stream AC Pro (`BK31`) gains an LED Brightness control in Enhanced Mode, 0 to 100 percent in steps of 5. Contributed by @Hendrixx-hue, who traced the write off his own app session and confirmed it on his unit: the device took the write and then reported the new brightness back through its live telemetry. The brightness you see is that reported value, not what was asked for, so if the unit ignores a write the control returns to what the device actually has. The other Stream models keep their read-only brightness reading, since nothing yet shows they accept the same write. (Ref #98)
