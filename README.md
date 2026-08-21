@@ -47,8 +47,8 @@
 | **Stream** - AC-coupled Battery | `BK31` `BK11` `BK41` `BK51` `BK61` | 54 + 2 binary | 1 number; `BK31` adds 3 numbers and 2 switches (Enhanced only) | 2 default (battery charge/discharge), 6 optional diagnostic (solar/home, PV 1-4) | ~30 s standard / ~3 s enhanced |
 | **Stream Micro** - Grid-tie Inverter | `BK01`\* | 21 | - | 4 optional diagnostic (PV 1-4) | ~3 s enhanced |
 | **PowerStream** - Microinverter | `HW51` | 25 | none, see below | 2 default (solar, inverter output), 2 optional diagnostic (PV 1-2) | ~30 s standard |
-| **STREAM AC 5000** - AC-coupled Battery | `ES22`\* | 56 + 2 binary | 2 switches, 5 numbers, 1 select (Enhanced only) | 4 default (grid import/export, battery charge/discharge), 1 optional diagnostic (home) | ~2 s enhanced |
-| **STREAM 5000** - AC-coupled Battery | `ES21`\* | 56 + 2 binary | 2 switches, 5 numbers, 1 select (Enhanced only) | 4 default (grid import/export, battery charge/discharge), 1 optional diagnostic (home) | ~2 s enhanced |
+| **STREAM AC 5000** - AC-coupled Battery | `ES22`\* | 56 + 2 binary | 2 switches, 6 numbers, 1 select (Enhanced only) | 4 default (grid import/export, battery charge/discharge), 1 optional diagnostic (home) | ~2 s enhanced |
+| **STREAM 5000** - AC-coupled Battery | `ES21`\* | 56 + 2 binary | 2 switches, 6 numbers, 1 select (Enhanced only) | 4 default (grid import/export, battery charge/discharge), 1 optional diagnostic (home) | ~2 s enhanced |
 
 > **\* Enhanced Mode only.** These serial prefixes cannot currently be linked to an IoT Developer API key, so Standard Mode reports error 1006 and their entities stay unavailable. This is an EcoFlow API limitation, not a configuration problem.
 >
@@ -146,7 +146,7 @@ Despite the name these are not Stream devices. They send none of the BK-series m
 
 Battery state and per-unit readings on a linked installation · grid import and export, each counting in one direction so the Energy Dashboard can use them · house consumption · the unit's own PV strings (PV 1-4 and their total) where panels are wired to the EcoFlow · Third-Party Solar Power, which is the app's separate "Other" figure and not a measurement of your strings · per-phase smart meter readings where a meter is linked in the app.
 
-**Controls, both models:** work mode, both SoC limits, backup reserve and its level, the app's backup socket, and a scheduled charge and discharge power setpoint. A setpoint on this device writes a whole-day task rather than flipping a switch, and whether a smart meter is linked in the app decides whether it acts as a ceiling or as an absolute power command - worth knowing before automating it.
+**Controls, both models:** work mode, both SoC limits, backup reserve and its level, the app's backup socket, a scheduled charge and discharge power setpoint, and the grid-tied output power. A setpoint on this device writes a whole-day task rather than flipping a switch, and whether a smart meter is linked in the app decides whether it acts as a ceiling or as an absolute power command - worth knowing before automating it.
 
 **The STREAM 5000 was read-only until an `ES21` proved otherwise.** Every write to this family is a rebuild of a frame recorded from a real app session, and reading alike is not evidence of writing alike, so this model had the readings and none of the controls. An owner then recorded his own unit taking a setting change from the app and reporting the new value back, on the same envelope and the same command these controls use, which is what turned them on.
 

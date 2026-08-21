@@ -27,7 +27,7 @@ field's value":
     30  backup reserve {1: on/off, 2: reserve %}, both in one frame
     39  scheduled task, see build_task_payload
 
-A write number is not a readback number. Three of these five are read back
+A write number is not a readback number. Four of these six are read back
 under the number they were written on and two are not; the table on
 `CONFIG_*` below says which is which.
 """
@@ -47,11 +47,17 @@ from .proto_encoding import encode_field_bytes, encode_field_varint, encode_vari
 #   29  SoC limits       -> `32/2 f1.7` and `f1.21`. `f29` carries them too but
 #                           lags an app change by minutes, so it is unmapped.
 #   39  scheduled task   -> `254/39 f40`, one level deeper on `.8`.
+#   10  grid-tied output -> `254/39 f10.1`, which is the reading the
+#                           Max Grid-tied Output Power sensor already shows.
+#                           Written as `{1: watts, 4: ?, 5: ?}`; the two
+#                           unnamed companions belong to the unit and are
+#                           read back before every write.
 CONFIG_WORK_MODE = 25
 CONFIG_BACKUP_SOCKET = 19
 CONFIG_SOC_LIMITS = 29
 CONFIG_BACKUP_RESERVE = 30
 CONFIG_TASK = 39
+CONFIG_GRID_OUTPUT = 10
 
 CMD_FUNC_CONFIG = 254
 CMD_ID_CONFIG_WRITE = 38
@@ -190,6 +196,52 @@ def build_backup_reserve_payload(
     )
     pdata = encode_field_varint(1, CONFIG_BACKUP_RESERVE) + encode_field_bytes(
         CONFIG_BACKUP_RESERVE, inner
+    )
+    return _build_envelope(pdata, device_sn, seq)
+
+
+def build_grid_output_power_payload(
+    power_w: int,
+    field_4: int,
+    field_5: int,
+    device_sn: str,
+    seq: int = 0,
+) -> bytes:
+    """Build a grid-tied output power SET frame (config field 10).
+
+    This is the setpoint the app calls the grid-tied output, and the reading
+    the Max Grid-tied Output Power sensor already shows. It is the one write
+    in this file confirmed on the model it is offered to rather than
+    inherited: the frame it reproduces was recorded from a live `ES21`
+    changing this very setting, and the device reported the new value back
+    two seconds later (#231).
+
+    ``field_4`` and ``field_5`` travel with the setpoint because the app
+    sends all three together. Nothing here knows what they mean, and their
+    values differ per unit, so the caller passes what this device last
+    reported rather than a constant. Guessing them would send one unit's
+    numbers to another.
+
+    No upper bound is enforced here, because the device reports its own on
+    `f10.6` and the control offers that instead. A constant in this builder
+    would be the rated 2500 W, which is above the ceiling on at least one
+    real unit and therefore not a bound at all. What the device does with a
+    setpoint above its ceiling is untested: the recording only carries
+    in-range writes.
+    """
+    if power_w < 0:
+        raise ValueError(f"power_w must not be negative, got {power_w}")
+    for name, value in (("field_4", field_4), ("field_5", field_5)):
+        if value < 0:
+            raise ValueError(f"{name} must not be negative, got {value}")
+
+    inner = (
+        encode_field_varint(1, power_w)
+        + encode_field_varint(4, field_4)
+        + encode_field_varint(5, field_5)
+    )
+    pdata = encode_field_varint(1, CONFIG_GRID_OUTPUT) + encode_field_bytes(
+        CONFIG_GRID_OUTPUT, inner
     )
     return _build_envelope(pdata, device_sn, seq)
 

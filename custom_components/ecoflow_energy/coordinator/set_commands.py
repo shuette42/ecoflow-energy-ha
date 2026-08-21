@@ -449,6 +449,34 @@ class SetCommandsMixin:
             )
             return True
 
+    async def async_set_stream_ac5000_grid_output_power(self, power_w: int) -> bool:
+        """Write config field 10, the grid-tied output setpoint.
+
+        The two companion values the app sends with the setpoint are read
+        here rather than passed in: they belong to the device, not to the
+        caller, and a write that invented them would send one unit's numbers
+        to another.
+        """
+        from ..ecoflow.stream_ac5000_commands import (
+            build_grid_output_power_payload,
+        )
+
+        async with self._device_config_lock:
+            data = self.data or {}
+            field_4 = as_known_int(data.get("_grid_output_field_4"))
+            field_5 = as_known_int(data.get("_grid_output_field_5"))
+            if field_4 is None or field_5 is None:
+                raise DeviceValueNotReported("grid-tied output power")
+            payload = build_grid_output_power_payload(
+                power_w, field_4, field_5, self.device_sn
+            )
+            if not await self.async_send_proto_set_command(
+                payload, label="stream_ac5000_grid_output_power"
+            ):
+                return False
+            self._seed_device_values(max_grid_output_power_w=power_w)
+            return True
+
     async def async_set_stream_ac5000_backup_reserve(
         self, *, enabled: bool | None = None, reserve_pct: int | None = None,
     ) -> bool:

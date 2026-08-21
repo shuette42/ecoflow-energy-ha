@@ -101,6 +101,41 @@ def _sent(coordinator: EcoFlowDeviceCoordinator) -> tuple[dict, bytes]:
     return headers[0], bytes.fromhex(headers[0]["pdata"])
 
 
+def _field_10(pdata: bytes) -> dict[int, int]:
+    """Return config field 10 of a write payload as {subfield: value}."""
+    for number, value in _walk(pdata):
+        if number == 10 and isinstance(value, bytes):
+            return {sub: val for sub, val in _walk(value) if isinstance(val, int)}
+    raise AssertionError("no config field 10 in this payload")
+
+
+def _walk(buf: bytes):
+    """Yield (field number, value) for one level of a protobuf message."""
+    offset = 0
+    while offset < len(buf):
+        key, offset = _varint(buf, offset)
+        number, wire = key >> 3, key & 7
+        if wire == 0:
+            value, offset = _varint(buf, offset)
+        elif wire == 2:
+            length, offset = _varint(buf, offset)
+            value, offset = buf[offset : offset + length], offset + length
+        else:  # pragma: no cover - not present in config writes
+            raise AssertionError(f"unexpected wire type {wire}")
+        yield number, value
+
+
+def _varint(buf: bytes, offset: int) -> tuple[int, int]:
+    result = shift = 0
+    while True:
+        byte = buf[offset]
+        offset += 1
+        result |= (byte & 0x7F) << shift
+        shift += 7
+        if not byte & 0x80:
+            return result, offset
+
+
 def _pdata_of(call) -> bytes:
     """Return the pdata of one recorded send, for multi-frame writes."""
     headers, _ = decode_header_message(call[0][0])
@@ -793,3 +828,134 @@ class TestBackupSocketSwitch:
 
         with pytest.raises(HomeAssistantError):
             await entity.async_turn_on()
+
+
+class TestGridOutputPower:
+    """The grid-tied output setpoint, config field 10.
+
+    Its bound is not the model rating but a ceiling the device reports on
+    `f10.6`, and its write carries two companion values that belong to the
+    unit rather than to the caller. Both are places a plausible-looking
+    shortcut would be silently wrong on somebody else's hardware.
+    """
+
+    REPORTED_WITH_FIELD_10 = {
+        **REPORTED,
+        "max_grid_output_power_w": 2000,
+        "_grid_output_field_4": 21,
+        "_grid_output_field_5": 800,
+        "_grid_output_ceiling_w": 2500,
+    }
+
+    async def test_the_write_reproduces_the_recorded_app_frame(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """Not a hand-written expectation: this is the payload the EcoFlow
+        app put on the wire for the same change on a live ES21 (#231).
+        """
+        recorded = json.loads(
+            (
+                Path(__file__).parents[1]
+                / "fixtures/stream_ac5000/es21_write_frames_masked.json"
+            ).read_text()
+        )["frames"][1]
+        expected = bytes.fromhex(
+            decode_header_message(bytes.fromhex(recorded["hex"]))[0][0]["pdata"]
+        )
+        coordinator = _coordinator(
+            hass, enhanced_config_entry, self.REPORTED_WITH_FIELD_10
+        )
+        entity = _number(coordinator, "max_grid_output_power_w")
+
+        await entity.async_set_native_value(1000)
+
+        _, pdata = _sent(coordinator)
+        assert pdata == expected
+
+    async def test_a_unit_reporting_other_companions_sends_those(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """The values are read per write, not captured once at setup.
+
+        An ES22 reported 5 and 600 where the recorded ES21 has 21 and 800, so
+        a build that reused the recorded pair would be wrong on the other
+        model and no assertion on the setpoint alone would catch it.
+        """
+        coordinator = _coordinator(
+            hass,
+            enhanced_config_entry,
+            {
+                **self.REPORTED_WITH_FIELD_10,
+                "_grid_output_field_4": 5,
+                "_grid_output_field_5": 600,
+            },
+        )
+        entity = _number(coordinator, "max_grid_output_power_w")
+
+        await entity.async_set_native_value(1000)
+
+        _, pdata = _sent(coordinator)
+        assert _field_10(pdata) == {1: 1000, 4: 5, 5: 600}
+
+    async def test_nothing_is_sent_before_the_device_reported_the_companions(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """A guessed companion would put another unit's numbers on the wire."""
+        coordinator = _coordinator(
+            hass, enhanced_config_entry, {"max_grid_output_power_w": 2000}
+        )
+        entity = _number(coordinator, "max_grid_output_power_w")
+
+        with pytest.raises(HomeAssistantError):
+            await entity.async_set_native_value(1000)
+
+        coordinator.async_send_proto_set_command.assert_not_called()
+
+    async def test_the_reported_ceiling_narrows_the_slider(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """An ES22 was seen at a 600 W ceiling on a unit rated 2500."""
+        coordinator = _coordinator(
+            hass,
+            enhanced_config_entry,
+            {**self.REPORTED_WITH_FIELD_10, "_grid_output_ceiling_w": 600},
+        )
+        entity = _number(coordinator, "max_grid_output_power_w")
+
+        assert entity.native_max_value == 600
+        assert entity.native_min_value == 0
+
+    async def test_the_ceiling_never_widens_past_the_rating(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        coordinator = _coordinator(
+            hass,
+            enhanced_config_entry,
+            {**self.REPORTED_WITH_FIELD_10, "_grid_output_ceiling_w": 9999},
+        )
+        entity = _number(coordinator, "max_grid_output_power_w")
+
+        assert entity.native_max_value == 2500
+
+    async def test_the_declared_range_holds_until_a_ceiling_arrives(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """The first minutes of a connection must not leave a dead slider."""
+        coordinator = _coordinator(
+            hass, enhanced_config_entry, {"max_grid_output_power_w": 2000}
+        )
+        entity = _number(coordinator, "max_grid_output_power_w")
+
+        assert entity.native_max_value == 2500
+
+    async def test_a_nonsense_ceiling_does_not_collapse_the_control(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        coordinator = _coordinator(
+            hass,
+            enhanced_config_entry,
+            {**self.REPORTED_WITH_FIELD_10, "_grid_output_ceiling_w": 0},
+        )
+        entity = _number(coordinator, "max_grid_output_power_w")
+
+        assert entity.native_max_value == 2500

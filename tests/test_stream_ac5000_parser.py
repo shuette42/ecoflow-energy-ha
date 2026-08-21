@@ -332,7 +332,7 @@ class TestDerivedValues:
         assert result["max_grid_output_power_w"] == 2400
         assert result["max_grid_input_power_w"] == 1200
 
-    def test_the_ceiling_fields_are_not_a_user_limit(self) -> None:
+    def test_the_ceiling_fields_are_not_offered_as_user_limits(self) -> None:
         """Neither f10.5 nor f10.6 is a user setting, for different reasons.
 
         `.6` sat at the same 2500 as the input limit for as long as nobody
@@ -341,9 +341,17 @@ class TestDerivedValues:
         once ever, when the ceiling was raised from 600, so it behaves like
         that ceiling. `.5` is unexplained: 600 at the old ceiling and 800
         after, matching no setting visible in the app.
+
+        Both are read now, because a write to this field carries `.5` and the
+        control bounds itself by `.6`. Neither reaches an owner: they are
+        keyed under a leading underscore, which is what keeps a number nobody
+        can explain out of the entity list.
         """
         inner = _sub(10, encode_field_varint(5, 800) + encode_field_varint(6, 2500))
-        assert parse_stream_ac5000_message(_build_frame(254, 39, bytes(inner))) is None
+        result = parse_stream_ac5000_message(_build_frame(254, 39, bytes(inner)))
+
+        assert result == {"_grid_output_field_5": 800, "_grid_output_ceiling_w": 2500}
+        assert all(key.startswith("_") for key in result)
 
     def test_the_milliwatt_pair_is_not_mapped(self) -> None:
         """254/40 f22 reads 600000/1200000 and stayed there while the account

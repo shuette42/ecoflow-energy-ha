@@ -204,10 +204,10 @@ class TestControlStateCoverage:
     """What the two model numbers actually report back, measured.
 
     `STREAM_AC5000_CONTROL_PREFIXES` claims in a comment that the ES21 and the
-    ES22 report the same four of the eight control states, and that the three
-    backup settings are missing from both because `254/39` sends only the
-    block that changed. A comment cannot hold that: the number would drift
-    the first time a fixture is added and nothing would say so.
+    ES22 report the same control states back, and that the three backup
+    settings are missing from both because `254/39` sends only the block that
+    changed. A comment cannot hold that: the number would drift the first
+    time a fixture is added and nothing would say so.
     """
 
     CONTROL_KEYS = frozenset(
@@ -236,7 +236,7 @@ class TestControlStateCoverage:
 
         assert es21 == es22
 
-    def test_four_of_the_eight_control_states_are_on_file_for_the_es21(self) -> None:
+    def test_five_of_the_nine_control_states_are_on_file_for_the_es21(self) -> None:
         assert self._states_reported(
             "es21_frames_masked.json", "es21_pv_masked.json"
         ) == {
@@ -244,6 +244,7 @@ class TestControlStateCoverage:
             "min_discharge_soc_pct",
             "scheduled_charge_power_w",
             "work_mode",
+            "max_grid_output_power_w",
         }
 
     def test_the_backup_settings_are_missing_from_every_capture(self) -> None:
@@ -261,3 +262,55 @@ class TestControlStateCoverage:
             "backup_reserve_switch",
             "backup_socket_switch",
         }
+
+
+class TestGridOutputCeiling:
+    """The claim the writable grid-tied output rests on, over real frames.
+
+    The control offers `f10.6` as its upper end instead of the model's rated
+    2500 W. That is only defensible while the device's own setpoint stays at
+    or below it, and that claim lived in a comment. A comment cannot hold it:
+    the count would drift the first time a fixture is added, and the
+    invariant could break without anything saying so.
+    """
+
+    FIXTURES_WITH_FIELD_10 = (
+        "es21_pv_masked.json",
+        "es22_get_reply_masked.json",
+        "es22_push_capture_masked.json",
+        "es22_task_frames_masked.json",
+    )
+
+    @staticmethod
+    def _pairs() -> list[tuple[str, int, int]]:
+        """Return (fixture, setpoint, ceiling) for every frame carrying both."""
+        found: list[tuple[str, int, int]] = []
+        for name in TestGridOutputCeiling.FIXTURES_WITH_FIELD_10:
+            for frame in json.loads((FIXTURES / name).read_text())["frames"]:
+                parsed = parse_stream_ac5000_message(bytes.fromhex(frame["hex"])) or {}
+                setpoint = parsed.get("max_grid_output_power_w")
+                ceiling = parsed.get("_grid_output_ceiling_w")
+                if setpoint is not None and ceiling is not None:
+                    found.append((name, setpoint, ceiling))
+        return found
+
+    def test_the_setpoint_never_exceeds_the_ceiling(self) -> None:
+        pairs = self._pairs()
+
+        assert pairs, "no frame on file carries both values"
+        assert [p for p in pairs if p[1] > p[2]] == []
+
+    def test_ten_frames_carry_both_values(self) -> None:
+        """The count the parser comment states, recomputed rather than trusted."""
+        assert len(self._pairs()) == 10
+
+    def test_the_ceiling_is_not_one_value_across_the_captures(self) -> None:
+        """A ceiling that never moved would make the bound untestable: it
+        would be indistinguishable from the rating it replaced.
+        """
+        assert {ceiling for _, _, ceiling in self._pairs()} == {600, 2500}
+
+    def test_both_model_numbers_are_represented(self) -> None:
+        families = {name.split("_")[0] for name, _, _ in self._pairs()}
+
+        assert families == {"es21", "es22"}

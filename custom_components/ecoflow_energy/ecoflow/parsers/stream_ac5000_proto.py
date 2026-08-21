@@ -199,14 +199,29 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
         # --- configuration readback ---
         # The two power limits the app calls "Max grid-tied output power" and
         # "Max grid input power". `.5` and `.6` hold values that look like
-        # these and are not, for different reasons: `.6` behaves like a
-        # ceiling, having moved once across four days of captures, when the
-        # account limit went from 600 to 2500, and through neither user
-        # change. `.5` is simply unexplained, 600 at that ceiling and 800
-        # after it rose, matching no setting visible in the app. Both stay
-        # unmapped.
+        # these and are not: neither has ever followed a user change.
         "10.1": ("max_grid_output_power_w", _TYPE_INT, 1),
         "10.2": ("max_grid_input_power_w", _TYPE_INT, 1),
+        # `.4` and `.5` are unexplained, and read here because the app sends
+        # them back alongside `.1` on every write to this field. Their values
+        # differ per unit (21 and 800 on an ES21, 5 and 600 then 4 and 800 on
+        # an ES22), so a write reproduces what this device last reported
+        # rather than a constant lifted from somebody else's capture. Kept
+        # private: a number nobody can explain is not an entity.
+        "10.4": ("_grid_output_field_4", _TYPE_INT, 1),
+        "10.5": ("_grid_output_field_5", _TYPE_INT, 1),
+        # `.6` is the ceiling the output setpoint may not exceed. Across the
+        # ten frames on file that carry this field, from both model numbers,
+        # `.1` is at or below `.6` every time, and `.6` moved once, from 600
+        # to 2500 between two captures four days apart, with `.1` following
+        # it upwards. It is not a user setting: nothing in the app changed
+        # it. Private for now, and used only to bound the control.
+        #
+        # That invariant is what makes `.6` usable as the control's upper
+        # end, so it is held by TestGridOutputCeiling in
+        # tests/test_stream_5000.py, which recomputes it and the count above
+        # from the fixtures rather than trusting this comment.
+        "10.6": ("_grid_output_ceiling_w", _TYPE_INT, 1),
         "25": ("_work_mode_raw", _TYPE_INT, 1),
         # The app's backup socket control, written on config field 19.
         "19.1": ("_backup_socket_enabled_raw", _TYPE_INT, 1),

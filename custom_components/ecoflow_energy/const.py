@@ -1056,10 +1056,15 @@ STREAMAC5000_SWITCHES: list[EcoFlowSwitchDef] = [
 # setpoint. Bounds are the model's rated 2500 W, a constant rather than a
 # reading: the app's own limits sit at or below it and are not enforced here,
 # because a setpoint above one is acknowledged and then silently clamped by the
-# device rather than rejected. Those limits are exposed as the Max Grid-tied
+# device rather than rejected. Both limits are exposed as the Max Grid-tied
 # Output Power and Max Grid Input Power sensors for an optimiser to read and
-# respect, and the output one additionally has an account ceiling that only
-# EcoFlow can raise.
+# respect. The output one is also a control, and the only write in this list
+# reproduced from a frame recorded on the model it is offered to: an ES21
+# owner changed it in the app while a capture ran, and the device reported the
+# new value back (#231). Its ceiling is not the rated 2500 W but a value the
+# device carries on `f10.6`, which only EcoFlow can raise, so the control
+# narrows to that ceiling at runtime rather than declaring one. The input
+# limit stays read-only: no frame writing it has been recorded.
 #
 # Each is keyed and named after the state key it writes, so the control and the
 # sensor reporting it back read the same. The keys stay separate from the shared
@@ -1075,6 +1080,7 @@ STREAMAC5000_NUMBERS: list[EcoFlowNumberDef] = [
     EcoFlowNumberDef("max_charge_soc_pct", "Max Charge SoC", "max_charge_soc_pct", "%", "mdi:battery-charging-high", 50, 100, 1, enhanced_only=True),
     EcoFlowNumberDef("min_discharge_soc_pct", "Min Discharge SoC", "min_discharge_soc_pct", "%", "mdi:battery-arrow-down", 0, 50, 1, enhanced_only=True),
     EcoFlowNumberDef("backup_reserve", "Backup Reserve", "backup_reserve_pct", "%", "mdi:battery-lock", 0, 100, 5, enhanced_only=True),
+    EcoFlowNumberDef("max_grid_output_power_w", "Max Grid-tied Output Power", "max_grid_output_power_w", "W", "mdi:transmission-tower-export", 0, 2500, 50, enhanced_only=True),
 ]
 
 STREAMAC5000_SELECTS: list[EcoFlowSelectDef] = [
@@ -1221,14 +1227,18 @@ def excluded_keys_for_serial(device_sn: str) -> frozenset[str]:
 #
 # The read-back side carries the same limit, and it is worth stating because
 # "no control without read-back" is a commitment here. Replaying every ES21
-# fixture through the parser yields four of the eight control states:
-# both SoC limits, the work mode and the scheduled charge power. That is not
-# an ES21 shortfall - replaying every ES22 fixture yields exactly the same
-# four. The backup reserve, its level and the backup socket are missing on
-# both model numbers, because `254/39` reports only the block that changed
-# and nobody touched those settings while a capture was running. So the two
-# variants are equally covered, and the gap is one this family has always
-# had rather than one this prefix introduces.
+# fixture through the parser yields five of the nine control states: both SoC
+# limits, the work mode, the scheduled charge power and the grid-tied output.
+# That is not an ES21 shortfall - replaying every ES22 fixture yields exactly
+# the same five. The backup reserve, its level and the backup socket are
+# missing on both model numbers, because `254/39` reports only the block that
+# changed and nobody touched those settings while a capture was running. So
+# the two variants are equally covered, and the gap is one this family has
+# always had rather than one this prefix introduces.
+#
+# The grid-tied output is the exception that proves the rule: it is the one
+# control here whose write was recorded on an ES21 rather than inherited from
+# an ES22, and it is also the one whose read-back both models report.
 #
 # This is an allowlist on purpose, the inverse of DELTA3_PORT_PRIORITY_KEYS
 # above: a prefix added later gets no controls until someone decides here,

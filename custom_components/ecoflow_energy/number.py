@@ -219,14 +219,28 @@ class EcoFlowNumber(
     def _derived_bounds(self) -> tuple[float, float] | None:
         """Return the runtime bounds, or None where the declared range holds.
 
-        Two controls have a range the device moves under them, and both follow
-        a battery limit the user can change while HA runs: the Delta 3 port
-        priority cutoffs and the Stream backup reserve. Every other number
-        keeps the range its definition declares.
+        Three controls have a range the device moves under them. Two follow a
+        battery limit the user can change while HA runs, the Delta 3 port
+        priority cutoffs and the Stream backup reserve. The third, the STREAM
+        AC 5000 grid-tied output, follows a ceiling only EcoFlow can raise.
+        Every other number keeps the range its definition declares.
         """
         if self._port_priority_stem() is not None:
             lower, upper = self._port_priority_bounds()
             return float(lower), float(upper)
+        if self._is_stream_ac5000_grid_output():
+            ceiling = as_known_int(
+                (self.coordinator.data or {}).get("_grid_output_ceiling_w")
+            )
+            if ceiling is None:
+                return None
+            # Never widen past the declared rating, and never collapse the
+            # range: a ceiling the device has not reported sensibly would
+            # otherwise leave a control that cannot be moved.
+            upper = min(float(ceiling), self._attr_native_max_value)
+            if upper <= self._attr_native_min_value:
+                return None
+            return self._attr_native_min_value, upper
         if self._is_stream_backup_reserve():
             data = self.coordinator.data or {}
             # Read through `as_known_int`, not raw: HA hands `number.set_value`
@@ -241,6 +255,19 @@ class EcoFlowNumber(
             )
             return float(floor), self._attr_native_max_value
         return None
+
+    def _is_stream_ac5000_grid_output(self) -> bool:
+        """Return True for the grid-tied output setpoint on this family.
+
+        Its upper bound is the device's own ceiling on `f10.6` rather than
+        the model rating: EcoFlow sets it per account and it has been seen at
+        600 W on a unit rated 2500, so offering the rating would present a
+        range three quarters of which the device would not honour.
+        """
+        return (
+            self._definition.key == "max_grid_output_power_w"
+            and self.coordinator.device_type == DEVICE_TYPE_STREAM_AC5000
+        )
 
     def _is_stream_backup_reserve(self) -> bool:
         """Return True for the Stream backup reserve on a write-gated model.
@@ -530,6 +557,12 @@ class EcoFlowNumber(
                 kind = "charge" if key == "scheduled_charge_power_w" else "discharge"
                 return await self.coordinator.async_set_stream_ac5000_task_power(
                     kind, int(value)
+                )
+            if key == "max_grid_output_power_w":
+                return (
+                    await self.coordinator.async_set_stream_ac5000_grid_output_power(
+                        int(value)
+                    )
                 )
         except DeviceValueNotReported:
             # Sending a guessed counterpart would change a setting the user did

@@ -25,6 +25,7 @@ from ecoflow_energy.ecoflow.stream_ac5000_commands import (
     WORK_MODES,
     build_backup_reserve_payload,
     build_backup_socket_payload,
+    build_grid_output_power_payload,
     build_soc_limits_payload,
     build_task_payload,
     build_work_mode_payload,
@@ -445,3 +446,64 @@ class TestES21WriteFrames:
 
     def test_an_unrecorded_prefix_is_still_held_back(self) -> None:
         assert not supports_stream_ac5000_controls("ES29" + "0" * 12)
+
+
+class TestGridOutputPower:
+    """Config field 10, the one write recorded on the model it is offered to.
+
+    Every other builder here reproduces an ES22 frame. This one reproduces an
+    ES21 frame from #231, and the device answered it, so the two recorded
+    writes are the vectors rather than an illustration of them.
+    """
+
+    def test_it_rebuilds_the_recorded_write_at_1000_w(self) -> None:
+        recorded = bytes.fromhex(_es21_frame(1)["hex"])
+
+        built = build_grid_output_power_payload(
+            1000, 21, 800, _ES21_MASKED_SN, seq=_header(recorded)["seq"]
+        )
+
+        assert built == recorded
+
+    def test_it_rebuilds_the_recorded_write_at_2000_w(self) -> None:
+        recorded = bytes.fromhex(_es21_frame(3)["hex"])
+
+        built = build_grid_output_power_payload(
+            2000, 21, 800, _ES21_MASKED_SN, seq=_header(recorded)["seq"]
+        )
+
+        assert built == recorded
+
+    def test_the_companion_values_reach_the_wire(self) -> None:
+        """Not decoration: an ES22 reported 5 and 600 where this ES21 has 21
+        and 800, so a builder ignoring them would send one unit's numbers to
+        another and no test comparing only the setpoint would notice.
+        """
+        frame = build_grid_output_power_payload(1000, 5, 600, _ES21_MASKED_SN, seq=7)
+
+        assert _config_fields(frame)[10] == {1: 1000, 4: 5, 5: 600}
+
+    def test_the_setpoint_is_the_only_value_the_caller_chooses(self) -> None:
+        as_written = _config_fields(
+            build_grid_output_power_payload(1500, 21, 800, _ES21_MASKED_SN, seq=7)
+        )
+
+        assert as_written[10] == {1: 1500, 4: 21, 5: 800}
+
+    @pytest.mark.parametrize(
+        ("power", "field_4", "field_5"),
+        [(-1, 21, 800), (1000, -1, 800), (1000, 21, -1)],
+    )
+    def test_a_negative_value_is_rejected(
+        self, power: int, field_4: int, field_5: int
+    ) -> None:
+        with pytest.raises(ValueError):
+            build_grid_output_power_payload(power, field_4, field_5, _ES21_MASKED_SN)
+
+    def test_no_upper_bound_is_enforced_here(self) -> None:
+        """The device carries its own ceiling and clamps silently, so a limit
+        in the builder could only be wrong. The control bounds itself.
+        """
+        frame = build_grid_output_power_payload(9999, 21, 800, _ES21_MASKED_SN, seq=7)
+
+        assert _config_fields(frame)[10][1] == 9999

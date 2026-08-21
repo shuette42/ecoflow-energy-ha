@@ -225,6 +225,7 @@ class TestStreamAC5000EntitySet:
             "max_charge_soc_pct",
             "min_discharge_soc_pct",
             "backup_reserve",
+            "max_grid_output_power_w",
         }
         assert await _setup_keys(hass, select_setup) == {"work_mode"}
 

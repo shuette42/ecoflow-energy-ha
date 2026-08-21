@@ -1539,6 +1539,9 @@
       },
       "scheduled_charge_power_w": {
         "name": "Scheduled Charge Power"
+      },
+      "max_grid_output_power_w": {
+        "name": "Max Grid-tied Output Power"
       }
     },
     "select": {

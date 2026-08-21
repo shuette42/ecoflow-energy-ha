@@ -8,7 +8,7 @@ Full list of all entities created for the STREAM AC 5000.
 
 **This is not the Stream entity set.** Despite the shared product name, an `ES22` speaks a different protocol from the BK-series Stream devices: it sends none of their telemetry messages and describes power as a flow matrix rather than as individual readings. It therefore has its own device type, parser and entity list. See [Stream](stream.md) for the BK series.
 
-**Totals:** 56 sensors, 2 binary sensors, 2 switches, 5 numbers, 1 select
+**Totals:** 56 sensors, 2 binary sensors, 2 switches, 6 numbers, 1 select
 
 > Entities marked with *disabled* are available but hidden by default. Enable them in **Settings > Devices > EcoFlow STREAM AC 5000 > Entities** (click the filter icon and show disabled entities).
 
@@ -77,7 +77,7 @@ The settings that also have a control read back here, so an automation can see w
 | Max Charge SoC | % | diagnostic | enabled | Upper SoC limit set in the app |
 | Min Discharge SoC | % | diagnostic | enabled | Lower SoC limit set in the app |
 | Backup Reserve | % | diagnostic | enabled | Reserve level held for a power cut |
-| Max Grid-tied Output Power | W | diagnostic | enabled | The app's "Max grid-tied output power". Its ceiling is raised by asking EcoFlow. A task power above the setting is clamped, not refused |
+| Max Grid-tied Output Power | W | diagnostic | enabled | The app's "Max grid-tied output power". Also writable, see the number of the same name. Its ceiling is raised by asking EcoFlow. A task power above the setting is clamped, not refused |
 | Max Grid Input Power | W | diagnostic | enabled | The app's "Max grid input power", the charge-side limit |
 | Scheduled Discharge Power | W | diagnostic | enabled | Power setpoint of the discharge task, mirrors the number of the same name |
 | Scheduled Charge Power | W | diagnostic | enabled | Power setpoint of the charge task, mirrors the number of the same name |
@@ -122,7 +122,7 @@ There is deliberately no Solar Energy counter, see the note below.
 
 ## Numbers
 
-> **The two power numbers are setpoints, not the device's limits.** The EcoFlow app calls them "Max discharging power" and "Max grid charging power", but a maximum is what they are only while a smart meter is linked; with none linked the device delivers the figure asked for. They are named after the sensors that report them back instead, and they sit close enough to the Max Grid-tied Output Power and Max Grid Input Power *sensors* to be mistaken for those. Those two sensors are the limits, they are configured in the app, and neither is writable from Home Assistant: this device offers no way to write a limit at all. Asking a setpoint for more than a limit allows is accepted, acknowledged and then clamped by the device, so no value set here can drive the unit past the limit its owner configured.
+> **The two power numbers are setpoints, not the device's limits.** The EcoFlow app calls them "Max discharging power" and "Max grid charging power", but a maximum is what they are only while a smart meter is linked; with none linked the device delivers the figure asked for. They are named after the sensors that report them back instead, and they sit close enough to the Max Grid-tied Output Power and Max Grid Input Power readings to be mistaken for those. Those two are the limits. The output one can now be set from Home Assistant as well, on the number of the same name, and the input one stays read-only because no frame writing it has been recorded. Asking a setpoint for more than a limit allows is accepted, acknowledged and then clamped by the device, so no value set here can drive the unit past the limit its owner configured.
 
 | Entity | Unit | Range | Description |
 |:---|:---:|:---:|:---|
@@ -131,6 +131,7 @@ There is deliberately no Solar Energy counter, see the note below.
 | Max Charge SoC | % | 50-100 | Upper SoC limit. Both limits are one setting on the wire, so changing either sends both |
 | Min Discharge SoC | % | 0-50 | Lower SoC limit |
 | Backup Reserve | % | 0-100 | Level held back for a power cut. Field 30 holds this and the on/off flag together, so changing either sends both |
+| Max Grid-tied Output Power | W | 0 to the device's ceiling | The app's "Max grid-tied output power", and the one limit on this device that can be set from here. The upper end is not the model's rated 2500 W but the ceiling the device reports, which only EcoFlow raises; it has been seen at 600 W on a unit rated 2500 |
 
 ## Selects
 
@@ -170,7 +171,7 @@ Home Power is unaffected and keeps arriving at the usual rate, as does everythin
 - **So do not run the app's own scheduler alongside these controls.** Every power write here overwrites whatever schedule the app holds, and the app will happily overwrite it back. Drive this device from Home Assistant or from the app's scheduler, not from both.
 - **Zero means idle**, not "no setting". Writing 0 stops the battery entirely rather than falling back to self-consumption. That is the way to park it.
 - **A setpoint is only acted on in Custom mode.** In self-powered or Intelligent Mode+ the device follows its own logic. The write is still accepted, so nothing reports an error; a warning goes to the log instead.
-- **A setpoint above one of the app's power limits is clamped, not refused.** Max Grid-tied Output Power and Max Grid Input Power report them, and both are set in the app. The output limit additionally has an account ceiling that only EcoFlow can raise.
+- **A setpoint above one of the app's power limits is clamped, not refused.** Max Grid-tied Output Power and Max Grid Input Power report them. The output one is also a control here; the input one is set in the app only. Above both sits an account ceiling that only EcoFlow can raise, and the output control offers that ceiling as its upper end rather than the model's rated 2500 W, because a range above it would do nothing.
 
 Response is quick: a change settles in 10 to 20 seconds in either direction.
 
