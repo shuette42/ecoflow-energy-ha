@@ -74,6 +74,15 @@ _SN_PREFIX_MAP = {
     # diagnosable device if it does not - which beats "unsupported device"
     # either way, because that state carries no information at all.
     "HJ35": DEVICE_TYPE_POWEROCEAN,
+    # Three-phase PowerOcean variant (#267). The reporter's own diagnostics
+    # run the Developer API path: 337 raw quota keys go into the existing
+    # PowerOcean parser and 102 readings come out, across all three grid
+    # phases, both MPPT strings, the EMS block and one battery pack. So the
+    # field layout is shown rather than assumed. Without the prefix the unit
+    # is only classified by product name, which the Developer API supplies
+    # and the app API leaves empty - which is why the same device works in
+    # Standard mode and is refused as unsupported in Enhanced mode.
+    "HJ36": DEVICE_TYPE_POWEROCEAN,
     # Three-phase PowerOcean variant (#245). Two raw captures from the same
     # reporter unit carry `96/1`, `96/7`, `96/8`, `96/33` and `96/39` - the EMS
     # heartbeat, the battery pack heartbeat, the EMS change report, the energy

@@ -168,6 +168,16 @@ class TestDeviceTypeRouting:
         # rather than a capture from an owner of this integration.
         assert get_device_type("", "HJ35TEST00000001") == "powerocean"
 
+    def test_hj36_powerocean_by_sn_prefix(self) -> None:
+        """#267: three-phase PowerOcean variant.
+
+        The reporter's diagnostics show the Developer API quota parsing
+        through the existing PowerOcean parser - all three grid phases, both
+        MPPT strings, EMS and one battery pack. The prefix is what carries
+        that into Enhanced mode, where the app API reports no product name.
+        """
+        assert get_device_type("", "HJ36TEST00000001") == "powerocean"
+
     def test_hj37_powerocean_by_sn_prefix(self) -> None:
         """#245: three-phase PowerOcean variant.
 
