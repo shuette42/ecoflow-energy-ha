@@ -28,6 +28,10 @@ from ecoflow_energy.ecoflow.const import (
     get_device_name,
     get_device_type,
 )
+from ecoflow_energy.ecoflow.proto_encoding import (
+    encode_field_bytes,
+    encode_field_varint,
+)
 from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (
     parse_stream_ac5000_message,
 )
@@ -200,6 +204,19 @@ class TestControlsAreGated:
         assert family - STREAM_AC5000_CONTROL_PREFIXES == set()
 
 
+def _frame_around(pdata: bytes) -> bytes:
+    """Wrap a bare `254/39` payload in the minimal envelope the parser needs.
+
+    The two-unit capture stores payloads rather than whole frames, which its
+    own note names as `254/39`.
+    """
+    header = bytearray()
+    header.extend(encode_field_bytes(1, pdata))
+    header.extend(encode_field_varint(8, 254))
+    header.extend(encode_field_varint(9, 39))
+    return encode_field_bytes(1, bytes(header))
+
+
 class TestControlStateCoverage:
     """What the two model numbers actually report back, measured.
 
@@ -218,28 +235,72 @@ class TestControlStateCoverage:
 
     @staticmethod
     def _states_reported(*fixtures: str) -> set[str]:
+        """Union of control states across whole fixtures.
+
+        Two frame shapes are on file: most carry a whole `hex` frame, while
+        the two-unit capture stores `pdata_hex`, the payload alone. Reading
+        only `hex` skipped that fixture with a KeyError rather than a result,
+        which is how a fixture can sit in the tree and contribute nothing
+        without anyone noticing.
+        """
         seen: set[str] = set()
         for name in fixtures:
-            frames = json.loads((FIXTURES / name).read_text())["frames"]
-            for frame in frames:
-                parsed = parse_stream_ac5000_message(bytes.fromhex(frame["hex"]))
+            for frame in json.loads((FIXTURES / name).read_text())["frames"]:
+                if "hex" in frame:
+                    parsed = parse_stream_ac5000_message(bytes.fromhex(frame["hex"]))
+                else:
+                    # A bare payload needs its envelope back before the parser
+                    # will look at it.
+                    parsed = parse_stream_ac5000_message(
+                        _frame_around(bytes.fromhex(frame["pdata_hex"]))
+                    )
                 seen |= set(parsed or {})
         return seen & TestControlStateCoverage.CONTROL_KEYS
 
-    def test_both_models_report_the_same_control_states(self) -> None:
-        es21 = self._states_reported(
-            "es21_frames_masked.json", "es21_pv_masked.json"
-        )
-        es22 = self._states_reported(
+    ES21_FIXTURES = ("es21_frames_masked.json", "es21_pv_masked.json")
+    ES22_FIXTURES = (
+        "es22_push_capture_masked.json",
+        "es22_get_reply_masked.json",
+        "es22_task_frames_masked.json",
+        "es22_two_units_masked.json",
+    )
+
+    def test_the_es22_reports_one_state_the_es21_captures_never_did(self) -> None:
+        """Every fixture of each model, not a subset that agrees.
+
+        The first version of this compared two of the four ES22 fixtures and
+        passed while claiming the two models were equally covered. They are
+        not: the scheduled discharge power appears only in the ES22 task
+        capture, because that is the only recording where somebody set one.
+        The difference is which recordings exist, not what the models report,
+        but the honest form of that is to name the gap rather than to pick
+        the fixtures that hide it.
+        """
+        es21 = self._states_reported(*self.ES21_FIXTURES)
+        es22 = self._states_reported(*self.ES22_FIXTURES)
+
+        assert es22 - es21 == {"scheduled_discharge_power_w"}
+        assert es21 - es22 == set()
+
+    def test_the_discharge_setpoint_comes_from_two_es22_captures(self) -> None:
+        """Names where the extra state comes from, so it stays checkable.
+
+        Both ES22 recordings that carry a scheduled task carry it. The ES21
+        recordings are a full-config report and a PV day; neither had a task
+        set while it ran. So the gap is about which recordings exist, not
+        about what the models report, and an ES21 capture taken with a task
+        configured would close it.
+        """
+        for fixture in ("es22_task_frames_masked.json", "es22_two_units_masked.json"):
+            assert "scheduled_discharge_power_w" in self._states_reported(fixture), fixture
+
+        plain = self._states_reported(
             "es22_push_capture_masked.json", "es22_get_reply_masked.json"
         )
-
-        assert es21 == es22
+        assert "scheduled_discharge_power_w" not in plain
 
     def test_five_of_the_nine_control_states_are_on_file_for_the_es21(self) -> None:
-        assert self._states_reported(
-            "es21_frames_masked.json", "es21_pv_masked.json"
-        ) == {
+        assert self._states_reported(*self.ES21_FIXTURES) == {
             "max_charge_soc_pct",
             "min_discharge_soc_pct",
             "scheduled_charge_power_w",
@@ -249,13 +310,7 @@ class TestControlStateCoverage:
 
     def test_the_backup_settings_are_missing_from_every_capture(self) -> None:
         """Not a model difference: no capture on file changed one of them."""
-        everything = self._states_reported(
-            "es21_frames_masked.json",
-            "es21_pv_masked.json",
-            "es22_push_capture_masked.json",
-            "es22_get_reply_masked.json",
-            "es22_task_frames_masked.json",
-        )
+        everything = self._states_reported(*self.ES21_FIXTURES, *self.ES22_FIXTURES)
 
         assert self.CONTROL_KEYS - everything == {
             "backup_reserve",

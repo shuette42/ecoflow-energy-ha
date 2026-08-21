@@ -211,11 +211,12 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
         "10.4": ("_grid_output_field_4", _TYPE_INT, 1),
         "10.5": ("_grid_output_field_5", _TYPE_INT, 1),
         # `.6` is the ceiling the output setpoint may not exceed. Across the
-        # ten frames on file that carry this field, from both model numbers,
-        # `.1` is at or below `.6` every time, and `.6` moved once, from 600
-        # to 2500 between two captures four days apart, with `.1` following
-        # it upwards. It is not a user setting: nothing in the app changed
-        # it. Private for now, and used only to bound the control.
+        # frames on file that carry this field, from both model numbers, `.1`
+        # is at or below `.6` every time, and `.6` moved once, from 600 to
+        # 2500, between a capture at 13:31 UTC and one at 20:21 UTC the same
+        # day, with `.1` following it upwards. It is not a user setting:
+        # nothing in the app changed it. Private for now, and used only to
+        # bound the control.
         #
         # That invariant is what makes `.6` usable as the control's upper
         # end, so it is held by TestGridOutputCeiling in

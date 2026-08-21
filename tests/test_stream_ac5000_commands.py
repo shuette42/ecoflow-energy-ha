@@ -507,3 +507,66 @@ class TestGridOutputPower:
         frame = build_grid_output_power_payload(9999, 21, 800, _ES21_MASKED_SN, seq=7)
 
         assert _config_fields(frame)[10][1] == 9999
+
+
+class TestGridOutputRoundTrip:
+    """Parse a real report, build a real write, compare to the recorded one.
+
+    The two halves of this control were tested separately: the parser against
+    a synthetic frame, the builder against the recorded write with the
+    companion values typed in by hand. Nothing joined them, so the parser
+    could read the wrong subfield and the builder would faithfully put that
+    wrong value on the wire with the whole suite green. Two mutations on
+    2026-08-21 proved it, which is what this closes.
+    """
+
+    def test_the_values_the_parser_reads_rebuild_the_recorded_write(self) -> None:
+        from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (
+            parse_stream_ac5000_message,
+        )
+
+        # The reporter's own unit reporting its configuration...
+        reported: dict = {}
+        for frame in json.loads(
+            (
+                Path(__file__).parent
+                / "fixtures"
+                / "stream_ac5000"
+                / "es21_pv_masked.json"
+            ).read_text()
+        )["frames"]:
+            reported.update(parse_stream_ac5000_message(bytes.fromhex(frame["hex"])) or {})
+
+        # ...and the same unit's app write, recorded a few days later.
+        recorded = bytes.fromhex(_es21_frame(1)["hex"])
+
+        built = build_grid_output_power_payload(
+            1000,
+            reported["_grid_output_field_4"],
+            reported["_grid_output_field_5"],
+            _ES21_MASKED_SN,
+            seq=_header(recorded)["seq"],
+        )
+
+        assert built == recorded
+
+    def test_the_parsed_ceiling_would_admit_the_recorded_setpoint(self) -> None:
+        """The bound and the value it bounds, from the same unit."""
+        from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (
+            parse_stream_ac5000_message,
+        )
+
+        reported: dict = {}
+        for frame in json.loads(
+            (
+                Path(__file__).parent
+                / "fixtures"
+                / "stream_ac5000"
+                / "es21_pv_masked.json"
+            ).read_text()
+        )["frames"]:
+            reported.update(parse_stream_ac5000_message(bytes.fromhex(frame["hex"])) or {})
+
+        written = _config_fields(bytes.fromhex(_es21_frame(3)["hex"]))[10][1]
+
+        assert written <= reported["_grid_output_ceiling_w"]

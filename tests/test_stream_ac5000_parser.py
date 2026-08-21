@@ -347,10 +347,24 @@ class TestDerivedValues:
         keyed under a leading underscore, which is what keeps a number nobody
         can explain out of the entity list.
         """
-        inner = _sub(10, encode_field_varint(5, 800) + encode_field_varint(6, 2500))
+        inner = _sub(
+            10,
+            encode_field_varint(4, 21)
+            + encode_field_varint(5, 800)
+            + encode_field_varint(6, 2500),
+        )
         result = parse_stream_ac5000_message(_build_frame(254, 39, bytes(inner)))
 
-        assert result == {"_grid_output_field_5": 800, "_grid_output_ceiling_w": 2500}
+        # Distinct values on purpose. `.4` was unpinned until 2026-08-21, and
+        # two mutations proved it: reading `10.3` instead, and dropping the
+        # mapping entirely, both left the full suite green. The first would put
+        # another field's value on the wire of real hardware, the second would
+        # make the control raise not-ready forever.
+        assert result == {
+            "_grid_output_field_4": 21,
+            "_grid_output_field_5": 800,
+            "_grid_output_ceiling_w": 2500,
+        }
         assert all(key.startswith("_") for key in result)
 
     def test_the_milliwatt_pair_is_not_mapped(self) -> None:

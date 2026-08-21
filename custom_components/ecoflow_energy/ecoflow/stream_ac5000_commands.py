@@ -27,9 +27,10 @@ field's value":
     30  backup reserve {1: on/off, 2: reserve %}, both in one frame
     39  scheduled task, see build_task_payload
 
-A write number is not a readback number. Four of these six are read back
-under the number they were written on and two are not; the table on
-`CONFIG_*` below says which is which.
+A write number is not a readback number. Four of the six config fields
+written here are read back under the number they were written on and two are
+not; the table on `CONFIG_*` below says which is which, and it is the table
+that lists all six.
 """
 
 from __future__ import annotations

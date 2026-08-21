@@ -1221,20 +1221,23 @@ def excluded_keys_for_serial(device_sn: str) -> frozenset[str]:
 # recorded frames rather than against a description of them.
 #
 # What the capture settles is the envelope and the command, not each config
-# field: the setting he changed was the grid-tied output, which this
-# integration does not write. The controls behind this gate write five other
-# fields in that same envelope.
+# field. The setting he changed was the grid-tied output, config field 10,
+# and that one is now written from here too, which makes it the only write on
+# this device confirmed on the model it is offered to. The other eight
+# controls write five further fields inside that same envelope, and for those
+# the capture proves the mechanism rather than the individual setting.
 #
 # The read-back side carries the same limit, and it is worth stating because
 # "no control without read-back" is a commitment here. Replaying every ES21
 # fixture through the parser yields five of the nine control states: both SoC
 # limits, the work mode, the scheduled charge power and the grid-tied output.
-# That is not an ES21 shortfall - replaying every ES22 fixture yields exactly
-# the same five. The backup reserve, its level and the backup socket are
+# Every ES22 fixture yields those five and one more, the scheduled discharge
+# power, which appears in the two recordings where somebody had a task
+# configured while the capture ran. Neither ES21 recording had one, so that
+# difference is about which recordings exist rather than about what the
+# models report. The backup reserve, its level and the backup socket are
 # missing on both model numbers, because `254/39` reports only the block that
-# changed and nobody touched those settings while a capture was running. So
-# the two variants are equally covered, and the gap is one this family has
-# always had rather than one this prefix introduces.
+# changed and nobody touched those settings while a capture was running.
 #
 # The grid-tied output is the exception that proves the rule: it is the one
 # control here whose write was recorded on an ES21 rather than inherited from
