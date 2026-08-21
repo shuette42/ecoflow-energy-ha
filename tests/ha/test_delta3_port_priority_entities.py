@@ -491,7 +491,7 @@ class TestDerivedBoundsArePublished:
     async def test_a_plain_number_never_reports_moving_bounds(
         self, hass: HomeAssistant
     ) -> None:
-        """Only port priority cutoffs derive their range."""
+        """The port priority cutoffs are the only Delta 3 numbers that do."""
         coordinator, _ = _coordinator(hass, DELTA3_MAX_PLUS, REPORTED)
         number = _number(coordinator, "max_charge_soc")
 

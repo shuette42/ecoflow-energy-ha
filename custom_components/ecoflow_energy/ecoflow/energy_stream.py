@@ -389,6 +389,42 @@ def build_device_get_all_payload(seq: int = 0) -> bytes:
     return encode_field_bytes(1, bytes(header))
 
 
+# The backup reserve floor is not the fixed 3 % the entity declares. The device
+# holds the reserve at least three points above the discharge limit and carries
+# it upwards whenever that limit rises, so the floor travels with the limit.
+#
+# Measured on a BK31 (#264, and on the same hardware in #98 against
+# v1.17.0-beta.16 and v1.17.0-beta.20): raising the discharge limit raised the
+# reserve with it and kept the distance, and a reserve below the floor was
+# corrected by the device with live telemetry restoring the real value within
+# about 30 seconds.
+STREAM_BACKUP_RESERVE_MARGIN = 3
+
+
+def stream_backup_reserve_floor(
+    min_discharge_soc: int | None, declared_floor: int, declared_ceiling: int
+) -> int:
+    """Return the lowest backup reserve the device accepts, in percent.
+
+    While the discharge limit has not been reported the declared floor stands.
+    A slider pinned shut before the first telemetry frame is worse than one
+    that is briefly too permissive, and a value the device will not take is
+    corrected by the device anyway.
+
+    The result never passes the declared ceiling. A discharge limit at the top
+    of its own range would otherwise put the floor above the ceiling, and an
+    inverted range makes the entity unusable in Home Assistant - a worse
+    failure than the over-permissive point it trades for.
+
+    This derives what is *shown*, never what is sent: the value the user picks
+    travels to the device untouched, so the device stays the authority on what
+    it accepts.
+    """
+    if not isinstance(min_discharge_soc, int):
+        return declared_floor
+    return min(declared_ceiling, min_discharge_soc + STREAM_BACKUP_RESERVE_MARGIN)
+
+
 def build_stream_backup_reserve_payload(
     backup_soc: int, device_sn: str, seq: int = 0,
 ) -> bytes:

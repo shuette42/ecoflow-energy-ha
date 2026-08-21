@@ -42,6 +42,7 @@ from custom_components.ecoflow_energy.const import (
     MODE_ENHANCED,
     MODE_STANDARD,
     STREAM_NUMBERS,
+    STREAMAC5000_NUMBERS,
     filter_defs_for_serial,
 )
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
@@ -53,6 +54,7 @@ from custom_components.ecoflow_energy.number import (
 )
 
 from .conftest import MOCK_STREAM_DEVICE
+from .test_stream_ac5000_entities import ES22_DEVICE
 
 BK31_DEVICE: dict[str, Any] = {
     "sn": "BK31TEST00000001",
@@ -539,3 +541,237 @@ class TestStreamSocLimitSet:
         assert encode_field_varint(33, 90) in pdata
         assert encode_field_varint(34, 21) in pdata
         assert encode_field_varint(102, 23) in pdata
+
+
+class TestBackupReserveFloorFollowsTheDischargeLimit:
+    """The reserve's lower bound is derived, not fixed at the declared 3.
+
+    The device holds backup reserve at least three points above the discharge
+    limit and carries it up whenever that limit rises (#264, measured on a
+    BK31 in #98). A fixed floor offers values the device refuses: they look
+    accepted for about half a minute, then live telemetry snaps the entity
+    back to the value the device actually kept.
+
+    Only the displayed bound derives. What the user picks is sent untouched,
+    because a client that corrects a value before sending reads its own
+    arithmetic back as if the device had confirmed it.
+    """
+
+    @staticmethod
+    def _entity(
+        hass: HomeAssistant,
+        entry: MockConfigEntry,
+        reported: dict[str, Any],
+        device: dict[str, Any] | None = None,
+        definitions: list[Any] | None = None,
+        key: str = "backup_reserve",
+    ) -> tuple[EcoFlowNumber, EcoFlowDeviceCoordinator]:
+        entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, entry, device or MOCK_STREAM_DEVICE
+        )
+        coordinator._device_data = dict(reported)
+        coordinator.async_set_updated_data(dict(reported))
+        definition = next(
+            item for item in (definitions or STREAM_NUMBERS) if item.key == key
+        )
+        entity = EcoFlowNumber(coordinator, definition)
+        entity.async_write_ha_state = MagicMock()
+        return entity, coordinator
+
+    async def test_a_reported_limit_lifts_the_floor(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        entity, _ = self._entity(
+            hass,
+            enhanced_config_entry,
+            {"min_discharge_soc_pct": 20, "backup_reserve_pct": 23},
+        )
+
+        assert entity.native_min_value == 23
+        assert entity.native_max_value == 95
+
+    async def test_the_floor_follows_a_limit_change_without_a_reload(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """The discharge limit is a control of its own, so it moves while HA
+        runs. Home Assistant snapshots min and max on a state write, and the
+        reserve itself does not move with it, so the new bound only reaches
+        the frontend if the entity writes its state anyway."""
+        entity, coordinator = self._entity(
+            hass,
+            enhanced_config_entry,
+            {"min_discharge_soc_pct": 20, "backup_reserve_pct": 23},
+        )
+        entity._handle_coordinator_update()
+        entity.async_write_ha_state.reset_mock()
+
+        coordinator.async_set_updated_data(
+            {"min_discharge_soc_pct": 40, "backup_reserve_pct": 23}
+        )
+        entity._handle_coordinator_update()
+
+        assert entity.native_min_value == 43
+        assert entity.async_write_ha_state.called
+
+    async def test_an_unchanged_limit_does_not_force_a_write(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """Zero-noise: a push that moves neither the value nor the bound must
+        stay out of the recorder."""
+        entity, coordinator = self._entity(
+            hass,
+            enhanced_config_entry,
+            {"min_discharge_soc_pct": 20, "backup_reserve_pct": 23},
+        )
+        entity._handle_coordinator_update()
+        entity.async_write_ha_state.reset_mock()
+
+        coordinator.async_set_updated_data(dict(coordinator._device_data))
+        entity._handle_coordinator_update()
+
+        assert not entity.async_write_ha_state.called
+
+    @pytest.mark.parametrize("reported", [{}, {"min_discharge_soc_pct": None}])
+    async def test_without_a_usable_limit_the_declared_floor_stands(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+        reported: dict[str, Any],
+    ) -> None:
+        """Enhanced Mode can take two minutes to deliver the first full frame.
+        A control pinned shut for that window reads as broken, while one that
+        is briefly too permissive costs at most a value the device corrects."""
+        entity, _ = self._entity(
+            hass, enhanced_config_entry, {**reported, "backup_reserve_pct": 23}
+        )
+
+        assert entity.native_min_value == 3
+        assert entity.native_max_value == 95
+
+    async def test_a_value_below_the_floor_is_sent_exactly_as_asked(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """The regression this whole change must not reintroduce.
+
+        A client-side correction was removed once already, because the value
+        it invented came back through the read-back looking like a device
+        confirmation. The bound is what moved here, never the write.
+        """
+        entity, coordinator = self._entity(
+            hass,
+            enhanced_config_entry,
+            {"min_discharge_soc_pct": 20, "backup_reserve_pct": 23},
+        )
+        coordinator.async_send_proto_set_command = AsyncMock(return_value=True)
+
+        await entity.async_set_native_value(5.0)
+
+        from custom_components.ecoflow_energy.ecoflow.proto.decoder import (
+            decode_header_message,
+        )
+
+        payload = coordinator.async_send_proto_set_command.call_args.args[0]
+        headers, _ = decode_header_message(payload)
+        pdata = bytes.fromhex(headers[0]["pdata"])
+        assert encode_field_varint(102, 5) in pdata
+        assert encode_field_varint(102, 23) not in pdata
+        assert coordinator.data["backup_reserve_pct"] == 5.0
+
+    async def test_a_stream_without_the_confirmed_prefix_keeps_its_range(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """Backup reserve exists on every BK serial, the measurement does not.
+
+        The three-point rule was read off a BK31. Another model reporting the
+        same telemetry key is not evidence that it holds there, and a floor
+        invented for it would refuse values that model may well accept.
+        """
+        entity, _ = self._entity(
+            hass,
+            enhanced_config_entry,
+            {"min_discharge_soc_pct": 20, "backup_reserve_pct": 23},
+            device={**MOCK_STREAM_DEVICE, "sn": "BK11TEST00000001"},
+        )
+
+        assert entity.native_min_value == 3
+
+    async def test_the_stream_ac_5000_reserve_keeps_its_declared_range(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """A different device with the same entity key and the same telemetry
+        key, and no capture tying the two together."""
+        entity, _ = self._entity(
+            hass,
+            enhanced_config_entry,
+            {"min_discharge_soc_pct": 20, "backup_reserve_pct": 25},
+            device=ES22_DEVICE,
+            definitions=STREAMAC5000_NUMBERS,
+        )
+
+        assert entity.native_min_value == 0
+        assert entity.native_max_value == 100
+
+    async def test_an_in_flight_float_still_holds_the_floor(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """Home Assistant hands `number.set_value` a float, and the optimistic
+        write stores exactly that until the device echoes the change back. A
+        strict integer check on the limit would collapse the floor to the
+        declared 3 for those seconds, and it would do it in the moment right
+        after the write that raised the limit."""
+        entity, _ = self._entity(
+            hass,
+            enhanced_config_entry,
+            {"min_discharge_soc_pct": 40.0, "backup_reserve_pct": 23},
+        )
+
+        assert entity.native_min_value == 43
+
+    async def test_raising_the_limit_lifts_the_floor_before_the_echo(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """The whole chain, because the float is not hypothetical: the limit
+        write seeds an int and the optimistic update then overwrites the same
+        key with the float the service call carried."""
+        entity, coordinator = self._entity(
+            hass,
+            enhanced_config_entry,
+            {
+                "max_charge_soc_pct": 95,
+                "min_discharge_soc_pct": 20,
+                "backup_reserve_pct": 23,
+            },
+        )
+        coordinator.async_send_proto_set_command = AsyncMock(return_value=True)
+        limit = EcoFlowNumber(
+            coordinator,
+            next(
+                item
+                for item in STREAM_NUMBERS
+                if item.key == "stream_discharge_limit"
+            ),
+        )
+        limit.async_write_ha_state = MagicMock()
+        assert entity.native_min_value == 23
+
+        await limit.async_set_native_value(40.0)
+
+        assert isinstance(coordinator.data["min_discharge_soc_pct"], float)
+        assert entity.native_min_value == 43
+
+    async def test_another_number_on_the_same_device_keeps_its_range(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """The derivation belongs to backup reserve alone. The discharge limit
+        is the sharpest test of that: same list, same hardware, same gate, and
+        it reads the very key the floor derives from."""
+        entity, _ = self._entity(
+            hass,
+            enhanced_config_entry,
+            {"min_discharge_soc_pct": 20, "backup_reserve_pct": 23},
+            key="stream_discharge_limit",
+        )
+
+        assert entity.native_min_value == 0
+        assert entity.native_max_value == 95

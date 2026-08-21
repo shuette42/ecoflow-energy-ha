@@ -36,6 +36,7 @@ from .const import (
 )
 from .coordinator import DeviceValueNotReported, EcoFlowDeviceCoordinator
 from .entity import (
+    as_known_int,
     EcoFlowWriteGateMixin,
     raise_set_failed,
     raise_set_not_ready,
@@ -47,6 +48,7 @@ from .ecoflow.delta3_commands import (
     build_port_priority_command,
     port_priority_soc_bounds,
 )
+from .ecoflow.energy_stream import stream_backup_reserve_floor
 from .ecoflow.parsers.delta3_proto import port_priority_keys
 from .ecoflow.parsers.smartplug import (
     build_plug_brightness_payload,
@@ -104,7 +106,7 @@ class EcoFlowNumber(
 
         self._restored_value: float | None = None
         self._last_written_value: float | None = None
-        self._last_written_bounds: tuple[int, int] | None = None
+        self._last_written_bounds: tuple[float, float] | None = None
         self._optimistic_lock_until: float = 0.0
         # Seeded from the coordinator rather than from zero: an entity added
         # after a rollback already happened must not read that rollback as
@@ -200,17 +202,62 @@ class EcoFlowNumber(
 
     @property
     def native_min_value(self) -> float:
-        """Return the lower bound, narrowed for port priority cutoffs."""
-        if self._port_priority_stem() is None:
+        """Return the lower bound, narrowed where the device derives it."""
+        bounds = self._derived_bounds()
+        if bounds is None:
             return self._attr_native_min_value
-        return float(self._port_priority_bounds()[0])
+        return bounds[0]
 
     @property
     def native_max_value(self) -> float:
-        """Return the upper bound, narrowed for port priority cutoffs."""
-        if self._port_priority_stem() is None:
+        """Return the upper bound, narrowed where the device derives it."""
+        bounds = self._derived_bounds()
+        if bounds is None:
             return self._attr_native_max_value
-        return float(self._port_priority_bounds()[1])
+        return bounds[1]
+
+    def _derived_bounds(self) -> tuple[float, float] | None:
+        """Return the runtime bounds, or None where the declared range holds.
+
+        Two controls have a range the device moves under them, and both follow
+        a battery limit the user can change while HA runs: the Delta 3 port
+        priority cutoffs and the Stream backup reserve. Every other number
+        keeps the range its definition declares.
+        """
+        if self._port_priority_stem() is not None:
+            lower, upper = self._port_priority_bounds()
+            return float(lower), float(upper)
+        if self._is_stream_backup_reserve():
+            data = self.coordinator.data or {}
+            # Read through `as_known_int`, not raw: HA hands `number.set_value`
+            # a float, so for the seconds between a discharge-limit write and
+            # the device echoing it back the key holds 40.0 rather than 40. A
+            # strict check there would drop the floor to the declared 3 for
+            # exactly as long as the value is in flight.
+            floor = stream_backup_reserve_floor(
+                as_known_int(data.get("min_discharge_soc_pct")),
+                int(self._attr_native_min_value),
+                int(self._attr_native_max_value),
+            )
+            return float(floor), self._attr_native_max_value
+        return None
+
+    def _is_stream_backup_reserve(self) -> bool:
+        """Return True for the Stream backup reserve on a write-gated model.
+
+        The key alone does not identify it: the STREAM AC 5000 carries a
+        backup reserve of its own, and the Stream list creates this one on
+        every BK serial. The gate is `supports_stream_controls`, the same
+        allowlist the other Stream writes ride, rather than a second set
+        holding the one model the floor was measured on - see the note at
+        STREAM_CONTROL_PREFIXES. Everything outside it keeps the declared
+        range.
+        """
+        return (
+            self._definition.key == "backup_reserve"
+            and self.coordinator.device_type == DEVICE_TYPE_STREAM
+            and supports_stream_controls(self.coordinator.device_sn)
+        )
 
     def _port_priority_stem(self) -> str | None:
         """Return the port stem for a port priority cutoff, else None."""
@@ -253,12 +300,12 @@ class EcoFlowNumber(
     def _bounds_moved(self) -> bool:
         """Return True after recording a change of the derived slider bounds.
 
-        Only port priority cutoffs have derived bounds; every other number
-        keeps its declared range and never reports a move.
+        A number with a declared range keeps it for good and never reports a
+        move; only the controls with runtime bounds can.
         """
-        if self._port_priority_stem() is None:
+        bounds = self._derived_bounds()
+        if bounds is None:
             return False
-        bounds = self._port_priority_bounds()
         if bounds == self._last_written_bounds:
             return False
         self._last_written_bounds = bounds

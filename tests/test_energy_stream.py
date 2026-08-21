@@ -15,6 +15,7 @@ from ecoflow_energy.ecoflow.energy_stream import (
     build_stream_led_brightness_payload,
     build_stream_soc_limits_payload,
     build_work_mode_set_payload,
+    stream_backup_reserve_floor,
 )
 from ecoflow_energy.ecoflow.proto.decoder import decode_header_message
 from ecoflow_energy.ecoflow.proto_encoding import (
@@ -633,6 +634,48 @@ class TestStreamBackupReservePayload:
             build_stream_backup_reserve_payload(150, self.SN)
         with pytest.raises(ValueError):
             build_stream_backup_reserve_payload(-1, self.SN)
+
+
+class TestStreamBackupReserveFloor:
+    """The lowest reserve the device accepts follows the discharge limit.
+
+    Measured on a BK31 (#264): the reserve sits three points above the
+    discharge limit and rises with it. The declared floor of 3 is what the
+    entity offers, and it is the correct answer only while the limit reads 0.
+    """
+
+    def test_the_floor_sits_three_points_above_the_reported_limit(self) -> None:
+        assert stream_backup_reserve_floor(20, 3, 95) == 23
+
+    def test_the_floor_moves_with_the_limit(self) -> None:
+        floors = [stream_backup_reserve_floor(limit, 3, 95) for limit in (10, 40, 62)]
+
+        assert floors == [13, 43, 65]
+
+    def test_a_limit_at_the_bottom_reproduces_the_declared_floor(self) -> None:
+        """Which is where the declared 3 came from: three points above zero."""
+        assert stream_backup_reserve_floor(0, 3, 95) == 3
+
+    @pytest.mark.parametrize("reported", [None, "20"])
+    def test_an_unreported_limit_leaves_the_declared_floor(self, reported) -> None:
+        """Before the first telemetry frame there is nothing to derive from,
+        and a control pinned shut looks broken to the user."""
+        assert stream_backup_reserve_floor(reported, 3, 95) == 3
+
+    def test_a_reading_that_is_not_a_whole_percent_leaves_it_too(self) -> None:
+        """A different case from an absent reading, and kept apart from it.
+
+        The caller normalises with `as_known_int`, which carries an in-flight
+        40.0 through as 40 and stops only at a fraction that no percentage the
+        device reports can have.
+        """
+        assert stream_backup_reserve_floor(20.5, 3, 95) == 3
+
+    def test_the_floor_never_passes_the_ceiling(self) -> None:
+        """A discharge limit at the top of its own range would otherwise put
+        the floor above the ceiling, and Home Assistant refuses every value on
+        an inverted range."""
+        assert stream_backup_reserve_floor(95, 3, 95) == 95
 
 
 class TestStreamLedBrightnessPayload:

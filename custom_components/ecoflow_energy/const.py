@@ -1224,6 +1224,12 @@ STREAM_AC5000_CONTROL_PREFIXES: frozenset[str] = frozenset({"ES22"})
 # The outlet switches, SoC limits and LED brightness share this one gate rather
 # than holding a set each. All were confirmed on the same hardware, so separate
 # sets would be several names for one fact and would have to stay in step.
+#
+# The backup reserve floor derivation rides this gate too, and it is the one
+# rider that is not a write: the reserve's lowest setting follows the discharge
+# limit by three points, measured on a BK31 (#264). Adding a prefix here on
+# confirmed writes alone therefore also claims that relation for it, so check
+# the floor on that hardware before widening the set.
 STREAM_CONTROL_PREFIXES: frozenset[str] = frozenset({"BK31"})
 
 
