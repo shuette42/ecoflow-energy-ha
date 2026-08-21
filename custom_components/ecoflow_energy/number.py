@@ -548,9 +548,11 @@ def _get_number_defs(device_type: str, device_sn: str = "") -> list[EcoFlowNumbe
     """Return number definitions based on device type.
 
     ``device_sn`` gates the STREAM AC 5000 and Stream controls, each confirmed
-    on one variant of its family only. See STREAM_AC5000_CONTROL_PREFIXES and
-    STREAM_CONTROL_PREFIXES. Both gates are closed on an empty serial: a write
-    entity that cannot be tied to a confirmed model is not created.
+    on the variants of its family that have produced a write frame of their
+    own: both for the STREAM AC 5000, one for the Stream. See
+    STREAM_AC5000_CONTROL_PREFIXES and STREAM_CONTROL_PREFIXES. Both gates are
+    closed on an empty serial: a write entity that cannot be tied to a
+    confirmed model is not created.
     """
     if device_type == DEVICE_TYPE_DELTA:
         return DELTA2MAX_NUMBERS

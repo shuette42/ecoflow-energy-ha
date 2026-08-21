@@ -352,7 +352,8 @@ def _get_switch_defs(device_type: str, device_sn: str = "") -> list[EcoFlowSwitc
     """Return switch definitions based on device type.
 
     ``device_sn`` gates the STREAM AC 5000 controls, which are confirmed on
-    one variant of that family only. See STREAM_AC5000_CONTROL_PREFIXES.
+    the variants that have produced a write frame of their own. See
+    STREAM_AC5000_CONTROL_PREFIXES.
     """
     if device_type == DEVICE_TYPE_DELTA:
         return DELTA2MAX_SWITCHES

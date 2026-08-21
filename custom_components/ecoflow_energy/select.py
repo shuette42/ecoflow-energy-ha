@@ -240,7 +240,8 @@ def _get_select_defs(device_type: str, device_sn: str = "") -> list[EcoFlowSelec
     """Return select definitions based on device type.
 
     ``device_sn`` gates the STREAM AC 5000 controls, which are confirmed on
-    one variant of that family only. See STREAM_AC5000_CONTROL_PREFIXES.
+    the variants that have produced a write frame of their own. See
+    STREAM_AC5000_CONTROL_PREFIXES.
     """
     if device_type == DEVICE_TYPE_POWEROCEAN:
         return POWEROCEAN_SELECTS

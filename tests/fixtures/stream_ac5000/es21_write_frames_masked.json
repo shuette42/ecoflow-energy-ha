@@ -1,0 +1,37 @@
+{
+  "note": "Config writes the EcoFlow app sent to a live ES21 (STREAM 5000) and the device's own readback, from a diagnostics download by the reporter of #231. Serials arrive masked from the capture as a run of X of the same length. The reporter lowered the grid-tied output from 2000 W to 1000 W and set it back, on 2026-08-21.",
+  "source_topics": [
+    "/app/{sn}/thing/property/set",
+    "/app/device/property/{sn}"
+  ],
+  "frames": [
+    {
+      "note": "App session start. cmd_id=37, the frame the app opens with before it writes anything.",
+      "ts_iso": "2026-08-21T07:58:41.157658+00:00",
+      "topic": "/app/{sn}/thing/property/set",
+      "size": 89,
+      "hex": "0a570a0408132801102018022001280140fe014825500458017004788cffffffffffffffff01800104ba0107416e64726f6964d2011058585858585858585858585858585858da011058585858585858585858585858585858"
+    },
+    {
+      "note": "Grid-tied output lowered to 1000 W in the app. Config field 10 carries {1: 1000, 4: 21, 5: 800}.",
+      "ts_iso": "2026-08-21T07:58:56.904460+00:00",
+      "topic": "/app/{sn}/thing/property/set",
+      "size": 97,
+      "hex": "0a5f0a0c080a520808e807201528a006102018022001280140fe014826500c58017007788cffffffffffffffff01800104ba0107416e64726f6964d2011058585858585858585858585858585858da011058585858585858585858585858585858"
+    },
+    {
+      "note": "The device's answer two seconds later: 254/39 reports config field 10 as {1: 1000}. This is what makes the write confirmed rather than merely sent.",
+      "ts_iso": "2026-08-21T07:58:58.815330+00:00",
+      "topic": "/app/device/property/{sn}",
+      "size": 156,
+      "hex": "0a99010a78520308e8075a12102d18860820ae13285930a70b48eb05500192033e0a3c0a1058585858585858585858585858585858150000b2421ddae20044256df19a44280235105034c43d000035c45557bc00435d5a620f4365ba6c7343b2031b0a190a10585858585858585858585858585858581059180020ae131002182020012801380340fe0148275078580170b2bae00378819802800103"
+    },
+    {
+      "note": "Grid-tied output raised back to 2000 W. Same shape, {1: 2000, 4: 21, 5: 800}.",
+      "ts_iso": "2026-08-21T07:59:09.296129+00:00",
+      "topic": "/app/{sn}/thing/property/set",
+      "size": 97,
+      "hex": "0a5f0a0c080a520808d00f201528a006102018022001280140fe014826500c58017008788cffffffffffffffff01800104ba0107416e64726f6964d2011058585858585858585858585858585858da011058585858585858585858585858585858"
+    }
+  ]
+}

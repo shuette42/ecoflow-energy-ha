@@ -1,17 +1,22 @@
-"""SET command builders for the EcoFlow STREAM AC 5000 (ES22).
+"""SET command builders for the STREAM AC 5000 family (`ES22` and `ES21`).
 
 The EcoFlow Android app publishes its writes to the same
 `/app/{uid}/{sn}/thing/property/set` topic the integration can subscribe to,
 so these frames are not inferred: they are the app's own frames with the
-payload swapped. Three of them are reproduced byte for byte in
+payload swapped. Four of them are reproduced byte for byte in
 `tests/test_stream_ac5000_commands.py`, and the SoC limit, work mode and task
 power writes were each confirmed on live hardware on 2026-08-03, with the
 device acknowledging and reading the new value back.
 
+The envelope below is not specific to either model number. The fourth vector
+is an app write to a live `ES21` (#231), and our own builder reproduces it
+byte for byte from its recorded payload, which is what opened the control
+gate to that prefix.
+
 This device needs its own envelope rather than
-`build_delta3_config_write_payload`: the ES22 writes on `cmd_id = 38`, not 17,
-and its header carries a product id, a version of 4, a `from` string and the
-serial in two fields, none of which the Delta 3 frame has.
+`build_delta3_config_write_payload`: this family writes on `cmd_id = 38`, not
+17, and its header carries a product id, a version of 4, a `from` string and
+the serial in two fields, none of which the Delta 3 frame has.
 
 The payload is always "field 1 names the config field being written, then that
 field's value":
@@ -78,7 +83,7 @@ def _build_envelope(
     seq: int = 0,
     cmd_id: int = CMD_ID_CONFIG_WRITE,
 ) -> bytes:
-    """Wrap a config-write payload in the ES22 envelope.
+    """Wrap a config-write payload in this family's envelope.
 
     Field order and values copied from the captured app frames:
 

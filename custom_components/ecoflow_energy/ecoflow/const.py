@@ -173,8 +173,9 @@ _SN_PREFIX_MAP = {
     # agree across independent message families - the home node total matches
     # the sum of the flow edges feeding it, the grid meter matches the export
     # derived from those edges - so this is the same parser rather than a
-    # guess from the shared name. Controls are a separate question and stay
-    # off, see STREAM_AC5000_CONTROL_PREFIXES in ../const.py.
+    # guess from the shared name. Controls were a separate question and
+    # stayed off until a capture from an owner's unit showed it accepting a
+    # write, see STREAM_AC5000_CONTROL_PREFIXES in ../const.py.
     "ES21": DEVICE_TYPE_STREAM_AC5000,
     # PowerStream microinverter (#230, capture from #188). Standard Mode
     # only: the whole device arrives as flat JSON under the `20_1.`

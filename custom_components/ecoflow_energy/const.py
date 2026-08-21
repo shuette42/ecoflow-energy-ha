@@ -1197,11 +1197,38 @@ def excluded_keys_for_serial(device_sn: str) -> frozenset[str]:
 
 # Serial prefixes whose STREAM AC 5000 controls have been confirmed on
 # hardware. Every write this integration sends to that family is a
-# byte-for-byte reproduction of a frame captured from an ES22, and a power
+# byte-for-byte reproduction of a frame captured from the app, and a power
 # setpoint writes a scheduled task into a real battery rather than flipping a
 # display setting. Reading the same telemetry is no evidence that the same
 # config write is accepted, so a variant reads until one of its own frames
 # says otherwise.
+#
+# Both prefixes have now said so. ES22 was confirmed first. ES21 followed from
+# a capture on a reporter's own unit (#231): he changed a setting in the app
+# while the raw capture was running, and the download carries the app's write
+# and the device's answer to it. The envelope in that write is this
+# integration's own, field for field including the negative product id, on the
+# same command pair every control here uses. The device then reported the
+# written value back, which is what separates a frame leaving a phone from a
+# frame a device accepted. Both halves are held by
+# TestES21WriteFrames in tests/test_stream_ac5000_commands.py, against the
+# recorded frames rather than against a description of them.
+#
+# What the capture settles is the envelope and the command, not each config
+# field: the setting he changed was the grid-tied output, which this
+# integration does not write. The controls behind this gate write five other
+# fields in that same envelope.
+#
+# The read-back side carries the same limit, and it is worth stating because
+# "no control without read-back" is a commitment here. Replaying every ES21
+# fixture through the parser yields four of the eight control states:
+# both SoC limits, the work mode and the scheduled charge power. That is not
+# an ES21 shortfall - replaying every ES22 fixture yields exactly the same
+# four. The backup reserve, its level and the backup socket are missing on
+# both model numbers, because `254/39` reports only the block that changed
+# and nobody touched those settings while a capture was running. So the two
+# variants are equally covered, and the gap is one this family has always
+# had rather than one this prefix introduces.
 #
 # This is an allowlist on purpose, the inverse of DELTA3_PORT_PRIORITY_KEYS
 # above: a prefix added later gets no controls until someone decides here,
@@ -1211,7 +1238,7 @@ def excluded_keys_for_serial(device_sn: str) -> frozenset[str]:
 # every control state key is also the key of a read entity (six sensors, two
 # binary sensors), so excluding them would take the read-only entities with
 # them - including the two SoC limits an ES21 demonstrably reports.
-STREAM_AC5000_CONTROL_PREFIXES: frozenset[str] = frozenset({"ES22"})
+STREAM_AC5000_CONTROL_PREFIXES: frozenset[str] = frozenset({"ES21", "ES22"})
 
 # Serial prefixes whose Stream (BK-series) writes have been confirmed on
 # hardware. Every config write this integration sends to that family was

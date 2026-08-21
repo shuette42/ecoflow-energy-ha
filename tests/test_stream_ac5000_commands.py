@@ -8,11 +8,18 @@ verified format rather than an interpretation of one.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 
+from ecoflow_energy.const import supports_stream_ac5000_controls
 from ecoflow_energy.ecoflow.proto.decoder import decode_header_message
 from ecoflow_energy.ecoflow.stream_ac5000_commands import (
+    CMD_FUNC_CONFIG,
+    CMD_ID_CONFIG_WRITE,
     TASK_ADD,
+    _build_envelope,
     TASK_REMOVE,
     TASK_UPDATE,
     WORK_MODES,
@@ -22,6 +29,18 @@ from ecoflow_energy.ecoflow.stream_ac5000_commands import (
     build_task_payload,
     build_work_mode_payload,
 )
+
+# Writes the EcoFlow app sent to a live ES21, and the device's answer to one.
+ES21_WRITE_FRAMES = (
+    Path(__file__).parent
+    / "fixtures"
+    / "stream_ac5000"
+    / "es21_write_frames_masked.json"
+)
+
+# The capture masks the serial as a run of X of the same length, so the frames
+# still rebuild byte for byte from it.
+_ES21_MASKED_SN = "X" * 16
 
 # The serial of the unit the frames were captured from, replaced by a
 # placeholder of the same length so the vectors still line up byte for byte.
@@ -62,6 +81,54 @@ def _header(frame: bytes) -> dict:
     headers, _ = decode_header_message(frame)
     assert headers
     return headers[0]
+
+
+def _es21_frame(index: int) -> dict:
+    return json.loads(ES21_WRITE_FRAMES.read_text())["frames"][index]
+
+
+def _config_fields(frame: bytes) -> dict[int, dict[int, int]]:
+    """Read a config write or readback as {field: {subfield: value}}.
+
+    A write names the field it changes in field 1 and puts the contents in
+    the field of that number. A readback carries the contents the same way
+    but no field 1, so the number is read off the field itself in both
+    directions and field 1 skipped where it appears.
+    """
+    pdata = bytes.fromhex(_header(frame)["pdata"])
+    fields: dict[int, dict[int, int]] = {}
+    for number, value in _walk(pdata):
+        if number == 1 or not isinstance(value, bytes):
+            continue
+        fields[number] = {sub: v for sub, v in _walk(value) if isinstance(v, int)}
+    return fields
+
+
+def _walk(buf: bytes):
+    """Yield (field number, value) for one level of a protobuf message."""
+    offset = 0
+    while offset < len(buf):
+        key, offset = _varint(buf, offset)
+        number, wire = key >> 3, key & 7
+        if wire == 0:
+            value, offset = _varint(buf, offset)
+        elif wire == 2:
+            length, offset = _varint(buf, offset)
+            value, offset = buf[offset : offset + length], offset + length
+        else:  # pragma: no cover - not present in these frames
+            raise AssertionError(f"unexpected wire type {wire}")
+        yield number, value
+
+
+def _varint(buf: bytes, offset: int) -> tuple[int, int]:
+    result = shift = 0
+    while True:
+        byte = buf[offset]
+        offset += 1
+        result |= (byte & 0x7F) << shift
+        shift += 7
+        if not byte & 0x80:
+            return result, offset
 
 
 class TestCapturedFrameReproduction:
@@ -287,3 +354,94 @@ def test_work_mode_write_and_read_tables_are_inverses() -> None:
     from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import _WORK_MODE
 
     assert {value: option for option, value in WORK_MODES.items()} == _WORK_MODE
+
+
+class TestES21WriteFrames:
+    """The app's own writes to a live ES21, and the device confirming one.
+
+    The gate on this family was an allowlist because reading a device is no
+    evidence that it accepts a config write. These frames are that evidence:
+    the reporter of #231 lowered the grid-tied output on his STREAM 5000 and
+    set it back while the raw capture was running, and the download carries
+    both what the app sent and what the device answered.
+    """
+
+    def test_the_app_envelope_to_an_es21_is_the_one_we_build(self) -> None:
+        """Rebuild a captured ES21 frame from its own payload, byte for byte.
+
+        The payload is lifted out of the recorded frame rather than
+        constructed, so what is under test is the envelope alone: every header
+        field, its order, and the negative product id. A difference anywhere in
+        it means the app addresses an ES21 differently from an ES22, which is
+        exactly what the allowlist was holding out for.
+        """
+        recorded = bytes.fromhex(_es21_frame(1)["hex"])
+        header = _header(recorded)
+
+        rebuilt = _build_envelope(
+            bytes.fromhex(header["pdata"]),
+            device_sn=_ES21_MASKED_SN,
+            seq=header["seq"],
+        )
+
+        assert rebuilt == recorded
+
+    def test_the_second_captured_write_rebuilds_as_well(self) -> None:
+        """The same envelope with a different seq and a different value.
+
+        One frame could be matched by a builder that is accidentally right
+        for one sequence number. Two, recorded thirteen seconds apart with
+        seq 7 and 8 and carrying 1000 W and 2000 W, cannot be.
+        """
+        recorded = bytes.fromhex(_es21_frame(3)["hex"])
+        header = _header(recorded)
+
+        rebuilt = _build_envelope(
+            bytes.fromhex(header["pdata"]),
+            device_sn=_ES21_MASKED_SN,
+            seq=header["seq"],
+        )
+
+        assert rebuilt == recorded
+        assert _config_fields(recorded)[10][1] == 2000
+        assert header["seq"] != _header(bytes.fromhex(_es21_frame(1)["hex"]))["seq"]
+
+    def test_the_session_opener_is_a_different_command(self) -> None:
+        """The app opens with cmd_id 37, which nothing here builds.
+
+        Pinned so the default in `_build_envelope` cannot drift onto it
+        unnoticed: every control this integration offers writes on 38.
+        """
+        header = _header(bytes.fromhex(_es21_frame(0)["hex"]))
+
+        assert header["cmd_func"] == CMD_FUNC_CONFIG
+        assert header["cmd_id"] == 37
+        assert CMD_ID_CONFIG_WRITE != 37
+
+    def test_the_captured_write_is_a_config_write_on_the_shared_command(self) -> None:
+        header = _header(bytes.fromhex(_es21_frame(1)["hex"]))
+
+        assert header["cmd_func"] == CMD_FUNC_CONFIG
+        assert header["cmd_id"] == CMD_ID_CONFIG_WRITE
+
+    def test_the_device_reports_the_written_value_back(self) -> None:
+        """The write said 1000 W and the device's next report agrees.
+
+        Without this the capture would only show a frame leaving the phone.
+        Field 10 is the grid-tied output setpoint; it is not written by this
+        integration, and it is here because it is the field the reporter
+        happened to change.
+        """
+        written = _config_fields(bytes.fromhex(_es21_frame(1)["hex"]))
+        reported = _config_fields(bytes.fromhex(_es21_frame(2)["hex"]))
+
+        assert reported[10][1] == written[10][1]
+        # Pinned as well, so a helper that returned the same empty answer for
+        # both frames could not satisfy the line above.
+        assert written[10][1] == 1000
+
+    def test_es21_is_allowed_to_be_written_to(self) -> None:
+        assert supports_stream_ac5000_controls("ES21" + "0" * 12)
+
+    def test_an_unrecorded_prefix_is_still_held_back(self) -> None:
+        assert not supports_stream_ac5000_controls("ES29" + "0" * 12)

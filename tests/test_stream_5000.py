@@ -1,9 +1,10 @@
 """Tests for the STREAM 5000 (ES21) variant of the STREAM AC 5000 family.
 
-The ES21 reads with the ES22 parser and is not written to. Both halves are
+The ES21 reads with the ES22 parser, and since a capture from an owner's
+unit showed it accepting a write, it is written to as well. Both halves are
 pinned here: the read path against real frames from issue #231, the write
-path against the allowlist that keeps controls off a variant no frame has
-confirmed.
+path against the allowlist, which still keeps controls off any variant no
+frame has confirmed.
 """
 
 from __future__ import annotations
@@ -142,14 +143,14 @@ class TestReadPath:
 # `test_fixture_identifiers.py`.
 
 
-class TestControlsStayOff:
-    """Reading the same telemetry is not evidence a write is accepted."""
+class TestControlsAreGated:
+    """Reading the same telemetry is not evidence a write is accepted.
 
-    @pytest.mark.parametrize(
-        "get_defs", [_get_number_defs, _get_switch_defs, _get_select_defs]
-    )
-    def test_an_es21_gets_no_controls(self, get_defs) -> None:
-        assert get_defs(DEVICE_TYPE_STREAM_AC5000, ES21_SN) == []
+    Both prefixes in this family now have that evidence of their own, so the
+    gate is open for both. What it still holds back is the next prefix: one
+    added to the serial map inherits no controls, and `_decided_on` below is
+    what makes that inheritance visible in a diff instead of silent.
+    """
 
     @pytest.mark.parametrize(
         ("get_defs", "expected"),
@@ -159,30 +160,104 @@ class TestControlsStayOff:
             (_get_select_defs, STREAMAC5000_SELECTS),
         ],
     )
-    def test_an_es22_keeps_its_controls(self, get_defs, expected) -> None:
+    @pytest.mark.parametrize("serial", [ES21_SN, ES22_SN])
+    def test_a_confirmed_serial_keeps_its_controls(
+        self, get_defs, expected, serial
+    ) -> None:
         # Identity, not truthiness: a getter that lost part of the list
         # would still be truthy.
-        assert get_defs(DEVICE_TYPE_STREAM_AC5000, ES22_SN) is expected
+        assert get_defs(DEVICE_TYPE_STREAM_AC5000, serial) is expected
 
     def test_an_unknown_serial_gets_no_controls(self) -> None:
-        # The default matters more than the ES21 case: it is what a prefix
-        # added later inherits before anyone has thought about it.
+        # This is the case that matters now that both known prefixes are
+        # open: it is what a prefix added later inherits before anyone has
+        # thought about it.
         assert not supports_stream_ac5000_controls("")
         assert not supports_stream_ac5000_controls("ES29ZE1B2J5P0137")
+
+    @pytest.mark.parametrize(
+        "get_defs", [_get_number_defs, _get_switch_defs, _get_select_defs]
+    )
+    def test_an_unknown_serial_is_offered_no_control_entities(self, get_defs) -> None:
+        assert get_defs(DEVICE_TYPE_STREAM_AC5000, "ES29ZE1B2J5P0137") == []
 
     def test_every_family_prefix_was_decided_on(self) -> None:
         """Adding a prefix without deciding about writes fails here.
 
         The allowlist is not self-enforcing: a new prefix silently inherits
         "no controls", which is the safe default but also a silent one. This
-        pins the split so the choice is visible in a diff.
+        pins the membership so the choice is visible in a diff, and it stays
+        useful with the set full: a third prefix breaks it on the first
+        assertion and has to be decided about here.
         """
         family = {
             prefix
             for prefix, device_type in _SN_PREFIX_MAP.items()
             if device_type == DEVICE_TYPE_STREAM_AC5000
         }
-        read_only = family - STREAM_AC5000_CONTROL_PREFIXES
         assert family == {"ES21", "ES22"}
-        assert STREAM_AC5000_CONTROL_PREFIXES == {"ES22"}
-        assert read_only == {"ES21"}
+        assert STREAM_AC5000_CONTROL_PREFIXES == {"ES21", "ES22"}
+        assert family - STREAM_AC5000_CONTROL_PREFIXES == set()
+
+
+class TestControlStateCoverage:
+    """What the two model numbers actually report back, measured.
+
+    `STREAM_AC5000_CONTROL_PREFIXES` claims in a comment that the ES21 and the
+    ES22 report the same four of the eight control states, and that the three
+    backup settings are missing from both because `254/39` sends only the
+    block that changed. A comment cannot hold that: the number would drift
+    the first time a fixture is added and nothing would say so.
+    """
+
+    CONTROL_KEYS = frozenset(
+        {definition.key for definition in STREAMAC5000_NUMBERS}
+        | {definition.key for definition in STREAMAC5000_SWITCHES}
+        | {definition.key for definition in STREAMAC5000_SELECTS}
+    )
+
+    @staticmethod
+    def _states_reported(*fixtures: str) -> set[str]:
+        seen: set[str] = set()
+        for name in fixtures:
+            frames = json.loads((FIXTURES / name).read_text())["frames"]
+            for frame in frames:
+                parsed = parse_stream_ac5000_message(bytes.fromhex(frame["hex"]))
+                seen |= set(parsed or {})
+        return seen & TestControlStateCoverage.CONTROL_KEYS
+
+    def test_both_models_report_the_same_control_states(self) -> None:
+        es21 = self._states_reported(
+            "es21_frames_masked.json", "es21_pv_masked.json"
+        )
+        es22 = self._states_reported(
+            "es22_push_capture_masked.json", "es22_get_reply_masked.json"
+        )
+
+        assert es21 == es22
+
+    def test_four_of_the_eight_control_states_are_on_file_for_the_es21(self) -> None:
+        assert self._states_reported(
+            "es21_frames_masked.json", "es21_pv_masked.json"
+        ) == {
+            "max_charge_soc_pct",
+            "min_discharge_soc_pct",
+            "scheduled_charge_power_w",
+            "work_mode",
+        }
+
+    def test_the_backup_settings_are_missing_from_every_capture(self) -> None:
+        """Not a model difference: no capture on file changed one of them."""
+        everything = self._states_reported(
+            "es21_frames_masked.json",
+            "es21_pv_masked.json",
+            "es22_push_capture_masked.json",
+            "es22_get_reply_masked.json",
+            "es22_task_frames_masked.json",
+        )
+
+        assert self.CONTROL_KEYS - everything == {
+            "backup_reserve",
+            "backup_reserve_switch",
+            "backup_socket_switch",
+        }
