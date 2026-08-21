@@ -177,6 +177,7 @@ Download the [latest release](https://github.com/shuette42/ecoflow-energy-ha/rel
 
 | | Standard | Enhanced |
 |:---|:---|:---|
+| **Connection** | EcoFlow cloud (HTTPS polling + MQTT) | EcoFlow cloud (WSS MQTT) |
 | **Credentials** | Access Key + Secret Key ([Developer Portal](https://developer.ecoflow.com)) | EcoFlow email + password (same as mobile app) |
 | **Devices** | All except the Enhanced-only serials (`J327`, `J32D`, `J32E`, `R371`, `R372`, `R374`, `HJ3C`, `BK01`, `ES21`, `ES22`) | All supported devices |
 | **Update rate** | ~30 s HTTP polling (+ MQTT push for Delta/Smart Plug) | ~2-4 s real-time via WSS MQTT |
@@ -186,6 +187,8 @@ Download the [latest release](https://github.com/shuette42/ecoflow-energy-ha/rel
 | **Stream AC Pro controls** | Not available | Max Charge SoC, Min Discharge SoC, LED Brightness, Backup Reserve and AC outlet switches |
 | **Stability** | Official EcoFlow API - supported and stable | Community-driven - unofficial, use at your own risk |
 | **Best for** | Reliable long-term operation | Real-time monitoring, fast automations, PowerOcean control |
+
+**Both modes are cloud-based.** The data travels from your device to EcoFlow's servers and from there to Home Assistant, so an internet connection is required and outages on EcoFlow's side are visible here. These devices expose no local API to talk to instead. The difference between the two modes is which EcoFlow service is used and how fast it delivers, not whether the connection leaves your network.
 
 **Standard Mode** uses the official EcoFlow IoT Developer API. Apply for free API keys at [developer.ecoflow.com](https://developer.ecoflow.com). Note: the European PowerOcean variants (`J327`, `J32D`, `J32E`), the PowerOcean Plus units (`R371`, `R372`, `R374`, `HJ3C`), the Stream Micro (`BK01`) and both STREAM 5000 models (`ES21`, `ES22`) are currently not exposed through the Developer API and cannot be linked to an API key (error 1006). These devices work in Enhanced Mode only.
 
