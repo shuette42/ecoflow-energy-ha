@@ -295,8 +295,25 @@ def build_task_payload(
     The app calls both powers a *maximum*, and with a smart meter linked they
     behave as one: the device runs closed-loop against the meter and will not
     discharge into an export. With no meter linked it runs open-loop and the
-    power becomes an absolute setpoint, confirmed on hardware at 1400 W into
-    a house drawing far less.
+    discharge power becomes an absolute setpoint, confirmed on hardware at
+    1400 W into a house drawing far less, and again by a second owner at
+    789 W against an 800 W setpoint while 1.8 kW went to the grid.
+
+    The charge power does not follow that pattern and is unproven. The same
+    owner measured a full grid charge running at about 2330 W against a
+    1250 W setpoint, with an external meter in the supply line, and an earlier
+    charge with no setpoint at all ran at about 2570 W for the same energy.
+    The device does take the value: it reports it back on `40.1.8.3.3` within
+    seconds. So it is stored and not acted on.
+
+    What outranked it is unknown. Backup Reserve stood at 100% in that run, a
+    task is only acted on in Custom mode, `8.1` and `8.2` below are unexplained
+    constants, and the whole-day window is one no recorded app write uses - the
+    charge fixture this builder is pinned against covers 13:00 to 16:00. That
+    last one is weak: the discharge task uses the same window and does act.
+
+    Do not close this by inventing a different frame. What is pinned here is a
+    reproduction of a recorded app write, and guessing past it would lose that.
     """
     task_type = _TASK_KINDS.get(kind)
     if task_type is None:

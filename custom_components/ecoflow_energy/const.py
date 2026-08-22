@@ -1072,8 +1072,9 @@ STREAMAC5000_SWITCHES: list[EcoFlowSwitchDef] = [
 # the entity id for every Delta 3 and PowerOcean owner. The displayed names were
 # unified across all of them instead: one value carries one name, and a label
 # costs nobody their history. It also rules out the app's "Max discharging
-# power" and "Max grid charging power", which are a maximum only while a smart
-# meter is linked.
+# power" and "Max grid charging power". The discharging one is a maximum only
+# while a smart meter is linked; the charging one has been measured being
+# ignored outright, so neither app name describes what the entity does.
 STREAMAC5000_NUMBERS: list[EcoFlowNumberDef] = [
     EcoFlowNumberDef("scheduled_discharge_power_w", "Scheduled Discharge Power", "scheduled_discharge_power_w", "W", "mdi:battery-arrow-down-outline", 0, 2500, 50, enhanced_only=True),
     EcoFlowNumberDef("scheduled_charge_power_w", "Scheduled Charge Power", "scheduled_charge_power_w", "W", "mdi:battery-arrow-up-outline", 0, 2500, 50, enhanced_only=True),

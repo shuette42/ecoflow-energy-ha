@@ -122,12 +122,12 @@ There is deliberately no Solar Energy counter, see the note below.
 
 ## Numbers
 
-> **The two power numbers are setpoints, not the device's limits.** The EcoFlow app calls them "Max discharging power" and "Max grid charging power", but a maximum is what they are only while a smart meter is linked; with none linked the device delivers the figure asked for. They are named after the sensors that report them back instead, and they sit close enough to the Max Grid-tied Output Power and Max Grid Input Power readings to be mistaken for those. Those two are the limits. The output one can now be set from Home Assistant as well, on the number of the same name, and the input one stays read-only because no frame writing it has been recorded. Asking a setpoint for more than a limit allows is accepted, acknowledged and then clamped by the device, so no value set here can drive the unit past the limit its owner configured.
+> **The two power numbers are setpoints, not the device's limits.** The EcoFlow app calls them "Max discharging power" and "Max grid charging power". For discharging, a maximum is what it is only while a smart meter is linked; with none linked the device delivers the figure asked for. For charging that has not held up in measurement, and the note further down says what is known. They are named after the sensors that report them back instead, and they sit close enough to the Max Grid-tied Output Power and Max Grid Input Power readings to be mistaken for those. Those two are the limits. The output one can now be set from Home Assistant as well, on the number of the same name, and the input one stays read-only because no frame writing it has been recorded. Asking a setpoint for more than a limit allows is accepted, acknowledged and then clamped by the device, so no value set here can drive the unit past the limit its owner configured.
 
 | Entity | Unit | Range | Description |
 |:---|:---:|:---:|:---|
 | Scheduled Discharge Power | W | 0-2500 | Discharge power setpoint, not a limit. This is the entity an external optimiser writes. The app calls it "Max discharging power" |
-| Scheduled Charge Power | W | 0-2500 | Charge power setpoint, not a limit. Grid charging, so it is how a cheap-tariff charge is driven. The app calls it "Max grid charging power" |
+| Scheduled Charge Power | W | 0-2500 | Charge power setpoint. Grid charging, so it is meant to drive a cheap-tariff charge, but whether the device acts on the figure is unsettled: see the note below. The app calls it "Max grid charging power" |
 | Max Charge SoC | % | 50-100 | Upper SoC limit. Both limits are one setting on the wire, so changing either sends both |
 | Min Discharge SoC | % | 0-50 | Lower SoC limit |
 | Backup Reserve | % | 0-100 | Level held back for a power cut. Field 30 holds this and the on/off flag together, so changing either sends both |
@@ -154,7 +154,13 @@ This is the single most important thing about this device, and it is not obvious
 
 **With a smart meter linked in the EcoFlow app**, the device runs closed loop against that meter. It will not discharge into an export, so the power setpoint acts only as a ceiling on covering house load. Request 1400 W into a house that needs 200 W and you get 200 W. This was measured, including with feed-in explicitly enabled, which does not change it.
 
-**With no meter linked**, the device runs open loop. The app's own help text says it plainly: *"When no meter is linked, power from the system's grid-tied ports goes to the home, and any unused power will flow to the grid."* The setpoint then becomes an absolute power command. Confirmed on hardware: unlinking a Tibber Pulse turned a 1400 W request that had been delivering nothing extra into a measured 1400 W discharge.
+**With no meter linked**, the device runs open loop. The app's own help text says it plainly: *"When no meter is linked, power from the system's grid-tied ports goes to the home, and any unused power will flow to the grid."* The discharge setpoint then becomes an absolute power command. Confirmed on hardware: unlinking a Tibber Pulse turned a 1400 W request that had been delivering nothing extra into a measured 1400 W discharge. A second owner reproduced it independently, measuring 789 W of discharge against an 800 W setpoint while 1.8 kW was going to the grid.
+
+**The charge setpoint is a different case, and it is open.** The same owner set it to 1250 W and measured a full overnight grid charge running at about 2330 W anyway, with an external meter in the supply line. An earlier charge with no setpoint at all ran at about 2570 W for the same energy, so the setting made no difference either way. The value does reach the device: the frame is a reproduction of a write recorded from the EcoFlow app for this setting, and the device reports the new figure back within seconds. So it is accepted and stored, and then not acted on.
+
+What outranked it is not established, and there are four candidates rather than three. Backup Reserve stood at 100% in that run, which is a standing demand to keep the pack full. A task is only acted on in Custom mode at all. The charge block carries two further fields whose meaning is unknown here. And the window is one the app itself was never recorded sending: a power write here always covers the whole day, while the recorded app write covered an afternoon. That last one is weak evidence against the whole-day window, since the discharge setpoint uses exactly the same window and does act.
+
+Until it is settled, treat this control as unproven and verify against your own metering before building an automation on it. The discharge side is unaffected.
 
 So for an optimiser that wants to command power rather than cap it, **unlink the meter from the EcoFlow app** and let the optimiser do the metering. The device then no longer self-consumes on its own, which is the point.
 
