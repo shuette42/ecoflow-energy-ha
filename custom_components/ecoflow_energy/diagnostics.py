@@ -437,6 +437,13 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
     if raw_frames:
         diag["raw_frames"] = {
             "count": len(raw_frames),
+            # Whether the vendor app's own writes were being watched while
+            # this ran. A capture that carries no write frame says nothing
+            # on its own: the app may have sent none, or this version may
+            # never have subscribed to the topic they arrive on. Both look
+            # like an empty result, and telling them apart from the outside
+            # took a round trip with a reporter before this was written down.
+            "app_writes_watched": coordinator.app_writes_watched,
             "truncated_at_bytes": _FRAME_BUDGETS,
             # Frames are sampled per message type, so the list is a selection
             # rather than a tail. Without this a reader cannot tell a quiet

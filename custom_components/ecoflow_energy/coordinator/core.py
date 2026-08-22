@@ -461,6 +461,19 @@ class EcoFlowDeviceCoordinator(
         with self._raw_frames_lock:
             return self._raw_frames.frames(), self._raw_frames.stats()
 
+    @property
+    def app_writes_watched(self) -> bool:
+        """Return whether the vendor app's writes are being recorded.
+
+        Read from the live client rather than from the config entry. The
+        two agree today - the flag is read once when the client is built,
+        and writing it reloads the entry - but only one of them is the
+        subscription that either happened or did not, and that is the
+        question a diagnostics reader is asking.
+        """
+        client = self._mqtt_client
+        return bool(client is not None and client.capture_writes)
+
     def record_unknown_proto_fields(
         self, cmd_key: str, fields: dict[int, Any]
     ) -> None:

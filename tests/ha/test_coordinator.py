@@ -7513,10 +7513,17 @@ class TestAppWriteCapture:
 
         assert coordinator._device_data == before
 
-    async def test_a_set_reply_is_not_a_write(
+    async def test_a_set_reply_is_kept_apart_from_the_write(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
     ) -> None:
-        """`set_reply` is the device answering, and must not land in the bucket."""
+        """`set_reply` is the device answering, and is evidence of its own.
+
+        It is recorded, because the reply to a write is the half that says
+        whether the device took it, and the vendor app's replies arrive on
+        the same shared channel. It gets its own class rather than the
+        write's: conflating a request with its answer would make a capture
+        unreadable in exactly the case it exists for.
+        """
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
@@ -7527,7 +7534,29 @@ class TestAppWriteCapture:
             self._frame(coordinator.device_sn),
         )
 
-        assert coordinator.raw_frames == []
+        frames = coordinator.raw_frames
+        assert len(frames) == 1
+        assert frames[0]["topic"] == "set_reply"
+
+    async def test_a_set_reply_never_reaches_the_parser(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """Recording a reply must not turn an echo into a reading."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        before = dict(coordinator._device_data)
+
+        with patch.object(
+            coordinator, "_parse_message", side_effect=AssertionError("parsed")
+        ):
+            coordinator._on_mqtt_message(
+                f"/app/user123/{coordinator.device_sn}/thing/property/set_reply",
+                self._frame(coordinator.device_sn),
+            )
+
+        assert coordinator._device_data == before
 
     async def test_a_write_keeps_its_own_bucket(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
@@ -1122,6 +1122,45 @@ class TestRawFrameDiagnostics:
         assert frame["hex"] == "0a02ffff"
         assert frame["cmds"] == [{"cmd_func": 96, "cmd_id": 33}]
         assert frame["ts_iso"].startswith("2026-")
+
+    async def test_a_capture_says_whether_app_writes_were_watched(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Absence of a write frame has two causes and they look identical.
+
+        Either the vendor app sent none, or this version never subscribed to
+        the topic they arrive on. The first is a finding about the device,
+        the second about the reporter's version, and #284 spent a round trip
+        on the difference. The flag makes the download answer it.
+        """
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        coordinator._raw_frames.add("property:proto/96.33", {
+            "ts": 1784973604.0,
+            "topic": "property",
+            "size": 42,
+            "hex": "0a02ffff",
+        })
+
+        # No client at all is the honest "not watching", not an omission.
+        assert _device_diagnostics(coordinator)["raw_frames"][
+            "app_writes_watched"
+        ] is False
+
+        coordinator._mqtt_client = Mock(
+            capture_writes=True,
+            last_connect_time=0.0,
+            reconnect_attempts=0,
+            **{"is_connected.return_value": False},
+        )
+
+        assert _device_diagnostics(coordinator)["raw_frames"][
+            "app_writes_watched"
+        ] is True
 
     async def test_sampling_counts_are_exposed(
         self,

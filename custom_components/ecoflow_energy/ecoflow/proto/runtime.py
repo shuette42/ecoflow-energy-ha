@@ -409,17 +409,23 @@ def _typed_runtime_map(
             mapped[key] = value
         mapped["_available_keys"].add(key)
 
-    # 5. Zero-fill: proto3 omits 0.0 values, but power fields need explicit 0.0
-    for key in config.zero_fill:
-        if key not in mapped["_available_keys"]:
-            mapped[key] = 0.0
-            mapped["_available_keys"].add(key)
-
-    # 6. Compute full-power-frame flag
+    # 5. How much of the power set this frame actually carried, judged before
+    # the zero-fill below puts the rest in. Judged after it, the answer was
+    # "all of it" on every frame, because zero-filling adds the four keys it
+    # is asking about - so the flag was constant and said nothing. Nothing
+    # reads it yet; it is the one signal that separates a device sending full
+    # snapshots from one sending only what changed, and that question is open
+    # on the PowerOcean Plus (#219).
     if config.flags.get("_is_energy_stream"):
         mapped["_is_full_power_frame"] = len(
             _FULL_POWER_KEYS & mapped["_available_keys"]
         ) >= 3
+
+    # 6. Zero-fill: proto3 omits 0.0 values, but power fields need explicit 0.0
+    for key in config.zero_fill:
+        if key not in mapped["_available_keys"]:
+            mapped[key] = 0.0
+            mapped["_available_keys"].add(key)
 
     mapped["_flat_count"] = len(fields)
 

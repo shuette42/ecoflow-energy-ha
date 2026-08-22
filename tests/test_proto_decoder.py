@@ -484,3 +484,37 @@ class TestPowerOceanParamChangeReport:
 
         assert declared == {1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 13, 14, 18, 19}
         assert not declared & {9, 12, 15, 16, 17, 20, 21, 22}
+
+
+class TestFullPowerFrameFlag:
+    """The flag says how much of the power set a frame carried.
+
+    It was computed after the zero-fill, which adds the very keys it counts,
+    so it read True on every frame including one that carried none of them.
+    A flag with one value is not a flag, and this is the only signal that
+    separates a device sending full snapshots from one sending only what
+    changed - the open question on the PowerOcean Plus in #219.
+    """
+
+    def test_a_frame_carrying_one_power_field_is_not_a_full_frame(self):
+        msg = JTS1EnergyStreamReport()
+        msg.bp_soc = 50
+        msg.sys_grid_pwr = 500.0
+        frame = _build_frame(96, 33, msg.SerializeToString())
+
+        result = decode_proto_runtime_frame(frame)
+
+        assert result.mapped["_is_full_power_frame"] is False
+        # The zero-fill still runs: an absent power field is a real zero to
+        # every consumer, and that behaviour is unchanged by the reorder.
+        assert result.mapped["solar"] == 0.0
+        assert result.mapped["home_direct"] == 0.0
+
+    def test_a_frame_carrying_no_power_fields_is_not_a_full_frame(self):
+        msg = JTS1EnergyStreamReport()
+        msg.bp_soc = 50
+        frame = _build_frame(96, 33, msg.SerializeToString())
+
+        assert (
+            decode_proto_runtime_frame(frame).mapped["_is_full_power_frame"] is False
+        )

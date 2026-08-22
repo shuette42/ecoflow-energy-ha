@@ -145,6 +145,14 @@ class MqttIngestMixin:
             # carries no identifier of its own.
             channel = "app" if topic.startswith("/app/") else "open"
             self._log_event("set_reply", f"topic={channel}/set_reply")
+            # Recorded for the same reason the write itself is, and it is not
+            # the same evidence: a write frame says what was asked for, its
+            # reply says whether the device took it. The replies to the vendor
+            # app's own writes arrive here too, on a channel we share with it,
+            # so the answer to a setting nobody here can send is on the wire
+            # already. Recorded and then dropped, like the write: an echo of a
+            # request is not a reading. Parsing stays off this path.
+            self._capture_raw_frame(topic, payload, None)
             if self.device_type == DEVICE_TYPE_DELTA3:
                 self._check_delta3_set_ack(payload)
             return
@@ -240,7 +248,15 @@ class MqttIngestMixin:
             # the Paho thread should not hold the lock across that.
             key = frame_key(entry, payload, secrets)
             with self._raw_frames_lock:
-                self._raw_frames.add(key, entry)
+                # The parsed key names decide whether this frame said
+                # something its message type has never said, which is what
+                # keeps a configuration readback from being thinned away by
+                # the telemetry it arrives among. A frame the parser did not
+                # read - a write, a reply - passes None and is sampled on
+                # arrival alone, because it has no readings to be novel in.
+                self._raw_frames.add(
+                    key, entry, keys=parsed.keys() if parsed else None
+                )
         except Exception:  # noqa: BLE001
             _LOGGER.debug("Raw frame capture failed", exc_info=True)
 

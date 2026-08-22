@@ -597,7 +597,11 @@ class TestTypedFrameBuffer:
         assert stats["frames_kept"] == len(buffer.frames())
         assert stats["frames_kept"] < stats["frames_seen"]
         assert stats["per_key"]["property:proto/254.21"]["seen"] == 100
-        assert stats["per_key"]["property:proto/32.50"] == {"seen": 1, "kept": 1}
+        assert stats["per_key"]["property:proto/32.50"] == {
+            "seen": 1,
+            "kept": 1,
+            "novel": 0,
+        }
 
     def test_span_covers_the_capture_window_not_the_last_bucket(self) -> None:
         """The span is what the reader uses to judge how long it ran."""
@@ -765,3 +769,109 @@ class TestPowerOceanGetAllSurvivesTheBudget:
         )
 
         assert budget == RAW_FRAME_MAX_BYTES
+
+
+class TestNovelReadingsSurviveThinning:
+    """The frame a capture was opened for must not be thinned away.
+
+    Reconstructed from the recording on #284. An owner changed a power limit
+    in the vendor app while the raw capture ran. His device's message type
+    `254/39` sent 118 frames in 213 seconds, the sampling kept 8 of them, and
+    the changed value was in none of the 8: the readback arrived between two
+    sampling slots and the telemetry around it survived instead.
+
+    Nothing was wrong with the sampling. One frame per slot is what keeps a
+    six-hour recording from becoming its own last four minutes. What was
+    missing is that a frame saying something new is worth a slot of its own.
+    """
+
+    # From the capture: frames, span, and the moment the readback arrived.
+    _FRAMES = 118
+    _SPAN_S = 213.0
+    _CHANGE_AT = 127.0
+
+    _TELEMETRY = ("grid_w", "soc_pct")
+    _CONFIG = ("max_grid_input_power_w",)
+
+    def _run(self, buffer: TypedFrameBuffer) -> None:
+        """Replay the capture: telemetry throughout, one readback at 127 s."""
+        step = self._SPAN_S / self._FRAMES
+        for i in range(self._FRAMES):
+            at = i * step
+            keys = (
+                self._TELEMETRY + self._CONFIG
+                if at <= self._CHANGE_AT < at + step
+                else self._TELEMETRY
+            )
+            buffer.add("property:proto/254.39", _entry(at), keys=keys)
+
+    def test_the_changed_value_is_kept(self) -> None:
+        buffer = TypedFrameBuffer(keys_max=20, per_key_max=10)
+
+        self._run(buffer)
+
+        stats = buffer.stats()["per_key"]["property:proto/254.39"]
+        assert stats["seen"] == self._FRAMES
+        # The regression this exists for: without the novelty slot the frame
+        # at 127 s is thinned away with everything else in its slot.
+        assert stats["novel"] == 2  # the first frame, then the readback
+        kept = [round(entry["ts"] - _T0, 3) for entry in buffer.frames()]
+        assert any(abs(ts - self._CHANGE_AT) < self._SPAN_S / self._FRAMES for ts in kept)
+
+    def test_the_recording_keeps_its_shape(self) -> None:
+        """A novelty slot must not buy its frame out of the thinned history.
+
+        The sampling exists so a long capture still has a middle. Novel
+        frames are kept on top of the per-type budget rather than out of it,
+        and there are at most a handful of them.
+        """
+        buffer = TypedFrameBuffer(keys_max=20, per_key_max=10)
+
+        self._run(buffer)
+
+        stats = buffer.stats()["per_key"]["property:proto/254.39"]
+        assert stats["kept"] <= 10 + 4
+        # Spread across the recording rather than clustered at one end.
+        kept = sorted(entry["ts"] - _T0 for entry in buffer.frames())
+        assert kept[0] == 0.0
+        assert kept[-1] > self._SPAN_S * 0.9
+
+    def test_a_repeated_reading_is_not_novel(self) -> None:
+        """Novelty is the first appearance, not every appearance.
+
+        A device that keeps reporting the same field after a change would
+        otherwise claim a slot on every frame, which is the crowding the
+        sampling exists to prevent.
+        """
+        buffer = TypedFrameBuffer(keys_max=20, per_key_max=10)
+
+        for i in range(50):
+            buffer.add("property:proto/254.39", _entry(float(i)), keys=self._TELEMETRY)
+
+        assert buffer.stats()["per_key"]["property:proto/254.39"]["novel"] == 1
+
+    def test_novelty_is_judged_per_message_type(self) -> None:
+        """A field in a full dump says nothing about whether it is pushed.
+
+        That a get answered with a configuration block is not evidence the
+        device ever reports it on its own, and the second is the question a
+        control needs answered. So the buckets do not share what they have
+        seen.
+        """
+        buffer = TypedFrameBuffer(keys_max=20, per_key_max=10)
+
+        buffer.add("get_reply:proto/254.39", _entry(0.0), keys=self._CONFIG)
+        buffer.add("property:proto/254.39", _entry(1.0), keys=self._CONFIG)
+
+        per_key = buffer.stats()["per_key"]
+        assert per_key["get_reply:proto/254.39"]["novel"] == 1
+        assert per_key["property:proto/254.39"]["novel"] == 1
+
+    def test_a_frame_with_no_readings_is_sampled_as_before(self) -> None:
+        """A write or a reply carries no parsed keys and claims no slot."""
+        buffer = TypedFrameBuffer(keys_max=20, per_key_max=10)
+
+        for i in range(50):
+            buffer.add("set:proto/254.38", _entry(float(i)))
+
+        assert buffer.stats()["per_key"]["set:proto/254.38"]["novel"] == 0

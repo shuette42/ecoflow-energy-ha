@@ -217,6 +217,20 @@ class EcoFlowMQTTClient:
         """Return whether this client uses WSS (True) or TCP (False)."""
         return self._wss_mode
 
+    @property
+    def capture_writes(self) -> bool:
+        """Return whether the vendor app's own writes are being watched.
+
+        Exported because its absence is indistinguishable from silence. A
+        capture taken while an owner changed a setting in the app carries no
+        write frame in either case: because the app sent none, or because
+        this client never subscribed to the topic it sends them on. The
+        first is a finding about the device and the second is a finding
+        about the version the reporter is running, and one of them cost a
+        round trip on #284 before this said so out loud.
+        """
+        return self._capture_writes
+
     def update_credentials(self, account: str, password: str) -> None:
         """Update stored credentials for next reconnect (e.g. after rc=5).
 
