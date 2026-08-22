@@ -69,6 +69,61 @@ class TestSubscribeDataFlag:
         assert any("/set_reply" in t for t in topics_subscribed), "Missing /set_reply subscription"
 
 
+class TestCaptureWritesReportsTheSubscription:
+    """The flag a diagnostics download shows must be the subscription.
+
+    A capture with no write frame in it means either that the vendor app
+    sent none or that nobody was listening, and telling those apart from
+    outside cost a round trip on #284. Reporting the constructor argument
+    would answer the wrong one of the two: it says a subscription was
+    wanted, not that it happened.
+    """
+
+    def test_false_before_the_client_ever_connects(self):
+        client = _make_client(capture_writes=True, wss_mode=True, user_id="user123")
+
+        assert client.capture_writes is False
+
+    @patch("ecoflow_energy.ecoflow.cloud_mqtt.mqtt.Client")
+    def test_true_once_the_subscribe_has_run(self, mock_mqtt_cls):
+        mock_paho = MagicMock()
+        mock_mqtt_cls.return_value = mock_paho
+        client = _make_client(capture_writes=True, wss_mode=True, user_id="user123")
+        client.client = mock_paho
+
+        client._on_connect(mock_paho, None, None, 0)
+
+        topics = [call[0][0] for call in mock_paho.subscribe.call_args_list]
+        assert any(t.endswith("/thing/property/set") for t in topics)
+        assert client.capture_writes is True
+
+    @patch("ecoflow_energy.ecoflow.cloud_mqtt.mqtt.Client")
+    def test_false_without_a_user_id(self, mock_mqtt_cls):
+        """The write topic is addressed by account, so there is none to watch."""
+        mock_paho = MagicMock()
+        mock_mqtt_cls.return_value = mock_paho
+        client = _make_client(capture_writes=True, wss_mode=False, user_id="")
+        client.client = mock_paho
+
+        client._on_connect(mock_paho, None, None, 0)
+
+        assert client.capture_writes is False
+
+    @patch("ecoflow_energy.ecoflow.cloud_mqtt.mqtt.Client")
+    def test_false_on_the_set_only_branch(self, mock_mqtt_cls):
+        """Standard Mode subscribes to no data topics, and to no writes."""
+        mock_paho = MagicMock()
+        mock_mqtt_cls.return_value = mock_paho
+        client = _make_client(
+            capture_writes=True, subscribe_data=False, wss_mode=False, user_id="user123"
+        )
+        client.client = mock_paho
+
+        client._on_connect(mock_paho, None, None, 0)
+
+        assert client.capture_writes is False
+
+
 class TestClientCreation:
     def test_tcp_mode_default(self):
         client = _make_client(wss_mode=False)

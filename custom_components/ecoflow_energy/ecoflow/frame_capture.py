@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 import re
 import time
-from collections.abc import Iterable
+from collections.abc import Mapping
 from typing import Any
 
 # Filler byte for masked identifiers. Replacing a secret with a run of the
@@ -281,10 +281,11 @@ class _Bucket:
         # frame" and holds until the budget is first exceeded.
         self.slot_s = 0.0
         self.seen = 0
-        # Every reading this message type has carried so far, and the frames
-        # kept because they carried one for the first time. See
-        # TypedFrameBuffer for why the thinned history alone loses them.
-        self.keys_seen: set[str] = set()
+        # What this message type has said before: the last value of every
+        # reading, and how many frames in a row it has held it. Both are
+        # needed - see TypedFrameBuffer for why a first appearance alone
+        # does not catch the case this exists for.
+        self.keys_seen: dict[str, tuple[Any, int]] = {}
         self.novel: list[tuple[int, dict[str, Any]]] = []
 
     def items(self) -> list[tuple[int, dict[str, Any]]]:
@@ -367,14 +368,14 @@ class TypedFrameBuffer:
         self,
         key: str,
         entry: dict[str, Any],
-        keys: Iterable[str] | None = None,
+        readings: Mapping[str, Any] | None = None,
     ) -> None:
         """Store one frame under its message-type key.
 
-        ``keys`` are the readings the parser took out of this frame. They
-        are not stored; they decide whether the frame said something its
-        message type has not said before, which is the one thing the
-        thinned history cannot preserve on its own.
+        ``readings`` are what the parser took out of this frame, names and
+        values. They decide whether the frame said something its message
+        type has not said before, which is the one thing the thinned
+        history cannot preserve on its own.
         """
         bucket = self._buckets.get(key)
         if bucket is None:
@@ -392,25 +393,34 @@ class TypedFrameBuffer:
             # slot; the incoming one takes over the reserved newest slot.
             self._sample(bucket, bucket.latest)
         bucket.latest = (self._seq, entry)
-        if keys is not None:
-            self._note_novelty(bucket, (self._seq, entry), keys)
+        if readings is not None:
+            self._note_novelty(bucket, (self._seq, entry), readings)
 
     def _note_novelty(
         self,
         bucket: _Bucket,
         item: tuple[int, dict[str, Any]],
-        keys: Iterable[str],
+        readings: Mapping[str, Any],
     ) -> None:
-        """Keep a frame that carried a reading this type had never carried.
+        """Keep a frame that said something its message type had not said.
 
-        A configuration readback is the case this exists for. It arrives
-        once, on the same message type as the telemetry around it, and
-        seconds later that type has pushed another twenty frames - so the
-        one frame the recording was opened for is thinned away while the
-        surrounding traffic survives. That is not a hypothetical: in a
-        three-minute capture from a STREAM AC 5000 whose owner changed a
-        limit in the vendor app, its message type sent 118 frames, 8 were
-        kept, and the changed value was in none of them.
+        A configuration readback is the case this exists for. It rides the
+        same message type as the telemetry around it and arrives once, so
+        the one frame a recording was opened for competes with a push that
+        repeats every two seconds, and loses.
+
+        Two things count as new, because the first alone is not enough. A
+        reading the type has never carried is the obvious one. A reading
+        whose value changed after holding still is the one that matters for
+        a setting somebody just moved in the vendor app, and the first
+        appearance of that key will usually have been its **old** value.
+
+        Holding still is what separates a setting from telemetry, and it is
+        why the second rule does not simply keep every change. Grid power
+        moves on every frame and would claim a slot on every frame, which
+        is the crowding the sampling exists to prevent. A value that has
+        been the same for `_STABLE_RUN` frames and then moves is a setting
+        on any device this integration talks to.
 
         Novelty is judged per message type rather than per device. The same
         reading can arrive both in an answer to a get and in an incremental
@@ -419,16 +429,30 @@ class TypedFrameBuffer:
         pushes it on its own, which is the question a control needs
         answered.
 
-        The set of keys a type has carried is bounded by the parser's key
-        space, so it cannot grow without bound. The frames kept are capped
-        separately, keeping the most recent: the first frames of a
+        The keys a type has carried are bounded by the parser's key space,
+        so the record cannot grow without bound. Values are kept only to be
+        compared with the next one, never exported. The frames kept are
+        capped separately, keeping the most recent: the first frames of a
         recording introduce every key a device reports, and those are
         already kept as the start of the thinned history.
         """
-        new = {str(name) for name in keys} - bucket.keys_seen
-        if not new:
+        novel = False
+        for name, value in readings.items():
+            key = str(name)
+            previous = bucket.keys_seen.get(key)
+            if previous is None:
+                novel = True
+                bucket.keys_seen[key] = (value, 1)
+                continue
+            last, run = previous
+            if _same_reading(last, value):
+                bucket.keys_seen[key] = (last, run + 1)
+                continue
+            if run >= _STABLE_RUN:
+                novel = True
+            bucket.keys_seen[key] = (value, 1)
+        if not novel:
             return
-        bucket.keys_seen |= new
         bucket.novel.append(item)
         if len(bucket.novel) > self._novel_max:
             del bucket.novel[0]
@@ -521,11 +545,34 @@ class TypedFrameBuffer:
 # same timestamp and the observed span is therefore zero.
 _MIN_SLOT_S = 0.001
 
-# How many frames a message type may keep for having carried a reading it had
-# never carried before. Four rather than one because a single change in the
-# vendor app can move several settings at once, and rather than many because
-# these sit on top of the per-type budget instead of inside it.
+# How many frames a message type may keep for having said something new.
+# Four rather than one because a single change in the vendor app can move
+# several settings at once, and rather than many because these sit on top of
+# the per-type budget instead of inside it. Worst case for a whole capture is
+# therefore keys_max * (per_key_max + 4) frames rather than
+# keys_max * per_key_max: 280 rather than 200 at the coordinator's settings.
 _NOVEL_PER_KEY_MAX = 4
+
+# How many frames a reading must hold one value before a change to it is
+# worth a slot. Telemetry moves on nearly every frame and never reaches this;
+# a setting holds for as long as nobody touches it. Five is deliberately low:
+# the cost of a false positive is one kept frame, the cost of a false negative
+# is the frame the recording was opened for.
+_STABLE_RUN = 5
+
+
+def _same_reading(previous: Any, current: Any) -> bool:
+    """Return whether a reading is unchanged, tolerating unhashable values.
+
+    Values come out of a parser and are mostly numbers, but a list or a dict
+    reaches here too. Equality is compared rather than identity, and anything
+    that refuses to compare counts as changed - which costs at most one kept
+    frame and never hides one.
+    """
+    try:
+        return bool(previous == current)
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def _slot(item: tuple[int, dict[str, Any]], bucket: _Bucket) -> int:

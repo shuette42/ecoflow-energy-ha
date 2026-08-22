@@ -97,6 +97,11 @@ class EcoFlowMQTTClient:
         # evidence. Subscribing is not publishing: the listen-only guarantee
         # is untouched by it.
         self._capture_writes = capture_writes
+        # Set when the subscribe below actually runs, which is what the
+        # diagnostics flag reports. The request and the subscription are not
+        # the same thing: the topic needs a user id and the data topics, and
+        # a client that never connected subscribed to nothing at all.
+        self._writes_subscribed = False
         self._device_sn = device_sn
         self._user_id = user_id
         self.message_handler = message_handler
@@ -221,6 +226,10 @@ class EcoFlowMQTTClient:
     def capture_writes(self) -> bool:
         """Return whether the vendor app's own writes are being watched.
 
+        This is the subscription rather than the request for one: it turns
+        true where the subscribe runs, so a client that never connected, or
+        one that took the SET-only branch, reports false honestly.
+
         Exported because its absence is indistinguishable from silence. A
         capture taken while an owner changed a setting in the app carries no
         write frame in either case: because the app sent none, or because
@@ -229,7 +238,7 @@ class EcoFlowMQTTClient:
         about the version the reporter is running, and one of them cost a
         round trip on #284 before this said so out loud.
         """
-        return self._capture_writes
+        return self._writes_subscribed
 
     def update_credentials(self, account: str, password: str) -> None:
         """Update stored credentials for next reconnect (e.g. after rc=5).
@@ -350,6 +359,7 @@ class EcoFlowMQTTClient:
                             "/thing/property/set"
                         )
                         client.subscribe(topic_write, qos=1)
+                        self._writes_subscribed = True
 
                 if not self._notified_connected:
                     self._notified_connected = True

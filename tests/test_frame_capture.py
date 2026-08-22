@@ -774,49 +774,96 @@ class TestPowerOceanGetAllSurvivesTheBudget:
 class TestNovelReadingsSurviveThinning:
     """The frame a capture was opened for must not be thinned away.
 
-    Reconstructed from the recording on #284. An owner changed a power limit
-    in the vendor app while the raw capture ran. His device's message type
-    `254/39` sent 118 frames in 213 seconds, the sampling kept 8 of them, and
-    the changed value was in none of the 8: the readback arrived between two
-    sampling slots and the telemetry around it survived instead.
-
-    Nothing was wrong with the sampling. One frame per slot is what keeps a
-    six-hour recording from becoming its own last four minutes. What was
-    missing is that a frame saying something new is worth a slot of its own.
+    Shaped after the recording on #284, and deliberately not claiming what
+    that recording shows. An owner changed a power limit in the vendor app
+    while the raw capture ran. In his file the configuration block appears
+    only in the device's answers to a get - five of them, all kept, all
+    before the change - and never once on the incremental push bucket, whose
+    118 frames were thinned to 8. So the file does not show a frame carrying
+    the new value being dropped. What it shows is that the value never
+    reached the recording at all, and either route to that is what these
+    tests cover: a first appearance on a bucket, and a change to a value the
+    bucket had been carrying unchanged.
     """
 
-    # From the capture: frames, span, and the moment the readback arrived.
+    # From the capture: frames and span of the incremental push bucket.
     _FRAMES = 118
     _SPAN_S = 213.0
     _CHANGE_AT = 127.0
 
-    _TELEMETRY = ("grid_w", "soc_pct")
-    _CONFIG = ("max_grid_input_power_w",)
+    # Timestamps are wall clock, so a stored offset does not come back out
+    # of `ts - _T0` bit for bit. Frames are seconds apart and the tolerance
+    # is microseconds, so it cannot make a neighbouring frame match.
+    _TS_EPSILON = 1e-6
 
-    def _run(self, buffer: TypedFrameBuffer) -> None:
-        """Replay the capture: telemetry throughout, one readback at 127 s."""
+    def _kept_at(self, buffer: TypedFrameBuffer, offset: float) -> bool:
+        """Return whether the frame recorded at `offset` survived."""
+        step = self._SPAN_S / self._FRAMES
+        return any(
+            offset - self._TS_EPSILON <= (entry["ts"] - _T0) < offset + step
+            for entry in buffer.frames()
+        )
+
+    def _telemetry(self, i: int) -> dict[str, float]:
+        """Readings that move on every frame, as live power does."""
+        return {"grid_w": 100.0 + i, "soc_pct": 50.0 + (i % 7)}
+
+    def _run(self, buffer: TypedFrameBuffer, *, config_from: int = 0) -> None:
+        """Replay the capture with a limit that changes partway through.
+
+        `config_from` is the frame at which the configuration block starts
+        riding the push, so the same replay covers both the case where it
+        was there all along and the case where it appears mid-recording.
+        """
         step = self._SPAN_S / self._FRAMES
         for i in range(self._FRAMES):
             at = i * step
-            keys = (
-                self._TELEMETRY + self._CONFIG
-                if at <= self._CHANGE_AT < at + step
-                else self._TELEMETRY
-            )
-            buffer.add("property:proto/254.39", _entry(at), keys=keys)
+            readings = self._telemetry(i)
+            if i >= config_from:
+                readings["max_grid_input_power_w"] = (
+                    2500 if at >= self._CHANGE_AT else 1200
+                )
+            buffer.add("property:proto/254.39", _entry(at), readings=readings)
 
-    def test_the_changed_value_is_kept(self) -> None:
+    def test_a_changed_setting_is_kept(self) -> None:
+        """The #284 question: the limit moves, on a key already being carried.
+
+        This is the case a first-appearance rule does not catch, and the one
+        that matters - the first appearance of that key carries the *old*
+        value.
+        """
         buffer = TypedFrameBuffer(keys_max=20, per_key_max=10)
 
         self._run(buffer)
 
-        stats = buffer.stats()["per_key"]["property:proto/254.39"]
-        assert stats["seen"] == self._FRAMES
-        # The regression this exists for: without the novelty slot the frame
-        # at 127 s is thinned away with everything else in its slot.
-        assert stats["novel"] == 2  # the first frame, then the readback
-        kept = [round(entry["ts"] - _T0, 3) for entry in buffer.frames()]
-        assert any(abs(ts - self._CHANGE_AT) < self._SPAN_S / self._FRAMES for ts in kept)
+        step = self._SPAN_S / self._FRAMES
+        # The first frame at or after the change, which is the one that
+        # carried the new value.
+        changed_at = -(-self._CHANGE_AT // step) * step
+        assert self._kept_at(buffer, changed_at)
+
+    def test_a_setting_appearing_mid_recording_is_kept(self) -> None:
+        """The other route to the same miss: the block starts arriving late."""
+        buffer = TypedFrameBuffer(keys_max=20, per_key_max=10)
+        appears_at = 60
+
+        self._run(buffer, config_from=appears_at)
+
+        assert self._kept_at(buffer, appears_at * self._SPAN_S / self._FRAMES)
+
+    def test_live_telemetry_claims_no_slots(self) -> None:
+        """Power moves on every frame and must never count as new.
+
+        Otherwise every frame is novel, the cap keeps only the last four,
+        and the mechanism becomes a second ring buffer.
+        """
+        buffer = TypedFrameBuffer(keys_max=20, per_key_max=10)
+
+        for i in range(self._FRAMES):
+            buffer.add("property:proto/254.39", _entry(float(i)), readings=self._telemetry(i))
+
+        # One: the first frame, where every key appears for the first time.
+        assert buffer.stats()["per_key"]["property:proto/254.39"]["novel"] == 1
 
     def test_the_recording_keeps_its_shape(self) -> None:
         """A novelty slot must not buy its frame out of the thinned history.
@@ -830,23 +877,37 @@ class TestNovelReadingsSurviveThinning:
         self._run(buffer)
 
         stats = buffer.stats()["per_key"]["property:proto/254.39"]
+        assert stats["seen"] == self._FRAMES
         assert stats["kept"] <= 10 + 4
-        # Spread across the recording rather than clustered at one end.
         kept = sorted(entry["ts"] - _T0 for entry in buffer.frames())
         assert kept[0] == 0.0
         assert kept[-1] > self._SPAN_S * 0.9
 
     def test_a_repeated_reading_is_not_novel(self) -> None:
-        """Novelty is the first appearance, not every appearance.
-
-        A device that keeps reporting the same field after a change would
-        otherwise claim a slot on every frame, which is the crowding the
-        sampling exists to prevent.
-        """
+        """Novelty is a change, not every appearance."""
         buffer = TypedFrameBuffer(keys_max=20, per_key_max=10)
 
         for i in range(50):
-            buffer.add("property:proto/254.39", _entry(float(i)), keys=self._TELEMETRY)
+            buffer.add(
+                "property:proto/254.39", _entry(float(i)), readings={"soc_pct": 50.0}
+            )
+
+        assert buffer.stats()["per_key"]["property:proto/254.39"]["novel"] == 1
+
+    def test_a_change_before_the_value_settled_is_not_novel(self) -> None:
+        """A reading has to hold still first, or telemetry qualifies too.
+
+        Four frames of one value then a change is inside the run length and
+        must not claim a slot; the boundary is worth pinning because it is
+        what separates a setting from a fast-moving reading.
+        """
+        buffer = TypedFrameBuffer(keys_max=20, per_key_max=10)
+
+        for i in range(4):
+            buffer.add(
+                "property:proto/254.39", _entry(float(i)), readings={"x": 1.0}
+            )
+        buffer.add("property:proto/254.39", _entry(4.0), readings={"x": 2.0})
 
         assert buffer.stats()["per_key"]["property:proto/254.39"]["novel"] == 1
 
@@ -860,8 +921,12 @@ class TestNovelReadingsSurviveThinning:
         """
         buffer = TypedFrameBuffer(keys_max=20, per_key_max=10)
 
-        buffer.add("get_reply:proto/254.39", _entry(0.0), keys=self._CONFIG)
-        buffer.add("property:proto/254.39", _entry(1.0), keys=self._CONFIG)
+        buffer.add(
+            "get_reply:proto/254.39", _entry(0.0), readings={"max_grid_input_power_w": 1200}
+        )
+        buffer.add(
+            "property:proto/254.39", _entry(1.0), readings={"max_grid_input_power_w": 1200}
+        )
 
         per_key = buffer.stats()["per_key"]
         assert per_key["get_reply:proto/254.39"]["novel"] == 1
@@ -875,3 +940,14 @@ class TestNovelReadingsSurviveThinning:
             buffer.add("set:proto/254.38", _entry(float(i)))
 
         assert buffer.stats()["per_key"]["set:proto/254.38"]["novel"] == 0
+
+    def test_an_unhashable_reading_does_not_break_the_capture(self) -> None:
+        """Parsers emit lists too, and capture must never affect ingest."""
+        buffer = TypedFrameBuffer(keys_max=20, per_key_max=10)
+
+        for i in range(10):
+            buffer.add(
+                "property:proto/254.39", _entry(float(i)), readings={"packs": [1, 2]}
+            )
+
+        assert buffer.stats()["per_key"]["property:proto/254.39"]["seen"] == 10

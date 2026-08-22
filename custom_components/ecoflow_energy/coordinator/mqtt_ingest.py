@@ -121,8 +121,11 @@ class MqttIngestMixin:
         to MQTT push for real-time data alongside HTTP polling (dual-source).
         In Enhanced Mode, MQTT is the primary source.
         """
-        # SET reply tracking (all modes): log acknowledgement, do not process as data
-        if "/set_reply" in topic:
+        # SET reply tracking (all modes): log acknowledgement, do not process
+        # as data. The same predicate the capture buckets on
+        # (`frame_capture._topic_class`), so a reply can never route as a
+        # reply here and then be filed among the telemetry there.
+        if topic.endswith("/set_reply"):
             # The reply body echoes the full serial in Standard Mode, and
             # reporters attach debug logs to public issues. Masked first and
             # truncated second, so the cut can never leave a serial fragment
@@ -248,15 +251,15 @@ class MqttIngestMixin:
             # the Paho thread should not hold the lock across that.
             key = frame_key(entry, payload, secrets)
             with self._raw_frames_lock:
-                # The parsed key names decide whether this frame said
+                # The parsed readings decide whether this frame said
                 # something its message type has never said, which is what
                 # keeps a configuration readback from being thinned away by
-                # the telemetry it arrives among. A frame the parser did not
-                # read - a write, a reply - passes None and is sampled on
-                # arrival alone, because it has no readings to be novel in.
-                self._raw_frames.add(
-                    key, entry, keys=parsed.keys() if parsed else None
-                )
+                # the telemetry it arrives among. Values travel with the
+                # names because a setting somebody just moved is a changed
+                # value of a key the type has carried for hours, not a new
+                # key. A frame the parser did not read - a write, a reply -
+                # passes None and is sampled on arrival alone.
+                self._raw_frames.add(key, entry, readings=parsed or None)
         except Exception:  # noqa: BLE001
             _LOGGER.debug("Raw frame capture failed", exc_info=True)
 

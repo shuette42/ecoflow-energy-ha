@@ -7538,6 +7538,27 @@ class TestAppWriteCapture:
         assert len(frames) == 1
         assert frames[0]["topic"] == "set_reply"
 
+    async def test_an_open_channel_reply_lands_in_the_same_bucket(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """Standard Mode answers on `/open/`, and it is the same evidence.
+
+        The two channels differ in who is asked, not in what comes back, and
+        a reply filed among the telemetry is the crowding the class exists
+        to prevent.
+        """
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+
+        coordinator._on_mqtt_message(
+            f"/open/acct/{coordinator.device_sn}/thing/property/set_reply",
+            self._frame(coordinator.device_sn),
+        )
+
+        assert [frame["topic"] for frame in coordinator.raw_frames] == ["set_reply"]
+
     async def test_a_set_reply_never_reaches_the_parser(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
     ) -> None:

@@ -1151,16 +1151,42 @@ class TestRawFrameDiagnostics:
             "app_writes_watched"
         ] is False
 
-        coordinator._mqtt_client = Mock(
+        coordinator._mqtt_client = self._watching_client()
+
+        assert _device_diagnostics(coordinator)["raw_frames"][
+            "app_writes_watched"
+        ] is True
+
+    @staticmethod
+    def _watching_client() -> Mock:
+        return Mock(
             capture_writes=True,
             last_connect_time=0.0,
             reconnect_attempts=0,
             **{"is_connected.return_value": False},
         )
 
-        assert _device_diagnostics(coordinator)["raw_frames"][
-            "app_writes_watched"
-        ] is True
+    async def test_an_empty_capture_still_says_writes_were_watched(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """The case where the question is sharpest has no frame list at all.
+
+        A recording that kept nothing is exactly when "was anything being
+        watched?" needs answering, and the frame list it would have been
+        attached to does not exist. So the flag stands on its own.
+        """
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        coordinator._mqtt_client = self._watching_client()
+
+        diag = _device_diagnostics(coordinator)
+
+        assert "raw_frames" not in diag
+        assert diag["app_writes_watched"] is True
 
     async def test_sampling_counts_are_exposed(
         self,

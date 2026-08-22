@@ -434,16 +434,23 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
     # One read for both halves: the counts only reconcile against the frame
     # list if they describe the same state of the buffer.
     raw_frames, raw_sampling = coordinator.raw_frame_capture()
+    # Whether the vendor app's own writes were being watched while this ran.
+    # A capture carrying no write frame says nothing on its own: the app may
+    # have sent none, or this version may never have subscribed to the topic
+    # they arrive on. Both look like an empty result, and telling them apart
+    # from the outside took a round trip with a reporter before this was
+    # written down.
+    #
+    # Reported even when nothing was captured at all, which is the case where
+    # the question is sharpest. Putting it inside the frame list would answer
+    # it only for the recordings that already have an answer in them.
+    app_writes_watched = coordinator.app_writes_watched
+    if app_writes_watched:
+        diag["app_writes_watched"] = True
     if raw_frames:
         diag["raw_frames"] = {
             "count": len(raw_frames),
-            # Whether the vendor app's own writes were being watched while
-            # this ran. A capture that carries no write frame says nothing
-            # on its own: the app may have sent none, or this version may
-            # never have subscribed to the topic they arrive on. Both look
-            # like an empty result, and telling them apart from the outside
-            # took a round trip with a reporter before this was written down.
-            "app_writes_watched": coordinator.app_writes_watched,
+            "app_writes_watched": app_writes_watched,
             "truncated_at_bytes": _FRAME_BUDGETS,
             # Frames are sampled per message type, so the list is a selection
             # rather than a tail. Without this a reader cannot tell a quiet
