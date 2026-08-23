@@ -7232,12 +7232,23 @@ class TestRawFrameCapture:
 
         assert coordinator.raw_frames == []
 
-    async def test_json_payload_is_not_captured(
+    async def test_a_json_push_is_captured(
         self,
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """JSON pushes expose their keys already and are left out."""
+        """A device that speaks JSON must not record an empty capture.
+
+        This test used to assert the opposite, on the reasoning that a JSON
+        push exposes its keys already. That holds only for the keys the
+        parser knows: those reach the reading list, and the ones it does
+        not know reach nothing at all. A Delta 2 Max owner switched the
+        capture on for 24 hours to answer whether his expansion battery
+        reports over this channel, and got a download with no frames in it,
+        because his device speaks JSON and this guard dropped every one
+        (#287). The probe path for unsupported devices had been keeping
+        them all along.
+        """
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
@@ -7248,7 +7259,29 @@ class TestRawFrameCapture:
             b'{"params": {"bpSoc": 50}}',
         )
 
-        assert coordinator.raw_frames == []
+        frames = coordinator.raw_frames
+        assert len(frames) == 1
+        assert frames[0]["format"] == "json"
+        assert bytes.fromhex(frames[0]["hex"]) == b'{"params": {"bpSoc": 50}}'
+
+    async def test_json_and_proto_do_not_share_a_bucket(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Both formats are kept, and neither crowds the other out."""
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        topic = f"/app/device/property/{coordinator.device_sn}"
+
+        coordinator._on_mqtt_message(topic, b'{"cmdFunc": 32, "cmdId": 2}')
+        for _ in range(50):
+            coordinator._on_mqtt_message(topic, b"\x0a\x04test")
+
+        formats = {frame.get("format") for frame in coordinator.raw_frames}
+        assert formats == {"json", "proto"}
 
 
 class TestRawFrameCaptureDepth:

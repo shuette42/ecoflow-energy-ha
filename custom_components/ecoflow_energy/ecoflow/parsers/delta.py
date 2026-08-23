@@ -36,9 +36,21 @@ _DELTA_MPPT_CHG_MAP: dict[int, str] = {
     1: "charging",
 }
 
+# The EMS charge state carries a fourth value the battery's own charge and
+# discharge state has never been seen to use. A Delta 2 Max reported 3 while
+# its owner's EcoFlow app showed the station as Standby, neither charging nor
+# discharging (#287). It gets a table of its own rather than widening the
+# shared one, because nothing says the other field means the same by that
+# number, and an enum decoded from the wrong table is worse than one that
+# drops what it cannot name.
+_DELTA_EMS_CHG_STATE_MAP: dict[int, str] = {
+    **_DELTA_CHG_DSG_MAP,
+    3: "standby",
+}
+
 _DELTA_ENUM_FIELDS: dict[str, dict[int, str]] = {
     "chg_dsg_state": _DELTA_CHG_DSG_MAP,
-    "ems_chg_state": _DELTA_CHG_DSG_MAP,
+    "ems_chg_state": _DELTA_EMS_CHG_STATE_MAP,
     "charger_type": _DELTA_CHARGER_TYPE_MAP,
     "mppt_chg_state": _DELTA_MPPT_CHG_MAP,
 }

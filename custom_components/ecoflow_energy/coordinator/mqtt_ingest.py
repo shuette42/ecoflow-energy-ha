@@ -223,30 +223,57 @@ class MqttIngestMixin:
         diagnostics download alone. Only the app-auth push path is captured:
         the HTTP quota path already exposes its keys verbatim.
 
+        Both wire formats are recorded. A device that pushes JSON is the
+        case this used to miss entirely: the guard here asked for a
+        protobuf frame, so switching the capture on for a Delta 2 Max
+        produced a download with no frames at all, while the option
+        promises it records what the device sends. The probe path for
+        unsupported devices has captured JSON all along for exactly the
+        reason it matters here - the key names are what a parser is built
+        from (#287).
+
         The frame is truncated and the device serial is masked before storage.
         Capture never affects ingest - any failure is swallowed.
         """
-        if not self._enhanced_mode or not is_proto_frame(payload):
+        if not self._enhanced_mode:
             return
         try:
             secrets = self._frame_secrets()
-            # Decoded before the entry is built, not after: how many messages
-            # the frame carries is what decides its byte budget. One decode
-            # either way, and the headers still end up in the entry.
-            cmds = decode_cmd_headers(payload)
-            entry = build_frame_entry(
-                topic,
-                payload,
-                secrets,
-                frame_budget(
-                    cmds,
-                    RAW_FRAME_MAX_BYTES,
-                    RAW_FRAME_BUNDLE_MAX_BYTES,
-                    RAW_FRAME_BUNDLE_HARD_CAP,
-                ),
-                parsed_keys=len(parsed) if parsed else 0,
-            )
-            entry["cmds"] = cmds
+            if not is_proto_frame(payload):
+                # A JSON payload carries no message headers to count, so it
+                # gets the single-message budget rather than a bundle budget
+                # it cannot demonstrate it needs.
+                entry = {
+                    "format": "json",
+                    **build_frame_entry(
+                        topic,
+                        payload,
+                        secrets,
+                        RAW_FRAME_MAX_BYTES,
+                        parsed_keys=len(parsed) if parsed else 0,
+                    ),
+                }
+                cmds = None
+            else:
+                # Decoded before the entry is built, not after: how many
+                # messages the frame carries is what decides its byte
+                # budget. One decode either way, and the headers still end
+                # up in the entry.
+                cmds = decode_cmd_headers(payload)
+                entry = build_frame_entry(
+                    topic,
+                    payload,
+                    secrets,
+                    frame_budget(
+                        cmds,
+                        RAW_FRAME_MAX_BYTES,
+                        RAW_FRAME_BUNDLE_MAX_BYTES,
+                        RAW_FRAME_BUNDLE_HARD_CAP,
+                    ),
+                    parsed_keys=len(parsed) if parsed else 0,
+                )
+                entry["format"] = "proto"
+                entry["cmds"] = cmds
             # Derived before the lock: the key comes out of the payload, and
             # the Paho thread should not hold the lock across that.
             key = frame_key(entry, payload, secrets)

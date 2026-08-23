@@ -575,7 +575,8 @@
         "state": {
           "idle": "Idle",
           "charging": "Charging",
-          "discharging": "Discharging"
+          "discharging": "Discharging",
+          "standby": "Standby"
         }
       },
       "charger_type": {
