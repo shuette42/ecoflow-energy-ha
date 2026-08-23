@@ -119,40 +119,55 @@ DELTA2MAX_HTTP_FIELD_MAP: dict[str, str] = {
     "mppt.cfgAcXboost": "ac_xboost_legacy",
     "mppt.cfgAcOutFreq": "ac_out_freq_hz_legacy",
     "mppt.beepState": "beep_mode_raw_legacy",
-    # --- bms_slave.1 (Slave Battery Pack 1) ---
-    "bms_slave.1.soc": "slave1_soc",
-    "bms_slave.1.vol": "slave1_voltage_mv",
-    "bms_slave.1.amp": "slave1_current_ma",
-    "bms_slave.1.temp": "slave1_temp_raw",
-    "bms_slave.1.soh": "slave1_soh",
-    "bms_slave.1.cycles": "slave1_cycles",
-    "bms_slave.1.inputWatts": "slave1_in_w",
-    "bms_slave.1.outputWatts": "slave1_out_w",
-    "bms_slave.1.remainCap": "slave1_remain_cap_mah",
-    "bms_slave.1.fullCap": "slave1_full_cap_mah",
-    "bms_slave.1.maxCellVol": "slave1_max_cell_vol_mv",
-    "bms_slave.1.minCellVol": "slave1_min_cell_vol_mv",
-    "bms_slave.1.maxCellTemp": "slave1_max_cell_temp_c",
-    "bms_slave.1.minCellTemp": "slave1_min_cell_temp_c",
-    "bms_slave.1.maxMosTemp": "slave1_max_mos_temp_c",
-    "bms_slave.1.errCode": "slave1_err_code",
-    # --- bms_slave.2 (Slave Battery Pack 2) ---
-    "bms_slave.2.soc": "slave2_soc",
-    "bms_slave.2.vol": "slave2_voltage_mv",
-    "bms_slave.2.amp": "slave2_current_ma",
-    "bms_slave.2.temp": "slave2_temp_raw",
-    "bms_slave.2.soh": "slave2_soh",
-    "bms_slave.2.cycles": "slave2_cycles",
-    "bms_slave.2.inputWatts": "slave2_in_w",
-    "bms_slave.2.outputWatts": "slave2_out_w",
-    "bms_slave.2.remainCap": "slave2_remain_cap_mah",
-    "bms_slave.2.fullCap": "slave2_full_cap_mah",
-    "bms_slave.2.maxCellVol": "slave2_max_cell_vol_mv",
-    "bms_slave.2.minCellVol": "slave2_min_cell_vol_mv",
-    "bms_slave.2.maxCellTemp": "slave2_max_cell_temp_c",
-    "bms_slave.2.minCellTemp": "slave2_min_cell_temp_c",
-    "bms_slave.2.maxMosTemp": "slave2_max_mos_temp_c",
-    "bms_slave.2.errCode": "slave2_err_code",
+    # --- Expansion battery packs ---
+    # The prefix is `bms_slave_bmsSlaveStatus_N`, not `bms_slave.N`. The old
+    # spelling was introduced with expansion battery support and never matched
+    # anything a device sends, so all 32 entities stayed empty for every owner
+    # of one - and the tests only ever compared the map against itself, which
+    # is why nothing caught it (#287).
+    #
+    # Read off a full-state answer from a Delta 2 Max with one pack attached:
+    # 312 keys, 52 of them under `bms_slave_bmsSlaveStatus_1` and 20 more
+    # under `bms_slave_bmsSlaveInfo_1`. The field names below the prefix were
+    # right all along, which is also what the master pack shows - it reads
+    # from `bms_bmsStatus.*` and has always worked.
+    #
+    # Pack 2 follows the same shape with `_2`. Only pack 1 is on file, since
+    # the reporter has one, so that half is the pattern rather than a
+    # reading. It costs nothing if the guess is wrong: an unmatched key fills
+    # no entity, which is exactly where all of these started.
+    "bms_slave_bmsSlaveStatus_1.soc": "slave1_soc",
+    "bms_slave_bmsSlaveStatus_1.vol": "slave1_voltage_mv",
+    "bms_slave_bmsSlaveStatus_1.amp": "slave1_current_ma",
+    "bms_slave_bmsSlaveStatus_1.temp": "slave1_temp_raw",
+    "bms_slave_bmsSlaveStatus_1.soh": "slave1_soh",
+    "bms_slave_bmsSlaveStatus_1.cycles": "slave1_cycles",
+    "bms_slave_bmsSlaveStatus_1.inputWatts": "slave1_in_w",
+    "bms_slave_bmsSlaveStatus_1.outputWatts": "slave1_out_w",
+    "bms_slave_bmsSlaveStatus_1.remainCap": "slave1_remain_cap_mah",
+    "bms_slave_bmsSlaveStatus_1.fullCap": "slave1_full_cap_mah",
+    "bms_slave_bmsSlaveStatus_1.maxCellVol": "slave1_max_cell_vol_mv",
+    "bms_slave_bmsSlaveStatus_1.minCellVol": "slave1_min_cell_vol_mv",
+    "bms_slave_bmsSlaveStatus_1.maxCellTemp": "slave1_max_cell_temp_c",
+    "bms_slave_bmsSlaveStatus_1.minCellTemp": "slave1_min_cell_temp_c",
+    "bms_slave_bmsSlaveStatus_1.maxMosTemp": "slave1_max_mos_temp_c",
+    "bms_slave_bmsSlaveStatus_1.errCode": "slave1_err_code",
+    "bms_slave_bmsSlaveStatus_2.soc": "slave2_soc",
+    "bms_slave_bmsSlaveStatus_2.vol": "slave2_voltage_mv",
+    "bms_slave_bmsSlaveStatus_2.amp": "slave2_current_ma",
+    "bms_slave_bmsSlaveStatus_2.temp": "slave2_temp_raw",
+    "bms_slave_bmsSlaveStatus_2.soh": "slave2_soh",
+    "bms_slave_bmsSlaveStatus_2.cycles": "slave2_cycles",
+    "bms_slave_bmsSlaveStatus_2.inputWatts": "slave2_in_w",
+    "bms_slave_bmsSlaveStatus_2.outputWatts": "slave2_out_w",
+    "bms_slave_bmsSlaveStatus_2.remainCap": "slave2_remain_cap_mah",
+    "bms_slave_bmsSlaveStatus_2.fullCap": "slave2_full_cap_mah",
+    "bms_slave_bmsSlaveStatus_2.maxCellVol": "slave2_max_cell_vol_mv",
+    "bms_slave_bmsSlaveStatus_2.minCellVol": "slave2_min_cell_vol_mv",
+    "bms_slave_bmsSlaveStatus_2.maxCellTemp": "slave2_max_cell_temp_c",
+    "bms_slave_bmsSlaveStatus_2.minCellTemp": "slave2_min_cell_temp_c",
+    "bms_slave_bmsSlaveStatus_2.maxMosTemp": "slave2_max_mos_temp_c",
+    "bms_slave_bmsSlaveStatus_2.errCode": "slave2_err_code",
 }
 
 

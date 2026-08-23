@@ -221,10 +221,17 @@ class TestFieldMapIntegrity:
         assert "mppt" in prefixes
 
     def test_slave_modules_covered(self):
-        """Field map should include slave battery pack mappings."""
+        """Field map should include slave battery pack mappings.
+
+        The prefix is checked against what a device sends rather than
+        against whatever the map happens to contain. The old spelling,
+        `bms_slave.1.`, matched nothing on real hardware and this test
+        passed anyway for a year, because it only ever compared the map
+        with itself (#287).
+        """
         keys = list(DELTA2MAX_HTTP_FIELD_MAP.keys())
-        slave1_keys = [k for k in keys if k.startswith("bms_slave.1.")]
-        slave2_keys = [k for k in keys if k.startswith("bms_slave.2.")]
+        slave1_keys = [k for k in keys if k.startswith("bms_slave_bmsSlaveStatus_1.")]
+        slave2_keys = [k for k in keys if k.startswith("bms_slave_bmsSlaveStatus_2.")]
         assert len(slave1_keys) == 16, f"Expected 16 slave1 keys, got {len(slave1_keys)}"
         assert len(slave2_keys) == 16, f"Expected 16 slave2 keys, got {len(slave2_keys)}"
 
@@ -322,69 +329,69 @@ class TestSlavePackMapping:
     """Test slave battery pack field mapping and unit conversions."""
 
     def test_slave1_soc(self):
-        result = parse_delta_http_quota({"bms_slave.1.soc": 85})
+        result = parse_delta_http_quota({"bms_slave_bmsSlaveStatus_1.soc": 85})
         assert result["slave1_soc"] == 85.0
 
     def test_slave2_soc(self):
-        result = parse_delta_http_quota({"bms_slave.2.soc": 72})
+        result = parse_delta_http_quota({"bms_slave_bmsSlaveStatus_2.soc": 72})
         assert result["slave2_soc"] == 72.0
 
     def test_slave1_voltage_mv_to_v(self):
         """Slave battery voltage in mV must be converted to V."""
-        result = parse_delta_http_quota({"bms_slave.1.vol": 52000})
+        result = parse_delta_http_quota({"bms_slave_bmsSlaveStatus_1.vol": 52000})
         assert result["slave1_voltage_v"] == 52.0
         assert "slave1_voltage_mv" not in result
 
     def test_slave2_voltage_mv_to_v(self):
-        result = parse_delta_http_quota({"bms_slave.2.vol": 48500})
+        result = parse_delta_http_quota({"bms_slave_bmsSlaveStatus_2.vol": 48500})
         assert result["slave2_voltage_v"] == 48.5
 
     def test_slave1_current_ma_to_a(self):
         """Slave battery current in mA must be converted to A."""
-        result = parse_delta_http_quota({"bms_slave.1.amp": 1500})
+        result = parse_delta_http_quota({"bms_slave_bmsSlaveStatus_1.amp": 1500})
         assert result["slave1_current_a"] == 1.5
         assert "slave1_current_ma" not in result
 
     def test_slave1_current_negative(self):
         """Negative current (discharging) must be preserved."""
-        result = parse_delta_http_quota({"bms_slave.1.amp": -2000})
+        result = parse_delta_http_quota({"bms_slave_bmsSlaveStatus_1.amp": -2000})
         assert result["slave1_current_a"] == -2.0
 
     def test_slave2_current_ma_to_a(self):
-        result = parse_delta_http_quota({"bms_slave.2.amp": 3200})
+        result = parse_delta_http_quota({"bms_slave_bmsSlaveStatus_2.amp": 3200})
         assert result["slave2_current_a"] == 3.2
 
     def test_slave1_temp_offset(self):
         """Slave BMS temp has +15 offset like main battery."""
-        result = parse_delta_http_quota({"bms_slave.1.temp": 40})
+        result = parse_delta_http_quota({"bms_slave_bmsSlaveStatus_1.temp": 40})
         assert result["slave1_temp_c"] == 25.0
         assert "slave1_temp_raw" not in result
 
     def test_slave2_temp_offset(self):
-        result = parse_delta_http_quota({"bms_slave.2.temp": 15})
+        result = parse_delta_http_quota({"bms_slave_bmsSlaveStatus_2.temp": 15})
         assert result["slave2_temp_c"] == 0.0
 
     def test_slave1_soh(self):
-        result = parse_delta_http_quota({"bms_slave.1.soh": 98})
+        result = parse_delta_http_quota({"bms_slave_bmsSlaveStatus_1.soh": 98})
         assert result["slave1_soh"] == 98.0
 
     def test_slave1_cycles(self):
-        result = parse_delta_http_quota({"bms_slave.1.cycles": 42})
+        result = parse_delta_http_quota({"bms_slave_bmsSlaveStatus_1.cycles": 42})
         assert result["slave1_cycles"] == 42.0
 
     def test_slave1_power_direct(self):
         """Slave input/output watts are direct values (no scaling)."""
         result = parse_delta_http_quota({
-            "bms_slave.1.inputWatts": 200,
-            "bms_slave.1.outputWatts": 150,
+            "bms_slave_bmsSlaveStatus_1.inputWatts": 200,
+            "bms_slave_bmsSlaveStatus_1.outputWatts": 150,
         })
         assert result["slave1_in_w"] == 200.0
         assert result["slave1_out_w"] == 150.0
 
     def test_slave1_capacity(self):
         result = parse_delta_http_quota({
-            "bms_slave.1.remainCap": 38000,
-            "bms_slave.1.fullCap": 40000,
+            "bms_slave_bmsSlaveStatus_1.remainCap": 38000,
+            "bms_slave_bmsSlaveStatus_1.fullCap": 40000,
         })
         assert result["slave1_remain_cap_mah"] == 38000.0
         assert result["slave1_full_cap_mah"] == 40000.0
@@ -392,8 +399,8 @@ class TestSlavePackMapping:
     def test_slave1_cell_voltages_stay_mv(self):
         """Cell-level voltages stay in mV (not converted to V)."""
         result = parse_delta_http_quota({
-            "bms_slave.1.maxCellVol": 3450,
-            "bms_slave.1.minCellVol": 3380,
+            "bms_slave_bmsSlaveStatus_1.maxCellVol": 3450,
+            "bms_slave_bmsSlaveStatus_1.minCellVol": 3380,
         })
         assert result["slave1_max_cell_vol_mv"] == 3450.0
         assert result["slave1_min_cell_vol_mv"] == 3380.0
@@ -401,39 +408,39 @@ class TestSlavePackMapping:
     def test_slave1_cell_temps_direct(self):
         """Cell temps are direct Celsius (no offset)."""
         result = parse_delta_http_quota({
-            "bms_slave.1.maxCellTemp": 35,
-            "bms_slave.1.minCellTemp": 28,
+            "bms_slave_bmsSlaveStatus_1.maxCellTemp": 35,
+            "bms_slave_bmsSlaveStatus_1.minCellTemp": 28,
         })
         assert result["slave1_max_cell_temp_c"] == 35.0
         assert result["slave1_min_cell_temp_c"] == 28.0
 
     def test_slave1_mos_temp_direct(self):
-        result = parse_delta_http_quota({"bms_slave.1.maxMosTemp": 42})
+        result = parse_delta_http_quota({"bms_slave_bmsSlaveStatus_1.maxMosTemp": 42})
         assert result["slave1_max_mos_temp_c"] == 42.0
 
     def test_slave1_err_code(self):
-        result = parse_delta_http_quota({"bms_slave.1.errCode": 0})
+        result = parse_delta_http_quota({"bms_slave_bmsSlaveStatus_1.errCode": 0})
         assert result["slave1_err_code"] == 0.0
 
     def test_slave_full_payload(self):
         """Parse a complete slave battery pack payload."""
         data = {
-            "bms_slave.1.soc": 85,
-            "bms_slave.1.vol": 52000,
-            "bms_slave.1.amp": -1200,
-            "bms_slave.1.temp": 40,
-            "bms_slave.1.soh": 97,
-            "bms_slave.1.cycles": 150,
-            "bms_slave.1.inputWatts": 0,
-            "bms_slave.1.outputWatts": 62,
-            "bms_slave.1.remainCap": 38000,
-            "bms_slave.1.fullCap": 40000,
-            "bms_slave.1.maxCellVol": 3450,
-            "bms_slave.1.minCellVol": 3380,
-            "bms_slave.1.maxCellTemp": 35,
-            "bms_slave.1.minCellTemp": 28,
-            "bms_slave.1.maxMosTemp": 42,
-            "bms_slave.1.errCode": 0,
+            "bms_slave_bmsSlaveStatus_1.soc": 85,
+            "bms_slave_bmsSlaveStatus_1.vol": 52000,
+            "bms_slave_bmsSlaveStatus_1.amp": -1200,
+            "bms_slave_bmsSlaveStatus_1.temp": 40,
+            "bms_slave_bmsSlaveStatus_1.soh": 97,
+            "bms_slave_bmsSlaveStatus_1.cycles": 150,
+            "bms_slave_bmsSlaveStatus_1.inputWatts": 0,
+            "bms_slave_bmsSlaveStatus_1.outputWatts": 62,
+            "bms_slave_bmsSlaveStatus_1.remainCap": 38000,
+            "bms_slave_bmsSlaveStatus_1.fullCap": 40000,
+            "bms_slave_bmsSlaveStatus_1.maxCellVol": 3450,
+            "bms_slave_bmsSlaveStatus_1.minCellVol": 3380,
+            "bms_slave_bmsSlaveStatus_1.maxCellTemp": 35,
+            "bms_slave_bmsSlaveStatus_1.minCellTemp": 28,
+            "bms_slave_bmsSlaveStatus_1.maxMosTemp": 42,
+            "bms_slave_bmsSlaveStatus_1.errCode": 0,
         }
         result = parse_delta_http_quota(data)
         assert result["slave1_soc"] == 85.0
@@ -456,10 +463,10 @@ class TestSlavePackMapping:
     def test_both_slaves_independent(self):
         """Both slave packs can be parsed independently in same payload."""
         data = {
-            "bms_slave.1.soc": 85,
-            "bms_slave.2.soc": 72,
-            "bms_slave.1.vol": 52000,
-            "bms_slave.2.vol": 48000,
+            "bms_slave_bmsSlaveStatus_1.soc": 85,
+            "bms_slave_bmsSlaveStatus_2.soc": 72,
+            "bms_slave_bmsSlaveStatus_1.vol": 52000,
+            "bms_slave_bmsSlaveStatus_2.vol": 48000,
         }
         result = parse_delta_http_quota(data)
         assert result["slave1_soc"] == 85.0
@@ -498,3 +505,55 @@ class TestCfgAcOutVolParity:
         assert http["ac_cfg_out_vol_v"] == pytest.approx(230.0)
         assert http["ac_cfg_out_vol_v"] == mqtt["ac_cfg_out_vol_v"]
         assert "ac_cfg_out_vol_mv" not in http
+
+
+class TestSlavePackAgainstRealHardware:
+    """The expansion battery block as a Delta 2 Max actually sends it.
+
+    Every key here is copied from the whole-state answer of a reporter's
+    unit with one pack attached (#287), rather than from this repo's own
+    field map. That distinction is the point: the previous spelling was
+    invented, matched nothing, left all 32 entities empty for a year, and
+    the tests never noticed because they asked the map about itself.
+    """
+
+    # Verbatim from the recording, values included.
+    _PACK_1 = {
+        "bms_slave_bmsSlaveStatus_1.soc": 60,
+        "bms_slave_bmsSlaveStatus_1.vol": 53336,
+        "bms_slave_bmsSlaveStatus_1.amp": -55,
+        "bms_slave_bmsSlaveStatus_1.soh": 100,
+        "bms_slave_bmsSlaveStatus_1.cycles": 22,
+        "bms_slave_bmsSlaveStatus_1.inputWatts": 0,
+        "bms_slave_bmsSlaveStatus_1.outputWatts": 0,
+        "bms_slave_bmsSlaveStatus_1.remainCap": 23487,
+        "bms_slave_bmsSlaveStatus_1.fullCap": 39280,
+        "bms_slave_bmsSlaveStatus_1.maxCellVol": 3305,
+        "bms_slave_bmsSlaveStatus_1.minCellVol": 3303,
+        "bms_slave_bmsSlaveStatus_1.maxCellTemp": 29,
+        "bms_slave_bmsSlaveStatus_1.minCellTemp": 27,
+        "bms_slave_bmsSlaveStatus_1.maxMosTemp": 27,
+        "bms_slave_bmsSlaveStatus_1.errCode": 23,
+    }
+
+    def test_every_reading_fills(self):
+        result = parse_delta_http_quota(self._PACK_1)
+
+        assert result["slave1_soc"] == 60.0
+        assert result["slave1_voltage_v"] == 53.336
+        assert result["slave1_current_a"] == -0.055
+        assert result["slave1_soh"] == 100.0
+        assert result["slave1_cycles"] == 22.0
+        assert result["slave1_max_cell_vol_mv"] == 3305.0
+        assert result["slave1_min_cell_temp_c"] == 27.0
+
+    def test_nothing_is_left_unread(self):
+        """A key the device sends and the map ignores is the whole defect."""
+        result = parse_delta_http_quota(self._PACK_1)
+
+        filled = {key for key in result if key.startswith("slave1_")}
+        assert len(filled) == len(self._PACK_1)
+
+    def test_the_old_spelling_no_longer_matches(self):
+        """It never matched hardware; it must not linger as a second path."""
+        assert parse_delta_http_quota({"bms_slave.1.soc": 85}) == {}
