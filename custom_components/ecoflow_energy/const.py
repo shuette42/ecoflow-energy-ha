@@ -836,12 +836,17 @@ STREAM_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("soc_precise_pct", "Battery SOC (Precise)", "%", None, "measurement", "mdi:battery-sync", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
     EcoFlowSensorDef("solar_w", "Solar Power", "W", "power", "measurement", "mdi:solar-power", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     # Per-string PV. Standard mode reports these individually (powGetPv..
-    # powGetPv4); the protobuf stream only carries the sum. Strings 3 and 4 are
-    # off by default because only the larger units populate them.
+    # powGetPv4); the protobuf stream carries a field number for strings 1 and
+    # 2 and none for the two above them, so on account sign-in those two can
+    # never fill. Strings 3 and 4 are therefore gated on an actual report
+    # rather than created for every unit: a four-string owner on developer keys
+    # gets them, and nobody else is left with an entity that stays unknown for
+    # good (#139). The gate is not needs-nonzero, because zero watts is what a
+    # string reads at night.
     EcoFlowSensorDef("pv1_w", "PV 1 Power", "W", "power", "measurement", "mdi:solar-power-variant", suggested_display_precision=0),
     EcoFlowSensorDef("pv2_w", "PV 2 Power", "W", "power", "measurement", "mdi:solar-power-variant", suggested_display_precision=0),
-    EcoFlowSensorDef("pv3_w", "PV 3 Power", "W", "power", "measurement", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
-    EcoFlowSensorDef("pv4_w", "PV 4 Power", "W", "power", "measurement", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("pv3_w", "PV 3 Power", "W", "power", "measurement", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=0, disabled_by_default=True, accessory=True),
+    EcoFlowSensorDef("pv4_w", "PV 4 Power", "W", "power", "measurement", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=0, disabled_by_default=True, accessory=True),
     # Per-string PV input voltage and current. The key naming follows the
     # vendor's own asymmetry (plugInInfoPvVol / plugInInfoPv2Vol): the first
     # string has no index, so the existing pv_voltage_v key stays as it is
@@ -864,10 +869,15 @@ STREAM_SENSORS: list[EcoFlowSensorDef] = [
     # dashboard that sums the enabled strings would silently under-report on a
     # unit whose higher strings are disabled. Users who want per-string
     # tracking enable exactly the strings their unit has.
+    #
+    # The counter for a string is written only while its power key is present,
+    # so 3 and 4 carry the same gate as the power readings they follow. It
+    # takes hold one update later, since the integrator seeds on the first
+    # reading and reports nothing for it.
     EcoFlowSensorDef("pv1_energy_kwh", "PV 1 Energy", "kWh", "energy", "total_increasing", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=2, disabled_by_default=True),
     EcoFlowSensorDef("pv2_energy_kwh", "PV 2 Energy", "kWh", "energy", "total_increasing", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=2, disabled_by_default=True),
-    EcoFlowSensorDef("pv3_energy_kwh", "PV 3 Energy", "kWh", "energy", "total_increasing", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=2, disabled_by_default=True),
-    EcoFlowSensorDef("pv4_energy_kwh", "PV 4 Energy", "kWh", "energy", "total_increasing", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=2, disabled_by_default=True),
+    EcoFlowSensorDef("pv3_energy_kwh", "PV 3 Energy", "kWh", "energy", "total_increasing", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=2, disabled_by_default=True, accessory=True),
+    EcoFlowSensorDef("pv4_energy_kwh", "PV 4 Energy", "kWh", "energy", "total_increasing", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=2, disabled_by_default=True, accessory=True),
     EcoFlowSensorDef("batt_charge_energy_kwh", "Battery Charge Energy", "kWh", "energy", "total_increasing", "mdi:battery-charging", suggested_display_precision=2),
     EcoFlowSensorDef("batt_discharge_energy_kwh", "Battery Discharge Energy", "kWh", "energy", "total_increasing", "mdi:battery", suggested_display_precision=2),
     EcoFlowSensorDef("home_from_batt_w", "Home From Battery", "W", "power", "measurement", "mdi:home-battery-outline", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
