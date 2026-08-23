@@ -186,13 +186,26 @@ def parse_delta_http_quota(quota_data: dict) -> dict[str, Any]:
             if v is not None:
                 result[sensor_key] = v
 
-    # --- Temperature offset: BMS temp fields have +15 offset ---
-    if "batt_temp_raw" in result:
-        result["batt_temp_c"] = result.pop("batt_temp_raw") - 15.0
-    for prefix in ("slave1", "slave2"):
-        raw_key = f"{prefix}_temp_raw"
+    # --- Battery temperature ---
+    # Reported in whole degrees Celsius, with nothing to subtract. A -15
+    # correction sat here from the first release, on the assertion that "BMS
+    # temp fields have +15 offset" and no evidence beside it, and it made
+    # every Delta battery read 15 K colder than it is.
+    #
+    # The device refutes it in the same message: a reporter's Delta 2 Max
+    # sends `temp` 29 alongside `cellTemp` [29, 29, 29, 29, 29] with both
+    # extremes at 29, and its expansion pack sends `temp` 29 among cells at
+    # 27 to 29. The maintainer's own unit shows the same shape from the
+    # other side - a battery temperature entity reading 15.0 while its cell
+    # temperature entities read 29 and 30. Two devices, and in both the
+    # figure sits exactly 15 K below the cells it is measured among.
+    for raw_key, temp_key in (
+        ("batt_temp_raw", "batt_temp_c"),
+        ("slave1_temp_raw", "slave1_temp_c"),
+        ("slave2_temp_raw", "slave2_temp_c"),
+    ):
         if raw_key in result:
-            result[f"{prefix}_temp_c"] = result.pop(raw_key) - 15.0
+            result[temp_key] = result.pop(raw_key)
 
     # --- Beeper inversion: beepMode=0 means beeper ON (normal mode) ---
     if "beep_mode_raw" in result:

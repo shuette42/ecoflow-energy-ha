@@ -227,10 +227,15 @@ def parse_delta_report(
         dest_key = field_map.get(lookup)
         if dest_key is None:
             continue
-        # Temperature offset: BMS temp fields have +15 offset
+        # Battery temperature: whole degrees Celsius, nothing to subtract.
+        # The -15 that sat here is refuted by the device itself - see the
+        # note in `delta_http.py`, which carried the same correction on the
+        # other path. Both are removed together: a reading that changed by
+        # 15 K depending on which path delivered it would be worse than
+        # either value alone.
         if dest_key in ("batt_temp_raw", "slave1_temp_raw", "slave2_temp_raw"):
             temp_key = dest_key.replace("_temp_raw", "_temp_c")
-            parsed[temp_key] = float(value) - 15.0
+            parsed[temp_key] = float(value)
         # Beeper inversion: beepMode=0 means beeper ON (normal mode)
         elif dest_key in ("beep_mode_raw", "beep_mode_raw_legacy"):
             parsed["beep_enabled"] = 0 if float(value) else 1

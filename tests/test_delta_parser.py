@@ -53,11 +53,19 @@ class TestDeltaParser:
         assert result["ac_slow_chg_watts"] == 200.0
         assert result["ac_fast_chg_watts"] == 2400.0
 
-    def test_bms_temp_offset(self):
-        """bmsStatus.temp has a +15 offset that must be removed."""
-        report = {"typeCode": "bmsStatus", "params": {"temp": 40}}
+    def test_bms_temp_is_passed_through(self):
+        """Reported in whole degrees Celsius, with nothing subtracted.
+
+        A -15 correction was applied from the first release on the claim
+        that these fields carry a +15 offset, with no evidence behind it.
+        The device refutes it in the same message: `temp` 29 arrives beside
+        `cellTemp` [29, 29, 29, 29, 29]. The maintainer's own unit showed
+        the same, a battery temperature of 15.0 among cell temperatures of
+        29 and 30 (#287).
+        """
+        report = {"typeCode": "bmsStatus", "params": {"temp": 29}}
         result = parse_delta_report(report)
-        assert result["batt_temp_c"] == 25.0  # 40 - 15
+        assert result["batt_temp_c"] == 29.0
 
     def test_voltage_mv_to_v_conversion(self):
         """Battery voltage in mV must be converted to V."""
@@ -248,16 +256,16 @@ class TestDeltaParser:
         result = parse_delta_report(report)
         assert result["slave1_current_a"] == -1.5
 
-    def test_slave1_temp_offset(self):
-        """Slave BMS temp has +15 offset like main battery."""
-        report = {"typeCode": "bmsSlaveStatus_1", "params": {"temp": 40}}
+    def test_slave1_temp_is_passed_through(self):
+        """The expansion pack reads the same way as the main battery."""
+        report = {"typeCode": "bmsSlaveStatus_1", "params": {"temp": 29}}
         result = parse_delta_report(report)
-        assert result["slave1_temp_c"] == 25.0
+        assert result["slave1_temp_c"] == 29.0
 
-    def test_slave2_temp_offset(self):
+    def test_slave2_temp_is_passed_through(self):
         report = {"typeCode": "bmsSlaveStatus_2", "params": {"temp": 15}}
         result = parse_delta_report(report)
-        assert result["slave2_temp_c"] == 0.0
+        assert result["slave2_temp_c"] == 15.0
 
     def test_slave1_full_report(self):
         """Parse a complete slave battery pack MQTT report."""
@@ -286,7 +294,7 @@ class TestDeltaParser:
         assert result["slave1_soc"] == 85.0
         assert result["slave1_voltage_v"] == 52.0
         assert result["slave1_current_a"] == -1.2
-        assert result["slave1_temp_c"] == 25.0
+        assert result["slave1_temp_c"] == 40.0
         assert result["slave1_soh"] == 97.0
         assert result["slave1_cycles"] == 150.0
         assert result["slave1_in_w"] == 0.0

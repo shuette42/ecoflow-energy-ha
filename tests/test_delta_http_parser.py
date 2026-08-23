@@ -46,16 +46,25 @@ class TestBasicMapping:
 # ===========================================================================
 
 
-class TestTemperatureOffset:
-    def test_bms_temp_offset_removed(self):
-        """bms_bmsStatus.temp has a +15 offset that must be subtracted."""
-        result = parse_delta_http_quota({"bms_bmsStatus.temp": 40})
-        assert result["batt_temp_c"] == 25.0
+class TestBatteryTemperature:
+    def test_temp_is_passed_through(self):
+        """Reported in whole degrees Celsius, with nothing subtracted.
+
+        A -15 correction was applied from the first release on the claim
+        that these fields carry a +15 offset, with no evidence behind it.
+        The device refutes it in the same message: `temp` 29 arrives beside
+        `cellTemp` [29, 29, 29, 29, 29]. The maintainer's own unit showed
+        the same, a battery temperature of 15.0 among cell temperatures of
+        29 and 30 (#287).
+        """
+        result = parse_delta_http_quota({"bms_bmsStatus.temp": 29})
+        assert result["batt_temp_c"] == 29.0
         assert "batt_temp_raw" not in result
 
-    def test_bms_temp_zero(self):
+    def test_a_cold_battery_reads_cold_rather_than_below_zero(self):
+        """The old correction turned 15 degrees into 0."""
         result = parse_delta_http_quota({"bms_bmsStatus.temp": 15})
-        assert result["batt_temp_c"] == 0.0
+        assert result["batt_temp_c"] == 15.0
 
 
 # ===========================================================================
@@ -361,15 +370,15 @@ class TestSlavePackMapping:
         result = parse_delta_http_quota({"bms_slave_bmsSlaveStatus_2.amp": 3200})
         assert result["slave2_current_a"] == 3.2
 
-    def test_slave1_temp_offset(self):
-        """Slave BMS temp has +15 offset like main battery."""
-        result = parse_delta_http_quota({"bms_slave_bmsSlaveStatus_1.temp": 40})
-        assert result["slave1_temp_c"] == 25.0
+    def test_slave1_temp_is_passed_through(self):
+        """The expansion pack reads the same way as the main battery."""
+        result = parse_delta_http_quota({"bms_slave_bmsSlaveStatus_1.temp": 29})
+        assert result["slave1_temp_c"] == 29.0
         assert "slave1_temp_raw" not in result
 
-    def test_slave2_temp_offset(self):
+    def test_slave2_temp_is_passed_through(self):
         result = parse_delta_http_quota({"bms_slave_bmsSlaveStatus_2.temp": 15})
-        assert result["slave2_temp_c"] == 0.0
+        assert result["slave2_temp_c"] == 15.0
 
     def test_slave1_soh(self):
         result = parse_delta_http_quota({"bms_slave_bmsSlaveStatus_1.soh": 98})
@@ -446,7 +455,7 @@ class TestSlavePackMapping:
         assert result["slave1_soc"] == 85.0
         assert result["slave1_voltage_v"] == 52.0
         assert result["slave1_current_a"] == -1.2
-        assert result["slave1_temp_c"] == 25.0
+        assert result["slave1_temp_c"] == 40.0
         assert result["slave1_soh"] == 97.0
         assert result["slave1_cycles"] == 150.0
         assert result["slave1_in_w"] == 0.0
