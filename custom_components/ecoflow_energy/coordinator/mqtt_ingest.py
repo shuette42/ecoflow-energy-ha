@@ -240,16 +240,31 @@ class MqttIngestMixin:
         try:
             secrets = self._frame_secrets()
             if not is_proto_frame(payload):
-                # A JSON payload carries no message headers to count, so it
-                # gets the single-message budget rather than a bundle budget
-                # it cannot demonstrate it needs.
+                # A JSON payload carries no message headers, so the budget
+                # cannot be derived from a message count the way a protobuf
+                # bundle's is. The topic answers the same question: a
+                # `get_reply` is a device's whole state by definition, and
+                # that is the one frame a field layout is read from.
+                #
+                # The distinction is not academic. A Delta 2 Max answers
+                # with 9488 B and the single-message budget kept 1024 of
+                # them, so the first capture taken after JSON recording
+                # arrived carried 11 % of the frame it was opened for - the
+                # expansion battery keys start past the cut. That is the
+                # same mistake `frame_budget` exists to prevent on the
+                # protobuf side, made again on this one.
+                json_budget = (
+                    RAW_FRAME_BUNDLE_HARD_CAP
+                    if "get_reply" in topic
+                    else RAW_FRAME_MAX_BYTES
+                )
                 entry = {
                     "format": "json",
                     **build_frame_entry(
                         topic,
                         payload,
                         secrets,
-                        RAW_FRAME_MAX_BYTES,
+                        json_budget,
                         parsed_keys=len(parsed) if parsed else 0,
                     ),
                 }

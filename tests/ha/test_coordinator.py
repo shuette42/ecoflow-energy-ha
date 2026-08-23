@@ -7264,6 +7264,57 @@ class TestRawFrameCapture:
         assert frames[0]["format"] == "json"
         assert bytes.fromhex(frames[0]["hex"]) == b'{"params": {"bpSoc": 50}}'
 
+    async def test_a_json_full_state_answer_is_not_cut_to_a_push_budget(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """The frame a capture is opened for is the whole-state answer.
+
+        A Delta 2 Max answers with 9488 bytes. The first version of the JSON
+        capture gave it the single-message budget and kept 1024 of them, so
+        the reporter's second recording carried 11 percent of the frame and
+        the expansion battery keys start past the cut (#287).
+        """
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        body = b'{"operateType":"latestQuotas","data":{"quotaMap":{"k":"' + b"x" * 9000 + b'"}}}'
+
+        coordinator._on_mqtt_message(
+            f"/app/user123/{coordinator.device_sn}/thing/property/get_reply", body
+        )
+
+        frame = coordinator.raw_frames[0]
+        assert frame["size"] == len(body)
+        assert "truncated" not in frame
+        assert len(bytes.fromhex(frame["hex"])) == len(body)
+
+    async def test_a_json_push_still_gets_the_small_budget(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Only the whole-state answer earns the larger budget.
+
+        An incremental push arrives thousands of times an hour and must not
+        claim a budget it cannot demonstrate it needs.
+        """
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        body = b'{"params":{"k":"' + b"x" * 9000 + b'"}}'
+
+        coordinator._on_mqtt_message(
+            f"/app/device/property/{coordinator.device_sn}", body
+        )
+
+        frame = coordinator.raw_frames[0]
+        assert frame["truncated"] is True
+        assert len(bytes.fromhex(frame["hex"])) == 1024
+
     async def test_json_and_proto_do_not_share_a_bucket(
         self,
         hass: HomeAssistant,

@@ -632,8 +632,7 @@
         "state": {
           "idle": "Leerlauf",
           "charging": "Laden",
-          "discharging": "Entladen",
-          "standby": "Bereitschaft"
+          "discharging": "Entladen"
         }
       },
       "charger_type": {

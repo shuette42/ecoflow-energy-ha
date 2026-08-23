@@ -37,16 +37,26 @@ _DELTA_MPPT_CHG_MAP: dict[int, str] = {
 }
 
 # The EMS charge state carries a fourth value the battery's own charge and
-# discharge state has never been seen to use. A Delta 2 Max reported 3 while
-# its owner's EcoFlow app showed the station as Standby, neither charging nor
-# discharging (#287). It gets a table of its own rather than widening the
-# shared one, because nothing says the other field means the same by that
-# number, and an enum decoded from the wrong table is worse than one that
-# drops what it cannot name.
-_DELTA_EMS_CHG_STATE_MAP: dict[int, str] = {
-    **_DELTA_CHG_DSG_MAP,
-    3: "standby",
-}
+# discharge state has never been seen to use. A Delta 2 Max reports 3, and
+# what it means is open (#287).
+#
+# It was briefly shipped as "standby" and is withdrawn. The owner had
+# described his station that way and then corrected himself: his EcoFlow app
+# never showed that word, and the reading was his own description of a unit
+# on AC power that was neither charging nor discharging. His capture then
+# offered a different explanation for the same moment - `maxChargeSoc` at 60
+# with the pack sitting at 60 - so the state may be a battery at its charge
+# limit rather than a station at rest. One frame, two readings that fit, and
+# no way to choose between them yet.
+#
+# So it stays dropped. An entity that says nothing is recoverable; a wrong
+# label in somebody's dashboard and history is not, and this file already
+# says as much about the values it does name.
+#
+# What would settle it: the value observed while the pack is below its
+# charge limit on AC power. If 3 appears there too, it is a resting state;
+# if the reading is something else, 3 belongs to the limit.
+_DELTA_EMS_CHG_STATE_MAP: dict[int, str] = dict(_DELTA_CHG_DSG_MAP)
 
 _DELTA_ENUM_FIELDS: dict[str, dict[int, str]] = {
     "chg_dsg_state": _DELTA_CHG_DSG_MAP,
