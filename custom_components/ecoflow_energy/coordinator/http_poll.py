@@ -64,10 +64,32 @@ class HttpPollMixin:
                     key_count=0,
                 )
 
-            # In Enhanced Mode, only trigger reauth if MQTT has never delivered data.
-            # When MQTT is active, HTTP failures are expected fallback noise (#2).
-            mqtt_active = self._enhanced_mode and self._last_mqtt_ts > 0.0
-            if self._consecutive_http_failures == 5 and not mqtt_active:
+            # Two things that are not an expired key, and both used to be
+            # read as one (#289).
+            #
+            # A transport failure says nothing about credentials. The client
+            # reports `network` when every attempt died on a timeout or a
+            # refused connection, which is exactly what a device that has
+            # gone offline looks like - a Stream microinverter at dusk, for
+            # instance, whose owner was asked to re-enter his secret key
+            # several times per evening while data kept arriving.
+            #
+            # And the "MQTT is carrying the data, so HTTP noise is expected"
+            # exemption was gated on Enhanced Mode, while Delta, Smart Plug
+            # and Stream subscribe to push in Standard Mode as well. For
+            # those the flag was false by construction, so the exemption
+            # could never apply to the devices that needed it most.
+            #
+            # What still triggers a prompt: the API answering with an error
+            # of its own, five times running, with nothing arriving over
+            # MQTT either. That is what an invalidated key looks like.
+            transport_failure = error_code == "network"
+            mqtt_active = self._last_mqtt_ts > 0.0
+            if (
+                self._consecutive_http_failures == 5
+                and not mqtt_active
+                and not transport_failure
+            ):
                 _LOGGER.warning(
                     "HTTP quota failed %d consecutive times for %s - triggering re-authentication",
                     self._consecutive_http_failures, self.device_sn[:4],

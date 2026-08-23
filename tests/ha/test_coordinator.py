@@ -1333,7 +1333,7 @@ class TestReauthSuppression:
         assert not hasattr(standard_config_entry, "_async_start_reauth_called") or \
             not standard_config_entry._async_start_reauth_called
 
-    async def test_non_1006_still_triggers_reauth_standard_mode(
+    async def test_an_api_error_still_triggers_reauth_standard_mode(
         self,
         hass: HomeAssistant,
         standard_config_entry: MockConfigEntry,
@@ -1341,7 +1341,44 @@ class TestReauthSuppression:
         mock_mqtt_client,
         mock_http_client,
     ) -> None:
-        """Non-1006 HTTP errors still trigger reauth after 5 failures in Standard Mode."""
+        """The safety net stays: the API refusing us five times still prompts.
+
+        This test used to drive the same path with `network` and assert a
+        prompt, which is the behaviour #289 reported as a bug. An error code
+        from the API is the case it was meant to cover, and that one is
+        unchanged.
+        """
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        await coordinator.async_setup()
+
+        mock_http_client.get_quota_all = AsyncMock(return_value=None)
+        mock_http_client.last_error_code = "8519"
+        coordinator._last_mqtt_ts = 0.0
+
+        with patch.object(standard_config_entry, "async_start_reauth") as mock_reauth:
+            for _ in range(5):
+                await coordinator._async_update_data()
+
+            mock_reauth.assert_called_once()
+
+    async def test_an_offline_device_never_asks_for_credentials(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+        mock_iot_api,
+        mock_mqtt_client,
+        mock_http_client,
+    ) -> None:
+        """#289: a Stream microinverter at dusk is not an auth problem.
+
+        Every attempt dying on a timeout is what an offline device looks
+        like, and the client reports that as `network`. It says nothing
+        about the key, so it must not put a credentials prompt in front of
+        the user - which it did, several times per evening.
+        """
         standard_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, standard_config_entry, MOCK_DELTA_DEVICE
@@ -1350,12 +1387,44 @@ class TestReauthSuppression:
 
         mock_http_client.get_quota_all = AsyncMock(return_value=None)
         mock_http_client.last_error_code = "network"
+        coordinator._last_mqtt_ts = 0.0
 
         with patch.object(standard_config_entry, "async_start_reauth") as mock_reauth:
-            for _ in range(5):
+            for _ in range(8):
                 await coordinator._async_update_data()
 
-            mock_reauth.assert_called_once()
+            mock_reauth.assert_not_called()
+
+    async def test_push_in_standard_mode_suppresses_the_prompt(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+        mock_iot_api,
+        mock_mqtt_client,
+        mock_http_client,
+    ) -> None:
+        """The exemption was gated on Enhanced Mode and had no business being.
+
+        Delta, Smart Plug and Stream subscribe to push in Standard Mode too,
+        so the flag was false exactly where the exemption was needed. Data
+        arriving over MQTT is proof the account still works, whatever the
+        quota endpoint is doing.
+        """
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        await coordinator.async_setup()
+
+        mock_http_client.get_quota_all = AsyncMock(return_value=None)
+        mock_http_client.last_error_code = "8519"
+        coordinator._last_mqtt_ts = 1000.0
+
+        with patch.object(standard_config_entry, "async_start_reauth") as mock_reauth:
+            for _ in range(8):
+                await coordinator._async_update_data()
+
+            mock_reauth.assert_not_called()
 
     async def test_app_auth_no_http_polling(
         self,
