@@ -946,3 +946,57 @@ class TestAppWriteSubscription:
         capturing = self._topics(capture_writes=True)
         assert set(plain) <= set(capturing)
         assert len(capturing) == len(plain) + 1
+
+
+class TestNoAccountIdInTheThreadName:
+    """A debug log is asked for in public. It must not carry the account id.
+
+    Paho names its network thread after the client id, Python puts the
+    thread name in every log record, and the Portal's client id format
+    embeds the user id. A reporter's 15 minute log on #219 therefore
+    published his account identifier on all 2714 of its lines.
+    """
+
+    def _client_with_thread(self, mock_mqtt_cls):
+        import threading
+
+        mock_paho = MagicMock()
+        mock_mqtt_cls.return_value = mock_paho
+        mock_paho._thread = threading.Thread(
+            target=lambda: None, name="paho-mqtt-client-WEB_uuid_2049739542351577090_x"
+        )
+        client = _make_client(device_sn="R371TEST00000001")
+        client.client = mock_paho
+        return client, mock_paho
+
+    @patch("ecoflow_energy.ecoflow.cloud_mqtt.mqtt.Client")
+    def test_the_thread_is_renamed_on_start(self, mock_mqtt_cls):
+        client, mock_paho = self._client_with_thread(mock_mqtt_cls)
+
+        client.start_loop()
+
+        mock_paho.loop_start.assert_called_once()
+        assert mock_paho._thread.name == "ecoflow-mqtt-R371"
+        assert "2049739542351577090" not in mock_paho._thread.name
+
+    @patch("ecoflow_energy.ecoflow.cloud_mqtt.mqtt.Client")
+    def test_only_four_characters_of_the_serial_are_used(self, mock_mqtt_cls):
+        """The name is a log field, so it follows the masking convention."""
+        client, mock_paho = self._client_with_thread(mock_mqtt_cls)
+
+        client.start_loop()
+
+        assert "R371TEST00000001" not in mock_paho._thread.name
+
+    @patch("ecoflow_energy.ecoflow.cloud_mqtt.mqtt.Client")
+    def test_a_missing_thread_does_not_stop_the_connection(self, mock_mqtt_cls):
+        """The handle is paho's private attribute, so it may not be there."""
+        mock_paho = MagicMock()
+        mock_mqtt_cls.return_value = mock_paho
+        del mock_paho._thread
+        client = _make_client()
+        client.client = mock_paho
+
+        client.start_loop()
+
+        mock_paho.loop_start.assert_called_once()

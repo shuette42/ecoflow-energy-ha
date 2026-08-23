@@ -523,8 +523,11 @@ def remap_bp_keys(
         if isinstance(pack, dict) and any(key in pack for key in BP_IDENTITY_KEYS)
     ]
     _LOGGER.debug(
+        # Four characters, like every other log line here. This one printed
+        # the whole serial, and a reporter's 15 minute debug log carried it
+        # 2714 times into a public issue (#219).
         "BP heartbeat for %s: %d pack(s) in message, %d real",
-        device_sn,
+        device_sn[:4],
         len(all_packs),
         len(real_packs),
     )

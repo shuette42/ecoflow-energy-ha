@@ -604,7 +604,7 @@ class EcoFlowMQTTClient:
                 keepalive = DEFAULT_WSS_KEEPALIVE if self._wss_mode else DEFAULT_MQTT_KEEPALIVE
                 broker = self._broker
                 self.client.connect(broker.host, broker.port, keepalive)
-                self.client.loop_start()
+                self._start_network_loop()
                 _LOGGER.debug("Force-reconnect: success at %s (%s)", self.broker, "WSS" if self._wss_mode else "TCP")
                 return True
             except Exception as exc:
@@ -624,7 +624,31 @@ class EcoFlowMQTTClient:
     def start_loop(self) -> None:
         """Start the Paho network loop."""
         if self.client:
-            self.client.loop_start()
+            self._start_network_loop()
+
+    def _start_network_loop(self) -> None:
+        """Start the paho loop, without the account id in the thread name.
+
+        Paho names its network thread after the client id, and Python puts
+        the thread name in every log record. The Portal's client id format
+        embeds the account's user id, so each debug line carried it - and a
+        debug log is the artefact users are asked to attach to public
+        issues. A reporter's 15 minute log on #219 published his account id
+        on all 2714 of them, next to the device serial fixed alongside this.
+
+        The thread itself is paho's, so the handle is read defensively and a
+        failure to rename is never allowed to stop the connection: a log
+        line that says too much is a smaller problem than a device that does
+        not connect.
+        """
+        self.client.loop_start()
+        thread = getattr(self.client, "_thread", None)
+        if thread is None:
+            return
+        try:
+            thread.name = f"ecoflow-mqtt-{self._device_sn[:4]}"
+        except Exception:  # noqa: BLE001
+            _LOGGER.debug("Could not rename the MQTT network thread", exc_info=True)
 
     def stop_loop(self) -> None:
         """Stop the Paho network loop."""

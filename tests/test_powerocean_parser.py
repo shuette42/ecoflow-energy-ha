@@ -1480,3 +1480,22 @@ class TestPercentRangeGuard:
         assert len(discards) == 1
         assert discards[0].levelno == logging.DEBUG
         assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+
+
+class TestNoFullSerialInTheHeartbeatLog:
+    """A debug log is asked for in public, so it masks like everything else.
+
+    This line printed the whole serial while the SET reply two modules away
+    masked it. A reporter's 15 minute log on #219 carried his device serial
+    2714 times into a public issue.
+    """
+
+    def test_the_battery_heartbeat_logs_four_characters(self, caplog) -> None:
+        import logging
+
+        caplog.set_level(logging.DEBUG)
+
+        remap_bp_keys({"all_packs": []}, {}, "R371TEST00000001")
+
+        assert "R371TEST00000001" not in caplog.text
+        assert "BP heartbeat for R371" in caplog.text
