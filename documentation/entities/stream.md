@@ -6,11 +6,13 @@ Full list of all entities created for Stream devices.
 
 **The Stream Micro (`BK01`) does not.** It is a grid-tie inverter with two solar strings and no battery, and it gets a reduced set. See [Stream Micro (BK01)](#stream-micro-bk01) at the end of this page.
 
-**Totals:** 54 sensors, 2 binary sensors, 1 number. Stream AC Pro (`BK31`) adds 3 numbers.
+**Totals:** 54 sensors, 2 binary sensors, 1 number. Stream AC Pro (`BK31`) adds 3 numbers. Four of the 54 are *accessory* entities (PV 3 and PV 4, power and energy) and exist only on a unit that reports those strings.
 
 > Entities marked with *disabled* are available but hidden by default. Enable them in **Settings > Devices > EcoFlow Stream > Entities** (click the filter icon and show disabled entities).
 
-> **Both modes are supported.** Standard Mode polls the official Developer API (~30 s), Enhanced Mode uses the real-time connection (~3 s). Both create the same sensors. Writable numbers require Enhanced Mode. The other difference is solar detail: Standard Mode reports all four strings, Enhanced Mode reports PV 1 and PV 2 plus their input voltage and current.
+> **Both modes are supported.** Standard Mode polls the official Developer API (~30 s), Enhanced Mode uses the real-time connection (~3 s). Writable numbers require Enhanced Mode. The difference is solar detail: Standard Mode reports all four strings, Enhanced Mode reports PV 1 and PV 2 plus their input voltage and current and carries no field for strings 3 and 4.
+
+> **Entities marked *accessory* are created only once the device actually reports that reading**, and they appear on their own the moment it does, without a restart. Solar strings 3 and 4 carry that mark: only the larger units drive them, and the real-time connection has no field for them at all, so listing them for everyone would leave most owners with two entities that can never fill.
 
 ---
 
@@ -35,8 +37,8 @@ Full list of all entities created for Stream devices.
 |:---|:---:|:---:|:---:|:---|
 | PV 1 Power | W | - | enabled | Solar string 1 |
 | PV 2 Power | W | - | enabled | Solar string 2 |
-| PV 3 Power | W | diagnostic | disabled | Solar string 3, larger units only (Standard Mode only) |
-| PV 4 Power | W | diagnostic | disabled | Solar string 4, larger units only (Standard Mode only) |
+| PV 3 Power | W | diagnostic | *accessory*, disabled | Solar string 3, larger units only, and reported through the Developer API only |
+| PV 4 Power | W | diagnostic | *accessory*, disabled | Solar string 4, larger units only, and reported through the Developer API only |
 | Solar Power | W | diagnostic | disabled | Total solar input, meter-dependent |
 | PV Voltage | V | diagnostic | disabled | Input voltage of string 1 |
 | PV Current | A | diagnostic | disabled | Input current of string 1 |
@@ -94,7 +96,7 @@ Full list of all entities created for Stream devices.
 | Battery Discharge Energy | kWh | enabled | Battery discharge |
 | Solar Energy | kWh | disabled | Solar production (needs a paired meter) |
 | Home Energy | kWh | disabled | Home consumption (needs a paired meter) |
-| PV 1 Energy to PV 4 Energy | kWh | disabled | Per-string solar production (strings 3 and 4 in Standard Mode only) |
+| PV 1 Energy to PV 4 Energy | kWh | disabled | Per-string solar production. The counters for strings 3 and 4 follow their power readings: *accessory*, so they exist only on a unit that reports those strings |
 
 Also available as disabled diagnostics: **Battery Charge Capacity** and **Battery Discharge Capacity** (Ah). These are cumulative charge counters, not energy, and are not suitable for the Energy Dashboard.
 
@@ -162,7 +164,7 @@ The Stream Micro is a grid-tie solar inverter: two solar strings, one single-pha
 | Device | WiFi Signal, LED Brightness (disabled diagnostics) |
 | Energy Dashboard | PV 1 Energy, PV 2 Energy (disabled by default, enable them for **Solar production**) |
 
-PV 3 and PV 4 exist as disabled diagnostics for the whole Stream family and stay empty on this two-string unit.
+PV 3 and PV 4 are not created here. They are *accessory* entities across the whole Stream family, so a two-string unit never gains them.
 
 ### What it deliberately does not get
 
