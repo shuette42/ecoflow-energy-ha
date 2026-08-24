@@ -137,7 +137,7 @@ These sensors are pre-configured for the HA Energy Dashboard (`total_increasing`
 | EMS Discharge Lower Limit | Configured min discharge SOC | disabled |
 | EMS Keep SoC | Keep-alive SoC target | disabled |
 | EMS Backup Ratio | Backup reserve ratio | disabled |
-| MPPT 1/2 Fault Code | MPPT fault indicators | disabled |
+| MPPT 1/2 Fault Code | A raw code from the device, passed through unchanged. EcoFlow publishes no meaning for the values, so nothing here translates them, and "fault" is their field name rather than a verdict. An owner tracing one unit found the code following sunrise and sunset with no alert in the EcoFlow app, which points at a producing / not producing state rather than an error. Read it as unlabelled: for automations the power reading of the string itself is the better signal. | disabled |
 | PCS AC/DC Error Code | Inverter error codes | disabled |
 | PCS AC Warning Code | Inverter warnings | disabled |
 | WiFi / Ethernet / 4G Status | Connectivity status | disabled |
@@ -153,7 +153,7 @@ These sensors are pre-configured for the HA Energy Dashboard (`total_increasing`
 | Heating Rod Target Power | The power limit configured for the heating rod. | disabled |
 | Heating Rod Target Temperature | The water temperature the heating rod is set to reach. | disabled |
 | EMS Max Internal Temp | Highest of the internal temperature probes | enabled |
-| MPPT 1/2 Warning Code | MPPT warnings, separate from the fault codes | disabled |
+| MPPT 1/2 Warning Code | MPPT warnings, separate from the fault codes. Unlabelled in the same way, and only reported on the real-time connection. | disabled |
 | AFCI Self-Test Result | Result of the arc-fault detector self-test | disabled |
 | EMS Self-Check State | Result of the system self-check | disabled |
 | System Heating State | Whether the system is heating itself | disabled |
