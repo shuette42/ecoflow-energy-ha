@@ -362,6 +362,13 @@ class TypedFrameBuffer:
         # ones that get a bucket.
         self._buckets: dict[str, _Bucket] = {}
         self._dropped_frames = 0
+        # Which types were turned away, not only how many frames. A bare
+        # count cannot answer "was the message I am looking for among
+        # them", which is the only question a saturated capture ever
+        # raises. Names carry no payload, so recording them costs nothing
+        # a reader could not already see.
+        self._dropped_per_key: dict[str, int] = {}
+        self._dropped_keys_untracked = 0
         self._seq = 0
 
     def add(
@@ -383,6 +390,7 @@ class TypedFrameBuffer:
                 # No budget left for a new type. Counted rather than ignored,
                 # so a reader can tell a saturated capture from a complete one.
                 self._dropped_frames += 1
+                self._note_dropped(key)
                 return
             bucket = self._buckets[key] = _Bucket()
             bucket.first_ts = _entry_ts(entry)
@@ -395,6 +403,23 @@ class TypedFrameBuffer:
         bucket.latest = (self._seq, entry)
         if readings is not None:
             self._note_novelty(bucket, (self._seq, entry), readings)
+
+    def _note_dropped(self, key: str) -> None:
+        """Record the name of a type that found no bucket.
+
+        Bounded the same way the buckets are, because the keys come off
+        the wire and a device that saturates the budget is exactly the one
+        that might keep inventing names. Past the cap only the count of
+        further distinct names is kept, so a reader still knows the list
+        is partial instead of reading it as complete.
+        """
+        counted = self._dropped_per_key.get(key)
+        if counted is not None:
+            self._dropped_per_key[key] = counted + 1
+        elif len(self._dropped_per_key) < self._keys_max:
+            self._dropped_per_key[key] = 1
+        else:
+            self._dropped_keys_untracked += 1
 
     def _note_novelty(
         self,
@@ -525,6 +550,8 @@ class TypedFrameBuffer:
             "keys_max": self._keys_max,
             "per_key_max": self._per_key_max,
             "frames_dropped_key_budget": self._dropped_frames,
+            "dropped_per_key": dict(self._dropped_per_key),
+            "dropped_keys_untracked": self._dropped_keys_untracked,
             "per_key": {
                 key: {
                     "seen": bucket.seen,

@@ -551,6 +551,45 @@ class TestTypedFrameBuffer:
         assert stats["keys_tracked"] == 3
         assert stats["frames_dropped_key_budget"] == 47
 
+    def test_dropped_types_are_named_not_only_counted(self) -> None:
+        """A saturated capture must say which types it turned away.
+
+        #247: a reporter's capture hit the ceiling and discarded 48 frames.
+        The question that mattered was whether one particular message was
+        among them, and the count alone could not answer it either way.
+        """
+        buffer = TypedFrameBuffer(keys_max=2, per_key_max=4)
+
+        buffer.add("kept-a", _entry(1.0))
+        buffer.add("kept-b", _entry(1.0))
+        buffer.add("turned-away", _entry(1.0))
+        buffer.add("turned-away", _entry(2.0))
+        buffer.add("also-turned-away", _entry(3.0))
+
+        stats = buffer.stats()
+        assert stats["frames_dropped_key_budget"] == 3
+        assert stats["dropped_per_key"] == {
+            "turned-away": 2,
+            "also-turned-away": 1,
+        }
+        assert stats["dropped_keys_untracked"] == 0
+
+    def test_the_dropped_name_list_is_bounded_too(self) -> None:
+        """The names come off the wire, so the list cannot grow freely.
+
+        Past the cap the count of further distinct names is kept, which is
+        what tells a reader the list is partial rather than complete.
+        """
+        buffer = TypedFrameBuffer(keys_max=2, per_key_max=4)
+
+        for key in range(50):
+            buffer.add(f"key{key}", _entry(1.0))
+
+        stats = buffer.stats()
+        assert len(stats["dropped_per_key"]) == 2
+        assert stats["dropped_keys_untracked"] == 46
+        assert stats["frames_dropped_key_budget"] == 48
+
     def test_worst_case_stays_inside_both_caps(self) -> None:
         keys_max, per_key_max = 3, 4
         buffer = TypedFrameBuffer(keys_max, per_key_max)
@@ -684,6 +723,8 @@ class TestTypedFrameBuffer:
             "keys_max": 4,
             "per_key_max": 4,
             "frames_dropped_key_budget": 0,
+            "dropped_per_key": {},
+            "dropped_keys_untracked": 0,
             "per_key": {},
         }
 
