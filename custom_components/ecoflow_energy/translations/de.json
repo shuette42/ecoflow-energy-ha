@@ -26,7 +26,7 @@
       },
       "devices": {
         "title": "Geräte auswählen",
-        "description": "Wähle die EcoFlow-Geräte aus, die du zu Home Assistant hinzufügen möchtest.",
+        "description": "Wähle die EcoFlow-Geräte aus, die du zu Home Assistant hinzufügen möchtest.\n\nEin Gerät mit dem Hinweis \"not supported yet\" hat hier keinen Parser und liefert nur zwei Diagnose-Sensoren. Es trotzdem hinzuzufügen lohnt sich: mit eingeschalteter Rohdaten-Erfassung in den Optionen zeichnet es auf, was das Gerät sendet, und aus einem Diagnose-Download an einem GitHub-Issue entsteht die Unterstützung für ein neues Modell.",
         "data": {
           "devices": "Geräte"
         }

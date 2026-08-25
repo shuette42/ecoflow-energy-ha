@@ -13,7 +13,11 @@ from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import SelectSelector, SelectSelectorConfig
 
-from .config_flow_setup import SetupFlowMixin, _device_label
+from .config_flow_setup import (
+    SetupFlowMixin,
+    _device_label,
+    unsupported_suffix,
+)
 from .const import (
     AUTH_METHOD_APP,
     AUTH_METHOD_DEVELOPER,
@@ -28,10 +32,12 @@ from .const import (
     CONF_SECRET_KEY,
     CONF_USER_ID,
     DEVICE_TYPE_DISPLAY_NAMES,
+    DEVICE_TYPE_UNKNOWN,
     MODE_ENHANCED,
     MODE_STANDARD,
     RAW_CAPTURE_DURATION_S,
     get_device_name,
+    get_device_type,
     raw_capture_window_open,
 )
 from .ecoflow.enhanced_auth import enhanced_login, get_app_device_list
@@ -62,6 +68,24 @@ async def _async_fetch_app_devices(
 
 class OptionsFlowMixin:
     """Options flow steps, composed into EcoFlowOptionsFlow."""
+
+    @staticmethod
+    def _stored_device_type(stored: dict[str, dict[str, Any]], sn: str) -> str:
+        """Classify a stored device the way setup does on every start.
+
+        `async_setup_entry` re-runs the classification and only falls back
+        to what the entry recorded, so a serial prefix added in a later
+        release makes a device supported without anything in the entry
+        changing. Reading the recorded type alone would keep this branch
+        calling such a device unsupported until a device-list fetch
+        happens to succeed - the same "working device labelled
+        unsupported" confusion that #267 was about.
+        """
+        device = stored.get(sn, {})
+        device_type = get_device_type(device.get("product_name") or "", sn)
+        if device_type == DEVICE_TYPE_UNKNOWN:
+            device_type = device.get("device_type", "")
+        return device_type
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -149,16 +173,20 @@ class OptionsFlowMixin:
             }
         else:
             stored = {
-                d["sn"]: d.get("device_type", "")
+                d["sn"]: d
                 for d in self.config_entry.data.get(CONF_DEVICES, [])
             }
             # Prefix-derived name first, same order as _device_label: the
             # type table alone would label an ES21 "STREAM AC 5000" and a
             # P231 "Delta 3 Series" whenever this fallback branch renders.
+            # The marker comes from the same helper the fresh-list branch
+            # uses, so which of the two branches rendered cannot change
+            # what a device is called.
             device_options = {
                 sn: (
-                    f"{get_device_name('', sn) or DEVICE_TYPE_DISPLAY_NAMES.get(stored.get(sn, ''), sn[:12])}"
+                    f"{get_device_name('', sn) or DEVICE_TYPE_DISPLAY_NAMES.get(self._stored_device_type(stored, sn), sn[:12])}"
                     f" ({sn[:12]})"
+                    f"{unsupported_suffix(self._stored_device_type(stored, sn))}"
                 )
                 for sn in current_device_sns
             }

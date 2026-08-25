@@ -26,7 +26,7 @@
       },
       "devices": {
         "title": "Select Devices",
-        "description": "Select the EcoFlow devices you want to add to Home Assistant.",
+        "description": "Select the EcoFlow devices you want to add to Home Assistant.\n\nA device marked \"not supported yet\" has no parser here, so it will only produce two diagnostic sensors. Adding it is still worth doing: with the raw data capture switched on in the options, it records what the device sends, and a diagnostics download attached to a GitHub issue is what support for a new model is built from.",
         "data": {
           "devices": "Devices"
         }

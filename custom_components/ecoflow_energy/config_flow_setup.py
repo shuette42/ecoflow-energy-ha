@@ -35,6 +35,25 @@ from .ecoflow.iot_api import IoTApiClient
 _LOGGER = logging.getLogger(__name__)
 
 
+def unsupported_suffix(device_type: str | None) -> str:
+    """Return the marker for a device this integration has no parser for.
+
+    Picking such a device is deliberately still allowed. The raw data
+    capture only runs on devices that were selected, and that capture is
+    the one route by which an unmapped model ever becomes a supported one.
+    Hiding the entry would close it. So the entry stays and says what it
+    is, rather than presenting a device that will produce two diagnostic
+    sensors and nothing else as if it were working.
+
+    Only an explicit unknown classification is marked. An absent or empty
+    device type means nobody classified this entry, which is not the same
+    as having classified it as unsupported: an `HJ36` was refused for
+    exactly that confusion once (#267), and a wrong marker here would
+    tell an owner their working device is not supported.
+    """
+    return " - not supported yet" if device_type == DEVICE_TYPE_UNKNOWN else ""
+
+
 def _device_label(device: dict[str, Any]) -> str:
     """Build a human-readable label for a device selection checkbox."""
     name = (
@@ -46,6 +65,7 @@ def _device_label(device: dict[str, Any]) -> str:
     sn = device.get("sn", "")
     sn_short = f"{sn[:8]}..." if len(sn) > 8 else sn
     status = "" if device.get("online", 0) else " (offline)"
+    status += unsupported_suffix(device.get("device_type"))
     return f"{name} ({sn_short}){status}" if name else f"{sn_short}{status}"
 
 

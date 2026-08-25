@@ -395,6 +395,36 @@ class TestDevicesStep:
         assert result["data"][CONF_ACCESS_KEY] == "ak"
         assert len(result["data"][CONF_DEVICES]) == 1
 
+    async def test_setup_list_marks_unsupported(self, hass: HomeAssistant) -> None:
+        """The list the user actually picks from carries the marker.
+
+        #297: the helper being right is not the same as the form using it.
+        Asserted on the rendered selector rather than on `_device_label`,
+        so that bypassing the helper at this call site fails here instead
+        of passing silently.
+        """
+        with patch(
+            "custom_components.ecoflow_energy.config_flow_setup.IoTApiClient",
+        ) as mock_cls:
+            api = mock_cls.return_value
+            api.get_mqtt_credentials = AsyncMock(return_value=MOCK_MQTT_CREDENTIALS)
+            api.get_device_list = AsyncMock(return_value=[
+                {"sn": "R351FAKE00000001", "productName": "Delta 2 Max", "online": 1},
+                {"sn": "ZZ99FAKE00000001", "productName": "Mystery Box", "online": 1},
+            ])
+            result = await _select_mode(hass, MODE_STANDARD)
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                {CONF_ACCESS_KEY: "ak", CONF_SECRET_KEY: "sk"},
+            )
+
+        labels = {
+            opt["value"]: opt["label"]
+            for opt in result["data_schema"].schema[CONF_DEVICES].config["options"]
+        }
+        assert labels["ZZ99FAKE00000001"].endswith(" - not supported yet")
+        assert "not supported" not in labels["R351FAKE00000001"]
+
     async def test_empty_selection_shows_error(self, hass: HomeAssistant) -> None:
         """Submitting an empty device selection re-shows the form with no_devices."""
         result = await self._advance_to_devices(hass)
@@ -806,6 +836,94 @@ class TestOptionsFlow:
         values = [opt["value"] for opt in options]
         assert values == ["SN001", "SN002"]
 
+    async def test_options_fresh_list_marks_unsupported(
+        self, hass: HomeAssistant
+    ) -> None:
+        """The freshly fetched branch marks unsupported devices too.
+
+        #297: this is the branch a user sees whenever the fetch works, so
+        it is asserted on the rendered selector rather than on the label
+        helper it happens to call today.
+        """
+        entry = self._create_app_auth_entry(hass)
+        with (
+            patch(
+                "custom_components.ecoflow_energy.config_flow_options.enhanced_login",
+                AsyncMock(return_value={"token": "t", "user_id": "uid"}),
+            ),
+            patch(
+                "custom_components.ecoflow_energy.config_flow_options.get_app_device_list",
+                AsyncMock(
+                    return_value=[
+                        {
+                            "sn": "R351FAKE00000001",
+                            "product_name": "Delta 2 Max",
+                            "device_type": "delta",
+                            "online": 1,
+                        },
+                        {
+                            "sn": "ZZ99FAKE00000001",
+                            "product_name": "Mystery Box",
+                            "device_type": "unknown",
+                            "online": 1,
+                        },
+                    ]
+                ),
+            ),
+        ):
+            result = await hass.config_entries.options.async_init(entry.entry_id)
+
+        labels = {
+            opt["value"]: opt["label"]
+            for opt in result["data_schema"].schema[CONF_DEVICES].config["options"]
+        }
+        assert labels["ZZ99FAKE00000001"].endswith(" - not supported yet")
+        assert "not supported" not in labels["R351FAKE00000001"]
+
+    async def test_options_stored_fallback_reclassifies(
+        self, hass: HomeAssistant
+    ) -> None:
+        """A prefix mapped since setup drops the marker without a fetch.
+
+        Setup re-runs the classification on every start and only falls
+        back to the recorded type, so a device recorded as unknown before
+        its prefix was added is supported today. Reading the recorded
+        type alone would keep telling its owner it is not supported, in
+        the one branch that renders when no fetch succeeded - the same
+        confusion #267 was about, one release later.
+        """
+        from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_AUTH_METHOD: AUTH_METHOD_APP,
+                CONF_EMAIL: "user@example.com",
+                CONF_PASSWORD: "secret",
+                CONF_USER_ID: "uid",
+                CONF_MODE: MODE_STANDARD,
+                CONF_DEVICES: [
+                    # Recorded as unknown, prefix mapped since.
+                    {"sn": "R351FAKE00000001", "device_type": "unknown", "online": 1},
+                ],
+            },
+            unique_id="uid",
+        )
+        entry.add_to_hass(hass)
+
+        with patch(
+            "custom_components.ecoflow_energy.config_flow_options.enhanced_login",
+            AsyncMock(side_effect=TimeoutError),
+        ):
+            result = await hass.config_entries.options.async_init(entry.entry_id)
+
+        labels = {
+            opt["value"]: opt["label"]
+            for opt in result["data_schema"].schema[CONF_DEVICES].config["options"]
+        }
+        assert "not supported" not in labels["R351FAKE00000001"]
+
     async def test_options_app_auth_login_failure_falls_back(
         self, hass: HomeAssistant
     ) -> None:
@@ -822,6 +940,49 @@ class TestOptionsFlow:
 
         options = result["data_schema"].schema[CONF_DEVICES].config["options"]
         assert [opt["value"] for opt in options] == ["SN001"]
+
+    async def test_options_stored_fallback_marks_unsupported(
+        self, hass: HomeAssistant
+    ) -> None:
+        """The stored-list branch marks unsupported devices too.
+
+        #297: two places build these labels, one from a fresh fetch and
+        one from what the entry stored. If only the fresh one carried the
+        marker, the same user would see a different answer depending on
+        whether the fetch happened to succeed.
+        """
+        from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_AUTH_METHOD: AUTH_METHOD_APP,
+                CONF_EMAIL: "user@example.com",
+                CONF_PASSWORD: "secret",
+                CONF_USER_ID: "uid",
+                CONF_MODE: MODE_STANDARD,
+                CONF_DEVICES: [
+                    {"sn": "R351FAKE00000001", "device_type": "delta", "online": 1},
+                    {"sn": "ZZ99FAKE00000001", "device_type": "unknown", "online": 1},
+                ],
+            },
+            unique_id="uid",
+        )
+        entry.add_to_hass(hass)
+
+        with patch(
+            "custom_components.ecoflow_energy.config_flow_options.enhanced_login",
+            AsyncMock(side_effect=TimeoutError),
+        ):
+            result = await hass.config_entries.options.async_init(entry.entry_id)
+
+        labels = {
+            opt["value"]: opt["label"]
+            for opt in result["data_schema"].schema[CONF_DEVICES].config["options"]
+        }
+        assert labels["ZZ99FAKE00000001"].endswith(" - not supported yet")
+        assert "not supported" not in labels["R351FAKE00000001"]
 
     async def test_options_enhanced_login_validates(self, hass: HomeAssistant) -> None:
         """Enhanced login in options flow validates credentials."""
@@ -1984,6 +2145,64 @@ class TestDeviceLabel:
 
         label = _device_label({"sn": "R351", "online": 1})
         assert label == "R351"
+
+    def test_unknown_device_type_is_marked(self) -> None:
+        """A device with no parser says so in its own label.
+
+        #297: picking one succeeded silently and produced two diagnostic
+        sensors, which reads as a broken setup rather than an unsupported
+        model.
+        """
+        from custom_components.ecoflow_energy.config_flow_setup import _device_label
+
+        label = _device_label({
+            "sn": "ZZ99FAKE00000001",
+            "product_name": "Mystery Box",
+            "device_type": "unknown",
+            "online": 1,
+        })
+        assert label == "Mystery Box (ZZ99FAKE...) - not supported yet"
+
+    def test_known_device_type_is_not_marked(self) -> None:
+        """A supported device carries no marker."""
+        from custom_components.ecoflow_energy.config_flow_setup import _device_label
+
+        label = _device_label({
+            "sn": "R351FAKE00000001",
+            "product_name": "Delta 2 Max",
+            "device_type": "delta",
+            "online": 1,
+        })
+        assert label == "Delta 2 Max (R351FAKE...)"
+
+    def test_missing_device_type_is_not_marked(self) -> None:
+        """An unclassified entry is not the same as an unsupported one.
+
+        Marking on an absent field would tell the owner of a working
+        device that it is not supported, which is the confusion that
+        refused an HJ36 once (#267).
+        """
+        from custom_components.ecoflow_energy.config_flow_setup import _device_label
+
+        assert "not supported" not in _device_label(
+            {"sn": "HJ36FAKE00000001", "product_name": "PowerOcean", "online": 1}
+        )
+        assert "not supported" not in _device_label(
+            {"sn": "HJ36FAKE00000001", "product_name": "PowerOcean",
+             "device_type": "", "online": 1}
+        )
+
+    def test_marker_and_offline_both_show(self) -> None:
+        """Being offline and being unsupported are separate facts."""
+        from custom_components.ecoflow_energy.config_flow_setup import _device_label
+
+        label = _device_label({
+            "sn": "ZZ99FAKE00000001",
+            "product_name": "Mystery Box",
+            "device_type": "unknown",
+            "online": 0,
+        })
+        assert label == "Mystery Box (ZZ99FAKE...) (offline) - not supported yet"
 
 
 class TestNormalizeDevices:
