@@ -3,5 +3,6 @@
   "render_readme": true,
   "homeassistant": "2025.1.0",
   "zip_release": true,
-  "filename": "ecoflow_energy.zip"
+  "filename": "ecoflow_energy.zip",
+  "hide_default_branch": true
 }
