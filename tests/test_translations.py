@@ -14,6 +14,8 @@ import json
 import re
 from pathlib import Path
 
+import pytest
+
 TRANSLATIONS_DIR = Path("custom_components/ecoflow_energy/translations")
 CONFIG_FLOW_PATHS = sorted(
     Path("custom_components/ecoflow_energy").glob("config_flow*.py")
@@ -543,3 +545,132 @@ class TestExceptionTranslations:
                 f"Exception '{key}' placeholders differ: "
                 f"en={en_placeholders}, de={per_lang['de'].get(key)}"
             )
+
+
+# ---------------------------------------------------------------------------
+# Device picker: the marker and the text that explains it
+# ---------------------------------------------------------------------------
+
+
+class TestDevicePickerExplanation:
+    """The device picker has to explain itself in both flows.
+
+    #296: the marker on an unsupported device shipped with an explanation
+    that only the initial setup step carried. A user reconfiguring an
+    existing entry - which is the route the reporter took - saw the marker
+    and no text saying what selecting a device is for, so the label read as
+    a warning against a checkbox that was ticked anyway.
+    """
+
+    MARKER = "not supported yet"
+
+    # The two facts the reporter needed and could not infer from the marker:
+    # what an unsupported device costs him, and what he can do about it.
+    # Asserting only that the text mentions the marker passes on a stub that
+    # repeats the marker and explains nothing.
+    CONSEQUENCE = {"en": "diagnostic sensors", "de": "Diagnose-Sensoren"}
+    REMEDY = {"en": "diagnostics download", "de": "Diagnose-Download"}
+
+    @staticmethod
+    def _lang(path: Path) -> str:
+        return "de" if path.name == "de.json" else "en"
+
+    @classmethod
+    def _assert_explains(cls, path: Path, text: str) -> None:
+        """The text has to carry the marker, its cost and the way out."""
+        lang = cls._lang(path)
+        assert cls.MARKER in text, (
+            f"{path.name}: text does not mention the '{cls.MARKER}' marker "
+            f"it explains"
+        )
+        assert cls.CONSEQUENCE[lang] in text, (
+            f"{path.name}: text names the marker without saying what an "
+            f"unsupported device produces instead"
+        )
+        assert cls.REMEDY[lang] in text, (
+            f"{path.name}: text names the problem without saying what the "
+            f"owner can do about it"
+        )
+
+    @pytest.mark.parametrize("path", [STRINGS_PATH, EN_PATH, DE_PATH])
+    def test_config_devices_step_explains_the_marker(self, path: Path) -> None:
+        """The fresh-setup picker explains what the marker costs."""
+        step = _get_config_steps(_load_translations(path)).get("devices", {})
+        text = step.get("description", "")
+        assert text, f"{path.name}: config step 'devices' has no description"
+        self._assert_explains(path, text)
+
+    @pytest.mark.parametrize("path", [STRINGS_PATH, EN_PATH, DE_PATH])
+    def test_options_init_explains_the_marker(self, path: Path) -> None:
+        """The options picker explains it too, not only the fresh setup."""
+        step = _get_options_steps(_load_translations(path)).get("init", {})
+        text = step.get("data_description", {}).get("devices", "")
+        assert text, (
+            f"{path.name}: options step 'init' has no help text for the "
+            f"device selector, so a user reconfiguring an entry sees the "
+            f"marker with nothing explaining it (#296)"
+        )
+        self._assert_explains(path, text)
+
+    def test_strings_and_en_are_the_same_text(self) -> None:
+        """`strings.json` and `en.json` are one language, so they must agree.
+
+        The three-way parametrisation above reads like a source-to-shipped
+        symmetry check and is three independent substring checks: giving
+        `en.json` entirely different wording, marker intact, left the whole
+        suite green. `strings.json` is the file a reviewer reads and
+        `en.json` is the file Home Assistant renders, so any divergence
+        between them is a mistake rather than a translation.
+        """
+        strings = _load_translations(STRINGS_PATH)
+        english = _load_translations(EN_PATH)
+        for section in ("config", "options"):
+            assert strings.get(section, {}).get("step") == english.get(
+                section, {}
+            ).get("step"), (
+                f"strings.json and en.json disagree in the '{section}' steps; "
+                f"the rendered text is en.json, so the difference ships"
+            )
+
+    def test_german_is_actually_translated(self) -> None:
+        """The German help texts are German, not the English left in place.
+
+        One English fragment is deliberate: the marker itself is built as a
+        hardcoded English literal in `unsupported_suffix()` and never passes
+        through the translation layer, so quoting it untranslated is what a
+        German user actually sees. That is a phrase, not the whole text.
+        """
+        english = _load_translations(EN_PATH)
+        german = _load_translations(DE_PATH)
+        pairs = (
+            (
+                "config devices description",
+                _get_config_steps(english)["devices"]["description"],
+                _get_config_steps(german)["devices"]["description"],
+            ),
+            (
+                "options devices help",
+                _get_options_steps(english)["init"]["data_description"]["devices"],
+                _get_options_steps(german)["init"]["data_description"]["devices"],
+            ),
+        )
+        for label, en_text, de_text in pairs:
+            assert en_text != de_text, f"{label}: de.json still carries the English text"
+
+    def test_marker_names_the_consequence(self) -> None:
+        """The marker says what it costs, not only that something is off.
+
+        "Not supported" is a status. The reporter who asked for the marker
+        could not infer from it that the device would expose nothing, which
+        is the fact he needed (#296).
+        """
+        from custom_components.ecoflow_energy.config_flow_setup import (
+            unsupported_suffix,
+        )
+        from custom_components.ecoflow_energy.const import DEVICE_TYPE_UNKNOWN
+
+        marker = unsupported_suffix(DEVICE_TYPE_UNKNOWN)
+        assert self.MARKER in marker
+        assert "no data" in marker, (
+            f"marker {marker!r} states the status without its consequence"
+        )

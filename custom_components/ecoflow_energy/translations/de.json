@@ -26,7 +26,7 @@
       },
       "devices": {
         "title": "Geräte auswählen",
-        "description": "Wähle die EcoFlow-Geräte aus, die du zu Home Assistant hinzufügen möchtest.\n\nEin Gerät mit dem Hinweis \"not supported yet\" hat hier keinen Parser und liefert nur zwei Diagnose-Sensoren. Es trotzdem hinzuzufügen lohnt sich: mit eingeschalteter Rohdaten-Erfassung in den Optionen zeichnet es auf, was das Gerät sendet, und aus einem Diagnose-Download an einem GitHub-Issue entsteht die Unterstützung für ein neues Modell.",
+        "description": "Wähle die EcoFlow-Geräte aus, die du zu Home Assistant hinzufügen möchtest.\n\nEin Gerät mit dem Hinweis \"not supported yet\" hat hier keinen Parser und liefert nur zwei Diagnose-Sensoren. Es trotzdem hinzuzufügen lohnt sich, denn aus einem Diagnose-Download davon an einem GitHub-Issue entsteht die Unterstützung für ein neues Modell. Mit Developer-Keys enthält dieser Download die Rohdaten eines solchen Geräts bereits. Mit App-Anmeldung nicht, dort also zuerst die Aufzeichnung der Diagnosedaten in den Integrations-Optionen einschalten und danach herunterladen.",
         "data": {
           "devices": "Geräte"
         }
@@ -105,6 +105,7 @@
           "raw_capture": "24 Stunden lang zusätzliche Diagnosedaten aufzeichnen"
         },
         "data_description": {
+          "devices": "Ein Gerät auszuwählen ist das, was diese Integration dazu bringt, es zu lesen. Ein Gerät mit dem Hinweis \"not supported yet\" hat hier keinen Parser und liefert nur zwei Diagnose-Sensoren, sonst nichts. Es trotzdem ausgewählt zu lassen lohnt sich, denn aus einem Diagnose-Download davon an einem GitHub-Issue entsteht die Unterstützung für ein neues Modell. Mit Developer-Keys enthält dieser Download die Rohdaten eines solchen Geräts bereits. Mit App-Anmeldung nicht, dort also zuerst die Aufzeichnung der Diagnosedaten weiter unten einschalten und danach herunterladen.",
           "raw_capture": "Behält mehr der Rohdaten, die deine Geräte senden, zeichnet jedes Gerät auf, das diese Integration noch nicht unterstützt, und hält fest, welche Einstellungen die EcoFlow-App währenddessen an deine Geräte schreibt. Das Letzte ist der Weg zu einer Steuerung für ein Modell, das hier niemand besitzt: die Einstellung einmal in der App ändern, während das läuft, zeigt was das Gerät annimmt. Nur sinnvoll, wenn in einem GitHub-Issue danach gefragt wurde, denn die Daten helfen nur zusammen mit einem Diagnose-Download. An deine Geräte wird nie etwas gesendet, und die Aufzeichnung endet nach 24 Stunden von selbst."
         }
       },

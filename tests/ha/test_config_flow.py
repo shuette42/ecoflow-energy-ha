@@ -422,7 +422,7 @@ class TestDevicesStep:
             opt["value"]: opt["label"]
             for opt in result["data_schema"].schema[CONF_DEVICES].config["options"]
         }
-        assert labels["ZZ99FAKE00000001"].endswith(" - not supported yet")
+        assert labels["ZZ99FAKE00000001"].endswith(" - not supported yet (no data exposed)")
         assert "not supported" not in labels["R351FAKE00000001"]
 
     async def test_empty_selection_shows_error(self, hass: HomeAssistant) -> None:
@@ -877,7 +877,7 @@ class TestOptionsFlow:
             opt["value"]: opt["label"]
             for opt in result["data_schema"].schema[CONF_DEVICES].config["options"]
         }
-        assert labels["ZZ99FAKE00000001"].endswith(" - not supported yet")
+        assert labels["ZZ99FAKE00000001"].endswith(" - not supported yet (no data exposed)")
         assert "not supported" not in labels["R351FAKE00000001"]
 
     async def test_options_stored_fallback_reclassifies(
@@ -981,7 +981,7 @@ class TestOptionsFlow:
             opt["value"]: opt["label"]
             for opt in result["data_schema"].schema[CONF_DEVICES].config["options"]
         }
-        assert labels["ZZ99FAKE00000001"].endswith(" - not supported yet")
+        assert labels["ZZ99FAKE00000001"].endswith(" - not supported yet (no data exposed)")
         assert "not supported" not in labels["R351FAKE00000001"]
 
     async def test_options_enhanced_login_validates(self, hass: HomeAssistant) -> None:
@@ -2161,7 +2161,7 @@ class TestDeviceLabel:
             "device_type": "unknown",
             "online": 1,
         })
-        assert label == "Mystery Box (ZZ99FAKE...) - not supported yet"
+        assert label == "Mystery Box (ZZ99FAKE...) - not supported yet (no data exposed)"
 
     def test_known_device_type_is_not_marked(self) -> None:
         """A supported device carries no marker."""
@@ -2202,7 +2202,7 @@ class TestDeviceLabel:
             "device_type": "unknown",
             "online": 0,
         })
-        assert label == "Mystery Box (ZZ99FAKE...) (offline) - not supported yet"
+        assert label == "Mystery Box (ZZ99FAKE...) (offline) - not supported yet (no data exposed)"
 
 
 class TestNormalizeDevices:

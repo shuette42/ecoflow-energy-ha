@@ -182,11 +182,14 @@ class OptionsFlowMixin:
             # The marker comes from the same helper the fresh-list branch
             # uses, so which of the two branches rendered cannot change
             # what a device is called.
+            stored_types = {
+                sn: self._stored_device_type(stored, sn) for sn in current_device_sns
+            }
             device_options = {
                 sn: (
-                    f"{get_device_name('', sn) or DEVICE_TYPE_DISPLAY_NAMES.get(self._stored_device_type(stored, sn), sn[:12])}"
+                    f"{get_device_name('', sn) or DEVICE_TYPE_DISPLAY_NAMES.get(stored_types[sn], sn[:12])}"
                     f" ({sn[:12]})"
-                    f"{unsupported_suffix(self._stored_device_type(stored, sn))}"
+                    f"{unsupported_suffix(stored_types[sn])}"
                 )
                 for sn in current_device_sns
             }

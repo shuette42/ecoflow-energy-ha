@@ -50,8 +50,17 @@ def unsupported_suffix(device_type: str | None) -> str:
     as having classified it as unsupported: an `HJ36` was refused for
     exactly that confusion once (#267), and a wrong marker here would
     tell an owner their working device is not supported.
+
+    The marker names the consequence, not only the status. The reporter
+    who asked for the marker in the first place read the finished one and
+    said that "not supported" gave him the state without telling him what
+    it costs him, which is the part he could not infer before (#296).
     """
-    return " - not supported yet" if device_type == DEVICE_TYPE_UNKNOWN else ""
+    return (
+        " - not supported yet (no data exposed)"
+        if device_type == DEVICE_TYPE_UNKNOWN
+        else ""
+    )
 
 
 def _device_label(device: dict[str, Any]) -> str:
