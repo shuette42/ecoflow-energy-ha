@@ -34,6 +34,61 @@ _MASK_BYTE = b"X"
 # nobody's to publish either. This catches them by shape.
 _SERIAL_RUN = re.compile(rb"[A-Z0-9]{15,}")
 
+# Identifiers shorter than a serial cannot be caught by shape alone. A run of
+# 12 upper-case alphanumerics appears in ordinary binary often enough that a
+# free-running pattern of that length would corrupt frames rather than clean
+# them, which is the failure `diagnostics.py` records: an over-broad mask once
+# came back with 25 of 25 captured frames destroyed.
+#
+# Protobuf gives the missing boundary for free. A length-delimited field
+# announces exactly how many bytes follow, so a candidate can be tested as a
+# whole value rather than as a lucky run inside one: tag byte with wire type
+# 2, a single length byte, then that many characters, all of them
+# `[A-Z0-9]`. Nothing shorter than `_IDENT_MIN` is masked, because below that
+# the field stops being an identifier and starts being a model name or a
+# status word.
+#
+# The STREAM AC 5000 carries a 12-character identifier this way, stable across
+# every frame of every capture on file, which the serial mask never reached.
+# It was found in a reporter's diagnostics download on 2026-08-26, in a file
+# he had attached to a public issue because this project asked him to.
+_IDENT_MIN = 12
+_IDENT_MAX = 32
+_IDENT_ALPHABET = frozenset(b"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+_WIRE_TYPE_LENGTH_DELIMITED = 2
+
+
+def _mask_delimited_identifiers(payload: bytes) -> bytes:
+    """Mask length-delimited fields whose whole value looks like an identifier.
+
+    Walks byte by byte rather than parsing: a frame that failed to parse would
+    be masked incompletely, and a frame is at its most interesting exactly
+    when it does not parse. Reading a tag and a length wherever they appear
+    costs a false positive of roughly one in a hundred billion per position,
+    since a value only qualifies when every one of its 12 or more bytes lands
+    in a 36-character alphabet. Length is preserved, so byte offsets survive
+    for a field-layout analysis.
+    """
+    out = bytearray(payload)
+    index = 0
+    limit = len(payload) - 2
+    while index < limit:
+        if payload[index] & 0x07 != _WIRE_TYPE_LENGTH_DELIMITED:
+            index += 1
+            continue
+        length = payload[index + 1]
+        start = index + 2
+        end = start + length
+        if not _IDENT_MIN <= length <= _IDENT_MAX or end > len(payload):
+            index += 1
+            continue
+        if all(byte in _IDENT_ALPHABET for byte in payload[start:end]):
+            out[start:end] = _MASK_BYTE * length
+            index = end
+            continue
+        index += 1
+    return bytes(out)
+
 
 def sanitize_frame(payload: bytes, secrets: list[str]) -> bytes:
     """Mask identifying strings inside a raw frame.
@@ -43,10 +98,14 @@ def sanitize_frame(payload: bytes, secrets: list[str]) -> bytes:
     length, in every case variant the payload might use.
 
     Named identifiers are masked first, then anything else shaped like a
-    serial. The second pass matters because a frame also carries the serial
-    of every battery pack and of any attached accessory, and the caller
-    cannot name what it has not discovered yet. Masking preserves length, so
-    byte offsets survive both passes and a field-layout analysis still works.
+    serial, then anything a device presents as a whole length-delimited field
+    of identifier-shaped characters. The second pass matters because a frame
+    also carries the serial of every battery pack and of any attached
+    accessory, and the caller cannot name what it has not discovered yet. The
+    third catches identifiers too short for the second to risk matching by
+    shape, which is how a 12-character one reached a public issue attachment
+    before anyone noticed. Masking preserves length, so byte offsets survive
+    all three passes and a field-layout analysis still works.
     """
     sanitized = payload
     for secret in secrets:
@@ -56,7 +115,8 @@ def sanitize_frame(payload: bytes, secrets: list[str]) -> bytes:
             raw = variant.encode("ascii", "ignore")
             if raw and raw in sanitized:
                 sanitized = sanitized.replace(raw, _MASK_BYTE * len(raw))
-    return _SERIAL_RUN.sub(lambda m: _MASK_BYTE * len(m.group()), sanitized)
+    sanitized = _SERIAL_RUN.sub(lambda m: _MASK_BYTE * len(m.group()), sanitized)
+    return _mask_delimited_identifiers(sanitized)
 
 
 def is_proto_frame(payload: bytes) -> bool:

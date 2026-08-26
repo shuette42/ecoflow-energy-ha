@@ -158,6 +158,171 @@ class TestSanitizeFrame:
         assert sanitize_frame(payload, []) == payload
 
 
+class TestDelimitedIdentifierMasking:
+    """The third pass: identifiers too short for the shape pass to risk.
+
+    A run of 12 upper-case alphanumerics turns up in ordinary binary, so a
+    free-running pattern that short would corrupt frames instead of cleaning
+    them. Protobuf supplies the boundary: a length-delimited field says how
+    many bytes it holds, so the whole value can be tested rather than a run
+    inside it.
+
+    The vectors below are the real thing. A STREAM AC 5000 carries a
+    12-character identifier this way in every frame it sends, and it reached
+    a public issue attachment because the serial pass never matched it.
+    """
+
+    # The exact bytes the device sends, identifier replaced: tag for field 2
+    # with wire type 2, length 12, then the value.
+    REAL_SHAPE = b"\x08\x03\x12\x0cAABBCCDDEEFF\x1d\xfa\x7e\xe2\x41"
+
+    def test_the_identifier_the_serial_pass_missed_is_masked(self) -> None:
+        result = sanitize_frame(self.REAL_SHAPE, [])
+
+        assert b"AABBCCDDEEFF" not in result
+        assert result == b"\x08\x03\x12\x0cXXXXXXXXXXXX\x1d\xfa\x7e\xe2\x41"
+
+    def test_the_serial_pass_alone_would_have_missed_it(self) -> None:
+        """The control for the line above: without this pass, nothing fires.
+
+        Twelve characters sit below the 15 the shape pattern requires, so a
+        test asserting the identifier is gone proves nothing unless the old
+        behaviour is pinned as well.
+        """
+        from ecoflow_energy.ecoflow.frame_capture import _SERIAL_RUN
+
+        assert _SERIAL_RUN.search(b"AABBCCDDEEFF") is None
+
+    def test_the_bytes_around_it_are_untouched(self) -> None:
+        result = sanitize_frame(self.REAL_SHAPE, [])
+
+        assert result.startswith(b"\x08\x03\x12\x0c")
+        assert result.endswith(b"\x1d\xfa\x7e\xe2\x41")
+        assert len(result) == len(self.REAL_SHAPE)
+
+    def test_a_field_below_the_floor_survives(self) -> None:
+        """Under 12 characters a field stops being an identifier.
+
+        Model names and status words live there, and they are what a capture
+        is read for.
+        """
+        payload = b"\x12\x0bSHORTID1234"
+
+        assert sanitize_frame(payload, []) == payload
+
+    def test_a_value_that_is_not_all_identifier_characters_survives(self) -> None:
+        """One lower-case letter is enough to say this is not an identifier."""
+        payload = b"\x12\x0cMODEL name12"
+
+        assert sanitize_frame(payload, []) == payload
+
+    def test_a_length_running_past_the_frame_is_ignored(self) -> None:
+        """A truncated frame must not be read past its end.
+
+        Frames are cut to a byte budget before they are stored, so a field
+        announcing more than remains is the normal case at the cut, not a
+        malformed device.
+        """
+        payload = b"\x12\x20AABBCCDDEEFF"
+
+        assert sanitize_frame(payload, []) == payload
+
+    def test_a_varint_field_is_not_read_as_a_length(self) -> None:
+        """Only wire type 2 announces a length. The others must be skipped."""
+        payload = b"\x08\x0cAABBCCDDEEFF"
+
+        assert sanitize_frame(payload, []) == payload
+
+    def test_two_identifiers_in_one_frame_both_go(self) -> None:
+        payload = b"\x12\x0cAABBCCDDEEFF\x1a\x0c112233445566"
+
+        result = sanitize_frame(payload, [])
+
+        assert b"AABBCCDDEEFF" not in result
+        assert b"112233445566" not in result
+        assert len(result) == len(payload)
+
+    def test_a_serial_sized_value_is_still_masked_once(self) -> None:
+        """The passes overlap on a 16-character serial. That is fine as long
+        as the result is a run of filler and not a run of filler masked
+        again into something shorter.
+        """
+        payload = b"\x12\x10HJ31TEST00000001"
+
+        result = sanitize_frame(payload, [])
+
+        assert result == b"\x12\x10" + b"X" * 16
+
+
+class TestMaskingDoesNotCorruptRealFrames:
+    """The guard the history of this mask asks for.
+
+    `diagnostics.py` records an over-broad mask that came back with 25 of 25
+    captured frames destroyed. A rule written against a synthetic payload
+    cannot see that, because a synthetic payload has no readings to lose. So
+    the check is run over every recorded frame this repo holds: mask it, parse
+    both versions, and require every number to survive.
+    """
+
+    @staticmethod
+    def _captures() -> list[tuple[str, bytes]]:
+        import json
+        from pathlib import Path
+
+        found: list[tuple[str, bytes]] = []
+        root = Path(__file__).parent / "fixtures"
+        for path in sorted(root.rglob("*.json")):
+            try:
+                data = json.loads(path.read_text())
+            except ValueError:  # pragma: no cover - not a frame fixture
+                continue
+            if not isinstance(data, dict):
+                continue
+            for frame in data.get("frames") or []:
+                raw = frame.get("hex")
+                if raw:
+                    found.append((path.name, bytes.fromhex(raw)))
+        return found
+
+    def test_there_are_frames_to_check(self) -> None:
+        """Positive control. A rglob that matched nothing would let the test
+        below pass while checking no frame at all.
+        """
+        assert len(self._captures()) >= 50
+
+    def test_every_recorded_frame_keeps_its_length(self) -> None:
+        for name, raw in self._captures():
+            assert len(sanitize_frame(raw, [])) == len(raw), name
+
+    def test_no_reading_changes_under_masking(self) -> None:
+        from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (
+            parse_stream_ac5000_message,
+        )
+
+        checked = 0
+        for name, raw in self._captures():
+            before = parse_stream_ac5000_message(raw) or {}
+            if not before:
+                continue
+            after = parse_stream_ac5000_message(sanitize_frame(raw, [])) or {}
+            numeric_before = {
+                key: value
+                for key, value in before.items()
+                if isinstance(value, (int, float))
+            }
+            numeric_after = {
+                key: value
+                for key, value in after.items()
+                if isinstance(value, (int, float))
+            }
+            assert numeric_before == numeric_after, name
+            checked += 1
+
+        # Second positive control: the loop above is only evidence while it
+        # has frames this parser understands.
+        assert checked >= 20
+
+
 class TestIsProtoFrame:
     def test_protobuf_header(self) -> None:
         assert is_proto_frame(b"\x0a\x10abc") is True
