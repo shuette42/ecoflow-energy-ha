@@ -10,6 +10,8 @@ No Home Assistant dependencies - stdlib only.
 from __future__ import annotations
 
 import logging
+import math
+import struct
 from typing import Any
 
 from .powerocean import (
@@ -25,6 +27,129 @@ from .powerocean import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _read_varint(data: memoryview, offset: int) -> tuple[int | None, int]:
+    """Read one protobuf varint without raising on a partial report."""
+    value = 0
+    shift = 0
+    while offset < len(data) and shift <= 63:
+        byte = data[offset]
+        offset += 1
+        value |= (byte & 0x7F) << shift
+        if not byte & 0x80:
+            return value, offset
+        shift += 7
+    return None, len(data)
+
+
+def _wire_fields(payload: bytes) -> list[tuple[int, int, int | bytes]]:
+    """Return the scalar fields from one small protobuf report.
+
+    The PowerGlow report types have not been published in EcoFlow's protobuf
+    schema. Keeping this narrow decoder beside the existing PowerOcean protobuf
+    mappings avoids claiming names for their unconfirmed fields.
+    """
+    fields: list[tuple[int, int, int | bytes]] = []
+    data = memoryview(payload)
+    offset = 0
+    while offset < len(data):
+        key, offset = _read_varint(data, offset)
+        if key is None:
+            break
+        number, wire_type = key >> 3, key & 0x07
+        if wire_type == 0:
+            value, offset = _read_varint(data, offset)
+            if value is None:
+                break
+        elif wire_type == 2:
+            length, offset = _read_varint(data, offset)
+            if length is None or offset + length > len(data):
+                break
+            value = data[offset : offset + length].tobytes()
+            offset += length
+        elif wire_type == 5:
+            if offset + 4 > len(data):
+                break
+            value = data[offset : offset + 4].tobytes()
+            offset += 4
+        elif wire_type == 1:
+            if offset + 8 > len(data):
+                break
+            value = data[offset : offset + 8].tobytes()
+            offset += 8
+        else:
+            break
+        fields.append((number, wire_type, value))
+    return fields
+
+
+def _field_bytes(
+    fields: list[tuple[int, int, int | bytes]], number: int
+) -> bytes | None:
+    for field_number, wire_type, value in fields:
+        if field_number == number and wire_type == 2 and isinstance(value, bytes):
+            return value
+    return None
+
+
+def _field_float(
+    fields: list[tuple[int, int, int | bytes]], number: int
+) -> float | None:
+    for field_number, wire_type, value in fields:
+        if field_number == number and wire_type == 5 and isinstance(value, bytes):
+            return struct.unpack("<f", value)[0]
+    return None
+
+
+def parse_powerglow_telemetry(headers: list[dict[str, Any]]) -> dict[str, float]:
+    """Decode confirmed PowerGlow reports forwarded by a PowerOcean.
+
+    ``212/8`` supplies the water temperature in field 6. ``212/33`` is a
+    repeated energy-stream report whose field 2 is the heating power. Its
+    proto3 payload omits a zero-valued field, so an item containing only the
+    PowerGlow serial is a confirmed 0 W reading, not an absent report.
+
+    The report does not presently carry confirmed target-temperature or
+    target-power fields. Those remain owned by the Standard-Mode quota path.
+    """
+    result: dict[str, float] = {}
+    for header in headers:
+        if not isinstance(header, dict):
+            continue
+        command = (header.get("cmd_func"), header.get("cmd_id"))
+        if command not in {(212, 8), (212, 33)}:
+            continue
+        pdata_hex = header.get("pdata")
+        if not isinstance(pdata_hex, str):
+            continue
+        try:
+            fields = _wire_fields(bytes.fromhex(pdata_hex))
+        except ValueError:
+            continue
+
+        if command == (212, 8):
+            temperature = _field_float(fields, 6)
+            if temperature is not None and math.isfinite(temperature) and -40 <= temperature <= 150:
+                result["heating_rod_water_temp_c"] = temperature
+            continue
+
+        for _, wire_type, item in fields:
+            if wire_type != 2 or not isinstance(item, bytes):
+                continue
+            item_fields = _wire_fields(item)
+            # A stream item must identify a heating rod. This excludes a
+            # malformed wrapper while still accepting a legitimate 0 W item.
+            if _field_bytes(item_fields, 1) is None:
+                continue
+            power = _field_float(item_fields, 2)
+            if power is None:
+                power = 0.0
+            if math.isfinite(power) and 0 <= power <= 20000:
+                result["heating_rod_power_w"] = power
+                break
+
+    return result
 
 # Proto enum sensor keys present in EMS Change Report (cmd_id=8).
 # With oneof wrappers in the proto, zero-values are preserved.

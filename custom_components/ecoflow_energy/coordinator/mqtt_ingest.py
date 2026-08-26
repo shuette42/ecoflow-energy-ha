@@ -30,6 +30,7 @@ from ..ecoflow.parsers.delta3_proto import (
 from ..ecoflow.parsers.powerocean import parse_powerocean_http_quota
 from ..ecoflow.parsers.powerocean_proto import (
     flatten_heartbeat,
+    parse_powerglow_telemetry,
     remap_bp_keys,
     remap_ems_state_keys,
     remap_ev_charging_keys,
@@ -55,6 +56,7 @@ from ..ecoflow.proto.runtime import (
     decode_proto_runtime_frame,
     decode_proto_runtime_headers,
 )
+from ..ecoflow.proto.decoder import decode_header_message
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -572,7 +574,9 @@ class MqttIngestMixin:
         # The envelope decode stays guarded because the get_reply caller has no
         # guard of its own and runs on the Paho thread.
         try:
-            results = decode_proto_runtime_headers(payload)
+            decoded_frame = decode_header_message(payload)
+            results = decode_proto_runtime_headers(payload, decoded_frame)
+            merged.update(parse_powerglow_telemetry(decoded_frame[0]))
         except Exception:
             _LOGGER.debug(
                 "PowerOcean protobuf decode error for %s",

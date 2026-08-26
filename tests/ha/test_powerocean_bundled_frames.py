@@ -1,6 +1,7 @@
 """Coordinator-level regression tests for bundled PowerOcean frames."""
 
 import base64
+import struct
 from unittest.mock import patch
 
 import pytest
@@ -38,6 +39,11 @@ def _build_header(cmd_func: int, cmd_id: int, pdata: bytes) -> bytes:
     return encode_field_bytes(1, bytes(header))
 
 
+def _field_float(field_number: int, value: float) -> bytes:
+    """Build one protobuf fixed32 float field for a hand-made fixture."""
+    return bytes([(field_number << 3) | 5]) + struct.pack("<f", value)
+
+
 def test_powerocean_parser_merges_bundled_stream_and_heartbeat() -> None:
     """The coordinator receives one sensor mapping from the whole bundle."""
     stream = JTS1EnergyStreamReport(
@@ -69,6 +75,47 @@ def test_powerocean_parser_merges_bundled_stream_and_heartbeat() -> None:
     assert parsed["grid_export_power_w"] == 6280.0
     assert parsed["pcs_ac_freq_hz"] == 50.0
     assert parsed["mppt_pv1_power_w"] == 3529.0
+
+
+def test_powerocean_parser_reads_powerglow_enhanced_reports() -> None:
+    """PowerGlow readings arrive through the parent PowerOcean stream."""
+    rod_serial = b"HF33TEST00000001"
+    parameter_report = b"".join(
+        (
+            encode_field_bytes(1, rod_serial),
+            _field_float(6, 58.0),
+        )
+    )
+    energy_item = b"".join(
+        (
+            encode_field_bytes(1, rod_serial),
+            _field_float(2, 1750.0),
+        )
+    )
+    frame = b"".join(
+        (
+            _build_header(212, 8, parameter_report),
+            _build_header(212, 33, encode_field_bytes(1, energy_item)),
+        )
+    )
+
+    parsed = _PowerOceanParser()._parse_powerocean_proto_frame(frame)
+
+    assert parsed is not None
+    assert parsed["heating_rod_water_temp_c"] == 58.0
+    assert parsed["heating_rod_power_w"] == 1750.0
+    assert "heating_rod_target_power_w" not in parsed
+    assert "heating_rod_target_temp_c" not in parsed
+
+
+def test_powerocean_parser_reads_zero_powerglow_power() -> None:
+    """An empty proto3 power field is the heating rod's explicit 0 W state."""
+    energy_item = encode_field_bytes(1, b"HF33TEST00000001")
+    frame = _build_header(212, 33, encode_field_bytes(1, energy_item))
+
+    parsed = _PowerOceanParser()._parse_powerocean_proto_frame(frame)
+
+    assert parsed == {"heating_rod_power_w": 0.0}
 
 
 def _energy_stream_frame() -> bytes:

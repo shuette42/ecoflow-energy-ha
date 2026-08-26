@@ -2,6 +2,7 @@
 
 import base64
 import re
+import struct
 from pathlib import Path
 from unittest.mock import patch
 
@@ -9,6 +10,7 @@ import pytest
 
 from ecoflow_energy.ecoflow.parsers.powerocean_proto import (
     flatten_heartbeat,
+    parse_powerglow_telemetry,
     remap_bp_keys,
     remap_ems_state_keys,
 )
@@ -73,6 +75,50 @@ def _build_header(
 
 def _build_bundle(*headers: bytes) -> bytes:
     return b"".join(headers)
+
+
+def _field_float(field_number: int, value: float) -> bytes:
+    """Build one protobuf fixed32 float field for a hand-made fixture."""
+    return bytes([(field_number << 3) | 5]) + struct.pack("<f", value)
+
+
+def test_powerglow_enhanced_reports_map_confirmed_fields() -> None:
+    """PowerGlow is an accessory report in the PowerOcean MQTT envelope."""
+    rod_serial = b"HF33TEST00000001"
+    parameter_report = b"".join(
+        (
+            encode_field_bytes(1, rod_serial),
+            _field_float(6, 58.0),
+        )
+    )
+    energy_item = b"".join(
+        (
+            encode_field_bytes(1, rod_serial),
+            _field_float(2, 1750.0),
+        )
+    )
+    frame = _build_bundle(
+        _build_header(212, 8, parameter_report),
+        _build_header(212, 33, encode_field_bytes(1, energy_item)),
+    )
+    headers, _ = decode_header_message(frame)
+
+    parsed = parse_powerglow_telemetry(headers)
+
+    assert parsed == {
+        "heating_rod_power_w": 1750.0,
+        "heating_rod_water_temp_c": 58.0,
+    }
+
+
+def test_powerglow_enhanced_idle_report_is_zero_watts() -> None:
+    """A serial-only proto3 stream item means the rod is explicitly idle."""
+    item = encode_field_bytes(1, b"HF33TEST00000001")
+    headers, _ = decode_header_message(
+        _build_header(212, 33, encode_field_bytes(1, item))
+    )
+
+    assert parse_powerglow_telemetry(headers) == {"heating_rod_power_w": 0.0}
 
 
 def test_runtime_decodes_every_header_with_its_own_sequence() -> None:
