@@ -141,6 +141,13 @@ _SN_PREFIX_MAP = {
     # `_SN_PREFIX_EXCLUDED_KEYS`. (#216)
     "D3N1": DEVICE_TYPE_DELTA3,
     "P321": DEVICE_TYPE_DELTA3,
+    # DELTA 3 Plus. Reported as unsupported by an owner whose capture then
+    # showed the existing Delta 3 parser reading his unit completely: the
+    # three message types this generation uses are all there, and the values
+    # check each other, with 53.037 V over 16 cells against a reported
+    # 3319 mV high and 3302 mV low cell, and 18716 of 19987 mAh against a
+    # reported 93 % (#304).
+    "P351": DEVICE_TYPE_DELTA3,
     # Base DELTA 3 (#182): confirmed from a reporter capture in Enhanced mode.
     # The unit sends the same three frames as a Max Plus (32/2 battery, 32/50
     # BMS, 254/21 status), and the status frame decodes through the existing
@@ -190,6 +197,8 @@ _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
     # A base DELTA 3 reports an empty product name through the app API, same
     # as the BK series below (#182).
     "P231": "DELTA 3",
+    # Same empty product name from the app API as the base model above.
+    "P351": "DELTA 3 Plus",
     "BK01": "Stream Micro",
     "BK11": "Stream Ultra",
     "BK31": "Stream AC Pro",

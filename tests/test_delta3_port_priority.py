@@ -9,6 +9,8 @@ slider had been dragged to both of its ends.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from custom_components.ecoflow_energy.const import (
@@ -315,3 +317,117 @@ class TestEntityReach:
 
         assert len(controls) == 6
         assert all(d.enhanced_only for d in controls)
+
+
+class TestDelta3PlusIsReadByTheExistingParser:
+    """`P351`, from the capture that settled it (#304).
+
+    The owner was told his device was unsupported while it was sending the
+    three message types this parser already reads. Adding a prefix to the
+    device-type map is the whole fix, and that claim is worth only as much
+    as the frames behind it, so they are the test.
+    """
+
+    FRAMES = (
+        Path(__file__).parent
+        / "fixtures"
+        / "delta3"
+        / "p351_frames_masked.json"
+    )
+
+    @classmethod
+    def _parsed(cls) -> dict:
+        import json
+
+        from ecoflow_energy.ecoflow.parsers.delta3_proto import (
+            parse_delta3_bms_heartbeat,
+            parse_delta3_cms_heartbeat,
+            parse_delta3_display_property,
+        )
+        from ecoflow_energy.ecoflow.proto.runtime import decode_proto_runtime_frame
+
+        merged: dict = {}
+        for frame in json.loads(cls.FRAMES.read_text())["frames"]:
+            result = decode_proto_runtime_frame(bytes.fromhex(frame["hex"]))
+            raw = {k: v for k, v in result.mapped.items() if not k.startswith("_")}
+            flags = result.mapped
+            if flags.get("_is_delta3_display"):
+                merged.update(parse_delta3_display_property(raw) or {})
+            elif flags.get("_is_delta3_cms_heartbeat"):
+                merged.update(parse_delta3_cms_heartbeat(raw) or {})
+            elif flags.get("_is_delta3_bms_heartbeat"):
+                merged.update(parse_delta3_bms_heartbeat(raw) or {})
+        return merged
+
+    def test_the_prefix_maps_to_the_delta_3_parser(self) -> None:
+        from ecoflow_energy.ecoflow.const import get_device_type
+
+        assert get_device_type("", "P351TEST00000001") == DEVICE_TYPE_DELTA3
+
+    def test_it_is_named_rather_than_left_to_the_serial(self) -> None:
+        """The app API returns an empty product name for this model."""
+        from ecoflow_energy.ecoflow.const import get_device_name
+
+        assert get_device_name("", "P351TEST00000001") == "DELTA 3 Plus (0001)"
+
+    def test_the_three_message_types_all_decode(self) -> None:
+        parsed = self._parsed()
+
+        assert len(parsed) >= 40, f"only {len(parsed)} readings came out"
+
+    def test_the_readings_check_each_other(self) -> None:
+        """Not a count: values from three separate frames, agreeing.
+
+        A field map that was merely plausible would not survive this. The
+        pack voltage has to match the cell voltages that make it up, the
+        cell spread has to be the difference between the two extremes, and
+        the charge left has to match the reported percentage.
+
+        The three frames were recorded minutes apart rather than together,
+        so the percentage is allowed two points of drift. The first two
+        checks are exact, because they compare values from one frame.
+        """
+        parsed = self._parsed()
+
+        cells = parsed["bms_cell_count"]
+        pack_mv = parsed["bms_voltage_v"] * 1000 / cells
+        assert parsed["bms_min_cell_vol_mv"] <= pack_mv <= parsed["bms_max_cell_vol_mv"]
+
+        spread = parsed["bms_max_cell_vol_mv"] - parsed["bms_min_cell_vol_mv"]
+        assert parsed["bms_cell_vol_diff_mv"] == spread
+
+        from_capacity = (
+            parsed["bms_remain_cap_mah"] / parsed["bms_full_cap_mah"] * 100
+        )
+        assert abs(from_capacity - parsed["cms_batt_soc"]) <= 2
+
+    def test_the_solar_inputs_add_up_to_the_reported_total(self) -> None:
+        """The other half of the device, from the status frame."""
+        parsed = self._parsed()
+
+        strings = parsed["pv1_in_w"] + parsed["pv2_in_w"] + parsed["ac_in_w"]
+        assert abs(strings - parsed["pow_in_sum_w"]) <= 5
+
+    def test_port_priority_is_withheld_from_this_model(self) -> None:
+        """Its serial is neither D3M nor D51, so the app hides the menu.
+
+        The capture carries no port priority field either, which is what
+        the entities would have had to fill.
+        """
+        switch_keys = {
+            d.key for d in filter_defs_for_serial(DELTA3_SWITCHES, "P351TEST00000001")
+        }
+        number_keys = {
+            d.key for d in filter_defs_for_serial(DELTA3_NUMBERS, "P351TEST00000001")
+        }
+
+        assert not (self.__class__.PORT_PRIORITY & (switch_keys | number_keys))
+
+    PORT_PRIORITY = {
+        "port_priority_ac1_switch",
+        "port_priority_ac2_switch",
+        "port_priority_dc_switch",
+        "port_priority_ac1_soc",
+        "port_priority_ac2_soc",
+        "port_priority_dc_soc",
+    }

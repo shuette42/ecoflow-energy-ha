@@ -1216,6 +1216,10 @@ _SN_PREFIX_EXCLUDED_KEYS: dict[str, frozenset[str]] = {
     "P321": DELTA3_PORT_PRIORITY_KEYS,
     "P231": DELTA3_PORT_PRIORITY_KEYS,
     "D3N1": DELTA3_PORT_PRIORITY_KEYS,
+    # A DELTA 3 Plus serial is neither D3M nor D51, so the app hides the menu
+    # and the entities could never fill. Its capture carries no port priority
+    # field either (#304).
+    "P351": DELTA3_PORT_PRIORITY_KEYS,
 }
 
 
