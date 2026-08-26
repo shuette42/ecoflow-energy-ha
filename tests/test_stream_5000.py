@@ -299,13 +299,14 @@ class TestControlStateCoverage:
         )
         assert "scheduled_discharge_power_w" not in plain
 
-    def test_five_of_the_nine_control_states_are_on_file_for_the_es21(self) -> None:
+    def test_six_of_the_ten_control_states_are_on_file_for_the_es21(self) -> None:
         assert self._states_reported(*self.ES21_FIXTURES) == {
             "max_charge_soc_pct",
             "min_discharge_soc_pct",
             "scheduled_charge_power_w",
             "work_mode",
             "max_grid_output_power_w",
+            "max_grid_input_power_w",
         }
 
     def test_the_backup_settings_are_missing_from_every_capture(self) -> None:

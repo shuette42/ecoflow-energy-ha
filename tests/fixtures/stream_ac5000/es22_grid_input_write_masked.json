@@ -1,0 +1,65 @@
+{
+  "note": "The EcoFlow app's own writes of Max Grid Input Power to a live ES22 (STREAM AC 5000), with the device's answer to each, from a diagnostics download by the reporter of #284. The owner changed the setting four times in the app on 2026-08-26 while the raw data capture was recording app writes. Serials arrive masked from the capture as a run of X of the same length. This app session ran on iOS, so the envelope carries `from` = ios and two fields the Android frames on file do not; the payload is what these vectors pin.",
+  "source_topics": [
+    "/app/{sn}/thing/property/set",
+    "/app/{sn}/thing/property/set_reply"
+  ],
+  "frames": [
+    {
+      "note": "Max Grid Input Power lowered to 1200 W in the EcoFlow app. Config field 10 carries {2: 1200}, with none of the companions the grid-tied output write sends.",
+      "ts_iso": "2026-08-26T08:20:38.645411+00:00",
+      "topic": "set",
+      "size": 98,
+      "hex": "0a600a07080a520310b0091020180220012801380340fe014826500758017022800104ba0103696f73ca011058585858585858585858585858585858d2011058585858585858585858585858585858da011058585858585858585858585858585858"
+    },
+    {
+      "note": "The device's answer to the write above, on the same sequence number.",
+      "ts_iso": "2026-08-26T08:20:38.738593+00:00",
+      "topic": "set_reply",
+      "size": 75,
+      "hex": "0a490a04080a10011002182020012801380340fe0148265004580160017022800104880101ca011058585858585858585858585858585858d2011058585858585858585858585858585858"
+    },
+    {
+      "note": "Raised to 2200 W.",
+      "ts_iso": "2026-08-26T08:20:51.192552+00:00",
+      "topic": "set",
+      "size": 98,
+      "hex": "0a600a07080a52031098111020180220012801380340fe014826500758017023800104ba0103696f73ca011058585858585858585858585858585858d2011058585858585858585858585858585858da011058585858585858585858585858585858"
+    },
+    {
+      "note": "The device's answer.",
+      "ts_iso": "2026-08-26T08:20:51.267535+00:00",
+      "topic": "set_reply",
+      "size": 75,
+      "hex": "0a490a04080a10011002182020012801380340fe0148265004580160017023800104880101ca011058585858585858585858585858585858d2011058585858585858585858585858585858"
+    },
+    {
+      "note": "Raised to 2600 W, above the 2500 W the unit had held from the factory, and accepted without an authorisation step.",
+      "ts_iso": "2026-08-26T08:20:57.479088+00:00",
+      "topic": "set",
+      "size": 98,
+      "hex": "0a600a07080a520310a8141020180220012801380340fe014826500758017024800104ba0103696f73ca011058585858585858585858585858585858d2011058585858585858585858585858585858da011058585858585858585858585858585858"
+    },
+    {
+      "note": "The device's answer.",
+      "ts_iso": "2026-08-26T08:20:57.683637+00:00",
+      "topic": "set_reply",
+      "size": 75,
+      "hex": "0a490a04080a10011002182020012801380340fe0148265004580160017024800104880101ca011058585858585858585858585858585858d2011058585858585858585858585858585858"
+    },
+    {
+      "note": "Set to 2500 W.",
+      "ts_iso": "2026-08-26T08:21:03.395171+00:00",
+      "topic": "set",
+      "size": 98,
+      "hex": "0a600a07080a520310c4131020180220012801380340fe014826500758017025800104ba0103696f73ca011058585858585858585858585858585858d2011058585858585858585858585858585858da011058585858585858585858585858585858"
+    },
+    {
+      "note": "The device's answer.",
+      "ts_iso": "2026-08-26T08:21:03.501621+00:00",
+      "topic": "set_reply",
+      "size": 75,
+      "hex": "0a490a04080a10011002182020012801380340fe0148265004580160017025800104880101ca011058585858585858585858585858585858d2011058585858585858585858585858585858"
+    }
+  ]
+}

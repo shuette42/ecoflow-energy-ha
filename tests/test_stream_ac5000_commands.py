@@ -25,6 +25,7 @@ from ecoflow_energy.ecoflow.stream_ac5000_commands import (
     WORK_MODES,
     build_backup_reserve_payload,
     build_backup_socket_payload,
+    build_grid_input_power_payload,
     build_grid_output_power_payload,
     build_soc_limits_payload,
     build_task_payload,
@@ -41,7 +42,7 @@ ES21_WRITE_FRAMES = (
 
 # The capture masks the serial as a run of X of the same length, so the frames
 # still rebuild byte for byte from it.
-_ES21_MASKED_SN = "X" * 16
+_MASKED_SN = "X" * 16
 
 # The serial of the unit the frames were captured from, replaced by a
 # placeholder of the same length so the vectors still line up byte for byte.
@@ -381,7 +382,7 @@ class TestES21WriteFrames:
 
         rebuilt = _build_envelope(
             bytes.fromhex(header["pdata"]),
-            device_sn=_ES21_MASKED_SN,
+            device_sn=_MASKED_SN,
             seq=header["seq"],
         )
 
@@ -399,7 +400,7 @@ class TestES21WriteFrames:
 
         rebuilt = _build_envelope(
             bytes.fromhex(header["pdata"]),
-            device_sn=_ES21_MASKED_SN,
+            device_sn=_MASKED_SN,
             seq=header["seq"],
         )
 
@@ -460,7 +461,7 @@ class TestGridOutputPower:
         recorded = bytes.fromhex(_es21_frame(1)["hex"])
 
         built = build_grid_output_power_payload(
-            1000, 21, 800, _ES21_MASKED_SN, seq=_header(recorded)["seq"]
+            1000, 21, 800, _MASKED_SN, seq=_header(recorded)["seq"]
         )
 
         assert built == recorded
@@ -469,7 +470,7 @@ class TestGridOutputPower:
         recorded = bytes.fromhex(_es21_frame(3)["hex"])
 
         built = build_grid_output_power_payload(
-            2000, 21, 800, _ES21_MASKED_SN, seq=_header(recorded)["seq"]
+            2000, 21, 800, _MASKED_SN, seq=_header(recorded)["seq"]
         )
 
         assert built == recorded
@@ -479,13 +480,13 @@ class TestGridOutputPower:
         and 800, so a builder ignoring them would send one unit's numbers to
         another and no test comparing only the setpoint would notice.
         """
-        frame = build_grid_output_power_payload(1000, 5, 600, _ES21_MASKED_SN, seq=7)
+        frame = build_grid_output_power_payload(1000, 5, 600, _MASKED_SN, seq=7)
 
         assert _config_fields(frame)[10] == {1: 1000, 4: 5, 5: 600}
 
     def test_the_setpoint_is_the_only_value_the_caller_chooses(self) -> None:
         as_written = _config_fields(
-            build_grid_output_power_payload(1500, 21, 800, _ES21_MASKED_SN, seq=7)
+            build_grid_output_power_payload(1500, 21, 800, _MASKED_SN, seq=7)
         )
 
         assert as_written[10] == {1: 1500, 4: 21, 5: 800}
@@ -498,13 +499,13 @@ class TestGridOutputPower:
         self, power: int, field_4: int, field_5: int
     ) -> None:
         with pytest.raises(ValueError):
-            build_grid_output_power_payload(power, field_4, field_5, _ES21_MASKED_SN)
+            build_grid_output_power_payload(power, field_4, field_5, _MASKED_SN)
 
     def test_no_upper_bound_is_enforced_here(self) -> None:
         """The device carries its own ceiling and clamps silently, so a limit
         in the builder could only be wrong. The control bounds itself.
         """
-        frame = build_grid_output_power_payload(9999, 21, 800, _ES21_MASKED_SN, seq=7)
+        frame = build_grid_output_power_payload(9999, 21, 800, _MASKED_SN, seq=7)
 
         assert _config_fields(frame)[10][1] == 9999
 
@@ -544,7 +545,7 @@ class TestGridOutputRoundTrip:
             1000,
             reported["_grid_output_field_4"],
             reported["_grid_output_field_5"],
-            _ES21_MASKED_SN,
+            _MASKED_SN,
             seq=_header(recorded)["seq"],
         )
 
@@ -570,3 +571,156 @@ class TestGridOutputRoundTrip:
         written = _config_fields(bytes.fromhex(_es21_frame(3)["hex"]))[10][1]
 
         assert written <= reported["_grid_output_ceiling_w"]
+
+
+# The app's own writes of Max Grid Input Power to a live ES22, with the
+# device's answer to each (#284). The session ran on iOS, whose envelope
+# carries `from` = ios and two fields the Android frames on file do not, so
+# these vectors pin the payload rather than the whole frame.
+ES22_GRID_INPUT_FRAMES = (
+    Path(__file__).parent
+    / "fixtures"
+    / "stream_ac5000"
+    / "es22_grid_input_write_masked.json"
+)
+
+# The four values the owner set, in the order he set them, and the frame index
+# each write sits at. Every write is followed by the device's answer.
+RECORDED_INPUT_WRITES = ((0, 1200), (2, 2200), (4, 2600), (6, 2500))
+
+
+def _es22_input_frame(index: int) -> dict:
+    return json.loads(ES22_GRID_INPUT_FRAMES.read_text())["frames"][index]
+
+
+class TestGridInputPower:
+    """Config field 10 subfield 2, recorded from the model it is offered to.
+
+    The owner of an ES22 changed Max Grid Input Power four times in the app
+    with the capture running, so the setpoint is not read off one frame and
+    generalised: four different values are on file, each with the device's
+    acknowledgement (#284).
+    """
+
+    @pytest.mark.parametrize(("index", "power"), RECORDED_INPUT_WRITES)
+    def test_it_rebuilds_the_payload_of_every_recorded_write(
+        self, index: int, power: int
+    ) -> None:
+        recorded = bytes.fromhex(_es22_input_frame(index)["hex"])
+
+        built = build_grid_input_power_payload(
+            power, _MASKED_SN, seq=_header(recorded)["seq"]
+        )
+
+        assert _header(built)["pdata"] == _header(recorded)["pdata"]
+
+    @pytest.mark.parametrize(("index", "power"), RECORDED_INPUT_WRITES)
+    def test_it_addresses_the_recorded_write_the_same_way(
+        self, index: int, power: int
+    ) -> None:
+        """The payload alone would not say where the frame is going."""
+        recorded = _header(bytes.fromhex(_es22_input_frame(index)["hex"]))
+
+        built = _header(
+            build_grid_input_power_payload(
+                power, _MASKED_SN, seq=recorded["seq"]
+            )
+        )
+
+        for field in ("src", "dest", "d_src", "d_dest", "cmd_func", "cmd_id"):
+            assert built[field] == recorded[field], field
+        assert recorded["cmd_func"] == CMD_FUNC_CONFIG
+        assert recorded["cmd_id"] == CMD_ID_CONFIG_WRITE
+        # The serial is what decides whose device this reaches, and the
+        # payload cannot express it. A builder ignoring the argument would
+        # otherwise ship green. It travels in two fields on our envelope; the
+        # recording carries a third, which is where its own app puts it.
+        expected = _MASKED_SN.encode("ascii").hex()
+        assert built["f26"] == built["f27"] == expected
+        assert recorded["f26"] == expected
+
+    def test_the_setpoint_travels_alone(self) -> None:
+        """No companions, unlike the output setpoint on the same field.
+
+        Copying the output builder would put watts on subfield 1 and send two
+        values from the last read alongside them, which writes the other
+        setting. The recorded frames carry subfield 2 and nothing else.
+        """
+        frame = build_grid_input_power_payload(1800, _MASKED_SN, seq=7)
+
+        assert _config_fields(frame)[10] == {2: 1800}
+
+    def test_the_recorded_writes_carry_subfield_2_alone(self) -> None:
+        """The line above is only worth something if the capture agrees."""
+        for index, power in RECORDED_INPUT_WRITES:
+            recorded = bytes.fromhex(_es22_input_frame(index)["hex"])
+
+            assert _config_fields(recorded)[10] == {2: power}
+
+    def test_the_device_acknowledged_every_recorded_write(self) -> None:
+        """A frame leaving a phone is not a frame a device took.
+
+        Each answer names config field 10, carries the sequence number of the
+        write it answers, and comes back from the device rather than to it.
+        """
+        for index, _power in RECORDED_INPUT_WRITES:
+            write = _header(bytes.fromhex(_es22_input_frame(index)["hex"]))
+            answer = _header(bytes.fromhex(_es22_input_frame(index + 1)["hex"]))
+
+            assert answer["seq"] == write["seq"]
+            assert (answer["src"], answer["dest"]) == (write["dest"], write["src"])
+            assert answer["is_ack"] == 1
+            assert bytes.fromhex(answer["pdata"])[:2] == b"\x08\x0a"
+
+    def test_a_negative_setpoint_is_rejected(self) -> None:
+        with pytest.raises(ValueError):
+            build_grid_input_power_payload(-1, _MASKED_SN)
+
+    def test_no_upper_bound_is_enforced_here(self) -> None:
+        """Same reasoning as the output setpoint: the device clamps silently.
+
+        2600 W is on file as accepted on a unit rated 2500, so a rating-shaped
+        constant here would have refused a write the hardware took.
+        """
+        frame = build_grid_input_power_payload(9999, _MASKED_SN, seq=7)
+
+        assert _config_fields(frame)[10][2] == 9999
+
+    def test_the_reading_the_parser_takes_is_the_one_the_write_sets(self) -> None:
+        """Parser and builder joined, the way the output control is.
+
+        Without this the parser could read a neighbouring subfield and the
+        builder would faithfully write the one nobody displays, with the whole
+        suite green.
+        """
+        from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (
+            parse_stream_ac5000_message,
+        )
+
+        # An ES22 reporting its configuration. The unit held 2500 W here, and
+        # the reporter's own unit held the same before he changed it.
+        reported: dict = {}
+        for frame in json.loads(
+            (
+                Path(__file__).parent
+                / "fixtures"
+                / "stream_ac5000"
+                / "es22_get_reply_masked.json"
+            ).read_text()
+        )["frames"]:
+            reported.update(
+                parse_stream_ac5000_message(bytes.fromhex(frame["hex"])) or {}
+            )
+
+        setpoint = reported["max_grid_input_power_w"]
+        written = _config_fields(
+            build_grid_input_power_payload(setpoint, _MASKED_SN, seq=7)
+        )[10]
+
+        # Pinned, so a parser and a builder that agreed on the wrong subfield
+        # could not satisfy the line below by both returning nothing.
+        assert setpoint == 2500
+        assert written == {2: setpoint}
+        # And the setpoint the parser reads is not the neighbouring output
+        # one, which sits at a different value on this very unit.
+        assert reported["max_grid_output_power_w"] == 600

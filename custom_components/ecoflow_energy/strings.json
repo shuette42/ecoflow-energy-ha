@@ -1543,6 +1543,9 @@
       },
       "max_grid_output_power_w": {
         "name": "Max Grid-tied Output Power"
+      },
+      "max_grid_input_power_w": {
+        "name": "Max Grid Input Power"
       }
     },
     "select": {

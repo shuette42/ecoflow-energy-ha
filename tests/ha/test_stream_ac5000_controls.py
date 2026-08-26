@@ -959,3 +959,164 @@ class TestGridOutputPower:
         entity = _number(coordinator, "max_grid_output_power_w")
 
         assert entity.native_max_value == 2500
+
+
+class TestGridInputPower:
+    """Max Grid Input Power, config field 10 one subfield over.
+
+    It shares its config field with the grid-tied output setpoint and is
+    written unlike it: watts alone, with none of the companion values the
+    output write carries. Getting that wrong writes the other setting.
+    """
+
+    GRID_INPUT_FRAMES = (
+        Path(__file__).parent.parent
+        / "fixtures"
+        / "stream_ac5000"
+        / "es22_grid_input_write_masked.json"
+    )
+
+    def _recorded_pdata(self, index: int) -> bytes:
+        frame = json.loads(self.GRID_INPUT_FRAMES.read_text())["frames"][index]
+        header = decode_header_message(bytes.fromhex(frame["hex"]))[0][0]
+        return bytes.fromhex(header["pdata"])
+
+    async def test_the_write_reproduces_the_recorded_app_frame(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """The payload the EcoFlow app put on the wire for the same change on
+        a live ES22, which the device then acknowledged (#284).
+        """
+        coordinator = _coordinator(
+            hass, enhanced_config_entry, {"max_grid_input_power_w": 2500}
+        )
+        entity = _number(coordinator, "max_grid_input_power_w")
+
+        await entity.async_set_native_value(1200)
+
+        _, pdata = _sent(coordinator)
+        assert pdata == self._recorded_pdata(0)
+
+    async def test_it_sends_the_setpoint_and_nothing_else(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """A build that copied the output write would send subfield 1 and two
+        companion values, changing the grid-tied output at the same time.
+        """
+        coordinator = _coordinator(
+            hass,
+            enhanced_config_entry,
+            {
+                "max_grid_input_power_w": 2500,
+                "max_grid_output_power_w": 800,
+                "_grid_output_field_4": 5,
+                "_grid_output_field_5": 800,
+            },
+        )
+        entity = _number(coordinator, "max_grid_input_power_w")
+
+        await entity.async_set_native_value(2200)
+
+        _, pdata = _sent(coordinator)
+        assert _field_10(pdata) == {2: 2200}
+
+    async def test_it_writes_without_waiting_for_a_reported_value(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """Nothing is read from the device first, so nothing can hold it up.
+
+        The output setpoint refuses until its companions arrive; this one has
+        none, and refusing here would be a limitation nobody asked for.
+        """
+        coordinator = _coordinator(hass, enhanced_config_entry, {})
+        entity = _number(coordinator, "max_grid_input_power_w")
+
+        await entity.async_set_native_value(2600)
+
+        _, pdata = _sent(coordinator)
+        assert _field_10(pdata) == {2: 2600}
+
+    async def test_the_written_value_is_shown_before_the_device_answers(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        coordinator = _coordinator(
+            hass, enhanced_config_entry, {"max_grid_input_power_w": 2500}
+        )
+        entity = _number(coordinator, "max_grid_input_power_w")
+
+        await entity.async_set_native_value(1200)
+
+        assert coordinator.data["max_grid_input_power_w"] == 1200
+
+    async def test_a_failed_write_keeps_the_device_value(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        coordinator = _coordinator(
+            hass, enhanced_config_entry, {"max_grid_input_power_w": 2500}
+        )
+        coordinator.async_send_proto_set_command = AsyncMock(return_value=False)
+        entity = _number(coordinator, "max_grid_input_power_w")
+
+        with pytest.raises(HomeAssistantError):
+            await entity.async_set_native_value(1200)
+
+        assert coordinator.data["max_grid_input_power_w"] == 2500
+
+    async def test_the_range_admits_every_value_the_device_took(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """2600 W is on file as accepted on a unit rated 2500 (#284), so a
+        slider stopping at the rating would refuse a write the hardware took.
+        """
+        coordinator = _coordinator(
+            hass, enhanced_config_entry, {"max_grid_input_power_w": 2500}
+        )
+        entity = _number(coordinator, "max_grid_input_power_w")
+
+        recorded = {1200, 2200, 2600, 2500}
+        assert entity.native_min_value <= min(recorded)
+        assert entity.native_max_value >= max(recorded)
+        # A range that admits them and a step that does not would still leave
+        # the recorded values unreachable from the slider.
+        assert all(value % entity.native_step == 0 for value in recorded)
+
+    async def test_the_write_goes_out_under_the_device_config_lock(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """It names config field 10, which the output setpoint also writes.
+
+        The output write reads two values off the device and sends them back
+        with its setpoint. A write outside the lock could land between that
+        read and that send, so the guard is that this frame goes out while
+        the lock is held rather than merely that it goes out.
+        """
+        coordinator = _coordinator(
+            hass, enhanced_config_entry, {"max_grid_input_power_w": 2500}
+        )
+        held: list[bool] = []
+
+        async def _record(*_args, **_kwargs):
+            held.append(coordinator._device_config_lock.locked())
+            return True
+
+        coordinator.async_send_proto_set_command = AsyncMock(side_effect=_record)
+        entity = _number(coordinator, "max_grid_input_power_w")
+
+        await entity.async_set_native_value(1200)
+
+        assert held == [True]
+
+    async def test_the_output_ceiling_does_not_bound_this_one(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """The reporter's own unit shows why they cannot share a bound: its
+        output ceiling sits at 800 W while it charges at 2500.
+        """
+        coordinator = _coordinator(
+            hass,
+            enhanced_config_entry,
+            {"max_grid_input_power_w": 2500, "_grid_output_ceiling_w": 800},
+        )
+        entity = _number(coordinator, "max_grid_input_power_w")
+
+        assert entity.native_max_value == 2600

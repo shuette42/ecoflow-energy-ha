@@ -535,10 +535,11 @@ class EcoFlowNumber(
     async def _async_set_stream_ac5000_value(self, key: str, value: float) -> bool:
         """Set a STREAM AC 5000 number via a 254/38 config write.
 
-        Every one of these reads a value the device reported before it can
-        send: two of the config fields hold two settings each, and a power
-        setpoint is a remove-then-write across two frames. The coordinator
-        owns those sequences so they cannot interleave with each other.
+        Most of these read a value the device reported before they can send:
+        two of the config fields hold two settings each, and a power setpoint
+        is a remove-then-write across two frames. The coordinator owns those
+        sequences so they cannot interleave with each other. The grid input
+        setpoint is the exception, because the app writes it on its own.
         """
         try:
             if key == "max_charge_soc_pct":
@@ -561,6 +562,12 @@ class EcoFlowNumber(
             if key == "max_grid_output_power_w":
                 return (
                     await self.coordinator.async_set_stream_ac5000_grid_output_power(
+                        int(value)
+                    )
+                )
+            if key == "max_grid_input_power_w":
+                return (
+                    await self.coordinator.async_set_stream_ac5000_grid_input_power(
                         int(value)
                     )
                 )

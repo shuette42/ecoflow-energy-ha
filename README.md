@@ -47,8 +47,8 @@
 | **Stream** - AC-coupled Battery | `BK31` `BK11` `BK41` `BK51` `BK61` | 54 + 2 binary | 1 number; `BK31` adds 3 numbers and 2 switches (Enhanced only) | 2 default (battery charge/discharge), 6 optional diagnostic (solar/home, PV 1-4) | ~30 s standard / ~3 s enhanced |
 | **Stream Micro** - Grid-tie Inverter | `BK01`\* | 21 | - | 2 optional diagnostic (PV 1-2) | ~3 s enhanced |
 | **PowerStream** - Microinverter | `HW51` | 25 | none, see below | 2 default (solar, inverter output), 2 optional diagnostic (PV 1-2) | ~30 s standard |
-| **STREAM AC 5000** - AC-coupled Battery | `ES22`\* | 56 + 2 binary | 2 switches, 6 numbers, 1 select (Enhanced only) | 4 default (grid import/export, battery charge/discharge), 1 optional diagnostic (home) | ~2 s enhanced |
-| **STREAM 5000** - AC-coupled Battery | `ES21`\* | 56 + 2 binary | 2 switches, 6 numbers, 1 select (Enhanced only) | 4 default (grid import/export, battery charge/discharge), 1 optional diagnostic (home) | ~2 s enhanced |
+| **STREAM AC 5000** - AC-coupled Battery | `ES22`\* | 56 + 2 binary | 2 switches, 7 numbers, 1 select (Enhanced only) | 4 default (grid import/export, battery charge/discharge), 1 optional diagnostic (home) | ~2 s enhanced |
+| **STREAM 5000** - AC-coupled Battery | `ES21`\* | 56 + 2 binary | 2 switches, 7 numbers, 1 select (Enhanced only) | 4 default (grid import/export, battery charge/discharge), 1 optional diagnostic (home) | ~2 s enhanced |
 
 > **\* Enhanced Mode only.** These serial prefixes cannot currently be linked to an IoT Developer API key, so Standard Mode reports error 1006 and their entities stay unavailable. This is an EcoFlow API limitation, not a configuration problem.
 >

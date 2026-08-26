@@ -477,6 +477,27 @@ class SetCommandsMixin:
             self._seed_device_values(max_grid_output_power_w=power_w)
             return True
 
+    async def async_set_stream_ac5000_grid_input_power(self, power_w: int) -> bool:
+        """Write config field 10 subfield 2, the grid input setpoint.
+
+        Nothing is read from the device first: the app writes this value on
+        its own, without the companions the output setpoint travels with. The
+        config lock is still held, because the frame names config field 10 and
+        the output write names the same field.
+        """
+        from ..ecoflow.stream_ac5000_commands import (
+            build_grid_input_power_payload,
+        )
+
+        async with self._device_config_lock:
+            payload = build_grid_input_power_payload(power_w, self.device_sn)
+            if not await self.async_send_proto_set_command(
+                payload, label="stream_ac5000_grid_input_power"
+            ):
+                return False
+            self._seed_device_values(max_grid_input_power_w=power_w)
+            return True
+
     async def async_set_stream_ac5000_backup_reserve(
         self, *, enabled: bool | None = None, reserve_pct: int | None = None,
     ) -> bool:

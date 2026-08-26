@@ -1092,6 +1092,21 @@ STREAMAC5000_NUMBERS: list[EcoFlowNumberDef] = [
     EcoFlowNumberDef("min_discharge_soc_pct", "Min Discharge SoC", "min_discharge_soc_pct", "%", "mdi:battery-arrow-down", 0, 50, 1, enhanced_only=True),
     EcoFlowNumberDef("backup_reserve", "Backup Reserve", "backup_reserve_pct", "%", "mdi:battery-lock", 0, 100, 5, enhanced_only=True),
     EcoFlowNumberDef("max_grid_output_power_w", "Max Grid-tied Output Power", "max_grid_output_power_w", "W", "mdi:transmission-tower-export", 0, 2500, 50, enhanced_only=True),
+    # 2600 W is not the model rating. It is the highest figure an app has
+    # offered and a device has acknowledged: an owner raised this setting from
+    # 2200 to 2600 on a unit rated 2500, and the app took it without the
+    # authorisation step it asks for on the output side (#284). The
+    # acknowledgement is not proof the device kept it - this family clamps a
+    # setpoint it dislikes silently - and no read-back of the new value is on
+    # file, because this device sends that block only in answer to a request
+    # and no answer arrived after the writes. Nothing on the wire reports an
+    # input ceiling the way `f10.6` reports the output one, so there is
+    # nothing better to follow than the highest acknowledged figure.
+    #
+    # The step is the app's own: all four recorded writes are multiples of
+    # 100 and the app adjusts this setting in 100 W steps. The output number
+    # beside it offers 50 because its own captures do.
+    EcoFlowNumberDef("max_grid_input_power_w", "Max Grid Input Power", "max_grid_input_power_w", "W", "mdi:transmission-tower-import", 0, 2600, 100, enhanced_only=True),
 ]
 
 STREAMAC5000_SELECTS: list[EcoFlowSelectDef] = [

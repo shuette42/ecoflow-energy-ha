@@ -48,17 +48,24 @@ from .proto_encoding import encode_field_bytes, encode_field_varint, encode_vari
 #   29  SoC limits       -> `32/2 f1.7` and `f1.21`. `f29` carries them too but
 #                           lags an app change by minutes, so it is unmapped.
 #   39  scheduled task   -> `254/39 f40`, one level deeper on `.8`.
-#   10  grid-tied output -> `254/39 f10.1`, which is the reading the
-#                           Max Grid-tied Output Power sensor already shows.
-#                           Written as `{1: watts, 4: ?, 5: ?}`; the two
-#                           unnamed companions belong to the unit and are
-#                           read back before every write.
+#   10  grid power       -> one field, both power limits, one subfield each.
+#                           The output setpoint reads back on `254/39 f10.1`,
+#                           the reading the Max Grid-tied Output Power sensor
+#                           shows, and is written as `{1: watts, 4: ?, 5: ?}`;
+#                           the two unnamed companions belong to the unit and
+#                           are read back before every write. The input
+#                           setpoint reads back on `f10.2` and is written as
+#                           `{2: watts}` alone, with no companions.
 CONFIG_WORK_MODE = 25
 CONFIG_BACKUP_SOCKET = 19
 CONFIG_SOC_LIMITS = 29
 CONFIG_BACKUP_RESERVE = 30
 CONFIG_TASK = 39
-CONFIG_GRID_OUTPUT = 10
+# One config field carries both power limits, one subfield each, so it is
+# named for the field rather than for either setting: `.1` is the grid-tied
+# output setpoint, `.2` the grid input one. A second constant of the same
+# value for the input side would be a synonym, not a distinction.
+CONFIG_GRID_POWER = 10
 
 CMD_FUNC_CONFIG = 254
 CMD_ID_CONFIG_WRITE = 38
@@ -241,8 +248,47 @@ def build_grid_output_power_payload(
         + encode_field_varint(4, field_4)
         + encode_field_varint(5, field_5)
     )
-    pdata = encode_field_varint(1, CONFIG_GRID_OUTPUT) + encode_field_bytes(
-        CONFIG_GRID_OUTPUT, inner
+    pdata = encode_field_varint(1, CONFIG_GRID_POWER) + encode_field_bytes(
+        CONFIG_GRID_POWER, inner
+    )
+    return _build_envelope(pdata, device_sn, seq)
+
+
+def build_grid_input_power_payload(
+    power_w: int,
+    device_sn: str,
+    seq: int = 0,
+) -> bytes:
+    """Build a Max Grid Input Power SET frame (config field 10, subfield 2).
+
+    The setting the app calls "netzgekoppelte Eingangsleistung", and the
+    reading the Max Grid Input Power sensor already shows on `f10.2`. It is
+    the ceiling the device charges under, which is what separates it from the
+    scheduled charge setpoint beside it (#177).
+
+    It shares config field 10 with the grid-tied output setpoint and is
+    written differently: the app sends the watts alone on subfield 2, without
+    the two companion values it sends with the output setpoint on subfield 1.
+    That is not an economy taken here - it is what four recorded writes from a
+    live `ES22` do, and they are the vectors in
+    `tests/test_stream_ac5000_commands.py`. Sending the companions along would
+    write the output setpoint at the same time.
+
+    No upper bound is enforced here. The device carries its own and clamps a
+    setpoint to it silently rather than refusing the frame, so a constant in
+    this builder could only be wrong in one direction or the other; the
+    control offers the bound instead. Nothing on the wire has been seen to
+    report an input ceiling the way `f10.6` reports the output one, and the
+    device's answer to one of these writes says only that the frame arrived:
+    the four recorded acknowledgements are the same two bytes whatever value
+    they answer.
+    """
+    if power_w < 0:
+        raise ValueError(f"power_w must not be negative, got {power_w}")
+
+    inner = encode_field_varint(2, power_w)
+    pdata = encode_field_varint(1, CONFIG_GRID_POWER) + encode_field_bytes(
+        CONFIG_GRID_POWER, inner
     )
     return _build_envelope(pdata, device_sn, seq)
 
