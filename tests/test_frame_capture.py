@@ -1,6 +1,8 @@
 """Tests for the shared raw-frame capture helpers."""
 
 import signal
+
+import pytest
 from contextlib import contextmanager
 from typing import Any, Iterator
 
@@ -252,6 +254,74 @@ class TestDelimitedIdentifierMasking:
         result = sanitize_frame(payload, [])
 
         assert result == b"\x12\x10" + b"X" * 16
+
+
+class TestTimeZoneMasking:
+    """The city half of a time zone goes, the region stays.
+
+    A Delta 3 reports the owner's time zone as an IANA name, and it reached a
+    diagnostics file attached to a public issue while the serial beside it was
+    masked. It is not an identifier, so neither of the passes before this one
+    could see it: lower case and a slash sit outside the identifier alphabet
+    on purpose.
+
+    Dropping it whole would cost something real, though. The region says which
+    side of the world a device is on, and that is what a schedule behaving
+    oddly is read against. So the region is kept.
+    """
+
+    def test_the_city_is_masked_and_the_region_survives(self) -> None:
+        payload = b"\xb2\x08\x0fEurope/Budapest\xb8\x08"
+
+        result = sanitize_frame(payload, [])
+
+        assert result == b"\xb2\x08\x0fEurope/XXXXXXXX\xb8\x08"
+
+    def test_neither_earlier_pass_would_have_caught_it(self) -> None:
+        """Control for the test above, so it cannot pass for a wrong reason."""
+        from ecoflow_energy.ecoflow.frame_capture import (
+            _SERIAL_RUN,
+            _mask_delimited_identifiers,
+        )
+
+        zone = b"Europe/Budapest"
+
+        assert _SERIAL_RUN.search(zone) is None
+        assert _mask_delimited_identifiers(b"\x12\x0f" + zone) == b"\x12\x0f" + zone
+
+    @pytest.mark.parametrize(
+        ("zone", "expected"),
+        [
+            (b"America/Denver", b"America/XXXXXX"),
+            (b"Asia/Kolkata", b"Asia/XXXXXXX"),
+            (b"Australia/Sydney", b"Australia/XXXXXX"),
+            # Three-part zones exist and the whole tail goes, not just the
+            # first component: the country is the part being removed.
+            (b"America/Argentina/Salta", b"America/XXXXXXXXXXXXXXX"),
+        ],
+    )
+    def test_other_regions_are_handled_the_same(
+        self, zone: bytes, expected: bytes
+    ) -> None:
+        assert sanitize_frame(zone, []) == expected
+
+    @pytest.mark.parametrize(
+        "payload", [b"MODEL/NAME", b"AC/DC", b"\x12\x03H/P", b"V1.0.1"]
+    )
+    def test_a_slash_is_not_enough_to_look_like_a_place(
+        self, payload: bytes
+    ) -> None:
+        """The region is matched against the real area names, not by shape.
+
+        A pattern that took any capitalised word before a slash would start
+        masking model names, which is what a capture is read for.
+        """
+        assert sanitize_frame(payload, []) == payload
+
+    def test_masking_preserves_length(self) -> None:
+        payload = b"\xb2\x08\x0fEurope/Budapest\xb8\x08"
+
+        assert len(sanitize_frame(payload, [])) == len(payload)
 
 
 class TestMaskingDoesNotCorruptRealFrames:

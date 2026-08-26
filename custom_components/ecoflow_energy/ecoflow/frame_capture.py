@@ -54,6 +54,27 @@ _SERIAL_RUN = re.compile(rb"[A-Z0-9]{15,}")
 # he had attached to a public issue because this project asked him to.
 _IDENT_MIN = 12
 _IDENT_MAX = 32
+
+# A device also reports the owner's time zone, as an IANA name like
+# `Europe/Budapest`. It is not an identifier and the pass above cannot see
+# it: lower case and a slash are outside that alphabet, by design, because
+# widening it would start masking model names.
+#
+# It is not dropped either. The region says which side of the world a device
+# is on, and that is worth having when a schedule behaves oddly. What goes is
+# the half that narrows it to a country: the region is kept and everything
+# after the first slash is masked, so `Europe/Budapest` becomes
+# `Europe/XXXXXXXX` and stays the same length.
+#
+# Found on 2026-08-26 in a diagnostics download attached to a public issue,
+# in the same week as the identifier below it. Serials were masked in that
+# file and this was not.
+# The region half is matched against the IANA area names rather than by
+# shape, so a model name with a slash in it cannot be mistaken for a place.
+_TIME_ZONE = re.compile(
+    rb"((?:Africa|America|Antarctica|Arctic|Asia|Atlantic|Australia"
+    rb"|Europe|Indian|Pacific)/)([A-Za-z_/+-]{3,40})"
+)
 _IDENT_ALPHABET = frozenset(b"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
 _WIRE_TYPE_LENGTH_DELIMITED = 2
 
@@ -98,8 +119,9 @@ def sanitize_frame(payload: bytes, secrets: list[str]) -> bytes:
     length, in every case variant the payload might use.
 
     Named identifiers are masked first, then anything else shaped like a
-    serial, then anything a device presents as a whole length-delimited field
-    of identifier-shaped characters. The second pass matters because a frame
+    serial, then the city half of any time zone the device reports, then
+    anything a device presents as a whole length-delimited field of
+    identifier-shaped characters. The second pass matters because a frame
     also carries the serial of every battery pack and of any attached
     accessory, and the caller cannot name what it has not discovered yet. The
     third catches identifiers too short for the second to risk matching by
@@ -116,6 +138,9 @@ def sanitize_frame(payload: bytes, secrets: list[str]) -> bytes:
             if raw and raw in sanitized:
                 sanitized = sanitized.replace(raw, _MASK_BYTE * len(raw))
     sanitized = _SERIAL_RUN.sub(lambda m: _MASK_BYTE * len(m.group()), sanitized)
+    sanitized = _TIME_ZONE.sub(
+        lambda m: m.group(1) + _MASK_BYTE * len(m.group(2)), sanitized
+    )
     return _mask_delimited_identifiers(sanitized)
 
 
