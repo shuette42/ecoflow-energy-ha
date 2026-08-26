@@ -94,13 +94,13 @@ def _find_async_show_form_calls(tree: ast.Module) -> list[dict]:
             ):
                 continue
 
-            step_id = None
+            step_ids: list[str] = []
             placeholders: set[str] = set()
             schema_fields: set[str] = set()
 
             for kw in child.keywords:
                 if kw.arg == "step_id":
-                    step_id = _get_string_value(kw.value)
+                    step_ids = _step_ids_of(kw.value)
 
                 elif kw.arg == "description_placeholders":
                     placeholders = _get_dict_keys(kw.value)
@@ -109,7 +109,7 @@ def _find_async_show_form_calls(tree: ast.Module) -> list[dict]:
                     # Walk into the vol.Schema(...) to find Required/Optional keys
                     schema_fields = _extract_schema_keys(kw.value)
 
-            if step_id:
+            for step_id in step_ids:
                 results.append(
                     {
                         "step_id": step_id,
@@ -121,6 +121,25 @@ def _find_async_show_form_calls(tree: ast.Module) -> list[dict]:
                 )
 
     return results
+
+
+def _step_ids_of(node: ast.expr) -> list[str]:
+    """Return every step id a `step_id=` argument can evaluate to.
+
+    A literal is one id. A conditional is two, and both halves are real
+    steps that need their own translations: one form rendered under two
+    keys is how a help text varies by sign-in method, since Home Assistant
+    parses translations with `string.Formatter` and an ICU select in the
+    string is a parse error (#296).
+
+    Reading only literals made both branches look like steps nobody
+    renders, which would have turned a correct change into a test failure
+    and, worse, would have hidden a genuinely orphaned branch.
+    """
+    if isinstance(node, ast.IfExp):
+        return _step_ids_of(node.body) + _step_ids_of(node.orelse)
+    value = _get_string_value(node)
+    return [value] if value else []
 
 
 def _extract_schema_keys(node: ast.expr) -> set[str]:
@@ -611,6 +630,108 @@ class TestDevicePickerExplanation:
             f"marker with nothing explaining it (#296)"
         )
         self._assert_explains(path, text)
+
+    @pytest.mark.parametrize("path", [STRINGS_PATH, EN_PATH, DE_PATH])
+    def test_both_sign_in_methods_get_their_own_step(self, path: Path) -> None:
+        """One form, two translation keys, and both must stay complete.
+
+        The tail of this help text is an instruction only one sign-in method
+        can act on, so the flow renders the form under `init` or `init_app`
+        and each carries its own wording. A file that lost one of them, or
+        let them drift apart in everything except the sentence that differs,
+        would send half the users the other half's instruction (#296).
+        """
+        steps = _get_options_steps(_load_translations(path))
+        assert "init_app" in steps, (
+            f"{path.name}: no account sign-in rendering of the options step"
+        )
+
+        plain, app = steps["init"], steps["init_app"]
+        assert set(plain) == set(app), (
+            f"{path.name}: the two renderings carry different keys, "
+            f"{sorted(set(plain) ^ set(app))}"
+        )
+        assert plain["title"] == app["title"]
+        assert plain["data"] == app["data"]
+
+        plain_help = plain["data_description"]["devices"]
+        app_help = app["data_description"]["devices"]
+        assert plain_help != app_help, (
+            f"{path.name}: both renderings give the same help text, which is "
+            f"the split not having happened"
+        )
+        # Everything except the closing instruction is shared, so a rewrite
+        # of one cannot quietly drop the explanation from the other.
+        shared = plain_help[: plain_help.rindex(".", 0, len(plain_help) - 200) + 1]
+        assert app_help.startswith(shared[:80])
+
+    @pytest.mark.parametrize("path", [STRINGS_PATH, EN_PATH, DE_PATH])
+    def test_only_the_account_rendering_mentions_the_recording(
+        self, path: Path
+    ) -> None:
+        """The one sentence the reporter could not act on.
+
+        He ran developer keys and was told to switch on a recording his
+        dialog never shows. The instruction belongs to the account
+        rendering alone, in every language.
+        """
+        phrase = "Aufzeichnung" if path is DE_PATH else "recording"
+        steps = _get_options_steps(_load_translations(path))
+
+        app_help = steps["init_app"]["data_description"]["devices"]
+        plain_help = steps["init"]["data_description"]["devices"]
+
+        assert phrase in app_help, (
+            f"{path.name}: the account rendering no longer says what to "
+            f"switch on"
+        )
+        assert phrase not in plain_help, (
+            f"{path.name}: the developer-keys rendering mentions the "
+            f"recording, and that mode has no such switch in its dialog "
+            f"(#296)"
+        )
+
+    @pytest.mark.parametrize("path", [STRINGS_PATH, EN_PATH, DE_PATH])
+    def test_the_setup_step_is_split_the_same_way(self, path: Path) -> None:
+        """The picker is reached from setup too, and was equally mode-blind."""
+        steps = _get_config_steps(_load_translations(path))
+        assert "devices_app" in steps
+        assert (
+            steps["devices"]["description"] != steps["devices_app"]["description"]
+        )
+
+    @pytest.mark.parametrize("path", [STRINGS_PATH, EN_PATH, DE_PATH])
+    def test_no_translation_uses_syntax_home_assistant_cannot_parse(
+        self, path: Path
+    ) -> None:
+        """Every string passes `string.Formatter`, because HA parses it.
+
+        `homeassistant/helpers/translation.py` runs each localized string
+        through `string.Formatter().parse()` and logs an error it cannot
+        recover from when that raises. An ICU `select` is the obvious way to
+        vary text by mode and is exactly what this rejects: it shipped to a
+        Docker run on 2026-08-26 and produced two parse errors before any
+        user saw it.
+        """
+        import string as _string
+
+        failures = []
+
+        def walk(node: object, path_parts: tuple[str, ...] = ()) -> None:
+            if isinstance(node, dict):
+                for key, value in node.items():
+                    walk(value, path_parts + (key,))
+            elif isinstance(node, str):
+                try:
+                    list(_string.Formatter().parse(node))
+                except ValueError:
+                    failures.append(".".join(path_parts))
+
+        walk(_load_translations(path))
+
+        assert not failures, (
+            f"{path.name}: Home Assistant cannot parse {failures}"
+        )
 
     def test_strings_and_en_are_the_same_text(self) -> None:
         """`strings.json` and `en.json` are one language, so they must agree.

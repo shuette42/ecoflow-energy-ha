@@ -15,6 +15,7 @@ from homeassistant.config_entries import SOURCE_REAUTH, SOURCE_RECONFIGURE
 
 from custom_components.ecoflow_energy.const import (
     AUTH_METHOD_APP,
+    AUTH_METHOD_DEVELOPER,
     CONF_ACCESS_KEY,
     CONF_AUTH_METHOD,
     CONF_DEVICES,
@@ -312,7 +313,7 @@ class TestAppCredentialsStep:
                 {CONF_EMAIL: "test@example.com", CONF_PASSWORD: "secret"},
             )
             assert result["type"] is FlowResultType.FORM
-            assert result["step_id"] == "devices"
+            assert result["step_id"] == "devices_app"  # account sign-in renders its own help text
 
     async def test_full_path_creates_entry(self, hass: HomeAssistant) -> None:
         """Full app-auth path: login -> devices -> entry created (no mode step)."""
@@ -336,7 +337,7 @@ class TestAppCredentialsStep:
                 {CONF_EMAIL: "test@example.com", CONF_PASSWORD: "secret"},
             )
             # Should be on devices step now
-            assert result["step_id"] == "devices"
+            assert result["step_id"] == "devices_app"  # account sign-in renders its own help text
 
             # Select the device - should create entry directly (no mode step)
             result = await hass.config_entries.flow.async_configure(
@@ -794,7 +795,7 @@ class TestOptionsFlow:
             result = await hass.config_entries.options.async_init(entry.entry_id)
             mock_cls.assert_not_called()
         assert result["type"] is FlowResultType.FORM
-        assert result["step_id"] == "init"
+        assert result["step_id"] == "init_app"  # account sign-in renders its own help text
 
     async def test_options_app_auth_refreshes_device_list(
         self, hass: HomeAssistant
@@ -830,7 +831,7 @@ class TestOptionsFlow:
 
         mock_login.assert_awaited_once()
         assert result["type"] is FlowResultType.FORM
-        assert result["step_id"] == "init"
+        assert result["step_id"] == "init_app"  # account sign-in renders its own help text
 
         options = result["data_schema"].schema[CONF_DEVICES].config["options"]
         values = [opt["value"] for opt in options]
@@ -936,7 +937,7 @@ class TestOptionsFlow:
             result = await hass.config_entries.options.async_init(entry.entry_id)
 
         assert result["type"] is FlowResultType.FORM
-        assert result["step_id"] == "init"
+        assert result["step_id"] == "init_app"  # account sign-in renders its own help text
 
         options = result["data_schema"].schema[CONF_DEVICES].config["options"]
         assert [opt["value"] for opt in options] == ["SN001"]
@@ -2333,3 +2334,229 @@ class TestFetchAppDevices:
                 hass, "test@example.com", "test_password"
             )
         assert devices == []
+
+
+class TestPickerHelpMatchesTheModeItRenders:
+    """The help text and the form it sits in, checked against each other.
+
+    #296 shipped a single help text naming both sign-in methods and ending
+    with an instruction that only one of them can follow: switch on the
+    recording "below", where the switch below exists for account sign-in
+    only. The reporter ran developer keys, went looking for a control this
+    dialog deliberately never rendered, and could not find it.
+
+    Every test that passed while that shipped asserted a property of the
+    string on its own. The defect is not in the string, it is in the
+    relation between the string and the schema of the step showing it, so
+    the assertions here render the text with the flow's own placeholders
+    and compare it against the schema from the same result.
+    """
+
+    RECORDING_PHRASES = ("recording below", "Aufzeichnung der Diagnosedaten")
+
+    @staticmethod
+    def _render(template: str, placeholders: dict[str, str]) -> str:
+        """Resolve a translation string the way the frontend would.
+
+        Only the two forms this repo uses are handled: plain `{token}` and
+        the ICU `select` that carries a per-mode sentence. A token the flow
+        did not supply raises, because in the frontend it does not degrade
+        quietly either - the whole slot renders as a format error.
+        """
+        import re
+
+        def one_select(match: re.Match) -> str:
+            token, body = match.group(1), match.group(2)
+            if token not in placeholders:
+                raise AssertionError(f"flow supplied no placeholder {token!r}")
+            arms = dict(re.findall(r"(\w+)\s*\{([^{}]*)\}", body))
+            return arms.get(placeholders[token], arms.get("other", ""))
+
+        rendered = re.sub(
+            r"\{(\w+),\s*select,\s*((?:\w+\s*\{[^{}]*\}\s*)+)\}", one_select, template
+        )
+        for token in re.findall(r"\{(\w+)\}", rendered):
+            if token not in placeholders:
+                raise AssertionError(f"flow supplied no placeholder {token!r}")
+            rendered = rendered.replace("{" + token + "}", placeholders[token])
+        return rendered
+
+    @staticmethod
+    async def _open(hass: HomeAssistant, entry) -> dict:
+        """Open the options form without letting it reach the network.
+
+        Both branches of the device-list fetch are stubbed, so which mode is
+        under test decides the text and nothing else.
+        """
+        with (
+            patch(
+                "custom_components.ecoflow_energy.config_flow_options."
+                "_async_fetch_app_devices",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch(
+                "custom_components.ecoflow_energy.ecoflow.iot_api."
+                "IoTApiClient.get_device_list",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+        ):
+            return await hass.config_entries.options.async_init(entry.entry_id)
+
+    @classmethod
+    def _devices_help(cls, result: dict) -> str:
+        """The help text the user is shown, for the step actually rendered.
+
+        Reading the step id off the result rather than assuming `init` is
+        the whole point: the flow picks the key, so a test that hard-coded
+        one would check text half the users never see.
+        """
+        import json
+        from pathlib import Path
+
+        strings = json.loads(
+            Path("custom_components/ecoflow_energy/strings.json").read_text()
+        )
+        step = strings["options"]["step"][result["step_id"]]
+        return cls._render(
+            step["data_description"]["devices"],
+            result.get("description_placeholders") or {},
+        )
+
+    async def test_developer_keys_are_never_sent_to_a_switch_they_do_not_have(
+        self, hass: HomeAssistant
+    ) -> None:
+        """The reported defect, as an assertion.
+
+        Red before the fix: the text said "switch on the recording below"
+        while this schema has no such field.
+        """
+        entry = TestOptionsFlow()._create_standard_entry(hass)
+        result = await self._open(hass, entry)
+
+        schema_keys = {key.schema for key in result["data_schema"].schema}
+        assert CONF_RAW_CAPTURE not in schema_keys
+
+        text = self._devices_help(result)
+        for phrase in self.RECORDING_PHRASES:
+            assert phrase not in text, f"sends a developer-keys user to {phrase!r}"
+
+    async def test_account_sign_in_is_told_about_the_switch_it_has(
+        self, hass: HomeAssistant
+    ) -> None:
+        """The mirror. Without it, deleting the sentence for everyone would
+        satisfy the test above and leave the other half of the users with no
+        instruction at all.
+        """
+        entry = TestOptionsFlow()._create_enhanced_entry(hass)
+        hass.config_entries.async_update_entry(
+            entry, data={**entry.data, CONF_AUTH_METHOD: AUTH_METHOD_APP}
+        )
+        result = await self._open(hass, entry)
+
+        schema_keys = {key.schema for key in result["data_schema"].schema}
+        assert CONF_RAW_CAPTURE in schema_keys
+
+        assert "recording below" in self._devices_help(result)
+
+    async def test_the_two_modes_do_not_get_the_same_text(
+        self, hass: HomeAssistant
+    ) -> None:
+        """The claim #301's commit message made, as an assertion.
+
+        It said both texts "stop giving one instruction to two modes" while
+        its diff changed no flow code at all. This is the line that would
+        have refused that commit.
+        """
+        developer = TestOptionsFlow()._create_standard_entry(hass)
+        developer_text = self._devices_help(await self._open(hass, developer))
+
+        account = TestOptionsFlow()._create_enhanced_entry(hass)
+        hass.config_entries.async_update_entry(
+            account, data={**account.data, CONF_AUTH_METHOD: AUTH_METHOD_APP}
+        )
+        account_text = self._devices_help(await self._open(hass, account))
+
+        assert developer_text != account_text
+        # Both still explain the marker, so a split that dropped the
+        # explanation for one mode would not pass as a difference.
+        for text in (developer_text, account_text):
+            assert "not supported yet" in text
+            assert "diagnostics download" in text
+
+    async def test_an_entry_from_before_the_key_existed_reads_as_developer(
+        self, hass: HomeAssistant
+    ) -> None:
+        """No `auth_method` stored is an old developer-keys entry.
+
+        Without the default it would fall through to whichever branch a
+        missing value happens to take, and the user would be told to switch
+        on something their dialog does not have.
+        """
+        entry = TestOptionsFlow()._create_standard_entry(hass)
+        assert CONF_AUTH_METHOD not in entry.data
+
+        result = await self._open(hass, entry)
+
+        assert result["step_id"] == "init"
+        assert "recording below" not in self._devices_help(result)
+
+
+class TestEveryStepSuppliesItsOwnPlaceholders:
+    """A token no flow fills is a visible error, not a missing word.
+
+    The frontend runs the whole string through a formatter and, on an
+    unresolved token, renders the format error in place of the text. So the
+    tokens in the translation files and the placeholders the flows pass have
+    to agree exactly, in both directions, for every step.
+    """
+
+    @staticmethod
+    def _tokens(text: str) -> set[str]:
+        import re
+
+        return set(re.findall(r"\{(\w+)[,}]", text))
+
+    def _all_step_texts(self) -> dict[str, set[str]]:
+        import json
+        from pathlib import Path
+
+        strings = json.loads(
+            Path("custom_components/ecoflow_energy/strings.json").read_text()
+        )
+        found: dict[str, set[str]] = {}
+        for section in ("config", "options"):
+            for step, body in strings.get(section, {}).get("step", {}).items():
+                tokens: set[str] = set()
+                tokens |= self._tokens(body.get("description", ""))
+                for value in (body.get("data_description") or {}).values():
+                    tokens |= self._tokens(value)
+                if tokens:
+                    found[f"{section}.{step}"] = tokens
+        return found
+
+    def test_the_only_token_in_use_is_supplied_by_a_flow(self) -> None:
+        """Every step carrying a token has a call site that fills it.
+
+        Kept as a grep rather than by driving every flow, because the point
+        is the pairing: a token added to a translation file without touching
+        the flow is exactly how the text and the code drift apart.
+        """
+        from pathlib import Path
+
+        sources = "\n".join(
+            path.read_text()
+            for path in Path("custom_components/ecoflow_energy").glob("config_flow*.py")
+        )
+        steps = self._all_step_texts()
+
+        # Positive control: if this ever finds nothing, the walk above broke
+        # and the loop below would pass while checking nothing.
+        assert steps, "no step carries a placeholder, so this test is blind"
+
+        for step, tokens in steps.items():
+            for token in tokens:
+                assert f'"{token}"' in sources, (
+                    f"{step} uses {{{token}}} and no config flow passes it"
+                )

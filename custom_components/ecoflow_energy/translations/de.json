@@ -26,7 +26,7 @@
       },
       "devices": {
         "title": "Geräte auswählen",
-        "description": "Wähle die EcoFlow-Geräte aus, die du zu Home Assistant hinzufügen möchtest.\n\nEin Gerät mit dem Hinweis \"not supported yet\" hat hier keinen Parser und liefert nur zwei Diagnose-Sensoren. Es trotzdem hinzuzufügen lohnt sich, denn aus einem Diagnose-Download davon an einem GitHub-Issue entsteht die Unterstützung für ein neues Modell. Mit Developer-Keys enthält dieser Download die Rohdaten eines solchen Geräts bereits. Mit App-Anmeldung nicht, dort also zuerst die Aufzeichnung der Diagnosedaten in den Integrations-Optionen einschalten und danach herunterladen.",
+        "description": "Wähle die EcoFlow-Geräte aus, die du zu Home Assistant hinzufügen möchtest.\n\nEin Gerät mit dem Hinweis \"not supported yet\" hat hier keinen Parser und liefert nur zwei Diagnose-Sensoren. Es trotzdem hinzuzufügen lohnt sich, denn aus einem Diagnose-Download davon an einem GitHub-Issue entsteht die Unterstützung für ein neues Modell. Dein Diagnose-Download enthält die Rohdaten eines solchen Geräts bereits, es muss also nichts eingeschaltet werden.",
         "data": {
           "devices": "Geräte"
         }
@@ -78,6 +78,13 @@
           "email": "E-Mail",
           "password": "Passwort"
         }
+      },
+      "devices_app": {
+        "title": "Geräte auswählen",
+        "description": "Wähle die EcoFlow-Geräte aus, die du zu Home Assistant hinzufügen möchtest.\n\nEin Gerät mit dem Hinweis \"not supported yet\" hat hier keinen Parser und liefert nur zwei Diagnose-Sensoren. Es trotzdem hinzuzufügen lohnt sich, denn aus einem Diagnose-Download davon an einem GitHub-Issue entsteht die Unterstützung für ein neues Modell. Schalte in den Integrations-Optionen zuerst die Aufzeichnung der Diagnosedaten ein und lade danach herunter, denn bei Anmeldung mit dem EcoFlow-Konto enthält der Download diese Rohdaten nicht von selbst.",
+        "data": {
+          "devices": "Geräte"
+        }
       }
     },
     "error": {
@@ -105,7 +112,7 @@
           "raw_capture": "24 Stunden lang zusätzliche Diagnosedaten aufzeichnen"
         },
         "data_description": {
-          "devices": "Ein Gerät auszuwählen ist das, was diese Integration dazu bringt, es zu lesen. Ein Gerät mit dem Hinweis \"not supported yet\" hat hier keinen Parser und liefert nur zwei Diagnose-Sensoren, sonst nichts. Es trotzdem ausgewählt zu lassen lohnt sich, denn aus einem Diagnose-Download davon an einem GitHub-Issue entsteht die Unterstützung für ein neues Modell. Mit Developer-Keys enthält dieser Download die Rohdaten eines solchen Geräts bereits. Mit App-Anmeldung nicht, dort also zuerst die Aufzeichnung der Diagnosedaten weiter unten einschalten und danach herunterladen.",
+          "devices": "Ein Gerät auszuwählen ist das, was diese Integration dazu bringt, es zu lesen. Ein Gerät mit dem Hinweis \"not supported yet\" hat hier keinen Parser und liefert nur zwei Diagnose-Sensoren, sonst nichts. Es trotzdem ausgewählt zu lassen lohnt sich, denn aus einem Diagnose-Download davon an einem GitHub-Issue entsteht die Unterstützung für ein neues Modell. Dein Diagnose-Download enthält die Rohdaten eines solchen Geräts bereits, es muss also nichts eingeschaltet werden.",
           "raw_capture": "Behält mehr der Rohdaten, die deine Geräte senden, zeichnet jedes Gerät auf, das diese Integration noch nicht unterstützt, und hält fest, welche Einstellungen die EcoFlow-App währenddessen an deine Geräte schreibt. Das Letzte ist der Weg zu einer Steuerung für ein Modell, das hier niemand besitzt: die Einstellung einmal in der App ändern, während das läuft, zeigt was das Gerät annimmt. Nur sinnvoll, wenn in einem GitHub-Issue danach gefragt wurde, denn die Daten helfen nur zusammen mit einem Diagnose-Download. An deine Geräte wird nie etwas gesendet, und die Aufzeichnung endet nach 24 Stunden von selbst."
         }
       },
@@ -123,6 +130,19 @@
         "data": {
           "email": "E-Mail",
           "password": "Passwort"
+        }
+      },
+      "init_app": {
+        "title": "EcoFlow Energy Optionen",
+        "description": "**Standard** - Offizielle EcoFlow IoT API. Von EcoFlow unterstützt. Updates alle 10-30 Sekunden.\n\n**Enhanced** - Community-basierte Echtzeit-Verbindung. Updates alle ~3 Sekunden. Inoffiziell - Nutzung auf eigene Verantwortung.\n\nBeim Wechsel des Modus werden ggf. neue Zugangsdaten benötigt.",
+        "data": {
+          "mode": "Verbindungsmodus",
+          "devices": "Geräte",
+          "raw_capture": "24 Stunden lang zusätzliche Diagnosedaten aufzeichnen"
+        },
+        "data_description": {
+          "devices": "Ein Gerät auszuwählen ist das, was diese Integration dazu bringt, es zu lesen. Ein Gerät mit dem Hinweis \"not supported yet\" hat hier keinen Parser und liefert nur zwei Diagnose-Sensoren, sonst nichts. Es trotzdem ausgewählt zu lassen lohnt sich, denn aus einem Diagnose-Download davon an einem GitHub-Issue entsteht die Unterstützung für ein neues Modell. Schalte unten zuerst die Aufzeichnung der Diagnosedaten ein und lade danach herunter, denn bei Anmeldung mit dem EcoFlow-Konto enthält der Download diese Rohdaten nicht von selbst.",
+          "raw_capture": "Behält mehr der Rohdaten, die deine Geräte senden, zeichnet jedes Gerät auf, das diese Integration noch nicht unterstützt, und hält fest, welche Einstellungen die EcoFlow-App währenddessen an deine Geräte schreibt. Das Letzte ist der Weg zu einer Steuerung für ein Modell, das hier niemand besitzt: die Einstellung einmal in der App ändern, während das läuft, zeigt was das Gerät annimmt. Nur sinnvoll, wenn in einem GitHub-Issue danach gefragt wurde, denn die Daten helfen nur zusammen mit einem Diagnose-Download. An deine Geräte wird nie etwas gesendet, und die Aufzeichnung endet nach 24 Stunden von selbst."
         }
       }
     },
@@ -637,7 +657,7 @@
         }
       },
       "charger_type": {
-        "name": "Ladegeraetetyp",
+        "name": "Ladegerätetyp",
         "state": {
           "none": "Keins",
           "ac": "AC",

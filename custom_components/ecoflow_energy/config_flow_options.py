@@ -98,9 +98,17 @@ class OptionsFlowMixin:
             d["sn"] for d in self.config_entry.data.get(CONF_DEVICES, [])
         ]
 
+        # Read once for the whole step. Three things downstream depend on it
+        # and must never disagree: which device list is fetched, whether the
+        # recording switch exists, and which instruction the help text gives
+        # about that switch. An entry written before this key existed is a
+        # developer-keys entry, which is what the default says.
+        auth_method = self.config_entry.data.get(
+            CONF_AUTH_METHOD, AUTH_METHOD_DEVELOPER
+        )
+
         # Fetch current device list from API (developer auth only)
         if not self._all_devices:
-            auth_method = self.config_entry.data.get(CONF_AUTH_METHOD, AUTH_METHOD_DEVELOPER)
             if auth_method == AUTH_METHOD_DEVELOPER:
                 ak = self.config_entry.data.get(CONF_ACCESS_KEY)
                 sk = self.config_entry.data.get(CONF_SECRET_KEY)
@@ -221,7 +229,7 @@ class OptionsFlowMixin:
         # frame buffer of every supported device as well as recording the ones
         # with no parser. Deliberately the last field: it is a help-us-out
         # switch, not a setting anyone needs.
-        if self.config_entry.data.get(CONF_AUTH_METHOD) == AUTH_METHOD_APP:
+        if auth_method == AUTH_METHOD_APP:
             schema[
                 vol.Required(
                     CONF_RAW_CAPTURE,
@@ -229,11 +237,36 @@ class OptionsFlowMixin:
                 )
             ] = bool
 
+        # One form, two translation keys. The help text under the device list
+        # ends in an instruction that holds for one sign-in method and
+        # misleads the other, and it is chosen by the same fact the guard
+        # above uses to decide whether the recording switch is drawn at all:
+        # text pointing at a control this dialog did not render is how #296
+        # was reported.
+        #
+        # Not a placeholder, though that is the obvious way: Home Assistant
+        # parses every translation with `string.Formatter` before the
+        # frontend ever sees it, so a value chosen inside the string is a
+        # parse error in the log, and a value chosen in Python would take
+        # the sentence out of the translation files and leave it English.
         return self.async_show_form(
-            step_id="init",
+            step_id=(
+                "init_app" if auth_method == AUTH_METHOD_APP else "init"
+            ),
             data_schema=vol.Schema(schema),
             errors=errors,
         )
+
+    async def async_step_init_app(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """The account sign-in rendering of `init`.
+
+        Same form and same handling; the id exists so the help text can
+        differ. Home Assistant routes a submission back to the step it was
+        shown as, so this has to be reachable by name.
+        """
+        return await self.async_step_init(user_input)
 
     def _raw_capture_currently_on(self) -> bool:
         """Return whether the capture is on AND still inside its window.

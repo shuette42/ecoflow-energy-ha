@@ -245,8 +245,15 @@ class SetupFlowMixin:
             for d in self._devices
         }
 
+        # Two translation keys for one form - see the note in
+        # `config_flow_options.py`. `_auth_type` is set before either path
+        # reaches this step.
         return self.async_show_form(
-            step_id="devices",
+            step_id=(
+                "devices_app"
+                if self._auth_type == AUTH_METHOD_APP
+                else "devices"
+            ),
             data_schema=vol.Schema(
                 {
                     vol.Required(
@@ -265,6 +272,12 @@ class SetupFlowMixin:
             ),
             errors=errors,
         )
+
+    async def async_step_devices_app(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """The account sign-in rendering of `devices`."""
+        return await self.async_step_devices(user_input)
 
     # ------------------------------------------------------------------
     # Helpers

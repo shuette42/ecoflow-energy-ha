@@ -26,7 +26,7 @@
       },
       "devices": {
         "title": "Select Devices",
-        "description": "Select the EcoFlow devices you want to add to Home Assistant.\n\nA device marked \"not supported yet\" has no parser here, so it will only produce two diagnostic sensors. Adding it is still worth doing, because a diagnostics download from it attached to a GitHub issue is what support for a new model is built from. With developer keys that download already carries the raw data such a device reports. With account sign-in it does not, so switch on the diagnostic data recording in the integration options first and download afterwards.",
+        "description": "Select the EcoFlow devices you want to add to Home Assistant.\n\nA device marked \"not supported yet\" has no parser here, so it will only produce two diagnostic sensors. Adding it is still worth doing, because a diagnostics download from it attached to a GitHub issue is what support for a new model is built from. Your diagnostics download already carries the raw data such a device reports, so nothing needs switching on first.",
         "data": {
           "devices": "Devices"
         }
@@ -78,6 +78,13 @@
           "email": "Email",
           "password": "Password"
         }
+      },
+      "devices_app": {
+        "title": "Select Devices",
+        "description": "Select the EcoFlow devices you want to add to Home Assistant.\n\nA device marked \"not supported yet\" has no parser here, so it will only produce two diagnostic sensors. Adding it is still worth doing, because a diagnostics download from it attached to a GitHub issue is what support for a new model is built from. Switch the diagnostic data recording in the integration options on first and download afterwards, because with account sign-in the download does not carry that raw data on its own.",
+        "data": {
+          "devices": "Devices"
+        }
       }
     },
     "error": {
@@ -105,7 +112,7 @@
           "raw_capture": "Record extra diagnostic data for 24 hours"
         },
         "data_description": {
-          "devices": "Selecting a device is what makes this integration read it. A device marked \"not supported yet\" has no parser here, so it produces two diagnostic sensors and nothing else. Leaving it selected is still worth doing, because a diagnostics download from it attached to a GitHub issue is what support for a new model is built from. With developer keys that download already carries the raw data such a device reports. With account sign-in it does not, so switch on the diagnostic data recording below first and download afterwards.",
+          "devices": "Selecting a device is what makes this integration read it. A device marked \"not supported yet\" has no parser here, so it produces two diagnostic sensors and nothing else. Leaving it selected is still worth doing, because a diagnostics download from it attached to a GitHub issue is what support for a new model is built from. Your diagnostics download already carries the raw data such a device reports, so nothing needs switching on first.",
           "raw_capture": "Keeps more of the raw messages your devices send, records any device this integration does not support yet, and records the settings the EcoFlow app writes to your devices while it runs. That last one is how a control gets built for a model nobody here owns: changing the setting in the app once, with this on, shows what the device accepts. Only worth switching on if it was asked for in a GitHub issue, since the data is only useful attached to a diagnostics download. Nothing is ever sent to your devices, and the recording stops by itself after 24 hours."
         }
       },
@@ -123,6 +130,19 @@
         "data": {
           "email": "Email",
           "password": "Password"
+        }
+      },
+      "init_app": {
+        "title": "EcoFlow Energy Options",
+        "description": "**Standard** - Official EcoFlow IoT API. Supported by EcoFlow. Updates every 10-30 seconds.\n\n**Enhanced** - Community-driven real-time connection. Updates every ~3 seconds. Unofficial - use at your own risk.\n\nSwitching modes may require new credentials.",
+        "data": {
+          "mode": "Connection Mode",
+          "devices": "Devices",
+          "raw_capture": "Record extra diagnostic data for 24 hours"
+        },
+        "data_description": {
+          "devices": "Selecting a device is what makes this integration read it. A device marked \"not supported yet\" has no parser here, so it produces two diagnostic sensors and nothing else. Leaving it selected is still worth doing, because a diagnostics download from it attached to a GitHub issue is what support for a new model is built from. Switch the diagnostic data recording below on first and download afterwards, because with account sign-in the download does not carry that raw data on its own.",
+          "raw_capture": "Keeps more of the raw messages your devices send, records any device this integration does not support yet, and records the settings the EcoFlow app writes to your devices while it runs. That last one is how a control gets built for a model nobody here owns: changing the setting in the app once, with this on, shows what the device accepts. Only worth switching on if it was asked for in a GitHub issue, since the data is only useful attached to a diagnostics download. Nothing is ever sent to your devices, and the recording stops by itself after 24 hours."
         }
       }
     },
