@@ -281,7 +281,8 @@ def build_grid_input_power_payload(
     report an input ceiling the way `f10.6` reports the output one, and the
     device's answer to one of these writes says only that the frame arrived:
     the four recorded acknowledgements are the same two bytes whatever value
-    they answer.
+    they answer. What a device does with a value it accepts is on file
+    separately, at 1800 W, in `es22_grid_input_readback_masked.json`.
     """
     if power_w < 0:
         raise ValueError(f"power_w must not be negative, got {power_w}")

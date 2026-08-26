@@ -1096,12 +1096,16 @@ STREAMAC5000_NUMBERS: list[EcoFlowNumberDef] = [
     # offered and a device has acknowledged: an owner raised this setting from
     # 2200 to 2600 on a unit rated 2500, and the app took it without the
     # authorisation step it asks for on the output side (#284). The
-    # acknowledgement is not proof the device kept it - this family clamps a
-    # setpoint it dislikes silently - and no read-back of the new value is on
-    # file, because this device sends that block only in answer to a request
-    # and no answer arrived after the writes. Nothing on the wire reports an
-    # input ceiling the way `f10.6` reports the output one, so there is
-    # nothing better to follow than the highest acknowledged figure.
+    # acknowledgement is not proof the device kept it, because this family
+    # clamps a setpoint it dislikes silently, and no read-back of 2600 is on
+    # file. That a written value is kept at all was settled separately, at
+    # 1800 W: the reporter set it from here and made the app request the
+    # settings again, and the device's answer carries 1800 on this subfield
+    # with the output setpoint beside it untouched. The top of the range is
+    # the one figure still resting on an acknowledgement alone. Nothing on
+    # the wire reports an input ceiling the way `f10.6` reports the output
+    # one, so there is nothing better to follow than the highest
+    # acknowledged figure.
     #
     # The step is the app's own: all four recorded writes are multiples of
     # 100 and the app adjusts this setting in 100 W steps. The output number

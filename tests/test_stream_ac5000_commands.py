@@ -686,6 +686,66 @@ class TestGridInputPower:
 
         assert _config_fields(frame)[10][2] == 9999
 
+    def test_the_device_reports_back_a_value_written_from_here(self) -> None:
+        """The half the write capture could not carry, from a second one.
+
+        An acknowledgement says a frame arrived, and this family clamps a
+        setpoint it dislikes silently, so the four acknowledged writes could
+        not say the device kept any of them. The reporter then set 1800 W on
+        this control and made the app ask the device for its settings again.
+        The device's answer carries 1800 on the subfield this control writes,
+        which is the difference between a frame that left Home Assistant and
+        a value the device holds.
+        """
+        from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (
+            parse_stream_ac5000_message,
+        )
+
+        frame = json.loads(
+            (
+                Path(__file__).parent
+                / "fixtures"
+                / "stream_ac5000"
+                / "es22_grid_input_readback_masked.json"
+            ).read_text()
+        )["frames"][0]
+        reported = parse_stream_ac5000_message(bytes.fromhex(frame["hex"])) or {}
+
+        assert reported["max_grid_input_power_w"] == 1800
+        # And the write did not disturb the setpoint sharing its config
+        # field: 800 is what this unit's output limit reads, unchanged.
+        assert reported["max_grid_output_power_w"] == 800
+
+    def test_the_reported_value_rebuilds_the_write_that_produced_it(self) -> None:
+        """Closes the loop the other way round.
+
+        The value the device reports back is fed into the builder, and the
+        payload that comes out is the one this control would send for it. A
+        parser reading a neighbouring subfield would break this even though
+        both halves look right on their own.
+        """
+        from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (
+            parse_stream_ac5000_message,
+        )
+
+        frame = json.loads(
+            (
+                Path(__file__).parent
+                / "fixtures"
+                / "stream_ac5000"
+                / "es22_grid_input_readback_masked.json"
+            ).read_text()
+        )["frames"][0]
+        reported = parse_stream_ac5000_message(bytes.fromhex(frame["hex"])) or {}
+        setpoint = reported["max_grid_input_power_w"]
+
+        built = _config_fields(
+            build_grid_input_power_payload(setpoint, _MASKED_SN, seq=7)
+        )[10]
+
+        assert setpoint == 1800
+        assert built == {2: setpoint}
+
     def test_the_reading_the_parser_takes_is_the_one_the_write_sets(self) -> None:
         """Parser and builder joined, the way the output control is.
 
