@@ -1000,3 +1000,87 @@ class TestNoAccountIdInTheThreadName:
         client.start_loop()
 
         mock_paho.loop_start.assert_called_once()
+
+
+class TestOwnPublishEchoFilter:
+    """Our own protobuf publishes come back from the broker.
+
+    Measured on a live PowerOcean 2026-08-27 (#247): the 20-second
+    EnergyStreamSwitch keepalive accounted for 316 of 4594 frames in a
+    20-minute recording and occupied one of the diagnostics record's twenty
+    message-type slots - while the writes the recording was opened for found
+    no slot at all.
+    """
+
+    def _msg(self, topic: str, payload: bytes):
+        msg = MagicMock()
+        msg.topic = topic
+        msg.payload = payload
+        return msg
+
+    def test_echo_of_our_own_publish_is_dropped(self):
+        handler = MagicMock()
+        client = _make_client(message_handler=handler)
+        payload = b"\x0a\x20\x0a\x02\x08\x01\x10\x20\x18\x60\x20\x01"
+
+        client._note_own_publish(payload)
+        client._on_message(
+            None, None, self._msg("/app/1/TEST1234SN/thing/property/set", payload)
+        )
+
+        handler.assert_not_called()
+
+    def test_a_frame_we_never_sent_still_reaches_the_handler(self):
+        """The negative control: the filter must not swallow device traffic."""
+        handler = MagicMock()
+        client = _make_client(message_handler=handler)
+
+        client._note_own_publish(b"\x0a\x02\x08\x01")
+        device_frame = b"\x0a\x02\x08\x02"
+        client._on_message(
+            None, None, self._msg("/app/device/property/TEST1234SN", device_frame)
+        )
+
+        handler.assert_called_once_with(
+            "/app/device/property/TEST1234SN", device_frame
+        )
+
+    def test_the_echo_record_expires(self):
+        """A payload that never came back must not pin memory or match later."""
+        from ecoflow_energy.ecoflow import cloud_mqtt as mqtt_mod
+
+        handler = MagicMock()
+        client = _make_client(message_handler=handler)
+        payload = b"\x0a\x02\x08\x01"
+
+        with patch.object(mqtt_mod, "monotonic", return_value=1000.0):
+            client._note_own_publish(payload)
+        with patch.object(
+            mqtt_mod, "monotonic", return_value=1000.0 + mqtt_mod.OWN_ECHO_TTL_S + 1
+        ):
+            client._on_message(
+                None, None, self._msg("/app/device/property/TEST1234SN", payload)
+            )
+
+        handler.assert_called_once()
+
+    def test_the_record_is_bounded(self):
+        from ecoflow_energy.ecoflow import cloud_mqtt as mqtt_mod
+
+        client = _make_client()
+        for i in range(mqtt_mod.OWN_ECHO_MAX + 20):
+            client._note_own_publish(f"payload-{i}".encode())
+
+        assert len(client._own_publishes) == mqtt_mod.OWN_ECHO_MAX
+
+    def test_publish_records_what_it_sent(self):
+        """The recording happens on the publish path, not at the call sites."""
+        client = _make_client()
+        client.connected = True
+        mock_paho = MagicMock()
+        mock_paho.is_connected.return_value = True
+        mock_paho.publish.return_value = MagicMock(rc=0)
+        client.client = mock_paho
+
+        assert client.publish("/some/topic", b"\x0a\x02\x08\x09") is True
+        assert client._is_own_echo(b"\x0a\x02\x08\x09") is True

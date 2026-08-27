@@ -190,6 +190,32 @@ def frame_budget(
     return min(bundle_cap, max(bundle_max, len(cmds) * message_max))
 
 
+# How many of a buffer's type slots stay available for writes and their
+# replies, whatever telemetry arrived first. `_topic_class` already gives a
+# write its own bucket so telemetry cannot share it - but the slots
+# themselves were handed out first-come, which defeated that intent the
+# moment a device had more telemetry types than slots. Measured 2026-08-27
+# on a PowerOcean with two accessories: 20 of 20 slots taken by telemetry,
+# and every user write of the session (241/100, 241/102, 96/127, 96/145,
+# 96/22, each with its reply) evicted with nothing kept but a name and a
+# count. A capture opened to record what a user changed then holds
+# everything except that.
+#
+# Four writes with their replies is what a settings session looks like, so
+# eight slots is the reserve. Telemetry keeps the rest.
+WRITE_CLASS_RESERVE = 8
+
+_WRITE_CLASSES = ("set", "set_reply")
+
+
+def _is_write_key(key: str) -> bool:
+    """Whether a bucket key belongs to a write or its reply.
+
+    `frame_key` puts the topic class in front, so the prefix is the class.
+    """
+    return key.split(":", 1)[0] in _WRITE_CLASSES
+
+
 def _topic_class(topic: str) -> str:
     """Return the bucket a topic belongs to.
 
@@ -433,9 +459,20 @@ class TypedFrameBuffer:
     caller has to bring one too.
     """
 
-    def __init__(self, keys_max: int, per_key_max: int) -> None:
+    def __init__(
+        self,
+        keys_max: int,
+        per_key_max: int,
+        write_reserve: int = WRITE_CLASS_RESERVE,
+    ) -> None:
         self._keys_max = keys_max
         self._per_key_max = per_key_max
+        # Writes get slots BESIDE the budget, not out of it. Taking them
+        # from `keys_max` would starve telemetry in a small buffer and, worse,
+        # break the guarantee this buffer exists for: that a rare type
+        # survives a flood of a frequent one. A reserve that costs an
+        # existing guarantee is not a fix.
+        self._write_reserve = max(write_reserve, 0)
         # One slot of every type's budget is reserved for the newest frame.
         self._samples_max = max(per_key_max - 1, 1)
         # Novel frames are kept on top of that budget rather than out of it:
@@ -471,7 +508,7 @@ class TypedFrameBuffer:
         """
         bucket = self._buckets.get(key)
         if bucket is None:
-            if len(self._buckets) >= self._keys_max:
+            if not self._has_slot_for(key):
                 # No budget left for a new type. Counted rather than ignored,
                 # so a reader can tell a saturated capture from a complete one.
                 self._dropped_frames += 1
@@ -488,6 +525,21 @@ class TypedFrameBuffer:
         bucket.latest = (self._seq, entry)
         if readings is not None:
             self._note_novelty(bucket, (self._seq, entry), readings)
+
+    def _has_slot_for(self, key: str) -> bool:
+        """Whether a new message type can still get a bucket.
+
+        Two independent ceilings. Telemetry fills `keys_max` as it always
+        did; writes and their replies draw on a reserve of their own beside
+        it. They cannot take each other's slots in either direction, which
+        is the point: telemetry arrives first on every device, and
+        first-come over one shared budget is what emptied the reserve.
+        """
+        if _is_write_key(key):
+            writes = sum(1 for k in self._buckets if _is_write_key(k))
+            return writes < self._write_reserve
+        telemetry = sum(1 for k in self._buckets if not _is_write_key(k))
+        return telemetry < self._keys_max
 
     def _note_dropped(self, key: str) -> None:
         """Record the name of a type that found no bucket.
@@ -633,6 +685,9 @@ class TypedFrameBuffer:
             ),
             "keys_tracked": len(self._buckets),
             "keys_max": self._keys_max,
+            # Named in the download so a reader can tell a capture that
+            # protected its writes from one taken before this existed.
+            "write_slots_reserved": self._write_reserve,
             "per_key_max": self._per_key_max,
             "frames_dropped_key_budget": self._dropped_frames,
             "dropped_per_key": dict(self._dropped_per_key),
@@ -663,6 +718,9 @@ _MIN_SLOT_S = 0.001
 # the per-type budget instead of inside it. Worst case for a whole capture is
 # therefore keys_max * (per_key_max + 4) frames rather than
 # keys_max * per_key_max: 280 rather than 200 at the coordinator's settings.
+# The write reserve raises the type count the same way, beside the budget
+# rather than inside it: (keys_max + WRITE_CLASS_RESERVE) * (per_key_max + 4),
+# 392 rather than 280 at those settings.
 _NOVEL_PER_KEY_MAX = 4
 
 # How many frames a reading must hold one value before a change to it is

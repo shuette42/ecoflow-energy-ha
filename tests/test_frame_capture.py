@@ -14,6 +14,7 @@ from ecoflow_energy.const import (
 from ecoflow_energy.ecoflow.frame_capture import (
     _slot,
     TypedFrameBuffer,
+    WRITE_CLASS_RESERVE,
     build_frame_entry,
     decode_cmd_headers,
     frame_budget,
@@ -956,6 +957,7 @@ class TestTypedFrameBuffer:
             "span_s": None,
             "keys_tracked": 0,
             "keys_max": 4,
+            "write_slots_reserved": 8,
             "per_key_max": 4,
             "frames_dropped_key_budget": 0,
             "dropped_per_key": {},
@@ -1227,3 +1229,59 @@ class TestNovelReadingsSurviveThinning:
             )
 
         assert buffer.stats()["per_key"]["property:proto/254.39"]["seen"] == 10
+
+
+class TestWriteSlotReserve:
+    """Writes keep a place of their own, whatever telemetry arrived first.
+
+    Rebuilt from the 2026-08-27 PowerOcean capture (#247): 20 of 20 type
+    slots taken by telemetry, and every user write of the session evicted
+    with nothing kept but a name and a count.
+    """
+
+    def test_a_write_gets_in_after_telemetry_filled_the_budget(self) -> None:
+        buffer = TypedFrameBuffer(keys_max=3, per_key_max=4, write_reserve=2)
+
+        for i in range(3):
+            buffer.add(f"property:proto/96.{i}", _entry(float(i)))
+        # The budget is full before the user touches anything.
+        assert buffer.stats()["keys_tracked"] == 3
+
+        buffer.add("set:proto/241.102", _entry(10.0, write=True))
+        buffer.add("set_reply:proto/241.102", _entry(11.0, write=True))
+
+        stats = buffer.stats()
+        assert "set:proto/241.102" in stats["per_key"]
+        assert "set_reply:proto/241.102" in stats["per_key"]
+        assert stats["dropped_per_key"] == {}
+        assert [f["ts"] - _T0 for f in buffer.frames() if f.get("write")] == [10.0, 11.0]
+
+    def test_the_reserve_does_not_come_out_of_the_telemetry_budget(self) -> None:
+        """The guarantee this buffer already had must survive the new one.
+
+        Taking the reserve out of `keys_max` would have starved telemetry -
+        the first shape of this fix did exactly that and broke eleven tests.
+        """
+        buffer = TypedFrameBuffer(keys_max=4, per_key_max=4, write_reserve=8)
+
+        for i in range(4):
+            buffer.add(f"property:proto/96.{i}", _entry(float(i)))
+
+        assert buffer.stats()["keys_tracked"] == 4
+        assert buffer.stats()["dropped_per_key"] == {}
+
+    def test_the_write_reserve_is_itself_bounded(self) -> None:
+        buffer = TypedFrameBuffer(keys_max=2, per_key_max=4, write_reserve=1)
+
+        buffer.add("set:proto/241.100", _entry(1.0, write=True))
+        buffer.add("set:proto/241.102", _entry(2.0, write=True))
+
+        stats = buffer.stats()
+        assert "set:proto/241.100" in stats["per_key"]
+        assert stats["dropped_per_key"] == {"set:proto/241.102": 1}
+
+    def test_the_download_names_the_reserve(self) -> None:
+        """A reader must be able to date a capture by its own stats block."""
+        assert TypedFrameBuffer(keys_max=4, per_key_max=4).stats()[
+            "write_slots_reserved"
+        ] == WRITE_CLASS_RESERVE

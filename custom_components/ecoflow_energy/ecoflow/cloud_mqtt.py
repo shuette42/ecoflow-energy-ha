@@ -9,11 +9,14 @@ to the event loop with ``hass.loop.call_soon_threadsafe()``.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import ssl
 import threading
 import time
+from collections import deque
+from time import monotonic
 from typing import Any, Callable
 
 import paho.mqtt.client as mqtt
@@ -35,6 +38,15 @@ from .const import (
 from .energy_stream import build_energy_stream_activate_payload
 
 _LOGGER = logging.getLogger(__name__)
+
+# How long a payload we published stays recognisable as our own echo. The
+# broker returns it within milliseconds; a minute is generous and bounds the
+# window in which an unrelated frame could collide with the same digest.
+OWN_ECHO_TTL_S = 60.0
+
+# How many recent publishes stay on file for that comparison. A settings
+# burst is a handful of frames; the keepalive adds one every 20 seconds.
+OWN_ECHO_MAX = 64
 
 # How long to wait for the broker to acknowledge a QoS-1 publish. Without
 # this wait, `publish()` reports success as soon as the message sits in the
@@ -140,6 +152,11 @@ class EcoFlowMQTTClient:
         # to a device must set this - passing enhanced_mode=False only
         # suppresses the energy stream switch, not get-all/latestQuotas.
         self._listen_only = listen_only
+        # Payloads we published, for recognising the broker's echo of them.
+        # Written from the caller's thread and read on paho's, so it carries
+        # its own lock rather than borrowing the client lock.
+        self._own_publishes: deque[tuple[float, bytes]] = deque(maxlen=OWN_ECHO_MAX)
+        self._own_publish_lock = threading.Lock()
         self._notified_connected = False
         self._last_counter_reset_time: float = 0
         self._counter_reset_interval = DEFAULT_COUNTER_RESET_INTERVAL
@@ -390,6 +407,9 @@ class EcoFlowMQTTClient:
                         payload = build_energy_stream_activate_payload()
                         set_topic = f"/app/{self._user_id}/{self._device_sn}/thing/property/set"
                         client.publish(set_topic, payload, qos=1)
+                        # This path goes straight to paho and would otherwise
+                        # never be recorded as ours.
+                        self._note_own_publish(payload)
                         _LOGGER.debug("EnergyStreamSwitch sent - energy_stream_report activated")
                     except Exception as exc:
                         _LOGGER.warning("EnergyStreamSwitch error: %s", exc)
@@ -509,6 +529,39 @@ class EcoFlowMQTTClient:
     # compact and default json.dumps spellings.
     _PING_ECHO_MARKERS = (b'{"command":"ping"', b'{"command": "ping"')
 
+    def _note_own_publish(self, payload: str | bytes) -> None:
+        """Remember a payload we sent, so its echo can be recognised.
+
+        The marker above catches the JSON ping and nothing else, which left
+        every protobuf publish of ours coming back as if the device had sent
+        it. On a live PowerOcean that is the 20-second EnergyStreamSwitch
+        keepalive: 316 frames in 20 minutes, one of them kept in the
+        diagnostics record occupying a message-type slot, and the other 315
+        counted against the recording as device traffic. An echo is our own
+        bytes, so recognising it needs no heuristic about sequence numbers -
+        only that we said them first.
+
+        Bounded by count and by age: an echo arrives in milliseconds, and a
+        payload that never comes back must not pin memory.
+        """
+        if isinstance(payload, str):
+            payload = payload.encode()
+        digest = hashlib.blake2b(payload, digest_size=16).digest()
+        with self._own_publish_lock:
+            self._own_publishes.append((monotonic(), digest))
+
+    def _is_own_echo(self, payload: bytes) -> bool:
+        """Whether this frame is the broker returning something we sent."""
+        digest = hashlib.blake2b(payload, digest_size=16).digest()
+        now = monotonic()
+        with self._own_publish_lock:
+            while self._own_publishes and now - self._own_publishes[0][0] > OWN_ECHO_TTL_S:
+                self._own_publishes.popleft()
+            for _sent_at, seen in self._own_publishes:
+                if seen == digest:
+                    return True
+        return False
+
     def _on_message(self, client, userdata, msg):
         """Callback for incoming MQTT messages."""
         if (
@@ -516,6 +569,10 @@ class EcoFlowMQTTClient:
             and msg.payload.startswith(self._PING_ECHO_MARKERS)
         ):
             # Broker echo of our own keepalive ping - not device data
+            return
+        if self._is_own_echo(msg.payload):
+            # Broker echo of one of our own publishes. Dropping it here keeps
+            # it out of the parser and out of the diagnostics recording alike.
             return
         _LOGGER.debug(
             "MQTT msg: %s (%d bytes) for %s",
@@ -690,6 +747,7 @@ class EcoFlowMQTTClient:
             result = self.client.publish(topic, payload, qos=qos)
             if result.rc != 0:
                 return False
+            self._note_own_publish(payload)
             if not wait or qos == 0:
                 # rc == 0 only means paho queued the message locally.
                 # Callers that do not report their outcome accept that.
