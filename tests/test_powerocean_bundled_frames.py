@@ -11,6 +11,7 @@ from ecoflow_energy.ecoflow.parsers.powerocean_proto import (
     flatten_heartbeat,
     remap_bp_keys,
     remap_ems_state_keys,
+    remap_heating_rod_keys,
 )
 from ecoflow_energy.ecoflow.proto.decoder import decode_header_message
 from ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
@@ -73,6 +74,107 @@ def _build_header(
 
 def _build_bundle(*headers: bytes) -> bytes:
     return b"".join(headers)
+
+
+# PowerGlow reports as PowerOceans sent them. The first three come from the
+# reporter capture on issue #7, recorded 2026-08-22; the fourth comes from a
+# different owner's unit recorded 2026-08-24 on issue #247, which carries a rod
+# nobody had noticed. In every one the serial is the sixteen 0x58 bytes the
+# diagnostics sanitizer had already substituted; nothing else was touched.
+_PG_IDLE_PDATA = bytes.fromhex(
+    "0a10585858585858585858585858585858581001180320002800"
+    "35000060423d00008c424001480050dc0b58646000"
+)
+_PG_HEATING_PDATA = bytes.fromhex(
+    "0a1058585858585858585858585858585858100118032"
+    "0ef1028f0103500008a423d0000a0424001480050dc0b58646000"
+)
+_PG_STANDBY_PDATA = bytes.fromhex(
+    "0a105858585858585858585858585858585810011803200028"
+    "ee3235000082423d0000a0424000480050dc0b58646000"
+)
+_PG_SECOND_UNIT_PDATA = bytes.fromhex(
+    "0a1058585858585858585858585858585858100118032095"
+    "0628960635000094423d0000a0424001480050dc0b58646000"
+)
+
+
+def test_powerglow_report_maps_all_four_heating_rod_readings() -> None:
+    """A heating rod drawing power reports its two readings and two setpoints."""
+    results = decode_proto_runtime_headers(_build_header(212, 8, _PG_HEATING_PDATA))
+
+    assert len(results) == 1
+    assert results[0].mapped["_is_heating_rod_param"] is True
+    raw = {k: v for k, v in results[0].mapped.items() if not k.startswith("_")}
+
+    assert remap_heating_rod_keys(raw) == {
+        "heating_rod_power_w": 2159.0,
+        "heating_rod_target_power_w": 2160.0,
+        "heating_rod_water_temp_c": 69.0,
+        "heating_rod_target_temp_c": 80.0,
+    }
+
+
+def test_powerglow_idle_report_is_a_real_zero_watts() -> None:
+    """An idle rod reports 0 W rather than omitting the reading."""
+    results = decode_proto_runtime_headers(_build_header(212, 8, _PG_IDLE_PDATA))
+    raw = {k: v for k, v in results[0].mapped.items() if not k.startswith("_")}
+
+    assert remap_heating_rod_keys(raw) == {
+        "heating_rod_power_w": 0.0,
+        "heating_rod_target_power_w": 0.0,
+        "heating_rod_water_temp_c": 56.0,
+        "heating_rod_target_temp_c": 70.0,
+    }
+
+
+def test_powerglow_target_power_is_not_an_echo_of_the_drawn_power() -> None:
+    """The target stands on its own: 6510 W requested while the rod draws none.
+
+    This is the most common of the six states in the capture and the only one
+    that separates the two fields, since they sit one watt apart whenever the
+    rod is actually heating.
+    """
+    results = decode_proto_runtime_headers(_build_header(212, 8, _PG_STANDBY_PDATA))
+    raw = {k: v for k, v in results[0].mapped.items() if not k.startswith("_")}
+
+    assert remap_heating_rod_keys(raw) == {
+        "heating_rod_power_w": 0.0,
+        "heating_rod_target_power_w": 6510.0,
+        "heating_rod_water_temp_c": 65.0,
+        "heating_rod_target_temp_c": 80.0,
+    }
+
+
+def test_powerglow_field_map_holds_on_a_second_owners_unit() -> None:
+    """A different PowerOcean, a different draw, the same twelve fields.
+
+    Recorded for an unrelated question on issue #247 and only later noticed to
+    contain a heating rod. Its numbers were never used to build the map, which
+    is what makes it a control rather than a second copy of the same evidence.
+    """
+    results = decode_proto_runtime_headers(
+        _build_header(212, 8, _PG_SECOND_UNIT_PDATA)
+    )
+    raw = {k: v for k, v in results[0].mapped.items() if not k.startswith("_")}
+
+    assert remap_heating_rod_keys(raw) == {
+        "heating_rod_power_w": 789.0,
+        "heating_rod_target_power_w": 790.0,
+        "heating_rod_water_temp_c": 74.0,
+        "heating_rod_target_temp_c": 80.0,
+    }
+
+
+def test_powerglow_serial_never_reaches_a_sensor_key() -> None:
+    """The rod's own serial identifies the report and is not published."""
+    results = decode_proto_runtime_headers(_build_header(212, 8, _PG_HEATING_PDATA))
+    raw = {k: v for k, v in results[0].mapped.items() if not k.startswith("_")}
+
+    assert raw["hr_sn"] == "X" * 16
+    assert not any(
+        isinstance(value, str) for value in remap_heating_rod_keys(raw).values()
+    )
 
 
 def test_runtime_decodes_every_header_with_its_own_sequence() -> None:

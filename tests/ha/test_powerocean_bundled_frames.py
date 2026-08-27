@@ -38,6 +38,52 @@ def _build_header(cmd_func: int, cmd_id: int, pdata: bytes) -> bytes:
     return encode_field_bytes(1, bytes(header))
 
 
+# The PowerGlow report as a PowerOcean sent it, from the reporter capture on
+# issue #7 recorded 2026-08-22. The rod draws 2159 W against a 2160 W target
+# and sits at 69 of a requested 80 degrees.
+_PG_HEATING_PDATA = bytes.fromhex(
+    "0a1058585858585858585858585858585858100118032"
+    "0ef1028f0103500008a423d0000a0424001480050dc0b58646000"
+)
+
+
+def test_powerocean_parser_reads_powerglow_beside_its_own_telemetry() -> None:
+    """A rod report in a bundle adds four keys without displacing any."""
+    stream = JTS1EnergyStreamReport(
+        sys_load_pwr=450.0, sys_grid_pwr=-6280.0, mppt_pwr=6730.0, bp_pwr=-1200.0
+    )
+    frame = _build_header(96, 33, stream.SerializeToString()) + _build_header(
+        212, 8, _PG_HEATING_PDATA
+    )
+
+    parsed = _PowerOceanParser()._parse_powerocean_proto_frame(frame)
+
+    assert parsed is not None
+    assert parsed["heating_rod_power_w"] == 2159.0
+    assert parsed["heating_rod_target_power_w"] == 2160.0
+    assert parsed["heating_rod_water_temp_c"] == 69.0
+    assert parsed["heating_rod_target_temp_c"] == 80.0
+    # The PowerOcean's own readings survive the accessory report beside them.
+    assert parsed["solar_w"] == 6730.0
+    assert parsed["home_w"] == 450.0
+
+
+def test_a_broken_powerglow_report_does_not_cost_the_powerocean_its_frame() -> None:
+    """One unreadable accessory header must not empty the whole bundle."""
+    stream = JTS1EnergyStreamReport(
+        sys_load_pwr=450.0, sys_grid_pwr=-6280.0, mppt_pwr=6730.0, bp_pwr=-1200.0
+    )
+    frame = _build_header(96, 33, stream.SerializeToString()) + _build_header(
+        212, 8, b"\xff\xff\xff\xff"
+    )
+
+    parsed = _PowerOceanParser()._parse_powerocean_proto_frame(frame)
+
+    assert parsed is not None
+    assert parsed["solar_w"] == 6730.0
+    assert "heating_rod_power_w" not in parsed
+
+
 def test_powerocean_parser_merges_bundled_stream_and_heartbeat() -> None:
     """The coordinator receives one sensor mapping from the whole bundle."""
     stream = JTS1EnergyStreamReport(

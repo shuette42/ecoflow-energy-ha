@@ -755,3 +755,50 @@ message EVChargingParamReport {
   oneof _use_grid_first { uint32 use_grid_first = 17; }
   oneof _switch_bits { uint32 switch_bits = 18; }
 }
+
+// --- PowerGlow heating rod, reported by the PowerOcean on cmd_func 212 ---
+//
+// The PowerOcean forwards the state of an attached PowerGlow. All twelve fields
+// below are present in all six report messages of a reporter capture recorded
+// on 2026-08-22 (issue #7), so none of them is inferred from a neighbour.
+//
+// The capture settles the scales for fields 4, 6 and 7: one message carries
+// 2159 drawn on field 4 at 69 on field 6 of a requested 80 on field 7, which is
+// watts and degrees exactly as sent. Field 5 rests on that one message too - it
+// reads 2160 there beside the 2159 - and elsewhere in the capture it reads 6510
+// while field 4 is zero, which is above any rating this rod has. Whether that
+// is a setpoint or an allowance is not settled here; the command family names
+// it target_power and the quota path already publishes its own targetPower to
+// the same sensor unscaled, so both modes at least agree with each other.
+//
+// The oneof wrappers matter: an idle rod reports field 4 as a real zero, which
+// a bare proto3 scalar would drop.
+//
+// The rod also appears on cmd_id 33 and 34. The command family gives those a
+// power, a temperature and a three-way split of where the energy came from,
+// and in this capture they carry neither power nor temperature - every 33 is
+// the bare serial and every 34 item omits the power. Only this report is
+// registered: it is the one message carrying the reading and both setpoints
+// together, so the four values cannot drift apart. The source split is the
+// reason someone will come back to 33 and 34, and it is not on this report.
+
+// Every name carries the rod's own hr_ prefix. The command family calls field
+// 6 plainly "temp", and a PowerOcean message already uses that name at field 9;
+// since each command's output merges into one flat dict per device, the shared
+// name would silently overwrite. The prefix is ours, the field numbers are the
+// device's.
+
+message HRChargingParamReport {
+  oneof _hr_sn { string hr_sn = 1; }
+  oneof _hr_mode { uint32 hr_mode = 2; }
+  oneof _hr_online_bits { uint32 hr_online_bits = 3; }
+  oneof _hr_heating_power { uint32 hr_heating_power = 4; }
+  oneof _hr_target_power { uint32 hr_target_power = 5; }
+  oneof _hr_temp { float hr_temp = 6; }
+  oneof _hr_target_temp { float hr_target_temp = 7; }
+  oneof _hr_run_stat { uint32 hr_run_stat = 8; }
+  oneof _hr_error_code { uint32 hr_error_code = 9; }
+  oneof _hr_water_tank_volume { uint32 hr_water_tank_volume = 10; }
+  oneof _hr_selfcheck_percent { uint32 hr_selfcheck_percent = 11; }
+  oneof _hr_run_flag { uint32 hr_run_flag = 12; }
+}

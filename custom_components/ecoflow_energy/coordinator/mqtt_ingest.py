@@ -33,6 +33,7 @@ from ..ecoflow.parsers.powerocean_proto import (
     remap_bp_keys,
     remap_ems_state_keys,
     remap_ev_charging_keys,
+    remap_heating_rod_keys,
     remap_proto_keys,
 )
 from ..ecoflow.parsers.smartplug import (
@@ -609,6 +610,9 @@ class MqttIngestMixin:
                     continue
                 if result.mapped.get("_is_ev_charging_param"):
                     merged.update(remap_ev_charging_keys(raw))
+                    continue
+                if result.mapped.get("_is_heating_rod_param"):
+                    merged.update(remap_heating_rod_keys(raw))
                     continue
                 if (
                     result.mapped.get("_is_ems_change")

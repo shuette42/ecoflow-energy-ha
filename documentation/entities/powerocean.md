@@ -6,17 +6,20 @@ Full list of all entities created for PowerOcean devices.
 
 > **Note:** The European variants (`J327`, `J32D`, `J32E`) and the PowerOcean Plus units (`R371`, `R372`, `R374`, `HJ3C`) are currently not exposed through the EcoFlow Developer API and therefore require Enhanced Mode. In Standard Mode these devices report error 1006 and all entities stay unavailable. Single-phase variants (`J327`, `J32E`) report only the phases that are physically present; the remaining phase entities stay empty. Whether `J32B` can be linked to an API key has not been tested, so Standard Mode is unproven for that prefix.
 
-> **The heating rod readings are optional and need Standard Mode.** They belong
+> **The heating rod readings are optional and work in both modes.** They belong
 > to the PowerGlow accessory, so they are only created once your system actually
 > reports a heating rod. A PowerOcean without one gets no heating rod entities.
-> The readings come from the API quota, and that quota is only polled when the
-> integration runs with developer keys, so with EcoFlow account sign-in they do
-> not appear. This also means a PowerGlow attached to a unit that only works in
-> Enhanced Mode (`J327`, `J32D`, `J32E`, and the PowerOcean Plus prefixes) cannot be read
-> at all today. If you ran an earlier 1.16.0 beta, the four entities were created
-> on every PowerOcean; leftover ones are removed automatically as soon as your
-> system reports data without a heating rod, unless you had enabled them, in
-> which case they are kept along with their history.
+> In Standard Mode they come from the API quota. With EcoFlow
+> account sign-in they arrive on the PowerOcean's real-time stream instead, in
+> one report roughly every seventeen seconds, so a PowerGlow attached to a unit
+> that only works in Enhanced Mode (`J327`, `J32D`, `J32E`, and the PowerOcean
+> Plus prefixes) should be readable as well - those units run the same parser,
+> though no capture from one with a heating rod exists yet. A rod that is off reports 0 W rather than
+> nothing, so an idle reading is a real one. If you ran an earlier 1.16.0 beta,
+> the four entities were created on every PowerOcean; leftover ones are removed
+> automatically as soon as your system reports data without a heating rod,
+> unless you had enabled them, in which case they are kept along with their
+> history.
 
 > **The wallbox readings are optional and need Enhanced Mode.** They belong to
 > a PowerPulse wallbox coupled to your PowerOcean, so they are only created once
@@ -150,7 +153,7 @@ These sensors are pre-configured for the HA Energy Dashboard (`total_increasing`
 | Battery Packs Online (EMS) | Pack count as reported by the EMS | disabled |
 | Heating Rod Power | Power drawn by an attached PowerGlow heating rod, in watts. Reported through the PowerOcean itself, so no separate device is needed. Only created on systems that report a heating rod (see note above). | disabled |
 | Heating Rod Water Temperature | Current water temperature at the heating rod, in whole degrees. | disabled |
-| Heating Rod Target Power | The power limit configured for the heating rod. | disabled |
+| Heating Rod Target Power | The power limit configured for the heating rod, in watts. | disabled |
 | Heating Rod Target Temperature | The water temperature the heating rod is set to reach. | disabled |
 | EMS Max Internal Temp | Highest of the internal temperature probes | enabled |
 | MPPT 1/2 Warning Code | MPPT warnings, separate from the fault codes. Unlabelled in the same way, and only reported on the real-time connection. | disabled |

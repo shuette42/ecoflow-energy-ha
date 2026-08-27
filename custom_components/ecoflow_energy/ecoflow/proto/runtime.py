@@ -141,6 +141,16 @@ def _build_cmd_registry() -> dict[tuple[int, int], CmdConfig]:
             parse_path="typed_runtime:ev_charging_param",
             flags={"_is_ev_charging_param": True},
         ),
+        # PowerGlow heating rod, forwarded by the PowerOcean it is coupled to.
+        # The rod also travels on (212, 33) and (212, 34), which carry the
+        # power alone. Only this one is registered: it is the only frame
+        # carrying the water temperature, the drawn power and both setpoints
+        # together, so the four cannot drift apart. See PLAN-101.
+        (212, 8): CmdConfig(
+            msg_class=pb2.HRChargingParamReport,
+            parse_path="typed_runtime:heating_rod_param",
+            flags={"_is_heating_rod_param": True},
+        ),
         # --- Delta 3 generation ---
         # Main status frame: full every 120 s, incremental about every 2 s.
         (254, 21): CmdConfig(

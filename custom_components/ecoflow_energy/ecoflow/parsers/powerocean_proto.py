@@ -602,6 +602,38 @@ def remap_bp_keys(
 # undeclared field numbers above 30 stay unread on purpose: they move, but
 # nothing observed says what they mean, and a sensor named after a guess is
 # worse than no sensor. See PLAN-079.
+HEATING_ROD_TO_SENSOR: dict[str, str] = {
+    "hr_temp": "heating_rod_water_temp_c",
+    "hr_heating_power": "heating_rod_power_w",
+    "hr_target_temp": "heating_rod_target_temp_c",
+    "hr_target_power": "heating_rod_target_power_w",
+}
+
+
+def remap_heating_rod_keys(raw: dict[str, Any]) -> dict[str, Any]:
+    """Remap a PowerGlow report (cmd_func 212, cmd_id 8).
+
+    The same four readings the Standard Mode quota supplies, from the report
+    the PowerOcean forwards on its real-time stream. The powers are integer
+    watts and the temperatures are floats in degrees Celsius, both as sent -
+    a reporter capture carries 2159 W drawn against a 2160 W target at 69 of a
+    requested 80 degrees, and no scaling reconciles those with the app.
+
+    An idle rod reports its power as a real zero rather than omitting it, which
+    the oneof wrapper on the message preserves. Nothing here is a meter, so no
+    key reaches a total_increasing sensor.
+    """
+    result: dict[str, Any] = {}
+
+    for proto_key, value in raw.items():
+        sensor_key = HEATING_ROD_TO_SENSOR.get(proto_key)
+        if sensor_key is None or not isinstance(value, (int, float)):
+            continue
+        result[sensor_key] = float(value)
+
+    return result
+
+
 EV_CHARGING_TO_SENSOR: dict[str, str] = {
     "ev_pwr": "ev_charge_power_w",
     "ev_charging_energy": "ev_session_energy_wh",
