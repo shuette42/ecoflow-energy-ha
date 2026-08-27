@@ -71,6 +71,8 @@
 
 3-phase grid monitoring (voltage, current, power per phase) · MPPT per-string tracking (up to 4 strings, device-dependent) · **Multi-battery-pack support** (up to 5 BP5000 packs - per-pack SoC, power, SoH, cycles, temperatures, lifetime energy) · Battery diagnostics (cell temps & voltages, MOSFET temps) · EMS state, work mode, feed mode, grid status, power factor · System diagnostics (fault codes, connectivity status, capacity limits)
 
+> **Use Enhanced Mode on a PowerOcean.** In Standard Mode the readings refresh reliably only while the EcoFlow app or web portal is open, so entities can sit still for hours while the poll itself looks healthy. See [Configure](#2-configure) for how to check this on your own system.
+
 **PowerOcean Plus** (`R371`, `R372`, `R374`, `HJ3C`) are the higher-power 3-phase hybrid units. They use the same entity set as a standard PowerOcean and are supported in Enhanced Mode. Beyond a standard unit they report per-phase **reactive power** (var) and **apparent power** (VA), and drive **MPPT strings 3 and 4**. These entities ship disabled by default so that standard units are not left with permanently empty sensors, so enable the ones you need after adding a Plus device. Field coverage is based on diagnostics from live Plus hardware; if your unit reports a value that no entity picks up, the raw data is available via **Download Diagnostics**.
 
 **Accessories.** Two PowerOcean add-ons report through the PowerOcean itself rather than as devices of their own, so their entities sit on the PowerOcean device page and are created only once the accessory actually reports:
@@ -183,6 +185,7 @@ Download the [latest release](https://github.com/shuette42/ecoflow-energy-ha/rel
 | **Update rate** | ~30 s HTTP polling (+ MQTT push for Delta/Smart Plug) | ~2-4 s real-time via WSS MQTT |
 | **Delta 2 Max / Smart Plug controls** | All switches and numbers | All switches and numbers |
 | **Delta 3 controls** | Switches and most numbers; the screen and idle shutdowns and the AC charge power need Enhanced Mode | All switches, numbers and selects |
+| **PowerOcean data freshness** | Refreshes reliably only while the EcoFlow app or portal is open | Continuous, the device pushes on its own |
 | **PowerOcean controls** | Read-only sensors only | Full energy strategy controls (Backup Reserve, Solar Surplus Threshold, Work Mode) |
 | **Stream AC Pro controls** | Not available | Max Charge SoC, Min Discharge SoC, LED Brightness, Backup Reserve and AC outlet switches |
 | **Stability** | Official EcoFlow API - supported and stable | Community-driven - unofficial, use at your own risk |
@@ -191,6 +194,12 @@ Download the [latest release](https://github.com/shuette42/ecoflow-energy-ha/rel
 **Both modes are cloud-based.** The data travels from your device to EcoFlow's servers and from there to Home Assistant, so an internet connection is required and outages on EcoFlow's side are visible here. These devices expose no local API to talk to instead. The difference between the two modes is which EcoFlow service is used and how fast it delivers, not whether the connection leaves your network.
 
 **Standard Mode** uses the official EcoFlow IoT Developer API. Apply for free API keys at [developer.ecoflow.com](https://developer.ecoflow.com). Note: the European PowerOcean variants (`J327`, `J32D`, `J32E`), the PowerOcean Plus units (`R371`, `R372`, `R374`, `HJ3C`), the Stream Micro (`BK01`) and both STREAM 5000 models (`ES21`, `ES22`) are currently not exposed through the Developer API and cannot be linked to an API key (error 1006). These devices work in Enhanced Mode only.
+
+> **PowerOcean owners: use Enhanced Mode.** On a PowerOcean the Developer API serves the copy EcoFlow's cloud holds, and that copy refreshes reliably only while the EcoFlow app or web portal is open. With the app closed the readings can stand still for hours and then jump, while the integration polls every 30 seconds throughout: the poll is healthy, the data behind it is not. Getting a PowerOcean to update without somebody looking at the app is what this integration's Enhanced Mode was built for, after months of trying to keep the official path fresh by other means. One owner has since reported the same pattern independently ([#267](https://github.com/shuette42/ecoflow-energy-ha/issues/267)): readings moving twice in a day, everything else looking normal.
+>
+> If you are on Standard Mode and want to check your own system, a diagnostics download answers it directly. `last_value_change_age_s` says how long ago any value actually moved, and `unchanged_updates` counts how many polls in a row carried nothing new. A large pair of numbers next to a healthy 30 second interval is this behaviour.
+>
+> Other device families are not affected in the same way: they either push over MQTT in Standard Mode or have no Enhanced path at all.
 
 **Enhanced Mode** connects with your EcoFlow email and password. No Developer API keys needed. Faster updates, but this is an unofficial, community-driven protocol based on observed behaviour that may change without notice. Stream-family devices report an empty product name, so they are identified by their serial prefix (`BK01`, `BK11`, `BK31`, `BK41`, `BK51`, `BK61`) and appear under the correct model name in Home Assistant in both modes. The Stream Micro (`BK01`) is not exposed through the Developer API at all and therefore needs Enhanced Mode.
 
