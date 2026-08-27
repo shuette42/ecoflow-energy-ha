@@ -689,6 +689,13 @@ message Delta3CmsHeartbeat {
 // left out: they are per-cell debug data, they would add sixteen entities
 // per device, and the min/max pairs below already carry the health signal.
 message Delta3BmsHeartbeat {
+  // Which battery pack this report is about. 0 is the built-in one and every
+  // extra battery counts up from 1. Undeclared until 2026-08-27, which is how
+  // two packs came to write the same flat sensor keys: a reporter's DELTA 3
+  // Plus with a 1024 Wh extra battery sent both packs inside one get-all reply
+  // one second apart, so three total_increasing sensors saw the second pack's
+  // lower lifetime totals as a meter reset. The command family calls it `num`.
+  oneof _num { uint32 num = 1; }
   oneof _soc { uint32 soc = 6; }
   oneof _vol { uint32 vol = 7; }
   oneof _amp { int32 amp = 8; }

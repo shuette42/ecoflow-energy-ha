@@ -329,8 +329,35 @@ _BMS_ENERGY_FIELDS: dict[str, str] = {
 # even interchangeable.
 
 
+# The pack this report is about: 0 is the built-in battery, an extra battery
+# counts up from 1. Only pack 0 reaches the flat `bms_*` keys.
+#
+# Every one of those keys holds a single value, so before this a unit with an
+# extra battery had both packs writing the same twenty-two of them and the last
+# frame in won. Three of the twenty-two are `total_increasing`, two of them
+# `device_class: energy`, and the two packs hold different lifetime totals - so
+# every alternation looked like a meter reset and Home Assistant added the
+# lower figure on top of the accumulated statistic.
+#
+# Measured on a reporter's DELTA 3 Plus with a 1024 Wh extra battery (#304):
+# one get-all reply carried pack 0 at 12.990 kWh and pack 1 at 11.147 kWh, one
+# second apart, three times over ten minutes. The maintainer's own D3M1 without
+# an extra battery sends 75 of these across four captures and every one is
+# pack 0, so nothing changes for a unit that has only the built-in battery.
+_MAIN_PACK = 0
+
+
 def parse_delta3_bms_heartbeat(fields: dict[str, Any]) -> dict[str, Any]:
-    """Parse a decoded Delta 3 BMS heartbeat into flat sensor keys."""
+    """Parse a decoded Delta 3 BMS heartbeat into flat sensor keys.
+
+    A report from an extra battery returns nothing. Its values are real and the
+    device does send them; they have no keys of their own yet, and publishing
+    them into the built-in battery's keys is worse than not publishing them.
+    """
+    pack = fields.get("num")
+    if isinstance(pack, int) and not isinstance(pack, bool) and pack != _MAIN_PACK:
+        return {}
+
     result: dict[str, Any] = {}
 
     for proto_key, (sensor_key, divisor) in _BMS_SCALED_FIELDS.items():

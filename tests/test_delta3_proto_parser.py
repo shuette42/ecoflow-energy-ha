@@ -11,6 +11,8 @@ counterpart at all.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from ecoflow_energy.ecoflow.parsers.delta3_http import parse_delta3_http_quota
 from ecoflow_energy.ecoflow.parsers.delta3_proto import (
     parse_delta3_bms_heartbeat,
@@ -564,3 +566,104 @@ class TestAcChargeMode:
 
         assert "acInChgMode" not in DELTA3_HTTP_FIELD_MAP
         assert "ac_charge_mode" not in DELTA3_HTTP_FIELD_MAP.values()
+
+
+# --- extra battery: two packs in one reply (#304) ---
+
+_TWO_PACK_FIXTURE = (
+    Path(__file__).parent / "fixtures" / "delta3" / "p351_two_packs_get_all.bin"
+)
+
+# What the EcoFlow app showed while this reply was recorded, from the reporter's
+# own screenshots: the DELTA 3 Plus at 53 percent and 36 degrees, the 1024 Wh
+# extra battery at 57 percent and 32 degrees.
+_MAIN_TEMP_C = 36.0
+_EXTRA_TEMP_C = 32.0
+_MAIN_LIFETIME_CHARGE_KWH = 12.956
+_EXTRA_LIFETIME_CHARGE_KWH = 11.113
+
+
+def _bms_reports(frame: bytes) -> list[dict]:
+    """Every BMS heartbeat in one envelope, in the order the device sent them."""
+    return [
+        {k: v for k, v in result.mapped.items() if not k.startswith("_")}
+        for result in decode_proto_runtime_headers(frame)
+        if result.mapped.get("_is_delta3_bms_heartbeat")
+    ]
+
+
+def test_one_reply_really_carries_two_battery_packs() -> None:
+    """The premise of the fix, checked rather than assumed.
+
+    Without this the test below would pass on a fixture with one pack in it and
+    prove nothing at all.
+    """
+    reports = _bms_reports(_TWO_PACK_FIXTURE.read_bytes())
+
+    assert len(reports) == 2
+    assert [r["num"] for r in reports] == [0, 1]
+    # Two physically different batteries: different temperature, and different
+    # lifetime totals - 12.956 kWh against 11.113 - which is what made the
+    # alternation destructive rather than merely wrong.
+    assert reports[0]["temp"] == _MAIN_TEMP_C
+    assert reports[1]["temp"] == _EXTRA_TEMP_C
+    assert reports[0]["accu_chg_energy"] > reports[1]["accu_chg_energy"]
+
+
+def test_only_the_built_in_pack_reaches_the_battery_sensors() -> None:
+    """An extra battery must not write the built-in battery's keys.
+
+    Three of them are `total_increasing` and two carry `device_class: energy`,
+    so the extra battery's lower lifetime total read as a meter reset and Home
+    Assistant added it on top of the accumulated statistic.
+    """
+    reports = _bms_reports(_TWO_PACK_FIXTURE.read_bytes())
+
+    main = parse_delta3_bms_heartbeat(reports[0])
+    extra = parse_delta3_bms_heartbeat(reports[1])
+
+    assert extra == {}
+    assert main["bms_temp_c"] == _MAIN_TEMP_C
+    assert main["bms_accu_chg_energy_kwh"] == _MAIN_LIFETIME_CHARGE_KWH
+    assert main["bms_cycles"] == 11.0
+
+
+def test_the_counters_never_step_backwards_across_the_whole_reply() -> None:
+    """Replaying the reply the way the coordinator does must not go down.
+
+    This is the defect stated as its own assertion: merge every BMS report in
+    the envelope in arrival order and watch the three monotonic keys. Before
+    the pack check this dropped from 12.99 to 11.147 within one reply.
+    """
+    monotonic = ("bms_cycles", "bms_accu_chg_energy_kwh", "bms_accu_dsg_energy_kwh")
+    highest: dict[str, float] = {}
+
+    for report in _bms_reports(_TWO_PACK_FIXTURE.read_bytes()):
+        for key, value in parse_delta3_bms_heartbeat(report).items():
+            if key not in monotonic:
+                continue
+            assert value >= highest.get(key, 0.0), (
+                f"{key} stepped back to {value} from {highest[key]}"
+            )
+            highest[key] = value
+
+    assert set(highest) == set(monotonic)
+
+
+def test_a_unit_without_an_extra_battery_is_untouched() -> None:
+    """Pack 0 is what a single-battery unit sends, so nothing changes for it.
+
+    The maintainer's own D3M1 sends 75 of these across four captures and every
+    one carries `num` 0. A report with no `num` at all is treated the same way,
+    since that is every frame recorded before the field was declared.
+    """
+    single = Delta3BmsHeartbeat(num=0, temp=21, cycles=42, accu_chg_energy=1234)
+    parsed = parse_delta3_bms_heartbeat(
+        _bms_reports(_build_frame(32, 50, single.SerializeToString()))[0]
+    )
+
+    assert parsed["bms_temp_c"] == 21.0
+    assert parsed["bms_cycles"] == 42.0
+
+    # The pre-declaration shape: no `num` on the wire at all.
+    assert parse_delta3_bms_heartbeat({"temp": 21, "cycles": 42})["bms_temp_c"] == 21.0
