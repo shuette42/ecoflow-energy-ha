@@ -356,6 +356,10 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
 
     data_keys = sorted(coordinator.device_data.keys()) if coordinator.device_data else []
 
+    last_value_change_age_s: float | None = None
+    if coordinator.last_value_change_ts > 0:
+        last_value_change_age_s = round(now - coordinator.last_value_change_ts, 1)
+
     snapshot = coordinator.snapshot
     snapshot_age_s: float | None = None
     if snapshot.captured_at > 0:
@@ -386,7 +390,13 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
         },
         "data_freshness": {
             "last_mqtt_age_s": last_mqtt_age_s,
+            # How often we ask. On its own this says nothing about whether the
+            # answers carry anything new, which is why the two fields below
+            # exist: a Standard Mode poll returning the cloud's stored copy
+            # looks identical here to one returning a fresh reading (#267).
             "update_interval": str(coordinator.update_interval) if coordinator.update_interval else None,
+            "last_value_change_age_s": last_value_change_age_s,
+            "unchanged_updates": coordinator.unchanged_updates,
             "http_fallback_active": bool(
                 coordinator.enhanced_mode and coordinator.update_interval is not None
             ),

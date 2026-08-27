@@ -75,6 +75,7 @@ class StateApplyMixin:
         if "ems_app_surplus_pct" in parsed:
             self._last_ems_param_change_ts = now
         self._resolve_unit_power(parsed)
+        self._note_value_change(parsed)
         self._device_data.update(parsed)
 
         # Re-aggregate bp_remain_watth from accumulated device_data (#10).

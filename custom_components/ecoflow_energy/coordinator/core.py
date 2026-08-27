@@ -172,6 +172,15 @@ class EcoFlowDeviceCoordinator(
 
         self._last_mqtt_ts: float = 0.0
         self._device_data: dict[str, Any] = {}
+        # When a value last actually moved, and how many updates in a row have
+        # carried nothing new. `update_interval` alone says how often we ask,
+        # which is what a diagnostics download reported until 2026-08-27 - so a
+        # reporter whose readings moved twice a day could point at a 30 s poll
+        # in the file and be entirely right about the number and no closer to
+        # the answer (#267). These two say whether the asking achieved
+        # anything.
+        self._last_value_change_ts: float = 0.0
+        self._unchanged_updates: int = 0
         self._snapshot = DeviceSnapshot()
         # Raw HTTP quota snapshot (Delta 3 only): the field map is
         # community-researched but not yet hardware-verified for every key,
@@ -368,6 +377,36 @@ class EcoFlowDeviceCoordinator(
     def device_data(self) -> dict[str, Any]:
         """Return the current device data dict."""
         return self._device_data
+
+    @property
+    def last_value_change_ts(self) -> float:
+        """Monotonic time a device value last changed (0 = never seen one)."""
+        return self._last_value_change_ts
+
+    @property
+    def unchanged_updates(self) -> int:
+        """Consecutive updates that carried no value this device had not sent."""
+        return self._unchanged_updates
+
+    def _note_value_change(self, parsed: dict[str, Any]) -> None:
+        """Record whether this update carried anything the device had not sent.
+
+        Compared key by key against what is already held, so a poll that
+        returns a byte-identical payload counts as nothing new even though it
+        succeeded. That is the distinction the caller cannot make: an HTTP poll
+        that returns the cloud's stored copy looks exactly like one that
+        returns a fresh reading.
+
+        Called before the merge, since afterwards every key compares equal.
+        """
+        for key, value in parsed.items():
+            if key.startswith("_"):
+                continue
+            if key not in self._device_data or self._device_data[key] != value:
+                self._last_value_change_ts = time.monotonic()
+                self._unchanged_updates = 0
+                return
+        self._unchanged_updates += 1
 
     @property
     def snapshot(self) -> DeviceSnapshot:

@@ -149,6 +149,7 @@ class HttpPollMixin:
         # Same pop as in _apply_data: prevent EMS raw battery state from
         # overwriting the power-derived value (#50).
         parsed.pop("batt_charge_discharge_state", None)
+        self._note_value_change(parsed)
         self._device_data.update(parsed)
 
         # Derive battery state from power (same logic as MQTT path, #50)

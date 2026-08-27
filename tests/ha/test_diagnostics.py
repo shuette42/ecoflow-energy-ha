@@ -1738,3 +1738,112 @@ class TestRedactionDoesNotEatTheEvidence:
         result = _redact_serials(payload)
 
         assert "HJ31TEST00000001" not in json.dumps(result)
+
+
+class TestDataFreshness:
+    """A download has to say whether the polling achieved anything (#267).
+
+    `update_interval` reports how often the integration asks. A reporter whose
+    readings moved twice a day pointed at the 30 s poll in his own file and was
+    entirely right about the number, because nothing in the file distinguished
+    a poll returning a fresh reading from one returning the cloud's stored copy.
+    """
+
+    async def _diag_device(self, hass, entry):
+        result = await async_get_config_entry_diagnostics(hass, entry)
+        return result["devices"][0]["data_freshness"]
+
+    async def _coordinator(self, hass, entry):
+        entry.add_to_hass(hass)
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.EcoFlowDeviceCoordinator.async_config_entry_first_refresh",
+            new_callable=AsyncMock,
+        ):
+            await hass.config_entries.async_setup(entry.entry_id)
+            await hass.async_block_till_done()
+        return next(iter(hass.data[DOMAIN][entry.entry_id].values()))
+
+    async def test_a_fresh_reading_resets_the_unchanged_run(
+        self, hass, standard_config_entry, mock_iot_api, mock_mqtt_client, mock_http_client
+    ) -> None:
+        """A value the device had not sent before counts as news."""
+        coordinator = await self._coordinator(hass, standard_config_entry)
+
+        coordinator._note_value_change({"soc_pct": 70.0})
+        coordinator._device_data.update({"soc_pct": 70.0})
+        coordinator._note_value_change({"soc_pct": 69.0})
+
+        freshness = await self._diag_device(hass, standard_config_entry)
+        assert freshness["unchanged_updates"] == 0
+        assert freshness["last_value_change_age_s"] is not None
+        assert freshness["last_value_change_age_s"] < 5
+
+    async def test_a_repeated_payload_is_counted_as_nothing_new(
+        self, hass, standard_config_entry, mock_iot_api, mock_mqtt_client, mock_http_client
+    ) -> None:
+        """The case the file could not show: polls succeed, values stand still.
+
+        This is what a Standard Mode download should look like when the cloud
+        keeps handing back the copy it already had.
+        """
+        coordinator = await self._coordinator(hass, standard_config_entry)
+        payload = {"soc_pct": 70.0, "solar_w": 1200.0}
+
+        coordinator._note_value_change(payload)
+        coordinator._device_data.update(payload)
+        for _ in range(12):
+            coordinator._note_value_change(dict(payload))
+
+        freshness = await self._diag_device(hass, standard_config_entry)
+        assert freshness["unchanged_updates"] == 12
+        # The interval still reads the same, which is the whole point: on its
+        # own it cannot tell this run apart from the one above.
+        assert freshness["update_interval"] is not None
+
+    async def test_a_standing_still_quota_shows_up_on_the_real_poll_path(
+        self, hass, standard_config_entry
+    ) -> None:
+        """Driven through the HTTP poll, not by calling the helper.
+
+        This is the path the reporter is on and the one the field exists for.
+        Wiring it up only in the MQTT path would leave Standard Mode blind
+        while every other test here still passed.
+        """
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA3_DEVICE
+        )
+        quota = {"powInSumW": 812.0, "powOutSumW": 231.0, "powGetPv": 210.0}
+        coordinator._http_client = MagicMock()
+        coordinator._http_client.get_quota_all = AsyncMock(return_value=quota)
+
+        await coordinator._async_update_data()
+        first_change = coordinator.last_value_change_ts
+        assert first_change > 0
+        assert coordinator.unchanged_updates == 0
+
+        # The cloud hands back the copy it already had, three times over.
+        for _ in range(3):
+            await coordinator._async_update_data()
+
+        assert coordinator.unchanged_updates == 3
+        assert coordinator.last_value_change_ts == first_change
+
+        # And a real move is picked up again on the same path.
+        coordinator._http_client.get_quota_all = AsyncMock(
+            return_value={**quota, "powGetPv": 205.0}
+        )
+        await coordinator._async_update_data()
+
+        assert coordinator.unchanged_updates == 0
+        assert coordinator.last_value_change_ts > first_change
+
+    async def test_a_device_that_never_reported_says_so(
+        self, hass, standard_config_entry, mock_iot_api, mock_mqtt_client, mock_http_client
+    ) -> None:
+        """No reading yet is not the same as a reading that has not moved."""
+        await self._coordinator(hass, standard_config_entry)
+
+        freshness = await self._diag_device(hass, standard_config_entry)
+        assert freshness["last_value_change_age_s"] is None
+        assert freshness["unchanged_updates"] == 0
