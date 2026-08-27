@@ -76,11 +76,14 @@ def _build_bundle(*headers: bytes) -> bytes:
     return b"".join(headers)
 
 
-# PowerGlow reports as PowerOceans sent them. The first three come from the
-# reporter capture on issue #7, recorded 2026-08-22; the fourth comes from a
-# different owner's unit recorded 2026-08-24 on issue #247, which carries a rod
-# nobody had noticed. In every one the serial is the sixteen 0x58 bytes the
-# diagnostics sanitizer had already substituted; nothing else was touched.
+# PowerGlow reports as one PowerOcean sent them. The first three come from a
+# capture recorded 2026-08-22 on issue #7; the fourth from a second download off
+# the same installation two days later, taken for an unrelated question on issue
+# #247. Same owner and same unit, so it is a second observation rather than a
+# second source - what it adds is the drawn power an order of magnitude lower,
+# which is why the whole-watt reading is not resting on one magnitude. In every
+# one the serial is the sixteen 0x58 bytes the diagnostics sanitizer had already
+# substituted; nothing else was touched.
 _PG_IDLE_PDATA = bytes.fromhex(
     "0a10585858585858585858585858585858581001180320002800"
     "35000060423d00008c424001480050dc0b58646000"
@@ -146,12 +149,13 @@ def test_powerglow_target_power_is_not_an_echo_of_the_drawn_power() -> None:
     }
 
 
-def test_powerglow_field_map_holds_on_a_second_owners_unit() -> None:
-    """A different PowerOcean, a different draw, the same twelve fields.
+def test_powerglow_field_map_holds_at_a_lower_draw() -> None:
+    """The same twelve fields at 789 W, an order of magnitude below the other.
 
-    Recorded for an unrelated question on issue #247 and only later noticed to
-    contain a heating rod. Its numbers were never used to build the map, which
-    is what makes it a control rather than a second copy of the same evidence.
+    From a later download off the same installation, taken for an unrelated
+    question. Same owner and same unit, so this is not independent evidence of
+    the layout - it is what keeps the whole-watt reading of fields 4 and 5 from
+    resting on a single magnitude.
     """
     results = decode_proto_runtime_headers(
         _build_header(212, 8, _PG_SECOND_UNIT_PDATA)
