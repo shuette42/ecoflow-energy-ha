@@ -809,3 +809,86 @@ message HRChargingParamReport {
   oneof _hr_selfcheck_percent { uint32 hr_selfcheck_percent = 11; }
   oneof _hr_run_flag { uint32 hr_run_flag = 12; }
 }
+
+// --- Accessories on the PowerOcean's cmd_func 241 (the EDEV relay) ---
+//
+// A PowerOcean relays its coupled accessories on command family 241 as well.
+// Every message opens with EdevBaseInfo naming the accessory by a bus address
+// (dev_addr) or its serial. The PowerPulse 2 wallbox (C376) reports here and
+// never on 209: three reporter captures (24.08., 27.08. and 28.08.2026, #247)
+// hold its whole charging session on cmd_id 3 - 1355 W at a 6 A setting,
+// energy and duration counting up within one order and resetting together
+// when a new order id appears - and not one 209/8 frame beside it. The
+// heating rod on the same relay reports on cmd_id 3 too, at its own address
+// and in field 3; a report without field 4 is therefore not a wallbox.
+//
+// Field names follow the command family the PowerOcean web client uses for
+// this relay; only the fields the captures carry are read (see the remap).
+
+message EdevBaseInfo {
+  oneof _dev_sn {
+    uint32 dev_addr = 1;
+    string dev_sn = 2;
+  }
+  oneof _sub_addr { uint32 sub_addr = 3; }
+}
+
+message EDevPileVehicleSet {
+  oneof _default_vehicle_id { string default_vehicle_id = 1; }
+  oneof _charge_vehicle_id { string charge_vehicle_id = 2; }
+  oneof _default_vehicle_comsumption { uint32 default_vehicle_comsumption = 3; }
+  oneof _current_vehicle_comsumption { uint32 current_vehicle_comsumption = 4; }
+}
+
+// The wallbox settings as the PowerOcean holds them. Currents are tenths of an
+// ampere: 60 and 160 in every capture for a 6 to 16 A charger, and a write of
+// 110 answered by the app's 11 A. Reported inside EDevPileChargingParamReport
+// and written back through EDevParamSet on cmd_id 102.
+message EDevPileParamSet {
+  oneof _switch_bits { uint32 switch_bits = 1; }
+  oneof _work_mode { uint32 work_mode = 2; }
+  oneof _current_ouput_max { uint32 current_ouput_max = 3; }
+  oneof _solar_current_min { uint32 solar_current_min = 4; }
+  oneof _phase_specified { uint32 phase_specified = 5; }
+  oneof _user_current_set { uint32 user_current_set = 6; }
+}
+
+// One charging order: energy in Wh and duration in seconds, both zero when
+// the order opens (captured on 27.08.: 364 Wh / 1080 s, then a new order id
+// with 0 / 0, then 51 / 240).
+message EDevPileOrderRealStatus {
+  oneof _order_id { uint32 order_id = 1; }
+  oneof _order_state { uint32 order_state = 2; }
+  oneof _order_start_timestamp { fixed32 order_start_timestamp = 3; }
+  oneof _order_end_timestamp { fixed32 order_end_timestamp = 4; }
+  oneof _order_charging_energy { uint32 order_charging_energy = 5; }
+  oneof _order_time { uint32 order_time = 6; }
+}
+
+// The wallbox report. charging_status carries the same numbering as EVChgSts
+// (1 available, 3 charging in the captures), charging_pwr is whole watts.
+message EDevPileChargingParamReport {
+  oneof _param_set { EDevPileParamSet param_set = 1; }
+  oneof _flag_state { uint32 flag_state = 2; }
+  oneof _online_bits { uint32 online_bits = 3; }
+  oneof _charging_status { uint32 charging_status = 4; }
+  oneof _error_code { bytes error_code = 5; }
+  oneof _charging_pwr { uint32 charging_pwr = 6; }
+  oneof _vehicle_info { EDevPileVehicleSet vehicle_info = 7; }
+  oneof _order_real_status { EDevPileOrderRealStatus order_real_status = 8; }
+  oneof _grid_phase_input { uint32 grid_phase_input = 10; }
+  oneof _ocpp_ctrl { uint32 ocpp_ctrl = 12; }
+}
+
+// cmd_id 3 on family 241. Fields 2 and 3 belong to other accessory kinds
+// (smart plugs; the heating rod reports in field 3 at its own address) and
+// are carried as opaque bytes: declared so a rod-only report does not show up
+// in the diagnostics as an undeclared field on every system with a rod, and
+// opaque because nothing reads them. Such a report decodes to no wallbox part
+// and maps to nothing - not to 0 W.
+message EDevParamReport {
+  oneof _dev_info { EdevBaseInfo dev_info = 1; }
+  oneof _plug_param { bytes plug_param = 2; }
+  oneof _third_plug_param_report { bytes third_plug_param_report = 3; }
+  oneof _pile_charging_param_report { EDevPileChargingParamReport pile_charging_param_report = 4; }
+}

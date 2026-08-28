@@ -34,6 +34,7 @@ from ..ecoflow.parsers.powerocean_proto import (
     remap_ems_state_keys,
     remap_ev_charging_keys,
     remap_heating_rod_keys,
+    remap_pile_charging_keys,
     remap_proto_keys,
 )
 from ..ecoflow.parsers.smartplug import (
@@ -610,6 +611,14 @@ class MqttIngestMixin:
                     continue
                 if result.mapped.get("_is_ev_charging_param"):
                     merged.update(remap_ev_charging_keys(raw))
+                    continue
+                # The same wallbox session on the accessory relay (241/3),
+                # where a PowerPulse 2 reports. The heating rod shares the
+                # tuple and maps to nothing, so a rod-only header leaves the
+                # wallbox keys untouched. Only here: every PowerOcean frame,
+                # push or get-all, goes through this loop.
+                if result.mapped.get("_is_pile_charging_param"):
+                    merged.update(remap_pile_charging_keys(raw))
                     continue
                 if result.mapped.get("_is_heating_rod_param"):
                     merged.update(remap_heating_rod_keys(raw))

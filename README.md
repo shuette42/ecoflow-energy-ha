@@ -77,7 +77,7 @@
 
 **Accessories.** Two PowerOcean add-ons report through the PowerOcean itself rather than as devices of their own, so their entities sit on the PowerOcean device page and are created only once the accessory actually reports:
 
-- **PowerPulse wallbox** (`C376`) - charging power, the energy and the duration of the running session, the charging state and which vehicle the charger recognized. Enhanced Mode only: the readings travel on the PowerOcean's real-time stream.
+- **PowerPulse wallbox** (`C376`, and the earlier PowerPulse on `HJ37`) - charging power, the energy and the duration of the running session, the charging state and which vehicle the charger recognized. Enhanced Mode only: the readings travel on the PowerOcean's real-time stream, where the PowerPulse 2 reports on the accessory relay and the earlier model on its own command family. Both feed the same five entities.
 - **PowerGlow heating rod** - water temperature, heating power and the two settings the rod is working towards. Available in both modes: Standard Mode reads them from the polled data, and in Enhanced Mode they travel on the PowerOcean's real-time stream.
 
 **Enhanced Mode controls** (verified against the official EcoFlow app, byte-for-byte wire compatible):

@@ -691,6 +691,68 @@ def remap_ev_charging_keys(raw: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+# The wallbox report on the accessory relay (cmd_func 241, cmd_id 3) numbers
+# its status like the 209 family names it: 1 available and 3 charging are the
+# two values in the reporter's captures, the rest follows the same enum.
+_PILE_STATUS_BY_NUMBER: dict[int, str] = {
+    0: "none",
+    1: "available",
+    2: "preparing",
+    3: "charging",
+    4: "suspended_charger",
+    5: "suspended_vehicle",
+    6: "finishing",
+    9: "faulted",
+}
+
+
+def remap_pile_charging_keys(raw: dict[str, Any]) -> dict[str, Any]:
+    """Remap a PowerPulse 2 report from the accessory relay (241/3).
+
+    Same five readings as `remap_ev_charging_keys`, from the message the
+    PowerOcean relays for a C376: whole watts, order energy in Wh and order
+    duration in seconds - a reporter capture holds 1355 W at a 6 A setting,
+    364 Wh after 1080 s, and both counters at 0 the moment a new order id
+    appears. The two families never coexist on one PowerOcean, so they share
+    the sensor keys rather than each getting a set of its own.
+
+    A relay report without the wallbox part (the heating rod reports on the
+    same tuple at its own address) maps to nothing at all: an empty dict, not
+    a 0 W reading.
+
+    The vehicle comes from `charge_vehicle_id`, as on the 209 path. No capture
+    separates it from `default_vehicle_id` - both read the same four digits in
+    every frame on file - so the choice follows the 209 mapping and is not
+    something the captures confirm.
+    """
+    report = raw.get("pile_charging_param_report")
+    if not isinstance(report, dict):
+        return {}
+    result: dict[str, Any] = {}
+    power = report.get("charging_pwr")
+    if isinstance(power, (int, float)) and not isinstance(power, bool):
+        result["ev_charge_power_w"] = float(power)
+    order = report.get("order_real_status")
+    if isinstance(order, dict):
+        energy = order.get("order_charging_energy")
+        if isinstance(energy, (int, float)) and not isinstance(energy, bool):
+            result["ev_session_energy_wh"] = float(energy)
+        seconds = order.get("order_time")
+        if isinstance(seconds, (int, float)) and not isinstance(seconds, bool):
+            result["ev_session_duration_s"] = float(seconds)
+    status = report.get("charging_status")
+    if isinstance(status, int) and not isinstance(status, bool):
+        mapped = _PILE_STATUS_BY_NUMBER.get(status)
+        # An unknown number would crash the enum sensor, so it is dropped.
+        if mapped is not None:
+            result["ev_charge_status"] = mapped
+    vehicle = report.get("vehicle_info")
+    if isinstance(vehicle, dict) and "charge_vehicle_id" in vehicle:
+        text = str(vehicle.get("charge_vehicle_id"))
+        result["ev_vehicle_id"] = None if text in ("", _EV_NO_VEHICLE) else text
+    return result
+
+
 def remap_ems_state_keys(raw: dict[str, Any]) -> dict[str, Any]:
     """Remap an EMS state report (cmd_id=17) to sensor keys.
 
