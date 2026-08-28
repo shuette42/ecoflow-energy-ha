@@ -56,12 +56,22 @@ _TYPE_INT = "int"
 _TYPE_FLOAT = "float"
 _FLOAT_ZERO_EPS = 1e-6
 
+# The unit's own state of charge offered as a stand-in for `soc_pct` when a
+# message carries no system figure. Private: the coordinator promotes it on
+# a single unit and drops it once a system figure has been seen (#323).
+SOC_FALLBACK_KEY = "_soc_pct_fallback"
+
 # cmd_func/cmd_id -> field_number -> (sensor_key, scalar_type)
 _STREAM_FIELD_MAP: dict[tuple[int, int], dict[int, tuple[str, str]]] = {
     # Main status frame (observed every few seconds)
     (254, 21): {
-        242: ("soc_pct", _TYPE_INT),
-        262: ("soc_pct", _TYPE_INT),  # mirrored SoC
+        # Two states of charge, and they are only the same number on a single
+        # unit. 262 is the system figure a linked pair reports as one battery
+        # (the app's System SOC), 242 is this unit's own BMS. Both used to
+        # land on `soc_pct`, so on two units joined by a parallel cable the
+        # battery sensor flapped between them with every frame (#323).
+        242: ("unit_soc_pct", _TYPE_INT),
+        262: ("soc_pct", _TYPE_INT),
         270: ("max_charge_soc_pct", _TYPE_INT),
         271: ("min_discharge_soc_pct", _TYPE_INT),
         # PV string 1 input. Both are floats on the wire; the vendor quota
@@ -258,8 +268,20 @@ def _finalize_stream_state(parsed: dict[str, Any]) -> dict[str, Any]:
         if isinstance(value, float) and isfinite(value) and abs(value) < _FLOAT_ZERO_EPS:
             result[key] = 0.0
 
-    if "soc_pct" not in result and "soc_precise_pct" in result:
-        result["soc_pct"] = result["soc_precise_pct"]
+    # A single unit is its own system, so a frame that carries only the
+    # unit's BMS reading (field 242, or the precise figure of the auxiliary
+    # frame) should still feed the battery sensor - but not from here. This
+    # parser sees one frame at a time, and the coordinator merges frames: a
+    # BMS-only frame promoted here would overwrite the system figure the
+    # previous frame delivered, and the sensor would flap between the two
+    # exactly as #323 describes. The stand-in travels on a private key and
+    # `_resolve_soc` in the coordinator, which knows whether a system figure
+    # was ever reported, decides whether it becomes `soc_pct`.
+    if "soc_pct" not in result:
+        if "unit_soc_pct" in result:
+            result[SOC_FALLBACK_KEY] = result["unit_soc_pct"]
+        elif "soc_precise_pct" in result:
+            result[SOC_FALLBACK_KEY] = int(round(result["soc_precise_pct"]))
 
     grid_state_raw = result.pop("_grid_connection_state_raw", None)
     if isinstance(grid_state_raw, int):

@@ -31,6 +31,11 @@ Field notes:
   this is an assumption, not a verified fact: the Stream protobuf path
   reports plain watts and nothing in the payload suggests a divisor.
   Reporter feedback comparing an entity against the app decides it.
+- `cmsBattSoc` is the state of charge of the system, which is what the app
+  shows and what a pair of units on a parallel cable reports as one battery.
+  `soc` is this unit's own BMS reading and only equals it on a single unit;
+  it maps onto `unit_soc_pct` and stands in for the system figure when a
+  quota carries no `cmsBattSoc`.
 - `plugInInfoPvVol` is the PV input voltage. It is exposed as a
   disabled-by-default diagnostic because the per-string breakdown, not
   the summed voltage, is what users are after.
@@ -41,6 +46,8 @@ Field notes:
 from __future__ import annotations
 
 from typing import Any
+
+from .stream_proto import SOC_FALLBACK_KEY
 
 # Mapping: flat quota key -> sensor key. Every value in this map is a
 # plain number in its native unit (W, V, %); no scaling is applied.
@@ -64,7 +71,12 @@ STREAM_HTTP_FIELD_MAP: dict[str, str] = {
 # Keys that are reported as clean integers (percent). Kept separate so the
 # power path can stay float and match the protobuf output exactly.
 STREAM_HTTP_INT_FIELD_MAP: dict[str, str] = {
-    "soc": "soc_pct",
+    # Same split as protobuf fields 262/242: `cmsBattSoc` is the system
+    # figure a linked pair reports as one battery, `soc` this unit's own BMS.
+    # A Stream Ultra X quota can carry `cmsBattSoc` alone (19 keys in the
+    # #139 diagnostics), a Stream Ultra both (#323).
+    "cmsBattSoc": "soc_pct",
+    "soc": "unit_soc_pct",
     "soh": "bms_soh_pct",
 }
 
@@ -109,6 +121,15 @@ def parse_stream_quota(raw: dict) -> dict[str, Any]:
         value = _numeric(raw[quota_key])
         if value is not None:
             result[sensor_key] = int(round(value))
+
+    # A single unit is its own system: a quota that carries only `soc`
+    # still feeds the battery sensor. Offered on the same private key as the
+    # protobuf path and promoted by the coordinator, not here: a `/quota`
+    # push is not guaranteed to be a whole snapshot, and a partial one
+    # carrying `soc` alone must not overwrite the system figure the last poll
+    # delivered.
+    if "soc_pct" not in result and "unit_soc_pct" in result:
+        result[SOC_FALLBACK_KEY] = result["unit_soc_pct"]
 
     # Derived battery split, identical to the protobuf path so the energy
     # integration behaves the same in both modes.

@@ -476,10 +476,13 @@
         }
       },
       "soc_precise_pct": {
-        "name": "Batterie Ladezustand (präzise)"
+        "name": "Batterieladezustand (präzise)"
       },
       "unit_batt_w": {
         "name": "Batterieleistung dieser Einheit"
+      },
+      "unit_soc_pct": {
+        "name": "Batterieladezustand dieser Einheit"
       },
       "ac_voltage_v": {
         "name": "AC-Spannung"

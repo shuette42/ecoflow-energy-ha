@@ -12,12 +12,35 @@ from ..const import (
     DEVICE_TYPE_POWEROCEAN,
 )
 from ..ecoflow.parsers.stream_ac5000_proto import UNIT_POWER_BY_SN_KEY
+from ..ecoflow.parsers.stream_proto import SOC_FALLBACK_KEY
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class StateApplyMixin:
     """Mixin applying parsed data to coordinator state."""
+
+    def _resolve_soc(self, parsed: dict[str, Any]) -> None:
+        """Decide whether a unit's own state of charge stands in for `soc_pct`.
+
+        A Stream reports two states of charge: the system figure (protobuf
+        field 262, quota `cmsBattSoc`), which a pair of units on a parallel
+        cable reports as one battery, and the unit's own BMS figure (field
+        242, quota `soc`). The parsers put the system figure on `soc_pct` and
+        offer the unit figure on a private key when a message has no system
+        figure. Only this layer sees the messages accumulate, so only this
+        layer can tell the two cases apart: a single unit that never reports
+        a system figure keeps its battery sensor from the stand-in, while a
+        pair latches onto the system figure the moment it arrives and a
+        BMS-only frame can no longer pull the sensor back to one unit's
+        reading (#323).
+        """
+        fallback = parsed.pop(SOC_FALLBACK_KEY, None)
+        if "soc_pct" in parsed:
+            self._soc_from_system = True
+            return
+        if fallback is not None and not self._soc_from_system:
+            parsed["soc_pct"] = fallback
 
     def _resolve_unit_power(self, parsed: dict[str, Any]) -> None:
         """Take this unit's own entry out of a STREAM per-unit block.
@@ -75,6 +98,7 @@ class StateApplyMixin:
         if "ems_app_surplus_pct" in parsed:
             self._last_ems_param_change_ts = now
         self._resolve_unit_power(parsed)
+        self._resolve_soc(parsed)
         self._note_value_change(parsed)
         self._device_data.update(parsed)
 

@@ -832,7 +832,12 @@ STREAM_NUMBERS: list[EcoFlowNumberDef] = [
 # =====================================================================
 
 STREAM_SENSORS: list[EcoFlowSensorDef] = [
+    # The system figure: what the app shows, and on two units joined by a
+    # parallel cable the pair's combined state of charge (#323).
     EcoFlowSensorDef("soc_pct", "Battery SOC", "%", "battery", "measurement", "mdi:battery", suggested_display_precision=0),
+    # This unit's own BMS state of charge. Off by default because on a single
+    # unit, which is what most owners have, it repeats the system figure.
+    EcoFlowSensorDef("unit_soc_pct", "Unit Battery SOC", "%", None, "measurement", "mdi:battery-outline", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("soc_precise_pct", "Battery SOC (Precise)", "%", None, "measurement", "mdi:battery-sync", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
     EcoFlowSensorDef("solar_w", "Solar Power", "W", "power", "measurement", "mdi:solar-power", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     # Per-string PV. Standard mode reports these individually (powGetPv..
@@ -1132,6 +1137,7 @@ STREAM_MICRO_EXCLUDED_KEYS: frozenset[str] = frozenset({
     # Battery block: the periodic full telemetry upload carries none of the
     # battery fields the protocol defines in that same message.
     "soc_pct",
+    "unit_soc_pct",
     "soc_precise_pct",
     "bms_soh_pct",
     "batt_w",

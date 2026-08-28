@@ -420,7 +420,9 @@ class TestBKSeriesSetIsUntouched:
     """
 
     def test_the_stream_list_keeps_its_size(self) -> None:
-        assert len(_get_sensor_defs(DEVICE_TYPE_STREAM)) == 54
+        # 55 since Unit Battery SOC joined the BK list (#323): a key the
+        # BK series itself reports, not an ES22 one.
+        assert len(_get_sensor_defs(DEVICE_TYPE_STREAM)) == 55
 
     def test_bk01_still_gets_the_micro_reduced_set(self) -> None:
         defs = _get_sensor_defs(DEVICE_TYPE_STREAM)

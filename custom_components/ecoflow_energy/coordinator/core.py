@@ -229,6 +229,9 @@ class EcoFlowDeviceCoordinator(
         # that looks exactly like a device that does not send the block, and
         # nothing else in a diagnostics download tells the two apart.
         self._unit_power_stats: dict[str, Any] | None = None
+        # Whether a Stream ever reported the system state of charge; once it
+        # has, a unit's own figure no longer stands in for it (#323).
+        self._soc_from_system = False
         # Debounce state for the PowerOcean SoC SET. HA Number-Entity sliders
         # send one SET per 5%-step during a mouse drag, which arrives at the
         # device at ~100 ms cadence. The device cannot keep all SETs in sync

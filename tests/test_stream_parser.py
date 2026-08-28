@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from ecoflow_energy.ecoflow.parsers.stream_proto import (
+    SOC_FALLBACK_KEY,
     _STREAM_FIELD_MAP,
     _decode_mapped_fields,
     parse_stream_proto_message,
@@ -52,6 +53,71 @@ def _build_masked_frame(cmd_func: int, cmd_id: int, inner: bytes, seq: int) -> b
 
 
 class TestStreamProtoParser:
+    def test_system_soc_feeds_battery_soc_and_unit_soc_stays_apart(self) -> None:
+        """Field 262 is the linked system's SoC, field 242 this unit's own.
+
+        Two Stream units on a parallel cable report both, and they differ
+        whenever the units are unbalanced. The battery sensor is the system
+        figure, which is what the app shows for the pair; the unit's own
+        reading gets its own key (#323).
+        """
+        inner = bytearray()
+        inner.extend(_encode_fixed32_field(242, 40.0))
+        inner.extend(_encode_fixed32_field(262, 55.0))
+
+        result = parse_stream_proto_message(_build_frame(254, 21, bytes(inner)))
+
+        assert result["soc_pct"] == 55
+        assert result["unit_soc_pct"] == 40
+
+    def test_system_soc_wins_regardless_of_field_order(self) -> None:
+        """Whichever of 242/262 the frame carries last must not decide."""
+        inner = bytearray()
+        inner.extend(_encode_fixed32_field(262, 55.0))
+        inner.extend(_encode_fixed32_field(242, 40.0))
+
+        result = parse_stream_proto_message(_build_frame(254, 21, bytes(inner)))
+
+        assert result["soc_pct"] == 55
+        assert result["unit_soc_pct"] == 40
+
+    def test_unit_soc_alone_is_offered_as_stand_in_not_promoted(self) -> None:
+        """A frame with only field 242 offers the unit figure for `soc_pct`.
+
+        The parser must not promote it itself: it sees one frame at a time,
+        and promoting here would let a BMS-only frame overwrite the system
+        figure of the frame before. The coordinator decides (#323).
+        """
+        inner = bytearray()
+        inner.extend(_encode_fixed32_field(242, 40.0))
+
+        result = parse_stream_proto_message(_build_frame(254, 21, bytes(inner)))
+
+        assert "soc_pct" not in result
+        assert result["unit_soc_pct"] == 40
+        assert result[SOC_FALLBACK_KEY] == 40
+
+    def test_stand_in_prefers_the_unit_figure_over_the_precise_one(self) -> None:
+        """Field 242 outranks the auxiliary frame's precise BMS figure, and
+        the stand-in is a whole percent either way."""
+        aux = _build_frame(32, 50, _encode_fixed32_field(25, 40.2))
+        main = _build_frame(254, 21, _encode_fixed32_field(242, 41.0))
+
+        result = parse_stream_proto_message(aux + main)
+
+        assert result[SOC_FALLBACK_KEY] == 41
+        assert isinstance(result[SOC_FALLBACK_KEY], int)
+        assert result["soc_precise_pct"] == pytest.approx(40.2, rel=1e-5)
+
+    def test_system_figure_leaves_no_stand_in(self) -> None:
+        inner = bytearray()
+        inner.extend(_encode_fixed32_field(242, 40.0))
+        inner.extend(_encode_fixed32_field(262, 55.0))
+
+        result = parse_stream_proto_message(_build_frame(254, 21, bytes(inner)))
+
+        assert SOC_FALLBACK_KEY not in result
+
     def test_parse_main_status_frame(self) -> None:
         inner = bytearray()
         inner.extend(encode_field_varint(242, 21))
@@ -80,7 +146,7 @@ class TestStreamProtoParser:
         result = parse_stream_proto_message(_build_frame(254, 21, bytes(inner)))
 
         assert result is not None
-        assert result["soc_pct"] == 21
+        assert result["unit_soc_pct"] == 21
         assert result["max_charge_soc_pct"] == 95
         assert result["min_discharge_soc_pct"] == 15
         assert result["ac_outlet_1_enabled"] == 1
@@ -115,7 +181,10 @@ class TestStreamProtoParser:
 
         assert result is not None
         assert result["soc_precise_pct"] == pytest.approx(21.6, rel=1e-5)
-        assert result["soc_pct"] == pytest.approx(21.6, rel=1e-5)
+        # The precise BMS figure is offered as a whole-percent stand-in for
+        # the battery sensor, never written to `soc_pct` by the parser.
+        assert "soc_pct" not in result
+        assert result[SOC_FALLBACK_KEY] == 22
         assert result["backup_reserve_pct"] == 80
 
     def test_parse_led_brightness_live_only(self) -> None:

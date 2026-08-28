@@ -1,6 +1,7 @@
 """Tests for the Stream (BK-series) JSON quota parser."""
 
 from ecoflow_energy.ecoflow.parsers.stream_http import parse_stream_quota
+from ecoflow_energy.ecoflow.parsers.stream_proto import SOC_FALLBACK_KEY
 
 
 class TestFieldMapping:
@@ -40,11 +41,54 @@ class TestFieldMapping:
         assert result["ac_outlet_1_w"] == 40.0
         assert result["pv_voltage_v"] == 38.5
 
+    def test_system_soc_feeds_battery_soc_and_unit_soc_stays_apart(self) -> None:
+        """`cmsBattSoc` is the linked system's SoC, `soc` this unit's own.
+
+        Same split as protobuf fields 262/242: the battery sensor is the
+        system figure, the unit's own reading gets its own key (#323).
+        """
+        result = parse_stream_quota({"soc": 40, "cmsBattSoc": 55.0})
+
+        assert result["soc_pct"] == 55
+        assert result["unit_soc_pct"] == 40
+
+    def test_unit_soc_alone_is_offered_as_stand_in_not_promoted(self) -> None:
+        """A quota carrying only `soc` offers the unit figure for `soc_pct`.
+
+        Promotion is the coordinator's call: a partial `/quota` push with
+        `soc` alone must not overwrite the system figure of the last poll.
+        """
+        result = parse_stream_quota({"soc": 40})
+
+        assert "soc_pct" not in result
+        assert result["unit_soc_pct"] == 40
+        assert result[SOC_FALLBACK_KEY] == 40
+
+    def test_system_figure_leaves_no_stand_in(self) -> None:
+        result = parse_stream_quota({"soc": 40, "cmsBattSoc": 55.0})
+
+        assert SOC_FALLBACK_KEY not in result
+
+    def test_system_soc_alone_feeds_battery_soc(self) -> None:
+        """A Stream Ultra X quota carries `cmsBattSoc` and no `soc` at all.
+
+        The 19-key quota in the #139 diagnostics is exactly that, and before
+        the split the battery sensor of such a unit stayed empty in Standard
+        Mode.
+        """
+        result = parse_stream_quota({"cmsBattSoc": 55.0})
+
+        assert result["soc_pct"] == 55
+        assert "unit_soc_pct" not in result
+
     def test_percent_keys_become_integers(self) -> None:
-        """SoC and SoH are whole percent, matching the protobuf path."""
+        """SoC and SoH are whole percent, matching the protobuf path.
+
+        `soc` is the unit's own figure and lands on `unit_soc_pct` (#323).
+        """
         result = parse_stream_quota({"soc": 87.4, "soh": 100})
 
-        assert result["soc_pct"] == 87
+        assert result["unit_soc_pct"] == 87
         assert result["bms_soh_pct"] == 100
 
     def test_missing_keys_are_absent(self) -> None:

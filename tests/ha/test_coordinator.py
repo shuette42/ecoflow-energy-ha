@@ -4792,12 +4792,12 @@ class TestParseMessageProtobuf:
         coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_STREAM_DEVICE)
 
         inner = bytearray()
-        inner.extend(encode_field_varint(242, 19))  # soc_pct
+        inner.extend(encode_field_varint(242, 19))  # unit_soc_pct: field 242 is this unit's own BMS SoC (#323)
         frame = _build_proto_frame(254, 21, bytes(inner))
 
         result = coordinator._parse_proto_device_data(frame)
         assert result is not None
-        assert result.get("soc_pct") == 19
+        assert result.get("unit_soc_pct") == 19
 
     async def test_parse_proto_device_data_invalid_pdata_hex_skipped(
         self,
@@ -4977,7 +4977,7 @@ class TestParseMessageGetReply:
         result = coordinator._parse_message(topic, payload)
 
         assert result is not None
-        assert result.get("soc_pct") == 19
+        assert result.get("unit_soc_pct") == 19
         assert result.get("backup_reserve_pct") == 20
         assert result.get("batt_w") == pytest.approx(-304.15, rel=1e-5)
         assert result.get("batt_discharge_power_w") == pytest.approx(304.15, rel=1e-5)
@@ -7550,6 +7550,81 @@ class TestStreamQuotaRouting:
             ("pv4_w", "pv4_energy_kwh"),
         ):
             assert STREAM_POWER_TO_ENERGY[power_key] == energy_key
+
+
+class TestStreamSocLatch:
+    """The battery SoC latches onto the system figure once one was reported.
+
+    A Stream reports its own BMS state of charge and, on a parallel-cabled
+    pair, the system figure. The parsers offer the unit figure on a private
+    key when a message carries no system figure; only the coordinator can
+    tell a single unit (never a system figure, the stand-in is the sensor)
+    from a pair (the stand-in must not pull the sensor back), because only
+    it sees the messages accumulate (#323).
+    """
+
+    BK_DEVICE: dict[str, Any] = {
+        "sn": "BK61TESTUNITAAAA",
+        "name": "STREAM Ultra X",
+        "product_name": "STREAM Ultra X",
+        "device_type": "stream",
+        "online": 1,
+    }
+
+    def _coordinator(self, hass, entry):
+        entry.add_to_hass(hass)
+        return EcoFlowDeviceCoordinator(hass, entry, self.BK_DEVICE)
+
+    async def test_a_bms_only_frame_cannot_overwrite_the_system_figure(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """The reporter's flap, in two messages: system 55, then BMS 40."""
+        coordinator = self._coordinator(hass, enhanced_config_entry)
+        coordinator._apply_data({"soc_pct": 55, "unit_soc_pct": 40})
+        coordinator._apply_data({"unit_soc_pct": 40, "_soc_pct_fallback": 40})
+        assert coordinator.data["soc_pct"] == 55
+        assert coordinator.data["unit_soc_pct"] == 40
+
+    async def test_the_precise_bms_frame_cannot_overwrite_it_either(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        coordinator = self._coordinator(hass, enhanced_config_entry)
+        coordinator._apply_data({"soc_pct": 55})
+        coordinator._apply_data({"soc_precise_pct": 40.2, "_soc_pct_fallback": 40})
+        assert coordinator.data["soc_pct"] == 55
+        assert coordinator.data["soc_precise_pct"] == 40.2
+
+    async def test_a_single_unit_keeps_its_sensor_from_the_stand_in(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """No system figure ever arrives: the unit figure is the sensor, and
+        it follows every update."""
+        coordinator = self._coordinator(hass, enhanced_config_entry)
+        coordinator._apply_data({"unit_soc_pct": 40, "_soc_pct_fallback": 40})
+        assert coordinator.data["soc_pct"] == 40
+        coordinator._apply_data({"unit_soc_pct": 41, "_soc_pct_fallback": 41})
+        assert coordinator.data["soc_pct"] == 41
+
+    async def test_the_system_figure_takes_over_from_the_stand_in(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """Stand-in first, system figure later: the sensor moves to the
+        system figure and stays there."""
+        coordinator = self._coordinator(hass, enhanced_config_entry)
+        coordinator._apply_data({"unit_soc_pct": 40, "_soc_pct_fallback": 40})
+        coordinator._apply_data({"soc_pct": 55, "unit_soc_pct": 40})
+        coordinator._apply_data({"unit_soc_pct": 40, "_soc_pct_fallback": 40})
+        assert coordinator.data["soc_pct"] == 55
+
+    async def test_the_private_key_never_reaches_the_state(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        coordinator = self._coordinator(hass, enhanced_config_entry)
+        coordinator._apply_data({"unit_soc_pct": 40, "_soc_pct_fallback": 40})
+        assert "_soc_pct_fallback" not in coordinator.data
+        coordinator._apply_data({"soc_pct": 55})
+        coordinator._apply_data({"_soc_pct_fallback": 40})
+        assert "_soc_pct_fallback" not in coordinator.data
 
 
 class TestLinkedUnitPower:

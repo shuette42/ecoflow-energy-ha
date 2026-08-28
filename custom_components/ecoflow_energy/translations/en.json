@@ -481,6 +481,9 @@
       "unit_batt_w": {
         "name": "Unit Battery Power"
       },
+      "unit_soc_pct": {
+        "name": "Unit Battery SOC"
+      },
       "ac_voltage_v": {
         "name": "AC Voltage"
       },

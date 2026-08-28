@@ -6,7 +6,7 @@ Full list of all entities created for Stream devices.
 
 **The Stream Micro (`BK01`) does not.** It is a grid-tie inverter with two solar strings and no battery, and it gets a reduced set. See [Stream Micro (BK01)](#stream-micro-bk01) at the end of this page.
 
-**Totals:** 54 sensors, 2 binary sensors, 1 number. Stream AC Pro (`BK31`) adds 3 numbers. Four of the 54 are *accessory* entities (PV 3 and PV 4, power and energy) and exist only on a unit that reports those strings.
+**Totals:** 55 sensors, 2 binary sensors, 1 number. Stream AC Pro (`BK31`) adds 3 numbers. Four of the 55 are *accessory* entities (PV 3 and PV 4, power and energy) and exist only on a unit that reports those strings.
 
 > Entities marked with *disabled* are available but hidden by default. Enable them in **Settings > Devices > EcoFlow Stream > Entities** (click the filter icon and show disabled entities).
 
@@ -20,7 +20,8 @@ Full list of all entities created for Stream devices.
 
 | Entity | Unit | Category | Default | Description |
 |:---|:---:|:---:|:---:|:---|
-| Battery SOC | % | - | enabled | State of charge (shown in device header) |
+| Battery SOC | % | - | enabled | State of charge (shown in device header). On two units joined by a parallel cable this is the system figure the app shows for the pair |
+| Unit Battery SOC | % | diagnostic | disabled | This unit's own battery state of charge. On a single unit it repeats Battery SOC, which is why it is off by default |
 | Battery SOC (Precise) | % | diagnostic | disabled | High-resolution SoC |
 | Battery SoH | % | - | enabled | State of health |
 | Battery Power | W | - | enabled | Signed battery power (positive = charging, negative = discharging) |

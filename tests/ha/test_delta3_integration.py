@@ -349,7 +349,7 @@ class TestOtherDeviceClassesAreNotMisrouted:
 
         assert result is not None
         assert result["grid_w"] == 1351.0
-        assert result["soc_pct"] == 21
+        assert result["unit_soc_pct"] == 21
         assert result["max_charge_soc_pct"] == 95
         # Delta 3 keys must never appear on a Stream device.
         assert "cms_batt_soc" not in result
