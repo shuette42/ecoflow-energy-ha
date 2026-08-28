@@ -205,6 +205,15 @@ def frame_budget(
 # eight slots is the reserve. Telemetry keeps the rest.
 WRITE_CLASS_RESERVE = 8
 
+# A write type that has repeated this often is not a person pressing a
+# button, it is the vendor app talking to itself. The 2026-08-28 beta.24
+# capture (#247) held 96/97 1157 times in six hours - once every eighteen
+# seconds while the app was open - and it had taken a reserve slot before the
+# reporter changed anything. His mode change, 241/102, arrived twice and was
+# dropped. Four presses on a button in a settings session stay far below
+# this, so a genuine write never gives way to another.
+_PERIODIC_WRITE_MIN_SEEN = 20
+
 _WRITE_CLASSES = ("set", "set_reply")
 
 
@@ -491,6 +500,11 @@ class TypedFrameBuffer:
         # a reader could not already see.
         self._dropped_per_key: dict[str, int] = {}
         self._dropped_keys_untracked = 0
+        # Write types that gave their reserve slot to a rarer write, with how
+        # often they had been seen. Named in the download so a reader can
+        # tell "this write never happened" from "this write was periodic and
+        # made room".
+        self._write_keys_evicted: dict[str, int] = {}
         self._seq = 0
 
     def add(
@@ -508,6 +522,22 @@ class TypedFrameBuffer:
         """
         bucket = self._buckets.get(key)
         if bucket is None:
+            if (
+                not self._has_slot_for(key)
+                and _is_write_key(key)
+                and key not in self._write_keys_evicted
+            ):
+                # The reserve is full. A slot held by a write that repeats
+                # like telemetry is worth less than the one that just
+                # arrived, because the newcomer is by definition the rarer
+                # of the two, and rare writes are what the reserve is for.
+                # A key that already gave up its slot does not get to buy
+                # it back: it was evicted for repeating, so it is the one
+                # write guaranteed to come back, and eighteen seconds later
+                # it would look like a new type and spend a second eviction
+                # on itself. Once out, it is counted like any other dropped
+                # type from then on.
+                self._evict_periodic_write()
             if not self._has_slot_for(key):
                 # No budget left for a new type. Counted rather than ignored,
                 # so a reader can tell a saturated capture from a complete one.
@@ -540,6 +570,41 @@ class TypedFrameBuffer:
             return writes < self._write_reserve
         telemetry = sum(1 for k in self._buckets if not _is_write_key(k))
         return telemetry < self._keys_max
+
+    def _evict_periodic_write(self) -> None:
+        """Free one reserve slot held by a write that repeats like telemetry.
+
+        Picks the write bucket seen most often, and only when it has been
+        seen at least `_PERIODIC_WRITE_MIN_SEEN` times; below that every
+        write in the reserve counts as a person's action and none gives way.
+        The evicted type keeps its name and count in the dropped list, which
+        is what the reserve's first shape recorded for every write - the
+        difference is that now it happens to the app's heartbeat instead of
+        the reporter's setting.
+
+        Writing `dropped_per_key` directly here is safe against the bound
+        `_note_dropped` enforces: an evicted key was already a tracked
+        bucket, so at most `write_reserve` keys can ever enter this way.
+
+        A `set` and the `set_reply` of the same type are judged on their
+        own counts, not as a pair. Only a periodic half is eligible, the
+        first-come reserve had already split such pairs (in the reporter's
+        capture 96/97 had no reply tracked and 96/112 no write), and both
+        halves stay pairable by name in the dropped list. Pairing them
+        would cost two slots per eviction and buy nothing.
+        """
+        busiest: str | None = None
+        for key, bucket in self._buckets.items():
+            if not _is_write_key(key) or bucket.seen < _PERIODIC_WRITE_MIN_SEEN:
+                continue
+            if busiest is None or bucket.seen > self._buckets[busiest].seen:
+                busiest = key
+        if busiest is None:
+            return
+        seen = self._buckets.pop(busiest).seen
+        self._write_keys_evicted[busiest] = self._write_keys_evicted.get(busiest, 0) + seen
+        self._dropped_frames += seen
+        self._dropped_per_key[busiest] = self._dropped_per_key.get(busiest, 0) + seen
 
     def _note_dropped(self, key: str) -> None:
         """Record the name of a type that found no bucket.
@@ -692,6 +757,7 @@ class TypedFrameBuffer:
             "frames_dropped_key_budget": self._dropped_frames,
             "dropped_per_key": dict(self._dropped_per_key),
             "dropped_keys_untracked": self._dropped_keys_untracked,
+            "write_keys_evicted": dict(self._write_keys_evicted),
             "per_key": {
                 key: {
                     "seen": bucket.seen,

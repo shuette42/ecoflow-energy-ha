@@ -962,6 +962,7 @@ class TestTypedFrameBuffer:
             "frames_dropped_key_budget": 0,
             "dropped_per_key": {},
             "dropped_keys_untracked": 0,
+            "write_keys_evicted": {},
             "per_key": {},
         }
 
@@ -1279,6 +1280,93 @@ class TestWriteSlotReserve:
         stats = buffer.stats()
         assert "set:proto/241.100" in stats["per_key"]
         assert stats["dropped_per_key"] == {"set:proto/241.102": 1}
+
+    def test_a_periodic_write_yields_its_slot_to_a_rare_one(self) -> None:
+        """Rebuilt from the 2026-08-28 beta.24 capture (#247).
+
+        The reserve was first-come among writes, and the app's own periodic
+        write (96/97, 1157 frames in six hours) had taken a slot before the
+        reporter touched anything. His mode changes (241/102, two frames)
+        and every reply were dropped - the second capture in a row that lost
+        exactly what it was opened for.
+        """
+        buffer = TypedFrameBuffer(keys_max=2, per_key_max=4, write_reserve=4)
+
+        for i in range(200):
+            buffer.add("set:proto/96.97", _entry(float(i), write=True))
+        # A second periodic write, less busy: the busiest must be the one
+        # to go, not the newest eligible one.
+        for i in range(30):
+            buffer.add("set:proto/96.98", _entry(250.0 + i, write=True))
+        buffer.add("set:proto/96.22", _entry(300.0, write=True))
+        buffer.add("set_reply:proto/96.22", _entry(301.0, write=True))
+        assert buffer.stats()["keys_tracked"] == 4
+
+        buffer.add("set:proto/241.102", _entry(400.0, write=True))
+        buffer.add("set:proto/241.102", _entry(401.0, write=True))
+
+        stats = buffer.stats()
+        assert "set:proto/241.102" in stats["per_key"]
+        assert stats["per_key"]["set:proto/241.102"]["seen"] == 2
+        # The busiest periodic one is gone from the buckets but not from the
+        # record; the less busy periodic one and the genuine writes stay.
+        assert "set:proto/96.97" not in stats["per_key"]
+        assert "set:proto/96.98" in stats["per_key"]
+        assert "set:proto/96.22" in stats["per_key"]
+        assert "set_reply:proto/96.22" in stats["per_key"]
+        assert stats["write_keys_evicted"] == {"set:proto/96.97": 200}
+        assert stats["dropped_per_key"] == {"set:proto/96.97": 200}
+        # Nothing is lost from the count: 200 + 30 + 2 + 2 added.
+        assert stats["frames_seen"] == 234
+        assert stats["frames_dropped_key_budget"] == 200
+
+    def test_an_evicted_periodic_write_does_not_buy_its_slot_back(self) -> None:
+        """The write evicted for repeating is the one certain to come back.
+
+        Eighteen seconds after 96/97 lost its slot its next frame arrived as
+        a "new" write type and, in the first shape of this rule, evicted
+        the next busiest write to retake the slot - spending two evictions
+        per rare newcomer. It stays out and is counted from then on.
+        """
+        buffer = TypedFrameBuffer(keys_max=2, per_key_max=4, write_reserve=2)
+
+        for i in range(200):
+            buffer.add("set:proto/96.97", _entry(float(i), write=True))
+        for i in range(30):
+            buffer.add("set:proto/96.98", _entry(250.0 + i, write=True))
+        buffer.add("set:proto/241.102", _entry(400.0, write=True))
+        assert buffer.stats()["write_keys_evicted"] == {"set:proto/96.97": 200}
+
+        for i in range(30):
+            buffer.add("set:proto/96.97", _entry(500.0 + i, write=True))
+
+        stats = buffer.stats()
+        assert "set:proto/96.97" not in stats["per_key"]
+        assert set(stats["per_key"]) >= {"set:proto/96.98", "set:proto/241.102"}
+        assert stats["write_keys_evicted"] == {"set:proto/96.97": 200}
+        assert stats["dropped_per_key"] == {"set:proto/96.97": 230}
+        assert stats["frames_seen"] == 261
+
+    def test_a_genuine_write_is_never_evicted_for_another(self) -> None:
+        """Only a write that repeats like telemetry gives way.
+
+        Four presses on a button are a settings session, not a heartbeat;
+        with every slot held by such writes the reserve stays bounded the
+        way it was, and the newcomer is counted rather than admitted.
+        """
+        buffer = TypedFrameBuffer(keys_max=2, per_key_max=4, write_reserve=2)
+
+        for i in range(4):
+            buffer.add("set:proto/241.100", _entry(float(i), write=True))
+        for i in range(4):
+            buffer.add("set_reply:proto/241.100", _entry(10.0 + i, write=True))
+
+        buffer.add("set:proto/241.102", _entry(20.0, write=True))
+
+        stats = buffer.stats()
+        assert set(stats["per_key"]) == {"set:proto/241.100", "set_reply:proto/241.100"}
+        assert stats["dropped_per_key"] == {"set:proto/241.102": 1}
+        assert stats["write_keys_evicted"] == {}
 
     def test_the_download_names_the_reserve(self) -> None:
         """A reader must be able to date a capture by its own stats block."""
