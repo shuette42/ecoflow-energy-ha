@@ -1670,6 +1670,30 @@
       },
       "ac_outlet_2_switch": {
         "name": "AC-Ausgang 2"
+      },
+      "schedule_1_enabled": {
+        "name": "Zeitplan 1 aktiv"
+      },
+      "schedule_2_enabled": {
+        "name": "Zeitplan 2 aktiv"
+      },
+      "schedule_3_enabled": {
+        "name": "Zeitplan 3 aktiv"
+      },
+      "schedule_4_enabled": {
+        "name": "Zeitplan 4 aktiv"
+      },
+      "schedule_5_enabled": {
+        "name": "Zeitplan 5 aktiv"
+      },
+      "schedule_6_enabled": {
+        "name": "Zeitplan 6 aktiv"
+      },
+      "schedule_7_enabled": {
+        "name": "Zeitplan 7 aktiv"
+      },
+      "schedule_8_enabled": {
+        "name": "Zeitplan 8 aktiv"
       }
     },
     "number": {
@@ -1744,6 +1768,30 @@
       },
       "max_grid_input_power_w": {
         "name": "Max. Netzbezugsleistung"
+      },
+      "schedule_1_power_w": {
+        "name": "Zeitplan 1 Ladeleistung"
+      },
+      "schedule_2_power_w": {
+        "name": "Zeitplan 2 Ladeleistung"
+      },
+      "schedule_3_power_w": {
+        "name": "Zeitplan 3 Ladeleistung"
+      },
+      "schedule_4_power_w": {
+        "name": "Zeitplan 4 Ladeleistung"
+      },
+      "schedule_5_power_w": {
+        "name": "Zeitplan 5 Ladeleistung"
+      },
+      "schedule_6_power_w": {
+        "name": "Zeitplan 6 Ladeleistung"
+      },
+      "schedule_7_power_w": {
+        "name": "Zeitplan 7 Ladeleistung"
+      },
+      "schedule_8_power_w": {
+        "name": "Zeitplan 8 Ladeleistung"
       }
     },
     "select": {
@@ -1825,6 +1873,9 @@
   "exceptions": {
     "set_command_failed": {
       "message": "Der Befehl für {entity} hat das Gerät nicht erreicht. Prüfe die Verbindung des Geräts und versuche es erneut."
+    },
+    "set_command_gone": {
+      "message": "{entity} kann nicht gesetzt werden - das Gerät meldet diesen Zeitplan nicht mehr. Prüfe, ob der Zeitplan in der EcoFlow-App noch existiert."
     },
     "set_command_not_ready": {
       "message": "{entity} kann noch nicht gesetzt werden - das Gerät hat seine aktuelle Einstellung noch nicht gemeldet. Bitte gleich noch einmal versuchen."

@@ -1651,6 +1651,9 @@
     "set_command_failed": {
       "message": "The command for {entity} did not reach the device. Check that the device is connected and try again."
     },
+    "set_command_gone": {
+      "message": "{entity} cannot be set - the device is no longer reporting this schedule. Check whether the schedule still exists in the EcoFlow app."
+    },
     "set_command_not_ready": {
       "message": "{entity} cannot be set yet - the device has not reported its current setting. Try again in a moment."
     },

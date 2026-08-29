@@ -30,12 +30,14 @@ from .const import (
     DELTA_PROFILE_R331,
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_DELTA3,
+    DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
     DEVICE_TYPE_STREAM_AC5000,
     DOMAIN,
     EcoFlowSwitchDef,
     filter_defs_for_serial,
+    POWEROCEAN_SWITCHES,
     supports_stream_ac5000_controls,
     supports_stream_controls,
     SMARTPLUG_SWITCH_COMMANDS,
@@ -51,7 +53,9 @@ from .coordinator import DeviceValueNotReported, EcoFlowDeviceCoordinator
 from .ecoflow.parsers.smartplug import build_plug_switch_payload
 from .entity import (
     EcoFlowWriteGateMixin,
+    reading_reported,
     raise_set_failed,
+    raise_set_gone,
     raise_set_not_ready,
     raise_set_rejected,
     raise_set_unsupported,
@@ -76,12 +80,53 @@ async def async_setup_entry(
             _get_switch_defs(coordinator.device_type, coordinator.device_sn),
             coordinator.device_sn,
         )
+        pending: list[EcoFlowSwitchDef] = []
         for defn in defs:
             if defn.enhanced_only and not coordinator.enhanced_mode:
                 continue
+            if defn.accessory and not reading_reported(coordinator, defn.state_key):
+                pending.append(defn)
+                continue
             entities.append(EcoFlowSwitch(coordinator, defn))
 
+        if pending:
+            _watch_for_accessory(entry, coordinator, pending, async_add_entities)
+
     async_add_entities(entities)
+
+
+@callback
+def _watch_for_accessory(
+    config_entry: ConfigEntry,
+    coordinator: EcoFlowDeviceCoordinator,
+    pending: list[EcoFlowSwitchDef],
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Add accessory switches as soon as the device first reports their state.
+
+    The gate is the definition's read-back key, because that is the reading
+    the control steers and the only one the device sends. Every definition
+    that reaches this path names the same string for both, so the two are
+    interchangeable today; the read-back key is the one named because it is
+    the one a control has to wait for. A PowerOcean schedule can be created
+    in the app while Home Assistant runs, so the wait has no deadline.
+    """
+
+    @callback
+    def _check_for_accessory() -> None:
+        ready = [
+            definition
+            for definition in pending
+            if reading_reported(coordinator, definition.state_key)
+        ]
+        for definition in ready:
+            pending.remove(definition)
+        if ready:
+            async_add_entities(
+                [EcoFlowSwitch(coordinator, definition) for definition in ready]
+            )
+
+    config_entry.async_on_unload(coordinator.async_add_listener(_check_for_accessory))
 
 
 class EcoFlowSwitch(
@@ -182,6 +227,22 @@ class EcoFlowSwitch(
         received - the switch would show the wrong state for the whole
         lock window and then snap back.
         """
+        schedule_slot = self._schedule_slot()
+        if schedule_slot is not None:
+            try:
+                ok = await self.coordinator.async_set_powerocean_schedule_armed(
+                    schedule_slot, turn_on
+                )
+            except DeviceValueNotReported:
+                # The slot is not in the device's task list. The switch is
+                # still here because a retracted reading keeps its entity, but
+                # there is no task behind it to arm.
+                raise_set_gone(self.entity_id)
+            if not ok:
+                raise_set_failed(self.entity_id)
+            self._apply_optimistic(turn_on)
+            return
+
         # SmartPlug app-auth: use protobuf SET (JSON cmdCode only works on /open/ topic)
         if (
             self.coordinator.device_type == DEVICE_TYPE_SMARTPLUG
@@ -274,6 +335,15 @@ class EcoFlowSwitch(
         self._optimistic_lock_until = time.monotonic() + OPTIMISTIC_LOCK_S
         self._write_state_always(turn_on)
 
+    def _schedule_slot(self) -> int | None:
+        """Return the slot number for a PowerOcean schedule switch, else None."""
+        if self.coordinator.device_type != DEVICE_TYPE_POWEROCEAN:
+            return None
+        key = self._definition.key
+        if not key.startswith("schedule_") or not key.endswith("_enabled"):
+            return None
+        return int(key[len("schedule_") : -len("_enabled")])
+
     def _port_priority_stem(self) -> str | None:
         """Return the port stem for a port priority switch, else None."""
         key = self._definition.key
@@ -357,6 +427,8 @@ def _get_switch_defs(device_type: str, device_sn: str = "") -> list[EcoFlowSwitc
     """
     if device_type == DEVICE_TYPE_DELTA:
         return DELTA2MAX_SWITCHES
+    if device_type == DEVICE_TYPE_POWEROCEAN:
+        return POWEROCEAN_SWITCHES
     if device_type == DEVICE_TYPE_SMARTPLUG:
         return SMARTPLUG_SWITCHES
     if device_type == DEVICE_TYPE_STREAM:

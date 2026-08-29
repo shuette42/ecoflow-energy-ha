@@ -825,9 +825,21 @@ def _decode_time_table(value: Any) -> int | None:
     for position, byte in enumerate(raw):
         result |= (byte & 0x7F) << (7 * position)
         if not byte & 0x80:
-            # Trailing bytes after a terminated varint mean the block is not
-            # what this reading assumes it is.
-            return result if position == len(raw) - 1 else None
+            if position != len(raw) - 1:
+                # Trailing bytes after a terminated varint mean the block is
+                # not what this reading assumes it is.
+                return None
+            if position and not byte:
+                # A final group of zero bits pads the varint without adding to
+                # it. The number would read the same, but the write path echoes
+                # this field back to the device by re-encoding it, and the
+                # encoder emits the short form - so a padded block would go
+                # back to the device shorter than it arrived. No captured frame
+                # carries one, so refusing costs nothing that has been seen,
+                # and refusing means the slot's write asks to be retried rather
+                # than resending a block the device did not send.
+                return None
+            return result
     return None
 
 

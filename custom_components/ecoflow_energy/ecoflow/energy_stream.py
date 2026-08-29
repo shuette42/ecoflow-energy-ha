@@ -9,7 +9,8 @@ Reverse-engineered from EcoFlow Portal JavaScript bundle.
 
 import time
 
-from .proto_encoding import encode_field_bytes, encode_field_varint
+from .parsers.powerocean_proto import SCHEDULE_MAX_INDEX
+from .proto_encoding import encode_field_bytes, encode_field_varint, encode_varint
 
 
 def build_energy_stream_activate_payload(seq: int = 0) -> bytes:
@@ -177,6 +178,11 @@ def _build_powerocean_set_envelope(
     cmd_id: int,
     seq: int = 0,
     device_sn: str = "",
+    *,
+    check_type: int | None = 3,
+    product_id: int | None = None,
+    version: int = 3,
+    source: str = "ios",
 ) -> bytes:
     """Build the PowerOcean SET envelope around a pre-encoded inner pdata.
 
@@ -211,6 +217,16 @@ def _build_powerocean_set_envelope(
         seq: Sequence number. Default 0 generates from timestamp.
         device_sn: Device serial number. If empty, the SN field is omitted
             (same as the older short envelope).
+        check_type: Field 7. None omits it. The app does not send it on every
+            command: the scheduled-task frames carry no field 7 at all.
+        product_id: Field 15. None omits it, which is what the SoC and feed
+            commands were captured doing. The scheduled-task frames carry 1.
+        version: Field 16. 3 on the frames this envelope was first written
+            for, 19 on the scheduled-task frames.
+        source: Field 23, the client identifier. The frames this envelope was
+            first written for came from an iOS client, the scheduled-task
+            capture from an Android one. Nothing shows the device reading it,
+            but matching the capture removes a variable.
     """
     if seq == 0:
         seq = int(time.time() * 1000) & 0x7FFFFFFF
@@ -221,15 +237,18 @@ def _build_powerocean_set_envelope(
     header.extend(encode_field_varint(3, 96))                    # dest
     header.extend(encode_field_varint(4, 1))                     # d_src
     header.extend(encode_field_varint(5, 1))                     # d_dest
-    header.extend(encode_field_varint(7, 3))                     # check_type
+    if check_type is not None:
+        header.extend(encode_field_varint(7, check_type))        # check_type
     header.extend(encode_field_varint(8, 96))                    # cmd_func
     header.extend(encode_field_varint(9, cmd_id))                # cmd_id
     header.extend(encode_field_varint(10, len(pdata)))           # data_len
     header.extend(encode_field_varint(11, 1))                    # need_ack
     header.extend(encode_field_varint(14, seq))                  # seq
-    header.extend(encode_field_varint(16, 3))                    # version
+    if product_id is not None:
+        header.extend(encode_field_varint(15, product_id))       # product_id
+    header.extend(encode_field_varint(16, version))              # version
     header.extend(encode_field_varint(17, 1))                    # payload_ver
-    header.extend(encode_field_bytes(23, b"ios"))                # from
+    header.extend(encode_field_bytes(23, source.encode("ascii")))  # from
     if device_sn:
         header.extend(encode_field_bytes(25, device_sn.encode("ascii")))
 
@@ -360,6 +379,214 @@ def build_backup_event_set_payload(
     pdata.extend(encode_field_varint(4, end_ts))
 
     return _build_powerocean_set_envelope(bytes(pdata), cmd_id=99, seq=seq)
+
+
+# Scheduled charge tasks (cmd_func 96, cmd_id 125). The device holds a list of
+# timer tasks; each one arms a charge window with a power setting. Only slot 1
+# has ever been seen on the wire.
+TIMER_TASK_CMD_ID = 125
+
+# `is_cfg`, field 2. The write path here only ever modifies an existing task.
+# 1 (create) and 3 (delete) exist on the wire and are deliberately unreachable
+# from this builder, see `build_timer_task_set_payload`.
+_TIMER_TASK_MODIFY = 2
+
+# Watts, and the bound is ours rather than the device's. Every write in the
+# capture succeeded, so no rejection was ever seen and the ceiling the firmware
+# enforces is unknown. The only two values on file are 1000 and 1500. Nothing
+# else in this repo carries a PowerOcean grid-charge ceiling either: the 2600 W
+# on `max_grid_input_power_w` belongs to a different device family. So this
+# refuses what cannot be a watt setting on this hardware at all and leaves the
+# real limit to the device, which is the side that knows it. It moves the day a
+# capture shows a higher figure accepted or a lower one refused.
+TIMER_TASK_POWER_MIN_W = 0
+TIMER_TASK_POWER_MAX_W = 30000
+
+_TIMER_TASK_OPERATIONS = ("arm", "disarm", "power")
+
+# The fields a power change has to hand back to the device untouched. Their
+# encoding is only partly resolved, so they are echoed from the last read and
+# never composed here.
+_TIMER_TASK_ECHOED = ("task_type", "time_mode", "time_param", "time_table")
+
+
+def _timer_task_int(name: str, value: object, minimum: int, maximum: int) -> int:
+    """Check one varint argument, refusing bools and out-of-range values."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError(f"{name} must be an int, got {type(value).__name__}")
+    if not minimum <= value <= maximum:
+        raise ValueError(f"{name} must be {minimum}..{maximum}, got {value}")
+    return value
+
+
+def build_timer_task_set_payload(
+    operation: str,
+    task_index: int,
+    *,
+    device_sn: str,
+    power_w: int | None = None,
+    task_type: int | None = None,
+    time_mode: int | None = None,
+    time_param: int | None = None,
+    time_table: int | None = None,
+    armed: bool | None = None,
+    seq: int = 0,
+) -> bytes:
+    """Build an EmsTimerTaskCfg write for one existing PowerOcean schedule.
+
+    Three operations, all of them `is_cfg=2` (modify) against a slot the owner
+    already created in the app:
+
+    ``arm``
+        Six-byte frame, fields 2, 3 and 4. Arms the schedule.
+    ``disarm``
+        Four-byte frame, fields 2 and 3. Disarms it. Field 4 is **omitted**,
+        never sent as zero: a false bool is not serialised in proto3, both
+        sides of the wire express "off" as the missing field, and an explicit
+        `4=0` is a no-op that leaves the schedule armed.
+    ``power``
+        Full body, fields 2, 3, 6, 7, 8, 9, 10 and optionally 4. Changes the
+        charge power while handing the schedule back unchanged.
+
+    Create and delete are refused rather than left reachable. A create has to
+    send `time_mode` and `time_param`, and each has exactly one sample with no
+    reading that survives falsification, so building one means copying a
+    recurrence off a stranger's device and hoping it means "every day". Delete
+    is four trivial bytes and a one-way door: with create impossible, an owner
+    who deletes from here can only get the schedule back in the app.
+
+    `armed` and the two-frame sequence
+        A full-body write clears the enable flag as a side effect. The app
+        handles that by sending the power change without field 4 and re-arming
+        1.5 s later with a separate six-byte frame. This builder can produce
+        either shape: `armed=True` folds the enable flag into the one frame and
+        closes the window where a lost re-arm silently disarms the schedule,
+        while `armed=False` reproduces the app's frame exactly, so the two-frame
+        sequence is a second call to this same function rather than a rewrite.
+        The single frame is composition, not observation - every one of its
+        fields is observed on `is_cfg=2` and the whole union is observed on
+        `is_cfg=1`, but that exact union on a modify is not - so it is the shape
+        the hardware round trip has to confirm.
+
+    The echoed fields
+        `task_type`, `time_mode`, `time_param` and `time_table` belong to the
+        device, not to the caller. They go out exactly as the last read reported
+        them. `time_table` is the decoded varint the read path publishes, and it
+        is re-encoded here into the length-delimited block the wire carries.
+
+    Args:
+        operation: One of ``arm``, ``disarm``, ``power``.
+        task_index: Device slot, 1-based.
+        device_sn: Target serial for envelope field 25. Every captured frame
+            carries it and no frame without it was tried.
+        power_w: Charge power in watts. ``power`` only.
+        task_type: Field 6, echoed. ``power`` only.
+        time_mode: Field 8, echoed. ``power`` only.
+        time_param: Field 9, echoed. ``power`` only.
+        time_table: Field 10 as the decoded varint, echoed. ``power`` only.
+        armed: Whether the schedule is armed and should stay armed.
+            ``power`` only, and required there.
+        seq: Sequence number. Default 0 generates from timestamp.
+
+    Returns:
+        Binary protobuf payload ready to publish on the SET topic.
+
+    Raises:
+        ValueError: unknown or refused operation, or a value out of range.
+        TypeError: an argument of the wrong type, or one that does not belong
+            to the requested operation.
+    """
+    if operation in ("create", "delete"):
+        raise ValueError(
+            f"timer task operation {operation!r} is not built: create needs two "
+            "recurrence fields whose meaning is unresolved, and delete cannot "
+            "be undone without a create"
+        )
+    if operation not in _TIMER_TASK_OPERATIONS:
+        raise ValueError(
+            f"timer task operation must be one of "
+            f"{', '.join(_TIMER_TASK_OPERATIONS)}, got {operation!r}"
+        )
+    if not device_sn:
+        raise ValueError("device_sn is required for a timer task write")
+
+    _timer_task_int("task_index", task_index, 1, SCHEDULE_MAX_INDEX)
+
+    supplied = {
+        "power_w": power_w,
+        "task_type": task_type,
+        "time_mode": time_mode,
+        "time_param": time_param,
+        "time_table": time_table,
+    }
+
+    if operation in ("arm", "disarm"):
+        # A short frame carries none of these. Accepting and dropping them
+        # would let a caller believe a power change went out.
+        extra = sorted(name for name, value in supplied.items() if value is not None)
+        if extra:
+            raise TypeError(
+                f"{operation} carries no {', '.join(extra)}; "
+                "the short frame holds only the slot"
+            )
+        if armed is not None:
+            raise TypeError(
+                f"{operation} sets the enable flag itself; armed does not apply"
+            )
+
+        pdata = encode_field_varint(2, _TIMER_TASK_MODIFY)
+        pdata += encode_field_varint(3, task_index)
+        if operation == "arm":
+            pdata += encode_field_varint(4, 1)
+        # disarm omits field 4 entirely. Not `encode_field_varint(4, 0)`.
+    else:
+        missing = sorted(name for name, value in supplied.items() if value is None)
+        if missing:
+            raise TypeError(
+                f"power needs {', '.join(missing)}; the echoed fields come from "
+                "the last read and are never composed here"
+            )
+        if not isinstance(armed, bool):
+            raise TypeError(
+                "power needs armed=True or armed=False: a full body clears the "
+                "enable flag, so the caller has to say whether to carry it"
+            )
+
+        watts = _timer_task_int(
+            "power_w", power_w, TIMER_TASK_POWER_MIN_W, TIMER_TASK_POWER_MAX_W
+        )
+        # All four are declared uint32 in the message definition, and every
+        # value the read path has produced fits. A wider one would mean the
+        # field is not what the read assumes, which is worth a refusal rather
+        # than a silently reshaped write.
+        echoed = {
+            name: _timer_task_int(name, supplied[name], 0, 2**32 - 1)
+            for name in _TIMER_TASK_ECHOED
+        }
+
+        pdata = encode_field_varint(2, _TIMER_TASK_MODIFY)
+        pdata += encode_field_varint(3, task_index)
+        if armed:
+            pdata += encode_field_varint(4, 1)
+        pdata += encode_field_varint(6, echoed["task_type"])
+        pdata += encode_field_varint(7, watts)
+        pdata += encode_field_varint(8, echoed["time_mode"])
+        pdata += encode_field_varint(9, echoed["time_param"])
+        pdata += encode_field_bytes(10, encode_varint(echoed["time_table"]))
+
+    # The scheduled-task frames carry a different envelope from the SoC and
+    # feed commands: no check_type, product_id 1, version 19, and an Android
+    # client identifier. Reproduced as captured rather than normalised.
+    return _build_powerocean_set_envelope(
+        pdata,
+        cmd_id=TIMER_TASK_CMD_ID,
+        seq=seq,
+        device_sn=device_sn,
+        check_type=None,
+        product_id=1,
+        version=19,
+        source="android",
+    )
 
 
 def build_device_get_all_payload(seq: int = 0) -> bytes:

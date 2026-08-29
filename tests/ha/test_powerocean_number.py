@@ -15,6 +15,7 @@ from custom_components.ecoflow_energy.const import (
     DEVICE_TYPE_POWEROCEAN,
     DOMAIN,
     POWEROCEAN_NUMBERS,
+    SCHEDULE_MAX_INDEX,
 )
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
 from custom_components.ecoflow_energy.number import (
@@ -36,12 +37,21 @@ class TestGetNumberDefs:
     def test_powerocean_returns_powerocean_numbers(self):
         defs = _get_number_defs(DEVICE_TYPE_POWEROCEAN)
         assert defs is POWEROCEAN_NUMBERS
-        assert len(defs) == 2
 
     def test_powerocean_number_keys(self):
+        """Two sliders every PowerOcean has, plus one charge power per
+        scheduled task slot. The schedule ones are accessory-gated, so a
+        device without a schedule never sees them."""
         defs = _get_number_defs(DEVICE_TYPE_POWEROCEAN)
         keys = {d.key for d in defs}
-        assert keys == {"backup_reserve", "solar_surplus_threshold"}
+
+        assert keys == {"backup_reserve", "solar_surplus_threshold"} | {
+            f"schedule_{index}_power_w"
+            for index in range(1, SCHEDULE_MAX_INDEX + 1)
+        }
+        assert not any(
+            d.accessory for d in defs if not d.key.startswith("schedule_")
+        )
 
     def test_powerocean_numbers_are_enhanced_only(self):
         defs = _get_number_defs(DEVICE_TYPE_POWEROCEAN)

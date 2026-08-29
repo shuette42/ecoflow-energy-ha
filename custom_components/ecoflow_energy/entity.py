@@ -55,6 +55,22 @@ def raise_set_not_ready(entity_id: str) -> NoReturn:
     )
 
 
+def raise_set_gone(entity_id: str) -> NoReturn:
+    """Report a write against a reading the device has stopped sending.
+
+    Not the same case as `raise_set_not_ready`, which promises the state
+    clears with the next status frame. A schedule the owner deleted in the
+    app is dropped from the device's task list for good, so the next frame
+    changes nothing and telling the user to try again in a moment would send
+    them waiting on something that is never coming.
+    """
+    raise HomeAssistantError(
+        translation_domain=DOMAIN,
+        translation_key="set_command_gone",
+        translation_placeholders={"entity": entity_id},
+    )
+
+
 def raise_set_rejected(entity_id: str, reason: str) -> NoReturn:
     """Report a value this device will not accept, before anything is sent.
 
@@ -84,6 +100,13 @@ def reading_reported(
     With ``needs_nonzero`` the key has to carry a value other than zero. A
     reading that must be published as an explicit zero to stop it latching
     would otherwise announce itself on the first frame of every device.
+
+    A key that is present and None counts as reported: several messages use
+    None to retract a reading, and an accessory that vanished from its device
+    keeps its entity rather than having it removed underneath the user. A
+    control that cannot be sent against a retracted reading therefore has to
+    check the value itself before it builds a write - existence here is not a
+    promise that there is something to send.
 
     Used by the sensor and binary sensor platforms to decide whether an
     accessory entity exists yet, which is why it lives here rather than on

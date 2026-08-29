@@ -232,6 +232,13 @@ class EcoFlowDeviceCoordinator(
         # Whether a Stream ever reported the system state of charge; once it
         # has, a unit's own figure no longer stands in for it (#323).
         self._soc_from_system = False
+        # Arming flags this integration has just written, each with the value
+        # sent and the monotonic time the hold expires. A scheduled-task write
+        # seeds the flag before it sends, and a device frame that was already
+        # in flight would otherwise put the old flag back - a later power
+        # write reads the flag out of the store and would then re-send the
+        # reverted one, undoing what the owner just asked for.
+        self._schedule_armed_latch: dict[str, tuple[bool, float]] = {}
         # Debounce state for the PowerOcean SoC SET. HA Number-Entity sliders
         # send one SET per 5%-step during a mouse drag, which arrives at the
         # device at ~100 ms cadence. The device cannot keep all SETs in sync

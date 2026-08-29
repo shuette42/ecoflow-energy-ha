@@ -1670,6 +1670,30 @@
       },
       "ac_outlet_2_switch": {
         "name": "AC Outlet 2"
+      },
+      "schedule_1_enabled": {
+        "name": "Schedule 1 Enabled"
+      },
+      "schedule_2_enabled": {
+        "name": "Schedule 2 Enabled"
+      },
+      "schedule_3_enabled": {
+        "name": "Schedule 3 Enabled"
+      },
+      "schedule_4_enabled": {
+        "name": "Schedule 4 Enabled"
+      },
+      "schedule_5_enabled": {
+        "name": "Schedule 5 Enabled"
+      },
+      "schedule_6_enabled": {
+        "name": "Schedule 6 Enabled"
+      },
+      "schedule_7_enabled": {
+        "name": "Schedule 7 Enabled"
+      },
+      "schedule_8_enabled": {
+        "name": "Schedule 8 Enabled"
       }
     },
     "number": {
@@ -1744,6 +1768,30 @@
       },
       "max_grid_input_power_w": {
         "name": "Max Grid Input Power"
+      },
+      "schedule_1_power_w": {
+        "name": "Schedule 1 Charge Power"
+      },
+      "schedule_2_power_w": {
+        "name": "Schedule 2 Charge Power"
+      },
+      "schedule_3_power_w": {
+        "name": "Schedule 3 Charge Power"
+      },
+      "schedule_4_power_w": {
+        "name": "Schedule 4 Charge Power"
+      },
+      "schedule_5_power_w": {
+        "name": "Schedule 5 Charge Power"
+      },
+      "schedule_6_power_w": {
+        "name": "Schedule 6 Charge Power"
+      },
+      "schedule_7_power_w": {
+        "name": "Schedule 7 Charge Power"
+      },
+      "schedule_8_power_w": {
+        "name": "Schedule 8 Charge Power"
       }
     },
     "select": {
@@ -1825,6 +1873,9 @@
   "exceptions": {
     "set_command_failed": {
       "message": "The command for {entity} did not reach the device. Check that the device is connected and try again."
+    },
+    "set_command_gone": {
+      "message": "{entity} cannot be set - the device is no longer reporting this schedule. Check whether the schedule still exists in the EcoFlow app."
     },
     "set_command_not_ready": {
       "message": "{entity} cannot be set yet - the device has not reported its current setting. Try again in a moment."

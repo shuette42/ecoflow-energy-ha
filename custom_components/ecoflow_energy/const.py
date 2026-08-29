@@ -22,6 +22,10 @@ from .ecoflow.const import (  # noqa: E402
     get_device_name,
     get_device_type,
 )
+from .ecoflow.energy_stream import (  # noqa: E402
+    TIMER_TASK_POWER_MAX_W,
+    TIMER_TASK_POWER_MIN_W,
+)
 from .ecoflow.parsers.powerocean_proto import SCHEDULE_MAX_INDEX  # noqa: E402
 
 DOMAIN = "ecoflow_energy"
@@ -248,6 +252,14 @@ ENERGY_STREAM_KEEPALIVE_S = 20  # Re-send EnergyStreamSwitch every 20s
 QUOTAS_KEEPALIVE_S = 30  # latestQuotas poll interval (app-level keepalive)
 APP_SURPLUS_SYNC_MIN_INTERVAL_S = 30.0  # min interval between auto-sync SETs that mirror EmsParamChangeReport.dev_soc into the EMS sysBatBackupRatio
 APP_SURPLUS_SYNC_USER_GRACE_S = 5.0  # ignore discrepancy briefly after a user SET to wait for the device echo
+# How long an arming flag this integration just wrote is held against a device
+# frame that disagrees with it. The device acknowledges a scheduled-task write
+# in about 0.2 s and its task list already carries the change by then, so the
+# only frame that can still hold the old flag is one that left the device
+# before the write arrived. This window has to outlive such a frame and
+# nothing more; it matches the entity-side optimistic lock so both expire
+# together. A frame that agrees with the write clears it immediately.
+POWEROCEAN_SCHEDULE_ARMED_LATCH_S = 5.0
 POWEROCEAN_SOC_DEBOUNCE_S = 0.3  # coalesce slider-drag SETs into one frame; the device cannot keep up with 5%-step sets at 100ms cadence and the EMS/App-layer fields desync
 # The two state keys the PowerOcean SoC sliders write. They are sent as one
 # frame, so a failed write has to undo both. Kept next to the debounce window
@@ -360,6 +372,10 @@ class EcoFlowSwitchDef:
     # read-back only exists on the app channel, so with developer keys the
     # switch would be created and never learn the device's actual position.
     enhanced_only: bool = False
+    # Control over something the device only sometimes has, so the entity is
+    # created on the first report that carries its state key rather than on
+    # every device. See _watch_for_accessory() in switch.py.
+    accessory: bool = False
 
 
 @dataclass(frozen=True)
@@ -373,6 +389,9 @@ class EcoFlowNumberDef:
     max_value: float = 100
     step: float = 1
     enhanced_only: bool = False
+    # Same meaning as on the switch definition: created on the first report
+    # that carries the state key. See _watch_for_accessory() in number.py.
+    accessory: bool = False
 
 
 @dataclass(frozen=True)
@@ -678,6 +697,52 @@ POWEROCEAN_SELECTS: list[EcoFlowSelectDef] = [
         enhanced_only=True,
     ),
 ]
+
+
+# --- Scheduled charge task controls ---
+#
+# The write side of the schedule readings above. Same gate for the same
+# reason: the definition exists for every slot the device can number, and the
+# entity is created on the first report that carries that slot. A PowerOcean
+# whose owner never made a schedule gets no controls at all.
+#
+# Neither control creates or deletes a task. Creating one means composing a
+# recurrence rather than echoing the device's own, and deleting one cannot be
+# undone from here while creating is out, so a slot is made in the app first
+# and these two change what it does from then on.
+POWEROCEAN_SWITCHES: list[EcoFlowSwitchDef] = []
+
+for _schedule_index in range(1, SCHEDULE_MAX_INDEX + 1):
+    POWEROCEAN_SWITCHES.append(
+        EcoFlowSwitchDef(
+            f"schedule_{_schedule_index}_enabled",
+            f"Schedule {_schedule_index} Enabled",
+            f"schedule_{_schedule_index}_enabled",
+            "mdi:calendar-check-outline",
+            enhanced_only=True,
+            accessory=True,
+        )
+    )
+    # The range is the one the payload builder validates against, and that
+    # bound is ours rather than the device's: no write was ever refused, so
+    # the ceiling the firmware enforces is unknown and the only two figures on
+    # file are 1000 and 1500. The step is 1 for the same reason - nothing on
+    # the wire says the device rounds, so a coarser step would refuse a
+    # setpoint that may well be valid.
+    POWEROCEAN_NUMBERS.append(
+        EcoFlowNumberDef(
+            f"schedule_{_schedule_index}_power_w",
+            f"Schedule {_schedule_index} Charge Power",
+            f"schedule_{_schedule_index}_power_w",
+            "W",
+            "mdi:battery-charging-outline",
+            TIMER_TASK_POWER_MIN_W,
+            TIMER_TASK_POWER_MAX_W,
+            1,
+            enhanced_only=True,
+            accessory=True,
+        )
+    )
 
 
 # =====================================================================

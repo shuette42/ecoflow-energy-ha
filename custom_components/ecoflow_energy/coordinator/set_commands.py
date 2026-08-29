@@ -18,6 +18,11 @@ from ..entity import as_known_int
 
 _LOGGER = logging.getLogger(__name__)
 
+# Marks a value that was absent from the store rather than present and None.
+# The accessory platforms read a present key as a reading the device has sent,
+# so a rollback has to be able to put absence back.
+_UNSET = object()
+
 
 class DeviceValueNotReported(Exception):
     """A write needs a value the device has not reported yet.
@@ -271,6 +276,111 @@ class SetCommandsMixin:
             _LOGGER.warning("Work-mode SET failed: %d (%s)", work_mode, self.device_sn[:4])
             self._log_event("set_work_mode_fail", str(work_mode))
         return ok
+
+    # ------------------------------------------------------------------
+    # PowerOcean scheduled charge tasks (96/125)
+    # ------------------------------------------------------------------
+
+    async def async_set_powerocean_schedule_armed(
+        self, task_index: int, armed: bool,
+    ) -> bool:
+        """Arm or disarm one scheduled charge task.
+
+        A short frame that carries nothing but the slot, so it needs no value
+        from the last read. The slot itself still has to be there. A task the
+        owner deletes in the app simply drops out of the device's task list,
+        and the parser then retracts every key of that slot to None - which
+        leaves the switch standing and toggleable, since a key that is present
+        and None still counts as reported. Sending against a slot the device
+        no longer holds would name a task that does not exist and then show it
+        as armed, so an arming flag that is not a bool refuses the write.
+
+        The flag is seeded before the send rather than after it, because a
+        power change on the same slot has to carry the arming along and the
+        two writes share this lock: a seed that lands after the next read
+        would let that write send the flag it just replaced. The same seed is
+        held against a device frame that was already in flight, for the window
+        named by `POWEROCEAN_SCHEDULE_ARMED_LATCH_S`. A failed send puts the
+        previous value back and drops the hold with it.
+        """
+        from ..ecoflow.energy_stream import build_timer_task_set_payload
+
+        state_key = f"schedule_{task_index}_enabled"
+        async with self._device_config_lock:
+            previous = self.device_data.get(state_key)
+            if not isinstance(previous, bool):
+                raise DeviceValueNotReported(f"schedule {task_index} enabled")
+            payload = build_timer_task_set_payload(
+                "arm" if armed else "disarm",
+                task_index,
+                device_sn=self.device_sn,
+            )
+            self._seed_device_values(**{state_key: armed})
+            self.latch_schedule_armed(state_key, armed)
+            if not await self.async_send_proto_set_command(
+                payload, label=f"powerocean_schedule_{task_index}_armed"
+            ):
+                self._seed_device_values(**{state_key: previous})
+                self.clear_schedule_armed_latch(state_key)
+                return False
+            return True
+
+    async def async_set_powerocean_schedule_power(
+        self, task_index: int, power_w: int,
+    ) -> bool:
+        """Change the charge power of one scheduled task.
+
+        The full body carries the whole task, so four fields the device owns
+        travel with it: the task type and the three that hold the recurrence.
+        They go out exactly as the last read reported them. Composing a
+        default for a missing one would rewrite the days and times the owner
+        set in the app, which is the one thing this write refuses to risk, so
+        an unreported field raises `DeviceValueNotReported` instead.
+
+        The arming flag travels too. A full body clears it as a side effect,
+        and the device's own task list confirms that a frame carrying field 4
+        leaves the schedule armed, so the current flag is read and sent back.
+        """
+        from ..ecoflow.energy_stream import build_timer_task_set_payload
+
+        prefix = f"schedule_{task_index}_"
+        async with self._device_config_lock:
+            data = self.device_data
+            echoed: dict[str, int] = {}
+            for name, suffix in (
+                ("task_type", "type"),
+                ("time_mode", "time_mode"),
+                ("time_param", "time_param"),
+                ("time_table", "time_table"),
+            ):
+                value = as_known_int(data.get(f"{prefix}{suffix}"))
+                if value is None:
+                    raise DeviceValueNotReported(
+                        f"schedule {task_index} {suffix}"
+                    )
+                echoed[name] = value
+
+            armed = data.get(f"{prefix}enabled")
+            if not isinstance(armed, bool):
+                raise DeviceValueNotReported(f"schedule {task_index} enabled")
+
+            state_key = f"{prefix}power_w"
+            previous = data.get(state_key, _UNSET)
+            payload = build_timer_task_set_payload(
+                "power",
+                task_index,
+                device_sn=self.device_sn,
+                power_w=power_w,
+                armed=armed,
+                **echoed,
+            )
+            self._seed_device_values(**{state_key: power_w})
+            if not await self.async_send_proto_set_command(
+                payload, label=f"powerocean_schedule_{task_index}_power"
+            ):
+                self._restore_device_values(**{state_key: previous})
+                return False
+            return True
 
     # ------------------------------------------------------------------
     # Stream BK-series SoC config writes (254/17)
@@ -589,6 +699,26 @@ class SetCommandsMixin:
         readback in seconds.
         """
         for key, value in values.items():
+            self.set_device_value(key, value)
+            if self.data is not None:
+                self.data[key] = value
+
+    def _restore_device_values(self, **values: Any) -> None:
+        """Put values back after a failed write, forgetting absent ones.
+
+        A key that was not in the store before the write has to go back to not
+        being there, rather than back as a present None. The accessory
+        platforms create a control the moment its reading exists, and a
+        present None counts as one - so seeding it would build the entity for
+        a slot the device has never described, and nothing would take it away
+        again. Pass `_UNSET` for a value that was absent.
+        """
+        for key, value in values.items():
+            if value is _UNSET:
+                self._device_data.pop(key, None)
+                if self.data is not None:
+                    self.data.pop(key, None)
+                continue
             self.set_device_value(key, value)
             if self.data is not None:
                 self.data[key] = value

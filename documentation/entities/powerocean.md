@@ -34,17 +34,29 @@ Full list of all entities created for PowerOcean devices.
 > **The schedule readings are optional and need Enhanced Mode.** A PowerOcean
 > only has a schedule if you created one yourself in the EcoFlow app, and most
 > systems never do, so having no schedule entities at all is the normal case
-> and not a fault. One pair of entities appears for each schedule your system
-> reports, and they go back to unknown when you delete that schedule in the
-> app, rather than staying on the last window they had. The task list is read from the
-> PowerOcean's real-time stream, which is why these entities need the EcoFlow
-> account sign-in. The readings are **read-only**: they
-> tell you what a schedule is set to and whether it is charging right now, but
-> a schedule can only be created, changed or removed in the EcoFlow app.
+> and not a fault. Four entities appear for each schedule your system reports:
+> a switch that turns it on and off, its charge power, the time of day it runs
+> and whether it is charging right now. Every change is confirmed against the
+> list the PowerOcean sends back, so the switch shows what the device did and
+> not merely what was asked of it. The list travels on the PowerOcean's
+> real-time stream, which is why these entities need the EcoFlow account
+> sign-in.
+>
+> **Creating and deleting a schedule stays in the EcoFlow app.** Home Assistant
+> can operate a schedule you made there, not invent one: without a way to
+> create, a delete from Home Assistant would be a one-way door. Delete one in
+> the app and its entities go back to unknown rather than staying on their last
+> value, and a write against it is refused with a message saying the schedule
+> is gone.
+>
+> Where the settings live in the app: **Settings > Automation > Schedule
+> charging and discharging**. Peak shaving sits on the same page and is a
+> different function; it limits what you draw from the grid and creates no
+> schedule.
 
 > **PowerOcean Plus** units report more of the same entity set than a standard PowerOcean: per-phase reactive power (var) and apparent power (VA), plus MPPT strings 3 and 4. Those entities are disabled by default, so enable the ones you need after adding a Plus device.
 
-**Totals:** 235 sensors, 13 binary sensors, 2 numbers, 1 select
+**Totals:** 235 sensors, 13 binary sensors, 10 numbers, 8 switches, 1 select
 
 > Entities marked with *disabled* are available but hidden by default. Enable them in **Settings > Devices > EcoFlow PowerOcean > Entities** (click the filter icon and show disabled entities).
 
@@ -196,10 +208,14 @@ Created only for the schedules your system actually reports, up to eight. See th
 
 | Entity | Type | Description | Default |
 |:---|:---:|:---|:---:|
+| Schedule 1 Enabled | Switch | Turns the schedule on and off. Reads back from the list the device sends, so it shows the state the PowerOcean actually holds | enabled |
+| Schedule 1 Power | Number | The maximum power the schedule uses, in watts | enabled |
 | Schedule 1 Window | Sensor | The time of day the schedule runs, written as `20:00-20:30` | enabled |
-| Schedule 1 Running | Binary sensor | Whether the schedule is charging right now. Stays off while the schedule exists but its window has not opened yet | enabled |
+| Schedule 1 Running | Binary sensor | Whether the schedule is running right now. Stays off while the schedule exists but its window has not opened yet | enabled |
 
-Further schedules follow the same pattern: Schedule 2 Window, Schedule 2 Running, and so on up to Schedule 8.
+Further schedules follow the same pattern: Schedule 2 Enabled, Schedule 2 Power, and so on up to Schedule 8.
+
+A schedule set in the app to run loads from the battery rather than to charge it keeps the same four entities, and its power is the discharge limit. Which direction a schedule has is set in the app and is not shown as an entity.
 
 ---
 
