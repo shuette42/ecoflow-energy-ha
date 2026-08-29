@@ -2193,6 +2193,29 @@ class TestDeviceLabel:
              "device_type": "", "online": 1}
         )
 
+    def test_app_path_device_without_product_name_is_not_marked(self) -> None:
+        """A prefix-classified device survives the app path unmarked.
+
+        The app API returns no product name, so the serial prefix is the
+        only classification such an entry ever gets. #326 reported what
+        happens when the prefix is missing: a `J329` was listed and then
+        skipped for having no parser. Walking the config-flow half of the
+        classification is what neither half covers on its own.
+        """
+        from custom_components.ecoflow_energy.config_flow import (
+            EcoFlowEnergyConfigFlow,
+        )
+        from custom_components.ecoflow_energy.config_flow_setup import _device_label
+
+        devices = EcoFlowEnergyConfigFlow._normalize_app_devices([
+            {"sn": "J329FAKE00000001", "product_name": "", "online": 1},
+        ])
+
+        # The rendered label first: it is the thing the user sees, and it
+        # pins the whole name fallback chain, not only the type field.
+        assert _device_label(devices[0]) == "PowerOcean (J329FAKE...)"
+        assert devices[0]["device_type"] == "powerocean"
+
     def test_marker_and_offline_both_show(self) -> None:
         """Being offline and being unsupported are separate facts."""
         from custom_components.ecoflow_energy.config_flow_setup import _device_label

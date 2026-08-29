@@ -156,6 +156,17 @@ class TestDeviceTypeRouting:
         # recognition alone.
         assert get_device_type("", "J327TEST00000001") == "powerocean"
 
+    def test_j329_powerocean_by_sn_prefix(self) -> None:
+        """#326: single-phase 6 kW hybrid inverter, the sibling of J327.
+
+        The reporter capture carries `96/1`, `96/7` and `96/8` - the EMS
+        heartbeat, the battery pack heartbeat and the EMS change report -
+        all three already decoded, so routing delivers live data rather
+        than recognition alone. The app API reports no product name for
+        this unit, so the prefix is the only classification it has.
+        """
+        assert get_device_type("", "J329TEST00000001") == "powerocean"
+
     def test_powerocean_plus_by_sn_prefix(self) -> None:
         # PowerOcean Plus variants (#88): higher-power 3-phase hybrid units,
         # Enhanced mode only, classified via SN prefix like J32D/J32E.

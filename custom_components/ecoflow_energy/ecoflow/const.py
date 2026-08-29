@@ -110,7 +110,7 @@ _SN_PREFIX_MAP = {
     "J32B": DEVICE_TYPE_POWEROCEAN,
     # Single-phase 5 kW hybrid inverter, European (#225). Routed on the same
     # evidence as J32B and rather more of it: a reporter capture holds 44
-    # command frames, of which the EMS heartbeat `96/8` alone accounts for 17
+    # command frames, of which the EMS change report `96/8` alone accounts for 17
     # and `96/1`, `96/7` and `96/13` for six more. All four are already
     # decoded, so this unit reports live data into the existing parser rather
     # than merely being recognised. The capture also carries `96/11`, `96/26`,
@@ -118,6 +118,21 @@ _SN_PREFIX_MAP = {
     # says more than the parser reads - the same situation as every other
     # PowerOcean variant here.
     "J327": DEVICE_TYPE_POWEROCEAN,
+    # Single-phase 6 kW hybrid inverter (#326), the larger sibling of the
+    # `J327` above: the app's own device registry keys it "PowerOcean
+    # Single Phase 6KW S2" against "PowerOcean Single Phase 5KW S2" for the
+    # J327, on the same product type 86 that also carries the 3.68 kW
+    # `J32B`. A reporter capture of about 4800 frames over 12.5 minutes
+    # carries `96/1`, `96/7` and `96/8` - the EMS heartbeat, the battery
+    # pack heartbeat and the EMS change report - all three decoded today,
+    # so this unit reports live data into the existing parser rather than
+    # merely being recognised. The capture also holds `96/26`, `96/35`,
+    # `96/51` and `96/53`, none of which is registered, so the device says
+    # more than the parser reads - the same situation as every other
+    # PowerOcean variant here. Without the prefix the unit is classified by
+    # product name alone, which the app API leaves empty, which is why it
+    # is skipped as unsupported in Enhanced mode.
+    "J329": DEVICE_TYPE_POWEROCEAN,
     # PowerOcean Plus variants (#88): higher-power 3-phase hybrid units
     # (e.g. P3-S1, ~25-30 kW). Not exposed through the Developer API, so
     # Enhanced mode only - same situation as J32D/J32E. Routed to the
