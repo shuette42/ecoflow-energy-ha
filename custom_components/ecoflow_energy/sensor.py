@@ -36,7 +36,7 @@ from .const import (
     STREAMAC5000_SENSORS,
 )
 from .coordinator import EcoFlowDeviceCoordinator
-from .entity import EcoFlowWriteGateMixin
+from .entity import EcoFlowWriteGateMixin, reading_reported
 
 # Map string → HA enum
 _STATE_CLASS_MAP = {
@@ -69,7 +69,7 @@ async def async_setup_entry(
         for sensor_def in sensor_defs:
             if sensor_def.enhanced_only and not coordinator.enhanced_mode:
                 continue
-            if sensor_def.accessory and not _reported(
+            if sensor_def.accessory and not reading_reported(
                 coordinator, sensor_def.key, sensor_def.accessory_needs_nonzero
             ):
                 pending.append(sensor_def)
@@ -86,31 +86,6 @@ async def async_setup_entry(
             )
 
     async_add_entities(entities)
-
-
-@callback
-def _reported(
-    coordinator: EcoFlowDeviceCoordinator, key: str, needs_nonzero: bool = False
-) -> bool:
-    """Return whether the device has this reading in its current state.
-
-    Both stores are checked because they are filled at different points:
-    the persistent device data by the parsers, the coordinator payload by
-    the update that follows.
-
-    With ``needs_nonzero`` the key has to carry a value other than zero. A
-    reading that must be published as an explicit zero to stop it latching
-    would otherwise announce itself on the first frame of every device.
-    """
-    for store in (coordinator.device_data, coordinator.data or {}):
-        if key not in store:
-            continue
-        if not needs_nonzero:
-            return True
-        value = store[key]
-        if isinstance(value, (int, float)) and value:
-            return True
-    return False
 
 
 @callback
@@ -164,7 +139,7 @@ def _watch_for_accessory(
         ready = [
             definition
             for definition in pending
-            if _reported(
+            if reading_reported(
                 coordinator, definition.key, definition.accessory_needs_nonzero
             )
         ]

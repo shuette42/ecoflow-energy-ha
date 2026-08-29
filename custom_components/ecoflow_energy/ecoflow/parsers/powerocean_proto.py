@@ -9,6 +9,8 @@ No Home Assistant dependencies - stdlib only.
 
 from __future__ import annotations
 
+from base64 import b64decode
+
 import logging
 from typing import Any
 
@@ -771,5 +773,180 @@ def remap_ems_state_keys(raw: dict[str, Any]) -> dict[str, Any]:
         )
 
     _apply_enum_mappings(result)
+
+    return result
+
+
+# The device's own numbering of a schedule slot, 1-based. Only slot 1 has ever
+# been observed on the wire, so nothing here assumes how many exist - the cap
+# below only stops a malformed list from producing keys without end.
+SCHEDULE_MAX_INDEX = 8
+
+# Minutes in a day. A window edge is minutes since local midnight, so 1440 is
+# the last value that can mean anything (midnight at the end of the day).
+_MINUTES_PER_DAY = 24 * 60
+
+# Every key one reported schedule produces, so an index that disappears from
+# the list can be retracted in full rather than left standing on its last
+# reading.
+_SCHEDULE_KEY_SUFFIXES: tuple[str, ...] = (
+    "enabled",
+    "running",
+    "power_w",
+    "window",
+    "type",
+    "time_mode",
+    "time_param",
+    "time_table",
+)
+
+
+def _decode_time_table(value: Any) -> int | None:
+    """Read the packed window block as the single varint it holds.
+
+    The block is length-delimited on the wire and declared `bytes`, so
+    `MessageToDict` hands it over base64-encoded in a `str`, and that is the
+    only form this ever sees: the decode path has no branch that yields the
+    raw bytes. Anything else is refused. Four bytes, one varint, verified on
+    every frame of the reporter capture on #328 that carries the field.
+
+    Anything that is not a terminated varint returns None rather than a
+    partial number: this is the one field whose encoding was read off a single
+    sample, and half of a window is worse than no window.
+    """
+    if not isinstance(value, str):
+        return None
+    try:
+        raw = b64decode(value, validate=True)
+    except Exception:
+        return None
+
+    result = 0
+    for position, byte in enumerate(raw):
+        result |= (byte & 0x7F) << (7 * position)
+        if not byte & 0x80:
+            # Trailing bytes after a terminated varint mean the block is not
+            # what this reading assumes it is.
+            return result if position == len(raw) - 1 else None
+    return None
+
+
+def _format_window(time_table: int | None) -> str | None:
+    """Render the window as `HH:MM-HH:MM`, or None when it cannot be read.
+
+    The varint splits as `start | end << 16`, both minutes since local
+    midnight. The reporter capture on #328 carries 80610480, which is 1200 and
+    1230: a window from 20:00 to 20:30. The start half is anchored - the task
+    began running between two reads bracketing 20:00 local - while the end
+    half rests on the split rather than on a window that was watched closing.
+    """
+    if time_table is None:
+        return None
+    start = time_table & 0xFFFF
+    end = (time_table >> 16) & 0xFFFF
+    if start == 0 and end == 0:
+        # Both halves zero is an unset block, not a window from midnight to
+        # midnight. A window of zero length is not something the app offers,
+        # no capture holds one, and rendering it would put a real-looking
+        # `00:00-00:00` on the entity. Zero and unset are kept apart
+        # everywhere else on this message, and they are kept apart here.
+        return None
+    if start >= _MINUTES_PER_DAY or end >= _MINUTES_PER_DAY:
+        # Minutes since midnight run 0 to 1439, so 1440 is one past the end of
+        # the day rather than the end of it. It could be meant as "until
+        # midnight", but no capture shows it, and rendering the unseen value
+        # as `24:00` would be a guess dressed as a reading. The whole window
+        # is refused, as it is for any other half that cannot be read.
+        return None
+    return (
+        f"{start // 60:02d}:{start % 60:02d}-{end // 60:02d}:{end % 60:02d}"
+    )
+
+
+def remap_timer_task_keys(
+    raw: dict[str, Any], known_indices: set[int]
+) -> dict[str, Any]:
+    """Remap the scheduled-task list (cmd_func 96, cmd_id 10) to schedule keys.
+
+    The message carries the device's whole task list, so a frame that carries
+    it carries every task, and a task that is gone is simply not mentioned.
+    `known_indices` is the caller's record of which slots have been reported
+    before; an index that drops out of the list has all of its keys published
+    as None, because nothing else would ever retract them and the readings
+    would go on describing a schedule the device no longer holds.
+
+    Absence is a value on this message, not a gap. A bool that is false is not
+    serialised, so a task reported without field 4 is disarmed - that is how
+    both sides of the wire express it, and reading the missing field as
+    "unknown" would show a disarmed schedule as one whose state is on its way.
+    The same holds for field 5, the device's own "running now". The numbers are
+    the other way round: an absent power or window is published as None, since
+    no capture holds a task without them and a stale number is worse than an
+    empty one.
+
+    Four of the keys have a reading behind them. `type`, `time_mode`,
+    `time_param` and `time_table` do not: they are the parts of the task whose
+    encoding is only partly resolved, and any write against this slot has to
+    hand them back exactly as they were reported rather than compose them.
+    """
+    tasks = raw.get("time_task_cfg")
+    if not isinstance(tasks, list):
+        tasks = []
+
+    result: dict[str, Any] = {}
+    reported: set[int] = set()
+
+    for task in tasks:
+        if not isinstance(task, dict):
+            continue
+        index = task.get("task_index")
+        if not isinstance(index, int) or isinstance(index, bool):
+            continue
+        if index < 1 or index > SCHEDULE_MAX_INDEX:
+            _LOGGER.debug(
+                "PowerOcean schedule list carries index %s, outside 1 to %s",
+                index,
+                SCHEDULE_MAX_INDEX,
+            )
+            continue
+        if index in reported:
+            _LOGGER.debug(
+                "PowerOcean schedule list carries index %s twice, "
+                "reporting the last of them",
+                index,
+            )
+        reported.add(index)
+
+        prefix = f"schedule_{index}_"
+        result[f"{prefix}enabled"] = bool(task.get("is_enable", False))
+        result[f"{prefix}running"] = bool(task.get("is_effect", False))
+
+        power = task.get("sys_chg_dsg_pwr")
+        result[f"{prefix}power_w"] = (
+            power if isinstance(power, int) and not isinstance(power, bool) else None
+        )
+
+        time_table = _decode_time_table(task.get("time_table"))
+        result[f"{prefix}time_table"] = time_table
+        result[f"{prefix}window"] = _format_window(time_table)
+
+        for proto_key, suffix in (
+            ("type", "type"),
+            ("time_mode", "time_mode"),
+            ("time_param", "time_param"),
+        ):
+            value = task.get(proto_key)
+            result[f"{prefix}{suffix}"] = (
+                value
+                if isinstance(value, int) and not isinstance(value, bool)
+                else None
+            )
+
+    for index in sorted(known_indices - reported):
+        for suffix in _SCHEDULE_KEY_SUFFIXES:
+            result[f"schedule_{index}_{suffix}"] = None
+
+    known_indices.clear()
+    known_indices.update(reported)
 
     return result

@@ -53,6 +53,13 @@ class CmdConfig:
     rename: dict[str, str] = field(default_factory=dict)
     zero_fill: frozenset[str] = field(default_factory=frozenset)
     flatten_key: str | None = None
+    # Whether a header of this command with a zero-length payload still
+    # decodes. Off everywhere else on purpose: an empty companion header is
+    # normally noise, and decoding it would let zero-fill publish readings
+    # from a message that carried none. It is on for a list report, where an
+    # empty payload is the list being empty and therefore the only signal
+    # that a task is gone.
+    decode_empty_payload: bool = False
 
 
 def _build_cmd_registry() -> dict[tuple[int, int], CmdConfig]:
@@ -162,6 +169,18 @@ def _build_cmd_registry() -> dict[tuple[int, int], CmdConfig]:
             parse_path="typed_runtime:edev_param_report",
             flags={"_is_pile_charging_param": True},
         ),
+        # The device's scheduled charge tasks, the whole list in one
+        # message. It rides inside the get-all reply the integration already
+        # receives, twice under the same sequence number, and the two copies
+        # can disagree - see the first-copy rule in `mqtt_ingest`. Evidence is
+        # the reporter capture on #328: ten bundles carry this header, four of
+        # them with a zero-length payload before any schedule existed.
+        (96, 10): CmdConfig(
+            msg_class=pb2.EmsAllTimerTaskReport,
+            parse_path="typed_runtime:timer_task_list",
+            flags={"_is_timer_task_list": True},
+            decode_empty_payload=True,
+        ),
         # --- Delta 3 generation ---
         # Main status frame: full every 120 s, incremental about every 2 s.
         (254, 21): CmdConfig(
@@ -215,6 +234,7 @@ def _empty_mapped() -> dict[str, Any]:
         "_is_delta3_display": False,
         "_is_delta3_cms_heartbeat": False,
         "_is_delta3_bms_heartbeat": False,
+        "_is_timer_task_list": False,
     }
 
 
@@ -288,6 +308,32 @@ def _header_pdata_candidates(header: dict[str, Any]) -> list[tuple[bytes, str]]:
         ]
 
     return [(pdata, "typed_source_header_pdata")]
+
+
+def _header_carries_no_pdata(header: dict[str, Any]) -> bool:
+    """True when the header genuinely holds no inner payload.
+
+    `_header_pdata_candidates` returns an empty list for two situations that
+    look alike from the outside and mean opposite things: a header that
+    carries nothing, and a header carrying something this decoder cannot read
+    - pdata of the wrong type, hex that does not parse, or a masked payload
+    whose sequence number is missing. Only the first of them is the device
+    saying "there is nothing here". Reading the second that way would let one
+    corrupt copy of a list publish an empty list the device never sent, and on
+    a command that retracts what it does not mention, that erases every key
+    the device still holds.
+    """
+    pdata = header.get("pdata")
+    if pdata is None:
+        return True
+    if not isinstance(pdata, str):
+        return False
+    if not pdata:
+        return True
+    try:
+        return not bytes.fromhex(pdata)
+    except ValueError:
+        return False
 
 
 def _typed_map_from_candidates(
@@ -504,6 +550,22 @@ def decode_proto_runtime_headers(
             candidates = [(payload, "typed_source_payload_field")]
         else:
             candidates = _header_pdata_candidates(header)
+
+        # A header carrying nothing is skipped, unless its command declares
+        # that an empty payload is itself the message. Without this the one
+        # frame that says "the list is empty" would look exactly like a frame
+        # that never mentioned the list at all.
+        #
+        # The condition is that the header carries no payload, not that no
+        # candidate could be built from it: those differ whenever a payload is
+        # present but unreadable, and only the first of them is the device
+        # reporting an empty message.
+        if (
+            not candidates
+            and registry[(cmd_func, cmd_id)].decode_empty_payload
+            and _header_carries_no_pdata(header)
+        ):
+            candidates = [(b"", "typed_source_header_pdata_empty")]
 
         best = _typed_map_from_candidates(header, candidates)
         if best is None:

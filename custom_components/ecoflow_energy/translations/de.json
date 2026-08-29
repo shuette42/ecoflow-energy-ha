@@ -1516,6 +1516,30 @@
           "power_supply": "Verbrauch bevorzugen",
           "battery_storage": "Speicher bevorzugen"
         }
+      },
+      "schedule_1_window": {
+        "name": "Zeitplan 1 Zeitfenster"
+      },
+      "schedule_2_window": {
+        "name": "Zeitplan 2 Zeitfenster"
+      },
+      "schedule_3_window": {
+        "name": "Zeitplan 3 Zeitfenster"
+      },
+      "schedule_4_window": {
+        "name": "Zeitplan 4 Zeitfenster"
+      },
+      "schedule_5_window": {
+        "name": "Zeitplan 5 Zeitfenster"
+      },
+      "schedule_6_window": {
+        "name": "Zeitplan 6 Zeitfenster"
+      },
+      "schedule_7_window": {
+        "name": "Zeitplan 7 Zeitfenster"
+      },
+      "schedule_8_window": {
+        "name": "Zeitplan 8 Zeitfenster"
       }
     },
     "binary_sensor": {
@@ -1563,6 +1587,30 @@
       },
       "backup_socket_enabled": {
         "name": "Notstromsteckdose"
+      },
+      "schedule_1_running": {
+        "name": "Zeitplan 1 läuft"
+      },
+      "schedule_2_running": {
+        "name": "Zeitplan 2 läuft"
+      },
+      "schedule_3_running": {
+        "name": "Zeitplan 3 läuft"
+      },
+      "schedule_4_running": {
+        "name": "Zeitplan 4 läuft"
+      },
+      "schedule_5_running": {
+        "name": "Zeitplan 5 läuft"
+      },
+      "schedule_6_running": {
+        "name": "Zeitplan 6 läuft"
+      },
+      "schedule_7_running": {
+        "name": "Zeitplan 7 läuft"
+      },
+      "schedule_8_running": {
+        "name": "Zeitplan 8 läuft"
       }
     },
     "switch": {

@@ -48,9 +48,9 @@ from custom_components.ecoflow_energy.ecoflow.const import (
 )
 from custom_components.ecoflow_energy.number import async_setup_entry as number_setup
 from custom_components.ecoflow_energy.select import async_setup_entry as select_setup
+from custom_components.ecoflow_energy.entity import reading_reported
 from custom_components.ecoflow_energy.sensor import (
     _get_sensor_defs,
-    _reported,
     async_setup_entry as sensor_setup,
 )
 from custom_components.ecoflow_energy.switch import async_setup_entry as switch_setup
@@ -323,13 +323,13 @@ class TestStreamAC5000Definitions:
             data: dict[str, Any] = {}
 
         stub = _Stub()
-        assert _reported(stub, "solar_w") is True
-        assert _reported(stub, "solar_w", needs_nonzero=True) is False
+        assert reading_reported(stub, "solar_w") is True
+        assert reading_reported(stub, "solar_w", needs_nonzero=True) is False
         stub.device_data["solar_w"] = 1556.0
-        assert _reported(stub, "solar_w", needs_nonzero=True) is True
+        assert reading_reported(stub, "solar_w", needs_nonzero=True) is True
         # A key without the flag is unaffected by its own zero.
-        assert _reported(stub, "grid_phase_a_active_power_w") is True
-        assert _reported(stub, "missing_key", needs_nonzero=True) is False
+        assert reading_reported(stub, "grid_phase_a_active_power_w") is True
+        assert reading_reported(stub, "missing_key", needs_nonzero=True) is False
 
     def test_the_solar_reading_waits_for_a_non_zero_value(self) -> None:
         """It is published as a zero, so presence alone cannot gate it.

@@ -328,6 +328,17 @@ class EcoFlowDeviceCoordinator(
         # Each heartbeat contains only one pack; this map ensures the same
         # physical pack always maps to the same pack{n}_* sensor keys.
         self._bp_sn_to_index: dict[str, int] = {}
+        # Which schedule slots the device has reported. A task list carries
+        # every task the device holds, so a slot that drops out of it has been
+        # deleted and its keys have to be retracted - nothing else would ever
+        # clear them. Written only from the MQTT ingest thread.
+        self._schedule_indices: set[int] = set()
+        # How many bundles carried copies of the schedule list that disagreed.
+        # The first copy is taken as current; this counts how often that
+        # choice mattered, so the rule can be re-judged from data rather than
+        # from the single divergence it was derived from. Reported in
+        # diagnostics, which is the only way that data ever reaches us.
+        self._schedule_divergent_bundles: int = 0
         # Battery charge/discharge state: rolling-average derivation (#63, #50).
         # State is derived from a short moving average of signed batt_w,
         # not the instantaneous value. This filters short oscillations that
@@ -390,6 +401,11 @@ class EcoFlowDeviceCoordinator(
     def unchanged_updates(self) -> int:
         """Consecutive updates that carried no value this device had not sent."""
         return self._unchanged_updates
+
+    @property
+    def schedule_divergent_bundles(self) -> int:
+        """Bundles whose repeated schedule-list copies disagreed."""
+        return self._schedule_divergent_bundles
 
     def _note_value_change(self, parsed: dict[str, Any]) -> None:
         """Record whether this update carried anything the device had not sent.

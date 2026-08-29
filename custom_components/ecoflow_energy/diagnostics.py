@@ -397,6 +397,14 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
             "update_interval": str(coordinator.update_interval) if coordinator.update_interval else None,
             "last_value_change_age_s": last_value_change_age_s,
             "unchanged_updates": coordinator.unchanged_updates,
+            # A get-all reply repeats the scheduled-task list under one
+            # sequence number, and the copies can disagree: in the capture
+            # this was read from, the later copy was 96 s behind the first.
+            # The first copy is taken as current, and this counts how often
+            # that decision was load-bearing. Reported at zero as well - a
+            # zero on a device that has a schedule is the evidence that the
+            # copies agree there, which is the answer the rule was missing.
+            "schedule_divergent_bundles": coordinator.schedule_divergent_bundles,
             "http_fallback_active": bool(
                 coordinator.enhanced_mode and coordinator.update_interval is not None
             ),

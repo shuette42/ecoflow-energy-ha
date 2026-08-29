@@ -1516,6 +1516,30 @@
           "power_supply": "Prioritize Power Supply",
           "battery_storage": "Prioritize Battery Storage"
         }
+      },
+      "schedule_1_window": {
+        "name": "Schedule 1 Window"
+      },
+      "schedule_2_window": {
+        "name": "Schedule 2 Window"
+      },
+      "schedule_3_window": {
+        "name": "Schedule 3 Window"
+      },
+      "schedule_4_window": {
+        "name": "Schedule 4 Window"
+      },
+      "schedule_5_window": {
+        "name": "Schedule 5 Window"
+      },
+      "schedule_6_window": {
+        "name": "Schedule 6 Window"
+      },
+      "schedule_7_window": {
+        "name": "Schedule 7 Window"
+      },
+      "schedule_8_window": {
+        "name": "Schedule 8 Window"
       }
     },
     "binary_sensor": {
@@ -1563,6 +1587,30 @@
       },
       "backup_socket_enabled": {
         "name": "Backup Socket"
+      },
+      "schedule_1_running": {
+        "name": "Schedule 1 Running"
+      },
+      "schedule_2_running": {
+        "name": "Schedule 2 Running"
+      },
+      "schedule_3_running": {
+        "name": "Schedule 3 Running"
+      },
+      "schedule_4_running": {
+        "name": "Schedule 4 Running"
+      },
+      "schedule_5_running": {
+        "name": "Schedule 5 Running"
+      },
+      "schedule_6_running": {
+        "name": "Schedule 6 Running"
+      },
+      "schedule_7_running": {
+        "name": "Schedule 7 Running"
+      },
+      "schedule_8_running": {
+        "name": "Schedule 8 Running"
       }
     },
     "switch": {

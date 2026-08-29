@@ -22,6 +22,7 @@ from .ecoflow.const import (  # noqa: E402
     get_device_name,
     get_device_type,
 )
+from .ecoflow.parsers.powerocean_proto import SCHEDULE_MAX_INDEX  # noqa: E402
 
 DOMAIN = "ecoflow_energy"
 
@@ -343,6 +344,10 @@ class EcoFlowBinarySensorDef:
     # only exists on the app channel, so with developer keys the entity would
     # be created and never fill.
     enhanced_only: bool = False
+    # Same meaning as on the sensor definition: a reading the base device does
+    # not have, so the entity is only created once the device has actually
+    # reported the key. See _watch_for_accessory() in binary_sensor.py.
+    accessory: bool = False
 
 
 @dataclass(frozen=True)
@@ -597,6 +602,50 @@ POWEROCEAN_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
     EcoFlowBinarySensorDef("battery_relay_fault", "Battery Relay Fault", "problem", "mdi:electric-switch", "diagnostic", disabled_by_default=True, enhanced_only=True),
     EcoFlowBinarySensorDef("ems_sg_ready_enabled", "SG Ready Enabled", None, "mdi:home-lightning-bolt-outline", "diagnostic", disabled_by_default=True, enhanced_only=True),
 ]
+
+
+# --- Scheduled charge tasks ---
+#
+# A PowerOcean has a schedule only when its owner created one in the app, and
+# most owners never do. The device reports its whole task list, so a slot that
+# exists produces schedule_N_* keys and a slot that does not produces nothing
+# at all. Both readings are therefore accessory-gated: the entity appears on
+# the first report that carries its index, and a schedule deleted later leaves
+# the entity unknown rather than frozen on its last reading, because the list
+# retracts the keys it stops mentioning.
+#
+# The upper bound comes from the parser that produces the keys, so the two
+# sides cannot drift apart. It is a guard against a malformed list, not an
+# assumption about how many slots the hardware has - only slot 1 has ever been
+# observed.
+#
+# Both the task list and the command that changes it live on the app channel,
+# so with developer keys these would be created and never fill.
+for _schedule_index in range(1, SCHEDULE_MAX_INDEX + 1):
+    POWEROCEAN_SENSORS.append(
+        EcoFlowSensorDef(
+            f"schedule_{_schedule_index}_window",
+            f"Schedule {_schedule_index} Window",
+            None,
+            None,
+            None,
+            "mdi:calendar-clock",
+            None,
+            enhanced_only=True,
+            accessory=True,
+        )
+    )
+    POWEROCEAN_BINARY_SENSORS.append(
+        EcoFlowBinarySensorDef(
+            f"schedule_{_schedule_index}_running",
+            f"Schedule {_schedule_index} Running",
+            "running",
+            "mdi:calendar-check",
+            None,
+            enhanced_only=True,
+            accessory=True,
+        )
+    )
 
 POWEROCEAN_NUMBERS: list[EcoFlowNumberDef] = [
     # Backup-Reserve (App-slider): minimum SoC kept in reserve. Wire field 2
@@ -1916,3 +1965,7 @@ SMARTPLUG_NUMBER_COMMANDS: dict[str, dict[str, Any]] = {
         "scale": 1,
     },
 }
+
+# The loop above is a module-level generator, so its variable would stay
+# bound in this namespace. Nothing reads it after the definitions are built.
+del _schedule_index

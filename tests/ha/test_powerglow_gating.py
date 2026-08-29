@@ -30,6 +30,9 @@ from custom_components.ecoflow_energy.const import (
     MODE_ENHANCED,
     POWEROCEAN_SENSORS,
 )
+from custom_components.ecoflow_energy.ecoflow.parsers.powerocean_proto import (
+    SCHEDULE_MAX_INDEX,
+)
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
 from custom_components.ecoflow_energy.sensor import async_setup_entry as sensor_setup
 
@@ -60,7 +63,15 @@ WALLBOX_KEYS = {
     "ev_vehicle_id",
 }
 
-ACCESSORY_KEYS = HEATING_ROD_KEYS | WALLBOX_KEYS
+# The scheduled charge tasks are the third user of the gate (#328). A
+# PowerOcean only has one when its owner created it in the app, and the slot
+# numbering comes from the device, so every slot the parser can report has a
+# definition that only becomes an entity once that slot is reported.
+SCHEDULE_KEYS = {
+    f"schedule_{index}_window" for index in range(1, SCHEDULE_MAX_INDEX + 1)
+}
+
+ACCESSORY_KEYS = HEATING_ROD_KEYS | WALLBOX_KEYS | SCHEDULE_KEYS
 
 
 def _entry(devices: list[dict[str, Any]] | None = None) -> MockConfigEntry:

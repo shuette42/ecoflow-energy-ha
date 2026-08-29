@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any, NoReturn
+from homeassistant.core import callback
+
+from typing import TYPE_CHECKING, Any, NoReturn
 
 from homeassistant.exceptions import HomeAssistantError
 
 from .const import DOMAIN
+
+if TYPE_CHECKING:
+    from .coordinator import EcoFlowDeviceCoordinator
 
 
 def raise_set_failed(entity_id: str) -> NoReturn:
@@ -64,6 +69,35 @@ def raise_set_rejected(entity_id: str, reason: str) -> NoReturn:
         translation_key="set_value_rejected",
         translation_placeholders={"entity": entity_id, "reason": reason},
     )
+
+
+@callback
+def reading_reported(
+    coordinator: EcoFlowDeviceCoordinator, key: str, needs_nonzero: bool = False
+) -> bool:
+    """Return whether the device has this reading in its current state.
+
+    Both stores are checked because they are filled at different points:
+    the persistent device data by the parsers, the coordinator payload by
+    the update that follows.
+
+    With ``needs_nonzero`` the key has to carry a value other than zero. A
+    reading that must be published as an explicit zero to stop it latching
+    would otherwise announce itself on the first frame of every device.
+
+    Used by the sensor and binary sensor platforms to decide whether an
+    accessory entity exists yet, which is why it lives here rather than on
+    one of them.
+    """
+    for store in (coordinator.device_data, coordinator.data or {}):
+        if key not in store:
+            continue
+        if not needs_nonzero:
+            return True
+        value = store[key]
+        if isinstance(value, (int, float)) and value:
+            return True
+    return False
 
 
 def as_known_int(value: Any) -> int | None:

@@ -31,7 +31,7 @@ from .const import (
     STREAMAC5000_BINARY_SENSORS,
 )
 from .coordinator import EcoFlowDeviceCoordinator
-from .entity import EcoFlowWriteGateMixin
+from .entity import EcoFlowWriteGateMixin, reading_reported
 
 _ENTITY_CATEGORY_MAP = {
     "diagnostic": EntityCategory.DIAGNOSTIC,
@@ -52,12 +52,51 @@ async def async_setup_entry(
         defs = filter_defs_for_serial(
             _get_binary_sensor_defs(coordinator.device_type), coordinator.device_sn
         )
+        pending: list[EcoFlowBinarySensorDef] = []
         for defn in defs:
             if defn.enhanced_only and not coordinator.enhanced_mode:
                 continue
+            if defn.accessory and not reading_reported(coordinator, defn.key):
+                pending.append(defn)
+                continue
             entities.append(EcoFlowBinarySensor(coordinator, defn))
 
+        if pending:
+            _watch_for_accessory(entry, coordinator, pending, async_add_entities)
+
     async_add_entities(entities)
+
+
+@callback
+def _watch_for_accessory(
+    config_entry: ConfigEntry,
+    coordinator: EcoFlowDeviceCoordinator,
+    pending: list[EcoFlowBinarySensorDef],
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Add accessory binary sensors as soon as the device first reports them.
+
+    The sensor platform does the same for its own accessory readings. It also
+    cleans up registry entries an earlier release created on every device;
+    there is nothing to clean up here, because no accessory binary sensor has
+    ever been created unconditionally.
+    """
+
+    @callback
+    def _check_for_accessory() -> None:
+        ready = [
+            definition
+            for definition in pending
+            if reading_reported(coordinator, definition.key)
+        ]
+        for definition in ready:
+            pending.remove(definition)
+        if ready:
+            async_add_entities(
+                [EcoFlowBinarySensor(coordinator, definition) for definition in ready]
+            )
+
+    config_entry.async_on_unload(coordinator.async_add_listener(_check_for_accessory))
 
 
 class EcoFlowBinarySensor(

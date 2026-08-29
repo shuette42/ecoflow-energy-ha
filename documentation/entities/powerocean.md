@@ -31,9 +31,20 @@ Full list of all entities created for PowerOcean devices.
 > one starts, so the session energy is not a meter and is not meant for the
 > Energy Dashboard. There are no wallbox controls.
 
+> **The schedule readings are optional and need Enhanced Mode.** A PowerOcean
+> only has a schedule if you created one yourself in the EcoFlow app, and most
+> systems never do, so having no schedule entities at all is the normal case
+> and not a fault. One pair of entities appears for each schedule your system
+> reports, and they go back to unknown when you delete that schedule in the
+> app, rather than staying on the last window they had. The task list is read from the
+> PowerOcean's real-time stream, which is why these entities need the EcoFlow
+> account sign-in. The readings are **read-only**: they
+> tell you what a schedule is set to and whether it is charging right now, but
+> a schedule can only be created, changed or removed in the EcoFlow app.
+
 > **PowerOcean Plus** units report more of the same entity set than a standard PowerOcean: per-phase reactive power (var) and apparent power (VA), plus MPPT strings 3 and 4. Those entities are disabled by default, so enable the ones you need after adding a Plus device.
 
-**Totals:** 227 sensors, 5 binary sensors, 2 numbers, 1 select
+**Totals:** 235 sensors, 13 binary sensors, 2 numbers, 1 select
 
 > Entities marked with *disabled* are available but hidden by default. Enable them in **Settings > Devices > EcoFlow PowerOcean > Entities** (click the filter icon and show disabled entities).
 
@@ -176,6 +187,19 @@ Created only once a coupled wallbox reports a charging session. See the note at 
 | Wallbox Session Duration | How long the current session has been running, in seconds | enabled |
 | Wallbox Charging Status | Available, preparing, charging, paused by charger, paused by vehicle, finishing, or fault | enabled |
 | Wallbox Vehicle | The vehicle the charger has recognized. Empty until a car is identified | enabled |
+
+---
+
+## Scheduled Charge Tasks (accessory, Enhanced Mode)
+
+Created only for the schedules your system actually reports, up to eight. See the note at the top.
+
+| Entity | Type | Description | Default |
+|:---|:---:|:---|:---:|
+| Schedule 1 Window | Sensor | The time of day the schedule runs, written as `20:00-20:30` | enabled |
+| Schedule 1 Running | Binary sensor | Whether the schedule is charging right now. Stays off while the schedule exists but its window has not opened yet | enabled |
+
+Further schedules follow the same pattern: Schedule 2 Window, Schedule 2 Running, and so on up to Schedule 8.
 
 ---
 

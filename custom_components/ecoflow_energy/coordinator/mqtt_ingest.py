@@ -36,6 +36,7 @@ from ..ecoflow.parsers.powerocean_proto import (
     remap_heating_rod_keys,
     remap_pile_charging_keys,
     remap_proto_keys,
+    remap_timer_task_keys,
 )
 from ..ecoflow.parsers.smartplug import (
     parse_smartplug_http_quota,
@@ -59,6 +60,19 @@ from ..ecoflow.proto.runtime import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+# Command tuples a single bundle carries more than once, where the copies are
+# not interchangeable. The first copy in header order is the read and the rest
+# are dropped.
+#
+# The PowerOcean get-all reply carries its schedule list twice under one
+# sequence number. The two are byte-identical in nine of the ten bundles of
+# the reporter capture on #328, and in the tenth they disagree: the first copy
+# omits the armed flag and the second carries it, 96 s after the schedule was
+# disarmed from the app. The first copy is the current one there, so first
+# wins. Merging by header order would decide the same thing the other way
+# round and by accident, which is why the choice is made here instead.
+_FIRST_COPY_WINS: frozenset[tuple[int, int]] = frozenset({(96, 10)})
 
 
 def _collect_total_increasing_keys() -> frozenset[str]:
@@ -585,8 +599,22 @@ class MqttIngestMixin:
 
         # One malformed header must not cost the keys already merged from the
         # others, so every result is merged under its own guard.
+        first_copy: dict[tuple[int, int], bytes] = {}
+        # Counted once per bundle, however many later copies disagree: the
+        # question this answers is how often the choice of copy mattered, and
+        # a bundle with three copies still only made one choice.
+        bundle_diverged = False
         for result in results:
             try:
+                header = result.headers[0] if result.headers else {}
+                command = (header.get("cmd_func"), header.get("cmd_id"))
+                if command in _FIRST_COPY_WINS:
+                    if command in first_copy:
+                        if result.source != first_copy[command]:
+                            bundle_diverged = True
+                        continue
+                    first_copy[command] = result.source
+
                 self._record_unknown_fields(result.mapped)
                 raw = {
                     key: value
@@ -623,6 +651,15 @@ class MqttIngestMixin:
                 if result.mapped.get("_is_heating_rod_param"):
                     merged.update(remap_heating_rod_keys(raw))
                     continue
+                # The scheduled charge tasks, the whole list at once. An empty
+                # payload is an empty list rather than a header with nothing
+                # in it, which is why this command decodes an empty payload at
+                # all: it is the only frame that says a schedule was deleted.
+                if result.mapped.get("_is_timer_task_list"):
+                    merged.update(
+                        remap_timer_task_keys(raw, self._schedule_indices)
+                    )
+                    continue
                 if (
                     result.mapped.get("_is_ems_change")
                     or result.mapped.get("_is_bp_heartbeat")
@@ -642,6 +679,9 @@ class MqttIngestMixin:
                     result.parse_path,
                     exc_info=True,
                 )
+
+        if bundle_diverged:
+            self._schedule_divergent_bundles += 1
 
         return merged or None
 

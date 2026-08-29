@@ -516,6 +516,53 @@ message JTS1EmsParamChangeReport {
   // limits by magnitude, unidentified, left alone.
 }
 
+// --- PowerOcean scheduled charge tasks (cmd_func 96) ---
+//
+// One entry of the device's scheduled-task list. The task holds a window, a
+// charge power and an armed flag, and it carries no state of charge at all -
+// the reporter capture on #328 holds the whole ten-field message and none of
+// its fields is a SoC.
+//
+// Two deliberate departures from the command family's own declaration, both
+// forced by the frames on the wire:
+//
+// 1. `time_table` is length-delimited, not a varint. Every frame carrying it
+//    uses tag byte 0x52, which is field 10 wire type 2, followed by a length
+//    of 4. Declared as a varint it would not match the wire type, and
+//    protobuf would file the field as unknown and drop it without a word.
+//    The four bytes hold one varint; whether the block is a `bytes` blob or a
+//    packed repeated field cannot be told apart from a single element, so the
+//    safer of the two is declared: an unexpected content costs the field, not
+//    the whole message.
+// 2. The command family groups fields 1, 2, 3, 4, 5 and 10 into one `oneof`,
+//    which cannot be literal. Six of the seven captured writes carry two or
+//    more of those at once and the device acts on them; the create carries
+//    four of them in one message. Every field is therefore independently
+//    optional, which is also what the read path needs: an absent field 4 is
+//    how both sides of the wire express "not armed", so absence has to stay
+//    distinguishable from zero.
+
+message EmsTimerTaskCfg {
+  oneof _role { uint32 role = 1; }
+  oneof _is_cfg { uint32 is_cfg = 2; }
+  oneof _task_index { uint32 task_index = 3; }
+  oneof _is_enable { bool is_enable = 4; }
+  oneof _is_effect { bool is_effect = 5; }
+  oneof _type { uint32 type = 6; }
+  oneof _sys_chg_dsg_pwr { uint32 sys_chg_dsg_pwr = 7; }
+  oneof _time_mode { uint32 time_mode = 8; }
+  oneof _time_param { uint32 time_param = 9; }
+  oneof _time_table { bytes time_table = 10; }
+}
+
+// The whole task list, reported on cmd_id 10 inside the get-all reply the
+// device already answers. An empty list is an empty message: a system with no
+// schedule sends this header with a zero-length payload, which is what the
+// reporter's first four bundles carry.
+message EmsAllTimerTaskReport {
+  repeated EmsTimerTaskCfg time_task_cfg = 1;
+}
+
 // --- Delta 3 generation (portable power stations) ---
 //
 // The Delta 3 generation publishes protobuf only - it never answers the
