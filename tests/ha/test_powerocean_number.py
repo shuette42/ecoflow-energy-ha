@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+import threading
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -13,9 +15,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.const import (
     DEVICE_TYPE_POWEROCEAN,
-    DOMAIN,
     POWEROCEAN_NUMBERS,
-    SCHEDULE_MAX_INDEX,
 )
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
 from custom_components.ecoflow_energy.number import (
@@ -39,19 +39,12 @@ class TestGetNumberDefs:
         assert defs is POWEROCEAN_NUMBERS
 
     def test_powerocean_number_keys(self):
-        """Two sliders every PowerOcean has, plus one charge power per
-        scheduled task slot. The schedule ones are accessory-gated, so a
-        device without a schedule never sees them."""
+        """Only the two hardware-confirmed PowerOcean sliders are exposed."""
         defs = _get_number_defs(DEVICE_TYPE_POWEROCEAN)
         keys = {d.key for d in defs}
 
-        assert keys == {"backup_reserve", "solar_surplus_threshold"} | {
-            f"schedule_{index}_power_w"
-            for index in range(1, SCHEDULE_MAX_INDEX + 1)
-        }
-        assert not any(
-            d.accessory for d in defs if not d.key.startswith("schedule_")
-        )
+        assert keys == {"backup_reserve", "solar_surplus_threshold"}
+        assert not any(d.accessory for d in defs)
 
     def test_powerocean_numbers_are_enhanced_only(self):
         defs = _get_number_defs(DEVICE_TYPE_POWEROCEAN)
@@ -832,6 +825,420 @@ class TestPowerOceanSocSetDebounce:
         coordinator.async_set_powerocean_soc.assert_not_called()
 
 
+class TestPowerOceanSocFlushLifecycle:
+    """Keep debounced SET work inside the coordinator unload boundary."""
+
+    def _make_coordinator(self, hass, entry):
+        entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, entry, MOCK_POWEROCEAN_DEVICE
+        )
+        coordinator._enhanced_mode = True
+        return coordinator
+
+    @staticmethod
+    def _fire_current_timer(coordinator) -> None:
+        handle = coordinator._powerocean_soc_debounce_unsub
+        assert handle is not None
+        # We invoke the callback deterministically instead of waiting for the
+        # real debounce delay. Cancelling keeps the loop from invoking it a
+        # second time later in the test.
+        handle.cancel()
+        coordinator._powerocean_soc_debounce_fired(handle)
+
+    async def test_shutdown_waits_for_executor_send_before_disconnect(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        # The HA test fixture normally executes executor jobs inline. Restore
+        # the real contract for this test so the broker call keeps running in
+        # a worker thread while shutdown progresses on the event loop.
+        monkeypatch.setattr(
+            hass,
+            "async_add_executor_job",
+            lambda target, *args: hass.loop.run_in_executor(
+                None, target, *args
+            ),
+        )
+        coordinator = self._make_coordinator(hass, enhanced_config_entry)
+        caplog.set_level(logging.DEBUG)
+        send_started = threading.Event()
+        release_send = threading.Event()
+        sequence: list[str] = []
+        mqtt = MagicMock()
+        mqtt.is_connected.return_value = True
+
+        def _send(*_args, **_kwargs) -> bool:
+            send_started.set()
+            release_send.wait()
+            sequence.append("send_return")
+            return False
+
+        mqtt.send_proto_set.side_effect = _send
+        mqtt.disconnect.side_effect = lambda: sequence.append("disconnect")
+        coordinator._mqtt_client = mqtt
+        coordinator._device_data.update(
+            ems_discharge_lower_limit_pct=20,
+            ems_app_surplus_pct=80,
+        )
+        coordinator.data = dict(coordinator._device_data)
+        coordinator.async_update_listeners = MagicMock()
+
+        assert await coordinator.async_set_powerocean_soc_debounced(50, 90)
+        self._fire_current_timer(coordinator)
+        async with asyncio.timeout(1):
+            while not send_started.is_set():
+                await asyncio.sleep(0)
+
+        first_caller = hass.async_create_task(
+            coordinator.async_shutdown(), eager_start=False
+        )
+        second_caller: asyncio.Task[None] | None = None
+        try:
+            await asyncio.sleep(0)
+            assert coordinator._shutdown is True
+            shutdown_state = (
+                coordinator._powerocean_soc_generation,
+                coordinator._powerocean_soc_cycle_open,
+                dict(coordinator._powerocean_soc_before),
+                coordinator._powerocean_soc_rollback_generation,
+                dict(coordinator._device_data),
+                list(coordinator.event_log),
+            )
+            first_caller.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await first_caller
+            assert coordinator._shutdown_task is not None
+            assert not coordinator._shutdown_task.done()
+            mqtt.disconnect.assert_not_called()
+
+            second_caller = hass.async_create_task(
+                coordinator.async_shutdown(), eager_start=False
+            )
+            await asyncio.sleep(0)
+            assert not second_caller.done()
+        finally:
+            release_send.set()
+            if second_caller is not None:
+                await second_caller
+            else:
+                cleanup = coordinator._shutdown_task
+                assert cleanup is not None
+                await asyncio.shield(cleanup)
+
+        assert sequence == ["send_return", "disconnect"]
+        assert (
+            coordinator._powerocean_soc_generation,
+            coordinator._powerocean_soc_cycle_open,
+            dict(coordinator._powerocean_soc_before),
+            coordinator._powerocean_soc_rollback_generation,
+            dict(coordinator._device_data),
+            list(coordinator.event_log),
+        ) == shutdown_state
+        coordinator.async_update_listeners.assert_not_called()
+        assert not any(
+            "PowerOcean SoC sent" in record.message
+            or "PowerOcean SoC SET failed" in record.message
+            for record in caplog.records
+        )
+
+    async def test_shutdown_waits_for_blocked_surplus_auto_sync(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        monkeypatch.setattr(
+            hass,
+            "async_add_executor_job",
+            lambda target, *args: hass.loop.run_in_executor(
+                None, target, *args
+            ),
+        )
+        coordinator = self._make_coordinator(hass, enhanced_config_entry)
+        caplog.set_level(logging.DEBUG)
+        coordinator._device_data.update(
+            ems_discharge_lower_limit_pct=20,
+            ems_backup_ratio_pct=80,
+            ems_app_surplus_pct=70,
+        )
+        coordinator.data = dict(coordinator._device_data)
+        coordinator._last_ems_param_change_ts = 900.0
+        coordinator.async_update_listeners = MagicMock()
+        send_started = threading.Event()
+        release_send = threading.Event()
+        sequence: list[str] = []
+        mqtt = MagicMock()
+        mqtt.is_connected.return_value = True
+
+        def _send(*_args, **_kwargs) -> bool:
+            send_started.set()
+            release_send.wait()
+            sequence.append("send_return")
+            return False
+
+        mqtt.send_proto_set.side_effect = _send
+        mqtt.disconnect.side_effect = lambda: sequence.append("disconnect")
+        coordinator._mqtt_client = mqtt
+
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.time.monotonic",
+            return_value=1000.0,
+        ):
+            coordinator._maybe_schedule_surplus_sync()
+        async with asyncio.timeout(1):
+            while not send_started.is_set():
+                await asyncio.sleep(0)
+        # The coordinator owns both the auto-sync coroutine (start boundary)
+        # and its shielded executor future (actual broker-write boundary).
+        assert len(coordinator._powerocean_soc_write_tasks) == 2
+
+        shutdown = hass.async_create_task(
+            coordinator.async_shutdown(), eager_start=False
+        )
+        try:
+            await asyncio.sleep(0)
+            assert coordinator._shutdown is True
+            after_shutdown = (
+                dict(coordinator._device_data),
+                dict(coordinator.data),
+                list(coordinator.event_log),
+                coordinator._powerocean_soc_rollback_generation,
+            )
+            assert not shutdown.done()
+            mqtt.disconnect.assert_not_called()
+        finally:
+            release_send.set()
+            await shutdown
+
+        assert sequence == ["send_return", "disconnect"]
+        assert (
+            dict(coordinator._device_data),
+            dict(coordinator.data),
+            list(coordinator.event_log),
+            coordinator._powerocean_soc_rollback_generation,
+        ) == after_shutdown
+        assert not coordinator._powerocean_soc_write_tasks
+        coordinator.async_update_listeners.assert_not_called()
+        assert not any(
+            "PowerOcean SoC sent" in record.message
+            or "PowerOcean SoC SET failed" in record.message
+            for record in caplog.records
+        )
+
+    async def test_shutdown_awaits_two_concurrent_flush_tasks(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        coordinator = self._make_coordinator(hass, enhanced_config_entry)
+        started = [asyncio.Event(), asyncio.Event()]
+        release = [asyncio.Event(), asyncio.Event()]
+        calls = 0
+
+        async def _send(_backup: int, _solar: int) -> bool:
+            nonlocal calls
+            index = calls
+            calls += 1
+            started[index].set()
+            await release[index].wait()
+            return True
+
+        coordinator.async_set_powerocean_soc = AsyncMock(side_effect=_send)
+        mqtt = MagicMock()
+        coordinator._mqtt_client = mqtt
+
+        assert await coordinator.async_set_powerocean_soc_debounced(20, 80)
+        self._fire_current_timer(coordinator)
+        await started[0].wait()
+        assert await coordinator.async_set_powerocean_soc_debounced(30, 90)
+        self._fire_current_timer(coordinator)
+        await started[1].wait()
+        assert len(coordinator._powerocean_soc_flush_tasks) == 2
+
+        shutdown = asyncio.create_task(coordinator.async_shutdown())
+        await asyncio.sleep(0)
+        release[0].set()
+        await asyncio.sleep(0)
+        assert not shutdown.done()
+        mqtt.disconnect.assert_not_called()
+
+        release[1].set()
+        await shutdown
+        mqtt.disconnect.assert_called_once_with()
+        assert not coordinator._powerocean_soc_flush_tasks
+
+    async def test_stale_callback_cannot_claim_newer_handle_or_pending(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        coordinator = self._make_coordinator(hass, enhanced_config_entry)
+        coordinator.async_set_powerocean_soc = AsyncMock(return_value=True)
+
+        assert await coordinator.async_set_powerocean_soc_debounced(20, 80)
+        stale_handle = coordinator._powerocean_soc_debounce_unsub
+        assert stale_handle is not None
+        assert await coordinator.async_set_powerocean_soc_debounced(30, 90)
+        current_handle = coordinator._powerocean_soc_debounce_unsub
+
+        coordinator._powerocean_soc_debounce_fired(stale_handle)
+
+        assert coordinator._powerocean_soc_debounce_unsub is current_handle
+        assert coordinator._powerocean_soc_pending == (30, 90)
+        assert not coordinator._powerocean_soc_flush_tasks
+        coordinator.async_set_powerocean_soc.assert_not_called()
+        await coordinator.async_shutdown()
+
+    async def test_pending_timer_shutdown_and_second_shutdown_are_idempotent(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        coordinator = self._make_coordinator(hass, enhanced_config_entry)
+        coordinator.async_set_powerocean_soc = AsyncMock(return_value=True)
+        mqtt = MagicMock()
+        coordinator._mqtt_client = mqtt
+
+        assert await coordinator.async_set_powerocean_soc_debounced(20, 80)
+        handle = coordinator._powerocean_soc_debounce_unsub
+        assert handle is not None
+
+        await coordinator.async_shutdown()
+        await coordinator.async_shutdown()
+        coordinator._powerocean_soc_debounce_fired(handle)
+
+        assert handle.cancelled()
+        assert coordinator._powerocean_soc_debounce_unsub is None
+        assert coordinator._powerocean_soc_pending is None
+        assert coordinator._powerocean_soc_cycle_open is False
+        assert coordinator._powerocean_soc_before == {}
+        assert not coordinator._powerocean_soc_flush_tasks
+        assert coordinator._shutdown_complete.is_set()
+        coordinator.async_set_powerocean_soc.assert_not_called()
+        mqtt.disconnect.assert_called_once_with()
+        assert not await coordinator.async_set_powerocean_soc_debounced(20, 80)
+
+    @pytest.mark.parametrize("failure_stage", ["disconnect", "force_flush", "super"])
+    async def test_shutdown_failure_is_shared_by_all_callers(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+        failure_stage: str,
+    ) -> None:
+        coordinator = self._make_coordinator(hass, enhanced_config_entry)
+        error = RuntimeError(f"{failure_stage} failed")
+        mqtt = MagicMock()
+        if failure_stage == "disconnect":
+            mqtt.disconnect.side_effect = error
+        coordinator._mqtt_client = mqtt
+        force_flush = MagicMock(
+            side_effect=error if failure_stage == "force_flush" else None
+        )
+        coordinator._energy_integrator.force_flush = force_flush
+        base_shutdown = AsyncMock(
+            side_effect=error if failure_stage == "super" else None
+        )
+
+        with patch(
+            "homeassistant.helpers.update_coordinator."
+            "DataUpdateCoordinator.async_shutdown",
+            base_shutdown,
+        ):
+            first = hass.async_create_task(
+                coordinator.async_shutdown(), eager_start=False
+            )
+            second = hass.async_create_task(
+                coordinator.async_shutdown(), eager_start=False
+            )
+            outcomes = await asyncio.gather(
+                first, second, return_exceptions=True
+            )
+
+            assert outcomes == [error, error]
+            assert coordinator._shutdown_task is not None
+            assert coordinator._shutdown_task.done()
+            assert not coordinator._shutdown_complete.is_set()
+            with pytest.raises(RuntimeError) as later:
+                await coordinator.async_shutdown()
+            assert later.value is error
+
+        mqtt.disconnect.assert_called_once_with()
+        force_flush.assert_called_once_with()
+        base_shutdown.assert_awaited_once_with()
+
+    async def test_shutdown_collects_task_and_all_stage_failures(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        coordinator = self._make_coordinator(hass, enhanced_config_entry)
+        task_error = ValueError("write failed")
+        disconnect_error = RuntimeError("disconnect failed")
+        flush_error = OSError("flush failed")
+        super_error = LookupError("super failed")
+
+        async def _failed_write() -> None:
+            raise task_error
+
+        write = hass.async_create_task(_failed_write(), eager_start=False)
+        coordinator._powerocean_soc_write_tasks.add(write)
+        mqtt = MagicMock()
+        mqtt.disconnect.side_effect = disconnect_error
+        coordinator._mqtt_client = mqtt
+        force_flush = MagicMock(side_effect=flush_error)
+        coordinator._energy_integrator.force_flush = force_flush
+        base_shutdown = AsyncMock(side_effect=super_error)
+
+        with patch(
+            "homeassistant.helpers.update_coordinator."
+            "DataUpdateCoordinator.async_shutdown",
+            base_shutdown,
+        ):
+            outcomes = await asyncio.gather(
+                coordinator.async_shutdown(),
+                coordinator.async_shutdown(),
+                return_exceptions=True,
+            )
+
+        assert outcomes == [task_error, task_error]
+        mqtt.disconnect.assert_called_once_with()
+        force_flush.assert_called_once_with()
+        base_shutdown.assert_awaited_once_with()
+
+    async def test_shutdown_propagates_cancelled_task_after_all_stages(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        coordinator = self._make_coordinator(hass, enhanced_config_entry)
+
+        async def _cancelled_write() -> None:
+            raise asyncio.CancelledError
+
+        write = hass.async_create_task(_cancelled_write(), eager_start=False)
+        coordinator._powerocean_soc_write_tasks.add(write)
+        mqtt = MagicMock()
+        coordinator._mqtt_client = mqtt
+        force_flush = MagicMock()
+        coordinator._energy_integrator.force_flush = force_flush
+        base_shutdown = AsyncMock()
+
+        with patch(
+            "homeassistant.helpers.update_coordinator."
+            "DataUpdateCoordinator.async_shutdown",
+            base_shutdown,
+        ):
+            first = hass.async_create_task(
+                coordinator.async_shutdown(), eager_start=False
+            )
+            second = hass.async_create_task(
+                coordinator.async_shutdown(), eager_start=False
+            )
+            outcomes = await asyncio.gather(
+                first, second, return_exceptions=True
+            )
+
+        assert all(isinstance(result, asyncio.CancelledError) for result in outcomes)
+        mqtt.disconnect.assert_called_once_with()
+        force_flush.assert_called_once_with()
+        base_shutdown.assert_awaited_once_with()
+
+
 class TestPowerOceanSocRollback:
     """The rollback that shipped in v1.16.0-beta.10 and did nothing.
 
@@ -897,16 +1304,14 @@ class TestPowerOceanSocRollback:
         assert coordinator._device_data["ems_discharge_lower_limit_pct"] == 50
         assert coordinator._device_data["ems_app_surplus_pct"] == 90
 
-    async def test_a_stale_flush_cannot_undo_a_resolved_newer_cycle(
+    async def test_an_older_failure_cannot_undo_a_newer_pending_request(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """A write that fails long after its cycle ended must keep its hands off.
+        """An older failure must leave a newer optimistic request untouched.
 
-        Two flushes can be in flight at once. If the later one resolves first
-        and a fresh cycle opens on top of it, the straggler's failure belongs
-        to a state that no longer exists: rolling back there would replace the
-        current value with one from two cycles ago, and the slider would move
-        on its own.
+        The cycle remains open until both in-flight writes and the newer
+        pending request settle. This regression also owns and cleans up the
+        third debounce timer that originally made the test flaky.
         """
         coordinator = self._make_coordinator(hass, enhanced_config_entry, set_ok=False)
         release_first = asyncio.Event()
@@ -923,22 +1328,30 @@ class TestPowerOceanSocRollback:
             side_effect=_first_hangs_and_fails
         )
 
-        await self._drag(coordinator, 50, 90)
-        stale = asyncio.create_task(coordinator._flush_powerocean_soc())
-        await asyncio.sleep(0)  # let it reach the hanging write
+        stale: asyncio.Task[None] | None = None
+        try:
+            await self._drag(coordinator, 50, 90)
+            stale = asyncio.create_task(coordinator._flush_powerocean_soc())
+            await asyncio.sleep(0)  # let it reach the hanging write
 
-        # A second write of the same cycle succeeds and closes it.
-        await self._drag(coordinator, 30, 70)
-        await coordinator._flush_powerocean_soc()
+            # A second write succeeds, but the older publish is unresolved so
+            # the cycle deliberately remains open.
+            await self._drag(coordinator, 30, 70)
+            await coordinator._flush_powerocean_soc()
 
-        # A fresh cycle opens and applies its own value.
-        await self._drag(coordinator, 10, 20)
+            # A still-newer request applies its own optimistic value.
+            await self._drag(coordinator, 10, 20)
 
-        release_first.set()
-        await stale
+            release_first.set()
+            await stale
 
-        assert coordinator._device_data["ems_app_surplus_pct"] == 20
-        assert coordinator._device_data["ems_discharge_lower_limit_pct"] == 10
+            assert coordinator._device_data["ems_app_surplus_pct"] == 20
+            assert coordinator._device_data["ems_discharge_lower_limit_pct"] == 10
+        finally:
+            release_first.set()
+            if stale is not None:
+                await stale
+            await coordinator.async_shutdown()
 
     async def test_rollback_releases_the_optimistic_lock(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
@@ -982,6 +1395,126 @@ class TestPowerOceanSocRollbackUnderOverlap:
         ):
             coordinator.set_device_value(key, value)
             coordinator.data[key] = value
+
+    @pytest.mark.parametrize("older_succeeded", [False, True])
+    @pytest.mark.parametrize("latest_succeeded", [False, True])
+    @pytest.mark.parametrize("completion_order", [(0, 1), (1, 0)])
+    async def test_two_request_outcome_and_completion_matrix(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+        older_succeeded: bool,
+        latest_succeeded: bool,
+        completion_order: tuple[int, int],
+    ) -> None:
+        """All eight result/order combinations resolve from settled writes."""
+        coordinator = self._make_coordinator(hass, enhanced_config_entry)
+        coordinator.async_update_listeners = MagicMock()
+        started = [asyncio.Event(), asyncio.Event()]
+        release = [asyncio.Event(), asyncio.Event()]
+        results = [older_succeeded, latest_succeeded]
+        calls = 0
+
+        async def _ordered_send(_backup: int, _solar: int) -> bool:
+            nonlocal calls
+            index = calls
+            calls += 1
+            started[index].set()
+            await release[index].wait()
+            return results[index]
+
+        coordinator.async_set_powerocean_soc = AsyncMock(
+            side_effect=_ordered_send
+        )
+        tasks: list[asyncio.Task[None]] = []
+        try:
+            await self._drag(coordinator, 50, 90)
+            tasks.append(asyncio.create_task(coordinator._flush_powerocean_soc()))
+            await started[0].wait()
+
+            await self._drag(coordinator, 30, 70)
+            tasks.append(asyncio.create_task(coordinator._flush_powerocean_soc()))
+            await started[1].wait()
+
+            first, second = completion_order
+            release[first].set()
+            await tasks[first]
+
+            # A partial result never closes or rolls back the cycle. This is
+            # especially important when the latest failure arrives first and
+            # the older publish later becomes the confirmed device value.
+            assert coordinator._powerocean_soc_cycle_open is True
+            assert coordinator._device_data["ems_discharge_lower_limit_pct"] == 30
+            assert coordinator._device_data["ems_app_surplus_pct"] == 70
+            coordinator.async_update_listeners.assert_not_called()
+
+            release[second].set()
+            await tasks[second]
+
+            if latest_succeeded:
+                expected = (30, 70)
+                expected_revision = 2
+            elif older_succeeded:
+                expected = (50, 90)
+                expected_revision = 1
+            else:
+                expected = (20, 80)
+                expected_revision = 0
+            assert (
+                coordinator._device_data["ems_discharge_lower_limit_pct"],
+                coordinator._device_data["ems_app_surplus_pct"],
+            ) == expected
+            assert coordinator._powerocean_soc_confirmed_revision == expected_revision
+            assert coordinator._powerocean_soc_cycle_open is False
+            assert not coordinator._powerocean_soc_active_revisions
+            if latest_succeeded:
+                coordinator.async_update_listeners.assert_not_called()
+            else:
+                coordinator.async_update_listeners.assert_called_once_with()
+        finally:
+            for event in release:
+                event.set()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            await coordinator.async_shutdown()
+
+    async def test_late_older_success_only_advances_pending_request_baseline(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        coordinator = self._make_coordinator(hass, enhanced_config_entry)
+        started = asyncio.Event()
+        release = asyncio.Event()
+
+        async def _older_send(_backup: int, _solar: int) -> bool:
+            started.set()
+            await release.wait()
+            return True
+
+        coordinator.async_set_powerocean_soc = AsyncMock(side_effect=_older_send)
+        older: asyncio.Task[None] | None = None
+        try:
+            await self._drag(coordinator, 50, 90)
+            older = asyncio.create_task(coordinator._flush_powerocean_soc())
+            await started.wait()
+
+            # The newer request is still optimistic and waiting on its timer.
+            await self._drag(coordinator, 30, 70)
+            release.set()
+            await older
+
+            assert coordinator._powerocean_soc_before == {
+                "ems_discharge_lower_limit_pct": 50,
+                "ems_app_surplus_pct": 90,
+            }
+            assert coordinator._powerocean_soc_confirmed_revision == 1
+            assert coordinator._powerocean_soc_cycle_open is True
+            assert coordinator._powerocean_soc_pending == (30, 70)
+            assert coordinator._device_data["ems_discharge_lower_limit_pct"] == 30
+            assert coordinator._device_data["ems_app_surplus_pct"] == 70
+        finally:
+            release.set()
+            if older is not None:
+                await older
+            await coordinator.async_shutdown()
 
     async def test_two_failing_writes_still_land_on_the_device_value(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,

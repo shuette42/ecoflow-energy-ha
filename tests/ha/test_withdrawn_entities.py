@@ -74,10 +74,12 @@ def _register(
     entry: MockConfigEntry,
     platform: str,
     unique_id: str,
+    *,
+    integration: str = DOMAIN,
 ) -> str:
     registry = er.async_get(hass)
     return registry.async_get_or_create(
-        platform, DOMAIN, unique_id, config_entry=entry
+        platform, integration, unique_id, config_entry=entry
     ).entity_id
 
 
@@ -121,6 +123,42 @@ class TestRemoval:
         _async_remove_withdrawn_entities(hass, entry)
 
         assert set(keep) <= _ids(hass)
+
+    def test_schedule_cleanup_is_exact_and_entry_scoped(
+        self, hass: HomeAssistant, entry: MockConfigEntry
+    ) -> None:
+        registry = er.async_get(hass)
+        stale = {
+            _register(hass, entry, "switch", f"{SERIAL}_schedule_1_enabled"),
+            _register(hass, entry, "number", f"{SERIAL}_schedule_2_power_w"),
+            _register(hass, entry, "sensor", f"{SERIAL}_schedule_3_window"),
+        }
+        running = _register(
+            hass, entry, "binary_sensor", f"{SERIAL}_schedule_1_running"
+        )
+        registry.async_update_entity(running, name="Morning charge running")
+
+        other_entry = MockConfigEntry(domain=DOMAIN, data={})
+        other_entry.add_to_hass(hass)
+        foreign_entry = _register(
+            hass,
+            other_entry,
+            "switch",
+            f"{OTHER_SERIAL}_schedule_1_enabled",
+        )
+        foreign_platform = _register(
+            hass,
+            entry,
+            "switch",
+            f"{SERIAL}_schedule_4_enabled",
+            integration="example",
+        )
+
+        _async_remove_withdrawn_entities(hass, entry)
+
+        assert not (stale & _ids(hass))
+        assert {running, foreign_entry, foreign_platform} <= _ids(hass)
+        assert registry.async_get(running).name == "Morning charge running"
 
     def test_a_longer_key_ending_in_the_same_word_survives(
         self, hass: HomeAssistant, entry: MockConfigEntry

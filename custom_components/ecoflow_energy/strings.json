@@ -93,6 +93,7 @@
       "no_devices": "No devices found. Make sure devices are bound in the EcoFlow app.",
       "enhanced_login_failed": "Enhanced Mode login failed. Check your EcoFlow app email and password.",
       "enhanced_decrypt_failed": "Enhanced Mode credential decryption failed.",
+      "powerstream_requires_standard": "PowerStream requires Standard Mode with Developer API keys.",
       "unknown": "An unexpected error occurred."
     },
     "abort": {
@@ -152,6 +153,7 @@
       "enhanced_login_failed": "Enhanced Mode login failed.",
       "enhanced_decrypt_failed": "Enhanced Mode credential decryption failed.",
       "no_devices": "Please select at least one device.",
+      "powerstream_requires_standard": "PowerStream requires Standard Mode with Developer API keys.",
       "unknown": "An unexpected error occurred."
     }
   },

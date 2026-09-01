@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.18.1] - 2026-09-01
+
+### Changed
+
+- PowerOcean scheduled charge tasks now expose only the device-reported running flag in Enhanced Mode. The task parser and diagnostic fields remain available for further validation, but the schedule window, enable switch and charge-power number are withheld because the available evidence does not establish authoritative writable bounds or a correlated persisted read-back. Existing schedules continue to be created and managed in the EcoFlow app. (Ref #328)
+
+### Fixed
+
+- Overlapping PowerOcean slider writes now keep the newest confirmed value when publishes finish out of order. Writes already publishing, including automatic surplus synchronization, also finish before MQTT disconnects during unload, even if an unload caller is cancelled, without letting an old debounce task roll back state or notify entities after shutdown.
+- Stream HTTP quotas now use the same unit-versus-system SoC latch as MQTT, so HTTP fallback cannot leak a private parser key or let a later unit reading replace an established system SoC.
+- PowerStream Standard Mode now accepts its MQTT quota push end to end. Account-sign-in entries reject PowerStream during setup and options changes, while existing mixed entries skip it cleanly and continue loading their supported devices.
+- Registry cleanup removes only the stale Stream-only entities that an earlier HW51 misclassification could create, while preserving current PowerStream entities, other devices and recorded history.
+- Repeated HTTP outages are logged once on transition and once on recovery instead of producing a warning and error on every poll; diagnostics remain quiet and explicit write failures keep one action-level warning.
+
 ## [1.18.0] - 2026-08-20
 
 ### Added

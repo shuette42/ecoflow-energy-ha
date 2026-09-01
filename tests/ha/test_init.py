@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
@@ -38,7 +37,7 @@ from custom_components.ecoflow_energy.const import (
     RAW_FRAME_PER_KEY_MAX,
 )
 
-from .conftest import MOCK_MQTT_CREDENTIALS, MOCK_POWEROCEAN_DEVICE
+from .conftest import MOCK_POWEROCEAN_DEVICE
 
 # Fixed wall-clock reference. Never compute a deadline from the real clock in
 # a test: on a fresh CI container the arithmetic can land in the past.
@@ -390,6 +389,65 @@ class TestMigration:
 
 
 class TestUnsupportedDeviceSkip:
+    async def test_app_auth_powerstream_is_skipped_without_probe_in_mixed_entry(
+        self,
+        hass: HomeAssistant,
+        mock_mqtt_client,
+        mock_enhanced_auth,
+    ) -> None:
+        """An old mixed entry keeps working without opening an HW51 session."""
+        powerstream = {
+            "sn": "HW51TEST00000001",
+            "name": "PowerStream",
+            "product_name": "PowerStream",
+            "device_type": "powerstream",
+            "online": 1,
+        }
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_AUTH_METHOD: AUTH_METHOD_APP,
+                CONF_MODE: MODE_ENHANCED,
+                CONF_EMAIL: "test@example.com",
+                CONF_PASSWORD: "test_password",
+                CONF_USER_ID: "uid",
+                CONF_DEVICES: [MOCK_POWEROCEAN_DEVICE, powerstream],
+                CONF_RAW_CAPTURE: True,
+                CONF_RAW_CAPTURE_UNTIL: 9_000_000_000.0,
+            },
+            unique_id="test@example.com",
+        )
+        entry.add_to_hass(hass)
+
+        with (
+            patch(
+                "custom_components.ecoflow_energy.coordinator."
+                "EcoFlowDeviceCoordinator.async_config_entry_first_refresh",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "custom_components.ecoflow_energy.async_start_probes",
+                new_callable=AsyncMock,
+            ) as start_probes,
+        ):
+            assert await hass.config_entries.async_setup(entry.entry_id) is True
+            await hass.async_block_till_done()
+
+        coordinators = hass.data[DOMAIN][entry.entry_id]
+        assert set(coordinators) == {MOCK_POWEROCEAN_DEVICE["sn"]}
+        start_probes.assert_not_awaited()
+        skipped = hass.data[DATA_SKIPPED_DEVICES][entry.entry_id]
+        assert skipped == [
+            {
+                "sn_prefix": "HW51",
+                "sn": "HW51TEST00000001",
+                "product_name": "PowerStream",
+                "reason": "PowerStream requires Standard Mode",
+                "probe_eligible": False,
+            }
+        ]
+
     async def test_unsupported_device_skipped(
         self,
         hass: HomeAssistant,

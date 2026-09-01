@@ -217,8 +217,14 @@ async def _skipped_devices_diagnostics(
             "reason": item.get("reason"),
         }
 
-        probe = probe_by_sn.get(item.get("sn"))
-        if probe is not None:
+        probe_eligible = item.get("probe_eligible", True)
+        probe = probe_by_sn.get(item.get("sn")) if probe_eligible else None
+        if not probe_eligible:
+            out["raw_capture"] = {
+                "status": "not attempted",
+                "hint": "device requires Standard Mode; app-auth probe not started",
+            }
+        elif probe is not None:
             # The app channel is the only route for models the Developer API
             # refuses (error 1006), so what the probe heard is the whole
             # evidence base for adding support.
@@ -259,10 +265,15 @@ async def _skipped_devices_diagnostics(
             }
 
         if not has_dev_creds:
-            out["quota_note"] = (
-                "developer credentials required to capture raw quota "
-                "(device is in enhanced/app-auth mode)"
-            )
+            if not probe_eligible:
+                out["quota_note"] = (
+                    "not attempted: device requires Standard Mode"
+                )
+            else:
+                out["quota_note"] = (
+                    "developer credentials required to capture raw quota "
+                    "(device is in enhanced/app-auth mode)"
+                )
             result.append(out)
             continue
 
@@ -271,7 +282,7 @@ async def _skipped_devices_diagnostics(
         if sn:
             try:
                 client = EcoFlowHTTPQuota(session, access_key, secret_key, sn)
-                response = await client.get_quota_all()
+                response = await client.get_quota_all(diagnostic=True)
             except Exception:  # noqa: BLE001
                 # A skipped-device quota fetch failing is expected and not
                 # actionable (unsupported model, transient API error), so it

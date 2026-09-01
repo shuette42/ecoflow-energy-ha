@@ -9,13 +9,13 @@ import pytest
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 import aiohttp
 from homeassistant.config_entries import SOURCE_REAUTH, SOURCE_RECONFIGURE
 
 from custom_components.ecoflow_energy.const import (
     AUTH_METHOD_APP,
-    AUTH_METHOD_DEVELOPER,
     CONF_ACCESS_KEY,
     CONF_AUTH_METHOD,
     CONF_DEVICES,
@@ -37,6 +37,14 @@ from .conftest import MOCK_DELTA_DEVICE, MOCK_MQTT_CREDENTIALS, MOCK_POWEROCEAN_
 # Fixed wall-clock reference - never derive a deadline from the real clock.
 FIXED_NOW = 1_800_000_000.0
 
+POWERSTREAM_DEVICE = {
+    "sn": "HW51TEST00000001",
+    "name": "PowerStream",
+    "product_name": "PowerStream",
+    "device_type": "powerstream",
+    "online": 1,
+}
+
 
 # ===========================================================================
 # Helper: advance through mode selection
@@ -55,6 +63,143 @@ async def _select_mode(hass: HomeAssistant, mode: str = MODE_STANDARD):
         {CONF_MODE: mode},
     )
     return result
+
+
+async def _advance_app_flow_with_powerstream(hass: HomeAssistant):
+    result = await _select_mode(hass, MODE_ENHANCED)
+    with (
+        patch(
+            "custom_components.ecoflow_energy.config_flow_setup.enhanced_login",
+            new_callable=AsyncMock,
+            return_value={"token": "jwt_token", "user_id": "uid123"},
+        ),
+        patch(
+            "custom_components.ecoflow_energy.config_flow_setup.get_app_device_list",
+            new_callable=AsyncMock,
+            return_value=[
+                POWERSTREAM_DEVICE,
+                {
+                    "sn": "HJ31TEST00000001",
+                    "product_name": "PowerOcean",
+                    "device_type": "powerocean",
+                    "online": 1,
+                },
+            ],
+        ),
+    ):
+        return await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_EMAIL: "test@example.com", CONF_PASSWORD: "secret"},
+        )
+
+
+class TestPowerStreamModeBoundary:
+    async def test_app_flow_shows_but_does_not_preselect_powerstream(
+        self, hass: HomeAssistant
+    ) -> None:
+        result = await _advance_app_flow_with_powerstream(hass)
+
+        marker = next(
+            key
+            for key in result["data_schema"].schema
+            if getattr(key, "schema", None) == CONF_DEVICES
+        )
+        options = result["data_schema"].schema[marker].config["options"]
+        assert any(
+            option["value"] == POWERSTREAM_DEVICE["sn"]
+            and "requires Standard Mode" in option["label"]
+            for option in options
+        )
+        assert marker.default() == ["HJ31TEST00000001"]
+
+    async def test_app_flow_rejects_explicit_powerstream_selection(
+        self, hass: HomeAssistant
+    ) -> None:
+        result = await _advance_app_flow_with_powerstream(hass)
+
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_DEVICES: [POWERSTREAM_DEVICE["sn"]]}
+        )
+
+        assert result["type"] is FlowResultType.FORM
+        assert result["errors"]["base"] == "powerstream_requires_standard"
+
+    async def test_app_auth_options_reject_before_entry_mutation(
+        self, hass: HomeAssistant
+    ) -> None:
+        powerocean = {
+            "sn": "HJ31TEST00000001",
+            "name": "PowerOcean",
+            "product_name": "PowerOcean",
+            "device_type": "powerocean",
+            "online": 1,
+        }
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_AUTH_METHOD: AUTH_METHOD_APP,
+                CONF_MODE: MODE_ENHANCED,
+                CONF_EMAIL: "test@example.com",
+                CONF_PASSWORD: "secret",
+                CONF_USER_ID: "uid123",
+                CONF_DEVICES: [powerocean, POWERSTREAM_DEVICE],
+            },
+            unique_id="test@example.com",
+        )
+        entry.add_to_hass(hass)
+        before = dict(entry.data)
+
+        with patch(
+            "custom_components.ecoflow_energy.config_flow_options."
+            "_async_fetch_app_devices",
+            new_callable=AsyncMock,
+            return_value=[powerocean, POWERSTREAM_DEVICE],
+        ):
+            result = await hass.config_entries.options.async_init(entry.entry_id)
+            result = await hass.config_entries.options.async_configure(
+                result["flow_id"],
+                {
+                    CONF_MODE: MODE_ENHANCED,
+                    CONF_DEVICES: [powerocean["sn"], POWERSTREAM_DEVICE["sn"]],
+                },
+            )
+
+        assert result["type"] is FlowResultType.FORM
+        assert result["errors"]["base"] == "powerstream_requires_standard"
+        assert entry.data == before
+
+    async def test_options_stored_fallback_keeps_standard_mode_hint(
+        self, hass: HomeAssistant
+    ) -> None:
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_AUTH_METHOD: AUTH_METHOD_APP,
+                CONF_MODE: MODE_ENHANCED,
+                CONF_EMAIL: "test@example.com",
+                CONF_PASSWORD: "secret",
+                CONF_USER_ID: "uid123",
+                CONF_DEVICES: [POWERSTREAM_DEVICE],
+            },
+            unique_id="test@example.com",
+        )
+        entry.add_to_hass(hass)
+
+        with patch(
+            "custom_components.ecoflow_energy.config_flow_options."
+            "_async_fetch_app_devices",
+            new_callable=AsyncMock,
+            side_effect=TimeoutError,
+        ):
+            result = await hass.config_entries.options.async_init(entry.entry_id)
+
+        options = result["data_schema"].schema[CONF_DEVICES].config["options"]
+        assert options == [{
+            "value": POWERSTREAM_DEVICE["sn"],
+            "label": "PowerStream (HW51TEST0000) - requires Standard Mode",
+        }]
 
 
 # ===========================================================================

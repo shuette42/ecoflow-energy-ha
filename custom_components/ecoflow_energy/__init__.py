@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 
 from homeassistant.config_entries import ConfigEntry
@@ -23,6 +24,7 @@ from .const import (
     CONF_RAW_CAPTURE_UNTIL,
     DATA_DEVICE_PROBES,
     DATA_SKIPPED_DEVICES,
+    DEVICE_TYPE_POWERSTREAM,
     DEVICE_TYPE_UNKNOWN,
     DOMAIN,
     MODE_ENHANCED,
@@ -138,7 +140,48 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
 # withdrawn because the device reports its charge mode only when that mode
 # changes, which is far too rarely for a control that has to show where the
 # device stands.
-_WITHDRAWN_ENTITY_SUFFIXES: tuple[str, ...] = ("_ac_charge_mode",)
+_WITHDRAWN_ENTITY_SUFFIXES: tuple[str, ...] = (
+    "_ac_charge_mode",
+    *(f"_schedule_{index}_{suffix}" for index in range(1, 9) for suffix in (
+        "enabled", "power_w", "window",
+    )),
+)
+
+# HW51 PowerStream microinverters could once be classified as Stream batteries.
+# These are the Stream-only platform/key pairs exposed by v1.17. The 16 sensor
+# keys shared by both families are deliberately absent so their entity ids and
+# history survive the corrected classification. A key on another platform is
+# a different entity: the current read-only sensor ``led_brightness`` survives,
+# while the historical writable number with the same key does not.
+_HW51_LEGACY_STREAM_SENSOR_KEYS: frozenset[str] = frozenset({
+    "ac_current_a", "ac_grid_connection_power_w", "ac_outlet_1_w",
+    "ac_outlet_2_w", "batt_charge_capacity_ah", "batt_charge_energy_kwh",
+    "batt_charge_discharge_state", "batt_charge_power_w",
+    "batt_design_cap_mah", "batt_discharge_capacity_ah",
+    "batt_discharge_energy_kwh", "batt_discharge_power_w",
+    "batt_full_cap_mah", "batt_max_cell_temp_c", "batt_max_cell_vol_mv",
+    "batt_max_mos_temp_c", "batt_min_cell_temp_c", "batt_min_cell_vol_mv",
+    "batt_remain_cap_mah", "bms_soh_pct", "backup_reserve_pct",
+    "feed_grid_power_limit_w", "grid_connection_power_w",
+    "grid_connection_state", "home_energy_kwh", "home_from_batt_w",
+    "home_from_grid_w", "home_from_solar_w", "home_w", "pv3_energy_kwh",
+    "pv3_w", "pv4_energy_kwh", "pv4_w", "pv_current_a", "pv_voltage_v",
+    "pv2_current_a", "soc_precise_pct", "sys_grid_connection_power_w",
+})
+_HW51_LEGACY_STREAM_KEYS_BY_DOMAIN: dict[str, frozenset[str]] = {
+    "sensor": _HW51_LEGACY_STREAM_SENSOR_KEYS,
+    "binary_sensor": frozenset({
+        "ac_outlet_1_enabled", "ac_outlet_2_enabled",
+    }),
+    "switch": frozenset({"ac_outlet_1_switch", "ac_outlet_2_switch"}),
+    "number": frozenset({
+        "backup_reserve",
+        "led_brightness",
+        "stream_charge_limit",
+        "stream_discharge_limit",
+    }),
+}
+_HW51_SERIAL_RE = re.compile(r"^HW51[A-Z0-9]{11,}$")
 
 
 def _async_remove_withdrawn_entities(
@@ -153,6 +196,8 @@ def _async_remove_withdrawn_entities(
     """
     registry = er.async_get(hass)
     for existing in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if existing.platform != DOMAIN:
+            continue
         if not existing.unique_id.endswith(_WITHDRAWN_ENTITY_SUFFIXES):
             continue
         _LOGGER.debug(
@@ -161,9 +206,33 @@ def _async_remove_withdrawn_entities(
         registry.async_remove(existing.entity_id)
 
 
+def _async_remove_legacy_hw51_stream_entities(
+    hass: HomeAssistant, entry: ConfigEntry
+) -> None:
+    """Remove only Stream-only registry entries once created on HW51 units."""
+    registry = er.async_get(hass)
+    for existing in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if existing.platform != DOMAIN:
+            continue
+        entity_domain = existing.entity_id.partition(".")[0]
+        stale_keys = _HW51_LEGACY_STREAM_KEYS_BY_DOMAIN.get(entity_domain)
+        if not stale_keys:
+            continue
+        serial, separator, key = existing.unique_id.partition("_")
+        if (
+            not separator
+            or not _HW51_SERIAL_RE.fullmatch(serial)
+            or key not in stale_keys
+        ):
+            continue
+        _LOGGER.debug("Removing legacy PowerStream entity %s", existing.entity_id)
+        registry.async_remove(existing.entity_id)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> bool:
     """Set up EcoFlow Energy from a config entry."""
     _async_remove_withdrawn_entities(hass, entry)
+    _async_remove_legacy_hw51_stream_entities(hass, entry)
 
     # Auto-upgrade: Enhanced Mode entries with email+password -> app-auth.
     # This lets existing Enhanced users benefit from the app-auth path
@@ -213,6 +282,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
         device_type = get_device_type(product_name, sn)
         if device_type == DEVICE_TYPE_UNKNOWN:
             device_type = device_info.get("device_type", "")
+        if (
+            entry.data.get(CONF_AUTH_METHOD) == AUTH_METHOD_APP
+            and device_type == DEVICE_TYPE_POWERSTREAM
+        ):
+            _LOGGER.warning(
+                "Skipping PowerStream %s...: this device requires Standard Mode",
+                sn[:4],
+            )
+            skipped_devices.append({
+                "sn_prefix": sn[:4],
+                "sn": sn,
+                "product_name": product_name or "PowerStream",
+                "reason": "PowerStream requires Standard Mode",
+                "probe_eligible": False,
+            })
+            continue
         if not device_type or device_type == DEVICE_TYPE_UNKNOWN:
             # One WARNING per unsupported device per setup: the user sees
             # the device in the EcoFlow account but gets no entities, so
@@ -312,10 +397,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
     # Off by default. The capture helps exactly one person - whoever
     # volunteered - and costs an extra connection plus a larger diagnostics
     # download, so it is opt-in and expires on its own.
-    if capture_on and skipped_devices:
+    probe_devices = [
+        device for device in skipped_devices if device.get("probe_eligible", True)
+    ]
+    if capture_on and probe_devices:
         probes = await async_start_probes(
             hass,
-            skipped_devices,
+            probe_devices,
             entry.data.get(CONF_EMAIL, ""),
             entry.data.get(CONF_PASSWORD, ""),
         )

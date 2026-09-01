@@ -93,6 +93,7 @@
       "no_devices": "No devices found. Make sure devices are bound in the EcoFlow app.",
       "enhanced_login_failed": "Enhanced Mode login failed. Check your EcoFlow app email and password.",
       "enhanced_decrypt_failed": "Enhanced Mode credential decryption failed.",
+      "powerstream_requires_standard": "PowerStream requires Standard Mode with Developer API keys.",
       "unknown": "An unexpected error occurred."
     },
     "abort": {
@@ -152,6 +153,7 @@
       "enhanced_login_failed": "Enhanced Mode login failed.",
       "enhanced_decrypt_failed": "Enhanced Mode credential decryption failed.",
       "no_devices": "Please select at least one device.",
+      "powerstream_requires_standard": "PowerStream requires Standard Mode with Developer API keys.",
       "unknown": "An unexpected error occurred."
     }
   },
@@ -1516,30 +1518,6 @@
           "power_supply": "Prioritize Power Supply",
           "battery_storage": "Prioritize Battery Storage"
         }
-      },
-      "schedule_1_window": {
-        "name": "Schedule 1 Window"
-      },
-      "schedule_2_window": {
-        "name": "Schedule 2 Window"
-      },
-      "schedule_3_window": {
-        "name": "Schedule 3 Window"
-      },
-      "schedule_4_window": {
-        "name": "Schedule 4 Window"
-      },
-      "schedule_5_window": {
-        "name": "Schedule 5 Window"
-      },
-      "schedule_6_window": {
-        "name": "Schedule 6 Window"
-      },
-      "schedule_7_window": {
-        "name": "Schedule 7 Window"
-      },
-      "schedule_8_window": {
-        "name": "Schedule 8 Window"
       }
     },
     "binary_sensor": {
@@ -1670,30 +1648,6 @@
       },
       "ac_outlet_2_switch": {
         "name": "AC Outlet 2"
-      },
-      "schedule_1_enabled": {
-        "name": "Schedule 1 Enabled"
-      },
-      "schedule_2_enabled": {
-        "name": "Schedule 2 Enabled"
-      },
-      "schedule_3_enabled": {
-        "name": "Schedule 3 Enabled"
-      },
-      "schedule_4_enabled": {
-        "name": "Schedule 4 Enabled"
-      },
-      "schedule_5_enabled": {
-        "name": "Schedule 5 Enabled"
-      },
-      "schedule_6_enabled": {
-        "name": "Schedule 6 Enabled"
-      },
-      "schedule_7_enabled": {
-        "name": "Schedule 7 Enabled"
-      },
-      "schedule_8_enabled": {
-        "name": "Schedule 8 Enabled"
       }
     },
     "number": {
@@ -1768,30 +1722,6 @@
       },
       "max_grid_input_power_w": {
         "name": "Max Grid Input Power"
-      },
-      "schedule_1_power_w": {
-        "name": "Schedule 1 Charge Power"
-      },
-      "schedule_2_power_w": {
-        "name": "Schedule 2 Charge Power"
-      },
-      "schedule_3_power_w": {
-        "name": "Schedule 3 Charge Power"
-      },
-      "schedule_4_power_w": {
-        "name": "Schedule 4 Charge Power"
-      },
-      "schedule_5_power_w": {
-        "name": "Schedule 5 Charge Power"
-      },
-      "schedule_6_power_w": {
-        "name": "Schedule 6 Charge Power"
-      },
-      "schedule_7_power_w": {
-        "name": "Schedule 7 Charge Power"
-      },
-      "schedule_8_power_w": {
-        "name": "Schedule 8 Charge Power"
       }
     },
     "select": {

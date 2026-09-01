@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -92,6 +93,8 @@ class SetCommandsMixin:
         actual SET runs asynchronously and may still fail; failures are
         logged via the underlying async_set_powerocean_soc.
         """
+        if self._shutdown:
+            return False
         if not self._enhanced_mode:
             _LOGGER.warning(
                 "PowerOcean SoC SET requires Enhanced Mode (%s)", self.device_sn[:4],
@@ -105,6 +108,9 @@ class SetCommandsMixin:
             )
             return False
 
+        self._powerocean_soc_request_revision += 1
+        revision = self._powerocean_soc_request_revision
+        self._powerocean_soc_latest_outcome = None
         if not self._powerocean_soc_cycle_open:
             # A cycle is opening. This is the last moment the device values
             # are still in _device_data: the caller applies its optimistic
@@ -125,15 +131,151 @@ class SetCommandsMixin:
             }
 
         self._powerocean_soc_pending = (backup_reserve_pct, solar_surplus_pct)
+        self._powerocean_soc_pending_revision = revision
         if self._powerocean_soc_debounce_unsub is not None:
             self._powerocean_soc_debounce_unsub.cancel()
-        self._powerocean_soc_debounce_unsub = self.hass.loop.call_later(
-            POWEROCEAN_SOC_DEBOUNCE_S,
-            lambda: self.hass.async_create_task(self._flush_powerocean_soc()),
+        handle: asyncio.TimerHandle | None = None
+
+        def _timer_fired() -> None:
+            # call_later never runs inline, so assignment has completed before
+            # this callback can execute.
+            assert handle is not None
+            self._powerocean_soc_debounce_fired(handle)
+
+        handle = self.hass.loop.call_later(
+            POWEROCEAN_SOC_DEBOUNCE_S, _timer_fired
         )
+        self._powerocean_soc_debounce_unsub = handle
         return True
 
-    async def _flush_powerocean_soc(self) -> None:
+    def _claim_powerocean_soc_pending(
+        self,
+    ) -> tuple[tuple[int, int], int, int] | None:
+        """Claim the current pending values before another window can replace them."""
+        pending = self._powerocean_soc_pending
+        if pending is None:
+            return None
+        self._powerocean_soc_pending = None
+        revision = self._powerocean_soc_pending_revision
+        self._powerocean_soc_pending_revision = 0
+        self._powerocean_soc_active_revisions.add(revision)
+        return (
+            pending,
+            self._powerocean_soc_generation,
+            revision,
+        )
+
+    def _powerocean_soc_debounce_fired(
+        self, handle: asyncio.TimerHandle,
+    ) -> None:
+        """Start the flush owned by *handle*, ignoring stale callbacks."""
+        if self._shutdown or self._powerocean_soc_debounce_unsub is not handle:
+            return
+        self._powerocean_soc_debounce_unsub = None
+        claim = self._claim_powerocean_soc_pending()
+        if claim is None:
+            return
+
+        # ConfigEntry tasks are eager on supported HA versions. Gate the
+        # coroutine until its identity is in our set, otherwise a no-op or
+        # shutdown-time flush could finish before it can be tracked.
+        tracked = asyncio.Event()
+
+        async def _run_tracked_flush() -> None:
+            await tracked.wait()
+            await self._flush_powerocean_soc(claim)
+
+        task = self._entry.async_create_task(
+            self.hass,
+            _run_tracked_flush(),
+            name=f"PowerOcean SoC flush {self.device_sn[:4]}",
+        )
+        self._powerocean_soc_flush_tasks.add(task)
+        task.add_done_callback(self._powerocean_soc_flush_done)
+        tracked.set()
+
+    def _powerocean_soc_flush_done(self, task: asyncio.Task[None]) -> None:
+        """Forget exactly the flush task that completed."""
+        self._powerocean_soc_flush_tasks.discard(task)
+
+    def _powerocean_soc_write_done(self, task: asyncio.Future[object]) -> None:
+        """Forget exactly the coordinator-owned direct write that completed."""
+        self._powerocean_soc_write_tasks.discard(task)
+        # ConfigEntry reports task failures too, but retrieving the result here
+        # avoids an unobserved-exception warning if it finishes before unload.
+        if task.cancelled():
+            return
+        task.exception()
+
+    def _schedule_powerocean_soc_write(
+        self,
+        backup_reserve_pct: int,
+        solar_surplus_pct: int,
+        *,
+        name: str,
+    ) -> asyncio.Task[object] | None:
+        """Create and identity-track a direct SoC write without a start race."""
+        if self._shutdown:
+            return None
+        tracked = asyncio.Event()
+
+        async def _run_tracked_write() -> bool:
+            await tracked.wait()
+            return await self.async_set_powerocean_soc(
+                backup_reserve_pct, solar_surplus_pct
+            )
+
+        task = self._entry.async_create_task(
+            self.hass,
+            _run_tracked_write(),
+            name=name,
+        )
+        self._powerocean_soc_write_tasks.add(task)
+        task.add_done_callback(self._powerocean_soc_write_done)
+        tracked.set()
+        return task
+
+    def _resolve_powerocean_soc_cycle(self, generation: int) -> None:
+        """Resolve a cycle only after its pending and claimed work settles."""
+        if (
+            self._shutdown
+            or generation != self._powerocean_soc_generation
+            or not self._powerocean_soc_cycle_open
+            or self._powerocean_soc_debounce_unsub is not None
+            or self._powerocean_soc_pending is not None
+            or self._powerocean_soc_active_revisions
+            or self._powerocean_soc_latest_outcome is None
+        ):
+            return
+
+        latest_succeeded = self._powerocean_soc_latest_outcome
+        self._powerocean_soc_cycle_open = False
+        self._powerocean_soc_latest_outcome = None
+        if latest_succeeded:
+            return
+
+        # The latest request failed. Reconcile the optimistic sliders to the
+        # newest request that actually reached the device, or to the snapshot
+        # captured before this cycle if no request succeeded.
+        before = dict(self._powerocean_soc_before)
+        for key in POWEROCEAN_SOC_STATE_KEYS:
+            if key in before:
+                self.set_device_value(key, before[key])
+                if self.data is not None:
+                    self.data[key] = before[key]
+            else:
+                self._device_data.pop(key, None)
+                if self.data is not None:
+                    self.data.pop(key, None)
+        # The entities hold a 5 s optimistic lock and would ignore the update
+        # below without advancing the rollback generation.
+        self._powerocean_soc_rollback_generation += 1
+        self.async_update_listeners()
+
+    async def _flush_powerocean_soc(
+        self,
+        claim: tuple[tuple[int, int], int, int] | None = None,
+    ) -> None:
         """Send the most recent debounced SoC SET to the device.
 
         The service call returned before this runs, so a failure here can
@@ -142,64 +284,62 @@ class SetCommandsMixin:
         an optimistic value on the way in, and on failure that value is the
         only thing left saying the write worked (issue #185).
         """
-        if self._powerocean_soc_debounce_unsub is not None:
+        if self._shutdown:
+            return
+        if claim is None and self._powerocean_soc_debounce_unsub is not None:
+            # Manual flushes (used by tests and immediate internal callers)
+            # own the currently visible handle. Timer callbacks claim their
+            # handle and pending pair synchronously before creating a task.
             self._powerocean_soc_debounce_unsub.cancel()
             self._powerocean_soc_debounce_unsub = None
-        pending = self._powerocean_soc_pending
-        if pending is None:
+        if claim is None:
+            claim = self._claim_powerocean_soc_pending()
+        if claim is None:
             return
-        self._powerocean_soc_pending = None
+        pending, generation, revision = claim
         backup, solar = pending
-        generation = self._powerocean_soc_generation
-        before = dict(self._powerocean_soc_before)
 
+        cancelled: asyncio.CancelledError | None = None
         try:
             delivered = await self.async_set_powerocean_soc(backup, solar)
-        except Exception:  # noqa: BLE001
+        except asyncio.CancelledError as err:
+            # A cancelled flush is a settled failed revision. Reconcile it if
+            # the coordinator is still live, then preserve cancellation for
+            # the owner/shutdown collector.
+            cancelled = err
+            delivered = False
+        except Exception:
             # Anything unexpected here would otherwise skip the rollback and
             # leave the optimistic value standing, which is the failure this
             # whole path exists to prevent.
             _LOGGER.debug("PowerOcean SoC flush raised", exc_info=True)
             delivered = False
 
-        if generation != self._powerocean_soc_generation:
-            # A newer cycle opened while this write was in flight. It owns the
-            # outcome now: undoing on top of it would replace a current value
-            # with a stale one, and closing its cycle would let the next drag
-            # snapshot this write's optimistic values.
+        if self._shutdown:
+            # Shutdown owns and clears the cycle before it waits for an
+            # executor-backed publish. Its eventual result belongs to the old
+            # coordinator and must not touch state or listeners after unload.
+            if cancelled is not None:
+                raise cancelled
             return
 
-        if delivered:
-            # The device took these, so they are what a later failure has to
-            # fall back to. Reading _device_data again would be wrong when a
-            # newer drag has already written its own optimistic value there.
+        if generation != self._powerocean_soc_generation:
+            self._powerocean_soc_active_revisions.discard(revision)
+            if cancelled is not None:
+                raise cancelled
+            return
+        if delivered and revision > self._powerocean_soc_confirmed_revision:
+            self._powerocean_soc_confirmed_revision = revision
             self._powerocean_soc_before = {
                 POWEROCEAN_SOC_STATE_KEYS[0]: backup,
                 POWEROCEAN_SOC_STATE_KEYS[1]: solar,
             }
-            self._powerocean_soc_cycle_open = False
-            return
-
-        # Undo the optimistic values so the sliders fall back to whatever
-        # the device last reported rather than to the request that failed.
-        for key in POWEROCEAN_SOC_STATE_KEYS:
-            if key in before:
-                self.set_device_value(key, before[key])
-                if self.data is not None:
-                    self.data[key] = before[key]
-            else:
-                # The device had never reported this key, so there is nothing
-                # to fall back to. Dropping it shows unknown, which is true;
-                # leaving it would publish the value the device refused.
-                self._device_data.pop(key, None)
-                if self.data is not None:
-                    self.data.pop(key, None)
-        self._powerocean_soc_cycle_open = False
-        # The entities hold a 5 s optimistic lock and would ignore the update
-        # below; on a dead connection no further update follows to correct
-        # them, so the failed value would simply stay on screen.
-        self._powerocean_soc_rollback_generation += 1
-        self.async_update_listeners()
+        if revision == self._powerocean_soc_request_revision:
+            self._powerocean_soc_latest_outcome = delivered
+        self._powerocean_soc_active_revisions.discard(revision)
+        self._resolve_powerocean_soc_cycle(generation)
+        if cancelled is not None:
+            raise cancelled
 
     async def async_set_powerocean_soc(
         self, backup_reserve_pct: int, solar_surplus_pct: int,
@@ -212,6 +352,8 @@ class SetCommandsMixin:
         device_sn). The legacy `async_set_soc_limits` only sends fields 1+2
         and is silently ignored by the device for backup-reserve changes.
         """
+        if self._shutdown:
+            return False
         if not self._enhanced_mode:
             _LOGGER.warning("PowerOcean SoC SET requires Enhanced Mode (%s)", self.device_sn[:4])
             return False
@@ -233,9 +375,20 @@ class SetCommandsMixin:
             solar_surplus_pct,
             device_sn=self.device_sn,
         )
-        ok = await self.hass.async_add_executor_job(
+        executor_job = self.hass.async_add_executor_job(
             partial(self._mqtt_client.send_proto_set, payload, wait=True),
         )
+        self._powerocean_soc_write_tasks.add(executor_job)
+        executor_job.add_done_callback(self._powerocean_soc_write_done)
+        # Cancelling the coroutine cannot stop a worker thread already inside
+        # send_proto_set. Shielding leaves the actual broker job tracked so
+        # unload still waits for it before disconnecting MQTT.
+        ok = await asyncio.shield(executor_job)
+        if self._shutdown:
+            # The executor job cannot be stopped once it has entered the MQTT
+            # client. Its result belongs to the coordinator being unloaded,
+            # so do not append a success/failure action after shutdown.
+            return ok
         label = f"backup={backup_reserve_pct} solar={solar_surplus_pct}"
         if ok:
             _LOGGER.debug("PowerOcean SoC sent: %s (%s)", label, self.device_sn[:4])
@@ -276,111 +429,6 @@ class SetCommandsMixin:
             _LOGGER.warning("Work-mode SET failed: %d (%s)", work_mode, self.device_sn[:4])
             self._log_event("set_work_mode_fail", str(work_mode))
         return ok
-
-    # ------------------------------------------------------------------
-    # PowerOcean scheduled charge tasks (96/125)
-    # ------------------------------------------------------------------
-
-    async def async_set_powerocean_schedule_armed(
-        self, task_index: int, armed: bool,
-    ) -> bool:
-        """Arm or disarm one scheduled charge task.
-
-        A short frame that carries nothing but the slot, so it needs no value
-        from the last read. The slot itself still has to be there. A task the
-        owner deletes in the app simply drops out of the device's task list,
-        and the parser then retracts every key of that slot to None - which
-        leaves the switch standing and toggleable, since a key that is present
-        and None still counts as reported. Sending against a slot the device
-        no longer holds would name a task that does not exist and then show it
-        as armed, so an arming flag that is not a bool refuses the write.
-
-        The flag is seeded before the send rather than after it, because a
-        power change on the same slot has to carry the arming along and the
-        two writes share this lock: a seed that lands after the next read
-        would let that write send the flag it just replaced. The same seed is
-        held against a device frame that was already in flight, for the window
-        named by `POWEROCEAN_SCHEDULE_ARMED_LATCH_S`. A failed send puts the
-        previous value back and drops the hold with it.
-        """
-        from ..ecoflow.energy_stream import build_timer_task_set_payload
-
-        state_key = f"schedule_{task_index}_enabled"
-        async with self._device_config_lock:
-            previous = self.device_data.get(state_key)
-            if not isinstance(previous, bool):
-                raise DeviceValueNotReported(f"schedule {task_index} enabled")
-            payload = build_timer_task_set_payload(
-                "arm" if armed else "disarm",
-                task_index,
-                device_sn=self.device_sn,
-            )
-            self._seed_device_values(**{state_key: armed})
-            self.latch_schedule_armed(state_key, armed)
-            if not await self.async_send_proto_set_command(
-                payload, label=f"powerocean_schedule_{task_index}_armed"
-            ):
-                self._seed_device_values(**{state_key: previous})
-                self.clear_schedule_armed_latch(state_key)
-                return False
-            return True
-
-    async def async_set_powerocean_schedule_power(
-        self, task_index: int, power_w: int,
-    ) -> bool:
-        """Change the charge power of one scheduled task.
-
-        The full body carries the whole task, so four fields the device owns
-        travel with it: the task type and the three that hold the recurrence.
-        They go out exactly as the last read reported them. Composing a
-        default for a missing one would rewrite the days and times the owner
-        set in the app, which is the one thing this write refuses to risk, so
-        an unreported field raises `DeviceValueNotReported` instead.
-
-        The arming flag travels too. A full body clears it as a side effect,
-        and the device's own task list confirms that a frame carrying field 4
-        leaves the schedule armed, so the current flag is read and sent back.
-        """
-        from ..ecoflow.energy_stream import build_timer_task_set_payload
-
-        prefix = f"schedule_{task_index}_"
-        async with self._device_config_lock:
-            data = self.device_data
-            echoed: dict[str, int] = {}
-            for name, suffix in (
-                ("task_type", "type"),
-                ("time_mode", "time_mode"),
-                ("time_param", "time_param"),
-                ("time_table", "time_table"),
-            ):
-                value = as_known_int(data.get(f"{prefix}{suffix}"))
-                if value is None:
-                    raise DeviceValueNotReported(
-                        f"schedule {task_index} {suffix}"
-                    )
-                echoed[name] = value
-
-            armed = data.get(f"{prefix}enabled")
-            if not isinstance(armed, bool):
-                raise DeviceValueNotReported(f"schedule {task_index} enabled")
-
-            state_key = f"{prefix}power_w"
-            previous = data.get(state_key, _UNSET)
-            payload = build_timer_task_set_payload(
-                "power",
-                task_index,
-                device_sn=self.device_sn,
-                power_w=power_w,
-                armed=armed,
-                **echoed,
-            )
-            self._seed_device_values(**{state_key: power_w})
-            if not await self.async_send_proto_set_command(
-                payload, label=f"powerocean_schedule_{task_index}_power"
-            ):
-                self._restore_device_values(**{state_key: previous})
-                return False
-            return True
 
     # ------------------------------------------------------------------
     # Stream BK-series SoC config writes (254/17)

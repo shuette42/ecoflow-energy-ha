@@ -23,6 +23,7 @@ from .const import (
     CONF_SECRET_KEY,
     CONF_USER_ID,
     DEVICE_TYPE_DISPLAY_NAMES,
+    DEVICE_TYPE_POWERSTREAM,
     DEVICE_TYPE_UNKNOWN,
     MODE_ENHANCED,
     MODE_STANDARD,
@@ -75,6 +76,8 @@ def _device_label(device: dict[str, Any]) -> str:
     sn_short = f"{sn[:8]}..." if len(sn) > 8 else sn
     status = "" if device.get("online", 0) else " (offline)"
     status += unsupported_suffix(device.get("device_type"))
+    if device.get("device_type") == DEVICE_TYPE_POWERSTREAM:
+        status += " - requires Standard Mode"
     return f"{name} ({sn_short}){status}" if name else f"{sn_short}{status}"
 
 
@@ -227,6 +230,12 @@ class SetupFlowMixin:
             selected_sns = user_input.get(CONF_DEVICES, [])
             if not selected_sns:
                 errors["base"] = "no_devices"
+            elif self._auth_type == AUTH_METHOD_APP and any(
+                d["sn"] in selected_sns
+                and d.get("device_type") == DEVICE_TYPE_POWERSTREAM
+                for d in self._devices
+            ):
+                errors["base"] = "powerstream_requires_standard"
             else:
                 self._selected_devices = [
                     d for d in self._devices if d["sn"] in selected_sns
@@ -258,7 +267,14 @@ class SetupFlowMixin:
                 {
                     vol.Required(
                         CONF_DEVICES,
-                        default=list(device_options.keys()),
+                        default=[
+                            sn
+                            for sn in device_options
+                            if self._auth_type != AUTH_METHOD_APP
+                            or next(
+                                d for d in self._devices if d["sn"] == sn
+                            ).get("device_type") != DEVICE_TYPE_POWERSTREAM
+                        ],
                     ): SelectSelector(
                         SelectSelectorConfig(
                             options=[

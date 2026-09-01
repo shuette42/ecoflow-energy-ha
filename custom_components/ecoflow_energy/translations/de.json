@@ -93,6 +93,7 @@
       "no_devices": "Keine Geräte gefunden. Stelle sicher, dass Geräte in der EcoFlow-App gekoppelt sind.",
       "enhanced_login_failed": "Enhanced-Modus Login fehlgeschlagen. Überprüfe E-Mail und Passwort deines EcoFlow-App-Kontos.",
       "enhanced_decrypt_failed": "Enhanced-Modus Entschlüsselung der Zugangsdaten fehlgeschlagen.",
+      "powerstream_requires_standard": "PowerStream benötigt den Standard-Modus mit Developer-API-Schlüsseln.",
       "unknown": "Ein unerwarteter Fehler ist aufgetreten."
     },
     "abort": {
@@ -152,6 +153,7 @@
       "enhanced_login_failed": "Enhanced-Modus Login fehlgeschlagen.",
       "enhanced_decrypt_failed": "Enhanced-Modus Entschlüsselung fehlgeschlagen.",
       "no_devices": "Bitte mindestens ein Gerät auswählen.",
+      "powerstream_requires_standard": "PowerStream benötigt den Standard-Modus mit Developer-API-Schlüsseln.",
       "unknown": "Ein unerwarteter Fehler ist aufgetreten."
     }
   },
@@ -1516,30 +1518,6 @@
           "power_supply": "Verbrauch bevorzugen",
           "battery_storage": "Speicher bevorzugen"
         }
-      },
-      "schedule_1_window": {
-        "name": "Zeitplan 1 Zeitfenster"
-      },
-      "schedule_2_window": {
-        "name": "Zeitplan 2 Zeitfenster"
-      },
-      "schedule_3_window": {
-        "name": "Zeitplan 3 Zeitfenster"
-      },
-      "schedule_4_window": {
-        "name": "Zeitplan 4 Zeitfenster"
-      },
-      "schedule_5_window": {
-        "name": "Zeitplan 5 Zeitfenster"
-      },
-      "schedule_6_window": {
-        "name": "Zeitplan 6 Zeitfenster"
-      },
-      "schedule_7_window": {
-        "name": "Zeitplan 7 Zeitfenster"
-      },
-      "schedule_8_window": {
-        "name": "Zeitplan 8 Zeitfenster"
       }
     },
     "binary_sensor": {
@@ -1670,30 +1648,6 @@
       },
       "ac_outlet_2_switch": {
         "name": "AC-Ausgang 2"
-      },
-      "schedule_1_enabled": {
-        "name": "Zeitplan 1 aktiv"
-      },
-      "schedule_2_enabled": {
-        "name": "Zeitplan 2 aktiv"
-      },
-      "schedule_3_enabled": {
-        "name": "Zeitplan 3 aktiv"
-      },
-      "schedule_4_enabled": {
-        "name": "Zeitplan 4 aktiv"
-      },
-      "schedule_5_enabled": {
-        "name": "Zeitplan 5 aktiv"
-      },
-      "schedule_6_enabled": {
-        "name": "Zeitplan 6 aktiv"
-      },
-      "schedule_7_enabled": {
-        "name": "Zeitplan 7 aktiv"
-      },
-      "schedule_8_enabled": {
-        "name": "Zeitplan 8 aktiv"
       }
     },
     "number": {
@@ -1768,30 +1722,6 @@
       },
       "max_grid_input_power_w": {
         "name": "Max. Netzbezugsleistung"
-      },
-      "schedule_1_power_w": {
-        "name": "Zeitplan 1 Ladeleistung"
-      },
-      "schedule_2_power_w": {
-        "name": "Zeitplan 2 Ladeleistung"
-      },
-      "schedule_3_power_w": {
-        "name": "Zeitplan 3 Ladeleistung"
-      },
-      "schedule_4_power_w": {
-        "name": "Zeitplan 4 Ladeleistung"
-      },
-      "schedule_5_power_w": {
-        "name": "Zeitplan 5 Ladeleistung"
-      },
-      "schedule_6_power_w": {
-        "name": "Zeitplan 6 Ladeleistung"
-      },
-      "schedule_7_power_w": {
-        "name": "Zeitplan 7 Ladeleistung"
-      },
-      "schedule_8_power_w": {
-        "name": "Zeitplan 8 Ladeleistung"
       }
     },
     "select": {

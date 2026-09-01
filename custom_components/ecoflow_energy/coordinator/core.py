@@ -199,6 +199,11 @@ class EcoFlowDeviceCoordinator(
         self._enhanced_mode: bool = enhanced_mode
         self._auth_method: str = AUTH_METHOD_DEVELOPER
         self._shutdown: bool = False
+        # Every unload caller shields and awaits this one cleanup operation.
+        # A failed cleanup stays failed so later callers observe the same
+        # outcome instead of being told shutdown succeeded.
+        self._shutdown_task: asyncio.Task[None] | None = None
+        self._shutdown_complete = asyncio.Event()
         self._last_flush_ts: float = 0.0
         self._last_mqtt_event_ts: float = 0.0
         self._consecutive_http_failures: int = 0
@@ -232,13 +237,6 @@ class EcoFlowDeviceCoordinator(
         # Whether a Stream ever reported the system state of charge; once it
         # has, a unit's own figure no longer stands in for it (#323).
         self._soc_from_system = False
-        # Arming flags this integration has just written, each with the value
-        # sent and the monotonic time the hold expires. A scheduled-task write
-        # seeds the flag before it sends, and a device frame that was already
-        # in flight would otherwise put the old flag back - a later power
-        # write reads the flag out of the store and would then re-send the
-        # reverted one, undoing what the owner just asked for.
-        self._schedule_armed_latch: dict[str, tuple[bool, float]] = {}
         # Debounce state for the PowerOcean SoC SET. HA Number-Entity sliders
         # send one SET per 5%-step during a mouse drag, which arrives at the
         # device at ~100 ms cadence. The device cannot keep all SETs in sync
@@ -247,15 +245,35 @@ class EcoFlowDeviceCoordinator(
         # POWEROCEAN_SOC_DEBOUNCE_S to a single frame carrying the most
         # recent (backup, solar) pair.
         self._powerocean_soc_pending: tuple[int, int] | None = None
+        self._powerocean_soc_pending_revision: int = 0
         self._powerocean_soc_debounce_unsub: asyncio.TimerHandle | None = None
-        # The two slider values as the device last had them, captured when a
-        # debounce window opens - before the entities write their optimistic
-        # value, which is the only moment the device value is still readable.
+        # More than one flush can be in flight when a second debounce window
+        # expires while the previous MQTT publish is still waiting for its
+        # acknowledgement. Shutdown owns and drains every one before MQTT is
+        # disconnected.
+        self._powerocean_soc_flush_tasks: set[asyncio.Task[None]] = set()
+        # Every direct SoC publish registers its actual executor future. The
+        # coordinator-created auto-sync task is tracked here as well so there
+        # is no gap before it starts and registers the broker operation.
+        self._powerocean_soc_write_tasks: set[asyncio.Future[Any]] = set()
+        # Rollback baseline: captured from device state when a cycle opens,
+        # then advanced only by successfully delivered requests in revision
+        # order. It therefore never contains an unconfirmed optimistic value.
         self._powerocean_soc_before: dict[str, Any] = {}
-        # Counts debounce windows. A flush that failed may only roll back if
-        # no newer window has opened since, otherwise a slow failing write
-        # would undo a faster successful one.
+        # Identifies resolved debounce cycles so completions from an older
+        # cycle cannot mutate the current one. Request revisions below order
+        # overlapping publishes within and across those cycles.
         self._powerocean_soc_generation: int = 0
+        # Generation separates resolved drag cycles. Revisions order every
+        # accepted request inside and across those cycles, because two MQTT
+        # publishes can complete in the opposite order from their requests.
+        self._powerocean_soc_request_revision: int = 0
+        self._powerocean_soc_confirmed_revision: int = 0
+        # Claimed revisions stay active until their publish result has been
+        # reconciled. The latest result is applied only after the pending
+        # timer and every claimed revision in the cycle have settled.
+        self._powerocean_soc_active_revisions: set[int] = set()
+        self._powerocean_soc_latest_outcome: bool | None = None
         # True from the moment a write cycle starts until it is resolved by a
         # success or a rollback. Taking a fresh snapshot needs this rather
         # than "no pending value": the flush clears the pending value when it

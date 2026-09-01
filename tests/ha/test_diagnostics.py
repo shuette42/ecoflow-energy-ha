@@ -1378,6 +1378,33 @@ class TestUnroutedDeviceCapture:
         assert result[0]["raw_capture"]["status"] == "no probe running for this device"
         assert "frames" not in result[0]["raw_capture"]
 
+    async def test_intentionally_unprobed_powerstream_reports_mode_boundary(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        skipped = [{
+            "sn_prefix": "HW51",
+            "sn": "HW51TEST00000001",
+            "product_name": "PowerStream",
+            "reason": "PowerStream requires Standard Mode",
+            "probe_eligible": False,
+        }]
+
+        result = await _skipped_devices_diagnostics(
+            hass, enhanced_config_entry, skipped, []
+        )
+
+        rendered = json.dumps(result)
+        assert result[0]["raw_capture"] == {
+            "status": "not attempted",
+            "hint": "device requires Standard Mode; app-auth probe not started",
+        }
+        assert result[0]["quota_note"] == (
+            "not attempted: device requires Standard Mode"
+        )
+        assert "login" not in rendered.lower()
+        assert "credential" not in rendered.lower()
+        assert "HW51TEST00000001" not in rendered
+
     async def test_probe_for_another_device_is_not_attached(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
     ) -> None:

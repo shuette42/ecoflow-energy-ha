@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from typing import Any
@@ -213,8 +214,18 @@ class SetupMixin:
             self._log_event("mqtt_disconnect", "client creation failed")
 
     async def async_shutdown(self) -> None:
-        """Stop the MQTT client and cancel timers."""
-        self._shutdown = True
+        """Await the one cancellation-safe coordinator cleanup task."""
+        if self._shutdown_task is None:
+            self._shutdown = True
+            self._shutdown_task = self._entry.async_create_task(
+                self.hass,
+                self._async_shutdown_cleanup(),
+                name=f"EcoFlow shutdown {self.device_sn[:4]}",
+            )
+        await asyncio.shield(self._shutdown_task)
+
+    async def _async_shutdown_cleanup(self) -> None:
+        """Drain in-flight writes, then stop MQTT and coordinator resources."""
         for handle in (
             self._keepalive_unsub, self._quotas_unsub, self._ping_unsub,
             self._stale_check_unsub, self._credential_refresh_unsub,
@@ -228,9 +239,66 @@ class SetupMixin:
         self._stale_check_unsub = None
         self._credential_refresh_unsub = None
         self._powerocean_soc_debounce_unsub = None
-        if self._mqtt_client is not None:
-            await self.hass.async_add_executor_job(self._mqtt_client.disconnect)
-            self._mqtt_client = None
-        await self.hass.async_add_executor_job(self._energy_integrator.force_flush)
-        await super().async_shutdown()
 
+        # Invalidate every claimed cycle before waiting. A publish already
+        # executing in HA's thread pool cannot be stopped by cancelling its
+        # asyncio wrapper; it is instead allowed to finish, and the post-await
+        # shutdown guard prevents its old result from mutating state.
+        self._powerocean_soc_generation += 1
+        self._powerocean_soc_pending = None
+        self._powerocean_soc_pending_revision = 0
+        self._powerocean_soc_cycle_open = False
+        self._powerocean_soc_before = {}
+        self._powerocean_soc_active_revisions.clear()
+        self._powerocean_soc_latest_outcome = None
+        task_errors: list[BaseException] = []
+        while self._powerocean_soc_flush_tasks or self._powerocean_soc_write_tasks:
+            tasks = tuple(
+                self._powerocean_soc_flush_tasks
+                | self._powerocean_soc_write_tasks
+            )
+            outcomes = await asyncio.gather(*tasks, return_exceptions=True)
+            self._powerocean_soc_flush_tasks.difference_update(tasks)
+            self._powerocean_soc_write_tasks.difference_update(tasks)
+            task_errors.extend(
+                outcome
+                for outcome in outcomes
+                if isinstance(outcome, BaseException)
+            )
+        # Set iteration order is deliberately irrelevant to the propagated
+        # outcome: task failures are sorted before ordered teardown stages.
+        task_errors.sort(
+            key=lambda error: (
+                type(error).__module__,
+                type(error).__qualname__,
+                str(error),
+            )
+        )
+        cleanup_errors = task_errors
+
+        if self._mqtt_client is not None:
+            try:
+                await self.hass.async_add_executor_job(self._mqtt_client.disconnect)
+            except BaseException as err:  # noqa: BLE001
+                cleanup_errors.append(err)
+            finally:
+                self._mqtt_client = None
+        try:
+            await self.hass.async_add_executor_job(
+                self._energy_integrator.force_flush
+            )
+        except BaseException as err:  # noqa: BLE001
+            cleanup_errors.append(err)
+        try:
+            await super().async_shutdown()
+        except BaseException as err:  # noqa: BLE001
+            cleanup_errors.append(err)
+
+        if cleanup_errors:
+            # Task failures are sorted above and teardown stages append in
+            # execution order, so every caller observes the same first error.
+            raise cleanup_errors[0]
+
+        # Never set this from finally: a failed cleanup must remain failed for
+        # every concurrent or later caller.
+        self._shutdown_complete.set()

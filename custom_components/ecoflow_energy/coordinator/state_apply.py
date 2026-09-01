@@ -10,7 +10,6 @@ from ..const import (
     APP_SURPLUS_SYNC_MIN_INTERVAL_S,
     APP_SURPLUS_SYNC_USER_GRACE_S,
     DEVICE_TYPE_POWEROCEAN,
-    POWEROCEAN_SCHEDULE_ARMED_LATCH_S,
 )
 from ..ecoflow.parsers.stream_ac5000_proto import UNIT_POWER_BY_SN_KEY
 from ..ecoflow.parsers.stream_proto import SOC_FALLBACK_KEY
@@ -73,48 +72,6 @@ class StateApplyMixin:
         if own is not None:
             parsed["unit_batt_w"] = own
 
-    def _resolve_schedule_armed(self, parsed: dict[str, Any]) -> None:
-        """Hold a just-written arming flag against a frame that predates it.
-
-        A scheduled-task write seeds `schedule_N_enabled` in the store before
-        it sends, because the power write for the same slot reads the flag
-        back out of the store and carries it along. A device frame that left
-        before the write arrived would put the old flag back, and the next
-        power change would then re-send it - re-arming a schedule the owner
-        had just disarmed, which is the one side effect this write exists to
-        avoid.
-
-        So a flag under the hold wins over a frame that disagrees with it, and
-        loses to one that agrees: an agreeing frame is the device confirming
-        the write, which ends the hold there and then. Only the flag is held.
-        Everything else the frame carries, this slot included, is applied.
-        """
-        if not self._schedule_armed_latch:
-            return
-        now = time.monotonic()
-        for key, (written, until) in list(self._schedule_armed_latch.items()):
-            expired = now >= until
-            if key in parsed:
-                if parsed[key] == written:
-                    del self._schedule_armed_latch[key]
-                    continue
-                if not expired:
-                    del parsed[key]
-                    continue
-            if expired:
-                del self._schedule_armed_latch[key]
-
-    def latch_schedule_armed(self, state_key: str, armed: bool) -> None:
-        """Start the hold for one arming flag this integration just sent."""
-        self._schedule_armed_latch[state_key] = (
-            armed,
-            time.monotonic() + POWEROCEAN_SCHEDULE_ARMED_LATCH_S,
-        )
-
-    def clear_schedule_armed_latch(self, state_key: str) -> None:
-        """Drop the hold for one arming flag, used when the send failed."""
-        self._schedule_armed_latch.pop(state_key, None)
-
     def _apply_data(self, parsed: dict[str, Any]) -> None:
         """Apply parsed data and notify listeners (HA event loop)."""
         from .core import DeviceSnapshot
@@ -142,7 +99,6 @@ class StateApplyMixin:
             self._last_ems_param_change_ts = now
         self._resolve_unit_power(parsed)
         self._resolve_soc(parsed)
-        self._resolve_schedule_armed(parsed)
         self._note_value_change(parsed)
         self._device_data.update(parsed)
 
@@ -195,6 +151,8 @@ class StateApplyMixin:
         `ems_backup_ratio_pct`, this method schedules a corrective
         both-field SET that brings the EMS in line.
         """
+        if self._shutdown:
+            return
         app_val = self._device_data.get("ems_app_surplus_pct")
         ems_val = self._device_data.get("ems_backup_ratio_pct")
         if app_val is None or ems_val is None:
@@ -240,6 +198,13 @@ class StateApplyMixin:
             backup_int = 0
         target_backup = min(backup_int, app_int)
 
+        task = self._schedule_powerocean_soc_write(
+            target_backup,
+            app_int,
+            name=f"PowerOcean surplus auto-sync {self.device_sn[:4]}",
+        )
+        if task is None:
+            return
         self._last_app_surplus_sync_ts = now
         _LOGGER.info(
             "PowerOcean surplus auto-sync (%s): app=%d ems=%d -> SET both=%d",
@@ -248,9 +213,6 @@ class StateApplyMixin:
         self._log_event(
             "surplus_auto_sync",
             f"app={app_int} ems={ems_int}",
-        )
-        self.hass.async_create_task(
-            self.async_set_powerocean_soc(target_backup, app_int)
         )
 
     def mark_user_surplus_set(self) -> None:
@@ -431,4 +393,3 @@ class StateApplyMixin:
                     total = self._energy_integrator.integrate(energy_key, abs(power_w))
                     if total is not None:
                         self._device_data[energy_key] = round(total, 2)
-

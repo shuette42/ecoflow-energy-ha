@@ -190,6 +190,7 @@ class MqttIngestMixin:
         if not self._enhanced_mode and self.device_type not in (
             DEVICE_TYPE_DELTA,
             DEVICE_TYPE_DELTA3,
+            DEVICE_TYPE_POWERSTREAM,
             DEVICE_TYPE_SMARTPLUG,
             DEVICE_TYPE_STREAM,
         ):

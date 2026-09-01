@@ -29,6 +29,7 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+_HTTP_FAILURE_SUMMARY_INTERVAL_S = 300.0
 
 
 class EcoFlowHTTPQuota:
@@ -51,7 +52,10 @@ class EcoFlowHTTPQuota:
         self._min_interval = min_interval
         self._last_call: float = 0.0
         self.last_error_code: str | None = None
-        self._logged_1006: bool = False
+        self._outage_active: bool = False
+        self._outage_kind: str | None = None
+        self._outage_last_summary_at: float = 0.0
+        self._outage_suppressed: int = 0
 
     @property
     def _sn_display(self) -> str:
@@ -62,7 +66,7 @@ class EcoFlowHTTPQuota:
     # Public API
     # ------------------------------------------------------------------
 
-    async def get_quota_all(self) -> dict | None:
+    async def get_quota_all(self, *, diagnostic: bool = False) -> dict | None:
         """Fetch all quotas via GET /iot-open/sign/device/quota/all?sn=...
 
         No request body - SN is passed as query parameter.
@@ -74,7 +78,10 @@ class EcoFlowHTTPQuota:
         url = f"{self._base_url}{IOT_QUOTA_ALL_PATH}"
         query = {"sn": self._device_sn}
 
-        return await self._request_with_retry("GET", url, query=query)
+        return await self._request_with_retry(
+            "GET", url, query=query,
+            purpose="diagnostic" if diagnostic else "poll",
+        )
 
     async def set_quota(self, command: dict) -> dict | None:
         """Apply a device setting via PUT /iot-open/sign/device/quota.
@@ -85,7 +92,9 @@ class EcoFlowHTTPQuota:
         """
         url = f"{self._base_url}{IOT_QUOTA_PATH}"
         body = {"sn": self._device_sn, **command}
-        return await self._request_with_retry("PUT", url, body=body)
+        return await self._request_with_retry(
+            "PUT", url, body=body, purpose="action"
+        )
 
     # ------------------------------------------------------------------
     # Signature
@@ -166,8 +175,10 @@ class EcoFlowHTTPQuota:
         *,
         body: dict | None = None,
         query: dict | None = None,
+        purpose: str = "poll",
     ) -> dict | None:
         """Execute an HTTP request with retry logic."""
+        failure_reason = "request_error"
         for attempt in range(1, HTTP_RETRIES + 1):
             try:
                 # Sign: for POST use body params, for GET use query params
@@ -185,57 +196,114 @@ class EcoFlowHTTPQuota:
                     async with request(
                         url, headers=headers, data=body_json.encode("utf-8"), timeout=timeout,
                     ) as resp:
-                        return await self._handle_response(resp)
+                        return await self._handle_response(resp, purpose=purpose)
                 else:
                     async with self._session.get(
                         url, headers=headers, params=query, timeout=timeout,
                     ) as resp:
-                        return await self._handle_response(resp)
+                        return await self._handle_response(resp, purpose=purpose)
 
-            except (aiohttp.ClientError, TimeoutError, asyncio.TimeoutError, self._RetryableAPIError) as exc:
-                if attempt < HTTP_RETRIES:
-                    _LOGGER.debug("HTTP %s: error (attempt %d/%d): %s", method, attempt, HTTP_RETRIES, exc)
-                else:
-                    _LOGGER.warning("HTTP %s: error (attempt %d/%d): %s", method, attempt, HTTP_RETRIES, exc)
+            except (
+                aiohttp.ClientError,
+                TimeoutError,
+                asyncio.TimeoutError,
+                self._RetryableAPIError,
+            ) as exc:
+                # aiohttp exceptions can embed RequestInfo, including the
+                # signed URL and full serial query. Keep only the exception
+                # class; retries are coalesced into one terminal outcome.
+                failure_reason = type(exc).__name__
 
             if attempt < HTTP_RETRIES:
                 await asyncio.sleep(HTTP_RETRY_BACKOFF_S)
 
         self.last_error_code = "network"
-        _LOGGER.error("HTTP: all %d attempts failed for %s", HTTP_RETRIES, self._sn_display)
+        self._note_failure(
+            "transport",
+            f"HTTP {method} transport failure for {self._sn_display} "
+            f"after {HTTP_RETRIES} attempts ({failure_reason})",
+            purpose,
+        )
         return None
 
-    async def _handle_response(self, resp: aiohttp.ClientResponse) -> dict | None:
+    def _note_failure(self, kind: str, message: str, purpose: str) -> None:
+        """Log an outage transition once, while keeping repeats quiet."""
+        if purpose != "poll":
+            _LOGGER.debug(
+                "HTTP request failed purpose=%s kind=%s device=%s",
+                purpose,
+                kind,
+                self._sn_display,
+            )
+            return
+
+        now = time.monotonic()
+        if not self._outage_active or self._outage_kind != kind:
+            self._outage_active = True
+            self._outage_kind = kind
+            self._outage_last_summary_at = now
+            self._outage_suppressed = 0
+            _LOGGER.warning("%s", message)
+            return
+
+        self._outage_suppressed += 1
+        if now - self._outage_last_summary_at < _HTTP_FAILURE_SUMMARY_INTERVAL_S:
+            return
+        _LOGGER.debug(
+            "HTTP poll failure persists for %s: kind=%s repeated=%d",
+            self._sn_display,
+            kind,
+            self._outage_suppressed,
+        )
+        self._outage_last_summary_at = now
+        self._outage_suppressed = 0
+
+    def _note_success(self, purpose: str) -> None:
+        """Log exactly one recovery when a polled outage ends."""
+        if purpose == "poll" and self._outage_active:
+            _LOGGER.info(
+                "HTTP quota recovered for %s after %s failure",
+                self._sn_display,
+                self._outage_kind or "request",
+            )
+            self._outage_active = False
+            self._outage_kind = None
+            self._outage_last_summary_at = 0.0
+            self._outage_suppressed = 0
+
+    async def _handle_response(
+        self, resp: aiohttp.ClientResponse, *, purpose: str = "poll"
+    ) -> dict | None:
         """Parse and validate an API response."""
         data = await resp.json()
         code = str(data.get("code"))
 
         if resp.ok and code == "0":
             _LOGGER.debug("HTTP: quota OK for %s", self._sn_display)
+            self._note_success(purpose)
             self.last_error_code = None
-            self._logged_1006 = False
             return data.get("data") or {}
 
         # EcoFlow error 8521 is a transient server-side error - retry
         if code == "8521":
-            _LOGGER.debug("HTTP: transient error 8521 for %s - will retry", self._sn_display)
-            raise self._RetryableAPIError(f"code={code}")
+            raise self._RetryableAPIError
 
         # Error 1006: device not linked to API key - not an auth failure (#2)
         if code == "1006":
             self.last_error_code = "1006"
-            if not self._logged_1006:
-                _LOGGER.warning(
-                    "HTTP: device %s not linked to API key - "
-                    "verify device binding at developer.ecoflow.com (code=1006)",
-                    self._sn_display,
-                )
-                self._logged_1006 = True
-            else:
-                _LOGGER.debug("HTTP: device %s still returns 1006", self._sn_display)
+            self._note_failure(
+                "api:1006",
+                f"HTTP: device {self._sn_display} not linked to API key - "
+                "verify device binding at developer.ecoflow.com (code=1006)",
+                purpose,
+            )
             return None
 
         self.last_error_code = code
-        _LOGGER.warning("HTTP: quota code=%s msg=%s (sn=%s)", code, data.get("message"), self._sn_display)
+        safe_code = code if code.isdecimal() and len(code) <= 10 else "unexpected"
+        self._note_failure(
+            f"api:{safe_code}",
+            f"HTTP quota API failure code={safe_code} for {self._sn_display}",
+            purpose,
+        )
         return None
-

@@ -55,7 +55,6 @@ from .entity import (
     EcoFlowWriteGateMixin,
     reading_reported,
     raise_set_failed,
-    raise_set_gone,
     raise_set_not_ready,
     raise_set_rejected,
     raise_set_unsupported,
@@ -108,8 +107,8 @@ def _watch_for_accessory(
     the control steers and the only one the device sends. Every definition
     that reaches this path names the same string for both, so the two are
     interchangeable today; the read-back key is the one named because it is
-    the one a control has to wait for. A PowerOcean schedule can be created
-    in the app while Home Assistant runs, so the wait has no deadline.
+    the one a control has to wait for. An accessory can begin reporting while
+    Home Assistant runs, so the wait has no deadline.
     """
 
     @callback
@@ -227,22 +226,6 @@ class EcoFlowSwitch(
         received - the switch would show the wrong state for the whole
         lock window and then snap back.
         """
-        schedule_slot = self._schedule_slot()
-        if schedule_slot is not None:
-            try:
-                ok = await self.coordinator.async_set_powerocean_schedule_armed(
-                    schedule_slot, turn_on
-                )
-            except DeviceValueNotReported:
-                # The slot is not in the device's task list. The switch is
-                # still here because a retracted reading keeps its entity, but
-                # there is no task behind it to arm.
-                raise_set_gone(self.entity_id)
-            if not ok:
-                raise_set_failed(self.entity_id)
-            self._apply_optimistic(turn_on)
-            return
-
         # SmartPlug app-auth: use protobuf SET (JSON cmdCode only works on /open/ topic)
         if (
             self.coordinator.device_type == DEVICE_TYPE_SMARTPLUG
@@ -334,15 +317,6 @@ class EcoFlowSwitch(
         self._optimistic_value = turn_on
         self._optimistic_lock_until = time.monotonic() + OPTIMISTIC_LOCK_S
         self._write_state_always(turn_on)
-
-    def _schedule_slot(self) -> int | None:
-        """Return the slot number for a PowerOcean schedule switch, else None."""
-        if self.coordinator.device_type != DEVICE_TYPE_POWEROCEAN:
-            return None
-        key = self._definition.key
-        if not key.startswith("schedule_") or not key.endswith("_enabled"):
-            return None
-        return int(key[len("schedule_") : -len("_enabled")])
 
     def _port_priority_stem(self) -> str | None:
         """Return the port stem for a port priority switch, else None."""

@@ -171,6 +171,42 @@ class TestThePlatform:
 
 
 class TestTheStandardModePush:
+    async def test_quota_push_reaches_event_loop_dispatch(
+        self, coordinator: EcoFlowDeviceCoordinator
+    ) -> None:
+        """The Standard-mode callback allowlist must include PowerStream."""
+        payload = json.dumps(
+            {"param": {"20_1.invOutputWatts": 1090, "20_1.batSoc": 87}}
+        ).encode()
+
+        with patch.object(
+            coordinator.hass.loop, "call_soon_threadsafe"
+        ) as dispatch:
+            coordinator._on_mqtt_message(
+                "/open/test_account/HW51TEST00000001/quota", payload
+            )
+
+        dispatch.assert_called_once()
+        assert dispatch.call_args.args[0] == coordinator._apply_data
+        assert dispatch.call_args.args[1] == {
+            "inv_output_w": 109.0,
+            "soc_pct": 87,
+        }
+
+    async def test_unmapped_quota_push_is_not_dispatched(
+        self, coordinator: EcoFlowDeviceCoordinator
+    ) -> None:
+        payload = json.dumps({"param": {"20_1.somethingNew": 1}}).encode()
+
+        with patch.object(
+            coordinator.hass.loop, "call_soon_threadsafe"
+        ) as dispatch:
+            coordinator._on_mqtt_message(
+                "/open/test_account/HW51TEST00000001/quota", payload
+            )
+
+        dispatch.assert_not_called()
+
     async def test_a_quota_push_is_read_by_the_same_parser(
         self, coordinator: EcoFlowDeviceCoordinator
     ) -> None:

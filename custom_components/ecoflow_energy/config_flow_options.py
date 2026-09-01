@@ -32,6 +32,7 @@ from .const import (
     CONF_SECRET_KEY,
     CONF_USER_ID,
     DEVICE_TYPE_DISPLAY_NAMES,
+    DEVICE_TYPE_POWERSTREAM,
     DEVICE_TYPE_UNKNOWN,
     MODE_ENHANCED,
     MODE_STANDARD,
@@ -156,22 +157,44 @@ class OptionsFlowMixin:
         if user_input is not None:
             new_mode = user_input.get(CONF_MODE, current_mode)
             selected_sns = user_input.get(CONF_DEVICES, current_device_sns)
-            if CONF_RAW_CAPTURE in user_input:
-                self._pending_raw_capture = user_input[CONF_RAW_CAPTURE]
+
+            known_devices = {
+                d["sn"]: d
+                for d in (
+                    self._all_devices
+                    or self.config_entry.data.get(CONF_DEVICES, [])
+                )
+            }
+            selected_powerstream = any(
+                self._stored_device_type(known_devices, sn)
+                == DEVICE_TYPE_POWERSTREAM
+                for sn in selected_sns
+            )
 
             if not selected_sns:
                 errors["base"] = "no_devices"
+            elif new_mode == MODE_ENHANCED and selected_powerstream:
+                # Validate before either credential branch and before
+                # changing any pending option. PowerStream has no app-auth
+                # data path and must stay on the official Standard API.
+                errors["base"] = "powerstream_requires_standard"
             elif new_mode == MODE_ENHANCED and current_mode != MODE_ENHANCED:
                 # Switching to Enhanced - need email + password
+                if CONF_RAW_CAPTURE in user_input:
+                    self._pending_raw_capture = user_input[CONF_RAW_CAPTURE]
                 self._pending_mode = new_mode
                 self._pending_devices = selected_sns
                 return await self.async_step_enhanced()
             elif new_mode != MODE_ENHANCED and not self.config_entry.data.get(CONF_ACCESS_KEY):
                 # Switching to Standard but no Developer API keys stored
+                if CONF_RAW_CAPTURE in user_input:
+                    self._pending_raw_capture = user_input[CONF_RAW_CAPTURE]
                 self._pending_mode = new_mode
                 self._pending_devices = selected_sns
                 return await self.async_step_developer()
             else:
+                if CONF_RAW_CAPTURE in user_input:
+                    self._pending_raw_capture = user_input[CONF_RAW_CAPTURE]
                 return self._save_options(new_mode, selected_sns)
 
         if self._all_devices:
@@ -198,6 +221,7 @@ class OptionsFlowMixin:
                     f"{get_device_name('', sn) or DEVICE_TYPE_DISPLAY_NAMES.get(stored_types[sn], sn[:12])}"
                     f" ({sn[:12]})"
                     f"{unsupported_suffix(stored_types[sn])}"
+                    f"{' - requires Standard Mode' if stored_types[sn] == DEVICE_TYPE_POWERSTREAM else ''}"
                 )
                 for sn in current_device_sns
             }

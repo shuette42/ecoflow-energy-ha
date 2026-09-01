@@ -1836,6 +1836,103 @@ class TestSETCommands:
         assert coordinator.event_log[-1]["type"] == "set_cmd_fail"
         assert "cfgMaxChgSoc" in coordinator.event_log[-1]["detail"]
 
+    async def test_delta3_http_action_failure_warns_once_at_coordinator(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """The HTTP client stays quiet; the action context owns the warning."""
+        import logging
+
+        import aiohttp
+
+        from custom_components.ecoflow_energy.ecoflow.cloud_http import (
+            EcoFlowHTTPQuota,
+        )
+
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA3_DEVICE
+        )
+        session = MagicMock()
+        session.put = MagicMock(side_effect=aiohttp.ClientError("offline"))
+        coordinator._http_client = EcoFlowHTTPQuota(
+            session=session,
+            access_key="ak",
+            secret_key="sk",
+            device_sn=MOCK_DELTA3_DEVICE["sn"],
+            min_interval=0,
+        )
+
+        with (
+            patch(
+                "custom_components.ecoflow_energy.ecoflow.cloud_http."
+                "asyncio.sleep",
+                new_callable=AsyncMock,
+            ),
+            caplog.at_level("DEBUG"),
+        ):
+            ok = await coordinator.async_send_delta3_set(
+                {"params": {"cfgMaxChgSoc": 80}}
+            )
+
+        assert ok is False
+        assert len(
+            [record for record in caplog.records if record.levelno == logging.WARNING]
+        ) == 1
+        assert not [
+            record for record in caplog.records if record.levelno >= logging.ERROR
+        ]
+
+    async def test_delta3_http_action_1006_warns_once_at_coordinator(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        import logging
+
+        from custom_components.ecoflow_energy.ecoflow.cloud_http import (
+            EcoFlowHTTPQuota,
+        )
+
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA3_DEVICE
+        )
+        response = AsyncMock()
+        response.ok = True
+        response.json = AsyncMock(return_value={
+            "code": "1006",
+            "message": "device not linked",
+        })
+        request_context = AsyncMock()
+        request_context.__aenter__.return_value = response
+        session = MagicMock()
+        session.put = MagicMock(return_value=request_context)
+        coordinator._http_client = EcoFlowHTTPQuota(
+            session=session,
+            access_key="ak",
+            secret_key="sk",
+            device_sn=MOCK_DELTA3_DEVICE["sn"],
+            min_interval=0,
+        )
+
+        with caplog.at_level("DEBUG"):
+            ok = await coordinator.async_send_delta3_set(
+                {"params": {"cfgMaxChgSoc": 80}}
+            )
+
+        assert ok is False
+        assert coordinator._http_client.last_error_code == "1006"
+        assert len(
+            [record for record in caplog.records if record.levelno == logging.WARNING]
+        ) == 1
+        assert not [
+            record for record in caplog.records if record.levelno >= logging.ERROR
+        ]
+
     # --- _async_send_delta3_set_proto (app channel) ------------------------
 
     def _delta3_app_coordinator(
@@ -7574,6 +7671,56 @@ class TestStreamSocLatch:
     def _coordinator(self, hass, entry):
         entry.add_to_hass(hass)
         return EcoFlowDeviceCoordinator(hass, entry, self.BK_DEVICE)
+
+    async def _http_update(self, coordinator, raw):
+        coordinator._http_client = MagicMock()
+        coordinator._http_client.get_quota_all = AsyncMock(return_value=raw)
+        coordinator._http_client.last_error_code = None
+        return await coordinator._async_update_data()
+
+    async def test_http_only_unit_soc_feeds_public_state(
+        self, hass: HomeAssistant, standard_config_entry: MockConfigEntry
+    ) -> None:
+        coordinator = self._coordinator(hass, standard_config_entry)
+
+        data = await self._http_update(coordinator, {"soc": 40})
+
+        assert data["soc_pct"] == 40
+        assert data["unit_soc_pct"] == 40
+        assert "_soc_pct_fallback" not in data
+
+    async def test_http_system_soc_latches_before_later_mqtt_unit_frame(
+        self, hass: HomeAssistant, standard_config_entry: MockConfigEntry
+    ) -> None:
+        coordinator = self._coordinator(hass, standard_config_entry)
+        await self._http_update(
+            coordinator, {"cmsBattSoc": 55, "soc": 40}
+        )
+
+        coordinator._apply_data(
+            {"unit_soc_pct": 41, "_soc_pct_fallback": 41}
+        )
+
+        assert coordinator.data["soc_pct"] == 55
+        assert coordinator.data["unit_soc_pct"] == 41
+        assert "_soc_pct_fallback" not in coordinator.data
+
+    async def test_mqtt_fallback_then_http_system_then_mqtt_fallback(
+        self, hass: HomeAssistant, standard_config_entry: MockConfigEntry
+    ) -> None:
+        coordinator = self._coordinator(hass, standard_config_entry)
+        coordinator._apply_data(
+            {"unit_soc_pct": 40, "_soc_pct_fallback": 40}
+        )
+        await self._http_update(
+            coordinator, {"cmsBattSoc": 55, "soc": 40}
+        )
+        coordinator._apply_data(
+            {"unit_soc_pct": 41, "_soc_pct_fallback": 41}
+        )
+
+        assert coordinator.data["soc_pct"] == 55
+        assert "_soc_pct_fallback" not in coordinator.data
 
     async def test_a_bms_only_frame_cannot_overwrite_the_system_figure(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry

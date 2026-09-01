@@ -22,10 +22,6 @@ from .ecoflow.const import (  # noqa: E402
     get_device_name,
     get_device_type,
 )
-from .ecoflow.energy_stream import (  # noqa: E402
-    TIMER_TASK_POWER_MAX_W,
-    TIMER_TASK_POWER_MIN_W,
-)
 from .ecoflow.parsers.powerocean_proto import SCHEDULE_MAX_INDEX  # noqa: E402
 
 DOMAIN = "ecoflow_energy"
@@ -252,14 +248,6 @@ ENERGY_STREAM_KEEPALIVE_S = 20  # Re-send EnergyStreamSwitch every 20s
 QUOTAS_KEEPALIVE_S = 30  # latestQuotas poll interval (app-level keepalive)
 APP_SURPLUS_SYNC_MIN_INTERVAL_S = 30.0  # min interval between auto-sync SETs that mirror EmsParamChangeReport.dev_soc into the EMS sysBatBackupRatio
 APP_SURPLUS_SYNC_USER_GRACE_S = 5.0  # ignore discrepancy briefly after a user SET to wait for the device echo
-# How long an arming flag this integration just wrote is held against a device
-# frame that disagrees with it. The device acknowledges a scheduled-task write
-# in about 0.2 s and its task list already carries the change by then, so the
-# only frame that can still hold the old flag is one that left the device
-# before the write arrived. This window has to outlive such a frame and
-# nothing more; it matches the entity-side optimistic lock so both expire
-# together. A frame that agrees with the write clears it immediately.
-POWEROCEAN_SCHEDULE_ARMED_LATCH_S = 5.0
 POWEROCEAN_SOC_DEBOUNCE_S = 0.3  # coalesce slider-drag SETs into one frame; the device cannot keep up with 5%-step sets at 100ms cadence and the EMS/App-layer fields desync
 # The two state keys the PowerOcean SoC sliders write. They are sent as one
 # frame, so a failed write has to undo both. Kept next to the debounce window
@@ -625,35 +613,19 @@ POWEROCEAN_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
 
 # --- Scheduled charge tasks ---
 #
-# A PowerOcean has a schedule only when its owner created one in the app, and
-# most owners never do. The device reports its whole task list, so a slot that
-# exists produces schedule_N_* keys and a slot that does not produces nothing
-# at all. Both readings are therefore accessory-gated: the entity appears on
-# the first report that carries its index, and a schedule deleted later leaves
-# the entity unknown rather than frozen on its last reading, because the list
-# retracts the keys it stops mentioning.
+# A PowerOcean has a schedule only when its owner created one in the app. The
+# parser keeps the full task fields for diagnostics and future protocol work,
+# but only the device-reported running flag is exposed. Writable bounds and a
+# correlated persisted read-back are not established well enough to expose
+# the other task fields safely.
 #
 # The upper bound comes from the parser that produces the keys, so the two
 # sides cannot drift apart. It is a guard against a malformed list, not an
 # assumption about how many slots the hardware has - only slot 1 has ever been
 # observed.
 #
-# Both the task list and the command that changes it live on the app channel,
-# so with developer keys these would be created and never fill.
+# The task list lives on the app channel, so the flag is Enhanced-only.
 for _schedule_index in range(1, SCHEDULE_MAX_INDEX + 1):
-    POWEROCEAN_SENSORS.append(
-        EcoFlowSensorDef(
-            f"schedule_{_schedule_index}_window",
-            f"Schedule {_schedule_index} Window",
-            None,
-            None,
-            None,
-            "mdi:calendar-clock",
-            None,
-            enhanced_only=True,
-            accessory=True,
-        )
-    )
     POWEROCEAN_BINARY_SENSORS.append(
         EcoFlowBinarySensorDef(
             f"schedule_{_schedule_index}_running",
@@ -699,50 +671,9 @@ POWEROCEAN_SELECTS: list[EcoFlowSelectDef] = [
 ]
 
 
-# --- Scheduled charge task controls ---
-#
-# The write side of the schedule readings above. Same gate for the same
-# reason: the definition exists for every slot the device can number, and the
-# entity is created on the first report that carries that slot. A PowerOcean
-# whose owner never made a schedule gets no controls at all.
-#
-# Neither control creates or deletes a task. Creating one means composing a
-# recurrence rather than echoing the device's own, and deleting one cannot be
-# undone from here while creating is out, so a slot is made in the app first
-# and these two change what it does from then on.
+# Schedule configuration remains read-only at the protocol layer until safe
+# bounds and correlated persistence evidence exist.
 POWEROCEAN_SWITCHES: list[EcoFlowSwitchDef] = []
-
-for _schedule_index in range(1, SCHEDULE_MAX_INDEX + 1):
-    POWEROCEAN_SWITCHES.append(
-        EcoFlowSwitchDef(
-            f"schedule_{_schedule_index}_enabled",
-            f"Schedule {_schedule_index} Enabled",
-            f"schedule_{_schedule_index}_enabled",
-            "mdi:calendar-check-outline",
-            enhanced_only=True,
-            accessory=True,
-        )
-    )
-    # The range is the one the payload builder validates against, and that
-    # bound is ours rather than the device's: no write was ever refused, so
-    # the ceiling the firmware enforces is unknown and the only two figures on
-    # file are 1000 and 1500. The step is 1 for the same reason - nothing on
-    # the wire says the device rounds, so a coarser step would refuse a
-    # setpoint that may well be valid.
-    POWEROCEAN_NUMBERS.append(
-        EcoFlowNumberDef(
-            f"schedule_{_schedule_index}_power_w",
-            f"Schedule {_schedule_index} Charge Power",
-            f"schedule_{_schedule_index}_power_w",
-            "W",
-            "mdi:battery-charging-outline",
-            TIMER_TASK_POWER_MIN_W,
-            TIMER_TASK_POWER_MAX_W,
-            1,
-            enhanced_only=True,
-            accessory=True,
-        )
-    )
 
 
 # =====================================================================

@@ -39,8 +39,8 @@
 
 | Device | Serial prefix | Sensors | Controls | Energy Sensors | Update Rate |
 |:---|:---|:---:|:---:|:---:|:---|
-| **PowerOcean** - Home Battery | `HJ31` `HJ32` `HJ35` `HJ36` `HJ37` `J32B` `J327`\* `J329` `J32D`\* `J32E`\* | 235 + 13 binary | 10 numbers, 8 switches, 1 select (Enhanced only) | 6 (solar, grid import/export, battery charge/discharge, home) | ~30 s standard / ~3 s enhanced |
-| **PowerOcean Plus** - 3-phase Hybrid | `R371`\* `R372`\* `R374`\* `HJ3C`\* | 235 + 13 binary | 10 numbers, 8 switches, 1 select (Enhanced only) | 6 (solar, grid import/export, battery charge/discharge, home) | ~3 s enhanced |
+| **PowerOcean** - Home Battery | `HJ31` `HJ32` `HJ35` `HJ36` `HJ37` `J32B` `J327`\* `J329` `J32D`\* `J32E`\* | 227 + 13 binary | 2 numbers, 1 select (Enhanced only) | 6 (solar, grid import/export, battery charge/discharge, home) | ~30 s standard / ~3 s enhanced |
+| **PowerOcean Plus** - 3-phase Hybrid | `R371`\* `R372`\* `R374`\* `HJ3C`\* | 227 + 13 binary | 2 numbers, 1 select (Enhanced only) | 6 (solar, grid import/export, battery charge/discharge, home) | ~3 s enhanced |
 | **Delta 2 Max** - Portable Power | `R351` `R331` | 94 + 4 binary | 7 switches, 8 numbers | 4 (solar 1+2, AC in/out) | ~30 s standard (+ MQTT push) |
 | **Delta 3** - Portable Power | `D3M1` `D3N1` `P321` `P231` `P351` | 47 | 7 switches, 4 numbers, 5 selects (selects and 1 number Enhanced only); `D3M` serials add 3 switches, 3 numbers and 1 binary sensor for port priority | 4 (solar 1+2, AC in, output) | ~30 s standard / ~2 s enhanced |
 | **Smart Plug** - Switchable Outlet | `HW52` | 11 + 1 binary | 1 switch, 2 numbers | 1 (total energy) | ~30 s standard / ~3 s enhanced |
@@ -85,6 +85,10 @@
 - **Backup Reserve** (`number`, 0-100%) - minimum SoC the system keeps in reserve. Same slider as "Backup-Reserve" in the EcoFlow app.
 - **Solar Surplus Threshold** (`number`, 0-100%) - SoC above which surplus solar is routed to controllable devices. Same slider as "Prioritize controllable devices (Beta)" in the app.
 - **Work Mode** (`select`) - Self-use ("Eigenstromversorgung") or AI Schedule ("Intelligenter Modus"). TOU and Backup modes are deferred (require additional sub-parameters).
+
+Existing scheduled grid-charge tasks expose only their device-reported
+**Running** status. Schedule timing, arming and charge power remain managed in
+the EcoFlow app until safe writable bounds and persisted read-back are known.
 
 The integration enforces the app's `backup_reserve <= solar_surplus_threshold` constraint automatically.
 
