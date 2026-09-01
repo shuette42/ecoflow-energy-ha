@@ -306,10 +306,23 @@ class TestDeviceTypeRouting:
             ), powerstream_keyword
             assert get_device_type(powerstream_keyword, "") == "powerstream"
 
-    def test_bk21_smart_meter_stays_unknown(self) -> None:
-        # Smart Meter support is deferred: it must remain unknown so it
-        # shows up as a visible skip, not silently mapped to a wrong parser.
-        assert get_device_type("", "BK21TEST00000001") == "unknown"
+    def test_bk21_is_the_smart_meter(self) -> None:
+        """The Smart Meter is reached by prefix only (#331).
+
+        Its product name arrives empty from the app API, and "Smart Meter"
+        matches none of the keyword lists, so without the prefix entry the
+        device is skipped as unsupported.
+        """
+        assert get_device_type("", "BK21TEST00000001") == "smart_meter"
+        assert _SN_PREFIX_MAP["BK21"] == "smart_meter"
+        assert get_device_name("", "BK21TEST00000001") == "Smart Meter (0001)"
+
+    def test_an_unmapped_bk_prefix_still_stays_unknown(self) -> None:
+        # The BK prefixes are enumerated one by one on purpose: a family
+        # match would route an unknown model into a parser whose field map
+        # it does not share, and a visible skip is worth more than a device
+        # full of empty entities.
+        assert get_device_type("", "BK99TEST00000001") == "unknown"
 
     def test_plain_delta_pro_stays_delta(self) -> None:
         # "DELTA Pro" (no "3") keeps its existing Delta behavior.

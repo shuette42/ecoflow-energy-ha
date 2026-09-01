@@ -12,6 +12,7 @@ from ..const import (
     DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_POWERSTREAM,
+    DEVICE_TYPE_SMART_METER,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
     DEVICE_TYPE_STREAM_AC5000,
@@ -38,6 +39,7 @@ from ..ecoflow.parsers.powerocean_proto import (
     remap_proto_keys,
     remap_timer_task_keys,
 )
+from ..ecoflow.parsers.smart_meter_proto import parse_smart_meter_message
 from ..ecoflow.parsers.smartplug import (
     parse_smartplug_http_quota,
     parse_smartplug_report,
@@ -405,6 +407,8 @@ class MqttIngestMixin:
                     return parse_stream_proto_message(payload)
                 if self.device_type == DEVICE_TYPE_STREAM_AC5000:
                     return parse_stream_ac5000_message(payload)
+                if self.device_type == DEVICE_TYPE_SMART_METER:
+                    return parse_smart_meter_message(payload)
                 return self._parse_proto_device_data(payload)
             return None
 
@@ -501,6 +505,11 @@ class MqttIngestMixin:
                 # Delta 3 generation but means different things by them.
                 if self.device_type == DEVICE_TYPE_STREAM_AC5000:
                     return parse_stream_ac5000_message(payload)
+                # The meter shares (254, 21) with the Stream AC Pro and means
+                # a different set of fields by it, so it routes by device type
+                # before any registry lookup, for the same reason as above.
+                if self.device_type == DEVICE_TYPE_SMART_METER:
+                    return parse_smart_meter_message(payload)
                 if self.device_type == DEVICE_TYPE_POWEROCEAN:
                     return self._parse_powerocean_proto_frame(payload)
 

@@ -15,6 +15,7 @@ from .ecoflow.const import (  # noqa: E402
     DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_POWERSTREAM,
+    DEVICE_TYPE_SMART_METER,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
     DEVICE_TYPE_STREAM_AC5000,
@@ -267,6 +268,7 @@ DEVICE_TYPE_DISPLAY_NAMES: dict[str, str] = {
     DEVICE_TYPE_STREAM: "Stream",
     DEVICE_TYPE_STREAM_AC5000: "STREAM AC 5000",
     DEVICE_TYPE_POWERSTREAM: "PowerStream",
+    DEVICE_TYPE_SMART_METER: "Smart Meter",
 }
 
 # Delta write/profile variants.
@@ -1675,6 +1677,52 @@ POWERSTREAM_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("pv1_energy_kwh", "PV 1 Energy", "kWh", "energy", "total_increasing", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=2, disabled_by_default=True),
     EcoFlowSensorDef("pv2_energy_kwh", "PV 2 Energy", "kWh", "energy", "total_increasing", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=2, disabled_by_default=True),
 ]
+
+# =====================================================================
+# Smart Meter sensor definitions
+# =====================================================================
+
+# The meter reports through the app channel only, so every reading here
+# arrives as a push. Phase labels follow the app, which counts A/B/C, while
+# the keys keep the L1/L2/L3 form the wire uses.
+SMARTMETER_SENSORS: list[EcoFlowSensorDef] = [
+    # --- Grid power ---
+    EcoFlowSensorDef("grid_w", "Grid Power", "W", "power", "measurement", "mdi:transmission-tower", suggested_display_precision=0),
+    EcoFlowSensorDef("grid_l1_w", "Phase A Power", "W", "power", "measurement", "mdi:transmission-tower", suggested_display_precision=0),
+    EcoFlowSensorDef("grid_l2_w", "Phase B Power", "W", "power", "measurement", "mdi:transmission-tower", suggested_display_precision=0),
+    EcoFlowSensorDef("grid_l3_w", "Phase C Power", "W", "power", "measurement", "mdi:transmission-tower", suggested_display_precision=0),
+    # --- Per-phase electrical readings, sent with the full uploads ---
+    EcoFlowSensorDef("grid_l1_voltage_v", "Phase A Voltage", "V", "voltage", "measurement", "mdi:sine-wave", suggested_display_precision=1),
+    EcoFlowSensorDef("grid_l2_voltage_v", "Phase B Voltage", "V", "voltage", "measurement", "mdi:sine-wave", suggested_display_precision=1),
+    EcoFlowSensorDef("grid_l3_voltage_v", "Phase C Voltage", "V", "voltage", "measurement", "mdi:sine-wave", suggested_display_precision=1),
+    EcoFlowSensorDef("grid_l1_current_a", "Phase A Current", "A", "current", "measurement", "mdi:current-ac", suggested_display_precision=2),
+    EcoFlowSensorDef("grid_l2_current_a", "Phase B Current", "A", "current", "measurement", "mdi:current-ac", suggested_display_precision=2),
+    EcoFlowSensorDef("grid_l3_current_a", "Phase C Current", "A", "current", "measurement", "mdi:current-ac", suggested_display_precision=2),
+    # --- Energy counters the meter keeps itself ---
+    # The lifetime counter is the one for the Energy Dashboard, and it is
+    # `total`, not `total_increasing`: the message definition carries no
+    # export counter, so a day on which the house exports would show up as a
+    # decrease. `total` reads that as a negative delta; `total_increasing`
+    # would read it as a meter change and count the standing total again.
+    # The daily figures are the opposite case. They reset to zero at
+    # midnight by design, which is exactly the reset `total_increasing` is
+    # built for, so they carry it and their zeros are published.
+    EcoFlowSensorDef("grid_energy_total_wh", "Grid Energy Total", "Wh", "energy", "total", "mdi:transmission-tower-import", suggested_display_precision=0),
+    EcoFlowSensorDef("grid_energy_today_wh", "Grid Energy Today", "Wh", "energy", "total_increasing", "mdi:transmission-tower-import", suggested_display_precision=0),
+    EcoFlowSensorDef("grid_l1_energy_today_wh", "Phase A Energy Today", "Wh", "energy", "total_increasing", "mdi:transmission-tower-import", suggested_display_precision=0),
+    EcoFlowSensorDef("grid_l2_energy_today_wh", "Phase B Energy Today", "Wh", "energy", "total_increasing", "mdi:transmission-tower-import", suggested_display_precision=0),
+    EcoFlowSensorDef("grid_l3_energy_today_wh", "Phase C Energy Today", "Wh", "energy", "total_increasing", "mdi:transmission-tower-import", suggested_display_precision=0),
+    # --- Diagnostics ---
+    EcoFlowSensorDef("grid_power_factor", "Power Factor", None, "power_factor", "measurement", "mdi:angle-acute", "diagnostic", suggested_display_precision=2),
+    EcoFlowSensorDef("grid_connection_state", "Grid Connection State", None, "enum", None, "mdi:transmission-tower", "diagnostic", options=["invalid", "grid_in", "not_online", "feed_grid"]),
+]
+
+SMARTMETER_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
+    EcoFlowBinarySensorDef("grid_l1_connected", "Phase A Connected", "connectivity", "mdi:transmission-tower", "diagnostic"),
+    EcoFlowBinarySensorDef("grid_l2_connected", "Phase B Connected", "connectivity", "mdi:transmission-tower", "diagnostic"),
+    EcoFlowBinarySensorDef("grid_l3_connected", "Phase C Connected", "connectivity", "mdi:transmission-tower", "diagnostic"),
+]
+
 
 # =====================================================================
 # Power → Energy mappings (Riemann sum integration per device type)

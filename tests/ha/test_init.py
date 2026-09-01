@@ -448,6 +448,119 @@ class TestUnsupportedDeviceSkip:
             }
         ]
 
+    async def test_developer_keys_smart_meter_is_skipped_without_probe(
+        self,
+        hass: HomeAssistant,
+        mock_mqtt_client,
+        caplog,
+    ) -> None:
+        """The mirror of the PowerStream case, with the modes swapped.
+
+        The meter reports on the app channel and nowhere else, so a
+        developer-key entry would create seventeen entities that can never
+        fill. It is skipped with one warning and no probe.
+        """
+        smart_meter = {
+            "sn": "BK21TEST00000001",
+            "name": "Smart Meter",
+            "product_name": "Smart Meter",
+            "device_type": "smart_meter",
+            "online": 1,
+        }
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_AUTH_METHOD: AUTH_METHOD_DEVELOPER,
+                CONF_ACCESS_KEY: "test_ak",
+                CONF_SECRET_KEY: "test_sk",
+                CONF_MODE: MODE_STANDARD,
+                CONF_DEVICES: [smart_meter],
+            },
+            unique_id="test_ak",
+        )
+        entry.add_to_hass(hass)
+
+        import logging
+        caplog.set_level(logging.WARNING)
+
+        with (
+            patch(
+                "custom_components.ecoflow_energy.coordinator."
+                "EcoFlowDeviceCoordinator.async_config_entry_first_refresh",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "custom_components.ecoflow_energy.async_start_probes",
+                new_callable=AsyncMock,
+            ) as start_probes,
+        ):
+            assert await hass.config_entries.async_setup(entry.entry_id) is True
+            await hass.async_block_till_done()
+
+        assert hass.data[DOMAIN][entry.entry_id] == {}
+        start_probes.assert_not_awaited()
+        assert hass.data[DATA_SKIPPED_DEVICES][entry.entry_id] == [
+            {
+                "sn_prefix": "BK21",
+                "sn": "BK21TEST00000001",
+                "product_name": "Smart Meter",
+                "reason": "Smart Meter requires Enhanced Mode",
+                "probe_eligible": False,
+            }
+        ]
+        warnings = [
+            r.getMessage() for r in caplog.records
+            if r.levelno == logging.WARNING and "Smart Meter" in r.getMessage()
+        ]
+        assert len(warnings) == 1
+        assert "requires Enhanced Mode" in warnings[0]
+
+    async def test_app_auth_smart_meter_is_not_skipped(
+        self,
+        hass: HomeAssistant,
+        mock_mqtt_client,
+        mock_enhanced_auth,
+    ) -> None:
+        """Negative control: the same serial on Enhanced Mode gets a coordinator.
+
+        Without it the test above would still pass if the skip fired on
+        every entry, which would take the meter away from the only mode it
+        works in.
+        """
+        smart_meter = {
+            "sn": "BK21TEST00000001",
+            "name": "Smart Meter",
+            "product_name": "Smart Meter",
+            "device_type": "smart_meter",
+            "online": 1,
+        }
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_AUTH_METHOD: AUTH_METHOD_APP,
+                CONF_MODE: MODE_ENHANCED,
+                CONF_EMAIL: "test@example.com",
+                CONF_PASSWORD: "test_password",
+                CONF_USER_ID: "uid",
+                CONF_DEVICES: [smart_meter],
+            },
+            unique_id="test@example.com",
+        )
+        entry.add_to_hass(hass)
+
+        with patch(
+            "custom_components.ecoflow_energy.coordinator."
+            "EcoFlowDeviceCoordinator.async_config_entry_first_refresh",
+            new_callable=AsyncMock,
+        ):
+            assert await hass.config_entries.async_setup(entry.entry_id) is True
+            await hass.async_block_till_done()
+
+        assert set(hass.data[DOMAIN][entry.entry_id]) == {"BK21TEST00000001"}
+        assert hass.data[DATA_SKIPPED_DEVICES][entry.entry_id] == []
+
     async def test_unsupported_device_skipped(
         self,
         hass: HomeAssistant,
@@ -621,9 +734,9 @@ class TestUnsupportedDeviceSkip:
     ) -> None:
         """Unsupported device: setup succeeds, one WARNING, tracked as skipped."""
         unsupported_device = {
-            "sn": "BK21TEST00000001",
-            "name": "Smart Meter",
-            "product_name": "Smart Meter",
+            "sn": "ZZ01TEST00000001",
+            "name": "Unmapped Device",
+            "product_name": "Unmapped Device",
             "device_type": "unknown",
             "online": 1,
         }
@@ -675,14 +788,14 @@ class TestUnsupportedDeviceSkip:
         ]
         assert len(warnings) == 1
         # SN prefix only (privacy) - full serial must not leak
-        assert "BK21" in warnings[0].getMessage()
-        assert "BK21TEST00000001" not in warnings[0].getMessage()
+        assert "ZZ01" in warnings[0].getMessage()
+        assert "ZZ01TEST00000001" not in warnings[0].getMessage()
 
         # Tracked under the top-level skipped-devices namespace
         skipped = hass.data[DATA_SKIPPED_DEVICES][entry.entry_id]
         assert len(skipped) == 1
-        assert skipped[0]["sn_prefix"] == "BK21"
-        assert skipped[0]["product_name"] == "Smart Meter"
+        assert skipped[0]["sn_prefix"] == "ZZ01"
+        assert skipped[0]["product_name"] == "Unmapped Device"
 
     async def test_unsupported_device_hint_matches_account_signin(
         self,
@@ -692,9 +805,9 @@ class TestUnsupportedDeviceSkip:
     ) -> None:
         """Account sign-in: the hint points at the capture switch, which exists there."""
         unsupported_device = {
-            "sn": "BK21TEST00000001",
-            "name": "Smart Meter",
-            "product_name": "Smart Meter",
+            "sn": "ZZ01TEST00000001",
+            "name": "Unmapped Device",
+            "product_name": "Unmapped Device",
             "device_type": "unknown",
             "online": 1,
         }
@@ -760,9 +873,9 @@ class TestUnsupportedDeviceSkip:
         turn on.
         """
         unsupported_device = {
-            "sn": "BK21TEST00000001",
-            "name": "Smart Meter",
-            "product_name": "Smart Meter",
+            "sn": "ZZ01TEST00000001",
+            "name": "Unmapped Device",
+            "product_name": "Unmapped Device",
             "device_type": "unknown",
             "online": 1,
         }
@@ -815,9 +928,9 @@ class TestUnsupportedDeviceSkip:
         re-create #188 for exactly this entry.
         """
         unsupported_device = {
-            "sn": "BK21TEST00000001",
-            "name": "Smart Meter",
-            "product_name": "Smart Meter",
+            "sn": "ZZ01TEST00000001",
+            "name": "Unmapped Device",
+            "product_name": "Unmapped Device",
             "device_type": "unknown",
             "online": 1,
         }
@@ -863,9 +976,9 @@ class TestUnsupportedDeviceSkip:
     ) -> None:
         """Unload removes the entry from the skipped-devices namespace."""
         unsupported_device = {
-            "sn": "BK21TEST00000001",
-            "name": "Smart Meter",
-            "product_name": "Smart Meter",
+            "sn": "ZZ01TEST00000001",
+            "name": "Unmapped Device",
+            "product_name": "Unmapped Device",
             "device_type": "unknown",
             "online": 1,
         }

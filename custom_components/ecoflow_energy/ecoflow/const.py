@@ -42,6 +42,10 @@ DEVICE_TYPE_STREAM_AC5000 = "stream_ac5000"
 # Microinverter, not a battery. Shares nothing with the Stream line but the
 # five letters in the middle of its name (#230).
 DEVICE_TYPE_POWERSTREAM = "powerstream"
+# Three-phase grid meter (EF-EM-P3-120). It measures and reports; it stores
+# nothing and switches nothing, so it shares the BK-series envelope with the
+# Stream line and none of its battery, PV or outlet fields (#331).
+DEVICE_TYPE_SMART_METER = "smart_meter"
 DEVICE_TYPE_UNKNOWN = "unknown"
 
 # Keywords used to classify devices from productName strings.
@@ -206,6 +210,15 @@ _SN_PREFIX_MAP = {
     # the field names. Mapping the prefix is what makes the name check below
     # the second line of defence instead of the only one.
     "HW51": DEVICE_TYPE_POWERSTREAM,
+    # EcoFlow Smart Meter (EF-EM-P3-120), the three-phase clamp meter sold
+    # alongside the Stream line (#331). It reports on the BK-series envelope
+    # and its own command pair 254/21 and 254/22, and the reporter capture
+    # decodes completely against it: aggregate grid power, per-phase power,
+    # voltage and current, the daily and lifetime import counters, the grid
+    # connection state and the three phase flags. The app API leaves its
+    # product name empty like every other BK prefix, so without this entry
+    # the unit is classified by name alone and skipped as unsupported.
+    "BK21": DEVICE_TYPE_SMART_METER,
 }
 
 _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
@@ -222,6 +235,7 @@ _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
     "BK61": "Stream Ultra X",
     "ES22": "STREAM AC 5000",
     "ES21": "STREAM 5000",
+    "BK21": "Smart Meter",
 }
 
 def get_device_name(product_name: str, sn: str = "") -> str:
@@ -254,7 +268,12 @@ def get_device_type(product_name: str, sn: str = "") -> str:
 
     Returns DEVICE_TYPE_POWEROCEAN, DEVICE_TYPE_DELTA, DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_SMARTPLUG, DEVICE_TYPE_STREAM, DEVICE_TYPE_STREAM_AC5000,
-    DEVICE_TYPE_POWERSTREAM, or DEVICE_TYPE_UNKNOWN.
+    DEVICE_TYPE_POWERSTREAM, DEVICE_TYPE_SMART_METER, or DEVICE_TYPE_UNKNOWN.
+
+    The Smart Meter has no keyword of its own: it is reached by its serial
+    prefix only. "Smart Meter" matches none of the keyword lists below, and
+    the app API reports an empty product name for it, so a keyword would be
+    an assumption about a string no capture has ever shown.
     """
     # The prefix is exact evidence, the product name a substring guess, so
     # the prefix wins. Every prefix mapped before this ordering existed

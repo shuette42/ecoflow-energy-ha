@@ -217,13 +217,18 @@ def _decode_scalar(wire_type: int, raw: bytes, scalar_type: str) -> float | int 
     return None
 
 
-def _decode_mapped_fields(
-    pdata: bytes,
-    field_map: dict[int, tuple[str, str]],
-) -> dict[str, Any]:
-    """Decode only the mapped fields from a protobuf payload."""
-    result: dict[str, Any] = {}
-    mv = memoryview(pdata)
+def _iter_fields(payload: bytes) -> list[tuple[int, int, bytes]]:
+    """Return ``(field_number, wire_type, raw_bytes)`` for one protobuf level.
+
+    One level only: a length-delimited field comes back as its raw bytes, so
+    a caller that needs to descend into a nested record calls this again on
+    them. That is what the Smart Meter parser does with its energy record.
+
+    Raises ``ValueError`` or ``IndexError`` on malformed input, which the
+    caller treats as "this payload candidate is not protobuf".
+    """
+    fields: list[tuple[int, int, bytes]] = []
+    mv = memoryview(payload)
     pos = 0
 
     while pos < len(mv):
@@ -248,6 +253,19 @@ def _decode_mapped_fields(
         else:
             break
 
+        fields.append((field_num, wire_type, raw))
+
+    return fields
+
+
+def _decode_mapped_fields(
+    pdata: bytes,
+    field_map: dict[int, tuple[str, str]],
+) -> dict[str, Any]:
+    """Decode only the mapped fields from a protobuf payload."""
+    result: dict[str, Any] = {}
+
+    for field_num, wire_type, raw in _iter_fields(pdata):
         mapping = field_map.get(field_num)
         if mapping is None:
             continue

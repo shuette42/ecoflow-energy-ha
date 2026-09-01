@@ -17,5 +17,6 @@ Complete list of all sensors, switches, numbers, and binary sensors per device:
 - [Stream Micro](entities/stream.md#stream-micro-bk01) - 21 sensors (`BK01`) - a grid-tie inverter without a battery, so it gets a reduced version of the Stream entity set
 - [PowerStream](entities/powerstream.md) - 25 sensors (`HW51`) - a microinverter, read-only, Standard Mode only
 - [STREAM AC 5000](entities/stream-ac-5000.md) - 56 sensors, 2 binary sensors, 2 switches, 7 numbers, 1 select (`ES22` and `ES21`) - shares the Stream name but not the Stream protocol, so it has its own parser and entity set
+- [Smart Meter](entities/smart-meter.md) - 17 sensors, 3 binary sensors (`BK21`) - a grid meter, read-only, Enhanced Mode only
 
 Counts are the device-specific entity definitions. Every device additionally exposes 2 universal diagnostic sensors (connection status and active mode) that are not included above.

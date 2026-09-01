@@ -94,6 +94,7 @@
       "enhanced_login_failed": "Enhanced-Modus Login fehlgeschlagen. Überprüfe E-Mail und Passwort deines EcoFlow-App-Kontos.",
       "enhanced_decrypt_failed": "Enhanced-Modus Entschlüsselung der Zugangsdaten fehlgeschlagen.",
       "powerstream_requires_standard": "PowerStream benötigt den Standard-Modus mit Developer-API-Schlüsseln.",
+      "smart_meter_requires_enhanced": "Der Smart Meter benötigt den Enhanced-Modus mit deinem EcoFlow-Konto.",
       "unknown": "Ein unerwarteter Fehler ist aufgetreten."
     },
     "abort": {
@@ -154,6 +155,7 @@
       "enhanced_decrypt_failed": "Enhanced-Modus Entschlüsselung fehlgeschlagen.",
       "no_devices": "Bitte mindestens ein Gerät auswählen.",
       "powerstream_requires_standard": "PowerStream benötigt den Standard-Modus mit Developer-API-Schlüsseln.",
+      "smart_meter_requires_enhanced": "Der Smart Meter benötigt den Enhanced-Modus mit deinem EcoFlow-Konto.",
       "unknown": "Ein unerwarteter Fehler ist aufgetreten."
     }
   },
@@ -1518,6 +1520,51 @@
           "power_supply": "Verbrauch bevorzugen",
           "battery_storage": "Speicher bevorzugen"
         }
+      },
+      "grid_l1_w": {
+        "name": "Phase A Leistung"
+      },
+      "grid_l2_w": {
+        "name": "Phase B Leistung"
+      },
+      "grid_l3_w": {
+        "name": "Phase C Leistung"
+      },
+      "grid_l1_voltage_v": {
+        "name": "Phase A Spannung"
+      },
+      "grid_l2_voltage_v": {
+        "name": "Phase B Spannung"
+      },
+      "grid_l3_voltage_v": {
+        "name": "Phase C Spannung"
+      },
+      "grid_l1_current_a": {
+        "name": "Phase A Strom"
+      },
+      "grid_l2_current_a": {
+        "name": "Phase B Strom"
+      },
+      "grid_l3_current_a": {
+        "name": "Phase C Strom"
+      },
+      "grid_energy_total_wh": {
+        "name": "Netzenergie gesamt"
+      },
+      "grid_energy_today_wh": {
+        "name": "Netzenergie heute"
+      },
+      "grid_l1_energy_today_wh": {
+        "name": "Phase A Energie heute"
+      },
+      "grid_l2_energy_today_wh": {
+        "name": "Phase B Energie heute"
+      },
+      "grid_l3_energy_today_wh": {
+        "name": "Phase C Energie heute"
+      },
+      "grid_power_factor": {
+        "name": "Leistungsfaktor"
       }
     },
     "binary_sensor": {
@@ -1589,6 +1636,15 @@
       },
       "schedule_8_running": {
         "name": "Zeitplan 8 läuft"
+      },
+      "grid_l1_connected": {
+        "name": "Phase A verbunden"
+      },
+      "grid_l2_connected": {
+        "name": "Phase B verbunden"
+      },
+      "grid_l3_connected": {
+        "name": "Phase C verbunden"
       }
     },
     "switch": {

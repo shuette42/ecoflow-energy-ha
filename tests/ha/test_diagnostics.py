@@ -119,9 +119,9 @@ class TestConfigEntryDiagnostics:
     ) -> None:
         """Diagnostics expose the skipped_devices list for the entry."""
         unsupported_device = {
-            "sn": "BK21TEST00000001",
-            "name": "Smart Meter",
-            "product_name": "Smart Meter",
+            "sn": "ZZ01TEST00000001",
+            "name": "Unmapped Device",
+            "product_name": "Unmapped Device",
             "device_type": "unknown",
             "online": 1,
         }
@@ -147,8 +147,8 @@ class TestConfigEntryDiagnostics:
 
         result = await async_get_config_entry_diagnostics(hass, entry)
         assert len(result["skipped_devices"]) == 1
-        assert result["skipped_devices"][0]["sn_prefix"] == "BK21"
-        assert result["skipped_devices"][0]["product_name"] == "Smart Meter"
+        assert result["skipped_devices"][0]["sn_prefix"] == "ZZ01"
+        assert result["skipped_devices"][0]["product_name"] == "Unmapped Device"
 
 
 # ===========================================================================
@@ -958,7 +958,7 @@ class TestSkippedDeviceRawQuotaDiagnostics:
     DIAG_QUOTA_PATH = (
         "custom_components.ecoflow_energy.diagnostics.EcoFlowHTTPQuota"
     )
-    # Fictional Smart Meter serial: a device we do not yet parse.
+    # Fictional serial on a prefix no parser claims.
     SKIPPED_SN = "SM3ATEST00000001"
     # A 16-char alphanumeric quota value that looks like a serial and must
     # be redacted, alongside numeric fields that must be preserved.
@@ -969,7 +969,7 @@ class TestSkippedDeviceRawQuotaDiagnostics:
             {
                 "sn_prefix": self.SKIPPED_SN[:4],
                 "sn": self.SKIPPED_SN,
-                "product_name": "Smart Meter",
+                "product_name": "Unmapped Device",
                 "reason": "no parser available for this device type",
             }
         ]

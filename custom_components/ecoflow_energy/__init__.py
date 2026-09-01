@@ -25,6 +25,7 @@ from .const import (
     DATA_DEVICE_PROBES,
     DATA_SKIPPED_DEVICES,
     DEVICE_TYPE_POWERSTREAM,
+    DEVICE_TYPE_SMART_METER,
     DEVICE_TYPE_UNKNOWN,
     DOMAIN,
     MODE_ENHANCED,
@@ -295,6 +296,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
                 "sn": sn,
                 "product_name": product_name or "PowerStream",
                 "reason": "PowerStream requires Standard Mode",
+                "probe_eligible": False,
+            })
+            continue
+        if (
+            entry.data.get(CONF_AUTH_METHOD) != AUTH_METHOD_APP
+            and device_type == DEVICE_TYPE_SMART_METER
+        ):
+            # The developer API answers for this meter with an empty quota,
+            # so a Standard Mode entry would create entities that can never
+            # fill. It reports on the app channel and nowhere else.
+            _LOGGER.warning(
+                "Skipping Smart Meter %s...: this device requires Enhanced Mode",
+                sn[:4],
+            )
+            skipped_devices.append({
+                "sn_prefix": sn[:4],
+                "sn": sn,
+                "product_name": product_name or "Smart Meter",
+                "reason": "Smart Meter requires Enhanced Mode",
                 "probe_eligible": False,
             })
             continue

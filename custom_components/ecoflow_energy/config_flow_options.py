@@ -33,6 +33,7 @@ from .const import (
     CONF_USER_ID,
     DEVICE_TYPE_DISPLAY_NAMES,
     DEVICE_TYPE_POWERSTREAM,
+    DEVICE_TYPE_SMART_METER,
     DEVICE_TYPE_UNKNOWN,
     MODE_ENHANCED,
     MODE_STANDARD,
@@ -170,6 +171,11 @@ class OptionsFlowMixin:
                 == DEVICE_TYPE_POWERSTREAM
                 for sn in selected_sns
             )
+            selected_smart_meter = any(
+                self._stored_device_type(known_devices, sn)
+                == DEVICE_TYPE_SMART_METER
+                for sn in selected_sns
+            )
 
             if not selected_sns:
                 errors["base"] = "no_devices"
@@ -178,6 +184,10 @@ class OptionsFlowMixin:
                 # changing any pending option. PowerStream has no app-auth
                 # data path and must stay on the official Standard API.
                 errors["base"] = "powerstream_requires_standard"
+            elif new_mode != MODE_ENHANCED and selected_smart_meter:
+                # The mirror of the line above. The Smart Meter reports on
+                # the app channel only, so it must stay on Enhanced Mode.
+                errors["base"] = "smart_meter_requires_enhanced"
             elif new_mode == MODE_ENHANCED and current_mode != MODE_ENHANCED:
                 # Switching to Enhanced - need email + password
                 if CONF_RAW_CAPTURE in user_input:
@@ -222,6 +232,7 @@ class OptionsFlowMixin:
                     f" ({sn[:12]})"
                     f"{unsupported_suffix(stored_types[sn])}"
                     f"{' - requires Standard Mode' if stored_types[sn] == DEVICE_TYPE_POWERSTREAM else ''}"
+                    f"{' - requires Enhanced Mode' if stored_types[sn] == DEVICE_TYPE_SMART_METER else ''}"
                 )
                 for sn in current_device_sns
             }

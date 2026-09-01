@@ -202,6 +202,199 @@ class TestPowerStreamModeBoundary:
         }]
 
 
+SMART_METER_DEVICE = {
+    "sn": "BK21TEST00000001",
+    "name": "Smart Meter",
+    "product_name": "Smart Meter",
+    "device_type": "smart_meter",
+    "online": 1,
+}
+
+
+def _device_marker(result: Any):
+    """Return the schema marker for the device selector on a devices step."""
+    return next(
+        key
+        for key in result["data_schema"].schema
+        if getattr(key, "schema", None) == CONF_DEVICES
+    )
+
+
+async def _advance_developer_flow_with_smart_meter(hass: HomeAssistant):
+    with patch(
+        "custom_components.ecoflow_energy.config_flow_setup.IoTApiClient",
+    ) as mock_cls:
+        api = mock_cls.return_value
+        api.get_mqtt_credentials = AsyncMock(return_value=MOCK_MQTT_CREDENTIALS)
+        api.get_device_list = AsyncMock(return_value=[
+            {"sn": "BK21TEST00000001", "productName": "", "online": 1},
+            {"sn": "HJ31TEST00000001", "productName": "PowerOcean", "online": 1},
+        ])
+
+        result = await _select_mode(hass, MODE_STANDARD)
+        return await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_ACCESS_KEY: "ak", CONF_SECRET_KEY: "sk"},
+        )
+
+
+async def _advance_app_flow_with_smart_meter(hass: HomeAssistant):
+    result = await _select_mode(hass, MODE_ENHANCED)
+    with (
+        patch(
+            "custom_components.ecoflow_energy.config_flow_setup.enhanced_login",
+            new_callable=AsyncMock,
+            return_value={"token": "jwt_token", "user_id": "uid123"},
+        ),
+        patch(
+            "custom_components.ecoflow_energy.config_flow_setup.get_app_device_list",
+            new_callable=AsyncMock,
+            return_value=[
+                SMART_METER_DEVICE,
+                {
+                    "sn": "HJ31TEST00000001",
+                    "product_name": "PowerOcean",
+                    "device_type": "powerocean",
+                    "online": 1,
+                },
+            ],
+        ),
+    ):
+        return await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_EMAIL: "test@example.com", CONF_PASSWORD: "secret"},
+        )
+
+
+class TestSmartMeterModeBoundary:
+    """The PowerStream boundary with the modes swapped.
+
+    The meter reports on the app channel only, so a developer-key entry
+    would create entities that can never fill. Before this guard the picker
+    rendered it clean and pre-selected, which is worse than the "not
+    supported yet" it used to show.
+    """
+
+    async def test_developer_flow_shows_but_does_not_preselect_the_meter(
+        self, hass: HomeAssistant
+    ) -> None:
+        result = await _advance_developer_flow_with_smart_meter(hass)
+
+        marker = _device_marker(result)
+        options = result["data_schema"].schema[marker].config["options"]
+        assert any(
+            option["value"] == SMART_METER_DEVICE["sn"]
+            and "requires Enhanced Mode" in option["label"]
+            for option in options
+        )
+        assert marker.default() == ["HJ31TEST00000001"]
+
+    async def test_developer_flow_rejects_explicit_meter_selection(
+        self, hass: HomeAssistant
+    ) -> None:
+        result = await _advance_developer_flow_with_smart_meter(hass)
+
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_DEVICES: [SMART_METER_DEVICE["sn"]]}
+        )
+
+        assert result["type"] is FlowResultType.FORM
+        assert result["errors"]["base"] == "smart_meter_requires_enhanced"
+
+    async def test_app_flow_preselects_the_meter_and_accepts_it(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Negative control for the two mode-dependent assertions above.
+
+        Without it a guard that fired in both modes would satisfy them and
+        take the meter away from the only mode it works in. The label
+        marker is deliberately not part of this control: like the
+        PowerStream one it states which mode the device needs, which is
+        true whichever mode the flow is currently in.
+        """
+        result = await _advance_app_flow_with_smart_meter(hass)
+
+        marker = _device_marker(result)
+        assert SMART_METER_DEVICE["sn"] in marker.default()
+
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_DEVICES: [SMART_METER_DEVICE["sn"]]}
+        )
+        assert result["type"] is FlowResultType.CREATE_ENTRY
+
+    async def test_options_reject_switch_to_standard_before_mutation(
+        self, hass: HomeAssistant
+    ) -> None:
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_AUTH_METHOD: AUTH_METHOD_APP,
+                CONF_MODE: MODE_ENHANCED,
+                CONF_EMAIL: "test@example.com",
+                CONF_PASSWORD: "secret",
+                CONF_USER_ID: "uid123",
+                CONF_ACCESS_KEY: "ak",
+                CONF_SECRET_KEY: "sk",
+                CONF_DEVICES: [SMART_METER_DEVICE],
+            },
+            unique_id="test@example.com",
+        )
+        entry.add_to_hass(hass)
+        before = dict(entry.data)
+
+        with patch(
+            "custom_components.ecoflow_energy.config_flow_options."
+            "_async_fetch_app_devices",
+            new_callable=AsyncMock,
+            return_value=[SMART_METER_DEVICE],
+        ):
+            result = await hass.config_entries.options.async_init(entry.entry_id)
+            result = await hass.config_entries.options.async_configure(
+                result["flow_id"],
+                {
+                    CONF_MODE: MODE_STANDARD,
+                    CONF_DEVICES: [SMART_METER_DEVICE["sn"]],
+                },
+            )
+
+        assert result["type"] is FlowResultType.FORM
+        assert result["errors"]["base"] == "smart_meter_requires_enhanced"
+        assert entry.data == before
+
+    async def test_options_stored_fallback_keeps_enhanced_mode_hint(
+        self, hass: HomeAssistant
+    ) -> None:
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_AUTH_METHOD: AUTH_METHOD_APP,
+                CONF_MODE: MODE_ENHANCED,
+                CONF_EMAIL: "test@example.com",
+                CONF_PASSWORD: "secret",
+                CONF_USER_ID: "uid123",
+                CONF_DEVICES: [SMART_METER_DEVICE],
+            },
+            unique_id="test@example.com",
+        )
+        entry.add_to_hass(hass)
+
+        with patch(
+            "custom_components.ecoflow_energy.config_flow_options."
+            "_async_fetch_app_devices",
+            new_callable=AsyncMock,
+            side_effect=TimeoutError,
+        ):
+            result = await hass.config_entries.options.async_init(entry.entry_id)
+
+        options = result["data_schema"].schema[CONF_DEVICES].config["options"]
+        assert options == [{
+            "value": SMART_METER_DEVICE["sn"],
+            "label": "Smart Meter (0001) (BK21TEST0000) - requires Enhanced Mode",
+        }]
+
+
 # ===========================================================================
 # Step 1: Mode selection
 # ===========================================================================

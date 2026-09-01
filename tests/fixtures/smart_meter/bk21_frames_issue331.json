@@ -1,0 +1,235 @@
+{
+  "note": "EcoFlow Smart Meter (BK21, EF-EM-P3-120) frames from the issue #331 reporter capture, 2026-08-31. 9 telemetry frames on 254/21, 3 upload period frames on 254/22 and 3 bundled get_reply frames. The property frames are XOR-masked with the low byte of their sequence number, the get_reply frames are not.",
+  "source_topics": [
+    "/app/device/property/{sn}",
+    "/app/{uid}/{sn}/thing/property/get_reply"
+  ],
+  "truncated_at_bytes": {
+    "message": 1024,
+    "bundle": 4096
+  },
+  "frames": [
+    {
+      "ts": 1788212631.95656,
+      "ts_iso": "2026-08-31T21:43:51.956560+00:00",
+      "topic": "property",
+      "size": 61,
+      "format": "proto",
+      "cmds": [
+        {
+          "cmd_func": 254,
+          "cmd_id": 21
+        }
+      ],
+      "hex": "0a3b0a18ef525d3fd631d74207d8c030e74e72727272ef4e51371d3110021820200128013001380340fe0148155018580170f25e788172800103880101"
+    },
+    {
+      "ts": 1788212665.2590966,
+      "ts_iso": "2026-08-31T21:44:25.259097+00:00",
+      "topic": "get_reply",
+      "size": 193,
+      "format": "proto",
+      "cmds": [
+        {
+          "cmd_func": 254,
+          "cmd_id": 22
+        },
+        {
+          "cmd_func": 254,
+          "cmd_id": 21
+        }
+      ],
+      "hex": "0a1e0a13a812c0a907b012d00fb812e0a712c012e0d403100240fe014816704b0a9e010a9201a808c801b2080d4575726f70652f585858585858b808019d201555a443d52600000000d826019a2700c22d00c82d00e02d00e82d00d02f01d82f01e02f019d30d3337143a5300f21b142aa30141500c066441d0000c743250020a5443d0020a544853192b3563fe53b902b7043ed3b077f6f43f53b00000000fd3bda1be53f953c000000009d3ca2197043c03d8280c9ac02100240fe014815704b"
+    },
+    {
+      "ts": 1788212767.9425964,
+      "ts_iso": "2026-08-31T21:46:07.942596+00:00",
+      "topic": "property",
+      "size": 61,
+      "format": "proto",
+      "cmds": [
+        {
+          "cmd_func": 254,
+          "cmd_id": 21
+        }
+      ],
+      "hex": "0a3b0a18c974a1bff217f1641fa2e516c16854545454c9689088201710021820200128013001380340fe0148155018580170d462788172800103880101"
+    },
+    {
+      "ts": 1788212893.9984126,
+      "ts_iso": "2026-08-31T21:48:13.998413+00:00",
+      "topic": "property",
+      "size": 54,
+      "format": "proto",
+      "cmds": [
+        {
+          "cmd_func": 254,
+          "cmd_id": 22
+        }
+      ],
+      "hex": "0a340a13bc06d4bd13a406c41bac06f4b306d406f4c01710021820200128013001380340fe0148165013709466788172800103880101"
+    },
+    {
+      "ts": 1788212901.3712075,
+      "ts_iso": "2026-08-31T21:48:21.371207+00:00",
+      "topic": "property",
+      "size": 184,
+      "format": "proto",
+      "cmds": [
+        {
+          "cmd_func": 254,
+          "cmd_id": 21
+        }
+      ],
+      "hex": "0ab5010a92018626e62f9c26236b5b5c415e4b0176767676767696262fb30e427de56dfb082e2e2e2ef6082fb4092eec032ee6032ece032ec6032efe012ff6012fce012fb31eeff15e6d8b1e1b829f6c841e3a3b2e6e456a332e2ee46d0b2e0e866a132e0e866aab1f95f17b11cb153cd9416dc315355f416ddb152e2e2e2ed315cbf3286ebb122e2e2e2eb31271c6b06dee13acaee7822c10021820200128013001380340fe01481550920170ae66788172800103880101"
+    },
+    {
+      "ts": 1788213035.6380475,
+      "ts_iso": "2026-08-31T21:50:35.638047+00:00",
+      "topic": "property",
+      "size": 61,
+      "format": "proto",
+      "cmds": [
+        {
+          "cmd_func": 254,
+          "cmd_id": 21
+        }
+      ],
+      "hex": "0a3b0a18932e375bd64dab3ece86bf4c9b320e0e0e0e933207fda54d10021820200128013001380340fe01481550185801708e6a788172800103880101"
+    },
+    {
+      "ts": 1788213169.569712,
+      "ts_iso": "2026-08-31T21:52:49.569712+00:00",
+      "topic": "property",
+      "size": 84,
+      "format": "proto",
+      "cmds": [
+        {
+          "cmd_func": 254,
+          "cmd_id": 21
+        }
+      ],
+      "hex": "0a520a2f74c94ede31aa4cd9b7eb5aab43d9fdfce92998adf4e96924aacce9a945add4e9a945ad7cd5e9e9e9e974d5f99e42aa10021820200128013001380340fe014815502f580170e96d788172800103880101"
+    },
+    {
+      "ts": 1788213193.9547014,
+      "ts_iso": "2026-08-31T21:53:13.954701+00:00",
+      "topic": "property",
+      "size": 54,
+      "format": "proto",
+      "cmds": [
+        {
+          "cmd_func": 254,
+          "cmd_id": 22
+        }
+      ],
+      "hex": "0a340a13e85280e947f052904ff852a0e7528052a0944310021820200128013001380340fe014816501370c06e788172800103880101"
+    },
+    {
+      "ts": 1788213303.4426758,
+      "ts_iso": "2026-08-31T21:55:03.442676+00:00",
+      "topic": "property",
+      "size": 61,
+      "format": "proto",
+      "cmds": [
+        {
+          "cmd_func": 254,
+          "cmd_id": 21
+        }
+      ],
+      "hex": "0a3b0a185be6baf9138563f6b103768453fac6c6c6c65bfad9c86f8510021820200128013001380340fe0148155018580170c671788172800103880101"
+    },
+    {
+      "ts": 1788213357.4965343,
+      "ts_iso": "2026-08-31T21:55:57.496534+00:00",
+      "topic": "get_reply",
+      "size": 193,
+      "format": "proto",
+      "cmds": [
+        {
+          "cmd_func": 254,
+          "cmd_id": 22
+        },
+        {
+          "cmd_func": 254,
+          "cmd_id": 21
+        }
+      ],
+      "hex": "0a1e0a13a812c0a907b012d00fb812e0a712c012e0d403100240fe01481670040a9e010a9201a808c801b2080d4575726f70652f585858585858b808019d20b385d643d52600000000d826019a2700c22d00c82d00e02d00e82d00d02f01d82f01e02f019d309e0d7143a530a96cb042aa301415000076441d0080cf432500e0ae443d00e0ae448531481b5a3fe53ba2c66f43ed3b50e96f43f53b00000000fd3b5fb90f40953c000000009d3c886aaa43c03d8280c9ac02100240fe0148157004"
+    },
+    {
+      "ts": 1788213359.3448856,
+      "ts_iso": "2026-08-31T21:55:59.344886+00:00",
+      "topic": "get_reply",
+      "size": 193,
+      "format": "proto",
+      "cmds": [
+        {
+          "cmd_func": 254,
+          "cmd_id": 22
+        },
+        {
+          "cmd_func": 254,
+          "cmd_id": 21
+        }
+      ],
+      "hex": "0a1e0a13a812c0a907b012d00fb812e0a712c012e0d403100240fe01481670050a9e010a9201a808c801b2080d4575726f70652f585858585858b808019d20b385d643d52600000000d826019a2700c22d00c82d00e02d00e82d00d02f01d82f01e02f019d309e0d7143a530dda5b242aa301415000076441d0080cf432500e0ae443d00e0ae448531481b5a3fe53ba2c66f43ed3b50e96f43f53b00000000fd3b5fb90f40953c000000009d3cf67ba943c03d8280c9ac02100240fe0148157005"
+    },
+    {
+      "ts": 1788213437.2658932,
+      "ts_iso": "2026-08-31T21:57:17.265893+00:00",
+      "topic": "property",
+      "size": 84,
+      "format": "proto",
+      "cmds": [
+        {
+          "cmd_func": 254,
+          "cmd_id": 21
+        }
+      ],
+      "hex": "0a520a2f3e8353af71e00693078612e10993b7b6a3a3dbe7bea32373e086a38313e79ea38313e7369fa3a3a3a33e9f246006e010021820200128013001380340fe014815502f580170a375788172800103880101"
+    },
+    {
+      "ts": 1788213494.070543,
+      "ts_iso": "2026-08-31T21:58:14.070543+00:00",
+      "topic": "property",
+      "size": 54,
+      "format": "proto",
+      "cmds": [
+        {
+          "cmd_func": 254,
+          "cmd_id": 22
+        }
+      ],
+      "hex": "0a340a13c47eacc56bdc7ebc63d47e8ccb7eac7e8cb86f10021820200128013001380340fe014816501370ec76788172800103880101"
+    },
+    {
+      "ts": 1788213571.176635,
+      "ts_iso": "2026-08-31T21:59:31.176635+00:00",
+      "topic": "property",
+      "size": 61,
+      "format": "proto",
+      "cmds": [
+        {
+          "cmd_func": 254,
+          "cmd_id": 21
+        }
+      ],
+      "hex": "0a3b0a18e25f5cf5ce3cda4ffbc7ce3dea437f7f7f7fe2437d63fa3c10021820200128013001380340fe0148155018580170ff78788172800103880101"
+    },
+    {
+      "ts": 1788213673.5875525,
+      "ts_iso": "2026-08-31T22:01:13.587553+00:00",
+      "topic": "property",
+      "size": 61,
+      "format": "proto",
+      "cmds": [
+        {
+          "cmd_func": 254,
+          "cmd_id": 21
+        }
+      ],
+      "hex": "0a3b0a1870cd11194bae48dd31425caf78d1edededed70d1e7ff98ae10021820200128013001380340fe0148155018580170ed7b788172800103880101"
+    }
+  ]
+}

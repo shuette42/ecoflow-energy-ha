@@ -19,6 +19,7 @@ from .const import (
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
+    DEVICE_TYPE_SMART_METER,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
     DEVICE_TYPE_STREAM_AC5000,
@@ -26,6 +27,7 @@ from .const import (
     EcoFlowBinarySensorDef,
     filter_defs_for_serial,
     POWEROCEAN_BINARY_SENSORS,
+    SMARTMETER_BINARY_SENSORS,
     SMARTPLUG_BINARY_SENSORS,
     STREAM_BINARY_SENSORS,
     STREAMAC5000_BINARY_SENSORS,
@@ -176,4 +178,6 @@ def _get_binary_sensor_defs(
         return STREAM_BINARY_SENSORS
     if device_type == DEVICE_TYPE_STREAM_AC5000:
         return STREAMAC5000_BINARY_SENSORS
+    if device_type == DEVICE_TYPE_SMART_METER:
+        return SMARTMETER_BINARY_SENSORS
     return []
