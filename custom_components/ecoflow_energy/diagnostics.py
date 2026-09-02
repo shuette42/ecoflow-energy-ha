@@ -57,6 +57,27 @@ _SERIAL_RE = re.compile(r"[A-Z0-9]{15,}")
 # leak the pass exists to prevent.
 _PRE_SANITIZED_KEYS = frozenset({"hex", "frame_hex"})
 
+# EcoFlow names a device after its model plus the last four characters of its
+# serial, so "Stream AC Pro (0362)" carries the end of a serial whose start is
+# published one line above it as the SN prefix. The pattern above never sees
+# that: four characters do not reach fifteen. Values under these keys are
+# therefore masked a second time, against the serials this entry actually
+# holds. Keying on the field rather than on the section keeps the single pass
+# single: a section added later that reuses these two field names is covered
+# whether or not its author thought about it. It does not cover a section that
+# dumps the stored device dict, where the same value is spelled ``name`` - a
+# word too generic to mask everywhere it occurs.
+_NAME_KEYS = frozenset({"device_name", "product_name"})
+
+# How much of a serial a generated name carries.
+_NAME_SERIAL_TAIL = 4
+
+# The markers this module writes. The serial pass runs before the tail pass on
+# the same string, so a tail spelled like four characters of a marker would
+# chew a marker the first pass had just written. The tail pattern matches the
+# markers first and leaves them alone.
+_MARKER_PATTERN = r"\*\*REDACTED(?:-\d+)?\*\*"
+
 # How much of a frame is kept, by what the frame carries: a bundle of several
 # messages gets the larger budget, everything else the smaller one. Reported
 # as a pair rather than a single number because one number would describe
@@ -95,7 +116,11 @@ _ENERGY_NOTE = (
 _ENERGY_TOTAL_DIGITS = 6
 
 
-def _redact_serials(value: Any, aliases: dict[str, str] | None = None) -> Any:
+def _redact_serials(
+    value: Any,
+    aliases: dict[str, str] | None = None,
+    tails: tuple[str, ...] = (),
+) -> Any:
     """Redact values that look like EcoFlow serial numbers.
 
     Recurses into dict and list values so nested quota structures (e.g.
@@ -118,6 +143,10 @@ def _redact_serials(value: Any, aliases: dict[str, str] | None = None) -> Any:
     reads the same throughout a dump and nothing carries over between dumps.
 
     Captured frames are the one exception, see ``_PRE_SANITIZED_KEYS``.
+
+    ``tails`` carries the serial endings a generated device name can hold; the
+    fields listed in ``_NAME_KEYS`` are masked against them as well, since a
+    four-character ending is far below what the serial pattern matches.
     """
     if aliases is None:
         aliases = {}
@@ -133,15 +162,65 @@ def _redact_serials(value: Any, aliases: dict[str, str] | None = None) -> Any:
 
         return _SERIAL_RE.sub(_alias, value)
     if isinstance(value, dict):
-        return {
-            _redact_serials(key, aliases): (
-                item if key in _PRE_SANITIZED_KEYS else _redact_serials(item, aliases)
-            )
-            for key, item in value.items()
-        }
+        redacted: dict[Any, Any] = {}
+        for key, item in value.items():
+            redacted_key = _redact_serials(key, aliases, tails)
+            if key in _PRE_SANITIZED_KEYS:
+                redacted[redacted_key] = item
+                continue
+            redacted_item = _redact_serials(item, aliases, tails)
+            if key in _NAME_KEYS and isinstance(redacted_item, str):
+                redacted_item = _mask_serial_tails(redacted_item, tails)
+            redacted[redacted_key] = redacted_item
+        return redacted
     if isinstance(value, list):
-        return [_redact_serials(item, aliases) for item in value]
+        return [_redact_serials(item, aliases, tails) for item in value]
     return value
+
+
+def _serial_tails(serials: list[str]) -> tuple[str, ...]:
+    """Return the serial endings a generated device name can carry.
+
+    The threshold is the published prefix length plus the tail length, so
+    only serials whose two ends do not overlap are used. Nothing observed is
+    shorter than sixteen characters, so this guard is about a shape that could
+    arrive rather than one that has.
+    """
+    tails: list[str] = []
+    for serial in serials:
+        if not serial or len(serial) < _NAME_SERIAL_TAIL * 2:
+            continue
+        tail = serial[-_NAME_SERIAL_TAIL:]
+        if tail not in tails:
+            tails.append(tail)
+    return tuple(tails)
+
+
+def _mask_serial_tails(text: str, tails: tuple[str, ...]) -> str:
+    """Replace every known serial ending in one pass.
+
+    One alternation rather than a substitution per tail, so a marker written
+    for the first tail cannot be matched again by the second. The markers the
+    serial pass may already have written are matched first and returned
+    untouched, for the same reason.
+
+    An empty set of tails returns immediately, since there is nothing to mask.
+    That is a short cut rather than a safeguard: the marker alternative is
+    always present, so the pattern is never the empty alternation that would
+    match at every position.
+    """
+    if not tails:
+        return text
+    pattern = re.compile(
+        "|".join([_MARKER_PATTERN, *(re.escape(tail) for tail in tails)]),
+        re.IGNORECASE,
+    )
+
+    def _keep_markers(match: re.Match[str]) -> str:
+        found = match.group(0)
+        return found if found.startswith("**") else REDACTED
+
+    return pattern.sub(_keep_markers, text)
 
 
 async def async_get_config_entry_diagnostics(
@@ -181,7 +260,9 @@ async def async_get_config_entry_diagnostics(
     # changed, and the last of them published the full serial and the account
     # id of every device write through the event log. A section added later
     # is covered here whether or not its author thought about it.
-    return _redact_serials(diagnostics)
+    serials = [coordinator.device_sn for coordinator in coordinators.values()]
+    serials += [item.get("sn", "") for item in skipped_devices]
+    return _redact_serials(diagnostics, tails=_serial_tails(serials))
 
 
 async def _skipped_devices_diagnostics(
