@@ -31,6 +31,7 @@ from custom_components.ecoflow_energy.diagnostics import (
     REDACTED,
     _device_diagnostics,
     _redact_serials,
+    _serial_tails,
     _skipped_devices_diagnostics,
     async_get_config_entry_diagnostics,
 )
@@ -926,6 +927,157 @@ class TestRedactSerials:
     def test_short_values_untouched(self) -> None:
         assert _redact_serials("bpSoc") == "bpSoc"
         assert _redact_serials(80) == 80
+
+
+class TestDeviceNameSerialTail:
+    """The device name carries the end of the serial whose start is published.
+
+    EcoFlow generates a name from the model plus the last four characters of
+    the serial, and the diagnostics publish the first four beside it. The
+    serial pattern needs fifteen characters and never saw the four, so a
+    download handed out both ends of a serial in a file owners are asked to
+    attach to a public issue.
+    """
+
+    def test_tails_come_from_long_serials_only(self) -> None:
+        assert _serial_tails(["HW52ZAB412340001"]) == ("0001",)
+        assert _serial_tails(["ABCD"]) == ()
+        assert _serial_tails([""]) == ()
+
+    def test_tails_are_unique(self) -> None:
+        assert _serial_tails(
+            ["HW52ZAB412340001", "HJ31ZAB412340001"]
+        ) == ("0001",)
+
+    def test_name_key_is_masked(self) -> None:
+        out = _redact_serials(
+            {"device_name": "PowerOcean (0001)"}, tails=("0001",)
+        )
+        assert out["device_name"] == f"PowerOcean ({REDACTED})"
+
+    def test_a_name_without_the_tail_is_left_alone(self) -> None:
+        out = _redact_serials(
+            {"device_name": "Garage charger"}, tails=("0001",)
+        )
+        assert out["device_name"] == "Garage charger"
+
+    def test_other_keys_keep_values_that_look_like_a_tail(self) -> None:
+        """Only the name fields are masked against the tail.
+
+        A four-character run is common in ordinary readings, and blanking it
+        everywhere would corrupt the artefact device support is built from.
+        """
+        out = _redact_serials(
+            {"order_id": "0001", "count": 1}, tails=("0001",)
+        )
+        assert out["order_id"] == "0001"
+        assert out["count"] == 1
+
+    def test_two_tails_are_replaced_in_one_pass(self) -> None:
+        """A marker written for one tail must not be matched by the next.
+
+        The second tail here is four characters of the marker itself, which
+        is what makes the test able to tell a single alternation apart from a
+        substitution per tail. A pair that does not collide cannot.
+        """
+        out = _redact_serials(
+            {"device_name": "Pair (0001) and (ACTE)"},
+            tails=("0001", "ACTE"),
+        )
+        assert out["device_name"] == f"Pair ({REDACTED}) and ({REDACTED})"
+
+    def test_a_marker_from_the_serial_pass_survives_the_tail_pass(self) -> None:
+        """The serial pass runs first and its marker is in the same string.
+
+        A tail spelled like four characters of that marker would otherwise
+        chew what the first pass had just written.
+        """
+        out = _redact_serials(
+            {"device_name": "Stream (ACTE) HW52ZAB41234ACTE"}, tails=("ACTE",)
+        )
+        assert out["device_name"] == f"Stream ({REDACTED}) {REDACTED}"
+        assert "ACTE" not in out["device_name"].replace(REDACTED, "")
+
+    def test_no_tails_leaves_a_name_untouched(self) -> None:
+        """Most callers pass no tails at all, so this is the common case.
+
+        The contract is the returned value, not how it is reached. The early
+        return and the marker-only pattern both satisfy it, which is why no
+        mutation of the guard alone can fail this test.
+        """
+        assert _redact_serials({"device_name": "PowerOcean"}) == {
+            "device_name": "PowerOcean"
+        }
+        assert _redact_serials({"device_name": "PowerOcean"}, tails=()) == {
+            "device_name": "PowerOcean"
+        }
+
+    def test_a_name_that_is_not_a_string_survives(self) -> None:
+        """A skipped device without a product name publishes None.
+
+        Handing None to the pattern would raise and take the whole download
+        down.
+        """
+        out = _redact_serials({"product_name": None}, tails=("0001",))
+        assert out["product_name"] is None
+
+    def test_masking_is_case_insensitive(self) -> None:
+        out = _redact_serials(
+            {"device_name": "Stream AC Pro (ab12)"}, tails=("AB12",)
+        )
+        assert out["device_name"] == f"Stream AC Pro ({REDACTED})"
+
+    async def test_download_no_longer_carries_both_ends_of_the_serial(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """End to end, on the shape the reporter's own file had."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass,
+            standard_config_entry,
+            {**MOCK_POWEROCEAN_DEVICE, "name": "PowerOcean (0001)"},
+        )
+        hass.data.setdefault(DOMAIN, {})[standard_config_entry.entry_id] = {
+            coordinator.device_sn: coordinator
+        }
+
+        result = await async_get_config_entry_diagnostics(hass, standard_config_entry)
+
+        device = result["devices"][0]
+        assert device["device_sn"] == "HW52..."
+        assert device["device_name"] == f"PowerOcean ({REDACTED})"
+        assert "0001" not in json.dumps(result)
+
+    async def test_a_skipped_device_contributes_its_tail(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """The serial of an unsupported device never reaches the output.
+
+        Its name still can, so its tail has to be collected too.
+        """
+        standard_config_entry.add_to_hass(hass)
+        hass.data.setdefault(DOMAIN, {})[standard_config_entry.entry_id] = {}
+        hass.data.setdefault(DATA_SKIPPED_DEVICES, {})[
+            standard_config_entry.entry_id
+        ] = [
+            {
+                "sn_prefix": "HZ31",
+                "sn": "HZ31ZAB412348F72",
+                "product_name": "Solar Tracker (8F72)",
+                "reason": "no parser available for this device type",
+                "probe_eligible": False,
+            }
+        ]
+
+        result = await async_get_config_entry_diagnostics(hass, standard_config_entry)
+
+        skipped = result["skipped_devices"][0]
+        assert skipped["product_name"] == f"Solar Tracker ({REDACTED})"
+        assert "8F72" not in json.dumps(result)
 
 
 class TestDeltaThreeRawQuotaCapture:
