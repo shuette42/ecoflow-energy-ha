@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [1.19.0] - 2026-09-01
 
+### Fixed
+
+- A Stream unit that is part of a linked system no longer reads 0% Battery SOC. Versions 1.18.0 and 1.18.1 made the system charge, the combined figure the app shows for units cabled together, the source of the battery sensor, which was right for the flapping reported in #323 but rested on the assumption that every unit in a system reports it. Not all of them do. In a two-unit recording the Stream Ultra X reported the system charge throughout, while the Stream AC Pro next to it sent that field as a flat zero on every frame that carried it, its own battery meanwhile going from 24% to 92%. The sensor took the zero, kept it, and no later reading could pull it back, so the unit read empty while it was charging. The system charge is the average across the units, and an average cannot be zero while one of the units is above zero, so a zero arriving next to a unit reading that contradicts it is now treated as what it is, a unit that does not calculate the figure, and the unit's own reading is shown instead. A battery that really is empty is unaffected, because then both readings are zero and there is nothing to contradict. Units that do report the system charge keep it exactly as before. Reported by @OB73-gif on three of four Stream AC Pro, and identified from the diagnostics @c-bren84 attached to #323. (Ref #336)
+
 ### Changed
 
 - PowerOcean scheduled charge tasks expose their enable switch, charge-power number and time-window sensor again in Enhanced Mode (beta.2). Version 1.18.1 had withheld them; the write path was verified on real hardware before it first shipped, with the device's own task list as the read-back. The charge-power number now follows the app's own limits: steps of 100 W, a minimum of 100 W per online battery pack and a maximum per model, and a value outside them is refused rather than rounded. (Ref #328)

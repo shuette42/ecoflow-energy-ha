@@ -7773,29 +7773,103 @@ class TestStreamSocLatch:
         coordinator._apply_data({"_soc_pct_fallback": 40})
         assert "_soc_pct_fallback" not in coordinator.data
 
-    async def test_a_zero_system_figure_latches_like_any_other(
+    async def test_a_zero_system_figure_does_not_latch(
         self, hass: HomeAssistant, standard_config_entry: MockConfigEntry
     ) -> None:
-        """A system figure of zero currently claims the sensor for good.
+        """A zero must not claim the sensor for good.
 
-        This pins current behaviour, not desired behaviour. The first HTTP
-        poll of a Stream carries the system figure, so a zero there latches
-        before any push arrives, and from then on the unit's own reading is
-        offered and dropped on every frame. The battery sensor stays at 0
-        while the unit itself reports a full battery.
-
-        Whether a zero should be allowed to latch is open: an empty battery
-        legitimately reads zero, and a single message carries nothing that
-        separates that from a unit reporting no usable system figure. Change
-        this test deliberately, not in passing.
+        The first HTTP poll of a Stream carries the system figure, so a zero
+        there used to latch before any push arrived, and from then on the
+        unit's own reading was offered and dropped on every frame. Nothing
+        could pull the sensor back.
         """
         coordinator = self._coordinator(hass, standard_config_entry)
 
         await self._http_update(coordinator, {"cmsBattSoc": 0})
         coordinator._apply_data({"unit_soc_pct": 94, "_soc_pct_fallback": 94})
 
-        assert coordinator.data["soc_pct"] == 0
+        assert coordinator.data["soc_pct"] == 94
         assert coordinator.data["unit_soc_pct"] == 94
+
+    async def test_a_paired_unit_that_reports_no_system_figure(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """The #336 shape: both figures in one frame, the system one zero.
+
+        Taken from the two-unit diagnostics on #323, where the Stream AC Pro
+        sent field 262 present and zero on all twelve frames that carried it
+        while its own BMS moved from 24% to 92%. A mean over the members
+        cannot read zero while one member is above it, so the unit's own
+        reading wins and the sensor keeps following it.
+        """
+        coordinator = self._coordinator(hass, enhanced_config_entry)
+
+        coordinator._apply_data({"soc_pct": 0, "unit_soc_pct": 24})
+        assert coordinator.data["soc_pct"] == 24
+
+        coordinator._apply_data({"soc_pct": 0, "unit_soc_pct": 92})
+        assert coordinator.data["soc_pct"] == 92
+
+    async def test_a_lone_zero_yields_to_the_unit_figure_already_known(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """The contradicting reading may have arrived in an earlier frame.
+
+        `254/21` is incremental, so a frame can carry the system figure while
+        the unit figure it contradicts came before it. Reading only the
+        message at hand would drop the sensor to zero until the next frame
+        carrying both. Unobserved in the #323 capture, which had two frames
+        with 242 alone and none with 262 alone, but the container permits it.
+        """
+        coordinator = self._coordinator(hass, enhanced_config_entry)
+
+        coordinator._apply_data({"unit_soc_pct": 70, "_soc_pct_fallback": 70})
+        assert coordinator.data["soc_pct"] == 70
+
+        coordinator._apply_data({"soc_pct": 0})
+
+        assert coordinator.data["soc_pct"] == 70
+
+    async def test_an_empty_battery_keeps_its_zero_from_state_too(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """The state lookup must not resurrect a value an empty pack lost.
+
+        With both readings at zero nothing contradicts the system figure, so
+        the sensor reads zero, which is the truth for an empty battery.
+        """
+        coordinator = self._coordinator(hass, enhanced_config_entry)
+
+        coordinator._apply_data({"unit_soc_pct": 0, "_soc_pct_fallback": 0})
+        coordinator._apply_data({"soc_pct": 0})
+
+        assert coordinator.data["soc_pct"] == 0
+
+    async def test_a_real_system_figure_still_wins_after_a_zero(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """Yielding to the unit figure must not cost the system figure.
+
+        A pair whose figure genuinely arrives has to keep latching, or #323
+        comes back.
+        """
+        coordinator = self._coordinator(hass, enhanced_config_entry)
+
+        coordinator._apply_data({"soc_pct": 0, "unit_soc_pct": 40})
+        coordinator._apply_data({"soc_pct": 55, "unit_soc_pct": 40})
+        coordinator._apply_data({"unit_soc_pct": 41, "_soc_pct_fallback": 41})
+
+        assert coordinator.data["soc_pct"] == 55
+
+    async def test_an_empty_linked_battery_still_reads_zero(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """Nothing contradicts the zero when the unit reads zero too."""
+        coordinator = self._coordinator(hass, enhanced_config_entry)
+
+        coordinator._apply_data({"soc_pct": 0, "unit_soc_pct": 0})
+
+        assert coordinator.data["soc_pct"] == 0
 
     async def test_a_zero_unit_figure_still_reaches_the_sensor(
         self, hass: HomeAssistant, standard_config_entry: MockConfigEntry
