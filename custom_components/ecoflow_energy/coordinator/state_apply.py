@@ -35,10 +35,32 @@ class StateApplyMixin:
         pair latches onto the system figure the moment it arrives and a
         BMS-only frame can no longer pull the sensor back to one unit's
         reading (#323).
+
+        Not every member of a linked system computes that figure. In a
+        two-unit capture the Stream Ultra X reported it tracking its own BMS
+        across a full charge, while the Stream AC Pro beside it sent the
+        field present and zero on all twelve frames that carried it, its own
+        BMS meanwhile moving between 24% and 92%. A system figure is the mean
+        over the members, and a mean cannot read zero while one member is
+        above zero, so a zero arriving next to a positive unit figure is not
+        this system's charge - it is a unit that does not calculate one. Such
+        a frame yields to the unit's own reading and does not latch, which
+        also lets a later BMS-only frame still stand in (#336).
+
+        A genuinely empty battery is untouched: then the unit figure reads
+        zero as well and nothing contradicts the system figure.
         """
         fallback = parsed.pop(SOC_FALLBACK_KEY, None)
         if "soc_pct" in parsed:
-            self._soc_from_system = True
+            if parsed["soc_pct"]:
+                self._soc_from_system = True
+                return
+            # A zero never latches. Where the unit's own reading contradicts
+            # it, that reading wins; where it does not, the zero stands but
+            # stays open to a later frame that carries a figure.
+            unit = parsed.get("unit_soc_pct")
+            if unit:
+                parsed["soc_pct"] = unit
             return
         if fallback is not None and not self._soc_from_system:
             parsed["soc_pct"] = fallback
