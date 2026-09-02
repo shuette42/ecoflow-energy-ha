@@ -7773,6 +7773,45 @@ class TestStreamSocLatch:
         coordinator._apply_data({"_soc_pct_fallback": 40})
         assert "_soc_pct_fallback" not in coordinator.data
 
+    async def test_a_zero_system_figure_latches_like_any_other(
+        self, hass: HomeAssistant, standard_config_entry: MockConfigEntry
+    ) -> None:
+        """A system figure of zero currently claims the sensor for good.
+
+        This pins current behaviour, not desired behaviour. The first HTTP
+        poll of a Stream carries the system figure, so a zero there latches
+        before any push arrives, and from then on the unit's own reading is
+        offered and dropped on every frame. The battery sensor stays at 0
+        while the unit itself reports a full battery.
+
+        Whether a zero should be allowed to latch is open: an empty battery
+        legitimately reads zero, and a single message carries nothing that
+        separates that from a unit reporting no usable system figure. Change
+        this test deliberately, not in passing.
+        """
+        coordinator = self._coordinator(hass, standard_config_entry)
+
+        await self._http_update(coordinator, {"cmsBattSoc": 0})
+        coordinator._apply_data({"unit_soc_pct": 94, "_soc_pct_fallback": 94})
+
+        assert coordinator.data["soc_pct"] == 0
+        assert coordinator.data["unit_soc_pct"] == 94
+
+    async def test_a_zero_unit_figure_still_reaches_the_sensor(
+        self, hass: HomeAssistant, standard_config_entry: MockConfigEntry
+    ) -> None:
+        """An empty battery on a unit that reports no system figure.
+
+        The stand-in has to survive a value of zero, or a genuinely empty
+        single unit would lose its battery sensor entirely.
+        """
+        coordinator = self._coordinator(hass, standard_config_entry)
+
+        data = await self._http_update(coordinator, {"soc": 0})
+
+        assert data["soc_pct"] == 0
+        assert data["unit_soc_pct"] == 0
+
 
 class TestLinkedUnitPower:
     """Per-unit battery power is claimed by serial, never by position."""

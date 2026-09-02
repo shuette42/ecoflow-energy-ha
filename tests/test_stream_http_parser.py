@@ -187,3 +187,96 @@ class TestEnergySensorHygiene:
         solar_keys = [k for k in STREAM_HTTP_FIELD_MAP.values() if k == "solar_w"]
         assert len(solar_keys) == 1
         assert sum(1 for s in STREAM_SENSORS if s.key == "solar_w") == 1
+
+
+class TestRealAcProQuota:
+    """The quota a STREAM AC Pro (BK31) actually returns in Standard Mode.
+
+    Taken from a real 15-key quota captured on 1.18.0. The shape matters
+    because it is not the one the other tests here assume: the AC Pro reports
+    `cmsBattSoc` and carries no `soc` key at all, so on this device the
+    stand-in path can never fire from an HTTP poll. The unit figure reaches
+    the coordinator only through the MQTT `/quota` push.
+    """
+
+    QUOTA: dict = {
+        "backupReverseSoc": 20,
+        "cmsBattSoc": 94.0,
+        "cmsMaxChgSoc": 95,
+        "cmsMinDsgSoc": 10,
+        "energyStrategyOperateMode.operateIntelligentScheduleModeOpen": False,
+        "energyStrategyOperateMode.operateSelfPoweredOpen": False,
+        "feedGridMode": 2,
+        "gridConnectionPower": -184.0303,
+        "powGetBpCms": 0.0,
+        "powGetPvSum": 0.0,
+        "powGetSysGrid": 327.8393,
+        "powGetSysLoad": 327.8393,
+        "quota_cloud_ts": "2026-09-01 06:01:50",
+        "relay2Onoff": True,
+        "relay3Onoff": True,
+    }
+
+    def test_battery_soc_comes_from_the_system_key(self) -> None:
+        result = parse_stream_quota(self.QUOTA)
+
+        assert result["soc_pct"] == 94
+
+    def test_no_unit_figure_and_no_stand_in_is_offered(self) -> None:
+        """There is no `soc` in this quota, so nothing can stand in.
+
+        A test that hands the parser `soc` alongside `cmsBattSoc` is testing
+        a shape this device does not produce.
+        """
+        result = parse_stream_quota(self.QUOTA)
+
+        assert "unit_soc_pct" not in result
+        assert SOC_FALLBACK_KEY not in result
+
+    def test_the_charge_window_the_device_reports_is_dropped(self) -> None:
+        """The quota carries the SoC window and this parser ignores it.
+
+        `cmsMaxChgSoc` and `cmsMinDsgSoc` are the same two values the
+        protobuf path reads as fields 270 and 271, and they sit in every
+        Standard Mode quota this device returns. Neither is mapped here, so
+        in Standard Mode the integration cannot see the window the device is
+        actually set to. The matching Number entities are Enhanced-only, so
+        nothing is broken by it today, but the data is on the wire and
+        unused. Pinned so it stays a deliberate decision rather than an
+        oversight nobody noticed.
+        """
+        result = parse_stream_quota(self.QUOTA)
+
+        assert "max_charge_soc_pct" not in result
+        assert "min_discharge_soc_pct" not in result
+
+
+class TestSystemSocOfZero:
+    """What a system figure of zero does today.
+
+    These pin current behaviour, not desired behaviour. A zero on
+    `cmsBattSoc` is published as the battery reading exactly like any other
+    value, and the parser offers no stand-in because the key is present.
+    Whether that is right is open: a genuinely empty battery reads zero, and
+    nothing in a single quota separates that from a unit reporting no usable
+    system figure. Change these tests deliberately, not in passing.
+    """
+
+    def test_zero_system_figure_becomes_the_battery_reading(self) -> None:
+        result = parse_stream_quota({"cmsBattSoc": 0.0, "soc": 94})
+
+        assert result["soc_pct"] == 0
+        assert result["unit_soc_pct"] == 94
+
+    def test_zero_system_figure_suppresses_the_stand_in(self) -> None:
+        """Presence, not truthiness, decides whether a stand-in is offered."""
+        result = parse_stream_quota({"cmsBattSoc": 0.0, "soc": 94})
+
+        assert SOC_FALLBACK_KEY not in result
+
+    def test_zero_unit_figure_still_stands_in(self) -> None:
+        """An empty battery reporting only its own figure keeps its sensor."""
+        result = parse_stream_quota({"soc": 0})
+
+        assert result["unit_soc_pct"] == 0
+        assert result[SOC_FALLBACK_KEY] == 0
