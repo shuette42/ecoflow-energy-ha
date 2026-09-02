@@ -36,6 +36,7 @@ from .const import (
 )
 from .coordinator import DeviceValueNotReported, EcoFlowDeviceCoordinator
 from .entity import (
+    raise_set_gone,
     as_known_int,
     EcoFlowWriteGateMixin,
     reading_reported,
@@ -48,6 +49,10 @@ from .ecoflow.delta3_commands import (
     build_number_command as build_delta3_number_command,
     build_port_priority_command,
     port_priority_soc_bounds,
+)
+from .ecoflow.const import (
+    schedule_power_max_w,
+    schedule_power_min_w,
 )
 from .ecoflow.energy_stream import stream_backup_reserve_floor
 from .ecoflow.parsers.delta3_proto import port_priority_keys
@@ -101,8 +106,8 @@ def _watch_for_accessory(
     the control steers and the only one the device sends. Every definition
     that reaches this path names the same string for both, so the two are
     interchangeable today; the read-back key is the one named because it is
-    the one a control has to wait for. An accessory can begin reporting while
-    Home Assistant runs, so the wait has no deadline.
+    the one a control has to wait for. A PowerOcean schedule can be created
+    in the app while Home Assistant runs, so the wait has no deadline.
     """
 
     @callback
@@ -265,8 +270,12 @@ class EcoFlowNumber(
         battery limit the user can change while HA runs, the Delta 3 port
         priority cutoffs and the Stream backup reserve. The third, the STREAM
         AC 5000 grid-tied output, follows a ceiling only EcoFlow can raise.
+        The scheduled charge power is a fourth of a different kind: its floor
+        follows the reported pack count, its ceiling the model.
         Every other number keeps the range its definition declares.
         """
+        if self._schedule_slot() is not None:
+            return self._schedule_power_bounds()
         if self._port_priority_stem() is not None:
             lower, upper = self._port_priority_bounds()
             return float(lower), float(upper)
@@ -327,6 +336,26 @@ class EcoFlowNumber(
             and self.coordinator.device_type == DEVICE_TYPE_STREAM
             and supports_stream_controls(self.coordinator.device_sn)
         )
+
+    def _schedule_power_bounds(self) -> tuple[float, float]:
+        """Return the charge power range the app would offer for this unit.
+
+        The floor is 100 W per online battery pack and the ceiling comes from
+        the serial prefix, which is exactly how the app builds this prompt:
+        neither is a device-reported rating, and no frame carries one. A pack
+        count that has not arrived yet gives the one-pack floor rather than
+        zero, because the app cannot send zero and what the device would do
+        with it has never been seen.
+        """
+        packs = as_known_int((self.coordinator.data or {}).get("bp_online_sum"))
+        upper = schedule_power_max_w(self.coordinator.device_sn)
+        lower = schedule_power_min_w(packs)
+        if lower > upper:
+            # More packs than the model's ceiling allows for at 100 W each.
+            # No installation looks like this, and a floor above the ceiling
+            # would leave a control that cannot be moved at all.
+            lower = schedule_power_min_w(None)
+        return float(lower), float(upper)
 
     def _port_priority_stem(self) -> str | None:
         """Return the port stem for a port priority cutoff, else None."""
@@ -503,6 +532,38 @@ class EcoFlowNumber(
         key = self._definition.key
         int_value = int(value)
 
+        slot = self._schedule_slot()
+        if slot is not None:
+            try:
+                ok = await self.coordinator.async_set_powerocean_schedule_power(
+                    slot, int_value
+                )
+            except DeviceValueNotReported:
+                # The write needs four fields the device owns, and composing
+                # one would rewrite the recurrence the owner set in the app.
+                # Two different situations reach here and they need different
+                # words: a schedule the device has stopped reporting is gone
+                # and will not come back on its own, while a slot that simply
+                # has not been reported yet resolves with the next frame. The
+                # armed flag tells them apart, because a retracted slot
+                # publishes it as None.
+                if not isinstance(
+                    self.coordinator.device_data.get(f"schedule_{slot}_enabled"),
+                    bool,
+                ):
+                    raise_set_gone(self.entity_id)
+                raise_set_not_ready(self.entity_id)
+            except ValueError as err:
+                raise_set_rejected(self.entity_id, str(err))
+            if not ok:
+                raise_set_failed(self.entity_id)
+            # The int, not the float Home Assistant handed in: the coordinator
+            # has already seeded this key with the int it put on the wire, and
+            # re-seeding the same key as a float would leave the type of a
+            # stored reading depending on which path last wrote it.
+            self._apply_optimistic_number(int_value)
+            return
+
         if self.coordinator.data is None:
             # Both PowerOcean sliders are sent as a pair, so the unchanged
             # one has to be read from coordinator data. Without data there
@@ -538,6 +599,22 @@ class EcoFlowNumber(
             return
 
         raise_set_unsupported(self.entity_id)
+
+    def _schedule_slot(self) -> int | None:
+        """Return the slot number for a PowerOcean schedule number, else None.
+
+        The device type is checked before the key, as the switch does: the
+        write this routes to is a PowerOcean frame, so a key of the same shape
+        on another device must not reach it. No other device defines one
+        today, and this is here so that adding one cannot quietly change where
+        it is sent.
+        """
+        if self.coordinator.device_type != DEVICE_TYPE_POWEROCEAN:
+            return None
+        key = self._definition.key
+        if not key.startswith("schedule_") or not key.endswith("_power_w"):
+            return None
+        return int(key[len("schedule_") : -len("_power_w")])
 
     async def _async_set_stream_value(self, key: str, value: float) -> bool:
         """Set a Stream AC Pro number value via WSS Protobuf SET.

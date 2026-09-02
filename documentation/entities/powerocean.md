@@ -31,17 +31,23 @@ Full list of all entities created for PowerOcean devices.
 > one starts, so the session energy is not a meter and is not meant for the
 > Energy Dashboard. There are no wallbox controls.
 
-> **Schedule status is optional and needs Enhanced Mode.** A PowerOcean only
-> has a schedule if you created one in the EcoFlow app. For each reported
-> schedule Home Assistant exposes only the device's Running flag. Timing,
-> arming and charge power stay in the EcoFlow app because safe writable bounds
-> and a correlated persisted read-back have not been established. The task
-> list travels on the real-time stream, which is why this status needs the
-> EcoFlow account sign-in.
+> **The schedule readings are optional and need Enhanced Mode.** A PowerOcean
+> only has a schedule if you created one yourself in the EcoFlow app, and most
+> systems never do, so having no schedule entities at all is the normal case
+> and not a fault. Four entities appear for each schedule your system reports:
+> a switch that turns it on and off, its charge power, the time of day it runs
+> and whether it is charging right now. Every change is confirmed against the
+> list the PowerOcean sends back, so the switch shows what the device did and
+> not merely what was asked of it. The list travels on the PowerOcean's
+> real-time stream, which is why these entities need the EcoFlow account
+> sign-in.
 >
-> **Schedule configuration stays in the EcoFlow app.** Deleting a schedule
-> there returns its Running entity to unknown instead of freezing the last
-> state.
+> **Creating and deleting a schedule stays in the EcoFlow app.** Home Assistant
+> can operate a schedule you made there, not invent one: without a way to
+> create, a delete from Home Assistant would be a one-way door. Delete one in
+> the app and its entities go back to unknown rather than staying on their last
+> value, and a write against it is refused with a message saying the schedule
+> is gone.
 >
 > Where the settings live in the app: **Settings > Automation > Schedule
 > charging and discharging**. Peak shaving sits on the same page and is a
@@ -50,7 +56,7 @@ Full list of all entities created for PowerOcean devices.
 
 > **PowerOcean Plus** units report more of the same entity set than a standard PowerOcean: per-phase reactive power (var) and apparent power (VA), plus MPPT strings 3 and 4. Those entities are disabled by default, so enable the ones you need after adding a Plus device.
 
-**Totals:** 227 sensors, 13 binary sensors, 2 numbers, 1 select
+**Totals:** 235 sensors, 13 binary sensors, 10 numbers, 8 switches, 1 select
 
 > Entities marked with *disabled* are available but hidden by default. Enable them in **Settings > Devices > EcoFlow PowerOcean > Entities** (click the filter icon and show disabled entities).
 
@@ -202,9 +208,16 @@ Created only for the schedules your system actually reports, up to eight. See th
 
 | Entity | Type | Description | Default |
 |:---|:---:|:---|:---:|
+| Schedule 1 Enabled | Switch | Turns the schedule on and off. Reads back from the list the device sends, so it shows the state the PowerOcean actually holds | enabled |
+| Schedule 1 Charge Power | Number | The maximum power the schedule uses, in watts | enabled |
+| Schedule 1 Window | Sensor | The time of day the schedule runs, written as `20:00-20:30` | enabled |
 | Schedule 1 Running | Binary sensor | Whether the schedule is running right now. Stays off while the schedule exists but its window has not opened yet | enabled |
 
-Further schedules follow the same pattern up to Schedule 8 Running.
+Further schedules follow the same pattern: Schedule 2 Enabled, Schedule 2 Charge Power, and so on up to Schedule 8. The EcoFlow app itself lets you create six schedules, so six is the number a system can actually reach.
+
+Charge Power takes the same range the app offers for the same setting. It moves in steps of 100 W, its minimum is 100 W for every online battery pack your system reports (200 W with two packs), and its maximum comes from the model: 10000 W on the three-phase 10 kW unit, 8000 W on the 8 kW one, 12000 W on the 12 kW one, 6000 W on the 6 kW and single-phase units, and 29900 W on a PowerOcean Plus. A value outside that range, or one that is not a multiple of 100, is refused rather than quietly rounded.
+
+A schedule set in the app to run loads from the battery rather than to charge it keeps the same four entities, and its power is the discharge limit. Which direction a schedule has is set in the app and is not shown as an entity.
 
 ---
 

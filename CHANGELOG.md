@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [1.19.0] - 2026-09-01
 
+### Changed
+
+- PowerOcean scheduled charge tasks expose their enable switch, charge-power number and time-window sensor again in Enhanced Mode (beta.2). Version 1.18.1 had withheld them; the write path was verified on real hardware before it first shipped, with the device's own task list as the read-back. The charge-power number now follows the app's own limits: steps of 100 W, a minimum of 100 W per online battery pack and a maximum per model, and a value outside them is refused rather than rounded. (Ref #328)
+
 ### Added
 
 - EcoFlow Smart Meter (`BK21`, EF-EM-P3-120) is recognised as its own device in Enhanced Mode: grid power, per-phase power, voltage and current, energy today and in total, per-phase energy today, power factor, grid state and per-phase connection flags. Read-only; the developer API exposes no data for this meter, so Standard Mode does not apply, and the device picker now marks the meter as needing Enhanced Mode, leaves it unticked on the developer-key path and refuses the selection there rather than setting up entities that could never fill. The energy counters are named after what they measure rather than after a direction. The app labels them as import, and there is no separate export counter in the message definition to set that against, so a day on which the house exports is the first thing that will show whether they hold import only or a net figure. Until that day exists the lifetime counter is published as a plain total, which reads a decrease as a negative delta rather than as a meter change; the daily counters do reset to zero at midnight by design and carry the monotonic class that reset is built for. Field map verified against the reporter's capture and app screenshot. (Ref #331)

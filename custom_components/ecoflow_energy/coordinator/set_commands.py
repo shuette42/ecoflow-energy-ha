@@ -14,6 +14,11 @@ from ..const import (
     POWEROCEAN_SOC_DEBOUNCE_S,
     POWEROCEAN_SOC_STATE_KEYS,
 )
+from ..ecoflow.const import (
+    POWEROCEAN_SCHEDULE_POWER_STEP_W,
+    schedule_power_max_w,
+    schedule_power_min_w,
+)
 from ..ecoflow.frame_capture import sanitize_frame
 from ..entity import as_known_int
 
@@ -429,6 +434,146 @@ class SetCommandsMixin:
             _LOGGER.warning("Work-mode SET failed: %d (%s)", work_mode, self.device_sn[:4])
             self._log_event("set_work_mode_fail", str(work_mode))
         return ok
+
+    # ------------------------------------------------------------------
+    # PowerOcean scheduled charge tasks (96/125)
+    # ------------------------------------------------------------------
+
+    async def async_set_powerocean_schedule_armed(
+        self, task_index: int, armed: bool,
+    ) -> bool:
+        """Arm or disarm one scheduled charge task.
+
+        A short frame that carries nothing but the slot, so it needs no value
+        from the last read. The slot itself still has to be there. A task the
+        owner deletes in the app simply drops out of the device's task list,
+        and the parser then retracts every key of that slot to None - which
+        leaves the switch standing and toggleable, since a key that is present
+        and None still counts as reported. Sending against a slot the device
+        no longer holds would name a task that does not exist and then show it
+        as armed, so an arming flag that is not a bool refuses the write.
+
+        The flag is seeded before the send rather than after it, because a
+        power change on the same slot has to carry the arming along and the
+        two writes share this lock: a seed that lands after the next read
+        would let that write send the flag it just replaced. The same seed is
+        held against a device frame that was already in flight, for the window
+        named by `POWEROCEAN_SCHEDULE_ARMED_LATCH_S`. A failed send puts the
+        previous value back and drops the hold with it.
+
+        A write that starts during unload is refused outright. Every state it
+        touches - the seed, the hold, the rollback - belongs to a coordinator
+        that is being torn down, and the same guard sits on the other
+        PowerOcean writes for the same reason.
+        """
+        from ..ecoflow.energy_stream import build_timer_task_set_payload
+
+        if self._shutdown:
+            return False
+        state_key = f"schedule_{task_index}_enabled"
+        async with self._device_config_lock:
+            previous = self.device_data.get(state_key)
+            if not isinstance(previous, bool):
+                raise DeviceValueNotReported(f"schedule {task_index} enabled")
+            payload = build_timer_task_set_payload(
+                "arm" if armed else "disarm",
+                task_index,
+                device_sn=self.device_sn,
+            )
+            self._seed_device_values(**{state_key: armed})
+            self.latch_schedule_armed(state_key, armed)
+            if not await self.async_send_proto_set_command(
+                payload, label=f"powerocean_schedule_{task_index}_armed"
+            ):
+                self._seed_device_values(**{state_key: previous})
+                self.clear_schedule_armed_latch(state_key)
+                return False
+            return True
+
+    async def async_set_powerocean_schedule_power(
+        self, task_index: int, power_w: int,
+    ) -> bool:
+        """Change the charge power of one scheduled task.
+
+        The full body carries the whole task, so four fields the device owns
+        travel with it: the task type and the three that hold the recurrence.
+        They go out exactly as the last read reported them. Composing a
+        default for a missing one would rewrite the days and times the owner
+        set in the app, which is the one thing this write refuses to risk, so
+        an unreported field raises `DeviceValueNotReported` instead.
+
+        The arming flag travels too. A full body clears it as a side effect,
+        and the device's own task list confirms that a frame carrying field 4
+        leaves the schedule armed, so the current flag is read and sent back.
+
+        The power itself is checked against the range the app offers for this
+        model - 100 W per online battery pack up to the prefix ceiling, on the
+        100 W grid - and a value outside it raises `ValueError` rather than
+        being rounded onto the grid.
+
+        Refused during unload for the same reason as the arming write above.
+        """
+        from ..ecoflow.energy_stream import build_timer_task_set_payload
+
+        if self._shutdown:
+            return False
+        prefix = f"schedule_{task_index}_"
+        async with self._device_config_lock:
+            data = self.device_data
+            echoed: dict[str, int] = {}
+            for name, suffix in (
+                ("task_type", "type"),
+                ("time_mode", "time_mode"),
+                ("time_param", "time_param"),
+                ("time_table", "time_table"),
+            ):
+                value = as_known_int(data.get(f"{prefix}{suffix}"))
+                if value is None:
+                    raise DeviceValueNotReported(
+                        f"schedule {task_index} {suffix}"
+                    )
+                echoed[name] = value
+
+            armed = data.get(f"{prefix}enabled")
+            if not isinstance(armed, bool):
+                raise DeviceValueNotReported(f"schedule {task_index} enabled")
+
+            # The app's own range, checked here as well as on the entity: a
+            # service call carries any number the caller likes, and the
+            # entity's step and bounds only constrain the slider. Refused
+            # rather than rounded - a value off the 100 W grid is one no app
+            # has ever sent, so silently moving it would put a setpoint on the
+            # wire that nobody asked for.
+            floor = schedule_power_min_w(as_known_int(data.get("bp_online_sum")))
+            ceiling = schedule_power_max_w(self.device_sn)
+            if power_w < floor or power_w > ceiling:
+                raise ValueError(
+                    f"charge power {power_w} W is outside the range this model "
+                    f"accepts ({floor}-{ceiling} W)"
+                )
+            if power_w % POWEROCEAN_SCHEDULE_POWER_STEP_W:
+                raise ValueError(
+                    f"charge power {power_w} W is not a multiple of "
+                    f"{POWEROCEAN_SCHEDULE_POWER_STEP_W} W"
+                )
+
+            state_key = f"{prefix}power_w"
+            previous = data.get(state_key, _UNSET)
+            payload = build_timer_task_set_payload(
+                "power",
+                task_index,
+                device_sn=self.device_sn,
+                power_w=power_w,
+                armed=armed,
+                **echoed,
+            )
+            self._seed_device_values(**{state_key: power_w})
+            if not await self.async_send_proto_set_command(
+                payload, label=f"powerocean_schedule_{task_index}_power"
+            ):
+                self._restore_device_values(**{state_key: previous})
+                return False
+            return True
 
     # ------------------------------------------------------------------
     # Stream BK-series SoC config writes (254/17)

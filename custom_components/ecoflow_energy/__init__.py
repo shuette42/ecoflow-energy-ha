@@ -141,12 +141,7 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
 # withdrawn because the device reports its charge mode only when that mode
 # changes, which is far too rarely for a control that has to show where the
 # device stands.
-_WITHDRAWN_ENTITY_SUFFIXES: tuple[str, ...] = (
-    "_ac_charge_mode",
-    *(f"_schedule_{index}_{suffix}" for index in range(1, 9) for suffix in (
-        "enabled", "power_w", "window",
-    )),
-)
+_WITHDRAWN_ENTITY_SUFFIXES: tuple[str, ...] = ("_ac_charge_mode",)
 
 # HW51 PowerStream microinverters could once be classified as Stream batteries.
 # These are the Stream-only platform/key pairs exposed by v1.17. The 16 sensor

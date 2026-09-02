@@ -124,41 +124,35 @@ class TestRemoval:
 
         assert set(keep) <= _ids(hass)
 
-    def test_schedule_cleanup_is_exact_and_entry_scoped(
+    def test_removal_is_scoped_to_this_entry_and_this_integration(
         self, hass: HomeAssistant, entry: MockConfigEntry
     ) -> None:
-        registry = er.async_get(hass)
-        stale = {
-            _register(hass, entry, "switch", f"{SERIAL}_schedule_1_enabled"),
-            _register(hass, entry, "number", f"{SERIAL}_schedule_2_power_w"),
-            _register(hass, entry, "sensor", f"{SERIAL}_schedule_3_window"),
-        }
-        running = _register(
-            hass, entry, "binary_sensor", f"{SERIAL}_schedule_1_running"
-        )
-        registry.async_update_entity(running, name="Morning charge running")
+        """The sweep walks a registry every integration writes into.
+
+        Two rows can carry the same unique id without being ours: one that
+        belongs to another config entry, and one another integration created
+        under its own platform. Removing either would delete a stranger's
+        entity, so both have to survive a sweep that removes our own.
+        """
+        stale = _register(hass, entry, "select", f"{SERIAL}_ac_charge_mode")
 
         other_entry = MockConfigEntry(domain=DOMAIN, data={})
         other_entry.add_to_hass(hass)
         foreign_entry = _register(
-            hass,
-            other_entry,
-            "switch",
-            f"{OTHER_SERIAL}_schedule_1_enabled",
+            hass, other_entry, "select", f"{OTHER_SERIAL}_ac_charge_mode"
         )
         foreign_platform = _register(
             hass,
             entry,
-            "switch",
-            f"{SERIAL}_schedule_4_enabled",
+            "select",
+            f"{SERIAL}_other_ac_charge_mode",
             integration="example",
         )
 
         _async_remove_withdrawn_entities(hass, entry)
 
-        assert not (stale & _ids(hass))
-        assert {running, foreign_entry, foreign_platform} <= _ids(hass)
-        assert registry.async_get(running).name == "Morning charge running"
+        assert stale not in _ids(hass)
+        assert {foreign_entry, foreign_platform} <= _ids(hass)
 
     def test_a_longer_key_ending_in_the_same_word_survives(
         self, hass: HomeAssistant, entry: MockConfigEntry

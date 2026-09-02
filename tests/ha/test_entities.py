@@ -12,6 +12,7 @@ from homeassistant.exceptions import HomeAssistantError
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.const import (
+    SCHEDULE_MAX_INDEX,
     DELTA2MAX_BINARY_SENSORS,
     DELTA2MAX_NUMBERS,
     DELTA2MAX_SENSORS,
@@ -152,8 +153,16 @@ class TestSwitchDefsRouting:
         assert _get_switch_defs(DEVICE_TYPE_STREAM, "BK31TEST00000001") is STREAM_SWITCHES
         assert _get_switch_defs(DEVICE_TYPE_STREAM, "BK11TEST00000001") == []
 
-    def test_powerocean_has_no_schedule_switches(self):
-        assert _get_switch_defs(DEVICE_TYPE_POWEROCEAN) == []
+    def test_powerocean_switches_are_the_schedule_slots(self):
+        """The only PowerOcean switch is the one per scheduled charge task,
+        and each is gated on its slot being reported, so a device with no
+        schedule still ends up with none of them."""
+        defs = _get_switch_defs(DEVICE_TYPE_POWEROCEAN)
+
+        assert {d.key for d in defs} == {
+            f"schedule_{index}_enabled" for index in range(1, SCHEDULE_MAX_INDEX + 1)
+        }
+        assert all(d.accessory and d.enhanced_only for d in defs)
 
 
 class TestNumberDefsRouting:

@@ -34,6 +34,7 @@ from ecoflow_energy.const import (
     RAW_FRAME_LOG_PER_KEY_MAX,
     RAW_FRAME_MAX_BYTES,
     RAW_FRAME_PER_KEY_MAX,
+    SCHEDULE_MAX_INDEX,
     get_device_name,
     get_device_type,
     get_delta_profile,
@@ -450,8 +451,9 @@ class TestPowerOceanSensors:
     def test_existing_sensors_count(self):
         """Core sensor count, excluding optional Plus and extended EMS fields.
 
-        Includes the heating-rod and wallbox accessory readings. Schedule
-        configuration is withheld from the sensor platform.
+        Includes the accessory readings (heating rod, wallbox, and the eight
+        scheduled-charge slots): they are defined on the PowerOcean and gated
+        at entity creation, not here.
         """
         keys = _extract_sensor_keys("POWEROCEAN_SENSORS")
         non_pack = [k for k in keys if not k.startswith("pack")]
@@ -464,7 +466,7 @@ class TestPowerOceanSensors:
         original = [
             k for k in non_pack if k not in ems_extended and k not in mppt_plus
         ]
-        assert len(original) == 73, f"Expected 73 core sensors, got {len(original)}"
+        assert len(original) == 81, f"Expected 81 core sensors, got {len(original)}"
 
     def test_mppt_plus_sensor_count(self):
         """6 PowerOcean Plus MPPT sensors (strings 3 and 4)."""
@@ -495,9 +497,9 @@ class TestPowerOceanSensors:
         assert len(found) == 28, f"Expected 28 EMS extended sensors, got {len(found)}"
 
     def test_total_sensor_count(self):
-        """Total excludes the eight withheld schedule window sensors."""
+        """Total PowerOcean sensors = 81 + 6 + 120 + 28 = 235."""
         keys = _extract_sensor_keys("POWEROCEAN_SENSORS")
-        assert len(keys) == 227, f"Expected 227 total sensors, got {len(keys)}"
+        assert len(keys) == 235, f"Expected 235 total sensors, got {len(keys)}"
 
 
     def test_only_soc_has_battery_device_class(self):
@@ -781,6 +783,19 @@ _PRECISION_WAIVED = {
         "to round - the charger sends '653', not 653"
     ),
 }
+
+# One waiver per schedule slot the device can report. The window is a text
+# reading built from the two edges of the task, so there is no number to
+# round; the slots are generated from the same cap the parser uses.
+_PRECISION_WAIVED.update(
+    {
+        f"schedule_{_index}_window": (
+            "the charge window is text, 'HH:MM-HH:MM', so there is no number "
+            "to round"
+        )
+        for _index in range(1, SCHEDULE_MAX_INDEX + 1)
+    }
+)
 
 # Key endings that can only ever name a whole number: a fault or error code, a
 # cycle counter, a cell count, a number of packs. None of them has a fractional
@@ -1171,3 +1186,51 @@ class TestFrameCaptureFootprint:
         assert RAW_FRAME_BUNDLE_MAX_BYTES >= widest, (
             f"{offender} holds a {widest} B frame the cap would cut"
         )
+
+
+class TestTheScheduleChargePowerCeiling:
+    """The table mirrors the app's own prompt, so a prefix that moves model
+    changes what the slider offers. Nothing on the wire carries this range."""
+
+    def test_every_mapped_prefix_gets_its_own_ceiling(self) -> None:
+        from ecoflow_energy.ecoflow.const import schedule_power_max_w
+
+        assert schedule_power_max_w("HJ31TEST00000001") == 10000
+        assert schedule_power_max_w("HJ35TEST00000001") == 6000
+        assert schedule_power_max_w("HJ36TEST00000001") == 8000
+        assert schedule_power_max_w("HJ37TEST00000001") == 12000
+        assert schedule_power_max_w("J329TEST00000001") == 6000
+        assert schedule_power_max_w("J32DTEST00000001") == 6000
+        assert schedule_power_max_w("R372TEST00000001") == 29900
+
+    def test_an_unmapped_prefix_falls_back_to_its_family(self) -> None:
+        """A new PowerOcean prefix lands on what its family carries rather
+        than on the builder's guard, which is three times the largest ceiling
+        any model has."""
+        from ecoflow_energy.ecoflow.const import schedule_power_max_w
+
+        assert schedule_power_max_w("HJ39TEST00000001") == 10000
+        assert schedule_power_max_w("J32XTEST00000001") == 6000
+        assert schedule_power_max_w("R379TEST00000001") == 29900
+        assert schedule_power_max_w("ZZZZTEST00000001") == 10000
+        assert schedule_power_max_w("") == 10000
+
+    def test_the_lookup_ignores_serial_case(self) -> None:
+        from ecoflow_energy.ecoflow.const import schedule_power_max_w
+
+        assert schedule_power_max_w("hj37test00000001") == 12000
+
+    def test_the_floor_is_a_hundred_watts_per_online_pack(self) -> None:
+        from ecoflow_energy.ecoflow.const import schedule_power_min_w
+
+        assert schedule_power_min_w(1) == 100
+        assert schedule_power_min_w(2) == 200
+        assert schedule_power_min_w(6) == 600
+
+    def test_an_unreported_pack_count_never_yields_zero(self) -> None:
+        """The app cannot send 0 W, so what the device does with it has never
+        been seen."""
+        from ecoflow_energy.ecoflow.const import schedule_power_min_w
+
+        assert schedule_power_min_w(None) == 100
+        assert schedule_power_min_w(0) == 100

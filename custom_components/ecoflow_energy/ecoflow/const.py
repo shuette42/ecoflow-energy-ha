@@ -238,6 +238,75 @@ _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
     "BK21": "Smart Meter",
 }
 
+# --- Scheduled charge task: the charge power range the app offers ---
+#
+# The app does not read this range from the device. It opens the power prompt
+# with a ceiling picked by product family and refined per model by the first
+# four characters of the serial, and with a floor of 100 W per online battery
+# pack. The step is 100 W. There is no heartbeat field carrying any of it; the
+# only device-reported input is the pack count, which the floor uses.
+POWEROCEAN_SCHEDULE_POWER_MAX_W: dict[str, int] = {
+    # Three-phase units, per model.
+    "HJ31": 10000,
+    "HJ35": 6000,
+    "HJ36": 8000,
+    "HJ37": 12000,
+    # Single-phase units. The app multiplies this by the number of linked
+    # units when a system runs in parallel. Nothing in this integration reads
+    # that count, so a parallel installation is offered the single-unit
+    # ceiling rather than a guessed multiple of it.
+    "J32B": 6000,
+    "J32D": 6000,
+    "J32E": 6000,
+    "J327": 6000,
+    "J329": 6000,
+    # PowerOcean Plus.
+    "R371": 29900,
+    "R372": 29900,
+    "R374": 29900,
+}
+
+# What a prefix outside the table above gets: the value its product family
+# carries, which is what the app falls back to when no per-model override
+# exists. A new PowerOcean prefix therefore lands on its family ceiling
+# instead of on the builder's 30000 W guard.
+_POWEROCEAN_SCHEDULE_POWER_MAX_FAMILY_W: tuple[tuple[str, int], ...] = (
+    ("HJ3", 10000),
+    ("J32", 6000),
+    ("R37", 29900),
+)
+
+# The grid every value sits on, and the floor for one pack. Also the floor
+# used when the pack count has not been reported: never 0, because the app
+# cannot send 0 and the device's answer to it has never been seen.
+POWEROCEAN_SCHEDULE_POWER_STEP_W = 100
+POWEROCEAN_SCHEDULE_POWER_MIN_W = 100
+POWEROCEAN_SCHEDULE_POWER_MAX_DEFAULT_W = 10000
+
+
+def schedule_power_max_w(sn: str) -> int:
+    """Return the scheduled charge power ceiling for this unit, in watts."""
+    prefix = (sn or "")[:4].upper()
+    exact = POWEROCEAN_SCHEDULE_POWER_MAX_W.get(prefix)
+    if exact is not None:
+        return exact
+    for family, ceiling in _POWEROCEAN_SCHEDULE_POWER_MAX_FAMILY_W:
+        if prefix.startswith(family):
+            return ceiling
+    return POWEROCEAN_SCHEDULE_POWER_MAX_DEFAULT_W
+
+
+def schedule_power_min_w(online_battery_packs: int | None) -> int:
+    """Return the scheduled charge power floor, in watts.
+
+    100 W per online battery pack, which is the app's own rule. A pack count
+    that has not been reported yet gives the one-pack floor rather than zero.
+    """
+    if online_battery_packs is None or online_battery_packs < 1:
+        return POWEROCEAN_SCHEDULE_POWER_MIN_W
+    return online_battery_packs * POWEROCEAN_SCHEDULE_POWER_MIN_W
+
+
 def get_device_name(product_name: str, sn: str = "") -> str:
     """Return a human-friendly name for the device.
 
