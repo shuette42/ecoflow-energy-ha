@@ -49,6 +49,14 @@ class StateApplyMixin:
 
         A genuinely empty battery is untouched: then the unit figure reads
         zero as well and nothing contradicts the system figure.
+
+        The contradicting reading is looked up in the accumulated state, not
+        only in the message at hand. `254/21` is an incremental container, so
+        a frame may carry the system figure while the unit figure it
+        contradicts arrived in an earlier one. Two frames of the capture
+        carried 242 without 262 and none the other way round, but the
+        container permits it, and reading only the current message would drop
+        the sensor to zero until the next frame carrying both.
         """
         fallback = parsed.pop(SOC_FALLBACK_KEY, None)
         if "soc_pct" in parsed:
@@ -58,7 +66,7 @@ class StateApplyMixin:
             # A zero never latches. Where the unit's own reading contradicts
             # it, that reading wins; where it does not, the zero stands but
             # stays open to a later frame that carries a figure.
-            unit = parsed.get("unit_soc_pct")
+            unit = parsed.get("unit_soc_pct") or self._device_data.get("unit_soc_pct")
             if unit:
                 parsed["soc_pct"] = unit
             return

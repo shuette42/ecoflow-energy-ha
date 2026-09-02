@@ -7810,6 +7810,41 @@ class TestStreamSocLatch:
         coordinator._apply_data({"soc_pct": 0, "unit_soc_pct": 92})
         assert coordinator.data["soc_pct"] == 92
 
+    async def test_a_lone_zero_yields_to_the_unit_figure_already_known(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """The contradicting reading may have arrived in an earlier frame.
+
+        `254/21` is incremental, so a frame can carry the system figure while
+        the unit figure it contradicts came before it. Reading only the
+        message at hand would drop the sensor to zero until the next frame
+        carrying both. Unobserved in the #323 capture, which had two frames
+        with 242 alone and none with 262 alone, but the container permits it.
+        """
+        coordinator = self._coordinator(hass, enhanced_config_entry)
+
+        coordinator._apply_data({"unit_soc_pct": 70, "_soc_pct_fallback": 70})
+        assert coordinator.data["soc_pct"] == 70
+
+        coordinator._apply_data({"soc_pct": 0})
+
+        assert coordinator.data["soc_pct"] == 70
+
+    async def test_an_empty_battery_keeps_its_zero_from_state_too(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """The state lookup must not resurrect a value an empty pack lost.
+
+        With both readings at zero nothing contradicts the system figure, so
+        the sensor reads zero, which is the truth for an empty battery.
+        """
+        coordinator = self._coordinator(hass, enhanced_config_entry)
+
+        coordinator._apply_data({"unit_soc_pct": 0, "_soc_pct_fallback": 0})
+        coordinator._apply_data({"soc_pct": 0})
+
+        assert coordinator.data["soc_pct"] == 0
+
     async def test_a_real_system_figure_still_wins_after_a_zero(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
     ) -> None:
