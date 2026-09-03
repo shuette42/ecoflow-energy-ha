@@ -13,7 +13,10 @@ from ecoflow_energy.ecoflow.parsers.powerocean import (
     _extract_ems_extended,
     _is_real_battery_pack,
 )
-from ecoflow_energy.ecoflow.parsers.powerocean_proto import remap_bp_keys
+from ecoflow_energy.ecoflow.parsers.powerocean_proto import (
+    remap_bp_keys,
+    remap_ems_param_change_keys,
+)
 
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "powerocean"
@@ -587,6 +590,23 @@ class TestEnergyStream:
         }
         result = parse_powerocean_http_quota(data)
         assert result["batt_charge_energy_kwh"] == 5.0
+
+    def test_placeholder_energy_total_dropped(self):
+        """The uint32 wire maximum is not a reading, same guard as zero (ADR-010)."""
+        data = {"ems_change_report.bpTotalChgEnergy": 4294967295}
+        result = parse_powerocean_http_quota(data)
+        assert "batt_charge_energy_kwh" not in result
+
+    def test_zero_energy_total_dropped(self):
+        """A lifetime counter reporting zero has nothing to report yet."""
+        data = {"ems_change_report.bpTotalChgEnergy": 0}
+        result = parse_powerocean_http_quota(data)
+        assert "batt_charge_energy_kwh" not in result
+
+    def test_genuine_energy_total_kept(self):
+        data = {"ems_change_report.bpTotalChgEnergy": 3667924}
+        result = parse_powerocean_http_quota(data)
+        assert result["batt_charge_energy_kwh"] == pytest.approx(3667.924)
 
     def test_ems_bp_online_sum(self):
         """ems_change_report.bpOnlineSum → bp_online_sum."""
@@ -1499,3 +1519,54 @@ class TestNoFullSerialInTheHeartbeatLog:
 
         assert "R371TEST00000001" not in caplog.text
         assert "BP heartbeat for R371" in caplog.text
+
+
+class TestRemapBpKeysEnergyPlaceholder:
+    """remap_bp_keys' lifetime-energy branch drops the uint32 placeholder (ADR-010)."""
+
+    def test_placeholder_dropped(self):
+        raw = {"bp_total_chg_energy": 4294967295}
+        result = remap_bp_keys(raw, {}, "R371TEST00000001")
+        assert "batt_charge_energy_kwh" not in result
+
+    def test_zero_dropped(self):
+        raw = {"bp_total_chg_energy": 0}
+        result = remap_bp_keys(raw, {}, "R371TEST00000001")
+        assert "batt_charge_energy_kwh" not in result
+
+    def test_genuine_value_kept(self):
+        raw = {"bp_total_chg_energy": 15000}
+        result = remap_bp_keys(raw, {}, "R371TEST00000001")
+        assert result["batt_charge_energy_kwh"] == 15.0
+
+
+class TestEmsParamChangeKeys:
+    """remap_ems_param_change_keys (cmd_id=13), ADR-011."""
+
+    def test_other_fields_pass_through_unchanged(self):
+        result = remap_ems_param_change_keys(
+            {"ems_app_surplus_pct": 50, "breaker_capacity_max": 35, "smart_ctrl": False}
+        )
+        assert result["breaker_capacity_max"] == 35
+        assert result["smart_ctrl"] is False
+
+    @pytest.mark.parametrize("value", [101, 65535, 4294967295])
+    def test_out_of_range_surplus_becomes_none(self, value):
+        """A placeholder becomes an explicit None, the key stays present."""
+        result = remap_ems_param_change_keys(
+            {"ems_app_surplus_pct": value, "breaker_capacity_max": 35, "smart_ctrl": False}
+        )
+        assert "ems_app_surplus_pct" in result
+        assert result["ems_app_surplus_pct"] is None
+        assert result["breaker_capacity_max"] == 35
+        assert result["smart_ctrl"] is False
+
+    @pytest.mark.parametrize("value", [0, 50, 100])
+    def test_in_range_surplus_kept(self, value):
+        result = remap_ems_param_change_keys({"ems_app_surplus_pct": value})
+        assert result["ems_app_surplus_pct"] == value
+
+    def test_missing_surplus_key_untouched(self):
+        result = remap_ems_param_change_keys({"breaker_capacity_max": 35})
+        assert "ems_app_surplus_pct" not in result
+        assert result["breaker_capacity_max"] == 35

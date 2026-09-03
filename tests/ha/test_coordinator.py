@@ -1276,6 +1276,49 @@ class TestHTTPPolling:
         assert data["someRawKey"] == 42
         assert coordinator.snapshot.source == "http"
 
+    async def test_http_update_drops_energy_counter_placeholders(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """The HTTP path guards zero and the uint32 wire maximum (ADR-010).
+
+        Exercised end to end through _async_update_data: the parser drops
+        the placeholder, _enforce_monotonic no longer eats a lower device
+        reading before set_total sees it, and _integrate_energy writes the
+        result back.
+        """
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        # hass.config.path() in this harness is a real, shared directory
+        # (not a per-test tmp dir), so a previous test's flushed state for
+        # the same mock serial would otherwise leak in via load_state().
+        # Marking the integrator loaded skips that read, same pattern as
+        # test_first_reading_after_state_loss_publishes_nothing.
+        coordinator._energy_integrator._loaded = True
+        coordinator._http_client = MagicMock()
+
+        coordinator._http_client.get_quota_all = AsyncMock(return_value={
+            "ems_change_report.bpTotalChgEnergy": 4294967295,
+        })
+        data = await coordinator._async_update_data()
+        assert "batt_charge_energy_kwh" not in data
+
+        coordinator._http_client.get_quota_all = AsyncMock(return_value={
+            "ems_change_report.bpTotalChgEnergy": 0,
+        })
+        data = await coordinator._async_update_data()
+        assert "batt_charge_energy_kwh" not in data
+
+        coordinator._http_client.get_quota_all = AsyncMock(return_value={
+            "ems_change_report.bpTotalChgEnergy": 3667924,
+        })
+        data = await coordinator._async_update_data()
+        # _integrate_energy rounds to 2 decimals on write-back.
+        assert data["batt_charge_energy_kwh"] == pytest.approx(3667.92)
+
 
 # ===========================================================================
 # Reauth Suppression (#2)
@@ -2885,6 +2928,58 @@ class TestApplyData:
         raw_total = coordinator._energy_integrator.get_total("solar_energy_kwh")
         assert raw_total is not None and raw_total > 0
 
+    async def test_apply_data_restores_stored_total_over_a_rejected_reading(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """A candidate-triggering device total does not reach the sensor (ADR-010).
+
+        The integrator already holds 2603 kWh. A reading at the uint32 wire
+        maximum (in kWh, after the parser's /1000) is far beyond tolerance,
+        so it becomes an unconfirmed candidate rather than the new total -
+        and the sensor must show the last good value, not the raw reading
+        that state_apply.py used to write straight into _device_data.
+        """
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        coordinator._energy_integrator._loaded = True
+        coordinator._energy_integrator._state["batt_charge_energy_kwh"] = (
+            2603.0, time.monotonic(), 0.0,
+        )
+
+        coordinator._apply_data({"batt_charge_energy_kwh": 4_294_967.295})
+
+        assert coordinator.device_data["batt_charge_energy_kwh"] == 2603.0
+
+    async def test_apply_data_lets_a_device_correction_reach_set_total(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """A poisoned _device_data value must not block a real device reading.
+
+        Before the _enforce_monotonic exemption, a lower reading was deleted
+        from `parsed` before the integrator ever saw it, so a poisoned
+        display value could never be corrected. With the exemption, the
+        first device reading is a brand-new metric for the integrator (it
+        was never told about the 4,000,000 poison) and is accepted at once;
+        the second, a small step, is accepted immediately too.
+        """
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        coordinator._energy_integrator._loaded = True
+        coordinator._device_data["batt_charge_energy_kwh"] = 4_000_000.0
+
+        coordinator._apply_data({"batt_charge_energy_kwh": 2603.0})
+        coordinator._apply_data({"batt_charge_energy_kwh": 2603.4})
+
+        assert coordinator.device_data["batt_charge_energy_kwh"] == 2603.4
+
     async def test_apply_data_derives_battery_state_charging(
         self,
         hass: HomeAssistant,
@@ -3792,6 +3887,45 @@ class TestBpRemapping:
         # Existing bp_* still mapped
         assert result["bp_soh_pct"] == 100.0
 
+    async def test_per_pack_lifetime_energy_drops_zero_and_placeholder(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Per-pack accu_chg/dsg_energy get the same zero/placeholder guard
+        as the EMS-change-report lifetime counters (F4,
+        plan-051-052-energy-guards review): a fresh restart has nothing in
+        `_device_data` for `_enforce_monotonic` to compare against, so an
+        unguarded zero or placeholder here would publish as a meter reset.
+        """
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        raw = {
+            "all_packs": [
+                {
+                    "bp_soc": 76,
+                    "bp_accu_chg_energy": 0,
+                    "bp_accu_dsg_energy": 4_294_967_295,
+                },
+                {
+                    "bp_soc": 74,
+                    "bp_accu_chg_energy": 2207455,
+                    "bp_accu_dsg_energy": 2122737,
+                },
+            ],
+        }
+        result = remap_bp_keys(raw, coordinator._bp_sn_to_index, coordinator.device_sn)
+
+        # Pack 1: zero and placeholder both dropped, not published as 0.0
+        assert "pack1_accu_chg_energy_kwh" not in result
+        assert "pack1_accu_dsg_energy_kwh" not in result
+
+        # Pack 2: a real reading still passes through
+        assert abs(result["pack2_accu_chg_energy_kwh"] - 2207.455) < 0.01
+        assert abs(result["pack2_accu_dsg_energy_kwh"] - 2122.737) < 0.01
+
     async def test_multi_pack_max_5(
         self,
         hass: HomeAssistant,
@@ -4155,7 +4289,13 @@ class TestMonotonicFilter:
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """Values that decrease a total_increasing sensor are dropped."""
+        """Values that decrease a total_increasing sensor are dropped -
+        except an energy-integrator-managed key (ADR-010). set_total is the
+        sole monotonic authority for those: dropping a lower reading here,
+        before set_total ever sees it, is what kept a poisoned total from
+        ever recovering. bp_cycles is not integrator-managed and is still
+        dropped exactly as before.
+        """
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
@@ -4167,9 +4307,10 @@ class TestMonotonicFilter:
         parsed = {"bp_cycles": 460.0, "solar_energy_kwh": 100.499, "solar_w": 3000}
         coordinator._enforce_monotonic(parsed)
 
-        # Regressions removed, non-monotonic key preserved
+        # Non-integrator regression removed, integrator-managed key passed
+        # through for set_total to arbitrate, non-monotonic key preserved.
         assert "bp_cycles" not in parsed
-        assert "solar_energy_kwh" not in parsed
+        assert parsed["solar_energy_kwh"] == 100.499
         assert parsed["solar_w"] == 3000
 
     async def test_increase_allowed(
@@ -4761,6 +4902,33 @@ class TestParseMessageProtobuf:
         topic = "/app/device/property/HW52TEST00000001"
         result = coordinator._parse_message(topic, frame)
         assert result == {"ems_app_surplus_pct": 42}
+
+    async def test_parse_protobuf_ems_param_change_placeholder_becomes_none(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """The second _is_ems_param_change call site also gets the guard.
+
+        Reached through _parse_message, the entrypoint used in production,
+        as opposed to test_param_change_placeholder_surplus_becomes_none
+        which calls _parse_powerocean_proto_frame directly (ADR-011).
+        """
+        from custom_components.ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
+            JTS1EmsParamChangeReport,
+        )
+
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        msg = JTS1EmsParamChangeReport()
+        msg.dev_soc = 4294967295
+        frame = _build_proto_frame(96, 13, msg.SerializeToString())
+
+        topic = "/app/device/property/HW52TEST00000001"
+        result = coordinator._parse_message(topic, frame)
+        assert result == {"ems_app_surplus_pct": None}
 
     async def test_parse_protobuf_empty_ems_param_change_returns_none(
         self,

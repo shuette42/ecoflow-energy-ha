@@ -214,8 +214,9 @@ class EcoFlowSensor(
             self._restored_value = last.native_value
             self._last_written_value = last.native_value
             # Seed the energy integrator so a lost or corrupt state file
-            # does not reset totals to zero. set_total is monotonic-guarded,
-            # so a stale restored value can never lower a live total.
+            # does not reset totals to zero. A restored value above the
+            # stored total is taken at once (ADR-010 addendum A1); a stale
+            # restored value at or below it can never lower a live total.
             if self._definition.state_class == "total_increasing" and isinstance(
                 last.native_value, (int, float)
             ):

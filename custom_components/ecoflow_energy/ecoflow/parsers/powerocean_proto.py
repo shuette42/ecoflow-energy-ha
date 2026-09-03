@@ -15,6 +15,7 @@ import logging
 from typing import Any
 
 from .powerocean import (
+    ENERGY_TOTAL_PLACEHOLDER_WH,
     _CHG_DSG_STATE_MAP,
     _FEED_MODE_MAP,
     _GRID_STATUS_MAP,
@@ -561,13 +562,23 @@ def remap_bp_keys(
             val = pack_data.get(proto_key)
             if val is not None:
                 result[f"{prefix}_{sensor_suffix}"] = float(val)
-        # Lifetime energy Wh -> kWh
+        # Lifetime energy Wh -> kWh. Same zero and placeholder guard as the
+        # `_LIFETIME_ENERGY_SENSORS` branch below (F4 of the
+        # plan-051-052-energy-guards review): these are `total_increasing`
+        # sensors too (const.py), and a fresh restart has nothing in
+        # `_device_data` for `_enforce_monotonic` to compare against, so an
+        # unguarded zero or placeholder here publishes as a meter reset the
+        # same way it did on the EMS-change-report counters.
         for proto_key, sensor_suffix in (
             ("bp_accu_chg_energy", "accu_chg_energy_kwh"),
             ("bp_accu_dsg_energy", "accu_dsg_energy_kwh"),
         ):
             val = pack_data.get(proto_key)
-            if val is not None:
+            if (
+                isinstance(val, (int, float))
+                and val > 0
+                and val != ENERGY_TOTAL_PLACEHOLDER_WH
+            ):
                 result[f"{prefix}_{sensor_suffix}"] = float(val) / 1000.0
 
     # Try battery key mapping first, then EMS change mapping
@@ -578,7 +589,11 @@ def remap_bp_keys(
         if sensor_key:
             # Energy totals from EMS change report: Wh -> kWh
             if sensor_key in _LIFETIME_ENERGY_SENSORS:
-                if isinstance(value, (int, float)) and value > 0:
+                if (
+                    isinstance(value, (int, float))
+                    and value > 0
+                    and value != ENERGY_TOTAL_PLACEHOLDER_WH
+                ):
                     result[sensor_key] = float(value) / 1000.0
             else:
                 result[sensor_key] = (
@@ -594,6 +609,30 @@ def remap_bp_keys(
 
     drop_invalid_percentages(result)
 
+    return result
+
+
+def remap_ems_param_change_keys(raw: dict[str, Any]) -> dict[str, Any]:
+    """Remap an EMS param change report (cmd_id=13) to sensor keys (ADR-011).
+
+    Every field is renamed by the generic proto decoder already (`dev_soc` to
+    `ems_app_surplus_pct` among others) and arrives here unmapped, so this
+    function's only job is to keep every one of those names flowing into
+    device data and the diagnostics key list: breaker rating, peak shaving
+    block, mode flags, none of which is an entity today. Narrowing the
+    pass-through to the surplus field alone would drop the rest from
+    diagnostics, which is the one thing this function must not do.
+
+    `ems_app_surplus_pct` feeds a write path (the backup-reserve pair write
+    in number.py), so a value the EMS never populated must not look like a
+    real reading. It becomes an explicit `None` rather than being dropped:
+    a control's last valid value is what the user's next write would send
+    back, and the device has just said it holds none.
+    """
+    result = dict(raw)
+    value = result.get("ems_app_surplus_pct")
+    if isinstance(value, (int, float)) and not 0.0 <= value <= 100.0:
+        result["ems_app_surplus_pct"] = None
     return result
 
 

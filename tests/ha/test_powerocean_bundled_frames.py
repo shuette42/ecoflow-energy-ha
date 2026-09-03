@@ -268,6 +268,24 @@ def test_param_change_real_frame_passes_every_declared_field_through() -> None:
     assert not any(key.startswith("_") for key in parsed)
 
 
+def test_param_change_placeholder_surplus_becomes_none() -> None:
+    """A wire-max dev_soc becomes an explicit None (ADR-011).
+
+    Same frame shape as the real-frame test above, so the positive control
+    that field pass-through was not narrowed is that test staying green
+    while this one, on a placeholder value, comes back with None instead of
+    4294967295.
+    """
+    message = JTS1EmsParamChangeReport(dev_soc=4294967295, breaker_capacity_max=35)
+    frame = _build_header(96, 13, message.SerializeToString())
+
+    parsed = _PowerOceanParser()._parse_powerocean_proto_frame(frame)
+
+    assert parsed is not None
+    assert parsed["ems_app_surplus_pct"] is None
+    assert parsed["breaker_capacity_max"] == 35
+
+
 def test_hj31_single_header_unknown_command_yields_nothing() -> None:
     """An unregistered command tuple produces no sensor keys at all."""
     frame = _build_header(96, 99, b"\x08\x01")

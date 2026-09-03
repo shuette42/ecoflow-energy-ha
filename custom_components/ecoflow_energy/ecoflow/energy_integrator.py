@@ -43,6 +43,20 @@ SAVE_INTERVAL_S = 60.0  # Save state to disk at most every 60s
 MAX_POWER_W = 1_000_000.0  # 1 MW; the largest EcoFlow unit is rated 30 kW
 MAX_TOTAL_KWH = 10_000_000.0  # 10 GWh; 30 kW running flat out for 38 years
 
+# Tolerance band for set_total, around the stored total (ADR-010).
+#
+# A device-reported total is allowed to move by this much between two
+# readings without going through the confirmation gate below. The floor is
+# derived from the interval this integrator itself credits per step: the
+# largest EcoFlow unit is rated 30 kW and MAX_GAP_S caps one interval at 7
+# minutes, so the largest jump the device's own counter could legitimately
+# make between two live readings is under 4 kWh (30 kW * 7 min / 60).
+# 5 kWh clears that with headroom. The percentage half keeps the same rule
+# proportionate on a large installation, where 10% of the standing total
+# dwarfs the floor.
+SET_TOTAL_TOLERANCE_PCT = 0.10
+SET_TOTAL_TOLERANCE_FLOOR_KWH = 5.0
+
 
 class EnergyIntegrator:
     """Integrates power (W) readings into energy totals (kWh)."""
@@ -57,6 +71,10 @@ class EnergyIntegrator:
         # Metrics already reported as implausible, so a device stuck on a bad
         # reading warns once instead of on every push.
         self._rejected: set[str] = set()
+        # A device-reported total that moved beyond the tolerance band from
+        # the stored value, waiting for a second reading to confirm it
+        # (ADR-010). Memory-only by design - see set_total's docstring.
+        self._candidates: dict[str, float] = {}
 
     def _reject(self, metric: str, what: str, value: float) -> None:
         """Report an implausible reading once per metric, then stay quiet."""
@@ -182,8 +200,87 @@ class EnergyIntegrator:
         self._dirty = True
         return new_total_kwh
 
-    def set_total(self, metric: str, total_kwh: float) -> None:
-        """Set total directly from API (monotonic - only if higher)."""
+    def restore_total(self, metric: str, total_kwh: float) -> None:
+        """Seed the integrator from a Home Assistant restored sensor state.
+
+        ADR-010 addendum A1: a restored sensor value is not a device
+        reading, so it does not go through ``set_total``'s confirmation
+        bands. The value Home Assistant already displays is at least as
+        trustworthy as a stale stored total, so:
+
+        - the plausibility ceiling still applies (NaN, infinity, negative,
+          or above ``MAX_TOTAL_KWH`` is rejected and changes nothing);
+        - a metric with no stored state takes the value directly;
+        - a restored value above the stored total replaces it, keeping the
+          stored timestamp and last power - it is a snapshot of the same
+          counter, not a new device reading;
+        - a restored value at or below the stored total is ignored;
+        - it never records a candidate, and accepting a restored value
+          drops any pending one, because that candidate was measured
+          against the stored total this call just replaced.
+
+        Publishes nothing: the caller does not write ``_device_data`` from
+        the return value (there is none), so the sensor keeps showing its
+        own restored value until the first ``integrate`` or ``set_total``
+        call produces a total - which by then is at or above what was
+        just restored here.
+        """
+        if not self._loaded:
+            self.load_state()
+
+        if (
+            not math.isfinite(total_kwh)
+            or total_kwh < 0
+            or total_kwh > MAX_TOTAL_KWH
+        ):
+            self._reject(metric, "restored energy total", total_kwh)
+            return
+
+        if metric not in self._state:
+            self._state[metric] = (total_kwh, time.monotonic(), 0.0)
+            self._dirty = True
+            return
+
+        current, last_ts, last_power = self._state[metric]
+        if total_kwh <= current:
+            return
+
+        self._state[metric] = (total_kwh, last_ts, last_power)
+        self._dirty = True
+        self._candidates.pop(metric, None)
+
+    def set_total(self, metric: str, total_kwh: float) -> float | None:
+        """Set total directly from a device-reported counter (ADR-010).
+
+        Relative to the stored total, a reading falls into one of three
+        bands, with tolerance ``max(SET_TOTAL_TOLERANCE_PCT * stored,
+        SET_TOTAL_TOLERANCE_FLOOR_KWH)``:
+
+        - a rise within tolerance is accepted at once (an ordinary
+          increment);
+        - a dip within tolerance is ignored - the class of glitch this
+          guard exists for (e.g. 4408.259 -> 4408.258);
+        - a step beyond tolerance, in either direction, becomes a
+          memory-only candidate. The next device reading within tolerance
+          of that candidate confirms it and becomes the new stored total; a
+          reading that agrees with the stored total drops the candidate
+          instead; anything else replaces it.
+
+        A single wrong reading can therefore never move the stored total on
+        its own, and a sustained wrong reading recovers in two device
+        readings without a magnitude ceiling low enough to risk rejecting a
+        genuine lifetime counter. Candidates are never persisted. This is a
+        device-only entry point: a restored Home Assistant sensor state is
+        not a device reading and goes through ``restore_total`` instead.
+
+        Returns:
+            The total a caller should display in kWh: the stored total
+            after this call, whatever it resolved to (accepted, unchanged
+            on an ignored dip, or unchanged on an unconfirmed candidate).
+            None only when this metric has never had a total established at
+            all - the same "leave the sensor alone" contract as
+            ``integrate``.
+        """
         if not self._loaded:
             self.load_state()
 
@@ -196,18 +293,58 @@ class EnergyIntegrator:
             or total_kwh > MAX_TOTAL_KWH
         ):
             self._reject(metric, "energy total", total_kwh)
-            return
+            existing = self._state.get(metric)
+            return existing[0] if existing else None
 
-        if metric in self._state:
-            current = self._state[metric][0]
-            if total_kwh < current:
-                return
-            last_power = self._state[metric][2]
-        else:
-            last_power = 0.0
+        if metric not in self._state:
+            # No reference point yet: accept directly. There is nothing to
+            # measure a jump against, and no candidate can exist for a
+            # metric that has never been seen.
+            self._state[metric] = (total_kwh, time.monotonic(), 0.0)
+            self._dirty = True
+            self._candidates.pop(metric, None)
+            return total_kwh
 
-        self._state[metric] = (total_kwh, time.monotonic(), last_power)
-        self._dirty = True
+        current, _last_ts, last_power = self._state[metric]
+        tolerance = max(
+            current * SET_TOTAL_TOLERANCE_PCT, SET_TOTAL_TOLERANCE_FLOOR_KWH
+        )
+        diff = total_kwh - current
+
+        if abs(diff) <= tolerance:
+            # Agrees with the stored total, so a pending candidate from an
+            # earlier, unconfirmed step is now stale.
+            self._candidates.pop(metric, None)
+            if diff > 0:
+                self._state[metric] = (total_kwh, time.monotonic(), last_power)
+                self._dirty = True
+                return total_kwh
+            return current
+
+        candidate = self._candidates.get(metric)
+        if candidate is not None:
+            candidate_tolerance = max(
+                candidate * SET_TOTAL_TOLERANCE_PCT,
+                SET_TOTAL_TOLERANCE_FLOOR_KWH,
+            )
+            if abs(total_kwh - candidate) <= candidate_tolerance:
+                # Confirmed: two device readings close to each other, both
+                # far from the old stored total. The confirming reading
+                # itself becomes the new total.
+                if total_kwh < current:
+                    _LOGGER.warning(
+                        "Energy total for %s confirmed lower: %.3f -> "
+                        "%.3f kWh. Home Assistant will record this as a "
+                        "meter reset",
+                        metric, current, total_kwh,
+                    )
+                self._state[metric] = (total_kwh, time.monotonic(), last_power)
+                self._dirty = True
+                del self._candidates[metric]
+                return total_kwh
+
+        self._candidates[metric] = total_kwh
+        return current
 
     def flush(self) -> None:
         """Save state to disk if dirty and enough time has passed.
