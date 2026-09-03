@@ -3887,6 +3887,45 @@ class TestBpRemapping:
         # Existing bp_* still mapped
         assert result["bp_soh_pct"] == 100.0
 
+    async def test_per_pack_lifetime_energy_drops_zero_and_placeholder(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """Per-pack accu_chg/dsg_energy get the same zero/placeholder guard
+        as the EMS-change-report lifetime counters (F4,
+        plan-051-052-energy-guards review): a fresh restart has nothing in
+        `_device_data` for `_enforce_monotonic` to compare against, so an
+        unguarded zero or placeholder here would publish as a meter reset.
+        """
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        raw = {
+            "all_packs": [
+                {
+                    "bp_soc": 76,
+                    "bp_accu_chg_energy": 0,
+                    "bp_accu_dsg_energy": 4_294_967_295,
+                },
+                {
+                    "bp_soc": 74,
+                    "bp_accu_chg_energy": 2207455,
+                    "bp_accu_dsg_energy": 2122737,
+                },
+            ],
+        }
+        result = remap_bp_keys(raw, coordinator._bp_sn_to_index, coordinator.device_sn)
+
+        # Pack 1: zero and placeholder both dropped, not published as 0.0
+        assert "pack1_accu_chg_energy_kwh" not in result
+        assert "pack1_accu_dsg_energy_kwh" not in result
+
+        # Pack 2: a real reading still passes through
+        assert abs(result["pack2_accu_chg_energy_kwh"] - 2207.455) < 0.01
+        assert abs(result["pack2_accu_dsg_energy_kwh"] - 2122.737) < 0.01
+
     async def test_multi_pack_max_5(
         self,
         hass: HomeAssistant,

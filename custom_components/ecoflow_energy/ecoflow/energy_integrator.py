@@ -200,6 +200,55 @@ class EnergyIntegrator:
         self._dirty = True
         return new_total_kwh
 
+    def restore_total(self, metric: str, total_kwh: float) -> None:
+        """Seed the integrator from a Home Assistant restored sensor state.
+
+        ADR-010 addendum A1: a restored sensor value is not a device
+        reading, so it does not go through ``set_total``'s confirmation
+        bands. The value Home Assistant already displays is at least as
+        trustworthy as a stale stored total, so:
+
+        - the plausibility ceiling still applies (NaN, infinity, negative,
+          or above ``MAX_TOTAL_KWH`` is rejected and changes nothing);
+        - a metric with no stored state takes the value directly;
+        - a restored value above the stored total replaces it, keeping the
+          stored timestamp and last power - it is a snapshot of the same
+          counter, not a new device reading;
+        - a restored value at or below the stored total is ignored;
+        - it never records a candidate, and accepting a restored value
+          drops any pending one, because that candidate was measured
+          against the stored total this call just replaced.
+
+        Publishes nothing: the caller does not write ``_device_data`` from
+        the return value (there is none), so the sensor keeps showing its
+        own restored value until the first ``integrate`` or ``set_total``
+        call produces a total - which by then is at or above what was
+        just restored here.
+        """
+        if not self._loaded:
+            self.load_state()
+
+        if (
+            not math.isfinite(total_kwh)
+            or total_kwh < 0
+            or total_kwh > MAX_TOTAL_KWH
+        ):
+            self._reject(metric, "restored energy total", total_kwh)
+            return
+
+        if metric not in self._state:
+            self._state[metric] = (total_kwh, time.monotonic(), 0.0)
+            self._dirty = True
+            return
+
+        current, last_ts, last_power = self._state[metric]
+        if total_kwh <= current:
+            return
+
+        self._state[metric] = (total_kwh, last_ts, last_power)
+        self._dirty = True
+        self._candidates.pop(metric, None)
+
     def set_total(self, metric: str, total_kwh: float) -> float | None:
         """Set total directly from a device-reported counter (ADR-010).
 
@@ -220,10 +269,9 @@ class EnergyIntegrator:
         A single wrong reading can therefore never move the stored total on
         its own, and a sustained wrong reading recovers in two device
         readings without a magnitude ceiling low enough to risk rejecting a
-        genuine lifetime counter. Candidates are never persisted: a
-        poisoned restored state (seed_energy_total) becomes a candidate
-        here and can only take effect if a live device reading confirms it,
-        so it can no longer re-poison a clean integrator across a restart.
+        genuine lifetime counter. Candidates are never persisted. This is a
+        device-only entry point: a restored Home Assistant sensor state is
+        not a device reading and goes through ``restore_total`` instead.
 
         Returns:
             The total a caller should display in kWh: the stored total

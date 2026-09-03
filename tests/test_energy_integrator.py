@@ -272,9 +272,9 @@ class TestSetTotalBands:
     def test_one_off_jump_never_moves_the_total(self, integrator):
         integrator.set_total("batt", 2603.0)
         integrator.set_total("batt", 4_294_967.295)  # far beyond tolerance
-        assert integrator.get_total("batt") <= 2603.0
+        assert integrator.get_total("batt") == 2603.0
         integrator.set_total("batt", 2603.4)  # agrees with the stored total
-        assert integrator.get_total("batt") <= 2603.4
+        assert integrator.get_total("batt") == 2603.4
 
     def test_genuine_catch_up_confirms_on_the_second_reading(self, integrator):
         integrator.set_total("batt", 2603.0)
@@ -325,24 +325,97 @@ class TestSetTotalBands:
 
         assert integrator.get_total("batt_charge_energy_kwh") == pytest.approx(2603.4)
 
-    def test_a_poisoned_restored_state_cannot_repoison_a_clean_integrator(
+    def test_a_poisoned_restored_state_is_healed_by_two_device_readings(
         self, state_file
     ):
-        """seed_energy_total's set_total call is subject to the same bands.
+        """seed_energy_total no longer calls set_total (ADR-010 addendum A1).
 
-        A restored HA sensor state (4,000,000, far beyond tolerance) must
-        not overwrite a clean integrator total (2603) on its own - only a
-        confirming device reading can move it.
+        This test used to assert the opposite of what it asserts now: that
+        a poisoned restore (4,000,000, far beyond tolerance) could not move
+        a clean integrator total (2603) at all. That was F1 of the
+        plan-051-052-energy-guards review - seed_energy_total's caller is
+        restore_total, not set_total, and a restored value is not a device
+        reading. restore_total takes a restored value above the stored
+        total directly, so the poisoned restore becomes the stored total
+        (not an unconfirmed candidate), and the recorder books the meter
+        reset one poll earlier than the old candidate path did. From there
+        it heals exactly like any other poisoned device total: two device
+        readings within tolerance of each other, the guarantee ADR-010
+        decision 1 already gives a poisoned state file.
         """
         integrator = EnergyIntegrator(state_file)
         integrator.load_state()
         integrator._state["solar"] = (2603.0, time.monotonic(), 0.0)
 
-        integrator.set_total("solar", 4_000_000.0)  # the restored, poisoned seed
-        assert integrator.get_total("solar") == 2603.0
+        integrator.restore_total("solar", 4_000_000.0)  # the restored, poisoned seed
+        assert integrator.get_total("solar") == 4_000_000.0
 
-        integrator.set_total("solar", 2603.3)  # a live device reading
-        assert integrator.get_total("solar") == 2603.3
+        integrator.set_total("solar", 2603.3)  # a live device reading -> candidate
+        assert integrator.get_total("solar") == 4_000_000.0
+
+        integrator.set_total("solar", 2603.5)  # confirms the candidate
+        assert integrator.get_total("solar") == 2603.5
+
+
+class TestRestoreTotal:
+    """restore_total: seed_energy_total's entry point (ADR-010 addendum A1).
+
+    A restored Home Assistant sensor state is not a device reading, so it
+    does not go through set_total's confirmation bands.
+    """
+
+    def test_restore_above_stored_total_is_taken_at_once(self, integrator):
+        integrator._state["solar"] = (100.0, 1000.0, 0.0)
+
+        integrator.restore_total("solar", 200.0)
+        assert integrator.get_total("solar") == 200.0
+
+        # A device reading 30s later builds on the restored total, not on
+        # an unconfirmed candidate - it is already the stored total.
+        with patch(
+            "ecoflow_energy.ecoflow.energy_integrator.time.monotonic",
+            return_value=1030.0,
+        ):
+            total = integrator.integrate("solar", 1000.0)
+        assert total is not None and total > 200.0
+
+    def test_restore_at_or_below_stored_total_is_ignored(self, integrator):
+        integrator._state["solar"] = (100.0, 1000.0, 0.0)
+
+        integrator.restore_total("solar", 50.0)
+        assert integrator.get_total("solar") == 100.0
+        assert "solar" not in integrator._candidates
+
+    def test_restore_above_ceiling_is_rejected(self, integrator, caplog):
+        integrator._state["solar"] = (100.0, 1000.0, 0.0)
+
+        with caplog.at_level("WARNING"):
+            integrator.restore_total("solar", 5.45e7)
+
+        assert integrator.get_total("solar") == 100.0
+        assert len(caplog.records) == 1
+
+    def test_restore_seeds_a_metric_without_state(self, integrator):
+        integrator.restore_total("fresh", 42.0)
+        assert integrator.get_total("fresh") == 42.0
+
+    def test_restore_drops_a_pending_candidate(self, integrator):
+        integrator._state["solar"] = (100.0, 1000.0, 0.0)
+
+        integrator.set_total("solar", 300.0)  # beyond tolerance -> candidate
+        assert integrator.get_total("solar") == 100.0
+        assert integrator._candidates["solar"] == 300.0
+
+        integrator.restore_total("solar", 200.0)
+        assert integrator.get_total("solar") == 200.0
+        assert "solar" not in integrator._candidates
+
+        # The discarded candidate (300) was measured against the total this
+        # restore just replaced. A device reading near it does not confirm
+        # anything - it starts a fresh candidate against the new total.
+        result = integrator.set_total("solar", 300.2)
+        assert result == 200.0
+        assert integrator._candidates["solar"] == 300.2
 
 
 class TestPersistence:

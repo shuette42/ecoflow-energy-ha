@@ -562,13 +562,23 @@ def remap_bp_keys(
             val = pack_data.get(proto_key)
             if val is not None:
                 result[f"{prefix}_{sensor_suffix}"] = float(val)
-        # Lifetime energy Wh -> kWh
+        # Lifetime energy Wh -> kWh. Same zero and placeholder guard as the
+        # `_LIFETIME_ENERGY_SENSORS` branch below (F4 of the
+        # plan-051-052-energy-guards review): these are `total_increasing`
+        # sensors too (const.py), and a fresh restart has nothing in
+        # `_device_data` for `_enforce_monotonic` to compare against, so an
+        # unguarded zero or placeholder here publishes as a meter reset the
+        # same way it did on the EMS-change-report counters.
         for proto_key, sensor_suffix in (
             ("bp_accu_chg_energy", "accu_chg_energy_kwh"),
             ("bp_accu_dsg_energy", "accu_dsg_energy_kwh"),
         ):
             val = pack_data.get(proto_key)
-            if val is not None:
+            if (
+                isinstance(val, (int, float))
+                and val > 0
+                and val != ENERGY_TOTAL_PLACEHOLDER_WH
+            ):
                 result[f"{prefix}_{sensor_suffix}"] = float(val) / 1000.0
 
     # Try battery key mapping first, then EMS change mapping

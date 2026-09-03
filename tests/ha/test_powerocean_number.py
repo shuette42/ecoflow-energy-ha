@@ -174,11 +174,14 @@ class TestPowerOceanNumberBasic:
         # source the backup_reserve write reads (ADR-011) - without it the
         # write is refused before it ever reaches
         # async_set_powerocean_soc_debounced, which is a different test.
+        # A distinctive value (90, not the old missing-key default of 100)
+        # makes test_set_failed_no_optimistic_update prove it read this key
+        # rather than a default that happened to match it (review F8).
         coordinator._device_data = {
             "ems_charge_upper_limit_pct": 100,
             "ems_discharge_lower_limit_pct": 0,
             "ems_backup_ratio_pct": 100,
-            "ems_app_surplus_pct": 100,
+            "ems_app_surplus_pct": 90,
         }
         coordinator.async_set_updated_data(dict(coordinator._device_data))
 
@@ -200,7 +203,7 @@ class TestPowerOceanNumberBasic:
         with pytest.raises(HomeAssistantError):
             await entity.async_set_native_value(50.0)
 
-        coordinator.async_set_powerocean_soc_debounced.assert_called_once_with(50, 100)
+        coordinator.async_set_powerocean_soc_debounced.assert_called_once_with(50, 90)
         # No optimistic update - original value retained
         assert coordinator.data["ems_discharge_lower_limit_pct"] == 0
 
@@ -461,6 +464,50 @@ class TestPowerOceanNumberSet3Field:
 
         with pytest.raises(HomeAssistantError):
             await entity.async_set_native_value(50.0)
+
+        coordinator.async_set_powerocean_soc_debounced.assert_not_awaited()
+
+    async def test_set_solar_surplus_rejects_missing_backup(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """A solar write refuses rather than guessing a pair (review F6).
+
+        coordinator.data holds nothing for ems_discharge_lower_limit_pct.
+        Guessing 0 here would move the discharge lower limit to the value
+        that lets the battery discharge fully, unchosen, so the write is
+        refused the same way the backup_reserve branch already is.
+        """
+        entity, coordinator = self._make_entity(
+            hass, enhanced_config_entry, "solar_surplus_threshold",
+        )
+        coordinator._device_data = {}
+        coordinator.async_set_updated_data({})
+        coordinator.async_set_powerocean_soc_debounced = AsyncMock(return_value=True)
+        entity.async_write_ha_state = MagicMock()
+
+        with pytest.raises(HomeAssistantError):
+            await entity.async_set_native_value(90.0)
+
+        coordinator.async_set_powerocean_soc_debounced.assert_not_awaited()
+
+    async def test_set_solar_surplus_rejects_explicit_none_backup(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """An explicit None discharge lower limit also refuses the write."""
+        entity, coordinator = self._make_entity(
+            hass, enhanced_config_entry, "solar_surplus_threshold",
+        )
+        coordinator._device_data["ems_discharge_lower_limit_pct"] = None
+        coordinator.async_set_updated_data(dict(coordinator._device_data))
+        coordinator.async_set_powerocean_soc_debounced = AsyncMock(return_value=True)
+        entity.async_write_ha_state = MagicMock()
+
+        with pytest.raises(HomeAssistantError):
+            await entity.async_set_native_value(90.0)
 
         coordinator.async_set_powerocean_soc_debounced.assert_not_awaited()
 

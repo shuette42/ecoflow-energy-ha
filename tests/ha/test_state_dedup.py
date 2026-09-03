@@ -29,7 +29,7 @@ from custom_components.ecoflow_energy.binary_sensor import EcoFlowBinarySensor
 from custom_components.ecoflow_energy.switch import EcoFlowSwitch
 from custom_components.ecoflow_energy.number import EcoFlowNumber
 
-from .conftest import MOCK_DELTA_DEVICE
+from .conftest import MOCK_DELTA_DEVICE, MOCK_POWEROCEAN_DEVICE
 
 
 # ---------------------------------------------------------------------------
@@ -847,6 +847,39 @@ class TestEnergyRestoreSeed:
 
         coordinator.seed_energy_total("solar_energy_kwh", 10.5)  # stale
         assert integrator.get_total("solar_energy_kwh") == 20.0
+
+    async def test_restore_above_stored_total_reaches_device_data(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """End-to-end pin for F1 (plan-051-052-energy-guards review).
+
+        seed_energy_total's call is not a device reading (ADR-010 addendum
+        A1): a restored value above the stored total is taken directly, not
+        held as a candidate that only a device reading could later confirm.
+        Before the fix (measured F1), set_total treated 200.0 as a candidate
+        here (tolerance max(10, 5) = 10 against a stored 100), so the next
+        power-driven integrate published the stale 100.0 - a 50% drop the
+        recorder books as a meter reset.
+        """
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE,
+        )
+        integrator = coordinator._energy_integrator
+        # Mark the integrator as already loaded so set_total/restore_total
+        # never read hass.config.path(".storage/...") - a coordinator built
+        # without a full async_setup_entry is not sandboxed there, and a
+        # leftover state file from another test would otherwise silently
+        # replace the controlled state set up below.
+        integrator._loaded = True
+        integrator._state["solar_energy_kwh"] = (100.0, time.monotonic() - 30.0, 0.0)
+
+        coordinator.seed_energy_total("solar_energy_kwh", 200.0)
+        coordinator._apply_data({"solar_w": 1000.0})
+
+        assert coordinator._device_data["solar_energy_kwh"] >= 200.0
 
     async def test_sensor_restore_seeds_integrator(
         self,

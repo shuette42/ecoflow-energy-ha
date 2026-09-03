@@ -306,14 +306,18 @@ class StateApplyMixin:
 
         Recovers energy totals when the integrator state file was lost or
         corrupted: HA restores the sensor value across restarts, so the
-        integrator continues from the restored total instead of zero.
-        set_total is monotonic-guarded (lower values are ignored), so a
-        stale restored value can never lower a live total. Keys that are
-        not integrator metrics (e.g. cycle counters) are ignored.
+        integrator continues from the restored total instead of zero. Calls
+        restore_total, not set_total: a restored sensor state is not a
+        device reading (ADR-010 addendum A1), so a restored value above the
+        stored total is taken at once instead of becoming an unconfirmed
+        candidate that only a device reading could later promote. A restored
+        value at or below the stored total is ignored, so a stale restored
+        value can never lower a live total. Keys that are not integrator
+        metrics (e.g. cycle counters) are ignored.
         """
         if key not in self._energy_integrator_keys:
             return
-        self._energy_integrator.set_total(key, total_kwh)
+        self._energy_integrator.restore_total(key, total_kwh)
 
     @property
     def _energy_integrator_keys(self) -> set[str]:
@@ -477,10 +481,22 @@ class StateApplyMixin:
             power_w = parsed.get(power_key)
             if power_w is not None:
                 total = self._energy_integrator.integrate(energy_key, abs(power_w))
-                if total is not None:
-                    self._device_data[energy_key] = round(total, 2)
-                else:
-                    self._device_data.pop(energy_key, None)
+            elif energy_key in parsed:
+                # F5 (plan-051-052-energy-guards review): the energy key can
+                # arrive without its power key (e.g.
+                # energy_stream.solarTotalEnergy without mpptPwr, since each
+                # power key is itself conditional on its own HTTP source).
+                # The integrator is still the sole monotonic authority for
+                # this key (ADR-010 decision 3, _enforce_monotonic skips
+                # it), so the frame's raw value must never stand unfiltered
+                # - rewrite from get_total instead.
+                total = self._energy_integrator.get_total(energy_key)
+            else:
+                continue
+            if total is not None:
+                self._device_data[energy_key] = round(total, 2)
+            else:
+                self._device_data.pop(energy_key, None)
 
         # API totals: prefer over Riemann sum (more accurate when available)
         for power_key, energy_key in self._energy_from_api:
