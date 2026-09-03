@@ -147,6 +147,27 @@ def drop_invalid_percentages(result: dict[str, Any]) -> None:
             del result[key]
 
 
+# The wire maximum for an unsigned 32-bit energy counter (ADR-010). The EMS
+# leaves a field it never populated at this value, the same reason
+# PERCENT_SENSOR_KEYS above can arrive at 4294967295.
+ENERGY_TOTAL_PLACEHOLDER_WH = 4_294_967_295
+
+
+def _valid_energy_wh(value: Any) -> float | None:
+    """Return the raw Wh reading, or None if it is not a real lifetime total.
+
+    Checked before the /1000 conversion to kWh. These fields only ever grow,
+    so the device reports zero when it has nothing to report yet - feeding
+    that to a total_increasing sensor next to a restored higher value reads
+    as a meter reset and re-counts the standing total. The wire maximum is
+    the same unpopulated-field placeholder as the percentage guard above.
+    """
+    v = _safe_float(value)
+    if v is None or v <= 0.0 or v == ENERGY_TOTAL_PLACEHOLDER_WH:
+        return None
+    return v
+
+
 def parse_powerocean_http_quota(quota_data: dict) -> dict[str, Any]:
     """Parse a PowerOcean GET /quota/all response into flat sensor keys.
 
@@ -416,7 +437,7 @@ def _extract_energy_stream(quota_data: dict, result: dict) -> None:
     }
     for http_key, sensor_key in _energy_keys.items():
         if http_key in quota_data:
-            v = _safe_float(quota_data[http_key])
+            v = _valid_energy_wh(quota_data[http_key])
             if v is not None:
                 # API returns Wh, sensors expect kWh
                 result[sensor_key] = v / 1000.0
@@ -431,7 +452,7 @@ def _extract_energy_stream(quota_data: dict, result: dict) -> None:
     }
     for http_key, sensor_key in _top_energy.items():
         if http_key in quota_data and sensor_key not in result:
-            v = _safe_float(quota_data[http_key])
+            v = _valid_energy_wh(quota_data[http_key])
             if v is not None:
                 result[sensor_key] = v / 1000.0
 
@@ -442,7 +463,7 @@ def _extract_energy_stream(quota_data: dict, result: dict) -> None:
     }
     for http_key, sensor_key in _ems_energy.items():
         if http_key in quota_data and sensor_key not in result:
-            v = _safe_float(quota_data[http_key])
+            v = _valid_energy_wh(quota_data[http_key])
             if v is not None:
                 result[sensor_key] = v / 1000.0
 

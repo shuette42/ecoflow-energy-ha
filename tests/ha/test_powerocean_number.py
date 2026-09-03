@@ -170,11 +170,15 @@ class TestPowerOceanNumberBasic:
         coordinator = EcoFlowDeviceCoordinator(
             hass, entry, MOCK_POWEROCEAN_DEVICE,
         )
-        # Seed device data with current limits
+        # Seed device data with current limits. ems_app_surplus_pct is the
+        # source the backup_reserve write reads (ADR-011) - without it the
+        # write is refused before it ever reaches
+        # async_set_powerocean_soc_debounced, which is a different test.
         coordinator._device_data = {
             "ems_charge_upper_limit_pct": 100,
             "ems_discharge_lower_limit_pct": 0,
             "ems_backup_ratio_pct": 100,
+            "ems_app_surplus_pct": 100,
         }
         coordinator.async_set_updated_data(dict(coordinator._device_data))
 
@@ -415,6 +419,50 @@ class TestPowerOceanNumberSet3Field:
         await entity.async_set_native_value(20.0)
 
         coordinator.async_set_powerocean_soc_debounced.assert_called_once_with(20, 20)
+
+    async def test_set_backup_reserve_rejects_missing_surplus(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """A backup write refuses rather than guessing a pair (ADR-011 addendum).
+
+        coordinator.data holds nothing for ems_app_surplus_pct: neither the
+        key nor a prior report exists. Guessing a default here would either
+        send the device a value the user never chose or write a placeholder
+        back to it, so the write is refused instead.
+        """
+        entity, coordinator = self._make_entity(
+            hass, enhanced_config_entry, "backup_reserve",
+        )
+        coordinator._device_data = {}
+        coordinator.async_set_updated_data({})
+        coordinator.async_set_powerocean_soc_debounced = AsyncMock(return_value=True)
+        entity.async_write_ha_state = MagicMock()
+
+        with pytest.raises(HomeAssistantError):
+            await entity.async_set_native_value(50.0)
+
+        coordinator.async_set_powerocean_soc_debounced.assert_not_awaited()
+
+    async def test_set_backup_reserve_rejects_explicit_none_surplus(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """A placeholder-guarded surplus (explicit None) also refuses the write."""
+        entity, coordinator = self._make_entity(
+            hass, enhanced_config_entry, "backup_reserve",
+        )
+        coordinator._device_data["ems_app_surplus_pct"] = None
+        coordinator.async_set_updated_data(dict(coordinator._device_data))
+        coordinator.async_set_powerocean_soc_debounced = AsyncMock(return_value=True)
+        entity.async_write_ha_state = MagicMock()
+
+        with pytest.raises(HomeAssistantError):
+            await entity.async_set_native_value(50.0)
+
+        coordinator.async_set_powerocean_soc_debounced.assert_not_awaited()
 
 
 class TestPowerOceanAppSurplusAutoSync:

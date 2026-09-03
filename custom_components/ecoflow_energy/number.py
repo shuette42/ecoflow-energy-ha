@@ -577,9 +577,18 @@ class EcoFlowNumber(
             # ems_backup_ratio_pct which can be clamped/derived. The
             # constraint backup <= solar must hold against the user's
             # actual surplus setting.
-            current_solar = int(self.coordinator.data.get("ems_app_surplus_pct", 100))
+            #
+            # A missing key or an explicit None (the device reported no
+            # value for this field, see ADR-011) means the surplus is
+            # unknown. Guessing a pair would either send the device a
+            # placeholder or silently move the app-side surplus to a value
+            # the user never chose - a refused write the user can retry is
+            # the honest failure.
+            current_solar = self.coordinator.data.get("ems_app_surplus_pct")
+            if current_solar is None:
+                raise_set_failed(self.entity_id)
             backup = int_value
-            solar = max(current_solar, backup)  # enforce backup <= solar
+            solar = max(int(current_solar), backup)  # enforce backup <= solar
             self.coordinator.mark_user_surplus_set()
             ok = await self.coordinator.async_set_powerocean_soc_debounced(backup, solar)
             if not ok:

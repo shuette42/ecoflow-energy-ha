@@ -237,21 +237,112 @@ class TestPowerChanges:
 
 class TestSetTotal:
     def test_set_total_monotonic(self, integrator):
-        """set_total only accepts higher values."""
+        """A lower value beyond tolerance becomes a candidate, not the total."""
         integrator._state["batt"] = (100.0, time.monotonic(), 0.0)
-        integrator.set_total("batt", 50.0)  # Lower → ignored
+        integrator.set_total("batt", 50.0)  # far below -> unconfirmed candidate
         assert integrator.get_total("batt") == 100.0
 
     def test_set_total_higher_accepted(self, integrator):
-        """set_total accepts higher values."""
+        """set_total accepts a rise within tolerance immediately (ADR-010)."""
         integrator._state["batt"] = (100.0, time.monotonic(), 0.0)
-        integrator.set_total("batt", 150.0)
-        assert integrator.get_total("batt") == 150.0
+        integrator.set_total("batt", 105.0)  # within max(10% of 100, 5) = 10
+        assert integrator.get_total("batt") == 105.0
 
     def test_set_total_new_metric(self, integrator):
         """set_total creates new metric."""
         integrator.set_total("new", 42.0)
         assert integrator.get_total("new") == 42.0
+
+
+class TestSetTotalBands:
+    """set_total's rise/dip/candidate bands around the stored total (ADR-010).
+
+    Tolerance is max(10% of the stored total, 5 kWh).
+    """
+
+    def test_poisoned_value_recovers_after_two_device_readings(self, integrator):
+        integrator._state["batt"] = (4_000_000.0, time.monotonic(), 0.0)
+
+        integrator.set_total("batt", 2603.0)
+        assert integrator.get_total("batt") == 4_000_000.0  # unconfirmed candidate
+
+        integrator.set_total("batt", 2603.4)
+        assert integrator.get_total("batt") == 2603.4  # confirmed
+
+    def test_one_off_jump_never_moves_the_total(self, integrator):
+        integrator.set_total("batt", 2603.0)
+        integrator.set_total("batt", 4_294_967.295)  # far beyond tolerance
+        assert integrator.get_total("batt") <= 2603.0
+        integrator.set_total("batt", 2603.4)  # agrees with the stored total
+        assert integrator.get_total("batt") <= 2603.4
+
+    def test_genuine_catch_up_confirms_on_the_second_reading(self, integrator):
+        integrator.set_total("batt", 2603.0)
+        integrator.set_total("batt", 2900.0)  # beyond tolerance -> candidate
+        assert integrator.get_total("batt") == 2603.0
+        integrator.set_total("batt", 2900.3)  # confirms the candidate
+        assert integrator.get_total("batt") == 2900.3
+
+    def test_small_step_is_accepted_immediately(self, integrator):
+        integrator.set_total("batt", 2603.0)
+        integrator.set_total("batt", 2603.4)
+        assert integrator.get_total("batt") == 2603.4
+
+    def test_repeated_dip_inside_the_band_never_moves_the_total(self, integrator):
+        integrator._state["batt"] = (4408.259, time.monotonic(), 0.0)
+
+        integrator.set_total("batt", 4408.258)
+        assert integrator.get_total("batt") == 4408.259
+        integrator.set_total("batt", 4408.257)
+        assert integrator.get_total("batt") == 4408.259
+
+    def test_fresh_small_counter_publishes_every_reading(self, integrator):
+        """The 5 kWh floor keeps a young counter out of candidate purgatory."""
+        for reading in (0.5, 0.8, 1.3, 2.0):
+            integrator.set_total("solar", reading)
+            assert integrator.get_total("solar") == reading
+
+    def test_poisoned_installation_recovers_after_restart_via_bands(self, state_file):
+        """The end-to-end case from #88 through a state file, not a direct assign.
+
+        Sibling of test_poisoned_installation_recovers_after_restart in
+        TestPlausibilityBounds: here the stored total (4,000,000) is itself
+        below MAX_TOTAL_KWH, so it survives load_state and must instead be
+        displaced by two confirming device readings.
+        """
+        Path(state_file).write_text(
+            json.dumps({"batt_charge_energy_kwh": [4_000_000.0, 100.0, 0.0]})
+        )
+        with patch(
+            "ecoflow_energy.ecoflow.energy_integrator.time.monotonic",
+            return_value=200.0,
+        ):
+            integrator = EnergyIntegrator(state_file)
+            integrator.load_state()
+            integrator.set_total("batt_charge_energy_kwh", 2603.0)
+            assert integrator.get_total("batt_charge_energy_kwh") == 4_000_000.0
+            integrator.set_total("batt_charge_energy_kwh", 2603.4)
+
+        assert integrator.get_total("batt_charge_energy_kwh") == pytest.approx(2603.4)
+
+    def test_a_poisoned_restored_state_cannot_repoison_a_clean_integrator(
+        self, state_file
+    ):
+        """seed_energy_total's set_total call is subject to the same bands.
+
+        A restored HA sensor state (4,000,000, far beyond tolerance) must
+        not overwrite a clean integrator total (2603) on its own - only a
+        confirming device reading can move it.
+        """
+        integrator = EnergyIntegrator(state_file)
+        integrator.load_state()
+        integrator._state["solar"] = (2603.0, time.monotonic(), 0.0)
+
+        integrator.set_total("solar", 4_000_000.0)  # the restored, poisoned seed
+        assert integrator.get_total("solar") == 2603.0
+
+        integrator.set_total("solar", 2603.3)  # a live device reading
+        assert integrator.get_total("solar") == 2603.3
 
 
 class TestPersistence:

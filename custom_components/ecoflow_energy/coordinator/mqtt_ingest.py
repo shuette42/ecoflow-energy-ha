@@ -32,6 +32,7 @@ from ..ecoflow.parsers.powerocean import parse_powerocean_http_quota
 from ..ecoflow.parsers.powerocean_proto import (
     flatten_heartbeat,
     remap_bp_keys,
+    remap_ems_param_change_keys,
     remap_ems_state_keys,
     remap_ev_charging_keys,
     remap_heating_rod_keys,
@@ -118,8 +119,18 @@ class MqttIngestMixin:
     _MONOTONIC_KEYS: frozenset[str] = _collect_total_increasing_keys()
 
     def _enforce_monotonic(self, parsed: dict[str, Any]) -> dict[str, Any]:
-        """Drop values that would decrease a total_increasing sensor."""
+        """Drop values that would decrease a total_increasing sensor.
+
+        Skips keys the energy integrator owns end to end (ADR-010): for
+        those, set_total is the sole monotonic authority, and dropping a
+        lower device reading here would delete it from `parsed` before
+        set_total ever saw it - the exact mechanism that kept a poisoned
+        total from ever recovering.
+        """
+        integrator_keys = self._energy_integrator_keys
         for key in self._MONOTONIC_KEYS:
+            if key in integrator_keys:
+                continue
             if key in parsed and key in self._device_data:
                 old = self._device_data[key]
                 new = parsed[key]
@@ -541,17 +552,11 @@ class MqttIngestMixin:
                 # Enhanced Mode: heartbeat with nested extraction
                 if result.mapped.get("_is_ems_heartbeat"):
                     return flatten_heartbeat(raw)
-                # Enhanced Mode: param change report (cmd_id=13) carries
-                # `ems_app_surplus_pct` (renamed from `dev_soc`) plus the
-                # declared parameter fields - breaker rating, peak shaving
-                # block, mode flags. None of them maps to an entity, and none
-                # has an entry in the BP/EMS-change rename tables, so the
-                # whole dict passes through unchanged. That pass-through is
-                # what puts their names into device data and therefore into
-                # the diagnostics key list - do not narrow it to the surplus
-                # field without moving that job somewhere else.
+                # Enhanced Mode: param change report (cmd_id=13). See
+                # remap_ems_param_change_keys for what passes through and
+                # what gets the placeholder guard (ADR-011).
                 if result.mapped.get("_is_ems_param_change"):
-                    return raw or None
+                    return remap_ems_param_change_keys(raw) if raw else None
                 # Enhanced Mode: EMS state report (cmd_id=17). Narrower
                 # mapping than the change report, deliberately so.
                 if result.mapped.get("_is_ems_state"):
@@ -642,7 +647,7 @@ class MqttIngestMixin:
                     merged.update(flatten_heartbeat(raw))
                     continue
                 if result.mapped.get("_is_ems_param_change"):
-                    merged.update(raw)
+                    merged.update(remap_ems_param_change_keys(raw))
                     continue
                 if result.mapped.get("_is_ems_state"):
                     merged.update(remap_ems_state_keys(raw))
