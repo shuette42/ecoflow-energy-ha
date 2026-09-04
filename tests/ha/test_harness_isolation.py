@@ -72,7 +72,12 @@ class TestStateDoesNotLeakAcrossTests:
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """Run after its partner above: a new coordinator must start empty.
+        """A new coordinator must start empty.
+
+        Under the fixture this holds on its own, because every test gets its
+        own config directory. It is written next to the test that flushes a
+        total because that pairing is what fails without the fixture, not
+        because it depends on the order.
 
         Before the fix this read the total the previous test flushed, off
         the plugin's shared directory - the exact PLAN-118 failure, and it
