@@ -17,6 +17,16 @@ from ..ecoflow.parsers.stream_proto import SOC_FALLBACK_KEY
 
 _LOGGER = logging.getLogger(__name__)
 
+# ADR-013: at most two writes per divergent (app, ems) pair per process
+# lifetime. The first write can only be judged against a report that left
+# the device after it, and the 30s throttle usually lands the next
+# evaluation on such a report but not always (the EmsChangeReport echo is
+# event-driven, not on a fixed cadence), so a second write is the cheapest
+# way to rule out a lost or raced first one. After two acknowledged writes
+# and two reports that still hold the old value, the device has answered,
+# and a third write would just be the loop this bound exists to stop.
+_SURPLUS_SYNC_MAX_WRITES = 2
+
 
 class StateApplyMixin:
     """Mixin applying parsed data to coordinator state."""
@@ -224,6 +234,17 @@ class StateApplyMixin:
         here to `ems_app_surplus_pct`). When that value diverges from
         `ems_backup_ratio_pct`, this method schedules a corrective
         both-field SET that brings the EMS in line.
+
+        ADR-013: a divergent (app, ems) pair gets at most
+        `_SURPLUS_SYNC_MAX_WRITES` writes per process lifetime. A boundary
+        value is not special-cased any more - it is simply the first
+        measured instance of a pair the device will never reconcile: at
+        app_int == 100 the EMS internally clamps `sys_bat_backup_ratio` to
+        ~90 by design even though dev_soc / socDev hold the user value, and
+        reissuing a SET would never close that gap. The general bound
+        covers it the same way it covers every other unreconciled pair -
+        two writes, then silence, until the app value, the EMS value or a
+        user setting changes.
         """
         if self._shutdown:
             return
@@ -236,20 +257,44 @@ class StateApplyMixin:
             ems_int = int(ems_val)
         except (TypeError, ValueError):
             return
+
+        record = self._surplus_sync_record
+        # A changed app value abandons whatever pair the record was
+        # tracking, even when the new report has already converged: a move
+        # in the EcoFlow app to the value the EMS already holds is new
+        # intent, not a continuation of a suppressed pair.
+        if record is not None and record["app"] != app_int:
+            record = None
+            self._surplus_sync_record = None
+
         if app_int == ems_int:
+            # Converged. An intact record is left alone here: an EMS that
+            # echoes the written value once and then reverts must not
+            # re-arm the loop at double the rate.
             return
 
-        # Edge-case suppress: at app_int == 100 (and likely 0), the EMS
-        # internally clamps `sys_bat_backup_ratio` to ~90 by design even
-        # though dev_soc / socDev hold the user value. Reissuing a SET
-        # would never reconcile the two - it would just generate periodic
-        # write traffic. The user-side mirror (ems_app_surplus_pct) is
-        # the source of truth for the slider; the EMS-side divergence at
-        # the boundaries is expected device behaviour.
-        if app_int in (0, 100):
+        # A divergent pair with a different EMS value than the one on
+        # record is new information - the device moved - so it is tracked
+        # fresh even though the app value did not change.
+        if record is not None and record["ems"] != ems_int:
+            record = None
+            self._surplus_sync_record = None
+
+        if record is not None and record["writes"] >= _SURPLUS_SYNC_MAX_WRITES:
+            if not record["stopped"]:
+                record["stopped"] = True
+                _LOGGER.info(
+                    "PowerOcean surplus auto-sync (%s): EMS still reports "
+                    "%d after %d writes of %d; no further writes until the "
+                    "app value, the EMS value or a user setting changes",
+                    self.device_sn[:4], ems_int, record["writes"], app_int,
+                )
+                self._log_event(
+                    "surplus_auto_sync_stopped",
+                    f"app={app_int} ems={ems_int} writes={record['writes']}",
+                )
             return
 
-        now = time.monotonic()
         # Suppress sync if the latest EmsParamChangeReport carrying the
         # `dev_soc` value is older than the user's most recent SET. The
         # ParamChange echo is event-driven and lags the EmsChangeReport
@@ -260,16 +305,23 @@ class StateApplyMixin:
         # SET, dragging HA back to the value the user just left.
         if self._last_ems_param_change_ts <= self._last_user_surplus_set_ts:
             return
+        now = time.monotonic()
         if now - self._last_app_surplus_sync_ts < APP_SURPLUS_SYNC_MIN_INTERVAL_S:
             return
         if now - self._last_user_surplus_set_ts < APP_SURPLUS_SYNC_USER_GRACE_S:
             return
 
-        backup_val = self._device_data.get("ems_discharge_lower_limit_pct", 0)
+        # A missing, None or non-numeric backup limit means the device's
+        # own discharge floor is unknown. Guessing 0 here would move it to
+        # the value that lets the battery discharge fully - a setting
+        # nobody chose (ADR-011 decision 4, applied to this, its third
+        # consumer of the pair) - so the write is refused the same way the
+        # guards above refuse an unreadable app or ems value.
+        backup_val = self._device_data.get("ems_discharge_lower_limit_pct")
         try:
             backup_int = int(backup_val)
         except (TypeError, ValueError):
-            backup_int = 0
+            return
         target_backup = min(backup_int, app_int)
 
         task = self._schedule_powerocean_soc_write(
@@ -280,6 +332,10 @@ class StateApplyMixin:
         if task is None:
             return
         self._last_app_surplus_sync_ts = now
+        if record is None:
+            record = {"app": app_int, "ems": ems_int, "writes": 0, "stopped": False}
+            self._surplus_sync_record = record
+        record["writes"] += 1
         _LOGGER.info(
             "PowerOcean surplus auto-sync (%s): app=%d ems=%d -> SET both=%d",
             self.device_sn[:4], app_int, ems_int, app_int,
@@ -293,9 +349,12 @@ class StateApplyMixin:
         """Record a user-initiated surplus/backup change.
 
         The surplus auto-sync uses this timestamp to suppress stale
-        app-side echoes.
+        app-side echoes, and this call also clears any auto-sync record
+        (ADR-013 decision 2a): a user who corrects the sliders from Home
+        Assistant starts fresh.
         """
         self._last_user_surplus_set_ts = time.monotonic()
+        self._surplus_sync_record = None
 
     async def _async_flush_energy_state(self) -> None:
         """Flush energy integrator state to disk (non-blocking)."""

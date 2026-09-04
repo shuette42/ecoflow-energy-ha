@@ -724,12 +724,7 @@ class TestEnergyIntegratorDiagnostics:
         coordinator = EcoFlowDeviceCoordinator(
             hass, standard_config_entry, MOCK_DELTA_DEVICE
         )
-        # What integrate() leaves behind on a first reading: state seeded at
-        # the current monotonic time, no total reported. Marked loaded so the
-        # seeding does not go near the state file, since diagnostics runs on
-        # the event loop.
         integrator = coordinator._energy_integrator
-        integrator._loaded = True
         with patch(
             "custom_components.ecoflow_energy.ecoflow.energy_integrator.time.monotonic",
             return_value=1000.0,
