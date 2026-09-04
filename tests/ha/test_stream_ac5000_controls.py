@@ -467,6 +467,28 @@ class TestPowerSetpoints:
         assert encode_field_varint(2, 80) in pdata
         assert encode_field_varint(2, 100) not in pdata
 
+    async def test_a_target_cleared_by_the_device_is_not_reused(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """Deleting the charge task in the app takes its target with it.
+
+        The read path clears every `scheduled_charge_` key when a task list
+        arrives without a charge task, the target included, so the next charge
+        write has nothing to carry over and falls back to 100 percent. The
+        mirror case, a removal issued from Home Assistant, deliberately keeps
+        the target, because there the write path knows what the owner meant.
+        This pins the difference rather than letting the two drift apart.
+        """
+        data = dict(REPORTED, scheduled_charge_soc_target=None)
+        coordinator = _coordinator(hass, enhanced_config_entry, data=data)
+        entity = _number(coordinator, "scheduled_charge_power_w")
+
+        await entity.async_set_native_value(600)
+
+        pdata = _last_pdata(coordinator)
+        assert encode_field_varint(2, 100) in pdata
+        assert encode_field_varint(2, 80) not in pdata
+
     async def test_charge_power_is_per_device(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
     ) -> None:

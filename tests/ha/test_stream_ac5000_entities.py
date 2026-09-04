@@ -435,3 +435,107 @@ class TestBKSeriesSetIsUntouched:
         defs = _get_sensor_defs(DEVICE_TYPE_STREAM)
 
         assert filter_defs_for_serial(defs, "BK31TEST00000001") == list(defs)
+
+
+class TestTaskListShrinkRouting:
+    """The topic decides which readback may retract a task, so drive the topic.
+
+    The parser tests cover the rule itself. These cover what only the ingest
+    can get wrong: a clear that fires on one topic and not the other, or an
+    acknowledgement read as a task list. ADR-015 decision 2 is what they pin,
+    and nothing else on this branch does.
+
+    Frames are @slaapyhoofd's, from the two downloads on #234.
+    """
+
+    FIXTURE = (
+        Path(__file__).parent.parent
+        / "fixtures"
+        / "stream_ac5000"
+        / "es22_task_delete_masked.json"
+    )
+    PROPERTY_TOPIC = "/app/1/ES22TEST00000001/thing/property/post"
+    GET_REPLY_TOPIC = "/app/1/ES22TEST00000001/thing/property/get_reply"
+    SET_REPLY_TOPIC = "/open/cert_account/ES22TEST00000001/set_reply"
+
+    def _frame(self, role: str) -> bytes:
+        frames = json.loads(self.FIXTURE.read_text())["frames"]
+        return bytes.fromhex(next(f["hex"] for f in frames if f["role"] == role))
+
+    def _coordinator(self, hass: HomeAssistant):
+        entry = _entry(ES22_DEVICE)
+        entry.add_to_hass(hass)
+        return EcoFlowDeviceCoordinator(hass, entry, ES22_DEVICE)
+
+    async def test_the_capture_sequence_ends_without_the_deleted_task(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Both tasks, a stale readback, then the list after the deletion.
+
+        Step two is decision 1 written down: the stale `get_reply` carries both
+        tasks and is applied as such, because a whole list is a whole list
+        whatever its age. Step three is the defect, and it is the step a clear
+        restricted to the property topic would fail.
+        """
+        coordinator = self._coordinator(hass)
+
+        both = coordinator._parse_message(
+            self.PROPERTY_TOPIC, self._frame("both_tasks_push")
+        )
+        assert both is not None
+        assert both["scheduled_discharge_power_w"] == 0
+        assert both["scheduled_charge_power_w"] == 2500
+
+        stale = coordinator._parse_message(
+            self.GET_REPLY_TOPIC, self._frame("stale_get_reply_after_delete")
+        )
+        assert stale is not None
+        assert stale["scheduled_discharge_power_w"] == 0
+
+        after = coordinator._parse_message(
+            self.GET_REPLY_TOPIC, self._frame("after_delete_get_reply")
+        )
+        assert after is not None
+        assert after["scheduled_charge_power_w"] == 2500
+        assert after["scheduled_discharge_power_w"] is None
+
+    async def test_a_property_push_alone_clears_the_deleted_kind(
+        self, hass: HomeAssistant
+    ) -> None:
+        """The mirror: a clear restricted to `get_reply` would fail here."""
+        coordinator = self._coordinator(hass)
+
+        coordinator._parse_message(
+            self.PROPERTY_TOPIC, self._frame("both_tasks_push")
+        )
+        after = coordinator._parse_message(
+            self.PROPERTY_TOPIC, self._frame("after_delete_push")
+        )
+        assert after is not None
+        assert after["scheduled_charge_power_w"] == 2500
+        assert after["scheduled_discharge_power_w"] is None
+
+    async def test_the_delete_acknowledgement_is_not_a_readback(
+        self, hass: HomeAssistant
+    ) -> None:
+        """A `/set_reply` never becomes a task list, and must not.
+
+        It echoes the entries of the write, one kind at a time. Read as a task
+        list it would clear the kind it does not mention and, by the write
+        path's rule, swallow the next removal.
+
+        What this pins is the outcome, and the outcome has two independent
+        guards: the ingest returns on every `/set_reply` topic before parsing,
+        and `(254, 38)` has no entry in the field map. Measured 2026-09-04:
+        removing either one alone leaves this test green, because the other
+        still holds. So it does not tell you which guard is doing the work,
+        and a test that claimed to would be claiming more than it can see.
+        Both would have to go for a `set_reply` to reach the task path, and
+        that is the state this refuses.
+        """
+        coordinator = self._coordinator(hass)
+
+        result = coordinator._parse_message(
+            self.SET_REPLY_TOPIC, self._frame("delete_ack")
+        )
+        assert result is None

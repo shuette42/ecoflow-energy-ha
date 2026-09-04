@@ -14,6 +14,7 @@ from ..const import (
     DEVICE_TYPE_POWERSTREAM,
     DEVICE_TYPE_SMART_METER,
     DEVICE_TYPE_SMARTPLUG,
+    DEVICE_TYPE_SOLAR_TRACKER,
     DEVICE_TYPE_STREAM,
     DEVICE_TYPE_STREAM_AC5000,
     RAW_FRAME_BUNDLE_HARD_CAP,
@@ -45,6 +46,7 @@ from ..ecoflow.parsers.smartplug import (
     parse_smartplug_http_quota,
     parse_smartplug_report,
 )
+from ..ecoflow.parsers.solar_tracker_proto import parse_solar_tracker_message
 from ..ecoflow.parsers.stream_ac5000_proto import parse_stream_ac5000_message
 from ..ecoflow.parsers.powerstream_http import parse_powerstream_quota
 from ..ecoflow.parsers.stream_http import parse_stream_quota
@@ -420,6 +422,8 @@ class MqttIngestMixin:
                     return parse_stream_ac5000_message(payload)
                 if self.device_type == DEVICE_TYPE_SMART_METER:
                     return parse_smart_meter_message(payload)
+                if self.device_type == DEVICE_TYPE_SOLAR_TRACKER:
+                    return parse_solar_tracker_message(payload)
                 return self._parse_proto_device_data(payload)
             return None
 
@@ -521,6 +525,10 @@ class MqttIngestMixin:
                 # before any registry lookup, for the same reason as above.
                 if self.device_type == DEVICE_TYPE_SMART_METER:
                     return parse_smart_meter_message(payload)
+                # Solar Tracker (#339): its own (32, 1) report, routed by
+                # device type for the same reason as the meter above.
+                if self.device_type == DEVICE_TYPE_SOLAR_TRACKER:
+                    return parse_solar_tracker_message(payload)
                 if self.device_type == DEVICE_TYPE_POWEROCEAN:
                     return self._parse_powerocean_proto_frame(payload)
 

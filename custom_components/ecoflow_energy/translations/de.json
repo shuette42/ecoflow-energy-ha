@@ -94,7 +94,7 @@
       "enhanced_login_failed": "Enhanced-Modus Login fehlgeschlagen. Überprüfe E-Mail und Passwort deines EcoFlow-App-Kontos.",
       "enhanced_decrypt_failed": "Enhanced-Modus Entschlüsselung der Zugangsdaten fehlgeschlagen.",
       "powerstream_requires_standard": "PowerStream benötigt den Standard-Modus mit Developer-API-Schlüsseln.",
-      "smart_meter_requires_enhanced": "Der Smart Meter benötigt den Enhanced-Modus mit deinem EcoFlow-Konto.",
+      "device_requires_enhanced": "Dieses Gerät benötigt den Enhanced-Modus mit deinem EcoFlow-Konto.",
       "unknown": "Ein unerwarteter Fehler ist aufgetreten."
     },
     "abort": {
@@ -155,7 +155,7 @@
       "enhanced_decrypt_failed": "Enhanced-Modus Entschlüsselung fehlgeschlagen.",
       "no_devices": "Bitte mindestens ein Gerät auswählen.",
       "powerstream_requires_standard": "PowerStream benötigt den Standard-Modus mit Developer-API-Schlüsseln.",
-      "smart_meter_requires_enhanced": "Der Smart Meter benötigt den Enhanced-Modus mit deinem EcoFlow-Konto.",
+      "device_requires_enhanced": "Dieses Gerät benötigt den Enhanced-Modus mit deinem EcoFlow-Konto.",
       "unknown": "Ein unerwarteter Fehler ist aufgetreten."
     }
   },
@@ -1589,6 +1589,28 @@
       },
       "schedule_8_window": {
         "name": "Zeitplan 8 Zeitfenster"
+      },
+      "tilt_angle_deg": {
+        "name": "Neigungswinkel"
+      },
+      "target_angle_deg": {
+        "name": "Zielwinkel"
+      },
+      "optimal_angle_deg": {
+        "name": "Optimaler Winkel"
+      },
+      "light_level": {
+        "name": "Helligkeit"
+      },
+      "battery_pct": {
+        "name": "Batterie"
+      },
+      "tracking_mode": {
+        "name": "Modus",
+        "state": {
+          "manual": "Manuell",
+          "auto": "Automatik"
+        }
       }
     },
     "binary_sensor": {

@@ -1,0 +1,148 @@
+{
+  "note": "EcoFlow Single Axis Solar Tracker (HZ31 / S02F) frames from issue #339, reporter gabbo99g-creator, 2026-09-02. Every frame decodes as cmd_func=32, cmd_id=1, product_id=7937, no enc_type (plain, unmasked pdata). Tagged T1/T2 are the reporter's own 264-frame dataset (his test markers, already pseudonymised, no header carries device_sn over all 293 headers), covering a manual rest state, a value present on the optimal-angle field, a test-down sweep, auto mode, and one get_reply bundle with two identical headers. Tagged S02F/HZ31 are one frame each, taken straight from the two diagnostics downloads' skipped_devices[].raw_capture.frames, so both account serial prefixes are represented from an independent source.",
+  "source_topics": [
+    "/app/device/property/{sn}",
+    "/app/{uid}/{sn}/thing/property/get_reply"
+  ],
+  "frames": [
+    {
+      "tag": "T1",
+      "ts": 1788351234.046109,
+      "ts_iso": "2026-09-02T12:13:54.046109+00:00",
+      "topic": "property",
+      "size": 108,
+      "format": "proto",
+      "cmds": [
+        {
+          "cmd_func": 32,
+          "cmd_id": 1
+        }
+      ],
+      "hex": "0a6a0a4f08001004180020fbbb0e2803300038004000480a50ffffffff0f580a600068e807706378238001778801039001c0cf2498019875a00103a80102b00102b80102c0019506c801fbbe66d00100d8010010351820380340204801504f5801700178813e800103880101"
+    },
+    {
+      "tag": "T2",
+      "ts": 1788351234.691412,
+      "ts_iso": "2026-09-02T12:13:54.691412+00:00",
+      "topic": "property",
+      "size": 108,
+      "format": "proto",
+      "cmds": [
+        {
+          "cmd_func": 32,
+          "cmd_id": 1
+        }
+      ],
+      "hex": "0a6a0a4f08001004180020caff0b2803300038004000484750ffffffff0f5847600168e807706278258001778801039001c0cf2498019875a00102a80102b00102b80102c001e705c801b0ee65d00100d8010010351820380340204801504f5801700178813e800103880101"
+    },
+    {
+      "tag": "T1",
+      "ts": 1788351945.8241992,
+      "ts_iso": "2026-09-02T12:25:45.824199+00:00",
+      "topic": "get_reply",
+      "size": 190,
+      "format": "proto",
+      "cmds": [
+        {
+          "cmd_func": 32,
+          "cmd_id": 1
+        },
+        {
+          "cmd_func": 32,
+          "cmd_id": 1
+        }
+      ],
+      "hex": "0a5d0a4f08001004180020b29f0e2803300038004000480a50ffffffff0f580a600068e807706278228001778801039001c0cf2498019875a00103a80102b00102b80102c0019506c801c2c466d00100d8010010354020480170c8e5f8d2010a5d0a4f08001004180020b29f0e2803300038004000480a50ffffffff0f580a600068e807706278228001778801039001c0cf2498019875a00103a80102b00102b80102c0019506c801c2c466d00100d8010010354020480170c8e5f8d201"
+    },
+    {
+      "tag": "T1",
+      "ts": 1788354903.127336,
+      "ts_iso": "2026-09-02T13:15:03.127336+00:00",
+      "topic": "property",
+      "size": 111,
+      "format": "proto",
+      "cmds": [
+        {
+          "cmd_func": 32,
+          "cmd_id": 1
+        }
+      ],
+      "hex": "0a6d0a5208001004180020f8a90b2803300038004000480a50ffffffff0f580a600068e807706178238001778801039001c0cf2498019875a00103a80102b00102b80102c00100c8018a17d001c2c1e0d406d80190031035182038034020480150525801700178813e800103880101"
+    },
+    {
+      "tag": "T1",
+      "ts": 1788355407.3662465,
+      "ts_iso": "2026-09-02T13:23:27.366246+00:00",
+      "topic": "property",
+      "size": 107,
+      "format": "proto",
+      "cmds": [
+        {
+          "cmd_func": 32,
+          "cmd_id": 1
+        }
+      ],
+      "hex": "0a690a4e08001004180020a6e31b2803300038004000483a5030584b600068e807706178238001778801039001c0cf2498019875a00103a80102b00102b80102c00101c801821bd001b2c6e0d406d801900310351820380340204801504e5801700178813e800103880101"
+    },
+    {
+      "tag": "T1",
+      "ts": 1788355858.76497,
+      "ts_iso": "2026-09-02T13:30:58.764970+00:00",
+      "topic": "property",
+      "size": 107,
+      "format": "proto",
+      "cmds": [
+        {
+          "cmd_func": 32,
+          "cmd_id": 1
+        }
+      ],
+      "hex": "0a690a4e080010041800208c972d2803300038004000483d504a5800600068e807706178238001778801039001c0cf2498019875a00103a80102b00102b80102c00103c801c61ed001f9c9e0d406d801900310351820380340204801504e5801700178813e800103880101"
+    },
+    {
+      "tag": "T1",
+      "ts": 1788356020.7548141,
+      "ts_iso": "2026-09-02T13:33:40.754814+00:00",
+      "topic": "property",
+      "size": 111,
+      "format": "proto",
+      "cmds": [
+        {
+          "cmd_func": 32,
+          "cmd_id": 1
+        }
+      ],
+      "hex": "0a6d0a5208001005180120bec62f2803300038004000484650ffffffff0f5800600068e807706078238001778801039001c0cf2498019875a00103a80102b00102b80102c00104c801e81fd00186cbe0d406d80190031035182038034020480150525801700178813e800103880101"
+    },
+    {
+      "tag": "S02F",
+      "ts": 1788355245.202387,
+      "ts_iso": "2026-09-02T13:20:45.202387+00:00",
+      "topic": "property",
+      "size": 111,
+      "format": "proto",
+      "cmds": [
+        {
+          "cmd_func": 32,
+          "cmd_id": 1
+        }
+      ],
+      "hex": "0a6d0a5208001004180020e6be0a2803300038004000480a50ffffffff0f580a600068e807706178238001778801039001c0cf2498019875a00103a80102b00102b80102c00100c801e019d001e3c4e0d406d80190031035182038034020480150525801700178813e800103880101"
+    },
+    {
+      "tag": "HZ31",
+      "ts": 1788355245.6526153,
+      "ts_iso": "2026-09-02T13:20:45.652615+00:00",
+      "topic": "property",
+      "size": 110,
+      "format": "proto",
+      "cmds": [
+        {
+          "cmd_func": 32,
+          "cmd_id": 1
+        }
+      ],
+      "hex": "0a6c0a51080010041800208a854e2803300038004000484b50ffffffff0f584b600068e807706278248001778801039001c0cf2498019875a00102a80102b00102b80102c00100c80138d00188c5e0d406d80190031035182038034020480150515801700178813e800103880101"
+    }
+  ]
+}

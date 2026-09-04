@@ -210,6 +210,30 @@ SMART_METER_DEVICE = {
     "online": 1,
 }
 
+SOLAR_TRACKER_DEVICE = {
+    "sn": "HZ31TEST00000001",
+    "name": "Solar Tracker",
+    "product_name": "Solar Tracker",
+    "device_type": "solar_tracker",
+    "online": 1,
+}
+
+# One case per member of ENHANCED_ONLY_DEVICE_TYPES. A type dropped from
+# that set silently loses its guard coverage along with its parametrize
+# case, so this list is the thing to extend when a third type joins it.
+ENHANCED_ONLY_DEVICE_CASES = [
+    pytest.param(
+        SMART_METER_DEVICE,
+        "Smart Meter (0001) (BK21TEST0000) - requires Enhanced Mode",
+        id="smart_meter",
+    ),
+    pytest.param(
+        SOLAR_TRACKER_DEVICE,
+        "Solar Tracker (0001) (HZ31TEST0000) - requires Enhanced Mode",
+        id="solar_tracker",
+    ),
+]
+
 
 def _device_marker(result: Any):
     """Return the schema marker for the device selector on a devices step."""
@@ -220,14 +244,16 @@ def _device_marker(result: Any):
     )
 
 
-async def _advance_developer_flow_with_smart_meter(hass: HomeAssistant):
+async def _advance_developer_flow_with_enhanced_only_device(
+    hass: HomeAssistant, device: dict[str, Any]
+):
     with patch(
         "custom_components.ecoflow_energy.config_flow_setup.IoTApiClient",
     ) as mock_cls:
         api = mock_cls.return_value
         api.get_mqtt_credentials = AsyncMock(return_value=MOCK_MQTT_CREDENTIALS)
         api.get_device_list = AsyncMock(return_value=[
-            {"sn": "BK21TEST00000001", "productName": "", "online": 1},
+            {"sn": device["sn"], "productName": "", "online": 1},
             {"sn": "HJ31TEST00000001", "productName": "PowerOcean", "online": 1},
         ])
 
@@ -238,7 +264,9 @@ async def _advance_developer_flow_with_smart_meter(hass: HomeAssistant):
         )
 
 
-async def _advance_app_flow_with_smart_meter(hass: HomeAssistant):
+async def _advance_app_flow_with_enhanced_only_device(
+    hass: HomeAssistant, device: dict[str, Any]
+):
     result = await _select_mode(hass, MODE_ENHANCED)
     with (
         patch(
@@ -250,7 +278,7 @@ async def _advance_app_flow_with_smart_meter(hass: HomeAssistant):
             "custom_components.ecoflow_energy.config_flow_setup.get_app_device_list",
             new_callable=AsyncMock,
             return_value=[
-                SMART_METER_DEVICE,
+                device,
                 {
                     "sn": "HJ31TEST00000001",
                     "product_name": "PowerOcean",
@@ -266,64 +294,69 @@ async def _advance_app_flow_with_smart_meter(hass: HomeAssistant):
         )
 
 
-class TestSmartMeterModeBoundary:
+class TestEnhancedOnlyModeBoundary:
     """The PowerStream boundary with the modes swapped.
 
-    The meter reports on the app channel only, so a developer-key entry
-    would create entities that can never fill. Before this guard the picker
-    rendered it clean and pre-selected, which is worse than the "not
-    supported yet" it used to show.
+    Every device type in ENHANCED_ONLY_DEVICE_TYPES reports on the app
+    channel only, so a developer-key entry would create entities that can
+    never fill. Before this guard the picker rendered such a device clean
+    and pre-selected, which is worse than the "not supported yet" it used
+    to show.
     """
 
-    async def test_developer_flow_shows_but_does_not_preselect_the_meter(
-        self, hass: HomeAssistant
+    @pytest.mark.parametrize("device,expected_label", ENHANCED_ONLY_DEVICE_CASES)
+    async def test_developer_flow_shows_but_does_not_preselect_the_device(
+        self, hass: HomeAssistant, device: dict[str, Any], expected_label: str
     ) -> None:
-        result = await _advance_developer_flow_with_smart_meter(hass)
+        result = await _advance_developer_flow_with_enhanced_only_device(hass, device)
 
         marker = _device_marker(result)
         options = result["data_schema"].schema[marker].config["options"]
         assert any(
-            option["value"] == SMART_METER_DEVICE["sn"]
+            option["value"] == device["sn"]
             and "requires Enhanced Mode" in option["label"]
             for option in options
         )
         assert marker.default() == ["HJ31TEST00000001"]
 
-    async def test_developer_flow_rejects_explicit_meter_selection(
-        self, hass: HomeAssistant
+    @pytest.mark.parametrize("device,expected_label", ENHANCED_ONLY_DEVICE_CASES)
+    async def test_developer_flow_rejects_explicit_device_selection(
+        self, hass: HomeAssistant, device: dict[str, Any], expected_label: str
     ) -> None:
-        result = await _advance_developer_flow_with_smart_meter(hass)
+        result = await _advance_developer_flow_with_enhanced_only_device(hass, device)
 
         result = await hass.config_entries.flow.async_configure(
-            result["flow_id"], {CONF_DEVICES: [SMART_METER_DEVICE["sn"]]}
+            result["flow_id"], {CONF_DEVICES: [device["sn"]]}
         )
 
         assert result["type"] is FlowResultType.FORM
-        assert result["errors"]["base"] == "smart_meter_requires_enhanced"
+        assert result["errors"]["base"] == "device_requires_enhanced"
 
-    async def test_app_flow_preselects_the_meter_and_accepts_it(
-        self, hass: HomeAssistant
+    @pytest.mark.parametrize("device,expected_label", ENHANCED_ONLY_DEVICE_CASES)
+    async def test_app_flow_preselects_the_device_and_accepts_it(
+        self, hass: HomeAssistant, device: dict[str, Any], expected_label: str
     ) -> None:
         """Negative control for the two mode-dependent assertions above.
 
         Without it a guard that fired in both modes would satisfy them and
-        take the meter away from the only mode it works in. The label
+        take the device away from the only mode it works in. The label
         marker is deliberately not part of this control: like the
         PowerStream one it states which mode the device needs, which is
         true whichever mode the flow is currently in.
         """
-        result = await _advance_app_flow_with_smart_meter(hass)
+        result = await _advance_app_flow_with_enhanced_only_device(hass, device)
 
         marker = _device_marker(result)
-        assert SMART_METER_DEVICE["sn"] in marker.default()
+        assert device["sn"] in marker.default()
 
         result = await hass.config_entries.flow.async_configure(
-            result["flow_id"], {CONF_DEVICES: [SMART_METER_DEVICE["sn"]]}
+            result["flow_id"], {CONF_DEVICES: [device["sn"]]}
         )
         assert result["type"] is FlowResultType.CREATE_ENTRY
 
+    @pytest.mark.parametrize("device,expected_label", ENHANCED_ONLY_DEVICE_CASES)
     async def test_options_reject_switch_to_standard_before_mutation(
-        self, hass: HomeAssistant
+        self, hass: HomeAssistant, device: dict[str, Any], expected_label: str
     ) -> None:
         entry = MockConfigEntry(
             domain=DOMAIN,
@@ -336,7 +369,7 @@ class TestSmartMeterModeBoundary:
                 CONF_USER_ID: "uid123",
                 CONF_ACCESS_KEY: "ak",
                 CONF_SECRET_KEY: "sk",
-                CONF_DEVICES: [SMART_METER_DEVICE],
+                CONF_DEVICES: [device],
             },
             unique_id="test@example.com",
         )
@@ -347,23 +380,24 @@ class TestSmartMeterModeBoundary:
             "custom_components.ecoflow_energy.config_flow_options."
             "_async_fetch_app_devices",
             new_callable=AsyncMock,
-            return_value=[SMART_METER_DEVICE],
+            return_value=[device],
         ):
             result = await hass.config_entries.options.async_init(entry.entry_id)
             result = await hass.config_entries.options.async_configure(
                 result["flow_id"],
                 {
                     CONF_MODE: MODE_STANDARD,
-                    CONF_DEVICES: [SMART_METER_DEVICE["sn"]],
+                    CONF_DEVICES: [device["sn"]],
                 },
             )
 
         assert result["type"] is FlowResultType.FORM
-        assert result["errors"]["base"] == "smart_meter_requires_enhanced"
+        assert result["errors"]["base"] == "device_requires_enhanced"
         assert entry.data == before
 
+    @pytest.mark.parametrize("device,expected_label", ENHANCED_ONLY_DEVICE_CASES)
     async def test_options_stored_fallback_keeps_enhanced_mode_hint(
-        self, hass: HomeAssistant
+        self, hass: HomeAssistant, device: dict[str, Any], expected_label: str
     ) -> None:
         entry = MockConfigEntry(
             domain=DOMAIN,
@@ -374,7 +408,7 @@ class TestSmartMeterModeBoundary:
                 CONF_EMAIL: "test@example.com",
                 CONF_PASSWORD: "secret",
                 CONF_USER_ID: "uid123",
-                CONF_DEVICES: [SMART_METER_DEVICE],
+                CONF_DEVICES: [device],
             },
             unique_id="test@example.com",
         )
@@ -390,8 +424,8 @@ class TestSmartMeterModeBoundary:
 
         options = result["data_schema"].schema[CONF_DEVICES].config["options"]
         assert options == [{
-            "value": SMART_METER_DEVICE["sn"],
-            "label": "Smart Meter (0001) (BK21TEST0000) - requires Enhanced Mode",
+            "value": device["sn"],
+            "label": expected_label,
         }]
 
 

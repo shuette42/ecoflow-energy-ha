@@ -50,6 +50,7 @@
 | **STREAM AC 5000** - AC-coupled Battery | `ES22`\* | 56 + 2 binary | 2 switches, 7 numbers, 1 select (Enhanced only) | 4 default (grid import/export, battery charge/discharge), 1 optional diagnostic (home) | ~2 s enhanced |
 | **STREAM 5000** - AC-coupled Battery | `ES21`\* | 56 + 2 binary | 2 switches, 7 numbers, 1 select (Enhanced only) | 4 default (grid import/export, battery charge/discharge), 1 optional diagnostic (home) | ~2 s enhanced |
 | **Smart Meter** - Grid Meter | `BK21`\* | 17 + 3 binary | none, read-only | 1 (grid energy) | ~3 s enhanced |
+| **Solar Tracker** | `HZ31`\*, `S02F`\* | 6 | none, read-only for now | none | ~3 s enhanced |
 
 > **\* Enhanced Mode only.** These serial prefixes cannot currently be linked to an IoT Developer API key, so Standard Mode reports error 1006 and their entities stay unavailable. This is an EcoFlow API limitation, not a configuration problem.
 >

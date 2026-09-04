@@ -104,6 +104,21 @@ class TestDeviceTypeRouting:
         assert get_device_type("STREAM AC Pro", "") == "stream"
         assert get_device_type("Power Stream", "HW51TEST00000001") == "powerstream"
 
+    def test_both_solar_tracker_prefixes_classify_and_are_named(self) -> None:
+        """One product, two account prefixes, and the classification is the
+        only thing that connects them.
+
+        The entity tests hardwire `device_type` in their device dict, so they
+        never exercise this step: dropping `S02F` from the prefix map left
+        them green and only one test failed. That is what this covers. The
+        display name matters too, because the app API returns an empty product
+        name for every device and the name a user sees comes from the prefix.
+        """
+        assert get_device_type("", "HZ31TEST00000001") == "solar_tracker"
+        assert get_device_type("", "S02FTEST00000002") == "solar_tracker"
+        assert get_device_name("", "HZ31TEST00000001") == "Solar Tracker (0001)"
+        assert get_device_name("", "S02FTEST00000002") == "Solar Tracker (0002)"
+
     def test_the_real_stream_family_still_routes(self) -> None:
         """The check above must not cost the devices it sits in front of.
 

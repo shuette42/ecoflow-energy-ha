@@ -46,6 +46,10 @@ DEVICE_TYPE_POWERSTREAM = "powerstream"
 # nothing and switches nothing, so it shares the BK-series envelope with the
 # Stream line and none of its battery, PV or outlet fields (#331).
 DEVICE_TYPE_SMART_METER = "smart_meter"
+# Single Axis Solar Tracker. One type for both account serial prefixes it
+# ships under, `HZ31` and `S02F`: same product id (7937), same productType
+# (31), same report message (32/1). Reported in #339.
+DEVICE_TYPE_SOLAR_TRACKER = "solar_tracker"
 DEVICE_TYPE_UNKNOWN = "unknown"
 
 # Keywords used to classify devices from productName strings.
@@ -219,6 +223,15 @@ _SN_PREFIX_MAP = {
     # product name empty like every other BK prefix, so without this entry
     # the unit is classified by name alone and skipped as unsupported.
     "BK21": DEVICE_TYPE_SMART_METER,
+    # Single Axis Solar Tracker (#339). Both prefixes map to the one type:
+    # the app registry keys `HZ31` (`product_st_fd100`) and `S02F`
+    # (`product_st_sp002`) to the same productType 31, and a reporter
+    # capture from each prefix decodes to the same 27-field report message
+    # with the same product id. The app API leaves the product name empty
+    # for this family too, so without these entries the unit is classified
+    # by name alone and skipped as unsupported.
+    "HZ31": DEVICE_TYPE_SOLAR_TRACKER,
+    "S02F": DEVICE_TYPE_SOLAR_TRACKER,
 }
 
 _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
@@ -236,6 +249,8 @@ _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
     "ES22": "STREAM AC 5000",
     "ES21": "STREAM 5000",
     "BK21": "Smart Meter",
+    "HZ31": "Solar Tracker",
+    "S02F": "Solar Tracker",
 }
 
 # --- Scheduled charge task: the charge power range the app offers ---
@@ -337,12 +352,14 @@ def get_device_type(product_name: str, sn: str = "") -> str:
 
     Returns DEVICE_TYPE_POWEROCEAN, DEVICE_TYPE_DELTA, DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_SMARTPLUG, DEVICE_TYPE_STREAM, DEVICE_TYPE_STREAM_AC5000,
-    DEVICE_TYPE_POWERSTREAM, DEVICE_TYPE_SMART_METER, or DEVICE_TYPE_UNKNOWN.
+    DEVICE_TYPE_POWERSTREAM, DEVICE_TYPE_SMART_METER,
+    DEVICE_TYPE_SOLAR_TRACKER, or DEVICE_TYPE_UNKNOWN.
 
-    The Smart Meter has no keyword of its own: it is reached by its serial
-    prefix only. "Smart Meter" matches none of the keyword lists below, and
-    the app API reports an empty product name for it, so a keyword would be
-    an assumption about a string no capture has ever shown.
+    The Smart Meter and the Solar Tracker have no keyword of their own:
+    both are reached by their serial prefix only. Neither name matches any
+    keyword list below, and the app API reports an empty product name for
+    both, so a keyword would be an assumption about a string no capture has
+    ever shown.
     """
     # The prefix is exact evidence, the product name a substring guess, so
     # the prefix wins. Every prefix mapped before this ordering existed

@@ -17,6 +17,7 @@ from .ecoflow.const import (  # noqa: E402
     DEVICE_TYPE_POWERSTREAM,
     DEVICE_TYPE_SMART_METER,
     DEVICE_TYPE_SMARTPLUG,
+    DEVICE_TYPE_SOLAR_TRACKER,
     DEVICE_TYPE_STREAM,
     DEVICE_TYPE_STREAM_AC5000,
     DEVICE_TYPE_UNKNOWN,
@@ -280,7 +281,19 @@ DEVICE_TYPE_DISPLAY_NAMES: dict[str, str] = {
     DEVICE_TYPE_STREAM_AC5000: "STREAM AC 5000",
     DEVICE_TYPE_POWERSTREAM: "PowerStream",
     DEVICE_TYPE_SMART_METER: "Smart Meter",
+    DEVICE_TYPE_SOLAR_TRACKER: "Solar Tracker",
 }
+
+# Device types that only report over the account channel (app-auth WSS).
+# Membership means: a Developer Key entry would set the device up and never
+# receive a reading from it, so the config/options flow must reject picking
+# one of these types unless the entry is running in Enhanced Mode.
+ENHANCED_ONLY_DEVICE_TYPES: frozenset[str] = frozenset(
+    {
+        DEVICE_TYPE_SMART_METER,
+        DEVICE_TYPE_SOLAR_TRACKER,
+    }
+)
 
 # Delta write/profile variants.
 # R351: newer Delta 2 Max-style operateType naming.
@@ -1797,6 +1810,29 @@ SMARTMETER_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
     EcoFlowBinarySensorDef("grid_l1_connected", "Phase A Connected", "connectivity", "mdi:transmission-tower", "diagnostic"),
     EcoFlowBinarySensorDef("grid_l2_connected", "Phase B Connected", "connectivity", "mdi:transmission-tower", "diagnostic"),
     EcoFlowBinarySensorDef("grid_l3_connected", "Phase C Connected", "connectivity", "mdi:transmission-tower", "diagnostic"),
+]
+
+# =====================================================================
+# Solar Tracker sensor definitions
+# =====================================================================
+
+# Single Axis Solar Tracker (HZ31 / S02F, #339). Six entities, the list ADR-014
+# closes: `target_angle_deg` and `tracking_mode` are frozen keys, kept for the
+# controls PLAN-119 leaves for round 2. See
+# custom_components/ecoflow_energy/ecoflow/parsers/solar_tracker_proto.py for
+# the field notes behind the offset, the sentinel and the enum.
+SOLARTRACKER_SENSORS: list[EcoFlowSensorDef] = [
+    EcoFlowSensorDef("tilt_angle_deg", "Tilt Angle", "°", None, "measurement", "mdi:angle-acute", suggested_display_precision=0),
+    # Frozen key: becomes the round-2 number entity's unique_id.
+    EcoFlowSensorDef("target_angle_deg", "Target Angle", "°", None, "measurement", "mdi:angle-acute", suggested_display_precision=0),
+    # `0xFFFFFFFF` on the wire is published as an explicit None (ADR-011
+    # decision 2), which reads as unknown here rather than as a stale value.
+    EcoFlowSensorDef("optimal_angle_deg", "Optimal Angle", "°", None, "measurement", "mdi:angle-acute", suggested_display_precision=0),
+    # Unscaled and unitless: no factor is verified against any app reading.
+    EcoFlowSensorDef("light_level", "Light Level", None, None, "measurement", "mdi:brightness-6", suggested_display_precision=0),
+    # Frozen key: becomes the round-2 select entity's unique_id.
+    EcoFlowSensorDef("tracking_mode", "Mode", None, "enum", None, "mdi:sun-compass", options=["manual", "auto"]),
+    EcoFlowSensorDef("battery_pct", "Battery", "%", "battery", "measurement", "mdi:battery", suggested_display_precision=0),
 ]
 
 

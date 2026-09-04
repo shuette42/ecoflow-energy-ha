@@ -94,7 +94,7 @@
       "enhanced_login_failed": "Enhanced Mode login failed. Check your EcoFlow app email and password.",
       "enhanced_decrypt_failed": "Enhanced Mode credential decryption failed.",
       "powerstream_requires_standard": "PowerStream requires Standard Mode with Developer API keys.",
-      "smart_meter_requires_enhanced": "The Smart Meter requires Enhanced Mode with your EcoFlow account.",
+      "device_requires_enhanced": "This device requires Enhanced Mode with your EcoFlow account.",
       "unknown": "An unexpected error occurred."
     },
     "abort": {
@@ -155,7 +155,7 @@
       "enhanced_decrypt_failed": "Enhanced Mode credential decryption failed.",
       "no_devices": "Please select at least one device.",
       "powerstream_requires_standard": "PowerStream requires Standard Mode with Developer API keys.",
-      "smart_meter_requires_enhanced": "The Smart Meter requires Enhanced Mode with your EcoFlow account.",
+      "device_requires_enhanced": "This device requires Enhanced Mode with your EcoFlow account.",
       "unknown": "An unexpected error occurred."
     }
   },
@@ -1589,6 +1589,28 @@
       },
       "schedule_8_window": {
         "name": "Schedule 8 Window"
+      },
+      "tilt_angle_deg": {
+        "name": "Tilt Angle"
+      },
+      "target_angle_deg": {
+        "name": "Target Angle"
+      },
+      "optimal_angle_deg": {
+        "name": "Optimal Angle"
+      },
+      "light_level": {
+        "name": "Light Level"
+      },
+      "battery_pct": {
+        "name": "Battery"
+      },
+      "tracking_mode": {
+        "name": "Mode",
+        "state": {
+          "manual": "Manual",
+          "auto": "Automatic"
+        }
       }
     },
     "binary_sensor": {

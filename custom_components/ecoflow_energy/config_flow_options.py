@@ -33,8 +33,8 @@ from .const import (
     CONF_USER_ID,
     DEVICE_TYPE_DISPLAY_NAMES,
     DEVICE_TYPE_POWERSTREAM,
-    DEVICE_TYPE_SMART_METER,
     DEVICE_TYPE_UNKNOWN,
+    ENHANCED_ONLY_DEVICE_TYPES,
     MODE_ENHANCED,
     MODE_STANDARD,
     RAW_CAPTURE_DURATION_S,
@@ -171,9 +171,9 @@ class OptionsFlowMixin:
                 == DEVICE_TYPE_POWERSTREAM
                 for sn in selected_sns
             )
-            selected_smart_meter = any(
+            selected_enhanced_only = any(
                 self._stored_device_type(known_devices, sn)
-                == DEVICE_TYPE_SMART_METER
+                in ENHANCED_ONLY_DEVICE_TYPES
                 for sn in selected_sns
             )
 
@@ -184,10 +184,10 @@ class OptionsFlowMixin:
                 # changing any pending option. PowerStream has no app-auth
                 # data path and must stay on the official Standard API.
                 errors["base"] = "powerstream_requires_standard"
-            elif new_mode != MODE_ENHANCED and selected_smart_meter:
-                # The mirror of the line above. The Smart Meter reports on
-                # the app channel only, so it must stay on Enhanced Mode.
-                errors["base"] = "smart_meter_requires_enhanced"
+            elif new_mode != MODE_ENHANCED and selected_enhanced_only:
+                # The mirror of the line above. These devices report on
+                # the app channel only, so they must stay on Enhanced Mode.
+                errors["base"] = "device_requires_enhanced"
             elif new_mode == MODE_ENHANCED and current_mode != MODE_ENHANCED:
                 # Switching to Enhanced - need email + password
                 if CONF_RAW_CAPTURE in user_input:
@@ -232,7 +232,7 @@ class OptionsFlowMixin:
                     f" ({sn[:12]})"
                     f"{unsupported_suffix(stored_types[sn])}"
                     f"{' - requires Standard Mode' if stored_types[sn] == DEVICE_TYPE_POWERSTREAM else ''}"
-                    f"{' - requires Enhanced Mode' if stored_types[sn] == DEVICE_TYPE_SMART_METER else ''}"
+                    f"{' - requires Enhanced Mode' if stored_types[sn] in ENHANCED_ONLY_DEVICE_TYPES else ''}"
                 )
                 for sn in current_device_sns
             }

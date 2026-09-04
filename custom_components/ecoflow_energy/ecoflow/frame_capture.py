@@ -55,6 +55,23 @@ _SERIAL_RUN = re.compile(rb"[A-Z0-9]{15,}")
 _IDENT_MIN = 12
 _IDENT_MAX = 32
 
+# A UUID is an identifier by definition and none of the passes above can see
+# one: it is lower case, it carries hyphens, and its runs of hex are shorter
+# than any threshold that would be safe to lower. Its own shape is the
+# boundary, so no length guess is needed and no ordinary binary matches it.
+#
+# Found on 2026-09-04 in a reporter's diagnostics download for #234, in a file
+# he had attached to a public issue because this project asked him to, and only
+# because the fixture sweep in `tests/test_fixture_identifiers.py` refused the
+# frame. The masking that ran over that download did not touch it. What such a
+# UUID identifies is not established here; masking it does not depend on the
+# answer, and a value nobody can explain is exactly the kind that should not
+# travel.
+_UUID_RUN = re.compile(
+    rb"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}"
+    rb"-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+)
+
 # A device also reports the owner's time zone, as an IANA name like
 # `Europe/Budapest`. It is not an identifier and the pass above cannot see
 # it: lower case and a slash are outside that alphabet, by design, because
@@ -119,15 +136,15 @@ def sanitize_frame(payload: bytes, secrets: list[str]) -> bytes:
     length, in every case variant the payload might use.
 
     Named identifiers are masked first, then anything else shaped like a
-    serial, then the city half of any time zone the device reports, then
-    anything a device presents as a whole length-delimited field of
-    identifier-shaped characters. The second pass matters because a frame
+    serial, then anything written as a UUID, then the city half of any time
+    zone the device reports, then anything a device presents as a whole
+    length-delimited field of identifier-shaped characters. The second pass matters because a frame
     also carries the serial of every battery pack and of any attached
     accessory, and the caller cannot name what it has not discovered yet. The
     third catches identifiers too short for the second to risk matching by
     shape, which is how a 12-character one reached a public issue attachment
     before anyone noticed. Masking preserves length, so byte offsets survive
-    all three passes and a field-layout analysis still works.
+    every pass and a field-layout analysis still works.
     """
     sanitized = payload
     for secret in secrets:
@@ -138,6 +155,7 @@ def sanitize_frame(payload: bytes, secrets: list[str]) -> bytes:
             if raw and raw in sanitized:
                 sanitized = sanitized.replace(raw, _MASK_BYTE * len(raw))
     sanitized = _SERIAL_RUN.sub(lambda m: _MASK_BYTE * len(m.group()), sanitized)
+    sanitized = _UUID_RUN.sub(lambda m: _MASK_BYTE * len(m.group()), sanitized)
     sanitized = _TIME_ZONE.sub(
         lambda m: m.group(1) + _MASK_BYTE * len(m.group(2)), sanitized
     )
