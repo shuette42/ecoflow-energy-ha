@@ -68,16 +68,20 @@ _SERIAL_RE = re.compile(r"[A-Z0-9]{15,}")
 # real work, not a formality. Any hex string of even length is already
 # valid base64 - its alphabet is a subset - so the shape check alone rejects
 # nothing that looks like a captured protobuf frame or a raw quota hex blob.
-# Measured over every string in this repo's fixtures and in the maintainer's
-# local downloads: 7,980 values pass the shape check, none fails the decode,
-# 7,972 fail on ASCII, and the 8 that survive are the encoded serials this
-# pass exists for.
+# Measured over every string this pass actually reaches in the fixtures and
+# in the local downloads, so outside the pre-sanitised frame keys below:
+# 7,196 values pass the shape check, none fails the decode, 7,188 fail on
+# ASCII, and the 8 that survive are the encoded serials this pass exists
+# for. Counting the skipped frame values too gives 7,980 and 7,188, which
+# is the same finding over a population this pass never judges.
 #
-# The full match below covers the same 7,972 on today's data, because bytes
-# that are not ASCII do not become an uppercase-alphanumeric run under any
-# lenient decoding either. So the two steps are redundant for the values on
-# file, and the ASCII step is kept as the cheaper of the two and as the one
-# that states the intent. What the full match is NOT redundant for is a
+# The full match below covers the same 7,188 on today's data, because
+# replacing an undecodable byte leaves a character no uppercase-alphanumeric
+# run accepts. That redundancy does not hold for every lenient decoding:
+# dropping such bytes instead of replacing them turns a serial with one
+# stray byte in front of it into a clean match, so the ASCII step is what
+# keeps this pass to whole encoded serials rather than to serials found
+# inside other bytes. It is also the cheaper of the two. What the full match is NOT redundant for is a
 # decoded value that is ASCII and contains a serial among other text: it
 # must be rejected rather than replaced whole, and only an anchored match
 # does that. No such value is on file; a test pins it.
@@ -90,11 +94,13 @@ def _looks_like_base64(value: str) -> bool:
 
     Run before the real decode below so a plain string never pays for a
     decode attempt it cannot pass. Length must be at least twenty and a
-    multiple of four - the minimum any base64-encoded serial can have,
-    since EcoFlow serials run to at least sixteen characters and sixteen
-    bytes never encode shorter than twenty base64 characters. Padding, if
-    present, is only valid at the very end and at most two characters -
-    exactly what the trailing `={0,2}` enforces here.
+    multiple of four, and twenty is the shortest form any value this pass
+    can accept: the serial pattern starts at fifteen characters, and
+    fifteen bytes encode to exactly twenty. Raising this floor would
+    therefore stop masking the shortest serials the pattern recognises,
+    silently, which is why a test pins the fifteen-character case. Padding,
+    if present, is only valid at the very end and at most two characters,
+    which is what the trailing `={0,2}` enforces.
     """
     if len(value) < _BASE64_MIN_LEN or len(value) % 4 != 0:
         return False
@@ -108,6 +114,13 @@ def _decode_base64_serial(value: str) -> str | None:
     decode, then an ASCII check on the decoded bytes, then a full match
     against ``_SERIAL_RE`` so decoded text that merely happens to be ASCII
     (a stray word, a snippet of JSON) is not mistaken for a serial.
+
+    One consequence, since both forms of a serial share one marker by
+    design: a dict that keys one entry by a serial and another by that
+    same serial encoded collapses to a single entry, because the two keys
+    now redact to the same string. No section builds keys that way - the
+    values found were values, and the per-pack keys carry a prefix - but
+    it is a real narrowing and a test pins it.
     """
     if not _looks_like_base64(value):
         return None

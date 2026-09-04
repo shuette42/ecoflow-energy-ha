@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
@@ -984,6 +985,12 @@ class TestRedactSerials:
         """
         value = "c249SEozMVRFU1RTRVJJQUwwMSBvaw=="
 
+        # Positive control: without these two the test is also green when
+        # the value never reaches the decode step at all, which is what a
+        # raised length floor or a narrowed shape check would do.
+        assert _looks_like_base64(value)
+        assert base64.b64decode(value).decode("ascii") == "sn=HJ31TESTSERIAL01 ok"
+
         assert _redact_serials({"moduleSn": value}) == {"moduleSn": value}
 
     def test_both_forms_of_one_serial_share_an_alias(self) -> None:
@@ -1018,6 +1025,61 @@ class TestRedactSerials:
         second = out["bpErrCode"][1]["moduleSn"]
         assert first != second
         assert {first, second} == {REDACTED, "**REDACTED-2**"}
+
+    def test_a_serial_behind_a_stray_byte_is_not_decoded(self) -> None:
+        """The strict decode is what keeps this to whole encoded serials.
+
+        ``/0hKMzFURVNUU0VSSUFMMDE=`` is one byte followed by a serial. A
+        strict decode refuses it, so the value falls through to the plain
+        pass and is masked only where an upper case run really sits. A
+        lenient decode that drops undecodable bytes would hand back a clean
+        serial and swallow the whole value instead, which is the search
+        over decoded text the design rules out.
+        """
+        value = "/0hKMzFURVNUU0VSSUFMMDE="
+
+        assert _looks_like_base64(value)
+        assert base64.b64decode(value).decode("ascii", errors="ignore") == (
+            "HJ31TESTSERIAL01"
+        )
+
+        out = _redact_serials({"moduleSn": value})
+
+        assert out["moduleSn"] != REDACTED
+        assert out["moduleSn"].startswith("/0hKMz")
+
+    def test_the_shortest_serial_the_pattern_accepts_is_masked(self) -> None:
+        """Fifteen characters, the floor of the serial pattern.
+
+        Fifteen bytes encode to exactly twenty base64 characters, which is
+        the length floor of the shape check, so this is the shortest value
+        the pass can accept at all. Raising that floor would stop masking
+        it without failing anything else, since every other base64 value in
+        this class is twenty-four characters or longer.
+        """
+        serial = "HJ31TESTSERIA1"
+        assert len(serial) == 14
+        short = serial + "X"  # fifteen, the first length _SERIAL_RE accepts
+        encoded = base64.b64encode(short.encode()).decode()
+        assert len(encoded) == 20
+
+        assert _redact_serials({"moduleSn": encoded}) == {"moduleSn": REDACTED}
+
+    def test_one_serial_in_two_key_forms_collapses_to_one_entry(self) -> None:
+        """The cost of one marker per serial, pinned rather than left quiet.
+
+        Both forms redact to the same string, so a dict keyed by a serial
+        AND by that same serial encoded ends up with a single entry. No
+        section builds keys that way, and the alternative would be two
+        markers for one pack, which is the thing the alias map exists to
+        prevent. Pinned so the narrowing is a decision on record and not a
+        surprise to whoever meets it.
+        """
+        out = _redact_serials(
+            {"HJ31TESTSERIAL01": 1, "SEozMVRFU1RTRVJJQUwwMQ==": 2}
+        )
+
+        assert out == {REDACTED: 2}
 
     def test_a_base64_serial_in_a_key_is_masked(self) -> None:
         """By shape, not by key name, so a key carrying one is covered too."""
