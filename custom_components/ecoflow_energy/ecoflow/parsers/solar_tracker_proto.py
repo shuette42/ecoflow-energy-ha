@@ -24,12 +24,16 @@ Field notes:
 - `angle` (9), `angle_manual` (10) and `angle_target` (11) all publish the
   wire value plus 10 degrees. The offset is not frame-derivable: it rests
   on the reporter's own cross-check against the app at raw 0, 10 and 75 on
-  both units. The frames do show `angle == angle_target` at rest in manual
+  both units. Those three values are what fields 9 and 11 carry; field 10
+  never does (48, 71 and 74 across the dataset), so for that one the offset
+  rests on the three fields sharing an encoding rather than on the app check
+  itself. The frames do show `angle == angle_target` at rest in manual
   mode on both units (10/10, 75/75, 71/71), which is consistent with all
   three fields sharing one encoding, but only the reporter's app check
   confirms the offset itself.
 - `angle_manual` (field 10, published as `optimal_angle_deg`) carries
-  `0xFFFFFFFF` in most frames (76 percent of the reporter's dataset) and a
+  `0xFFFFFFFF` in most frames (86 percent of the dataset; 76 percent on one
+  of the two units alone) and a
   real value only for a short window around a manual command. The sentinel
   becomes an explicit `None` - the key stays in the result - rather than
   being dropped, so the entity reads unknown instead of holding a stale
@@ -43,7 +47,7 @@ Field notes:
   setpoint and is published exactly as read in every mode, auto included.
   In auto mode it holds the last manual value rather than where the
   tracker is currently headed; the frames confirm this over more than
-  three hours (field 9 sweeping 70-74 while field 11 sits at the last
+  three hours (field 9 sweeping 2 to 75 while field 11 sits at the last
   manual setpoint the whole time). Deriving it to `None` in auto would be
   a claim the frames do not support, and round 2's control entity needs a
   state in every mode.
@@ -65,7 +69,7 @@ Deliberately not mapped, each for the reason PLAN-119 records: `angle`'s
 sibling `battery_temperature` (15, scale unverified against any app
 reading), `track_num` (24, a counter, not a reading), `word` (2, follows
 motion with no label), the charge/config/version/counter fields (12, 13,
-16-23, 25-27), and `scenes` (1). Nothing in that group is a reading an
+16-23, 25-27), fields 5 to 8, and `scenes` (1). Nothing in that group is a reading an
 owner watches, and none has a vendor name plus a frame plus an app check
 behind it the way the six shipped fields do.
 """

@@ -17,7 +17,7 @@ Read-only in this release. Setting the angle and switching between manual and au
 | Entity | Unit | Category | Default | Description |
 |:---|:---:|:---:|:---:|:---|
 | Tilt Angle | ° | - | enabled | The angle the panel currently stands at |
-| Target Angle | ° | - | enabled | The angle the tracker is moving towards |
+| Target Angle | ° | - | enabled | The angle set by hand. In automatic mode it keeps the last hand-set value rather than following where the tracker goes |
 | Optimal Angle | ° | - | enabled | The angle the tracker calculates as best right now. Reads unknown while the device reports no figure |
 | Light Level | - | - | enabled | The brightness reading the tracker uses. See the note below on why it carries no unit |
 | Mode | - | - | enabled | `manual` or `auto` |
@@ -45,7 +45,7 @@ Several fields the device sends are not published, because no recording settles 
 
 - The battery temperature, whose scale is unconfirmed
 - A counter that changes as the tracker moves, which two separate readings showed is not the mode it was first taken for
-- Seven further fields the reporter himself grouped as medium or low confidence
+- Twenty-one further fields the device sends, none of which a recording settles: config and version values, counters, and a handful the reporter himself grouped as medium or low confidence
 
 They stay out until a recording settles them. A sensor that shows a number nobody can explain is worse than an absent one.
 
