@@ -23,6 +23,7 @@ from .const import (
     DEVICE_TYPE_POWERSTREAM,
     DEVICE_TYPE_SMART_METER,
     DEVICE_TYPE_SMARTPLUG,
+    DEVICE_TYPE_SOLAR_TRACKER,
     DEVICE_TYPE_STREAM,
     DEVICE_TYPE_STREAM_AC5000,
     DOMAIN,
@@ -34,6 +35,7 @@ from .const import (
     POWERSTREAM_SENSORS,
     SMARTMETER_SENSORS,
     SMARTPLUG_SENSORS,
+    SOLARTRACKER_SENSORS,
     STREAM_SENSORS,
     STREAMAC5000_SENSORS,
 )
@@ -323,4 +325,6 @@ def _get_sensor_defs(device_type: str) -> list[EcoFlowSensorDef]:
         return POWERSTREAM_SENSORS
     if device_type == DEVICE_TYPE_SMART_METER:
         return SMARTMETER_SENSORS
+    if device_type == DEVICE_TYPE_SOLAR_TRACKER:
+        return SOLARTRACKER_SENSORS
     return []

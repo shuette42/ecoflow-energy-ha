@@ -698,8 +698,18 @@ def _finalize_task(result: dict[str, Any]) -> None:
     blocks = result.pop("_task_blocks", None) or ()
 
     published: set[str] = set()
+    # A block that does not decode, or that carries neither power container,
+    # leaves the frame unable to say what the list holds. It still publishes
+    # what it did read, and it clears nothing: one corrupt block would
+    # otherwise wipe a live task's setpoint, and by the write path's rule that
+    # drops the next removal as well.
+    inconclusive = False
     for task in (_decode_task(block) for block in blocks):
-        for kind in task.get("_task_kinds", ()):
+        kinds = task.get("_task_kinds", ())
+        if not kinds:
+            inconclusive = True
+            continue
+        for kind in kinds:
             if kind in published:
                 # The device can hold more than one task of a kind and these
                 # keys hold one, so the last in the list is what is reported.
@@ -733,12 +743,28 @@ def _finalize_task(result: dict[str, Any]) -> None:
                 result[f"scheduled_{kind}_start_min"] = window_raw & 0xFFFF
                 result[f"scheduled_{kind}_end_min"] = (window_raw >> 16) & 0xFFFF
 
-    if published or not task_list_empty:
+    if not blocks and not task_list_empty:
+        # No `f40` in this frame. Most `254/39` frames are deltas that carry
+        # none even while tasks stand, so absence says nothing at all and the
+        # coordinator merge keeps whatever the setpoints held.
         return
-    # None is an explicit clear: both platforms show it as unknown and stop
-    # falling back to the value they restored at startup.
-    for key in _TASK_KEYS:
-        result[key] = None
+    if inconclusive:
+        return
+    # An `f40` that arrives is the whole list, so a kind missing from it has no
+    # task on the device. None is an explicit clear: both platforms show it as
+    # unknown and stop falling back to the value they restored at startup. Zero
+    # would not do, because 0 W is a real setpoint here and the write path
+    # would read it as a task to update rather than one that is gone.
+    #
+    # The empty list is the same rule with nothing published, so it needs no
+    # branch of its own any more.
+    for kind, _group in _TASK_BLOCKS:
+        if kind in published:
+            continue
+        prefix = f"scheduled_{kind}_"
+        for key in _TASK_KEYS:
+            if key.startswith(prefix):
+                result[key] = None
 
 
 def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:

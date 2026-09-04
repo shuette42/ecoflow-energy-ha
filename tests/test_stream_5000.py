@@ -254,7 +254,11 @@ class TestControlStateCoverage:
                     parsed = parse_stream_ac5000_message(
                         _frame_around(bytes.fromhex(frame["pdata_hex"]))
                     )
-                seen |= set(parsed or {})
+                # A key set to None is the parser saying the device has no
+                # such task, which is the opposite of a state being on file.
+                # Counting it would let this coverage test report evidence
+                # that the captures do not contain.
+                seen |= {k for k, v in (parsed or {}).items() if v is not None}
         return seen & TestControlStateCoverage.CONTROL_KEYS
 
     ES21_FIXTURES = ("es21_frames_masked.json", "es21_pv_masked.json")
@@ -282,17 +286,31 @@ class TestControlStateCoverage:
         assert es22 - es21 == {"scheduled_discharge_power_w"}
         assert es21 - es22 == set()
 
-    def test_the_discharge_setpoint_comes_from_two_es22_captures(self) -> None:
+    def test_the_discharge_setpoint_comes_from_one_es22_capture(self) -> None:
         """Names where the extra state comes from, so it stays checkable.
 
-        Both ES22 recordings that carry a scheduled task carry it. The ES21
+        One ES22 recording carries a scheduled discharge task. The ES21
         recordings are a full-config report and a PV day; neither had a task
         set while it ran. So the gap is about which recordings exist, not
         about what the models report, and an ES21 capture taken with a task
         configured would close it.
+
+        This test read "two captures" until 2026-09-04. The second one,
+        `es22_two_units_masked.json`, carries an empty task list: all four of
+        its frames report both kinds as None, which is the parser stating that
+        no task exists. The old counting helper took a key's presence as
+        evidence and so counted that explicit nothing as a reported setpoint.
+        Once the helper stopped counting None, the second capture dropped out
+        and the claim in the name turned out to be one capture too generous.
         """
-        for fixture in ("es22_task_frames_masked.json", "es22_two_units_masked.json"):
-            assert "scheduled_discharge_power_w" in self._states_reported(fixture), fixture
+        assert "scheduled_discharge_power_w" in self._states_reported(
+            "es22_task_frames_masked.json"
+        )
+        # The empty-task-list capture states the absence rather than reporting
+        # a setpoint, which is not the same thing and must not count as one.
+        assert "scheduled_discharge_power_w" not in self._states_reported(
+            "es22_two_units_masked.json"
+        )
 
         plain = self._states_reported(
             "es22_push_capture_masked.json", "es22_get_reply_masked.json"

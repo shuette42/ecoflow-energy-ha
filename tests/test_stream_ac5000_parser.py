@@ -443,8 +443,11 @@ class TestSocLimits:
         assert result["scheduled_discharge_enabled"] is True
         assert result["scheduled_discharge_start_min"] == 0
         assert result["scheduled_discharge_end_min"] == 1380
-        # The charge task is a separate frame, so nothing about it is implied.
-        assert "scheduled_charge_power_w" not in result
+        # An `f40` is the whole list (ADR-015), so a frame carrying only a
+        # discharge task states that no charge task exists. Before that rule
+        # the key was simply absent and a deleted charge task kept its old
+        # setpoint for as long as the integration ran.
+        assert result["scheduled_charge_power_w"] is None
 
 
 class TestScheduledTasks:
@@ -468,7 +471,9 @@ class TestScheduledTasks:
         assert result["scheduled_charge_start_min"] == 780
         assert result["scheduled_charge_end_min"] == 960
         assert result["scheduled_charge_task_slot"] == 1
-        assert "scheduled_discharge_power_w" not in result
+        # The kinds stay separate, and the absent one now says so explicitly
+        # rather than by omission (ADR-015).
+        assert result["scheduled_discharge_power_w"] is None
 
     def test_a_frame_carrying_two_tasks_reports_both(self) -> None:
         """`f40` is the whole list and `40.1` repeats, one block per task.
@@ -574,7 +579,13 @@ class TestScheduledTasks:
         assert result["scheduled_discharge_task_slot"] == 1
         assert result["scheduled_discharge_start_min"] == 120
         assert result["scheduled_discharge_end_min"] == 360
-        assert not [key for key in result if key.startswith("scheduled_charge_")]
+        # Every charge key is present and None: the list carried one task and
+        # it was a discharge one, so the frame states there is no charge task
+        # (ADR-015). Absence would mean "this frame says nothing", which is
+        # what a frame without `f40` means and this one is not.
+        charge_keys = [k for k in result if k.startswith("scheduled_charge_")]
+        assert charge_keys
+        assert all(result[k] is None for k in charge_keys)
 
     def test_a_charge_task_numbered_two_is_read_as_charge(self) -> None:
         """The mirror, so the rule is not re-derived in one direction only."""
@@ -596,7 +607,12 @@ class TestScheduledTasks:
         assert result["scheduled_charge_power_w"] == 900
         assert result["scheduled_charge_soc_target"] == 80
         assert result["scheduled_charge_task_slot"] == 2
-        assert not [key for key in result if key.startswith("scheduled_discharge_")]
+        # Mirror of the discharge case: the list held one charge task, so the
+        # frame states there is no discharge task rather than staying silent
+        # about it (ADR-015).
+        discharge_keys = [k for k in result if k.startswith("scheduled_discharge_")]
+        assert discharge_keys
+        assert all(result[k] is None for k in discharge_keys)
 
     def test_two_tasks_of_one_kind_report_the_last(
         self, caplog: pytest.LogCaptureFixture
@@ -753,7 +769,7 @@ class TestCaptureReplay:
             charge = [r for r in reported if "scheduled_charge_power_w" in r]
             assert charge, path.name
             assert all(r["scheduled_charge_power_w"] == 600 for r in charge)
-            assert all("scheduled_discharge_power_w" not in r for r in reported)
+            assert all(r.get("scheduled_discharge_power_w") is None for r in reported)
 
     def test_get_reply_bundle_decodes_every_command(self) -> None:
         frame = _load(GET_REPLY)[0]
@@ -1118,3 +1134,135 @@ class TestPvStrings:
                     assert parsed[key] == 0.0, (frame["ts_iso"], key)
                     seen += 1
         assert seen >= 5
+
+
+class TestTaskListShrink:
+    """A task list that shrinks must retract the task that left it.
+
+    Built from the two diagnostics downloads @slaapyhoofd attached to #234 on
+    2026-09-03, after adding a charge task beside an existing discharge task
+    and then deleting the discharge one. Before ADR-015 an `f40` carrying only
+    the survivor left the deleted kind's keys untouched, and the coordinator
+    merge, which exists so a frame without `f40` cannot wipe the setpoints,
+    kept them. The deleted task went on being reported.
+    """
+
+    @staticmethod
+    def _frames() -> dict[str, dict]:
+        data = json.loads(
+            (FIXTURES / "es22_task_delete_masked.json").read_text()
+        )
+        return {frame["role"]: frame for frame in data["frames"]}
+
+    def _parse(self, role: str) -> dict | None:
+        return parse_stream_ac5000_message(
+            bytes.fromhex(self._frames()[role]["hex"])
+        )
+
+    def test_the_fixture_carries_the_capture_it_claims_to(self) -> None:
+        """Positive control. A shrunk fixture would let the rest pass blind."""
+        frames = self._frames()
+        assert set(frames) == {
+            "both_tasks_push",
+            "delete_ack",
+            "stale_get_reply_after_delete",
+            "after_delete_get_reply",
+            "no_task_list_push",
+            "after_delete_push",
+            "after_own_write_push",
+        }
+        assert all(f["hex"] for f in frames.values())
+
+    def test_the_capture_sequence_retracts_the_deleted_task(self) -> None:
+        """The defect, in the order the frames arrived.
+
+        Step three is what was red before the fix: the reload readback carries
+        the charge task alone, and the discharge keys have to say so.
+        """
+        both = self._parse("both_tasks_push")
+        assert both is not None
+        assert both["scheduled_discharge_power_w"] == 0
+        assert both["scheduled_charge_power_w"] == 2500
+
+        after = self._parse("after_delete_get_reply")
+        assert after is not None
+        assert after["scheduled_charge_power_w"] == 2500
+        assert after["scheduled_discharge_power_w"] is None
+        assert after["scheduled_discharge_task_slot"] is None
+
+    def test_the_push_after_the_reload_agrees_with_the_readback(self) -> None:
+        result = self._parse("after_delete_push")
+        assert result is not None
+        assert result["scheduled_charge_power_w"] == 2500
+        assert result["scheduled_discharge_power_w"] is None
+
+    def test_a_frame_without_a_task_list_retracts_nothing(self) -> None:
+        """Most `254/39` frames carry no `f40` at all.
+
+        Absence of the container says nothing, which is why the coordinator
+        merge keeps the setpoints across them. Only a list that arrives is
+        evidence.
+        """
+        result = self._parse("no_task_list_push")
+        assert result is not None
+        assert not [key for key in result if key.startswith("scheduled_")]
+
+    def test_the_push_after_our_own_removal_retracts_the_other_kind(self) -> None:
+        """The only push on file that follows a removal we issued ourselves.
+
+        It carries the discharge task alone, 3.5 s after the write, and is the
+        third independent line for the whole-list rule.
+        """
+        result = self._parse("after_own_write_push")
+        assert result is not None
+        assert result["scheduled_discharge_power_w"] is not None
+        assert result["scheduled_charge_power_w"] is None
+
+    def test_a_set_reply_never_reaches_the_parser(self) -> None:
+        """The acknowledgement echoes `f39`, the write's own entries.
+
+        It is in the fixture so this stays pinned: read as a task list it
+        would clear the kind it does not mention and swallow the next removal.
+        The ingest returns on every `/set_reply` topic before parsing, and
+        `(254, 38)` has no entry in the field map, so nothing here can.
+        """
+        result = self._parse("delete_ack")
+        assert not [key for key in (result or {}) if key.startswith("scheduled_")]
+
+    def test_a_block_that_does_not_decode_retracts_nothing(self) -> None:
+        """Absence is evidence only when the list was read in full.
+
+        A block that fails to decode, or that carries neither power container,
+        leaves the frame unable to say what the device holds. It publishes what
+        it did read and clears nothing. Without that rule one corrupt block
+        would wipe a live task's setpoint, and by the write path's rule that
+        drops the next removal too, which is the one-sided failure #234 is
+        about.
+        """
+        good = (
+            encode_field_varint(2, 1)
+            + encode_field_varint(3, 1)
+            + _sub(7, encode_varint((960 << 16) | 780))
+            + _sub(
+                8,
+                encode_field_varint(1, 1)
+                + _sub(
+                    3,
+                    encode_field_bytes(1, b"ES22TEST00000001")
+                    + encode_field_varint(2, 100)
+                    + encode_field_varint(3, 600),
+                ),
+            )
+        )
+        # A second block carrying neither power container: a slot and a window
+        # and nothing that says which kind it is.
+        kindless = encode_field_varint(2, 1) + _sub(7, encode_varint(60))
+
+        result = parse_stream_ac5000_message(
+            _build_frame(254, 39, bytes(_sub(40, _sub(1, good) + _sub(1, kindless))))
+        )
+        assert result is not None
+        assert result["scheduled_charge_power_w"] == 600
+        assert not [
+            key for key in result if key.startswith("scheduled_discharge_")
+        ]

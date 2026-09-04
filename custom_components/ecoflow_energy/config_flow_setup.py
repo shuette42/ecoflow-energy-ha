@@ -24,8 +24,8 @@ from .const import (
     CONF_USER_ID,
     DEVICE_TYPE_DISPLAY_NAMES,
     DEVICE_TYPE_POWERSTREAM,
-    DEVICE_TYPE_SMART_METER,
     DEVICE_TYPE_UNKNOWN,
+    ENHANCED_ONLY_DEVICE_TYPES,
     MODE_ENHANCED,
     MODE_STANDARD,
     get_device_name,
@@ -79,7 +79,7 @@ def _device_label(device: dict[str, Any]) -> str:
     status += unsupported_suffix(device.get("device_type"))
     if device.get("device_type") == DEVICE_TYPE_POWERSTREAM:
         status += " - requires Standard Mode"
-    elif device.get("device_type") == DEVICE_TYPE_SMART_METER:
+    elif device.get("device_type") in ENHANCED_ONLY_DEVICE_TYPES:
         status += " - requires Enhanced Mode"
     return f"{name} ({sn_short}){status}" if name else f"{sn_short}{status}"
 
@@ -241,13 +241,13 @@ class SetupFlowMixin:
                 errors["base"] = "powerstream_requires_standard"
             elif self._auth_type != AUTH_METHOD_APP and any(
                 d["sn"] in selected_sns
-                and d.get("device_type") == DEVICE_TYPE_SMART_METER
+                and d.get("device_type") in ENHANCED_ONLY_DEVICE_TYPES
                 for d in self._devices
             ):
-                # The mirror of the PowerStream case. The meter reports on
-                # the app channel only, so a developer-key entry would set
-                # it up and then never receive a reading.
-                errors["base"] = "smart_meter_requires_enhanced"
+                # The mirror of the PowerStream case. These devices report
+                # on the app channel only, so a developer-key entry would
+                # set one up and then never receive a reading.
+                errors["base"] = "device_requires_enhanced"
             else:
                 self._selected_devices = [
                     d for d in self._devices if d["sn"] in selected_sns
@@ -285,10 +285,10 @@ class SetupFlowMixin:
                             if next(
                                 d for d in self._devices if d["sn"] == sn
                             ).get("device_type")
-                            != (
-                                DEVICE_TYPE_POWERSTREAM
+                            not in (
+                                (DEVICE_TYPE_POWERSTREAM,)
                                 if self._auth_type == AUTH_METHOD_APP
-                                else DEVICE_TYPE_SMART_METER
+                                else ENHANCED_ONLY_DEVICE_TYPES
                             )
                         ],
                     ): SelectSelector(
