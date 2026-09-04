@@ -257,6 +257,111 @@ class TestDelimitedIdentifierMasking:
         assert result == b"\x12\x10" + b"X" * 16
 
 
+class TestUUIDMasking:
+    """`_UUID_RUN`, shipped in #348 without a unit test of its own.
+
+    A UUID is lower case and hyphenated, so no pass around it can see one:
+    `_SERIAL_RUN` needs upper case, the delimited pass needs a whole
+    alphanumeric field, and the joined-hex pass needs a serial behind it.
+    Its own shape is the boundary, found 2026-09-04 in a reporter's
+    diagnostics download for #234.
+    """
+
+    UUID = b"a2e0d4a0-8b4d-4e16-9e3b-fd5777dcb68b"
+
+    def test_a_uuid_is_masked_by_shape(self) -> None:
+        payload = b"\x7a\x24" + self.UUID
+
+        result = sanitize_frame(payload, [])
+
+        assert self.UUID not in result
+        assert b"X" * len(self.UUID) in result
+
+    def test_uuid_masking_preserves_length(self) -> None:
+        payload = b"\x7a\x24" + self.UUID + b"\x10\x01"
+
+        result = sanitize_frame(payload, [])
+
+        assert len(result) == len(payload)
+        assert result.startswith(b"\x7a\x24")
+        assert result.endswith(b"\x10\x01")
+
+
+class TestJoinedHexRunMasking:
+    """The fourth pass: a lower-case hex run a hyphen joins to a serial.
+
+    No pass above it can see this value: it is lower case, so `_SERIAL_RUN`
+    and the delimited pass both refuse it, and it has none of a UUID's
+    hyphenated shape for `_UUID_RUN`. The field is not a whole
+    length-delimited value either - the hyphen sits inside a longer string -
+    so the delimited pass could not reach it under any alphabet. The serial
+    half is the boundary: `_SERIAL_RUN` has already turned it into a run of
+    `X`, which still satisfies `[A-Z0-9]{15,}`.
+
+    The synthetic value below is the shape a reporter's diagnostics download
+    for #234 carried, not the value itself - a run of digits and `ab`
+    identifies nobody, the reporter's unit does.
+    """
+
+    SERIAL = b"HJ31TEST00000001"
+    # Tag for a length-delimited field, length 29: 12 hex characters, a
+    # hyphen, and a 16-character serial.
+    REAL_SHAPE = b"\x22\x1d" + b"0123456789ab-" + SERIAL
+
+    def test_a_hex_run_joined_to_a_serial_is_masked(self) -> None:
+        result = sanitize_frame(self.REAL_SHAPE, [])
+
+        assert b"0123456789ab" not in result
+        assert result == b"\x22\x1d" + b"X" * 12 + b"-" + b"X" * 16
+
+    def test_the_joined_run_keeps_its_hyphen_and_length(self) -> None:
+        result = sanitize_frame(self.REAL_SHAPE, [])
+
+        assert result.startswith(b"\x22\x1d")
+        assert b"-" in result
+        assert len(result) == len(self.REAL_SHAPE)
+
+    def test_a_hex_run_without_a_serial_behind_it_stays(self) -> None:
+        """The anchor: nothing serial-shaped follows, so the run must stay.
+
+        Ordinary binary does not join a lower-case hex run to a serial by
+        chance (0 hits in 1556 frames outside the download this was found
+        in), which is what makes the anchor safe. A bare run earns no such
+        guarantee and must be left alone.
+        """
+        payload = b"\x22\x0c" + b"0123456789ab"
+
+        assert sanitize_frame(payload, []) == payload
+
+    def test_a_hex_run_below_the_floor_before_a_serial_stays(self) -> None:
+        """The width floor is 12, pinned rather than measured.
+
+        No frame on file shows an identifier this short joined to a serial,
+        so an eight-character hex run must stay untouched even with a serial
+        right behind it - the serial itself is still masked, by
+        `_SERIAL_RUN`, which is a different pass and not under test here.
+        """
+        payload = b"\x22\x19" + b"01234567-" + self.SERIAL
+
+        result = sanitize_frame(payload, [])
+
+        assert b"01234567-" in result
+        assert self.SERIAL not in result
+
+    def test_a_json_timestamp_is_not_an_identifier(self) -> None:
+        """The anchor against the free-running variant that was rejected.
+
+        A free-running `[0-9a-f]{12,}` would also match a 13-digit
+        millisecond timestamp inside a JSON set frame - 29 distinct values
+        across 27 frames in the local capture corpus. None of them is
+        followed by a serial-shaped run, so the anchored pass must leave
+        this alone.
+        """
+        payload = b'{"timestamp":1786556254405,"cmdFunc":50}'
+
+        assert sanitize_frame(payload, []) == payload
+
+
 class TestTimeZoneMasking:
     """The city half of a time zone goes, the region stays.
 
@@ -355,6 +460,34 @@ class TestMaskingDoesNotCorruptRealFrames:
                     found.append((path.name, bytes.fromhex(raw)))
         return found
 
+    @staticmethod
+    def _captures_with_family() -> list[tuple[str, str, bytes]]:
+        """Every recorded frame, tagged with its fixture family directory.
+
+        `test_no_header_field_changes_under_masking` needs the family so a
+        broken decode that silently emptied one device's frames shows up as
+        a family with a checked count of zero, rather than disappearing into
+        one repo-wide total.
+        """
+        import json
+        from pathlib import Path
+
+        found: list[tuple[str, str, bytes]] = []
+        root = Path(__file__).parent / "fixtures"
+        for path in sorted(root.rglob("*.json")):
+            try:
+                data = json.loads(path.read_text())
+            except ValueError:  # pragma: no cover - not a frame fixture
+                continue
+            if not isinstance(data, dict):
+                continue
+            family = path.relative_to(root).parts[0]
+            for frame in data.get("frames") or []:
+                raw = frame.get("hex")
+                if raw:
+                    found.append((family, path.name, bytes.fromhex(raw)))
+        return found
+
     def test_there_are_frames_to_check(self) -> None:
         """Positive control. A rglob that matched nothing would let the test
         below pass while checking no frame at all.
@@ -366,32 +499,86 @@ class TestMaskingDoesNotCorruptRealFrames:
             assert len(sanitize_frame(raw, [])) == len(raw), name
 
     def test_no_reading_changes_under_masking(self) -> None:
+        """Every pure parser that takes a raw frame, not the ES 5000 alone.
+
+        A masking bug that corrupted a Stream or Smart Meter reading would
+        have passed unnoticed while only the ES 5000 parser ran it back.
+        """
+        from ecoflow_energy.ecoflow.parsers.smart_meter_proto import (
+            parse_smart_meter_message,
+        )
         from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (
             parse_stream_ac5000_message,
         )
+        from ecoflow_energy.ecoflow.parsers.stream_proto import (
+            parse_stream_proto_message,
+        )
 
-        checked = 0
+        parsers = (
+            parse_stream_ac5000_message,
+            parse_stream_proto_message,
+            parse_smart_meter_message,
+        )
+        checked: dict[str, int] = {}
         for name, raw in self._captures():
-            before = parse_stream_ac5000_message(raw) or {}
-            if not before:
-                continue
-            after = parse_stream_ac5000_message(sanitize_frame(raw, [])) or {}
-            numeric_before = {
-                key: value
-                for key, value in before.items()
-                if isinstance(value, (int, float))
-            }
-            numeric_after = {
-                key: value
-                for key, value in after.items()
-                if isinstance(value, (int, float))
-            }
-            assert numeric_before == numeric_after, name
-            checked += 1
+            for parser in parsers:
+                before = parser(raw) or {}
+                if not before:
+                    continue
+                after = parser(sanitize_frame(raw, [])) or {}
+                numeric_before = {
+                    key: value
+                    for key, value in before.items()
+                    if isinstance(value, (int, float))
+                }
+                numeric_after = {
+                    key: value
+                    for key, value in after.items()
+                    if isinstance(value, (int, float))
+                }
+                assert numeric_before == numeric_after, (parser.__name__, name)
+                checked[parser.__name__] = checked.get(parser.__name__, 0) + 1
 
-        # Second positive control: the loop above is only evidence while it
-        # has frames this parser understands.
-        assert checked >= 20
+        # Second positive control, per parser: a parser that stopped matching
+        # any fixture (a broken import, a renamed field) must not pass this
+        # test by contributing zero to a combined total.
+        assert checked.get("parse_stream_ac5000_message", 0) >= 20
+        assert checked.get("parse_stream_proto_message", 0) >= 1
+        assert checked.get("parse_smart_meter_message", 0) >= 1
+
+    def test_no_header_field_changes_under_masking(self) -> None:
+        """The family-agnostic negative control.
+
+        `parse_stream_ac5000_message` only understands one family's payload,
+        so the check above cannot see whether masking disturbed a PowerOcean
+        or Delta 3 frame's routing. `decode_header_message` reads the outer
+        frame header every family shares, so this runs over all of them.
+
+        String-typed fields (the serial, the account id, the payload itself)
+        are excluded on purpose - masking changes those by design. Every
+        other header field - `cmd_func`, `cmd_id`, `seq`, `src`, `dest`, and
+        the rest of the routing fields - must be byte-for-byte identical.
+        """
+        from ecoflow_energy.ecoflow.proto.decoder import decode_header_message
+
+        checked: dict[str, int] = {}
+        for family, name, raw in self._captures_with_family():
+            headers_before, _ = decode_header_message(raw)
+            headers_after, _ = decode_header_message(sanitize_frame(raw, []))
+            assert len(headers_before) == len(headers_after), (family, name)
+            for before, after in zip(headers_before, headers_after):
+                for key, value in before.items():
+                    if not isinstance(value, (int, float)):
+                        continue  # string-typed: serial, account id, pdata
+                    assert after.get(key) == value, (family, name, key)
+            checked[family] = checked.get(family, 0) + 1
+
+        # Positive control, per family: a decode that silently emptied one
+        # device family's headers must not pass this test by leaving a
+        # combined total that still looks healthy.
+        assert len(checked) >= 5, checked
+        for family, count in checked.items():
+            assert count >= 1, family
 
 
 class TestIsProtoFrame:

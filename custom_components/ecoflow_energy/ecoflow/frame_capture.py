@@ -72,6 +72,34 @@ _UUID_RUN = re.compile(
     rb"-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
 )
 
+# A device also joins a short lower-case hex value to its own serial with a
+# hyphen inside one string field: `<hex>-<serial>`. Neither pass above can
+# see the hex half - lower case rules out `_SERIAL_RUN` and the delimited
+# pass below, and it has none of a UUID's hyphens for `_UUID_RUN` to match -
+# and the field is not a whole value the delimited pass could test either,
+# because the hyphen sits inside it. Widening that pass's alphabet was
+# measured and rejected: it would still not reach a value that is not a
+# whole field, and it matched nothing on file (PLAN-121, ADR-016).
+#
+# The serial half is the boundary instead: `[A-Z0-9]{15,}` right after the
+# hyphen is not a shape ordinary binary produces (0 hits in 1556 frames
+# outside the download this was found in), so anchoring on it is safe at a
+# width a free-running pattern would not be. A free-running `[0-9a-f]{12,}`
+# was measured too and rejected - it also matches 13-digit millisecond
+# timestamps inside JSON set frames, 29 of them across 27 frames in the
+# local capture corpus, which is exactly the kind of corpus damage the
+# narrow alphabet above exists to avoid.
+#
+# `_SERIAL_RUN` masks the serial half first, to a run of `X`, which still
+# satisfies `[A-Z0-9]{15,}` - so the order between the two passes does not
+# matter.
+#
+# Found 2026-09-04 in the same reporter's diagnostics download as
+# `_UUID_RUN`, in a header sub-message field, 8 occurrences in 8 frames,
+# never on its own. What the hex half identifies is not established here;
+# masking it does not depend on the answer.
+_JOINED_HEX_RUN = re.compile(rb"[0-9a-f]{12,32}(?=-[A-Z0-9]{15,})")
+
 # A device also reports the owner's time zone, as an IANA name like
 # `Europe/Budapest`. It is not an identifier and the pass above cannot see
 # it: lower case and a slash are outside that alphabet, by design, because
@@ -136,15 +164,18 @@ def sanitize_frame(payload: bytes, secrets: list[str]) -> bytes:
     length, in every case variant the payload might use.
 
     Named identifiers are masked first, then anything else shaped like a
-    serial, then anything written as a UUID, then the city half of any time
-    zone the device reports, then anything a device presents as a whole
+    serial, then anything written as a UUID, then a lower-case hex run a
+    hyphen joins to a serial-shaped run, then the city half of any time zone
+    the device reports, then anything a device presents as a whole
     length-delimited field of identifier-shaped characters. The second pass matters because a frame
     also carries the serial of every battery pack and of any attached
     accessory, and the caller cannot name what it has not discovered yet. The
-    third catches identifiers too short for the second to risk matching by
-    shape, which is how a 12-character one reached a public issue attachment
-    before anyone noticed. Masking preserves length, so byte offsets survive
-    every pass and a field-layout analysis still works.
+    third and fourth catch identifiers too short, or too oddly shaped, for
+    the second to risk matching: a UUID by its own hyphenated shape, and a
+    hex run by the serial it is joined to - which is how a 12-character one
+    reached a public issue attachment before anyone noticed. Masking
+    preserves length, so byte offsets survive every pass and a field-layout
+    analysis still works.
     """
     sanitized = payload
     for secret in secrets:
@@ -156,6 +187,7 @@ def sanitize_frame(payload: bytes, secrets: list[str]) -> bytes:
                 sanitized = sanitized.replace(raw, _MASK_BYTE * len(raw))
     sanitized = _SERIAL_RUN.sub(lambda m: _MASK_BYTE * len(m.group()), sanitized)
     sanitized = _UUID_RUN.sub(lambda m: _MASK_BYTE * len(m.group()), sanitized)
+    sanitized = _JOINED_HEX_RUN.sub(lambda m: _MASK_BYTE * len(m.group()), sanitized)
     sanitized = _TIME_ZONE.sub(
         lambda m: m.group(1) + _MASK_BYTE * len(m.group(2)), sanitized
     )
