@@ -1292,12 +1292,6 @@ class TestHTTPPolling:
         coordinator = EcoFlowDeviceCoordinator(
             hass, standard_config_entry, MOCK_POWEROCEAN_DEVICE
         )
-        # hass.config.path() in this harness is a real, shared directory
-        # (not a per-test tmp dir), so a previous test's flushed state for
-        # the same mock serial would otherwise leak in via load_state().
-        # Marking the integrator loaded skips that read, same pattern as
-        # test_first_reading_after_state_loss_publishes_nothing.
-        coordinator._energy_integrator._loaded = True
         coordinator._http_client = MagicMock()
 
         coordinator._http_client.get_quota_all = AsyncMock(return_value={
@@ -2945,7 +2939,6 @@ class TestApplyData:
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
-        coordinator._energy_integrator._loaded = True
         coordinator._energy_integrator._state["batt_charge_energy_kwh"] = (
             2603.0, time.monotonic(), 0.0,
         )
@@ -2972,7 +2965,6 @@ class TestApplyData:
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
-        coordinator._energy_integrator._loaded = True
         coordinator._device_data["batt_charge_energy_kwh"] = 4_000_000.0
 
         coordinator._apply_data({"batt_charge_energy_kwh": 2603.0})
@@ -3414,8 +3406,6 @@ class TestApplyData:
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
-        # Empty state with nothing to load: the lost-state-file case.
-        coordinator._energy_integrator._loaded = True
 
         clock = (
             "custom_components.ecoflow_energy.ecoflow.energy_integrator"
@@ -3453,7 +3443,6 @@ class TestApplyData:
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
-        coordinator._energy_integrator._loaded = True
 
         clock = (
             "custom_components.ecoflow_energy.ecoflow.energy_integrator"

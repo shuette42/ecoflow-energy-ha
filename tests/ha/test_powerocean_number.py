@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import threading
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
@@ -512,6 +512,11 @@ class TestPowerOceanNumberSet3Field:
         coordinator.async_set_powerocean_soc_debounced.assert_not_awaited()
 
 
+_MISSING = object()  # parametrize marker: pop the key rather than set a value
+
+_SURPLUS_SYNC_CLOCK = "custom_components.ecoflow_energy.coordinator.time.monotonic"
+
+
 class TestPowerOceanAppSurplusAutoSync:
     """Auto-sync the EMS-side sysBatBackupRatio with the app-side dev_soc.
 
@@ -540,6 +545,28 @@ class TestPowerOceanAppSurplusAutoSync:
         coordinator._last_ems_param_change_ts = 1500.0
         coordinator.async_set_powerocean_soc = AsyncMock(return_value=True)
         return coordinator
+
+    def _make_divergent_coordinator(self, hass, entry, app=13, ems=20):
+        """A coordinator parked on a pair the EMS never adopts (#247)."""
+        coordinator = self._make_coordinator(hass, entry)
+        coordinator._device_data["ems_app_surplus_pct"] = app
+        coordinator._device_data["ems_backup_ratio_pct"] = ems
+        return coordinator
+
+    async def _run_evaluations(self, hass, coordinator, n, start=2010.0, step=31.0):
+        """Run ``n`` evaluations, each timestamped 31s past the previous one.
+
+        A fixed ``return_value`` per evaluation (not a shared counter the
+        mock consumes) so the spacing holds regardless of how many
+        evaluations are suppressed before reaching the one call site that
+        reads the clock. Each evaluation is drained with
+        ``async_block_till_done`` because a scheduled write only reaches the
+        mocked ``async_set_powerocean_soc`` once its tracked task runs.
+        """
+        for i in range(n):
+            with patch(_SURPLUS_SYNC_CLOCK, return_value=start + i * step):
+                coordinator._maybe_schedule_surplus_sync()
+            await hass.async_block_till_done()
 
     async def test_discrepancy_triggers_corrective_set(
         self,
@@ -712,21 +739,173 @@ class TestPowerOceanAppSurplusAutoSync:
             coordinator._maybe_schedule_surplus_sync()
         coordinator.async_set_powerocean_soc.assert_not_called()
 
-    async def test_non_numeric_backup_limit_falls_back_to_zero(
+    @pytest.mark.parametrize(
+        "backup_value",
+        ["junk", _MISSING, None],
+        ids=["non-numeric", "missing-key", "explicit-none"],
+    )
+    async def test_an_unknown_backup_limit_refuses_the_sync(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+        backup_value: object,
+    ) -> None:
+        """ADR-013 decision 5 (ADR-011 decision 4 applied to this consumer).
+
+        Guessing 0 for an unreadable discharge-lower-limit would move it to
+        the value that lets the battery discharge fully - a setting nobody
+        chose. The write is refused instead, silently, like the other
+        guards on an unreadable app or ems value.
+        """
+        coordinator = self._make_coordinator(hass, enhanced_config_entry)
+        if backup_value is _MISSING:
+            coordinator._device_data.pop("ems_discharge_lower_limit_pct")
+        else:
+            coordinator._device_data["ems_discharge_lower_limit_pct"] = backup_value
+        with patch(_SURPLUS_SYNC_CLOCK, return_value=1000.0):
+            coordinator._maybe_schedule_surplus_sync()
+        coordinator.async_set_powerocean_soc.assert_not_called()
+        assert not any(
+            e["type"] == "surplus_auto_sync" for e in coordinator.event_log
+        )
+        assert coordinator.surplus_auto_sync_diagnostics is None
+
+    async def test_a_pair_the_ems_never_adopts_gets_two_writes_then_silence(
         self,
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """A non-numeric discharge-lower-limit falls back to backup=0 and syncs."""
-        coordinator = self._make_coordinator(hass, enhanced_config_entry)
-        coordinator._device_data["ems_discharge_lower_limit_pct"] = "junk"
-        with patch(
-            "custom_components.ecoflow_energy.coordinator.time.monotonic",
-            return_value=1000.0,
+        """PLAN-117: Xygen's app=13 ems=20 pair (#247), replayed six times.
+
+        Before the bound this scheduled a write on every evaluation,
+        forever. It must stop at two.
+        """
+        coordinator = self._make_divergent_coordinator(hass, enhanced_config_entry)
+        await self._run_evaluations(hass, coordinator, 6)
+        assert coordinator.async_set_powerocean_soc.call_count == 2
+        coordinator.async_set_powerocean_soc.assert_has_calls(
+            [call(0, 13), call(0, 13)]
+        )
+
+    async def test_the_stop_is_logged_once_and_reported(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        coordinator = self._make_divergent_coordinator(hass, enhanced_config_entry)
+        with caplog.at_level(logging.INFO):
+            await self._run_evaluations(hass, coordinator, 6)
+
+        stop_events = [
+            e for e in coordinator.event_log
+            if e["type"] == "surplus_auto_sync_stopped"
+        ]
+        assert len(stop_events) == 1
+        assert stop_events[0]["detail"] == "app=13 ems=20 writes=2"
+
+        stop_logs = [
+            r for r in caplog.records if "no further writes" in r.message
+        ]
+        assert len(stop_logs) == 1
+
+        assert coordinator.surplus_auto_sync_diagnostics == {
+            "app": 13, "ems": 20, "writes": 2, "stopped": True,
+        }
+
+    async def test_a_different_ems_value_reopens_the_sync(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """The device moved: a new ems value is new information (2c)."""
+        coordinator = self._make_divergent_coordinator(hass, enhanced_config_entry)
+        await self._run_evaluations(hass, coordinator, 6)
+        coordinator._device_data["ems_backup_ratio_pct"] = 21
+        with patch(_SURPLUS_SYNC_CLOCK, return_value=2010.0 + 6 * 31.0):
+            coordinator._maybe_schedule_surplus_sync()
+        await hass.async_block_till_done()
+        assert coordinator.async_set_powerocean_soc.call_count == 3
+
+    async def test_a_changed_app_value_reopens_the_sync(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """A move to the value the EMS already holds clears the record (2b),
+
+        even though that report has converged and writes nothing itself.
+        The next divergence is then treated as new intent.
+        """
+        coordinator = self._make_divergent_coordinator(hass, enhanced_config_entry)
+        await self._run_evaluations(hass, coordinator, 6)
+
+        coordinator._device_data["ems_app_surplus_pct"] = 20  # now equals ems
+        with patch(_SURPLUS_SYNC_CLOCK, return_value=2010.0 + 6 * 31.0):
+            coordinator._maybe_schedule_surplus_sync()
+        await hass.async_block_till_done()
+        assert coordinator.async_set_powerocean_soc.call_count == 2
+        assert coordinator.surplus_auto_sync_diagnostics is None
+
+        coordinator._device_data["ems_app_surplus_pct"] = 13
+        with patch(_SURPLUS_SYNC_CLOCK, return_value=2010.0 + 7 * 31.0):
+            coordinator._maybe_schedule_surplus_sync()
+        await hass.async_block_till_done()
+        assert coordinator.async_set_powerocean_soc.call_count == 3
+
+    async def test_an_equal_reading_does_not_reopen_the_sync(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """An EMS that echoes the written value once and reverts (2d) must
+        not re-arm the loop at double the rate."""
+        coordinator = self._make_divergent_coordinator(hass, enhanced_config_entry)
+        await self._run_evaluations(hass, coordinator, 6)
+
+        coordinator._device_data["ems_backup_ratio_pct"] = 13  # equals app
+        with patch(_SURPLUS_SYNC_CLOCK, return_value=2010.0 + 6 * 31.0):
+            coordinator._maybe_schedule_surplus_sync()
+        await hass.async_block_till_done()
+        coordinator._device_data["ems_backup_ratio_pct"] = 20  # reverts
+        with patch(_SURPLUS_SYNC_CLOCK, return_value=2010.0 + 7 * 31.0):
+            coordinator._maybe_schedule_surplus_sync()
+        await hass.async_block_till_done()
+
+        assert coordinator.async_set_powerocean_soc.call_count == 2
+
+    async def test_a_user_set_reopens_the_sync(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """A user SET from Home Assistant always clears the record (2a)."""
+        coordinator = self._make_divergent_coordinator(hass, enhanced_config_entry)
+        await self._run_evaluations(hass, coordinator, 6)
+
+        t = 2010.0 + 6 * 31.0
+        with patch(_SURPLUS_SYNC_CLOCK, return_value=t):
+            coordinator.mark_user_surplus_set()
+        coordinator._last_ems_param_change_ts = t + 1
+        with patch(_SURPLUS_SYNC_CLOCK, return_value=t + 6):  # past the 5s grace
+            coordinator._maybe_schedule_surplus_sync()
+        await hass.async_block_till_done()
+
+        assert coordinator.async_set_powerocean_soc.call_count == 3
+
+    async def test_a_refused_schedule_does_not_count(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """A shutdown-refused schedule must not advance the write count."""
+        coordinator = self._make_divergent_coordinator(hass, enhanced_config_entry)
+        with (
+            patch.object(coordinator, "_schedule_powerocean_soc_write", return_value=None),
+            patch(_SURPLUS_SYNC_CLOCK, return_value=2010.0),
         ):
             coordinator._maybe_schedule_surplus_sync()
-            await hass.async_block_till_done()
-        coordinator.async_set_powerocean_soc.assert_called_once_with(0, 47)
+        assert coordinator.surplus_auto_sync_diagnostics is None
 
     async def test_apply_data_updates_param_change_ts(
         self,
@@ -745,43 +924,31 @@ class TestPowerOceanAppSurplusAutoSync:
             coordinator._apply_data({"ems_app_surplus_pct": 47})
         assert coordinator._last_ems_param_change_ts == 3000.0
 
-    async def test_no_sync_when_app_value_is_100(
+    @pytest.mark.parametrize("app_value,ems_value", [(100, 90), (0, 10)])
+    async def test_a_boundary_value_gets_two_writes_then_silence(
         self,
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
+        app_value: int,
+        ems_value: int,
     ) -> None:
-        """At app_int == 100 the EMS clamps sys_bat_backup_ratio to 90 by
-        design. Auto-syncing would generate periodic write traffic that
-        never reconciles. The user-side mirror is the source of truth."""
-        coordinator = self._make_coordinator(hass, enhanced_config_entry)
-        coordinator._device_data["ems_app_surplus_pct"] = 100
-        coordinator._device_data["ems_backup_ratio_pct"] = 90
-        coordinator._last_user_surplus_set_ts = 1000.0
-        coordinator._last_ems_param_change_ts = 2000.0
-        with patch(
-            "custom_components.ecoflow_energy.coordinator.time.monotonic",
-            return_value=2010.0,
-        ):
-            coordinator._maybe_schedule_surplus_sync()
-        coordinator.async_set_powerocean_soc.assert_not_called()
+        """The (0, 100) special case is gone (ADR-013 decision 4).
 
-    async def test_no_sync_when_app_value_is_0(
-        self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
-    ) -> None:
-        """At app_int == 0 the EMS may also diverge by design."""
-        coordinator = self._make_coordinator(hass, enhanced_config_entry)
-        coordinator._device_data["ems_app_surplus_pct"] = 0
-        coordinator._device_data["ems_backup_ratio_pct"] = 10
+        At app_int == 100 the EMS clamps sys_bat_backup_ratio to ~90 by
+        design; at app_int == 0 it diverges the same way. Neither is
+        special-cased any more - the general bound covers it: two writes,
+        then silence, exactly like any other pair the device never adopts.
+        """
+        coordinator = self._make_divergent_coordinator(
+            hass, enhanced_config_entry, app=app_value, ems=ems_value,
+        )
         coordinator._last_user_surplus_set_ts = 1000.0
         coordinator._last_ems_param_change_ts = 2000.0
-        with patch(
-            "custom_components.ecoflow_energy.coordinator.time.monotonic",
-            return_value=2010.0,
-        ):
-            coordinator._maybe_schedule_surplus_sync()
-        coordinator.async_set_powerocean_soc.assert_not_called()
+        await self._run_evaluations(hass, coordinator, 6)
+        assert coordinator.async_set_powerocean_soc.call_count == 2
+        coordinator.async_set_powerocean_soc.assert_has_calls(
+            [call(0, app_value), call(0, app_value)]
+        )
 
     async def test_apply_data_does_not_touch_param_change_ts_for_other_fields(
         self,

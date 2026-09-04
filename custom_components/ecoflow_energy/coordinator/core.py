@@ -228,6 +228,13 @@ class EcoFlowDeviceCoordinator(
         # echo of a value the user has since superseded in HA) would
         # otherwise pull HA back to the obsolete app-side value.
         self._last_ems_param_change_ts: float = 0.0
+        # The divergent (app, ems) pair the auto-sync is currently bounded
+        # against (ADR-013): app value, ems value, writes issued for this
+        # pair, and whether the bound has been reached and reported.
+        # Cleared on a user SET, on a changed app value, or on a changed
+        # ems value while the app value stays put - each is new intent or
+        # new information, not a continuation of the suppressed pair.
+        self._surplus_sync_record: dict[str, int | bool] | None = None
         # What the last STREAM per-unit block held: how many linked units it
         # listed, and whether one of them was this device. Diagnostics only.
         # A serial that never matches is the one failure this feature can have
@@ -438,6 +445,19 @@ class EcoFlowDeviceCoordinator(
     def schedule_divergent_bundles(self) -> int:
         """Bundles whose repeated schedule-list copies disagreed."""
         return self._schedule_divergent_bundles
+
+    @property
+    def surplus_auto_sync_diagnostics(self) -> dict[str, int | bool] | None:
+        """Return the surplus auto-sync record, or None (ADR-013).
+
+        None on every device that never runs the auto-sync (it is only
+        scheduled for a PowerOcean in Enhanced Mode) and equally None once
+        no divergent pair is on record - the two cases a diagnostics reader
+        cannot otherwise tell apart from an absent key.
+        """
+        if self._surplus_sync_record is None:
+            return None
+        return dict(self._surplus_sync_record)
 
     def _note_value_change(self, parsed: dict[str, Any]) -> None:
         """Record whether this update carried anything the device had not sent.

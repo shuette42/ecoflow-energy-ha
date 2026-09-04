@@ -79,3 +79,11 @@ dumps/
 mitm-flows*.dump
 ecoflow-mqtt-decoded*.json
 .venv-proto/
+
+# Editor and tooling backups. A copy of a production module next to the module
+# is invisible to `git status` when only a personal ~/.config/git/ignore covers
+# it, and a fresh checkout without that config would stage it into this public
+# repository on the next `git add -A`. Found 2026-09-04 in a review.
+*.bak
+*.orig
+*.rej

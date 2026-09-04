@@ -868,12 +868,6 @@ class TestEnergyRestoreSeed:
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE,
         )
         integrator = coordinator._energy_integrator
-        # Mark the integrator as already loaded so set_total/restore_total
-        # never read hass.config.path(".storage/...") - a coordinator built
-        # without a full async_setup_entry is not sandboxed there, and a
-        # leftover state file from another test would otherwise silently
-        # replace the controlled state set up below.
-        integrator._loaded = True
         integrator._state["solar_energy_kwh"] = (100.0, time.monotonic() - 30.0, 0.0)
 
         coordinator.seed_energy_total("solar_energy_kwh", 200.0)

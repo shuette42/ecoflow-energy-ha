@@ -524,6 +524,11 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
         # device integrates nothing" is itself the answer to a question about
         # a kWh sensor that will not move.
         "energy_integrator": _energy_integrator_diagnostics(coordinator, now),
+        # Always present too (ADR-013): null on every device that never
+        # runs the PowerOcean surplus auto-sync, and equally null once a
+        # divergent pair it tracked has no record - see the property's own
+        # docstring for why those two cases share one representation.
+        "surplus_auto_sync": coordinator.surplus_auto_sync_diagnostics,
         "event_log": _format_event_log(coordinator.event_log),
     }
 
