@@ -6,9 +6,9 @@ a real (in-memory) Home Assistant instance via the ``hass`` fixture.
 
 from __future__ import annotations
 
-import shutil
 import threading
 from pathlib import Path
+from collections.abc import AsyncGenerator
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -71,33 +71,32 @@ def auto_enable_custom_integrations(enable_custom_integrations):
 
 
 @pytest.fixture
-def hass_config_dir(hass_tmp_config_dir: str) -> str:
+async def hass(hass: HomeAssistant, tmp_path: Path) -> AsyncGenerator[HomeAssistant]:
     """Give every test its own config directory instead of the plugin's shared one.
 
     ``hass.config.path()`` in this harness otherwise resolves to the plugin's
     own package directory (``testing_config/``), which every test shares. The
     energy integrator is the one thing in this integration that writes there
-    directly (``.storage/ecoflow_energy_<sn>.json``), so a total flushed by
-    one test was still on disk for the next run of any other test, in the
-    same session or a later one.
+    directly (``.storage/ecoflow_energy_<sn>.json``), so a total flushed by one
+    test was still on disk for the next run of any other test, in the same
+    session or a later one.
 
-    ``hass_tmp_config_dir`` is the plugin's own documented hook for this: its
-    docstring says to override ``hass_config_dir`` with it, and the ``hass``
-    fixture depends on ``hass_config_dir``, so every test that builds a
-    ``hass`` picks this up automatically. Not autouse - a test that builds no
-    ``hass`` has no path to write to.
+    This overrides the plugin's ``hass`` fixture by name, asks for the original
+    as a parameter, and repoints the config directory at pytest's per-test
+    ``tmp_path``. ``Config.config_dir`` is a plain attribute and ``Config.path``
+    joins it at call time, so nothing else has to cooperate.
 
-    The hook copies the whole ``testing_config/`` directory
-    (``copytree(..., dirs_exist_ok=True)``), so a ``.storage/`` a run before
-    this fixture existed left behind in the plugin's own package directory
-    would be copied into every test's tmp directory too. The plugin ships no
-    ``.storage/`` of its own, so everything under it is ours to remove.
+    The first shape of this fixture used the plugin's ``hass_tmp_config_dir``
+    hook, which is the documented way to do it and works on the version
+    installed here. It does not exist on 0.13.316, which is what CI installs:
+    versions from 0.13.317 need Python 3.14 and CI runs 3.13, so the floor in
+    ``requirements_test.txt`` is a pin in practice. Eight tests went red there
+    while every one of them passed locally. ``./scripts/dev/run_tests.sh
+    --ci-env`` reproduces that environment, and this shape is measured green on
+    both.
     """
-    config_dir = hass_tmp_config_dir
-    storage_dir = Path(config_dir) / ".storage"
-    if storage_dir.exists():
-        shutil.rmtree(storage_dir)
-    return config_dir
+    hass.config.config_dir = str(tmp_path)
+    yield hass
 
 
 # ---------------------------------------------------------------------------

@@ -4,8 +4,9 @@
 package directory (``testing_config/``), so a state file the energy
 integrator flushed in one test was still on disk for the next run of any
 other test - in the same session, or a later one, since the file survives
-between invocations. These tests pin the fix from ADR-012: the
-``hass_config_dir`` override in ``tests/ha/conftest.py``.
+between invocations. These tests pin the fix from ADR-012 as amended
+2026-09-04: the ``hass`` fixture override in ``tests/ha/conftest.py`` that
+re-points ``hass.config.config_dir`` at pytest's own ``tmp_path``.
 """
 
 from __future__ import annotations
@@ -13,7 +14,6 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 from homeassistant.core import HomeAssistant
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -36,10 +36,15 @@ async def test_state_file_path_is_under_the_test_tmp_dir(
 
     Before the fix, ``hass.config.path()`` resolved to the pytest plugin's
     installed package directory, so this assertion failed against a real
-    site-packages path instead of the test's own tmp_path.
+    site-packages path instead of the test's own tmp_path. The second
+    assertion pins that nothing is copied into ``tmp_path`` on the way in -
+    unlike the plugin's own ``hass_tmp_config_dir`` hook, re-pointing
+    ``config_dir`` after the fact never populates a ``.storage/`` the test
+    did not write itself.
     """
     resolved = hass.config.path(".storage/x.json")
     assert resolved.startswith(str(tmp_path))
+    assert not (tmp_path / ".storage").exists()
 
 
 class TestStateDoesNotLeakAcrossTests:
@@ -90,48 +95,3 @@ class TestStateDoesNotLeakAcrossTests:
         )
         coordinator._energy_integrator.load_state()
         assert coordinator._energy_integrator.state_snapshot() == {}
-
-
-def test_leftovers_in_the_plugin_dir_are_not_copied_in(
-    tmp_path_factory: pytest.TempPathFactory,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A ``.storage/`` left in the plugin's own package dir must not leak in.
-
-    ``hass_tmp_config_dir`` copies the whole ``testing_config/`` directory,
-    so a ``.storage/`` a pre-fix run left behind there would otherwise be
-    copied into every test's own tmp directory. The ``hass_config_dir``
-    fixture in ``conftest.py`` removes the copy after that ``copytree`` runs.
-
-    This calls both fixture functions directly, in that order, instead of
-    going through the ``hass`` fixture: measured on 2026-09-04, the ``hass``
-    graph resolves ``hass_tmp_config_dir`` (and its ``copytree``) before a
-    same-scope, no-dependency fixture placed earlier in a test's parameter
-    list, even though nothing documents that ordering as reliable. A
-    monkeypatch applied through such a fixture would silently miss the
-    ``copytree`` call it exists to influence - which this test's own first
-    draft did: it seeded a fake plugin directory, asserted a clean result,
-    and passed whether or not the ``.storage`` removal in ``conftest.py``
-    was even present, because ``get_test_config_dir`` had already been
-    called before the monkeypatch took hold.
-    """
-    fake_plugin_dir = tmp_path_factory.mktemp("fake_plugin_dir")
-    storage = fake_plugin_dir / ".storage"
-    storage.mkdir()
-    (storage / _STATE_FILE_NAME).write_text(
-        '{"solar_energy_kwh": [200.004, 500.0, 0.0]}'
-    )
-    monkeypatch.setattr(
-        "pytest_homeassistant_custom_component.plugins.get_test_config_dir",
-        lambda: str(fake_plugin_dir),
-    )
-
-    from pytest_homeassistant_custom_component.plugins import hass_tmp_config_dir
-
-    from .conftest import hass_config_dir as hass_config_dir_fixture
-
-    dest = tmp_path_factory.mktemp("test_config_dir")
-    copied_dir = hass_tmp_config_dir.__wrapped__(dest)
-    config_dir = hass_config_dir_fixture.__wrapped__(copied_dir)
-
-    assert not (Path(config_dir) / ".storage").exists()
