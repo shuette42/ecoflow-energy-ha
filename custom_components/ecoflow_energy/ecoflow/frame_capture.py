@@ -98,7 +98,23 @@ _UUID_RUN = re.compile(
 # `_UUID_RUN`, in a header sub-message field, 8 occurrences in 8 frames,
 # never on its own. What the hex half identifies is not established here;
 # masking it does not depend on the answer.
-_JOINED_HEX_RUN = re.compile(rb"[0-9a-f]{12,32}(?=-[A-Z0-9]{15,})")
+#
+# Two details the pattern depends on and which a later edit must not undo:
+#
+# The run has no upper bound. An earlier form capped it at 32, the width of
+# a UUID without its hyphens, and a cap masks the LAST 32 characters of a
+# longer run while leaving the front of it standing - a partial mask, which
+# is worse than none, because a 44-character run would leave 12 characters
+# behind and those are themselves an identifier-shaped run. The anchor
+# carries the safety here, not the width, so the width is not a second
+# safety and only costs that case. No run over 12 exists on file either
+# way, so this changes no byte of any recording.
+#
+# `_MASK_BYTE` must stay inside `[A-Z0-9]`. `_SERIAL_RUN` runs first and
+# replaces the serial half with mask bytes, and the anchor below still has
+# to match what it left behind. That holds for `X` and fails for any other
+# choice, which is why the two are not independent.
+_JOINED_HEX_RUN = re.compile(rb"[0-9a-f]{12,}(?=-[A-Z0-9]{15,})")
 
 # A device also reports the owner's time zone, as an IANA name like
 # `Europe/Budapest`. It is not an identifier and the pass above cannot see

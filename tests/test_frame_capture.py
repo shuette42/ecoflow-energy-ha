@@ -348,6 +348,61 @@ class TestJoinedHexRunMasking:
         assert b"01234567-" in result
         assert self.SERIAL not in result
 
+    def test_a_lower_case_run_outside_hex_is_not_masked(self) -> None:
+        """The alphabet is hex, and widening it must fail a test here.
+
+        A pattern of `[0-9a-z]` would still mask everything this class
+        checks, so without this case a widening of the alphabet passes the
+        suite unnoticed. Lower-case letters beyond `f` are ordinary text,
+        not an identifier this device writes.
+        """
+        payload = b"\x22\x1d" + b"ghijklmnopqr-" + self.SERIAL
+
+        result = sanitize_frame(payload, [])
+
+        assert b"ghijklmnopqr" in result
+
+    def test_a_hex_run_touching_a_serial_without_a_hyphen_stays(self) -> None:
+        """The hyphen is part of the shape, not decoration.
+
+        Making it optional would let the pattern reach into any byte string
+        that happens to end in hex before a serial, which is the free-running
+        behaviour the anchor exists to avoid.
+        """
+        payload = b"\x22\x1c" + b"0123456789ab" + self.SERIAL
+
+        result = sanitize_frame(payload, [])
+
+        assert b"0123456789ab" in result
+
+    def test_the_anchor_needs_a_full_length_serial_behind_it(self) -> None:
+        """The anchor floor is 15, the same one `_SERIAL_RUN` uses.
+
+        Lowering it would make the pattern fire on shorter upper-case runs,
+        which ordinary binary produces often enough that the narrow alphabet
+        elsewhere in this module exists to avoid exactly that.
+        """
+        payload = b"\x22\x19" + b"0123456789ab-" + b"HJ31TEST0000"
+
+        result = sanitize_frame(payload, [])
+
+        assert b"0123456789ab" in result
+
+    def test_a_run_longer_than_a_uuid_is_masked_whole(self) -> None:
+        """No upper bound: a partial mask is worse than none.
+
+        A capped run masks its tail and leaves its front standing, and a
+        front of twelve or more characters is itself the shape the fixture
+        gate refuses. Nothing on file carries a run this long; the case is
+        pinned so a later edit cannot reintroduce the cap unnoticed.
+        """
+        long_run = b"0123456789ab" * 10  # 120 characters
+        payload = b"\x22\x7f" + long_run + b"-" + self.SERIAL
+
+        result = sanitize_frame(payload, [])
+
+        assert result == b"\x22\x7f" + b"X" * 120 + b"-" + b"X" * 16
+
     def test_a_json_timestamp_is_not_an_identifier(self) -> None:
         """The anchor against the free-running variant that was rejected.
 
@@ -537,14 +592,21 @@ class TestMaskingDoesNotCorruptRealFrames:
                     if isinstance(value, (int, float))
                 }
                 assert numeric_before == numeric_after, (parser.__name__, name)
-                checked[parser.__name__] = checked.get(parser.__name__, 0) + 1
+                checked[parser.__name__] = (
+                    checked.get(parser.__name__, 0) + len(numeric_before)
+                )
 
-        # Second positive control, per parser: a parser that stopped matching
-        # any fixture (a broken import, a renamed field) must not pass this
-        # test by contributing zero to a combined total.
-        assert checked.get("parse_stream_ac5000_message", 0) >= 20
-        assert checked.get("parse_stream_proto_message", 0) >= 1
-        assert checked.get("parse_smart_meter_message", 0) >= 1
+        # Second positive control, per parser, counting VALUES COMPARED and
+        # not frames visited. A counter that increments once per frame stays
+        # healthy even when every parser has stopped returning numbers at
+        # all - a stub returning `{"only": "text"}` passed the earlier shape
+        # of this assertion with zero numbers compared. The floors sit just
+        # under what the fixtures hold today (988, 382, 114), so a parser
+        # that quietly stops reading most of its fields is caught, not only
+        # one whose import fails outright.
+        assert checked.get("parse_stream_ac5000_message", 0) >= 900
+        assert checked.get("parse_stream_proto_message", 0) >= 350
+        assert checked.get("parse_smart_meter_message", 0) >= 100
 
     def test_no_header_field_changes_under_masking(self) -> None:
         """The family-agnostic negative control.
@@ -571,14 +633,27 @@ class TestMaskingDoesNotCorruptRealFrames:
                     if not isinstance(value, (int, float)):
                         continue  # string-typed: serial, account id, pdata
                     assert after.get(key) == value, (family, name, key)
-            checked[family] = checked.get(family, 0) + 1
+                    checked[family] = checked.get(family, 0) + 1
 
-        # Positive control, per family: a decode that silently emptied one
-        # device family's headers must not pass this test by leaving a
-        # combined total that still looks healthy.
-        assert len(checked) >= 5, checked
-        for family, count in checked.items():
-            assert count >= 1, family
+        # Positive control, per family, counting FIELDS COMPARED and not
+        # frames visited. A decoder returning no headers at all satisfies
+        # `len(before) == len(after)` as `0 == 0`, never enters the loop,
+        # and left the earlier per-frame counter looking healthy - measured
+        # green with a decoder stubbed to return nothing. Counting inside
+        # the comparison ties the number to the decoder's own output. The
+        # floors sit just under what each family holds today.
+        assert set(checked) >= {
+            "delta3",
+            "smart_meter",
+            "solar_tracker",
+            "stream",
+            "stream_ac5000",
+        }, checked
+        assert checked["delta3"] >= 40, checked
+        assert checked["smart_meter"] >= 180, checked
+        assert checked["solar_tracker"] >= 90, checked
+        assert checked["stream"] >= 320, checked
+        assert checked["stream_ac5000"] >= 1050, checked
 
 
 class TestIsProtoFrame:
