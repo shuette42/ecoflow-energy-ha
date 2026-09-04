@@ -136,15 +136,15 @@ def sanitize_frame(payload: bytes, secrets: list[str]) -> bytes:
     length, in every case variant the payload might use.
 
     Named identifiers are masked first, then anything else shaped like a
-    serial, then the city half of any time zone the device reports, then
-    anything a device presents as a whole length-delimited field of
-    identifier-shaped characters. The second pass matters because a frame
+    serial, then anything written as a UUID, then the city half of any time
+    zone the device reports, then anything a device presents as a whole
+    length-delimited field of identifier-shaped characters. The second pass matters because a frame
     also carries the serial of every battery pack and of any attached
     accessory, and the caller cannot name what it has not discovered yet. The
     third catches identifiers too short for the second to risk matching by
     shape, which is how a 12-character one reached a public issue attachment
     before anyone noticed. Masking preserves length, so byte offsets survive
-    all three passes and a field-layout analysis still works.
+    every pass and a field-layout analysis still works.
     """
     sanitized = payload
     for secret in secrets:

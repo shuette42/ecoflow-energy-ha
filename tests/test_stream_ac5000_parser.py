@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (
+    _TASK_KEYS,
     parse_stream_ac5000_message,
 )
 from ecoflow_energy.ecoflow.proto_encoding import (
@@ -583,9 +584,9 @@ class TestScheduledTasks:
         # it was a discharge one, so the frame states there is no charge task
         # (ADR-015). Absence would mean "this frame says nothing", which is
         # what a frame without `f40` means and this one is not.
-        charge_keys = [k for k in result if k.startswith("scheduled_charge_")]
-        assert charge_keys
-        assert all(result[k] is None for k in charge_keys)
+        expected = {k for k in _TASK_KEYS if k.startswith("scheduled_charge_")}
+        assert {k for k in result if k.startswith("scheduled_charge_")} == expected
+        assert all(result[k] is None for k in expected)
 
     def test_a_charge_task_numbered_two_is_read_as_charge(self) -> None:
         """The mirror, so the rule is not re-derived in one direction only."""
@@ -610,9 +611,9 @@ class TestScheduledTasks:
         # Mirror of the discharge case: the list held one charge task, so the
         # frame states there is no discharge task rather than staying silent
         # about it (ADR-015).
-        discharge_keys = [k for k in result if k.startswith("scheduled_discharge_")]
-        assert discharge_keys
-        assert all(result[k] is None for k in discharge_keys)
+        expected = {k for k in _TASK_KEYS if k.startswith("scheduled_discharge_")}
+        assert {k for k in result if k.startswith("scheduled_discharge_")} == expected
+        assert all(result[k] is None for k in expected)
 
     def test_two_tasks_of_one_kind_report_the_last(
         self, caplog: pytest.LogCaptureFixture
@@ -769,7 +770,12 @@ class TestCaptureReplay:
             charge = [r for r in reported if "scheduled_charge_power_w" in r]
             assert charge, path.name
             assert all(r["scheduled_charge_power_w"] == 600 for r in charge)
-            assert all(r.get("scheduled_discharge_power_w") is None for r in reported)
+            # `.get(...) is None` would pass on a missing key too, so it
+            # would not discriminate the change at all. Split out the frames
+            # that carry a list and demand the key be there and be None.
+            with_list = [r for r in reported if "scheduled_charge_power_w" in r]
+            assert with_list
+            assert all(r["scheduled_discharge_power_w"] is None for r in with_list)
 
     def test_get_reply_bundle_decodes_every_command(self) -> None:
         frame = _load(GET_REPLY)[0]
@@ -1219,15 +1225,42 @@ class TestTaskListShrink:
         assert result["scheduled_charge_power_w"] is None
 
     def test_a_set_reply_never_reaches_the_parser(self) -> None:
-        """The acknowledgement echoes `f39`, the write's own entries.
+        """The acknowledgement carries no task keys through the parser.
 
-        It is in the fixture so this stays pinned: read as a task list it
-        would clear the kind it does not mention and swallow the next removal.
-        The ingest returns on every `/set_reply` topic before parsing, and
-        `(254, 38)` has no entry in the field map, so nothing here can.
+        It echoes `f39`, the write's own entries. This test drives the parser
+        directly, so it pins one half: `(254, 38)` has no entry in the field
+        map. The other half, that the ingest returns on a `/set_reply` topic
+        before parsing at all, is a routing question and lives with the
+        coordinator tests. Saying otherwise here would claim coverage this
+        shape cannot have.
         """
         result = self._parse("delete_ack")
         assert not [key for key in (result or {}) if key.startswith("scheduled_")]
+
+
+    def test_the_cleared_keys_per_kind_add_up_to_the_empty_list_keys(self) -> None:
+        """The per-kind clear derives its keys, so nothing may fall outside it.
+
+        `_finalize_task` clears a kind by prefix rather than from a second
+        hand-kept list. That the two agree today is arithmetic, not a rule:
+        six `scheduled_charge_*` and five `scheduled_discharge_*` happen to be
+        the eleven entries of `_TASK_KEYS`. A twelfth entry outside the scheme
+        would go uncleared, and on the empty-list path too, which is a silent
+        narrowing of what `main` already did.
+        """
+        from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (
+            _TASK_BLOCKS,
+            _TASK_KEYS,
+        )
+
+        by_kind = {
+            key
+            for kind, _group in _TASK_BLOCKS
+            for key in _TASK_KEYS
+            if key.startswith(f"scheduled_{kind}_")
+        }
+        assert by_kind
+        assert set(_TASK_KEYS) == by_kind
 
     def test_a_block_that_does_not_decode_retracts_nothing(self) -> None:
         """Absence is evidence only when the list was read in full.
