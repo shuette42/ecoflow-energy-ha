@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
@@ -30,6 +31,7 @@ from custom_components.ecoflow_energy.const import (
 from custom_components.ecoflow_energy.diagnostics import (
     REDACTED,
     _device_diagnostics,
+    _looks_like_base64,
     _redact_serials,
     _serial_tails,
     _skipped_devices_diagnostics,
@@ -922,6 +924,249 @@ class TestRedactSerials:
     def test_short_values_untouched(self) -> None:
         assert _redact_serials("bpSoc") == "bpSoc"
         assert _redact_serials(80) == 80
+
+    def test_a_base64_serial_is_masked(self) -> None:
+        """A base64-encoded serial is decoded and replaced whole.
+
+        Shaped like the quota section this was found in: an ``emsErrCode``
+        block nesting a ``moduleSn`` value that is base64, not plain text.
+        ``SEozMVRFU1RTRVJJQUwwMQ==`` is the base64 form of
+        ``HJ31TESTSERIAL01`` and carries no upper-case run of fifteen or
+        more on its own, so this isolates the decode step from the ordering
+        question the next test covers.
+        """
+        out = _redact_serials(
+            {"error_code": {"emsErrCode": {"moduleSn": "SEozMVRFU1RTRVJJQUwwMQ=="}}}
+        )
+        assert out["error_code"]["emsErrCode"]["moduleSn"] == REDACTED
+        dumped = json.dumps(out)
+        assert "HJ31TESTSERIAL01" not in dumped
+        assert "SEozMVRFU1RTRVJJQUwwMQ==" not in dumped
+
+    def test_the_decode_runs_before_the_plain_pass(self) -> None:
+        """The decode must see the base64 form before the plain pass does.
+
+        ``HJ31TESTBAM40TX5`` base64-encodes to ``SEozMVRFU1RCQU00MFRYNQ==``,
+        which DOES carry an upper-case run of fifteen or more
+        (``MVRFU1RCQU00MFRYNQ``). Run the plain pass first and it eats that
+        run, leaving ``SEoz**REDACTED**==`` behind - a fragment the decode
+        step can no longer recognise as base64 at all. The whole value must
+        come out as one marker instead.
+        """
+        out = _redact_serials("SEozMVRFU1RCQU00MFRYNQ==")
+        assert out == REDACTED
+        assert "SEoz" not in out
+        assert "==" not in out
+
+    def test_a_hex_string_is_not_a_base64_serial(self) -> None:
+        """Negative control: a hex string passes the shape check but not ASCII.
+
+        Hex digits are a subset of the base64 alphabet, so this 24-character
+        hex string is itself valid base64 by shape - asserted directly here
+        so the test cannot silently pass because the shape check rejected it
+        first. It decodes to eighteen binary bytes (starting with
+        ``\\xdd\\xcd\\xfd``) that are not ASCII text, so the value must fall
+        through the decode step unchanged.
+        """
+        hex_value = "3c39e723136e4a1b8f0d2e57"
+        assert _looks_like_base64(hex_value)
+        out = _redact_serials({"payload_hex": hex_value})
+        assert out == {"payload_hex": hex_value}
+
+    def test_decoded_text_around_a_serial_is_not_replaced_whole(self) -> None:
+        """The match is anchored, so a serial among other text is not a serial.
+
+        ``c249SEozMVRFU1RTRVJJQUwwMSBvaw==`` decodes to
+        ``sn=HJ31TESTSERIAL01 ok``, which contains a serial but is not one.
+        An unanchored search would swallow the whole value into a single
+        marker and drop what surrounded it. Nothing on file carries this
+        shape, so without this case a change from a full match to a search
+        passes the suite unnoticed.
+        """
+        value = "c249SEozMVRFU1RTRVJJQUwwMSBvaw=="
+
+        # Positive control: without these two the test is also green when
+        # the value never reaches the decode step at all, which is what a
+        # raised length floor or a narrowed shape check would do.
+        assert _looks_like_base64(value)
+        assert base64.b64decode(value).decode("ascii") == "sn=HJ31TESTSERIAL01 ok"
+
+        assert _redact_serials({"moduleSn": value}) == {"moduleSn": value}
+
+    def test_both_forms_of_one_serial_share_an_alias(self) -> None:
+        """Whichever form the walk meets first, the other reads the same.
+
+        A download can carry a pack's serial as plain text in one section
+        and base64 in another. Two markers for one pack would read as two
+        packs to whoever has to make sense of the file.
+        """
+        plain_first = _redact_serials(
+            {"sn": "HJ31TESTSERIAL01", "moduleSn": "SEozMVRFU1RTRVJJQUwwMQ=="}
+        )
+        base64_first = _redact_serials(
+            {"moduleSn": "SEozMVRFU1RTRVJJQUwwMQ==", "sn": "HJ31TESTSERIAL01"}
+        )
+
+        assert plain_first["sn"] == plain_first["moduleSn"] == REDACTED
+        assert base64_first["sn"] == base64_first["moduleSn"] == REDACTED
+
+    def test_two_packs_in_base64_stay_distinct(self) -> None:
+        """The alias map still counts packs, so two remain two."""
+        out = _redact_serials(
+            {
+                "bpErrCode": [
+                    {"moduleSn": "SEozQVpESDVaRzVFMDA3NQ=="},
+                    {"moduleSn": "SEozQVpESDVaRzU4MDUxMg=="},
+                ]
+            }
+        )
+
+        first = out["bpErrCode"][0]["moduleSn"]
+        second = out["bpErrCode"][1]["moduleSn"]
+        assert first != second
+        assert {first, second} == {REDACTED, "**REDACTED-2**"}
+
+    def test_a_serial_behind_a_stray_byte_is_not_decoded(self) -> None:
+        """The strict decode is what keeps this to whole encoded serials.
+
+        ``/0hKMzFURVNUU0VSSUFMMDE=`` is one byte followed by a serial. A
+        strict decode refuses it, so the value falls through to the plain
+        pass and is masked only where an upper case run really sits. A
+        lenient decode that drops undecodable bytes would hand back a clean
+        serial and swallow the whole value instead, which is the search
+        over decoded text the design rules out.
+        """
+        value = "/0hKMzFURVNUU0VSSUFMMDE="
+
+        assert _looks_like_base64(value)
+        assert base64.b64decode(value).decode("ascii", errors="ignore") == (
+            "HJ31TESTSERIAL01"
+        )
+
+        out = _redact_serials({"moduleSn": value})
+
+        assert out["moduleSn"] != REDACTED
+        assert out["moduleSn"].startswith("/0hKMz")
+
+    def test_the_shortest_serial_the_pattern_accepts_is_masked(self) -> None:
+        """Fifteen characters, the floor of the serial pattern.
+
+        Fifteen bytes encode to exactly twenty base64 characters, which is
+        the length floor of the shape check, so this is the shortest value
+        the pass can accept at all. Raising that floor would stop masking
+        it without failing anything else, since every other base64 value in
+        this class is twenty-four characters or longer.
+        """
+        serial = "HJ31TESTSERIA1"
+        assert len(serial) == 14
+        short = serial + "X"  # fifteen, the first length _SERIAL_RE accepts
+        encoded = base64.b64encode(short.encode()).decode()
+        assert len(encoded) == 20
+
+        assert _redact_serials({"moduleSn": encoded}) == {"moduleSn": REDACTED}
+
+    def test_one_serial_in_two_key_forms_collapses_to_one_entry(self) -> None:
+        """The cost of one marker per serial, pinned rather than left quiet.
+
+        Both forms redact to the same string, so a dict keyed by a serial
+        AND by that same serial encoded ends up with a single entry. No
+        section builds keys that way, and the alternative would be two
+        markers for one pack, which is the thing the alias map exists to
+        prevent. Pinned so the narrowing is a decision on record and not a
+        surprise to whoever meets it.
+        """
+        out = _redact_serials(
+            {"HJ31TESTSERIAL01": 1, "SEozMVRFU1RTRVJJQUwwMQ==": 2}
+        )
+
+        assert out == {REDACTED: 2}
+
+    def test_a_base64_serial_in_a_key_is_masked(self) -> None:
+        """By shape, not by key name, so a key carrying one is covered too."""
+        out = _redact_serials({"SEozMVRFU1RTRVJJQUwwMQ==": 42})
+
+        assert list(out) == [REDACTED]
+        assert out[REDACTED] == 42
+
+
+class TestBase64SerialsInBothQuotaSections:
+    """The two sections a raw quota reaches, in the shape a dump carries.
+
+    Both are redacted by the one pass the whole dump goes through, so one
+    change covers them; each gets its own case because the second one's
+    reach rests on the code path rather than on a download. Every routed
+    PowerOcean download on file is Enhanced Mode, where no quota is polled
+    and the values are empty, so no file could have shown it.
+
+    Serials here are test values, not the ones observed.
+    """
+
+    def _redacted(self, diagnostics: dict, serials: list[str]) -> dict:
+        """Redact the way the entry point does, tails and all."""
+        return _redact_serials(diagnostics, tails=_serial_tails(serials))
+
+    def test_skipped_device_raw_quota(self) -> None:
+        """The section the four observed values sat in, unparsed devices."""
+        diagnostics = {
+            "skipped_devices": [
+                {
+                    "sn": "HJ31TESTSERIAL01",
+                    "raw_quota": {
+                        "error_code.emsErrCode.moduleSn": (
+                            "SEozMVRFU1RTRVJJQUwwMQ=="
+                        ),
+                        "error_code.bpErrCode": [
+                            {"moduleSn": "SEozQVpESDVaRzVFMDA3NQ=="},
+                            {"moduleSn": "SEozQVpESDVaRzU4MDUxMg=="},
+                        ],
+                    },
+                }
+            ]
+        }
+
+        out = self._redacted(diagnostics, ["HJ31TESTSERIAL01"])
+
+        dumped = json.dumps(out)
+        assert "SEozMVRFU1RTRVJJQUwwMQ==" not in dumped
+        assert "SEozQVpESDVaRzVFMDA3NQ==" not in dumped
+        assert "SEozQVpESDVaRzU4MDUxMg==" not in dumped
+        assert "HJ3AZDH5ZG5E0075" not in dumped
+        quota = out["skipped_devices"][0]["raw_quota"]
+        packs = [entry["moduleSn"] for entry in quota["error_code.bpErrCode"]]
+        assert packs[0] != packs[1]
+
+    def test_routed_device_raw_quota_values(self) -> None:
+        """The same keys reach a fully supported device on the polled path.
+
+        The quota response is stored verbatim and exported under the
+        device's own raw_quota, so a device this integration parses carries
+        these keys too whenever it is polled. That reach comes from the code
+        rather than from any download, which is why it is pinned here.
+        """
+        diagnostics = {
+            "devices": [
+                {
+                    "sn_prefix": "HJ31",
+                    "raw_quota": {
+                        "captured": True,
+                        "key_count": 2,
+                        "values": {
+                            "error_code.pcsErrCode.moduleSn": (
+                                "SEozMVRFU1RTRVJJQUwwMQ=="
+                            ),
+                            "bpSoc": 80,
+                        },
+                    },
+                }
+            ]
+        }
+
+        out = self._redacted(diagnostics, ["HJ31TESTSERIAL01"])
+
+        values = out["devices"][0]["raw_quota"]["values"]
+        assert values["error_code.pcsErrCode.moduleSn"] == REDACTED
+        assert values["bpSoc"] == 80
+        assert "HJ31TESTSERIAL01" not in json.dumps(out)
 
 
 class TestDeviceNameSerialTail:
