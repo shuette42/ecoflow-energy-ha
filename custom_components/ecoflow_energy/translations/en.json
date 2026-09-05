@@ -1548,20 +1548,23 @@
       "grid_l3_current_a": {
         "name": "Phase C Current"
       },
-      "grid_energy_total_wh": {
-        "name": "Grid Energy Total"
+      "grid_import_energy_wh": {
+        "name": "Grid Import Energy"
       },
-      "grid_energy_today_wh": {
-        "name": "Grid Energy Today"
+      "grid_export_energy_wh": {
+        "name": "Grid Export Energy"
       },
-      "grid_l1_energy_today_wh": {
-        "name": "Phase A Energy Today"
+      "grid_net_energy_wh": {
+        "name": "Grid Net Energy"
       },
-      "grid_l2_energy_today_wh": {
-        "name": "Phase B Energy Today"
+      "grid_l1_net_energy_wh": {
+        "name": "Phase A Net Energy"
       },
-      "grid_l3_energy_today_wh": {
-        "name": "Phase C Energy Today"
+      "grid_l2_net_energy_wh": {
+        "name": "Phase B Net Energy"
+      },
+      "grid_l3_net_energy_wh": {
+        "name": "Phase C Net Energy"
       },
       "grid_power_factor": {
         "name": "Power Factor"

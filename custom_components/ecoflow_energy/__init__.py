@@ -142,7 +142,23 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
 # withdrawn because the device reports its charge mode only when that mode
 # changes, which is far too rarely for a control that has to show where the
 # device stands.
-_WITHDRAWN_ENTITY_SUFFIXES: tuple[str, ...] = ("_ac_charge_mode",)
+#
+# The five `grid_*_wh` suffixes were the Smart Meter (BK21) energy counters
+# of v1.19.0-beta.1 through beta.7, built on a schema whose "today" and
+# "reactive" labels turned out wrong for every one of the five: a capture
+# spanning local midnight showed none of them resetting, and a house that
+# exports fell the ones then classed `total_increasing`. PLAN-123/ADR-018
+# replaces all five with six new keys under the direction the device's own
+# arithmetic actually shows (import, export, net, three phase nets), so the
+# old ids are withdrawn rather than migrated.
+_WITHDRAWN_ENTITY_SUFFIXES: tuple[str, ...] = (
+    "_ac_charge_mode",
+    "_grid_energy_total_wh",
+    "_grid_energy_today_wh",
+    "_grid_l1_energy_today_wh",
+    "_grid_l2_energy_today_wh",
+    "_grid_l3_energy_today_wh",
+)
 
 # HW51 PowerStream microinverters could once be classified as Stream batteries.
 # These are the Stream-only platform/key pairs exposed by v1.17. The 16 sensor
