@@ -92,7 +92,7 @@ class HttpPollMixin:
             ):
                 _LOGGER.warning(
                     "HTTP quota failed %d consecutive times for %s - triggering re-authentication",
-                    self._consecutive_http_failures, self.device_sn[:4],
+                    self._consecutive_http_failures, self.device_tag,
                 )
                 self._entry.async_start_reauth(self.hass)
             return dict(self._device_data)

@@ -976,7 +976,7 @@ class TestNoAccountIdInTheThreadName:
         client.start_loop()
 
         mock_paho.loop_start.assert_called_once()
-        assert mock_paho._thread.name == "ecoflow-mqtt-R371"
+        assert mock_paho._thread.name == "ecoflow-mqtt-R371-62d9"
         assert "2049739542351577090" not in mock_paho._thread.name
 
     @patch("ecoflow_energy.ecoflow.cloud_mqtt.mqtt.Client")

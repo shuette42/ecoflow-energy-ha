@@ -14,6 +14,7 @@ from base64 import b64decode
 import logging
 from typing import Any
 
+from ..const import device_log_tag
 from .powerocean import (
     ENERGY_TOTAL_PLACEHOLDER_WH,
     _CHG_DSG_STATE_MAP,
@@ -530,7 +531,7 @@ def remap_bp_keys(
         # the whole serial, and a reporter's 15 minute debug log carried it
         # 2714 times into a public issue (#219).
         "BP heartbeat for %s: %d pack(s) in message, %d real",
-        device_sn[:4],
+        device_log_tag(device_sn),
         len(all_packs),
         len(real_packs),
     )

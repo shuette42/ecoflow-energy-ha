@@ -34,6 +34,7 @@ from .const import (
     MQTT_PORT_TCP,
     MQTT_PORT_WSS,
     MQTT_WSS_PATH,
+    device_log_tag,
 )
 from .energy_stream import build_energy_stream_activate_payload
 
@@ -578,7 +579,7 @@ class EcoFlowMQTTClient:
             "MQTT msg: %s (%d bytes) for %s",
             self.mask_topic(msg.topic),
             len(msg.payload),
-            self._device_sn[:4],
+            device_log_tag(self._device_sn),
         )
         try:
             self.message_handler(msg.topic, msg.payload)
@@ -703,7 +704,7 @@ class EcoFlowMQTTClient:
         if thread is None:
             return
         try:
-            thread.name = f"ecoflow-mqtt-{self._device_sn[:4]}"
+            thread.name = f"ecoflow-mqtt-{device_log_tag(self._device_sn)}"
         except Exception:  # noqa: BLE001
             _LOGGER.debug("Could not rename the MQTT network thread", exc_info=True)
 

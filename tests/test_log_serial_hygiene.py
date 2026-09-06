@@ -6,8 +6,8 @@ diagnostics export was given a single check on the way out for exactly this
 reason; logging has no such choke point, so the guarantee is held here instead
 of in each of the thirty-odd call sites.
 
-The convention is `sn[:4]` for serials, `mask_topic()` for topics and
-`sanitize_frame()` for payloads. This test fails on a new call site that
+The convention is `device_log_tag()` for serials, `mask_topic()` for topics
+and `sanitize_frame()` for payloads. This test fails on a new call site that
 forgets any of the three, which is the failure mode that produced three
 separate leaks in one release - each found in the section next to the one
 being worked on.
@@ -59,31 +59,40 @@ def _log_call_bodies(source: str) -> list[tuple[int, str]]:
     return bodies
 
 
-def _strip_sanitize_frame_args(body: str) -> str:
-    """Blank the argument text of every sanitize_frame(...) call in a body.
+# The two maskers that take the full serial as their input. Everywhere else
+# inside a log call, a bare serial is the leak; inside these two argument
+# lists it is the fix, because that is the value they exist to erase or
+# shorten.
+_MASKERS = ("sanitize_frame(", "device_log_tag(")
 
-    The masker takes the full serial as the secret to erase, so its argument
-    list is the one place inside a log call where `self.device_sn` is the fix
-    rather than the leak. Only that span is exempted - a serial passed to the
-    log call next to a sanitize_frame() call still fails.
+
+def _strip_masker_args(body: str) -> str:
+    """Blank the argument text of every masker call in a body.
+
+    Only those spans are exempted - a serial passed to the log call next to a
+    masker call still fails, which is what caught the six sites that had been
+    given the tag and kept the raw serial in the next argument.
     """
-    out: list[str] = []
-    index = 0
-    while True:
-        start = body.find("sanitize_frame(", index)
-        if start == -1:
-            out.append(body[index:])
-            return "".join(out)
-        scan = start + len("sanitize_frame(")
-        out.append(body[index:scan])
-        depth = 1
-        while scan < len(body) and depth:
-            if body[scan] == "(":
-                depth += 1
-            elif body[scan] == ")":
-                depth -= 1
-            scan += 1
-        index = scan
+    for masker in _MASKERS:
+        out: list[str] = []
+        index = 0
+        while True:
+            start = body.find(masker, index)
+            if start == -1:
+                out.append(body[index:])
+                break
+            scan = start + len(masker)
+            out.append(body[index:scan])
+            depth = 1
+            while scan < len(body) and depth:
+                if body[scan] == "(":
+                    depth += 1
+                elif body[scan] == ")":
+                    depth -= 1
+                scan += 1
+            index = scan
+        body = "".join(out)
+    return body
 
 
 def _offenders(
@@ -101,8 +110,10 @@ def _offenders(
 
 
 def test_no_full_serial_in_log_calls() -> None:
-    offenders = _offenders(_BARE_SERIAL, _strip_sanitize_frame_args)
-    assert not offenders, "log calls pass a full serial, use sn[:4]:\n" + "\n".join(
+    offenders = _offenders(_BARE_SERIAL, _strip_masker_args)
+    assert not offenders, (
+        "log calls pass a full serial, use device_log_tag():\n"
+    ) + "\n".join(
         offenders
     )
 

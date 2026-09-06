@@ -1518,7 +1518,7 @@ class TestNoFullSerialInTheHeartbeatLog:
         remap_bp_keys({"all_packs": []}, {}, "R371TEST00000001")
 
         assert "R371TEST00000001" not in caplog.text
-        assert "BP heartbeat for R371" in caplog.text
+        assert "BP heartbeat for R371-62d9" in caplog.text
 
 
 class TestRemapBpKeysEnergyPlaceholder:

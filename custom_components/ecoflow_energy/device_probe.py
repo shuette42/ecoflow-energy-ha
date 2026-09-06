@@ -45,6 +45,7 @@ from .const import (
     RAW_FRAME_KEYS_MAX,
     RAW_FRAME_MAX_BYTES,
     RAW_FRAME_PER_KEY_MAX,
+    device_log_tag,
 )
 from .ecoflow.broker import BrokerAddress, broker_from_credentials
 from .ecoflow.cloud_mqtt import EcoFlowMQTTClient
@@ -314,7 +315,7 @@ class UnroutedDeviceProbe:
         # Assistant deliberately does not wait for those either. One
         # reconnect attempt is short enough to be worth waiting for.
         self.hass.async_create_task(
-            _run(), f"ecoflow probe reconnect {self.device_sn[:4]}", eager_start=True
+            _run(), f"ecoflow probe reconnect {device_log_tag(self.device_sn)}", eager_start=True
         )
 
     def _reconnect(self) -> None:
@@ -333,7 +334,7 @@ class UnroutedDeviceProbe:
             self._client.try_reconnect()
         except Exception:  # noqa: BLE001
             _LOGGER.debug(
-                "Probe reconnect failed for %s...", self.device_sn[:4], exc_info=True
+                "Probe reconnect failed for %s", device_log_tag(self.device_sn), exc_info=True
             )
         if self._stopped:
             # A stop landed while the attempt ran. The flag is set before the
@@ -345,8 +346,8 @@ class UnroutedDeviceProbe:
                 self._client.disconnect()
             except Exception:  # noqa: BLE001
                 _LOGGER.debug(
-                    "Probe post-stop disconnect failed for %s...",
-                    self.device_sn[:4],
+                    "Probe post-stop disconnect failed for %s",
+                    device_log_tag(self.device_sn),
                     exc_info=True,
                 )
 
@@ -361,7 +362,7 @@ class UnroutedDeviceProbe:
             return await self.hass.async_add_executor_job(self._connect)
         except Exception:  # noqa: BLE001
             _LOGGER.debug(
-                "Probe connect failed for %s...", self.device_sn[:4], exc_info=True
+                "Probe connect failed for %s", device_log_tag(self.device_sn), exc_info=True
             )
             return False
 
@@ -394,7 +395,7 @@ class UnroutedDeviceProbe:
             await self.hass.async_add_executor_job(self._client.disconnect)
         except Exception:  # noqa: BLE001
             _LOGGER.debug(
-                "Probe disconnect failed for %s...", self.device_sn[:4], exc_info=True
+                "Probe disconnect failed for %s", device_log_tag(self.device_sn), exc_info=True
             )
 
     def _on_message(self, topic: str, payload: bytes) -> None:
@@ -535,9 +536,9 @@ async def async_start_probes(
         # retry - the watchdog only sees the probes on this list.
         probes.append(probe)
         _LOGGER.debug(
-            "Capturing raw data for unsupported device %s... for diagnostics "
+            "Capturing raw data for unsupported device %s for diagnostics "
             "(initial connect: %s)",
-            sn[:4],
+            device_log_tag(sn),
             "ok" if started else "failed, will retry",
         )
     return probes

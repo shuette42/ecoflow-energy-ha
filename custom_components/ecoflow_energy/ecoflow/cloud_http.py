@@ -26,6 +26,7 @@ from .const import (
     IOT_QUOTA_ALL_PATH,
     IOT_QUOTA_PATH,
     QUOTA_HTTP_MIN_INTERVAL_S,
+    device_log_tag,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -60,7 +61,7 @@ class EcoFlowHTTPQuota:
     @property
     def _sn_display(self) -> str:
         """SN prefix only for logs - never leak a full serial to HA logs."""
-        return self._device_sn[:4] + "..."
+        return device_log_tag(self._device_sn)
 
     # ------------------------------------------------------------------
     # Public API
