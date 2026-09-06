@@ -28,6 +28,7 @@ from custom_components.ecoflow_energy.const import (
     UNKNOWN_FIELD_CMDS_MAX,
     UNKNOWN_FIELD_NUMBERS_MAX,
 )
+from custom_components.ecoflow_energy.ecoflow.const import device_log_tag
 from custom_components.ecoflow_energy.diagnostics import (
     REDACTED,
     _device_diagnostics,
@@ -178,6 +179,11 @@ class TestDeviceDiagnostics:
         assert result["device_name"] == "Delta 2 Max"
         assert result["product_name"] == "Delta 2 Max"
         assert result["enhanced_mode"] is False
+        # The tag that also goes into the log, so a log line and a download
+        # can be matched up without either naming the serial (PLAN-124).
+        assert result["device_tag"] == device_log_tag(coordinator.device_sn)
+        assert result["device_tag"].startswith("DAEB-")
+        assert "K5ZZ1234" not in result["device_tag"]
 
     async def test_mqtt_status_disconnected(
         self,

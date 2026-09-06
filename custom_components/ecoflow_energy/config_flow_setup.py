@@ -37,6 +37,17 @@ from .ecoflow.iot_api import IoTApiClient
 _LOGGER = logging.getLogger(__name__)
 
 
+def short_serial(sn: str) -> str:
+    """Prefix and tail, never the middle.
+
+    The picker is the owner's own screen, so it may carry more than a log
+    does, and it has to let two devices of one model be told apart. The
+    middle is what the vendor's own device names never show either
+    (PLAN-124).
+    """
+    return f"{sn[:4]}...{sn[-4:]}" if len(sn) > 8 else sn
+
+
 def unsupported_suffix(device_type: str | None) -> str:
     """Return the marker for a device this integration has no parser for.
 
@@ -74,7 +85,7 @@ def _device_label(device: dict[str, Any]) -> str:
         or DEVICE_TYPE_DISPLAY_NAMES.get(device.get("device_type", ""), "")
     )
     sn = device.get("sn", "")
-    sn_short = f"{sn[:8]}..." if len(sn) > 8 else sn
+    sn_short = short_serial(sn)
     status = "" if device.get("online", 0) else " (offline)"
     status += unsupported_suffix(device.get("device_type"))
     if device.get("device_type") == DEVICE_TYPE_POWERSTREAM:

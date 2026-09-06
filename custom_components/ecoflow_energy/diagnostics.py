@@ -554,6 +554,9 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
     diag: dict[str, Any] = {
         # SN prefix only (privacy) - mirrors the skipped-device convention
         "device_sn": coordinator.device_sn[:4] + "...",
+        # The same tag the log carries, so a log line and this download
+        # can be matched up without either of them naming the serial.
+        "device_tag": coordinator.device_tag,
         "device_name": coordinator.device_name,
         "product_name": coordinator.product_name,
         "enhanced_mode": coordinator.enhanced_mode,

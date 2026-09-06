@@ -1249,3 +1249,44 @@ class TestTheScheduleChargePowerCeiling:
 
         assert schedule_power_min_w(None) == 100
         assert schedule_power_min_w(0) == 100
+
+
+class TestDeviceLogTag:
+    """PLAN-124: a one-way tag that names a device in a log without
+    carrying more of the serial than the four-character prefix already on
+    every other line (ADR-019)."""
+
+    def test_fixed_vector(self) -> None:
+        """Pinned so a hash-library change is caught, not just a shape change."""
+        from ecoflow_energy.ecoflow.const import device_log_tag
+
+        assert device_log_tag("TEST1234567890AB") == "TEST-5076"
+
+    def test_two_serials_sharing_a_prefix_get_different_tags(self) -> None:
+        """The reporter's own case: two J32E units, identical at four
+        characters on every other line - the tag is the only thing left
+        that can tell them apart."""
+        from ecoflow_energy.ecoflow.const import device_log_tag
+
+        tag_a = device_log_tag("J32EZEH400000001")
+        tag_b = device_log_tag("J32EZEH400000002")
+        assert tag_a != tag_b
+        assert tag_a.startswith("J32E-")
+        assert tag_b.startswith("J32E-")
+
+    def test_the_tag_carries_no_character_of_the_hidden_serial(self) -> None:
+        """Decision 1: the hash half must not merely re-spell sn[4:] - it is
+        a one-way hash, not a second slice of the serial."""
+        from ecoflow_energy.ecoflow.const import device_log_tag
+
+        sn = "TEST1234567890AB"
+        tag = device_log_tag(sn)
+        _, _, hash_part = tag.partition("-")
+        assert hash_part not in sn[4:]
+
+    def test_short_input_is_returned_unchanged(self) -> None:
+        """Nothing to protect, nothing to hash, below the four-character floor."""
+        from ecoflow_energy.ecoflow.const import device_log_tag
+
+        assert device_log_tag("R35") == "R35"
+        assert device_log_tag("") == ""

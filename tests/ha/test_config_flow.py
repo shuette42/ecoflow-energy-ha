@@ -198,7 +198,7 @@ class TestPowerStreamModeBoundary:
         options = result["data_schema"].schema[CONF_DEVICES].config["options"]
         assert options == [{
             "value": POWERSTREAM_DEVICE["sn"],
-            "label": "PowerStream (HW51TEST0000) - requires Standard Mode",
+            "label": "PowerStream (HW51...0001) - requires Standard Mode",
         }]
 
 
@@ -224,12 +224,12 @@ SOLAR_TRACKER_DEVICE = {
 ENHANCED_ONLY_DEVICE_CASES = [
     pytest.param(
         SMART_METER_DEVICE,
-        "Smart Meter (0001) (BK21TEST0000) - requires Enhanced Mode",
+        "Smart Meter (0001) (BK21...0001) - requires Enhanced Mode",
         id="smart_meter",
     ),
     pytest.param(
         SOLAR_TRACKER_DEVICE,
-        "Solar Tracker (0001) (HZ31TEST0000) - requires Enhanced Mode",
+        "Solar Tracker (0001) (HZ31...0001) - requires Enhanced Mode",
         id="solar_tracker",
     ),
 ]
@@ -2503,14 +2503,14 @@ class TestDeviceLabel:
         from custom_components.ecoflow_energy.config_flow_setup import _device_label
 
         label = _device_label({"sn": "HW52FAKE00000001", "online": 1})
-        assert label == "HW52FAKE..."
+        assert label == "HW52...0001"
 
     def test_fallback_to_bare_sn_offline(self) -> None:
         """Offline device without name gets the offline suffix on the bare SN."""
         from custom_components.ecoflow_energy.config_flow_setup import _device_label
 
         label = _device_label({"sn": "HW52FAKE00000001", "online": 0})
-        assert label == "HW52FAKE... (offline)"
+        assert label == "HW52...0001 (offline)"
 
     def test_short_sn_not_truncated(self) -> None:
         """SNs of 8 characters or fewer are used verbatim."""
@@ -2534,7 +2534,7 @@ class TestDeviceLabel:
             "device_type": "unknown",
             "online": 1,
         })
-        assert label == "Mystery Box (ZZ99FAKE...) - not supported yet (no data exposed)"
+        assert label == "Mystery Box (ZZ99...0001) - not supported yet (no data exposed)"
 
     def test_known_device_type_is_not_marked(self) -> None:
         """A supported device carries no marker."""
@@ -2546,7 +2546,7 @@ class TestDeviceLabel:
             "device_type": "delta",
             "online": 1,
         })
-        assert label == "Delta 2 Max (R351FAKE...)"
+        assert label == "Delta 2 Max (R351...0001)"
 
     def test_missing_device_type_is_not_marked(self) -> None:
         """An unclassified entry is not the same as an unsupported one.
@@ -2585,7 +2585,7 @@ class TestDeviceLabel:
 
         # The rendered label first: it is the thing the user sees, and it
         # pins the whole name fallback chain, not only the type field.
-        assert _device_label(devices[0]) == "PowerOcean (J329FAKE...)"
+        assert _device_label(devices[0]) == "PowerOcean (J329...0001)"
         assert devices[0]["device_type"] == "powerocean"
 
     def test_marker_and_offline_both_show(self) -> None:
@@ -2598,7 +2598,7 @@ class TestDeviceLabel:
             "device_type": "unknown",
             "online": 0,
         })
-        assert label == "Mystery Box (ZZ99FAKE...) (offline) - not supported yet (no data exposed)"
+        assert label == "Mystery Box (ZZ99...0001) (offline) - not supported yet (no data exposed)"
 
 
 class TestNormalizeDevices:

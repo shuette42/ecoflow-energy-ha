@@ -1,6 +1,7 @@
 """Tests for the Riemann sum energy integrator."""
 
 import json
+import re
 import time
 from pathlib import Path
 from unittest.mock import patch
@@ -419,6 +420,31 @@ class TestRestoreTotal:
 
 
 class TestPersistence:
+    def test_a_failed_save_logs_no_serial(self, state_file, caplog):
+        """The state file is named after the full serial, so the exception
+        text carries it. An owner attaching a log after a permissions
+        problem would publish sixteen characters of it (PLAN-124).
+        """
+        integrator = EnergyIntegrator(state_file)
+        integrator._state["solar"] = (1.0, time.monotonic(), 0.0)
+        failing = (
+            "/config/.storage/ecoflow_energy_TEST1234567890AB.json"
+        )
+
+        with caplog.at_level("WARNING"):
+            with patch.object(
+                type(integrator._state_file),
+                "write_text",
+                side_effect=PermissionError(13, "Permission denied", failing),
+            ):
+                integrator._save_state()
+
+        # Positive control: the failure was logged at all.
+        assert any("save energy state" in r.getMessage() for r in caplog.records)
+        for record in caplog.records:
+            assert "TEST1234567890AB" not in record.getMessage()
+            assert not re.search(r"[A-Z0-9]{12,}", record.getMessage())
+
     def test_save_and_load(self, state_file):
         """State survives across instances (explicit load_state call)."""
         i1 = EnergyIntegrator(state_file)

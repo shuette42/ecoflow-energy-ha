@@ -232,7 +232,7 @@ class AvailabilityMixin:
                     log(
                         "Device %s [%s] became unavailable (%s, reconnect_attempts=%d)",
                         self.device_name,
-                        self.device_sn,
+                        self.device_tag,
                         age_str,
                         reconnect_attempts,
                     )

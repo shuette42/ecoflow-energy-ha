@@ -34,6 +34,7 @@ from .const import (
     get_device_type,
     raw_capture_window_open,
 )
+from .ecoflow.const import device_log_tag
 from .coordinator import EcoFlowDeviceCoordinator
 from .device_probe import (
     UnroutedDeviceProbe,
@@ -305,6 +306,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
             )
             skipped_devices.append({
                 "sn_prefix": sn[:4],
+                "device_tag": device_log_tag(sn),
                 "sn": sn,
                 "product_name": product_name or "PowerStream",
                 "reason": "PowerStream requires Standard Mode",
@@ -326,6 +328,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
             )
             skipped_devices.append({
                 "sn_prefix": sn[:4],
+                "device_tag": device_log_tag(sn),
                 "sn": sn,
                 "product_name": product_name or label,
                 "reason": f"{label} requires Enhanced Mode",
@@ -370,6 +373,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
             )
             skipped_devices.append({
                 "sn_prefix": sn[:4],
+                "device_tag": device_log_tag(sn),
                 # Full SN is carried in-memory only so diagnostics can fetch
                 # this device's raw quota to help add parser support. It is
                 # never persisted and never included in diagnostics output

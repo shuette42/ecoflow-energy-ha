@@ -430,7 +430,14 @@ class EnergyIntegrator:
                         )
                 _LOGGER.debug("Energy state loaded: %d metrics", len(self._state))
         except Exception as exc:
-            _LOGGER.warning("Failed to load energy state: %s", exc)
+            # Never the exception's own text: this file is named after the
+            # full serial, so an OSError carries all sixteen characters into
+            # a log an owner may attach to a public issue (PLAN-124).
+            _LOGGER.warning(
+                "Failed to load energy state: %s: %s",
+                type(exc).__name__,
+                getattr(exc, "strerror", None) or "see the diagnostics download",
+            )
             self._state = {}
 
     def _save_state(self) -> None:
@@ -444,4 +451,9 @@ class EnergyIntegrator:
             }
             self._state_file.write_text(json.dumps(data, indent=2))
         except Exception as exc:
-            _LOGGER.warning("Failed to save energy state: %s", exc)
+            # Same reason as the load path above.
+            _LOGGER.warning(
+                "Failed to save energy state: %s: %s",
+                type(exc).__name__,
+                getattr(exc, "strerror", None) or "see the diagnostics download",
+            )
