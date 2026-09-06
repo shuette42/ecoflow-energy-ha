@@ -18,6 +18,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
+    AUTH_METHOD_APP,
     AUTH_METHOD_DEVELOPER,
     CONF_ACCESS_KEY,
     CONF_AUTH_METHOD,
@@ -33,6 +34,7 @@ from .const import (
     DOMAIN,
     RAW_FRAME_BUNDLE_MAX_BYTES,
     RAW_FRAME_MAX_BYTES,
+    raw_capture_window_open,
 )
 from .coordinator import EcoFlowDeviceCoordinator
 from .ecoflow.cloud_http import EcoFlowHTTPQuota
@@ -426,17 +428,41 @@ async def _skipped_devices_diagnostics(
         else:
             # Say so explicitly. A missing section would be indistinguishable
             # from a version that has no capture at all, and the reader would
-            # have no way to tell that the login or the connection was what
-            # failed.
+            # have no way to tell what stopped the capture from running.
+            #
+            # Three different situations end up here and they need three
+            # different sentences. The comment that used to sit on this branch
+            # claimed it "now means one thing only", the account login. That
+            # was wrong: a probe is only ever started while the capture option
+            # is switched on and inside its window, so the ordinary case - an
+            # owner who downloaded diagnostics without switching anything on -
+            # landed on a hint saying the sign-in had failed. It cost a reader
+            # of one such download the first two minutes of the analysis, in a
+            # file whose own device list proved the sign-in had worked.
+            if entry.data.get(CONF_AUTH_METHOD) != AUTH_METHOD_APP:
+                hint = (
+                    "the raw capture needs the EcoFlow account sign-in; this "
+                    "entry uses developer keys"
+                )
+            elif not raw_capture_window_open(entry.data):
+                hint = (
+                    "the raw capture is switched off for this entry; switch it "
+                    "on in the integration options, let the device report, then "
+                    "download diagnostics again"
+                )
+            else:
+                # The capture is on and inside its window, and a probe that
+                # failed to connect is kept and reports its own reason above.
+                # So what is left is a probe that never started at all.
+                hint = (
+                    "the raw capture is switched on, but no session was "
+                    "started for this device: signing in or fetching the "
+                    "connection credentials did not succeed"
+                )
             out["raw_capture"] = {
                 "status": "no probe running for this device",
-                # A probe that failed to connect is kept and reports its own
-                # reason above, so this branch now means one thing only: the
-                # account login never got far enough to start one.
-                "hint": (
-                    "requires EcoFlow account login; signing in or fetching "
-                    "the connection credentials did not succeed"
-                ),
+                "capture_enabled": raw_capture_window_open(entry.data),
+                "hint": hint,
             }
 
         if not has_dev_creds:
