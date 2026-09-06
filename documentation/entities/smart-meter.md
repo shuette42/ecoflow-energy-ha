@@ -2,7 +2,7 @@
 
 Full list of all entities created for the EcoFlow Smart Meter (BK21 series).
 
-**Totals:** 17 sensors, 3 binary sensors
+**Totals:** 18 sensors, 3 binary sensors
 
 > Entities marked with *disabled* are available but hidden by default. Enable them in **Settings > Devices > EcoFlow Smart Meter > Entities**.
 
@@ -33,13 +33,14 @@ The phases are keyed L1, L2 and L3 on the wire and lettered A, B and C in the Ec
 
 | Entity | Unit | Default | Description |
 |:---|:---:|:---:|:---|
-| Grid Energy Total | Wh | enabled | Lifetime counter the meter keeps itself |
-| Grid Energy Today | Wh | enabled | Energy since midnight, total for all phases |
-| Phase A Energy Today | Wh | enabled | Energy since midnight, phase A |
-| Phase B Energy Today | Wh | enabled | Energy since midnight, phase B |
-| Phase C Energy Today | Wh | enabled | Energy since midnight, phase C |
+| Grid Import Energy | Wh | enabled | Lifetime counter, energy drawn from the grid |
+| Grid Export Energy | Wh | enabled | Lifetime counter, energy fed back into the grid |
+| Grid Net Energy | Wh | enabled | Lifetime counter, import minus export |
+| Phase A Net Energy | Wh | enabled | Lifetime counter, phase A import minus export |
+| Phase B Net Energy | Wh | enabled | Lifetime counter, phase B import minus export |
+| Phase C Net Energy | Wh | enabled | Lifetime counter, phase C import minus export |
 
-> **Grid Energy Total** is the one to add to the Energy Dashboard. It is the meter's own lifetime counter, so it survives restarts and gaps without being rebuilt from power readings. The app labels this counter as import; whether it is really import only or a net figure will show on the first day the house exports, which is why it is published as a plain total and not as a monotonic one. The daily figures do reset to zero at midnight by design, which is the reset a monotonic counter is built for, so those carry it.
+> **Grid Import Energy** and **Grid Export Energy** are the two entities for the Energy Dashboard, on the grid consumption and return-to-grid slots. Both are lifetime counters the meter keeps itself, so they survive restarts and gaps without being rebuilt from power readings. **Grid Net Energy** and the three phase figures are import minus export, so they fall whenever the house feeds power back into the grid. That is a real reading, not a fault, which is exactly why these four are published as a plain total and not as a monotonic one, and why they do not belong in the dashboard's grid slots.
 
 ---
 
@@ -61,11 +62,11 @@ None. The meter measures and reports; it has nothing to set.
 
 ## Notes
 
-**Where the readings come from.** Support was built from a recording an owner took on 2026-08-31 with the EcoFlow app open beside it, and the values above match what the app showed at that moment: 407 W total, 318 W on phase B and 89 W on phase C with phase A idle, and 1345 Wh imported. The meter sends a short frame every few seconds and a full one less often; voltages, currents, the power factor and the connection flags only appear in the full frames, so those entities update more slowly than the power readings.
+**Where the readings come from.** Support was built from a recording an owner took on 2026-08-31 with the EcoFlow app open beside it, and the values above match what the app showed at that moment: 407 W total, 318 W on phase B and 89 W on phase C with phase A idle, and 1345 Wh imported. The meter sends a short frame every few seconds and a full one less often; voltages, currents, the power factor and the connection flags only appear in the full frames, so those entities update more slowly than the power readings. A second recording of 18 hours and 40 minutes spanning local midnight, together with a short deliberate export test, settled the six energy counters: none of them reset at midnight, and the export test moved only the export counter and the exporting phase's net figure.
 
-**Today and lifetime read the same for now.** In that recording the daily figure and the lifetime figure carried the same number, which is what you would expect on a meter commissioned the same day. Which of the two is really the lifetime counter is therefore not yet settled by observation; the field named as the lifetime one is the field used for the Energy Dashboard sensor. A recording taken across midnight is what confirms it, and until then a jump in **Grid Energy Today** at midnight is the thing to report.
+**No daily counter is on the wire.** All six energy entities are lifetime counters; the meter does not send anything that resets at midnight. The midnight recording showed every counter holding its value across the reset point instead of dropping back to zero. Owners who want a daily figure can derive one from **Grid Import Energy** with the Energy Dashboard's own daily view or a Utility Meter helper.
 
-**No separate export counter.** There is no export or feed-in total in the message definition, and no second counter to derive one from, so the Energy Dashboard gets one grid entry from this device and nothing on the return side. The house in the recording never exported, so whether the counters above hold import only or a net figure is not something that recording can settle. **Grid Connection State** does report feeding into the grid, so the direction is visible even where the energy is not.
+**Grid Export Energy is a genuine counter, not a derived value.** It stays at zero on an installation that has never fed power back into the grid. During the export test it climbed from 25 Wh to 28 Wh while the exporting phase's own net figure fell by the same amount, and the app agreed on the import, export and net figures at that moment. **Grid Connection State** already reports feeding into the grid on its own, so together the two show both that export happened and how much.
 
 **Power Factor reads zero.** The field is sent in every full frame and was zero throughout the recording. It is kept as a diagnostic entity rather than dropped, because zero on an idle phase is a plausible reading and the entity is the cheapest way for an owner to confirm whether it ever moves.
 
