@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from hashlib import sha256
+
 # MQTT Broker
 MQTT_HOST = "mqtt-e.ecoflow.com"
 MQTT_PORT_TCP = 8883
@@ -390,3 +392,20 @@ def get_device_type(product_name: str, sn: str = "") -> str:
         if kw in name:
             return DEVICE_TYPE_STREAM
     return DEVICE_TYPE_UNKNOWN
+
+
+def device_log_tag(sn: str) -> str:
+    """Name a device in a log line without carrying more of the serial than
+    the four-character prefix already used everywhere else (PLAN-124, ADR-019).
+
+    Returns the four-character prefix, a dash, and the first four hex
+    characters of sha256(sn) - stable across restarts, distinct for two
+    devices sharing a prefix, and a one-way function of the hidden twelve
+    characters (never a second slice of the serial).
+
+    Below the four-character floor there is nothing to protect and nothing
+    to hash, so the serial is returned unchanged.
+    """
+    if len(sn) < 4:
+        return sn
+    return f"{sn[:4]}-{sha256(sn.encode()).hexdigest()[:4]}"

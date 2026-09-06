@@ -24,6 +24,7 @@ from .ecoflow.const import (  # noqa: E402
     POWEROCEAN_SCHEDULE_POWER_MAX_DEFAULT_W,
     POWEROCEAN_SCHEDULE_POWER_MIN_W,
     POWEROCEAN_SCHEDULE_POWER_STEP_W,
+    device_log_tag,
     get_device_name,
     get_device_type,
 )

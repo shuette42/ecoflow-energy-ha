@@ -163,7 +163,7 @@ class MqttIngestMixin:
             # too short for the mask to recognize.
             _LOGGER.debug(
                 "SET reply for %s: %s",
-                self.device_sn[:4],
+                self.device_tag,
                 sanitize_frame(payload, [self.device_sn])[:200],
             )
             # The topic itself is not loggable: it is
@@ -239,7 +239,7 @@ class MqttIngestMixin:
             # raises nothing else once the arguments are in hand.
             _LOGGER.debug(
                 "Dropped a message for %s: the event loop closed mid-dispatch",
-                self.device_sn[:4],
+                self.device_tag,
             )
 
     def _capture_raw_frame(
@@ -374,13 +374,13 @@ class MqttIngestMixin:
             return
         if ack.applied:
             _LOGGER.debug(
-                "Setting applied on %s (field %s)", self.device_sn[:4], ack.action_id
+                "Setting applied on %s (field %s)", self.device_tag, ack.action_id
             )
             return
         _LOGGER.warning(
             "Device %s rejected a setting (field %s, status %s) - "
             "the change was not applied",
-            self.device_sn[:4],
+            self.device_tag,
             ack.action_id,
             ack.config_ok,
         )
@@ -590,7 +590,7 @@ class MqttIngestMixin:
                 return self._parse_proto_device_data(payload, result.headers)
             except Exception:
                 _LOGGER.debug(
-                    "Protobuf decode error for %s", self.device_sn[:4], exc_info=True
+                    "Protobuf decode error for %s", self.device_tag, exc_info=True
                 )
             return None
 
@@ -615,7 +615,7 @@ class MqttIngestMixin:
         except Exception:
             _LOGGER.debug(
                 "PowerOcean protobuf decode error for %s",
-                self.device_sn[:4],
+                self.device_tag,
                 exc_info=True,
             )
             results = []
@@ -698,7 +698,7 @@ class MqttIngestMixin:
             except Exception:
                 _LOGGER.debug(
                     "PowerOcean protobuf decode error for %s (%s)",
-                    self.device_sn[:4],
+                    self.device_tag,
                     result.parse_path,
                     exc_info=True,
                 )

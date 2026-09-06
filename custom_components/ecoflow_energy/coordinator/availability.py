@@ -155,12 +155,12 @@ class AvailabilityMixin:
             if age > stale_threshold_s and self.update_interval is None:
                 _LOGGER.info(
                     "MQTT stale for %s (%.0fs) - switching to HTTP fallback (tier 4)",
-                    self.device_sn[:4], age,
+                    self.device_tag, age,
                 )
                 self._log_event("stale_detected", f"age={age:.0f}s, http_fallback")
                 self.update_interval = timedelta(seconds=HTTP_FALLBACK_INTERVAL_S)
             elif age <= stale_threshold_s and self.update_interval is not None:
-                _LOGGER.info("MQTT recovered for %s - disabling HTTP fallback", self.device_sn[:4])
+                _LOGGER.info("MQTT recovered for %s - disabling HTTP fallback", self.device_tag)
                 self._log_event("stale_recovered", "http_fallback_disabled")
                 self.update_interval = None
         else:
@@ -190,7 +190,7 @@ class AvailabilityMixin:
                             "MQTT stale for %s [%s] (%.0fs) while connected - "
                             "re-sending initial requests",
                             self.device_name,
-                            self.device_sn[:4],
+                            self.device_tag,
                             age,
                         )
                         self._log_event("stale_reactivate", f"age={age:.0f}s")
@@ -201,7 +201,7 @@ class AvailabilityMixin:
                         _LOGGER.info(
                             "MQTT stale for %s [%s] (%.0fs) while connected - forcing reconnect",
                             self.device_name,
-                            self.device_sn[:4],
+                            self.device_tag,
                             age,
                         )
                         self._log_event("stale_force_reconnect", f"age={age:.0f}s")
@@ -232,7 +232,7 @@ class AvailabilityMixin:
                     log(
                         "Device %s [%s] became unavailable (%s, reconnect_attempts=%d)",
                         self.device_name,
-                        self.device_sn,
+                        self.device_tag,
                         age_str,
                         reconnect_attempts,
                     )
@@ -255,7 +255,7 @@ class AvailabilityMixin:
                     _LOGGER.info(
                         "MQTT recovered for %s [%s] - device available again",
                         self.device_name,
-                        self.device_sn[:4],
+                        self.device_tag,
                     )
                     self._log_event("stale_recovered", "device_available")
                     self._device_available = True

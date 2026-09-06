@@ -14,6 +14,7 @@ from pytest_homeassistant_custom_component.common import (
     async_fire_time_changed,
 )
 
+from custom_components.ecoflow_energy.ecoflow.const import device_log_tag
 from custom_components.ecoflow_energy.const import (
     AUTH_METHOD_APP,
     AUTH_METHOD_DEVELOPER,
@@ -441,6 +442,7 @@ class TestUnsupportedDeviceSkip:
         assert skipped == [
             {
                 "sn_prefix": "HW51",
+                "device_tag": device_log_tag("HW51TEST00000001"),
                 "sn": "HW51TEST00000001",
                 "product_name": "PowerStream",
                 "reason": "PowerStream requires Standard Mode",
@@ -503,6 +505,7 @@ class TestUnsupportedDeviceSkip:
         assert hass.data[DATA_SKIPPED_DEVICES][entry.entry_id] == [
             {
                 "sn_prefix": "BK21",
+                "device_tag": device_log_tag("BK21TEST00000001"),
                 "sn": "BK21TEST00000001",
                 "product_name": "Smart Meter",
                 "reason": "Smart Meter requires Enhanced Mode",

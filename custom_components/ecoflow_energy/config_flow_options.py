@@ -16,6 +16,7 @@ from homeassistant.helpers.selector import SelectSelector, SelectSelectorConfig
 from .config_flow_setup import (
     SetupFlowMixin,
     _device_label,
+    short_serial,
     unsupported_suffix,
 )
 from .const import (
@@ -228,8 +229,8 @@ class OptionsFlowMixin:
             }
             device_options = {
                 sn: (
-                    f"{get_device_name('', sn) or DEVICE_TYPE_DISPLAY_NAMES.get(stored_types[sn], sn[:12])}"
-                    f" ({sn[:12]})"
+                    f"{get_device_name('', sn) or DEVICE_TYPE_DISPLAY_NAMES.get(stored_types[sn], short_serial(sn))}"
+                    f" ({short_serial(sn)})"
                     f"{unsupported_suffix(stored_types[sn])}"
                     f"{' - requires Standard Mode' if stored_types[sn] == DEVICE_TYPE_POWERSTREAM else ''}"
                     f"{' - requires Enhanced Mode' if stored_types[sn] in ENHANCED_ONLY_DEVICE_TYPES else ''}"

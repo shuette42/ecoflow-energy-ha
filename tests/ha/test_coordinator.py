@@ -263,6 +263,35 @@ class TestCoordinatorInit:
         assert coordinator.device_type == DEVICE_TYPE_DELTA
         assert coordinator.enhanced_mode is False
 
+    async def test_ha_coordinator_name_carries_the_tag_not_the_serial(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """PLAN-124: HA's own DataUpdateCoordinator logs `self.name` on every
+        MQTT push (`Manually updated %s data`, DEBUG). Before the fix that
+        name carried eight characters of the serial; it must carry the
+        four-character prefix and a one-way tag instead, never more.
+        """
+        standard_config_entry.add_to_hass(hass)
+        device = {
+            "sn": "TEST1234567890AB",
+            "name": "PowerOcean",
+            "product_name": "PowerOcean",
+            "device_type": DEVICE_TYPE_POWEROCEAN,
+            "online": 1,
+        }
+        coordinator = EcoFlowDeviceCoordinator(hass, standard_config_entry, device)
+
+        with caplog.at_level(
+            "DEBUG", logger="custom_components.ecoflow_energy.coordinator.core"
+        ):
+            coordinator.async_set_updated_data({})
+
+        assert "TEST-5076" in caplog.text
+        assert "TEST1234" not in caplog.text
+
     async def test_reclassify_unknown_type_from_product_name(
         self,
         hass: HomeAssistant,
@@ -2302,6 +2331,14 @@ class TestStaleDetection:
             assert coordinator.availability_stage == "unavailable"
         assert "became unavailable" in caplog.text
         assert "reconnect_attempts=5" in caplog.text
+        # PLAN-124: the line fires at the moment an owner is most likely to
+        # copy the log into an issue - it must carry the tag, not the full
+        # sixteen-character serial.
+        record = next(
+            r for r in caplog.records if "became unavailable" in r.getMessage()
+        )
+        assert "HW52-ae8f" in record.getMessage()
+        assert MOCK_POWEROCEAN_DEVICE["sn"] not in record.getMessage()
         self._cleanup_stale_timer(coordinator)
 
     async def test_app_auth_transient_unavailable_logs_info_not_warning(

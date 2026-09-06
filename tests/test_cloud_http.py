@@ -336,7 +336,7 @@ class TestError8521Retry:
         assert [
             r.getMessage() for r in records if "failure persists" in r.getMessage()
         ] == [
-            "HTTP poll failure persists for SN12...: "
+            "HTTP poll failure persists for SN12-eaa5: "
             "kind=transport repeated=5"
         ]
 
@@ -528,7 +528,7 @@ class TestOutageLogHygiene:
         messages = [record.getMessage() for record in caplog.records]
         assert messages == [
             "first failure",
-            "HTTP poll failure persists for HW51...: "
+            "HTTP poll failure persists for HW51-860d: "
             "kind=transport repeated=2",
         ]
 
@@ -717,7 +717,7 @@ class TestError1006Handling:
         assert [
             r.getMessage() for r in records if "failure persists" in r.getMessage()
         ] == [
-            "HTTP poll failure persists for SN12...: "
+            "HTTP poll failure persists for SN12-eaa5: "
             "kind=api:1006 repeated=5"
         ]
         assert len(records) == 2

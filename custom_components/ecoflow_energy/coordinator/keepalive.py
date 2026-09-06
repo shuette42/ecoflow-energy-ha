@@ -38,9 +38,9 @@ class KeepaliveMixin:
             self.hass.async_add_executor_job(
                 self._mqtt_client.send_energy_stream_switch,
             )
-            _LOGGER.debug("EnergyStreamSwitch keepalive sent for %s", self.device_sn[:4])
+            _LOGGER.debug("EnergyStreamSwitch keepalive sent for %s", self.device_tag)
         else:
-            _LOGGER.debug("EnergyStreamSwitch skipped for %s (not connected)", self.device_sn[:4])
+            _LOGGER.debug("EnergyStreamSwitch skipped for %s (not connected)", self.device_tag)
         if not self._shutdown:
             self._keepalive_unsub = self.hass.loop.call_later(
                 ENERGY_STREAM_KEEPALIVE_S,

@@ -94,7 +94,7 @@ body:
     id: logs
     attributes:
       label: Relevant Log Entries
-      description: Copy log entries from Home Assistant (Settings > System > Logs). Enable debug logging if possible.
+      description: Copy log entries from Home Assistant (Settings > System > Logs). Enable debug logging if possible. The integration writes at most the first four characters of a serial, followed by a short tag that tells two devices of the same model apart.
       render: text
     validations:
       required: false
@@ -103,7 +103,7 @@ body:
     id: diagnostics
     attributes:
       label: Diagnostics
-      description: If possible, download the integration diagnostics (Settings > Integrations > EcoFlow Energy > 3 dots > Download Diagnostics) and paste or attach the JSON.
+      description: If possible, download the integration diagnostics (Settings > Integrations > EcoFlow Energy > 3 dots > Download Diagnostics) and paste or attach the JSON. It carries at most the first four characters of a serial, plus the same short tag the log uses, so a log and a download can be matched up.
       render: json
     validations:
       required: false

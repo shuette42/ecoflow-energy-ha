@@ -287,7 +287,7 @@ class StateApplyMixin:
                     "PowerOcean surplus auto-sync (%s): EMS still reports "
                     "%d after %d writes of %d; no further writes until the "
                     "app value, the EMS value or a user setting changes",
-                    self.device_sn[:4], ems_int, record["writes"], app_int,
+                    self.device_tag, ems_int, record["writes"], app_int,
                 )
                 self._log_event(
                     "surplus_auto_sync_stopped",
@@ -327,7 +327,7 @@ class StateApplyMixin:
         task = self._schedule_powerocean_soc_write(
             target_backup,
             app_int,
-            name=f"PowerOcean surplus auto-sync {self.device_sn[:4]}",
+            name=f"PowerOcean surplus auto-sync {self.device_tag}",
         )
         if task is None:
             return
@@ -338,7 +338,7 @@ class StateApplyMixin:
         record["writes"] += 1
         _LOGGER.info(
             "PowerOcean surplus auto-sync (%s): app=%d ems=%d -> SET both=%d",
-            self.device_sn[:4], app_int, ems_int, app_int,
+            self.device_tag, app_int, ems_int, app_int,
         )
         self._log_event(
             "surplus_auto_sync",
@@ -483,7 +483,7 @@ class StateApplyMixin:
                 _LOGGER.debug(
                     "Battery state for %s: avg(%ds)=%.1fW pending %s "
                     "(was %s, commit in %ds, n=%d)",
-                    self.device_sn[:4],
+                    self.device_tag,
                     self.BATT_WINDOW_S,
                     avg,
                     derived,
@@ -502,7 +502,7 @@ class StateApplyMixin:
         _LOGGER.debug(
             "Battery state for %s: avg(%ds)=%.1fW -> %s "
             "(was %s, held %.0fs, confirmed %.0fs, n=%d)",
-            self.device_sn[:4],
+            self.device_tag,
             self.BATT_WINDOW_S,
             avg,
             derived,

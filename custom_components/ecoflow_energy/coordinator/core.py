@@ -61,6 +61,7 @@ from ..const import (
     STREAMAC5000_POWER_TO_ENERGY,
     UNKNOWN_FIELD_CMDS_MAX,
     UNKNOWN_FIELD_NUMBERS_MAX,
+    device_log_tag,
     get_delta_profile,
     get_device_name,
     raw_capture_window_open,
@@ -161,7 +162,7 @@ class EcoFlowDeviceCoordinator(
             hass,
             _LOGGER,
             config_entry=entry,
-            name=f"EcoFlow {self.device_name} ({self.device_sn[:8]})",
+            name=f"EcoFlow {self.device_name} ({self.device_tag})",
             update_interval=poll_interval,
         )
 
@@ -420,6 +421,11 @@ class EcoFlowDeviceCoordinator(
         else:
             self._power_to_energy = {}
             self._energy_from_api = []
+
+    @property
+    def device_tag(self) -> str:
+        """Return the one-way log tag for this device (PLAN-124, ADR-019)."""
+        return device_log_tag(self.device_sn)
 
     @property
     def device_available(self) -> bool:
