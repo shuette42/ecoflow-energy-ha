@@ -1788,19 +1788,23 @@ SMARTMETER_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("grid_l2_current_a", "Phase B Current", "A", "current", "measurement", "mdi:current-ac", suggested_display_precision=2),
     EcoFlowSensorDef("grid_l3_current_a", "Phase C Current", "A", "current", "measurement", "mdi:current-ac", suggested_display_precision=2),
     # --- Energy counters the meter keeps itself ---
-    # The lifetime counter is the one for the Energy Dashboard, and it is
-    # `total`, not `total_increasing`: the message definition carries no
-    # export counter, so a day on which the house exports would show up as a
-    # decrease. `total` reads that as a negative delta; `total_increasing`
-    # would read it as a meter change and count the standing total again.
-    # The daily figures are the opposite case. They reset to zero at
-    # midnight by design, which is exactly the reset `total_increasing` is
-    # built for, so they carry it and their zeros are published.
-    EcoFlowSensorDef("grid_energy_total_wh", "Grid Energy Total", "Wh", "energy", "total", "mdi:transmission-tower-import", suggested_display_precision=0),
-    EcoFlowSensorDef("grid_energy_today_wh", "Grid Energy Today", "Wh", "energy", "total_increasing", "mdi:transmission-tower-import", suggested_display_precision=0),
-    EcoFlowSensorDef("grid_l1_energy_today_wh", "Phase A Energy Today", "Wh", "energy", "total_increasing", "mdi:transmission-tower-import", suggested_display_precision=0),
-    EcoFlowSensorDef("grid_l2_energy_today_wh", "Phase B Energy Today", "Wh", "energy", "total_increasing", "mdi:transmission-tower-import", suggested_display_precision=0),
-    EcoFlowSensorDef("grid_l3_energy_today_wh", "Phase C Energy Today", "Wh", "energy", "total_increasing", "mdi:transmission-tower-import", suggested_display_precision=0),
+    # All six are lifetime counters (ADR-018, PLAN-123): a capture spanning
+    # local midnight shows none of them resetting, so direction decides the
+    # state class, not a daily/lifetime split the wire does not have. Import
+    # and export only ever stand still or rise, so they are
+    # `total_increasing` and the Energy Dashboard's two grid entries. Net and
+    # the three phase nets fall whenever the house exports - `.7 = .4 - .6`
+    # and the phases sum to `.7`, not to import - so they are `total`, which
+    # records the fall as the negative delta it is and permits the negative
+    # value a net exporter's total will eventually cross. `measurement` is
+    # not a candidate: `device_class: energy` admits only `total` and
+    # `total_increasing`.
+    EcoFlowSensorDef("grid_import_energy_wh", "Grid Import Energy", "Wh", "energy", "total_increasing", "mdi:transmission-tower-import", suggested_display_precision=0),
+    EcoFlowSensorDef("grid_export_energy_wh", "Grid Export Energy", "Wh", "energy", "total_increasing", "mdi:transmission-tower-export", suggested_display_precision=0),
+    EcoFlowSensorDef("grid_net_energy_wh", "Grid Net Energy", "Wh", "energy", "total", "mdi:transmission-tower", suggested_display_precision=0),
+    EcoFlowSensorDef("grid_l1_net_energy_wh", "Phase A Net Energy", "Wh", "energy", "total", "mdi:transmission-tower", suggested_display_precision=0),
+    EcoFlowSensorDef("grid_l2_net_energy_wh", "Phase B Net Energy", "Wh", "energy", "total", "mdi:transmission-tower", suggested_display_precision=0),
+    EcoFlowSensorDef("grid_l3_net_energy_wh", "Phase C Net Energy", "Wh", "energy", "total", "mdi:transmission-tower", suggested_display_precision=0),
     # --- Diagnostics ---
     EcoFlowSensorDef("grid_power_factor", "Power Factor", None, "power_factor", "measurement", "mdi:angle-acute", "diagnostic", suggested_display_precision=2),
     EcoFlowSensorDef("grid_connection_state", "Grid Connection State", None, "enum", None, "mdi:transmission-tower", "diagnostic", options=["invalid", "grid_in", "not_online", "feed_grid"]),

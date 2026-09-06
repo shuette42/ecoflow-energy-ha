@@ -49,14 +49,14 @@
 | **PowerStream** - Microinverter | `HW51` | 25 | none, see below | 2 default (solar, inverter output), 2 optional diagnostic (PV 1-2) | ~30 s standard |
 | **STREAM AC 5000** - AC-coupled Battery | `ES22`\* | 56 + 2 binary | 2 switches, 7 numbers, 1 select (Enhanced only) | 4 default (grid import/export, battery charge/discharge), 1 optional diagnostic (home) | ~2 s enhanced |
 | **STREAM 5000** - AC-coupled Battery | `ES21`\* | 56 + 2 binary | 2 switches, 7 numbers, 1 select (Enhanced only) | 4 default (grid import/export, battery charge/discharge), 1 optional diagnostic (home) | ~2 s enhanced |
-| **Smart Meter** - Grid Meter | `BK21`\* | 17 + 3 binary | none, read-only | 1 (grid energy) | ~3 s enhanced |
+| **Smart Meter** - Grid Meter | `BK21`\* | 18 + 3 binary | none, read-only | 2 (grid import, grid export) | ~3 s enhanced |
 | **Solar Tracker** | `HZ31`\*, `S02F`\* | 6 | none, read-only for now | none | ~3 s enhanced |
 
 > **\* Enhanced Mode only.** These serial prefixes cannot currently be linked to an IoT Developer API key, so Standard Mode reports error 1006 and their entities stay unavailable. This is an EcoFlow API limitation, not a configuration problem.
 >
 > **PowerOcean and PowerOcean Plus share one entity set.** A Plus unit simply reports more of it: per-phase reactive power (var) and apparent power (VA), plus MPPT strings 3 and 4. Those entities exist for every PowerOcean but are disabled by default, because a standard unit never sends them and the entity would sit at "unknown" forever. Enable them under **Settings > Devices & services > Entities** on a Plus device.
 >
-> **The Smart Meter has no separate export counter.** It keeps one energy counter for the connection as a whole and one per phase, and the message definition holds nothing on the return side, so the Energy Dashboard gets a single grid entry from it. The app labels those counters as import; whether they really are import only or a net figure will show on the first day the house exports. Its connection state does report when the house is feeding into the grid, so the direction is visible even where the energy is not. See [entity reference](documentation/entities/smart-meter.md).
+> **The Smart Meter reports six lifetime counters: import, export, net, and net per phase.** Import and export are the two entries for the Energy Dashboard, on the grid consumption and return-to-grid slots. Net and the three phase figures are import minus export, so they fall whenever the house feeds power back into the grid; that is a real reading, not a fault, and it is why those four do not belong in the dashboard's grid slots. Its connection state does report when the house is feeding into the grid, so the direction is visible even where the energy is not. See [entity reference](documentation/entities/smart-meter.md).
 >
 > **Tip:** Other Delta-series devices (Delta Pro, Delta 2, etc.) should work automatically with the Delta sensor set. Base Delta 3 and Delta 3 Plus use the Delta 3 sensor set. The five AC-coupled Stream models share one sensor set.
 >

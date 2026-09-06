@@ -91,11 +91,12 @@ METER_ONLY_KEYS = {
     "grid_l1_current_a",
     "grid_l2_current_a",
     "grid_l3_current_a",
-    "grid_energy_total_wh",
-    "grid_energy_today_wh",
-    "grid_l1_energy_today_wh",
-    "grid_l2_energy_today_wh",
-    "grid_l3_energy_today_wh",
+    "grid_import_energy_wh",
+    "grid_export_energy_wh",
+    "grid_net_energy_wh",
+    "grid_l1_net_energy_wh",
+    "grid_l2_net_energy_wh",
+    "grid_l3_net_energy_wh",
     "grid_power_factor",
 }
 
@@ -150,13 +151,15 @@ class TestSmartMeterRouting:
 
 
 class TestSmartMeterEntitySet:
-    async def test_the_meter_gets_its_seventeen_sensors(
+    async def test_the_meter_gets_its_eighteen_sensors(
         self, hass: HomeAssistant
     ) -> None:
+        """18, not 17: ADR-018 split the five old energy keys into six
+        (import, export, net, three phase nets), one more than before."""
         entities = await _setup_entities(hass, sensor_setup, BK21_DEVICE)
 
         keys = {entity._definition.key for entity in entities}
-        assert len(entities) == 17
+        assert len(entities) == 18
         assert keys == {sensor.key for sensor in SMARTMETER_SENSORS}
 
     async def test_the_meter_gets_its_three_binary_sensors(
@@ -188,14 +191,16 @@ class TestSmartMeterEntitySet:
 
 
 class TestSmartMeterDefinitions:
-    def test_the_daily_counters_are_the_only_monotonic_ones(self) -> None:
-        """A midnight zero is the reset `total_increasing` is built for.
+    def test_import_and_export_are_the_only_monotonic_counters(self) -> None:
+        """Direction, not a reset period, decides `total_increasing` now
+        (ADR-018, PLAN-123): the meter has no daily reset at all, so import
+        and export are monotonic because they only ever stand still or rise,
+        and net and the three phase nets are excluded because a net exporter
+        makes them fall.
 
-        The lifetime counter must stay out of that set. The message
-        definition carries no export counter, so a day on which the house
-        exports can move the lifetime figure down, and `total_increasing`
-        would read that as a meter change and count the standing total a
-        second time.
+        Before the rename this test held the four keys with a midnight
+        reset (`_today_wh`) and excluded the single lifetime key; both the
+        premise (a daily/lifetime split) and the answer have changed.
         """
         monotonic = [
             sensor.key
@@ -204,35 +209,58 @@ class TestSmartMeterDefinitions:
         ]
 
         assert sorted(monotonic) == [
-            "grid_energy_today_wh",
-            "grid_l1_energy_today_wh",
-            "grid_l2_energy_today_wh",
-            "grid_l3_energy_today_wh",
+            "grid_export_energy_wh",
+            "grid_import_energy_wh",
         ]
 
-    def test_the_lifetime_counter_is_a_plain_total(self) -> None:
-        lifetime = next(
+    def test_the_net_counters_are_plain_totals(self) -> None:
+        """There is no longer one lifetime sensor to single out - four
+        sensors fall whenever the house exports (net plus the three phase
+        nets), and all four must be `total`, which permits the negative
+        delta a net exporter's total eventually crosses."""
+        nets = [
             sensor
             for sensor in SMARTMETER_SENSORS
-            if sensor.key == "grid_energy_total_wh"
-        )
-
-        assert lifetime.state_class == "total"
-
-    def test_every_daily_counter_is_monotonic(self) -> None:
-        daily = [
-            sensor for sensor in SMARTMETER_SENSORS if sensor.key.endswith("_today_wh")
+            if sensor.key
+            in {
+                "grid_net_energy_wh",
+                "grid_l1_net_energy_wh",
+                "grid_l2_net_energy_wh",
+                "grid_l3_net_energy_wh",
+            }
         ]
 
-        assert len(daily) == 4
-        assert all(sensor.state_class == "total_increasing" for sensor in daily)
+        assert len(nets) == 4
+        assert all(sensor.state_class == "total" for sensor in nets)
+
+    def test_the_energy_counters_have_the_new_key_names(self) -> None:
+        """The entity key list ADR-018 replaced the five `_today_wh`/
+        `_total_wh` keys with: no key here may still carry a period in its
+        name, only a direction."""
+        energy_keys = sorted(
+            sensor.key
+            for sensor in SMARTMETER_SENSORS
+            if sensor.device_class == "energy"
+        )
+
+        assert energy_keys == [
+            "grid_export_energy_wh",
+            "grid_import_energy_wh",
+            "grid_l1_net_energy_wh",
+            "grid_l2_net_energy_wh",
+            "grid_l3_net_energy_wh",
+            "grid_net_energy_wh",
+        ]
 
     def test_every_energy_counter_reports_watt_hours(self) -> None:
+        """Same property as before the rename, one more sensor to check:
+        the split added `grid_export_energy_wh`, six energy counters now
+        instead of five."""
         energy = [
             sensor for sensor in SMARTMETER_SENSORS if sensor.device_class == "energy"
         ]
 
-        assert len(energy) == 5
+        assert len(energy) == 6
         assert all(sensor.unit == "Wh" for sensor in energy)
 
     def test_the_enum_offers_exactly_the_states_the_parser_produces(self) -> None:
@@ -291,7 +319,12 @@ class TestTheCaptureReachesTheEntities:
 
         # 406.65 W on the wire, shown as whole watts.
         assert values["grid_w"] == 407
-        assert values["grid_energy_total_wh"] == 1345
+        # Field .4 (import) and .7 (net) are both 1345 in this frame because
+        # the house had not exported yet; .6 (export) is absent from the
+        # wire and fills to zero (ADR-018, PLAN-123).
+        assert values["grid_import_energy_wh"] == 1345
+        assert values["grid_net_energy_wh"] == 1345
+        assert values["grid_export_energy_wh"] == 0
         assert values["grid_connection_state"] == "grid_in"
         # Phase B carries most of the load in this frame, phase A none.
         assert values["grid_l1_w"] == 0
@@ -328,6 +361,46 @@ class TestTheCaptureReachesTheEntities:
             "grid_l2_connected": True,
             "grid_l3_connected": True,
         }
+
+
+class TestTheNetCounterCanFall:
+    """The whole reason `grid_net_energy_wh` and the phase nets are `total`
+    and not `total_increasing` (ADR-018, PLAN-123): a net exporter's total
+    genuinely falls, and the coordinator's monotonic guard must let that
+    reading through to the sensor rather than freeze it at the earlier,
+    higher value.
+
+    This is new coverage, not a reshape - nothing before the rename could
+    exercise it, because every energy key was either a daily counter (reset
+    to zero, but never asked to fall mid-day) or the one lifetime key
+    (which could only ever rise).
+    """
+
+    async def test_a_falling_net_reading_reaches_the_sensor(
+        self, hass: HomeAssistant
+    ) -> None:
+        entry = _entry(BK21_DEVICE)
+        entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, BK21_DEVICE)
+        hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
+            BK21_DEVICE["sn"]: coordinator
+        }
+
+        # First reading high, second one lower - the shape a net exporter's
+        # total actually takes, and exactly what `_enforce_monotonic` would
+        # discard if `grid_net_energy_wh` were still `total_increasing`.
+        coordinator._apply_data({"grid_net_energy_wh": 500.0})
+        coordinator._apply_data({"grid_net_energy_wh": 300.0})
+
+        created: list[Any] = []
+        await sensor_setup(hass, entry, created.extend)
+        values = {
+            entity._definition.key: entity.native_value
+            for entity in created
+            if hasattr(entity, "_definition")
+        }
+
+        assert values["grid_net_energy_wh"] == 300.0
 
 
 class TestSmartMeterDiagnostics:

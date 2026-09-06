@@ -1,0 +1,68 @@
+{
+  "note": "EcoFlow Smart Meter (BK21, EF-EM-P3-120) frames from the issue #331 reporter capture across local midnight, 2026-09-03/04. The five frames of an 18h40m, 31,761-frame diagnostics download (single MQTT session, 0 reconnects) that carry the nested energy record (field 773): one before local midnight, four after. Property frames are XOR-masked with the low byte of their sequence number, the get_reply frame is not. Already sanitized at capture time by sanitize_frame(); re-run here as the fixture gate requires and confirmed byte-identical.",
+  "source_topics": [
+    "/app/device/property/{sn}",
+    "/app/{uid}/{sn}/thing/property/get_reply"
+  ],
+  "frames": [
+    {
+      "ts_iso": "2026-09-03T19:18:41.737251+00:00",
+      "topic": "get_reply",
+      "cmds": [
+        {
+          "cmd_func": 254,
+          "cmd_id": 22
+        },
+        {
+          "cmd_func": 254,
+          "cmd_id": 21
+        }
+      ],
+      "hex": "0a220a13a812c0a907b012d00fb812e0a712c012e0d403100240fe01481670828ad6c5060aac010a9c01a808c801b2080d4575726f70652f585858585858b808019d20cb9cb943d52600000000d826019a2700c22d00c82d00e02d00e82d00d02f01d82f01e02f019d30211e7643a530d1939043aa301e0d000040401500a826461d00287b46250026d146350000e0413d00eed046853189d3e13fe53bacfa7543ed3bb3ce7343f53b00000000fd3b5c01383f953c000000009d3c4485a242c03d8280c9ac02100240fe01481570828ad6c506"
+    },
+    {
+      "ts_iso": "2026-09-04T13:52:36.585365+00:00",
+      "topic": "property",
+      "cmds": [
+        {
+          "cmd_func": 254,
+          "cmd_id": 21
+        }
+      ],
+      "hex": "0a630a3fc97476368417f1645933c217fe644a59545414144154280112495412ca127154f55013615454b4156954d15013b16fa52b3917c16854545454c96803b8b31610021820200128013001380340fe014815503f580170d4ca43788172800103880101"
+    },
+    {
+      "ts_iso": "2026-09-04T13:54:17.025112+00:00",
+      "topic": "property",
+      "cmds": [
+        {
+          "cmd_func": 254,
+          "cmd_id": 21
+        }
+      ],
+      "hex": "0a5d0a392598815105fb1d88756a2efb1288a6b5b8b8f8f8adb830edfea5b8ee26fe9db814bcff8db8b858f985b828bcff2d84b8b8b8b8258408e124fa10021820200128013001380340fe0148155039580170b8cd43788172800103880101"
+    },
+    {
+      "ts_iso": "2026-09-04T13:55:48.991131+00:00",
+      "topic": "property",
+      "cmds": [
+        {
+          "cmd_func": 254,
+          "cmd_id": 21
+        }
+      ],
+      "hex": "0a570a335bceadfb6bbd54cee0f3fefebebeebfe72abb8e3fe9860b8dbfe4bfab9cbfefe1ebfc3fe67fab96bc2fefefefe63c2c12bf7bc10021820200128013001380340fe0148155033580170fecf43788172800103880101"
+    },
+    {
+      "ts_iso": "2026-09-04T13:57:33.540304+00:00",
+      "topic": "property",
+      "cmds": [
+        {
+          "cmd_func": 254,
+          "cmd_id": 21
+        }
+      ],
+      "hex": "0a5d0a39ef52398ada31d7425f64ea31d8426c7f727232326772e227346f720aec345772cd763547727292334f72d17635e74e72727272ef4e8062753010021820200128013001380340fe0148155039580170f2d243788172800103880101"
+    }
+  ]
+}

@@ -1,11 +1,13 @@
 """Protobuf telemetry parser for the EcoFlow Smart Meter (BK21, EF-EM-P3-120).
 
-Derived from a 17-minute capture of a live BK21 in app-auth MQTT mode
-(2026-08-31, issue #331). The meter measures and reports and does nothing
-else: there is no battery, no PV, no outlet and no write path worth having
-(its config message covers the timezone, the upload periods and a factory
-reset), so it gets its own device type and its own map rather than a branch
-inside the Stream parser.
+Derived from two captures of a live BK21 in app-auth MQTT mode (issue #331):
+a 17-minute one taken the day the meter was installed (2026-08-31), and an
+18 h 40 min one spanning local midnight (2026-09-03/04, @wildnet), plus a
+few-minutes export test he ran on the same house. The meter measures and
+reports and does nothing else: there is no battery, no PV, no outlet and no
+write path worth having (its config message covers the timezone, the upload
+periods and a factory reset), so it gets its own device type and its own
+map rather than a branch inside the Stream parser.
 
 The envelope is the BK-series one, so everything that unwraps a frame is
 imported from `stream_proto.py`: the header decode, the per-header XOR mask
@@ -38,24 +40,43 @@ Field notes:
   each other: 240 V and 2.107 A against 318 W on L2. That is the meter
   reporting apparent and active power separately, not a scaling error;
   no factor is applied to any of them. The app shows the same numbers.
-- `773` is the only nested field. Its `.4` (today) and `.7` (lifetime)
-  counters are equal in every frame of the capture because the meter was
-  installed that day, so which is which cannot be told from these bytes.
-  `.7` is named lifetime here because the message definition says so; the
-  split stays unconfirmed until a capture spanning midnight exists.
-- `773.1` (`today_active_L1`) is the one mapped field the capture never
-  carried: L1 drew nothing all day, and its power, voltage and current
-  fields are all present and all zero. Its two siblings `.2` and `.3` are
-  on the wire in the same record, so the record shape is shown rather than
-  assumed and only the idle phase is missing.
+- `773` is the only nested field, and it holds six lifetime counters, not a
+  lifetime pair and four daily ones - direction decides which counter a
+  subfield is, not a reset period. `.4` is cumulative import, `.6`
+  cumulative export, `.7` cumulative net import (`.4 - .6`), `.1/.2/.3`
+  cumulative net per phase (sum to `.7`, not to `.4`). Nothing on the wire
+  resets at midnight: the five retained `773` records of the midnight
+  capture (one before local midnight, four after) hold `.1 + .2 + .3 = .7`
+  and `.4 - .6 = .7` exactly on both sides, and none of the six counters
+  falls there. The vendor schema names `.4` `today_active`, `.7`
+  `total_active_energy`, `.1/.2/.3` `today_active_L1..L3`, and lists `.5`
+  and `.6` as reactive energy; every one of those names is wrong for this
+  device. A definition says what a field is called; the numbers say what
+  the device puts in it.
+- The encoder omits a subfield at zero from the record; absence inside a
+  present record is the zero, not a missing reading. `.1` was absent from
+  every frame of the first capture with phase A idle at 0 W and is present
+  at 3 Wh in every record of the midnight capture; `.6` was absent from the
+  first capture, taken before the house had ever exported, and is present
+  at 28 Wh in every midnight record, after a few minutes of export on
+  2026-09-03 moved it from 25 to 28. `_decode_mapped_fields` leans on this
+  once, for `.6` alone: a present record without it publishes
+  `grid_export_energy_wh = 0.0`, because export's zero is the one steady
+  state among the six (import and the phase nets leave zero within hours of
+  commissioning, so their absence is never seen again). `.4` is never
+  filled this way - a missing `.4` stays missing, or a house that has
+  always exported and never imported would get a fabricated import reading.
+- `773.5` is in no record of either capture. The vendor schema calls it
+  reactive energy too - the same label it wrongly gives `.6` - and it stays
+  unmapped until a frame carries it and its own reading can be checked
+  against something.
 
 Deliberately not mapped: `133`/`134`/`135` (timezone), `627` (error code
 list), `728`/`729`/`732`/`733` (country, town, factory and debug mode),
 `984` (unidentified constant), and the `254/22` upload periods. Not on the
-wire in this capture and therefore absent from the map: `616`, `617`
-(reactive power), `601`/`602` (WiFi), `484` (ambient temperature),
-`773.5`/`773.6` (reactive energy). The message definition has no export
-counter at all - export shows only as a negative sign on the power fields.
+wire in either capture and therefore absent from the map: `616`, `617`
+(reactive power), `601`/`602` (WiFi), `484` (ambient temperature), and
+`773.5` (see above).
 
 Values are published unrounded, as in `stream_proto.py`. Display precision
 belongs to the sensor definitions, and rounding the current to one decimal
@@ -113,21 +134,32 @@ _SMART_METER_FIELD_MAP: dict[tuple[int, int], dict[int, tuple[str, str]]] = {
     },
 }
 
-# Subfields of `_ENERGY_RECORD_FIELD`, all watt-hours.
+# Subfields of `_ENERGY_RECORD_FIELD`, all watt-hours, all lifetime (ADR-018,
+# PLAN-123): the midnight capture proves none of the six resets, so the key
+# names the direction the meter counts in, never a period.
 _ENERGY_RECORD_MAP: dict[int, tuple[str, str]] = {
-    1: ("grid_l1_energy_today_wh", _TYPE_FLOAT),
-    2: ("grid_l2_energy_today_wh", _TYPE_FLOAT),
-    3: ("grid_l3_energy_today_wh", _TYPE_FLOAT),
-    4: ("grid_energy_today_wh", _TYPE_FLOAT),
-    7: ("grid_energy_total_wh", _TYPE_FLOAT),
+    1: ("grid_l1_net_energy_wh", _TYPE_FLOAT),
+    2: ("grid_l2_net_energy_wh", _TYPE_FLOAT),
+    3: ("grid_l3_net_energy_wh", _TYPE_FLOAT),
+    4: ("grid_import_energy_wh", _TYPE_FLOAT),
+    6: ("grid_export_energy_wh", _TYPE_FLOAT),
+    7: ("grid_net_energy_wh", _TYPE_FLOAT),
 }
 
-# Keys that carry a lifetime counter. Such a counter only ever stands still
-# or moves, so a zero on one is a glitch rather than a reading, and a glitch
-# published to the Energy Dashboard sensor would show as the house giving
-# back everything it ever drew. It is dropped rather than published. The
-# daily counters are the opposite case: their midnight zero is the reading.
-_LIFETIME_KEYS = frozenset({"grid_energy_total_wh"})
+# The one subfield whose absence inside a present record is filled rather
+# than left missing (see the module docstring, "encoder behaviour"): its
+# zero is the only steady state among the six.
+_ENERGY_EXPORT_FIELD = 6
+
+# The key that carries the import counter. It only ever stands still or
+# rises, so an explicit zero on it is a glitch rather than a reading - this
+# encoder omits zeros, so an explicit one was written some other way - and a
+# glitch published to the Energy Dashboard sensor would show as the house
+# giving back everything it ever drew. It is dropped rather than published.
+# Export's explicit zero is the fill above, and a zero on a net figure
+# (total or per phase) is a reading a net exporter passes through, so
+# neither belongs on this list.
+_LIFETIME_KEYS = frozenset({"grid_import_energy_wh"})
 
 _BOOL_KEYS = {
     "_grid_l1_connected_raw": "grid_l1_connected",
@@ -145,7 +177,17 @@ def _decode_mapped_fields(
 
     for field_num, wire_type, raw in _iter_fields(pdata):
         if field_num == _ENERGY_RECORD_FIELD and wire_type == 2:
+            # The fill below rests on absence, so presence has to be read
+            # from the wire rather than from a successful decode. A field
+            # that is there and does not decode says nothing, and turning
+            # that into a zero would write a reading nobody measured onto a
+            # counter that only rises, which Home Assistant takes for a
+            # meter change (`never-publish-zero-total-increasing`).
+            export_present = False
+            counters_decoded = 0
             for sub_num, sub_wire, sub_raw in _iter_fields(raw):
+                if sub_num == _ENERGY_EXPORT_FIELD:
+                    export_present = True
                 mapping = _ENERGY_RECORD_MAP.get(sub_num)
                 if mapping is None:
                     continue
@@ -153,6 +195,13 @@ def _decode_mapped_fields(
                 value = _decode_scalar(sub_wire, sub_raw, scalar_type)
                 if value is not None:
                     result[sensor_key] = value
+                    counters_decoded += 1
+            # And a record that carried no counter we read is not a reading
+            # at all: filling it would return a lone export of zero and make
+            # the whole message look like it had data.
+            if not export_present and counters_decoded:
+                export_key, _ = _ENERGY_RECORD_MAP[_ENERGY_EXPORT_FIELD]
+                result[export_key] = 0.0
             continue
 
         mapping = field_map.get(field_num)

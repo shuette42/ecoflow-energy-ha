@@ -1548,20 +1548,23 @@
       "grid_l3_current_a": {
         "name": "Phase C Strom"
       },
-      "grid_energy_total_wh": {
-        "name": "Netzenergie gesamt"
+      "grid_import_energy_wh": {
+        "name": "Netzbezugsenergie"
       },
-      "grid_energy_today_wh": {
-        "name": "Netzenergie heute"
+      "grid_export_energy_wh": {
+        "name": "Netzeinspeiseenergie"
       },
-      "grid_l1_energy_today_wh": {
-        "name": "Phase A Energie heute"
+      "grid_net_energy_wh": {
+        "name": "Netzenergie netto"
       },
-      "grid_l2_energy_today_wh": {
-        "name": "Phase B Energie heute"
+      "grid_l1_net_energy_wh": {
+        "name": "Phase A Nettoenergie"
       },
-      "grid_l3_energy_today_wh": {
-        "name": "Phase C Energie heute"
+      "grid_l2_net_energy_wh": {
+        "name": "Phase B Nettoenergie"
+      },
+      "grid_l3_net_energy_wh": {
+        "name": "Phase C Nettoenergie"
       },
       "grid_power_factor": {
         "name": "Leistungsfaktor"

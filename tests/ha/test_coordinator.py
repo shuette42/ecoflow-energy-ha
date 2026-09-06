@@ -4273,6 +4273,23 @@ class TestMonotonicFilter:
         ):
             assert key in MqttIngestMixin._MONOTONIC_KEYS
 
+        # The comparison above builds `expected` with the same rule the
+        # production side uses, so it cannot catch a change to that rule.
+        # These name the outcome directly instead, on both sides, for the
+        # meter whose classes were decided by direction rather than period
+        # (PLAN-123): the two directional counters are guarded, and the four
+        # net figures must not be, because a net figure falls on export and
+        # the guard would freeze it at the earlier, higher value.
+        for guarded in ("grid_import_energy_wh", "grid_export_energy_wh"):
+            assert guarded in MqttIngestMixin._MONOTONIC_KEYS
+        for unguarded in (
+            "grid_net_energy_wh",
+            "grid_l1_net_energy_wh",
+            "grid_l2_net_energy_wh",
+            "grid_l3_net_energy_wh",
+        ):
+            assert unguarded not in MqttIngestMixin._MONOTONIC_KEYS
+
     async def test_regression_dropped(
         self,
         hass: HomeAssistant,

@@ -28,6 +28,9 @@ from ecoflow_energy.ecoflow.proto_encoding import (
 
 FIXTURE = Path(__file__).parent / "fixtures" / "smart_meter" / "bk21_frames_issue331.json"
 STREAM_FIXTURE = Path(__file__).parent / "fixtures" / "stream" / "bk01_capture_masked.json"
+MIDNIGHT_FIXTURE = (
+    Path(__file__).parent / "fixtures" / "smart_meter" / "bk21_midnight_issue331.json"
+)
 
 
 def _frames(path: Path) -> list[dict[str, Any]]:
@@ -36,6 +39,10 @@ def _frames(path: Path) -> list[dict[str, Any]]:
 
 def _payload(index: int) -> bytes:
     return bytes.fromhex(_frames(FIXTURE)[index]["hex"])
+
+
+def _midnight_payload(index: int) -> bytes:
+    return bytes.fromhex(_frames(MIDNIGHT_FIXTURE)[index]["hex"])
 
 
 def _encode_fixed32_field(field_number: int, value: float) -> bytes:
@@ -75,12 +82,14 @@ _INCREMENTAL = {
 _WITH_ENERGY_RECORD = {
     6: {"grid_w": 432.4347839355469, "grid_l1_w": 0.0,
         "grid_l2_w": 342.93017578125, "grid_l3_w": 89.50462341308594,
-        "grid_l2_energy_today_wh": 967.0, "grid_l3_energy_today_wh": 411.0,
-        "grid_energy_today_wh": 1378.0, "grid_energy_total_wh": 1378.0},
+        "grid_l2_net_energy_wh": 967.0, "grid_l3_net_energy_wh": 411.0,
+        "grid_import_energy_wh": 1378.0, "grid_net_energy_wh": 1378.0,
+        "grid_export_energy_wh": 0.0},
     11: {"grid_w": 420.10107421875, "grid_l1_w": 0.0,
          "grid_l2_w": 331.5275573730469, "grid_l3_w": 88.57351684570312,
-         "grid_l2_energy_today_wh": 992.0, "grid_l3_energy_today_wh": 417.0,
-         "grid_energy_today_wh": 1409.0, "grid_energy_total_wh": 1409.0},
+         "grid_l2_net_energy_wh": 992.0, "grid_l3_net_energy_wh": 417.0,
+         "grid_import_energy_wh": 1409.0, "grid_net_energy_wh": 1409.0,
+         "grid_export_energy_wh": 0.0},
 }
 
 # The 146-byte full upload, frame 4, and the two bundles that followed it
@@ -97,8 +106,9 @@ _FULL = {
         "grid_l1_current_a": 0.0,
         "grid_l2_current_a": 2.1072933673858643,
         "grid_l3_current_a": 0.8354451060295105,
-        "grid_l2_energy_today_wh": 941.0, "grid_l3_energy_today_wh": 404.0,
-        "grid_energy_today_wh": 1345.0, "grid_energy_total_wh": 1345.0,
+        "grid_l2_net_energy_wh": 941.0, "grid_l3_net_energy_wh": 404.0,
+        "grid_import_energy_wh": 1345.0, "grid_net_energy_wh": 1345.0,
+        "grid_export_energy_wh": 0.0,
         "grid_power_factor": 0.0, "grid_connection_state": "grid_in",
         "grid_l1_connected": True, "grid_l2_connected": True,
         "grid_l3_connected": True},
@@ -111,8 +121,9 @@ _FULL = {
         "grid_l1_current_a": 0.0,
         "grid_l2_current_a": 1.789912462234497,
         "grid_l3_current_a": 0.8386775255203247,
-        "grid_l2_energy_today_wh": 923.0, "grid_l3_energy_today_wh": 398.0,
-        "grid_energy_today_wh": 1321.0, "grid_energy_total_wh": 1321.0,
+        "grid_l2_net_energy_wh": 923.0, "grid_l3_net_energy_wh": 398.0,
+        "grid_import_energy_wh": 1321.0, "grid_net_energy_wh": 1321.0,
+        "grid_export_energy_wh": 0.0,
         "grid_power_factor": 0.0, "grid_connection_state": "grid_in",
         "grid_l1_connected": True, "grid_l2_connected": True,
         "grid_l3_connected": True},
@@ -125,8 +136,9 @@ _FULL = {
         "grid_l1_current_a": 0.0,
         "grid_l2_current_a": 2.2456891536712646,
         "grid_l3_current_a": 0.8519787788391113,
-        "grid_l2_energy_today_wh": 984.0, "grid_l3_energy_today_wh": 415.0,
-        "grid_energy_today_wh": 1399.0, "grid_energy_total_wh": 1399.0,
+        "grid_l2_net_energy_wh": 984.0, "grid_l3_net_energy_wh": 415.0,
+        "grid_import_energy_wh": 1399.0, "grid_net_energy_wh": 1399.0,
+        "grid_export_energy_wh": 0.0,
         "grid_power_factor": 0.0, "grid_connection_state": "grid_in",
         "grid_l1_connected": True, "grid_l2_connected": True,
         "grid_l3_connected": True},
@@ -139,8 +151,9 @@ _FULL = {
          "grid_l1_current_a": 0.0,
          "grid_l2_current_a": 2.2456891536712646,
          "grid_l3_current_a": 0.8519787788391113,
-         "grid_l2_energy_today_wh": 984.0, "grid_l3_energy_today_wh": 415.0,
-         "grid_energy_today_wh": 1399.0, "grid_energy_total_wh": 1399.0,
+         "grid_l2_net_energy_wh": 984.0, "grid_l3_net_energy_wh": 415.0,
+         "grid_import_energy_wh": 1399.0, "grid_net_energy_wh": 1399.0,
+         "grid_export_energy_wh": 0.0,
          "grid_power_factor": 0.0, "grid_connection_state": "grid_in",
          "grid_l1_connected": True, "grid_l2_connected": True,
          "grid_l3_connected": True},
@@ -195,11 +208,16 @@ class TestSmartMeterParser:
         _assert_matches(parse_smart_meter_message(_payload(index)), _EXPECTED[index])
 
     def test_the_full_upload_carries_the_whole_meter(self) -> None:
-        """Frame 4, the 146-byte full upload, is the widest frame captured."""
+        """Frame 4, the 146-byte full upload, is the widest frame captured.
+
+        20, not 19: the export fill (ADR-018) adds `grid_export_energy_wh`
+        to every frame whose energy record is present, including this one,
+        where `.6` itself is absent from the wire.
+        """
         result = parse_smart_meter_message(_payload(4))
 
         assert result is not None
-        assert len(result) == 19
+        assert len(result) == 20
         assert result["grid_w"] == pytest.approx(406.65173, rel=1e-6)
         # The phases do not multiply out: 239.44 V at 2.107 A against
         # 317.8 W on L2. That is the meter separating apparent from active
@@ -268,14 +286,17 @@ class TestFieldMapIsPinned:
     def test_removing_an_energy_subfield_removes_exactly_its_key(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        assert "grid_energy_today_wh" in (parse_smart_meter_message(_payload(4)) or {})
+        """`.4` now names the import counter, not "today" (ADR-018): removing
+        its map entry must drop `grid_import_energy_wh` alone and leave the
+        sibling `.7` (`grid_net_energy_wh`) decoding normally."""
+        assert "grid_import_energy_wh" in (parse_smart_meter_message(_payload(4)) or {})
 
         monkeypatch.delitem(_ENERGY_RECORD_MAP, 4)
 
         result = parse_smart_meter_message(_payload(4))
         assert result is not None
-        assert "grid_energy_today_wh" not in result
-        assert "grid_energy_total_wh" in result
+        assert "grid_import_energy_wh" not in result
+        assert "grid_net_energy_wh" in result
 
 
 class TestGuards:
@@ -295,10 +316,15 @@ class TestGuards:
         assert result["grid_connection_state"] is None
 
     def test_a_zero_lifetime_counter_is_dropped(self) -> None:
-        """A lifetime counter at 0 is a glitch, not a reading.
+        """`_LIFETIME_KEYS` narrows to import alone (ADR-018, decision 4): an
+        explicit zero on `.4` is still a glitch and is dropped, while a zero
+        net (`.7`, `.1`) is a reading a net exporter passes through and is
+        published, and an absent `.6` fills to zero rather than staying
+        missing.
 
-        The daily counters are the opposite case: they reset every night, so
-        a zero there is a reading and stays.
+        Before the rename, `.7` was the lifetime key and `.4`/`.1` were the
+        daily ones that kept their zero; this test held the same record and
+        proved the opposite drop.
         """
         record = bytearray()
         record.extend(_encode_fixed32_field(1, 0.0))
@@ -309,9 +335,10 @@ class TestGuards:
         result = parse_smart_meter_message(_build_frame(254, 21, inner))
 
         assert result is not None
-        assert "grid_energy_total_wh" not in result
-        assert result["grid_l1_energy_today_wh"] == 0.0
-        assert result["grid_energy_today_wh"] == 0.0
+        assert "grid_import_energy_wh" not in result
+        assert result["grid_l1_net_energy_wh"] == 0.0
+        assert result["grid_net_energy_wh"] == 0.0
+        assert result["grid_export_energy_wh"] == 0.0
 
     def test_a_stream_frame_produces_no_meter_specific_reading(self) -> None:
         """A BK31/BK01 Stream frame must not be read as a meter.
@@ -327,9 +354,10 @@ class TestGuards:
             "grid_l1_w", "grid_l2_w", "grid_l3_w",
             "grid_l1_voltage_v", "grid_l2_voltage_v", "grid_l3_voltage_v",
             "grid_l1_current_a", "grid_l2_current_a", "grid_l3_current_a",
-            "grid_l1_energy_today_wh", "grid_l2_energy_today_wh",
-            "grid_l3_energy_today_wh",
-            "grid_energy_today_wh", "grid_energy_total_wh",
+            "grid_l1_net_energy_wh", "grid_l2_net_energy_wh",
+            "grid_l3_net_energy_wh",
+            "grid_import_energy_wh", "grid_export_energy_wh",
+            "grid_net_energy_wh",
             "grid_l1_connected", "grid_l2_connected", "grid_l3_connected",
         }
 
@@ -344,3 +372,246 @@ class TestGuards:
         # Positive control: without it the loop above passes on a fixture
         # that decoded to nothing at all.
         assert decoded_any
+
+
+# The five `773`-carrying records of the midnight capture (#331, @wildnet,
+# comment of 2026-09-05), in the fixture's own order: one before local
+# midnight, four after. Every value is read directly off the wire (a walk of
+# field 773's subfields on the reporter's own hardware), not derived from the
+# parser under test - see the module docstring's rule for why.
+_MIDNIGHT_RECORDS: list[dict[str, float]] = [
+    {
+        "grid_l1_net_energy_wh": 3.0,
+        "grid_l2_net_energy_wh": 10666.0,
+        "grid_l3_net_energy_wh": 16074.0,
+        "grid_import_energy_wh": 26771.0,
+        "grid_export_energy_wh": 28.0,
+        "grid_net_energy_wh": 26743.0,
+    },
+    {
+        "grid_l1_net_energy_wh": 3.0,
+        "grid_l2_net_energy_wh": 13663.0,
+        "grid_l3_net_energy_wh": 20259.0,
+        "grid_import_energy_wh": 33953.0,
+        "grid_export_energy_wh": 28.0,
+        "grid_net_energy_wh": 33925.0,
+    },
+    {
+        "grid_l1_net_energy_wh": 3.0,
+        "grid_l2_net_energy_wh": 13666.0,
+        "grid_l3_net_energy_wh": 20267.0,
+        "grid_import_energy_wh": 33964.0,
+        "grid_export_energy_wh": 28.0,
+        "grid_net_energy_wh": 33936.0,
+    },
+    {
+        "grid_l1_net_energy_wh": 3.0,
+        "grid_l2_net_energy_wh": 13667.0,
+        "grid_l3_net_energy_wh": 20275.0,
+        "grid_import_energy_wh": 33973.0,
+        "grid_export_energy_wh": 28.0,
+        "grid_net_energy_wh": 33945.0,
+    },
+    {
+        "grid_l1_net_energy_wh": 3.0,
+        "grid_l2_net_energy_wh": 13668.0,
+        "grid_l3_net_energy_wh": 20284.0,
+        "grid_import_energy_wh": 33983.0,
+        "grid_export_energy_wh": 28.0,
+        "grid_net_energy_wh": 33955.0,
+    },
+]
+
+_ENERGY_KEYS = (
+    "grid_l1_net_energy_wh",
+    "grid_l2_net_energy_wh",
+    "grid_l3_net_energy_wh",
+    "grid_import_energy_wh",
+    "grid_export_energy_wh",
+    "grid_net_energy_wh",
+)
+
+
+class TestMidnightFixture:
+    def test_the_midnight_fixture_carries_the_capture_it_claims_to(self) -> None:
+        """A shrunk or re-cut fixture must not quietly narrow the tests."""
+        frames = _frames(MIDNIGHT_FIXTURE)
+        assert len(frames) == 5
+
+        get_reply = [f for f in frames if f["topic"] == "get_reply"]
+        property_21 = [
+            f for f in frames
+            if f["topic"] == "property" and f["cmds"] == [{"cmd_func": 254, "cmd_id": 21}]
+        ]
+
+        assert len(get_reply) == 1
+        assert get_reply[0]["cmds"] == [
+            {"cmd_func": 254, "cmd_id": 22}, {"cmd_func": 254, "cmd_id": 21}
+        ]
+        assert len(property_21) == 4
+        # Fixture order is capture order: one record before local midnight
+        # (2026-09-03 CEST), four after (2026-09-04 CEST).
+        assert [f["ts_iso"] for f in frames] == sorted(f["ts_iso"] for f in frames)
+
+
+class TestMidnightRecords:
+    """The BK21 energy record (`773`) holds six lifetime counters, not a
+    lifetime pair and four daily ones - direction decides the class, not
+    period (ADR-018, PLAN-123)."""
+
+    @pytest.mark.parametrize("index", range(5))
+    def test_the_midnight_records_decode_to_the_reporters_table(
+        self, index: int
+    ) -> None:
+        result = parse_smart_meter_message(_midnight_payload(index))
+        assert result is not None
+
+        expected = _MIDNIGHT_RECORDS[index]
+        for key, want in expected.items():
+            assert result.get(key) == pytest.approx(want), key
+
+    @pytest.mark.parametrize("index", range(5))
+    def test_import_minus_export_is_net_in_every_record(self, index: int) -> None:
+        result = parse_smart_meter_message(_midnight_payload(index))
+        assert result is not None
+
+        assert result["grid_import_energy_wh"] - result["grid_export_energy_wh"] == (
+            pytest.approx(result["grid_net_energy_wh"])
+        )
+
+    @pytest.mark.parametrize("index", range(5))
+    def test_the_phases_sum_to_net_not_to_import(self, index: int) -> None:
+        result = parse_smart_meter_message(_midnight_payload(index))
+        assert result is not None
+
+        phase_sum = (
+            result["grid_l1_net_energy_wh"]
+            + result["grid_l2_net_energy_wh"]
+            + result["grid_l3_net_energy_wh"]
+        )
+        assert phase_sum == pytest.approx(result["grid_net_energy_wh"])
+        # Every one of the five records carries a non-zero export (28 Wh),
+        # so the phases must disagree with import - if they agreed, the
+        # parser would be reading the wrong subfield as the phase total.
+        assert result["grid_export_energy_wh"] > 0
+        assert phase_sum != pytest.approx(result["grid_import_energy_wh"])
+
+    def test_no_counter_falls_across_midnight(self) -> None:
+        """None of the six counters may go backwards, in either direction
+        the device counts - across the actual local midnight the reporter's
+        meter crossed while the capture ran."""
+        results = [
+            parse_smart_meter_message(_midnight_payload(i)) for i in range(5)
+        ]
+        assert all(r is not None for r in results)
+
+        for key in _ENERGY_KEYS:
+            values = [r[key] for r in results]
+            assert values == sorted(values), (key, values)
+
+
+class TestExportFill:
+    """Decision 4 (ADR-018): absence of `.6` inside a present `773` record
+    reads as zero; the fill is `.6` alone."""
+
+    def test_export_absent_from_a_present_record_reads_zero(self) -> None:
+        record = bytearray()
+        record.extend(_encode_fixed32_field(1, 3.0))
+        record.extend(_encode_fixed32_field(2, 100.0))
+        record.extend(_encode_fixed32_field(3, 200.0))
+        record.extend(_encode_fixed32_field(4, 303.0))
+        record.extend(_encode_fixed32_field(7, 303.0))
+        inner = encode_field_bytes(773, bytes(record))
+
+        result = parse_smart_meter_message(_build_frame(254, 21, inner))
+
+        assert result is not None
+        assert result["grid_export_energy_wh"] == 0.0
+
+    def test_import_absent_from_a_present_record_is_not_filled(self) -> None:
+        """The fill is for `.6` alone - a missing `.4` must stay missing,
+        or a house that has always exported and never imported would get a
+        fabricated import reading of zero."""
+        record = bytearray()
+        record.extend(_encode_fixed32_field(1, 3.0))
+        record.extend(_encode_fixed32_field(2, 100.0))
+        record.extend(_encode_fixed32_field(3, 200.0))
+        record.extend(_encode_fixed32_field(6, 5.0))
+        record.extend(_encode_fixed32_field(7, 295.0))
+        inner = encode_field_bytes(773, bytes(record))
+
+        result = parse_smart_meter_message(_build_frame(254, 21, inner))
+
+        assert result is not None
+        assert "grid_import_energy_wh" not in result
+        # The fields that were on the wire still decode normally.
+        assert result["grid_export_energy_wh"] == 5.0
+        assert result["grid_net_energy_wh"] == 295.0
+
+    def test_an_undecodable_export_field_is_not_treated_as_absent(self) -> None:
+        """Present but unreadable is not the same as missing.
+
+        The fill exists because this encoder omits a zero export, so an
+        absent `.6` means no export. A `.6` that is on the wire and does not
+        decode says nothing at all, and turning that into a zero writes a
+        fabricated reading onto a counter that only ever rises, which Home
+        Assistant reads as a meter change.
+        """
+        record = bytearray()
+        record.extend(_encode_fixed32_field(1, 3.0))
+        record.extend(_encode_fixed32_field(4, 303.0))
+        record.extend(_encode_fixed32_field(7, 303.0))
+        # Field 6 present, wire type 2, which `_decode_scalar` refuses.
+        record.extend(encode_field_bytes(6, b"\x01\x02"))
+        inner = encode_field_bytes(773, bytes(record))
+
+        result = parse_smart_meter_message(_build_frame(254, 21, inner))
+
+        assert result is not None
+        assert "grid_export_energy_wh" not in result
+
+    def test_a_record_carrying_no_mapped_counter_publishes_nothing(self) -> None:
+        """A record that decodes but holds no counter we read is not a
+        reading, and the fill must not invent one.
+
+        Field 5 is on the wire in the vendor's schema and is deliberately
+        unmapped. A record carrying only that one would otherwise come back
+        as a lone export of zero, which also makes the whole message look
+        like it carried data.
+        """
+        record = bytearray()
+        record.extend(_encode_fixed32_field(5, 42.0))
+        inner = encode_field_bytes(773, bytes(record))
+
+        result = parse_smart_meter_message(_build_frame(254, 21, inner))
+
+        assert result is None or "grid_export_energy_wh" not in result
+
+    def test_an_explicit_zero_import_is_dropped_and_a_zero_net_is_published(
+        self,
+    ) -> None:
+        """`_LIFETIME_KEYS` narrows to the import key alone (decision 4).
+
+        An explicit zero on import is still a glitch - this encoder omits
+        zeros, so an explicit one is not a reading. A zero on a net figure
+        (total or per phase) is a reading a net exporter passes through, and
+        must be published, not dropped.
+        """
+        record = bytearray()
+        record.extend(_encode_fixed32_field(1, 0.0))
+        record.extend(_encode_fixed32_field(2, 0.0))
+        record.extend(_encode_fixed32_field(3, 0.0))
+        record.extend(_encode_fixed32_field(4, 0.0))
+        record.extend(_encode_fixed32_field(6, 0.0))
+        record.extend(_encode_fixed32_field(7, 0.0))
+        inner = encode_field_bytes(773, bytes(record))
+
+        result = parse_smart_meter_message(_build_frame(254, 21, inner))
+
+        assert result is not None
+        assert "grid_import_energy_wh" not in result
+        assert result["grid_export_energy_wh"] == 0.0
+        assert result["grid_net_energy_wh"] == 0.0
+        assert result["grid_l1_net_energy_wh"] == 0.0
+        assert result["grid_l2_net_energy_wh"] == 0.0
+        assert result["grid_l3_net_energy_wh"] == 0.0
