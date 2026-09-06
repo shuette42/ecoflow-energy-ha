@@ -109,7 +109,7 @@ _FULL = {
         "grid_l2_net_energy_wh": 941.0, "grid_l3_net_energy_wh": 404.0,
         "grid_import_energy_wh": 1345.0, "grid_net_energy_wh": 1345.0,
         "grid_export_energy_wh": 0.0,
-        "grid_power_factor": 0.0, "grid_connection_state": "grid_in",
+        "grid_connection_state": "grid_in",
         "grid_l1_connected": True, "grid_l2_connected": True,
         "grid_l3_connected": True},
     1: {"grid_w": 328.6647033691406,
@@ -124,7 +124,7 @@ _FULL = {
         "grid_l2_net_energy_wh": 923.0, "grid_l3_net_energy_wh": 398.0,
         "grid_import_energy_wh": 1321.0, "grid_net_energy_wh": 1321.0,
         "grid_export_energy_wh": 0.0,
-        "grid_power_factor": 0.0, "grid_connection_state": "grid_in",
+        "grid_connection_state": "grid_in",
         "grid_l1_connected": True, "grid_l2_connected": True,
         "grid_l3_connected": True},
     9: {"grid_w": 429.0445251464844,
@@ -139,7 +139,7 @@ _FULL = {
         "grid_l2_net_energy_wh": 984.0, "grid_l3_net_energy_wh": 415.0,
         "grid_import_energy_wh": 1399.0, "grid_net_energy_wh": 1399.0,
         "grid_export_energy_wh": 0.0,
-        "grid_power_factor": 0.0, "grid_connection_state": "grid_in",
+        "grid_connection_state": "grid_in",
         "grid_l1_connected": True, "grid_l2_connected": True,
         "grid_l3_connected": True},
     10: {"grid_w": 429.0445251464844,
@@ -154,7 +154,7 @@ _FULL = {
          "grid_l2_net_energy_wh": 984.0, "grid_l3_net_energy_wh": 415.0,
          "grid_import_energy_wh": 1399.0, "grid_net_energy_wh": 1399.0,
          "grid_export_energy_wh": 0.0,
-         "grid_power_factor": 0.0, "grid_connection_state": "grid_in",
+         "grid_connection_state": "grid_in",
          "grid_l1_connected": True, "grid_l2_connected": True,
          "grid_l3_connected": True},
 }
@@ -210,14 +210,17 @@ class TestSmartMeterParser:
     def test_the_full_upload_carries_the_whole_meter(self) -> None:
         """Frame 4, the 146-byte full upload, is the widest frame captured.
 
-        20, not 19: the export fill (ADR-018) adds `grid_export_energy_wh`
-        to every frame whose energy record is present, including this one,
-        where `.6` itself is absent from the wire.
+        The export fill adds `grid_export_energy_wh` to every frame whose
+        energy record is present, including this one, where `.6` itself is
+        absent from the wire. The power factor is not among the keys: this
+        meter sends it as zero while power flows, which is not a reading
+        and is dropped (#331).
         """
         result = parse_smart_meter_message(_payload(4))
 
         assert result is not None
-        assert len(result) == 20
+        assert len(result) == 19
+        assert "grid_power_factor" not in result
         assert result["grid_w"] == pytest.approx(406.65173, rel=1e-6)
         # The phases do not multiply out: 239.44 V at 2.107 A against
         # 317.8 W on L2. That is the meter separating apparent from active
@@ -297,6 +300,49 @@ class TestFieldMapIsPinned:
         assert result is not None
         assert "grid_import_energy_wh" not in result
         assert "grid_net_energy_wh" in result
+
+
+class TestPowerFactorZero:
+    """A power factor of 0.0 while power is flowing is not a reading.
+
+    Promised to the reporter on #331 (2026-09-03): the meter sends the
+    field on every complete upload and reads 0.0 in all of them, on two
+    separate installations, with power and current both non-zero. A power
+    factor of zero at 319 W is not physically possible, so the device is
+    sending an empty field rather than a measurement, and an impossible
+    number is worse than no number.
+
+    The sensor stays. It reports nothing rather than zero, and only while
+    power is actually flowing, so a genuine zero on an idle meter is
+    untouched.
+    """
+
+    def test_a_zero_factor_while_power_flows_is_not_published(self) -> None:
+        inner = _encode_fixed32_field(515, 319.0) + _encode_fixed32_field(618, 0.0)
+
+        result = parse_smart_meter_message(_build_frame(254, 21, inner))
+
+        assert result is not None
+        assert result["grid_w"] == 319.0
+        assert "grid_power_factor" not in result
+
+    def test_a_zero_factor_on_an_idle_meter_is_a_reading(self) -> None:
+        """No power, no contradiction - the zero stands."""
+        inner = _encode_fixed32_field(515, 0.0) + _encode_fixed32_field(618, 0.0)
+
+        result = parse_smart_meter_message(_build_frame(254, 21, inner))
+
+        assert result is not None
+        assert result["grid_power_factor"] == 0.0
+
+    def test_a_real_factor_is_untouched(self) -> None:
+        """Positive control: the rule must not eat an ordinary reading."""
+        inner = _encode_fixed32_field(515, 319.0) + _encode_fixed32_field(618, 0.92)
+
+        result = parse_smart_meter_message(_build_frame(254, 21, inner))
+
+        assert result is not None
+        assert result["grid_power_factor"] == pytest.approx(0.92, rel=1e-6)
 
 
 class TestGuards:
