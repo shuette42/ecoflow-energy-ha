@@ -82,12 +82,14 @@ _INCREMENTAL = {
 _WITH_ENERGY_RECORD = {
     6: {"grid_w": 432.4347839355469, "grid_l1_w": 0.0,
         "grid_l2_w": 342.93017578125, "grid_l3_w": 89.50462341308594,
-        "grid_l2_energy_today_wh": 967.0, "grid_l3_energy_today_wh": 411.0,
-        "grid_energy_today_wh": 1378.0, "grid_energy_total_wh": 1378.0},
+        "grid_l2_net_energy_wh": 967.0, "grid_l3_net_energy_wh": 411.0,
+        "grid_import_energy_wh": 1378.0, "grid_net_energy_wh": 1378.0,
+        "grid_export_energy_wh": 0.0},
     11: {"grid_w": 420.10107421875, "grid_l1_w": 0.0,
          "grid_l2_w": 331.5275573730469, "grid_l3_w": 88.57351684570312,
-         "grid_l2_energy_today_wh": 992.0, "grid_l3_energy_today_wh": 417.0,
-         "grid_energy_today_wh": 1409.0, "grid_energy_total_wh": 1409.0},
+         "grid_l2_net_energy_wh": 992.0, "grid_l3_net_energy_wh": 417.0,
+         "grid_import_energy_wh": 1409.0, "grid_net_energy_wh": 1409.0,
+         "grid_export_energy_wh": 0.0},
 }
 
 # The 146-byte full upload, frame 4, and the two bundles that followed it
@@ -104,8 +106,9 @@ _FULL = {
         "grid_l1_current_a": 0.0,
         "grid_l2_current_a": 2.1072933673858643,
         "grid_l3_current_a": 0.8354451060295105,
-        "grid_l2_energy_today_wh": 941.0, "grid_l3_energy_today_wh": 404.0,
-        "grid_energy_today_wh": 1345.0, "grid_energy_total_wh": 1345.0,
+        "grid_l2_net_energy_wh": 941.0, "grid_l3_net_energy_wh": 404.0,
+        "grid_import_energy_wh": 1345.0, "grid_net_energy_wh": 1345.0,
+        "grid_export_energy_wh": 0.0,
         "grid_power_factor": 0.0, "grid_connection_state": "grid_in",
         "grid_l1_connected": True, "grid_l2_connected": True,
         "grid_l3_connected": True},
@@ -118,8 +121,9 @@ _FULL = {
         "grid_l1_current_a": 0.0,
         "grid_l2_current_a": 1.789912462234497,
         "grid_l3_current_a": 0.8386775255203247,
-        "grid_l2_energy_today_wh": 923.0, "grid_l3_energy_today_wh": 398.0,
-        "grid_energy_today_wh": 1321.0, "grid_energy_total_wh": 1321.0,
+        "grid_l2_net_energy_wh": 923.0, "grid_l3_net_energy_wh": 398.0,
+        "grid_import_energy_wh": 1321.0, "grid_net_energy_wh": 1321.0,
+        "grid_export_energy_wh": 0.0,
         "grid_power_factor": 0.0, "grid_connection_state": "grid_in",
         "grid_l1_connected": True, "grid_l2_connected": True,
         "grid_l3_connected": True},
@@ -132,8 +136,9 @@ _FULL = {
         "grid_l1_current_a": 0.0,
         "grid_l2_current_a": 2.2456891536712646,
         "grid_l3_current_a": 0.8519787788391113,
-        "grid_l2_energy_today_wh": 984.0, "grid_l3_energy_today_wh": 415.0,
-        "grid_energy_today_wh": 1399.0, "grid_energy_total_wh": 1399.0,
+        "grid_l2_net_energy_wh": 984.0, "grid_l3_net_energy_wh": 415.0,
+        "grid_import_energy_wh": 1399.0, "grid_net_energy_wh": 1399.0,
+        "grid_export_energy_wh": 0.0,
         "grid_power_factor": 0.0, "grid_connection_state": "grid_in",
         "grid_l1_connected": True, "grid_l2_connected": True,
         "grid_l3_connected": True},
@@ -146,8 +151,9 @@ _FULL = {
          "grid_l1_current_a": 0.0,
          "grid_l2_current_a": 2.2456891536712646,
          "grid_l3_current_a": 0.8519787788391113,
-         "grid_l2_energy_today_wh": 984.0, "grid_l3_energy_today_wh": 415.0,
-         "grid_energy_today_wh": 1399.0, "grid_energy_total_wh": 1399.0,
+         "grid_l2_net_energy_wh": 984.0, "grid_l3_net_energy_wh": 415.0,
+         "grid_import_energy_wh": 1399.0, "grid_net_energy_wh": 1399.0,
+         "grid_export_energy_wh": 0.0,
          "grid_power_factor": 0.0, "grid_connection_state": "grid_in",
          "grid_l1_connected": True, "grid_l2_connected": True,
          "grid_l3_connected": True},
@@ -202,11 +208,16 @@ class TestSmartMeterParser:
         _assert_matches(parse_smart_meter_message(_payload(index)), _EXPECTED[index])
 
     def test_the_full_upload_carries_the_whole_meter(self) -> None:
-        """Frame 4, the 146-byte full upload, is the widest frame captured."""
+        """Frame 4, the 146-byte full upload, is the widest frame captured.
+
+        20, not 19: the export fill (ADR-018) adds `grid_export_energy_wh`
+        to every frame whose energy record is present, including this one,
+        where `.6` itself is absent from the wire.
+        """
         result = parse_smart_meter_message(_payload(4))
 
         assert result is not None
-        assert len(result) == 19
+        assert len(result) == 20
         assert result["grid_w"] == pytest.approx(406.65173, rel=1e-6)
         # The phases do not multiply out: 239.44 V at 2.107 A against
         # 317.8 W on L2. That is the meter separating apparent from active
@@ -275,14 +286,17 @@ class TestFieldMapIsPinned:
     def test_removing_an_energy_subfield_removes_exactly_its_key(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        assert "grid_energy_today_wh" in (parse_smart_meter_message(_payload(4)) or {})
+        """`.4` now names the import counter, not "today" (ADR-018): removing
+        its map entry must drop `grid_import_energy_wh` alone and leave the
+        sibling `.7` (`grid_net_energy_wh`) decoding normally."""
+        assert "grid_import_energy_wh" in (parse_smart_meter_message(_payload(4)) or {})
 
         monkeypatch.delitem(_ENERGY_RECORD_MAP, 4)
 
         result = parse_smart_meter_message(_payload(4))
         assert result is not None
-        assert "grid_energy_today_wh" not in result
-        assert "grid_energy_total_wh" in result
+        assert "grid_import_energy_wh" not in result
+        assert "grid_net_energy_wh" in result
 
 
 class TestGuards:
@@ -302,10 +316,15 @@ class TestGuards:
         assert result["grid_connection_state"] is None
 
     def test_a_zero_lifetime_counter_is_dropped(self) -> None:
-        """A lifetime counter at 0 is a glitch, not a reading.
+        """`_LIFETIME_KEYS` narrows to import alone (ADR-018, decision 4): an
+        explicit zero on `.4` is still a glitch and is dropped, while a zero
+        net (`.7`, `.1`) is a reading a net exporter passes through and is
+        published, and an absent `.6` fills to zero rather than staying
+        missing.
 
-        The daily counters are the opposite case: they reset every night, so
-        a zero there is a reading and stays.
+        Before the rename, `.7` was the lifetime key and `.4`/`.1` were the
+        daily ones that kept their zero; this test held the same record and
+        proved the opposite drop.
         """
         record = bytearray()
         record.extend(_encode_fixed32_field(1, 0.0))
@@ -316,9 +335,10 @@ class TestGuards:
         result = parse_smart_meter_message(_build_frame(254, 21, inner))
 
         assert result is not None
-        assert "grid_energy_total_wh" not in result
-        assert result["grid_l1_energy_today_wh"] == 0.0
-        assert result["grid_energy_today_wh"] == 0.0
+        assert "grid_import_energy_wh" not in result
+        assert result["grid_l1_net_energy_wh"] == 0.0
+        assert result["grid_net_energy_wh"] == 0.0
+        assert result["grid_export_energy_wh"] == 0.0
 
     def test_a_stream_frame_produces_no_meter_specific_reading(self) -> None:
         """A BK31/BK01 Stream frame must not be read as a meter.
@@ -334,9 +354,10 @@ class TestGuards:
             "grid_l1_w", "grid_l2_w", "grid_l3_w",
             "grid_l1_voltage_v", "grid_l2_voltage_v", "grid_l3_voltage_v",
             "grid_l1_current_a", "grid_l2_current_a", "grid_l3_current_a",
-            "grid_l1_energy_today_wh", "grid_l2_energy_today_wh",
-            "grid_l3_energy_today_wh",
-            "grid_energy_today_wh", "grid_energy_total_wh",
+            "grid_l1_net_energy_wh", "grid_l2_net_energy_wh",
+            "grid_l3_net_energy_wh",
+            "grid_import_energy_wh", "grid_export_energy_wh",
+            "grid_net_energy_wh",
             "grid_l1_connected", "grid_l2_connected", "grid_l3_connected",
         }
 
