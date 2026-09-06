@@ -1823,6 +1823,104 @@ class TestUnroutedDeviceCapture:
         assert result[0]["raw_capture"]["status"] == "no probe running for this device"
         assert "frames" not in result[0]["raw_capture"]
 
+    @staticmethod
+    def _skipped() -> list[dict[str, str]]:
+        return [{
+            "sn_prefix": "RE11",
+            "sn": "RE11TEST00000001",
+            "product_name": "",
+            "reason": "no parser available for this device type",
+        }]
+
+    async def test_capture_switched_off_does_not_blame_the_sign_in(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """The ordinary case must not read as a broken account.
+
+        A probe only ever starts while the capture option is on and inside
+        its window, so an owner who downloads diagnostics without switching
+        anything on lands here. Telling them the sign-in failed sends the
+        reader after a fault that is not there, in a file whose own device
+        list proves the sign-in worked.
+        """
+        capture = (await _skipped_devices_diagnostics(
+            hass, enhanced_config_entry, self._skipped(), []
+        ))[0]["raw_capture"]
+
+        assert capture["capture_enabled"] is False
+        assert "switched off" in capture["hint"]
+        assert "did not succeed" not in capture["hint"]
+        assert "sign-in" not in capture["hint"]
+
+    async def test_capture_on_without_a_probe_names_the_sign_in(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """With the capture on, a missing session is the login after all."""
+        now = 1_800_000_000.0
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                **enhanced_config_entry.data,
+                CONF_RAW_CAPTURE: True,
+                CONF_RAW_CAPTURE_UNTIL: now + 3600,
+            },
+            unique_id="capture-on@example.com",
+        )
+
+        with patch(
+            "custom_components.ecoflow_energy.const.time.time", return_value=now
+        ):
+            capture = (await _skipped_devices_diagnostics(
+                hass, entry, self._skipped(), []
+            ))[0]["raw_capture"]
+
+        assert capture["capture_enabled"] is True
+        assert "did not succeed" in capture["hint"]
+
+    async def test_expired_window_reads_as_off_not_as_a_failure(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """A stored flag past its deadline is off, and must say so.
+
+        The flag survives the window, so without this case an owner whose
+        24 hours ran out would be told their account sign-in had failed.
+        """
+        now = 1_800_000_000.0
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                **enhanced_config_entry.data,
+                CONF_RAW_CAPTURE: True,
+                CONF_RAW_CAPTURE_UNTIL: now - 1,
+            },
+            unique_id="capture-expired@example.com",
+        )
+
+        with patch(
+            "custom_components.ecoflow_energy.const.time.time", return_value=now
+        ):
+            capture = (await _skipped_devices_diagnostics(
+                hass, entry, self._skipped(), []
+            ))[0]["raw_capture"]
+
+        assert capture["capture_enabled"] is False
+        assert "switched off" in capture["hint"]
+        assert "did not succeed" not in capture["hint"]
+
+    async def test_developer_entry_names_the_mode_not_the_login(
+        self, hass: HomeAssistant, standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """On developer keys the capture does not exist, which is not a fault."""
+        capture = (await _skipped_devices_diagnostics(
+            hass, standard_config_entry, self._skipped(), []
+        ))[0]["raw_capture"]
+
+        assert capture["capture_enabled"] is False
+        assert "developer keys" in capture["hint"]
+        assert "did not succeed" not in capture["hint"]
+
 
 class TestUnknownProtoFieldDiagnostics:
     """The field numbers a device sends that the binding does not declare.
