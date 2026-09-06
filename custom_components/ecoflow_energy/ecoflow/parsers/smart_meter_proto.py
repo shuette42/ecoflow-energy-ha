@@ -238,6 +238,23 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
         if isinstance(value, (int, float)) and not value:
             del result[key]
 
+    # The meter sends the power factor on every complete upload and reads
+    # 0.0 in all of them, on two separate installations, with power and
+    # current both non-zero. A power factor of zero while 319 W flows is not
+    # physically possible, so the field is empty rather than measured, and
+    # an impossible number is worse than none. Reported on #331; the sensor
+    # stays and reports nothing instead. A zero on an idle meter is left
+    # alone, because then there is nothing it contradicts.
+    power = result.get("grid_w")
+    factor = result.get("grid_power_factor")
+    if (
+        isinstance(factor, (int, float))
+        and not factor
+        and isinstance(power, (int, float))
+        and power
+    ):
+        del result["grid_power_factor"]
+
     return result
 
 
