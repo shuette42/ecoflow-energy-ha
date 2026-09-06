@@ -403,6 +403,65 @@ class TestTheNetCounterCanFall:
         assert values["grid_net_energy_wh"] == 300.0
 
 
+class TestThePowerFactorClearSurvivesAMerge:
+    """Dropping the key is not enough on an installation that already saw a zero.
+
+    Device data is merged rather than replaced, and a sensor falls back to
+    its restored value only when the key is MISSING from that merged state.
+    A parser that deletes the key therefore leaves whatever was stored last
+    in place, so a meter that reported zero once while idle would keep
+    showing that zero for the rest of its life. An explicit `None` is what
+    the sensor reads as a clear.
+    """
+
+    async def test_a_zero_seen_at_idle_does_not_survive_into_load(
+        self, hass: HomeAssistant
+    ) -> None:
+        entry = _entry(BK21_DEVICE)
+        entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, BK21_DEVICE)
+        hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
+            BK21_DEVICE["sn"]: coordinator
+        }
+
+        # Both readings go through the parser, so this covers what it
+        # actually emits rather than what the rule intends.
+        from tests.test_smart_meter_parser import (
+            _build_frame,
+            _encode_fixed32_field,
+        )
+        from custom_components.ecoflow_energy.ecoflow.parsers.smart_meter_proto import (
+            parse_smart_meter_message,
+        )
+
+        def _reading(power: float, factor: float) -> bytes:
+            inner = _encode_fixed32_field(515, power) + _encode_fixed32_field(
+                618, factor
+            )
+            return _build_frame(254, 21, inner)
+
+        idle = parse_smart_meter_message(_reading(0.0, 0.0))
+        under_load = parse_smart_meter_message(_reading(319.0, 0.0))
+        assert idle is not None and under_load is not None
+        # Positive control: the rule fired on the second frame.
+        assert idle["grid_power_factor"] == 0.0
+        assert under_load.get("grid_power_factor", "absent") != 0.0
+
+        coordinator._apply_data(idle)
+        coordinator._apply_data(under_load)
+
+        created: list[Any] = []
+        await sensor_setup(hass, entry, created.extend)
+        values = {
+            entity._definition.key: entity.native_value
+            for entity in created
+            if hasattr(entity, "_definition")
+        }
+
+        assert values["grid_w"] == 319.0
+        assert values["grid_power_factor"] is None
+
+
 class TestSmartMeterDiagnostics:
     """A device that reports fine but shows up as skipped in a diagnostics
     download sends every future reporter down the wrong path."""

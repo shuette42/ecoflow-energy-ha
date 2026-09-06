@@ -253,7 +253,13 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
         and isinstance(power, (int, float))
         and power
     ):
-        del result["grid_power_factor"]
+        # An explicit None rather than dropping the key: device data is
+        # merged, not replaced, and a sensor only falls back to its restored
+        # value when the key is missing from that merged state. Dropping it
+        # would leave whatever was stored last in place, so a meter that
+        # reported zero once while idle would keep showing that zero for
+        # good. `None` is what the sensor reads as a clear.
+        result["grid_power_factor"] = None
 
     return result
 
