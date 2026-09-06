@@ -177,8 +177,17 @@ def _decode_mapped_fields(
 
     for field_num, wire_type, raw in _iter_fields(pdata):
         if field_num == _ENERGY_RECORD_FIELD and wire_type == 2:
-            export_seen = False
+            # The fill below rests on absence, so presence has to be read
+            # from the wire rather than from a successful decode. A field
+            # that is there and does not decode says nothing, and turning
+            # that into a zero would write a reading nobody measured onto a
+            # counter that only rises, which Home Assistant takes for a
+            # meter change (`never-publish-zero-total-increasing`).
+            export_present = False
+            counters_decoded = 0
             for sub_num, sub_wire, sub_raw in _iter_fields(raw):
+                if sub_num == _ENERGY_EXPORT_FIELD:
+                    export_present = True
                 mapping = _ENERGY_RECORD_MAP.get(sub_num)
                 if mapping is None:
                     continue
@@ -186,9 +195,11 @@ def _decode_mapped_fields(
                 value = _decode_scalar(sub_wire, sub_raw, scalar_type)
                 if value is not None:
                     result[sensor_key] = value
-                    if sub_num == _ENERGY_EXPORT_FIELD:
-                        export_seen = True
-            if not export_seen:
+                    counters_decoded += 1
+            # And a record that carried no counter we read is not a reading
+            # at all: filling it would return a lone export of zero and make
+            # the whole message look like it had data.
+            if not export_present and counters_decoded:
                 export_key, _ = _ENERGY_RECORD_MAP[_ENERGY_EXPORT_FIELD]
                 result[export_key] = 0.0
             continue

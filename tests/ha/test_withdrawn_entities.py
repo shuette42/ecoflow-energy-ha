@@ -109,6 +109,46 @@ class TestRemoval:
         assert first not in _ids(hass)
         assert second not in _ids(hass)
 
+    def test_the_five_pre_release_meter_entities_are_withdrawn(
+        self, hass: HomeAssistant, entry: MockConfigEntry
+    ) -> None:
+        """The BK21 counters shipped in beta.1 to beta.7 under names that
+        described a period, and are replaced by six named by direction
+        (PLAN-123). They are withdrawn rather than migrated, so the removal
+        has to reach all five and leave the new ones alone.
+        """
+        old_keys = (
+            "grid_energy_total_wh",
+            "grid_energy_today_wh",
+            "grid_l1_energy_today_wh",
+            "grid_l2_energy_today_wh",
+            "grid_l3_energy_today_wh",
+        )
+        new_keys = (
+            "grid_import_energy_wh",
+            "grid_export_energy_wh",
+            "grid_net_energy_wh",
+            "grid_l1_net_energy_wh",
+            "grid_l2_net_energy_wh",
+            "grid_l3_net_energy_wh",
+        )
+        meter_sn = "BK21TESTSERIAL01"
+        stale = [
+            _register(hass, entry, "sensor", f"{meter_sn}_{key}") for key in old_keys
+        ]
+        current = [
+            _register(hass, entry, "sensor", f"{meter_sn}_{key}") for key in new_keys
+        ]
+        # Positive control: without this the assertions below are also true
+        # of a registry the helper never touched.
+        assert len(_ids(hass) & set(stale)) == 5
+
+        _async_remove_withdrawn_entities(hass, entry)
+
+        surviving = _ids(hass)
+        assert not surviving & set(stale)
+        assert set(current) <= surviving
+
     def test_current_entities_survive(
         self, hass: HomeAssistant, entry: MockConfigEntry
     ) -> None:

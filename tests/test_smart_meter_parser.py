@@ -548,6 +548,45 @@ class TestExportFill:
         assert result["grid_export_energy_wh"] == 5.0
         assert result["grid_net_energy_wh"] == 295.0
 
+    def test_an_undecodable_export_field_is_not_treated_as_absent(self) -> None:
+        """Present but unreadable is not the same as missing.
+
+        The fill exists because this encoder omits a zero export, so an
+        absent `.6` means no export. A `.6` that is on the wire and does not
+        decode says nothing at all, and turning that into a zero writes a
+        fabricated reading onto a counter that only ever rises, which Home
+        Assistant reads as a meter change.
+        """
+        record = bytearray()
+        record.extend(_encode_fixed32_field(1, 3.0))
+        record.extend(_encode_fixed32_field(4, 303.0))
+        record.extend(_encode_fixed32_field(7, 303.0))
+        # Field 6 present, wire type 2, which `_decode_scalar` refuses.
+        record.extend(encode_field_bytes(6, b"\x01\x02"))
+        inner = encode_field_bytes(773, bytes(record))
+
+        result = parse_smart_meter_message(_build_frame(254, 21, inner))
+
+        assert result is not None
+        assert "grid_export_energy_wh" not in result
+
+    def test_a_record_carrying_no_mapped_counter_publishes_nothing(self) -> None:
+        """A record that decodes but holds no counter we read is not a
+        reading, and the fill must not invent one.
+
+        Field 5 is on the wire in the vendor's schema and is deliberately
+        unmapped. A record carrying only that one would otherwise come back
+        as a lone export of zero, which also makes the whole message look
+        like it carried data.
+        """
+        record = bytearray()
+        record.extend(_encode_fixed32_field(5, 42.0))
+        inner = encode_field_bytes(773, bytes(record))
+
+        result = parse_smart_meter_message(_build_frame(254, 21, inner))
+
+        assert result is None or "grid_export_energy_wh" not in result
+
     def test_an_explicit_zero_import_is_dropped_and_a_zero_net_is_published(
         self,
     ) -> None:

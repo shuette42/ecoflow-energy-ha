@@ -66,7 +66,7 @@ None. The meter measures and reports; it has nothing to set.
 
 **No daily counter is on the wire.** All six energy entities are lifetime counters; the meter does not send anything that resets at midnight. The midnight recording showed every counter holding its value across the reset point instead of dropping back to zero. Owners who want a daily figure can derive one from **Grid Import Energy** with the Energy Dashboard's own daily view or a Utility Meter helper.
 
-**Grid Export Energy is a genuine counter, not a derived value.** It stays at zero on an installation that has never fed power back into the grid. During the export test it climbed from 25 Wh to 28 Wh while the exporting phase's own net figure fell by the same amount, and the app agreed on the import, export and net figures at that moment. **Grid Connection State** already reports feeding into the grid on its own, so together the two show both that export happened and how much.
+**Grid Export Energy is a genuine counter, not a derived value.** It stays at zero on an installation that has never fed power back into the grid. During the export test it climbed from 25 Wh to 28 Wh while the exporting phase's own net figure fell, and the app agreed on the import, export and net figures at that moment. **Grid Connection State** already reports feeding into the grid on its own, so together the two show both that export happened and how much.
 
 **Power Factor reads zero.** The field is sent in every full frame and was zero throughout the recording. It is kept as a diagnostic entity rather than dropped, because zero on an idle phase is a plausible reading and the entity is the cheapest way for an owner to confirm whether it ever moves.
 
