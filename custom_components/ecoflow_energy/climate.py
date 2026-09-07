@@ -15,6 +15,7 @@ refused.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -45,6 +46,14 @@ from .entity import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+# How long a bundled gesture waits for the device to report a mode switch
+# before it sends the value that switch was bundled with, and how often it
+# looks. Measured on hardware 2026-09-07: the device reports a new mode 1.0
+# to 2.6 s after the write, and a setpoint that arrives before that report
+# is acknowledged and dropped.
+MODE_SETTLE_TIMEOUT_S = 6.0
+MODE_SETTLE_POLL_S = 0.25
 
 _MODE_TO_HVAC = {
     "cooling": HVACMode.COOL,
@@ -340,6 +349,8 @@ class EcoFlowWave3Climate(
             if new_mode != self.hvac_mode:
                 await self.async_set_hvac_mode(new_mode)
                 target_mode = _HVAC_TO_MODE.get(new_mode)
+                if target_mode is not None:
+                    await self._await_mode(target_mode)
 
         if ATTR_TARGET_TEMP_LOW in kwargs or ATTR_TARGET_TEMP_HIGH in kwargs:
             lower = kwargs.get(ATTR_TARGET_TEMP_LOW)
@@ -355,6 +366,37 @@ class EcoFlowWave3Climate(
             await self._send(
                 "target_temp_c", float(kwargs[ATTR_TEMPERATURE]), mode=target_mode
             )
+
+    async def _await_mode(self, mode: str) -> None:
+        """Wait for the device to report `mode` before the next write goes out.
+
+        Measured on hardware 2026-09-07: a mode write and a setpoint write
+        sent 13 ms apart both reach the device and are both acknowledged,
+        and the setpoint is silently dropped. The device applies the mode
+        switch first and reports its own stored values for the new mode
+        about a second later; a setpoint arriving inside that window is
+        lost. The same setpoint sent on its own, with the mode already
+        settled, is applied, which is the control that separates a device
+        race from a defect in the frame.
+
+        So a bundled call waits for the device's own report of the new
+        mode. Observed latency is 1.0 to 2.6 s; the timeout is generous
+        against a slow answer and the write is attempted anyway when it
+        expires, since a refusal would be worse than a write the device
+        may still take.
+        """
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + MODE_SETTLE_TIMEOUT_S
+        while loop.time() < deadline:
+            if self._read("operating_mode") == mode:
+                return
+            await asyncio.sleep(MODE_SETTLE_POLL_S)
+        _LOGGER.debug(
+            "%s did not report mode %s within %.0fs, sending the value anyway",
+            self.entity_id,
+            mode,
+            MODE_SETTLE_TIMEOUT_S,
+        )
 
     async def async_set_fan_mode(self, fan_mode: str) -> None:
         """Set the fan speed."""
