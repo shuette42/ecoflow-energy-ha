@@ -116,10 +116,10 @@ def _apply_enum_mappings(result: dict[str, Any]) -> None:
             else:
                 result[sensor_key] = "connected" if iv == 1 else "disconnected"
 
-    for sensor_key, mapping in _PROTO_ENUM_STR.items():
+    for sensor_key, str_mapping in _PROTO_ENUM_STR.items():
         if sensor_key in result:
             raw_val = str(result[sensor_key])
-            result[sensor_key] = mapping.get(raw_val, raw_val)
+            result[sensor_key] = str_mapping.get(raw_val, raw_val)
 
     # grid_is_energized (bool, field 752) overrides sys_grid_sta when present.
     # The EcoFlow app uses gridIsEnergized for the main grid display.

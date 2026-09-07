@@ -7,6 +7,7 @@ Inner payload fields are decoded via the generated pb2 classes.
 from __future__ import annotations
 
 import struct
+from typing import Any
 
 _HEADER_FIELDS = {
     1: ("pdata", "bytes"), 2: ("src", "i32"), 3: ("dest", "i32"),
@@ -54,7 +55,12 @@ def _decode_single_header(hdr: bytes) -> dict:
     """Decode a single protobuf header message into field name/value pairs."""
     mv = memoryview(hdr)
     i = 0
-    out = {}
+    # Explicitly annotated: an unannotated {} would lock mypy's inferred
+    # value type to whatever the first assignment below happens to be (int,
+    # from the wt==0 branch), then flag the wt==2 str-valued assignments as
+    # incompatible - the field values here are genuinely int | str | float
+    # depending on wire type and field name.
+    out: dict[str, Any] = {}
     while i < len(mv):
         key, i = _read_varint(mv, i)
         if key is None:

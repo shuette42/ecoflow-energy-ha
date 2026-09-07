@@ -332,6 +332,22 @@ class TestPublishDelivery:
         assert client.send_proto_set(b"\x00", wait=True) is False
         info.wait_for_publish.assert_called_once()
 
+    def test_publish_survives_client_swapped_to_none_mid_check(self, caplog):
+        """force_reconnect() runs on a separate thread and can swap
+        self.client to None between the is_connected() gate and the actual
+        publish call. That is a normal reconnect race, not a device fault -
+        publish() must return False for it without an ERROR log line.
+        """
+        client = _make_client()
+        client.is_connected = lambda: True
+        client.client = None
+
+        with caplog.at_level(logging.DEBUG):
+            result = client.publish("test/topic", "payload")
+
+        assert result is False
+        assert [r for r in caplog.records if r.levelno >= logging.ERROR] == []
+
 
 # ===========================================================================
 # Reconnect Strategy

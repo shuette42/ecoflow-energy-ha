@@ -824,7 +824,16 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
     # Signed battery power, positive is charge. All three zero-filled edges
     # being numbers means this frame carried `f12`; an absent group leaves
     # `batt_w` out so the coordinator keeps the last value.
-    if all(isinstance(v, (int, float)) for v in (home_from_batt, batt_to_grid, grid_to_batt)):
+    if (
+        # Written as three isinstance checks rather than all(...) over a
+        # generator - mypy cannot narrow the individual variables through
+        # all(), which is what left float(home_from_batt) and
+        # float(batt_to_grid) below unproven to the checker despite this
+        # guard already covering them at runtime.
+        isinstance(home_from_batt, (int, float))
+        and isinstance(batt_to_grid, (int, float))
+        and isinstance(grid_to_batt, (int, float))
+    ):
         # `f12.9` is the solar-to-battery edge and belongs in this sum. It is
         # absent from the fixtures only because the unit they came from has no
         # PV wired to the EcoFlow; on issue #177 it is confirmed three times on

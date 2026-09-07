@@ -600,11 +600,18 @@ class EcoFlowMQTTClient:
                 if self.is_connected():
                     return True
 
+                client = self.client
+                if client is None:
+                    # Every real caller creates the client before connecting;
+                    # this only turns a future ordering mistake into a clean
+                    # False instead of an AttributeError.
+                    return False
+
                 keepalive = DEFAULT_WSS_KEEPALIVE if self._wss_mode else DEFAULT_MQTT_KEEPALIVE
 
                 _LOGGER.debug("Connecting to %s (%s)", self.broker, "WSS" if self._wss_mode else "TCP")
                 broker = self._broker
-                self.client.connect(broker.host, broker.port, keepalive)
+                client.connect(broker.host, broker.port, keepalive)
                 return True
             except Exception as exc:
                 self._log_issue("warning", "MQTT connection error: %s", exc)
@@ -642,10 +649,12 @@ class EcoFlowMQTTClient:
             return False
         try:
             _LOGGER.debug("Force-reconnect: disconnecting and recreating client...")
-            with contextlib.suppress(Exception):
-                self.client.loop_stop()
-            with contextlib.suppress(Exception):
-                self.client.disconnect()
+            existing = self.client
+            if existing is not None:
+                with contextlib.suppress(Exception):
+                    existing.loop_stop()
+                with contextlib.suppress(Exception):
+                    existing.disconnect()
             self.connected = False
             self.client = None
 
@@ -656,10 +665,20 @@ class EcoFlowMQTTClient:
                 )
                 return False
 
+            client = self.client
+            if client is None:
+                # _create_client_unlocked() sets self.client on every success
+                # path; this only guards a future refactor from silently
+                # reintroducing the gap.
+                self._log_retryable(
+                    "Force-reconnect: client missing after successful creation"
+                )
+                return False
+
             try:
                 keepalive = DEFAULT_WSS_KEEPALIVE if self._wss_mode else DEFAULT_MQTT_KEEPALIVE
                 broker = self._broker
-                self.client.connect(broker.host, broker.port, keepalive)
+                client.connect(broker.host, broker.port, keepalive)
                 self._start_network_loop()
                 _LOGGER.debug("Force-reconnect: success at %s (%s)", self.broker, "WSS" if self._wss_mode else "TCP")
                 return True
@@ -697,8 +716,11 @@ class EcoFlowMQTTClient:
         line that says too much is a smaller problem than a device that does
         not connect.
         """
-        self.client.loop_start()
-        thread = getattr(self.client, "_thread", None)
+        client = self.client
+        if client is None:
+            return
+        client.loop_start()
+        thread = getattr(client, "_thread", None)
         if thread is None:
             return
         try:
@@ -742,8 +764,16 @@ class EcoFlowMQTTClient:
             return False
         if not self.is_connected():
             return False
+        # A fresh local read, not the self.client already implied by
+        # is_connected() above: force_reconnect() swaps self.client to None
+        # from another thread (see is_connected()'s own docstring for the
+        # same hazard), so re-reading self.client a second time below would
+        # race against that swap instead of being guarded against it.
+        client = self.client
+        if client is None:
+            return False
         try:
-            result = self.client.publish(topic, payload, qos=qos)
+            result = client.publish(topic, payload, qos=qos)
             if result.rc != 0:
                 return False
             self._note_own_publish(payload)
