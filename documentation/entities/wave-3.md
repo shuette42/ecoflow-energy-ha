@@ -24,6 +24,8 @@ The band can now be set from the card as a pair, which is the way the app itself
 
 The fourteen individual controls below stay next to this card and are not replaced by it: an automation that only ever touches the fan speed, or a dashboard tile for just the target temperature, keeps using those directly.
 
+With one exception the card sends the same writes those controls send, and every one of those has been sent to a unit and acknowledged. The exception is the band: that frame is rebuilt from the recording and has not been sent to a unit from here yet. The card itself has not been used against hardware either, so a report of what your unit does with it is welcome on [#161](https://github.com/shuette42/ecoflow-energy-ha/issues/161).
+
 ---
 
 ## Switches
