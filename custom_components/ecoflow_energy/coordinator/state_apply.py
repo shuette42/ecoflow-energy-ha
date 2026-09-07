@@ -25,6 +25,21 @@ from ..ecoflow.parsers.wave3_proto import (
 
 _LOGGER = logging.getLogger(__name__)
 
+
+def _registry_device(registry: dr.DeviceRegistry, device_sn: str, entry_id: str) -> dr.DeviceEntry | None:
+    """Look a device up by its identifier on whichever registry API is present.
+
+    Home Assistant 2026.9 deprecates `async_get_device` for identifier lookups,
+    because identifiers are no longer unique across config entries, and logs a
+    warning per call site; the replacement takes the owning config entry. The
+    oldest release this integration supports has only the old call, so the
+    lookup follows the registry rather than the other way round.
+    """
+    lookup = getattr(registry, "async_get_device_by_identifier", None)
+    if lookup is not None:
+        return lookup((DOMAIN, device_sn), entry_id)
+    return registry.async_get_device(identifiers={(DOMAIN, device_sn)})
+
 # ADR-013: at most two writes per divergent (app, ems) pair per process
 # lifetime. The first write can only be judged against a report that left
 # the device after it, and the 30s throttle usually lands the next
@@ -207,9 +222,7 @@ class StateApplyMixin:
                 self._sw_version = firmware
                 self._firmware["pd_firm_ver"] = {"decoded": firmware}
                 registry = dr.async_get(self.hass)
-                device = registry.async_get_device(
-                    identifiers={(DOMAIN, self.device_sn)}
-                )
+                device = _registry_device(registry, self.device_sn, self._entry.entry_id)
                 # The registry's own state is the comparison (PLAN-047
                 # review F2), not `_sw_version`: the device registry entry
                 # is created when the platforms add their entities, which
