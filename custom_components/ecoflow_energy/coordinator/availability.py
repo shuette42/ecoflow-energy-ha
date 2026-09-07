@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import time
 from datetime import timedelta
+from typing import TYPE_CHECKING
 
 from ..const import (
     DEVICE_TYPE_SMARTPLUG,
@@ -23,8 +24,13 @@ from ..const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+if TYPE_CHECKING:
+    from ._typing import CoordinatorState as _Base
+else:
+    _Base = object
 
-class AvailabilityMixin:
+
+class AvailabilityMixin(_Base):
     """Mixin providing graduated availability and stale checks."""
 
     @property

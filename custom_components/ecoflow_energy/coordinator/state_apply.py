@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.helpers import device_registry as dr
 
@@ -50,8 +50,13 @@ def _registry_device(registry: dr.DeviceRegistry, device_sn: str, entry_id: str)
 # and a third write would just be the loop this bound exists to stop.
 _SURPLUS_SYNC_MAX_WRITES = 2
 
+if TYPE_CHECKING:
+    from ._typing import CoordinatorState as _Base
+else:
+    _Base = object
 
-class StateApplyMixin:
+
+class StateApplyMixin(_Base):
     """Mixin applying parsed data to coordinator state."""
 
     def _resolve_soc(self, parsed: dict[str, Any]) -> None:

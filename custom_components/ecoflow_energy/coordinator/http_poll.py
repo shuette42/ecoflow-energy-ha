@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..const import (
     DEVICE_TYPE_DELTA,
@@ -24,8 +24,13 @@ from ..ecoflow.parsers.stream_http import parse_stream_quota
 
 _LOGGER = logging.getLogger(__name__)
 
+if TYPE_CHECKING:
+    from ._typing import CoordinatorState as _Base
+else:
+    _Base = object
 
-class HttpPollMixin:
+
+class HttpPollMixin(_Base):
     """Mixin providing the HTTP polling update path."""
 
     # ------------------------------------------------------------------

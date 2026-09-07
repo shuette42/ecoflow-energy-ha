@@ -6,7 +6,7 @@ import json
 import logging
 import re
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..const import (
     DEVICE_TYPE_DELTA,
@@ -125,7 +125,13 @@ def _collect_total_increasing_keys() -> frozenset[str]:
     return frozenset(keys)
 
 
-class MqttIngestMixin:
+if TYPE_CHECKING:
+    from ._typing import CoordinatorState as _Base
+else:
+    _Base = object
+
+
+class MqttIngestMixin(_Base):
     """Mixin providing MQTT message parsing and monotonic enforcement."""
 
     # ------------------------------------------------------------------

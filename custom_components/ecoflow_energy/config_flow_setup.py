@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import aiohttp
 import voluptuous as vol
@@ -94,7 +94,13 @@ def _device_label(device: dict[str, Any]) -> str:
     return f"{name} ({sn_short}){status}" if name else f"{sn_short}{status}"
 
 
-class SetupFlowMixin:
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigFlow as _Base
+else:
+    _Base = object
+
+
+class SetupFlowMixin(_Base):
     """Initial setup steps, composed into EcoFlowEnergyConfigFlow."""
 
     # ------------------------------------------------------------------

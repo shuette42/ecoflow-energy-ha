@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import aiohttp
 import voluptuous as vol
@@ -68,8 +68,16 @@ async def _async_fetch_app_devices(
     return SetupFlowMixin._normalize_app_devices(raw_devices)
 
 
-class OptionsFlowMixin:
+if TYPE_CHECKING:
+    from homeassistant.config_entries import OptionsFlow as _Base
+else:
+    _Base = object
+
+
+class OptionsFlowMixin(_Base):
     """Options flow steps, composed into EcoFlowOptionsFlow."""
+
+    _all_devices: list[dict[str, Any]]
 
     @staticmethod
     def _stored_device_type(stored: dict[str, dict[str, Any]], sn: str) -> str:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
@@ -34,8 +34,13 @@ from ..ecoflow.iot_api import IoTApiClient
 
 _LOGGER = logging.getLogger(__name__)
 
+if TYPE_CHECKING:
+    from ._typing import CoordinatorState as _Base
+else:
+    _Base = object
 
-class SetupMixin:
+
+class SetupMixin(_Base):
     """Mixin providing coordinator setup and teardown."""
 
     # ------------------------------------------------------------------

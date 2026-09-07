@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import aiohttp
 import voluptuous as vol
@@ -28,7 +28,13 @@ from .ecoflow.iot_api import IoTApiClient
 _LOGGER = logging.getLogger(__name__)
 
 
-class ReauthFlowMixin:
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigFlow as _Base
+else:
+    _Base = object
+
+
+class ReauthFlowMixin(_Base):
     """Re-authentication steps, composed into EcoFlowEnergyConfigFlow."""
 
     # ------------------------------------------------------------------
