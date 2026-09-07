@@ -433,7 +433,8 @@ def test_an_incremental_power_frame_carries_only_power() -> None:
     inferred from a field's absence.
     """
     result = parse_wave3_message(_payload(14))
-    assert result == {"ac_input_power_w": pytest.approx(14.9527, abs=0.0001)}
+    # 14.9527 on the wire, published at two decimals like every float here.
+    assert result == {"ac_input_power_w": 14.95}
 
 
 def test_an_incremental_sleep_frame_flips_running() -> None:
@@ -618,3 +619,21 @@ def test_every_full_frame_stays_inside_the_measured_ranges() -> None:
     # would leave - a floor low enough to survive losing a message type
     # entirely is not a floor.
     assert checked >= 60
+
+
+def test_float_readings_carry_at_most_two_decimals() -> None:
+    """The device sends single-precision floats, so a 19.55 setpoint arrives
+    as 19.549999237060547. A sensor hides that behind its display precision;
+    a number entity shows it verbatim (seen in the Docker window for the
+    constant temperature setpoint). Every float the parser publishes is
+    rounded to two decimals, which loses nothing the app can express.
+    """
+    result = parse_wave3_message(_payload(0))
+    assert result is not None
+
+    floats = {key: value for key, value in result.items() if isinstance(value, float)}
+    assert len(floats) >= 10  # positive control: the full frame carries floats
+    assert result["constant_temp_target_temp_c"] == 19.55
+    assert result["temp_ambient_c"] == 21.61
+    for key, value in floats.items():
+        assert value == round(value, 2), key
