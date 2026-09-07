@@ -718,6 +718,11 @@ class EcoFlowMQTTClient:
         """
         client = self.client
         if client is None:
+            # Both callers create the client first, so this is a reconnect
+            # having swapped it away between their check and this call. Say
+            # so rather than returning silently: the caller believes a
+            # network loop is running after this returns.
+            _LOGGER.debug("No client to start the network loop on")
             return
         client.loop_start()
         thread = getattr(client, "_thread", None)

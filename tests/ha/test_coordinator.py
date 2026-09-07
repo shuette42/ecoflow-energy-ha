@@ -3499,11 +3499,8 @@ class TestApplyData:
 class TestProtoKeyRemapping:
     async def test_remap_energy_stream_keys(
         self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Protobuf keys are remapped to sensor keys."""
-        enhanced_config_entry.add_to_hass(hass)
         raw = {
             "solar": 3200,
             "home_direct": 1500,
@@ -3521,11 +3518,8 @@ class TestProtoKeyRemapping:
 
     async def test_remap_derives_grid_import_export(
         self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Grid import/export splits are computed from grid_w."""
-        enhanced_config_entry.add_to_hass(hass)
         # Positive grid_w = import
         result = remap_proto_keys({"grid_raw_f2": 500})
         assert result["grid_import_power_w"] == 500
@@ -3538,11 +3532,8 @@ class TestProtoKeyRemapping:
 
     async def test_remap_derives_batt_charge_discharge(
         self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Battery charge/discharge splits are computed from batt_w."""
-        enhanced_config_entry.add_to_hass(hass)
         # Positive batt_w = charging
         result = remap_proto_keys({"batt_pb": 1200})
         assert result["batt_charge_power_w"] == 1200
@@ -3555,22 +3546,16 @@ class TestProtoKeyRemapping:
 
     async def test_remap_preserves_unknown_keys(
         self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Keys not in the mapping are passed through unchanged."""
-        enhanced_config_entry.add_to_hass(hass)
         result = remap_proto_keys({"solar": 100, "some_new_field": 42})
         assert result["solar_w"] == 100
         assert result["some_new_field"] == 42
 
     async def test_remap_zero_values(
         self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Zero power values produce zero derived splits."""
-        enhanced_config_entry.add_to_hass(hass)
         result = remap_proto_keys({"grid_raw_f2": 0.0, "batt_pb": 0.0})
         assert result["grid_w"] == 0.0
         assert result["grid_import_power_w"] == 0.0
@@ -3588,11 +3573,8 @@ class TestProtoKeyRemapping:
 class TestHeartbeatExtraction:
     async def test_mppt_per_string(
         self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """MPPT per-string data extracted from nested mppt_heart_beat."""
-        enhanced_config_entry.add_to_hass(hass)
         raw = {
             "mppt_heart_beat": [
                 {
@@ -3616,11 +3598,8 @@ class TestHeartbeatExtraction:
 
     async def test_grid_phase_from_load_info(
         self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Grid phase data extracted from pcs_load_info nested array."""
-        enhanced_config_entry.add_to_hass(hass)
         raw = {
             "pcs_load_info": [
                 {"vol": 230.5, "amp": 10.2, "pwr": 2300.0},
@@ -3638,11 +3617,8 @@ class TestHeartbeatExtraction:
 
     async def test_grid_phase_from_pcs_phase(
         self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Grid phase data from pcs_a/b/c_phase fallback."""
-        enhanced_config_entry.add_to_hass(hass)
         raw = {
             "pcs_a_phase": {"vol": 230.0, "amp": 10.0, "act_pwr": -2200.0},
             "pcs_b_phase": {"vol": 231.0, "amp": 11.0, "act_pwr": -2500.0},
@@ -3656,33 +3632,24 @@ class TestHeartbeatExtraction:
 
     async def test_grid_status_derived_from_phase_voltage(
         self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Grid status derived as 'ok' when phase A voltage > 50V."""
-        enhanced_config_entry.add_to_hass(hass)
         raw = {"pcs_a_phase": {"vol": 230.0, "amp": 10.0, "act_pwr": -2000.0}}
         result = flatten_heartbeat(raw)
         assert result["grid_status"] == "ok"
 
     async def test_grid_status_not_detected_low_voltage(
         self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Grid status 'not_detected' when phase A voltage <= 50V."""
-        enhanced_config_entry.add_to_hass(hass)
         raw = {"pcs_a_phase": {"vol": 0.0, "amp": 0.0, "act_pwr": 0.0}}
         result = flatten_heartbeat(raw)
         assert result["grid_status"] == "not_detected"
 
     async def test_empty_heartbeat(
         self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Empty heartbeat produces empty result."""
-        enhanced_config_entry.add_to_hass(hass)
         result = flatten_heartbeat({})
         assert result == {}
 

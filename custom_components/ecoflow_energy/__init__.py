@@ -465,13 +465,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
     # Off by default. The capture helps exactly one person - whoever
     # volunteered - and costs an extra connection plus a larger diagnostics
     # download, so it is opt-in and expires on its own.
-    # A device that fails `probe_eligible` (PowerStream, Enhanced-only) never
-    # actually carries the key with a value other than the one that failed
-    # the check, so every item that passes here only ever holds string
-    # values - the comprehension states that instead of leaving it implicit
-    # for `async_start_probes`, which only ever reads strings.
+    # A skipped device carries one non-string value, `probe_eligible`, and
+    # `async_start_probes` reads only `sn` and `product_name`. Name those two
+    # rather than filtering on the type of the value: a key added later with
+    # a non-string value would be dropped by a type filter without anything
+    # saying so, and a probe that never starts is the quietest way for that
+    # to show up.
     probe_devices: list[dict[str, str]] = [
-        {k: v for k, v in device.items() if isinstance(v, str)}
+        {
+            key: value
+            for key in ("sn", "product_name")
+            if isinstance(value := device.get(key, ""), str)
+        }
         for device in skipped_devices
         if device.get("probe_eligible", True)
     ]
