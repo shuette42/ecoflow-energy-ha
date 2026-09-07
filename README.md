@@ -37,22 +37,22 @@
 
 ## Supported Devices
 
-| Device | Serial prefix | Sensors | Controls | Energy Sensors | Update Rate |
-|:---|:---|:---:|:---:|:---:|:---|
-| **PowerOcean** - Home Battery | `HJ31` `HJ32` `HJ35` `HJ36` `HJ37` `J32B` `J327`\* `J329` `J32D`\* `J32E`\* | 235 + 13 binary | 10 numbers, 8 switches, 1 select (Enhanced only) | 6 (solar, grid import/export, battery charge/discharge, home) | ~30 s standard / ~3 s enhanced |
-| **PowerOcean Plus** - 3-phase Hybrid | `R371`\* `R372`\* `R374`\* `HJ3C`\* | 235 + 13 binary | 10 numbers, 8 switches, 1 select (Enhanced only) | 6 (solar, grid import/export, battery charge/discharge, home) | ~3 s enhanced |
-| **Delta 2 Max** - Portable Power | `R351` `R331` | 94 + 4 binary | 7 switches, 8 numbers | 4 (solar 1+2, AC in/out) | ~30 s standard (+ MQTT push) |
-| **Delta 3** - Portable Power | `D3M1` `D3N1` `P321` `P231` `P351` | 47 | 7 switches, 4 numbers, 5 selects (selects and 1 number Enhanced only); `D3M` serials add 3 switches, 3 numbers and 1 binary sensor for port priority | 4 (solar 1+2, AC in, output) | ~30 s standard / ~2 s enhanced |
-| **Smart Plug** - Switchable Outlet | `HW52` | 11 + 1 binary | 1 switch, 2 numbers | 1 (total energy) | ~30 s standard / ~3 s enhanced |
-| **Stream** - AC-coupled Battery | `BK31` `BK11` `BK41` `BK51` `BK61` | 54 + 2 binary | 1 number; `BK31` adds 3 numbers and 2 switches (Enhanced only) | 2 default (battery charge/discharge), 6 optional diagnostic (solar/home, PV 1-4) | ~30 s standard / ~3 s enhanced |
-| **Stream Micro** - Grid-tie Inverter | `BK01`\* | 21 | - | 2 optional diagnostic (PV 1-2) | ~3 s enhanced |
-| **PowerStream** - Microinverter | `HW51` | 25 | none, see below | 2 default (solar, inverter output), 2 optional diagnostic (PV 1-2) | ~30 s standard |
-| **STREAM AC 5000** - AC-coupled Battery | `ES22`\* | 56 + 2 binary | 2 switches, 7 numbers, 1 select (Enhanced only) | 4 default (grid import/export, battery charge/discharge), 1 optional diagnostic (home) | ~2 s enhanced |
-| **STREAM 5000** - AC-coupled Battery | `ES21`\* | 56 + 2 binary | 2 switches, 7 numbers, 1 select (Enhanced only) | 4 default (grid import/export, battery charge/discharge), 1 optional diagnostic (home) | ~2 s enhanced |
-| **Smart Meter** - Grid Meter | `BK21`\* | 18 + 3 binary | none, read-only | 2 (grid import, grid export) | ~3 s enhanced |
-| **Solar Tracker** | `HZ31`\*, `S02F`\* | 6 | none, read-only for now | none | ~3 s enhanced |
+| Device | Serial prefix | Connection | Sensors | Controls | Energy Dashboard | Update |
+|:---|:---|:---|:---:|:---|:---:|:---|
+| **PowerOcean** | `HJ31` `HJ32` `HJ35` `HJ36` `HJ37` `J32B` `J329` `J327`\* `J32D`\* `J32E`\* | Standard, Enhanced | 235 + 13 binary | 8 switches · 10 numbers · 1 select (Enhanced) | 6 | ~30 s / ~3 s |
+| **PowerOcean Plus** | `R371` `R372` `R374` `HJ3C` | Enhanced only | 235 + 13 binary | 8 switches · 10 numbers · 1 select | 6 | ~3 s |
+| **Delta 2 Max** | `R351` `R331` | Standard, MQTT push | 94 + 4 binary | 7 switches · 8 numbers | 4 | ~30 s |
+| **Delta 3** | `D3M1` `D3N1` `P321` `P231` `P351` | Standard, Enhanced | 47 (`D3M`: + 1 binary) | 7 switches · 4 numbers · 5 selects (`D3M`: 10 · 7 · 5) | 4 | ~30 s / ~2 s |
+| **Smart Plug** | `HW52` | Standard, Enhanced | 11 + 1 binary | 1 switch · 2 numbers | 1 | ~30 s / ~3 s |
+| **Stream** | `BK31` `BK11` `BK41` `BK51` `BK61` | Standard, Enhanced | 55 + 2 binary | 1 number (`BK31`: 2 switches · 4 numbers) | 2 + 6 optional | ~30 s / ~3 s |
+| **Stream Micro** | `BK01` | Enhanced only | 21 | none | 2 optional | ~3 s |
+| **PowerStream** | `HW51` | Standard only | 25 | none, read-only | 2 + 2 optional | ~30 s |
+| **STREAM AC 5000** | `ES22` | Enhanced only | 56 + 2 binary | 2 switches · 7 numbers · 1 select | 4 + 1 optional | ~2 s |
+| **STREAM 5000** | `ES21` | Enhanced only | 56 + 2 binary | 2 switches · 7 numbers · 1 select | 4 + 1 optional | ~2 s |
+| **Smart Meter** | `BK21` | Enhanced only | 18 + 3 binary | none, read-only | 2 | ~3 s |
+| **Solar Tracker** | `HZ31` `S02F` | Enhanced only | 6 | none, read-only for now | none | ~3 s |
 
-> **\* Enhanced Mode only.** These serial prefixes cannot currently be linked to an IoT Developer API key, so Standard Mode reports error 1006 and their entities stay unavailable. This is an EcoFlow API limitation, not a configuration problem.
+> **Connection.** Standard Mode reads through the IoT Developer API with your access and secret key; Enhanced Mode signs in with the EcoFlow account and receives pushes at the faster rate. **Enhanced only** means the serial prefix cannot currently be linked to a Developer API key, so Standard Mode reports error 1006 and the entities stay unavailable; the three starred PowerOcean prefixes are in the same position. This is an EcoFlow API limitation, not a configuration problem. Controls marked Enhanced exist only with the account sign-in. The Energy Dashboard column counts the sensors made for it; optional ones are disabled by default and depend on the installation, see the device notes below and the [Energy Dashboard](#energy-dashboard) section.
 >
 > **PowerOcean and PowerOcean Plus share one entity set.** A Plus unit simply reports more of it: per-phase reactive power (var) and apparent power (VA), plus MPPT strings 3 and 4. Those entities exist for every PowerOcean but are disabled by default, because a standard unit never sends them and the entity would sit at "unknown" forever. Enable them under **Settings > Devices & services > Entities** on a Plus device.
 >
