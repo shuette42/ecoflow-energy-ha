@@ -47,6 +47,7 @@ PLATFORMS: list[Platform] = [
     Platform.SWITCH,
     Platform.NUMBER,
     Platform.SELECT,
+    Platform.CLIMATE,
 ]
 
 # Config entry keys

@@ -2,13 +2,27 @@
 
 Full list of all entities created for the EcoFlow WAVE 3 portable air conditioner.
 
-**Totals:** 18 sensors, 5 binary sensors, 4 switches, 5 numbers, 5 selects
+**Totals:** 18 sensors, 5 binary sensors, 4 switches, 5 numbers, 5 selects, 1 climate
 
 The WAVE 3 reports through the account connection only, so it needs **Enhanced Mode**. The Developer API lists the unit but refuses every reading from it with error 1006, which means a Standard Mode entry cannot select it and its entities would never fill.
 
 Nothing is polled. The device sends two messages by itself: the full status every 120 seconds, and a runtime block every 300 seconds carrying the temperatures inside the refrigerant loop, the supply voltage and current, and the firmware. While the unit is running it also pushes its input power roughly every 2 seconds.
 
 Every control sends the frame the EcoFlow app sends for the same setting, one setting per frame, and the device answers with its new value in a push of its own, usually within 2 seconds. Home Assistant shows the requested value for 5 seconds and from then on what the device reports.
+
+---
+
+## Climate
+
+| Entity | Default | Description |
+|:---|:---:|:---|
+| WAVE 3 | enabled | The whole unit as one thermostat card, under the device's own name rather than its own label |
+
+The card's power toggle is the same standby the Power switch below sends: off puts the unit into standby, and turning it on again from off sends the power-on command first and the mode second, the same two frames a manual power-off from the app leaves behind. Cooling and heating map to Cool and Heat, fan to Fan only, dehumidify to Dry, and constant temperature to Heat/cool, where the card shows a band of two temperatures instead of one setpoint - the range the unit holds itself between.
+
+The band can now be set from the card as a pair, which is the way the app itself writes it. In a recording of the app setting the band twelve times, both limits always travelled in one message and the device acknowledged each one straight away, naming the upper limit only. The lower limit is therefore confirmed by the unit's own next status report rather than by the acknowledgment, same as any other control here.
+
+The fourteen individual controls below stay next to this card and are not replaced by it: an automation that only ever touches the fan speed, or a dashboard tile for just the target temperature, keeps using those directly.
 
 ---
 
@@ -27,7 +41,7 @@ Every control sends the frame the EcoFlow app sends for the same setting, one se
 
 | Entity | Unit | Range | Default | Description |
 |:---|:---:|:---:|:---:|:---|
-| Target Temperature | °C | 15.5 to 30, in steps of 0.5 | enabled | The setpoint of the mode that is running. Written in cooling and heating. Constant temperature shows its own setpoint here but is set through a band of two temperatures the app writes as a pair, which is not offered yet; fan and dehumidify have no setpoint |
+| Target Temperature | °C | 15.5 to 30, in steps of 0.5 | enabled | The setpoint of the mode that is running. Written in cooling and heating. Constant temperature shows its own setpoint here but is set through a band of two temperatures, now offered on the Climate card above; fan and dehumidify have no setpoint |
 | Fan Speed | % | 20, 40, 60, 80 or 100 | enabled | The five steps the app offers. Refused in constant temperature mode, where the unit picks the speed itself |
 | Target Humidity | % | 40 to 80 | enabled | The setpoint of dehumidify mode, and accepted in that mode only |
 | Screen Brightness | % | 10 to 100 | enabled | Brightness of the unit's own display |
@@ -92,7 +106,7 @@ Target Temperature, Fan Speed, Target Humidity and Operating Submode are the val
 
 The submode presets carry their own values. Choosing sleep or max also sets that preset's temperature and fan speed (sleep in cooling set 26 °C and 20 % on the unit here), and writing a temperature or a fan speed afterwards leaves the preset, so the submode reads normal again. That is the device's own behaviour, the app does the same.
 
-A write goes to the running mode as well. That is why a setpoint is refused outside cooling and heating, a humidity target outside dehumidify, and a fan speed in constant temperature: the app does not offer those either, and the one it does offer differently, the constant temperature band, is not offered here yet. The refusal arrives as an error on the entity naming the reason, and nothing is sent to the device.
+A write goes to the running mode as well. That is why a setpoint is refused outside cooling and heating, a humidity target outside dehumidify, and a fan speed in constant temperature: the app does not offer those either, and the one it does offer differently, the constant temperature band, is set through the Climate card instead. The refusal arrives as an error on the entity naming the reason, and nothing is sent to the device.
 
 ### What the energy counter samples
 

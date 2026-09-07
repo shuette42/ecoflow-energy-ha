@@ -17,6 +17,12 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from homeassistant.components.climate import (
+    ATTR_TARGET_TEMP_HIGH,
+    ATTR_TARGET_TEMP_LOW,
+    HVACAction,
+    HVACMode,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
@@ -26,6 +32,10 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.ecoflow_energy.binary_sensor import (
     async_setup_entry as binary_sensor_setup,
 )
+from custom_components.ecoflow_energy.climate import (
+    EcoFlowWave3Climate,
+    async_setup_entry as climate_setup,
+)
 from custom_components.ecoflow_energy.const import (
     AUTH_METHOD_APP,
     CONF_AUTH_METHOD,
@@ -34,6 +44,7 @@ from custom_components.ecoflow_energy.const import (
     CONF_MODE,
     CONF_PASSWORD,
     CONF_USER_ID,
+    DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_WAVE3,
     DOMAIN,
     MODE_ENHANCED,
@@ -91,6 +102,17 @@ WAVE3_DEVICE: dict[str, Any] = {
     "name": "",
     "product_name": "",
     "device_type": DEVICE_TYPE_WAVE3,
+    "online": 1,
+}
+
+# Same shape as WAVE3_DEVICE, a Delta 3 instead - the climate platform is
+# forwarded for every config entry, so this is what proves it stays off a
+# device that has no thermostat.
+DELTA3_DEVICE: dict[str, Any] = {
+    "sn": "D3M1TEST00000099",
+    "name": "",
+    "product_name": "",
+    "device_type": DEVICE_TYPE_DELTA3,
     "online": 1,
 }
 
@@ -758,3 +780,390 @@ class TestRegistryLookup:
         registry.async_get_device.assert_called_once_with(
             identifiers={(DOMAIN, "AC71TEST00000052")}
         )
+
+
+def _climate(coordinator: EcoFlowDeviceCoordinator) -> EcoFlowWave3Climate:
+    """Build one WAVE 3 climate entity directly, same shape as `_switch`."""
+    entity = EcoFlowWave3Climate(coordinator)
+    entity.async_write_ha_state = MagicMock()
+    entity.entity_id = "climate.wave_3"
+    return entity
+
+
+async def _setup_all(
+    hass: HomeAssistant, platform_setup, device: dict[str, Any]
+) -> list[Any]:
+    """Run one platform's setup and return every entity created.
+
+    A copy of `_setup_entities` without the `hasattr(entity, "_definition")`
+    filter: the climate entity is not definition-driven, so that filter
+    would silently drop it from the result. `_setup_entities` stays
+    unchanged - other tests depend on its filter.
+    """
+    entry = _entry(device)
+    entry.add_to_hass(hass)
+    coordinator = EcoFlowDeviceCoordinator(hass, entry, device)
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {device["sn"]: coordinator}
+
+    created: list[Any] = []
+    await platform_setup(hass, entry, created.extend)
+    return created
+
+
+def _all_pdata(mock_mqtt: MagicMock) -> list[str]:
+    """Every `send_proto_set` call's pdata, in order.
+
+    `_sent_pdata` only returns the last call; several of the climate tests
+    below assert a two-frame sequence (power then mode, or mode then
+    setpoint), where the order itself is the thing under test.
+    """
+    result = []
+    for call in mock_mqtt.send_proto_set.call_args_list:
+        payload = call[0][0]
+        headers, _ = decode_header_message(payload)
+        result.append(headers[0]["pdata"])
+    return result
+
+
+class TestWave3ClimateEntitySet:
+    """The climate platform is forwarded for every config entry in this
+    integration, so it has to create exactly one entity for a WAVE 3 and
+    none at all for anything that is not one."""
+
+    async def test_the_climate_platform_creates_exactly_one_entity(
+        self, hass: HomeAssistant
+    ) -> None:
+        entities = await _setup_all(hass, climate_setup, WAVE3_DEVICE)
+        assert len(entities) == 1
+        entity = entities[0]
+        assert entity.unique_id.endswith("_climate")
+        assert entity.name is None
+
+    async def test_the_climate_platform_skips_a_delta_3_device(
+        self, hass: HomeAssistant
+    ) -> None:
+        entities = await _setup_all(hass, climate_setup, DELTA3_DEVICE)
+        assert entities == []
+
+
+class TestTheClimateReachesTheWire:
+    """Built on `_wired`: only the MQTT client is mocked, so the frame that
+    reaches it is the real one the coordinator's write path builds. Each
+    case seeds exactly the state it needs (the vectors are from the
+    2026-09-07 app capture, PLAN-047 Phase C)."""
+
+    async def test_switching_mode_from_off_sends_power_then_mode(
+        self, hass: HomeAssistant
+    ) -> None:
+        coordinator, mqtt = _wired(hass, {"running": False, "operating_mode": "fan"})
+        entity = _climate(coordinator)
+        await entity.async_set_hvac_mode(HVACMode.COOL)
+        assert _all_pdata(mqtt) == ["2001", "c80901"]
+
+    async def test_switching_to_off_sends_standby(self, hass: HomeAssistant) -> None:
+        coordinator, mqtt = _wired(
+            hass, {"running": True, "operating_mode": "cooling"}
+        )
+        entity = _climate(coordinator)
+        await entity.async_set_hvac_mode(HVACMode.OFF)
+        assert _all_pdata(mqtt) == ["e00a01"]
+
+    async def test_switching_to_off_on_an_already_standing_by_unit_sends_nothing(
+        self, hass: HomeAssistant
+    ) -> None:
+        """E8: the on-path already guards on `running` before powering on
+        (line below checks it); the off-path used to send a standby frame
+        unconditionally, one frame the user did not ask for (ADR-021
+        D-C8)."""
+        coordinator, mqtt = _wired(
+            hass, {"running": False, "operating_mode": "cooling"}
+        )
+        entity = _climate(coordinator)
+        await entity.async_set_hvac_mode(HVACMode.OFF)
+        assert _all_pdata(mqtt) == []
+
+    async def test_switching_mode_on_a_running_unit_sends_one_frame(
+        self, hass: HomeAssistant
+    ) -> None:
+        coordinator, mqtt = _wired(
+            hass, {"running": True, "operating_mode": "cooling"}
+        )
+        entity = _climate(coordinator)
+        await entity.async_set_hvac_mode(HVACMode.HEAT)
+        assert _all_pdata(mqtt) == ["c80902"]
+
+    async def test_a_setpoint_write_is_the_app_frame(self, hass: HomeAssistant) -> None:
+        coordinator, mqtt = _wired(
+            hass,
+            {"running": True, "operating_mode": "cooling", "target_temp_c": 24.0},
+        )
+        entity = _climate(coordinator)
+        await entity.async_set_temperature(temperature=22.0)
+        assert _all_pdata(mqtt) == ["e5090000b041"]
+
+    async def test_a_setpoint_write_off_the_gated_mode_is_refused(
+        self, hass: HomeAssistant
+    ) -> None:
+        coordinator, mqtt = _wired(hass, {"running": True, "operating_mode": "fan"})
+        entity = _climate(coordinator)
+        with pytest.raises(HomeAssistantError) as excinfo:
+            await entity.async_set_temperature(temperature=22.0)
+        assert excinfo.value.translation_key == "set_value_rejected"
+        assert _all_pdata(mqtt) == []
+
+    async def test_a_fan_speed_write_is_the_app_frame(self, hass: HomeAssistant) -> None:
+        coordinator, mqtt = _wired(
+            hass,
+            {"running": True, "operating_mode": "fan", "airflow_speed_pct": 40},
+        )
+        entity = _climate(coordinator)
+        await entity.async_set_fan_mode("60")
+        assert _all_pdata(mqtt) == ["d8093c"]
+
+    async def test_a_preset_write_is_the_app_frame(self, hass: HomeAssistant) -> None:
+        coordinator, mqtt = _wired(
+            hass, {"running": True, "operating_mode": "cooling"}
+        )
+        entity = _climate(coordinator)
+        await entity.async_set_preset_mode("sleep")
+        assert _all_pdata(mqtt) == ["d00903"]
+
+    async def test_a_preset_the_app_never_writes_is_refused(
+        self, hass: HomeAssistant
+    ) -> None:
+        coordinator, mqtt = _wired(
+            hass, {"running": True, "operating_mode": "cooling"}
+        )
+        entity = _climate(coordinator)
+        with pytest.raises(HomeAssistantError) as excinfo:
+            await entity.async_set_preset_mode("normal")
+        assert excinfo.value.translation_key == "set_value_rejected"
+        assert _all_pdata(mqtt) == []
+
+    async def test_a_humidity_write_is_the_app_frame(self, hass: HomeAssistant) -> None:
+        coordinator, mqtt = _wired(
+            hass,
+            {
+                "running": True,
+                "operating_mode": "dehumidify",
+                "target_humidity_pct": 49.0,
+            },
+        )
+        entity = _climate(coordinator)
+        await entity.async_set_humidity(55)
+        assert _all_pdata(mqtt) == ["ed0900005c42"]
+
+    async def test_a_mode_switch_bundled_with_a_setpoint_sends_mode_then_setpoint(
+        self, hass: HomeAssistant
+    ) -> None:
+        """E2 fix: the target mode is passed to the write gate straight from
+        the gesture, so the setpoint write is checked against `cooling`
+        rather than the pre-switch `dehumidify` still sitting in
+        accumulated state."""
+        coordinator, mqtt = _wired(
+            hass, {"running": True, "operating_mode": "dehumidify"}
+        )
+        entity = _climate(coordinator)
+        await entity.async_set_temperature(temperature=19.5, hvac_mode=HVACMode.COOL)
+        assert _all_pdata(mqtt) == ["c80901", "e50900009c41"]
+
+    async def test_a_mode_switch_into_a_mode_without_that_value_still_refuses_it(
+        self, hass: HomeAssistant
+    ) -> None:
+        """E2's fan case: the target mode override does not exempt the
+        write from its own mode gate. Switching into `fan` sends the mode
+        frame, but the setpoint has no place in `fan` either way, so the
+        second write is still refused and no second frame goes out."""
+        coordinator, mqtt = _wired(
+            hass, {"running": True, "operating_mode": "cooling"}
+        )
+        entity = _climate(coordinator)
+        with pytest.raises(HomeAssistantError) as excinfo:
+            await entity.async_set_temperature(
+                temperature=22.0, hvac_mode=HVACMode.FAN_ONLY
+            )
+        assert excinfo.value.translation_key == "set_value_rejected"
+        assert _all_pdata(mqtt) == ["c80903"]
+
+    async def test_the_band_write_is_the_single_app_frame_for_that_pair(
+        self, hass: HomeAssistant
+    ) -> None:
+        """PC-A's verdict is BAND CAPTURED: 158 (upper) and 159 (lower)
+        always travel in one ConfigWrite. Upper 21.9 / lower 17.7 is the
+        first pair the capture recorded, frame 66. E1 fix: the band's own
+        range check accepts this 0.1-grid pair; only the 0.5-grid step
+        check (carried over from target_temp_c) used to refuse it."""
+        coordinator, mqtt = _wired(
+            hass, {"running": True, "operating_mode": "constant_temp"}
+        )
+        entity = _climate(coordinator)
+        await entity.async_set_temperature(target_temp_low=17.7, target_temp_high=21.9)
+        assert _all_pdata(mqtt) == ["f5093333af41fd099a998d41"]
+
+    def test_build_band_write_accepts_the_apps_own_captured_pair(self) -> None:
+        """Same E1 fix, exercised directly against the builder."""
+        from custom_components.ecoflow_energy.ecoflow.wave3_commands import (
+            build_band_write,
+        )
+
+        payload = build_band_write(17.7, 21.9, WAVE3_DEVICE["sn"], seq=1)
+        headers, _ = decode_header_message(payload)
+        assert headers[0]["pdata"] == "f5093333af41fd099a998d41"
+
+    async def test_a_band_narrower_than_the_apps_own_minimum_is_refused(
+        self, hass: HomeAssistant
+    ) -> None:
+        coordinator, mqtt = _wired(
+            hass, {"running": True, "operating_mode": "constant_temp"}
+        )
+        entity = _climate(coordinator)
+        with pytest.raises(HomeAssistantError) as excinfo:
+            await entity.async_set_temperature(
+                target_temp_low=18.0, target_temp_high=21.0
+            )
+        assert excinfo.value.translation_key == "set_value_rejected"
+        assert _all_pdata(mqtt) == []
+
+    async def test_the_band_is_not_writable_until_a_frame_is_on_record(
+        self, hass: HomeAssistant
+    ) -> None:
+        """A one-sided card call (only the high slider moved) has to read
+        the other limit out of accumulated state. Before the device has
+        ever reported either limit there is nothing to read, and the write
+        has to refuse rather than guess one."""
+        coordinator, mqtt = _wired(
+            hass, {"running": True, "operating_mode": "constant_temp"}
+        )
+        entity = _climate(coordinator)
+        with pytest.raises(HomeAssistantError) as excinfo:
+            await entity.async_set_temperature(target_temp_high=24.0)
+        assert excinfo.value.translation_key == "set_command_not_ready"
+        assert _all_pdata(mqtt) == []
+
+
+class TestTheClimateReadsTheDevice:
+    """Coordinator state in, HA climate properties out. Frame 0 (the full
+    upload) already has its readings asserted by
+    `test_a_full_upload_fills_the_sensors`; the values used here are exactly
+    those, not numbers invented for this file - `humi_ambient_pct` (63.01,
+    same as `test_a_standby_full_upload_decodes_the_criteria` in
+    test_wave3_parser.py) included."""
+
+    async def test_reading_the_full_upload_matches_the_asserted_sensors(
+        self, hass: HomeAssistant
+    ) -> None:
+        entry = _entry(WAVE3_DEVICE)
+        entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, WAVE3_DEVICE)
+
+        parsed = coordinator._parse_message(
+            f"/app/device/property/{WAVE3_DEVICE['sn']}", _frame(FULL_DISPLAY_INDEX)
+        )
+        assert parsed is not None
+        with patch(_CLOCK, return_value=1000.0):
+            coordinator._apply_data(parsed)
+
+        entity = _climate(coordinator)
+
+        assert entity.current_temperature == pytest.approx(21.61)
+        # 63.01, the same frame's asserted value in test_wave3_parser.py's
+        # test_a_standby_full_upload_decodes_the_criteria - a literal, not
+        # the entity's own input, so a rounding-mode change would be caught.
+        assert entity.current_humidity == 63
+        assert entity.hvac_mode == HVACMode.OFF
+        assert entity.hvac_action == HVACAction.OFF
+
+    async def test_a_reported_mode_while_the_unit_sleeps_does_not_show_as_running(
+        self, hass: HomeAssistant
+    ) -> None:
+        coordinator = _coordinator(
+            hass, {"running": False, "operating_mode": "cooling"}
+        )
+        entity = _climate(coordinator)
+        assert entity.hvac_mode == HVACMode.OFF
+        assert entity.hvac_action == HVACAction.OFF
+
+    async def test_constant_temp_reports_the_band_and_no_single_setpoint_or_action(
+        self, hass: HomeAssistant
+    ) -> None:
+        coordinator = _coordinator(
+            hass,
+            {
+                "running": True,
+                "operating_mode": "constant_temp",
+                "constant_temp_lower_limit_c": 18.0,
+                "constant_temp_upper_limit_c": 24.0,
+            },
+        )
+        entity = _climate(coordinator)
+        assert entity.hvac_mode == HVACMode.HEAT_COOL
+        assert entity.hvac_action is None
+        assert entity.target_temperature is None
+        assert entity.target_temperature_low == 18.0
+        assert entity.target_temperature_high == 24.0
+
+    async def test_the_rendered_band_attributes_are_not_rounded_to_the_setpoint_step(
+        self, hass: HomeAssistant
+    ) -> None:
+        """E3: `state_attributes` is what Home Assistant actually publishes,
+        and that is where `display_temp` rounds to `precision` - a property
+        read never exercises it. A 0.5 precision would turn 21.9 into 22.0
+        and 17.7 into 17.5; the fix removes `_attr_precision` so Celsius
+        falls back to HA's own default, `PRECISION_TENTHS`, which is on the
+        band's own 0.1 grid."""
+        coordinator = _coordinator(
+            hass,
+            {
+                "running": True,
+                "operating_mode": "constant_temp",
+                "constant_temp_lower_limit_c": 17.7,
+                "constant_temp_upper_limit_c": 21.9,
+            },
+        )
+        entity = _climate(coordinator)
+        entity.hass = hass
+        attrs = entity.state_attributes
+        assert attrs[ATTR_TARGET_TEMP_HIGH] == 21.9
+        assert attrs[ATTR_TARGET_TEMP_LOW] == 17.7
+
+    async def test_a_fan_speed_off_the_five_rungs_does_not_leak_into_the_attribute(
+        self, hass: HomeAssistant
+    ) -> None:
+        coordinator = _coordinator(
+            hass,
+            {"running": True, "operating_mode": "fan", "airflow_speed_pct": 55},
+        )
+        entity = _climate(coordinator)
+        assert entity.fan_mode is None
+
+    async def test_an_unreported_setpoint_is_none_not_zero(
+        self, hass: HomeAssistant
+    ) -> None:
+        coordinator = _coordinator(hass, {"running": True, "operating_mode": "cooling"})
+        entity = _climate(coordinator)
+        assert entity.target_temperature is None
+
+
+class TestTheClimateHasNoOptimisticHold:
+    """The brief for this phase asked for a hold mirroring the switch
+    platform's (`climate.time.monotonic` patched, a write holding its value
+    across a contradicting coordinator update). The shipped `climate.py`
+    has none: it imports no clock, and every property reads
+    `self.coordinator.data` fresh on each access (ADR-021 D-C1, stated in
+    the module's own docstring). A test written to expect a hold would
+    fail against the entity as delivered - not because the entity is wrong,
+    but because the design deliberately has no state to hold. This class
+    checks the design that shipped instead: a write in flight does not
+    change what the entity reports until the device's own push does."""
+
+    async def test_a_write_does_not_change_what_hvac_mode_reports_until_the_device_confirms(
+        self, hass: HomeAssistant
+    ) -> None:
+        coordinator, _mqtt = _wired(
+            hass, {"running": True, "operating_mode": "cooling"}
+        )
+        entity = _climate(coordinator)
+        await entity.async_set_hvac_mode(HVACMode.OFF)
+        # No optimistic write followed that call - the coordinator's own
+        # state is unchanged, and the entity reports exactly that.
+        assert entity.hvac_mode == HVACMode.COOL
