@@ -6,7 +6,7 @@ import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any
+from typing import Any, Protocol
 
 from homeassistant.const import Platform
 
@@ -1479,9 +1479,24 @@ def supports_stream_controls(device_sn: str) -> bool:
     return device_sn[:4].upper() in STREAM_CONTROL_PREFIXES
 
 
+class _HasKey(Protocol):
+    """Structural bound for `filter_defs_for_serial`.
+
+    The five entity-definition dataclasses (sensor, binary sensor, switch,
+    number, select) share no common base - only the `key` field they all
+    declare. Declared as a read-only property, not a plain attribute: a
+    plain `key: str` here would require every implementer's `key` to be
+    externally *assignable* through this Protocol for mypy to call it a
+    match, which none of the `frozen=True` dataclasses are.
+    """
+
+    @property
+    def key(self) -> str: ...
+
+
 # DefT is any entity definition carrying a ``key`` attribute (sensor,
 # binary sensor, number, switch, select).
-def filter_defs_for_serial[DefT](definitions: list[DefT], device_sn: str) -> list[DefT]:
+def filter_defs_for_serial[DefT: _HasKey](definitions: list[DefT], device_sn: str) -> list[DefT]:
     """Drop entity definitions a device variant cannot ever populate.
 
     Applied by the sensor, binary sensor, number, switch and select platforms

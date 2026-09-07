@@ -314,7 +314,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
         and await _async_raw_capture_active(hass, entry)
     )
 
-    skipped_devices: list[dict[str, str]] = []
+    skipped_devices: list[dict[str, str | bool]] = []
     for device_info in devices:
         sn = device_info["sn"]
         # Both device producers may pass product_name through as null, so
@@ -465,8 +465,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
     # Off by default. The capture helps exactly one person - whoever
     # volunteered - and costs an extra connection plus a larger diagnostics
     # download, so it is opt-in and expires on its own.
-    probe_devices = [
-        device for device in skipped_devices if device.get("probe_eligible", True)
+    # A device that fails `probe_eligible` (PowerStream, Enhanced-only) never
+    # actually carries the key with a value other than the one that failed
+    # the check, so every item that passes here only ever holds string
+    # values - the comprehension states that instead of leaving it implicit
+    # for `async_start_probes`, which only ever reads strings.
+    probe_devices: list[dict[str, str]] = [
+        {k: v for k, v in device.items() if isinstance(v, str)}
+        for device in skipped_devices
+        if device.get("probe_eligible", True)
     ]
     if capture_on and probe_devices:
         probes = await async_start_probes(

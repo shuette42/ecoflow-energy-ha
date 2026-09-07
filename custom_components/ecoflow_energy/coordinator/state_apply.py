@@ -384,6 +384,8 @@ class StateApplyMixin(_Base):
         # consumer of the pair) - so the write is refused the same way the
         # guards above refuse an unreadable app or ems value.
         backup_val = self._device_data.get("ems_discharge_lower_limit_pct")
+        if backup_val is None:
+            return
         try:
             backup_int = int(backup_val)
         except (TypeError, ValueError):

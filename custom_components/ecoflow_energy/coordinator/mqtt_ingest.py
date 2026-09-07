@@ -425,7 +425,16 @@ class MqttIngestMixin(_Base):
             # this field means the write was not ours to warn about. Delta 3
             # keeps the unconditional warning below - its sender does not
             # record, and its app traffic has not shown this shape yet.
-            sent_at = self._config_writes_sent.get(ack.action_id)
+            # A missing action_id (the field absent from the ACK) can never
+            # be a key in `_config_writes_sent`, so it already fell into the
+            # "not sent by us" branch below - this just makes that visible
+            # to the type checker instead of relying on `None` never
+            # matching an int key.
+            sent_at = (
+                self._config_writes_sent.get(ack.action_id)
+                if ack.action_id is not None
+                else None
+            )
             if sent_at is None or time.monotonic() - sent_at > 30:
                 _LOGGER.debug(
                     "Device %s rejected a setting this integration did not "
@@ -692,7 +701,12 @@ class MqttIngestMixin(_Base):
 
         # One malformed header must not cost the keys already merged from the
         # others, so every result is merged under its own guard.
-        first_copy: dict[tuple[int, int], bytes] = {}
+        # Keyed on whatever (cmd_func, cmd_id) a header actually carries:
+        # decoder.py decodes them as two independent proto fields, so a
+        # malformed header can have one without the other. `_first_copy_wins`
+        # already accepts `tuple[int | None, int | None]` for exactly that
+        # reason - this declaration only had to catch up to it.
+        first_copy: dict[tuple[int | None, int | None], bytes] = {}
         # Counted once per bundle, however many later copies disagree: the
         # question this answers is how often the choice of copy mattered, and
         # a bundle with three copies still only made one choice.

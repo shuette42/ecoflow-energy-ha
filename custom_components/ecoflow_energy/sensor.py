@@ -215,6 +215,14 @@ class EcoFlowSensor(
             # or "WORKMODE_SELFUSE" are invalid and would block entity setup.
             if self._definition.options and str(last.native_value) not in self._definition.options:
                 return
+            if not isinstance(last.native_value, (str, int, float)):
+                # HA's own storage type allows a date, datetime or Decimal
+                # here, but this entity's `native_value` property never
+                # produces one - every sensor this integration owns returns
+                # a parsed number or string. A stored value of one of those
+                # types would mean the state belongs to a different entity
+                # entirely, not one worth restoring.
+                return
             self._restored_value = last.native_value
             self._last_written_value = last.native_value
             # Seed the energy integrator so a lost or corrupt state file

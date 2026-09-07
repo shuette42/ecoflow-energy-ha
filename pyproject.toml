@@ -15,3 +15,12 @@ exclude = "ecocharge_pb2\\.py$"
 module = "ecoflow_energy.ecoflow.proto.ecocharge_pb2"
 follow_imports = "skip"
 ignore_errors = true
+
+# ADR-022 decision 3: this module declares the state the coordinator mixins
+# borrow, purely for the type checker - every method ends in `...` and the
+# file is never imported at runtime. mypy's `empty-body` check flags the
+# four methods whose return type is not `None`; nothing else in the module
+# is exempted.
+[[tool.mypy.overrides]]
+module = "ecoflow_energy.coordinator._typing"
+disable_error_code = ["empty-body"]

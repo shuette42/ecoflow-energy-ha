@@ -116,7 +116,7 @@ class SetupMixin(_Base):
             # Read once here, like the buffer depth in core.py: writing the
             # flag reloads the entry and builds a new client, so it never has
             # to change underneath a live subscription.
-            capture_writes=raw_capture_window_open(self.config_entry.data),
+            capture_writes=raw_capture_window_open(self._entry.data),
         )
 
         self._credential_obtained_ts = time.monotonic()

@@ -293,10 +293,15 @@ class EcoFlowNumber(
             # Never widen past the declared rating, and never collapse the
             # range: a ceiling the device has not reported sensibly would
             # otherwise leave a control that cannot be moved.
-            upper = min(float(ceiling), self._attr_native_max_value)
-            if upper <= self._attr_native_min_value:
+            # Named apart from `upper` above: mypy infers a function-scope
+            # variable's type from its first binding (the `tuple[int, int]`
+            # unpack a few lines up), and this branch never runs alongside
+            # that one - reusing the name would make the checker flag its
+            # own float here as incompatible with that unrelated int.
+            ceiling_upper = min(float(ceiling), self._attr_native_max_value)
+            if ceiling_upper <= self._attr_native_min_value:
                 return None
-            return self._attr_native_min_value, upper
+            return self._attr_native_min_value, ceiling_upper
         if self._is_stream_backup_reserve():
             data = self.coordinator.data or {}
             # Read through `as_known_int`, not raw: HA hands `number.set_value`

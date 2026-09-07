@@ -209,7 +209,7 @@ class SetCommandsMixin(_Base):
         """Forget exactly the flush task that completed."""
         self._powerocean_soc_flush_tasks.discard(task)
 
-    def _powerocean_soc_write_done(self, task: asyncio.Future[object]) -> None:
+    def _powerocean_soc_write_done(self, task: asyncio.Future[bool]) -> None:
         """Forget exactly the coordinator-owned direct write that completed."""
         self._powerocean_soc_write_tasks.discard(task)
         # ConfigEntry reports task failures too, but retrieving the result here

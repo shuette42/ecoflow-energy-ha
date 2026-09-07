@@ -480,7 +480,11 @@ async def _skipped_devices_diagnostics(
 
         sn = item.get("sn")
         response: dict | None = None
-        if sn:
+        # `has_dev_creds` (checked above, with a `continue` on False) already
+        # guarantees session/access_key/secret_key are all set here - this
+        # just states that invariant where the values are used instead of
+        # leaving it two branches back.
+        if sn and session is not None and access_key and secret_key:
             try:
                 client = EcoFlowHTTPQuota(session, access_key, secret_key, sn)
                 response = await client.get_quota_all(diagnostic=True)
