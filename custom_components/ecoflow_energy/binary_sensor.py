@@ -23,6 +23,7 @@ from .const import (
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
     DEVICE_TYPE_STREAM_AC5000,
+    DEVICE_TYPE_WAVE3,
     DOMAIN,
     EcoFlowBinarySensorDef,
     filter_defs_for_serial,
@@ -31,6 +32,7 @@ from .const import (
     SMARTPLUG_BINARY_SENSORS,
     STREAM_BINARY_SENSORS,
     STREAMAC5000_BINARY_SENSORS,
+    WAVE3_BINARY_SENSORS,
 )
 from .coordinator import EcoFlowDeviceCoordinator
 from .entity import EcoFlowWriteGateMixin, reading_reported
@@ -180,4 +182,6 @@ def _get_binary_sensor_defs(
         return STREAMAC5000_BINARY_SENSORS
     if device_type == DEVICE_TYPE_SMART_METER:
         return SMARTMETER_BINARY_SENSORS
+    if device_type == DEVICE_TYPE_WAVE3:
+        return WAVE3_BINARY_SENSORS
     return []

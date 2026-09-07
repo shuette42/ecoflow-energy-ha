@@ -17,6 +17,7 @@ from ..const import (
     DEVICE_TYPE_SOLAR_TRACKER,
     DEVICE_TYPE_STREAM,
     DEVICE_TYPE_STREAM_AC5000,
+    DEVICE_TYPE_WAVE3,
     RAW_FRAME_BUNDLE_HARD_CAP,
     RAW_FRAME_BUNDLE_MAX_BYTES,
     RAW_FRAME_MAX_BYTES,
@@ -47,6 +48,7 @@ from ..ecoflow.parsers.smartplug import (
     parse_smartplug_report,
 )
 from ..ecoflow.parsers.solar_tracker_proto import parse_solar_tracker_message
+from ..ecoflow.parsers.wave3_proto import parse_wave3_message
 from ..ecoflow.parsers.stream_ac5000_proto import parse_stream_ac5000_message
 from ..ecoflow.parsers.powerstream_http import parse_powerstream_quota
 from ..ecoflow.parsers.stream_http import parse_stream_quota
@@ -447,6 +449,11 @@ class MqttIngestMixin:
                     return parse_smart_meter_message(payload)
                 if self.device_type == DEVICE_TYPE_SOLAR_TRACKER:
                     return parse_solar_tracker_message(payload)
+                # The WAVE 3 shares (254, 21)/(254, 22) with the Smart Meter
+                # and the Stream AC Pro and means different fields by them,
+                # so it routes by device type before the registry lookup.
+                if self.device_type == DEVICE_TYPE_WAVE3:
+                    return parse_wave3_message(payload)
                 return self._parse_proto_device_data(payload)
             return None
 
@@ -552,6 +559,12 @@ class MqttIngestMixin:
                 # device type for the same reason as the meter above.
                 if self.device_type == DEVICE_TYPE_SOLAR_TRACKER:
                     return parse_solar_tracker_message(payload)
+                # WAVE 3 (#161): shares (254, 21)/(254, 22) with the Smart
+                # Meter and the Stream AC Pro and means different fields by
+                # them, so it routes by device type for the same reason as
+                # the meter above.
+                if self.device_type == DEVICE_TYPE_WAVE3:
+                    return parse_wave3_message(payload)
                 if self.device_type == DEVICE_TYPE_POWEROCEAN:
                     return self._parse_powerocean_proto_frame(payload)
 

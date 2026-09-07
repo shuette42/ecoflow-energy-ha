@@ -1614,6 +1614,92 @@
           "manual": "Manuell",
           "auto": "Automatik"
         }
+      },
+      "temp_ambient_c": {
+        "name": "Umgebungstemperatur"
+      },
+      "humi_ambient_pct": {
+        "name": "Luftfeuchtigkeit"
+      },
+      "operating_mode": {
+        "name": "Betriebsmodus",
+        "state": {
+          "cooling": "Kühlen",
+          "heating": "Heizen",
+          "fan": "Lüften",
+          "dehumidify": "Entfeuchten",
+          "constant_temp": "Konstante Temperatur"
+        }
+      },
+      "target_temp_c": {
+        "name": "Zieltemperatur"
+      },
+      "airflow_speed_pct": {
+        "name": "Lüfterstufe"
+      },
+      "ac_input_power_w": {
+        "name": "AC-Eingangsleistung"
+      },
+      "temp_outdoor_ambient_c": {
+        "name": "Außentemperatur"
+      },
+      "ac_input_energy_kwh": {
+        "name": "AC-Eingangsenergie"
+      },
+      "temp_indoor_supply_air_c": {
+        "name": "Zulufttemperatur"
+      },
+      "temp_indoor_return_air_c": {
+        "name": "Ablufttemperatur"
+      },
+      "operating_submode": {
+        "name": "Untermodus",
+        "state": {
+          "none": "Keiner",
+          "normal": "Normal",
+          "max": "Max",
+          "sleep": "Schlaf",
+          "eco": "Eco"
+        }
+      },
+      "ac_input_voltage_v": {
+        "name": "AC-Eingangsspannung"
+      },
+      "ac_input_current_a": {
+        "name": "AC-Eingangsstrom"
+      },
+      "temp_condenser_c": {
+        "name": "Kondensatortemperatur"
+      },
+      "temp_evaporator_c": {
+        "name": "Verdampfertemperatur"
+      },
+      "temp_compressor_discharge_c": {
+        "name": "Verdichter-Austrittstemperatur"
+      },
+      "target_humidity_pct": {
+        "name": "Zielfeuchtigkeit"
+      },
+      "screen_brightness_pct": {
+        "name": "Bildschirmhelligkeit"
+      },
+      "battery_soc_pct": {
+        "name": "Batterie"
+      },
+      "battery_voltage_v": {
+        "name": "Batteriespannung"
+      },
+      "battery_current_a": {
+        "name": "Batteriestrom"
+      },
+      "battery_power_w": {
+        "name": "Batterieleistung"
+      },
+      "pv_input_power_w": {
+        "name": "PV-Eingangsleistung"
+      },
+      "condensate_water_level": {
+        "name": "Kondenswasserstand"
       }
     },
     "binary_sensor": {
@@ -1694,6 +1780,24 @@
       },
       "grid_l3_connected": {
         "name": "Phase C verbunden"
+      },
+      "running": {
+        "name": "Läuft"
+      },
+      "ac_input_connected": {
+        "name": "AC-Eingang verbunden"
+      },
+      "fault": {
+        "name": "Störung"
+      },
+      "draining": {
+        "name": "Entwässerung läuft"
+      },
+      "pet_care_alarm": {
+        "name": "Haustier-Alarm"
+      },
+      "bms_communication_error": {
+        "name": "Batterie-Kommunikationsfehler"
       }
     },
     "switch": {

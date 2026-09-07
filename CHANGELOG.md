@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.20.0] - 2026-09-07
+
+### Added
+
+- The EcoFlow WAVE 3 portable air conditioner is now supported. An owner gets 24 sensors and 6 binary sensors: the room the unit is working on, the mode and setpoint it is running at, the fan step, the temperatures inside the refrigerant loop, the mains supply figures, and whether it is running, faulted or draining. It is available with the EcoFlow account sign-in only. The Developer API lists the unit but refuses every reading from it with error 1006, so an entry made with developer keys cannot select it and its entities would never fill. Nothing is polled: the device sends its full status every 120 seconds and a runtime block with the loop temperatures and the firmware every 300 seconds, and while it runs it adds its input power roughly every 2 seconds. One of the 24 is a lifetime energy counter integrated from that input power, ready for the Energy Dashboard. The four battery entities and the battery communication alarm are disabled by default, because the add-on battery is optional and a unit without one still reports those fields: the charge arrives as zero, which reads as a flat battery rather than as an absent one, and the alarm arrives as on. The 2 second rate was measured with the EcoFlow app open and it is not yet settled whether it holds with the app closed, so the 120 second standby rate is the one to count on when judging how closely the energy counter tracks a short cooling run. Read-only in this release: mode, setpoint, fan speed and the settings follow once a write from Home Assistant has been confirmed on the hardware, and the commands the app sends have already been recorded, so their shape is known. Only one unit is on record, so owners of the other AC71 variants are asked to report what reads differently. (Ref #161)
+
 ## [1.19.0] - 2026-09-03
 
 ### Fixed

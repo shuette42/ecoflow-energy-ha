@@ -35,6 +35,9 @@ from ecoflow_energy.const import (
     RAW_FRAME_MAX_BYTES,
     RAW_FRAME_PER_KEY_MAX,
     SCHEDULE_MAX_INDEX,
+    WAVE3_SENSORS,
+    WAVE3_BINARY_SENSORS,
+    ENHANCED_ONLY_DEVICE_TYPES,
     get_device_name,
     get_device_type,
     get_delta_profile,
@@ -1290,3 +1293,36 @@ class TestDeviceLogTag:
 
         assert device_log_tag("R35") == "R35"
         assert device_log_tag("") == ""
+
+
+class TestWave3Sensors:
+    """WAVE 3 (AC71, #161, PLAN-047 Phase A) entity list shape."""
+
+    def test_counts_and_unique_keys(self) -> None:
+        assert len(WAVE3_SENSORS) == 24
+        assert len(WAVE3_BINARY_SENSORS) == 6
+
+        sensor_keys = [s.key for s in WAVE3_SENSORS]
+        assert len(sensor_keys) == len(set(sensor_keys))
+
+        binary_keys = [b.key for b in WAVE3_BINARY_SENSORS]
+        assert len(binary_keys) == len(set(binary_keys))
+
+    def test_only_battery_soc_has_battery_device_class(self) -> None:
+        battery_keys = {s.key for s in WAVE3_SENSORS if s.device_class == "battery"}
+        assert battery_keys == {"battery_soc_pct"}
+
+    def test_enum_options_match_the_parser(self) -> None:
+        from ecoflow_energy.ecoflow.parsers.wave3_proto import (
+            _OPERATING_MODE_NAMES,
+            _SUBMODE_NAMES,
+        )
+
+        by_key = {s.key: s for s in WAVE3_SENSORS}
+        assert set(by_key["operating_mode"].options) == set(_OPERATING_MODE_NAMES.values())
+        assert set(by_key["operating_submode"].options) == set(_SUBMODE_NAMES.values())
+
+    def test_wave3_is_enhanced_only_device_type(self) -> None:
+        from ecoflow_energy.ecoflow.const import DEVICE_TYPE_WAVE3
+
+        assert DEVICE_TYPE_WAVE3 in ENHANCED_ONLY_DEVICE_TYPES

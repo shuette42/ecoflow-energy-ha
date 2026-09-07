@@ -218,9 +218,17 @@ SOLAR_TRACKER_DEVICE = {
     "online": 1,
 }
 
+WAVE3_DEVICE = {
+    "sn": "AC71TEST00000001",
+    "name": "WAVE 3",
+    "product_name": "",
+    "device_type": "wave3",
+    "online": 1,
+}
+
 # One case per member of ENHANCED_ONLY_DEVICE_TYPES. A type dropped from
 # that set silently loses its guard coverage along with its parametrize
-# case, so this list is the thing to extend when a third type joins it.
+# case, so this list is the thing to extend when another type joins it.
 ENHANCED_ONLY_DEVICE_CASES = [
     pytest.param(
         SMART_METER_DEVICE,
@@ -231,6 +239,11 @@ ENHANCED_ONLY_DEVICE_CASES = [
         SOLAR_TRACKER_DEVICE,
         "Solar Tracker (0001) (HZ31...0001) - requires Enhanced Mode",
         id="solar_tracker",
+    ),
+    pytest.param(
+        WAVE3_DEVICE,
+        "WAVE 3 (0001) (AC71...0001) - requires Enhanced Mode",
+        id="wave3",
     ),
 ]
 
