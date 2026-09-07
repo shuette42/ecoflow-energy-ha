@@ -176,6 +176,11 @@ class EcoFlowDeviceCoordinator(
 
         self._last_mqtt_ts: float = 0.0
         self._device_data: dict[str, Any] = {}
+        # ConfigWrite field -> monotonic time this integration last wrote it.
+        # Written on the event loop (`async_send_wave3_set`), read on the Paho
+        # thread (`_check_config_write_ack`) to tell a rejection of our own
+        # write from one of the vendor app's on the shared set_reply topic.
+        self._config_writes_sent: dict[int, float] = {}
         # When a value last actually moved, and how many updates in a row have
         # carried nothing new. `update_interval` alone says how often we ask,
         # which is what a diagnostics download reported until 2026-08-27 - so a

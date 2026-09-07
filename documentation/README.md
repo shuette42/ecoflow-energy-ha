@@ -19,6 +19,6 @@ Complete list of all sensors, switches, numbers, and binary sensors per device:
 - [STREAM AC 5000](entities/stream-ac-5000.md) - 56 sensors, 2 binary sensors, 2 switches, 7 numbers, 1 select (`ES22` and `ES21`) - shares the Stream name but not the Stream protocol, so it has its own parser and entity set
 - [Smart Meter](entities/smart-meter.md) - 18 sensors, 3 binary sensors (`BK21`) - a grid meter, read-only, Enhanced Mode only
 - [Solar Tracker](entities/solar-tracker.md) - 6 sensors (`HZ31` and `S02F`) - one product under two serial prefixes, read-only in this release, Enhanced Mode only
-- [WAVE 3](entities/wave-3.md) - 24 sensors, 6 binary sensors (`AC71`) - a portable air conditioner, read-only in this release, Enhanced Mode only
+- [WAVE 3](entities/wave-3.md) - 18 sensors, 5 binary sensors, 4 switches, 5 numbers, 5 selects (`AC71`) - a portable air conditioner, Enhanced Mode only
 
 Counts are the device-specific entity definitions. Every device additionally exposes 2 universal diagnostic sensors (connection status and active mode) that are not included above.

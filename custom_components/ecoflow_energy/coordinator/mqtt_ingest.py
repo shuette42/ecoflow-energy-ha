@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from typing import Any
 
 from ..const import (
@@ -212,8 +213,8 @@ class MqttIngestMixin:
             # already. Recorded and then dropped, like the write: an echo of a
             # request is not a reading. Parsing stays off this path.
             self._capture_raw_frame(topic, payload, None)
-            if self.device_type == DEVICE_TYPE_DELTA3:
-                self._check_delta3_set_ack(payload)
+            if self.device_type in (DEVICE_TYPE_DELTA3, DEVICE_TYPE_WAVE3):
+                self._check_config_write_ack(payload)
             return
 
         # A write, published by the vendor app and delivered to us because we
@@ -386,11 +387,15 @@ class MqttIngestMixin:
                 secrets.append(user_id)
         return secrets
 
-    def _check_delta3_set_ack(self, payload: bytes) -> None:
-        """Report a rejected Delta 3 setting (Paho thread).
+    def _check_config_write_ack(self, payload: bytes) -> None:
+        """Report a rejected ConfigWrite setting (Paho thread).
 
-        A rejection means the user pressed a control and the device did not
-        apply it, which is worth a warning. A successful write stays silent.
+        Shared by Delta 3 and WAVE 3, both of which write over the same
+        app-channel ConfigWrite envelope and get the same ACK shape back
+        (header 254/18, pdata field 1 = the written field, field 2 = whether
+        it took). A rejection means the user pressed a control and the
+        device did not apply it, which is worth a warning. A successful
+        write stays silent.
         """
         from ..ecoflow.delta3_commands import parse_config_write_ack
 
@@ -402,6 +407,29 @@ class MqttIngestMixin:
                 "Setting applied on %s (field %s)", self.device_tag, ack.action_id
             )
             return
+
+        if self.device_type == DEVICE_TYPE_WAVE3:
+            # The set_reply topic is shared with the vendor app (see the
+            # comment above this call), so a rejection here can belong to a
+            # write the app made, not the user. `_config_writes_sent` is
+            # written on the event loop in `async_send_wave3_set`
+            # (set_commands.py) right before the publish and read here on
+            # the Paho thread - one dict assignment and one `.get`, safe
+            # under CPython's GIL. Nothing we sent within the last 30 s for
+            # this field means the write was not ours to warn about. Delta 3
+            # keeps the unconditional warning below - its sender does not
+            # record, and its app traffic has not shown this shape yet.
+            sent_at = self._config_writes_sent.get(ack.action_id)
+            if sent_at is None or time.monotonic() - sent_at > 30:
+                _LOGGER.debug(
+                    "Device %s rejected a setting this integration did not "
+                    "send (field %s, status %s)",
+                    self.device_tag,
+                    ack.action_id,
+                    ack.config_ok,
+                )
+                return
+
         _LOGGER.warning(
             "Device %s rejected a setting (field %s, status %s) - "
             "the change was not applied",

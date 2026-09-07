@@ -1621,22 +1621,6 @@
       "humi_ambient_pct": {
         "name": "Luftfeuchtigkeit"
       },
-      "operating_mode": {
-        "name": "Betriebsmodus",
-        "state": {
-          "cooling": "Kühlen",
-          "heating": "Heizen",
-          "fan": "Lüften",
-          "dehumidify": "Entfeuchten",
-          "constant_temp": "Konstante Temperatur"
-        }
-      },
-      "target_temp_c": {
-        "name": "Zieltemperatur"
-      },
-      "airflow_speed_pct": {
-        "name": "Lüfterstufe"
-      },
       "ac_input_power_w": {
         "name": "AC-Eingangsleistung"
       },
@@ -1652,16 +1636,6 @@
       "temp_indoor_return_air_c": {
         "name": "Ablufttemperatur"
       },
-      "operating_submode": {
-        "name": "Untermodus",
-        "state": {
-          "none": "Keiner",
-          "normal": "Normal",
-          "max": "Max",
-          "sleep": "Schlaf",
-          "eco": "Eco"
-        }
-      },
       "ac_input_voltage_v": {
         "name": "AC-Eingangsspannung"
       },
@@ -1676,12 +1650,6 @@
       },
       "temp_compressor_discharge_c": {
         "name": "Verdichter-Austrittstemperatur"
-      },
-      "target_humidity_pct": {
-        "name": "Zielfeuchtigkeit"
-      },
-      "screen_brightness_pct": {
-        "name": "Bildschirmhelligkeit"
       },
       "battery_soc_pct": {
         "name": "Batterie"
@@ -1781,9 +1749,6 @@
       "grid_l3_connected": {
         "name": "Phase C verbunden"
       },
-      "running": {
-        "name": "Läuft"
-      },
       "ac_input_connected": {
         "name": "AC-Eingang verbunden"
       },
@@ -1881,6 +1846,18 @@
       },
       "schedule_8_enabled": {
         "name": "Zeitplan 8 aktiv"
+      },
+      "power": {
+        "name": "Betrieb"
+      },
+      "beep_enabled": {
+        "name": "Piepser"
+      },
+      "automatic_drainage": {
+        "name": "Automatische Entwässerung"
+      },
+      "pet_care_enabled": {
+        "name": "Haustier-Schutz"
       }
     },
     "number": {
@@ -1979,6 +1956,21 @@
       },
       "schedule_8_power_w": {
         "name": "Zeitplan 8 Ladeleistung"
+      },
+      "target_temp_c": {
+        "name": "Zieltemperatur"
+      },
+      "airflow_speed_pct": {
+        "name": "Lüfterstufe"
+      },
+      "target_humidity_pct": {
+        "name": "Zielfeuchtigkeit"
+      },
+      "screen_brightness_pct": {
+        "name": "Bildschirmhelligkeit"
+      },
+      "pet_care_warning_temp_c": {
+        "name": "Haustier-Warntemperatur"
       }
     },
     "select": {
@@ -2052,6 +2044,52 @@
           "6_hours": "6 h",
           "12_hours": "12 h",
           "24_hours": "24 h",
+          "never": "Nie"
+        }
+      },
+      "operating_mode": {
+        "name": "Betriebsmodus",
+        "state": {
+          "cooling": "Kühlen",
+          "heating": "Heizen",
+          "fan": "Lüften",
+          "dehumidify": "Entfeuchten",
+          "constant_temp": "Konstante Temperatur"
+        }
+      },
+      "operating_submode": {
+        "name": "Untermodus",
+        "state": {
+          "none": "Keiner",
+          "normal": "Normal",
+          "max": "Max",
+          "sleep": "Schlaf",
+          "eco": "Eco"
+        }
+      },
+      "display_temperature_source": {
+        "name": "Anzeigetemperatur",
+        "state": {
+          "ambient": "Umgebung",
+          "outlet": "Luftauslass"
+        }
+      },
+      "mood_light_mode": {
+        "name": "Stimmungslicht",
+        "state": {
+          "off": "Aus",
+          "on": "An",
+          "screen_time": "Mit Bildschirm"
+        }
+      },
+      "screen_off_time_s": {
+        "name": "Bildschirm-Abschaltung",
+        "state": {
+          "10s": "10 s",
+          "30s": "30 s",
+          "1min": "1 min",
+          "5min": "5 min",
+          "10min": "10 min",
           "never": "Nie"
         }
       }

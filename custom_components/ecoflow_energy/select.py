@@ -35,16 +35,19 @@ from .const import (
     DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_STREAM_AC5000,
+    DEVICE_TYPE_WAVE3,
     DOMAIN,
     EcoFlowSelectDef,
     POWEROCEAN_SELECTS,
     STREAMAC5000_SELECTS,
+    WAVE3_SELECTS,
     filter_defs_for_serial,
     supports_stream_ac5000_controls,
 )
 from .coordinator import EcoFlowDeviceCoordinator
 from .ecoflow.delta3_commands import build_select_command as build_delta3_select_command
-from .entity import raise_set_failed, raise_set_unsupported
+from .ecoflow.wave3_commands import Wave3WriteRefused
+from .entity import raise_set_failed, raise_set_rejected, raise_set_unsupported
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -195,6 +198,28 @@ class EcoFlowSelect(CoordinatorEntity[EcoFlowDeviceCoordinator], SelectEntity):
             self._apply_optimistic_select(option)
             return
 
+        if self.coordinator.device_type == DEVICE_TYPE_WAVE3:
+            # A definition with a value_map (screen_off_time_s) is written in
+            # wire values, like the Delta 3 screen timeout above. Everything
+            # else is an enum control the device already reports as a label.
+            if self._definition.value_map is not None:
+                wire_value = self._wire_value(option)
+                if wire_value is None:
+                    raise_set_unsupported(self.entity_id)
+                send_value: Any = wire_value
+            else:
+                send_value = option
+            try:
+                ok = await self.coordinator.async_send_wave3_set(
+                    self._definition.key, send_value
+                )
+            except Wave3WriteRefused as err:
+                raise_set_rejected(self.entity_id, str(err))
+            if not ok:
+                raise_set_failed(self.entity_id)
+            self._apply_optimistic_select(option)
+            return
+
         raise_set_unsupported(self.entity_id)
 
     def _wire_value(self, option: str) -> int | None:
@@ -251,4 +276,6 @@ def _get_select_defs(device_type: str, device_sn: str = "") -> list[EcoFlowSelec
         if not supports_stream_ac5000_controls(device_sn):
             return []
         return STREAMAC5000_SELECTS
+    if device_type == DEVICE_TYPE_WAVE3:
+        return WAVE3_SELECTS
     return []

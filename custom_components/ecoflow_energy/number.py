@@ -22,6 +22,7 @@ from .const import (
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
     DEVICE_TYPE_STREAM_AC5000,
+    DEVICE_TYPE_WAVE3,
     DOMAIN,
     EcoFlowNumberDef,
     filter_defs_for_serial,
@@ -33,6 +34,7 @@ from .const import (
     STREAMAC5000_NUMBERS,
     supports_stream_ac5000_controls,
     supports_stream_controls,
+    WAVE3_NUMBERS,
 )
 from .coordinator import DeviceValueNotReported, EcoFlowDeviceCoordinator
 from .entity import (
@@ -50,6 +52,7 @@ from .ecoflow.delta3_commands import (
     build_port_priority_command,
     port_priority_soc_bounds,
 )
+from .ecoflow.wave3_commands import Wave3WriteRefused
 from .ecoflow.const import (
     schedule_power_max_w,
     schedule_power_min_w,
@@ -429,6 +432,17 @@ class EcoFlowNumber(
                 raise_set_failed(self.entity_id)
             self._apply_optimistic_number(value)
             return
+        if self.coordinator.device_type == DEVICE_TYPE_WAVE3:
+            try:
+                ok = await self.coordinator.async_send_wave3_set(
+                    self._definition.key, value
+                )
+            except Wave3WriteRefused as err:
+                raise_set_rejected(self.entity_id, str(err))
+            if not ok:
+                raise_set_failed(self.entity_id)
+            self._apply_optimistic_number(value)
+            return
         if self.coordinator.device_type == DEVICE_TYPE_DELTA3:
             stem = self._port_priority_stem()
             if stem is not None:
@@ -757,4 +771,6 @@ def _get_number_defs(device_type: str, device_sn: str = "") -> list[EcoFlowNumbe
         if not supports_stream_ac5000_controls(device_sn):
             return []
         return STREAMAC5000_NUMBERS
+    if device_type == DEVICE_TYPE_WAVE3:
+        return WAVE3_NUMBERS
     return []

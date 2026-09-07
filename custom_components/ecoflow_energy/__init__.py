@@ -197,6 +197,32 @@ _HW51_LEGACY_STREAM_KEYS_BY_DOMAIN: dict[str, frozenset[str]] = {
 }
 _HW51_SERIAL_RE = re.compile(r"^HW51[A-Z0-9]{11,}$")
 
+# The six WAVE 3 (AC71) sensors and the running flag that became
+# number/select/switch entities under the same keys once the 1.20.0 controls
+# shipped (ADR-020, PLAN-047). Domain AND key must both match for a removal,
+# so a control entity (number/select/switch) with the same unique-id key
+# survives untouched.
+_AC71_RETIRED_KEYS_BY_DOMAIN: dict[str, frozenset[str]] = {
+    "sensor": frozenset({
+        "operating_mode",
+        "target_temp_c",
+        "airflow_speed_pct",
+        "operating_submode",
+        "target_humidity_pct",
+        "screen_brightness_pct",
+    }),
+    "binary_sensor": frozenset({"running"}),
+}
+_AC71_SERIAL_RE = re.compile(r"^AC71[A-Z0-9]{11,}$")
+
+# One row per retired-entity generation: a serial-prefix pattern paired with
+# the platform/key pairs that generation's retirement removes. Table-driven
+# so the next retirement is one more row rather than a near-duplicate helper.
+_RETIRED_KEYS_BY_SERIAL: tuple[tuple[re.Pattern[str], dict[str, frozenset[str]]], ...] = (
+    (_HW51_SERIAL_RE, _HW51_LEGACY_STREAM_KEYS_BY_DOMAIN),
+    (_AC71_SERIAL_RE, _AC71_RETIRED_KEYS_BY_DOMAIN),
+)
+
 
 def _async_remove_withdrawn_entities(
     hass: HomeAssistant, entry: ConfigEntry
@@ -220,33 +246,37 @@ def _async_remove_withdrawn_entities(
         registry.async_remove(existing.entity_id)
 
 
-def _async_remove_legacy_hw51_stream_entities(
+def _async_remove_retired_platform_entities(
     hass: HomeAssistant, entry: ConfigEntry
 ) -> None:
-    """Remove only Stream-only registry entries once created on HW51 units."""
+    """Remove registry entries a platform once created for a serial prefix
+    whose entities a later release retired - HW51's Stream misclassification,
+    and the WAVE 3 (AC71) sensors and running flag replaced by controls under
+    the same keys (see `_RETIRED_KEYS_BY_SERIAL`).
+    """
     registry = er.async_get(hass)
     for existing in er.async_entries_for_config_entry(registry, entry.entry_id):
         if existing.platform != DOMAIN:
             continue
         entity_domain = existing.entity_id.partition(".")[0]
-        stale_keys = _HW51_LEGACY_STREAM_KEYS_BY_DOMAIN.get(entity_domain)
-        if not stale_keys:
-            continue
         serial, separator, key = existing.unique_id.partition("_")
-        if (
-            not separator
-            or not _HW51_SERIAL_RE.fullmatch(serial)
-            or key not in stale_keys
-        ):
+        if not separator:
             continue
-        _LOGGER.debug("Removing legacy PowerStream entity %s", existing.entity_id)
-        registry.async_remove(existing.entity_id)
+        for serial_re, stale_by_domain in _RETIRED_KEYS_BY_SERIAL:
+            stale_keys = stale_by_domain.get(entity_domain)
+            if not stale_keys or key not in stale_keys:
+                continue
+            if not serial_re.fullmatch(serial):
+                continue
+            _LOGGER.debug("Removing retired entity %s", existing.entity_id)
+            registry.async_remove(existing.entity_id)
+            break
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> bool:
     """Set up EcoFlow Energy from a config entry."""
     _async_remove_withdrawn_entities(hass, entry)
-    _async_remove_legacy_hw51_stream_entities(hass, entry)
+    _async_remove_retired_platform_entities(hass, entry)
 
     # Auto-upgrade: Enhanced Mode entries with email+password -> app-auth.
     # This lets existing Enhanced users benefit from the app-auth path

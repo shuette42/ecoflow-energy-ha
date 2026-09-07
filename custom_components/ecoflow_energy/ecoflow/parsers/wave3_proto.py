@@ -261,6 +261,18 @@ _ACTIVE_MODE_EMPTY: dict[str, Any] = {
 }
 
 
+def _tidy_float(value: float) -> float:
+    """Round a float32 reading to two decimals.
+
+    The device sends single-precision floats: a setpoint of 19.55 arrives as
+    19.549999237060547, which a sensor hides behind its display precision and
+    a number entity shows exactly as it is. Two decimals keep every value the
+    unit can express at the resolution its app shows (0.5 K, whole percent,
+    0.01 A) and nothing of the representation noise.
+    """
+    return round(value, 2)
+
+
 def _decode_mode_info(raw: bytes) -> dict[str, Any]:
     """Decode wave_mode_info (field 514) into its thirteen keys.
 
@@ -297,6 +309,8 @@ def _decode_mode_info(raw: bytes) -> dict[str, Any]:
             value = _decode_scalar(sub_wire, sub_raw, scalar_type)
             if value is None:
                 continue
+            if scalar_type is _TYPE_FLOAT:
+                value = _tidy_float(value)
             if key in _SUBMODE_KEYS:
                 result[key] = _SUBMODE_NAMES.get(int(value))
             else:
@@ -346,6 +360,8 @@ def _decode_mapped_fields(
 
         sensor_key, scalar_type = mapping
         value = _decode_scalar(wire_type, raw, scalar_type)
+        if value is not None and scalar_type is _TYPE_FLOAT:
+            value = _tidy_float(value)
         if value is not None:
             result[sensor_key] = value
 

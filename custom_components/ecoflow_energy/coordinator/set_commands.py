@@ -1074,6 +1074,83 @@ class SetCommandsMixin:
         # entity only has to hold its optimistic value until then.
         return True
 
+    async def async_send_wave3_set(self, key: str, value: Any) -> bool:
+        """Write one WAVE 3 (AC71) setting as a ConfigWrite frame.
+
+        Two gates run before anything is built. `write_refusal` checks
+        `value` against the device's own accumulated state (the operating
+        mode a control is gated to, or a label the app's client never
+        writes) - it needs accumulated state because `operating_mode`
+        regularly arrives on a different frame than the write under
+        consideration. `build_write` then checks `value` against the
+        control's own table (range, step, allowed set) while encoding it.
+        Either can raise `Wave3WriteRefused`, which the platform layer turns
+        into a user-facing error via `raise_set_rejected`.
+
+        The power switch is not in `WAVE3_CONTROLS` - both gates would
+        report it as an unknown control - so it skips `write_refusal`
+        entirely and is encoded by `build_power_write` instead. No optimistic
+        write into `_device_data`: the entity holds its own requested value,
+        and the device pushes the confirmed change on its own report stream
+        within about 2 s (verified on the maintainer's unit, PLAN-047).
+        """
+        from ..ecoflow.wave3_commands import (
+            WAVE3_CONTROLS,
+            WAVE3_POWER_ON_FIELD,
+            WAVE3_STANDBY_FIELD,
+            Wave3WriteRefused,
+            build_power_write,
+            build_write,
+            write_refusal,
+        )
+
+        if key != "power":
+            reason = write_refusal(key, value, self._device_data)
+            if reason is not None:
+                _LOGGER.debug(
+                    "WAVE 3 write refused for %s: %s", self.device_tag, reason
+                )
+                self._log_event("set_refused", f"key={key}")
+                raise Wave3WriteRefused(reason)
+
+        if self._mqtt_client is None or not self._mqtt_client.is_connected():
+            _LOGGER.warning(
+                "Cannot apply setting for %s - device connection is down",
+                self.device_tag,
+            )
+            self._log_event("set_cmd_fail", f"key={key}")
+            return False
+
+        if key == "power":
+            payload = build_power_write(bool(value), self.device_sn)
+            field = WAVE3_POWER_ON_FIELD if value else WAVE3_STANDBY_FIELD
+        else:
+            try:
+                payload = build_write(key, value, self.device_sn)
+            except Wave3WriteRefused:
+                self._log_event("set_refused", f"key={key}")
+                raise
+            field = WAVE3_CONTROLS[key].field
+
+        # Recorded so `_check_config_write_ack` (mqtt_ingest.py, Paho thread)
+        # can tell a rejection of our own write from a rejection of the
+        # vendor app's write on the same shared set_reply topic. Written on
+        # the event loop here, read on the Paho thread there: one dict
+        # assignment and one `.get`, safe under CPython's GIL.
+        self._config_writes_sent[field] = time.monotonic()
+
+        ok = await self.hass.async_add_executor_job(
+            partial(self._mqtt_client.send_proto_set, payload, wait=True),
+        )
+        if not ok:
+            _LOGGER.warning("SET failed for %s: not sent", self.device_tag)
+            self._log_event("set_cmd_fail", f"key={key}")
+            return False
+
+        _LOGGER.debug("SET sent for %s: key=%s", self.device_tag, key)
+        self._log_event("set_cmd", f"key={key}")
+        return True
+
     async def async_send_set_command(self, command: dict[str, Any]) -> bool:
         """Send a SET command to the device via MQTT.
 
