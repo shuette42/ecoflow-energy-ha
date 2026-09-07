@@ -8,6 +8,7 @@ from datetime import timedelta
 
 from ..const import (
     DEVICE_TYPE_SMARTPLUG,
+    DEVICE_TYPE_WAVE3,
     HARD_UNAVAILABLE_S,
     HTTP_FALLBACK_INTERVAL_S,
     MQTT_HEALTH_CHECK_INTERVAL_S,
@@ -16,6 +17,7 @@ from ..const import (
     SMARTPLUG_STALE_THRESHOLD_S,
     SOFT_UNAVAILABLE_S,
     STALE_THRESHOLD_S,
+    WAVE3_STALE_THRESHOLD_S,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -124,6 +126,8 @@ class AvailabilityMixin:
         """Return the MQTT stale threshold for this device."""
         if self._enhanced_mode and self.device_type == DEVICE_TYPE_SMARTPLUG:
             return SMARTPLUG_STALE_THRESHOLD_S
+        if self.device_type == DEVICE_TYPE_WAVE3:
+            return WAVE3_STALE_THRESHOLD_S
         return STALE_THRESHOLD_S
 
     def _check_stale(self) -> None:

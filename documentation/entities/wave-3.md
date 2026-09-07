@@ -90,6 +90,8 @@ Every control sends the frame the EcoFlow app sends for the same setting, one se
 
 Target Temperature, Fan Speed, Target Humidity and Operating Submode are the values of the currently active mode. The device keeps a separate set for each mode, so switching from cooling to heating changes all four at once, and Home Assistant follows within one push. A setpoint you saw in cooling is not lost when you switch away; it simply is not the one being reported any more.
 
+The submode presets carry their own values. Choosing sleep or max also sets that preset's temperature and fan speed (sleep in cooling set 26 °C and 20 % on the unit here), and writing a temperature or a fan speed afterwards leaves the preset, so the submode reads normal again. That is the device's own behaviour, the app does the same.
+
 A write goes to the running mode as well. That is why a setpoint is refused outside cooling and heating, a humidity target outside dehumidify, and a fan speed in constant temperature: the app does not offer those either, and the one it does offer differently, the constant temperature band, is not offered here yet. The refusal arrives as an error on the entity naming the reason, and nothing is sent to the device.
 
 ### What the energy counter samples

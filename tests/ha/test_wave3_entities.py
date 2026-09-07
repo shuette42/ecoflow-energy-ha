@@ -643,3 +643,79 @@ class TestTheEntitiesReachTheWire:
         mode = _select(coordinator, "operating_mode")
         await mode.async_select_option("cooling")
         assert _sent_pdata(mqtt) == "c80901"
+
+
+class TestStandbyCadence:
+    """In standby the WAVE 3 pushes its full status every 120 s and nothing
+    in between. Under the 35 s default the coordinator re-sent its initial
+    requests every stale interval and the unit answered a full state every
+    ~40 s (four `stale_reactivate` events in two minutes on the production
+    log of 2026-09-07). The threshold has to sit above two idle uploads."""
+
+    _AVAIL_CLOCK = "custom_components.ecoflow_energy.coordinator.availability.time.monotonic"
+
+    async def test_the_stale_threshold_covers_two_idle_uploads(
+        self, hass: HomeAssistant
+    ) -> None:
+        from custom_components.ecoflow_energy.const import WAVE3_STALE_THRESHOLD_S
+
+        coordinator = _coordinator(hass, {})
+        assert coordinator._stale_threshold_s() == WAVE3_STALE_THRESHOLD_S
+        assert WAVE3_STALE_THRESHOLD_S >= 2 * 120 + 20
+
+    async def test_a_hundred_seconds_of_silence_is_not_stale(
+        self, hass: HomeAssistant
+    ) -> None:
+        coordinator = _coordinator(hass, {})
+        mqtt = MagicMock()
+        mqtt.is_connected.return_value = True
+        coordinator._mqtt_client = mqtt
+        coordinator._last_mqtt_ts = 1000.0
+        coordinator._log_event = MagicMock()
+        # The check reschedules itself on the real clock; keep it out of the
+        # test's teardown, where the mocked client would meet a real age.
+        coordinator._schedule_stale_check = MagicMock()
+        mqtt.reconnect_attempts = 0
+
+        with patch(self._AVAIL_CLOCK, return_value=1100.0):
+            coordinator._check_stale()
+        assert not any(
+            call.args and call.args[0] == "stale_reactivate"
+            for call in coordinator._log_event.call_args_list
+        )
+        mqtt.resend_initial_requests.assert_not_called()
+
+        # Positive control: past the threshold the cheap remedy still runs.
+        with patch(self._AVAIL_CLOCK, return_value=1000.0 + 300.0):
+            coordinator._check_stale()
+        assert any(
+            call.args and call.args[0] == "stale_reactivate"
+            for call in coordinator._log_event.call_args_list
+        )
+
+
+class TestRegistryLookup:
+    """Home Assistant 2026.9 deprecates `async_get_device` for identifier
+    lookups and warns per call site; the replacement takes the owning
+    config entry. The oldest supported release has only the old call."""
+
+    def test_the_new_api_is_used_when_the_registry_has_it(self) -> None:
+        from custom_components.ecoflow_energy.coordinator.state_apply import _registry_device
+
+        registry = MagicMock()
+        registry.async_get_device_by_identifier.return_value = "entry"
+        assert _registry_device(registry, "AC71TEST00000052", "cfg1") == "entry"
+        registry.async_get_device_by_identifier.assert_called_once_with(
+            (DOMAIN, "AC71TEST00000052"), "cfg1"
+        )
+        registry.async_get_device.assert_not_called()
+
+    def test_the_old_api_is_the_fallback(self) -> None:
+        from custom_components.ecoflow_energy.coordinator.state_apply import _registry_device
+
+        registry = MagicMock(spec=["async_get_device"])
+        registry.async_get_device.return_value = "entry"
+        assert _registry_device(registry, "AC71TEST00000052", "cfg1") == "entry"
+        registry.async_get_device.assert_called_once_with(
+            identifiers={(DOMAIN, "AC71TEST00000052")}
+        )

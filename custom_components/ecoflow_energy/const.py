@@ -97,6 +97,11 @@ MODE_ENHANCED = "enhanced"
 # Coordinator - Stale detection
 STALE_THRESHOLD_S = 35.0  # MQTT data older than this → trigger reconnect + HTTP fallback
 SMARTPLUG_STALE_THRESHOLD_S = 180.0  # Smart Plug app-auth: tolerate sparse telemetry bursts
+# WAVE 3 in standby pushes its full status every 120 s and nothing in between.
+# Under the 35 s default the coordinator re-sent its initial requests every
+# stale interval, so the unit answered a full state every ~40 s instead of
+# being listened to (measured 2026-09-07, #161). Two idle uploads plus margin.
+WAVE3_STALE_THRESHOLD_S = 270.0
 MQTT_HEALTH_CHECK_INTERVAL_S = 5.0  # Run stale/reconnect health checks independently from stale threshold
 
 # Graduated availability degradation thresholds (app-auth only).
