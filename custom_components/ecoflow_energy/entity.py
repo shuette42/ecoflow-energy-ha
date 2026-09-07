@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from homeassistant.core import callback
-
 from typing import TYPE_CHECKING, Any, NoReturn
 
+from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
 
 from .const import DOMAIN

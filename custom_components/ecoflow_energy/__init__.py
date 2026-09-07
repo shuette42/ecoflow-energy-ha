@@ -24,23 +24,23 @@ from .const import (
     CONF_RAW_CAPTURE_UNTIL,
     DATA_DEVICE_PROBES,
     DATA_SKIPPED_DEVICES,
-    DEVICE_TYPE_POWERSTREAM,
     DEVICE_TYPE_DISPLAY_NAMES,
-    ENHANCED_ONLY_DEVICE_TYPES,
+    DEVICE_TYPE_POWERSTREAM,
     DEVICE_TYPE_UNKNOWN,
     DOMAIN,
+    ENHANCED_ONLY_DEVICE_TYPES,
     MODE_ENHANCED,
     PLATFORMS,
     get_device_type,
     raw_capture_window_open,
 )
-from .ecoflow.const import device_log_tag
 from .coordinator import EcoFlowDeviceCoordinator
 from .device_probe import (
     UnroutedDeviceProbe,
     async_start_probe_watchdog,
     async_start_probes,
 )
+from .ecoflow.const import device_log_tag
 
 _LOGGER = logging.getLogger(__name__)
 

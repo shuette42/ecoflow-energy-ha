@@ -11,7 +11,6 @@ For the ecoflow sub-package we also register it directly so that
 parent ``ecoflow_energy.__init__`` would fail (HA imports).
 """
 
-import importlib
 import sys
 import types
 from pathlib import Path

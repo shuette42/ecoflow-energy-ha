@@ -12,17 +12,16 @@ import json
 from pathlib import Path
 
 import pytest
-
 from ecoflow_energy.const import supports_stream_ac5000_controls
 from ecoflow_energy.ecoflow.proto.decoder import decode_header_message
 from ecoflow_energy.ecoflow.stream_ac5000_commands import (
     CMD_FUNC_CONFIG,
     CMD_ID_CONFIG_WRITE,
     TASK_ADD,
-    _build_envelope,
     TASK_REMOVE,
     TASK_UPDATE,
     WORK_MODES,
+    _build_envelope,
     build_backup_reserve_payload,
     build_backup_socket_payload,
     build_grid_input_power_payload,

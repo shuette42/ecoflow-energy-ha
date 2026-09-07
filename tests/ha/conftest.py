@@ -7,14 +7,13 @@ a real (in-memory) Home Assistant instance via the ``hass`` fixture.
 from __future__ import annotations
 
 import threading
-from pathlib import Path
 from collections.abc import AsyncGenerator
+from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
-
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 
@@ -34,7 +33,6 @@ def _record_threads_before_test():
 
 from custom_components.ecoflow_energy.const import (  # noqa: E402
     AUTH_METHOD_APP,
-    AUTH_METHOD_DEVELOPER,
     CONF_ACCESS_KEY,
     CONF_AUTH_METHOD,
     CONF_DEVICES,
@@ -52,7 +50,6 @@ from custom_components.ecoflow_energy.const import (  # noqa: E402
     MODE_ENHANCED,
     MODE_STANDARD,
 )
-
 
 # ---------------------------------------------------------------------------
 # Enable custom integration discovery (required by pytest-homeassistant-custom-component)

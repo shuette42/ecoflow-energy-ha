@@ -15,8 +15,8 @@ from ..const import (
     DEVICE_TYPE_STREAM,
 )
 from ..ecoflow.firmware import extract_firmware_versions
-from ..ecoflow.parsers.delta_http import parse_delta_http_quota
 from ..ecoflow.parsers.delta3_http import parse_delta3_http_quota
+from ..ecoflow.parsers.delta_http import parse_delta_http_quota
 from ..ecoflow.parsers.powerocean import parse_powerocean_http_quota
 from ..ecoflow.parsers.powerstream_http import parse_powerstream_quota
 from ..ecoflow.parsers.smartplug import parse_smartplug_http_quota

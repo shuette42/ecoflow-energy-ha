@@ -8,13 +8,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
-
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
 )
 
-from custom_components.ecoflow_energy.ecoflow.const import device_log_tag
 from custom_components.ecoflow_energy.const import (
     AUTH_METHOD_APP,
     AUTH_METHOD_DEVELOPER,
@@ -37,6 +35,7 @@ from custom_components.ecoflow_energy.const import (
     RAW_CAPTURE_DURATION_S,
     RAW_FRAME_PER_KEY_MAX,
 )
+from custom_components.ecoflow_energy.ecoflow.const import device_log_tag
 
 from .conftest import MOCK_POWEROCEAN_DEVICE
 

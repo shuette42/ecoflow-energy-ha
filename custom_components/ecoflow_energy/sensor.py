@@ -17,6 +17,8 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
+    DELTA2MAX_SENSORS,
+    DELTA3_SENSORS,
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
@@ -28,10 +30,6 @@ from .const import (
     DEVICE_TYPE_STREAM_AC5000,
     DEVICE_TYPE_WAVE3,
     DOMAIN,
-    DELTA2MAX_SENSORS,
-    DELTA3_SENSORS,
-    EcoFlowSensorDef,
-    filter_defs_for_serial,
     POWEROCEAN_SENSORS,
     POWERSTREAM_SENSORS,
     SMARTMETER_SENSORS,
@@ -40,6 +38,8 @@ from .const import (
     STREAM_SENSORS,
     STREAMAC5000_SENSORS,
     WAVE3_SENSORS,
+    EcoFlowSensorDef,
+    filter_defs_for_serial,
 )
 from .coordinator import EcoFlowDeviceCoordinator
 from .entity import EcoFlowWriteGateMixin, reading_reported

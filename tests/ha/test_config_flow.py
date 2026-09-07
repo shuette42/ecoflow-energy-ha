@@ -5,14 +5,13 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
+import aiohttp
 import pytest
 from homeassistant import config_entries
+from homeassistant.config_entries import SOURCE_REAUTH, SOURCE_RECONFIGURE
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
-
-import aiohttp
-from homeassistant.config_entries import SOURCE_REAUTH, SOURCE_RECONFIGURE
 
 from custom_components.ecoflow_energy.const import (
     AUTH_METHOD_APP,
@@ -32,7 +31,11 @@ from custom_components.ecoflow_energy.const import (
     RAW_CAPTURE_DURATION_S,
 )
 
-from .conftest import MOCK_DELTA_DEVICE, MOCK_MQTT_CREDENTIALS, MOCK_POWEROCEAN_DEVICE  # noqa: F401
+from .conftest import (  # noqa: F401
+    MOCK_DELTA_DEVICE,
+    MOCK_MQTT_CREDENTIALS,
+    MOCK_POWEROCEAN_DEVICE,
+)
 
 # Fixed wall-clock reference - never derive a deadline from the real clock.
 FIXED_NOW = 1_800_000_000.0

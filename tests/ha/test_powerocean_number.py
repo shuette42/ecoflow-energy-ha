@@ -10,7 +10,6 @@ from unittest.mock import AsyncMock, MagicMock, call, patch
 import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.const import (
@@ -27,7 +26,6 @@ from custom_components.ecoflow_energy.number import (
 from .conftest import (
     MOCK_POWEROCEAN_DEVICE,
 )
-
 
 # ===========================================================================
 # Number definition routing

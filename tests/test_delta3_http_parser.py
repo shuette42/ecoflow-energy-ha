@@ -8,7 +8,6 @@ charge/discharge state enum, the derived output-flow booleans
 from __future__ import annotations
 
 import pytest
-
 from ecoflow_energy.ecoflow.parsers.delta3_http import (
     DELTA3_HTTP_FIELD_MAP,
     parse_delta3_http_quota,

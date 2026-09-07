@@ -8,59 +8,61 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.ecoflow_energy.binary_sensor import (
+    EcoFlowBinarySensor,
+    _get_binary_sensor_defs,
+)
 from custom_components.ecoflow_energy.const import (
-    SCHEDULE_MAX_INDEX,
     DELTA2MAX_BINARY_SENSORS,
     DELTA2MAX_NUMBERS,
     DELTA2MAX_SENSORS,
     DELTA2MAX_SWITCHES,
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_POWEROCEAN,
-    DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_POWERSTREAM,
+    DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
     DEVICE_TYPE_STREAM_AC5000,
     DOMAIN,
+    POWEROCEAN_BINARY_SENSORS,
+    POWEROCEAN_SENSORS,
+    POWERSTREAM_SENSORS,
+    SCHEDULE_MAX_INDEX,
+    SMARTPLUG_NUMBERS,
+    STREAM_BINARY_SENSORS,
+    STREAM_NUMBERS,
+    STREAM_SENSORS,
+    STREAM_SWITCHES,
+    STREAMAC5000_BINARY_SENSORS,
+    STREAMAC5000_SENSORS,
     EcoFlowBinarySensorDef,
     EcoFlowNumberDef,
     EcoFlowSensorDef,
     EcoFlowSwitchDef,
-    POWEROCEAN_BINARY_SENSORS,
-    POWEROCEAN_SENSORS,
-    SMARTPLUG_NUMBERS,
-    STREAM_BINARY_SENSORS,
-    STREAM_SWITCHES,
-    STREAM_NUMBERS,
-    POWERSTREAM_SENSORS,
-    STREAM_SENSORS,
-    STREAMAC5000_BINARY_SENSORS,
-    STREAMAC5000_SENSORS,
 )
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
+from custom_components.ecoflow_energy.number import (
+    NUMBER_COMMANDS,
+    SMARTPLUG_NUMBER_COMMANDS,
+    EcoFlowNumber,
+    _get_number_defs,
+)
 from custom_components.ecoflow_energy.sensor import (
     EcoFlowDiagnosticSensor,
     EcoFlowSensor,
     _get_sensor_defs,
 )
-from custom_components.ecoflow_energy.binary_sensor import (
-    EcoFlowBinarySensor,
-    _get_binary_sensor_defs,
+from custom_components.ecoflow_energy.switch import (
+    SWITCH_COMMANDS_R351 as SWITCH_COMMANDS,
+)
+from custom_components.ecoflow_energy.switch import (
+    SWITCH_DECLARATIVE_R351 as SWITCH_DECLARATIVE,
 )
 from custom_components.ecoflow_energy.switch import (
     EcoFlowSwitch,
-    OPTIMISTIC_LOCK_S,
-    SWITCH_COMMANDS_R351 as SWITCH_COMMANDS,
-    SWITCH_DECLARATIVE_R351 as SWITCH_DECLARATIVE,
     _get_switch_defs,
-)
-from custom_components.ecoflow_energy.number import (
-    EcoFlowNumber,
-    NUMBER_COMMANDS,
-    SMARTPLUG_NUMBER_COMMANDS,
-    _get_number_defs,
 )
 
 from .conftest import (
@@ -69,7 +71,6 @@ from .conftest import (
     MOCK_SMARTPLUG_DEVICE,
     MOCK_STREAM_DEVICE,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

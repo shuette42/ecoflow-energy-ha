@@ -17,14 +17,13 @@ it, which makes a wrongly created write entity permanent for that owner.
 from __future__ import annotations
 
 import asyncio
-from typing import Any
 from dataclasses import replace
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.const import (
@@ -50,6 +49,8 @@ from custom_components.ecoflow_energy.ecoflow.proto_encoding import encode_field
 from custom_components.ecoflow_energy.number import (
     EcoFlowNumber,
     _get_number_defs,
+)
+from custom_components.ecoflow_energy.number import (
     async_setup_entry as number_setup,
 )
 
@@ -176,7 +177,7 @@ class TestStreamNumberPlatformSetup:
     async def test_enhanced_mode_creates_ac_pro_numbers(
         self, hass: HomeAssistant
     ) -> None:
-        assert _AC_PRO_NUMBER_KEYS <= await self._setup_keys(hass, MODE_ENHANCED)
+        assert await self._setup_keys(hass, MODE_ENHANCED) >= _AC_PRO_NUMBER_KEYS
 
     async def test_standard_mode_creates_no_write_numbers(
         self, hass: HomeAssistant

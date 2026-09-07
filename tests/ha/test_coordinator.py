@@ -10,7 +10,6 @@ from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
-
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.const import (
@@ -20,18 +19,13 @@ from custom_components.ecoflow_energy.const import (
     CONF_EMAIL,
     CONF_MODE,
     CONF_PASSWORD,
-    CONF_RAW_CAPTURE,
-    CONF_RAW_CAPTURE_UNTIL,
     CONF_USER_ID,
     CREDENTIAL_MAX_AGE_S,
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
-    DEVICE_TYPE_SMARTPLUG,
-    DEVICE_TYPE_STREAM,
     DEVICE_TYPE_UNKNOWN,
     DOMAIN,
-    ENERGY_STREAM_KEEPALIVE_S,
     HARD_UNAVAILABLE_S,
     HTTP_FALLBACK_INTERVAL_S,
     MODE_ENHANCED,
@@ -49,7 +43,6 @@ from custom_components.ecoflow_energy.const import (
     STREAM_POWER_TO_ENERGY,
 )
 from custom_components.ecoflow_energy.coordinator import (
-    DeviceSnapshot,
     EcoFlowDeviceCoordinator,
 )
 from custom_components.ecoflow_energy.ecoflow.parsers.powerocean_proto import (
@@ -64,14 +57,12 @@ from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
 )
 
 from .conftest import (
-    MOCK_DELTA_DEVICE,
     MOCK_DELTA3_DEVICE,
-    MOCK_MQTT_CREDENTIALS,
+    MOCK_DELTA_DEVICE,
     MOCK_POWEROCEAN_DEVICE,
     MOCK_SMARTPLUG_DEVICE,
     MOCK_STREAM_DEVICE,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers for battery state derivation tests (#63)
@@ -4758,12 +4749,12 @@ class TestParseMessageProtobuf:
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """_parse_message decodes a protobuf energy_stream frame for PowerOcean."""
+        from custom_components.ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
+            JTS1EnergyStreamReport,
+        )
         from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
             encode_field_bytes,
             encode_field_varint,
-        )
-        from custom_components.ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
-            JTS1EnergyStreamReport,
         )
 
         enhanced_config_entry.add_to_hass(hass)
@@ -4824,12 +4815,12 @@ class TestParseMessageProtobuf:
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """E2E: bp_heartbeat proto frame with 2 packs survives underscore filter."""
+        from custom_components.ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
+            JTS1BpHeartbeatReport,
+        )
         from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
             encode_field_bytes,
             encode_field_varint,
-        )
-        from custom_components.ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
-            JTS1BpHeartbeatReport,
         )
 
         enhanced_config_entry.add_to_hass(hass)
@@ -5396,7 +5387,10 @@ class TestParseMessageGetReply:
     ) -> None:
         """PowerOcean proto get_reply extracts EmsChangeReport (cmd_func=96, cmd_id=8)."""
         from ecoflow_energy.ecoflow.proto.ecocharge_pb2 import JTS1EmsChangeReport
-        from ecoflow_energy.ecoflow.proto_encoding import encode_field_bytes, encode_field_varint
+        from ecoflow_energy.ecoflow.proto_encoding import (
+            encode_field_bytes,
+            encode_field_varint,
+        )
 
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
@@ -5428,7 +5422,10 @@ class TestParseMessageGetReply:
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Proto get_reply without cmd_func=96/cmd_id=8 header returns None."""
-        from ecoflow_energy.ecoflow.proto_encoding import encode_field_bytes, encode_field_varint
+        from ecoflow_energy.ecoflow.proto_encoding import (
+            encode_field_bytes,
+            encode_field_varint,
+        )
 
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(

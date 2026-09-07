@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
-
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.const import (
@@ -28,7 +27,7 @@ from custom_components.ecoflow_energy.const import (
     UNKNOWN_FIELD_CMDS_MAX,
     UNKNOWN_FIELD_NUMBERS_MAX,
 )
-from custom_components.ecoflow_energy.ecoflow.const import device_log_tag
+from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
 from custom_components.ecoflow_energy.diagnostics import (
     REDACTED,
     _device_diagnostics,
@@ -38,16 +37,14 @@ from custom_components.ecoflow_energy.diagnostics import (
     _skipped_devices_diagnostics,
     async_get_config_entry_diagnostics,
 )
-from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
+from custom_components.ecoflow_energy.ecoflow.const import device_log_tag
 from custom_components.ecoflow_energy.ecoflow.frame_capture import build_frame_entry
 
 from .conftest import (
-    MOCK_DELTA_DEVICE,
     MOCK_DELTA3_DEVICE,
-    MOCK_MQTT_CREDENTIALS,
+    MOCK_DELTA_DEVICE,
     MOCK_POWEROCEAN_DEVICE,
 )
-
 
 # ===========================================================================
 # async_get_config_entry_diagnostics
@@ -2117,7 +2114,7 @@ class TestUnknownProtoFieldDiagnostics:
             hass, standard_config_entry, MOCK_DELTA3_DEVICE
         )
         coordinator.record_unknown_proto_fields(
-            "254/21", {number: 1 for number in range(UNKNOWN_FIELD_NUMBERS_MAX)}
+            "254/21", dict.fromkeys(range(UNKNOWN_FIELD_NUMBERS_MAX), 1)
         )
         coordinator.record_unknown_proto_fields("254/21", {5: 2400, 99999: 1})
 

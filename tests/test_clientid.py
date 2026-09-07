@@ -1,7 +1,6 @@
 """Tests for EcoFlow ClientID generator."""
 
 import hashlib
-import re
 
 from ecoflow_energy.ecoflow.clientid import BT, generate_client_id
 

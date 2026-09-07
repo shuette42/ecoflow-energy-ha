@@ -7,10 +7,6 @@ from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from homeassistant.core import HomeAssistant
-from homeassistant.util import dt as dt_util
-from pytest_homeassistant_custom_component.common import async_fire_time_changed
-
 from ecoflow_energy.const import (
     PROBE_WATCHDOG_INTERVAL_S,
     RAW_FRAME_KEYS_MAX,
@@ -28,6 +24,9 @@ from ecoflow_energy.ecoflow.proto_encoding import (
     encode_field_bytes,
     encode_field_varint,
 )
+from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
+from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 SKIPPED_SN = "RE11TEST00000001"
 

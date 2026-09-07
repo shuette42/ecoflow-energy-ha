@@ -53,6 +53,8 @@ from custom_components.ecoflow_energy.ecoflow.delta3_commands import (
 from custom_components.ecoflow_energy.select import (
     EcoFlowSelect,
     _get_select_defs,
+)
+from custom_components.ecoflow_energy.select import (
     async_setup_entry as select_setup,
 )
 

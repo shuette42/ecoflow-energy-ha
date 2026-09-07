@@ -1,7 +1,6 @@
 """Tests for EcoFlow Protobuf encoder - EnergyStreamSwitch and SoC limit SET."""
 
 import pytest
-
 from ecoflow_energy.ecoflow.energy_stream import (
     build_backup_event_set_payload,
     build_energy_stream_activate_payload,
@@ -23,7 +22,6 @@ from ecoflow_energy.ecoflow.proto_encoding import (
     encode_field_varint,
     encode_varint,
 )
-
 
 # ===========================================================================
 # Varint / field primitives

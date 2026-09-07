@@ -6,7 +6,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
 from ecoflow_energy.ecoflow.parsers.powerocean_proto import (
     flatten_heartbeat,
     remap_bp_keys,
@@ -15,7 +14,6 @@ from ecoflow_energy.ecoflow.parsers.powerocean_proto import (
 )
 from ecoflow_energy.ecoflow.proto.decoder import decode_header_message
 from ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
-    JTS1BpHeartbeatReport,
     JTS1EmsChangeReport,
     JTS1EmsHeartbeat,
     JTS1EmsPVInvEnergyStreamReport,

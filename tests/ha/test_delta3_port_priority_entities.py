@@ -21,7 +21,6 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.const import (
@@ -48,6 +47,8 @@ from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinato
 from custom_components.ecoflow_energy.number import EcoFlowNumber
 from custom_components.ecoflow_energy.switch import (
     EcoFlowSwitch,
+)
+from custom_components.ecoflow_energy.switch import (
     async_setup_entry as switch_setup,
 )
 

@@ -18,7 +18,6 @@ from __future__ import annotations
 from typing import Any
 
 from homeassistant.core import HomeAssistant
-
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.const import (
@@ -34,7 +33,6 @@ from custom_components.ecoflow_energy.const import (
     MODE_ENHANCED,
 )
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
-
 from custom_components.ecoflow_energy.ecoflow.proto.runtime import (
     _header_carries_no_pdata,
 )
@@ -42,7 +40,6 @@ from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
     encode_field_bytes,
     encode_field_varint,
 )
-
 from tests.test_powerocean_timer_task import (
     LIST_ARMED_1000W,
     LIST_ARMED_1500W,

@@ -10,7 +10,7 @@ import base64
 import logging
 import re
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -757,6 +757,6 @@ def _format_event_log(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
         entry = dict(event)
         ts = entry.get("ts")
         if isinstance(ts, (int, float)) and ts > 0:
-            entry["ts_iso"] = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+            entry["ts_iso"] = datetime.fromtimestamp(ts, tz=UTC).isoformat()
         formatted.append(entry)
     return formatted

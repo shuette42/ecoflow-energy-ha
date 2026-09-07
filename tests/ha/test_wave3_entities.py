@@ -27,7 +27,6 @@ from homeassistant.components.climate import (
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
-
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.binary_sensor import (
@@ -35,6 +34,8 @@ from custom_components.ecoflow_energy.binary_sensor import (
 )
 from custom_components.ecoflow_energy.climate import (
     EcoFlowWave3Climate,
+)
+from custom_components.ecoflow_energy.climate import (
     async_setup_entry as climate_setup,
 )
 from custom_components.ecoflow_energy.const import (
@@ -71,15 +72,21 @@ from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
 from custom_components.ecoflow_energy.ecoflow.wave3_commands import Wave3WriteRefused
 from custom_components.ecoflow_energy.number import (
     EcoFlowNumber,
+)
+from custom_components.ecoflow_energy.number import (
     async_setup_entry as number_setup,
 )
 from custom_components.ecoflow_energy.select import (
     EcoFlowSelect,
+)
+from custom_components.ecoflow_energy.select import (
     async_setup_entry as select_setup,
 )
 from custom_components.ecoflow_energy.sensor import async_setup_entry as sensor_setup
 from custom_components.ecoflow_energy.switch import (
     EcoFlowSwitch,
+)
+from custom_components.ecoflow_energy.switch import (
     async_setup_entry as switch_setup,
 )
 
@@ -297,9 +304,8 @@ class TestWave3Controls:
             coordinator,
             "async_send_wave3_set",
             AsyncMock(side_effect=Wave3WriteRefused("no setpoint in fan mode")),
-        ):
-            with pytest.raises(HomeAssistantError) as excinfo:
-                await entity.async_set_native_value(22.0)
+        ), pytest.raises(HomeAssistantError) as excinfo:
+            await entity.async_set_native_value(22.0)
 
         assert excinfo.value.translation_key == "set_value_rejected"
         assert (
@@ -745,7 +751,9 @@ class TestRegistryLookup:
     config entry. The oldest supported release has only the old call."""
 
     def test_the_new_api_is_used_when_the_registry_has_it(self) -> None:
-        from custom_components.ecoflow_energy.coordinator.state_apply import _registry_device
+        from custom_components.ecoflow_energy.coordinator.state_apply import (
+            _registry_device,
+        )
 
         registry = MagicMock()
         registry.async_get_device_by_identifier.return_value = "entry"
@@ -773,7 +781,9 @@ class TestRegistryLookup:
         assert bound.arguments["config_entry_id"] == "cfg1"
 
     def test_the_old_api_is_the_fallback(self) -> None:
-        from custom_components.ecoflow_energy.coordinator.state_apply import _registry_device
+        from custom_components.ecoflow_energy.coordinator.state_apply import (
+            _registry_device,
+        )
 
         registry = MagicMock(spec=["async_get_device"])
         registry.async_get_device.return_value = "entry"

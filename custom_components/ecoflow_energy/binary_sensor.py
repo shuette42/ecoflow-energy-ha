@@ -25,14 +25,14 @@ from .const import (
     DEVICE_TYPE_STREAM_AC5000,
     DEVICE_TYPE_WAVE3,
     DOMAIN,
-    EcoFlowBinarySensorDef,
-    filter_defs_for_serial,
     POWEROCEAN_BINARY_SENSORS,
     SMARTMETER_BINARY_SENSORS,
     SMARTPLUG_BINARY_SENSORS,
     STREAM_BINARY_SENSORS,
     STREAMAC5000_BINARY_SENSORS,
     WAVE3_BINARY_SENSORS,
+    EcoFlowBinarySensorDef,
+    filter_defs_for_serial,
 )
 from .coordinator import EcoFlowDeviceCoordinator
 from .entity import EcoFlowWriteGateMixin, reading_reported

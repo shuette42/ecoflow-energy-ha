@@ -7,7 +7,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
 from ecoflow_energy.ecoflow.energy_integrator import EnergyIntegrator
 from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (
     parse_stream_ac5000_message,
@@ -431,13 +430,12 @@ class TestPersistence:
             "/config/.storage/ecoflow_energy_TEST1234567890AB.json"
         )
 
-        with caplog.at_level("WARNING"):
-            with patch.object(
-                type(integrator._state_file),
-                "write_text",
-                side_effect=PermissionError(13, "Permission denied", failing),
-            ):
-                integrator._save_state()
+        with caplog.at_level("WARNING"), patch.object(
+            type(integrator._state_file),
+            "write_text",
+            side_effect=PermissionError(13, "Permission denied", failing),
+        ):
+            integrator._save_state()
 
         # Positive control: the failure was logged at all.
         assert any("save energy state" in r.getMessage() for r in caplog.records)

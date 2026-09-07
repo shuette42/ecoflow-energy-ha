@@ -37,10 +37,10 @@ from .const import (
     DEVICE_TYPE_STREAM_AC5000,
     DEVICE_TYPE_WAVE3,
     DOMAIN,
-    EcoFlowSelectDef,
     POWEROCEAN_SELECTS,
     STREAMAC5000_SELECTS,
     WAVE3_SELECTS,
+    EcoFlowSelectDef,
     filter_defs_for_serial,
     supports_stream_ac5000_controls,
 )

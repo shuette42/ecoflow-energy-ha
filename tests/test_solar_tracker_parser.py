@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from ecoflow_energy.ecoflow.parsers.solar_tracker_proto import (
     _TRACKING_MODE,
     parse_solar_tracker_message,

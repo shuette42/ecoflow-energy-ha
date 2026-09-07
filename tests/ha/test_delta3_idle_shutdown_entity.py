@@ -41,6 +41,8 @@ from custom_components.ecoflow_energy.const import (
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
 from custom_components.ecoflow_energy.select import (
     EcoFlowSelect,
+)
+from custom_components.ecoflow_energy.select import (
     async_setup_entry as select_setup,
 )
 

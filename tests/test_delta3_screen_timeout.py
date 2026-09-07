@@ -16,7 +16,6 @@ Entity behaviour is covered in tests/ha/test_delta3_screen_timeout_entity.py.
 from __future__ import annotations
 
 import pytest
-
 from ecoflow_energy.const import (
     DELTA3_SCREEN_TIMEOUT_KEY,
     DELTA3_SCREEN_TIMEOUT_STATE_KEY,

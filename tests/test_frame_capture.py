@@ -1,20 +1,20 @@
 """Tests for the shared raw-frame capture helpers."""
 
 import signal
+from collections.abc import Iterator
+from contextlib import contextmanager
+from typing import Any
 
 import pytest
-from contextlib import contextmanager
-from typing import Any, Iterator
-
 from ecoflow_energy.const import (
     RAW_FRAME_BUNDLE_HARD_CAP,
     RAW_FRAME_BUNDLE_MAX_BYTES,
     RAW_FRAME_MAX_BYTES,
 )
 from ecoflow_energy.ecoflow.frame_capture import (
-    _slot,
-    TypedFrameBuffer,
     WRITE_CLASS_RESERVE,
+    TypedFrameBuffer,
+    _slot,
     build_frame_entry,
     decode_cmd_headers,
     frame_budget,
@@ -26,7 +26,6 @@ from ecoflow_energy.ecoflow.proto_encoding import (
     encode_field_bytes,
     encode_field_varint,
 )
-
 
 # Frame timestamps are wall clock. Tests offset from a fixed epoch instead of
 # starting at zero, so they exercise the same value range the capture sees.

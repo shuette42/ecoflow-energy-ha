@@ -7,10 +7,9 @@ import struct
 from pathlib import Path
 
 import pytest
-
 from ecoflow_energy.ecoflow.parsers.stream_proto import (
-    SOC_FALLBACK_KEY,
     _STREAM_FIELD_MAP,
+    SOC_FALLBACK_KEY,
     _decode_mapped_fields,
     parse_stream_proto_message,
 )

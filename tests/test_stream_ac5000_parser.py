@@ -8,7 +8,6 @@ import struct
 from pathlib import Path
 
 import pytest
-
 from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (
     _TASK_KEYS,
     parse_stream_ac5000_message,
@@ -975,7 +974,9 @@ class TestLinkedUnitBlock:
         The last frame is the one his app screenshot pins down: 0 W on the unit
         reading 87 percent and 689 W on the one reading 65 percent.
         """
-        from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import _read_unit_entries
+        from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (
+            _read_unit_entries,
+        )
 
         fixture = json.loads(TWO_UNITS.read_text(encoding="utf-8"))
         unit_a, unit_b = fixture["unit_a"], fixture["unit_b"]
@@ -1000,7 +1001,9 @@ class TestLinkedUnitBlock:
         instead, and on this capture the two disagree by up to 54 W within a
         single frame.
         """
-        from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import _read_unit_entries
+        from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (
+            _read_unit_entries,
+        )
 
         checked = 0
         fixture = json.loads(TWO_UNITS.read_text(encoding="utf-8"))

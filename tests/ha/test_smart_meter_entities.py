@@ -19,7 +19,6 @@ from pathlib import Path
 from typing import Any
 
 from homeassistant.core import HomeAssistant
-
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.binary_sensor import (
@@ -426,12 +425,12 @@ class TestThePowerFactorClearSurvivesAMerge:
 
         # Both readings go through the parser, so this covers what it
         # actually emits rather than what the rule intends.
+        from custom_components.ecoflow_energy.ecoflow.parsers.smart_meter_proto import (
+            parse_smart_meter_message,
+        )
         from tests.test_smart_meter_parser import (
             _build_frame,
             _encode_fixed32_field,
-        )
-        from custom_components.ecoflow_energy.ecoflow.parsers.smart_meter_proto import (
-            parse_smart_meter_message,
         )
 
         def _reading(power: float, factor: float) -> bytes:

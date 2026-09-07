@@ -24,44 +24,46 @@ from .const import (
     DEVICE_TYPE_STREAM_AC5000,
     DEVICE_TYPE_WAVE3,
     DOMAIN,
-    EcoFlowNumberDef,
-    filter_defs_for_serial,
     NUMBER_COMMANDS,
     POWEROCEAN_NUMBERS,
     SMARTPLUG_NUMBER_COMMANDS,
     SMARTPLUG_NUMBERS,
     STREAM_NUMBERS,
     STREAMAC5000_NUMBERS,
+    WAVE3_NUMBERS,
+    EcoFlowNumberDef,
+    filter_defs_for_serial,
     supports_stream_ac5000_controls,
     supports_stream_controls,
-    WAVE3_NUMBERS,
 )
 from .coordinator import DeviceValueNotReported, EcoFlowDeviceCoordinator
-from .entity import (
-    raise_set_gone,
-    as_known_int,
-    EcoFlowWriteGateMixin,
-    reading_reported,
-    raise_set_failed,
-    raise_set_not_ready,
-    raise_set_rejected,
-    raise_set_unsupported,
-)
-from .ecoflow.delta3_commands import (
-    build_number_command as build_delta3_number_command,
-    build_port_priority_command,
-    port_priority_soc_bounds,
-)
-from .ecoflow.wave3_commands import Wave3WriteRefused
 from .ecoflow.const import (
     schedule_power_max_w,
     schedule_power_min_w,
+)
+from .ecoflow.delta3_commands import (
+    build_number_command as build_delta3_number_command,
+)
+from .ecoflow.delta3_commands import (
+    build_port_priority_command,
+    port_priority_soc_bounds,
 )
 from .ecoflow.energy_stream import stream_backup_reserve_floor
 from .ecoflow.parsers.delta3_proto import port_priority_keys
 from .ecoflow.parsers.smartplug import (
     build_plug_brightness_payload,
     build_plug_max_watts_payload,
+)
+from .ecoflow.wave3_commands import Wave3WriteRefused
+from .entity import (
+    EcoFlowWriteGateMixin,
+    as_known_int,
+    raise_set_failed,
+    raise_set_gone,
+    raise_set_not_ready,
+    raise_set_rejected,
+    raise_set_unsupported,
+    reading_reported,
 )
 
 _LOGGER = logging.getLogger(__name__)

@@ -8,7 +8,6 @@ from typing import Any
 
 import aiohttp
 import voluptuous as vol
-
 from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import SelectSelector, SelectSelectorConfig
@@ -385,8 +384,7 @@ class OptionsFlowMixin:
                     password=password,
                     user_id=user_id,
                 )
-            else:
-                errors["base"] = "enhanced_login_failed"
+            errors["base"] = "enhanced_login_failed"
 
         return self.async_show_form(
             step_id="enhanced",

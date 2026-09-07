@@ -3,12 +3,10 @@
 import hashlib
 import hmac
 import time
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from ecoflow_energy.ecoflow.iot_api import IoTApiClient
-
 
 # ---------------------------------------------------------------------------
 # Helpers

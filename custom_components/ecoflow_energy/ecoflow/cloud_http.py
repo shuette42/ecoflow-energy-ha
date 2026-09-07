@@ -204,12 +204,7 @@ class EcoFlowHTTPQuota:
                     ) as resp:
                         return await self._handle_response(resp, purpose=purpose)
 
-            except (
-                aiohttp.ClientError,
-                TimeoutError,
-                asyncio.TimeoutError,
-                self._RetryableAPIError,
-            ) as exc:
+            except (aiohttp.ClientError, TimeoutError, self._RetryableAPIError) as exc:
                 # aiohttp exceptions can embed RequestInfo, including the
                 # signed URL and full serial query. Keep only the exception
                 # class; retries are coalesced into one terminal outcome.

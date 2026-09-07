@@ -20,8 +20,9 @@ from ecoflow_energy.ecoflow.cloud_http import (
 
 class TestHTTPClientInit:
     def test_default_base_url(self):
-        from ecoflow_energy.ecoflow.const import IOT_API_BASE
         from unittest.mock import MagicMock
+
+        from ecoflow_energy.ecoflow.const import IOT_API_BASE
 
         client = EcoFlowHTTPQuota(
             session=MagicMock(),

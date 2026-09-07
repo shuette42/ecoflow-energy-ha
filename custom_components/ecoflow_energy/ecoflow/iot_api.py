@@ -16,7 +16,12 @@ from typing import Any
 
 import aiohttp
 
-from .const import IOT_API_BASE, IOT_CERT_PATH, IOT_DEVICE_LIST_PATH, IOT_MIN_FETCH_INTERVAL_S
+from .const import (
+    IOT_API_BASE,
+    IOT_CERT_PATH,
+    IOT_DEVICE_LIST_PATH,
+    IOT_MIN_FETCH_INTERVAL_S,
+)
 
 _LOGGER = logging.getLogger(__name__)
 

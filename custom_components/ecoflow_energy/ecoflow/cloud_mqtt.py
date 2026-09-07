@@ -16,8 +16,9 @@ import ssl
 import threading
 import time
 from collections import deque
+from collections.abc import Callable
 from time import monotonic
-from typing import Any, Callable
+from typing import Any
 
 import paho.mqtt.client as mqtt
 

@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from ecoflow_energy.ecoflow.parsers.stream_proto import _iter_fields
 from ecoflow_energy.ecoflow.proto.decoder import decode_header_message
 from ecoflow_energy.ecoflow.wave3_commands import (
