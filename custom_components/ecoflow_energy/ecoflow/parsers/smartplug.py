@@ -75,7 +75,7 @@ def parse_smartplug_http_quota(quota_data: dict) -> dict[str, Any]:
     # --- Switch state ---
     if f"{_prefix}switchSta" in quota_data:
         val = quota_data[f"{_prefix}switchSta"]
-        if isinstance(val, bool) or isinstance(val, (int, float)):
+        if isinstance(val, (bool, int, float)):
             result["switch_state"] = 1 if val else 0
 
     # --- Diagnostics ---
@@ -257,9 +257,8 @@ def parse_smartplug_report(data: dict[str, Any]) -> dict[str, Any]:
 
     # Switch state: handle bool and int
     switch_val = params.get("switchSta")
-    if switch_val is not None:
-        if isinstance(switch_val, bool) or isinstance(switch_val, (int, float)):
-            result["switch_state"] = 1 if switch_val else 0
+    if switch_val is not None and isinstance(switch_val, (bool, int, float)):
+        result["switch_state"] = 1 if switch_val else 0
 
     return result
 

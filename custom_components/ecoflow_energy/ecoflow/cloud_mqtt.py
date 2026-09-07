@@ -9,6 +9,7 @@ to the event loop with ``hass.loop.call_soon_threadsafe()``.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import logging
@@ -641,14 +642,10 @@ class EcoFlowMQTTClient:
             return False
         try:
             _LOGGER.debug("Force-reconnect: disconnecting and recreating client...")
-            try:
+            with contextlib.suppress(Exception):
                 self.client.loop_stop()
-            except Exception:
-                pass
-            try:
+            with contextlib.suppress(Exception):
                 self.client.disconnect()
-            except Exception:
-                pass
             self.connected = False
             self.client = None
 

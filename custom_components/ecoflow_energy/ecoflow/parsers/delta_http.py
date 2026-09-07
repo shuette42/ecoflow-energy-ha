@@ -14,10 +14,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-_LOGGER = logging.getLogger(__name__)
-
 from . import _safe_float
 from .delta import _DELTA_ENUM_FIELDS
+
+_LOGGER = logging.getLogger(__name__)
 
 # Mapping: HTTP API key ("module.field") -> sensor key
 # Based on GetAllQuotaResponse from EcoFlow IoT Developer Platform

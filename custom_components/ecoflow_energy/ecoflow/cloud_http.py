@@ -105,7 +105,7 @@ class EcoFlowHTTPQuota:
         """Flatten nested objects for API signature (EcoFlow spec)."""
         items: list[tuple[str, str]] = []
         if isinstance(obj, dict):
-            for k in obj.keys():
+            for k in obj:
                 new_key = f"{parent}.{k}" if parent else k
                 items.extend(self._flatten(obj[k], new_key))
         elif isinstance(obj, list):

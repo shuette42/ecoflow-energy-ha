@@ -316,7 +316,10 @@ class EcoFlowSwitch(
                 self.coordinator.data[state_key] = turn_on
         self._apply_optimistic(turn_on)
 
-    async def _async_set_stream_ac5000(self, turn_on: bool) -> bool:
+    # Same NoReturn gap as number.py's _async_set_stream_value:
+    # raise_set_unsupported always raises, ruff's RET503 does not see it
+    # across the import from entity.py.
+    async def _async_set_stream_ac5000(self, turn_on: bool) -> bool:  # noqa: RET503
         """Send one of the two STREAM AC 5000 switches as a config write.
 
         Both halves go out through the coordinator so they queue behind any
@@ -410,10 +413,7 @@ class EcoFlowSwitch(
         decl = declarative_templates.get(self._definition.key)
         if decl is not None:
             invert = decl.get("invert", False)
-            if invert:
-                value = 0 if turn_on else 1
-            else:
-                value = 1 if turn_on else 0
+            value = (0 if turn_on else 1) if invert else (1 if turn_on else 0)
 
             params = {decl["param_key"]: value}
             if "extra_params" in decl:

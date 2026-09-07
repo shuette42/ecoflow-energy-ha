@@ -6,10 +6,16 @@ import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any, TypeVar
+from typing import Any
 
 from homeassistant.const import Platform
 
+# Four names below (DEVICE_TYPE_UNKNOWN, device_log_tag, get_device_name,
+# get_device_type) are re-exported for callers that import them from this
+# top-level const module (e.g. coordinator/core.py, config_flow_setup.py)
+# rather than from .ecoflow.const directly. They are unused in this file's
+# own body, hence the per-line noqa instead of deleting them - and no
+# __all__ (that would change what `import *` exposes from this module).
 from .ecoflow.const import (  # noqa: E402
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_DELTA3,
@@ -20,14 +26,14 @@ from .ecoflow.const import (  # noqa: E402
     DEVICE_TYPE_SOLAR_TRACKER,
     DEVICE_TYPE_STREAM,
     DEVICE_TYPE_STREAM_AC5000,
-    DEVICE_TYPE_UNKNOWN,
+    DEVICE_TYPE_UNKNOWN,  # noqa: F401
     DEVICE_TYPE_WAVE3,
     POWEROCEAN_SCHEDULE_POWER_MAX_DEFAULT_W,
     POWEROCEAN_SCHEDULE_POWER_MIN_W,
     POWEROCEAN_SCHEDULE_POWER_STEP_W,
-    device_log_tag,
-    get_device_name,
-    get_device_type,
+    device_log_tag,  # noqa: F401
+    get_device_name,  # noqa: F401
+    get_device_type,  # noqa: F401
 )
 from .ecoflow.parsers.powerocean_proto import SCHEDULE_MAX_INDEX  # noqa: E402
 
@@ -1380,11 +1386,6 @@ _SN_PREFIX_EXCLUDED_KEYS: dict[str, frozenset[str]] = {
 }
 
 
-# Any entity definition carrying a ``key`` attribute (sensor, binary sensor,
-# number, switch, select).
-_DefT = TypeVar("_DefT")
-
-
 def excluded_keys_for_serial(device_sn: str) -> frozenset[str]:
     """Return the entity keys the device behind ``device_sn`` never produces."""
     if not device_sn:
@@ -1478,7 +1479,9 @@ def supports_stream_controls(device_sn: str) -> bool:
     return device_sn[:4].upper() in STREAM_CONTROL_PREFIXES
 
 
-def filter_defs_for_serial(definitions: list[_DefT], device_sn: str) -> list[_DefT]:
+# DefT is any entity definition carrying a ``key`` attribute (sensor,
+# binary sensor, number, switch, select).
+def filter_defs_for_serial[DefT](definitions: list[DefT], device_sn: str) -> list[DefT]:
     """Drop entity definitions a device variant cannot ever populate.
 
     Applied by the sensor, binary sensor, number, switch and select platforms

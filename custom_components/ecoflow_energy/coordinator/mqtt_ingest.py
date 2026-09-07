@@ -756,15 +756,14 @@ class MqttIngestMixin:
                 if (
                     result.mapped.get("_is_ems_change")
                     or result.mapped.get("_is_bp_heartbeat")
-                ):
-                    if raw:
-                        merged.update(
-                            remap_bp_keys(
-                                raw,
-                                self._bp_sn_to_index,
-                                self.device_sn,
-                            )
+                ) and raw:
+                    merged.update(
+                        remap_bp_keys(
+                            raw,
+                            self._bp_sn_to_index,
+                            self.device_sn,
                         )
+                    )
             except Exception:
                 _LOGGER.debug(
                     "PowerOcean protobuf decode error for %s (%s)",

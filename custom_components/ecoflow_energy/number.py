@@ -649,7 +649,11 @@ class EcoFlowNumber(
             return None
         return int(key[len("schedule_") : -len("_power_w")])
 
-    async def _async_set_stream_value(self, key: str, value: float) -> bool:
+    # Every path through this function either returns or ends in
+    # raise_set_unsupported/raise_set_not_ready/raise_set_rejected, all typed
+    # NoReturn in entity.py. Ruff's RET503 does not resolve NoReturn across
+    # that import, so it sees the trailing call as a fall-through.
+    async def _async_set_stream_value(self, key: str, value: float) -> bool:  # noqa: RET503
         """Set a Stream AC Pro number value via WSS Protobuf SET.
 
         JSON SET does not work on the /app/ WSS topic (SmartPlug proves
@@ -684,7 +688,9 @@ class EcoFlowNumber(
         # wrong thing to tell the user.
         raise_set_unsupported(self.entity_id)
 
-    async def _async_set_stream_ac5000_value(self, key: str, value: float) -> bool:
+    # Same NoReturn gap as _async_set_stream_value above: raise_set_unsupported
+    # always raises, ruff's RET503 does not see it across the import.
+    async def _async_set_stream_ac5000_value(self, key: str, value: float) -> bool:  # noqa: RET503
         """Set a STREAM AC 5000 number via a 254/38 config write.
 
         Most of these read a value the device reported before they can send:
