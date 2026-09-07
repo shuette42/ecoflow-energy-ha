@@ -192,17 +192,39 @@ def test_int_kind_controls_accept_the_float_home_assistant_sends() -> None:
         build_write("screen_brightness_pct", 54.5, DEVICE_SN)
 
 
-def test_float32_writes_refuse_companions() -> None:
-    """T8: float32 (the WAVE 3 setpoint fields) and companions are mutually
-    exclusive - combining them would silently drop the companions rather
-    than encode them, so the builder refuses the combination outright
-    (COSMETIC-2, PLAN-047 review lens A)."""
+def test_float32_writes_refuse_nested_and_submessage() -> None:
+    """T8: float32 (the WAVE 3 setpoint fields) cannot combine with a nested
+    wrapper or a submessage - those reshape the pdata layout float32 does not
+    use, so the builder refuses the combination outright.
+
+    Companions ARE combinable with float32 (PLAN-047 Phase C, ADR-021 D-C6):
+    the constant-temperature band write is two float32 fields in one frame,
+    encoded on this same path - see
+    test_band_write_encodes_two_float32_fields_in_field_order below. This
+    test used to assert the opposite (COSMETIC-2, PLAN-047 review lens A);
+    that restriction was lifted deliberately once the band write needed it,
+    and only the nested/submessage restriction still holds."""
     from ecoflow_energy.ecoflow.energy_stream import build_delta3_config_write_payload
 
     with pytest.raises(ValueError):
+        build_delta3_config_write_payload(156, 27.0, DEVICE_SN, float32=True, nested=True)
+    with pytest.raises(ValueError):
         build_delta3_config_write_payload(
-            156, 27.0, DEVICE_SN, float32=True, companions=((157, 49),)
+            156, 27.0, DEVICE_SN, float32=True, submessage=b"\x01"
         )
+
+
+def test_band_write_encodes_two_float32_fields_in_field_order() -> None:
+    """T9: the constant-temperature band write combines float32 with a
+    companion on the same encoder path T8 checks the restrictions of -
+    upper (158) first, lower (159) second, matching the app's own traffic
+    (PLAN-047 capture analysis, PC-A)."""
+    from ecoflow_energy.ecoflow.energy_stream import build_delta3_config_write_payload
+
+    payload = build_delta3_config_write_payload(
+        158, 21.9, DEVICE_SN, float32=True, companions=((159, 17.7),)
+    )
+    assert _pdata_hex(payload) == "f5093333af41fd099a998d41"
 
 
 def test_the_capture_ack_confirms_the_screen_brightness_write() -> None:

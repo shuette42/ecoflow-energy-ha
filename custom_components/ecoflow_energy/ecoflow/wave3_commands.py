@@ -64,6 +64,20 @@ WAVE3_DEST = 66
 WAVE3_POWER_ON_FIELD = 4
 WAVE3_STANDBY_FIELD = 172
 
+# The constant-temperature band: both fields always travel in one ConfigWrite
+# (observed in the app's own traffic, PLAN-047 capture analysis). Never
+# separately - a caller wanting to move one side has to read the other out
+# of accumulated state and send both.
+WAVE3_BAND_UPPER_FIELD = 158
+WAVE3_BAND_LOWER_FIELD = 159
+# The narrowest band in twelve app writes (PC-A frame 89, 21.5/17.5 = 4.0);
+# the device has not been observed refusing anything narrower. This is a
+# client-side inference from app behaviour rather than a device refusal -
+# revisit if an owner reports a narrower band being rejected.
+WAVE3_BAND_MIN_WIDTH_K = 4.0
+_BAND_MIN_C = 15.5
+_BAND_MAX_C = 30.0
+
 
 class Wave3WriteRefused(ValueError):
     """A value does not fit a control's own table (unknown key, out of range,
@@ -345,13 +359,86 @@ def build_power_write(turn_on: bool, device_sn: str, seq: int = 0) -> bytes:
     )
 
 
-def write_refusal(key: str, value: Any, state: Mapping[str, Any]) -> str | None:
+def _validate_band_value(label: str, value: float) -> None:
+    """Check one band limit against its range only, no step grid.
+
+    `target_temp_c` (field 156) is on a 0.5 K grid, but the band limits are
+    not the same field and are not on that grid: seven of PC-A's twelve
+    captured pairs sit on a 0.1 grid instead (21.9/17.7, 22.7/16.9, 25.4/20.1
+    among them), and the device acks them. An earlier revision of this
+    function enforced the 0.5 grid anyway, carried over from
+    `target_temp_c`'s own table, and refused the exact pairs the app itself
+    sends (E1, PLAN-047 Phase C review).
+    """
+    if value < _BAND_MIN_C or value > _BAND_MAX_C:
+        raise Wave3WriteRefused(f"{label} must be between {_BAND_MIN_C} and {_BAND_MAX_C}")
+
+
+def build_band_write(lower: float, upper: float, device_sn: str, seq: int = 0) -> bytes:
+    """Build the WAVE 3 constant-temperature band ConfigWrite frame.
+
+    Both limits travel in one frame - field 158 (upper) and field 159
+    (lower), each a float32, upper always first (observed in the app's own
+    traffic, PLAN-047 capture analysis; `build_delta3_config_write_payload`
+    sorts by field number, which already produces that order since
+    158 < 159). Raises `Wave3WriteRefused` when either value is out of
+    range or the band is narrower than `WAVE3_BAND_MIN_WIDTH_K` - the
+    caller must not guess a missing side, it must refuse.
+    """
+    _validate_band_value("upper limit", upper)
+    _validate_band_value("lower limit", lower)
+    if upper - lower < WAVE3_BAND_MIN_WIDTH_K:
+        raise Wave3WriteRefused(
+            f"the band must be at least {WAVE3_BAND_MIN_WIDTH_K} degrees wide"
+        )
+    return build_delta3_config_write_payload(
+        WAVE3_BAND_UPPER_FIELD,
+        upper,
+        device_sn,
+        seq=seq,
+        companions=((WAVE3_BAND_LOWER_FIELD, lower),),
+        source="ios",
+        dest=WAVE3_DEST,
+        float32=True,
+    )
+
+
+def band_write_refusal(state: Mapping[str, Any]) -> str | None:
+    """Return why the app itself would refuse a band write, or None.
+
+    Evaluated against accumulated device state, same reasoning as
+    `write_refusal`: the band is only meaningful in `constant_temp`, and
+    `operating_mode` can arrive on a different frame than the write under
+    consideration.
+    """
+    mode = state.get("operating_mode")
+    if mode != "constant_temp":
+        return (
+            "the constant temperature band is only writable in constant_temp, "
+            f"current mode is {mode!r}"
+        )
+    return None
+
+
+def write_refusal(
+    key: str, value: Any, state: Mapping[str, Any], mode: str | None = None
+) -> str | None:
     """Return why the app itself would refuse this write, or None if it would not.
 
     Evaluated against accumulated device state, never a single MQTT message -
     `operating_mode` regularly arrives on a different frame than the write
     under consideration. A caller sends a write only once both this and
     `build_write`'s own table check pass.
+
+    `mode` overrides the accumulated `operating_mode` for a gesture that
+    switches mode and writes a mode-gated value in the same call
+    (`climate.async_set_temperature` with both `hvac_mode` and a setpoint):
+    the mode frame goes out first, but its ack has not landed in accumulated
+    state yet, so checking the pre-switch mode would refuse a value that
+    becomes valid the instant the switch does (E2, PLAN-047 Phase C review).
+    Passing the target mode does not exempt the write from the mode gate -
+    a target mode that itself has no such value (fan speed switching into
+    `constant_temp`, a setpoint switching into `fan`) still refuses.
     """
     control = WAVE3_CONTROLS.get(key)
     if control is None:
@@ -362,17 +449,20 @@ def write_refusal(key: str, value: Any, state: Mapping[str, Any]) -> str | None:
             f"{value!r} is never written by the app; observed writes are max, sleep, or eco"
         )
 
-    mode = state.get("operating_mode")
+    effective_mode = mode if mode is not None else state.get("operating_mode")
 
-    if key in _MODE_REQUIRED_KEYS and mode is None:
+    if key in _MODE_REQUIRED_KEYS and effective_mode is None:
         return f"{key} needs operating_mode, which has not been reported yet"
 
     if key == "airflow_speed_pct":
-        if mode == "constant_temp":
+        if effective_mode == "constant_temp":
             return "fan speed is fixed in constant_temp mode"
         return None
 
-    if control.modes is not None and mode not in control.modes:
-        return f"{key} is only writable in {sorted(control.modes)}, current mode is {mode!r}"
+    if control.modes is not None and effective_mode not in control.modes:
+        return (
+            f"{key} is only writable in {sorted(control.modes)}, "
+            f"current mode is {effective_mode!r}"
+        )
 
     return None

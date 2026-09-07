@@ -1074,7 +1074,9 @@ class SetCommandsMixin:
         # entity only has to hold its optimistic value until then.
         return True
 
-    async def async_send_wave3_set(self, key: str, value: Any) -> bool:
+    async def async_send_wave3_set(
+        self, key: str, value: Any, mode: str | None = None
+    ) -> bool:
         """Write one WAVE 3 (AC71) setting as a ConfigWrite frame.
 
         Two gates run before anything is built. `write_refusal` checks
@@ -1086,6 +1088,12 @@ class SetCommandsMixin:
         control's own table (range, step, allowed set) while encoding it.
         Either can raise `Wave3WriteRefused`, which the platform layer turns
         into a user-facing error via `raise_set_rejected`.
+
+        `mode` is forwarded to `write_refusal` unchanged: it overrides the
+        accumulated `operating_mode` for a gesture that switches mode and
+        writes a mode-gated value in the same call, where the mode frame's
+        own ack has not landed in accumulated state yet (E2, PLAN-047 Phase
+        C review).
 
         The power switch is not in `WAVE3_CONTROLS` - both gates would
         report it as an unknown control - so it skips `write_refusal`
@@ -1105,7 +1113,7 @@ class SetCommandsMixin:
         )
 
         if key != "power":
-            reason = write_refusal(key, value, self._device_data)
+            reason = write_refusal(key, value, self._device_data, mode=mode)
             if reason is not None:
                 _LOGGER.debug(
                     "WAVE 3 write refused for %s: %s", self.device_tag, reason
@@ -1149,6 +1157,60 @@ class SetCommandsMixin:
 
         _LOGGER.debug("SET sent for %s: key=%s", self.device_tag, key)
         self._log_event("set_cmd", f"key={key}")
+        return True
+
+    async def async_send_wave3_band(self, lower: float, upper: float) -> bool:
+        """Write the WAVE 3 constant-temperature band as one ConfigWrite frame.
+
+        Mirrors `async_send_wave3_set`: `band_write_refusal` checks the mode
+        gate against accumulated state, `build_band_write` checks the values
+        against their own table while encoding them. Either can raise
+        `Wave3WriteRefused`, which the platform layer turns into a
+        user-facing error via `raise_set_rejected`. The ack only echoes the
+        upper limit (observed in the app's own traffic, PLAN-047); the field
+        recorded in `_config_writes_sent` is the upper one for that reason.
+        """
+        from ..ecoflow.wave3_commands import (
+            WAVE3_BAND_UPPER_FIELD,
+            Wave3WriteRefused,
+            band_write_refusal,
+            build_band_write,
+        )
+
+        reason = band_write_refusal(self._device_data)
+        if reason is not None:
+            _LOGGER.debug(
+                "WAVE 3 band write refused for %s: %s", self.device_tag, reason
+            )
+            self._log_event("set_refused", "key=constant_temp_band")
+            raise Wave3WriteRefused(reason)
+
+        if self._mqtt_client is None or not self._mqtt_client.is_connected():
+            _LOGGER.warning(
+                "Cannot apply setting for %s - device connection is down",
+                self.device_tag,
+            )
+            self._log_event("set_cmd_fail", "key=constant_temp_band")
+            return False
+
+        try:
+            payload = build_band_write(lower, upper, self.device_sn)
+        except Wave3WriteRefused:
+            self._log_event("set_refused", "key=constant_temp_band")
+            raise
+
+        self._config_writes_sent[WAVE3_BAND_UPPER_FIELD] = time.monotonic()
+
+        ok = await self.hass.async_add_executor_job(
+            partial(self._mqtt_client.send_proto_set, payload, wait=True),
+        )
+        if not ok:
+            _LOGGER.warning("SET failed for %s: not sent", self.device_tag)
+            self._log_event("set_cmd_fail", "key=constant_temp_band")
+            return False
+
+        _LOGGER.debug("SET sent for %s: key=constant_temp_band", self.device_tag)
+        self._log_event("set_cmd", "key=constant_temp_band")
         return True
 
     async def async_send_set_command(self, command: dict[str, Any]) -> bool:

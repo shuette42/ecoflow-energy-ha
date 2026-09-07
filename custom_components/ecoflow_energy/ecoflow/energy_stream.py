@@ -817,20 +817,24 @@ def build_delta3_config_write_payload(
             default of 2; WAVE 3 (AC71) needs 66, measured against hardware
             replies (PLAN-047).
         float32: True writes `value` as a little-endian float32 (wire type 5)
-            instead of a varint - the WAVE 3 setpoint fields need this. Not
-            combinable with `nested`, `companions`, or `submessage`.
+            instead of a varint - the WAVE 3 setpoint fields need this.
+            `companions` is allowed together with `float32` (the WAVE 3
+            constant-temperature band writes two float32 fields in one
+            frame); `nested` and `submessage` are not.
 
     Returns:
         Binary protobuf payload ready to publish on the SET topic.
     """
-    if float32 and (companions or submessage is not None or nested):
-        raise ValueError("float32 writes carry one field")
+    if float32 and (submessage is not None or nested):
+        raise ValueError("float32 writes carry no submessage or nesting")
 
     if seq == 0:
         seq = int(time.time() * 1000) & 0x7FFFFFFF
 
     if float32:
-        pdata = encode_field_fixed32(config_field, value)
+        # Ascending field order, same reasoning as the varint branch below.
+        fields = sorted([(config_field, value), *companions])
+        pdata = b"".join(encode_field_fixed32(f, v) for f, v in fields)
     elif submessage is not None:
         pdata = encode_field_bytes(config_field, submessage)
     elif nested:
