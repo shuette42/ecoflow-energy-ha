@@ -50,3 +50,32 @@ jobs:
           pip install -r requirements-dev.txt
       - name: Run ruff
         run: ruff check custom_components/ tests/
+
+  Types:
+    name: Types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Python 3.13
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+          cache: 'pip'
+          cache-dependency-path: |
+            requirements-dev.txt
+            requirements_test.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+          # mypy checks our classes against Home Assistant's own annotations
+          # (DataUpdateCoordinator, ConfigFlow and the rest), not only against
+          # ignore_missing_imports. Measured 2026-09-08: without the real
+          # package mypy reports four errors that do not occur locally, because
+          # an unresolved import can be ignored but cannot be subclassed for
+          # real attribute checking. The version comes from requirements_test.txt,
+          # the same source the test job uses, so both gates read the same
+          # Home Assistant rather than two that drift apart.
+          pip install -r requirements_test.txt
+      - name: Run mypy
+        run: mypy custom_components/ecoflow_energy
