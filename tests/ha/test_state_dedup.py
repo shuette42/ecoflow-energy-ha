@@ -676,9 +676,9 @@ class TestFailedSendNoOptimistic:
                 new_callable=AsyncMock, return_value=False,
             ),
             patch.object(switch, "async_write_ha_state") as mock_write,
+            pytest.raises(HomeAssistantError),
         ):
-            with pytest.raises(HomeAssistantError):
-                await switch._send_command(False)
+            await switch._send_command(False)
 
         assert mock_write.call_count == 0
         assert switch._optimistic_value is None
@@ -705,9 +705,9 @@ class TestFailedSendNoOptimistic:
                 new_callable=AsyncMock, return_value=False,
             ),
             patch.object(switch, "async_write_ha_state") as mock_write,
+            pytest.raises(HomeAssistantError),
         ):
-            with pytest.raises(HomeAssistantError):
-                await switch._send_command(False)
+            await switch._send_command(False)
 
         assert mock_write.call_count == 0
         assert switch._optimistic_value is None
@@ -760,9 +760,9 @@ class TestFailedSendNoOptimistic:
                 new_callable=AsyncMock, return_value=False,
             ),
             patch.object(number, "async_write_ha_state") as mock_write,
+            pytest.raises(HomeAssistantError),
         ):
-            with pytest.raises(HomeAssistantError):
-                await number.async_set_native_value(95.0)
+            await number.async_set_native_value(95.0)
 
         assert mock_write.call_count == 0
         assert number.native_value == 80
@@ -790,9 +790,9 @@ class TestFailedSendNoOptimistic:
                 new_callable=AsyncMock, return_value=False,
             ),
             patch.object(number, "async_write_ha_state") as mock_write,
+            pytest.raises(HomeAssistantError),
         ):
-            with pytest.raises(HomeAssistantError):
-                await number.async_set_native_value(1500.0)
+            await number.async_set_native_value(1500.0)
 
         assert mock_write.call_count == 0
         assert number.native_value == 2000

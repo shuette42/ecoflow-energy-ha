@@ -771,11 +771,14 @@ class TestEcoFlowNumber:
         )
         number = EcoFlowNumber(coordinator, defn)
 
-        with patch.object(
-            coordinator, "async_send_set_command", new_callable=AsyncMock, return_value=False,
-        ), patch.object(number, "async_write_ha_state"):
-            with pytest.raises(HomeAssistantError):
-                await number.async_set_native_value(50.0)
+        with (
+            patch.object(
+                coordinator, "async_send_set_command", new_callable=AsyncMock, return_value=False,
+            ),
+            patch.object(number, "async_write_ha_state"),
+            pytest.raises(HomeAssistantError),
+        ):
+            await number.async_set_native_value(50.0)
 
         assert coordinator.data["max_charge_soc"] == 60
 
@@ -1079,7 +1082,7 @@ class TestEcoFlowNumber:
             await number.async_set_native_value(80.0)
 
         mock_cmd.assert_awaited_once()
-        payload, kwargs = mock_cmd.call_args.args[0], mock_cmd.call_args.kwargs
+        payload = mock_cmd.call_args.args[0]
         assert isinstance(payload, bytes)
         # The protobuf frame must decode back to the requested value: the
         # outer envelope carries cmd_func=254 / cmd_id=17 with field 102=80.

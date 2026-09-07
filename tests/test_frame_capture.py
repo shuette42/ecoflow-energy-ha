@@ -627,7 +627,7 @@ class TestMaskingDoesNotCorruptRealFrames:
             headers_before, _ = decode_header_message(raw)
             headers_after, _ = decode_header_message(sanitize_frame(raw, []))
             assert len(headers_before) == len(headers_after), (family, name)
-            for before, after in zip(headers_before, headers_after):
+            for before, after in zip(headers_before, headers_after, strict=True):
                 for key, value in before.items():
                     if not isinstance(value, (int, float)):
                         continue  # string-typed: serial, account id, pdata

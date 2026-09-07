@@ -8,13 +8,13 @@ from ecoflow_energy.ecoflow.cloud_mqtt import EcoFlowMQTTClient
 
 
 def _make_client(**kwargs) -> EcoFlowMQTTClient:
-    defaults = dict(
-        certificate_account="test_account",
-        certificate_password="test_password",
-        device_sn="TEST1234SN",
-        message_handler=MagicMock(),
-        wss_mode=False,
-    )
+    defaults = {
+        "certificate_account": "test_account",
+        "certificate_password": "test_password",
+        "device_sn": "TEST1234SN",
+        "message_handler": MagicMock(),
+        "wss_mode": False,
+    }
     defaults.update(kwargs)
     return EcoFlowMQTTClient(**defaults)
 

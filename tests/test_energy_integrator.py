@@ -57,7 +57,7 @@ def _trapezoid_kwh(readings, dt=30.0):
     """
     watt_seconds = sum(
         (first + second) / 2.0 * dt
-        for first, second in zip(readings, readings[1:])
+        for first, second in zip(readings, readings[1:], strict=False)
     )
     return watt_seconds / 3_600_000.0
 

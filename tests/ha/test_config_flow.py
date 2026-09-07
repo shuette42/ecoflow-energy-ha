@@ -61,11 +61,10 @@ async def _select_mode(hass: HomeAssistant, mode: str = MODE_STANDARD):
     )
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "user"
-    result = await hass.config_entries.flow.async_configure(
+    return await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {CONF_MODE: mode},
     )
-    return result
 
 
 async def _advance_app_flow_with_powerstream(hass: HomeAssistant):
@@ -762,11 +761,10 @@ class TestDevicesStep:
             ])
 
             result = await _select_mode(hass, MODE_STANDARD)
-            result = await hass.config_entries.flow.async_configure(
+            return await hass.config_entries.flow.async_configure(
                 result["flow_id"],
                 {CONF_ACCESS_KEY: "ak", CONF_SECRET_KEY: "sk"},
             )
-            return result
 
     async def test_devices_form_shown(self, hass: HomeAssistant) -> None:
         result = await self._advance_to_devices(hass)

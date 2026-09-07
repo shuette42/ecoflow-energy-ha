@@ -63,10 +63,9 @@ def _probe(hass: HomeAssistant) -> UnroutedDeviceProbe:
         # so the stand-in has to answer that like the real client does.
         client.broker = "mqtt-e.ecoflow.com:8084"
         mock_client.return_value = client
-        probe = UnroutedDeviceProbe(
+        return UnroutedDeviceProbe(
             hass, SKIPPED_SN, "Ocean 2", "cert_account", "cert_password", "user123"
         )
-    return probe
 
 
 def _fake_clock(step: float) -> Iterator[float]:
