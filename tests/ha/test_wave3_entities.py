@@ -10,6 +10,7 @@ integration) - is exactly the part a parser test cannot cover on its own.
 
 from __future__ import annotations
 
+import asyncio
 import binascii
 import json
 from pathlib import Path
@@ -959,12 +960,79 @@ class TestTheClimateReachesTheWire:
         """E2 fix: the target mode is passed to the write gate straight from
         the gesture, so the setpoint write is checked against `cooling`
         rather than the pre-switch `dehumidify` still sitting in
-        accumulated state."""
+        accumulated state.
+
+        The device reports the new mode while the gesture waits, which is
+        what happens on hardware about a second after the mode frame.
+        """
         coordinator, mqtt = _wired(
             hass, {"running": True, "operating_mode": "dehumidify"}
         )
         entity = _climate(coordinator)
+
+        def _report_mode(*args: Any, **kwargs: Any) -> bool:
+            coordinator._device_data["operating_mode"] = "cooling"
+            coordinator.async_set_updated_data(dict(coordinator._device_data))
+            mqtt.send_proto_set.side_effect = None
+            return True
+
+        mqtt.send_proto_set.side_effect = _report_mode
         await entity.async_set_temperature(temperature=19.5, hvac_mode=HVACMode.COOL)
+        assert _all_pdata(mqtt) == ["c80901", "e50900009c41"]
+
+    async def test_a_bundled_setpoint_waits_for_the_device_to_report_the_mode(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Measured on hardware 2026-09-07: a setpoint sent 13 ms behind a
+        mode switch is acknowledged and dropped, while the same setpoint
+        sent once the mode has settled is applied. So the gesture waits for
+        the device's own report of the new mode before the second frame.
+        """
+        coordinator, mqtt = _wired(
+            hass, {"running": True, "operating_mode": "dehumidify"}
+        )
+        entity = _climate(coordinator)
+        seen: list[str | None] = []
+        loop = asyncio.get_running_loop()
+
+        def _report_later() -> None:
+            coordinator._device_data["operating_mode"] = "cooling"
+            coordinator.async_set_updated_data(dict(coordinator._device_data))
+
+        def _record(*args: Any, **kwargs: Any) -> bool:
+            seen.append(coordinator.data.get("operating_mode"))
+            if len(seen) == 1:
+                # The device answers a mode write on its own schedule, well
+                # after the write returns. Scheduling it rather than setting
+                # it inline is what makes this test able to fail: without
+                # the wait, the second frame goes out before this lands.
+                loop.call_soon_threadsafe(loop.call_later, 0.2, _report_later)
+            return True
+
+        mqtt.send_proto_set.side_effect = _record
+        await entity.async_set_temperature(temperature=19.5, hvac_mode=HVACMode.COOL)
+        # The mode frame goes out while the device still reports the old
+        # mode; the setpoint frame only after the new one has been reported.
+        assert seen == ["dehumidify", "cooling"]
+
+    async def test_a_bundled_setpoint_is_sent_anyway_when_the_mode_never_arrives(
+        self, hass: HomeAssistant
+    ) -> None:
+        """A device that never reports the switch must not swallow the
+        value: the wait expires and the write is attempted, because a
+        refusal would be worse than a write the device may still take."""
+        coordinator, mqtt = _wired(
+            hass, {"running": True, "operating_mode": "dehumidify"}
+        )
+        entity = _climate(coordinator)
+        with patch(
+            "custom_components.ecoflow_energy.climate.MODE_SETTLE_TIMEOUT_S", 0.05
+        ), patch(
+            "custom_components.ecoflow_energy.climate.MODE_SETTLE_POLL_S", 0.01
+        ):
+            await entity.async_set_temperature(
+                temperature=19.5, hvac_mode=HVACMode.COOL
+            )
         assert _all_pdata(mqtt) == ["c80901", "e50900009c41"]
 
     async def test_a_mode_switch_into_a_mode_without_that_value_still_refuses_it(
@@ -978,7 +1046,11 @@ class TestTheClimateReachesTheWire:
             hass, {"running": True, "operating_mode": "cooling"}
         )
         entity = _climate(coordinator)
-        with pytest.raises(HomeAssistantError) as excinfo:
+        with patch(
+            "custom_components.ecoflow_energy.climate.MODE_SETTLE_TIMEOUT_S", 0.05
+        ), patch(
+            "custom_components.ecoflow_energy.climate.MODE_SETTLE_POLL_S", 0.01
+        ), pytest.raises(HomeAssistantError) as excinfo:
             await entity.async_set_temperature(
                 temperature=22.0, hvac_mode=HVACMode.FAN_ONLY
             )
