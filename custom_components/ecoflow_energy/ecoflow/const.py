@@ -52,6 +52,12 @@ DEVICE_TYPE_SMART_METER = "smart_meter"
 # ships under, `HZ31` and `S02F`: same product id (7937), same productType
 # (31), same report message (32/1). Reported in #339.
 DEVICE_TYPE_SOLAR_TRACKER = "solar_tracker"
+# WAVE 3 portable air conditioner (`AC71`, app productType 44, internal
+# family AC517). Enhanced mode only: the Developer API lists the unit with
+# an empty product name and refuses every quota read with error 1006, and
+# the app channel carries no product name either, so the type is reached
+# through the serial prefix below and never through a keyword (#161).
+DEVICE_TYPE_WAVE3 = "wave3"
 DEVICE_TYPE_UNKNOWN = "unknown"
 
 # Keywords used to classify devices from productName strings.
@@ -234,6 +240,12 @@ _SN_PREFIX_MAP = {
     # by name alone and skipped as unsupported.
     "HZ31": DEVICE_TYPE_SOLAR_TRACKER,
     "S02F": DEVICE_TYPE_SOLAR_TRACKER,
+    # WAVE 3 (#161): productType 44, family AC517. The Developer API lists
+    # it (`productName` empty) and refuses its quota with 1006, the app API
+    # lists it without any product name, so without this entry the unit is
+    # classified by name alone and skipped as unsupported. Further `AC71*`
+    # regional variants join here as owners report them, like the BK series.
+    "AC71": DEVICE_TYPE_WAVE3,
 }
 
 _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
@@ -253,6 +265,9 @@ _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
     "BK21": "Smart Meter",
     "HZ31": "Solar Tracker",
     "S02F": "Solar Tracker",
+    # WAVE 3: the app names it "WAVE 3-<tail>", neither channel gives a
+    # product name, so `get_device_name` renders "WAVE 3 (0052)" from here.
+    "AC71": "WAVE 3",
 }
 
 # --- Scheduled charge task: the charge power range the app offers ---
@@ -355,13 +370,13 @@ def get_device_type(product_name: str, sn: str = "") -> str:
     Returns DEVICE_TYPE_POWEROCEAN, DEVICE_TYPE_DELTA, DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_SMARTPLUG, DEVICE_TYPE_STREAM, DEVICE_TYPE_STREAM_AC5000,
     DEVICE_TYPE_POWERSTREAM, DEVICE_TYPE_SMART_METER,
-    DEVICE_TYPE_SOLAR_TRACKER, or DEVICE_TYPE_UNKNOWN.
+    DEVICE_TYPE_SOLAR_TRACKER, DEVICE_TYPE_WAVE3, or DEVICE_TYPE_UNKNOWN.
 
-    The Smart Meter and the Solar Tracker have no keyword of their own:
-    both are reached by their serial prefix only. Neither name matches any
-    keyword list below, and the app API reports an empty product name for
-    both, so a keyword would be an assumption about a string no capture has
-    ever shown.
+    The Smart Meter, the Solar Tracker and the WAVE 3 have no keyword of
+    their own: all three are reached by their serial prefix only. None of
+    their names matches any keyword list below, and the app API reports an
+    empty product name for each, so a keyword would be an assumption about
+    a string no capture has ever shown.
     """
     # The prefix is exact evidence, the product name a substring guess, so
     # the prefix wins. Every prefix mapped before this ordering existed

@@ -21,6 +21,7 @@ from .ecoflow.const import (  # noqa: E402
     DEVICE_TYPE_STREAM,
     DEVICE_TYPE_STREAM_AC5000,
     DEVICE_TYPE_UNKNOWN,
+    DEVICE_TYPE_WAVE3,
     POWEROCEAN_SCHEDULE_POWER_MAX_DEFAULT_W,
     POWEROCEAN_SCHEDULE_POWER_MIN_W,
     POWEROCEAN_SCHEDULE_POWER_STEP_W,
@@ -283,6 +284,7 @@ DEVICE_TYPE_DISPLAY_NAMES: dict[str, str] = {
     DEVICE_TYPE_POWERSTREAM: "PowerStream",
     DEVICE_TYPE_SMART_METER: "Smart Meter",
     DEVICE_TYPE_SOLAR_TRACKER: "Solar Tracker",
+    DEVICE_TYPE_WAVE3: "WAVE 3",
 }
 
 # Device types that only report over the account channel (app-auth WSS).
@@ -293,6 +295,7 @@ ENHANCED_ONLY_DEVICE_TYPES: frozenset[str] = frozenset(
     {
         DEVICE_TYPE_SMART_METER,
         DEVICE_TYPE_SOLAR_TRACKER,
+        DEVICE_TYPE_WAVE3,
     }
 )
 
@@ -1840,6 +1843,61 @@ SOLARTRACKER_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("battery_pct", "Battery", "%", "battery", "measurement", "mdi:battery", suggested_display_precision=0),
 ]
 
+# =====================================================================
+# WAVE 3 sensor definitions
+# =====================================================================
+
+# WAVE 3 portable AC (AC71, #161, PLAN-047 Phase A). Account-channel only -
+# no serial prefix can be bound to a Developer Key (error 1006), so every
+# entity below is enhanced_only. See
+# custom_components/ecoflow_energy/ecoflow/parsers/wave3_proto.py for the
+# field notes behind the enums and the optional add-on battery.
+WAVE3_SENSORS: list[EcoFlowSensorDef] = [
+    EcoFlowSensorDef("temp_ambient_c", "Ambient Temperature", "°C", "temperature", "measurement", "mdi:thermometer", suggested_display_precision=1),
+    EcoFlowSensorDef("humi_ambient_pct", "Ambient Humidity", "%", "humidity", "measurement", "mdi:water-percent", suggested_display_precision=0),
+    EcoFlowSensorDef("operating_mode", "Operating Mode", None, "enum", None, "mdi:air-conditioner", options=["cooling", "heating", "fan", "dehumidify", "constant_temp"]),
+    EcoFlowSensorDef("target_temp_c", "Target Temperature", "°C", "temperature", "measurement", "mdi:thermostat", suggested_display_precision=1),
+    EcoFlowSensorDef("airflow_speed_pct", "Fan Speed", "%", None, "measurement", "mdi:fan", suggested_display_precision=0),
+    EcoFlowSensorDef("ac_input_power_w", "AC Input Power", "W", "power", "measurement", "mdi:flash", suggested_display_precision=0),
+    EcoFlowSensorDef("temp_outdoor_ambient_c", "Outdoor Temperature", "°C", "temperature", "measurement", "mdi:thermometer", suggested_display_precision=1),
+    EcoFlowSensorDef("ac_input_energy_kwh", "AC Input Energy", "kWh", "energy", "total_increasing", "mdi:lightning-bolt", suggested_display_precision=2),
+    # --- Diagnostics ---
+    EcoFlowSensorDef("temp_indoor_supply_air_c", "Supply Air Temperature", "°C", "temperature", "measurement", "mdi:thermometer-chevron-up", "diagnostic", suggested_display_precision=1),
+    EcoFlowSensorDef("temp_indoor_return_air_c", "Return Air Temperature", "°C", "temperature", "measurement", "mdi:thermometer-chevron-down", "diagnostic", suggested_display_precision=1),
+    EcoFlowSensorDef("operating_submode", "Operating Submode", None, "enum", None, "mdi:cog-outline", "diagnostic", options=["none", "normal", "max", "sleep", "eco"]),
+    EcoFlowSensorDef("ac_input_voltage_v", "AC Input Voltage", "V", "voltage", "measurement", "mdi:sine-wave", "diagnostic", suggested_display_precision=1),
+    EcoFlowSensorDef("ac_input_current_a", "AC Input Current", "A", "current", "measurement", "mdi:current-ac", "diagnostic", suggested_display_precision=2),
+    # `temp_condenser_c`, `temp_evaporator_c`, `temp_compressor_discharge_c`, `target_humidity_pct`
+    # and `screen_brightness_pct` are disabled by default: internal refrigeration-cycle and
+    # display readings, useful for diagnostics but not something most users watch daily.
+    EcoFlowSensorDef("temp_condenser_c", "Condenser Temperature", "°C", "temperature", "measurement", "mdi:thermometer-high", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
+    EcoFlowSensorDef("temp_evaporator_c", "Evaporator Temperature", "°C", "temperature", "measurement", "mdi:thermometer-low", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
+    EcoFlowSensorDef("temp_compressor_discharge_c", "Compressor Discharge Temperature", "°C", "temperature", "measurement", "mdi:thermometer-alert", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
+    EcoFlowSensorDef("target_humidity_pct", "Target Humidity", "%", "humidity", "measurement", "mdi:water-percent", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("screen_brightness_pct", "Screen Brightness", "%", None, "measurement", "mdi:brightness-6", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    # --- Optional add-on battery: disabled by default, reads 0 on units without one ---
+    EcoFlowSensorDef("battery_soc_pct", "Battery", "%", "battery", "measurement", "mdi:battery", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    EcoFlowSensorDef("battery_voltage_v", "Battery Voltage", "V", "voltage", "measurement", "mdi:flash-triangle", "diagnostic", suggested_display_precision=2, disabled_by_default=True),
+    EcoFlowSensorDef("battery_current_a", "Battery Current", "A", "current", "measurement", "mdi:current-dc", "diagnostic", suggested_display_precision=2, disabled_by_default=True),
+    EcoFlowSensorDef("battery_power_w", "Battery Power", "W", "power", "measurement", "mdi:battery", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    # Not the add-on battery group above: no non-zero value has been observed
+    # yet on the one unit on record, so it stays off until one is (#161).
+    EcoFlowSensorDef("pv_input_power_w", "PV Input Power", "W", "power", "measurement", "mdi:solar-power", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+    # Not the add-on battery group above: unit is unknown, the capture only
+    # ever showed 0.0 for this key, so it stays off until a unit is known.
+    EcoFlowSensorDef("condensate_water_level", "Condensate Water Level", None, None, "measurement", "mdi:water", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
+]
+
+WAVE3_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
+    EcoFlowBinarySensorDef("running", "Running", "running", "mdi:power", None),
+    EcoFlowBinarySensorDef("ac_input_connected", "AC Input Connected", "plug", "mdi:power-plug", "diagnostic"),
+    EcoFlowBinarySensorDef("fault", "Fault", "problem", "mdi:alert-circle", "diagnostic"),
+    EcoFlowBinarySensorDef("draining", "Draining", None, "mdi:water", "diagnostic"),
+    EcoFlowBinarySensorDef("pet_care_alarm", "Pet Care Alarm", "problem", "mdi:paw", "diagnostic", disabled_by_default=True),
+    # Reads true on every unit without an add-on battery fitted.
+    EcoFlowBinarySensorDef("bms_communication_error", "Battery Communication Error", "problem", "mdi:battery-alert", "diagnostic", disabled_by_default=True),
+]
+
 
 # =====================================================================
 # Power → Energy mappings (Riemann sum integration per device type)
@@ -1931,6 +1989,14 @@ POWERSTREAM_POWER_TO_ENERGY: dict[str, str] = {
 }
 
 POWERSTREAM_ENERGY_FROM_API: list[tuple[str, str]] = []
+
+# The Riemann sum samples every frame carrying the power reading: about 2s
+# while the unit runs, 120s in standby (WAVE3's push cadence).
+WAVE3_POWER_TO_ENERGY: dict[str, str] = {
+    "ac_input_power_w": "ac_input_energy_kwh",
+}
+
+WAVE3_ENERGY_FROM_API: list[tuple[str, str]] = []
 
 
 # ===========================================================================

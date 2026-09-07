@@ -44,6 +44,7 @@ from ..const import (
     DEVICE_TYPE_STREAM,
     DEVICE_TYPE_STREAM_AC5000,
     DEVICE_TYPE_UNKNOWN,
+    DEVICE_TYPE_WAVE3,
     DOMAIN,
     HTTP_FALLBACK_INTERVAL_S,
     POWEROCEAN_ENERGY_FROM_API,
@@ -61,6 +62,8 @@ from ..const import (
     STREAMAC5000_POWER_TO_ENERGY,
     UNKNOWN_FIELD_CMDS_MAX,
     UNKNOWN_FIELD_NUMBERS_MAX,
+    WAVE3_ENERGY_FROM_API,
+    WAVE3_POWER_TO_ENERGY,
     device_log_tag,
     get_delta_profile,
     get_device_name,
@@ -418,6 +421,9 @@ class EcoFlowDeviceCoordinator(
         elif self.device_type == DEVICE_TYPE_POWERSTREAM:
             self._power_to_energy = POWERSTREAM_POWER_TO_ENERGY
             self._energy_from_api = POWERSTREAM_ENERGY_FROM_API
+        elif self.device_type == DEVICE_TYPE_WAVE3:
+            self._power_to_energy = WAVE3_POWER_TO_ENERGY
+            self._energy_from_api = WAVE3_ENERGY_FROM_API
         else:
             self._power_to_energy = {}
             self._energy_from_api = []

@@ -26,6 +26,7 @@ from .const import (
     DEVICE_TYPE_SOLAR_TRACKER,
     DEVICE_TYPE_STREAM,
     DEVICE_TYPE_STREAM_AC5000,
+    DEVICE_TYPE_WAVE3,
     DOMAIN,
     DELTA2MAX_SENSORS,
     DELTA3_SENSORS,
@@ -38,6 +39,7 @@ from .const import (
     SOLARTRACKER_SENSORS,
     STREAM_SENSORS,
     STREAMAC5000_SENSORS,
+    WAVE3_SENSORS,
 )
 from .coordinator import EcoFlowDeviceCoordinator
 from .entity import EcoFlowWriteGateMixin, reading_reported
@@ -327,4 +329,6 @@ def _get_sensor_defs(device_type: str) -> list[EcoFlowSensorDef]:
         return SMARTMETER_SENSORS
     if device_type == DEVICE_TYPE_SOLAR_TRACKER:
         return SOLARTRACKER_SENSORS
+    if device_type == DEVICE_TYPE_WAVE3:
+        return WAVE3_SENSORS
     return []

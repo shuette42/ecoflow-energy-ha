@@ -6,14 +6,22 @@ import logging
 import time
 from typing import Any
 
+from homeassistant.helpers import device_registry as dr
+
 from ..const import (
     APP_SURPLUS_SYNC_MIN_INTERVAL_S,
     APP_SURPLUS_SYNC_USER_GRACE_S,
     DEVICE_TYPE_POWEROCEAN,
+    DEVICE_TYPE_WAVE3,
+    DOMAIN,
     POWEROCEAN_SCHEDULE_ARMED_LATCH_S,
 )
 from ..ecoflow.parsers.stream_ac5000_proto import UNIT_POWER_BY_SN_KEY
 from ..ecoflow.parsers.stream_proto import SOC_FALLBACK_KEY
+from ..ecoflow.parsers.wave3_proto import (
+    WAVE3_ACTIVE_MODE_INPUTS,
+    resolve_active_mode,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -183,8 +191,48 @@ class StateApplyMixin:
         self._resolve_unit_power(parsed)
         self._resolve_soc(parsed)
         self._resolve_schedule_armed(parsed)
+
+        # WAVE 3 (#161): the RuntimePropertyUpload carries its own firmware
+        # revision, the first device in this integration to report one over
+        # MQTT rather than only through the HTTP quota. Surface it the same
+        # way the quota path does (self._firmware, read by diagnostics) and
+        # push it to the device registry so the HA device page shows it.
+        # Popped (and scoped to this device type) before `_note_value_change`
+        # runs below, so a repeated firmware value is not itself counted as
+        # a device-carried change, and the key is not swallowed for whatever
+        # future parser next emits it (PLAN-047 review F1, F4).
+        if self.device_type == DEVICE_TYPE_WAVE3:
+            firmware = parsed.pop("firmware_version", None)
+            if isinstance(firmware, str) and firmware:
+                self._sw_version = firmware
+                self._firmware["pd_firm_ver"] = {"decoded": firmware}
+                registry = dr.async_get(self.hass)
+                device = registry.async_get_device(
+                    identifiers={(DOMAIN, self.device_sn)}
+                )
+                # The registry's own state is the comparison (PLAN-047
+                # review F2), not `_sw_version`: the device registry entry
+                # is created when the platforms add their entities, which
+                # can land after the first firmware frame. Gating on
+                # `_sw_version` alone would then never retry for the life
+                # of the config entry once that first race was lost.
+                if device is not None and device.sw_version != firmware:
+                    registry.async_update_device(device.id, sw_version=firmware)
+
         self._note_value_change(parsed)
+
         self._device_data.update(parsed)
+
+        # WAVE 3 (#161): re-derive the four generic active-mode keys from
+        # accumulated state, not from this message alone. A 2s incremental
+        # frame can carry a mode switch without that mode's per-mode list
+        # (the device only resends `514` on a full upload), so deriving from
+        # `parsed` would leave the previous mode's setpoint standing for up
+        # to 120s, the WAVE 3's idle push cadence.
+        if self.device_type == DEVICE_TYPE_WAVE3 and (
+            parsed.keys() & WAVE3_ACTIVE_MODE_INPUTS
+        ):
+            self._device_data.update(resolve_active_mode(self._device_data))
 
         # Re-aggregate bp_remain_watth from accumulated device_data (#10).
         # Each proto heartbeat may only contain a subset of battery packs.
