@@ -121,6 +121,72 @@ def test_powerocean_parser_merges_bundled_stream_and_heartbeat() -> None:
     assert parsed["mppt_pv1_power_w"] == 3529.0
 
 
+def test_paired_system_keeps_the_working_units_copy() -> None:
+    """A pair's bundle carries every EMS message twice; the first copy is the read.
+
+    Two J32E units as a pair report as one device whose get-all reply holds
+    each EMS message once per unit (#347). Merging in header order handed the
+    integration the second copy, which in the reporter's download was a
+    cached 121.5 W in every bundle, so the live unit's readings were replaced
+    by the idle unit's until the next push.
+    """
+    working = JTS1EmsHeartbeat(pcs_ac_freq=50.03)
+    working.pcs_a_phase.act_pwr = 1389.4
+    pv = working.mppt_heart_beat.add().mppt_pv.add()
+    pv.pwr = 2493.0
+    idle = JTS1EmsHeartbeat(pcs_ac_freq=50.13)
+    idle.pcs_a_phase.act_pwr = 121.5
+    first_change = JTS1EmsChangeReport(sys_bat_chg_up_limit=100)
+    second_change = JTS1EmsChangeReport(sys_bat_chg_up_limit=90)
+
+    frame = b"".join(
+        (
+            _build_header(96, 1, working.SerializeToString()),
+            _build_header(96, 8, first_change.SerializeToString()),
+            _build_header(96, 1, idle.SerializeToString()),
+            _build_header(96, 8, second_change.SerializeToString()),
+        )
+    )
+    parser = _PowerOceanParser()
+    parser._schedule_divergent_bundles = 0
+
+    parsed = parser._parse_powerocean_proto_frame(frame)
+
+    assert parsed is not None
+    assert parsed["pcs_ac_freq_hz"] == pytest.approx(50.03)
+    assert parsed["grid_phase_a_active_power_w"] == pytest.approx(1389.4)
+    assert parsed["mppt_pv1_power_w"] == 2493.0
+    assert parsed["ems_charge_upper_limit_pct"] == 100.0
+    # A pair's two heartbeats always differ; that must not count as a
+    # divergent schedule bundle.
+    assert parser._schedule_divergent_bundles == 0
+
+
+def test_paired_system_still_reads_every_battery_pack() -> None:
+    """The pack heartbeat's copies are one pack each and all of them are kept."""
+    first = JTS1BpHeartbeatReport()
+    pack = first.bp_heart_beat.add()
+    pack.bp_sn = b"BPTESTPACK000001"
+    pack.bp_soc = 97
+    second = JTS1BpHeartbeatReport()
+    pack = second.bp_heart_beat.add()
+    pack.bp_sn = b"BPTESTPACK000002"
+    pack.bp_soc = 96
+
+    frame = b"".join(
+        (
+            _build_header(96, 7, first.SerializeToString()),
+            _build_header(96, 7, second.SerializeToString()),
+        )
+    )
+
+    parsed = _PowerOceanParser()._parse_powerocean_proto_frame(frame)
+
+    assert parsed is not None
+    assert parsed["pack1_soc"] == 97
+    assert parsed["pack2_soc"] == 96
+
+
 def _energy_stream_frame() -> bytes:
     message = JTS1EnergyStreamReport(
         sys_load_pwr=450.0, sys_grid_pwr=-6280.0, mppt_pwr=6730.0, bp_pwr=-1200.0
