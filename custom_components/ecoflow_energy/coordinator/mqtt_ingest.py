@@ -79,6 +79,29 @@ _LOGGER = logging.getLogger(__name__)
 # round and by accident, which is why the choice is made here instead.
 _FIRST_COPY_WINS: frozenset[tuple[int, int]] = frozenset({(96, 10)})
 
+# Two PowerOcean single-phase units run as a pair are one cloud device whose
+# get-all reply carries every EMS message twice, one copy per unit, under one
+# sequence number (#347, the reporter's diagnostics of 2026-09-05). In all
+# thirteen bundles of that download the first copy is the unit doing the
+# work and the second one repeats the same 121.5 W in every bundle over 55
+# minutes, a cached state rather than a reading. Merging in header order let
+# the second copy overwrite the first, so the integration showed the idle
+# unit's frequency, phase, PV block and state of charge and the live pushes,
+# which carry one copy, pulled the values back a minute later. So on the EMS
+# command set the first copy wins, which is a no-op for a single unit.
+#
+# The battery pack heartbeat is the exception: its copies are one pack each,
+# keyed by pack serial, and every one of them is a different device.
+_PER_DEVICE_COPIES: frozenset[tuple[int, int]] = frozenset({(96, 7)})
+_EMS_CMD_FUNC = 96
+
+
+def _first_copy_wins(command: tuple[int | None, int | None]) -> bool:
+    """Return whether a repeated command in one bundle keeps its first copy."""
+    if command in _FIRST_COPY_WINS:
+        return True
+    return command[0] == _EMS_CMD_FUNC and command not in _PER_DEVICE_COPIES
+
 
 def _collect_total_increasing_keys() -> frozenset[str]:
     """Collect all total_increasing sensor keys from the entity definitions.
@@ -631,9 +654,15 @@ class MqttIngestMixin:
             try:
                 header = result.headers[0] if result.headers else {}
                 command = (header.get("cmd_func"), header.get("cmd_id"))
-                if command in _FIRST_COPY_WINS:
+                if _first_copy_wins(command):
                     if command in first_copy:
-                        if result.source != first_copy[command]:
+                        # Only the schedule list is counted as divergent: a
+                        # pair's two heartbeats always differ, and that is
+                        # the pair, not a disagreement.
+                        if (
+                            command in _FIRST_COPY_WINS
+                            and result.source != first_copy[command]
+                        ):
                             bundle_diverged = True
                         continue
                     first_copy[command] = result.source
