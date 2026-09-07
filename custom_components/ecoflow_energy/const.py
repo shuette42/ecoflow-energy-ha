@@ -100,8 +100,13 @@ SMARTPLUG_STALE_THRESHOLD_S = 180.0  # Smart Plug app-auth: tolerate sparse tele
 # WAVE 3 in standby pushes its full status every 120 s and nothing in between.
 # Under the 35 s default the coordinator re-sent its initial requests every
 # stale interval, so the unit answered a full state every ~40 s instead of
-# being listened to (measured 2026-09-07, #161). Two idle uploads plus margin.
+# being listened to (measured 2026-09-07, #161). Two idle uploads plus margin,
+# and the soft threshold moved with it so the stale band keeps its width, as
+# the Smart Plug pair above does. Both apply in standby only: a running unit
+# pushes every 2 s and keeps the default watch, so a silent session while it
+# runs is repaired as fast as on any other device.
 WAVE3_STALE_THRESHOLD_S = 270.0
+WAVE3_SOFT_UNAVAILABLE_S = 540.0
 MQTT_HEALTH_CHECK_INTERVAL_S = 5.0  # Run stale/reconnect health checks independently from stale threshold
 
 # Graduated availability degradation thresholds (app-auth only).

@@ -17,6 +17,7 @@ from ..const import (
     SMARTPLUG_STALE_THRESHOLD_S,
     SOFT_UNAVAILABLE_S,
     STALE_THRESHOLD_S,
+    WAVE3_SOFT_UNAVAILABLE_S,
     WAVE3_STALE_THRESHOLD_S,
 )
 
@@ -94,6 +95,8 @@ class AvailabilityMixin:
         """Return the soft-unavailable threshold for this device."""
         if self._enhanced_mode and self.device_type == DEVICE_TYPE_SMARTPLUG:
             return SMARTPLUG_SOFT_UNAVAILABLE_S
+        if self._wave3_idle():
+            return WAVE3_SOFT_UNAVAILABLE_S
         return SOFT_UNAVAILABLE_S
 
     def _hard_unavailable_s(self) -> float:
@@ -126,9 +129,19 @@ class AvailabilityMixin:
         """Return the MQTT stale threshold for this device."""
         if self._enhanced_mode and self.device_type == DEVICE_TYPE_SMARTPLUG:
             return SMARTPLUG_STALE_THRESHOLD_S
-        if self.device_type == DEVICE_TYPE_WAVE3:
+        if self._wave3_idle():
             return WAVE3_STALE_THRESHOLD_S
         return STALE_THRESHOLD_S
+
+    def _wave3_idle(self) -> bool:
+        """A WAVE 3 that is not running, so it pushes every 120 s, not every 2 s.
+
+        No `_enhanced_mode` gate like the Smart Plug line above: the WAVE 3 is
+        Enhanced-only (error 1006 on developer keys), so there is no other
+        mode to tell apart. `running` absent means no upload yet, which is
+        treated as idle, the slower of the two cadences.
+        """
+        return self.device_type == DEVICE_TYPE_WAVE3 and not self._device_data.get("running")
 
     def _check_stale(self) -> None:
         """Check MQTT data freshness and manage graduated availability.

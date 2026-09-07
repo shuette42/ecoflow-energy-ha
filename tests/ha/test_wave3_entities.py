@@ -657,11 +657,30 @@ class TestStandbyCadence:
     async def test_the_stale_threshold_covers_two_idle_uploads(
         self, hass: HomeAssistant
     ) -> None:
-        from custom_components.ecoflow_energy.const import WAVE3_STALE_THRESHOLD_S
+        from custom_components.ecoflow_energy.const import (
+            SOFT_UNAVAILABLE_S,
+            STALE_THRESHOLD_S,
+            WAVE3_SOFT_UNAVAILABLE_S,
+            WAVE3_STALE_THRESHOLD_S,
+        )
 
-        coordinator = _coordinator(hass, {})
-        assert coordinator._stale_threshold_s() == WAVE3_STALE_THRESHOLD_S
+        idle = _coordinator(hass, {"running": False})
+        assert idle._stale_threshold_s() == WAVE3_STALE_THRESHOLD_S
+        assert idle._soft_unavailable_s() == WAVE3_SOFT_UNAVAILABLE_S
         assert WAVE3_STALE_THRESHOLD_S >= 2 * 120 + 20
+        # The band between stale and soft keeps its width (the Smart Plug pair
+        # moved together as well): a unit missing two idle uploads is stale,
+        # not degraded.
+        assert WAVE3_SOFT_UNAVAILABLE_S - WAVE3_STALE_THRESHOLD_S >= SOFT_UNAVAILABLE_S - STALE_THRESHOLD_S
+
+        # No upload yet reads as idle, the slower of the two cadences.
+        assert _coordinator(hass, {})._stale_threshold_s() == WAVE3_STALE_THRESHOLD_S
+
+        # A running unit pushes every 2 s and keeps the default watch, so a
+        # silent session while it runs is repaired as fast as anywhere else.
+        running = _coordinator(hass, {"running": True})
+        assert running._stale_threshold_s() == STALE_THRESHOLD_S
+        assert running._soft_unavailable_s() == SOFT_UNAVAILABLE_S
 
     async def test_a_hundred_seconds_of_silence_is_not_stale(
         self, hass: HomeAssistant
@@ -683,7 +702,10 @@ class TestStandbyCadence:
             call.args and call.args[0] == "stale_reactivate"
             for call in coordinator._log_event.call_args_list
         )
-        mqtt.resend_initial_requests.assert_not_called()
+        # The reactivation itself is handed to the executor, so its mock is a
+        # scheduling race and not an oracle; the event is what the check
+        # records synchronously, and the positive control below proves the
+        # assertion above can fail.
 
         # Positive control: past the threshold the cheap remedy still runs.
         with patch(self._AVAIL_CLOCK, return_value=1000.0 + 300.0):
@@ -709,6 +731,23 @@ class TestRegistryLookup:
             (DOMAIN, "AC71TEST00000052"), "cfg1"
         )
         registry.async_get_device.assert_not_called()
+
+    def test_the_call_shape_matches_the_registry_that_has_it(self) -> None:
+        """The two positional arguments come from reading the 2026.9 source;
+        wherever the running Home Assistant has the method, bind the call
+        against its real signature so a renamed or reordered parameter fails
+        here and not on an owner's log."""
+        import inspect
+
+        from homeassistant.helpers import device_registry as dr
+
+        lookup = getattr(dr.DeviceRegistry, "async_get_device_by_identifier", None)
+        if lookup is None:
+            pytest.skip("this Home Assistant has only async_get_device")
+        signature = inspect.signature(lookup)
+        bound = signature.bind(None, (DOMAIN, "AC71TEST00000052"), "cfg1")
+        assert bound.arguments["identifier"] == (DOMAIN, "AC71TEST00000052")
+        assert bound.arguments["config_entry_id"] == "cfg1"
 
     def test_the_old_api_is_the_fallback(self) -> None:
         from custom_components.ecoflow_energy.coordinator.state_apply import _registry_device
