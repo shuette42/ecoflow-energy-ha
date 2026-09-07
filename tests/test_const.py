@@ -37,6 +37,9 @@ from ecoflow_energy.const import (
     SCHEDULE_MAX_INDEX,
     WAVE3_SENSORS,
     WAVE3_BINARY_SENSORS,
+    WAVE3_SWITCHES,
+    WAVE3_NUMBERS,
+    WAVE3_SELECTS,
     ENHANCED_ONLY_DEVICE_TYPES,
     get_device_name,
     get_device_type,
@@ -1296,11 +1299,14 @@ class TestDeviceLogTag:
 
 
 class TestWave3Sensors:
-    """WAVE 3 (AC71, #161, PLAN-047 Phase A) entity list shape."""
+    """WAVE 3 (AC71, #161, PLAN-047 Phase B) entity list shape."""
 
     def test_counts_and_unique_keys(self) -> None:
-        assert len(WAVE3_SENSORS) == 24
-        assert len(WAVE3_BINARY_SENSORS) == 6
+        assert len(WAVE3_SENSORS) == 18
+        assert len(WAVE3_BINARY_SENSORS) == 5
+        assert len(WAVE3_SWITCHES) == 4
+        assert len(WAVE3_NUMBERS) == 5
+        assert len(WAVE3_SELECTS) == 5
 
         sensor_keys = [s.key for s in WAVE3_SENSORS]
         assert len(sensor_keys) == len(set(sensor_keys))
@@ -1308,21 +1314,46 @@ class TestWave3Sensors:
         binary_keys = [b.key for b in WAVE3_BINARY_SENSORS]
         assert len(binary_keys) == len(set(binary_keys))
 
+        # Unique across all five lists: a key shared by two of them would
+        # collide on the same entity_id (device_sn + key), one clobbering
+        # the other's unique_id registration.
+        all_keys = (
+            sensor_keys
+            + binary_keys
+            + [w.key for w in WAVE3_SWITCHES]
+            + [n.key for n in WAVE3_NUMBERS]
+            + [s.key for s in WAVE3_SELECTS]
+        )
+        assert len(all_keys) == len(set(all_keys))
+
     def test_only_battery_soc_has_battery_device_class(self) -> None:
         battery_keys = {s.key for s in WAVE3_SENSORS if s.device_class == "battery"}
         assert battery_keys == {"battery_soc_pct"}
 
     def test_enum_options_match_the_parser(self) -> None:
         from ecoflow_energy.ecoflow.parsers.wave3_proto import (
+            _DISPLAY_TEMPERATURE_SOURCE_NAMES,
+            _MOOD_LIGHT_MODE_NAMES,
             _OPERATING_MODE_NAMES,
             _SUBMODE_NAMES,
         )
 
-        by_key = {s.key: s for s in WAVE3_SENSORS}
+        by_key = {s.key: s for s in WAVE3_SELECTS}
         assert set(by_key["operating_mode"].options) == set(_OPERATING_MODE_NAMES.values())
         assert set(by_key["operating_submode"].options) == set(_SUBMODE_NAMES.values())
+        assert set(by_key["display_temperature_source"].options) == set(
+            _DISPLAY_TEMPERATURE_SOURCE_NAMES.values()
+        )
+        assert set(by_key["mood_light_mode"].options) == set(_MOOD_LIGHT_MODE_NAMES.values())
 
     def test_wave3_is_enhanced_only_device_type(self) -> None:
         from ecoflow_energy.ecoflow.const import DEVICE_TYPE_WAVE3
 
         assert DEVICE_TYPE_WAVE3 in ENHANCED_ONLY_DEVICE_TYPES
+
+    def test_no_wave3_control_has_enhanced_only_flag(self) -> None:
+        """The device type gates Enhanced Mode already (see the test above);
+        an enhanced_only flag on top would be a second, redundant gate."""
+        assert not any(w.enhanced_only for w in WAVE3_SWITCHES)
+        assert not any(n.enhanced_only for n in WAVE3_NUMBERS)
+        assert not any(s.enhanced_only for s in WAVE3_SELECTS)

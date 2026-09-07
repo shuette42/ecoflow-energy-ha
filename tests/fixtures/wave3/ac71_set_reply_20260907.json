@@ -1,0 +1,22 @@
+{
+  "note": "EcoFlow WAVE 3 (AC71) ConfigWriteAck from the maintainer's own unit, listen-only capture of 2026-09-07 (PLAN-047, issue #161). This is the device's reply to the screen-brightness write in the same capture session (ConfigWrite field 14, screen_brightness_pct). No identifier of any kind is present in this frame - it carries only the ConfigWrite field it acknowledges and whether the write took.",
+  "source_topics": [
+    "/app/{uid}/{sn}/thing/property/set_reply"
+  ],
+  "frames": [
+    {
+      "tag": "set_reply_lcd_light",
+      "t": 0.404,
+      "topic": "set_reply",
+      "size": 46,
+      "format": "proto",
+      "cmds": [
+        {
+          "cmd_func": 254,
+          "cmd_id": 18
+        }
+      ],
+      "hex": "0a2c0a06080e100170361042182020012801380340fe01481250065801600170fbf5bde307788158800103880101"
+    }
+  ]
+}

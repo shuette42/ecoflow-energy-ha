@@ -1,12 +1,16 @@
-"""Registry cleanup for the former HW51 Stream misclassification."""
+"""Registry cleanup: the former HW51 Stream misclassification, and the WAVE 3
+(AC71) sensors and running flag retired for number/select/switch controls
+under the same keys (ADR-020, PLAN-047).
+"""
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy import (
+    _AC71_RETIRED_KEYS_BY_DOMAIN,
     _HW51_LEGACY_STREAM_KEYS_BY_DOMAIN,
-    _async_remove_legacy_hw51_stream_entities,
+    _async_remove_retired_platform_entities,
 )
 from custom_components.ecoflow_energy.const import (
     CONF_DEVICES,
@@ -16,6 +20,8 @@ from custom_components.ecoflow_energy.const import (
 
 HW51 = "HW51TEST00000001"
 BK31 = "BK31TEST00000001"
+AC71 = "AC71TEST00000052"
+BK21 = "BK21TEST00000001"
 
 # Exact v1.17 Stream surface minus the 16 sensor keys that are valid current
 # PowerStream entities. Kept independent of the production cleanup table so a
@@ -118,7 +124,7 @@ def test_removes_complete_surface_for_deselected_hw51(
         for key in keys
     }
 
-    _async_remove_legacy_hw51_stream_entities(hass, entry)
+    _async_remove_retired_platform_entities(hass, entry)
 
     assert not (stale & _ids(hass))
 
@@ -136,7 +142,7 @@ def test_every_current_powerstream_id_and_customization_survives(
     registry = er.async_get(hass)
     registry.async_update_entity(current["solar_w"], name="Roof solar")
 
-    _async_remove_legacy_hw51_stream_entities(hass, entry)
+    _async_remove_retired_platform_entities(hass, entry)
 
     assert set(current.values()) <= _ids(hass)
     assert registry.async_get(current["solar_w"]).name == "Roof solar"
@@ -159,7 +165,7 @@ def test_cleanup_is_platform_and_key_exact(hass: HomeAssistant) -> None:
         ),
     }
 
-    _async_remove_legacy_hw51_stream_entities(hass, entry)
+    _async_remove_retired_platform_entities(hass, entry)
 
     assert stale_number not in _ids(hass)
     assert keep <= _ids(hass)
@@ -173,7 +179,7 @@ def test_other_entry_and_bk_device_survive(hass: HomeAssistant) -> None:
     )
     bk_row = _register(hass, entry, "sensor", f"{BK31}_home_w")
 
-    _async_remove_legacy_hw51_stream_entities(hass, entry)
+    _async_remove_retired_platform_entities(hass, entry)
 
     assert {other_entry_row, bk_row} <= _ids(hass)
 
@@ -187,7 +193,7 @@ def test_invalid_or_lowercase_serial_does_not_trigger(
         for serial in ("HW51SHORT", "hw51test00000001")
     }
 
-    _async_remove_legacy_hw51_stream_entities(hass, entry)
+    _async_remove_retired_platform_entities(hass, entry)
 
     assert keep <= _ids(hass)
 
@@ -196,5 +202,44 @@ def test_cleanup_is_idempotent(hass: HomeAssistant) -> None:
     entry = _entry(hass)
     _register(hass, entry, "sensor", f"{HW51}_home_w")
 
-    _async_remove_legacy_hw51_stream_entities(hass, entry)
-    _async_remove_legacy_hw51_stream_entities(hass, entry)
+    _async_remove_retired_platform_entities(hass, entry)
+    _async_remove_retired_platform_entities(hass, entry)
+
+
+def test_removes_ac71_retired_sensors_and_running_flag(
+    hass: HomeAssistant,
+) -> None:
+    """The six WAVE 3 sensors and the running binary_sensor are retired for
+    the number/select/switch controls that took over the same keys."""
+    entry = _entry(hass)
+    stale = {
+        _register(hass, entry, domain, f"{AC71}_{key}")
+        for domain, keys in _AC71_RETIRED_KEYS_BY_DOMAIN.items()
+        for key in keys
+    }
+
+    _async_remove_retired_platform_entities(hass, entry)
+
+    assert not (stale & _ids(hass))
+
+
+def test_ac71_control_and_other_serial_entities_survive(
+    hass: HomeAssistant,
+) -> None:
+    """A control entity on the same key, and the same sensor keys on a
+    serial that is not AC71, are outside this retirement."""
+    entry = _entry(hass)
+    keep = {
+        # A control entity on the same key is a current entity, not a
+        # historical one - a domain the AC71 table does not list.
+        _register(hass, entry, "number", f"{AC71}_target_temp_c"),
+        # Same for the select-domain controls (operating_mode is a retired
+        # sensor key; the select entity on the same key is current).
+        _register(hass, entry, "select", f"{AC71}_operating_mode"),
+        # The same sensor key on an unrelated serial is a different entity.
+        _register(hass, entry, "sensor", f"{BK21}_operating_mode"),
+    }
+
+    _async_remove_retired_platform_entities(hass, entry)
+
+    assert keep <= _ids(hass)

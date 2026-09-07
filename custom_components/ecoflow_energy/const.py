@@ -1855,26 +1855,23 @@ SOLARTRACKER_SENSORS: list[EcoFlowSensorDef] = [
 WAVE3_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef("temp_ambient_c", "Ambient Temperature", "°C", "temperature", "measurement", "mdi:thermometer", suggested_display_precision=1),
     EcoFlowSensorDef("humi_ambient_pct", "Ambient Humidity", "%", "humidity", "measurement", "mdi:water-percent", suggested_display_precision=0),
-    EcoFlowSensorDef("operating_mode", "Operating Mode", None, "enum", None, "mdi:air-conditioner", options=["cooling", "heating", "fan", "dehumidify", "constant_temp"]),
-    EcoFlowSensorDef("target_temp_c", "Target Temperature", "°C", "temperature", "measurement", "mdi:thermostat", suggested_display_precision=1),
-    EcoFlowSensorDef("airflow_speed_pct", "Fan Speed", "%", None, "measurement", "mdi:fan", suggested_display_precision=0),
     EcoFlowSensorDef("ac_input_power_w", "AC Input Power", "W", "power", "measurement", "mdi:flash", suggested_display_precision=0),
     EcoFlowSensorDef("temp_outdoor_ambient_c", "Outdoor Temperature", "°C", "temperature", "measurement", "mdi:thermometer", suggested_display_precision=1),
     EcoFlowSensorDef("ac_input_energy_kwh", "AC Input Energy", "kWh", "energy", "total_increasing", "mdi:lightning-bolt", suggested_display_precision=2),
     # --- Diagnostics ---
     EcoFlowSensorDef("temp_indoor_supply_air_c", "Supply Air Temperature", "°C", "temperature", "measurement", "mdi:thermometer-chevron-up", "diagnostic", suggested_display_precision=1),
     EcoFlowSensorDef("temp_indoor_return_air_c", "Return Air Temperature", "°C", "temperature", "measurement", "mdi:thermometer-chevron-down", "diagnostic", suggested_display_precision=1),
-    EcoFlowSensorDef("operating_submode", "Operating Submode", None, "enum", None, "mdi:cog-outline", "diagnostic", options=["none", "normal", "max", "sleep", "eco"]),
     EcoFlowSensorDef("ac_input_voltage_v", "AC Input Voltage", "V", "voltage", "measurement", "mdi:sine-wave", "diagnostic", suggested_display_precision=1),
     EcoFlowSensorDef("ac_input_current_a", "AC Input Current", "A", "current", "measurement", "mdi:current-ac", "diagnostic", suggested_display_precision=2),
-    # `temp_condenser_c`, `temp_evaporator_c`, `temp_compressor_discharge_c`, `target_humidity_pct`
-    # and `screen_brightness_pct` are disabled by default: internal refrigeration-cycle and
-    # display readings, useful for diagnostics but not something most users watch daily.
+    # `temp_condenser_c`, `temp_evaporator_c` and `temp_compressor_discharge_c` are
+    # disabled by default: internal refrigeration-cycle readings, useful for
+    # diagnostics but not something most users watch daily. `target_temp_c`,
+    # `airflow_speed_pct`, `operating_mode`, `operating_submode`,
+    # `target_humidity_pct` and `screen_brightness_pct` moved to the number and
+    # select platforms below, where a control lives alongside its own read-back.
     EcoFlowSensorDef("temp_condenser_c", "Condenser Temperature", "°C", "temperature", "measurement", "mdi:thermometer-high", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
     EcoFlowSensorDef("temp_evaporator_c", "Evaporator Temperature", "°C", "temperature", "measurement", "mdi:thermometer-low", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
     EcoFlowSensorDef("temp_compressor_discharge_c", "Compressor Discharge Temperature", "°C", "temperature", "measurement", "mdi:thermometer-alert", "diagnostic", suggested_display_precision=1, disabled_by_default=True),
-    EcoFlowSensorDef("target_humidity_pct", "Target Humidity", "%", "humidity", "measurement", "mdi:water-percent", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
-    EcoFlowSensorDef("screen_brightness_pct", "Screen Brightness", "%", None, "measurement", "mdi:brightness-6", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     # --- Optional add-on battery: disabled by default, reads 0 on units without one ---
     EcoFlowSensorDef("battery_soc_pct", "Battery", "%", "battery", "measurement", "mdi:battery", "diagnostic", suggested_display_precision=0, disabled_by_default=True),
     EcoFlowSensorDef("battery_voltage_v", "Battery Voltage", "V", "voltage", "measurement", "mdi:flash-triangle", "diagnostic", suggested_display_precision=2, disabled_by_default=True),
@@ -1889,13 +1886,93 @@ WAVE3_SENSORS: list[EcoFlowSensorDef] = [
 ]
 
 WAVE3_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
-    EcoFlowBinarySensorDef("running", "Running", "running", "mdi:power", None),
+    # "running" moved to the switch platform below (`power`), whose own
+    # state key is the same "running" field. See EcoFlowSwitchDef("power", ...).
     EcoFlowBinarySensorDef("ac_input_connected", "AC Input Connected", "plug", "mdi:power-plug", "diagnostic"),
     EcoFlowBinarySensorDef("fault", "Fault", "problem", "mdi:alert-circle", "diagnostic"),
     EcoFlowBinarySensorDef("draining", "Draining", None, "mdi:water", "diagnostic"),
     EcoFlowBinarySensorDef("pet_care_alarm", "Pet Care Alarm", "problem", "mdi:paw", "diagnostic", disabled_by_default=True),
     # Reads true on every unit without an add-on battery fitted.
     EcoFlowBinarySensorDef("bms_communication_error", "Battery Communication Error", "problem", "mdi:battery-alert", "diagnostic", disabled_by_default=True),
+]
+
+# Every write here goes over the same app WebSocket ConfigWrite envelope as
+# Delta 3, with the WAVE 3's own routing id - see `wave3_commands.py`. No
+# `enhanced_only` flag on any of these: the device type is in
+# ENHANCED_ONLY_DEVICE_TYPES already, so a Developer Key entry can never
+# select it in the first place.
+WAVE3_SWITCHES: list[EcoFlowSwitchDef] = [
+    # Standby, not the hard power-off: the app's own client never writes
+    # `cfg_power_off` (field 3) either. See WAVE3_POWER_ON_FIELD / WAVE3_STANDBY_FIELD.
+    EcoFlowSwitchDef("power", "Power", "running", "mdi:power"),
+    EcoFlowSwitchDef("beep_enabled", "Buzzer", "beep_enabled", "mdi:volume-high"),
+    EcoFlowSwitchDef("automatic_drainage", "Automatic Drainage", "automatic_drainage", "mdi:water-pump"),
+    EcoFlowSwitchDef("pet_care_enabled", "Pet Care", "pet_care_enabled", "mdi:paw"),
+]
+
+WAVE3_NUMBERS: list[EcoFlowNumberDef] = [
+    # target_temp_c, airflow_speed_pct, target_humidity_pct and operating_submode
+    # (on the select platform below) are the values of whichever mode is
+    # currently running - see WAVE3_ACTIVE_MODE_INPUTS in wave3_proto.py. A
+    # write is refused outside the mode it belongs to; see wave3_commands.py.
+    EcoFlowNumberDef("target_temp_c", "Target Temperature", "target_temp_c", "°C", "mdi:thermostat", 15.5, 30, 0.5),
+    EcoFlowNumberDef("airflow_speed_pct", "Fan Speed", "airflow_speed_pct", "%", "mdi:fan", 20, 100, 20),
+    EcoFlowNumberDef("target_humidity_pct", "Target Humidity", "target_humidity_pct", "%", "mdi:water-percent", 40, 80, 1),
+    EcoFlowNumberDef("screen_brightness_pct", "Screen Brightness", "screen_brightness_pct", "%", "mdi:brightness-6", 10, 100, 1),
+    EcoFlowNumberDef("pet_care_warning_temp_c", "Pet Care Warning Temperature", "pet_care_warning_temp_c", "°C", "mdi:thermometer-alert", 25, 45, 1),
+]
+
+# Wire value -> option label, screen-off timeout. Same pattern as
+# DELTA3_SCREEN_TIMEOUT_VALUES: the device reports a number of seconds, not a
+# label, so the wire value is what the entity stores and round-trips.
+WAVE3_SCREEN_OFF_TIME_VALUES: Mapping[int, str] = MappingProxyType(
+    {
+        10: "10s",
+        30: "30s",
+        60: "1min",
+        300: "5min",
+        600: "10min",
+        0: "never",
+    }
+)
+
+WAVE3_SELECTS: list[EcoFlowSelectDef] = [
+    EcoFlowSelectDef(
+        "operating_mode",
+        "Operating Mode",
+        "operating_mode",
+        ("cooling", "heating", "fan", "dehumidify", "constant_temp"),
+        icon="mdi:air-conditioner",
+    ),
+    EcoFlowSelectDef(
+        "operating_submode",
+        "Operating Submode",
+        "operating_submode",
+        ("none", "normal", "max", "sleep", "eco"),
+        icon="mdi:cog-outline",
+    ),
+    EcoFlowSelectDef(
+        "display_temperature_source",
+        "Display Temperature",
+        "display_temperature_source",
+        ("ambient", "outlet"),
+        icon="mdi:thermometer",
+    ),
+    EcoFlowSelectDef(
+        "mood_light_mode",
+        "Mood Light",
+        "mood_light_mode",
+        ("off", "on", "screen_time"),
+        icon="mdi:led-strip-variant",
+    ),
+    EcoFlowSelectDef(
+        "screen_off_time_s",
+        "Screen Timeout",
+        "screen_off_time_s",
+        tuple(WAVE3_SCREEN_OFF_TIME_VALUES.values()),
+        icon="mdi:monitor-off",
+        value_map=WAVE3_SCREEN_OFF_TIME_VALUES,
+    ),
 ]
 
 

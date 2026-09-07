@@ -6859,7 +6859,7 @@ class TestDelta3ParseMessage:
         standard_config_entry.add_to_hass(hass)
         coordinator = self._coordinator(hass, standard_config_entry)
 
-        coordinator._check_delta3_set_ack(b"\x00garbage-not-a-frame")
+        coordinator._check_config_write_ack(b"\x00garbage-not-a-frame")
 
         assert not any(
             e["type"] == "set_rejected" for e in coordinator.event_log
@@ -6880,7 +6880,7 @@ class TestDelta3ParseMessage:
         )
         payload = _build_proto_frame(254, 18, pdata)
 
-        coordinator._check_delta3_set_ack(payload)
+        coordinator._check_config_write_ack(payload)
 
         assert not any(
             e["type"] == "set_rejected" for e in coordinator.event_log
@@ -6901,7 +6901,7 @@ class TestDelta3ParseMessage:
         )
         payload = _build_proto_frame(254, 18, pdata)
 
-        coordinator._check_delta3_set_ack(payload)
+        coordinator._check_config_write_ack(payload)
 
         log = coordinator.event_log
         assert log[-1]["type"] == "set_rejected"

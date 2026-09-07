@@ -10,7 +10,12 @@ Reverse-engineered from EcoFlow Portal JavaScript bundle.
 import time
 
 from .parsers.powerocean_proto import SCHEDULE_MAX_INDEX
-from .proto_encoding import encode_field_bytes, encode_field_varint, encode_varint
+from .proto_encoding import (
+    encode_field_bytes,
+    encode_field_fixed32,
+    encode_field_varint,
+    encode_varint,
+)
 
 
 def build_energy_stream_activate_payload(seq: int = 0) -> bytes:
@@ -764,13 +769,15 @@ def build_stream_led_brightness_payload(
 
 def build_delta3_config_write_payload(
     config_field: int,
-    value: int,
+    value: int | float,
     device_sn: str,
     seq: int = 0,
     nested: bool = False,
     companions: tuple[tuple[int, int], ...] = (),
     submessage: bytes | None = None,
     source: str | None = None,
+    dest: int = 2,
+    float32: bool = False,
 ) -> bytes:
     """Build a Delta 3 ConfigWrite SET frame for the app WebSocket channel.
 
@@ -806,14 +813,25 @@ def build_delta3_config_write_payload(
         source: optional app identifier for header field 23, for example
             ``ios``. The Stream AC Pro frames carry it because the captures
             they were reproduced from did; the Delta 3 frames omit it.
+        dest: header field 3, the device-family routing id. Delta 3 keeps the
+            default of 2; WAVE 3 (AC71) needs 66, measured against hardware
+            replies (PLAN-047).
+        float32: True writes `value` as a little-endian float32 (wire type 5)
+            instead of a varint - the WAVE 3 setpoint fields need this. Not
+            combinable with `nested`, `companions`, or `submessage`.
 
     Returns:
         Binary protobuf payload ready to publish on the SET topic.
     """
+    if float32 and (companions or submessage is not None or nested):
+        raise ValueError("float32 writes carry one field")
+
     if seq == 0:
         seq = int(time.time() * 1000) & 0x7FFFFFFF
 
-    if submessage is not None:
+    if float32:
+        pdata = encode_field_fixed32(config_field, value)
+    elif submessage is not None:
         pdata = encode_field_bytes(config_field, submessage)
     elif nested:
         pdata = encode_field_bytes(config_field, encode_field_varint(1, value))
@@ -827,7 +845,7 @@ def build_delta3_config_write_payload(
     header = bytearray()
     header.extend(encode_field_bytes(1, pdata))              # pdata
     header.extend(encode_field_varint(2, 32))                # src = 32 (App)
-    header.extend(encode_field_varint(3, 2))                 # dest = 2
+    header.extend(encode_field_varint(3, dest))               # dest
     header.extend(encode_field_varint(4, 1))                 # d_src
     header.extend(encode_field_varint(5, 1))                 # d_dest
     header.extend(encode_field_varint(7, 3))                 # check_type

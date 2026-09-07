@@ -34,6 +34,7 @@ from .const import (
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
     DEVICE_TYPE_STREAM_AC5000,
+    DEVICE_TYPE_WAVE3,
     DOMAIN,
     EcoFlowSwitchDef,
     filter_defs_for_serial,
@@ -48,9 +49,11 @@ from .const import (
     SWITCH_COMMANDS_R351,
     SWITCH_DECLARATIVE_R331,
     SWITCH_DECLARATIVE_R351,
+    WAVE3_SWITCHES,
 )
 from .coordinator import DeviceValueNotReported, EcoFlowDeviceCoordinator
 from .ecoflow.parsers.smartplug import build_plug_switch_payload
+from .ecoflow.wave3_commands import Wave3WriteRefused
 from .entity import (
     EcoFlowWriteGateMixin,
     reading_reported,
@@ -256,6 +259,18 @@ class EcoFlowSwitch(
             self._apply_optimistic(turn_on)
             return
 
+        if self.coordinator.device_type == DEVICE_TYPE_WAVE3:
+            try:
+                ok = await self.coordinator.async_send_wave3_set(
+                    self._definition.key, turn_on
+                )
+            except Wave3WriteRefused as err:
+                raise_set_rejected(self.entity_id, str(err))
+            if not ok:
+                raise_set_failed(self.entity_id)
+            self._apply_optimistic(turn_on)
+            return
+
         if self.coordinator.device_type == DEVICE_TYPE_STREAM_AC5000:
             ok = await self._async_set_stream_ac5000(turn_on)
             if not ok:
@@ -441,6 +456,8 @@ def _get_switch_defs(device_type: str, device_sn: str = "") -> list[EcoFlowSwitc
         if not supports_stream_ac5000_controls(device_sn):
             return []
         return STREAMAC5000_SWITCHES
+    if device_type == DEVICE_TYPE_WAVE3:
+        return WAVE3_SWITCHES
     return []
 
 

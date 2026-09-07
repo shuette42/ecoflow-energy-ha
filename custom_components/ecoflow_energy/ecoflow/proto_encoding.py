@@ -3,6 +3,8 @@
 Used by energy_stream.py (PowerOcean) and smartplug.py (SmartPlug SET commands).
 """
 
+import struct
+
 
 def encode_varint(value: int) -> bytes:
     """Encode an int as a protobuf unsigned varint."""
@@ -26,3 +28,9 @@ def encode_field_bytes(field_number: int, data: bytes) -> bytes:
     """Encode a length-delimited field (wire type 2)."""
     tag = (field_number << 3) | 2
     return encode_varint(tag) + encode_varint(len(data)) + data
+
+
+def encode_field_fixed32(field_number: int, value: float) -> bytes:
+    """Encode a little-endian float32 field (wire type 5)."""
+    tag = (field_number << 3) | 5
+    return encode_varint(tag) + struct.pack("<f", value)

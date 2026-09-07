@@ -14,10 +14,11 @@ import binascii
 import json
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -37,7 +38,10 @@ from custom_components.ecoflow_energy.const import (
     DOMAIN,
     MODE_ENHANCED,
     WAVE3_BINARY_SENSORS,
+    WAVE3_NUMBERS,
+    WAVE3_SELECTS,
     WAVE3_SENSORS,
+    WAVE3_SWITCHES,
 )
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
 from custom_components.ecoflow_energy.diagnostics import (
@@ -47,11 +51,25 @@ from custom_components.ecoflow_energy.ecoflow.const import (
     get_device_name,
     get_device_type,
 )
+from custom_components.ecoflow_energy.ecoflow.proto.decoder import decode_header_message
 from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
     encode_field_bytes,
     encode_field_varint,
 )
+from custom_components.ecoflow_energy.ecoflow.wave3_commands import Wave3WriteRefused
+from custom_components.ecoflow_energy.number import (
+    EcoFlowNumber,
+    async_setup_entry as number_setup,
+)
+from custom_components.ecoflow_energy.select import (
+    EcoFlowSelect,
+    async_setup_entry as select_setup,
+)
 from custom_components.ecoflow_energy.sensor import async_setup_entry as sensor_setup
+from custom_components.ecoflow_energy.switch import (
+    EcoFlowSwitch,
+    async_setup_entry as switch_setup,
+)
 
 CAPTURE = (
     Path(__file__).parent.parent
@@ -113,6 +131,42 @@ async def _setup_entities(
     return [entity for entity in created if hasattr(entity, "_definition")]
 
 
+def _coordinator(
+    hass: HomeAssistant, data: dict[str, Any] | None = None
+) -> EcoFlowDeviceCoordinator:
+    """A WAVE 3 coordinator seeded with `data`, entry already added to hass."""
+    entry = _entry(WAVE3_DEVICE)
+    entry.add_to_hass(hass)
+    coordinator = EcoFlowDeviceCoordinator(hass, entry, WAVE3_DEVICE)
+    coordinator._device_data = dict(data or {})
+    coordinator.async_set_updated_data(dict(coordinator._device_data))
+    return coordinator
+
+
+def _switch(coordinator: EcoFlowDeviceCoordinator, key: str) -> EcoFlowSwitch:
+    defn = next(d for d in WAVE3_SWITCHES if d.key == key)
+    entity = EcoFlowSwitch(coordinator, defn)
+    entity.async_write_ha_state = MagicMock()
+    entity.entity_id = f"switch.{key}"
+    return entity
+
+
+def _number(coordinator: EcoFlowDeviceCoordinator, key: str) -> EcoFlowNumber:
+    defn = next(d for d in WAVE3_NUMBERS if d.key == key)
+    entity = EcoFlowNumber(coordinator, defn)
+    entity.async_write_ha_state = MagicMock()
+    entity.entity_id = f"number.{key}"
+    return entity
+
+
+def _select(coordinator: EcoFlowDeviceCoordinator, key: str) -> EcoFlowSelect:
+    defn = next(d for d in WAVE3_SELECTS if d.key == key)
+    entity = EcoFlowSelect(coordinator, defn)
+    entity.async_write_ha_state = MagicMock()
+    entity.entity_id = f"select.{key}"
+    return entity
+
+
 def _frame(index: int) -> bytes:
     frames = json.loads(CAPTURE.read_text())["frames"]
     return binascii.unhexlify(frames[index]["hex"])
@@ -144,20 +198,139 @@ class TestWave3Routing:
 
 
 class TestWave3EntitySet:
-    async def test_the_wave3_gets_its_24_sensors_and_6_binary_sensors(
+    async def test_the_wave3_gets_18_sensors_5_binary_4_switches_5_numbers_5_selects(
         self, hass: HomeAssistant
     ) -> None:
         entities = await _setup_entities(hass, sensor_setup, WAVE3_DEVICE)
         keys = {entity._definition.key for entity in entities}
-        assert len(entities) == 24
+        assert len(entities) == 18
         assert keys == {sensor.key for sensor in WAVE3_SENSORS}
 
         binary_entities = await _setup_entities(
             hass, binary_sensor_setup, WAVE3_DEVICE
         )
         binary_keys = {entity._definition.key for entity in binary_entities}
-        assert len(binary_entities) == 6
+        assert len(binary_entities) == 5
         assert binary_keys == {sensor.key for sensor in WAVE3_BINARY_SENSORS}
+
+        switch_entities = await _setup_entities(hass, switch_setup, WAVE3_DEVICE)
+        switch_keys = {entity._definition.key for entity in switch_entities}
+        assert len(switch_entities) == 4
+        assert switch_keys == {defn.key for defn in WAVE3_SWITCHES}
+
+        number_entities = await _setup_entities(hass, number_setup, WAVE3_DEVICE)
+        number_keys = {entity._definition.key for entity in number_entities}
+        assert len(number_entities) == 5
+        assert number_keys == {defn.key for defn in WAVE3_NUMBERS}
+
+        select_entities = await _setup_entities(hass, select_setup, WAVE3_DEVICE)
+        select_keys = {entity._definition.key for entity in select_entities}
+        assert len(select_entities) == 5
+        assert select_keys == {defn.key for defn in WAVE3_SELECTS}
+
+        # No key does double duty across the five entity sets - each reading
+        # or control lives on exactly one platform.
+        all_keys = [
+            *keys,
+            *binary_keys,
+            *switch_keys,
+            *number_keys,
+            *select_keys,
+        ]
+        assert len(all_keys) == len(set(all_keys))
+
+
+class TestWave3Controls:
+    """PLAN-047 Phase B: the WAVE 3 control entities write over the same
+    app WebSocket ConfigWrite envelope as Delta 3, with a refusal path
+    (Wave3WriteRefused) for values that do not fit the device's current
+    mode, and an optimistic hold on the switch so a slow device push does
+    not flicker the UI back to the pre-write state."""
+
+    async def test_a_switch_write_awaits_the_wave3_set_with_key_and_value(
+        self, hass: HomeAssistant
+    ) -> None:
+        coordinator = _coordinator(hass, {"running": False})
+        entity = _switch(coordinator, "power")
+
+        with patch.object(
+            coordinator, "async_send_wave3_set", AsyncMock(return_value=True)
+        ) as sent:
+            await entity.async_turn_on()
+            sent.assert_awaited_once_with("power", True)
+
+            await entity.async_turn_off()
+            sent.assert_awaited_with("power", False)
+
+    async def test_a_refused_number_write_raises_and_leaves_the_value_alone(
+        self, hass: HomeAssistant
+    ) -> None:
+        coordinator = _coordinator(
+            hass, {"target_temp_c": None, "operating_mode": "fan"}
+        )
+        entity = _number(coordinator, "target_temp_c")
+
+        with patch.object(
+            coordinator,
+            "async_send_wave3_set",
+            AsyncMock(side_effect=Wave3WriteRefused("no setpoint in fan mode")),
+        ):
+            with pytest.raises(HomeAssistantError) as excinfo:
+                await entity.async_set_native_value(22.0)
+
+        assert excinfo.value.translation_key == "set_value_rejected"
+        assert (
+            excinfo.value.translation_placeholders["reason"]
+            == "no setpoint in fan mode"
+        )
+        assert entity.native_value is None
+
+    async def test_a_select_write_translates_the_option_to_its_wire_value(
+        self, hass: HomeAssistant
+    ) -> None:
+        coordinator = _coordinator(hass, {"screen_off_time_s": 10})
+        entity = _select(coordinator, "screen_off_time_s")
+
+        with patch.object(
+            coordinator, "async_send_wave3_set", AsyncMock(return_value=True)
+        ) as sent:
+            await entity.async_select_option("never")
+
+        sent.assert_awaited_once_with("screen_off_time_s", 0)
+        assert entity.current_option == "never"
+
+    async def test_the_optimistic_hold_expires_onto_a_store_that_already_agrees(
+        self, hass: HomeAssistant
+    ) -> None:
+        coordinator = _coordinator(hass, {"running": True})
+        entity = _switch(coordinator, "power")
+
+        with (
+            patch(
+                "custom_components.ecoflow_energy.switch.time.monotonic",
+                return_value=1000.0,
+            ),
+            patch.object(
+                coordinator, "async_send_wave3_set", AsyncMock(return_value=True)
+            ),
+        ):
+            await entity.async_turn_off()
+            assert entity.is_on is False
+
+            # The device pushes its own confirmation (212 within ~2s on real
+            # hardware) while the 5s hold is still active - it must not be
+            # allowed to flicker the switch back on mid-hold.
+            coordinator.async_set_updated_data({"running": True})
+            entity._handle_coordinator_update()
+            assert entity.is_on is False
+
+        with patch(
+            "custom_components.ecoflow_energy.switch.time.monotonic",
+            return_value=1006.0,
+        ):
+            # Hold expired onto a store that already carries the pushed
+            # value - not the stale pre-write one.
+            assert entity.is_on is True
 
 
 class TestTheCaptureReachesTheEntities:
@@ -388,3 +561,85 @@ class TestWave3Diagnostics:
         assert diag["skipped_devices"] == []
         assert len(diag["devices"]) == 1
         assert diag["devices"][0]["device_sn"].startswith("AC71")
+
+
+def _wired(
+    hass: HomeAssistant, data: dict[str, Any]
+) -> tuple[EcoFlowDeviceCoordinator, MagicMock]:
+    """A WAVE 3 coordinator with only the MQTT client mocked.
+
+    Nothing sits between the entity and the client: the platform branch, the
+    coordinator method and the frame builder all run for real.
+    """
+    coordinator = _coordinator(hass, data)
+    mock_mqtt = MagicMock()
+    mock_mqtt.is_connected.return_value = True
+    mock_mqtt.send_proto_set.return_value = True
+    coordinator._mqtt_client = mock_mqtt
+    return coordinator, mock_mqtt
+
+
+def _sent_pdata(mock_mqtt: MagicMock) -> str:
+    payload = mock_mqtt.send_proto_set.call_args[0][0]
+    headers, _ = decode_header_message(payload)
+    return headers[0]["pdata"]
+
+
+class TestTheEntitiesReachTheWire:
+    """Home Assistant hands every number over as a float and every select as
+    a label. Driven from the entity with only the client mocked, each write
+    has to come out as the frame the app itself sends for that setting (the
+    vectors are from the 2026-09-07 app capture and the probe writes)."""
+
+    async def test_a_brightness_write_from_the_ui_is_the_app_frame(
+        self, hass: HomeAssistant
+    ) -> None:
+        coordinator, mqtt = _wired(
+            hass, {"screen_brightness_pct": 100, "operating_mode": "fan"}
+        )
+        entity = _number(coordinator, "screen_brightness_pct")
+        await entity.async_set_native_value(54.0)
+        assert _sent_pdata(mqtt) == "7036"
+
+    async def test_a_fan_speed_write_from_the_ui_is_the_app_frame(
+        self, hass: HomeAssistant
+    ) -> None:
+        coordinator, mqtt = _wired(
+            hass, {"airflow_speed_pct": 40, "operating_mode": "fan"}
+        )
+        entity = _number(coordinator, "airflow_speed_pct")
+        await entity.async_set_native_value(60.0)
+        assert _sent_pdata(mqtt) == "d8093c"
+
+    async def test_a_setpoint_write_from_the_ui_is_the_app_frame(
+        self, hass: HomeAssistant
+    ) -> None:
+        coordinator, mqtt = _wired(
+            hass, {"target_temp_c": 24.0, "operating_mode": "cooling"}
+        )
+        entity = _number(coordinator, "target_temp_c")
+        await entity.async_set_native_value(27.0)
+        assert _sent_pdata(mqtt) == "e5090000d841"
+
+    async def test_the_power_switch_sends_the_two_app_triggers(
+        self, hass: HomeAssistant
+    ) -> None:
+        coordinator, mqtt = _wired(hass, {"running": False})
+        entity = _switch(coordinator, "power")
+        await entity.async_turn_on()
+        assert _sent_pdata(mqtt) == "2001"
+        await entity.async_turn_off()
+        assert _sent_pdata(mqtt) == "e00a01"
+
+    async def test_a_select_write_from_the_ui_is_the_app_frame(
+        self, hass: HomeAssistant
+    ) -> None:
+        coordinator, mqtt = _wired(
+            hass, {"screen_off_time_s": 10, "operating_mode": "fan"}
+        )
+        entity = _select(coordinator, "screen_off_time_s")
+        await entity.async_select_option("never")
+        assert _sent_pdata(mqtt) == "6000"
+        mode = _select(coordinator, "operating_mode")
+        await mode.async_select_option("cooling")
+        assert _sent_pdata(mqtt) == "c80901"
