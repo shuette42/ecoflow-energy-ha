@@ -96,7 +96,7 @@ A write goes to the running mode as well. That is why a setpoint is refused outs
 
 ### What the energy counter samples
 
-AC Input Energy is integrated from AC Input Power at whatever rate the device sends that power. That is roughly every 2 seconds while the unit runs, and every 120 seconds in standby, where the draw is under a watt. The 2 second rate was measured with the EcoFlow app open, and it is not yet settled whether it holds with the app closed, so the 120 second rate is the one to count on when judging how closely the counter tracks a short cooling run.
+AC Input Energy is integrated from AC Input Power at whatever rate the device sends that power. That is every 2 seconds while the unit runs, measured with the EcoFlow app closed as well as open, and every 120 seconds in standby, where the draw is under a watt.
 
 ### Why the battery entities are off by default
 
