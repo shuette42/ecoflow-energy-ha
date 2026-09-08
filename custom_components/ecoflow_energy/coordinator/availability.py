@@ -39,7 +39,8 @@ class AvailabilityMixin(_Base):
 
         Stages (app-auth MQTT-only path):
         - "healthy": data flowing within stale threshold
-        - "stale": data age > stale threshold, reconnect active, entities still available
+        - "stale": data age > stale threshold, reconnect active, entities still
+          available
         - "degraded": data age > soft_unavailable, entities available with old values
         - "unavailable": data age > hard_unavailable, entities go unavailable in HA
 
@@ -230,7 +231,8 @@ class AvailabilityMixin(_Base):
                         )
                     else:
                         _LOGGER.info(
-                            "MQTT stale for %s [%s] (%.0fs) while connected - forcing reconnect",
+                            "MQTT stale for %s [%s] (%.0fs) while connected - "
+                            "forcing reconnect",
                             self.device_name,
                             self.device_tag,
                             age,

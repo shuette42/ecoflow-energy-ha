@@ -83,7 +83,8 @@ _SERIAL_RE = re.compile(r"[A-Z0-9]{15,}")
 # dropping such bytes instead of replacing them turns a serial with one
 # stray byte in front of it into a clean match, so the ASCII step is what
 # keeps this pass to whole encoded serials rather than to serials found
-# inside other bytes. It is also the cheaper of the two. What the full match is NOT redundant for is a
+# inside other bytes. It is also the cheaper of the two. What the full match is NOT
+# redundant for is a
 # decoded value that is ASCII and contains a serial among other text: it
 # must be rejected rather than replaced whole, and only an anchored match
 # does that. No such value is on file; a test pins it.

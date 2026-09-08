@@ -79,7 +79,10 @@ class AppApiClient:
 
         Returns a normalized list of device dicts compatible with
         IoTApiClient format:
-            [{"sn": "...", "product_name": "...", "online": 1, "device_type": "..."}, ...]
+            [
+                {"sn": "...", "product_name": "...", "online": 1, "device_type": "..."},
+                ...,
+            ]
 
         Returns an empty list on failure.
         """

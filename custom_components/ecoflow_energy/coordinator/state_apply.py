@@ -275,7 +275,8 @@ class StateApplyMixin(_Base):
 
         # Integrate power → energy via Riemann sum
         self._integrate_energy(parsed)
-        # Throttle flush scheduling: at most once per 60s (matches integrator's SAVE_INTERVAL_S)
+        # Throttle flush scheduling: at most once per 60s (matches integrator's
+        # SAVE_INTERVAL_S)
         if now - self._last_flush_ts > 60:
             self._last_flush_ts = now
             self.hass.async_create_task(self._async_flush_energy_state())
@@ -486,7 +487,8 @@ class StateApplyMixin(_Base):
     BATT_CONFIRM_S = 600  # a diverging candidate must persist this long to commit
 
     def _derive_battery_state(self) -> None:
-        """Derive battery charge/discharge state from a rolling-average power (#63, #50).
+        """Derive battery charge/discharge state from a rolling-average power
+        (#63, #50).
 
         The raw EMS field bp_chg_dsg_sta reports the controller MODE, not the
         physical state, so we override it from signed batt_w. Using the

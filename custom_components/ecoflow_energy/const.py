@@ -278,7 +278,9 @@ HTTP_SUPPLEMENT_INTERVAL_S = (
 )
 ENERGY_STREAM_KEEPALIVE_S = 20  # Re-send EnergyStreamSwitch every 20s
 QUOTAS_KEEPALIVE_S = 30  # latestQuotas poll interval (app-level keepalive)
-APP_SURPLUS_SYNC_MIN_INTERVAL_S = 30.0  # min interval between auto-sync SETs that mirror EmsParamChangeReport.dev_soc into the EMS sysBatBackupRatio
+# min interval between auto-sync SETs that mirror EmsParamChangeReport.dev_soc into the
+# EMS sysBatBackupRatio
+APP_SURPLUS_SYNC_MIN_INTERVAL_S = 30.0
 APP_SURPLUS_SYNC_USER_GRACE_S = (
     5.0  # ignore discrepancy briefly after a user SET to wait for the device echo
 )
@@ -290,7 +292,9 @@ APP_SURPLUS_SYNC_USER_GRACE_S = (
 # nothing more; it matches the entity-side optimistic lock so both expire
 # together. A frame that agrees with the write clears it immediately.
 POWEROCEAN_SCHEDULE_ARMED_LATCH_S = 5.0
-POWEROCEAN_SOC_DEBOUNCE_S = 0.3  # coalesce slider-drag SETs into one frame; the device cannot keep up with 5%-step sets at 100ms cadence and the EMS/App-layer fields desync
+# coalesce slider-drag SETs into one frame; the device cannot keep up with 5%-step sets
+# at 100ms cadence and the EMS/App-layer fields desync
+POWEROCEAN_SOC_DEBOUNCE_S = 0.3
 # The two state keys the PowerOcean SoC sliders write. They are sent as one
 # frame, so a failed write has to undo both. Kept next to the debounce window
 # because the snapshot and the rollback have to agree on exactly this pair -

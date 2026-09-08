@@ -823,7 +823,8 @@ class TestUnsupportedDeviceSkip:
         mock_mqtt_client,
         caplog,
     ) -> None:
-        """Account sign-in: the hint points at the capture switch, which exists there."""
+        """Account sign-in: the hint points at the capture switch, which exists
+        there."""
         unsupported_device = {
             "sn": "ZZ01TEST00000001",
             "name": "Unmapped Device",

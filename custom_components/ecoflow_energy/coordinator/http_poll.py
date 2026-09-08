@@ -98,7 +98,8 @@ class HttpPollMixin(_Base):
                 and not transport_failure
             ):
                 _LOGGER.warning(
-                    "HTTP quota failed %d consecutive times for %s - triggering re-authentication",
+                    "HTTP quota failed %d consecutive times for %s - triggering "
+                    "re-authentication",
                     self._consecutive_http_failures,
                     self.device_tag,
                 )

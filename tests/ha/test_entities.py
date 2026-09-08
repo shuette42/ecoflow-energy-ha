@@ -1394,7 +1394,8 @@ class TestEcoFlowDiagnosticSensor:
         hass: HomeAssistant,
         standard_config_entry: MockConfigEntry,
     ) -> None:
-        """mqtt_status sensor reflects 'connected_stale' when connected but no recent data."""
+        """mqtt_status sensor reflects 'connected_stale' when connected but no recent
+        data."""
         standard_config_entry.add_to_hass(hass)
         coordinator = _make_coordinator(hass, standard_config_entry)
         mock_mqtt = MagicMock()

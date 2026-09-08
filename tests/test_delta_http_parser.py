@@ -219,7 +219,8 @@ class TestFieldMapIntegrity:
         assert len(DELTA2MAX_HTTP_FIELD_MAP) > 50
 
     def test_all_modules_covered(self):
-        """Field map should cover pd, inv, bms_bmsStatus, bms_emsStatus, mppt, bms_slave."""
+        """Field map should cover pd, inv, bms_bmsStatus, bms_emsStatus, mppt,
+        bms_slave."""
         prefixes = {k.split(".")[0] for k in DELTA2MAX_HTTP_FIELD_MAP}
         assert "pd" in prefixes
         assert "inv" in prefixes

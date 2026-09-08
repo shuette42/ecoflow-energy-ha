@@ -34,7 +34,8 @@ class TestDeltaParser:
         assert result["ac_in_w"] == 200.0
 
     def test_inv_status_ac_charge_speed(self):
-        """invStatus charge-speed keys map to the configured charge speed (issue #95)."""
+        """invStatus charge-speed keys map to the configured charge speed (issue
+        #95)."""
         report = {
             "typeCode": "invStatus",
             "params": {"SlowChgWatts": 800, "FastChgWatts": 2400},

@@ -1229,7 +1229,7 @@ class TestTheClimateHasNoOptimisticHold:
     checks the design that shipped instead: a write in flight does not
     change what the entity reports until the device's own push does."""
 
-    async def test_a_write_does_not_change_what_hvac_mode_reports_until_the_device_confirms(
+    async def test_hvac_mode_reports_the_old_value_until_the_device_confirms(
         self, hass: HomeAssistant
     ) -> None:
         coordinator, _mqtt = _wired(

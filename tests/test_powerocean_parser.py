@@ -564,7 +564,8 @@ class TestEnergyStream:
         assert result["solar_energy_kwh"] == 5.0
 
     def test_ems_change_report_energy_fallback(self):
-        """ems_change_report.* energy totals used when energy_stream.* and top-level not present."""
+        """ems_change_report.* energy totals used when energy_stream.* and top-level not
+        present."""
         data = {
             "ems_change_report.bpTotalChgEnergy": 4398306,
             "ems_change_report.bpTotalDsgEnergy": 4217302,

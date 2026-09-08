@@ -1542,7 +1542,8 @@ class TestOptionsFlow:
     async def test_options_developer_fetch_error_falls_back_to_stored(
         self, hass: HomeAssistant
     ) -> None:
-        """A failed device-list fetch keeps the options form usable with stored devices."""
+        """A failed device-list fetch keeps the options form usable with stored
+        devices."""
         entry = self._create_standard_entry(hass)
         with patch(
             "custom_components.ecoflow_energy.config_flow_options.IoTApiClient",
@@ -1883,7 +1884,8 @@ class TestReauthFlow:
         assert entry.data[CONF_SECRET_KEY] == "new_sk"
 
     async def test_reauth_enhanced_shows_second_step(self, hass: HomeAssistant) -> None:
-        """Reauth for Enhanced Mode shows enhanced credentials form after API validation."""
+        """Reauth for Enhanced Mode shows enhanced credentials form after API
+        validation."""
         entry = self._create_enhanced_entry(hass)
         result = await hass.config_entries.flow.async_init(
             DOMAIN,
@@ -2771,8 +2773,8 @@ class TestDeviceLabel:
             }
         )
         assert (
-            label
-            == "Mystery Box (ZZ99...0001) (offline) - not supported yet (no data exposed)"
+            label == "Mystery Box (ZZ99...0001) (offline) - not supported yet (no data "
+            "exposed)"
         )
 
 

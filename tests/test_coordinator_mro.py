@@ -82,7 +82,8 @@ def test_coordinator_mro_own_prefix_is_unchanged():
     mro = _mro_names(EcoFlowDeviceCoordinator)
 
     assert mro[: len(COORDINATOR_OWN_PREFIX)] == COORDINATOR_OWN_PREFIX, (
-        f"EcoFlowDeviceCoordinator.__mro__ starts with {mro[: len(COORDINATOR_OWN_PREFIX)]!r}, "
+        f"EcoFlowDeviceCoordinator.__mro__ starts with "
+        f"{mro[: len(COORDINATOR_OWN_PREFIX)]!r}, "
         f"expected {COORDINATOR_OWN_PREFIX!r} - the mixin composition order at "
         "coordinator/core.py:101 (or one mixin's own bases) has changed"
     )
@@ -132,7 +133,8 @@ def test_config_flow_mro_own_prefix_is_unchanged_and_config_flow_is_not_doubled(
         f"{mro[: len(CONFIG_FLOW_OWN_PREFIX)]!r}, expected {CONFIG_FLOW_OWN_PREFIX!r}"
     )
     assert mro.count("ConfigFlow") == 1, (
-        f"EcoFlowEnergyConfigFlow.__mro__ contains ConfigFlow {mro.count('ConfigFlow')} "
+        f"EcoFlowEnergyConfigFlow.__mro__ contains ConfigFlow "
+        f"{mro.count('ConfigFlow')} "
         f"times: {mro!r} - expected exactly once"
     )
     assert "CoordinatorState" not in mro, (
