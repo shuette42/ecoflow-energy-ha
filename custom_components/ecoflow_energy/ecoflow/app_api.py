@@ -69,7 +69,9 @@ class AppApiClient:
         # Remember the host that accepted the login so subsequent calls
         # (device list, MQTT credentials) hit the same region.
         self._base_url = result.get("base_url", IOT_API_BASE)
-        _LOGGER.debug("App login OK (user_id=%s, base_url=%s)", self._user_id, self._base_url)
+        _LOGGER.debug(
+            "App login OK (user_id=%s, base_url=%s)", self._user_id, self._base_url
+        )
         return True
 
     async def get_device_list(self) -> list[dict[str, Any]]:
@@ -77,7 +79,10 @@ class AppApiClient:
 
         Returns a normalized list of device dicts compatible with
         IoTApiClient format:
-            [{"sn": "...", "product_name": "...", "online": 1, "device_type": "..."}, ...]
+            [
+                {"sn": "...", "product_name": "...", "online": 1, "device_type": "..."},
+                ...,
+            ]
 
         Returns an empty list on failure.
         """
@@ -125,7 +130,9 @@ class AppApiClient:
             _LOGGER.debug("App API: no token, cannot fetch MQTT credentials")
             return None
 
-        return await get_enhanced_credentials(self._session, self._token, base_url=self._base_url)
+        return await get_enhanced_credentials(
+            self._session, self._token, base_url=self._base_url
+        )
 
 
 def _parse_device_response(data: dict[str, Any]) -> list[dict[str, Any]]:
@@ -178,9 +185,11 @@ def _add_device(
     seen_sns.add(sn)
     product_name = dev.get("productName", dev.get("name", ""))
 
-    devices.append({
-        "sn": sn,
-        "product_name": product_name,
-        "online": dev.get("online", 0),
-        "device_type": get_device_type(product_name, sn),
-    })
+    devices.append(
+        {
+            "sn": sn,
+            "product_name": product_name,
+            "online": dev.get("online", 0),
+            "device_type": get_device_type(product_name, sn),
+        }
+    )

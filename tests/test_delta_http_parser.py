@@ -1,12 +1,10 @@
 """Tests for Delta 2 Max HTTP quota API response parser."""
 
 import pytest
-
 from ecoflow_energy.ecoflow.parsers.delta_http import (
     DELTA2MAX_HTTP_FIELD_MAP,
     parse_delta_http_quota,
 )
-
 
 # ===========================================================================
 # Basic Mapping
@@ -221,7 +219,8 @@ class TestFieldMapIntegrity:
         assert len(DELTA2MAX_HTTP_FIELD_MAP) > 50
 
     def test_all_modules_covered(self):
-        """Field map should cover pd, inv, bms_bmsStatus, bms_emsStatus, mppt, bms_slave."""
+        """Field map should cover pd, inv, bms_bmsStatus, bms_emsStatus, mppt,
+        bms_slave."""
         prefixes = {k.split(".")[0] for k in DELTA2MAX_HTTP_FIELD_MAP}
         assert "pd" in prefixes
         assert "inv" in prefixes
@@ -241,8 +240,12 @@ class TestFieldMapIntegrity:
         keys = list(DELTA2MAX_HTTP_FIELD_MAP.keys())
         slave1_keys = [k for k in keys if k.startswith("bms_slave_bmsSlaveStatus_1.")]
         slave2_keys = [k for k in keys if k.startswith("bms_slave_bmsSlaveStatus_2.")]
-        assert len(slave1_keys) == 16, f"Expected 16 slave1 keys, got {len(slave1_keys)}"
-        assert len(slave2_keys) == 16, f"Expected 16 slave2 keys, got {len(slave2_keys)}"
+        assert len(slave1_keys) == 16, (
+            f"Expected 16 slave1 keys, got {len(slave1_keys)}"
+        )
+        assert len(slave2_keys) == 16, (
+            f"Expected 16 slave2 keys, got {len(slave2_keys)}"
+        )
 
 
 # ===========================================================================
@@ -276,10 +279,12 @@ class TestNewPdFields:
 
     def test_modern_key_wins_over_legacy(self):
         """When both modern and legacy keys are present, modern value wins."""
-        result = parse_delta_http_quota({
-            "pd.newAcAutoOnCfg": 1,
-            "pd.acAutoOutConfig": 0,
-        })
+        result = parse_delta_http_quota(
+            {
+                "pd.newAcAutoOnCfg": 1,
+                "pd.acAutoOutConfig": 0,
+            }
+        )
         assert result["ac_auto_on"] == 1.0
 
     def test_screen_brightness(self):
@@ -390,36 +395,44 @@ class TestSlavePackMapping:
 
     def test_slave1_power_direct(self):
         """Slave input/output watts are direct values (no scaling)."""
-        result = parse_delta_http_quota({
-            "bms_slave_bmsSlaveStatus_1.inputWatts": 200,
-            "bms_slave_bmsSlaveStatus_1.outputWatts": 150,
-        })
+        result = parse_delta_http_quota(
+            {
+                "bms_slave_bmsSlaveStatus_1.inputWatts": 200,
+                "bms_slave_bmsSlaveStatus_1.outputWatts": 150,
+            }
+        )
         assert result["slave1_in_w"] == 200.0
         assert result["slave1_out_w"] == 150.0
 
     def test_slave1_capacity(self):
-        result = parse_delta_http_quota({
-            "bms_slave_bmsSlaveStatus_1.remainCap": 38000,
-            "bms_slave_bmsSlaveStatus_1.fullCap": 40000,
-        })
+        result = parse_delta_http_quota(
+            {
+                "bms_slave_bmsSlaveStatus_1.remainCap": 38000,
+                "bms_slave_bmsSlaveStatus_1.fullCap": 40000,
+            }
+        )
         assert result["slave1_remain_cap_mah"] == 38000.0
         assert result["slave1_full_cap_mah"] == 40000.0
 
     def test_slave1_cell_voltages_stay_mv(self):
         """Cell-level voltages stay in mV (not converted to V)."""
-        result = parse_delta_http_quota({
-            "bms_slave_bmsSlaveStatus_1.maxCellVol": 3450,
-            "bms_slave_bmsSlaveStatus_1.minCellVol": 3380,
-        })
+        result = parse_delta_http_quota(
+            {
+                "bms_slave_bmsSlaveStatus_1.maxCellVol": 3450,
+                "bms_slave_bmsSlaveStatus_1.minCellVol": 3380,
+            }
+        )
         assert result["slave1_max_cell_vol_mv"] == 3450.0
         assert result["slave1_min_cell_vol_mv"] == 3380.0
 
     def test_slave1_cell_temps_direct(self):
         """Cell temps are direct Celsius (no offset)."""
-        result = parse_delta_http_quota({
-            "bms_slave_bmsSlaveStatus_1.maxCellTemp": 35,
-            "bms_slave_bmsSlaveStatus_1.minCellTemp": 28,
-        })
+        result = parse_delta_http_quota(
+            {
+                "bms_slave_bmsSlaveStatus_1.maxCellTemp": 35,
+                "bms_slave_bmsSlaveStatus_1.minCellTemp": 28,
+            }
+        )
         assert result["slave1_max_cell_temp_c"] == 35.0
         assert result["slave1_min_cell_temp_c"] == 28.0
 

@@ -9,15 +9,10 @@ from ecoflow_energy.ecoflow.energy_stream import (
     build_energy_stream_activate_payload,
     build_energy_stream_deactivate_payload,
 )
-from ecoflow_energy.ecoflow.proto_encoding import (
-    encode_field_bytes,
-    encode_field_varint,
-)
 from ecoflow_energy.ecoflow.proto.decoder import decode_header_message
 from ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
     JTS1EmsChangeReport,
     JTS1EmsParamChangeReport,
-    JTS1EmsHeartbeat,
     JTS1EnergyStreamReport,
 )
 from ecoflow_energy.ecoflow.proto.runtime import (
@@ -25,14 +20,18 @@ from ecoflow_energy.ecoflow.proto.runtime import (
     _build_cmd_registry,
     decode_proto_runtime_frame,
 )
+from ecoflow_energy.ecoflow.proto_encoding import (
+    encode_field_bytes,
+    encode_field_varint,
+)
 
 
 def _build_frame(cmd_func: int, cmd_id: int, inner: bytes) -> bytes:
     """Build a minimal HeaderMessage frame for testing."""
     header = bytearray()
-    header.extend(encode_field_bytes(1, inner))       # pdata
-    header.extend(encode_field_varint(8, cmd_func))   # cmd_func
-    header.extend(encode_field_varint(9, cmd_id))     # cmd_id
+    header.extend(encode_field_bytes(1, inner))  # pdata
+    header.extend(encode_field_varint(8, cmd_func))  # cmd_func
+    header.extend(encode_field_varint(9, cmd_id))  # cmd_id
     return encode_field_bytes(1, bytes(header))
 
 
@@ -188,6 +187,7 @@ class TestRuntimeDecoder:
         from custom_components.ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
             JTS1EmsParamChangeReport,
         )
+
         msg = JTS1EmsParamChangeReport()
         msg.dev_soc = 47
         inner = msg.SerializeToString()
@@ -236,7 +236,7 @@ class TestProtobufImportFailure:
         proto_pkg = sys.modules.get(proto_pkg_key)
         had_attr = hasattr(proto_pkg, "ecocharge_pb2")
         if had_attr:
-            saved_attr = getattr(proto_pkg, "ecocharge_pb2")
+            saved_attr = proto_pkg.ecocharge_pb2
             delattr(proto_pkg, "ecocharge_pb2")
 
         # Install a blocking meta path finder (modern find_spec API) that
@@ -246,7 +246,7 @@ class TestProtobufImportFailure:
             def find_spec(self, fullname, path, target=None):
                 if fullname == pb2_key:
                     raise ImportError("mocked: protobuf module not installed")
-                return None
+                return
 
         blocker = _BlockPb2Finder()
         sys.meta_path.insert(0, blocker)
@@ -266,7 +266,7 @@ class TestProtobufImportFailure:
             if saved_module is not None:
                 sys.modules[pb2_key] = saved_module
             if had_attr:
-                setattr(proto_pkg, "ecocharge_pb2", saved_attr)
+                proto_pkg.ecocharge_pb2 = saved_attr
 
 
 class TestDecoderMalformedInput:
@@ -515,6 +515,4 @@ class TestFullPowerFrameFlag:
         msg.bp_soc = 50
         frame = _build_frame(96, 33, msg.SerializeToString())
 
-        assert (
-            decode_proto_runtime_frame(frame).mapped["_is_full_power_frame"] is False
-        )
+        assert decode_proto_runtime_frame(frame).mapped["_is_full_power_frame"] is False

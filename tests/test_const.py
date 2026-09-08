@@ -5,28 +5,23 @@ from __future__ import annotations
 import ast
 import json
 import re
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 from ecoflow_energy.const import (
-    DELTA_PROFILE_R331,
-    DELTA_PROFILE_R351,
-    POWEROCEAN_SENSORS,
+    DELTA2MAX_BINARY_SENSORS,
+    DELTA2MAX_NUMBERS,
     DELTA2MAX_SENSORS,
+    DELTA2MAX_SWITCHES,
+    DELTA3_POWER_TO_ENERGY,
     DELTA3_SELECTS,
     DELTA3_SENSORS,
-    DELTA3_POWER_TO_ENERGY,
-    SMARTPLUG_SENSORS,
-    STREAM_SENSORS,
-    STREAM_NUMBERS,
-    STREAM_BINARY_SENSORS,
-    DELTA2MAX_BINARY_SENSORS,
-    DELTA2MAX_SWITCHES,
-    DELTA2MAX_NUMBERS,
+    DELTA_PROFILE_R331,
+    DELTA_PROFILE_R351,
+    ENHANCED_ONLY_DEVICE_TYPES,
     POWEROCEAN_BINARY_SENSORS,
-    STREAM_SWITCHES,
-    SMARTPLUG_SWITCHES,
-    SMARTPLUG_NUMBERS,
+    POWEROCEAN_SENSORS,
     RAW_FRAME_BUNDLE_HARD_CAP,
     RAW_FRAME_BUNDLE_MAX_BYTES,
     RAW_FRAME_KEYS_MAX,
@@ -35,15 +30,21 @@ from ecoflow_energy.const import (
     RAW_FRAME_MAX_BYTES,
     RAW_FRAME_PER_KEY_MAX,
     SCHEDULE_MAX_INDEX,
-    WAVE3_SENSORS,
+    SMARTPLUG_NUMBERS,
+    SMARTPLUG_SENSORS,
+    SMARTPLUG_SWITCHES,
+    STREAM_BINARY_SENSORS,
+    STREAM_NUMBERS,
+    STREAM_SENSORS,
+    STREAM_SWITCHES,
     WAVE3_BINARY_SENSORS,
-    WAVE3_SWITCHES,
     WAVE3_NUMBERS,
     WAVE3_SELECTS,
-    ENHANCED_ONLY_DEVICE_TYPES,
+    WAVE3_SENSORS,
+    WAVE3_SWITCHES,
+    get_delta_profile,
     get_device_name,
     get_device_type,
-    get_delta_profile,
 )
 from ecoflow_energy.ecoflow.const import (
     _POWERSTREAM_KEYWORDS,
@@ -78,13 +79,17 @@ def _captured_frames(node: Any) -> Iterator[str]:
 
 class TestDeltaProfileRouting:
     def test_delta2max_r351_by_name(self):
-        assert get_delta_profile("Delta 2 Max", "DAEBK5ZZ12340001") == DELTA_PROFILE_R351
+        assert (
+            get_delta_profile("Delta 2 Max", "DAEBK5ZZ12340001") == DELTA_PROFILE_R351
+        )
 
     def test_legacy_delta_max_r331_by_name(self):
         assert get_delta_profile("Delta Max", "RXXX123456789012") == DELTA_PROFILE_R331
 
     def test_r331_sn_prefix_wins(self):
-        assert get_delta_profile("Delta 2 Max", "R331ABCDEF123456") == DELTA_PROFILE_R331
+        assert (
+            get_delta_profile("Delta 2 Max", "R331ABCDEF123456") == DELTA_PROFILE_R331
+        )
 
     def test_delta2_without_max_is_r331(self):
         assert get_delta_profile("Delta 2", "DAEBK5ZZ12340001") == DELTA_PROFILE_R331
@@ -95,7 +100,7 @@ class TestDeltaProfileRouting:
 
 class TestDeviceTypeRouting:
     def test_powerstream_is_not_a_stream(self) -> None:
-        """"PowerStream" contains "stream", and the match is by substring.
+        """ "PowerStream" contains "stream", and the match is by substring.
 
         A PowerStream microinverter was classified as a Stream battery and
         given its whole entity set. It connected, reported nothing that
@@ -386,7 +391,11 @@ def _extract_sensor_keys(var_name: str) -> list[str]:
         if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
             target_name = node.target.id
             value = node.value
-        elif isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+        elif (
+            isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+        ):
             target_name = node.targets[0].id
             value = node.value
 
@@ -404,21 +413,36 @@ def _extract_sensor_keys(var_name: str) -> list[str]:
 # EMS and system-level diagnostics, kept apart from the core sensor count so
 # that adding one does not silently move the core number.
 _PO_EMS_EXTENDED = {
-    "ems_charge_upper_limit_pct", "ems_discharge_lower_limit_pct",
-    "ems_keep_soc_pct", "ems_backup_ratio_pct",
-    "mppt1_fault_code", "mppt2_fault_code",
-    "pcs_ac_error_code", "pcs_dc_error_code", "pcs_ac_warning_code",
-    "wifi_status", "ethernet_status", "cellular_status",
-    "ems_led_brightness", "ems_work_state",
-    "ems_total_battery_capacity_wh", "pcs_max_output_power_w",
-    "pcs_max_input_power_w", "bp_max_charge_power_w",
+    "ems_charge_upper_limit_pct",
+    "ems_discharge_lower_limit_pct",
+    "ems_keep_soc_pct",
+    "ems_backup_ratio_pct",
+    "mppt1_fault_code",
+    "mppt2_fault_code",
+    "pcs_ac_error_code",
+    "pcs_dc_error_code",
+    "pcs_ac_warning_code",
+    "wifi_status",
+    "ethernet_status",
+    "cellular_status",
+    "ems_led_brightness",
+    "ems_work_state",
+    "ems_total_battery_capacity_wh",
+    "pcs_max_output_power_w",
+    "pcs_max_input_power_w",
+    "bp_max_charge_power_w",
     "bp_max_discharge_power_w",
     # From the EMS change report cmd_id=17 (run state, fault flags, AFCI)
     # and the two cmd_id=8 fields that had no entity before.
-    "mppt1_warning_code", "mppt2_warning_code",
-    "afci_self_test_result", "ems_self_check_state",
-    "sys_heat_state", "sys_calibration_state", "parallel_mode",
-    "battery_limit_reason", "ems_sg_ready_state",
+    "mppt1_warning_code",
+    "mppt2_warning_code",
+    "afci_self_test_result",
+    "ems_self_check_state",
+    "sys_heat_state",
+    "sys_calibration_state",
+    "parallel_mode",
+    "battery_limit_reason",
+    "ems_sg_ready_state",
 }
 
 
@@ -484,18 +508,16 @@ class TestPowerOceanSensors:
             for suffix in ("power_w", "voltage_v", "current_a")
         }
         ems_extended = _PO_EMS_EXTENDED
-        original = [
-            k for k in non_pack if k not in ems_extended and k not in mppt_plus
-        ]
+        original = [k for k in non_pack if k not in ems_extended and k not in mppt_plus]
         assert len(original) == 81, f"Expected 81 core sensors, got {len(original)}"
 
     def test_mppt_plus_sensor_count(self):
         """6 PowerOcean Plus MPPT sensors (strings 3 and 4)."""
         keys = _extract_sensor_keys("POWEROCEAN_SENSORS")
-        mppt_plus = [
-            k for k in keys if k.startswith(("mppt_pv3_", "mppt_pv4_"))
-        ]
-        assert len(mppt_plus) == 6, f"Expected 6 Plus MPPT sensors, got {len(mppt_plus)}"
+        mppt_plus = [k for k in keys if k.startswith(("mppt_pv3_", "mppt_pv4_"))]
+        assert len(mppt_plus) == 6, (
+            f"Expected 6 Plus MPPT sensors, got {len(mppt_plus)}"
+        )
 
     def test_pack_sensors_count(self):
         """120 pack sensors (5 packs x 24 sensors)."""
@@ -508,7 +530,9 @@ class TestPowerOceanSensors:
         keys = _extract_sensor_keys("POWEROCEAN_SENSORS")
         for n in range(1, 6):
             pack_keys = [k for k in keys if k.startswith(f"pack{n}_")]
-            assert len(pack_keys) == 24, f"Expected 24 sensors for pack{n}, got {len(pack_keys)}"
+            assert len(pack_keys) == 24, (
+                f"Expected 24 sensors for pack{n}, got {len(pack_keys)}"
+            )
 
     def test_ems_extended_count(self):
         """28 EMS/system extended sensors."""
@@ -522,20 +546,16 @@ class TestPowerOceanSensors:
         keys = _extract_sensor_keys("POWEROCEAN_SENSORS")
         assert len(keys) == 235, f"Expected 235 total sensors, got {len(keys)}"
 
-
     def test_only_soc_has_battery_device_class(self):
         """Only the primary soc_pct should have device_class='battery'.
 
         Pack SoC and bp_real_soc_pct must NOT use device_class='battery'
         because HA picks battery-class entities for the device header.
         """
-        battery_sensors = [
-            s for s in POWEROCEAN_SENSORS if s.device_class == "battery"
-        ]
+        battery_sensors = [s for s in POWEROCEAN_SENSORS if s.device_class == "battery"]
         keys = {s.key for s in battery_sensors}
         assert keys == {"soc_pct"}, (
-            f"Expected battery device_class only on {{'soc_pct'}}, "
-            f"but found: {keys}"
+            f"Expected battery device_class only on {{'soc_pct'}}, but found: {keys}"
         )
 
 
@@ -550,18 +570,33 @@ class TestDelta2MaxSensors:
         for pack in (1, 2):
             prefix = f"slave{pack}"
             for suffix in (
-                "_soc", "_soh", "_voltage_v", "_current_a", "_temp_c",
-                "_cycles", "_in_w", "_out_w", "_remain_cap_mah",
-                "_full_cap_mah", "_max_cell_vol_mv", "_min_cell_vol_mv",
-                "_max_cell_temp_c", "_min_cell_temp_c", "_max_mos_temp_c",
+                "_soc",
+                "_soh",
+                "_voltage_v",
+                "_current_a",
+                "_temp_c",
+                "_cycles",
+                "_in_w",
+                "_out_w",
+                "_remain_cap_mah",
+                "_full_cap_mah",
+                "_max_cell_vol_mv",
+                "_min_cell_vol_mv",
+                "_max_cell_temp_c",
+                "_min_cell_temp_c",
+                "_max_mos_temp_c",
                 "_err_code",
             ):
-                assert f"{prefix}{suffix}" in keys, f"Missing slave sensor: {prefix}{suffix}"
+                assert f"{prefix}{suffix}" in keys, (
+                    f"Missing slave sensor: {prefix}{suffix}"
+                )
 
     def test_slave_sensors_count(self):
         keys = _extract_sensor_keys("DELTA2MAX_SENSORS")
         slave_keys = [k for k in keys if k.startswith("slave")]
-        assert len(slave_keys) == 32, f"Expected 32 slave sensors, got {len(slave_keys)}"
+        assert len(slave_keys) == 32, (
+            f"Expected 32 slave sensors, got {len(slave_keys)}"
+        )
 
     def test_only_soc_sensors_have_battery_device_class(self):
         """Only the primary SoC sensor should have device_class='battery'.
@@ -571,13 +606,10 @@ class TestDelta2MaxSensors:
         device_class='battery' because HA picks battery-class entities
         for the device header.
         """
-        battery_sensors = [
-            s for s in DELTA2MAX_SENSORS if s.device_class == "battery"
-        ]
+        battery_sensors = [s for s in DELTA2MAX_SENSORS if s.device_class == "battery"]
         keys = {s.key for s in battery_sensors}
         assert keys == {"soc"}, (
-            f"Expected battery device_class only on {{'soc'}}, "
-            f"but found: {keys}"
+            f"Expected battery device_class only on {{'soc'}}, but found: {keys}"
         )
 
     def test_soh_no_battery_device_class(self):
@@ -685,13 +717,10 @@ class TestStreamEntities:
         use device_class='battery' because HA picks battery-class entities
         for the device header (Issue #32).
         """
-        battery_sensors = [
-            s for s in STREAM_SENSORS if s.device_class == "battery"
-        ]
+        battery_sensors = [s for s in STREAM_SENSORS if s.device_class == "battery"]
         keys = {s.key for s in battery_sensors}
         assert keys == {"soc_pct"}, (
-            f"Expected battery device_class only on {{'soc_pct'}}, "
-            f"but found: {keys}"
+            f"Expected battery device_class only on {{'soc_pct'}}, but found: {keys}"
         )
 
     def test_soh_and_precise_soc_no_battery_device_class(self) -> None:
@@ -719,7 +748,9 @@ class TestDelta3Energy:
             assert key in sensors, f"Missing Delta 3 energy sensor: {key}"
             s = sensors[key]
             assert s.device_class == "energy", f"{key} must be device_class=energy"
-            assert s.state_class == "total_increasing", f"{key} must be total_increasing"
+            assert s.state_class == "total_increasing", (
+                f"{key} must be total_increasing"
+            )
             assert s.unit == "kWh", f"{key} must be kWh"
 
     def test_power_to_energy_mapping(self) -> None:
@@ -732,7 +763,9 @@ class TestDelta3Energy:
         sensor_keys = {s.key for s in DELTA3_SENSORS}
         for power_key, energy_key in DELTA3_POWER_TO_ENERGY.items():
             assert power_key in sensor_keys, f"Source power sensor missing: {power_key}"
-            assert energy_key in sensor_keys, f"Target energy sensor missing: {energy_key}"
+            assert energy_key in sensor_keys, (
+                f"Target energy sensor missing: {energy_key}"
+            )
 
 
 class TestBatteryDeviceClassSingleton:
@@ -751,9 +784,7 @@ class TestBatteryDeviceClassSingleton:
             if not _re.fullmatch(r"[A-Z0-9]+_SENSORS", name):
                 continue
             sensor_list = getattr(_const, name)
-            battery_keys = [
-                s.key for s in sensor_list if s.device_class == "battery"
-            ]
+            battery_keys = [s.key for s in sensor_list if s.device_class == "battery"]
             assert len(battery_keys) <= 1, (
                 f"{name} has multiple battery device_class sensors: "
                 f"{battery_keys} - HA uses battery-class for the device header"
@@ -780,10 +811,7 @@ class TestEnergySensorPrecision:
             if not _re.fullmatch(r"[A-Z0-9]+_SENSORS", name):
                 continue
             for sensor in getattr(_const, name):
-                if (
-                    sensor.unit == "kWh"
-                    and sensor.suggested_display_precision == 0
-                ):
+                if sensor.unit == "kWh" and sensor.suggested_display_precision == 0:
                     offenders.append(f"{name}.{sensor.key}")
 
         assert not offenders, (
@@ -811,8 +839,7 @@ _PRECISION_WAIVED = {
 _PRECISION_WAIVED.update(
     {
         f"schedule_{_index}_window": (
-            "the charge window is text, 'HH:MM-HH:MM', so there is no number "
-            "to round"
+            "the charge window is text, 'HH:MM-HH:MM', so there is no number to round"
         )
         for _index in range(1, SCHEDULE_MAX_INDEX + 1)
     }
@@ -858,9 +885,7 @@ class TestIntegerSensorPrecision:
             if (
                 isinstance(value, list)
                 and value
-                and all(
-                    isinstance(item, _const.EcoFlowSensorDef) for item in value
-                )
+                and all(isinstance(item, _const.EcoFlowSensorDef) for item in value)
             ):
                 yield name, value
 
@@ -1088,9 +1113,7 @@ class TestFrameCaptureFootprint:
 
     # "20 * 3 * 2048 B = 122 880 B (120 KiB)" - thousands are spaced, so the
     # result is read back with its spaces removed.
-    _ARITHMETIC = re.compile(
-        r"(\d+) \* (\d+) \* (\d+) B = ([\d ]+?) B \((\d+) KiB\)"
-    )
+    _ARITHMETIC = re.compile(r"(\d+) \* (\d+) \* (\d+) B = ([\d ]+?) B \((\d+) KiB\)")
 
     def _statements(self) -> list[tuple[int, int, int, int, int]]:
         source = (REPO_ROOT / "custom_components/ecoflow_energy/const.py").read_text()
@@ -1204,7 +1227,7 @@ class TestFrameCaptureFootprint:
                     widest, offender = size, path.name
 
         assert widest, "no captured frames found under tests/fixtures"
-        assert RAW_FRAME_BUNDLE_MAX_BYTES >= widest, (
+        assert widest <= RAW_FRAME_BUNDLE_MAX_BYTES, (
             f"{offender} holds a {widest} B frame the cap would cut"
         )
 
@@ -1339,12 +1362,16 @@ class TestWave3Sensors:
         )
 
         by_key = {s.key: s for s in WAVE3_SELECTS}
-        assert set(by_key["operating_mode"].options) == set(_OPERATING_MODE_NAMES.values())
+        assert set(by_key["operating_mode"].options) == set(
+            _OPERATING_MODE_NAMES.values()
+        )
         assert set(by_key["operating_submode"].options) == set(_SUBMODE_NAMES.values())
         assert set(by_key["display_temperature_source"].options) == set(
             _DISPLAY_TEMPERATURE_SOURCE_NAMES.values()
         )
-        assert set(by_key["mood_light_mode"].options) == set(_MOOD_LIGHT_MODE_NAMES.values())
+        assert set(by_key["mood_light_mode"].options) == set(
+            _MOOD_LIGHT_MODE_NAMES.values()
+        )
 
     def test_wave3_is_enhanced_only_device_type(self) -> None:
         from ecoflow_energy.ecoflow.const import DEVICE_TYPE_WAVE3

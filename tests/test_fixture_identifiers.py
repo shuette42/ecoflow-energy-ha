@@ -19,9 +19,11 @@ import re
 from pathlib import Path
 
 import pytest
-
 from ecoflow_energy.ecoflow.frame_capture import _encrypted_regions, _xor
-from ecoflow_energy.ecoflow.proto_encoding import encode_field_bytes, encode_field_varint
+from ecoflow_energy.ecoflow.proto_encoding import (
+    encode_field_bytes,
+    encode_field_varint,
+)
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures"
 
@@ -128,12 +130,18 @@ def test_no_identifier_survived_masking(path: Path) -> None:
             region_text = _xor(raw_frame[region.start : region.end], region.key).decode(
                 "latin1"
             )
-            assert not _UUID.search(region_text), f"{where}: unmasked UUID under the mask"
-            assert not _MAC.search(region_text), f"{where}: unmasked MAC under the mask"
+            assert not _UUID.search(region_text), (
+                f"{where}: unmasked UUID under the mask"
+            )
+            assert not _MAC.search(region_text), (
+                f"{where}: unmasked MAC under the mask"
+            )
             for run in _RUN.findall(region_text):
                 if run in _PLACEHOLDERS:
                     continue
-                assert set(run) == {"X"}, f"{where}: unmasked run under the mask {run!r}"
+                assert set(run) == {"X"}, (
+                    f"{where}: unmasked run under the mask {run!r}"
+                )
 
         # Only where the field is an actual MQTT topic. Several fixtures reuse
         # the same key for the message type ("property", "get_reply"), which
@@ -161,7 +169,9 @@ def test_the_encrypted_region_walk_still_finds_its_headers() -> None:
     blobs = regions = 0
     for path in _fixture_files():
         try:
-            frames = _frames(json.loads(path.read_text(encoding="utf-8", errors="replace")))
+            frames = _frames(
+                json.loads(path.read_text(encoding="utf-8", errors="replace"))
+            )
         except ValueError:
             frames = [{"hex": path.read_bytes().hex()}]
         for frame in frames:

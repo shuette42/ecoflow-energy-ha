@@ -9,14 +9,12 @@ No Home Assistant dependencies - stdlib only.
 
 from __future__ import annotations
 
-from base64 import b64decode
-
 import logging
+from base64 import b64decode
 from typing import Any
 
 from ..const import device_log_tag
 from .powerocean import (
-    ENERGY_TOTAL_PLACEHOLDER_WH,
     _CHG_DSG_STATE_MAP,
     _FEED_MODE_MAP,
     _GRID_STATUS_MAP,
@@ -25,6 +23,7 @@ from .powerocean import (
     _WORK_MODE_INT_MAP,
     _WORK_MODE_MAP,
     _WORK_STATE_MAP,
+    ENERGY_TOTAL_PLACEHOLDER_WH,
     drop_invalid_percentages,
 )
 
@@ -117,10 +116,10 @@ def _apply_enum_mappings(result: dict[str, Any]) -> None:
             else:
                 result[sensor_key] = "connected" if iv == 1 else "disconnected"
 
-    for sensor_key, mapping in _PROTO_ENUM_STR.items():
+    for sensor_key, str_mapping in _PROTO_ENUM_STR.items():
         if sensor_key in result:
             raw_val = str(result[sensor_key])
-            result[sensor_key] = mapping.get(raw_val, raw_val)
+            result[sensor_key] = str_mapping.get(raw_val, raw_val)
 
     # grid_is_energized (bool, field 752) overrides sys_grid_sta when present.
     # The EcoFlow app uses gridIsEnergized for the main grid display.
@@ -351,9 +350,7 @@ def flatten_heartbeat(raw: dict[str, Any]) -> dict[str, Any]:
     for proto_key, sensor_key in HEARTBEAT_TO_SENSOR.items():
         val = raw.get(proto_key)
         if val is not None:
-            result[sensor_key] = (
-                float(val) if isinstance(val, (int, float)) else val
-            )
+            result[sensor_key] = float(val) if isinstance(val, (int, float)) else val
 
     _apply_enum_mappings(result)
 
@@ -584,9 +581,7 @@ def remap_bp_keys(
 
     # Try battery key mapping first, then EMS change mapping
     for proto_key, value in raw.items():
-        sensor_key = BP_TO_SENSOR.get(proto_key) or EMS_CHANGE_TO_SENSOR.get(
-            proto_key
-        )
+        sensor_key = BP_TO_SENSOR.get(proto_key) or EMS_CHANGE_TO_SENSOR.get(proto_key)
         if sensor_key:
             # Energy totals from EMS change report: Wh -> kWh
             if sensor_key in _LIFETIME_ENERGY_SENSORS:
@@ -726,9 +721,7 @@ def remap_ev_charging_keys(raw: dict[str, Any]) -> dict[str, Any]:
             text = str(value)
             result[sensor_key] = None if text == _EV_NO_VEHICLE else text
             continue
-        result[sensor_key] = (
-            float(value) if isinstance(value, (int, float)) else value
-        )
+        result[sensor_key] = float(value) if isinstance(value, (int, float)) else value
 
     return result
 
@@ -808,9 +801,7 @@ def remap_ems_state_keys(raw: dict[str, Any]) -> dict[str, Any]:
         sensor_key = EMS_STATE_TO_SENSOR.get(proto_key)
         if sensor_key is None:
             continue
-        result[sensor_key] = (
-            float(value) if isinstance(value, (int, float)) else value
-        )
+        result[sensor_key] = float(value) if isinstance(value, (int, float)) else value
 
     _apply_enum_mappings(result)
 
@@ -910,9 +901,7 @@ def _format_window(time_table: int | None) -> str | None:
         # as `24:00` would be a guess dressed as a reading. The whole window
         # is refused, as it is for any other half that cannot be read.
         return None
-    return (
-        f"{start // 60:02d}:{start % 60:02d}-{end // 60:02d}:{end % 60:02d}"
-    )
+    return f"{start // 60:02d}:{start % 60:02d}-{end // 60:02d}:{end % 60:02d}"
 
 
 def remap_timer_task_keys(

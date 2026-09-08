@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import aiohttp
 import voluptuous as vol
-
 from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
@@ -29,7 +28,13 @@ from .ecoflow.iot_api import IoTApiClient
 _LOGGER = logging.getLogger(__name__)
 
 
-class ReauthFlowMixin:
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigFlow as _Base
+else:
+    _Base = object
+
+
+class ReauthFlowMixin(_Base):
     """Re-authentication steps, composed into EcoFlowEnergyConfigFlow."""
 
     # ------------------------------------------------------------------
@@ -131,7 +136,9 @@ class ReauthFlowMixin:
                 except (aiohttp.ClientError, TimeoutError, OSError):
                     errors["base"] = "cannot_connect"
                 except (KeyError, ValueError, TypeError, AttributeError):
-                    _LOGGER.exception("Unexpected error during Enhanced re-authentication")
+                    _LOGGER.exception(
+                        "Unexpected error during Enhanced re-authentication"
+                    )
                     errors["base"] = "unknown"
 
         return self.async_show_form(

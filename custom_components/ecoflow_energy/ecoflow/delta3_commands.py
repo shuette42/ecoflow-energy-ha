@@ -44,8 +44,8 @@ _DIR_SRC = 1
 class Delta3Switch(NamedTuple):
     """One boolean control, with both wire representations."""
 
-    params_key: str      # JSON params key on the HTTP endpoint
-    config_field: int    # ConfigWrite field number on the app channel
+    params_key: str  # JSON params key on the HTTP endpoint
+    config_field: int  # ConfigWrite field number on the app channel
 
 
 class Delta3Select(NamedTuple):
@@ -74,7 +74,8 @@ DELTA3_SWITCH_PARAMS: dict[str, Delta3Switch] = {
     "bypass_out_disable_switch": Delta3Switch("cfgBypassOutDisable", 26),
 }
 
-# Energy backup is the only nested payload: {"cfgEnergyBackup": {"energyBackupEn": bool}}
+# Energy backup is the only nested payload:
+# {"cfgEnergyBackup": {"energyBackupEn": bool}}
 # On the binary channel it is equally nested: field 43 wraps an inner field 1.
 DELTA3_ENERGY_BACKUP_KEY = "energy_backup_switch"
 DELTA3_ENERGY_BACKUP_PARAMS_KEY = "cfgEnergyBackup"
@@ -412,8 +413,8 @@ def build_proto_command(
 class Delta3ConfigAck(NamedTuple):
     """Decoded ConfigWriteAck: which field was written and whether it took."""
 
-    action_id: int | None    # echoes the written ConfigWrite field number
-    config_ok: int | None    # 1 = applied
+    action_id: int | None  # echoes the written ConfigWrite field number
+    config_ok: int | None  # 1 = applied
 
     @property
     def applied(self) -> bool:

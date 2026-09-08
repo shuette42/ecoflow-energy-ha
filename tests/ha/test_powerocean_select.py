@@ -15,8 +15,8 @@ from custom_components.ecoflow_energy.const import (
 )
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
 from custom_components.ecoflow_energy.select import (
-    EcoFlowSelect,
     WORK_MODE_TO_INT,
+    EcoFlowSelect,
     _get_select_defs,
 )
 
@@ -66,7 +66,9 @@ class TestEcoFlowSelect:
     def _make_entity(self, hass, entry):
         entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
-            hass, entry, MOCK_POWEROCEAN_DEVICE,
+            hass,
+            entry,
+            MOCK_POWEROCEAN_DEVICE,
         )
         coordinator._device_data = {"ems_work_mode": "self_use"}
         coordinator.async_set_updated_data(dict(coordinator._device_data))

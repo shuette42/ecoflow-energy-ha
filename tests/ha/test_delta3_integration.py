@@ -14,7 +14,6 @@ from unittest.mock import AsyncMock, patch
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
-
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.const import (
@@ -122,9 +121,7 @@ class TestDelta3EndToEnd:
         registry = er.async_get(hass)
 
         def state_for(platform: str, key: str) -> str:
-            entity_id = registry.async_get_entity_id(
-                platform, DOMAIN, f"{sn}_{key}"
-            )
+            entity_id = registry.async_get_entity_id(platform, DOMAIN, f"{sn}_{key}")
             assert entity_id is not None, f"missing entity {platform} {key}"
             state = hass.states.get(entity_id)
             assert state is not None, f"no state for {entity_id}"

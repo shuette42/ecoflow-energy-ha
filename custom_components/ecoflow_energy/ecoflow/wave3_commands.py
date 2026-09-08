@@ -45,7 +45,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, NamedTuple
 
-from .delta3_commands import parse_config_write_ack  # noqa: F401 - re-exported for the coordinator
+from .delta3_commands import (
+    parse_config_write_ack,  # noqa: F401 - re-exported for the coordinator
+)
 from .energy_stream import build_delta3_config_write_payload
 from .parsers.wave3_proto import (
     _DISPLAY_TEMPERATURE_SOURCE_NAMES,
@@ -145,7 +147,8 @@ WAVE3_CONTROLS: dict[str, Wave3Control] = {
         maximum=None,
         step=None,
         allowed_values=(20, 40, 60, 80, 100),
-        modes=None,  # gated by exclusion (constant_temp), not inclusion - see write_refusal
+        # gated by exclusion (constant_temp), not inclusion - see write_refusal
+        modes=None,
         read_key="airflow_speed_pct",
     ),
     "target_temp_c": Wave3Control(
@@ -276,7 +279,9 @@ def _validate_and_encode(key: str, control: Wave3Control, value: Any) -> int | f
     if control.kind == "enum":
         codes = _ENUM_CODE_LOOKUP[key]
         if value not in codes:
-            raise Wave3WriteRefused(f"{key} does not accept {value!r}; allowed: {sorted(codes)}")
+            raise Wave3WriteRefused(
+                f"{key} does not accept {value!r}; allowed: {sorted(codes)}"
+            )
         return codes[value]
 
     # int / float share the same range/step/allowed-set check. allowed_values
@@ -371,7 +376,9 @@ def _validate_band_value(label: str, value: float) -> None:
     sends (E1, PLAN-047 Phase C review).
     """
     if value < _BAND_MIN_C or value > _BAND_MAX_C:
-        raise Wave3WriteRefused(f"{label} must be between {_BAND_MIN_C} and {_BAND_MAX_C}")
+        raise Wave3WriteRefused(
+            f"{label} must be between {_BAND_MIN_C} and {_BAND_MAX_C}"
+        )
 
 
 def build_band_write(lower: float, upper: float, device_sn: str, seq: int = 0) -> bytes:
@@ -446,7 +453,8 @@ def write_refusal(
 
     if key == "operating_submode" and value in _SUBMODE_WRITE_REFUSED_LABELS:
         return (
-            f"{value!r} is never written by the app; observed writes are max, sleep, or eco"
+            f"{value!r} is never written by the app; observed writes are max, "
+            "sleep, or eco"
         )
 
     effective_mode = mode if mode is not None else state.get("operating_mode")

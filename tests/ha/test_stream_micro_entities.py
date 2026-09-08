@@ -14,7 +14,6 @@ from typing import Any
 
 import pytest
 from homeassistant.core import HomeAssistant
-
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.binary_sensor import (
@@ -89,9 +88,7 @@ async def _setup_keys(
     created: list[Any] = []
     await platform_setup(hass, entry, created.extend)
     return {
-        entity._definition.key
-        for entity in created
-        if hasattr(entity, "_definition")
+        entity._definition.key for entity in created if hasattr(entity, "_definition")
     }
 
 
@@ -113,7 +110,9 @@ class TestStreamMicroRouting:
 
 class TestPrefixFilterHelper:
     def test_bk01_has_an_exclusion_set(self) -> None:
-        assert excluded_keys_for_serial("BK01TEST00000001") is STREAM_MICRO_EXCLUDED_KEYS
+        assert (
+            excluded_keys_for_serial("BK01TEST00000001") is STREAM_MICRO_EXCLUDED_KEYS
+        )
 
     def test_other_stream_prefixes_are_unfiltered(self) -> None:
         assert excluded_keys_for_serial("BK31TEST00000001") == frozenset()
@@ -138,9 +137,9 @@ class TestPrefixFilterHelper:
         kept = filter_defs_for_serial(micro_defs, "BK01TEST00000001")
 
         assert "backup_reserve" not in {definition.key for definition in kept}
-        assert filter_defs_for_serial(
-            ac_pro_defs, "BK31TEST00000001"
-        ) == list(ac_pro_defs)
+        assert filter_defs_for_serial(ac_pro_defs, "BK31TEST00000001") == list(
+            ac_pro_defs
+        )
 
 
 class TestStreamMicroEntitySet:
@@ -232,9 +231,7 @@ class TestStreamAcProKeepsItsEntities:
 
         assert keys == {"ac_outlet_1_enabled", "ac_outlet_2_enabled"}
 
-    async def test_stream_numbers_still_created(
-        self, hass: HomeAssistant
-    ) -> None:
+    async def test_stream_numbers_still_created(self, hass: HomeAssistant) -> None:
         keys = await _setup_keys(hass, BK31_DEVICE, number_setup)
 
         assert keys == {

@@ -74,7 +74,9 @@ def _build_cmd_registry() -> dict[tuple[int, int], CmdConfig]:
     try:
         from . import ecocharge_pb2 as pb2
     except ImportError:
-        _LOGGER.warning("Failed to import protobuf module - Enhanced Mode will not work")
+        _LOGGER.warning(
+            "Failed to import protobuf module - Enhanced Mode will not work"
+        )
         return {}
 
     return {
@@ -484,9 +486,9 @@ def _typed_runtime_map(
     # snapshots from one sending only what changed, and that question is open
     # on the PowerOcean Plus (#219).
     if config.flags.get("_is_energy_stream"):
-        mapped["_is_full_power_frame"] = len(
-            _FULL_POWER_KEYS & mapped["_available_keys"]
-        ) >= 3
+        mapped["_is_full_power_frame"] = (
+            len(_FULL_POWER_KEYS & mapped["_available_keys"]) >= 3
+        )
 
     # 6. Zero-fill: proto3 omits 0.0 values, but power fields need explicit 0.0
     for key in config.zero_fill:
@@ -541,6 +543,12 @@ def decode_proto_runtime_headers(
             continue
         cmd_func = header.get("cmd_func")
         cmd_id = header.get("cmd_id")
+        if not isinstance(cmd_func, int) or not isinstance(cmd_id, int):
+            # decoder.py always stores cmd_func/cmd_id as int when the header
+            # carries them at all; a non-int here only means one of them is
+            # missing, which fails the registry lookup below identically -
+            # this just makes that fact visible to the type checker too.
+            continue
         if (cmd_func, cmd_id) not in registry:
             continue
 

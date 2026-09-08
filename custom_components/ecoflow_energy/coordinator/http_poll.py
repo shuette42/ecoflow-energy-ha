@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..const import (
     DEVICE_TYPE_DELTA,
@@ -15,8 +15,8 @@ from ..const import (
     DEVICE_TYPE_STREAM,
 )
 from ..ecoflow.firmware import extract_firmware_versions
-from ..ecoflow.parsers.delta_http import parse_delta_http_quota
 from ..ecoflow.parsers.delta3_http import parse_delta3_http_quota
+from ..ecoflow.parsers.delta_http import parse_delta_http_quota
 from ..ecoflow.parsers.powerocean import parse_powerocean_http_quota
 from ..ecoflow.parsers.powerstream_http import parse_powerstream_quota
 from ..ecoflow.parsers.smartplug import parse_smartplug_http_quota
@@ -24,8 +24,13 @@ from ..ecoflow.parsers.stream_http import parse_stream_quota
 
 _LOGGER = logging.getLogger(__name__)
 
+if TYPE_CHECKING:
+    from ._typing import CoordinatorState as _Base
+else:
+    _Base = object
 
-class HttpPollMixin:
+
+class HttpPollMixin(_Base):
     """Mixin providing the HTTP polling update path."""
 
     # ------------------------------------------------------------------
@@ -54,7 +59,9 @@ class HttpPollMixin:
                 return dict(self._device_data)
 
             self._consecutive_http_failures += 1
-            self._log_event("http_fail", f"consecutive={self._consecutive_http_failures}")
+            self._log_event(
+                "http_fail", f"consecutive={self._consecutive_http_failures}"
+            )
             if self._consecutive_http_failures >= 3:
                 self._device_available = False
                 self._snapshot = DeviceSnapshot(
@@ -91,8 +98,10 @@ class HttpPollMixin:
                 and not transport_failure
             ):
                 _LOGGER.warning(
-                    "HTTP quota failed %d consecutive times for %s - triggering re-authentication",
-                    self._consecutive_http_failures, self.device_tag,
+                    "HTTP quota failed %d consecutive times for %s - triggering "
+                    "re-authentication",
+                    self._consecutive_http_failures,
+                    self.device_tag,
                 )
                 self._entry.async_start_reauth(self.hass)
             return dict(self._device_data)

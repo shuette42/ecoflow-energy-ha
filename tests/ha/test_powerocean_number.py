@@ -10,7 +10,6 @@ from unittest.mock import AsyncMock, MagicMock, call, patch
 import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.const import (
@@ -27,7 +26,6 @@ from custom_components.ecoflow_energy.number import (
 from .conftest import (
     MOCK_POWEROCEAN_DEVICE,
 )
-
 
 # ===========================================================================
 # Number definition routing
@@ -47,12 +45,9 @@ class TestGetNumberDefs:
         keys = {d.key for d in defs}
 
         assert keys == {"backup_reserve", "solar_surplus_threshold"} | {
-            f"schedule_{index}_power_w"
-            for index in range(1, SCHEDULE_MAX_INDEX + 1)
+            f"schedule_{index}_power_w" for index in range(1, SCHEDULE_MAX_INDEX + 1)
         }
-        assert not any(
-            d.accessory for d in defs if not d.key.startswith("schedule_")
-        )
+        assert not any(d.accessory for d in defs if not d.key.startswith("schedule_"))
 
     def test_powerocean_numbers_are_enhanced_only(self):
         defs = _get_number_defs(DEVICE_TYPE_POWEROCEAN)
@@ -87,7 +82,9 @@ class TestAsyncSetSocLimits:
         """Enhanced Mode coordinator sends SoC limits via proto SET."""
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
-            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE,
+            hass,
+            enhanced_config_entry,
+            MOCK_POWEROCEAN_DEVICE,
         )
         assert coordinator.enhanced_mode is True
 
@@ -112,8 +109,11 @@ class TestAsyncSetSocLimits:
         standard_config_entry.add_to_hass(hass)
 
         from .conftest import MOCK_DELTA_DEVICE
+
         coordinator = EcoFlowDeviceCoordinator(
-            hass, standard_config_entry, MOCK_DELTA_DEVICE,
+            hass,
+            standard_config_entry,
+            MOCK_DELTA_DEVICE,
         )
         assert coordinator.enhanced_mode is False
 
@@ -128,7 +128,9 @@ class TestAsyncSetSocLimits:
         """Enhanced Mode with disconnected MQTT rejects SoC limit SET."""
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
-            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE,
+            hass,
+            enhanced_config_entry,
+            MOCK_POWEROCEAN_DEVICE,
         )
 
         mock_mqtt = MagicMock()
@@ -146,7 +148,9 @@ class TestAsyncSetSocLimits:
         """Enhanced Mode with no MQTT client rejects SoC limit SET."""
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
-            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE,
+            hass,
+            enhanced_config_entry,
+            MOCK_POWEROCEAN_DEVICE,
         )
         coordinator._mqtt_client = None
 
@@ -163,12 +167,16 @@ class TestPowerOceanNumberBasic:
     """Basic native_value and failure-mode tests using backup_reserve."""
 
     def _make_number_entity(
-        self, hass, entry,
+        self,
+        hass,
+        entry,
     ) -> tuple[EcoFlowNumber, EcoFlowDeviceCoordinator]:
         """Create a PowerOcean backup_reserve entity with mocked coordinator."""
         entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
-            hass, entry, MOCK_POWEROCEAN_DEVICE,
+            hass,
+            entry,
+            MOCK_POWEROCEAN_DEVICE,
         )
         # Seed device data with current limits. ems_app_surplus_pct is the
         # source the backup_reserve write reads (ADR-011) - without it the
@@ -196,7 +204,8 @@ class TestPowerOceanNumberBasic:
     ) -> None:
         """Failed SET does not optimistically update coordinator data."""
         entity, coordinator = self._make_number_entity(
-            hass, enhanced_config_entry,
+            hass,
+            enhanced_config_entry,
         )
         coordinator.async_set_powerocean_soc_debounced = AsyncMock(return_value=False)
 
@@ -214,7 +223,8 @@ class TestPowerOceanNumberBasic:
     ) -> None:
         """Number entity reads current value from coordinator data via state_key."""
         entity, coordinator = self._make_number_entity(
-            hass, enhanced_config_entry,
+            hass,
+            enhanced_config_entry,
         )
         assert entity.native_value == 0.0
 
@@ -225,7 +235,8 @@ class TestPowerOceanNumberBasic:
     ) -> None:
         """Number entity returns None when coordinator has no data."""
         entity, coordinator = self._make_number_entity(
-            hass, enhanced_config_entry,
+            hass,
+            enhanced_config_entry,
         )
         coordinator.async_set_updated_data(None)
         assert entity.native_value is None
@@ -244,7 +255,9 @@ class TestAsyncSetPowerOceanSoc:
     ) -> None:
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
-            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE,
+            hass,
+            enhanced_config_entry,
+            MOCK_POWEROCEAN_DEVICE,
         )
         mock_mqtt = MagicMock()
         mock_mqtt.is_connected.return_value = True
@@ -270,7 +283,9 @@ class TestAsyncSetPowerOceanSoc:
     ) -> None:
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
-            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE,
+            hass,
+            enhanced_config_entry,
+            MOCK_POWEROCEAN_DEVICE,
         )
         mock_mqtt = MagicMock()
         mock_mqtt.is_connected.return_value = True
@@ -287,8 +302,11 @@ class TestAsyncSetPowerOceanSoc:
     ) -> None:
         standard_config_entry.add_to_hass(hass)
         from .conftest import MOCK_DELTA_DEVICE
+
         coordinator = EcoFlowDeviceCoordinator(
-            hass, standard_config_entry, MOCK_DELTA_DEVICE,
+            hass,
+            standard_config_entry,
+            MOCK_DELTA_DEVICE,
         )
         result = await coordinator.async_set_powerocean_soc(0, 100)
         assert result is False
@@ -302,7 +320,9 @@ class TestAsyncSetWorkMode:
     ) -> None:
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
-            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE,
+            hass,
+            enhanced_config_entry,
+            MOCK_POWEROCEAN_DEVICE,
         )
         mock_mqtt = MagicMock()
         mock_mqtt.is_connected.return_value = True
@@ -323,7 +343,9 @@ class TestAsyncSetWorkMode:
     ) -> None:
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
-            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE,
+            hass,
+            enhanced_config_entry,
+            MOCK_POWEROCEAN_DEVICE,
         )
         mock_mqtt = MagicMock()
         mock_mqtt.is_connected.return_value = True
@@ -342,7 +364,9 @@ class TestPowerOceanNumberSet3Field:
     def _make_entity(self, hass, entry, key: str):
         entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
-            hass, entry, MOCK_POWEROCEAN_DEVICE,
+            hass,
+            entry,
+            MOCK_POWEROCEAN_DEVICE,
         )
         coordinator._device_data = {
             "ems_charge_upper_limit_pct": 100,
@@ -362,7 +386,9 @@ class TestPowerOceanNumberSet3Field:
     ) -> None:
         """Setting backup_reserve sends backup=value, solar=current_solar."""
         entity, coordinator = self._make_entity(
-            hass, enhanced_config_entry, "backup_reserve",
+            hass,
+            enhanced_config_entry,
+            "backup_reserve",
         )
         coordinator.async_set_powerocean_soc_debounced = AsyncMock(return_value=True)
         entity.async_write_ha_state = MagicMock()
@@ -378,9 +404,13 @@ class TestPowerOceanNumberSet3Field:
     ) -> None:
         """If new backup > current solar, raise solar to backup."""
         entity, coordinator = self._make_entity(
-            hass, enhanced_config_entry, "backup_reserve",
+            hass,
+            enhanced_config_entry,
+            "backup_reserve",
         )
-        coordinator._device_data["ems_app_surplus_pct"] = 40  # source for backup constraint
+        coordinator._device_data["ems_app_surplus_pct"] = (
+            40  # source for backup constraint
+        )
         coordinator._device_data["ems_backup_ratio_pct"] = 40  # EMS mirror
         coordinator.async_set_updated_data(dict(coordinator._device_data))
         coordinator.async_set_powerocean_soc_debounced = AsyncMock(return_value=True)
@@ -397,7 +427,9 @@ class TestPowerOceanNumberSet3Field:
     ) -> None:
         """Setting solar_surplus_threshold sends backup=current, solar=value."""
         entity, coordinator = self._make_entity(
-            hass, enhanced_config_entry, "solar_surplus_threshold",
+            hass,
+            enhanced_config_entry,
+            "solar_surplus_threshold",
         )
         coordinator.async_set_powerocean_soc_debounced = AsyncMock(return_value=True)
         entity.async_write_ha_state = MagicMock()
@@ -413,7 +445,9 @@ class TestPowerOceanNumberSet3Field:
     ) -> None:
         """If new solar < current backup, lower backup to solar."""
         entity, coordinator = self._make_entity(
-            hass, enhanced_config_entry, "solar_surplus_threshold",
+            hass,
+            enhanced_config_entry,
+            "solar_surplus_threshold",
         )
         coordinator.async_set_powerocean_soc_debounced = AsyncMock(return_value=True)
         entity.async_write_ha_state = MagicMock()
@@ -436,7 +470,9 @@ class TestPowerOceanNumberSet3Field:
         back to it, so the write is refused instead.
         """
         entity, coordinator = self._make_entity(
-            hass, enhanced_config_entry, "backup_reserve",
+            hass,
+            enhanced_config_entry,
+            "backup_reserve",
         )
         coordinator._device_data = {}
         coordinator.async_set_updated_data({})
@@ -455,7 +491,9 @@ class TestPowerOceanNumberSet3Field:
     ) -> None:
         """A placeholder-guarded surplus (explicit None) also refuses the write."""
         entity, coordinator = self._make_entity(
-            hass, enhanced_config_entry, "backup_reserve",
+            hass,
+            enhanced_config_entry,
+            "backup_reserve",
         )
         coordinator._device_data["ems_app_surplus_pct"] = None
         coordinator.async_set_updated_data(dict(coordinator._device_data))
@@ -480,7 +518,9 @@ class TestPowerOceanNumberSet3Field:
         refused the same way the backup_reserve branch already is.
         """
         entity, coordinator = self._make_entity(
-            hass, enhanced_config_entry, "solar_surplus_threshold",
+            hass,
+            enhanced_config_entry,
+            "solar_surplus_threshold",
         )
         coordinator._device_data = {}
         coordinator.async_set_updated_data({})
@@ -499,7 +539,9 @@ class TestPowerOceanNumberSet3Field:
     ) -> None:
         """An explicit None discharge lower limit also refuses the write."""
         entity, coordinator = self._make_entity(
-            hass, enhanced_config_entry, "solar_surplus_threshold",
+            hass,
+            enhanced_config_entry,
+            "solar_surplus_threshold",
         )
         coordinator._device_data["ems_discharge_lower_limit_pct"] = None
         coordinator.async_set_updated_data(dict(coordinator._device_data))
@@ -530,7 +572,9 @@ class TestPowerOceanAppSurplusAutoSync:
     def _make_coordinator(self, hass, entry):
         entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
-            hass, entry, MOCK_POWEROCEAN_DEVICE,
+            hass,
+            entry,
+            MOCK_POWEROCEAN_DEVICE,
         )
         coordinator._enhanced_mode = True
         coordinator._device_data = {
@@ -720,9 +764,7 @@ class TestPowerOceanAppSurplusAutoSync:
         ):
             coordinator._maybe_schedule_surplus_sync()
         coordinator.async_set_powerocean_soc.assert_not_called()
-        assert not any(
-            e["type"] == "surplus_auto_sync" for e in coordinator.event_log
-        )
+        assert not any(e["type"] == "surplus_auto_sync" for e in coordinator.event_log)
 
     async def test_non_numeric_ems_value_aborts_silently(
         self,
@@ -765,9 +807,7 @@ class TestPowerOceanAppSurplusAutoSync:
         with patch(_SURPLUS_SYNC_CLOCK, return_value=1000.0):
             coordinator._maybe_schedule_surplus_sync()
         coordinator.async_set_powerocean_soc.assert_not_called()
-        assert not any(
-            e["type"] == "surplus_auto_sync" for e in coordinator.event_log
-        )
+        assert not any(e["type"] == "surplus_auto_sync" for e in coordinator.event_log)
         assert coordinator.surplus_auto_sync_diagnostics is None
 
     async def test_a_pair_the_ems_never_adopts_gets_two_writes_then_silence(
@@ -798,19 +838,19 @@ class TestPowerOceanAppSurplusAutoSync:
             await self._run_evaluations(hass, coordinator, 6)
 
         stop_events = [
-            e for e in coordinator.event_log
-            if e["type"] == "surplus_auto_sync_stopped"
+            e for e in coordinator.event_log if e["type"] == "surplus_auto_sync_stopped"
         ]
         assert len(stop_events) == 1
         assert stop_events[0]["detail"] == "app=13 ems=20 writes=2"
 
-        stop_logs = [
-            r for r in caplog.records if "no further writes" in r.message
-        ]
+        stop_logs = [r for r in caplog.records if "no further writes" in r.message]
         assert len(stop_logs) == 1
 
         assert coordinator.surplus_auto_sync_diagnostics == {
-            "app": 13, "ems": 20, "writes": 2, "stopped": True,
+            "app": 13,
+            "ems": 20,
+            "writes": 2,
+            "stopped": True,
         }
 
     async def test_a_different_ems_value_reopens_the_sync(
@@ -901,7 +941,9 @@ class TestPowerOceanAppSurplusAutoSync:
         """A shutdown-refused schedule must not advance the write count."""
         coordinator = self._make_divergent_coordinator(hass, enhanced_config_entry)
         with (
-            patch.object(coordinator, "_schedule_powerocean_soc_write", return_value=None),
+            patch.object(
+                coordinator, "_schedule_powerocean_soc_write", return_value=None
+            ),
             patch(_SURPLUS_SYNC_CLOCK, return_value=2010.0),
         ):
             coordinator._maybe_schedule_surplus_sync()
@@ -940,7 +982,10 @@ class TestPowerOceanAppSurplusAutoSync:
         then silence, exactly like any other pair the device never adopts.
         """
         coordinator = self._make_divergent_coordinator(
-            hass, enhanced_config_entry, app=app_value, ems=ems_value,
+            hass,
+            enhanced_config_entry,
+            app=app_value,
+            ems=ems_value,
         )
         coordinator._last_user_surplus_set_ts = 1000.0
         coordinator._last_ems_param_change_ts = 2000.0
@@ -978,7 +1023,9 @@ class TestPowerOceanAppSurplusAutoSync:
         # next auto-sync waits for the device echo before firing.
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
-            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE,
+            hass,
+            enhanced_config_entry,
+            MOCK_POWEROCEAN_DEVICE,
         )
         coordinator._device_data = {
             "ems_charge_upper_limit_pct": 100,
@@ -1011,7 +1058,9 @@ class TestPowerOceanSocSetDebounce:
     def _make_coordinator(self, hass, entry):
         entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
-            hass, entry, MOCK_POWEROCEAN_DEVICE,
+            hass,
+            entry,
+            MOCK_POWEROCEAN_DEVICE,
         )
         coordinator._enhanced_mode = True
         coordinator.async_set_powerocean_soc = AsyncMock(return_value=True)
@@ -1100,9 +1149,7 @@ class TestPowerOceanSocFlushLifecycle:
 
     def _make_coordinator(self, hass, entry):
         entry.add_to_hass(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, entry, MOCK_POWEROCEAN_DEVICE
-        )
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_POWEROCEAN_DEVICE)
         coordinator._enhanced_mode = True
         return coordinator
 
@@ -1129,9 +1176,7 @@ class TestPowerOceanSocFlushLifecycle:
         monkeypatch.setattr(
             hass,
             "async_add_executor_job",
-            lambda target, *args: hass.loop.run_in_executor(
-                None, target, *args
-            ),
+            lambda target, *args: hass.loop.run_in_executor(None, target, *args),
         )
         coordinator = self._make_coordinator(hass, enhanced_config_entry)
         caplog.set_level(logging.DEBUG)
@@ -1225,9 +1270,7 @@ class TestPowerOceanSocFlushLifecycle:
         monkeypatch.setattr(
             hass,
             "async_add_executor_job",
-            lambda target, *args: hass.loop.run_in_executor(
-                None, target, *args
-            ),
+            lambda target, *args: hass.loop.run_in_executor(None, target, *args),
         )
         coordinator = self._make_coordinator(hass, enhanced_config_entry)
         caplog.set_level(logging.DEBUG)
@@ -1301,7 +1344,9 @@ class TestPowerOceanSocFlushLifecycle:
         )
 
     async def test_shutdown_awaits_two_concurrent_flush_tasks(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         coordinator = self._make_coordinator(hass, enhanced_config_entry)
         started = [asyncio.Event(), asyncio.Event()]
@@ -1341,7 +1386,9 @@ class TestPowerOceanSocFlushLifecycle:
         assert not coordinator._powerocean_soc_flush_tasks
 
     async def test_stale_callback_cannot_claim_newer_handle_or_pending(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         coordinator = self._make_coordinator(hass, enhanced_config_entry)
         coordinator.async_set_powerocean_soc = AsyncMock(return_value=True)
@@ -1361,7 +1408,9 @@ class TestPowerOceanSocFlushLifecycle:
         await coordinator.async_shutdown()
 
     async def test_pending_timer_shutdown_and_second_shutdown_are_idempotent(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         coordinator = self._make_coordinator(hass, enhanced_config_entry)
         coordinator.async_set_powerocean_soc = AsyncMock(return_value=True)
@@ -1419,9 +1468,7 @@ class TestPowerOceanSocFlushLifecycle:
             second = hass.async_create_task(
                 coordinator.async_shutdown(), eager_start=False
             )
-            outcomes = await asyncio.gather(
-                first, second, return_exceptions=True
-            )
+            outcomes = await asyncio.gather(first, second, return_exceptions=True)
 
             assert outcomes == [error, error]
             assert coordinator._shutdown_task is not None
@@ -1436,7 +1483,9 @@ class TestPowerOceanSocFlushLifecycle:
         base_shutdown.assert_awaited_once_with()
 
     async def test_shutdown_collects_task_and_all_stage_failures(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         coordinator = self._make_coordinator(hass, enhanced_config_entry)
         task_error = ValueError("write failed")
@@ -1473,7 +1522,9 @@ class TestPowerOceanSocFlushLifecycle:
         base_shutdown.assert_awaited_once_with()
 
     async def test_shutdown_propagates_cancelled_task_after_all_stages(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         coordinator = self._make_coordinator(hass, enhanced_config_entry)
 
@@ -1499,9 +1550,7 @@ class TestPowerOceanSocFlushLifecycle:
             second = hass.async_create_task(
                 coordinator.async_shutdown(), eager_start=False
             )
-            outcomes = await asyncio.gather(
-                first, second, return_exceptions=True
-            )
+            outcomes = await asyncio.gather(first, second, return_exceptions=True)
 
         assert all(isinstance(result, asyncio.CancelledError) for result in outcomes)
         mqtt.disconnect.assert_called_once_with()
@@ -1541,7 +1590,9 @@ class TestPowerOceanSocRollback:
             coordinator.data[key] = value
 
     async def test_a_failed_write_restores_the_device_value(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         coordinator = self._make_coordinator(hass, enhanced_config_entry, set_ok=False)
 
@@ -1552,7 +1603,9 @@ class TestPowerOceanSocRollback:
         assert coordinator._device_data["ems_app_surplus_pct"] == 80
 
     async def test_a_drag_burst_rolls_back_to_the_value_before_the_drag(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Every step of a drag writes optimistically; only the first is real."""
         coordinator = self._make_coordinator(hass, enhanced_config_entry, set_ok=False)
@@ -1564,7 +1617,9 @@ class TestPowerOceanSocRollback:
         assert coordinator._device_data["ems_app_surplus_pct"] == 80
 
     async def test_a_successful_write_is_not_rolled_back(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         coordinator = self._make_coordinator(hass, enhanced_config_entry, set_ok=True)
 
@@ -1575,7 +1630,9 @@ class TestPowerOceanSocRollback:
         assert coordinator._device_data["ems_app_surplus_pct"] == 90
 
     async def test_an_older_failure_cannot_undo_a_newer_pending_request(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """An older failure must leave a newer optimistic request untouched.
 
@@ -1624,7 +1681,9 @@ class TestPowerOceanSocRollback:
             await coordinator.async_shutdown()
 
     async def test_rollback_releases_the_optimistic_lock(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Without this the slider shows the refused value for a further 5 s."""
         coordinator = self._make_coordinator(hass, enhanced_config_entry, set_ok=False)
@@ -1693,9 +1752,7 @@ class TestPowerOceanSocRollbackUnderOverlap:
             await release[index].wait()
             return results[index]
 
-        coordinator.async_set_powerocean_soc = AsyncMock(
-            side_effect=_ordered_send
-        )
+        coordinator.async_set_powerocean_soc = AsyncMock(side_effect=_ordered_send)
         tasks: list[asyncio.Task[None]] = []
         try:
             await self._drag(coordinator, 50, 90)
@@ -1748,7 +1805,9 @@ class TestPowerOceanSocRollbackUnderOverlap:
             await coordinator.async_shutdown()
 
     async def test_late_older_success_only_advances_pending_request_baseline(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         coordinator = self._make_coordinator(hass, enhanced_config_entry)
         started = asyncio.Event()
@@ -1787,7 +1846,9 @@ class TestPowerOceanSocRollbackUnderOverlap:
             await coordinator.async_shutdown()
 
     async def test_two_failing_writes_still_land_on_the_device_value(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         coordinator = self._make_coordinator(hass, enhanced_config_entry)
         release = asyncio.Event()
@@ -1816,7 +1877,9 @@ class TestPowerOceanSocRollbackUnderOverlap:
         assert coordinator._device_data["ems_app_surplus_pct"] == 80
 
     async def test_a_failure_after_a_success_falls_back_to_what_was_written(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """The device holds the value of the successful write, not the old one."""
         coordinator = self._make_coordinator(hass, enhanced_config_entry)
@@ -1833,7 +1896,9 @@ class TestPowerOceanSocRollbackUnderOverlap:
         assert coordinator._device_data["ems_app_surplus_pct"] == 90
 
     async def test_a_failure_before_the_device_ever_reported_clears_the_value(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Nothing to fall back to means unknown, not the refused value."""
         coordinator = self._make_coordinator(hass, enhanced_config_entry)
@@ -1848,7 +1913,9 @@ class TestPowerOceanSocRollbackUnderOverlap:
         assert "ems_app_surplus_pct" not in coordinator._device_data
 
     async def test_a_raising_write_still_rolls_back(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         coordinator = self._make_coordinator(hass, enhanced_config_entry)
         coordinator.async_set_powerocean_soc = AsyncMock(

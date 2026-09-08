@@ -10,7 +10,7 @@ import base64
 import logging
 import re
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -83,7 +83,8 @@ _SERIAL_RE = re.compile(r"[A-Z0-9]{15,}")
 # dropping such bytes instead of replacing them turns a serial with one
 # stray byte in front of it into a clean match, so the ASCII step is what
 # keeps this pass to whole encoded serials rather than to serials found
-# inside other bytes. It is also the cheaper of the two. What the full match is NOT redundant for is a
+# inside other bytes. It is also the cheaper of the two. What the full match is NOT
+# redundant for is a
 # decoded value that is ASCII and contains a serial among other text: it
 # must be rejected rather than replaced whole, and only an anchored match
 # does that. No such value is on file; a test pins it.
@@ -467,9 +468,7 @@ async def _skipped_devices_diagnostics(
 
         if not has_dev_creds:
             if not probe_eligible:
-                out["quota_note"] = (
-                    "not attempted: device requires Standard Mode"
-                )
+                out["quota_note"] = "not attempted: device requires Standard Mode"
             else:
                 out["quota_note"] = (
                     "developer credentials required to capture raw quota "
@@ -480,7 +479,11 @@ async def _skipped_devices_diagnostics(
 
         sn = item.get("sn")
         response: dict | None = None
-        if sn:
+        # `has_dev_creds` (checked above, with a `continue` on False) already
+        # guarantees session/access_key/secret_key are all set here - this
+        # just states that invariant where the values are used instead of
+        # leaving it two branches back.
+        if sn and session is not None and access_key and secret_key:
             try:
                 client = EcoFlowHTTPQuota(session, access_key, secret_key, sn)
                 response = await client.get_quota_all(diagnostic=True)
@@ -566,7 +569,9 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
     if coordinator.last_mqtt_ts > 0:
         last_mqtt_age_s = round(now - coordinator.last_mqtt_ts, 1)
 
-    data_keys = sorted(coordinator.device_data.keys()) if coordinator.device_data else []
+    data_keys = (
+        sorted(coordinator.device_data.keys()) if coordinator.device_data else []
+    )
 
     last_value_change_age_s: float | None = None
     if coordinator.last_value_change_ts > 0:
@@ -609,7 +614,9 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
             # answers carry anything new, which is why the two fields below
             # exist: a Standard Mode poll returning the cloud's stored copy
             # looks identical here to one returning a fresh reading (#267).
-            "update_interval": str(coordinator.update_interval) if coordinator.update_interval else None,
+            "update_interval": str(coordinator.update_interval)
+            if coordinator.update_interval
+            else None,
             "last_value_change_age_s": last_value_change_age_s,
             "unchanged_updates": coordinator.unchanged_updates,
             # A get-all reply repeats the scheduled-task list under one
@@ -757,6 +764,6 @@ def _format_event_log(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
         entry = dict(event)
         ts = entry.get("ts")
         if isinstance(ts, (int, float)) and ts > 0:
-            entry["ts_iso"] = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+            entry["ts_iso"] = datetime.fromtimestamp(ts, tz=UTC).isoformat()
         formatted.append(entry)
     return formatted

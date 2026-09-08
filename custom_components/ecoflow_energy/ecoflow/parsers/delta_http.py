@@ -14,11 +14,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-_LOGGER = logging.getLogger(__name__)
-
+from . import _safe_float
 from .delta import _DELTA_ENUM_FIELDS
 
-from . import _safe_float
+_LOGGER = logging.getLogger(__name__)
 
 # Mapping: HTTP API key ("module.field") -> sensor key
 # Based on GetAllQuotaResponse from EcoFlow IoT Developer Platform
@@ -171,7 +170,6 @@ DELTA2MAX_HTTP_FIELD_MAP: dict[str, str] = {
 }
 
 
-
 def parse_delta_http_quota(quota_data: dict) -> dict[str, Any]:
     """Parse a Delta 2 Max GET /quota/all response into flat sensor keys.
 
@@ -292,7 +290,9 @@ def parse_delta_http_quota(quota_data: dict) -> dict[str, Any]:
             if iv in mapping:
                 result[key] = mapping[iv]
             else:
-                _LOGGER.debug("Unknown enum value for %s: %r (dropped)", key, result[key])
+                _LOGGER.debug(
+                    "Unknown enum value for %s: %r (dropped)", key, result[key]
+                )
                 del result[key]
 
     return result

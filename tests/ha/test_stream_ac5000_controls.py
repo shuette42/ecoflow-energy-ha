@@ -19,7 +19,6 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.const import (
@@ -27,9 +26,10 @@ from custom_components.ecoflow_energy.const import (
     STREAMAC5000_SELECTS,
     STREAMAC5000_SWITCHES,
 )
-from custom_components.ecoflow_energy.ecoflow.stream_ac5000_commands import TASK_REMOVE
-from custom_components.ecoflow_energy.switch import EcoFlowSwitch
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
+from custom_components.ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (
+    parse_stream_ac5000_message,
+)
 from custom_components.ecoflow_energy.ecoflow.proto.decoder import (
     decode_header_message,
 )
@@ -38,12 +38,10 @@ from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
     encode_field_varint,
     encode_varint,
 )
+from custom_components.ecoflow_energy.ecoflow.stream_ac5000_commands import TASK_REMOVE
 from custom_components.ecoflow_energy.number import EcoFlowNumber
 from custom_components.ecoflow_energy.select import EcoFlowSelect
-
-from custom_components.ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (
-    parse_stream_ac5000_message,
-)
+from custom_components.ecoflow_energy.switch import EcoFlowSwitch
 
 from .test_stream_ac5000_entities import ES22_DEVICE
 
@@ -283,10 +281,18 @@ class TestSocLimitNumbers:
     @pytest.mark.parametrize(
         ("key", "value", "counterpart", "expected"),
         [
-            ("max_charge_soc_pct", 85.0, "min_discharge_soc_pct",
-             bytes([0x08, 85, 0x10, 15])),
-            ("min_discharge_soc_pct", 20.0, "max_charge_soc_pct",
-             bytes([0x08, 90, 0x10, 20])),
+            (
+                "max_charge_soc_pct",
+                85.0,
+                "min_discharge_soc_pct",
+                bytes([0x08, 85, 0x10, 15]),
+            ),
+            (
+                "min_discharge_soc_pct",
+                20.0,
+                "max_charge_soc_pct",
+                bytes([0x08, 90, 0x10, 20]),
+            ),
         ],
     )
     async def test_a_float_counterpart_still_writes(
@@ -336,7 +342,9 @@ class TestSocLimitNumbers:
 
         data = dict(REPORTED, backup_reserve_enabled=True, backup_reserve_pct=30.0)
         coordinator = _coordinator(hass, enhanced_config_entry, data=data)
-        defn = next(d for d in STREAMAC5000_SWITCHES if d.key == "backup_reserve_switch")
+        defn = next(
+            d for d in STREAMAC5000_SWITCHES if d.key == "backup_reserve_switch"
+        )
         entity = EcoFlowSwitch(coordinator, defn)
         entity.async_write_ha_state = MagicMock()
 
@@ -353,7 +361,9 @@ class TestSocLimitNumbers:
         from custom_components.ecoflow_energy.switch import EcoFlowSwitch
 
         coordinator = _coordinator(hass, enhanced_config_entry, data={})
-        defn = next(d for d in STREAMAC5000_SWITCHES if d.key == "backup_reserve_switch")
+        defn = next(
+            d for d in STREAMAC5000_SWITCHES if d.key == "backup_reserve_switch"
+        )
         entity = EcoFlowSwitch(coordinator, defn)
         entity.async_write_ha_state = MagicMock()
 
@@ -603,7 +613,9 @@ class TestPowerSetpoints:
         That is exactly when the operation is an update, so an add always falls
         back to the number derived from the kind.
         """
-        coordinator = _coordinator(hass, enhanced_config_entry, data={"work_mode": "custom"})
+        coordinator = _coordinator(
+            hass, enhanced_config_entry, data={"work_mode": "custom"}
+        )
         entity = _number(coordinator, "scheduled_charge_power_w")
 
         await entity.async_set_native_value(300)
@@ -762,8 +774,12 @@ class TestConcurrentWrites:
         sent = _suspending_sender(coordinator)
 
         writes = [
-            _number(coordinator, "scheduled_charge_power_w").async_set_native_value(700),
-            _number(coordinator, "scheduled_discharge_power_w").async_set_native_value(300),
+            _number(coordinator, "scheduled_charge_power_w").async_set_native_value(
+                700
+            ),
+            _number(coordinator, "scheduled_discharge_power_w").async_set_native_value(
+                300
+            ),
         ]
         if first == "discharge":
             writes.reverse()

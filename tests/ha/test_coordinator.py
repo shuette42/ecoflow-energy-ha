@@ -6,11 +6,11 @@ import itertools
 import struct
 import time
 from datetime import timedelta
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
-
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.const import (
@@ -20,18 +20,13 @@ from custom_components.ecoflow_energy.const import (
     CONF_EMAIL,
     CONF_MODE,
     CONF_PASSWORD,
-    CONF_RAW_CAPTURE,
-    CONF_RAW_CAPTURE_UNTIL,
     CONF_USER_ID,
     CREDENTIAL_MAX_AGE_S,
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
-    DEVICE_TYPE_SMARTPLUG,
-    DEVICE_TYPE_STREAM,
     DEVICE_TYPE_UNKNOWN,
     DOMAIN,
-    ENERGY_STREAM_KEEPALIVE_S,
     HARD_UNAVAILABLE_S,
     HTTP_FALLBACK_INTERVAL_S,
     MODE_ENHANCED,
@@ -49,7 +44,6 @@ from custom_components.ecoflow_energy.const import (
     STREAM_POWER_TO_ENERGY,
 )
 from custom_components.ecoflow_energy.coordinator import (
-    DeviceSnapshot,
     EcoFlowDeviceCoordinator,
 )
 from custom_components.ecoflow_energy.ecoflow.parsers.powerocean_proto import (
@@ -64,14 +58,12 @@ from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
 )
 
 from .conftest import (
-    MOCK_DELTA_DEVICE,
     MOCK_DELTA3_DEVICE,
-    MOCK_MQTT_CREDENTIALS,
+    MOCK_DELTA_DEVICE,
     MOCK_POWEROCEAN_DEVICE,
     MOCK_SMARTPLUG_DEVICE,
     MOCK_STREAM_DEVICE,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers for battery state derivation tests (#63)
@@ -126,46 +118,196 @@ def _feed_timeline(
 # logic should collapse these into at most a handful of transitions.
 # Format: (seconds_from_start, batt_w).
 _PROD_TIMELINE_2026_04_20: list[tuple[float, float]] = [
-    (0, 640), (4, 680), (5, 700), (9, 740), (14, 790), (19, 840),
-    (24, 900), (25, 910), (29, 990), (34, 1080), (39, 1110), (44, 1070),
-    (45, 1040), (49, 960), (55, 930),
-    (60, 940), (65, 930), (70, 910), (75, 880), (80, 850), (85, 790),
-    (90, 680), (95, 590), (100, 510), (104, 480), (105, 470), (110, 420),
+    (0, 640),
+    (4, 680),
+    (5, 700),
+    (9, 740),
+    (14, 790),
+    (19, 840),
+    (24, 900),
+    (25, 910),
+    (29, 990),
+    (34, 1080),
+    (39, 1110),
+    (44, 1070),
+    (45, 1040),
+    (49, 960),
+    (55, 930),
+    (60, 940),
+    (65, 930),
+    (70, 910),
+    (75, 880),
+    (80, 850),
+    (85, 790),
+    (90, 680),
+    (95, 590),
+    (100, 510),
+    (104, 480),
+    (105, 470),
+    (110, 420),
     (115, 310),
-    (120, 190), (125, 170), (125, 160), (130, 130), (135, 100), (141, 70),
-    (145, 50), (146, 40), (151, 30),
-    (156, 20), (165, 10), (171, 30), (176, 60), (181, 80),
-    (185, 60), (186, 30), (191, -30), (196, -20), (201, 10),
-    (205, 30), (211, 40), (216, 50), (221, 60), (225, 70), (232, 80),
-    (237, 110), (242, 150),
-    (245, 190), (247, 220), (252, 270),
-    (257, 280), (262, 260), (265, 270), (267, 290), (272, 340), (277, 370),
-    (282, 420), (285, 440), (287, 450), (292, 480), (297, 520),
-    (305, 570), (307, 580), (312, 620), (317, 690), (322, 740), (325, 750),
-    (327, 720), (332, 650), (337, 630), (342, 640), (352, 620), (357, 610),
-    (362, 620), (367, 630), (372, 820), (377, 1170), (382, 1180), (385, 1130),
-    (388, 890), (393, 450), (398, 230), (403, 140), (405, 130), (408, 100),
-    (413, 90), (418, 70),
-    (423, 40), (425, 30), (428, 10),
-    (433, 0), (438, -30), (443, -60), (445, -70), (453, -50), (458, -60),
-    (464, -70), (465, -80), (469, -160), (474, -230),
-    (484, -240), (489, -250),
-    (494, -270), (499, -280), (504, -290), (509, -300),
-    (519, -280), (524, -240), (529, -220), (534, -260), (539, -340),
-    (545, -330), (550, -310), (555, -300), (560, -280), (565, -270),
-    (570, -260), (575, -250), (580, -230), (585, -210), (590, -160),
-    (595, -100), (600, -80), (605, -130), (605, -140), (610, -170),
-    (615, -130), (620, -110), (625, -90), (625, -80), (631, -60), (636, -40),
+    (120, 190),
+    (125, 170),
+    (125, 160),
+    (130, 130),
+    (135, 100),
+    (141, 70),
+    (145, 50),
+    (146, 40),
+    (151, 30),
+    (156, 20),
+    (165, 10),
+    (171, 30),
+    (176, 60),
+    (181, 80),
+    (185, 60),
+    (186, 30),
+    (191, -30),
+    (196, -20),
+    (201, 10),
+    (205, 30),
+    (211, 40),
+    (216, 50),
+    (221, 60),
+    (225, 70),
+    (232, 80),
+    (237, 110),
+    (242, 150),
+    (245, 190),
+    (247, 220),
+    (252, 270),
+    (257, 280),
+    (262, 260),
+    (265, 270),
+    (267, 290),
+    (272, 340),
+    (277, 370),
+    (282, 420),
+    (285, 440),
+    (287, 450),
+    (292, 480),
+    (297, 520),
+    (305, 570),
+    (307, 580),
+    (312, 620),
+    (317, 690),
+    (322, 740),
+    (325, 750),
+    (327, 720),
+    (332, 650),
+    (337, 630),
+    (342, 640),
+    (352, 620),
+    (357, 610),
+    (362, 620),
+    (367, 630),
+    (372, 820),
+    (377, 1170),
+    (382, 1180),
+    (385, 1130),
+    (388, 890),
+    (393, 450),
+    (398, 230),
+    (403, 140),
+    (405, 130),
+    (408, 100),
+    (413, 90),
+    (418, 70),
+    (423, 40),
+    (425, 30),
+    (428, 10),
+    (433, 0),
+    (438, -30),
+    (443, -60),
+    (445, -70),
+    (453, -50),
+    (458, -60),
+    (464, -70),
+    (465, -80),
+    (469, -160),
+    (474, -230),
+    (484, -240),
+    (489, -250),
+    (494, -270),
+    (499, -280),
+    (504, -290),
+    (509, -300),
+    (519, -280),
+    (524, -240),
+    (529, -220),
+    (534, -260),
+    (539, -340),
+    (545, -330),
+    (550, -310),
+    (555, -300),
+    (560, -280),
+    (565, -270),
+    (570, -260),
+    (575, -250),
+    (580, -230),
+    (585, -210),
+    (590, -160),
+    (595, -100),
+    (600, -80),
+    (605, -130),
+    (605, -140),
+    (610, -170),
+    (615, -130),
+    (620, -110),
+    (625, -90),
+    (625, -80),
+    (631, -60),
+    (636, -40),
     (641, -20),
-    (645, 0), (651, 40), (656, 90), (661, 140), (665, 190), (666, 200),
-    (676, 170), (681, 190), (685, 210), (686, 220), (691, 260), (696, 290),
-    (701, 310), (705, 330),
-    (711, 360), (721, 400), (725, 450), (726, 460), (731, 500), (736, 520),
-    (741, 450), (745, 420), (751, 430), (756, 440), (776, 430), (781, 410),
-    (791, 430), (797, 460), (805, 410), (812, 320), (817, 340), (822, 350),
-    (832, 360), (837, 370), (842, 380), (845, 390), (847, 400), (852, 430),
-    (857, 490), (862, 560), (865, 580), (867, 600), (873, 580), (878, 560),
-    (883, 600), (885, 610), (888, 630), (893, 660), (898, 690),
+    (645, 0),
+    (651, 40),
+    (656, 90),
+    (661, 140),
+    (665, 190),
+    (666, 200),
+    (676, 170),
+    (681, 190),
+    (685, 210),
+    (686, 220),
+    (691, 260),
+    (696, 290),
+    (701, 310),
+    (705, 330),
+    (711, 360),
+    (721, 400),
+    (725, 450),
+    (726, 460),
+    (731, 500),
+    (736, 520),
+    (741, 450),
+    (745, 420),
+    (751, 430),
+    (756, 440),
+    (776, 430),
+    (781, 410),
+    (791, 430),
+    (797, 460),
+    (805, 410),
+    (812, 320),
+    (817, 340),
+    (822, 350),
+    (832, 360),
+    (837, 370),
+    (842, 380),
+    (845, 390),
+    (847, 400),
+    (852, 430),
+    (857, 490),
+    (862, 560),
+    (865, 580),
+    (867, 600),
+    (873, 580),
+    (878, 560),
+    (883, 600),
+    (885, 610),
+    (888, 630),
+    (893, 660),
+    (898, 690),
 ]
 
 
@@ -575,9 +717,7 @@ class TestProperties:
         coordinator = EcoFlowDeviceCoordinator(hass, standard_config_entry, device)
         assert coordinator.device_info["sw_version"] == "1.0.66"
 
-        bare = EcoFlowDeviceCoordinator(
-            hass, standard_config_entry, MOCK_DELTA_DEVICE
-        )
+        bare = EcoFlowDeviceCoordinator(hass, standard_config_entry, MOCK_DELTA_DEVICE)
         assert "sw_version" not in bare.device_info
 
 
@@ -762,10 +902,12 @@ class TestMessageParsing:
         import json
 
         topic = "/open/cert_account/SN001/quota"
-        payload = json.dumps({
-            "typeCode": "pdStatus",
-            "params": {"soc": 85, "wattsInSum": 200},
-        }).encode()
+        payload = json.dumps(
+            {
+                "typeCode": "pdStatus",
+                "params": {"soc": 85, "wattsInSum": 200},
+            }
+        ).encode()
 
         result = coordinator._parse_message(topic, payload)
         assert result is not None
@@ -913,9 +1055,11 @@ class TestMessageParsing:
         import json
 
         topic = "/open/cert/SN001/quota"
-        payload = json.dumps({
-            "params": {"2_1.watts": 150, "2_1.volt": 230},
-        }).encode()
+        payload = json.dumps(
+            {
+                "params": {"2_1.watts": 150, "2_1.volt": 230},
+            }
+        ).encode()
 
         with patch.object(coordinator.hass.loop, "call_soon_threadsafe") as mock_csf:
             coordinator._on_mqtt_message(topic, payload)
@@ -939,9 +1083,11 @@ class TestMessageParsing:
         import json
 
         topic = "/open/cert/SN001/quota"
-        payload = json.dumps({
-            "param": {"watts": 100, "brightness": 512, "switchSta": 1},
-        }).encode()
+        payload = json.dumps(
+            {
+                "param": {"watts": 100, "brightness": 512, "switchSta": 1},
+            }
+        ).encode()
 
         with patch.object(coordinator.hass.loop, "call_soon_threadsafe") as mock_csf:
             coordinator._on_mqtt_message(topic, payload)
@@ -964,10 +1110,12 @@ class TestMessageParsing:
             hass, standard_config_entry, MOCK_DELTA_DEVICE
         )
         topic = f"/app/device/property/{MOCK_DELTA_DEVICE['sn']}"
-        payload = json.dumps({
-            "typeCode": "pdStatus",
-            "params": {"soc": 85, "wattsInSum": 200},
-        }).encode()
+        payload = json.dumps(
+            {
+                "typeCode": "pdStatus",
+                "params": {"soc": 85, "wattsInSum": 200},
+            }
+        ).encode()
 
         result = coordinator._parse_message(topic, payload)
         assert result is not None
@@ -1024,9 +1172,11 @@ class TestMessageParsing:
             hass, standard_config_entry, MOCK_SMARTPLUG_DEVICE
         )
         topic = f"/app/device/property/{MOCK_SMARTPLUG_DEVICE['sn']}"
-        payload = json.dumps({
-            "param": {"watts": 1500, "switchSta": 1, "volt": 230},
-        }).encode()
+        payload = json.dumps(
+            {
+                "param": {"watts": 1500, "switchSta": 1, "volt": 230},
+            }
+        ).encode()
 
         result = coordinator._parse_message(topic, payload)
         assert result is not None
@@ -1188,13 +1338,15 @@ class TestHTTPPolling:
             hass, standard_config_entry, MOCK_POWEROCEAN_DEVICE
         )
         coordinator._http_client = MagicMock()
-        coordinator._http_client.get_quota_all = AsyncMock(return_value={
-            "mpptPwr": 1234.0,
-            "sysLoadPwr": 800.0,
-            "bpPwr": -300.0,
-            "sysGridPwr": 150.0,
-            "bpSoc": 85,
-        })
+        coordinator._http_client.get_quota_all = AsyncMock(
+            return_value={
+                "mpptPwr": 1234.0,
+                "sysLoadPwr": 800.0,
+                "bpPwr": -300.0,
+                "sysGridPwr": 150.0,
+                "bpSoc": 85,
+            }
+        )
 
         data = await coordinator._async_update_data()
 
@@ -1224,11 +1376,13 @@ class TestHTTPPolling:
             hass, standard_config_entry, MOCK_DELTA_DEVICE
         )
         coordinator._http_client = MagicMock()
-        coordinator._http_client.get_quota_all = AsyncMock(return_value={
-            "pd.soc": 75,
-            "pd.sysVer": 16975450,
-            "inv.sysVer": 33554523,
-        })
+        coordinator._http_client.get_quota_all = AsyncMock(
+            return_value={
+                "pd.soc": 75,
+                "pd.sysVer": 16975450,
+                "inv.sysVer": 33554523,
+            }
+        )
 
         await coordinator._async_update_data()
 
@@ -1247,10 +1401,12 @@ class TestHTTPPolling:
             hass, standard_config_entry, MOCK_POWEROCEAN_DEVICE
         )
         coordinator._http_client = MagicMock()
-        coordinator._http_client.get_quota_all = AsyncMock(return_value={
-            "bpSoc": 85,
-            "ems_change_report.pcs10minOverVol": 253.0,
-        })
+        coordinator._http_client.get_quota_all = AsyncMock(
+            return_value={
+                "bpSoc": 85,
+                "ems_change_report.pcs10minOverVol": 253.0,
+            }
+        )
 
         await coordinator._async_update_data()
 
@@ -1267,11 +1423,13 @@ class TestHTTPPolling:
             hass, standard_config_entry, MOCK_SMARTPLUG_DEVICE
         )
         coordinator._http_client = MagicMock()
-        coordinator._http_client.get_quota_all = AsyncMock(return_value={
-            "2_1.watts": 1500,
-            "2_1.switchSta": 1,
-            "2_1.volt": 230,
-        })
+        coordinator._http_client.get_quota_all = AsyncMock(
+            return_value={
+                "2_1.watts": 1500,
+                "2_1.switchSta": 1,
+                "2_1.volt": 230,
+            }
+        )
 
         data = await coordinator._async_update_data()
 
@@ -1296,9 +1454,11 @@ class TestHTTPPolling:
         }
         coordinator = EcoFlowDeviceCoordinator(hass, standard_config_entry, device)
         coordinator._http_client = MagicMock()
-        coordinator._http_client.get_quota_all = AsyncMock(return_value={
-            "someRawKey": 42,
-        })
+        coordinator._http_client.get_quota_all = AsyncMock(
+            return_value={
+                "someRawKey": 42,
+            }
+        )
 
         data = await coordinator._async_update_data()
 
@@ -1323,21 +1483,27 @@ class TestHTTPPolling:
         )
         coordinator._http_client = MagicMock()
 
-        coordinator._http_client.get_quota_all = AsyncMock(return_value={
-            "ems_change_report.bpTotalChgEnergy": 4294967295,
-        })
+        coordinator._http_client.get_quota_all = AsyncMock(
+            return_value={
+                "ems_change_report.bpTotalChgEnergy": 4294967295,
+            }
+        )
         data = await coordinator._async_update_data()
         assert "batt_charge_energy_kwh" not in data
 
-        coordinator._http_client.get_quota_all = AsyncMock(return_value={
-            "ems_change_report.bpTotalChgEnergy": 0,
-        })
+        coordinator._http_client.get_quota_all = AsyncMock(
+            return_value={
+                "ems_change_report.bpTotalChgEnergy": 0,
+            }
+        )
         data = await coordinator._async_update_data()
         assert "batt_charge_energy_kwh" not in data
 
-        coordinator._http_client.get_quota_all = AsyncMock(return_value={
-            "ems_change_report.bpTotalChgEnergy": 3667924,
-        })
+        coordinator._http_client.get_quota_all = AsyncMock(
+            return_value={
+                "ems_change_report.bpTotalChgEnergy": 3667924,
+            }
+        )
         data = await coordinator._async_update_data()
         # _integrate_energy rounds to 2 decimals on write-back.
         assert data["batt_charge_energy_kwh"] == pytest.approx(3667.92)
@@ -1396,8 +1562,10 @@ class TestReauthSuppression:
             await coordinator._async_update_data()
 
         # No reauth should have been triggered
-        assert not hasattr(standard_config_entry, "_async_start_reauth_called") or \
-            not standard_config_entry._async_start_reauth_called
+        assert (
+            not hasattr(standard_config_entry, "_async_start_reauth_called")
+            or not standard_config_entry._async_start_reauth_called
+        )
 
     async def test_an_api_error_still_triggers_reauth_standard_mode(
         self,
@@ -1533,7 +1701,9 @@ class TestReauthSuppression:
             instance = cls.return_value
             instance.login = AsyncMock(return_value=False)
 
-            with patch.object(enhanced_config_entry, "async_start_reauth") as mock_reauth:
+            with patch.object(
+                enhanced_config_entry, "async_start_reauth"
+            ) as mock_reauth:
                 await coordinator.async_setup()
                 mock_reauth.assert_called_once()
 
@@ -1650,7 +1820,9 @@ class TestSETCommands:
         ok = await coordinator.async_send_set_command(command)
         assert ok is True
         topic = mock_mqtt_client.publish.call_args[0][0]
-        assert topic == f"/app/test_user_123/{MOCK_DELTA_DEVICE['sn']}/thing/property/set"
+        assert (
+            topic == f"/app/test_user_123/{MOCK_DELTA_DEVICE['sn']}/thing/property/set"
+        )
 
     async def test_send_set_command_mqtt_disconnected(
         self,
@@ -1877,9 +2049,7 @@ class TestSETCommands:
         coordinator = EcoFlowDeviceCoordinator(
             hass, standard_config_entry, MOCK_DELTA3_DEVICE
         )
-        ok = await coordinator.async_send_delta3_set(
-            {"params": {"cfgMaxChgSoc": 80}}
-        )
+        ok = await coordinator.async_send_delta3_set({"params": {"cfgMaxChgSoc": 80}})
         assert ok is False
 
     async def test_delta3_set_http_no_response_logs_fail(
@@ -1895,9 +2065,7 @@ class TestSETCommands:
         coordinator._http_client = MagicMock()
         coordinator._http_client.set_quota = AsyncMock(return_value=None)
 
-        ok = await coordinator.async_send_delta3_set(
-            {"params": {"cfgMaxChgSoc": 80}}
-        )
+        ok = await coordinator.async_send_delta3_set({"params": {"cfgMaxChgSoc": 80}})
         assert ok is False
         assert coordinator.event_log[-1]["type"] == "set_cmd_fail"
         assert "cfgMaxChgSoc" in coordinator.event_log[-1]["detail"]
@@ -1933,8 +2101,7 @@ class TestSETCommands:
 
         with (
             patch(
-                "custom_components.ecoflow_energy.ecoflow.cloud_http."
-                "asyncio.sleep",
+                "custom_components.ecoflow_energy.ecoflow.cloud_http.asyncio.sleep",
                 new_callable=AsyncMock,
             ),
             caplog.at_level("DEBUG"),
@@ -1944,9 +2111,16 @@ class TestSETCommands:
             )
 
         assert ok is False
-        assert len(
-            [record for record in caplog.records if record.levelno == logging.WARNING]
-        ) == 1
+        assert (
+            len(
+                [
+                    record
+                    for record in caplog.records
+                    if record.levelno == logging.WARNING
+                ]
+            )
+            == 1
+        )
         assert not [
             record for record in caplog.records if record.levelno >= logging.ERROR
         ]
@@ -1969,10 +2143,12 @@ class TestSETCommands:
         )
         response = AsyncMock()
         response.ok = True
-        response.json = AsyncMock(return_value={
-            "code": "1006",
-            "message": "device not linked",
-        })
+        response.json = AsyncMock(
+            return_value={
+                "code": "1006",
+                "message": "device not linked",
+            }
+        )
         request_context = AsyncMock()
         request_context.__aenter__.return_value = response
         session = MagicMock()
@@ -1992,18 +2168,23 @@ class TestSETCommands:
 
         assert ok is False
         assert coordinator._http_client.last_error_code == "1006"
-        assert len(
-            [record for record in caplog.records if record.levelno == logging.WARNING]
-        ) == 1
+        assert (
+            len(
+                [
+                    record
+                    for record in caplog.records
+                    if record.levelno == logging.WARNING
+                ]
+            )
+            == 1
+        )
         assert not [
             record for record in caplog.records if record.levelno >= logging.ERROR
         ]
 
     # --- _async_send_delta3_set_proto (app channel) ------------------------
 
-    def _delta3_app_coordinator(
-        self, hass: HomeAssistant
-    ) -> EcoFlowDeviceCoordinator:
+    def _delta3_app_coordinator(self, hass: HomeAssistant) -> EcoFlowDeviceCoordinator:
         entry = MockConfigEntry(
             domain=DOMAIN,
             title="EcoFlow Energy",
@@ -2028,9 +2209,7 @@ class TestSETCommands:
     ) -> None:
         """App-channel Delta 3 SET without MQTT returns False and logs fail."""
         coordinator = self._delta3_app_coordinator(hass)
-        ok = await coordinator.async_send_delta3_set(
-            {"params": {"cfgMaxChgSoc": 80}}
-        )
+        ok = await coordinator.async_send_delta3_set({"params": {"cfgMaxChgSoc": 80}})
         assert ok is False
         assert coordinator.event_log[-1]["type"] == "set_cmd_fail"
 
@@ -2044,9 +2223,7 @@ class TestSETCommands:
         mock_mqtt.is_connected.return_value = True
         coordinator._mqtt_client = mock_mqtt
 
-        ok = await coordinator.async_send_delta3_set(
-            {"params": {"unknownControl": 1}}
-        )
+        ok = await coordinator.async_send_delta3_set({"params": {"unknownControl": 1}})
         assert ok is False
         mock_mqtt.send_proto_set.assert_not_called()
         assert coordinator.event_log[-1]["type"] == "set_cmd_fail"
@@ -2379,7 +2556,8 @@ class TestStaleDetection:
         assert "no data since connect" in caplog.text
         # The transition must not be logged at WARNING or above
         assert not [
-            r for r in caplog.records
+            r
+            for r in caplog.records
             if r.levelname in ("WARNING", "ERROR", "CRITICAL")
             and "became unavailable" in r.getMessage()
         ]
@@ -2390,7 +2568,8 @@ class TestStaleDetection:
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """Availability stage progresses through healthy -> stale -> degraded -> unavailable."""
+        """Availability stage progresses through healthy -> stale -> degraded ->
+        unavailable."""
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
@@ -2424,7 +2603,8 @@ class TestStaleDetection:
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """PowerOcean stays available during a 600s stream gap (observed real behavior)."""
+        """PowerOcean stays available during a 600s stream gap (observed real
+        behavior)."""
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
@@ -2770,8 +2950,7 @@ class TestEnhancedSetup:
                 "custom_components.ecoflow_energy.ecoflow.app_api.AppApiClient",
             ) as cls,
             patch(
-                "custom_components.ecoflow_energy.coordinator.setup."
-                "EcoFlowMQTTClient",
+                "custom_components.ecoflow_energy.coordinator.setup.EcoFlowMQTTClient",
             ) as client_cls,
         ):
             instance = cls.return_value
@@ -2818,8 +2997,7 @@ class TestEnhancedSetup:
                 "custom_components.ecoflow_energy.coordinator.setup.IoTApiClient",
             ) as api_cls,
             patch(
-                "custom_components.ecoflow_energy.coordinator.setup."
-                "EcoFlowMQTTClient",
+                "custom_components.ecoflow_energy.coordinator.setup.EcoFlowMQTTClient",
             ) as client_cls,
         ):
             api_cls.return_value.get_mqtt_credentials = AsyncMock(
@@ -2949,7 +3127,11 @@ class TestApplyData:
         for metric in ("solar_energy_kwh", "home_energy_kwh"):
             if metric in coordinator._energy_integrator._state:
                 total, _ts, power = coordinator._energy_integrator._state[metric]
-                coordinator._energy_integrator._state[metric] = (total, time.monotonic() - 30, power)
+                coordinator._energy_integrator._state[metric] = (
+                    total,
+                    time.monotonic() - 30,
+                    power,
+                )
         coordinator._apply_data({"solar_w": 3000, "home_w": 1500})
 
         # Energy keys should now exist in device_data
@@ -2977,7 +3159,9 @@ class TestApplyData:
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
         coordinator._energy_integrator._state["batt_charge_energy_kwh"] = (
-            2603.0, time.monotonic(), 0.0,
+            2603.0,
+            time.monotonic(),
+            0.0,
         )
 
         coordinator._apply_data({"batt_charge_energy_kwh": 4_294_967.295})
@@ -3045,7 +3229,9 @@ class TestApplyData:
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
-        _feed_samples(coordinator, [10.0, -5.0, 20.0, 0.0, 15.0, -10.0, 5.0, 30.0, -15.0, 25.0])
+        _feed_samples(
+            coordinator, [10.0, -5.0, 20.0, 0.0, 15.0, -10.0, 5.0, 30.0, -15.0, 25.0]
+        )
         assert coordinator.device_data["batt_charge_discharge_state"] == "standby"
 
     async def test_apply_data_needs_min_samples_before_deriving(
@@ -3123,10 +3309,12 @@ class TestApplyData:
             "custom_components.ecoflow_energy.coordinator.time.monotonic",
             return_value=2000.0,
         ):
-            coordinator._apply_data({
-                "batt_w": 0.0,
-                "batt_charge_discharge_state": "discharging",
-            })
+            coordinator._apply_data(
+                {
+                    "batt_w": 0.0,
+                    "batt_charge_discharge_state": "discharging",
+                }
+            )
         assert coordinator.device_data["batt_charge_discharge_state"] == "standby"
 
     async def test_apply_data_ems_raw_state_stripped_from_device_data(
@@ -3157,11 +3345,13 @@ class TestApplyData:
         ) as mock_mono:
             for i in range(10):
                 mock_mono.return_value = 1000.0 + i * 3.0
-                coordinator._apply_data({
-                    "batt_w": -500.0,
-                    "batt_charge_power_w": 0.0,
-                    "batt_discharge_power_w": 0.0,
-                })
+                coordinator._apply_data(
+                    {
+                        "batt_w": -500.0,
+                        "batt_charge_power_w": 0.0,
+                        "batt_discharge_power_w": 0.0,
+                    }
+                )
         assert coordinator.device_data["batt_charge_discharge_state"] == "discharging"
 
     async def test_apply_data_split_fields_fallback_when_no_batt_w(
@@ -3179,10 +3369,12 @@ class TestApplyData:
         ) as mock_mono:
             for i in range(10):
                 mock_mono.return_value = 1000.0 + i * 3.0
-                coordinator._apply_data({
-                    "batt_charge_power_w": 800.0,
-                    "batt_discharge_power_w": 0.0,
-                })
+                coordinator._apply_data(
+                    {
+                        "batt_charge_power_w": 800.0,
+                        "batt_discharge_power_w": 0.0,
+                    }
+                )
         assert coordinator.device_data["batt_charge_discharge_state"] == "charging"
 
     async def test_apply_data_prod_timeline_few_flips(
@@ -3242,12 +3434,12 @@ class TestApplyData:
         )
         points: list[tuple[float, float]] = []
         # Bootstrap: steady discharge (first derived state commits)
-        points += [(i * 10.0, -300.0) for i in range(15)]           # t=0..140
+        points += [(i * 10.0, -300.0) for i in range(15)]  # t=0..140
         # Oscillation around zero for ~500s (< BATT_CONFIRM_S)
-        for i in range(50):                                          # t=150..640
+        for i in range(50):  # t=150..640
             points.append((150.0 + i * 10.0, 140.0 if i % 2 == 0 else -140.0))
         # Back to steady discharge (candidate dropped via derived == prev)
-        points += [(650.0 + i * 10.0, -300.0) for i in range(12)]    # t=650..760
+        points += [(650.0 + i * 10.0, -300.0) for i in range(12)]  # t=650..760
         states = _feed_timeline(coordinator, points)
         assert states == ["discharging"], f"Unexpected flips: {states}"
 
@@ -3263,11 +3455,11 @@ class TestApplyData:
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
         points: list[tuple[float, float]] = []
-        points += [(i * 10.0, -400.0) for i in range(15)]            # t=0..140
+        points += [(i * 10.0, -400.0) for i in range(15)]  # t=0..140
         # Ramp -400W -> +1700W over 300s, then hold +1700W for ~180s
-        for i in range(30):                                          # t=150..440
+        for i in range(30):  # t=150..440
             points.append((150.0 + i * 10.0, -400.0 + (i + 1) * 70.0))
-        points += [(460.0 + i * 10.0, 1700.0) for i in range(19)]    # t=460..640
+        points += [(460.0 + i * 10.0, 1700.0) for i in range(19)]  # t=460..640
         states = _feed_timeline(coordinator, points)
         assert states == ["discharging"], f"Unexpected flips: {states}"
 
@@ -3283,9 +3475,9 @@ class TestApplyData:
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
         points: list[tuple[float, float]] = []
-        points += [(i * 10.0, 1000.0) for i in range(15)]            # t=0..140
-        points += [(150.0 + i * 10.0, -1700.0) for i in range(10)]   # t=150..240
-        points += [(250.0 + i * 10.0, 600.0) for i in range(26)]     # t=250..500
+        points += [(i * 10.0, 1000.0) for i in range(15)]  # t=0..140
+        points += [(150.0 + i * 10.0, -1700.0) for i in range(10)]  # t=150..240
+        points += [(250.0 + i * 10.0, 600.0) for i in range(26)]  # t=250..500
         states = _feed_timeline(coordinator, points)
         assert states == ["charging"], f"Unexpected flips: {states}"
 
@@ -3301,8 +3493,8 @@ class TestApplyData:
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
         points: list[tuple[float, float]] = []
-        points += [(i * 10.0, 900.0) for i in range(15)]             # t=0..140
-        points += [(150.0 + i * 10.0, -900.0) for i in range(67)]    # t=150..810
+        points += [(i * 10.0, 900.0) for i in range(15)]  # t=0..140
+        points += [(150.0 + i * 10.0, -900.0) for i in range(67)]  # t=150..810
         _feed_timeline(coordinator, points)
         # Candidate registered at ~t=220 (first avg < -150 past hold);
         # 600s not yet elapsed at t=810 -> still charging.
@@ -3325,12 +3517,12 @@ class TestApplyData:
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
         points: list[tuple[float, float]] = []
-        points += [(i * 10.0, 0.0) for i in range(15)]               # t=0..140 standby
-        points += [(150.0 + i * 10.0, 900.0) for i in range(7)]      # t=150..210 candidate
+        points += [(i * 10.0, 0.0) for i in range(15)]  # t=0..140 standby
+        points += [(150.0 + i * 10.0, 900.0) for i in range(7)]  # t=150..210 candidate
         # Deadband excursion: window average settles at 100W (50..150)
-        points += [(220.0 + i * 10.0, 100.0) for i in range(13)]     # t=220..340
+        points += [(220.0 + i * 10.0, 100.0) for i in range(13)]  # t=220..340
         # Candidate band again until just before the 600s confirmation
-        points += [(350.0 + i * 10.0, 900.0) for i in range(46)]     # t=350..800
+        points += [(350.0 + i * 10.0, 900.0) for i in range(46)]  # t=350..800
         _feed_timeline(coordinator, points)
         # Pending since ~t=210; at t=800 confirmation not yet elapsed.
         assert coordinator.device_data["batt_charge_discharge_state"] == "standby"
@@ -3351,19 +3543,21 @@ class TestApplyData:
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
         points: list[tuple[float, float]] = []
-        points += [(i * 10.0, 0.0) for i in range(15)]               # t=0..140 standby
-        points += [(150.0 + i * 10.0, 900.0) for i in range(16)]     # t=150..300 candidate
-        points += [(310.0 + i * 10.0, 0.0) for i in range(16)]       # t=310..460 back to standby
+        points += [(i * 10.0, 0.0) for i in range(15)]  # t=0..140 standby
+        points += [(150.0 + i * 10.0, 900.0) for i in range(16)]  # t=150..300 candidate
+        points += [
+            (310.0 + i * 10.0, 0.0) for i in range(16)
+        ]  # t=310..460 back to standby
         _feed_timeline(coordinator, points)
         assert coordinator._batt_pending_state is None
         # Fresh candidate from t=470; old timer (started ~t=210) would
         # have committed at ~t=810 - the state must still be standby well
         # past that point.
-        points_d = [(470.0 + i * 10.0, 900.0) for i in range(60)]    # t=470..1060
+        points_d = [(470.0 + i * 10.0, 900.0) for i in range(60)]  # t=470..1060
         _feed_timeline(coordinator, points_d)
         assert coordinator.device_data["batt_charge_discharge_state"] == "standby"
         # The fresh timer commits ~600s after the new candidate appeared.
-        points_e = [(1070.0 + i * 10.0, 900.0) for i in range(9)]    # t=1070..1150
+        points_e = [(1070.0 + i * 10.0, 900.0) for i in range(9)]  # t=1070..1150
         _feed_timeline(coordinator, points_e)
         assert coordinator.device_data["batt_charge_discharge_state"] == "charging"
 
@@ -3395,13 +3589,15 @@ class TestApplyData:
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
         points: list[tuple[float, float]] = []
-        points += [(i * 10.0, 900.0) for i in range(15)]             # t=0..140 charging
-        points += [(150.0 + i * 10.0, -900.0) for i in range(69)]    # t=150..830 confirm+commit
+        points += [(i * 10.0, 900.0) for i in range(15)]  # t=0..140 charging
+        points += [
+            (150.0 + i * 10.0, -900.0) for i in range(69)
+        ]  # t=150..830 confirm+commit
         _feed_timeline(coordinator, points)
         assert coordinator.device_data["batt_charge_discharge_state"] == "discharging"
         # Strong opposite swing right after the commit (t=840..930, within
         # the 120s hold window) -> blocked, and no pending timer starts.
-        swing = [(840.0 + i * 10.0, 900.0) for i in range(10)]       # t=840..930
+        swing = [(840.0 + i * 10.0, 900.0) for i in range(10)]  # t=840..930
         _feed_timeline(coordinator, swing)
         assert coordinator.device_data["batt_charge_discharge_state"] == "discharging"
         assert coordinator._batt_pending_state is None
@@ -3422,7 +3618,8 @@ class TestApplyData:
         coordinator._integrate_energy({"batt_charge_energy_kwh": 12.5})
 
         coordinator._energy_integrator.set_total.assert_called_once_with(
-            "batt_charge_energy_kwh", 12.5,
+            "batt_charge_energy_kwh",
+            12.5,
         )
 
     async def test_first_reading_after_state_loss_publishes_nothing(
@@ -3445,8 +3642,7 @@ class TestApplyData:
         )
 
         clock = (
-            "custom_components.ecoflow_energy.ecoflow.energy_integrator"
-            ".time.monotonic"
+            "custom_components.ecoflow_energy.ecoflow.energy_integrator.time.monotonic"
         )
         reading = {"solar_w": 3000.0, "batt_charge_power_w": 2000.0}
 
@@ -3482,8 +3678,7 @@ class TestApplyData:
         )
 
         clock = (
-            "custom_components.ecoflow_energy.ecoflow.energy_integrator"
-            ".time.monotonic"
+            "custom_components.ecoflow_energy.ecoflow.energy_integrator.time.monotonic"
         )
 
         with patch(clock, return_value=1000.0):
@@ -3507,14 +3702,8 @@ class TestApplyData:
 class TestProtoKeyRemapping:
     async def test_remap_energy_stream_keys(
         self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Protobuf keys are remapped to sensor keys."""
-        enhanced_config_entry.add_to_hass(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
-        )
         raw = {
             "solar": 3200,
             "home_direct": 1500,
@@ -3532,14 +3721,8 @@ class TestProtoKeyRemapping:
 
     async def test_remap_derives_grid_import_export(
         self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Grid import/export splits are computed from grid_w."""
-        enhanced_config_entry.add_to_hass(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
-        )
         # Positive grid_w = import
         result = remap_proto_keys({"grid_raw_f2": 500})
         assert result["grid_import_power_w"] == 500
@@ -3552,14 +3735,8 @@ class TestProtoKeyRemapping:
 
     async def test_remap_derives_batt_charge_discharge(
         self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Battery charge/discharge splits are computed from batt_w."""
-        enhanced_config_entry.add_to_hass(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
-        )
         # Positive batt_w = charging
         result = remap_proto_keys({"batt_pb": 1200})
         assert result["batt_charge_power_w"] == 1200
@@ -3572,28 +3749,16 @@ class TestProtoKeyRemapping:
 
     async def test_remap_preserves_unknown_keys(
         self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Keys not in the mapping are passed through unchanged."""
-        enhanced_config_entry.add_to_hass(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
-        )
         result = remap_proto_keys({"solar": 100, "some_new_field": 42})
         assert result["solar_w"] == 100
         assert result["some_new_field"] == 42
 
     async def test_remap_zero_values(
         self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Zero power values produce zero derived splits."""
-        enhanced_config_entry.add_to_hass(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
-        )
         result = remap_proto_keys({"grid_raw_f2": 0.0, "batt_pb": 0.0})
         assert result["grid_w"] == 0.0
         assert result["grid_import_power_w"] == 0.0
@@ -3611,14 +3776,8 @@ class TestProtoKeyRemapping:
 class TestHeartbeatExtraction:
     async def test_mppt_per_string(
         self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """MPPT per-string data extracted from nested mppt_heart_beat."""
-        enhanced_config_entry.add_to_hass(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
-        )
         raw = {
             "mppt_heart_beat": [
                 {
@@ -3642,14 +3801,8 @@ class TestHeartbeatExtraction:
 
     async def test_grid_phase_from_load_info(
         self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Grid phase data extracted from pcs_load_info nested array."""
-        enhanced_config_entry.add_to_hass(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
-        )
         raw = {
             "pcs_load_info": [
                 {"vol": 230.5, "amp": 10.2, "pwr": 2300.0},
@@ -3667,14 +3820,8 @@ class TestHeartbeatExtraction:
 
     async def test_grid_phase_from_pcs_phase(
         self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Grid phase data from pcs_a/b/c_phase fallback."""
-        enhanced_config_entry.add_to_hass(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
-        )
         raw = {
             "pcs_a_phase": {"vol": 230.0, "amp": 10.0, "act_pwr": -2200.0},
             "pcs_b_phase": {"vol": 231.0, "amp": 11.0, "act_pwr": -2500.0},
@@ -3688,36 +3835,24 @@ class TestHeartbeatExtraction:
 
     async def test_grid_status_derived_from_phase_voltage(
         self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Grid status derived as 'ok' when phase A voltage > 50V."""
-        enhanced_config_entry.add_to_hass(hass)
         raw = {"pcs_a_phase": {"vol": 230.0, "amp": 10.0, "act_pwr": -2000.0}}
         result = flatten_heartbeat(raw)
         assert result["grid_status"] == "ok"
 
     async def test_grid_status_not_detected_low_voltage(
         self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Grid status 'not_detected' when phase A voltage <= 50V."""
-        enhanced_config_entry.add_to_hass(hass)
         raw = {"pcs_a_phase": {"vol": 0.0, "amp": 0.0, "act_pwr": 0.0}}
         result = flatten_heartbeat(raw)
         assert result["grid_status"] == "not_detected"
 
     async def test_empty_heartbeat(
         self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Empty heartbeat produces empty result."""
-        enhanced_config_entry.add_to_hass(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
-        )
         result = flatten_heartbeat({})
         assert result == {}
 
@@ -3796,7 +3931,13 @@ class TestBpRemapping:
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
-        raw = {"sys_grid_sta": 1, "bp_chg_dsg_sta": 2, "ems_feed_mode": 0, "ems_work_mode": 0, "pcs_run_sta": 1}
+        raw = {
+            "sys_grid_sta": 1,
+            "bp_chg_dsg_sta": 2,
+            "ems_feed_mode": 0,
+            "ems_work_mode": 0,
+            "pcs_run_sta": 1,
+        }
         result = remap_bp_keys(raw, coordinator._bp_sn_to_index, coordinator.device_sn)
 
         assert result["grid_status"] == "ok"
@@ -3824,7 +3965,8 @@ class TestBpRemapping:
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """ems_work_state=0 maps to 'none' (not lost by zero-omission thanks to oneof)."""
+        """ems_work_state=0 maps to 'none' (not lost by zero-omission thanks to
+        oneof)."""
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
@@ -3843,7 +3985,8 @@ class TestBpRemapping:
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
-        # sys_grid_sta=0 would normally be "not_detected", but grid_is_energized=True overrides
+        # sys_grid_sta=0 would normally be "not_detected", but grid_is_energized=True
+        # overrides
         raw = {"sys_grid_sta": 0, "grid_is_energized": True}
         result = remap_bp_keys(raw, coordinator._bp_sn_to_index, coordinator.device_sn)
         assert result["grid_status"] == "ok"
@@ -3891,8 +4034,18 @@ class TestBpRemapping:
         )
         raw = {
             "all_packs": [
-                {"bp_soc": 76, "bp_pwr": 2486.48, "bp_vol": 54.671, "bp_accu_chg_energy": 2238706},
-                {"bp_soc": 74, "bp_pwr": 2529.19, "bp_vol": 54.698, "bp_accu_chg_energy": 2207455},
+                {
+                    "bp_soc": 76,
+                    "bp_pwr": 2486.48,
+                    "bp_vol": 54.671,
+                    "bp_accu_chg_energy": 2238706,
+                },
+                {
+                    "bp_soc": 74,
+                    "bp_pwr": 2529.19,
+                    "bp_vol": 54.698,
+                    "bp_accu_chg_energy": 2207455,
+                },
             ],
             "bp_soh": 100,
         }
@@ -4003,7 +4156,8 @@ class TestBpRemapping:
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """All packs are empty dicts (EMS module placeholders) - no pack sensors produced."""
+        """All packs are empty dicts (EMS module placeholders) - no pack sensors
+        produced."""
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
@@ -4108,13 +4262,21 @@ class TestBpRemapping:
         raw = {
             "all_packs": [
                 # Pack 1: active (non-zero power)
-                {"bp_soc": 76, "bp_pwr": 2486.48, "bp_vol": 54.671,
-                 "bp_design_cap": 100000, "bp_full_cap": 100000,
-                 "bp_remain_watth": 3891.2},
+                {
+                    "bp_soc": 76,
+                    "bp_pwr": 2486.48,
+                    "bp_vol": 54.671,
+                    "bp_design_cap": 100000,
+                    "bp_full_cap": 100000,
+                    "bp_remain_watth": 3891.2,
+                },
                 # Pack 2: idle - proto3 omits bp_soc=0, bp_pwr=0.0 but
                 # bp_design_cap/bp_full_cap are >0 so they survive MessageToDict
-                {"bp_design_cap": 100000, "bp_full_cap": 100000,
-                 "bp_remain_watth": 2000.0},
+                {
+                    "bp_design_cap": 100000,
+                    "bp_full_cap": 100000,
+                    "bp_remain_watth": 2000.0,
+                },
             ],
         }
         parsed = remap_bp_keys(raw, coordinator._bp_sn_to_index, coordinator.device_sn)
@@ -4142,22 +4304,38 @@ class TestBpRemapping:
         )
 
         # First heartbeat: Pack A reports (SN=AAA)
-        msg1 = remap_bp_keys({
-            "all_packs": [
-                {"bp_sn": "AAA", "bp_soc": 76, "bp_pwr": 2486,
-                 "bp_remain_watth": 2400},
-            ],
-        }, coordinator._bp_sn_to_index, coordinator.device_sn)
+        msg1 = remap_bp_keys(
+            {
+                "all_packs": [
+                    {
+                        "bp_sn": "AAA",
+                        "bp_soc": 76,
+                        "bp_pwr": 2486,
+                        "bp_remain_watth": 2400,
+                    },
+                ],
+            },
+            coordinator._bp_sn_to_index,
+            coordinator.device_sn,
+        )
         coordinator._apply_data(msg1)
         assert coordinator.device_data["pack1_remain_watth"] == 2400.0
 
         # Second heartbeat: Pack B reports (SN=BBB) - different SN → pack2
-        msg2 = remap_bp_keys({
-            "all_packs": [
-                {"bp_sn": "BBB", "bp_soc": 74, "bp_pwr": 2529,
-                 "bp_remain_watth": 2600},
-            ],
-        }, coordinator._bp_sn_to_index, coordinator.device_sn)
+        msg2 = remap_bp_keys(
+            {
+                "all_packs": [
+                    {
+                        "bp_sn": "BBB",
+                        "bp_soc": 74,
+                        "bp_pwr": 2529,
+                        "bp_remain_watth": 2600,
+                    },
+                ],
+            },
+            coordinator._bp_sn_to_index,
+            coordinator.device_sn,
+        )
         coordinator._apply_data(msg2)
 
         # Both packs in device_data, aggregate is sum
@@ -4166,12 +4344,20 @@ class TestBpRemapping:
         assert coordinator.device_data["bp_remain_watth"] == 5000.0
 
         # Third heartbeat: Pack A again with updated value
-        msg3 = remap_bp_keys({
-            "all_packs": [
-                {"bp_sn": "AAA", "bp_soc": 75, "bp_pwr": 2400,
-                 "bp_remain_watth": 2300},
-            ],
-        }, coordinator._bp_sn_to_index, coordinator.device_sn)
+        msg3 = remap_bp_keys(
+            {
+                "all_packs": [
+                    {
+                        "bp_sn": "AAA",
+                        "bp_soc": 75,
+                        "bp_pwr": 2400,
+                        "bp_remain_watth": 2300,
+                    },
+                ],
+            },
+            coordinator._bp_sn_to_index,
+            coordinator.device_sn,
+        )
         coordinator._apply_data(msg3)
 
         # Pack 1 updated to 2300, Pack 2 retains 2600 → total 4900
@@ -4226,7 +4412,8 @@ class TestBpRemapping:
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """_apply_data does not re-aggregate when no pack remain_watth keys in parsed."""
+        """_apply_data does not re-aggregate when no pack remain_watth keys in
+        parsed."""
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
@@ -4257,12 +4444,24 @@ class TestBpRemapping:
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
         # Simulate fully discharged state
-        parsed = remap_bp_keys({
-            "all_packs": [
-                {"bp_design_cap": 100000, "bp_full_cap": 100000, "bp_remain_watth": 0.0},
-                {"bp_design_cap": 100000, "bp_full_cap": 100000, "bp_remain_watth": 0.0},
-            ],
-        }, coordinator._bp_sn_to_index, coordinator.device_sn)
+        parsed = remap_bp_keys(
+            {
+                "all_packs": [
+                    {
+                        "bp_design_cap": 100000,
+                        "bp_full_cap": 100000,
+                        "bp_remain_watth": 0.0,
+                    },
+                    {
+                        "bp_design_cap": 100000,
+                        "bp_full_cap": 100000,
+                        "bp_remain_watth": 0.0,
+                    },
+                ],
+            },
+            coordinator._bp_sn_to_index,
+            coordinator.device_sn,
+        )
         coordinator._apply_data(parsed)
 
         assert coordinator.device_data["bp_remain_watth"] == 0.0
@@ -4619,7 +4818,10 @@ class TestQuotasPoll:
         coordinator._last_smartplug_get_all_ts = 1000.0
 
         with (
-            patch("custom_components.ecoflow_energy.coordinator.time.monotonic", return_value=1000.0),
+            patch(
+                "custom_components.ecoflow_energy.coordinator.time.monotonic",
+                return_value=1000.0,
+            ),
             patch.object(hass, "async_add_executor_job") as mock_exec,
         ):
             coordinator._send_quotas_poll()
@@ -4758,12 +4960,12 @@ class TestParseMessageProtobuf:
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """_parse_message decodes a protobuf energy_stream frame for PowerOcean."""
+        from custom_components.ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
+            JTS1EnergyStreamReport,
+        )
         from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
             encode_field_bytes,
             encode_field_varint,
-        )
-        from custom_components.ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
-            JTS1EnergyStreamReport,
         )
 
         enhanced_config_entry.add_to_hass(hass)
@@ -4824,12 +5026,12 @@ class TestParseMessageProtobuf:
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """E2E: bp_heartbeat proto frame with 2 packs survives underscore filter."""
+        from custom_components.ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
+            JTS1BpHeartbeatReport,
+        )
         from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
             encode_field_bytes,
             encode_field_varint,
-        )
-        from custom_components.ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
-            JTS1BpHeartbeatReport,
         )
 
         enhanced_config_entry.add_to_hass(hass)
@@ -5027,9 +5229,9 @@ class TestParseMessageProtobuf:
         )
         inner = bytearray()
         inner.extend(encode_field_varint(10, 1500))  # watts (deciWatt)
-        inner.extend(encode_field_varint(11, 1))     # switchSta
-        inner.extend(encode_field_varint(9, 230))    # volt
-        inner.extend(encode_field_varint(8, 500))    # current (mA)
+        inner.extend(encode_field_varint(11, 1))  # switchSta
+        inner.extend(encode_field_varint(9, 230))  # volt
+        inner.extend(encode_field_varint(8, 500))  # current (mA)
         frame = _build_proto_frame(2, 1, bytes(inner))
 
         result = coordinator._parse_proto_device_data(frame)
@@ -5070,7 +5272,8 @@ class TestParseMessageProtobuf:
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
         fake_result = SimpleNamespace(
-            mapped={"_is_ems_change": True}, headers=[],
+            mapped={"_is_ems_change": True},
+            headers=[],
         )
         with patch(
             "custom_components.ecoflow_energy.coordinator.mqtt_ingest."
@@ -5078,7 +5281,8 @@ class TestParseMessageProtobuf:
             return_value=fake_result,
         ):
             result = coordinator._parse_message(
-                "/app/device/property/HW52TEST00000001", b"\x0a\x02\x08\x01",
+                "/app/device/property/HW52TEST00000001",
+                b"\x0a\x02\x08\x01",
             )
         assert result is None
 
@@ -5091,8 +5295,10 @@ class TestParseMessageProtobuf:
             domain=DOMAIN,
             title="EcoFlow Energy",
             data={
-                "access_key": "ak", "secret_key": "sk",
-                "mode": MODE_STANDARD, "devices": [MOCK_STREAM_DEVICE],
+                "access_key": "ak",
+                "secret_key": "sk",
+                "mode": MODE_STANDARD,
+                "devices": [MOCK_STREAM_DEVICE],
             },
             unique_id="ak_stream_proto",
         )
@@ -5100,7 +5306,9 @@ class TestParseMessageProtobuf:
         coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_STREAM_DEVICE)
 
         inner = bytearray()
-        inner.extend(encode_field_varint(242, 19))  # unit_soc_pct: field 242 is this unit's own BMS SoC (#323)
+        inner.extend(
+            encode_field_varint(242, 19)
+        )  # unit_soc_pct: field 242 is this unit's own BMS SoC (#323)
         frame = _build_proto_frame(254, 21, bytes(inner))
 
         result = coordinator._parse_proto_device_data(frame)
@@ -5118,7 +5326,8 @@ class TestParseMessageProtobuf:
             hass, standard_config_entry, MOCK_SMARTPLUG_DEVICE
         )
         result = coordinator._parse_proto_device_data(
-            b"", headers=[{"pdata": "zznothex"}],
+            b"",
+            headers=[{"pdata": "zznothex"}],
         )
         assert result is None
 
@@ -5188,7 +5397,9 @@ class TestParseMessageGetReply:
     """Tests for _parse_message handling of get_reply topic (latestQuotas response)."""
 
     async def test_delta_get_reply_parsed(
-        self, hass: HomeAssistant, standard_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
     ) -> None:
         """Delta get_reply with quotaMap is parsed via delta_http_quota parser."""
         import json as json_mod
@@ -5198,17 +5409,19 @@ class TestParseMessageGetReply:
             hass, standard_config_entry, MOCK_DELTA_DEVICE
         )
         topic = "/app/user123/SN001/thing/property/get_reply"
-        payload = json_mod.dumps({
-            "operateType": "latestQuotas",
-            "data": {
-                "quotaMap": {
-                    "pd.soc": 75,
-                    "pd.wattsInSum": 200,
-                    "pd.wattsOutSum": 100,
-                    "inv.outputWatts": 142,
-                }
+        payload = json_mod.dumps(
+            {
+                "operateType": "latestQuotas",
+                "data": {
+                    "quotaMap": {
+                        "pd.soc": 75,
+                        "pd.wattsInSum": 200,
+                        "pd.wattsOutSum": 100,
+                        "inv.outputWatts": 142,
+                    }
+                },
             }
-        }).encode()
+        ).encode()
 
         result = coordinator._parse_message(topic, payload)
         assert result is not None
@@ -5216,9 +5429,11 @@ class TestParseMessageGetReply:
         assert result.get("watts_in_sum") == 200
 
     async def test_smartplug_get_reply_parsed(
-        self, hass: HomeAssistant,
+        self,
+        hass: HomeAssistant,
     ) -> None:
-        """SmartPlug get_reply with quotaMap is parsed via smartplug_http_quota parser."""
+        """SmartPlug get_reply with quotaMap is parsed via smartplug_http_quota
+        parser."""
         import json as json_mod
 
         from .conftest import MOCK_SMARTPLUG_DEVICE
@@ -5227,26 +5442,28 @@ class TestParseMessageGetReply:
             domain=DOMAIN,
             title="EcoFlow Energy",
             data={
-                "access_key": "ak", "secret_key": "sk",
-                "mode": MODE_STANDARD, "devices": [MOCK_SMARTPLUG_DEVICE],
+                "access_key": "ak",
+                "secret_key": "sk",
+                "mode": MODE_STANDARD,
+                "devices": [MOCK_SMARTPLUG_DEVICE],
             },
             unique_id="ak_plug",
         )
         entry.add_to_hass(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, entry, MOCK_SMARTPLUG_DEVICE
-        )
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_SMARTPLUG_DEVICE)
         topic = "/app/user123/SN001/thing/property/get_reply"
-        payload = json_mod.dumps({
-            "operateType": "latestQuotas",
-            "data": {
-                "quotaMap": {
-                    "2_1.watts": 1500,
-                    "2_1.voltage": 2300,
-                    "2_1.switchSta": 1,
-                }
+        payload = json_mod.dumps(
+            {
+                "operateType": "latestQuotas",
+                "data": {
+                    "quotaMap": {
+                        "2_1.watts": 1500,
+                        "2_1.voltage": 2300,
+                        "2_1.switchSta": 1,
+                    }
+                },
             }
-        }).encode()
+        ).encode()
 
         result = coordinator._parse_message(topic, payload)
         assert result is not None
@@ -5254,7 +5471,8 @@ class TestParseMessageGetReply:
         assert result.get("switch_state") == 1
 
     async def test_stream_proto_get_reply_parsed(
-        self, hass: HomeAssistant,
+        self,
+        hass: HomeAssistant,
     ) -> None:
         """Stream get_reply protobuf is parsed via the BK31 proto mapper."""
         entry = MockConfigEntry(
@@ -5293,7 +5511,8 @@ class TestParseMessageGetReply:
         assert result.get("ac_frequency_hz") == pytest.approx(49.99, rel=1e-5)
 
     async def test_stream_coordinator_power_to_energy_mapping(
-        self, hass: HomeAssistant,
+        self,
+        hass: HomeAssistant,
     ) -> None:
         """A Stream coordinator wires STREAM_POWER_TO_ENERGY (not empty)."""
         entry = MockConfigEntry(
@@ -5327,7 +5546,9 @@ class TestParseMessageGetReply:
         )
 
     async def test_get_reply_empty_quota_map_returns_none(
-        self, hass: HomeAssistant, standard_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
     ) -> None:
         """get_reply with empty quotaMap returns None."""
         import json as json_mod
@@ -5337,16 +5558,17 @@ class TestParseMessageGetReply:
             hass, standard_config_entry, MOCK_DELTA_DEVICE
         )
         topic = "/app/user123/SN001/thing/property/get_reply"
-        payload = json_mod.dumps({
-            "operateType": "latestQuotas",
-            "data": {"quotaMap": {}}
-        }).encode()
+        payload = json_mod.dumps(
+            {"operateType": "latestQuotas", "data": {"quotaMap": {}}}
+        ).encode()
 
         result = coordinator._parse_message(topic, payload)
         assert result is None
 
     async def test_get_reply_no_data_returns_none(
-        self, hass: HomeAssistant, standard_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
     ) -> None:
         """get_reply without data field returns None."""
         import json as json_mod
@@ -5362,9 +5584,12 @@ class TestParseMessageGetReply:
         assert result is None
 
     async def test_powerocean_get_reply_json_parsed(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """PowerOcean JSON get_reply with quotaMap is parsed via powerocean_http_quota parser."""
+        """PowerOcean JSON get_reply with quotaMap is parsed via powerocean_http_quota
+        parser."""
         import json as json_mod
 
         enhanced_config_entry.add_to_hass(hass)
@@ -5372,17 +5597,19 @@ class TestParseMessageGetReply:
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
         topic = "/app/user123/SN001/thing/property/get_reply"
-        payload = json_mod.dumps({
-            "operateType": "latestQuotas",
-            "data": {
-                "quotaMap": {
-                    "bpSoc": 85,
-                    "ems_change_report.emsFeedMode": 3,
-                    "ems_change_report.sysGridSta": 1,
-                    "pcs_change_report.gridFreq": 50.01,
-                }
+        payload = json_mod.dumps(
+            {
+                "operateType": "latestQuotas",
+                "data": {
+                    "quotaMap": {
+                        "bpSoc": 85,
+                        "ems_change_report.emsFeedMode": 3,
+                        "ems_change_report.sysGridSta": 1,
+                        "pcs_change_report.gridFreq": 50.01,
+                    }
+                },
             }
-        }).encode()
+        ).encode()
 
         result = coordinator._parse_message(topic, payload)
         assert result is not None
@@ -5392,11 +5619,17 @@ class TestParseMessageGetReply:
         assert result.get("pcs_ac_freq_hz") == 50.01
 
     async def test_powerocean_get_reply_proto_parsed(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """PowerOcean proto get_reply extracts EmsChangeReport (cmd_func=96, cmd_id=8)."""
+        """PowerOcean proto get_reply extracts EmsChangeReport (cmd_func=96,
+        cmd_id=8)."""
         from ecoflow_energy.ecoflow.proto.ecocharge_pb2 import JTS1EmsChangeReport
-        from ecoflow_energy.ecoflow.proto_encoding import encode_field_bytes, encode_field_varint
+        from ecoflow_energy.ecoflow.proto_encoding import (
+            encode_field_bytes,
+            encode_field_varint,
+        )
 
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
@@ -5405,17 +5638,17 @@ class TestParseMessageGetReply:
 
         # Build an EmsChangeReport with connectivity and enum fields
         msg = JTS1EmsChangeReport()
-        msg.wifi_sta_stat = 0   # connected
-        msg.eth_wan_stat = 1    # disconnected
-        msg.iot_4g_sta = 1      # connected
+        msg.wifi_sta_stat = 0  # connected
+        msg.eth_wan_stat = 1  # disconnected
+        msg.iot_4g_sta = 1  # connected
         msg.bp_soc = 75
         inner = msg.SerializeToString()
 
         # Wrap in HeaderMessage frame: cmd_func=96, cmd_id=8
         header = bytearray()
-        header.extend(encode_field_bytes(1, inner))       # pdata
-        header.extend(encode_field_varint(8, 96))         # cmd_func
-        header.extend(encode_field_varint(9, 8))          # cmd_id
+        header.extend(encode_field_bytes(1, inner))  # pdata
+        header.extend(encode_field_varint(8, 96))  # cmd_func
+        header.extend(encode_field_varint(9, 8))  # cmd_id
         payload = encode_field_bytes(1, bytes(header))
 
         result = coordinator._parse_powerocean_get_reply(payload)
@@ -5425,10 +5658,15 @@ class TestParseMessageGetReply:
         assert result.get("cellular_status") == "connected"
 
     async def test_powerocean_get_reply_no_ems_change_returns_none(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Proto get_reply without cmd_func=96/cmd_id=8 header returns None."""
-        from ecoflow_energy.ecoflow.proto_encoding import encode_field_bytes, encode_field_varint
+        from ecoflow_energy.ecoflow.proto_encoding import (
+            encode_field_bytes,
+            encode_field_varint,
+        )
 
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
@@ -5438,15 +5676,16 @@ class TestParseMessageGetReply:
         # Build a frame with wrong cmd_id (not 8)
         header = bytearray()
         header.extend(encode_field_bytes(1, b"\x08\x01"))  # some pdata
-        header.extend(encode_field_varint(8, 96))           # cmd_func=96
-        header.extend(encode_field_varint(9, 1))            # cmd_id=1 (heartbeat, not change)
+        header.extend(encode_field_varint(8, 96))  # cmd_func=96
+        header.extend(encode_field_varint(9, 1))  # cmd_id=1 (heartbeat, not change)
         payload = encode_field_bytes(1, bytes(header))
 
         result = coordinator._parse_powerocean_get_reply(payload)
         assert result is None
 
     async def test_get_reply_quota_map_stream_is_mapped(
-        self, hass: HomeAssistant,
+        self,
+        hass: HomeAssistant,
     ) -> None:
         """A Stream get_reply goes through the field map, raw keys are dropped."""
         import json as json_mod
@@ -5455,23 +5694,27 @@ class TestParseMessageGetReply:
             domain=DOMAIN,
             title="EcoFlow Energy",
             data={
-                "access_key": "ak", "secret_key": "sk",
-                "mode": MODE_STANDARD, "devices": [MOCK_STREAM_DEVICE],
+                "access_key": "ak",
+                "secret_key": "sk",
+                "mode": MODE_STANDARD,
+                "devices": [MOCK_STREAM_DEVICE],
             },
             unique_id="ak_stream",
         )
         entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_STREAM_DEVICE)
         topic = "/app/user123/SN001/thing/property/get_reply"
-        payload = json_mod.dumps({
-            "data": {"quotaMap": {"powGetPv": 518, "someRawKey": 7}}
-        }).encode()
+        payload = json_mod.dumps(
+            {"data": {"quotaMap": {"powGetPv": 518, "someRawKey": 7}}}
+        ).encode()
 
         result = coordinator._parse_message(topic, payload)
         assert result == {"pv1_w": 518.0}
 
     async def test_powerocean_proto_get_reply_routed_via_parse_message(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Binary get_reply for PowerOcean routes to _parse_powerocean_get_reply."""
         from ecoflow_energy.ecoflow.proto.ecocharge_pb2 import JTS1EmsChangeReport
@@ -5490,7 +5733,9 @@ class TestParseMessageGetReply:
         assert result.get("wifi_status") == "connected"
 
     async def test_powerocean_get_reply_wrong_cmd_func_returns_none(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Sub-messages with cmd_func != 96 are skipped entirely."""
         from ecoflow_energy.ecoflow.proto.ecocharge_pb2 import JTS1EmsChangeReport
@@ -5507,7 +5752,9 @@ class TestParseMessageGetReply:
         assert result is None
 
     async def test_powerocean_get_reply_missing_pdata_returns_none(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """A header without pdata is skipped."""
         enhanced_config_entry.add_to_hass(hass)
@@ -5523,7 +5770,9 @@ class TestParseMessageGetReply:
         assert result is None
 
     async def test_powerocean_get_reply_invalid_pdata_hex_returns_none(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """A non-hex pdata string is skipped without raising."""
         enhanced_config_entry.add_to_hass(hass)
@@ -5542,7 +5791,9 @@ class TestParseMessageGetReply:
         assert result is None
 
     async def test_powerocean_get_reply_corrupt_pdata_returns_none(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Corrupt pdata bytes hit the decode exception handler and yield None."""
         enhanced_config_entry.add_to_hass(hass)
@@ -5561,7 +5812,9 @@ class TestParseMessageGetReply:
         assert result is None
 
     async def test_powerocean_get_reply_empty_fields_returns_none(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """An empty EmsChangeReport produces no fields and yields None."""
         from ecoflow_energy.ecoflow.proto.ecocharge_pb2 import JTS1EmsChangeReport
@@ -5576,7 +5829,9 @@ class TestParseMessageGetReply:
         assert result is None
 
     async def test_powerocean_get_reply_ems_word_mode_renamed(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """ems_word_mode from cmd_id=8 is renamed and enum-mapped to work mode."""
         from ecoflow_energy.ecoflow.proto.ecocharge_pb2 import JTS1EmsChangeReport
@@ -5594,7 +5849,9 @@ class TestParseMessageGetReply:
         assert result.get("ems_work_mode") == "ai_schedule"
 
     async def test_powerocean_get_reply_dev_soc_renamed(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """dev_soc from cmd_id=13 surfaces as ems_app_surplus_pct."""
         from ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
@@ -5613,15 +5870,18 @@ class TestParseMessageGetReply:
         assert result == {"ems_app_surplus_pct": 55}
 
     async def test_smartplug_proto_get_reply_parsed(
-        self, hass: HomeAssistant,
+        self,
+        hass: HomeAssistant,
     ) -> None:
         """Binary SmartPlug get_reply routes through _parse_proto_device_data."""
         entry = MockConfigEntry(
             domain=DOMAIN,
             title="EcoFlow Energy",
             data={
-                "access_key": "ak", "secret_key": "sk",
-                "mode": MODE_STANDARD, "devices": [MOCK_SMARTPLUG_DEVICE],
+                "access_key": "ak",
+                "secret_key": "sk",
+                "mode": MODE_STANDARD,
+                "devices": [MOCK_SMARTPLUG_DEVICE],
             },
             unique_id="ak_plug_proto",
         )
@@ -5630,7 +5890,7 @@ class TestParseMessageGetReply:
 
         inner = bytearray()
         inner.extend(encode_field_varint(10, 1500))  # watts (deciWatt)
-        inner.extend(encode_field_varint(11, 1))     # switchSta
+        inner.extend(encode_field_varint(11, 1))  # switchSta
         payload = _build_proto_frame(2, 1, bytes(inner))
 
         topic = "/app/user123/SN001/thing/property/get_reply"
@@ -5640,7 +5900,9 @@ class TestParseMessageGetReply:
         assert result["switch_state"] == 1
 
     async def test_powerocean_get_reply_unknown_fields_only_returns_none(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """pdata with only unknown proto fields decodes to no fields: None."""
         enhanced_config_entry.add_to_hass(hass)
@@ -5891,9 +6153,7 @@ class TestEventLog:
         assert payload.index(sn.encode()) == 190
 
         with caplog.at_level("DEBUG"):
-            coordinator._on_mqtt_message(
-                f"/open/cert_account/{sn}/set_reply", payload
-            )
+            coordinator._on_mqtt_message(f"/open/cert_account/{sn}/set_reply", payload)
 
         assert sn not in caplog.text
         assert sn[:10] not in caplog.text
@@ -5998,54 +6258,53 @@ class TestAppAuthMode:
         return entry
 
     async def test_app_auth_powerocean_is_enhanced(
-        self, hass: HomeAssistant,
+        self,
+        hass: HomeAssistant,
     ) -> None:
         """App-auth PowerOcean has enhanced_mode=True, no polling."""
         entry = self._create_app_auth_entry(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, entry, MOCK_POWEROCEAN_DEVICE
-        )
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_POWEROCEAN_DEVICE)
         assert coordinator.enhanced_mode is True
         assert coordinator.update_interval is None
 
     async def test_app_auth_delta_is_enhanced(
-        self, hass: HomeAssistant,
+        self,
+        hass: HomeAssistant,
     ) -> None:
         """App-auth Delta also has enhanced_mode=True (WSS, no HTTP)."""
         entry = self._create_app_auth_entry(hass, MOCK_DELTA_DEVICE)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, entry, MOCK_DELTA_DEVICE
-        )
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_DELTA_DEVICE)
         assert coordinator.enhanced_mode is True
         assert coordinator.update_interval is None
 
     async def test_app_auth_smartplug_is_enhanced(
-        self, hass: HomeAssistant,
+        self,
+        hass: HomeAssistant,
     ) -> None:
         """App-auth SmartPlug also has enhanced_mode=True (WSS, no HTTP)."""
         entry = self._create_app_auth_entry(hass, MOCK_SMARTPLUG_DEVICE)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, entry, MOCK_SMARTPLUG_DEVICE
-        )
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_SMARTPLUG_DEVICE)
         assert coordinator.enhanced_mode is True
         assert coordinator.update_interval is None
 
     async def test_app_auth_setup_calls_login(
-        self, hass: HomeAssistant, mock_mqtt_client,
+        self,
+        hass: HomeAssistant,
+        mock_mqtt_client,
     ) -> None:
         """App-auth setup calls enhanced_login and get_enhanced_credentials."""
         entry = self._create_app_auth_entry(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, entry, MOCK_POWEROCEAN_DEVICE
-        )
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_POWEROCEAN_DEVICE)
 
         mock_app_api = MagicMock()
         mock_app_api.login = AsyncMock(return_value=True)
         mock_app_api.user_id = "uid"
-        mock_app_api.get_mqtt_credentials = AsyncMock(return_value={
-            "userName": "app-user",
-            "password": "app-pass",
-        })
+        mock_app_api.get_mqtt_credentials = AsyncMock(
+            return_value={
+                "userName": "app-user",
+                "password": "app-pass",
+            }
+        )
 
         with patch(
             "custom_components.ecoflow_energy.ecoflow.app_api.AppApiClient",
@@ -6060,13 +6319,12 @@ class TestAppAuthMode:
         await coordinator.async_shutdown()
 
     async def test_app_auth_login_failure_triggers_reauth(
-        self, hass: HomeAssistant,
+        self,
+        hass: HomeAssistant,
     ) -> None:
         """App-auth login failure triggers re-authentication."""
         entry = self._create_app_auth_entry(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, entry, MOCK_POWEROCEAN_DEVICE
-        )
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_POWEROCEAN_DEVICE)
 
         mock_app_api = MagicMock()
         mock_app_api.login = AsyncMock(return_value=False)
@@ -6083,13 +6341,12 @@ class TestAppAuthMode:
         mock_reauth.assert_called_once()
 
     async def test_app_auth_no_http_fallback_on_stale(
-        self, hass: HomeAssistant,
+        self,
+        hass: HomeAssistant,
     ) -> None:
         """App-auth mode does not switch to HTTP fallback when MQTT is stale."""
         entry = self._create_app_auth_entry(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, entry, MOCK_POWEROCEAN_DEVICE
-        )
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_POWEROCEAN_DEVICE)
         coordinator._mqtt_client = MagicMock()
         coordinator._mqtt_client.is_connected.return_value = False
         coordinator._mqtt_client.try_reconnect.return_value = None
@@ -6107,21 +6364,22 @@ class TestAppAuthMode:
         await coordinator.async_shutdown()
 
     async def test_app_auth_mqtt_has_auth_error_handler(
-        self, hass: HomeAssistant,
+        self,
+        hass: HomeAssistant,
     ) -> None:
         """App-auth MQTT client must have auth_error_handler wired."""
         entry = self._create_app_auth_entry(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, entry, MOCK_POWEROCEAN_DEVICE
-        )
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_POWEROCEAN_DEVICE)
 
         mock_app_api = MagicMock()
         mock_app_api.login = AsyncMock(return_value=True)
         mock_app_api.user_id = "uid"
-        mock_app_api.get_mqtt_credentials = AsyncMock(return_value={
-            "userName": "app-user",
-            "password": "app-pass",
-        })
+        mock_app_api.get_mqtt_credentials = AsyncMock(
+            return_value={
+                "userName": "app-user",
+                "password": "app-pass",
+            }
+        )
 
         with (
             patch(
@@ -6153,21 +6411,22 @@ class TestAppAuthMode:
         await coordinator.async_shutdown()
 
     async def test_app_auth_rc5_triggers_credential_refresh(
-        self, hass: HomeAssistant,
+        self,
+        hass: HomeAssistant,
     ) -> None:
         """App-auth rc=5 triggers login + credential refresh."""
         entry = self._create_app_auth_entry(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, entry, MOCK_POWEROCEAN_DEVICE
-        )
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_POWEROCEAN_DEVICE)
 
         mock_app_api = MagicMock()
         mock_app_api.login = AsyncMock(return_value=True)
         mock_app_api.user_id = "uid"
-        mock_app_api.get_mqtt_credentials = AsyncMock(return_value={
-            "userName": "app-user",
-            "password": "app-pass",
-        })
+        mock_app_api.get_mqtt_credentials = AsyncMock(
+            return_value={
+                "userName": "app-user",
+                "password": "app-pass",
+            }
+        )
 
         with (
             patch(
@@ -6197,10 +6456,12 @@ class TestAppAuthMode:
         # Simulate rc=5 by calling the handler
         mock_refresh_api = MagicMock()
         mock_refresh_api.login = AsyncMock(return_value=True)
-        mock_refresh_api.get_mqtt_credentials = AsyncMock(return_value={
-            "certificateAccount": "new-user",
-            "certificatePassword": "new-pass",
-        })
+        mock_refresh_api.get_mqtt_credentials = AsyncMock(
+            return_value={
+                "certificateAccount": "new-user",
+                "certificatePassword": "new-pass",
+            }
+        )
 
         with patch(
             "custom_components.ecoflow_energy.ecoflow.app_api.AppApiClient",
@@ -6216,13 +6477,12 @@ class TestAppAuthMode:
         await coordinator.async_shutdown()
 
     async def test_credential_age_check_fresh(
-        self, hass: HomeAssistant,
+        self,
+        hass: HomeAssistant,
     ) -> None:
         """Credential check does not refresh when credentials are fresh."""
         entry = self._create_app_auth_entry(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, entry, MOCK_POWEROCEAN_DEVICE
-        )
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_POWEROCEAN_DEVICE)
         coordinator._mqtt_client = MagicMock()
         coordinator._mqtt_client.cert_account = "test"
         coordinator._credential_obtained_ts = time.monotonic()  # just obtained
@@ -6237,27 +6497,30 @@ class TestAppAuthMode:
             coordinator._credential_refresh_unsub.cancel()
 
     async def test_credential_age_check_old_triggers_refresh(
-        self, hass: HomeAssistant,
+        self,
+        hass: HomeAssistant,
     ) -> None:
         """Credential check triggers proactive refresh when credentials are old."""
         entry = self._create_app_auth_entry(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, entry, MOCK_POWEROCEAN_DEVICE
-        )
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_POWEROCEAN_DEVICE)
         coordinator._auth_method = "app"
         coordinator._mqtt_client = MagicMock()
         coordinator._mqtt_client.cert_account = "old-account"
         coordinator._mqtt_client.update_credentials.return_value = None
         coordinator._mqtt_client.force_reconnect.return_value = None
         # Credentials older than CREDENTIAL_MAX_AGE_S
-        coordinator._credential_obtained_ts = time.monotonic() - CREDENTIAL_MAX_AGE_S - 100
+        coordinator._credential_obtained_ts = (
+            time.monotonic() - CREDENTIAL_MAX_AGE_S - 100
+        )
 
         mock_app_api = MagicMock()
         mock_app_api.login = AsyncMock(return_value=True)
-        mock_app_api.get_mqtt_credentials = AsyncMock(return_value={
-            "certificateAccount": "new-account",
-            "certificatePassword": "new-pass",
-        })
+        mock_app_api.get_mqtt_credentials = AsyncMock(
+            return_value={
+                "certificateAccount": "new-account",
+                "certificatePassword": "new-pass",
+            }
+        )
 
         # Call proactive refresh directly instead of going through
         # _check_credential_age -> async_create_task (avoids timing issues in CI)
@@ -6273,19 +6536,18 @@ class TestAppAuthMode:
         mock_app_api.get_mqtt_credentials.assert_called_once()
 
     async def test_credential_age_check_schedules_refresh_when_old(
-        self, hass: HomeAssistant,
+        self,
+        hass: HomeAssistant,
     ) -> None:
         """_check_credential_age logs event when credentials are old enough."""
         entry = self._create_app_auth_entry(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, entry, MOCK_POWEROCEAN_DEVICE
-        )
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_POWEROCEAN_DEVICE)
         # Use a fixed monotonic value far in the past via mock to guarantee
         # age > CREDENTIAL_MAX_AGE_S regardless of CI system clock.
-        now = time.monotonic()
         coordinator._credential_obtained_ts = 1.0  # fixed positive value
 
-        # Replace the coroutine method with a sync no-op to avoid async scheduling issues
+        # Replace the coroutine method with a sync no-op to avoid async scheduling
+        # issues
         coordinator._proactive_credential_refresh = lambda: None  # type: ignore[assignment]
         with (
             patch.object(hass, "async_create_task") as mock_task,
@@ -6305,13 +6567,12 @@ class TestAppAuthMode:
             coordinator._credential_refresh_unsub.cancel()
 
     async def test_proactive_refresh_failure_graceful(
-        self, hass: HomeAssistant,
+        self,
+        hass: HomeAssistant,
     ) -> None:
         """Proactive refresh failure does not mark device unavailable."""
         entry = self._create_app_auth_entry(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, entry, MOCK_POWEROCEAN_DEVICE
-        )
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_POWEROCEAN_DEVICE)
         coordinator._auth_method = "app"
         coordinator._mqtt_client = MagicMock()
         coordinator._mqtt_client.cert_account = "old"
@@ -6332,25 +6593,23 @@ class TestAppAuthMode:
         assert any(e["type"] == "credential_proactive_fail" for e in log)
 
     async def test_schedule_credential_refresh_noop_when_shutdown(
-        self, hass: HomeAssistant,
+        self,
+        hass: HomeAssistant,
     ) -> None:
         """_schedule_credential_refresh does nothing after shutdown."""
         entry = self._create_app_auth_entry(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, entry, MOCK_POWEROCEAN_DEVICE
-        )
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_POWEROCEAN_DEVICE)
         coordinator._shutdown = True
         coordinator._schedule_credential_refresh()
         assert coordinator._credential_refresh_unsub is None
 
     async def test_check_credential_age_noop_when_shutdown(
-        self, hass: HomeAssistant,
+        self,
+        hass: HomeAssistant,
     ) -> None:
         """_check_credential_age returns early after shutdown (no reschedule)."""
         entry = self._create_app_auth_entry(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, entry, MOCK_POWEROCEAN_DEVICE
-        )
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_POWEROCEAN_DEVICE)
         coordinator._shutdown = True
         coordinator._credential_obtained_ts = 1.0
         with patch(
@@ -6391,7 +6650,8 @@ class TestAppAuthMode:
         return coordinator, entry
 
     async def test_reactive_refresh_missing_credentials_triggers_reauth(
-        self, hass: HomeAssistant,
+        self,
+        hass: HomeAssistant,
     ) -> None:
         """App-auth reactive refresh without stored credentials goes to reauth."""
         coordinator, entry = self._app_auth_coordinator_no_creds(hass)
@@ -6401,13 +6661,12 @@ class TestAppAuthMode:
         coordinator._mqtt_client.update_credentials.assert_not_called()
 
     async def test_reactive_refresh_login_failure_triggers_reauth(
-        self, hass: HomeAssistant,
+        self,
+        hass: HomeAssistant,
     ) -> None:
         """App-auth reactive refresh with failing login goes to reauth."""
         entry = self._create_app_auth_entry(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, entry, MOCK_POWEROCEAN_DEVICE
-        )
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_POWEROCEAN_DEVICE)
         coordinator._auth_method = AUTH_METHOD_APP
         coordinator._mqtt_client = MagicMock()
 
@@ -6425,13 +6684,12 @@ class TestAppAuthMode:
         coordinator._mqtt_client.update_credentials.assert_not_called()
 
     async def test_reactive_refresh_no_credentials_logs_fail_and_reauth(
-        self, hass: HomeAssistant,
+        self,
+        hass: HomeAssistant,
     ) -> None:
         """App-auth reactive refresh with no portal creds logs fail + reauth."""
         entry = self._create_app_auth_entry(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, entry, MOCK_POWEROCEAN_DEVICE
-        )
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_POWEROCEAN_DEVICE)
         coordinator._auth_method = AUTH_METHOD_APP
         coordinator._mqtt_client = MagicMock()
 
@@ -6451,18 +6709,18 @@ class TestAppAuthMode:
         assert coordinator.event_log[-1]["detail"] == "app-auth, no credentials"
 
     async def test_proactive_refresh_without_mqtt_client_is_noop(
-        self, hass: HomeAssistant,
+        self,
+        hass: HomeAssistant,
     ) -> None:
         """Proactive refresh without an MQTT client returns silently."""
         entry = self._create_app_auth_entry(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, entry, MOCK_POWEROCEAN_DEVICE
-        )
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_POWEROCEAN_DEVICE)
         await coordinator._proactive_credential_refresh()
         assert coordinator.event_log == []
 
     async def test_proactive_refresh_missing_credentials_is_noop(
-        self, hass: HomeAssistant,
+        self,
+        hass: HomeAssistant,
     ) -> None:
         """Proactive app-auth refresh without stored credentials does nothing."""
         coordinator, entry = self._app_auth_coordinator_no_creds(hass)
@@ -6473,13 +6731,12 @@ class TestAppAuthMode:
         assert coordinator.event_log == []
 
     async def test_proactive_refresh_no_credentials_logs_fail(
-        self, hass: HomeAssistant,
+        self,
+        hass: HomeAssistant,
     ) -> None:
         """Proactive app-auth refresh with no portal creds logs the fail event."""
         entry = self._create_app_auth_entry(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, entry, MOCK_POWEROCEAN_DEVICE
-        )
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_POWEROCEAN_DEVICE)
         coordinator._auth_method = AUTH_METHOD_APP
         coordinator._mqtt_client = MagicMock()
         coordinator._mqtt_client.cert_account = "old-account"
@@ -6861,9 +7118,7 @@ class TestDelta3ParseMessage:
 
         coordinator._check_config_write_ack(b"\x00garbage-not-a-frame")
 
-        assert not any(
-            e["type"] == "set_rejected" for e in coordinator.event_log
-        )
+        assert not any(e["type"] == "set_rejected" for e in coordinator.event_log)
 
     async def test_set_ack_applied_is_silent(
         self,
@@ -6875,16 +7130,13 @@ class TestDelta3ParseMessage:
         coordinator = self._coordinator(hass, standard_config_entry)
 
         pdata = bytes(
-            bytearray(encode_field_varint(1, 33)) +
-            bytearray(encode_field_varint(2, 1))
+            bytearray(encode_field_varint(1, 33)) + bytearray(encode_field_varint(2, 1))
         )
         payload = _build_proto_frame(254, 18, pdata)
 
         coordinator._check_config_write_ack(payload)
 
-        assert not any(
-            e["type"] == "set_rejected" for e in coordinator.event_log
-        )
+        assert not any(e["type"] == "set_rejected" for e in coordinator.event_log)
 
     async def test_set_ack_rejected_logs_event(
         self,
@@ -6896,8 +7148,7 @@ class TestDelta3ParseMessage:
         coordinator = self._coordinator(hass, standard_config_entry)
 
         pdata = bytes(
-            bytearray(encode_field_varint(1, 33)) +
-            bytearray(encode_field_varint(2, 2))
+            bytearray(encode_field_varint(1, 33)) + bytearray(encode_field_varint(2, 2))
         )
         payload = _build_proto_frame(254, 18, pdata)
 
@@ -6917,8 +7168,7 @@ class TestDelta3ParseMessage:
         coordinator = self._coordinator(hass, standard_config_entry)
 
         pdata = bytes(
-            bytearray(encode_field_varint(1, 34)) +
-            bytearray(encode_field_varint(2, 0))
+            bytearray(encode_field_varint(1, 34)) + bytearray(encode_field_varint(2, 0))
         )
         payload = _build_proto_frame(254, 18, pdata)
         topic = "/app/user123/D3M1TEST00000001/thing/property/set_reply"
@@ -6988,15 +7238,15 @@ class TestDeveloperCredentialRefresh:
         """Successful refresh updates the MQTT credentials and bumps the ts."""
         coordinator = self._coordinator(hass, standard_config_entry)
         coordinator._iot_api = MagicMock()
-        coordinator._iot_api.refresh_credentials = AsyncMock(return_value={
-            "certificateAccount": "new-account",
-            "certificatePassword": "new-password",
-        })
+        coordinator._iot_api.refresh_credentials = AsyncMock(
+            return_value={
+                "certificateAccount": "new-account",
+                "certificatePassword": "new-password",
+            }
+        )
 
         with (
-            patch.object(
-                standard_config_entry, "async_start_reauth"
-            ) as mock_reauth,
+            patch.object(standard_config_entry, "async_start_reauth") as mock_reauth,
             patch(
                 "custom_components.ecoflow_energy.coordinator.time.monotonic",
                 return_value=5000.0,
@@ -7005,7 +7255,8 @@ class TestDeveloperCredentialRefresh:
             await coordinator._refresh_mqtt_credentials()
 
         coordinator._mqtt_client.update_credentials.assert_called_once_with(
-            "new-account", "new-password",
+            "new-account",
+            "new-password",
         )
         assert coordinator._credential_obtained_ts == 5000.0
         assert coordinator.event_log[-1]["type"] == "credential_refresh_ok"
@@ -7022,9 +7273,7 @@ class TestDeveloperCredentialRefresh:
         coordinator._iot_api = MagicMock()
         coordinator._iot_api.refresh_credentials = AsyncMock(return_value=None)
 
-        with patch.object(
-            standard_config_entry, "async_start_reauth"
-        ) as mock_reauth:
+        with patch.object(standard_config_entry, "async_start_reauth") as mock_reauth:
             await coordinator._refresh_mqtt_credentials()
 
         coordinator._mqtt_client.update_credentials.assert_not_called()
@@ -7060,13 +7309,15 @@ class TestDeveloperCredentialRefresh:
         coordinator = self._coordinator(hass, standard_config_entry)
         coordinator._mqtt_client.update_broker.return_value = True
         coordinator._iot_api = MagicMock()
-        coordinator._iot_api.refresh_credentials = AsyncMock(return_value={
-            "certificateAccount": "old-account",
-            "certificatePassword": "rotated-password",
-            "url": "mqtt-a.ecoflow.com",
-            "port": 8085,
-            "protocol": "mqtts",
-        })
+        coordinator._iot_api.refresh_credentials = AsyncMock(
+            return_value={
+                "certificateAccount": "old-account",
+                "certificatePassword": "rotated-password",
+                "url": "mqtt-a.ecoflow.com",
+                "port": 8085,
+                "protocol": "mqtts",
+            }
+        )
 
         with (
             patch.object(hass, "async_add_executor_job") as mock_exec,
@@ -7080,9 +7331,7 @@ class TestDeveloperCredentialRefresh:
         coordinator._mqtt_client.update_broker.assert_called_once_with(
             ("mqtt-a.ecoflow.com", 8085, "/mqtt")
         )
-        mock_exec.assert_called_once_with(
-            coordinator._mqtt_client.force_reconnect
-        )
+        mock_exec.assert_called_once_with(coordinator._mqtt_client.force_reconnect)
 
     async def test_reactive_refresh_adopts_the_broker_too(
         self,
@@ -7092,13 +7341,15 @@ class TestDeveloperCredentialRefresh:
         """The path taken after an auth failure reads the same field."""
         coordinator = self._coordinator(hass, standard_config_entry)
         coordinator._iot_api = MagicMock()
-        coordinator._iot_api.refresh_credentials = AsyncMock(return_value={
-            "certificateAccount": "new-account",
-            "certificatePassword": "pw",
-            "url": "mqtt-a.ecoflow.com",
-            "port": 8085,
-            "protocol": "mqtts",
-        })
+        coordinator._iot_api.refresh_credentials = AsyncMock(
+            return_value={
+                "certificateAccount": "new-account",
+                "certificatePassword": "pw",
+                "url": "mqtt-a.ecoflow.com",
+                "port": 8085,
+                "protocol": "mqtts",
+            }
+        )
 
         await coordinator._refresh_mqtt_credentials()
 
@@ -7118,10 +7369,12 @@ class TestDeveloperCredentialRefresh:
         """
         coordinator = self._coordinator(hass, standard_config_entry)
         coordinator._iot_api = MagicMock()
-        coordinator._iot_api.refresh_credentials = AsyncMock(return_value={
-            "certificateAccount": "old-account",
-            "certificatePassword": "rotated-password",
-        })
+        coordinator._iot_api.refresh_credentials = AsyncMock(
+            return_value={
+                "certificateAccount": "old-account",
+                "certificatePassword": "rotated-password",
+            }
+        )
 
         with (
             patch.object(hass, "async_add_executor_job") as mock_exec,
@@ -7133,7 +7386,8 @@ class TestDeveloperCredentialRefresh:
             await coordinator._proactive_credential_refresh()
 
         coordinator._mqtt_client.update_credentials.assert_called_once_with(
-            "old-account", "rotated-password",
+            "old-account",
+            "rotated-password",
         )
         assert coordinator._credential_obtained_ts == 6000.0
         assert coordinator.event_log[-1]["type"] == "credential_proactive_ok"
@@ -7148,16 +7402,19 @@ class TestDeveloperCredentialRefresh:
         """Changed account: credentials updated AND force_reconnect dispatched."""
         coordinator = self._coordinator(hass, standard_config_entry)
         coordinator._iot_api = MagicMock()
-        coordinator._iot_api.refresh_credentials = AsyncMock(return_value={
-            "certificateAccount": "new-account",
-            "certificatePassword": "new-password",
-        })
+        coordinator._iot_api.refresh_credentials = AsyncMock(
+            return_value={
+                "certificateAccount": "new-account",
+                "certificatePassword": "new-password",
+            }
+        )
 
         with patch.object(hass, "async_add_executor_job") as mock_exec:
             await coordinator._proactive_credential_refresh()
 
         coordinator._mqtt_client.update_credentials.assert_called_once_with(
-            "new-account", "new-password",
+            "new-account",
+            "new-password",
         )
         mock_exec.assert_called_once_with(
             coordinator._mqtt_client.force_reconnect,
@@ -7174,9 +7431,7 @@ class TestDeveloperCredentialRefresh:
         coordinator._iot_api = MagicMock()
         coordinator._iot_api.refresh_credentials = AsyncMock(return_value=None)
 
-        with patch.object(
-            standard_config_entry, "async_start_reauth"
-        ) as mock_reauth:
+        with patch.object(standard_config_entry, "async_start_reauth") as mock_reauth:
             await coordinator._proactive_credential_refresh()
 
         coordinator._mqtt_client.update_credentials.assert_not_called()
@@ -7228,9 +7483,7 @@ class TestMalformedProtoMessages:
             MOCK_SMARTPLUG_DEVICE,
             MOCK_STREAM_DEVICE,
         ):
-            coordinator = EcoFlowDeviceCoordinator(
-                hass, standard_config_entry, device
-            )
+            coordinator = EcoFlowDeviceCoordinator(hass, standard_config_entry, device)
             topic = f"/app/device/property/{device['sn']}"
             for payload in self._GARBAGE:
                 assert coordinator._parse_message(topic, payload) is None
@@ -7282,9 +7535,7 @@ class TestRawFrameCapture:
         )
         sn = coordinator.device_sn
 
-        coordinator._on_mqtt_message(
-            f"/app/device/property/{sn}", self._frame(sn)
-        )
+        coordinator._on_mqtt_message(f"/app/device/property/{sn}", self._frame(sn))
 
         captured = bytes.fromhex(coordinator.raw_frames[0]["hex"])
         assert sn.encode() not in captured
@@ -7407,9 +7658,18 @@ class TestRawFrameCapture:
         # The twelve types the recording actually delivered, in descending
         # frequency - the frequent ones claim their buckets first.
         observed = [
-            (53, 14), (96, 8), (96, 1), (241, 5), (96, 7),
-            (96, 33), (96, 34), (96, 13), (96, 3), (209, 51),
-            (224, 38), (241, 36),
+            (53, 14),
+            (96, 8),
+            (96, 1),
+            (241, 5),
+            (96, 7),
+            (96, 33),
+            (96, 34),
+            (96, 13),
+            (96, 3),
+            (209, 51),
+            (224, 38),
+            (241, 36),
         ]
         traffic = (
             [(get_reply, 96, 1), (get_reply, 96, 33)]
@@ -7588,7 +7848,11 @@ class TestRawFrameCapture:
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
-        body = b'{"operateType":"latestQuotas","data":{"quotaMap":{"k":"' + b"x" * 9000 + b'"}}}'
+        body = (
+            b'{"operateType":"latestQuotas","data":{"quotaMap":{"k":"'
+            + b"x" * 9000
+            + b'"}}}'
+        )
 
         coordinator._on_mqtt_message(
             f"/app/user123/{coordinator.device_sn}/thing/property/get_reply", body
@@ -7675,13 +7939,9 @@ class TestRawFrameCaptureDepth:
         coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_POWEROCEAN_DEVICE)
         return coordinator.raw_frame_capture()[1]["per_key_max"]
 
-    async def test_an_open_window_deepens_the_buffer(
-        self, hass: HomeAssistant
-    ) -> None:
+    async def test_an_open_window_deepens_the_buffer(self, hass: HomeAssistant) -> None:
         """The flag has to reach the buffer, not just the options screen."""
-        entry = self._entry(
-            raw_capture=True, raw_capture_until=self.NOW + 3600
-        )
+        entry = self._entry(raw_capture=True, raw_capture_until=self.NOW + 3600)
 
         with patch(
             "custom_components.ecoflow_energy.const.time.time",
@@ -7697,9 +7957,7 @@ class TestRawFrameCaptureDepth:
             "custom_components.ecoflow_energy.const.time.time",
             return_value=self.NOW,
         ):
-            assert self._per_key_max(hass, self._entry()) == (
-                RAW_FRAME_LOG_PER_KEY_MAX
-            )
+            assert self._per_key_max(hass, self._entry()) == (RAW_FRAME_LOG_PER_KEY_MAX)
 
     async def test_an_expired_window_does_not_deepen_the_buffer(
         self, hass: HomeAssistant
@@ -7745,9 +8003,7 @@ class TestRawFrameCaptureDepth:
             ),
         ):
             entry.add_to_hass(hass)
-            coordinator = EcoFlowDeviceCoordinator(
-                hass, entry, MOCK_POWEROCEAN_DEVICE
-            )
+            coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_POWEROCEAN_DEVICE)
             topic = f"/app/device/property/{coordinator.device_sn}"
             with (
                 patch(
@@ -7779,9 +8035,7 @@ class TestStreamQuotaRouting:
 
     def _coordinator(self, hass, standard_config_entry):
         standard_config_entry.add_to_hass(hass)
-        return EcoFlowDeviceCoordinator(
-            hass, standard_config_entry, MOCK_STREAM_DEVICE
-        )
+        return EcoFlowDeviceCoordinator(hass, standard_config_entry, MOCK_STREAM_DEVICE)
 
     async def test_quota_topic_is_mapped(
         self,
@@ -7792,15 +8046,17 @@ class TestStreamQuotaRouting:
         import json as json_mod
 
         coordinator = self._coordinator(hass, standard_config_entry)
-        payload = json_mod.dumps({
-            "params": {
-                "powGetPv": 518,
-                "powGetPv2": 301,
-                "powGetPvSum": 819,
-                "powGetBpCms": -220,
-                "bmsFaultState": 0,
+        payload = json_mod.dumps(
+            {
+                "params": {
+                    "powGetPv": 518,
+                    "powGetPv2": 301,
+                    "powGetPvSum": 819,
+                    "powGetBpCms": -220,
+                    "bmsFaultState": 0,
+                }
             }
-        }).encode()
+        ).encode()
 
         result = coordinator._parse_message("/open/cert/SN001/quota", payload)
 
@@ -7904,13 +8160,9 @@ class TestStreamSocLatch:
         self, hass: HomeAssistant, standard_config_entry: MockConfigEntry
     ) -> None:
         coordinator = self._coordinator(hass, standard_config_entry)
-        await self._http_update(
-            coordinator, {"cmsBattSoc": 55, "soc": 40}
-        )
+        await self._http_update(coordinator, {"cmsBattSoc": 55, "soc": 40})
 
-        coordinator._apply_data(
-            {"unit_soc_pct": 41, "_soc_pct_fallback": 41}
-        )
+        coordinator._apply_data({"unit_soc_pct": 41, "_soc_pct_fallback": 41})
 
         assert coordinator.data["soc_pct"] == 55
         assert coordinator.data["unit_soc_pct"] == 41
@@ -7920,15 +8172,9 @@ class TestStreamSocLatch:
         self, hass: HomeAssistant, standard_config_entry: MockConfigEntry
     ) -> None:
         coordinator = self._coordinator(hass, standard_config_entry)
-        coordinator._apply_data(
-            {"unit_soc_pct": 40, "_soc_pct_fallback": 40}
-        )
-        await self._http_update(
-            coordinator, {"cmsBattSoc": 55, "soc": 40}
-        )
-        coordinator._apply_data(
-            {"unit_soc_pct": 41, "_soc_pct_fallback": 41}
-        )
+        coordinator._apply_data({"unit_soc_pct": 40, "_soc_pct_fallback": 40})
+        await self._http_update(coordinator, {"cmsBattSoc": 55, "soc": 40})
+        coordinator._apply_data({"unit_soc_pct": 41, "_soc_pct_fallback": 41})
 
         assert coordinator.data["soc_pct"] == 55
         assert "_soc_pct_fallback" not in coordinator.data

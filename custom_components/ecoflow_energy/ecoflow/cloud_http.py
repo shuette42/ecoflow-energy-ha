@@ -80,7 +80,9 @@ class EcoFlowHTTPQuota:
         query = {"sn": self._device_sn}
 
         return await self._request_with_retry(
-            "GET", url, query=query,
+            "GET",
+            url,
+            query=query,
             purpose="diagnostic" if diagnostic else "poll",
         )
 
@@ -93,9 +95,7 @@ class EcoFlowHTTPQuota:
         """
         url = f"{self._base_url}{IOT_QUOTA_PATH}"
         body = {"sn": self._device_sn, **command}
-        return await self._request_with_retry(
-            "PUT", url, body=body, purpose="action"
-        )
+        return await self._request_with_retry("PUT", url, body=body, purpose="action")
 
     # ------------------------------------------------------------------
     # Signature
@@ -105,7 +105,7 @@ class EcoFlowHTTPQuota:
         """Flatten nested objects for API signature (EcoFlow spec)."""
         items: list[tuple[str, str]] = []
         if isinstance(obj, dict):
-            for k in obj.keys():
+            for k in obj:
                 new_key = f"{parent}.{k}" if parent else k
                 items.extend(self._flatten(obj[k], new_key))
         elif isinstance(obj, list):
@@ -161,7 +161,9 @@ class EcoFlowHTTPQuota:
         """Check and update rate limit. Returns True if request is allowed."""
         now = time.monotonic()
         if now - self._last_call < self._min_interval:
-            _LOGGER.debug("HTTP: rate-limited (%.1fs since last call)", now - self._last_call)
+            _LOGGER.debug(
+                "HTTP: rate-limited (%.1fs since last call)", now - self._last_call
+            )
             return False
         self._last_call = now
         return True
@@ -192,24 +194,29 @@ class EcoFlowHTTPQuota:
                     # a GET makes the server validate the signature as if a
                     # body were present and reject it with 8521.
                     headers["Content-Type"] = "application/json;charset=UTF-8"
-                    body_json = json.dumps(body, separators=(",", ":"), ensure_ascii=False)
-                    request = self._session.post if method == "POST" else self._session.put
+                    body_json = json.dumps(
+                        body, separators=(",", ":"), ensure_ascii=False
+                    )
+                    request = (
+                        self._session.post if method == "POST" else self._session.put
+                    )
                     async with request(
-                        url, headers=headers, data=body_json.encode("utf-8"), timeout=timeout,
+                        url,
+                        headers=headers,
+                        data=body_json.encode("utf-8"),
+                        timeout=timeout,
                     ) as resp:
                         return await self._handle_response(resp, purpose=purpose)
                 else:
                     async with self._session.get(
-                        url, headers=headers, params=query, timeout=timeout,
+                        url,
+                        headers=headers,
+                        params=query,
+                        timeout=timeout,
                     ) as resp:
                         return await self._handle_response(resp, purpose=purpose)
 
-            except (
-                aiohttp.ClientError,
-                TimeoutError,
-                asyncio.TimeoutError,
-                self._RetryableAPIError,
-            ) as exc:
+            except (aiohttp.ClientError, TimeoutError, self._RetryableAPIError) as exc:
                 # aiohttp exceptions can embed RequestInfo, including the
                 # signed URL and full serial query. Keep only the exception
                 # class; retries are coalesced into one terminal outcome.

@@ -12,17 +12,16 @@ import json
 from pathlib import Path
 
 import pytest
-
 from ecoflow_energy.const import supports_stream_ac5000_controls
 from ecoflow_energy.ecoflow.proto.decoder import decode_header_message
 from ecoflow_energy.ecoflow.stream_ac5000_commands import (
     CMD_FUNC_CONFIG,
     CMD_ID_CONFIG_WRITE,
     TASK_ADD,
-    _build_envelope,
     TASK_REMOVE,
     TASK_UPDATE,
     WORK_MODES,
+    _build_envelope,
     build_backup_reserve_payload,
     build_backup_socket_payload,
     build_grid_input_power_payload,
@@ -168,7 +167,9 @@ class TestBackupReserve:
         assert _pdata(frame) == APP_BACKUP_RESERVE_ON_30
 
     def test_off_clears_the_flag_and_keeps_the_level(self) -> None:
-        pdata = bytes.fromhex(_pdata(build_backup_reserve_payload(False, 30, SN, seq=1)))
+        pdata = bytes.fromhex(
+            _pdata(build_backup_reserve_payload(False, 30, SN, seq=1))
+        )
 
         assert pdata == bytes([0x08, 30, 0xF2, 0x01, 0x04, 0x08, 0, 0x10, 30])
 
@@ -180,10 +181,15 @@ class TestBackupReserve:
 
 class TestBackupSocket:
     def test_on_matches_the_app(self) -> None:
-        assert _pdata(build_backup_socket_payload(True, SN, seq=1)) == APP_BACKUP_SOCKET_ON
+        assert (
+            _pdata(build_backup_socket_payload(True, SN, seq=1)) == APP_BACKUP_SOCKET_ON
+        )
 
     def test_off_matches_the_app(self) -> None:
-        assert _pdata(build_backup_socket_payload(False, SN, seq=1)) == APP_BACKUP_SOCKET_OFF
+        assert (
+            _pdata(build_backup_socket_payload(False, SN, seq=1))
+            == APP_BACKUP_SOCKET_OFF
+        )
 
 
 class TestEnvelope:
@@ -259,9 +265,7 @@ class TestTask:
         )
         disabled = bytes.fromhex(
             _pdata(
-                build_task_payload(
-                    "discharge", 0, 1380, 600, SN, enabled=False, seq=1
-                )
+                build_task_payload("discharge", 0, 1380, 600, SN, enabled=False, seq=1)
             )
         )
 
@@ -269,7 +273,9 @@ class TestTask:
         assert bytes.fromhex("18002001") in disabled
 
     def test_charge_power_is_per_device_and_discharge_is_not(self) -> None:
-        charge = bytes.fromhex(_pdata(build_task_payload("charge", 780, 960, 600, SN, seq=1)))
+        charge = bytes.fromhex(
+            _pdata(build_task_payload("charge", 780, 960, 600, SN, seq=1))
+        )
         discharge = bytes.fromhex(
             _pdata(build_task_payload("discharge", 0, 1380, 600, SN, seq=1))
         )
@@ -304,7 +310,9 @@ class TestTask:
 
     def test_the_task_number_defaults_to_the_kind(self) -> None:
         """Which is what keeps the two tasks written here from colliding."""
-        charge = bytes.fromhex(_pdata(build_task_payload("charge", 780, 960, 600, SN, seq=1)))
+        charge = bytes.fromhex(
+            _pdata(build_task_payload("charge", 780, 960, 600, SN, seq=1))
+        )
         discharge = bytes.fromhex(
             _pdata(build_task_payload("discharge", 0, 1380, 600, SN, seq=1))
         )
@@ -312,7 +320,9 @@ class TestTask:
         assert bytes.fromhex("1001") in charge
         assert bytes.fromhex("1002") in discharge
 
-    def test_an_observed_number_overrides_the_kind_but_not_the_power_block(self) -> None:
+    def test_an_observed_number_overrides_the_kind_but_not_the_power_block(
+        self,
+    ) -> None:
         """A removal has to name the task the device knows.
 
         The number and the power block are decided separately: the number is
@@ -322,8 +332,14 @@ class TestTask:
         pdata = bytes.fromhex(
             _pdata(
                 build_task_payload(
-                    "discharge", 0, 1439, 0, SN,
-                    operation=TASK_REMOVE, task_slot=1, seq=1,
+                    "discharge",
+                    0,
+                    1439,
+                    0,
+                    SN,
+                    operation=TASK_REMOVE,
+                    task_slot=1,
+                    seq=1,
                 )
             )
         )
@@ -536,7 +552,9 @@ class TestGridOutputRoundTrip:
                 / "es21_pv_masked.json"
             ).read_text()
         )["frames"]:
-            reported.update(parse_stream_ac5000_message(bytes.fromhex(frame["hex"])) or {})
+            reported.update(
+                parse_stream_ac5000_message(bytes.fromhex(frame["hex"])) or {}
+            )
 
         # ...and the same unit's app write, recorded a few days later.
         recorded = bytes.fromhex(_es21_frame(1)["hex"])
@@ -566,7 +584,9 @@ class TestGridOutputRoundTrip:
                 / "es21_pv_masked.json"
             ).read_text()
         )["frames"]:
-            reported.update(parse_stream_ac5000_message(bytes.fromhex(frame["hex"])) or {})
+            reported.update(
+                parse_stream_ac5000_message(bytes.fromhex(frame["hex"])) or {}
+            )
 
         written = _config_fields(bytes.fromhex(_es21_frame(3)["hex"]))[10][1]
 
@@ -622,9 +642,7 @@ class TestGridInputPower:
         recorded = _header(bytes.fromhex(_es22_input_frame(index)["hex"]))
 
         built = _header(
-            build_grid_input_power_payload(
-                power, _MASKED_SN, seq=recorded["seq"]
-            )
+            build_grid_input_power_payload(power, _MASKED_SN, seq=recorded["seq"])
         )
 
         for field in ("src", "dest", "d_src", "d_dest", "cmd_func", "cmd_id"):

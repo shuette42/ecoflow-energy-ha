@@ -672,7 +672,15 @@ class _Bucket:
     after doing something on the device has to see that frame.
     """
 
-    __slots__ = ("first_ts", "keys_seen", "latest", "novel", "samples", "seen", "slot_s")
+    __slots__ = (
+        "first_ts",
+        "keys_seen",
+        "latest",
+        "novel",
+        "samples",
+        "seen",
+        "slot_s",
+    )
 
     def __init__(self) -> None:
         self.samples: list[tuple[int, dict[str, Any]]] = []
@@ -883,7 +891,9 @@ class TypedFrameBuffer:
         if busiest is None:
             return
         seen = self._buckets.pop(busiest).seen
-        self._write_keys_evicted[busiest] = self._write_keys_evicted.get(busiest, 0) + seen
+        self._write_keys_evicted[busiest] = (
+            self._write_keys_evicted.get(busiest, 0) + seen
+        )
         self._dropped_frames += seen
         self._dropped_per_key[busiest] = self._dropped_per_key.get(busiest, 0) + seen
 
@@ -1121,4 +1131,6 @@ def _thin_to_slots(
 def _entry_ts(entry: dict[str, Any]) -> float:
     """Return the entry timestamp, tolerating a missing or odd value."""
     ts = entry.get("ts")
-    return float(ts) if isinstance(ts, (int, float)) and not isinstance(ts, bool) else 0.0
+    return (
+        float(ts) if isinstance(ts, (int, float)) and not isinstance(ts, bool) else 0.0
+    )

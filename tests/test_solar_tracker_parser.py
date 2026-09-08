@@ -13,14 +13,20 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from ecoflow_energy.ecoflow.parsers.solar_tracker_proto import (
     _TRACKING_MODE,
     parse_solar_tracker_message,
 )
 
-FIXTURE = Path(__file__).parent / "fixtures" / "solar_tracker" / "hz31_s02f_frames_issue339.json"
-STREAM_FIXTURE = Path(__file__).parent / "fixtures" / "stream" / "bk01_capture_masked.json"
+FIXTURE = (
+    Path(__file__).parent
+    / "fixtures"
+    / "solar_tracker"
+    / "hz31_s02f_frames_issue339.json"
+)
+STREAM_FIXTURE = (
+    Path(__file__).parent / "fixtures" / "stream" / "bk01_capture_masked.json"
+)
 
 
 def _frames(path: Path) -> list[dict[str, Any]]:
@@ -29,9 +35,15 @@ def _frames(path: Path) -> list[dict[str, Any]]:
 
 def _frame(tag: str, ts_prefix: str, topic: str = "property") -> dict[str, Any]:
     for frame in _frames(FIXTURE):
-        if frame["tag"] == tag and frame["topic"] == topic and frame["ts_iso"].startswith(ts_prefix):
+        if (
+            frame["tag"] == tag
+            and frame["topic"] == topic
+            and frame["ts_iso"].startswith(ts_prefix)
+        ):
             return frame
-    raise AssertionError(f"no fixture frame for tag={tag!r} ts_prefix={ts_prefix!r} topic={topic!r}")
+    raise AssertionError(
+        f"no fixture frame for tag={tag!r} ts_prefix={ts_prefix!r} topic={topic!r}"
+    )
 
 
 def _payload(frame: dict[str, Any]) -> bytes:
@@ -79,7 +91,8 @@ def _value_span_of_first_field(data: bytes, target_field: int) -> tuple[int, int
 
 
 def _single_byte_varint_span(pdata: bytes, target_field: int) -> tuple[int, int]:
-    """Return the (start, end) byte range of a field whose varint value fits one byte."""
+    """Return the (start, end) byte range of a field whose varint value fits one
+    byte."""
     pos = 0
     while pos < len(pdata):
         start = pos
@@ -98,7 +111,9 @@ def _single_byte_varint_span(pdata: bytes, target_field: int) -> tuple[int, int]
             raise ValueError(wire_type)
         if field_num == target_field:
             if wire_type != 0 or pos - start != 2:
-                raise AssertionError("field is not a one-byte varint; helper does not support it")
+                raise AssertionError(
+                    "field is not a one-byte varint; helper does not support it"
+                )
             return start, pos
     raise AssertionError(f"field {target_field} not found")
 
@@ -255,7 +270,10 @@ class TestSolarTrackerParser:
                 assert 10 <= optimal <= 85, (frame["ts_iso"], optimal)
 
             assert result["tracking_mode"] in ("manual", "auto"), frame["ts_iso"]
-            assert 96 <= result["battery_pct"] <= 100, (frame["ts_iso"], result["battery_pct"])
+            assert 96 <= result["battery_pct"] <= 100, (
+                frame["ts_iso"],
+                result["battery_pct"],
+            )
             assert result["light_level"] > 0, frame["ts_iso"]
 
 

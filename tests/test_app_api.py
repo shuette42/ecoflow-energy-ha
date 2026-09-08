@@ -3,9 +3,7 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from ecoflow_energy.ecoflow.app_api import AppApiClient, _parse_device_response
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -43,12 +41,12 @@ class TestLogin:
         with patch(
             "ecoflow_energy.ecoflow.app_api.enhanced_login",
             new_callable=AsyncMock,
-            return_value={"token": "jwt_token_123", "user_id": "uid_456"},
+            return_value={"token": "test_jwt_token_123", "user_id": "uid_456"},
         ):
             result = await client.login()
 
         assert result is True
-        assert client.token == "jwt_token_123"
+        assert client.token == "test_jwt_token_123"
         assert client.user_id == "uid_456"
 
     @pytest.mark.asyncio
@@ -308,7 +306,9 @@ class TestGetMqttCredentials:
             result = await client.get_mqtt_credentials()
 
         assert result == expected_creds
-        mock_get.assert_called_once_with(session, "valid_token", base_url=client._base_url)
+        mock_get.assert_called_once_with(
+            session, "valid_token", base_url=client._base_url
+        )
 
     @pytest.mark.asyncio
     async def test_no_token_returns_none(self):
@@ -347,7 +347,7 @@ class TestRegionRouting:
             "ecoflow_energy.ecoflow.app_api.enhanced_login",
             new_callable=AsyncMock,
             return_value={
-                "token": "jwt_token_123",
+                "token": "test_jwt_token_123",
                 "user_id": "uid_456",
                 "base_url": "https://api.ecoflow.com",
             },
@@ -366,7 +366,7 @@ class TestRegionRouting:
             "ecoflow_energy.ecoflow.app_api.enhanced_login",
             new_callable=AsyncMock,
             return_value={
-                "token": "jwt_token_123",
+                "token": "test_jwt_token_123",
                 "user_id": "uid_456",
                 "base_url": "https://api.ecoflow.com",
             },
@@ -387,7 +387,7 @@ class TestRegionRouting:
             "ecoflow_energy.ecoflow.app_api.enhanced_login",
             new_callable=AsyncMock,
             return_value={
-                "token": "jwt_token_123",
+                "token": "test_jwt_token_123",
                 "user_id": "uid_456",
                 "base_url": "https://api.ecoflow.com",
             },
@@ -402,7 +402,7 @@ class TestRegionRouting:
             await client.get_mqtt_credentials()
 
         mock_get.assert_called_once_with(
-            session, "jwt_token_123", base_url="https://api.ecoflow.com"
+            session, "test_jwt_token_123", base_url="https://api.ecoflow.com"
         )
 
     @pytest.mark.asyncio
@@ -415,7 +415,7 @@ class TestRegionRouting:
         with patch(
             "ecoflow_energy.ecoflow.app_api.enhanced_login",
             new_callable=AsyncMock,
-            return_value={"token": "jwt_token_123", "user_id": "uid_456"},
+            return_value={"token": "test_jwt_token_123", "user_id": "uid_456"},
         ):
             await client.login()
 

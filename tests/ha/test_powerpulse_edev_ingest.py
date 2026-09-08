@@ -14,7 +14,6 @@ from __future__ import annotations
 from typing import Any
 
 from homeassistant.core import HomeAssistant
-
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.const import (
@@ -34,7 +33,6 @@ from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
     encode_field_bytes,
     encode_field_varint,
 )
-
 from tests.test_powerpulse_edev_wallbox import (
     FRAME_CHARGING_MID_ORDER,
     HEATING_ROD_REPORT,

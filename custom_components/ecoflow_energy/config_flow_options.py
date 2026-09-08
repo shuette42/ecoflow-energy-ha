@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import aiohttp
 import voluptuous as vol
-
 from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.selector import SelectSelector, SelectSelectorConfig
+from homeassistant.helpers.selector import (
+    SelectOptionDict,
+    SelectSelector,
+    SelectSelectorConfig,
+)
 
 from .config_flow_setup import (
     SetupFlowMixin,
@@ -69,8 +72,16 @@ async def _async_fetch_app_devices(
     return SetupFlowMixin._normalize_app_devices(raw_devices)
 
 
-class OptionsFlowMixin:
+if TYPE_CHECKING:
+    from homeassistant.config_entries import OptionsFlow as _Base
+else:
+    _Base = object
+
+
+class OptionsFlowMixin(_Base):
     """Options flow steps, composed into EcoFlowOptionsFlow."""
+
+    _all_devices: list[dict[str, Any]]
 
     @staticmethod
     def _stored_device_type(stored: dict[str, dict[str, Any]], sn: str) -> str:
@@ -122,8 +133,17 @@ class OptionsFlowMixin:
                         raw = await api.get_device_list()
                         if raw:
                             self._all_devices = SetupFlowMixin._normalize_devices(raw)
-                    except (aiohttp.ClientError, TimeoutError, OSError, KeyError, ValueError, TypeError):
-                        _LOGGER.warning("Options flow: failed to fetch device list", exc_info=True)
+                    except (
+                        aiohttp.ClientError,
+                        TimeoutError,
+                        OSError,
+                        KeyError,
+                        ValueError,
+                        TypeError,
+                    ):
+                        _LOGGER.warning(
+                            "Options flow: failed to fetch device list", exc_info=True
+                        )
             elif auth_method == AUTH_METHOD_APP:
                 email = self.config_entry.data.get(CONF_EMAIL)
                 password = self.config_entry.data.get(CONF_PASSWORD)
@@ -163,13 +183,11 @@ class OptionsFlowMixin:
             known_devices = {
                 d["sn"]: d
                 for d in (
-                    self._all_devices
-                    or self.config_entry.data.get(CONF_DEVICES, [])
+                    self._all_devices or self.config_entry.data.get(CONF_DEVICES, [])
                 )
             }
             selected_powerstream = any(
-                self._stored_device_type(known_devices, sn)
-                == DEVICE_TYPE_POWERSTREAM
+                self._stored_device_type(known_devices, sn) == DEVICE_TYPE_POWERSTREAM
                 for sn in selected_sns
             )
             selected_enhanced_only = any(
@@ -196,7 +214,9 @@ class OptionsFlowMixin:
                 self._pending_mode = new_mode
                 self._pending_devices = selected_sns
                 return await self.async_step_enhanced()
-            elif new_mode != MODE_ENHANCED and not self.config_entry.data.get(CONF_ACCESS_KEY):
+            elif new_mode != MODE_ENHANCED and not self.config_entry.data.get(
+                CONF_ACCESS_KEY
+            ):
                 # Switching to Standard but no Developer API keys stored
                 if CONF_RAW_CAPTURE in user_input:
                     self._pending_raw_capture = user_input[CONF_RAW_CAPTURE]
@@ -209,15 +229,9 @@ class OptionsFlowMixin:
                 return self._save_options(new_mode, selected_sns)
 
         if self._all_devices:
-            device_options = {
-                d["sn"]: _device_label(d)
-                for d in self._all_devices
-            }
+            device_options = {d["sn"]: _device_label(d) for d in self._all_devices}
         else:
-            stored = {
-                d["sn"]: d
-                for d in self.config_entry.data.get(CONF_DEVICES, [])
-            }
+            stored = {d["sn"]: d for d in self.config_entry.data.get(CONF_DEVICES, [])}
             # Prefix-derived name first, same order as _device_label: the
             # type table alone would label an ES21 "STREAM AC 5000" and a
             # P231 "Delta 3 Series" whenever this fallback branch renders.
@@ -229,11 +243,24 @@ class OptionsFlowMixin:
             }
             device_options = {
                 sn: (
-                    f"{get_device_name('', sn) or DEVICE_TYPE_DISPLAY_NAMES.get(stored_types[sn], short_serial(sn))}"
+                    f"{
+                        get_device_name('', sn)
+                        or DEVICE_TYPE_DISPLAY_NAMES.get(
+                            stored_types[sn], short_serial(sn)
+                        )
+                    }"
                     f" ({short_serial(sn)})"
                     f"{unsupported_suffix(stored_types[sn])}"
-                    f"{' - requires Standard Mode' if stored_types[sn] == DEVICE_TYPE_POWERSTREAM else ''}"
-                    f"{' - requires Enhanced Mode' if stored_types[sn] in ENHANCED_ONLY_DEVICE_TYPES else ''}"
+                    f"{
+                        ' - requires Standard Mode'
+                        if stored_types[sn] == DEVICE_TYPE_POWERSTREAM
+                        else ''
+                    }"
+                    f"{
+                        ' - requires Enhanced Mode'
+                        if stored_types[sn] in ENHANCED_ONLY_DEVICE_TYPES
+                        else ''
+                    }"
                 )
                 for sn in current_device_sns
             }
@@ -251,7 +278,7 @@ class OptionsFlowMixin:
             ): SelectSelector(
                 SelectSelectorConfig(
                     options=[
-                        {"value": sn, "label": label}
+                        SelectOptionDict(value=sn, label=label)
                         for sn, label in device_options.items()
                     ],
                     multiple=True,
@@ -286,9 +313,7 @@ class OptionsFlowMixin:
         # parse error in the log, and a value chosen in Python would take
         # the sentence out of the translation files and leave it English.
         return self.async_show_form(
-            step_id=(
-                "init_app" if auth_method == AUTH_METHOD_APP else "init"
-            ),
+            step_id=("init_app" if auth_method == AUTH_METHOD_APP else "init"),
             data_schema=vol.Schema(schema),
             errors=errors,
         )
@@ -385,8 +410,7 @@ class OptionsFlowMixin:
                     password=password,
                     user_id=user_id,
                 )
-            else:
-                errors["base"] = "enhanced_login_failed"
+            errors["base"] = "enhanced_login_failed"
 
         return self.async_show_form(
             step_id="enhanced",

@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from ecoflow_energy.ecoflow.parsers.smart_meter_proto import (
     _ENERGY_RECORD_MAP,
     _SMART_METER_FIELD_MAP,
@@ -26,8 +25,12 @@ from ecoflow_energy.ecoflow.proto_encoding import (
     encode_varint,
 )
 
-FIXTURE = Path(__file__).parent / "fixtures" / "smart_meter" / "bk21_frames_issue331.json"
-STREAM_FIXTURE = Path(__file__).parent / "fixtures" / "stream" / "bk01_capture_masked.json"
+FIXTURE = (
+    Path(__file__).parent / "fixtures" / "smart_meter" / "bk21_frames_issue331.json"
+)
+STREAM_FIXTURE = (
+    Path(__file__).parent / "fixtures" / "stream" / "bk01_capture_masked.json"
+)
 MIDNIGHT_FIXTURE = (
     Path(__file__).parent / "fixtures" / "smart_meter" / "bk21_midnight_issue331.json"
 )
@@ -65,31 +68,67 @@ def _build_frame(cmd_func: int, cmd_id: int, inner: bytes) -> bytes:
 # frames (1, 9, 10) carry a full upload unmasked next to an upload-period
 # message.
 _INCREMENTAL = {
-    0: {"grid_w": 328.6029968261719, "grid_l1_w": 0.0,
-        "grid_l2_w": 239.2700653076172, "grid_l3_w": 89.33292388916016},
-    2: {"grid_w": 333.8434143066406, "grid_l1_w": 0.0,
-        "grid_l2_w": 244.86236572265625, "grid_l3_w": 88.98104095458984},
-    5: {"grid_w": 432.6658020019531, "grid_l1_w": 0.0,
-        "grid_l2_w": 343.8987121582031, "grid_l3_w": 88.76708984375},
-    8: {"grid_w": 426.4959716796875, "grid_l1_w": 0.0,
-        "grid_l2_w": 338.1103210449219, "grid_l3_w": 88.38567352294922},
-    13: {"grid_w": 355.0791931152344, "grid_l1_w": 0.0,
-         "grid_l2_w": 266.21881103515625, "grid_l3_w": 88.86038208007812},
-    14: {"grid_w": 333.9139404296875, "grid_l1_w": 0.0,
-         "grid_l2_w": 245.07046508789062, "grid_l3_w": 88.84347534179688},
+    0: {
+        "grid_w": 328.6029968261719,
+        "grid_l1_w": 0.0,
+        "grid_l2_w": 239.2700653076172,
+        "grid_l3_w": 89.33292388916016,
+    },
+    2: {
+        "grid_w": 333.8434143066406,
+        "grid_l1_w": 0.0,
+        "grid_l2_w": 244.86236572265625,
+        "grid_l3_w": 88.98104095458984,
+    },
+    5: {
+        "grid_w": 432.6658020019531,
+        "grid_l1_w": 0.0,
+        "grid_l2_w": 343.8987121582031,
+        "grid_l3_w": 88.76708984375,
+    },
+    8: {
+        "grid_w": 426.4959716796875,
+        "grid_l1_w": 0.0,
+        "grid_l2_w": 338.1103210449219,
+        "grid_l3_w": 88.38567352294922,
+    },
+    13: {
+        "grid_w": 355.0791931152344,
+        "grid_l1_w": 0.0,
+        "grid_l2_w": 266.21881103515625,
+        "grid_l3_w": 88.86038208007812,
+    },
+    14: {
+        "grid_w": 333.9139404296875,
+        "grid_l1_w": 0.0,
+        "grid_l2_w": 245.07046508789062,
+        "grid_l3_w": 88.84347534179688,
+    },
 }
 
 _WITH_ENERGY_RECORD = {
-    6: {"grid_w": 432.4347839355469, "grid_l1_w": 0.0,
-        "grid_l2_w": 342.93017578125, "grid_l3_w": 89.50462341308594,
-        "grid_l2_net_energy_wh": 967.0, "grid_l3_net_energy_wh": 411.0,
-        "grid_import_energy_wh": 1378.0, "grid_net_energy_wh": 1378.0,
-        "grid_export_energy_wh": 0.0},
-    11: {"grid_w": 420.10107421875, "grid_l1_w": 0.0,
-         "grid_l2_w": 331.5275573730469, "grid_l3_w": 88.57351684570312,
-         "grid_l2_net_energy_wh": 992.0, "grid_l3_net_energy_wh": 417.0,
-         "grid_import_energy_wh": 1409.0, "grid_net_energy_wh": 1409.0,
-         "grid_export_energy_wh": 0.0},
+    6: {
+        "grid_w": 432.4347839355469,
+        "grid_l1_w": 0.0,
+        "grid_l2_w": 342.93017578125,
+        "grid_l3_w": 89.50462341308594,
+        "grid_l2_net_energy_wh": 967.0,
+        "grid_l3_net_energy_wh": 411.0,
+        "grid_import_energy_wh": 1378.0,
+        "grid_net_energy_wh": 1378.0,
+        "grid_export_energy_wh": 0.0,
+    },
+    11: {
+        "grid_w": 420.10107421875,
+        "grid_l1_w": 0.0,
+        "grid_l2_w": 331.5275573730469,
+        "grid_l3_w": 88.57351684570312,
+        "grid_l2_net_energy_wh": 992.0,
+        "grid_l3_net_energy_wh": 417.0,
+        "grid_import_energy_wh": 1409.0,
+        "grid_net_energy_wh": 1409.0,
+        "grid_export_energy_wh": 0.0,
+    },
 }
 
 # The 146-byte full upload, frame 4, and the two bundles that followed it
@@ -97,8 +136,10 @@ _WITH_ENERGY_RECORD = {
 # counters but different per-phase power, so they are not one reading sent
 # twice.
 _FULL = {
-    4: {"grid_w": 406.6517333984375,
-        "grid_l1_w": 0.0, "grid_l2_w": 317.8153991699219,
+    4: {
+        "grid_w": 406.6517333984375,
+        "grid_l1_w": 0.0,
+        "grid_l2_w": 317.8153991699219,
         "grid_l3_w": 88.83634185791016,
         "grid_l1_voltage_v": 239.96511840820312,
         "grid_l2_voltage_v": 239.4418182373047,
@@ -106,14 +147,21 @@ _FULL = {
         "grid_l1_current_a": 0.0,
         "grid_l2_current_a": 2.1072933673858643,
         "grid_l3_current_a": 0.8354451060295105,
-        "grid_l2_net_energy_wh": 941.0, "grid_l3_net_energy_wh": 404.0,
-        "grid_import_energy_wh": 1345.0, "grid_net_energy_wh": 1345.0,
+        "grid_l2_net_energy_wh": 941.0,
+        "grid_l3_net_energy_wh": 404.0,
+        "grid_import_energy_wh": 1345.0,
+        "grid_net_energy_wh": 1345.0,
         "grid_export_energy_wh": 0.0,
-        "grid_power_factor": None, "grid_connection_state": "grid_in",
-        "grid_l1_connected": True, "grid_l2_connected": True,
-        "grid_l3_connected": True},
-    1: {"grid_w": 328.6647033691406,
-        "grid_l1_w": 0.0, "grid_l2_w": 240.10012817382812,
+        "grid_power_factor": None,
+        "grid_connection_state": "grid_in",
+        "grid_l1_connected": True,
+        "grid_l2_connected": True,
+        "grid_l3_connected": True,
+    },
+    1: {
+        "grid_w": 328.6647033691406,
+        "grid_l1_w": 0.0,
+        "grid_l2_w": 240.10012817382812,
         "grid_l3_w": 88.56456756591797,
         "grid_l1_voltage_v": 240.170166015625,
         "grid_l2_voltage_v": 239.49620056152344,
@@ -121,14 +169,21 @@ _FULL = {
         "grid_l1_current_a": 0.0,
         "grid_l2_current_a": 1.789912462234497,
         "grid_l3_current_a": 0.8386775255203247,
-        "grid_l2_net_energy_wh": 923.0, "grid_l3_net_energy_wh": 398.0,
-        "grid_import_energy_wh": 1321.0, "grid_net_energy_wh": 1321.0,
+        "grid_l2_net_energy_wh": 923.0,
+        "grid_l3_net_energy_wh": 398.0,
+        "grid_import_energy_wh": 1321.0,
+        "grid_net_energy_wh": 1321.0,
         "grid_export_energy_wh": 0.0,
-        "grid_power_factor": None, "grid_connection_state": "grid_in",
-        "grid_l1_connected": True, "grid_l2_connected": True,
-        "grid_l3_connected": True},
-    9: {"grid_w": 429.0445251464844,
-        "grid_l1_w": 0.0, "grid_l2_w": 340.832275390625,
+        "grid_power_factor": None,
+        "grid_connection_state": "grid_in",
+        "grid_l1_connected": True,
+        "grid_l2_connected": True,
+        "grid_l3_connected": True,
+    },
+    9: {
+        "grid_w": 429.0445251464844,
+        "grid_l1_w": 0.0,
+        "grid_l2_w": 340.832275390625,
         "grid_l3_w": 88.21222686767578,
         "grid_l1_voltage_v": 239.77590942382812,
         "grid_l2_voltage_v": 239.911376953125,
@@ -136,27 +191,39 @@ _FULL = {
         "grid_l1_current_a": 0.0,
         "grid_l2_current_a": 2.2456891536712646,
         "grid_l3_current_a": 0.8519787788391113,
-        "grid_l2_net_energy_wh": 984.0, "grid_l3_net_energy_wh": 415.0,
-        "grid_import_energy_wh": 1399.0, "grid_net_energy_wh": 1399.0,
+        "grid_l2_net_energy_wh": 984.0,
+        "grid_l3_net_energy_wh": 415.0,
+        "grid_import_energy_wh": 1399.0,
+        "grid_net_energy_wh": 1399.0,
         "grid_export_energy_wh": 0.0,
-        "grid_power_factor": None, "grid_connection_state": "grid_in",
-        "grid_l1_connected": True, "grid_l2_connected": True,
-        "grid_l3_connected": True},
-    10: {"grid_w": 429.0445251464844,
-         "grid_l1_w": 0.0, "grid_l2_w": 338.96844482421875,
-         "grid_l3_w": 89.3239517211914,
-         "grid_l1_voltage_v": 239.77590942382812,
-         "grid_l2_voltage_v": 239.911376953125,
-         "grid_l3_voltage_v": 241.05319213867188,
-         "grid_l1_current_a": 0.0,
-         "grid_l2_current_a": 2.2456891536712646,
-         "grid_l3_current_a": 0.8519787788391113,
-         "grid_l2_net_energy_wh": 984.0, "grid_l3_net_energy_wh": 415.0,
-         "grid_import_energy_wh": 1399.0, "grid_net_energy_wh": 1399.0,
-         "grid_export_energy_wh": 0.0,
-         "grid_power_factor": None, "grid_connection_state": "grid_in",
-         "grid_l1_connected": True, "grid_l2_connected": True,
-         "grid_l3_connected": True},
+        "grid_power_factor": None,
+        "grid_connection_state": "grid_in",
+        "grid_l1_connected": True,
+        "grid_l2_connected": True,
+        "grid_l3_connected": True,
+    },
+    10: {
+        "grid_w": 429.0445251464844,
+        "grid_l1_w": 0.0,
+        "grid_l2_w": 338.96844482421875,
+        "grid_l3_w": 89.3239517211914,
+        "grid_l1_voltage_v": 239.77590942382812,
+        "grid_l2_voltage_v": 239.911376953125,
+        "grid_l3_voltage_v": 241.05319213867188,
+        "grid_l1_current_a": 0.0,
+        "grid_l2_current_a": 2.2456891536712646,
+        "grid_l3_current_a": 0.8519787788391113,
+        "grid_l2_net_energy_wh": 984.0,
+        "grid_l3_net_energy_wh": 415.0,
+        "grid_import_energy_wh": 1399.0,
+        "grid_net_energy_wh": 1399.0,
+        "grid_export_energy_wh": 0.0,
+        "grid_power_factor": None,
+        "grid_connection_state": "grid_in",
+        "grid_l1_connected": True,
+        "grid_l2_connected": True,
+        "grid_l3_connected": True,
+    },
 }
 
 _EXPECTED = {**_INCREMENTAL, **_WITH_ENERGY_RECORD, **_FULL}
@@ -187,12 +254,16 @@ class TestFixture:
         assert len(frames) == 15
 
         property_21 = [
-            f for f in frames
-            if f["topic"] == "property" and f["cmds"] == [{"cmd_func": 254, "cmd_id": 21}]
+            f
+            for f in frames
+            if f["topic"] == "property"
+            and f["cmds"] == [{"cmd_func": 254, "cmd_id": 21}]
         ]
         property_22 = [
-            f for f in frames
-            if f["topic"] == "property" and f["cmds"] == [{"cmd_func": 254, "cmd_id": 22}]
+            f
+            for f in frames
+            if f["topic"] == "property"
+            and f["cmds"] == [{"cmd_func": 254, "cmd_id": 22}]
         ]
         get_reply = [f for f in frames if f["topic"] == "get_reply"]
 
@@ -258,9 +329,7 @@ class TestSmartMeterParser:
         result = parse_smart_meter_message(_payload(10))
         assert result is not None
 
-        phase_sum = (
-            result["grid_l1_w"] + result["grid_l2_w"] + result["grid_l3_w"]
-        )
+        phase_sum = result["grid_l1_w"] + result["grid_l2_w"] + result["grid_l3_w"]
         assert result["grid_w"] == pytest.approx(429.0445251464844, rel=1e-9)
         assert phase_sum == pytest.approx(428.2923965454102, rel=1e-9)
         assert result["grid_w"] != pytest.approx(phase_sum, rel=1e-6)
@@ -397,14 +466,24 @@ class TestGuards:
         counters - must stay absent from a Stream frame, and does.
         """
         meter_only = {
-            "grid_l1_w", "grid_l2_w", "grid_l3_w",
-            "grid_l1_voltage_v", "grid_l2_voltage_v", "grid_l3_voltage_v",
-            "grid_l1_current_a", "grid_l2_current_a", "grid_l3_current_a",
-            "grid_l1_net_energy_wh", "grid_l2_net_energy_wh",
+            "grid_l1_w",
+            "grid_l2_w",
+            "grid_l3_w",
+            "grid_l1_voltage_v",
+            "grid_l2_voltage_v",
+            "grid_l3_voltage_v",
+            "grid_l1_current_a",
+            "grid_l2_current_a",
+            "grid_l3_current_a",
+            "grid_l1_net_energy_wh",
+            "grid_l2_net_energy_wh",
             "grid_l3_net_energy_wh",
-            "grid_import_energy_wh", "grid_export_energy_wh",
+            "grid_import_energy_wh",
+            "grid_export_energy_wh",
             "grid_net_energy_wh",
-            "grid_l1_connected", "grid_l2_connected", "grid_l3_connected",
+            "grid_l1_connected",
+            "grid_l2_connected",
+            "grid_l3_connected",
         }
 
         decoded_any = False
@@ -486,13 +565,16 @@ class TestMidnightFixture:
 
         get_reply = [f for f in frames if f["topic"] == "get_reply"]
         property_21 = [
-            f for f in frames
-            if f["topic"] == "property" and f["cmds"] == [{"cmd_func": 254, "cmd_id": 21}]
+            f
+            for f in frames
+            if f["topic"] == "property"
+            and f["cmds"] == [{"cmd_func": 254, "cmd_id": 21}]
         ]
 
         assert len(get_reply) == 1
         assert get_reply[0]["cmds"] == [
-            {"cmd_func": 254, "cmd_id": 22}, {"cmd_func": 254, "cmd_id": 21}
+            {"cmd_func": 254, "cmd_id": 22},
+            {"cmd_func": 254, "cmd_id": 21},
         ]
         assert len(property_21) == 4
         # Fixture order is capture order: one record before local midnight
@@ -546,9 +628,7 @@ class TestMidnightRecords:
         """None of the six counters may go backwards, in either direction
         the device counts - across the actual local midnight the reporter's
         meter crossed while the capture ran."""
-        results = [
-            parse_smart_meter_message(_midnight_payload(i)) for i in range(5)
-        ]
+        results = [parse_smart_meter_message(_midnight_payload(i)) for i in range(5)]
         assert all(r is not None for r in results)
 
         for key in _ENERGY_KEYS:

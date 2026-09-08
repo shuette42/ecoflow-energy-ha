@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import Any
 
 from homeassistant.core import HomeAssistant
-
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.const import (
@@ -148,9 +147,7 @@ class TestTheCaptureReachesTheEntities:
     """The point of the whole phase: a frame each tracker sent, in, and
     Home Assistant states out."""
 
-    async def test_the_hz31_frame_fills_the_sensors(
-        self, hass: HomeAssistant
-    ) -> None:
+    async def test_the_hz31_frame_fills_the_sensors(self, hass: HomeAssistant) -> None:
         entry = _entry(HZ31_DEVICE)
         entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(hass, entry, HZ31_DEVICE)
@@ -181,9 +178,7 @@ class TestTheCaptureReachesTheEntities:
         assert values["tracking_mode"] == "manual"
         assert values["battery_pct"] == 98
 
-    async def test_the_s02f_frame_fills_the_sensors(
-        self, hass: HomeAssistant
-    ) -> None:
+    async def test_the_s02f_frame_fills_the_sensors(self, hass: HomeAssistant) -> None:
         entry = _entry(S02F_DEVICE)
         entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(hass, entry, S02F_DEVICE)

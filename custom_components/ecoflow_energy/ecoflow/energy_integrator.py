@@ -85,7 +85,9 @@ class EnergyIntegrator:
         _LOGGER.warning(
             "Ignoring implausible %s for %s: %r. The energy total is kept at "
             "its last good value; further occurrences are logged at debug level",
-            what, metric, value,
+            what,
+            metric,
+            value,
         )
 
     # ------------------------------------------------------------------
@@ -228,11 +230,7 @@ class EnergyIntegrator:
         if not self._loaded:
             self.load_state()
 
-        if (
-            not math.isfinite(total_kwh)
-            or total_kwh < 0
-            or total_kwh > MAX_TOTAL_KWH
-        ):
+        if not math.isfinite(total_kwh) or total_kwh < 0 or total_kwh > MAX_TOTAL_KWH:
             self._reject(metric, "restored energy total", total_kwh)
             return
 
@@ -287,11 +285,7 @@ class EnergyIntegrator:
         # Guard before the monotonic comparison, not after: an implausible
         # value is always higher than the real one, so it would win every time
         # and then block every correct reading that follows.
-        if (
-            not math.isfinite(total_kwh)
-            or total_kwh < 0
-            or total_kwh > MAX_TOTAL_KWH
-        ):
+        if not math.isfinite(total_kwh) or total_kwh < 0 or total_kwh > MAX_TOTAL_KWH:
             self._reject(metric, "energy total", total_kwh)
             existing = self._state.get(metric)
             return existing[0] if existing else None
@@ -336,7 +330,9 @@ class EnergyIntegrator:
                         "Energy total for %s confirmed lower: %.3f -> "
                         "%.3f kWh. Home Assistant will record this as a "
                         "meter reset",
-                        metric, current, total_kwh,
+                        metric,
+                        current,
+                        total_kwh,
                     )
                 self._state[metric] = (total_kwh, time.monotonic(), last_power)
                 self._dirty = True
@@ -409,7 +405,8 @@ class EnergyIntegrator:
                             _LOGGER.warning(
                                 "Discarding implausible stored energy total "
                                 "for %s: %r. The counter restarts from zero",
-                                metric, total,
+                                metric,
+                                total,
                             )
                             continue
                         last_ts = float(values[1])
@@ -420,7 +417,9 @@ class EnergyIntegrator:
                         elif last_ts > now:
                             _LOGGER.debug(
                                 "Monotonic reset for %s: saved=%.1f > now=%.1f",
-                                metric, last_ts, now,
+                                metric,
+                                last_ts,
+                                now,
                             )
                             last_ts = now
                         self._state[metric] = (
@@ -446,9 +445,7 @@ class EnergyIntegrator:
             # Snapshot: dict() copy prevents RuntimeError if _state is mutated
             # concurrently from the event loop while this runs in executor.
             snapshot = dict(self._state)
-            data: dict[str, Any] = {
-                m: [t, ts, p] for m, (t, ts, p) in snapshot.items()
-            }
+            data: dict[str, Any] = {m: [t, ts, p] for m, (t, ts, p) in snapshot.items()}
             self._state_file.write_text(json.dumps(data, indent=2))
         except Exception as exc:
             # Same reason as the load path above.

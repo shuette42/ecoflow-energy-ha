@@ -27,7 +27,6 @@ from homeassistant.components.climate import (
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
-
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.binary_sensor import (
@@ -35,6 +34,8 @@ from custom_components.ecoflow_energy.binary_sensor import (
 )
 from custom_components.ecoflow_energy.climate import (
     EcoFlowWave3Climate,
+)
+from custom_components.ecoflow_energy.climate import (
     async_setup_entry as climate_setup,
 )
 from custom_components.ecoflow_energy.const import (
@@ -71,23 +72,26 @@ from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
 from custom_components.ecoflow_energy.ecoflow.wave3_commands import Wave3WriteRefused
 from custom_components.ecoflow_energy.number import (
     EcoFlowNumber,
+)
+from custom_components.ecoflow_energy.number import (
     async_setup_entry as number_setup,
 )
 from custom_components.ecoflow_energy.select import (
     EcoFlowSelect,
+)
+from custom_components.ecoflow_energy.select import (
     async_setup_entry as select_setup,
 )
 from custom_components.ecoflow_energy.sensor import async_setup_entry as sensor_setup
 from custom_components.ecoflow_energy.switch import (
     EcoFlowSwitch,
+)
+from custom_components.ecoflow_energy.switch import (
     async_setup_entry as switch_setup,
 )
 
 CAPTURE = (
-    Path(__file__).parent.parent
-    / "fixtures"
-    / "wave3"
-    / "ac71_frames_plan046.json"
+    Path(__file__).parent.parent / "fixtures" / "wave3" / "ac71_frames_plan046.json"
 )
 
 # One index per shape from the 24h capture (PLAN-047):
@@ -229,9 +233,7 @@ class TestWave3EntitySet:
         assert len(entities) == 18
         assert keys == {sensor.key for sensor in WAVE3_SENSORS}
 
-        binary_entities = await _setup_entities(
-            hass, binary_sensor_setup, WAVE3_DEVICE
-        )
+        binary_entities = await _setup_entities(hass, binary_sensor_setup, WAVE3_DEVICE)
         binary_keys = {entity._definition.key for entity in binary_entities}
         assert len(binary_entities) == 5
         assert binary_keys == {sensor.key for sensor in WAVE3_BINARY_SENSORS}
@@ -293,13 +295,15 @@ class TestWave3Controls:
         )
         entity = _number(coordinator, "target_temp_c")
 
-        with patch.object(
-            coordinator,
-            "async_send_wave3_set",
-            AsyncMock(side_effect=Wave3WriteRefused("no setpoint in fan mode")),
+        with (
+            patch.object(
+                coordinator,
+                "async_send_wave3_set",
+                AsyncMock(side_effect=Wave3WriteRefused("no setpoint in fan mode")),
+            ),
+            pytest.raises(HomeAssistantError) as excinfo,
         ):
-            with pytest.raises(HomeAssistantError) as excinfo:
-                await entity.async_set_native_value(22.0)
+            await entity.async_set_native_value(22.0)
 
         assert excinfo.value.translation_key == "set_value_rejected"
         assert (
@@ -360,9 +364,7 @@ class TestTheCaptureReachesTheEntities:
     """The point of the whole phase: a frame the AC71 sent, in, and Home
     Assistant states out - including the WAVE3-only state_apply handling."""
 
-    async def test_a_full_upload_fills_the_sensors(
-        self, hass: HomeAssistant
-    ) -> None:
+    async def test_a_full_upload_fills_the_sensors(self, hass: HomeAssistant) -> None:
         entry = _entry(WAVE3_DEVICE)
         entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(hass, entry, WAVE3_DEVICE)
@@ -438,14 +440,10 @@ class TestTheCaptureReachesTheEntities:
         # rounds to - so the scale check reads the integrator directly,
         # not the quantized published field.
         assert coordinator.data["ac_input_energy_kwh"] == 0.01
-        raw_total = coordinator._energy_integrator.get_total(
-            "ac_input_energy_kwh"
-        )
+        raw_total = coordinator._energy_integrator.get_total("ac_input_energy_kwh")
         assert raw_total == pytest.approx(0.00523, abs=0.0002)
 
-        energy_def = next(
-            d for d in WAVE3_SENSORS if d.key == "ac_input_energy_kwh"
-        )
+        energy_def = next(d for d in WAVE3_SENSORS if d.key == "ac_input_energy_kwh")
         assert energy_def.device_class == "energy"
         assert energy_def.state_class == "total_increasing"
         assert energy_def.unit == "kWh"
@@ -555,8 +553,7 @@ class TestWave3ActiveModeInputs:
         from custom_components.ecoflow_energy.ecoflow.parsers import wave3_proto
 
         assert (
-            state_apply.WAVE3_ACTIVE_MODE_INPUTS
-            is wave3_proto.WAVE3_ACTIVE_MODE_INPUTS
+            state_apply.WAVE3_ACTIVE_MODE_INPUTS is wave3_proto.WAVE3_ACTIVE_MODE_INPUTS
         )
 
 
@@ -675,7 +672,9 @@ class TestStandbyCadence:
     ~40 s (four `stale_reactivate` events in two minutes on the production
     log of 2026-09-07). The threshold has to sit above two idle uploads."""
 
-    _AVAIL_CLOCK = "custom_components.ecoflow_energy.coordinator.availability.time.monotonic"
+    _AVAIL_CLOCK = (
+        "custom_components.ecoflow_energy.coordinator.availability.time.monotonic"
+    )
 
     async def test_the_stale_threshold_covers_two_idle_uploads(
         self, hass: HomeAssistant
@@ -694,7 +693,10 @@ class TestStandbyCadence:
         # The band between stale and soft keeps its width (the Smart Plug pair
         # moved together as well): a unit missing two idle uploads is stale,
         # not degraded.
-        assert WAVE3_SOFT_UNAVAILABLE_S - WAVE3_STALE_THRESHOLD_S >= SOFT_UNAVAILABLE_S - STALE_THRESHOLD_S
+        assert (
+            WAVE3_SOFT_UNAVAILABLE_S - WAVE3_STALE_THRESHOLD_S
+            >= SOFT_UNAVAILABLE_S - STALE_THRESHOLD_S
+        )
 
         # No upload yet reads as idle, the slower of the two cadences.
         assert _coordinator(hass, {})._stale_threshold_s() == WAVE3_STALE_THRESHOLD_S
@@ -745,7 +747,9 @@ class TestRegistryLookup:
     config entry. The oldest supported release has only the old call."""
 
     def test_the_new_api_is_used_when_the_registry_has_it(self) -> None:
-        from custom_components.ecoflow_energy.coordinator.state_apply import _registry_device
+        from custom_components.ecoflow_energy.coordinator.state_apply import (
+            _registry_device,
+        )
 
         registry = MagicMock()
         registry.async_get_device_by_identifier.return_value = "entry"
@@ -773,7 +777,9 @@ class TestRegistryLookup:
         assert bound.arguments["config_entry_id"] == "cfg1"
 
     def test_the_old_api_is_the_fallback(self) -> None:
-        from custom_components.ecoflow_energy.coordinator.state_apply import _registry_device
+        from custom_components.ecoflow_energy.coordinator.state_apply import (
+            _registry_device,
+        )
 
         registry = MagicMock(spec=["async_get_device"])
         registry.async_get_device.return_value = "entry"
@@ -862,9 +868,7 @@ class TestTheClimateReachesTheWire:
         assert _all_pdata(mqtt) == ["2001", "c80901"]
 
     async def test_switching_to_off_sends_standby(self, hass: HomeAssistant) -> None:
-        coordinator, mqtt = _wired(
-            hass, {"running": True, "operating_mode": "cooling"}
-        )
+        coordinator, mqtt = _wired(hass, {"running": True, "operating_mode": "cooling"})
         entity = _climate(coordinator)
         await entity.async_set_hvac_mode(HVACMode.OFF)
         assert _all_pdata(mqtt) == ["e00a01"]
@@ -886,9 +890,7 @@ class TestTheClimateReachesTheWire:
     async def test_switching_mode_on_a_running_unit_sends_one_frame(
         self, hass: HomeAssistant
     ) -> None:
-        coordinator, mqtt = _wired(
-            hass, {"running": True, "operating_mode": "cooling"}
-        )
+        coordinator, mqtt = _wired(hass, {"running": True, "operating_mode": "cooling"})
         entity = _climate(coordinator)
         await entity.async_set_hvac_mode(HVACMode.HEAT)
         assert _all_pdata(mqtt) == ["c80902"]
@@ -912,7 +914,9 @@ class TestTheClimateReachesTheWire:
         assert excinfo.value.translation_key == "set_value_rejected"
         assert _all_pdata(mqtt) == []
 
-    async def test_a_fan_speed_write_is_the_app_frame(self, hass: HomeAssistant) -> None:
+    async def test_a_fan_speed_write_is_the_app_frame(
+        self, hass: HomeAssistant
+    ) -> None:
         coordinator, mqtt = _wired(
             hass,
             {"running": True, "operating_mode": "fan", "airflow_speed_pct": 40},
@@ -922,9 +926,7 @@ class TestTheClimateReachesTheWire:
         assert _all_pdata(mqtt) == ["d8093c"]
 
     async def test_a_preset_write_is_the_app_frame(self, hass: HomeAssistant) -> None:
-        coordinator, mqtt = _wired(
-            hass, {"running": True, "operating_mode": "cooling"}
-        )
+        coordinator, mqtt = _wired(hass, {"running": True, "operating_mode": "cooling"})
         entity = _climate(coordinator)
         await entity.async_set_preset_mode("sleep")
         assert _all_pdata(mqtt) == ["d00903"]
@@ -932,9 +934,7 @@ class TestTheClimateReachesTheWire:
     async def test_a_preset_the_app_never_writes_is_refused(
         self, hass: HomeAssistant
     ) -> None:
-        coordinator, mqtt = _wired(
-            hass, {"running": True, "operating_mode": "cooling"}
-        )
+        coordinator, mqtt = _wired(hass, {"running": True, "operating_mode": "cooling"})
         entity = _climate(coordinator)
         with pytest.raises(HomeAssistantError) as excinfo:
             await entity.async_set_preset_mode("normal")
@@ -1025,10 +1025,11 @@ class TestTheClimateReachesTheWire:
             hass, {"running": True, "operating_mode": "dehumidify"}
         )
         entity = _climate(coordinator)
-        with patch(
-            "custom_components.ecoflow_energy.climate.MODE_SETTLE_TIMEOUT_S", 0.05
-        ), patch(
-            "custom_components.ecoflow_energy.climate.MODE_SETTLE_POLL_S", 0.01
+        with (
+            patch(
+                "custom_components.ecoflow_energy.climate.MODE_SETTLE_TIMEOUT_S", 0.05
+            ),
+            patch("custom_components.ecoflow_energy.climate.MODE_SETTLE_POLL_S", 0.01),
         ):
             await entity.async_set_temperature(
                 temperature=19.5, hvac_mode=HVACMode.COOL
@@ -1042,15 +1043,15 @@ class TestTheClimateReachesTheWire:
         write from its own mode gate. Switching into `fan` sends the mode
         frame, but the setpoint has no place in `fan` either way, so the
         second write is still refused and no second frame goes out."""
-        coordinator, mqtt = _wired(
-            hass, {"running": True, "operating_mode": "cooling"}
-        )
+        coordinator, mqtt = _wired(hass, {"running": True, "operating_mode": "cooling"})
         entity = _climate(coordinator)
-        with patch(
-            "custom_components.ecoflow_energy.climate.MODE_SETTLE_TIMEOUT_S", 0.05
-        ), patch(
-            "custom_components.ecoflow_energy.climate.MODE_SETTLE_POLL_S", 0.01
-        ), pytest.raises(HomeAssistantError) as excinfo:
+        with (
+            patch(
+                "custom_components.ecoflow_energy.climate.MODE_SETTLE_TIMEOUT_S", 0.05
+            ),
+            patch("custom_components.ecoflow_energy.climate.MODE_SETTLE_POLL_S", 0.01),
+            pytest.raises(HomeAssistantError) as excinfo,
+        ):
             await entity.async_set_temperature(
                 temperature=22.0, hvac_mode=HVACMode.FAN_ONLY
             )
@@ -1228,7 +1229,7 @@ class TestTheClimateHasNoOptimisticHold:
     checks the design that shipped instead: a write in flight does not
     change what the entity reports until the device's own push does."""
 
-    async def test_a_write_does_not_change_what_hvac_mode_reports_until_the_device_confirms(
+    async def test_hvac_mode_reports_the_old_value_until_the_device_confirms(
         self, hass: HomeAssistant
     ) -> None:
         coordinator, _mqtt = _wired(

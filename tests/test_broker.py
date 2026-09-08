@@ -1,7 +1,6 @@
 """Broker address resolution from the credential response (issue #184)."""
 
 import pytest
-
 from ecoflow_energy.ecoflow.broker import broker_from_credentials
 from ecoflow_energy.ecoflow.const import (
     MQTT_HOST,
@@ -42,7 +41,9 @@ class TestRegionAwareBroker:
 
     def test_string_port_is_accepted(self) -> None:
         """Ports arrive as strings from some responses."""
-        broker = broker_from_credentials({**EU_CREDENTIALS, "port": "8084"}, wss_mode=True)
+        broker = broker_from_credentials(
+            {**EU_CREDENTIALS, "port": "8084"}, wss_mode=True
+        )
 
         assert broker.port == 8084
 
@@ -61,7 +62,9 @@ class TestRegionAwareBroker:
         assert broker.host == "mqtt-a.ecoflow.com"
 
     def test_path_without_a_leading_slash_is_repaired(self) -> None:
-        broker = broker_from_credentials({**EU_CREDENTIALS, "path": "mqtt"}, wss_mode=True)
+        broker = broker_from_credentials(
+            {**EU_CREDENTIALS, "path": "mqtt"}, wss_mode=True
+        )
 
         assert broker.path == "/mqtt"
 

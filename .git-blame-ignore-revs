@@ -1,0 +1,12 @@
+# Commits that only reformatted code, never changed what it does.
+#
+# GitHub reads this file on its own. To make the blame command here skip them
+# too, once per checkout:
+#
+#     git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# A line below must be a full 40 character hash of a commit that is on main,
+# so an entry is added after the pull request has been squashed, never before.
+
+# style: run the formatter over the integration and the tests (#366)
+d5261c3e9d5372a484cd977ecf80a303ee10d68c

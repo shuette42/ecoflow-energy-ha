@@ -24,44 +24,46 @@ from .const import (
     DEVICE_TYPE_STREAM_AC5000,
     DEVICE_TYPE_WAVE3,
     DOMAIN,
-    EcoFlowNumberDef,
-    filter_defs_for_serial,
     NUMBER_COMMANDS,
     POWEROCEAN_NUMBERS,
     SMARTPLUG_NUMBER_COMMANDS,
     SMARTPLUG_NUMBERS,
     STREAM_NUMBERS,
     STREAMAC5000_NUMBERS,
+    WAVE3_NUMBERS,
+    EcoFlowNumberDef,
+    filter_defs_for_serial,
     supports_stream_ac5000_controls,
     supports_stream_controls,
-    WAVE3_NUMBERS,
 )
 from .coordinator import DeviceValueNotReported, EcoFlowDeviceCoordinator
-from .entity import (
-    raise_set_gone,
-    as_known_int,
-    EcoFlowWriteGateMixin,
-    reading_reported,
-    raise_set_failed,
-    raise_set_not_ready,
-    raise_set_rejected,
-    raise_set_unsupported,
-)
-from .ecoflow.delta3_commands import (
-    build_number_command as build_delta3_number_command,
-    build_port_priority_command,
-    port_priority_soc_bounds,
-)
-from .ecoflow.wave3_commands import Wave3WriteRefused
 from .ecoflow.const import (
     schedule_power_max_w,
     schedule_power_min_w,
+)
+from .ecoflow.delta3_commands import (
+    build_number_command as build_delta3_number_command,
+)
+from .ecoflow.delta3_commands import (
+    build_port_priority_command,
+    port_priority_soc_bounds,
 )
 from .ecoflow.energy_stream import stream_backup_reserve_floor
 from .ecoflow.parsers.delta3_proto import port_priority_keys
 from .ecoflow.parsers.smartplug import (
     build_plug_brightness_payload,
     build_plug_max_watts_payload,
+)
+from .ecoflow.wave3_commands import Wave3WriteRefused
+from .entity import (
+    EcoFlowWriteGateMixin,
+    as_known_int,
+    raise_set_failed,
+    raise_set_gone,
+    raise_set_not_ready,
+    raise_set_rejected,
+    raise_set_unsupported,
+    reading_reported,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -73,7 +75,9 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up EcoFlow numbers from a config entry."""
-    coordinators: dict[str, EcoFlowDeviceCoordinator] = hass.data[DOMAIN][entry.entry_id]
+    coordinators: dict[str, EcoFlowDeviceCoordinator] = hass.data[DOMAIN][
+        entry.entry_id
+    ]
     entities: list[EcoFlowNumber] = []
 
     for coordinator in coordinators.values():
@@ -202,9 +206,7 @@ class EcoFlowNumber(
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        rollback = getattr(
-            self.coordinator, "_powerocean_soc_rollback_generation", 0
-        )
+        rollback = getattr(self.coordinator, "_powerocean_soc_rollback_generation", 0)
         if rollback != self._seen_rollback_generation:
             # A write of ours was rejected and the coordinator restored the
             # device value. Holding the optimistic lock now would keep showing
@@ -291,10 +293,15 @@ class EcoFlowNumber(
             # Never widen past the declared rating, and never collapse the
             # range: a ceiling the device has not reported sensibly would
             # otherwise leave a control that cannot be moved.
-            upper = min(float(ceiling), self._attr_native_max_value)
-            if upper <= self._attr_native_min_value:
+            # Named apart from `upper` above: mypy infers a function-scope
+            # variable's type from its first binding (the `tuple[int, int]`
+            # unpack a few lines up), and this branch never runs alongside
+            # that one - reusing the name would make the checker flag its
+            # own float here as incompatible with that unrelated int.
+            ceiling_upper = min(float(ceiling), self._attr_native_max_value)
+            if ceiling_upper <= self._attr_native_min_value:
                 return None
-            return self._attr_native_min_value, upper
+            return self._attr_native_min_value, ceiling_upper
         if self._is_stream_backup_reserve():
             data = self.coordinator.data or {}
             # Read through `as_known_int`, not raw: HA hands `number.set_value`
@@ -425,9 +432,7 @@ class EcoFlowNumber(
             self._apply_optimistic_number(value)
             return
         if self.coordinator.device_type == DEVICE_TYPE_STREAM_AC5000:
-            ok = await self._async_set_stream_ac5000_value(
-                self._definition.key, value
-            )
+            ok = await self._async_set_stream_ac5000_value(self._definition.key, value)
             if not ok:
                 raise_set_failed(self.entity_id)
             self._apply_optimistic_number(value)
@@ -604,7 +609,9 @@ class EcoFlowNumber(
             backup = int_value
             solar = max(int(current_solar), backup)  # enforce backup <= solar
             self.coordinator.mark_user_surplus_set()
-            ok = await self.coordinator.async_set_powerocean_soc_debounced(backup, solar)
+            ok = await self.coordinator.async_set_powerocean_soc_debounced(
+                backup, solar
+            )
             if not ok:
                 raise_set_failed(self.entity_id)
             self._apply_optimistic_number(value)
@@ -623,7 +630,9 @@ class EcoFlowNumber(
             solar = int_value
             backup = min(int(current_backup), solar)  # enforce backup <= solar
             self.coordinator.mark_user_surplus_set()
-            ok = await self.coordinator.async_set_powerocean_soc_debounced(backup, solar)
+            ok = await self.coordinator.async_set_powerocean_soc_debounced(
+                backup, solar
+            )
             if not ok:
                 raise_set_failed(self.entity_id)
             self._apply_optimistic_number(value)
@@ -647,16 +656,18 @@ class EcoFlowNumber(
             return None
         return int(key[len("schedule_") : -len("_power_w")])
 
-    async def _async_set_stream_value(self, key: str, value: float) -> bool:
+    # Every path through this function either returns or ends in
+    # raise_set_unsupported/raise_set_not_ready/raise_set_rejected, all typed
+    # NoReturn in entity.py. Ruff's RET503 does not resolve NoReturn across
+    # that import, so it sees the trailing call as a fall-through.
+    async def _async_set_stream_value(self, key: str, value: float) -> bool:  # noqa: RET503
         """Set a Stream AC Pro number value via WSS Protobuf SET.
 
         JSON SET does not work on the /app/ WSS topic (SmartPlug proves
         this). Stream numbers are sent as protobuf ConfigWrite frames.
         """
         if key == "backup_reserve":
-            return await self.coordinator.async_set_stream_backup_reserve(
-                int(value)
-            )
+            return await self.coordinator.async_set_stream_backup_reserve(int(value))
         if key in ("stream_charge_limit", "stream_discharge_limit"):
             try:
                 if key == "stream_charge_limit":
@@ -682,7 +693,9 @@ class EcoFlowNumber(
         # wrong thing to tell the user.
         raise_set_unsupported(self.entity_id)
 
-    async def _async_set_stream_ac5000_value(self, key: str, value: float) -> bool:
+    # Same NoReturn gap as _async_set_stream_value above: raise_set_unsupported
+    # always raises, ruff's RET503 does not see it across the import.
+    async def _async_set_stream_ac5000_value(self, key: str, value: float) -> bool:  # noqa: RET503
         """Set a STREAM AC 5000 number via a 254/38 config write.
 
         Most of these read a value the device reported before they can send:
@@ -710,16 +723,12 @@ class EcoFlowNumber(
                     kind, int(value)
                 )
             if key == "max_grid_output_power_w":
-                return (
-                    await self.coordinator.async_set_stream_ac5000_grid_output_power(
-                        int(value)
-                    )
+                return await self.coordinator.async_set_stream_ac5000_grid_output_power(
+                    int(value)
                 )
             if key == "max_grid_input_power_w":
-                return (
-                    await self.coordinator.async_set_stream_ac5000_grid_input_power(
-                        int(value)
-                    )
+                return await self.coordinator.async_set_stream_ac5000_grid_input_power(
+                    int(value)
                 )
         except DeviceValueNotReported:
             # Sending a guessed counterpart would change a setting the user did

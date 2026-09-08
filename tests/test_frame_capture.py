@@ -2,23 +2,23 @@
 
 import re
 import signal
+from collections.abc import Iterator
+from contextlib import contextmanager
+from typing import Any
 
 import pytest
-from contextlib import contextmanager
-from typing import Any, Iterator
-
 from ecoflow_energy.const import (
     RAW_FRAME_BUNDLE_HARD_CAP,
     RAW_FRAME_BUNDLE_MAX_BYTES,
     RAW_FRAME_MAX_BYTES,
 )
 from ecoflow_energy.ecoflow.frame_capture import (
+    WRITE_CLASS_RESERVE,
+    TypedFrameBuffer,
     _encrypted_regions,
     _plain_passes,
     _slot,
     _xor,
-    TypedFrameBuffer,
-    WRITE_CLASS_RESERVE,
     build_frame_entry,
     decode_cmd_headers,
     frame_budget,
@@ -30,7 +30,6 @@ from ecoflow_energy.ecoflow.proto_encoding import (
     encode_field_bytes,
     encode_field_varint,
 )
-
 
 # Frame timestamps are wall clock. Tests offset from a fixed epoch instead of
 # starting at zero, so they exercise the same value range the capture sees.
@@ -195,9 +194,7 @@ class TestSanitizeFrame:
         """
         device_sn = "HJ31TEST00000001"
         pack_sn = "BP5000TEST000001"
-        payload = (
-            b"\x0a\x10" + device_sn.encode() + b"\x12\x10" + pack_sn.encode()
-        )
+        payload = b"\x0a\x10" + device_sn.encode() + b"\x12\x10" + pack_sn.encode()
 
         result = sanitize_frame(payload, [device_sn])
 
@@ -530,9 +527,7 @@ class TestTimeZoneMasking:
     @pytest.mark.parametrize(
         "payload", [b"MODEL/NAME", b"AC/DC", b"\x12\x03H/P", b"V1.0.1"]
     )
-    def test_a_slash_is_not_enough_to_look_like_a_place(
-        self, payload: bytes
-    ) -> None:
+    def test_a_slash_is_not_enough_to_look_like_a_place(self, payload: bytes) -> None:
         """The region is matched against the real area names, not by shape.
 
         A pattern that took any capitalised word before a slash would start
@@ -809,7 +804,9 @@ class TestEncryptedRegionMasking:
         plain = b"HJDEFGKILMNPQRST"
         key = 3
         ciphertext = bytes(b ^ key for b in plain)
-        assert re.fullmatch(rb"[A-Z0-9]{16}", ciphertext), "fixture must look like a serial"
+        assert re.fullmatch(rb"[A-Z0-9]{16}", ciphertext), (
+            "fixture must look like a serial"
+        )
         frame = _enc_header(254, 39, pdata_plain=plain, seq=key)
 
         result = sanitize_frame(frame, [])
@@ -1003,8 +1000,8 @@ class TestMaskingDoesNotCorruptRealFrames:
                     if isinstance(value, (int, float))
                 }
                 assert numeric_before == numeric_after, (parser.__name__, name)
-                checked[parser.__name__] = (
-                    checked.get(parser.__name__, 0) + len(numeric_before)
+                checked[parser.__name__] = checked.get(parser.__name__, 0) + len(
+                    numeric_before
                 )
 
         # Second positive control, per parser, counting VALUES COMPARED and
@@ -1039,7 +1036,7 @@ class TestMaskingDoesNotCorruptRealFrames:
             headers_before, _ = decode_header_message(raw)
             headers_after, _ = decode_header_message(sanitize_frame(raw, []))
             assert len(headers_before) == len(headers_after), (family, name)
-            for before, after in zip(headers_before, headers_after):
+            for before, after in zip(headers_before, headers_after, strict=True):
                 for key, value in before.items():
                     if not isinstance(value, (int, float)):
                         continue  # string-typed: serial, account id, pdata
@@ -1135,7 +1132,9 @@ class TestBuildFrameEntry:
 
     def test_parsed_keys_optional(self) -> None:
         assert "parsed_keys" not in build_frame_entry("/t", b"\x0a", [], 8)
-        assert build_frame_entry("/t", b"\x0a", [], 8, parsed_keys=3)["parsed_keys"] == 3
+        assert (
+            build_frame_entry("/t", b"\x0a", [], 8, parsed_keys=3)["parsed_keys"] == 3
+        )
 
     def test_a_cut_frame_says_so(self) -> None:
         """The mismatch was always derivable and nobody derived it."""
@@ -1541,9 +1540,7 @@ class TestTypedFrameBuffer:
         stats = buffer.stats()
         assert len(buffer.frames()) <= keys_max * per_key_max
         assert stats["keys_tracked"] == keys_max
-        assert all(
-            entry["kept"] <= per_key_max for entry in stats["per_key"].values()
-        )
+        assert all(entry["kept"] <= per_key_max for entry in stats["per_key"].values())
 
     def test_frames_are_ordered_by_timestamp_across_buckets(self) -> None:
         buffer = TypedFrameBuffer(keys_max=4, per_key_max=4)
@@ -1843,7 +1840,9 @@ class TestNovelReadingsSurviveThinning:
         buffer = TypedFrameBuffer(keys_max=20, per_key_max=10)
 
         for i in range(self._FRAMES):
-            buffer.add("property:proto/254.39", _entry(float(i)), readings=self._telemetry(i))
+            buffer.add(
+                "property:proto/254.39", _entry(float(i)), readings=self._telemetry(i)
+            )
 
         # One: the first frame, where every key appears for the first time.
         assert buffer.stats()["per_key"]["property:proto/254.39"]["novel"] == 1
@@ -1887,9 +1886,7 @@ class TestNovelReadingsSurviveThinning:
         buffer = TypedFrameBuffer(keys_max=20, per_key_max=10)
 
         for i in range(4):
-            buffer.add(
-                "property:proto/254.39", _entry(float(i)), readings={"x": 1.0}
-            )
+            buffer.add("property:proto/254.39", _entry(float(i)), readings={"x": 1.0})
         buffer.add("property:proto/254.39", _entry(4.0), readings={"x": 2.0})
 
         assert buffer.stats()["per_key"]["property:proto/254.39"]["novel"] == 1
@@ -1905,10 +1902,14 @@ class TestNovelReadingsSurviveThinning:
         buffer = TypedFrameBuffer(keys_max=20, per_key_max=10)
 
         buffer.add(
-            "get_reply:proto/254.39", _entry(0.0), readings={"max_grid_input_power_w": 1200}
+            "get_reply:proto/254.39",
+            _entry(0.0),
+            readings={"max_grid_input_power_w": 1200},
         )
         buffer.add(
-            "property:proto/254.39", _entry(1.0), readings={"max_grid_input_power_w": 1200}
+            "property:proto/254.39",
+            _entry(1.0),
+            readings={"max_grid_input_power_w": 1200},
         )
 
         per_key = buffer.stats()["per_key"]
@@ -1959,7 +1960,10 @@ class TestWriteSlotReserve:
         assert "set:proto/241.102" in stats["per_key"]
         assert "set_reply:proto/241.102" in stats["per_key"]
         assert stats["dropped_per_key"] == {}
-        assert [f["ts"] - _T0 for f in buffer.frames() if f.get("write")] == [10.0, 11.0]
+        assert [f["ts"] - _T0 for f in buffer.frames() if f.get("write")] == [
+            10.0,
+            11.0,
+        ]
 
     def test_the_reserve_does_not_come_out_of_the_telemetry_budget(self) -> None:
         """The guarantee this buffer already had must survive the new one.
@@ -2074,6 +2078,7 @@ class TestWriteSlotReserve:
 
     def test_the_download_names_the_reserve(self) -> None:
         """A reader must be able to date a capture by its own stats block."""
-        assert TypedFrameBuffer(keys_max=4, per_key_max=4).stats()[
-            "write_slots_reserved"
-        ] == WRITE_CLASS_RESERVE
+        assert (
+            TypedFrameBuffer(keys_max=4, per_key_max=4).stats()["write_slots_reserved"]
+            == WRITE_CLASS_RESERVE
+        )

@@ -8,59 +8,61 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.ecoflow_energy.binary_sensor import (
+    EcoFlowBinarySensor,
+    _get_binary_sensor_defs,
+)
 from custom_components.ecoflow_energy.const import (
-    SCHEDULE_MAX_INDEX,
     DELTA2MAX_BINARY_SENSORS,
     DELTA2MAX_NUMBERS,
     DELTA2MAX_SENSORS,
     DELTA2MAX_SWITCHES,
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_POWEROCEAN,
-    DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_POWERSTREAM,
+    DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
     DEVICE_TYPE_STREAM_AC5000,
     DOMAIN,
+    POWEROCEAN_BINARY_SENSORS,
+    POWEROCEAN_SENSORS,
+    POWERSTREAM_SENSORS,
+    SCHEDULE_MAX_INDEX,
+    SMARTPLUG_NUMBERS,
+    STREAM_BINARY_SENSORS,
+    STREAM_NUMBERS,
+    STREAM_SENSORS,
+    STREAM_SWITCHES,
+    STREAMAC5000_BINARY_SENSORS,
+    STREAMAC5000_SENSORS,
     EcoFlowBinarySensorDef,
     EcoFlowNumberDef,
     EcoFlowSensorDef,
     EcoFlowSwitchDef,
-    POWEROCEAN_BINARY_SENSORS,
-    POWEROCEAN_SENSORS,
-    SMARTPLUG_NUMBERS,
-    STREAM_BINARY_SENSORS,
-    STREAM_SWITCHES,
-    STREAM_NUMBERS,
-    POWERSTREAM_SENSORS,
-    STREAM_SENSORS,
-    STREAMAC5000_BINARY_SENSORS,
-    STREAMAC5000_SENSORS,
 )
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
+from custom_components.ecoflow_energy.number import (
+    NUMBER_COMMANDS,
+    SMARTPLUG_NUMBER_COMMANDS,
+    EcoFlowNumber,
+    _get_number_defs,
+)
 from custom_components.ecoflow_energy.sensor import (
     EcoFlowDiagnosticSensor,
     EcoFlowSensor,
     _get_sensor_defs,
 )
-from custom_components.ecoflow_energy.binary_sensor import (
-    EcoFlowBinarySensor,
-    _get_binary_sensor_defs,
+from custom_components.ecoflow_energy.switch import (
+    SWITCH_COMMANDS_R351 as SWITCH_COMMANDS,
+)
+from custom_components.ecoflow_energy.switch import (
+    SWITCH_DECLARATIVE_R351 as SWITCH_DECLARATIVE,
 )
 from custom_components.ecoflow_energy.switch import (
     EcoFlowSwitch,
-    OPTIMISTIC_LOCK_S,
-    SWITCH_COMMANDS_R351 as SWITCH_COMMANDS,
-    SWITCH_DECLARATIVE_R351 as SWITCH_DECLARATIVE,
     _get_switch_defs,
-)
-from custom_components.ecoflow_energy.number import (
-    EcoFlowNumber,
-    NUMBER_COMMANDS,
-    SMARTPLUG_NUMBER_COMMANDS,
-    _get_number_defs,
 )
 
 from .conftest import (
@@ -69,7 +71,6 @@ from .conftest import (
     MOCK_SMARTPLUG_DEVICE,
     MOCK_STREAM_DEVICE,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -82,9 +83,7 @@ def _make_coordinator(
     device: dict | None = None,
 ) -> EcoFlowDeviceCoordinator:
     """Create a coordinator without calling async_setup."""
-    return EcoFlowDeviceCoordinator(
-        hass, entry, device or MOCK_DELTA_DEVICE
-    )
+    return EcoFlowDeviceCoordinator(hass, entry, device or MOCK_DELTA_DEVICE)
 
 
 # ===========================================================================
@@ -117,7 +116,9 @@ class TestBinarySensorDefsRouting:
         assert _get_binary_sensor_defs(DEVICE_TYPE_DELTA) is DELTA2MAX_BINARY_SENSORS
 
     def test_powerocean_binary_sensors(self):
-        assert _get_binary_sensor_defs(DEVICE_TYPE_POWEROCEAN) is POWEROCEAN_BINARY_SENSORS
+        assert (
+            _get_binary_sensor_defs(DEVICE_TYPE_POWEROCEAN) is POWEROCEAN_BINARY_SENSORS
+        )
 
     def test_stream_binary_sensors(self):
         assert _get_binary_sensor_defs(DEVICE_TYPE_STREAM) is STREAM_BINARY_SENSORS
@@ -150,7 +151,9 @@ class TestSwitchDefsRouting:
         so an empty serial withholds them exactly as it does there: a write
         with no serial cannot be addressed anyway."""
         assert _get_switch_defs(DEVICE_TYPE_STREAM) == []
-        assert _get_switch_defs(DEVICE_TYPE_STREAM, "BK31TEST00000001") is STREAM_SWITCHES
+        assert (
+            _get_switch_defs(DEVICE_TYPE_STREAM, "BK31TEST00000001") is STREAM_SWITCHES
+        )
         assert _get_switch_defs(DEVICE_TYPE_STREAM, "BK11TEST00000001") == []
 
     def test_powerocean_switches_are_the_schedule_slots(self):
@@ -174,6 +177,7 @@ class TestNumberDefsRouting:
 
     def test_powerocean_numbers(self):
         from custom_components.ecoflow_energy.const import POWEROCEAN_NUMBERS
+
         assert _get_number_defs(DEVICE_TYPE_POWEROCEAN) is POWEROCEAN_NUMBERS
 
     def test_stream_numbers(self) -> None:
@@ -199,8 +203,12 @@ class TestEcoFlowSensor:
         standard_config_entry.add_to_hass(hass)
         coordinator = _make_coordinator(hass, standard_config_entry)
         defn = EcoFlowSensorDef(
-            key="soc", name="SoC", unit="%", device_class="battery",
-            state_class="measurement", icon="mdi:battery",
+            key="soc",
+            name="SoC",
+            unit="%",
+            device_class="battery",
+            state_class="measurement",
+            icon="mdi:battery",
         )
         sensor = EcoFlowSensor(coordinator, defn)
         assert sensor.unique_id == "DAEBK5ZZ12340001_soc"
@@ -230,26 +238,34 @@ class TestEcoFlowSensor:
         """Sensor rounds value based on suggested_display_precision."""
         standard_config_entry.add_to_hass(hass)
         coordinator = _make_coordinator(hass, standard_config_entry)
-        coordinator.async_set_updated_data({
-            "power_w": 2347.28399,
-            "energy_kwh": 15.23456,
-            "soc_pct": 76.8,
-            "raw_val": 3.14159,
-            "int_val": 500,
-            "str_val": "online",
-        })
+        coordinator.async_set_updated_data(
+            {
+                "power_w": 2347.28399,
+                "energy_kwh": 15.23456,
+                "soc_pct": 76.8,
+                "raw_val": 3.14159,
+                "int_val": 500,
+                "str_val": "online",
+            }
+        )
 
         # precision=0 → integer
-        defn_w = EcoFlowSensorDef(key="power_w", name="Power", suggested_display_precision=0)
+        defn_w = EcoFlowSensorDef(
+            key="power_w", name="Power", suggested_display_precision=0
+        )
         assert EcoFlowSensor(coordinator, defn_w).native_value == 2347
         assert isinstance(EcoFlowSensor(coordinator, defn_w).native_value, int)
 
         # precision=2 → 2 decimal places
-        defn_kwh = EcoFlowSensorDef(key="energy_kwh", name="Energy", suggested_display_precision=2)
+        defn_kwh = EcoFlowSensorDef(
+            key="energy_kwh", name="Energy", suggested_display_precision=2
+        )
         assert EcoFlowSensor(coordinator, defn_kwh).native_value == 15.23
 
         # precision=1
-        defn_soc = EcoFlowSensorDef(key="soc_pct", name="SoC", suggested_display_precision=1)
+        defn_soc = EcoFlowSensorDef(
+            key="soc_pct", name="SoC", suggested_display_precision=1
+        )
         assert EcoFlowSensor(coordinator, defn_soc).native_value == 76.8
 
         # no precision → raw value
@@ -257,12 +273,16 @@ class TestEcoFlowSensor:
         assert EcoFlowSensor(coordinator, defn_raw).native_value == 3.14159
 
         # already-int with precision=0 → stays int (no fractional rounding artifacts)
-        defn_int = EcoFlowSensorDef(key="int_val", name="Int", suggested_display_precision=0)
+        defn_int = EcoFlowSensorDef(
+            key="int_val", name="Int", suggested_display_precision=0
+        )
         assert EcoFlowSensor(coordinator, defn_int).native_value == 500
         assert isinstance(EcoFlowSensor(coordinator, defn_int).native_value, int)
 
         # string value with precision set → passes through unchanged
-        defn_str = EcoFlowSensorDef(key="str_val", name="Str", suggested_display_precision=0)
+        defn_str = EcoFlowSensorDef(
+            key="str_val", name="Str", suggested_display_precision=0
+        )
         assert EcoFlowSensor(coordinator, defn_str).native_value == "online"
 
     async def test_sensor_native_value_none_when_no_data(
@@ -383,7 +403,9 @@ class TestEcoFlowSwitch:
         coordinator = _make_coordinator(hass, standard_config_entry)
         coordinator.async_set_updated_data({"ac_enabled": 1})
 
-        defn = EcoFlowSwitchDef(key="ac_switch", name="AC Output", state_key="ac_enabled")
+        defn = EcoFlowSwitchDef(
+            key="ac_switch", name="AC Output", state_key="ac_enabled"
+        )
         switch = EcoFlowSwitch(coordinator, defn)
         assert switch.is_on is True
 
@@ -397,7 +419,9 @@ class TestEcoFlowSwitch:
         coordinator = _make_coordinator(hass, standard_config_entry)
         coordinator.async_set_updated_data({"ac_enabled": 1})
 
-        defn = EcoFlowSwitchDef(key="ac_switch", name="AC Output", state_key="ac_enabled")
+        defn = EcoFlowSwitchDef(
+            key="ac_switch", name="AC Output", state_key="ac_enabled"
+        )
         switch = EcoFlowSwitch(coordinator, defn)
 
         # Simulate optimistic lock (turned off)
@@ -416,7 +440,9 @@ class TestEcoFlowSwitch:
         coordinator = _make_coordinator(hass, standard_config_entry)
         coordinator.async_set_updated_data({"ac_enabled": 1})
 
-        defn = EcoFlowSwitchDef(key="ac_switch", name="AC Output", state_key="ac_enabled")
+        defn = EcoFlowSwitchDef(
+            key="ac_switch", name="AC Output", state_key="ac_enabled"
+        )
         switch = EcoFlowSwitch(coordinator, defn)
 
         # Expired lock
@@ -448,11 +474,15 @@ class TestEcoFlowSwitch:
         standard_config_entry.add_to_hass(hass)
         coordinator = _make_coordinator(hass, standard_config_entry)
 
-        defn = EcoFlowSwitchDef(key="ac_switch", name="AC Output", state_key="ac_enabled")
+        defn = EcoFlowSwitchDef(
+            key="ac_switch", name="AC Output", state_key="ac_enabled"
+        )
         switch = EcoFlowSwitch(coordinator, defn)
 
         with (
-            patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock) as mock_cmd,
+            patch.object(
+                coordinator, "async_send_set_command", new_callable=AsyncMock
+            ) as mock_cmd,
             patch.object(switch, "async_write_ha_state"),
         ):
             await switch.async_turn_on()
@@ -471,11 +501,15 @@ class TestEcoFlowSwitch:
         standard_config_entry.add_to_hass(hass)
         coordinator = _make_coordinator(hass, standard_config_entry)
 
-        defn = EcoFlowSwitchDef(key="dc_switch", name="DC Output", state_key="dc_out_enabled")
+        defn = EcoFlowSwitchDef(
+            key="dc_switch", name="DC Output", state_key="dc_out_enabled"
+        )
         switch = EcoFlowSwitch(coordinator, defn)
 
         with (
-            patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock) as mock_cmd,
+            patch.object(
+                coordinator, "async_send_set_command", new_callable=AsyncMock
+            ) as mock_cmd,
             patch.object(switch, "async_write_ha_state"),
         ):
             await switch.async_turn_off()
@@ -496,7 +530,9 @@ class TestEcoFlowSwitch:
         defn = EcoFlowSwitchDef(key="nonexistent_switch", name="Bad", state_key="x")
         switch = EcoFlowSwitch(coordinator, defn)
 
-        with patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock) as mock_cmd:
+        with patch.object(
+            coordinator, "async_send_set_command", new_callable=AsyncMock
+        ) as mock_cmd:
             with pytest.raises(HomeAssistantError):
                 await switch._send_command(True)
             mock_cmd.assert_not_called()
@@ -510,7 +546,9 @@ class TestEcoFlowSwitch:
         standard_config_entry.add_to_hass(hass)
         coordinator = _make_coordinator(hass, standard_config_entry)
 
-        defn = EcoFlowSwitchDef(key="ac_switch", name="AC Output", state_key="ac_enabled")
+        defn = EcoFlowSwitchDef(
+            key="ac_switch", name="AC Output", state_key="ac_enabled"
+        )
         switch = EcoFlowSwitch(coordinator, defn)
         assert switch.is_on is None
 
@@ -523,11 +561,15 @@ class TestEcoFlowSwitch:
         standard_config_entry.add_to_hass(hass)
         coordinator = _make_coordinator(hass, standard_config_entry)
 
-        defn = EcoFlowSwitchDef(key="beeper_switch", name="Beeper", state_key="beep_enabled")
+        defn = EcoFlowSwitchDef(
+            key="beeper_switch", name="Beeper", state_key="beep_enabled"
+        )
         switch = EcoFlowSwitch(coordinator, defn)
 
         with (
-            patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock) as mock_cmd,
+            patch.object(
+                coordinator, "async_send_set_command", new_callable=AsyncMock
+            ) as mock_cmd,
             patch.object(switch, "async_write_ha_state"),
         ):
             await switch.async_turn_on()
@@ -546,11 +588,15 @@ class TestEcoFlowSwitch:
         standard_config_entry.add_to_hass(hass)
         coordinator = _make_coordinator(hass, standard_config_entry)
 
-        defn = EcoFlowSwitchDef(key="beeper_switch", name="Beeper", state_key="beep_enabled")
+        defn = EcoFlowSwitchDef(
+            key="beeper_switch", name="Beeper", state_key="beep_enabled"
+        )
         switch = EcoFlowSwitch(coordinator, defn)
 
         with (
-            patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock) as mock_cmd,
+            patch.object(
+                coordinator, "async_send_set_command", new_callable=AsyncMock
+            ) as mock_cmd,
             patch.object(switch, "async_write_ha_state"),
         ):
             await switch.async_turn_off()
@@ -567,11 +613,15 @@ class TestEcoFlowSwitch:
         standard_config_entry.add_to_hass(hass)
         coordinator = _make_coordinator(hass, standard_config_entry)
 
-        defn = EcoFlowSwitchDef(key="xboost_switch", name="X-Boost", state_key="ac_xboost")
+        defn = EcoFlowSwitchDef(
+            key="xboost_switch", name="X-Boost", state_key="ac_xboost"
+        )
         switch = EcoFlowSwitch(coordinator, defn)
 
         with (
-            patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock) as mock_cmd,
+            patch.object(
+                coordinator, "async_send_set_command", new_callable=AsyncMock
+            ) as mock_cmd,
             patch.object(switch, "async_write_ha_state"),
         ):
             await switch.async_turn_on()
@@ -589,11 +639,15 @@ class TestEcoFlowSwitch:
         standard_config_entry.add_to_hass(hass)
         coordinator = _make_coordinator(hass, standard_config_entry)
 
-        defn = EcoFlowSwitchDef(key="ac_auto_on_switch", name="AC Auto Restart", state_key="ac_auto_on")
+        defn = EcoFlowSwitchDef(
+            key="ac_auto_on_switch", name="AC Auto Restart", state_key="ac_auto_on"
+        )
         switch = EcoFlowSwitch(coordinator, defn)
 
         with (
-            patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock) as mock_cmd,
+            patch.object(
+                coordinator, "async_send_set_command", new_callable=AsyncMock
+            ) as mock_cmd,
             patch.object(switch, "async_write_ha_state"),
         ):
             await switch.async_turn_on()
@@ -611,13 +665,16 @@ class TestEcoFlowSwitch:
         coordinator = _make_coordinator(hass, standard_config_entry)
 
         defn = EcoFlowSwitchDef(
-            key="backup_reserve_switch", name="Backup Reserve",
+            key="backup_reserve_switch",
+            name="Backup Reserve",
             state_key="backup_reserve_enabled",
         )
         switch = EcoFlowSwitch(coordinator, defn)
 
         with (
-            patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock) as mock_cmd,
+            patch.object(
+                coordinator, "async_send_set_command", new_callable=AsyncMock
+            ) as mock_cmd,
             patch.object(switch, "async_write_ha_state"),
         ):
             await switch.async_turn_off()
@@ -628,6 +685,7 @@ class TestEcoFlowSwitch:
             assert cmd["params"]["bpPowerSoc"] == 50
             assert cmd["params"]["minChgSoc"] == 0
             assert cmd["params"]["minDsgSoc"] == 0
+
 
 # ===========================================================================
 # EcoFlowNumber
@@ -646,9 +704,13 @@ class TestEcoFlowNumber:
         coordinator.async_set_updated_data({"ac_chg_rated_power_w": 1200})
 
         defn = EcoFlowNumberDef(
-            key="ac_charge_speed", name="AC Charge Speed",
-            state_key="ac_chg_rated_power_w", unit="W",
-            min_value=200, max_value=2400, step=100,
+            key="ac_charge_speed",
+            name="AC Charge Speed",
+            state_key="ac_chg_rated_power_w",
+            unit="W",
+            min_value=200,
+            max_value=2400,
+            step=100,
         )
         number = EcoFlowNumber(coordinator, defn)
         assert number.native_value == 1200.0
@@ -664,7 +726,8 @@ class TestEcoFlowNumber:
         coordinator.async_set_updated_data({})
 
         defn = EcoFlowNumberDef(
-            key="ac_charge_speed", name="AC Charge Speed",
+            key="ac_charge_speed",
+            name="AC Charge Speed",
             state_key="ac_chg_rated_power_w",
         )
         number = EcoFlowNumber(coordinator, defn)
@@ -681,7 +744,8 @@ class TestEcoFlowNumber:
         coordinator.async_set_updated_data({"ac_chg_rated_power_w": "error"})
 
         defn = EcoFlowNumberDef(
-            key="ac_charge_speed", name="AC Charge Speed",
+            key="ac_charge_speed",
+            name="AC Charge Speed",
             state_key="ac_chg_rated_power_w",
         )
         number = EcoFlowNumber(coordinator, defn)
@@ -696,9 +760,13 @@ class TestEcoFlowNumber:
         standard_config_entry.add_to_hass(hass)
         coordinator = _make_coordinator(hass, standard_config_entry)
         defn = EcoFlowNumberDef(
-            key="max_charge_soc", name="Max Charge SoC",
-            state_key="max_charge_soc", unit="%",
-            min_value=50, max_value=100, step=1,
+            key="max_charge_soc",
+            name="Max Charge SoC",
+            state_key="max_charge_soc",
+            unit="%",
+            min_value=50,
+            max_value=100,
+            step=1,
         )
         number = EcoFlowNumber(coordinator, defn)
         assert number.native_min_value == 50
@@ -729,14 +797,22 @@ class TestEcoFlowNumber:
         await coordinator.async_setup()
 
         defn = EcoFlowNumberDef(
-            key="max_charge_soc", name="Max Charge SoC",
-            state_key="max_charge_soc", unit="%",
-            min_value=50, max_value=100, step=1,
+            key="max_charge_soc",
+            name="Max Charge SoC",
+            state_key="max_charge_soc",
+            unit="%",
+            min_value=50,
+            max_value=100,
+            step=1,
         )
         number = EcoFlowNumber(coordinator, defn)
 
-        with patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock) as mock_cmd, \
-             patch.object(number, "async_write_ha_state"):
+        with (
+            patch.object(
+                coordinator, "async_send_set_command", new_callable=AsyncMock
+            ) as mock_cmd,
+            patch.object(number, "async_write_ha_state"),
+        ):
             await number.async_set_native_value(90.0)
             mock_cmd.assert_called_once()
             cmd = mock_cmd.call_args[0][0]
@@ -764,17 +840,27 @@ class TestEcoFlowNumber:
         coordinator.data = {"max_charge_soc": 60}
 
         defn = EcoFlowNumberDef(
-            key="max_charge_soc", name="Max Charge SoC",
-            state_key="max_charge_soc", unit="%",
-            min_value=50, max_value=100, step=1,
+            key="max_charge_soc",
+            name="Max Charge SoC",
+            state_key="max_charge_soc",
+            unit="%",
+            min_value=50,
+            max_value=100,
+            step=1,
         )
         number = EcoFlowNumber(coordinator, defn)
 
-        with patch.object(
-            coordinator, "async_send_set_command", new_callable=AsyncMock, return_value=False,
-        ), patch.object(number, "async_write_ha_state"):
-            with pytest.raises(HomeAssistantError):
-                await number.async_set_native_value(50.0)
+        with (
+            patch.object(
+                coordinator,
+                "async_send_set_command",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
+            patch.object(number, "async_write_ha_state"),
+            pytest.raises(HomeAssistantError),
+        ):
+            await number.async_set_native_value(50.0)
 
         assert coordinator.data["max_charge_soc"] == 60
 
@@ -788,9 +874,13 @@ class TestEcoFlowNumber:
         coordinator = _make_coordinator(hass, standard_config_entry)
 
         defn = EcoFlowNumberDef(
-            key="not_a_real_control", name="Nope",
-            state_key="not_a_real_control", unit="%",
-            min_value=0, max_value=100, step=1,
+            key="not_a_real_control",
+            name="Nope",
+            state_key="not_a_real_control",
+            unit="%",
+            min_value=0,
+            max_value=100,
+            step=1,
         )
         number = EcoFlowNumber(coordinator, defn)
 
@@ -820,8 +910,12 @@ class TestEcoFlowNumber:
         defn = next(d for d in DELTA2MAX_NUMBERS if d.key == "ac_charge_speed")
         number = EcoFlowNumber(coordinator, defn)
 
-        with patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock) as mock_cmd, \
-             patch.object(number, "async_write_ha_state"):
+        with (
+            patch.object(
+                coordinator, "async_send_set_command", new_callable=AsyncMock
+            ) as mock_cmd,
+            patch.object(number, "async_write_ha_state"),
+        ):
             await number.async_set_native_value(800.0)
             mock_cmd.assert_called_once()
             cmd = mock_cmd.call_args[0][0]
@@ -846,18 +940,26 @@ class TestEcoFlowNumber:
     ) -> None:
         """Smart Plug LED brightness sends cmdCode format command (% -> raw)."""
         standard_config_entry.add_to_hass(hass)
-        coordinator = _make_coordinator(hass, standard_config_entry, MOCK_SMARTPLUG_DEVICE)
+        coordinator = _make_coordinator(
+            hass, standard_config_entry, MOCK_SMARTPLUG_DEVICE
+        )
         coordinator.async_set_updated_data({"led_brightness": 50.0})  # 50%
 
         defn = EcoFlowNumberDef(
-            key="led_brightness", name="LED Brightness",
+            key="led_brightness",
+            name="LED Brightness",
             state_key="led_brightness",
-            min_value=0, max_value=100, step=5, unit="%",
+            min_value=0,
+            max_value=100,
+            step=5,
+            unit="%",
         )
         number = EcoFlowNumber(coordinator, defn)
 
         with (
-            patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock) as mock_cmd,
+            patch.object(
+                coordinator, "async_send_set_command", new_callable=AsyncMock
+            ) as mock_cmd,
             patch.object(number, "async_write_ha_state"),
         ):
             await number.async_set_native_value(80.0)  # 80%
@@ -875,18 +977,26 @@ class TestEcoFlowNumber:
     ) -> None:
         """Smart Plug max watts sends cmdCode format command."""
         standard_config_entry.add_to_hass(hass)
-        coordinator = _make_coordinator(hass, standard_config_entry, MOCK_SMARTPLUG_DEVICE)
+        coordinator = _make_coordinator(
+            hass, standard_config_entry, MOCK_SMARTPLUG_DEVICE
+        )
         coordinator.async_set_updated_data({"max_power_w": 2500})
 
         defn = EcoFlowNumberDef(
-            key="max_watts", name="Max Power Limit",
-            state_key="max_power_w", unit="W",
-            min_value=0, max_value=2500, step=100,
+            key="max_watts",
+            name="Max Power Limit",
+            state_key="max_power_w",
+            unit="W",
+            min_value=0,
+            max_value=2500,
+            step=100,
         )
         number = EcoFlowNumber(coordinator, defn)
 
         with (
-            patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock) as mock_cmd,
+            patch.object(
+                coordinator, "async_send_set_command", new_callable=AsyncMock
+            ) as mock_cmd,
             patch.object(number, "async_write_ha_state"),
         ):
             await number.async_set_native_value(2000.0)
@@ -903,13 +1013,19 @@ class TestEcoFlowNumber:
     ) -> None:
         """Smart Plug number entity updates state optimistically after SET."""
         standard_config_entry.add_to_hass(hass)
-        coordinator = _make_coordinator(hass, standard_config_entry, MOCK_SMARTPLUG_DEVICE)
+        coordinator = _make_coordinator(
+            hass, standard_config_entry, MOCK_SMARTPLUG_DEVICE
+        )
         coordinator.async_set_updated_data({"led_brightness": 0})
 
         defn = EcoFlowNumberDef(
-            key="led_brightness", name="LED Brightness",
+            key="led_brightness",
+            name="LED Brightness",
             state_key="led_brightness",
-            min_value=0, max_value=100, step=5, unit="%",
+            min_value=0,
+            max_value=100,
+            step=5,
+            unit="%",
         )
         number = EcoFlowNumber(coordinator, defn)
         assert number.native_value == 0.0
@@ -933,14 +1049,20 @@ class TestEcoFlowNumber:
         coordinator.async_set_updated_data({"screen_brightness": 50})
 
         defn = EcoFlowNumberDef(
-            key="screen_brightness", name="Screen Brightness",
-            state_key="screen_brightness", unit="%",
-            min_value=0, max_value=100, step=10,
+            key="screen_brightness",
+            name="Screen Brightness",
+            state_key="screen_brightness",
+            unit="%",
+            min_value=0,
+            max_value=100,
+            step=10,
         )
         number = EcoFlowNumber(coordinator, defn)
 
         with (
-            patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock) as mock_cmd,
+            patch.object(
+                coordinator, "async_send_set_command", new_callable=AsyncMock
+            ) as mock_cmd,
             patch.object(number, "async_write_ha_state"),
         ):
             await number.async_set_native_value(80.0)
@@ -961,14 +1083,20 @@ class TestEcoFlowNumber:
         coordinator.async_set_updated_data({"screen_timeout_sec": 30})
 
         defn = EcoFlowNumberDef(
-            key="screen_timeout", name="Screen Timeout",
-            state_key="screen_timeout_sec", unit="s",
-            min_value=0, max_value=1800, step=10,
+            key="screen_timeout",
+            name="Screen Timeout",
+            state_key="screen_timeout_sec",
+            unit="s",
+            min_value=0,
+            max_value=1800,
+            step=10,
         )
         number = EcoFlowNumber(coordinator, defn)
 
         with (
-            patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock) as mock_cmd,
+            patch.object(
+                coordinator, "async_send_set_command", new_callable=AsyncMock
+            ) as mock_cmd,
             patch.object(number, "async_write_ha_state"),
         ):
             await number.async_set_native_value(300.0)
@@ -987,14 +1115,20 @@ class TestEcoFlowNumber:
         coordinator.async_set_updated_data({"backup_reserve_soc": 50})
 
         defn = EcoFlowNumberDef(
-            key="backup_reserve_soc", name="Backup Reserve Level",
-            state_key="backup_reserve_soc", unit="%",
-            min_value=5, max_value=100, step=5,
+            key="backup_reserve_soc",
+            name="Backup Reserve Level",
+            state_key="backup_reserve_soc",
+            unit="%",
+            min_value=5,
+            max_value=100,
+            step=5,
         )
         number = EcoFlowNumber(coordinator, defn)
 
         with (
-            patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock) as mock_cmd,
+            patch.object(
+                coordinator, "async_send_set_command", new_callable=AsyncMock
+            ) as mock_cmd,
             patch.object(number, "async_write_ha_state"),
         ):
             await number.async_set_native_value(75.0)
@@ -1017,14 +1151,20 @@ class TestEcoFlowNumber:
         coordinator.async_set_updated_data({"car_standby_min": 120})
 
         defn = EcoFlowNumberDef(
-            key="car_standby_timeout", name="12V Port Timeout",
-            state_key="car_standby_min", unit="min",
-            min_value=0, max_value=720, step=30,
+            key="car_standby_timeout",
+            name="12V Port Timeout",
+            state_key="car_standby_min",
+            unit="min",
+            min_value=0,
+            max_value=720,
+            step=30,
         )
         number = EcoFlowNumber(coordinator, defn)
 
         with (
-            patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock) as mock_cmd,
+            patch.object(
+                coordinator, "async_send_set_command", new_callable=AsyncMock
+            ) as mock_cmd,
             patch.object(number, "async_write_ha_state"),
         ):
             await number.async_set_native_value(240.0)
@@ -1072,13 +1212,18 @@ class TestEcoFlowNumber:
         number = EcoFlowNumber(coordinator, defn)
 
         with (
-            patch.object(coordinator, "async_send_proto_set_command", new_callable=AsyncMock, return_value=True) as mock_cmd,
+            patch.object(
+                coordinator,
+                "async_send_proto_set_command",
+                new_callable=AsyncMock,
+                return_value=True,
+            ) as mock_cmd,
             patch.object(number, "async_write_ha_state"),
         ):
             await number.async_set_native_value(80.0)
 
         mock_cmd.assert_awaited_once()
-        payload, kwargs = mock_cmd.call_args.args[0], mock_cmd.call_args.kwargs
+        payload = mock_cmd.call_args.args[0]
         assert isinstance(payload, bytes)
         # The protobuf frame must decode back to the requested value: the
         # outer envelope carries cmd_func=254 / cmd_id=17 with field 102=80.
@@ -1130,7 +1275,12 @@ class TestEcoFlowNumber:
         switch = EcoFlowSwitch(coordinator, defn)
 
         with (
-            patch.object(coordinator, "async_send_proto_set_command", new_callable=AsyncMock, return_value=True) as mock_cmd,
+            patch.object(
+                coordinator,
+                "async_send_proto_set_command",
+                new_callable=AsyncMock,
+                return_value=True,
+            ) as mock_cmd,
             patch.object(switch, "async_write_ha_state"),
         ):
             await switch.async_turn_on()
@@ -1149,6 +1299,7 @@ class TestEcoFlowNumber:
         assert header["from"] == "ios"
         pdata = bytes.fromhex(header["pdata"])
         assert b"\xe0\x17\x01" in pdata
+
 
 # ===========================================================================
 # EcoFlowDiagnosticSensor
@@ -1194,6 +1345,7 @@ class TestEcoFlowDiagnosticSensor:
         coordinator = _make_coordinator(hass, standard_config_entry)
         sensor = EcoFlowDiagnosticSensor(coordinator, "mqtt_status")
         from homeassistant.const import EntityCategory
+
         assert sensor.entity_category is EntityCategory.DIAGNOSTIC
 
     async def test_diagnostic_sensor_device_info(
@@ -1242,7 +1394,8 @@ class TestEcoFlowDiagnosticSensor:
         hass: HomeAssistant,
         standard_config_entry: MockConfigEntry,
     ) -> None:
-        """mqtt_status sensor reflects 'connected_stale' when connected but no recent data."""
+        """mqtt_status sensor reflects 'connected_stale' when connected but no recent
+        data."""
         standard_config_entry.add_to_hass(hass)
         coordinator = _make_coordinator(hass, standard_config_entry)
         mock_mqtt = MagicMock()
@@ -1283,7 +1436,9 @@ class TestAvailabilityPropagation:
         coordinator = _make_coordinator(hass, standard_config_entry)
         coordinator.async_set_updated_data({"ac_enabled": 1})
 
-        defn = EcoFlowSwitchDef(key="ac_switch", name="AC Output", state_key="ac_enabled")
+        defn = EcoFlowSwitchDef(
+            key="ac_switch", name="AC Output", state_key="ac_enabled"
+        )
         switch = EcoFlowSwitch(coordinator, defn)
 
         assert switch.available is True

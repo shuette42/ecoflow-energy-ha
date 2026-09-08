@@ -1,4 +1,5 @@
-"""Tests for EcoFlowMQTTClient - subscribe_data, client creation, reconnect, disconnect."""
+"""Tests for EcoFlowMQTTClient - subscribe_data, client creation, reconnect,
+disconnect."""
 
 import logging
 import time
@@ -8,13 +9,13 @@ from ecoflow_energy.ecoflow.cloud_mqtt import EcoFlowMQTTClient
 
 
 def _make_client(**kwargs) -> EcoFlowMQTTClient:
-    defaults = dict(
-        certificate_account="test_account",
-        certificate_password="test_password",
-        device_sn="TEST1234SN",
-        message_handler=MagicMock(),
-        wss_mode=False,
-    )
+    defaults = {
+        "certificate_account": "test_account",
+        "certificate_password": "test_password",
+        "device_sn": "TEST1234SN",
+        "message_handler": MagicMock(),
+        "wss_mode": False,
+    }
     defaults.update(kwargs)
     return EcoFlowMQTTClient(**defaults)
 
@@ -30,7 +31,8 @@ class TestSubscribeDataFlag:
 
     @patch("ecoflow_energy.ecoflow.cloud_mqtt.mqtt.Client")
     def test_standard_mode_no_data_subscriptions(self, mock_mqtt_cls):
-        """In Standard Mode (subscribe_data=False), _on_connect subscribes only to set_reply."""
+        """In Standard Mode (subscribe_data=False), _on_connect subscribes only to
+        set_reply."""
         mock_paho = MagicMock()
         mock_mqtt_cls.return_value = mock_paho
 
@@ -48,7 +50,8 @@ class TestSubscribeDataFlag:
 
     @patch("ecoflow_energy.ecoflow.cloud_mqtt.mqtt.Client")
     def test_enhanced_mode_subscribes_data_topics(self, mock_mqtt_cls):
-        """In Enhanced Mode (subscribe_data=True), _on_connect must subscribe to data topics."""
+        """In Enhanced Mode (subscribe_data=True), _on_connect must subscribe to data
+        topics."""
         mock_paho = MagicMock()
         mock_mqtt_cls.return_value = mock_paho
 
@@ -64,9 +67,15 @@ class TestSubscribeDataFlag:
 
         # Must subscribe to quota, property, and set_reply topics
         topics_subscribed = [call[0][0] for call in mock_paho.subscribe.call_args_list]
-        assert any("/quota" in t for t in topics_subscribed), "Missing /quota subscription"
-        assert any("/property/" in t for t in topics_subscribed), "Missing /property subscription"
-        assert any("/set_reply" in t for t in topics_subscribed), "Missing /set_reply subscription"
+        assert any("/quota" in t for t in topics_subscribed), (
+            "Missing /quota subscription"
+        )
+        assert any("/property/" in t for t in topics_subscribed), (
+            "Missing /property subscription"
+        )
+        assert any("/set_reply" in t for t in topics_subscribed), (
+            "Missing /set_reply subscription"
+        )
 
 
 class TestCaptureWritesReportsTheSubscription:
@@ -332,6 +341,22 @@ class TestPublishDelivery:
         assert client.send_proto_set(b"\x00", wait=True) is False
         info.wait_for_publish.assert_called_once()
 
+    def test_publish_survives_client_swapped_to_none_mid_check(self, caplog):
+        """force_reconnect() runs on a separate thread and can swap
+        self.client to None between the is_connected() gate and the actual
+        publish call. That is a normal reconnect race, not a device fault -
+        publish() must return False for it without an ERROR log line.
+        """
+        client = _make_client()
+        client.is_connected = lambda: True
+        client.client = None
+
+        with caplog.at_level(logging.DEBUG):
+            result = client.publish("test/topic", "payload")
+
+        assert result is False
+        assert [r for r in caplog.records if r.levelno >= logging.ERROR] == []
+
 
 # ===========================================================================
 # Reconnect Strategy
@@ -349,7 +374,7 @@ class TestReconnectDelay:
         client = _make_client(base_reconnect_delay=5)
         client.reconnect_attempts = 3
         delay = client._get_reconnect_delay()
-        assert delay == 5 * (2 ** 3)  # 40
+        assert delay == 5 * (2**3)  # 40
 
     def test_get_reconnect_delay_capped(self):
         client = _make_client(base_reconnect_delay=5, max_reconnect_delay=60)
@@ -412,7 +437,8 @@ class TestShouldAttemptReconnect:
         assert client._should_attempt_reconnect() is True
 
     def test_effective_delay_never_exceeds_cap(self):
-        """Tier multipliers must not push the effective delay past max_reconnect_delay."""
+        """Tier multipliers must not push the effective delay past
+        max_reconnect_delay."""
         client = _make_client(base_reconnect_delay=5, max_reconnect_delay=60)
         client.reconnect_attempts = 7  # tier 3: 2x multiplier
         client.last_reconnect_time = 1000.0
@@ -572,7 +598,9 @@ class TestPingEchoFilter:
         client = _make_client(message_handler=handler)
 
         payload = b'{"command": "ping", "value": 123, "deviceSn": "TEST1234SN"}'
-        client._on_message(None, None, self._msg("/app/device/property/TEST1234SN", payload))
+        client._on_message(
+            None, None, self._msg("/app/device/property/TEST1234SN", payload)
+        )
 
         handler.assert_not_called()
 
@@ -581,7 +609,9 @@ class TestPingEchoFilter:
         client = _make_client(message_handler=handler)
 
         payload = b'{"command":"ping","value":123,"deviceSn":"TEST1234SN"}'
-        client._on_message(None, None, self._msg("/app/device/property/TEST1234SN", payload))
+        client._on_message(
+            None, None, self._msg("/app/device/property/TEST1234SN", payload)
+        )
 
         handler.assert_not_called()
 
@@ -591,7 +621,9 @@ class TestPingEchoFilter:
         client = _make_client(message_handler=handler)
 
         payload = b"\x0a\x12\x08\x01"
-        client._on_message(None, None, self._msg("/app/device/property/TEST1234SN", payload))
+        client._on_message(
+            None, None, self._msg("/app/device/property/TEST1234SN", payload)
+        )
 
         handler.assert_called_once_with("/app/device/property/TEST1234SN", payload)
 
@@ -601,7 +633,9 @@ class TestPingEchoFilter:
         client = _make_client(message_handler=handler)
 
         payload = b'{"command": "ping"}'
-        client._on_message(None, None, self._msg("/open/acct/TEST1234SN/quota", payload))
+        client._on_message(
+            None, None, self._msg("/open/acct/TEST1234SN/quota", payload)
+        )
 
         handler.assert_called_once()
 
@@ -1041,9 +1075,7 @@ class TestOwnPublishEchoFilter:
             None, None, self._msg("/app/device/property/TEST1234SN", device_frame)
         )
 
-        handler.assert_called_once_with(
-            "/app/device/property/TEST1234SN", device_frame
-        )
+        handler.assert_called_once_with("/app/device/property/TEST1234SN", device_frame)
 
     def test_the_echo_record_expires(self):
         """A payload that never came back must not pin memory or match later."""

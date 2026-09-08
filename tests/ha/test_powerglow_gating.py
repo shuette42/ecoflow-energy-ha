@@ -14,7 +14,6 @@ from typing import Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
-
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.const import (
@@ -30,10 +29,10 @@ from custom_components.ecoflow_energy.const import (
     MODE_ENHANCED,
     POWEROCEAN_SENSORS,
 )
+from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
 from custom_components.ecoflow_energy.ecoflow.parsers.powerocean_proto import (
     SCHEDULE_MAX_INDEX,
 )
-from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
 from custom_components.ecoflow_energy.sensor import async_setup_entry as sensor_setup
 
 POWEROCEAN_DEVICE: dict[str, Any] = {
@@ -117,10 +116,8 @@ def _keys(entities: list[Any]) -> set[str]:
 
 class TestDefinitions:
     def test_all_four_heating_rod_defs_are_marked_accessory(self) -> None:
-        marked = {
-            sensor.key for sensor in POWEROCEAN_SENSORS if sensor.accessory
-        }
-        assert HEATING_ROD_KEYS <= marked
+        marked = {sensor.key for sensor in POWEROCEAN_SENSORS if sensor.accessory}
+        assert marked >= HEATING_ROD_KEYS
 
     def test_no_other_powerocean_sensor_is_gated(self) -> None:
         """A gated definition without a matching parser key would never be
@@ -201,9 +198,7 @@ class TestLateAccessory:
 
         assert _keys(created) & HEATING_ROD_KEYS == {"heating_rod_water_temp_c"}
 
-    async def test_no_duplicate_on_further_updates(
-        self, hass: HomeAssistant
-    ) -> None:
+    async def test_no_duplicate_on_further_updates(self, hass: HomeAssistant) -> None:
         coordinator, created = await _setup(hass)
 
         coordinator.set_device_value("heating_rod_water_temp_c", 58.0)
@@ -249,7 +244,9 @@ class TestLateAccessory:
         }
         assert (POWEROCEAN_DEVICE["sn"], "heating_rod_power_w") in by_device
         assert not [
-            key for sn, key in by_device if sn == second["sn"] and key in HEATING_ROD_KEYS
+            key
+            for sn, key in by_device
+            if sn == second["sn"] and key in HEATING_ROD_KEYS
         ]
 
 

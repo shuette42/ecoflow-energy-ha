@@ -7,12 +7,14 @@ from ecoflow_energy.ecoflow.parsers.stream_proto import SOC_FALLBACK_KEY
 class TestFieldMapping:
     def test_per_string_pv_is_mapped(self) -> None:
         """The per-string PV inputs issue #139 asks for reach sensor keys."""
-        result = parse_stream_quota({
-            "powGetPv": 518.0,
-            "powGetPv2": 301.0,
-            "powGetPv3": 188.0,
-            "powGetPv4": 12.0,
-        })
+        result = parse_stream_quota(
+            {
+                "powGetPv": 518.0,
+                "powGetPv2": 301.0,
+                "powGetPv3": 188.0,
+                "powGetPv4": 12.0,
+            }
+        )
 
         assert result["pv1_w"] == 518.0
         assert result["pv2_w"] == 301.0
@@ -27,13 +29,15 @@ class TestFieldMapping:
         assert "powGetPvSum" not in result
 
     def test_system_power_paths_are_mapped(self) -> None:
-        result = parse_stream_quota({
-            "powGetSysLoad": 255.0,
-            "powGetSysGrid": 79.0,
-            "powGetSysLoadFromPv": 176.0,
-            "powGetSchuko1": 40.0,
-            "plugInInfoPvVol": 38.5,
-        })
+        result = parse_stream_quota(
+            {
+                "powGetSysLoad": 255.0,
+                "powGetSysGrid": 79.0,
+                "powGetSysLoadFromPv": 176.0,
+                "powGetSchuko1": 40.0,
+                "plugInInfoPvVol": 38.5,
+            }
+        )
 
         assert result["home_w"] == 255.0
         assert result["grid_w"] == 79.0
@@ -130,12 +134,14 @@ class TestBatterySplit:
 class TestRejectedInput:
     def test_unmapped_keys_are_dropped(self) -> None:
         """Raw quota keys must never leak into the device data store."""
-        result = parse_stream_quota({
-            "powGetPv": 100.0,
-            "bmsFaultState": 0,
-            "packSn": "BK11TEST00000001",
-            "energyStrategyOperateMode.operateSelfPoweredOpen": True,
-        })
+        result = parse_stream_quota(
+            {
+                "powGetPv": 100.0,
+                "bmsFaultState": 0,
+                "packSn": "BK11TEST00000001",
+                "energyStrategyOperateMode.operateSelfPoweredOpen": True,
+            }
+        )
 
         assert result == {"pv1_w": 100.0}
 

@@ -17,6 +17,8 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
+    DELTA2MAX_SENSORS,
+    DELTA3_SENSORS,
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
@@ -28,10 +30,6 @@ from .const import (
     DEVICE_TYPE_STREAM_AC5000,
     DEVICE_TYPE_WAVE3,
     DOMAIN,
-    DELTA2MAX_SENSORS,
-    DELTA3_SENSORS,
-    EcoFlowSensorDef,
-    filter_defs_for_serial,
     POWEROCEAN_SENSORS,
     POWERSTREAM_SENSORS,
     SMARTMETER_SENSORS,
@@ -40,6 +38,8 @@ from .const import (
     STREAM_SENSORS,
     STREAMAC5000_SENSORS,
     WAVE3_SENSORS,
+    EcoFlowSensorDef,
+    filter_defs_for_serial,
 )
 from .coordinator import EcoFlowDeviceCoordinator
 from .entity import EcoFlowWriteGateMixin, reading_reported
@@ -63,7 +63,9 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up EcoFlow sensors from a config entry."""
-    coordinators: dict[str, EcoFlowDeviceCoordinator] = hass.data[DOMAIN][entry.entry_id]
+    coordinators: dict[str, EcoFlowDeviceCoordinator] = hass.data[DOMAIN][
+        entry.entry_id
+    ]
     registry = er.async_get(hass)
     entities: list[SensorEntity] = []
 
@@ -193,9 +195,13 @@ class EcoFlowSensor(
         if definition.state_class:
             self._attr_state_class = _STATE_CLASS_MAP.get(definition.state_class)
         if definition.entity_category:
-            self._attr_entity_category = _ENTITY_CATEGORY_MAP.get(definition.entity_category)
+            self._attr_entity_category = _ENTITY_CATEGORY_MAP.get(
+                definition.entity_category
+            )
         if definition.suggested_display_precision is not None:
-            self._attr_suggested_display_precision = definition.suggested_display_precision
+            self._attr_suggested_display_precision = (
+                definition.suggested_display_precision
+            )
         if definition.disabled_by_default:
             self._attr_entity_registry_enabled_default = False
         if definition.options:
@@ -209,14 +215,28 @@ class EcoFlowSensor(
     async def async_added_to_hass(self) -> None:
         """Restore last known value when entity is added."""
         await super().async_added_to_hass()
-        if (last := await self.async_get_last_sensor_data()) and last.native_value is not None:
+        if (
+            last := await self.async_get_last_sensor_data()
+        ) and last.native_value is not None:
             # Enum sensors: discard restored values not in options list.
             # After migrating from numeric to enum, old values like "0"
             # or "WORKMODE_SELFUSE" are invalid and would block entity setup.
-            if self._definition.options and str(last.native_value) not in self._definition.options:
+            if (
+                self._definition.options
+                and str(last.native_value) not in self._definition.options
+            ):
                 return
-            self._restored_value = last.native_value
-            self._last_written_value = last.native_value
+            # Home Assistant's stored type also allows a date, datetime or
+            # Decimal, and no sensor this integration owns produces one, so
+            # nothing reachable is dropped here. The guard covers both
+            # assignments below rather than only the first, and the value is
+            # bound to a local because a property access is not narrowed by
+            # the check itself.
+            restored = last.native_value
+            if not isinstance(restored, (str, int, float)):
+                return
+            self._restored_value = restored
+            self._last_written_value = restored
             # Seed the energy integrator so a lost or corrupt state file
             # does not reset totals to zero. A restored value above the
             # stored total is taken at once (ADR-010 addendum A1); a stale

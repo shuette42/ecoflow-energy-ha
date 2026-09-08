@@ -15,7 +15,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.const import (
@@ -27,7 +26,6 @@ from custom_components.ecoflow_energy.number import EcoFlowNumber
 from custom_components.ecoflow_energy.switch import EcoFlowSwitch
 
 from .conftest import MOCK_DELTA_DEVICE
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -65,7 +63,10 @@ async def _add_switch(switch: EcoFlowSwitch, last_state: object) -> None:
     with (
         patch.object(CoordinatorEntity, "async_added_to_hass", new_callable=AsyncMock),
         patch.object(
-            switch, "async_get_last_state", new_callable=AsyncMock, return_value=last_state
+            switch,
+            "async_get_last_state",
+            new_callable=AsyncMock,
+            return_value=last_state,
         ),
     ):
         await switch.async_added_to_hass()

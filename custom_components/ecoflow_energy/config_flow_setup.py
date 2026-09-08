@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import aiohttp
 import voluptuous as vol
-
 from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.selector import SelectSelector, SelectSelectorConfig
+from homeassistant.helpers.selector import (
+    SelectOptionDict,
+    SelectSelector,
+    SelectSelectorConfig,
+)
 
 from .const import (
     AUTH_METHOD_APP,
@@ -95,7 +98,13 @@ def _device_label(device: dict[str, Any]) -> str:
     return f"{name} ({sn_short}){status}" if name else f"{sn_short}{status}"
 
 
-class SetupFlowMixin:
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigFlow as _Base
+else:
+    _Base = object
+
+
+class SetupFlowMixin(_Base):
     """Initial setup steps, composed into EcoFlowEnergyConfigFlow."""
 
     # ------------------------------------------------------------------
@@ -272,19 +281,14 @@ class SetupFlowMixin:
                     )
                 return self._create_entry(mode=MODE_STANDARD)
 
-        device_options = {
-            d["sn"]: _device_label(d)
-            for d in self._devices
-        }
+        device_options = {d["sn"]: _device_label(d) for d in self._devices}
 
         # Two translation keys for one form - see the note in
         # `config_flow_options.py`. `_auth_type` is set before either path
         # reaches this step.
         return self.async_show_form(
             step_id=(
-                "devices_app"
-                if self._auth_type == AUTH_METHOD_APP
-                else "devices"
+                "devices_app" if self._auth_type == AUTH_METHOD_APP else "devices"
             ),
             data_schema=vol.Schema(
                 {
@@ -293,9 +297,9 @@ class SetupFlowMixin:
                         default=[
                             sn
                             for sn in device_options
-                            if next(
-                                d for d in self._devices if d["sn"] == sn
-                            ).get("device_type")
+                            if next(d for d in self._devices if d["sn"] == sn).get(
+                                "device_type"
+                            )
                             not in (
                                 (DEVICE_TYPE_POWERSTREAM,)
                                 if self._auth_type == AUTH_METHOD_APP
@@ -305,7 +309,7 @@ class SetupFlowMixin:
                     ): SelectSelector(
                         SelectSelectorConfig(
                             options=[
-                                {"value": sn, "label": label}
+                                SelectOptionDict(value=sn, label=label)
                                 for sn, label in device_options.items()
                             ],
                             multiple=True,

@@ -34,7 +34,8 @@ class TestDeltaParser:
         assert result["ac_in_w"] == 200.0
 
     def test_inv_status_ac_charge_speed(self):
-        """invStatus charge-speed keys map to the configured charge speed (issue #95)."""
+        """invStatus charge-speed keys map to the configured charge speed (issue
+        #95)."""
         report = {
             "typeCode": "invStatus",
             "params": {"SlowChgWatts": 800, "FastChgWatts": 2400},
@@ -159,7 +160,12 @@ class TestDeltaParser:
             v for k, v in DELTA2MAX_FIELD_MAP.items() if k not in casing_aliases
         ]
         # Raw keys are never in the output (replaced by processed keys)
-        raw_keys = ("batt_temp_raw", "beep_mode_raw", "slave1_temp_raw", "slave2_temp_raw")
+        raw_keys = (
+            "batt_temp_raw",
+            "beep_mode_raw",
+            "slave1_temp_raw",
+            "slave2_temp_raw",
+        )
         dest_keys_without_raw = [k for k in dest_keys if k not in raw_keys]
         assert len(dest_keys_without_raw) == len(set(dest_keys_without_raw))
 

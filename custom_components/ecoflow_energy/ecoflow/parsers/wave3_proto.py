@@ -72,8 +72,9 @@ of the three yet - reading them back is Phase B work.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from math import isfinite
-from typing import Any, Mapping
+from typing import Any
 
 from ..firmware import decode_version
 from ..proto.decoder import _read_varint, decode_header_message
@@ -178,7 +179,13 @@ _MODE_INFO_ALL_KEYS: tuple[str, ...] = tuple(
 # `_decode_mode_info` refuses to guess and publishes the all-None dict.
 _MODE_INFO_ENTRY_COUNT = 6
 
-_SUBMODE_NAMES: dict[int, str] = {0: "none", 1: "normal", 2: "max", 3: "sleep", 4: "eco"}
+_SUBMODE_NAMES: dict[int, str] = {
+    0: "none",
+    1: "normal",
+    2: "max",
+    3: "sleep",
+    4: "eco",
+}
 _SUBMODE_KEYS = frozenset({"cooling_submode", "heating_submode"})
 
 _OPERATING_MODE_NAMES: dict[int, str] = {
@@ -292,7 +299,9 @@ def _decode_mode_info(raw: bytes) -> dict[str, Any]:
     result: dict[str, Any] = dict.fromkeys(_MODE_INFO_ALL_KEYS)
 
     entries: list[bytes] = [
-        item for field_num, wire_type, item in _iter_fields(raw) if field_num == 1 and wire_type == 2
+        item
+        for field_num, wire_type, item in _iter_fields(raw)
+        if field_num == 1 and wire_type == 2
     ]
     if len(entries) != _MODE_INFO_ENTRY_COUNT:
         return result
@@ -373,7 +382,11 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
     result = dict(parsed)
 
     for key, value in list(result.items()):
-        if isinstance(value, float) and isfinite(value) and abs(value) < _FLOAT_ZERO_EPS:
+        if (
+            isinstance(value, float)
+            and isfinite(value)
+            and abs(value) < _FLOAT_ZERO_EPS
+        ):
             result[key] = 0.0
 
     sleep_raw = result.pop("_dev_sleep_state_raw", None)
@@ -395,7 +408,9 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
 
     display_raw = result.pop("_display_temperature_source_raw", None)
     if isinstance(display_raw, int):
-        result["display_temperature_source"] = _DISPLAY_TEMPERATURE_SOURCE_NAMES.get(display_raw)
+        result["display_temperature_source"] = _DISPLAY_TEMPERATURE_SOURCE_NAMES.get(
+            display_raw
+        )
 
     drainage_raw = result.pop("_drainage_mode_raw", None)
     if isinstance(drainage_raw, int):

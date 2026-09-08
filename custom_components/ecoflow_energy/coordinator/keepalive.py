@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+from typing import TYPE_CHECKING
 
 from ..const import (
     DEVICE_TYPE_SMARTPLUG,
@@ -15,8 +16,13 @@ from ..const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+if TYPE_CHECKING:
+    from ._typing import CoordinatorState as _Base
+else:
+    _Base = object
 
-class KeepaliveMixin:
+
+class KeepaliveMixin(_Base):
     """Mixin providing EnergyStreamSwitch, latestQuotas, and ping keep-alives."""
 
     # ------------------------------------------------------------------
@@ -40,7 +46,9 @@ class KeepaliveMixin:
             )
             _LOGGER.debug("EnergyStreamSwitch keepalive sent for %s", self.device_tag)
         else:
-            _LOGGER.debug("EnergyStreamSwitch skipped for %s (not connected)", self.device_tag)
+            _LOGGER.debug(
+                "EnergyStreamSwitch skipped for %s (not connected)", self.device_tag
+            )
         if not self._shutdown:
             self._keepalive_unsub = self.hass.loop.call_later(
                 ENERGY_STREAM_KEEPALIVE_S,
@@ -54,7 +62,8 @@ class KeepaliveMixin:
     def _schedule_quotas_poll(self) -> None:
         """Schedule the next latestQuotas poll."""
         self._quotas_unsub = self.hass.loop.call_later(
-            QUOTAS_KEEPALIVE_S, self._send_quotas_poll,
+            QUOTAS_KEEPALIVE_S,
+            self._send_quotas_poll,
         )
 
     def _send_quotas_poll(self) -> None:
@@ -72,7 +81,8 @@ class KeepaliveMixin:
                 now = time.monotonic()
                 if (
                     self._last_smartplug_get_all_ts <= 0.0
-                    or (now - self._last_smartplug_get_all_ts) >= SMARTPLUG_GET_ALL_KEEPALIVE_S
+                    or (now - self._last_smartplug_get_all_ts)
+                    >= SMARTPLUG_GET_ALL_KEEPALIVE_S
                 ):
                     self._last_smartplug_get_all_ts = now
                     self.hass.async_add_executor_job(
@@ -80,7 +90,8 @@ class KeepaliveMixin:
                     )
         if not self._shutdown:
             self._quotas_unsub = self.hass.loop.call_later(
-                QUOTAS_KEEPALIVE_S, self._send_quotas_poll,
+                QUOTAS_KEEPALIVE_S,
+                self._send_quotas_poll,
             )
 
     # ------------------------------------------------------------------
@@ -90,7 +101,8 @@ class KeepaliveMixin:
     def _schedule_ping(self) -> None:
         """Schedule the next ping heartbeat."""
         self._ping_unsub = self.hass.loop.call_later(
-            PING_KEEPALIVE_S, self._send_ping,
+            PING_KEEPALIVE_S,
+            self._send_ping,
         )
 
     def _send_ping(self) -> None:
@@ -103,6 +115,6 @@ class KeepaliveMixin:
             )
         if not self._shutdown:
             self._ping_unsub = self.hass.loop.call_later(
-                PING_KEEPALIVE_S, self._send_ping,
+                PING_KEEPALIVE_S,
+                self._send_ping,
             )
-

@@ -7,7 +7,7 @@ import json
 import logging
 import time
 from functools import partial
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..const import (
     AUTH_METHOD_APP,
@@ -39,7 +39,13 @@ class DeviceValueNotReported(Exception):
     """
 
 
-class SetCommandsMixin:
+if TYPE_CHECKING:
+    from ._typing import CoordinatorState as _Base
+else:
+    _Base = object
+
+
+class SetCommandsMixin(_Base):
     """Mixin providing SET command dispatch and SoC debounce."""
 
     # ------------------------------------------------------------------
@@ -47,7 +53,9 @@ class SetCommandsMixin:
     # ------------------------------------------------------------------
 
     async def async_set_soc_limits(
-        self, max_charge_soc: int, min_discharge_soc: int,
+        self,
+        max_charge_soc: int,
+        min_discharge_soc: int,
     ) -> bool:
         """Send SoC limits to PowerOcean via WSS Protobuf (Enhanced Mode only).
 
@@ -55,10 +63,14 @@ class SetCommandsMixin:
         2 fields: charge upper limit and discharge lower limit.
         """
         if not self._enhanced_mode:
-            _LOGGER.warning("SoC limit SET requires Enhanced Mode (%s)", self.device_tag)
+            _LOGGER.warning(
+                "SoC limit SET requires Enhanced Mode (%s)", self.device_tag
+            )
             return False
         if self._mqtt_client is None or not self._mqtt_client.is_connected():
-            _LOGGER.warning("Cannot send SoC limits - MQTT not connected (%s)", self.device_tag)
+            _LOGGER.warning(
+                "Cannot send SoC limits - MQTT not connected (%s)", self.device_tag
+            )
             return False
 
         from ..ecoflow.energy_stream import build_soc_limit_set_payload
@@ -70,16 +82,24 @@ class SetCommandsMixin:
         if ok:
             _LOGGER.debug(
                 "SoC limits sent: max=%d, min=%d (%s)",
-                max_charge_soc, min_discharge_soc, self.device_tag,
+                max_charge_soc,
+                min_discharge_soc,
+                self.device_tag,
             )
-            self._log_event("set_soc_limits", f"max={max_charge_soc}, min={min_discharge_soc}")
+            self._log_event(
+                "set_soc_limits", f"max={max_charge_soc}, min={min_discharge_soc}"
+            )
         else:
             _LOGGER.warning("SoC limits SET failed (%s)", self.device_tag)
-            self._log_event("set_soc_limits_fail", f"max={max_charge_soc}, min={min_discharge_soc}")
+            self._log_event(
+                "set_soc_limits_fail", f"max={max_charge_soc}, min={min_discharge_soc}"
+            )
         return ok
 
     async def async_set_powerocean_soc_debounced(
-        self, backup_reserve_pct: int, solar_surplus_pct: int,
+        self,
+        backup_reserve_pct: int,
+        solar_surplus_pct: int,
     ) -> bool:
         """Coalesce rapid-fire SoC SET requests (HA slider drag) into one frame.
 
@@ -102,14 +122,16 @@ class SetCommandsMixin:
             return False
         if not self._enhanced_mode:
             _LOGGER.warning(
-                "PowerOcean SoC SET requires Enhanced Mode (%s)", self.device_tag,
+                "PowerOcean SoC SET requires Enhanced Mode (%s)",
+                self.device_tag,
             )
             return False
         if backup_reserve_pct > solar_surplus_pct:
             _LOGGER.warning(
                 "PowerOcean SoC SET rejected locally: backup_reserve (%d) > "
                 "solar_surplus (%d). Device requires backup <= solar.",
-                backup_reserve_pct, solar_surplus_pct,
+                backup_reserve_pct,
+                solar_surplus_pct,
             )
             return False
 
@@ -147,9 +169,7 @@ class SetCommandsMixin:
             assert handle is not None
             self._powerocean_soc_debounce_fired(handle)
 
-        handle = self.hass.loop.call_later(
-            POWEROCEAN_SOC_DEBOUNCE_S, _timer_fired
-        )
+        handle = self.hass.loop.call_later(POWEROCEAN_SOC_DEBOUNCE_S, _timer_fired)
         self._powerocean_soc_debounce_unsub = handle
         return True
 
@@ -171,7 +191,8 @@ class SetCommandsMixin:
         )
 
     def _powerocean_soc_debounce_fired(
-        self, handle: asyncio.TimerHandle,
+        self,
+        handle: asyncio.TimerHandle,
     ) -> None:
         """Start the flush owned by *handle*, ignoring stale callbacks."""
         if self._shutdown or self._powerocean_soc_debounce_unsub is not handle:
@@ -203,7 +224,7 @@ class SetCommandsMixin:
         """Forget exactly the flush task that completed."""
         self._powerocean_soc_flush_tasks.discard(task)
 
-    def _powerocean_soc_write_done(self, task: asyncio.Future[object]) -> None:
+    def _powerocean_soc_write_done(self, task: asyncio.Future[bool]) -> None:
         """Forget exactly the coordinator-owned direct write that completed."""
         self._powerocean_soc_write_tasks.discard(task)
         # ConfigEntry reports task failures too, but retrieving the result here
@@ -347,7 +368,9 @@ class SetCommandsMixin:
             raise cancelled
 
     async def async_set_powerocean_soc(
-        self, backup_reserve_pct: int, solar_surplus_pct: int,
+        self,
+        backup_reserve_pct: int,
+        solar_surplus_pct: int,
     ) -> bool:
         """Send a 3-field SoC SET to PowerOcean (app-replay format).
 
@@ -360,16 +383,21 @@ class SetCommandsMixin:
         if self._shutdown:
             return False
         if not self._enhanced_mode:
-            _LOGGER.warning("PowerOcean SoC SET requires Enhanced Mode (%s)", self.device_tag)
+            _LOGGER.warning(
+                "PowerOcean SoC SET requires Enhanced Mode (%s)", self.device_tag
+            )
             return False
         if self._mqtt_client is None or not self._mqtt_client.is_connected():
-            _LOGGER.warning("Cannot send PowerOcean SoC - MQTT not connected (%s)", self.device_tag)
+            _LOGGER.warning(
+                "Cannot send PowerOcean SoC - MQTT not connected (%s)", self.device_tag
+            )
             return False
         if backup_reserve_pct > solar_surplus_pct:
             _LOGGER.warning(
                 "PowerOcean SoC SET rejected locally: backup_reserve (%d) > "
                 "solar_surplus (%d). Device requires backup <= solar.",
-                backup_reserve_pct, solar_surplus_pct,
+                backup_reserve_pct,
+                solar_surplus_pct,
             )
             return False
 
@@ -399,7 +427,9 @@ class SetCommandsMixin:
             _LOGGER.debug("PowerOcean SoC sent: %s (%s)", label, self.device_tag)
             self._log_event("set_powerocean_soc", label)
         else:
-            _LOGGER.warning("PowerOcean SoC SET failed: %s (%s)", label, self.device_tag)
+            _LOGGER.warning(
+                "PowerOcean SoC SET failed: %s (%s)", label, self.device_tag
+            )
             self._log_event("set_powerocean_soc_fail", label)
         return ok
 
@@ -412,12 +442,14 @@ class SetCommandsMixin:
         """
         if not self._enhanced_mode:
             _LOGGER.warning(
-                "Work-mode SET requires Enhanced Mode (%s)", self.device_tag,
+                "Work-mode SET requires Enhanced Mode (%s)",
+                self.device_tag,
             )
             return False
         if self._mqtt_client is None or not self._mqtt_client.is_connected():
             _LOGGER.warning(
-                "Cannot send work-mode - MQTT not connected (%s)", self.device_tag,
+                "Cannot send work-mode - MQTT not connected (%s)",
+                self.device_tag,
             )
             return False
 
@@ -440,7 +472,9 @@ class SetCommandsMixin:
     # ------------------------------------------------------------------
 
     async def async_set_powerocean_schedule_armed(
-        self, task_index: int, armed: bool,
+        self,
+        task_index: int,
+        armed: bool,
     ) -> bool:
         """Arm or disarm one scheduled charge task.
 
@@ -491,7 +525,9 @@ class SetCommandsMixin:
             return True
 
     async def async_set_powerocean_schedule_power(
-        self, task_index: int, power_w: int,
+        self,
+        task_index: int,
+        power_w: int,
     ) -> bool:
         """Change the charge power of one scheduled task.
 
@@ -529,9 +565,7 @@ class SetCommandsMixin:
             ):
                 value = as_known_int(data.get(f"{prefix}{suffix}"))
                 if value is None:
-                    raise DeviceValueNotReported(
-                        f"schedule {task_index} {suffix}"
-                    )
+                    raise DeviceValueNotReported(f"schedule {task_index} {suffix}")
                 echoed[name] = value
 
             armed = data.get(f"{prefix}enabled")
@@ -580,7 +614,10 @@ class SetCommandsMixin:
     # ------------------------------------------------------------------
 
     async def async_set_stream_soc_limits(
-        self, *, charge: int | None = None, discharge: int | None = None,
+        self,
+        *,
+        charge: int | None = None,
+        discharge: int | None = None,
     ) -> bool:
         """Write the grouped Stream charge/discharge limit configuration.
 
@@ -597,17 +634,11 @@ class SetCommandsMixin:
             current_charge = as_known_int(data.get("max_charge_soc_pct"))
             current_discharge = as_known_int(data.get("min_discharge_soc_pct"))
             backup = as_known_int(data.get("backup_reserve_pct"))
-            if (
-                current_charge is None
-                or current_discharge is None
-                or backup is None
-            ):
+            if current_charge is None or current_discharge is None or backup is None:
                 raise DeviceValueNotReported("Stream SoC limits")
 
             requested_charge = current_charge if charge is None else charge
-            requested_discharge = (
-                current_discharge if discharge is None else discharge
-            )
+            requested_discharge = current_discharge if discharge is None else discharge
 
             payload = build_stream_soc_limits_payload(
                 requested_charge,
@@ -631,9 +662,7 @@ class SetCommandsMixin:
         from ..ecoflow.energy_stream import build_stream_backup_reserve_payload
 
         async with self._device_config_lock:
-            payload = build_stream_backup_reserve_payload(
-                reserve_pct, self.device_sn
-            )
+            payload = build_stream_backup_reserve_payload(reserve_pct, self.device_sn)
             if not await self.async_send_proto_set_command(
                 payload, label="stream_backup_reserve"
             ):
@@ -702,9 +731,7 @@ class SetCommandsMixin:
         )
 
         async with self._device_config_lock:
-            payload = build_stream_ac5000_backup_socket_payload(
-                turn_on, self.device_sn
-            )
+            payload = build_stream_ac5000_backup_socket_payload(turn_on, self.device_sn)
             return await self.async_send_proto_set_command(
                 payload, label="stream_ac5000_backup_socket"
             )
@@ -724,7 +751,10 @@ class SetCommandsMixin:
     # ------------------------------------------------------------------
 
     async def async_set_stream_ac5000_soc_limits(
-        self, *, charge: int | None = None, discharge: int | None = None,
+        self,
+        *,
+        charge: int | None = None,
+        discharge: int | None = None,
     ) -> bool:
         """Write config field 29, which holds both SoC limits.
 
@@ -802,7 +832,10 @@ class SetCommandsMixin:
             return True
 
     async def async_set_stream_ac5000_backup_reserve(
-        self, *, enabled: bool | None = None, reserve_pct: int | None = None,
+        self,
+        *,
+        enabled: bool | None = None,
+        reserve_pct: int | None = None,
     ) -> bool:
         """Write config field 30, which holds the on/off flag and the level.
 
@@ -819,9 +852,7 @@ class SetCommandsMixin:
                 reserve_pct = as_known_int(data.get("backup_reserve_pct"))
             if not isinstance(enabled, bool) or reserve_pct is None:
                 raise DeviceValueNotReported("backup reserve")
-            payload = build_backup_reserve_payload(
-                enabled, reserve_pct, self.device_sn
-            )
+            payload = build_backup_reserve_payload(enabled, reserve_pct, self.device_sn)
             if not await self.async_send_proto_set_command(
                 payload, label="stream_ac5000_backup_reserve"
             ):
@@ -832,7 +863,9 @@ class SetCommandsMixin:
             return True
 
     async def async_set_stream_ac5000_task_power(
-        self, kind: str, power_w: int,
+        self,
+        kind: str,
+        power_w: int,
     ) -> bool:
         """Replace the scheduled task with one of `kind` at `power_w`.
 
@@ -863,7 +896,11 @@ class SetCommandsMixin:
                 # is sent, which is what every removal before this one carried.
                 if not await self.async_send_proto_set_command(
                     build_task_payload(
-                        other, 0, MINUTES_PER_DAY - 1, 0, self.device_sn,
+                        other,
+                        0,
+                        MINUTES_PER_DAY - 1,
+                        0,
+                        self.device_sn,
                         operation=TASK_REMOVE,
                         task_slot=as_known_int(
                             data.get(f"scheduled_{other}_task_slot")
@@ -967,7 +1004,9 @@ class SetCommandsMixin:
                 "Setting the %s power on %s while it is in %s mode: a "
                 "scheduled task is only acted on in custom mode, so the "
                 "device will accept this and may do nothing with it",
-                kind, self.device_tag, mode,
+                kind,
+                self.device_tag,
+                mode,
             )
 
         reported = as_known_int(data.get(f"scheduled_{kind}_power_w")) is not None
@@ -985,11 +1024,17 @@ class SetCommandsMixin:
         )
 
     async def async_send_proto_set_command(
-        self, payload: bytes, label: str,
+        self,
+        payload: bytes,
+        label: str,
     ) -> bool:
         """Send a protobuf SET command via WSS MQTT."""
         if self._mqtt_client is None or not self._mqtt_client.is_connected():
-            _LOGGER.debug("Cannot send proto SET (%s) - MQTT not connected (%s)", label, self.device_tag)
+            _LOGGER.debug(
+                "Cannot send proto SET (%s) - MQTT not connected (%s)",
+                label,
+                self.device_tag,
+            )
             return False
 
         ok = await self.hass.async_add_executor_job(
@@ -1221,7 +1266,9 @@ class SetCommandsMixin:
         Payload: {"id": <ts>, "version": "1.0", ...command}
         """
         if self._mqtt_client is None or not self._mqtt_client.is_connected():
-            _LOGGER.debug("Cannot send SET command - MQTT not connected (%s)", self.device_tag)
+            _LOGGER.debug(
+                "Cannot send SET command - MQTT not connected (%s)", self.device_tag
+            )
             return False
 
         msg_id = int(time.time() * 1000) % 1_000_000
@@ -1234,7 +1281,9 @@ class SetCommandsMixin:
             }
         )
         if self._mqtt_client.wss_mode:
-            topic = f"/app/{self._mqtt_client.user_id}/{self.device_sn}/thing/property/set"
+            topic = (
+                f"/app/{self._mqtt_client.user_id}/{self.device_sn}/thing/property/set"
+            )
         else:
             topic = f"/open/{self._mqtt_client.cert_account}/{self.device_sn}/set"
 

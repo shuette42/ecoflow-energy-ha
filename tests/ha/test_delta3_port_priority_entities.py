@@ -21,7 +21,6 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.const import (
@@ -48,6 +47,8 @@ from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinato
 from custom_components.ecoflow_energy.number import EcoFlowNumber
 from custom_components.ecoflow_energy.switch import (
     EcoFlowSwitch,
+)
+from custom_components.ecoflow_energy.switch import (
     async_setup_entry as switch_setup,
 )
 
@@ -165,9 +166,7 @@ class TestSwitchCarriesTheReportedCutoff:
         assert item["limited"] is True
         assert item["cutoffSoc"] == 35  # not a default, not the AC 2 value
 
-    async def test_each_port_reads_its_own_cutoff(
-        self, hass: HomeAssistant
-    ) -> None:
+    async def test_each_port_reads_its_own_cutoff(self, hass: HomeAssistant) -> None:
         """Three ports share one key prefix, so a stem mix-up is cheap to make
         and invisible afterwards - the write would succeed with the wrong
         threshold."""
@@ -241,9 +240,7 @@ class TestNumberCarriesTheReportedFlag:
         assert item["limited"] is True  # AC 2 was non-essential, still is
         assert item["cutoffSoc"] == 55
 
-    async def test_an_essential_port_stays_essential(
-        self, hass: HomeAssistant
-    ) -> None:
+    async def test_an_essential_port_stays_essential(self, hass: HomeAssistant) -> None:
         """False is the proto3 default and the common case, so a builder that
         assumed a value would most likely assume this one wrong."""
         coordinator, _ = _coordinator(hass, DELTA3_MAX_PLUS, REPORTED)
@@ -265,9 +262,7 @@ class TestNumberCarriesTheReportedFlag:
         assert err.value.translation_key == "set_command_not_ready"
         coordinator.async_send_delta3_set.assert_not_called()
 
-    async def test_the_regular_numbers_are_untouched(
-        self, hass: HomeAssistant
-    ) -> None:
+    async def test_the_regular_numbers_are_untouched(self, hass: HomeAssistant) -> None:
         coordinator, _ = _coordinator(hass, DELTA3_MAX_PLUS, REPORTED)
         entity = _number(coordinator, "max_charge_soc")
 
@@ -289,9 +284,7 @@ class TestCutoffBoundsFollowTheDevice:
         assert entity.native_min_value == 5
         assert entity.native_max_value == 95
 
-    async def test_narrowed_limits_narrow_the_slider(
-        self, hass: HomeAssistant
-    ) -> None:
+    async def test_narrowed_limits_narrow_the_slider(self, hass: HomeAssistant) -> None:
         coordinator, _ = _coordinator(
             hass,
             DELTA3_MAX_PLUS,
@@ -342,9 +335,7 @@ class TestSwitchPlatformGating:
         self, hass: HomeAssistant, device: dict[str, Any], enhanced: bool = True
     ) -> set[str]:
         coordinator, entry = _coordinator(hass, device, REPORTED, enhanced)
-        hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
-            device["sn"]: coordinator
-        }
+        hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {device["sn"]: coordinator}
         created: list[Any] = []
         await switch_setup(hass, entry, created.extend)
         return {e._definition.key for e in created}
@@ -373,7 +364,10 @@ class TestSwitchPlatformGating:
 
     @pytest.mark.parametrize(
         ("device", "defs"),
-        [(MOCK_DELTA_DEVICE, DELTA2MAX_SWITCHES), (MOCK_STREAM_DEVICE, STREAM_SWITCHES)],
+        [
+            (MOCK_DELTA_DEVICE, DELTA2MAX_SWITCHES),
+            (MOCK_STREAM_DEVICE, STREAM_SWITCHES),
+        ],
     )
     async def test_other_device_types_lose_nothing(
         self, hass: HomeAssistant, device: dict[str, Any], defs: list[Any]
@@ -403,7 +397,7 @@ class TestWritesInSuccession:
         switch = _switch(coordinator, "port_priority_ac1_switch")
         number = _number(coordinator, "port_priority_ac1_soc")
 
-        await switch.async_turn_on()          # AC 1 -> non-essential
+        await switch.async_turn_on()  # AC 1 -> non-essential
         await number.async_set_native_value(25)  # ... before the device echoes
 
         sent = coordinator.async_send_delta3_set.call_args[0][0]
@@ -431,9 +425,7 @@ class TestWritesInSuccession:
         assert item["cutoffSoc"] == 20, "the switch undid the slider"
         assert item["limited"] is False
 
-    async def test_a_write_touches_only_its_own_port(
-        self, hass: HomeAssistant
-    ) -> None:
+    async def test_a_write_touches_only_its_own_port(self, hass: HomeAssistant) -> None:
         """Seeding the store must not disturb the other two ports."""
         coordinator, _ = _coordinator(hass, DELTA3_MAX_PLUS, REPORTED)
         switch = _switch(coordinator, "port_priority_dc_switch")

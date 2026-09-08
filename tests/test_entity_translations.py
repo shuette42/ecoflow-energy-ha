@@ -22,7 +22,6 @@ import re
 from pathlib import Path
 
 import pytest
-
 from ecoflow_energy import const as C
 
 TRANSLATIONS_DIR = Path("custom_components/ecoflow_energy/translations")

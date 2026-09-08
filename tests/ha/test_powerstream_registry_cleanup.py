@@ -27,57 +27,63 @@ BK21 = "BK21TEST00000001"
 # PowerStream entities. Kept independent of the production cleanup table so a
 # future accidental omission cannot make both implementation and test agree.
 V117_STALE_BY_DOMAIN = {
-    "sensor": frozenset({
-        "ac_current_a",
-        "ac_grid_connection_power_w",
-        "ac_outlet_1_w",
-        "ac_outlet_2_w",
-        "backup_reserve_pct",
-        "batt_charge_capacity_ah",
-        "batt_charge_discharge_state",
-        "batt_charge_energy_kwh",
-        "batt_charge_power_w",
-        "batt_design_cap_mah",
-        "batt_discharge_capacity_ah",
-        "batt_discharge_energy_kwh",
-        "batt_discharge_power_w",
-        "batt_full_cap_mah",
-        "batt_max_cell_temp_c",
-        "batt_max_cell_vol_mv",
-        "batt_max_mos_temp_c",
-        "batt_min_cell_temp_c",
-        "batt_min_cell_vol_mv",
-        "batt_remain_cap_mah",
-        "bms_soh_pct",
-        "feed_grid_power_limit_w",
-        "grid_connection_power_w",
-        "grid_connection_state",
-        "home_energy_kwh",
-        "home_from_batt_w",
-        "home_from_grid_w",
-        "home_from_solar_w",
-        "home_w",
-        "pv2_current_a",
-        "pv3_energy_kwh",
-        "pv3_w",
-        "pv4_energy_kwh",
-        "pv4_w",
-        "pv_current_a",
-        "pv_voltage_v",
-        "soc_precise_pct",
-        "sys_grid_connection_power_w",
-    }),
-    "binary_sensor": frozenset({
-        "ac_outlet_1_enabled",
-        "ac_outlet_2_enabled",
-    }),
+    "sensor": frozenset(
+        {
+            "ac_current_a",
+            "ac_grid_connection_power_w",
+            "ac_outlet_1_w",
+            "ac_outlet_2_w",
+            "backup_reserve_pct",
+            "batt_charge_capacity_ah",
+            "batt_charge_discharge_state",
+            "batt_charge_energy_kwh",
+            "batt_charge_power_w",
+            "batt_design_cap_mah",
+            "batt_discharge_capacity_ah",
+            "batt_discharge_energy_kwh",
+            "batt_discharge_power_w",
+            "batt_full_cap_mah",
+            "batt_max_cell_temp_c",
+            "batt_max_cell_vol_mv",
+            "batt_max_mos_temp_c",
+            "batt_min_cell_temp_c",
+            "batt_min_cell_vol_mv",
+            "batt_remain_cap_mah",
+            "bms_soh_pct",
+            "feed_grid_power_limit_w",
+            "grid_connection_power_w",
+            "grid_connection_state",
+            "home_energy_kwh",
+            "home_from_batt_w",
+            "home_from_grid_w",
+            "home_from_solar_w",
+            "home_w",
+            "pv2_current_a",
+            "pv3_energy_kwh",
+            "pv3_w",
+            "pv4_energy_kwh",
+            "pv4_w",
+            "pv_current_a",
+            "pv_voltage_v",
+            "soc_precise_pct",
+            "sys_grid_connection_power_w",
+        }
+    ),
+    "binary_sensor": frozenset(
+        {
+            "ac_outlet_1_enabled",
+            "ac_outlet_2_enabled",
+        }
+    ),
     "switch": frozenset({"ac_outlet_1_switch", "ac_outlet_2_switch"}),
-    "number": frozenset({
-        "backup_reserve",
-        "led_brightness",
-        "stream_charge_limit",
-        "stream_discharge_limit",
-    }),
+    "number": frozenset(
+        {
+            "backup_reserve",
+            "led_brightness",
+            "stream_charge_limit",
+            "stream_discharge_limit",
+        }
+    ),
 }
 
 
@@ -99,9 +105,11 @@ def _register(
     *,
     integration: str = DOMAIN,
 ) -> str:
-    return er.async_get(hass).async_get_or_create(
-        domain, integration, unique_id, config_entry=entry
-    ).entity_id
+    return (
+        er.async_get(hass)
+        .async_get_or_create(domain, integration, unique_id, config_entry=entry)
+        .entity_id
+    )
 
 
 def _ids(hass: HomeAssistant) -> set[str]:
@@ -134,9 +142,7 @@ def test_every_current_powerstream_id_and_customization_survives(
 ) -> None:
     entry = _entry(hass)
     current = {
-        definition.key: _register(
-            hass, entry, "sensor", f"{HW51}_{definition.key}"
-        )
+        definition.key: _register(hass, entry, "sensor", f"{HW51}_{definition.key}")
         for definition in POWERSTREAM_SENSORS
     }
     registry = er.async_get(hass)
@@ -160,9 +166,7 @@ def test_cleanup_is_platform_and_key_exact(hass: HomeAssistant) -> None:
         # Similar but not exact unique-id key.
         _register(hass, entry, "sensor", f"{HW51}_home_w_extra"),
         # A row owned by another integration is outside the cleanup.
-        _register(
-            hass, entry, "sensor", f"{HW51}_home_w", integration="example"
-        ),
+        _register(hass, entry, "sensor", f"{HW51}_home_w", integration="example"),
     }
 
     _async_remove_retired_platform_entities(hass, entry)
@@ -174,9 +178,7 @@ def test_cleanup_is_platform_and_key_exact(hass: HomeAssistant) -> None:
 def test_other_entry_and_bk_device_survive(hass: HomeAssistant) -> None:
     entry = _entry(hass)
     other_entry = _entry(hass)
-    other_entry_row = _register(
-        hass, other_entry, "sensor", f"{HW51}_home_w"
-    )
+    other_entry_row = _register(hass, other_entry, "sensor", f"{HW51}_home_w")
     bk_row = _register(hass, entry, "sensor", f"{BK31}_home_w")
 
     _async_remove_retired_platform_entities(hass, entry)

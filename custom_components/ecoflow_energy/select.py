@@ -37,10 +37,10 @@ from .const import (
     DEVICE_TYPE_STREAM_AC5000,
     DEVICE_TYPE_WAVE3,
     DOMAIN,
-    EcoFlowSelectDef,
     POWEROCEAN_SELECTS,
     STREAMAC5000_SELECTS,
     WAVE3_SELECTS,
+    EcoFlowSelectDef,
     filter_defs_for_serial,
     supports_stream_ac5000_controls,
 )
@@ -71,7 +71,9 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up EcoFlow select entities from a config entry."""
-    coordinators: dict[str, EcoFlowDeviceCoordinator] = hass.data[DOMAIN][entry.entry_id]
+    coordinators: dict[str, EcoFlowDeviceCoordinator] = hass.data[DOMAIN][
+        entry.entry_id
+    ]
     entities: list[EcoFlowSelect] = []
 
     for coordinator in coordinators.values():
@@ -158,7 +160,9 @@ class EcoFlowSelect(CoordinatorEntity[EcoFlowDeviceCoordinator], SelectEntity):
         if option not in self._definition.options:
             _LOGGER.warning(
                 "Select option %s not in allowed options %s for %s",
-                option, self._definition.options, self._definition.key,
+                option,
+                self._definition.options,
+                self._definition.key,
             )
             return
 
@@ -166,9 +170,7 @@ class EcoFlowSelect(CoordinatorEntity[EcoFlowDeviceCoordinator], SelectEntity):
             if self.coordinator.device_type == DEVICE_TYPE_STREAM_AC5000:
                 # A different device family with its own modes, so it does not
                 # share the PowerOcean wire values.
-                ok = await self.coordinator.async_set_stream_ac5000_work_mode(
-                    option
-                )
+                ok = await self.coordinator.async_set_stream_ac5000_work_mode(option)
                 if not ok:
                     raise_set_failed(self.entity_id)
                 self._apply_optimistic_select(option)

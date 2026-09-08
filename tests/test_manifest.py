@@ -38,23 +38,28 @@ class TestManifest:
         m = _load_manifest()
         for req in m["requirements"]:
             assert "pycryptodome" not in req.lower(), (
-                f"pycryptodome must not be in requirements - use cryptography instead (found: {req})"
+                f"pycryptodome must not be in requirements - use cryptography instead "
+                f"(found: {req})"
             )
 
     def test_requirements_does_not_redeclare_paho_mqtt(self):
-        """paho-mqtt ships with HA core via the `mqtt` integration - must not be redeclared here."""
+        """paho-mqtt ships with HA core via the `mqtt` integration - must not be
+        redeclared here."""
         m = _load_manifest()
         for req in m["requirements"]:
             assert "paho-mqtt" not in req.lower(), (
-                f"paho-mqtt is already part of Home Assistant core; do not list it in manifest.json (found: {req})"
+                f"paho-mqtt is already part of Home Assistant core; do not list it in "
+                f"manifest.json (found: {req})"
             )
 
     def test_requirements_does_not_redeclare_protobuf(self):
-        """protobuf ships with HA core via several core integrations - must not be redeclared here."""
+        """protobuf ships with HA core via several core integrations - must not be
+        redeclared here."""
         m = _load_manifest()
         for req in m["requirements"]:
             assert "protobuf" not in req.lower(), (
-                f"protobuf is already part of Home Assistant core; do not list it in manifest.json (found: {req})"
+                f"protobuf is already part of Home Assistant core; do not list it in "
+                f"manifest.json (found: {req})"
             )
 
     def test_version_format(self):
@@ -70,5 +75,12 @@ class TestManifest:
 
     def test_required_keys_present(self):
         m = _load_manifest()
-        for key in ("domain", "name", "version", "config_flow", "iot_class", "requirements"):
+        for key in (
+            "domain",
+            "name",
+            "version",
+            "config_flow",
+            "iot_class",
+            "requirements",
+        ):
             assert key in m, f"Required key '{key}' missing from manifest.json"

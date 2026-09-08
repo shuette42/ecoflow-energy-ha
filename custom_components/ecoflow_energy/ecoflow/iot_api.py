@@ -16,7 +16,12 @@ from typing import Any
 
 import aiohttp
 
-from .const import IOT_API_BASE, IOT_CERT_PATH, IOT_DEVICE_LIST_PATH, IOT_MIN_FETCH_INTERVAL_S
+from .const import (
+    IOT_API_BASE,
+    IOT_CERT_PATH,
+    IOT_DEVICE_LIST_PATH,
+    IOT_MIN_FETCH_INTERVAL_S,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -75,12 +80,17 @@ class IoTApiClient:
         url = f"{self._base_url}{IOT_DEVICE_LIST_PATH}"
         headers = self._make_signed_headers()
         try:
-            async with self._session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+            async with self._session.get(
+                url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)
+            ) as resp:
                 resp.raise_for_status()
                 body = await resp.json()
                 data = body.get("data")
                 if data is None:
-                    _LOGGER.warning("IoT API device list: empty response - code=%s", body.get("code"))
+                    _LOGGER.warning(
+                        "IoT API device list: empty response - code=%s",
+                        body.get("code"),
+                    )
                     return None
                 # data == [] is a legitimate account with no bound devices
                 return data
@@ -138,12 +148,16 @@ class IoTApiClient:
         url = f"{self._base_url}{IOT_CERT_PATH}"
 
         try:
-            async with self._session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+            async with self._session.get(
+                url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)
+            ) as resp:
                 resp.raise_for_status()
                 body = await resp.json()
                 data = body.get("data")
                 if not data:
-                    _LOGGER.warning("IoT API: empty response - code=%s", body.get("code"))
+                    _LOGGER.warning(
+                        "IoT API: empty response - code=%s", body.get("code")
+                    )
                     return None
                 self._cached = data
                 _LOGGER.debug(

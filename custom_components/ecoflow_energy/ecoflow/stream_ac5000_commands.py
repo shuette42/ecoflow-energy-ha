@@ -173,9 +173,7 @@ def build_soc_limits_payload(
     return _build_envelope(pdata, device_sn, seq)
 
 
-def build_backup_socket_payload(
-    enabled: bool, device_sn: str, seq: int = 0
-) -> bytes:
+def build_backup_socket_payload(enabled: bool, device_sn: str, seq: int = 0) -> bytes:
     """Build a backup socket SET frame (config field 19).
 
     The app calls this the backup socket control. It reads back on
@@ -376,9 +374,7 @@ def build_task_payload(
     if not 0 <= power_w <= MAX_TASK_POWER_W:
         raise ValueError(f"power_w must be 0..{MAX_TASK_POWER_W}, got {power_w}")
     if not 0 <= charge_soc_target <= 100:
-        raise ValueError(
-            f"charge_soc_target must be 0..100, got {charge_soc_target}"
-        )
+        raise ValueError(f"charge_soc_target must be 0..100, got {charge_soc_target}")
 
     task = bytearray()
     task.extend(encode_field_varint(1, operation))

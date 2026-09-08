@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import time
 from datetime import timedelta
+from typing import TYPE_CHECKING
 
 from ..const import (
     DEVICE_TYPE_SMARTPLUG,
@@ -23,8 +24,13 @@ from ..const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+if TYPE_CHECKING:
+    from ._typing import CoordinatorState as _Base
+else:
+    _Base = object
 
-class AvailabilityMixin:
+
+class AvailabilityMixin(_Base):
     """Mixin providing graduated availability and stale checks."""
 
     @property
@@ -33,7 +39,8 @@ class AvailabilityMixin:
 
         Stages (app-auth MQTT-only path):
         - "healthy": data flowing within stale threshold
-        - "stale": data age > stale threshold, reconnect active, entities still available
+        - "stale": data age > stale threshold, reconnect active, entities still
+          available
         - "degraded": data age > soft_unavailable, entities available with old values
         - "unavailable": data age > hard_unavailable, entities go unavailable in HA
 
@@ -122,7 +129,8 @@ class AvailabilityMixin:
         """Schedule a periodic check for stale MQTT data."""
         stale_threshold_s = min(self._stale_threshold_s(), MQTT_HEALTH_CHECK_INTERVAL_S)
         self._stale_check_unsub = self.hass.loop.call_later(
-            stale_threshold_s, self._check_stale,
+            stale_threshold_s,
+            self._check_stale,
         )
 
     def _stale_threshold_s(self) -> float:
@@ -141,7 +149,9 @@ class AvailabilityMixin:
         mode to tell apart. `running` absent means no upload yet, which is
         treated as idle, the slower of the two cadences.
         """
-        return self.device_type == DEVICE_TYPE_WAVE3 and not self._device_data.get("running")
+        return self.device_type == DEVICE_TYPE_WAVE3 and not self._device_data.get(
+            "running"
+        )
 
     def _check_stale(self) -> None:
         """Check MQTT data freshness and manage graduated availability.
@@ -165,19 +175,24 @@ class AvailabilityMixin:
 
         stale_threshold_s = self._stale_threshold_s()
         age = self._mqtt_data_age()
-        mqtt_connected = self._mqtt_client is not None and self._mqtt_client.is_connected()
+        mqtt_connected = (
+            self._mqtt_client is not None and self._mqtt_client.is_connected()
+        )
 
         if self._http_client is not None:
             # Developer-auth: HTTP fallback available
             if age > stale_threshold_s and self.update_interval is None:
                 _LOGGER.info(
                     "MQTT stale for %s (%.0fs) - switching to HTTP fallback (tier 4)",
-                    self.device_tag, age,
+                    self.device_tag,
+                    age,
                 )
                 self._log_event("stale_detected", f"age={age:.0f}s, http_fallback")
                 self.update_interval = timedelta(seconds=HTTP_FALLBACK_INTERVAL_S)
             elif age <= stale_threshold_s and self.update_interval is not None:
-                _LOGGER.info("MQTT recovered for %s - disabling HTTP fallback", self.device_tag)
+                _LOGGER.info(
+                    "MQTT recovered for %s - disabling HTTP fallback", self.device_tag
+                )
                 self._log_event("stale_recovered", "http_fallback_disabled")
                 self.update_interval = None
         else:
@@ -216,13 +231,16 @@ class AvailabilityMixin:
                         )
                     else:
                         _LOGGER.info(
-                            "MQTT stale for %s [%s] (%.0fs) while connected - forcing reconnect",
+                            "MQTT stale for %s [%s] (%.0fs) while connected - "
+                            "forcing reconnect",
                             self.device_name,
                             self.device_tag,
                             age,
                         )
                         self._log_event("stale_force_reconnect", f"age={age:.0f}s")
-                        self.hass.async_add_executor_job(self._mqtt_client.force_reconnect)
+                        self.hass.async_add_executor_job(
+                            self._mqtt_client.force_reconnect
+                        )
                         # Next silence starts with the cheap remedy again.
                         self._stale_reactivate_tried = False
 
@@ -288,6 +306,6 @@ class AvailabilityMixin:
 
         # Re-schedule unless shutting down
         self._stale_check_unsub = self.hass.loop.call_later(
-            min(stale_threshold_s, MQTT_HEALTH_CHECK_INTERVAL_S), self._check_stale,
+            min(stale_threshold_s, MQTT_HEALTH_CHECK_INTERVAL_S),
+            self._check_stale,
         )
-

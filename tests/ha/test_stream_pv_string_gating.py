@@ -17,7 +17,6 @@ from typing import Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
-
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.const import (
@@ -123,7 +122,7 @@ class TestDefinitions:
     def test_the_higher_strings_are_gated(self) -> None:
         gated = {sensor.key for sensor in STREAM_SENSORS if sensor.accessory}
 
-        assert HIGHER_STRING_KEYS <= gated
+        assert gated >= HIGHER_STRING_KEYS
 
     def test_the_lower_strings_are_not(self) -> None:
         """Both modes fill strings 1 and 2, so gating them would delay them
@@ -142,9 +141,7 @@ class TestDefinitions:
         that is not fitted, so the stronger gate must stay off."""
         gated = [sensor for sensor in STREAM_SENSORS if sensor.accessory]
 
-        assert not [
-            sensor.key for sensor in gated if sensor.accessory_needs_nonzero
-        ]
+        assert not [sensor.key for sensor in gated if sensor.accessory_needs_nonzero]
 
     def test_the_gate_does_not_change_the_default(self) -> None:
         """The gate decides whether the entity exists, the default whether it
@@ -164,13 +161,11 @@ class TestGating:
 
         assert not _keys(created) & HIGHER_STRING_KEYS
 
-    async def test_the_lower_strings_are_unaffected(
-        self, hass: HomeAssistant
-    ) -> None:
+    async def test_the_lower_strings_are_unaffected(self, hass: HomeAssistant) -> None:
         _, created = await _setup(hass, TWO_STRING_REPORT)
         keys = _keys(created)
 
-        assert LOWER_STRING_KEYS <= keys
+        assert keys >= LOWER_STRING_KEYS
         assert "soc_pct" in keys
 
     async def test_a_four_string_report_creates_all_of_them(
@@ -216,9 +211,7 @@ class TestLateReport:
 
         assert _keys(created) & HIGHER_STRING_KEYS == {"pv3_w"}
 
-    async def test_no_duplicate_on_further_updates(
-        self, hass: HomeAssistant
-    ) -> None:
+    async def test_no_duplicate_on_further_updates(self, hass: HomeAssistant) -> None:
         coordinator, created = await _setup(hass, TWO_STRING_REPORT)
 
         for watts in (402.0, 411.0):

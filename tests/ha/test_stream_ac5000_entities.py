@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import Any
 
 from homeassistant.core import HomeAssistant
-
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.binary_sensor import (
@@ -46,11 +45,13 @@ from custom_components.ecoflow_energy.ecoflow.const import (
     get_device_name,
     get_device_type,
 )
+from custom_components.ecoflow_energy.entity import reading_reported
 from custom_components.ecoflow_energy.number import async_setup_entry as number_setup
 from custom_components.ecoflow_energy.select import async_setup_entry as select_setup
-from custom_components.ecoflow_energy.entity import reading_reported
 from custom_components.ecoflow_energy.sensor import (
     _get_sensor_defs,
+)
+from custom_components.ecoflow_energy.sensor import (
     async_setup_entry as sensor_setup,
 )
 from custom_components.ecoflow_energy.switch import async_setup_entry as switch_setup
@@ -194,9 +195,7 @@ class TestStreamAC5000EntitySet:
         assert solar.translation_key == "third_party_solar_w"
 
         label = json.loads(
-            Path(
-                "custom_components/ecoflow_energy/translations/en.json"
-            ).read_text()
+            Path("custom_components/ecoflow_energy/translations/en.json").read_text()
         )["entity"]["sensor"][solar.translation_key]["name"]
         assert label == "Third-Party Solar Power"
 
@@ -313,7 +312,9 @@ class TestStreamAC5000Definitions:
         one without the other would create a counter that can never move."""
         by_key = {s.key: s for s in STREAMAC5000_SENSORS}
         for power_key, energy_key in STREAMAC5000_POWER_TO_ENERGY.items():
-            assert by_key[energy_key].accessory == by_key[power_key].accessory, energy_key
+            assert by_key[energy_key].accessory == by_key[power_key].accessory, (
+                energy_key
+            )
 
     def test_a_zero_does_not_announce_an_accessory(self) -> None:
         """The gate itself, not just the flag that switches it on."""
@@ -505,9 +506,7 @@ class TestTaskListShrinkRouting:
         """The mirror: a clear restricted to `get_reply` would fail here."""
         coordinator = self._coordinator(hass)
 
-        coordinator._parse_message(
-            self.PROPERTY_TOPIC, self._frame("both_tasks_push")
-        )
+        coordinator._parse_message(self.PROPERTY_TOPIC, self._frame("both_tasks_push"))
         after = coordinator._parse_message(
             self.PROPERTY_TOPIC, self._frame("after_delete_push")
         )

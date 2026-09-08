@@ -7,14 +7,13 @@ a real (in-memory) Home Assistant instance via the ``hass`` fixture.
 from __future__ import annotations
 
 import threading
-from pathlib import Path
 from collections.abc import AsyncGenerator
+from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
-
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 
@@ -32,9 +31,9 @@ def _record_threads_before_test():
         if thread not in before and "_run_safe_shutdown_loop" in thread.name:
             thread.join(timeout=5)
 
+
 from custom_components.ecoflow_energy.const import (  # noqa: E402
     AUTH_METHOD_APP,
-    AUTH_METHOD_DEVELOPER,
     CONF_ACCESS_KEY,
     CONF_AUTH_METHOD,
     CONF_DEVICES,
@@ -53,9 +52,9 @@ from custom_components.ecoflow_energy.const import (  # noqa: E402
     MODE_STANDARD,
 )
 
-
 # ---------------------------------------------------------------------------
-# Enable custom integration discovery (required by pytest-homeassistant-custom-component)
+# Enable custom integration discovery (required by
+# pytest-homeassistant-custom-component)
 # ---------------------------------------------------------------------------
 
 
@@ -265,11 +264,13 @@ def mock_http_client():
         "custom_components.ecoflow_energy.coordinator.setup.EcoFlowHTTPQuota",
     ) as cls:
         instance = cls.return_value
-        instance.get_quota_all = AsyncMock(return_value={
-            "pd.soc": 75,
-            "pd.wattsInSum": 200,
-            "pd.wattsOutSum": 100,
-        })
+        instance.get_quota_all = AsyncMock(
+            return_value={
+                "pd.soc": 75,
+                "pd.wattsInSum": 200,
+                "pd.wattsOutSum": 100,
+            }
+        )
         yield instance
 
 

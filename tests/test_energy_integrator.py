@@ -7,7 +7,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
 from ecoflow_energy.ecoflow.energy_integrator import EnergyIntegrator
 from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (
     parse_stream_ac5000_message,
@@ -58,7 +57,7 @@ def _trapezoid_kwh(readings, dt=30.0):
     """
     watt_seconds = sum(
         (first + second) / 2.0 * dt
-        for first, second in zip(readings, readings[1:])
+        for first, second in zip(readings, readings[1:], strict=False)
     )
     return watt_seconds / 3_600_000.0
 
@@ -66,7 +65,9 @@ def _trapezoid_kwh(readings, dt=30.0):
 class TestStateSnapshot:
     """The read-only view diagnostics reports from."""
 
-    def test_snapshot_reports_the_running_state_not_the_file(self, integrator, state_file):
+    def test_snapshot_reports_the_running_state_not_the_file(
+        self, integrator, state_file
+    ):
         """Nothing has been flushed, so the file does not exist yet."""
         integrator._state["solar"] = (5.0, 1000.0, 250.0)
         with patch(
@@ -204,7 +205,9 @@ class TestPowerChanges:
 
         assert counted == pytest.approx(_trapezoid_kwh(readings))
 
-    def test_alternating_counts_the_same_as_its_mean_held_steady(self, integrator, state_file):
+    def test_alternating_counts_the_same_as_its_mean_held_steady(
+        self, integrator, state_file
+    ):
         """Half the time at 2000 W is the same energy as all of it at 1000 W.
 
         Stated as an equivalence rather than a total, because the point is not
@@ -427,17 +430,17 @@ class TestPersistence:
         """
         integrator = EnergyIntegrator(state_file)
         integrator._state["solar"] = (1.0, time.monotonic(), 0.0)
-        failing = (
-            "/config/.storage/ecoflow_energy_TEST1234567890AB.json"
-        )
+        failing = "/config/.storage/ecoflow_energy_TEST1234567890AB.json"
 
-        with caplog.at_level("WARNING"):
-            with patch.object(
+        with (
+            caplog.at_level("WARNING"),
+            patch.object(
                 type(integrator._state_file),
                 "write_text",
                 side_effect=PermissionError(13, "Permission denied", failing),
-            ):
-                integrator._save_state()
+            ),
+        ):
+            integrator._save_state()
 
         # Positive control: the failure was logged at all.
         assert any("save energy state" in r.getMessage() for r in caplog.records)
@@ -634,7 +637,9 @@ class TestPlausibilityBounds:
         from pathlib import Path
 
         Path(state_file).write_text(
-            json.dumps({"solar": [self.POISONED_KWH, 100.0, 0.0], "home": [42.0, 100.0, 0.0]})
+            json.dumps(
+                {"solar": [self.POISONED_KWH, 100.0, 0.0], "home": [42.0, 100.0, 0.0]}
+            )
         )
         with patch(
             "ecoflow_energy.ecoflow.energy_integrator.time.monotonic",
@@ -703,12 +708,8 @@ class TestStreamAc5000Readings:
                 values.append(float(value))
         return values
 
-    @pytest.mark.parametrize(
-        "key", ["grid_export_power_w", "batt_discharge_power_w"]
-    )
-    def test_a_counter_climbs_on_readings_that_pass_through_zero(
-        self, integrator, key
-    ):
+    @pytest.mark.parametrize("key", ["grid_export_power_w", "batt_discharge_power_w"])
+    def test_a_counter_climbs_on_readings_that_pass_through_zero(self, integrator, key):
         """Both counters read 0,00 on the reporter's dashboard all day."""
         readings = self._readings(key)
 

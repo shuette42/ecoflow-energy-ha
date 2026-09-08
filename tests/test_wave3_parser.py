@@ -21,7 +21,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from ecoflow_energy.ecoflow.parsers.stream_proto import _iter_fields, _pdata_candidates
 from ecoflow_energy.ecoflow.parsers.wave3_proto import (
     _ERRCODE_LIST_FIELD,
@@ -42,7 +41,9 @@ FIXTURE = Path(__file__).parent / "fixtures" / "wave3" / "ac71_frames_plan046.js
 
 # A different device's parser fixture, reused by one test only to prove the
 # WAVE 3 map does not accidentally match a Smart Meter frame's field numbers.
-_METER_FIXTURE = Path(__file__).parent / "fixtures" / "smart_meter" / "bk21_frames_issue331.json"
+_METER_FIXTURE = (
+    Path(__file__).parent / "fixtures" / "smart_meter" / "bk21_frames_issue331.json"
+)
 
 _MASKED_TAGS = ("standby_full", "runtime_full")
 
@@ -358,7 +359,9 @@ def test_a_stray_field_before_the_mode_list_does_not_shift_the_modes() -> None:
     (PLAN-047 review, finding A2).
     """
 
-    def _prepend_stray(entries: list[tuple[int, int, bytes]]) -> list[tuple[int, int, bytes]]:
+    def _prepend_stray(
+        entries: list[tuple[int, int, bytes]],
+    ) -> list[tuple[int, int, bytes]]:
         return [(2, 0, encode_varint(1))] + entries
 
     frame = _rebuild_mode_info(0, _prepend_stray)
@@ -377,7 +380,9 @@ def test_a_mode_list_with_the_wrong_entry_count_publishes_no_mode_data() -> None
     baseline = parse_wave3_message(_payload(0))
     assert baseline is not None
 
-    def _drop_entry_zero(entries: list[tuple[int, int, bytes]]) -> list[tuple[int, int, bytes]]:
+    def _drop_entry_zero(
+        entries: list[tuple[int, int, bytes]],
+    ) -> list[tuple[int, int, bytes]]:
         return entries[1:]
 
     frame = _rebuild_mode_info(0, _drop_entry_zero)
@@ -574,7 +579,9 @@ _RANGE_TEMP_KEYS = (
     "temp_evaporator_c",
     "temp_compressor_discharge_c",
 )
-_RANGE_OPERATING_MODES = frozenset({"cooling", "heating", "fan", "dehumidify", "constant_temp"})
+_RANGE_OPERATING_MODES = frozenset(
+    {"cooling", "heating", "fan", "dehumidify", "constant_temp"}
+)
 
 
 def test_every_full_frame_stays_inside_the_measured_ranges() -> None:
@@ -587,7 +594,9 @@ def test_every_full_frame_stays_inside_the_measured_ranges() -> None:
     frame decoded" check, but not a floor on how much was measured.
     """
     frames = _frames()
-    masked_full_indices = [i for i, frame in enumerate(frames) if frame["tag"] in _ALL_MASKED_FULL_TAGS]
+    masked_full_indices = [
+        i for i, frame in enumerate(frames) if frame["tag"] in _ALL_MASKED_FULL_TAGS
+    ]
     assert len(masked_full_indices) == 11
 
     results = [parse_wave3_message(_payload(i)) for i in masked_full_indices]

@@ -16,7 +16,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
-
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.const import (
@@ -179,9 +178,7 @@ class TestTheStandardModePush:
             {"param": {"20_1.invOutputWatts": 1090, "20_1.batSoc": 87}}
         ).encode()
 
-        with patch.object(
-            coordinator.hass.loop, "call_soon_threadsafe"
-        ) as dispatch:
+        with patch.object(coordinator.hass.loop, "call_soon_threadsafe") as dispatch:
             coordinator._on_mqtt_message(
                 "/open/test_account/HW51TEST00000001/quota", payload
             )
@@ -198,9 +195,7 @@ class TestTheStandardModePush:
     ) -> None:
         payload = json.dumps({"param": {"20_1.somethingNew": 1}}).encode()
 
-        with patch.object(
-            coordinator.hass.loop, "call_soon_threadsafe"
-        ) as dispatch:
+        with patch.object(coordinator.hass.loop, "call_soon_threadsafe") as dispatch:
             coordinator._on_mqtt_message(
                 "/open/test_account/HW51TEST00000001/quota", payload
             )

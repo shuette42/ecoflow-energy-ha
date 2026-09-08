@@ -25,10 +25,8 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
-
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.const import (
@@ -54,7 +52,6 @@ from custom_components.ecoflow_energy.number import (
 from custom_components.ecoflow_energy.switch import (
     async_setup_entry as switch_setup,
 )
-
 from tests.test_powerocean_timer_task import (
     LIST_ARMED_1000W,
     LIST_ARMED_1500W,
@@ -486,8 +483,12 @@ class TestTheNumber:
 
 @pytest.mark.parametrize(
     "missing",
-    ["schedule_1_type", "schedule_1_time_mode", "schedule_1_time_param",
-     "schedule_1_time_table"],
+    [
+        "schedule_1_type",
+        "schedule_1_time_mode",
+        "schedule_1_time_param",
+        "schedule_1_time_table",
+    ],
 )
 async def test_a_slot_missing_an_echo_field_refuses_the_write(
     hass: HomeAssistant, missing: str
@@ -686,9 +687,7 @@ class TestTheArmingHold:
     async def test_a_stale_report_cannot_revert_a_flag_just_written(
         self, hass: HomeAssistant
     ) -> None:
-        coordinator, switches, numbers, mqtt = await _setup(
-            hass, LIST_ARMED_1500W
-        )
+        coordinator, switches, numbers, mqtt = await _setup(hass, LIST_ARMED_1500W)
         switch = _prepare(_by_key(switches, "schedule_1_enabled"), hass)
         number = _prepare(_by_key(numbers, "schedule_1_power_w"), hass)
 
