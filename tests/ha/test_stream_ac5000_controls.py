@@ -78,14 +78,14 @@ def _coordinator(
 def _number(coordinator: EcoFlowDeviceCoordinator, key: str) -> EcoFlowNumber:
     defn = next(d for d in STREAMAC5000_NUMBERS if d.key == key)
     entity = EcoFlowNumber(coordinator, defn)
-    entity.async_write_ha_state = MagicMock()
+    entity.async_write_ha_state = MagicMock()  # type: ignore[misc]
     return entity
 
 
 def _select(coordinator: EcoFlowDeviceCoordinator, key: str) -> EcoFlowSelect:
     defn = next(d for d in STREAMAC5000_SELECTS if d.key == key)
     entity = EcoFlowSelect(coordinator, defn)
-    entity.async_write_ha_state = MagicMock()
+    entity.async_write_ha_state = MagicMock()  # type: ignore[misc]
     return entity
 
 
@@ -163,7 +163,7 @@ def _config_field(pdata: bytes) -> int:
 def _switch(coordinator: EcoFlowDeviceCoordinator, key: str) -> EcoFlowSwitch:
     defn = next(d for d in STREAMAC5000_SWITCHES if d.key == key)
     entity = EcoFlowSwitch(coordinator, defn)
-    entity.async_write_ha_state = MagicMock()
+    entity.async_write_ha_state = MagicMock()  # type: ignore[misc]
     return entity
 
 
@@ -354,7 +354,7 @@ class TestSocLimitNumbers:
             d for d in STREAMAC5000_SWITCHES if d.key == "backup_reserve_switch"
         )
         entity = EcoFlowSwitch(coordinator, defn)
-        entity.async_write_ha_state = MagicMock()
+        entity.async_write_ha_state = MagicMock()  # type: ignore[misc]
 
         await entity.async_turn_off()
 
@@ -373,7 +373,7 @@ class TestSocLimitNumbers:
             d for d in STREAMAC5000_SWITCHES if d.key == "backup_reserve_switch"
         )
         entity = EcoFlowSwitch(coordinator, defn)
-        entity.async_write_ha_state = MagicMock()
+        entity.async_write_ha_state = MagicMock()  # type: ignore[misc]
 
         with pytest.raises(HomeAssistantError) as err:
             await entity.async_turn_off()

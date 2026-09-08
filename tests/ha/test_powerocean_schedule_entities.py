@@ -262,6 +262,11 @@ class TestStandardMode:
         assert _schedule_keys(sensors) == set()
         assert _schedule_keys(binary_sensors) == set()
 
+        # Standard Mode polls, so the base class arms a refresh timer this
+        # test would otherwise leave running. The Enhanced Mode tests above
+        # set no interval and have nothing to cancel.
+        await coordinator.async_shutdown()
+
 
 class TestScheduleAppearsAndDisappears:
     async def test_a_schedule_created_later_adds_its_entities(

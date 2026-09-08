@@ -16,10 +16,10 @@ updates:
         patterns: ["*"]
         update-types: ["minor", "patch"]
     ignore:
-      # pytest-homeassistant-custom-component >=0.13.317 requires Python 3.14.
-      # Our CI runs Python 3.13. Re-evaluate when CI is upgraded to 3.14.
+      # The test framework decides which Home Assistant the type gate reads its
+      # annotations from, so it is raised deliberately, in a commit that fixes
+      # whatever the newer release reports, rather than by a dependency bump.
       - dependency-name: "pytest-homeassistant-custom-component"
-        versions: [">=0.13.317"]
 
   # GitHub Actions versions
   - package-ecosystem: "github-actions"

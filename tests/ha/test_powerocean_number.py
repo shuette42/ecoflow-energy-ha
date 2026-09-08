@@ -1037,7 +1037,7 @@ class TestPowerOceanAppSurplusAutoSync:
         coordinator.async_set_powerocean_soc_debounced = AsyncMock(return_value=True)
         defn = next(d for d in POWEROCEAN_NUMBERS if d.key == "solar_surplus_threshold")
         entity = EcoFlowNumber(coordinator, defn)
-        entity.async_write_ha_state = MagicMock()
+        entity.async_write_ha_state = MagicMock()  # type: ignore[misc]
         with patch(
             "custom_components.ecoflow_energy.number.time.monotonic",
             return_value=2000.0,
