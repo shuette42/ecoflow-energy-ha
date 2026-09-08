@@ -19,6 +19,11 @@ import re
 from pathlib import Path
 
 import pytest
+from ecoflow_energy.ecoflow.frame_capture import _encrypted_regions, _xor
+from ecoflow_energy.ecoflow.proto_encoding import (
+    encode_field_bytes,
+    encode_field_varint,
+)
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures"
 
@@ -58,7 +63,7 @@ def _frames(payload: object) -> list[dict]:
             value = payload.get(key)
             if isinstance(value, list):
                 return [item for item in value if isinstance(item, dict)]
-        if "hex" in payload:
+        if "hex" in payload or "frame_hex" in payload:
             return [payload]
     return []
 
@@ -75,7 +80,16 @@ def test_the_fixture_tree_is_not_empty() -> None:
 
 @pytest.mark.parametrize("path", _fixture_files(), ids=lambda p: p.name)
 def test_no_identifier_survived_masking(path: Path) -> None:
-    """No serial, UUID, MAC or account id may reach a public fixture."""
+    """No serial, UUID, MAC or account id may reach a public fixture.
+
+    A header whose `enc_type` field is 1 XOR-masks its own `pdata` (or, on a
+    single-header frame, the shared payload) with the low byte of its own
+    `seq` field (PLAN-128). None of the checks above can see a string once
+    that mask sits on top of it, so every region `_encrypted_regions` finds
+    is un-XOR-ed with the header's own key and re-checked with the same
+    `_UUID`/`_MAC`/`_RUN` patterns. Measured on this corpus: 0 new failures
+    over 164 hex blobs and 67 `enc_type == 1` headers.
+    """
     text_of_file = path.read_bytes().decode("latin1")
     try:
         frames = _frames(json.loads(text_of_file))
@@ -93,7 +107,7 @@ def test_no_identifier_survived_masking(path: Path) -> None:
     assert not _MAC.search(text_of_file), f"{path.name}: unmasked MAC"
 
     for index, frame in enumerate(frames):
-        hex_payload = frame.get("hex")
+        hex_payload = frame.get("hex") or frame.get("frame_hex")
         if not hex_payload:
             continue
         text = bytes.fromhex(hex_payload).decode("latin1")
@@ -105,9 +119,94 @@ def test_no_identifier_survived_masking(path: Path) -> None:
                 continue
             assert set(run) == {"X"}, f"{where}: unmasked run {run!r}"
 
+        # The mask under the mask: unmask every region the header itself
+        # declares XOR-ed and run the same three checks over that plaintext.
+        # A region with no `seq` has no key to derive and is left alone here
+        # too - `sanitize_frame` cannot mask what it cannot decrypt either.
+        raw_frame = bytes.fromhex(hex_payload)
+        for region in _encrypted_regions(raw_frame):
+            if region.key is None:
+                continue
+            region_text = _xor(raw_frame[region.start : region.end], region.key).decode(
+                "latin1"
+            )
+            assert not _UUID.search(region_text), (
+                f"{where}: unmasked UUID under the mask"
+            )
+            assert not _MAC.search(region_text), (
+                f"{where}: unmasked MAC under the mask"
+            )
+            for run in _RUN.findall(region_text):
+                if run in _PLACEHOLDERS:
+                    continue
+                assert set(run) == {"X"}, (
+                    f"{where}: unmasked run under the mask {run!r}"
+                )
+
         # Only where the field is an actual MQTT topic. Several fixtures reuse
         # the same key for the message type ("property", "get_reply"), which
         # carries no identifier and must not be asked to look templated.
         topic = frame.get("topic") or ""
         if "/" in topic:
             assert "{sn}" in topic or "XXXX" in topic, f"{where}: raw topic {topic}"
+
+
+def test_the_encrypted_region_walk_still_finds_its_headers() -> None:
+    """A floor on what the region check inspects, not only on what it flags.
+
+    `test_no_identifier_survived_masking` only fails when a region it looked
+    at was dirty. A `_encrypted_regions` that silently started returning `[]`
+    for every frame would make every one of those assertions vacuously true,
+    and the corpus would read as clean for the wrong reason - a counter that
+    counts the loop instead of the comparison, which this repo has been
+    burned by before.
+
+    Measured on this corpus: 164 hex blobs across the fixture tree, 67 of
+    which carry at least one `enc_type == 1` header. Both are floors rather
+    than exact counts, so a new fixture may raise them without breaking this
+    test.
+    """
+    blobs = regions = 0
+    for path in _fixture_files():
+        try:
+            frames = _frames(
+                json.loads(path.read_text(encoding="utf-8", errors="replace"))
+            )
+        except ValueError:
+            frames = [{"hex": path.read_bytes().hex()}]
+        for frame in frames:
+            hex_payload = frame.get("hex") or frame.get("frame_hex")
+            if not hex_payload:
+                continue
+            blobs += 1
+            regions += len(_encrypted_regions(bytes.fromhex(hex_payload)))
+    assert blobs >= 164, blobs
+    assert regions >= 67, regions
+
+
+def test_the_region_check_has_a_positive_control() -> None:
+    """Confirm the pattern applied under the mask can actually fail.
+
+    Every fixture on file reports clean because `sanitize_frame` already
+    cleaned it - that alone does not prove the region-aware assertions in
+    `test_no_identifier_survived_masking` have any way to fail. This is that
+    check's positive control: it builds one XOR-masked
+    header directly, the way a device would send it, without running it
+    through `sanitize_frame` first, and confirms `_encrypted_regions` finds
+    the region and `_UUID` finds the identifier once it is decrypted with
+    the header's own key - the same two steps the fixture gate performs.
+    """
+    key = 0x42
+    uuid_plain = b"a1b2c3d4-0000-4000-8000-abcdefabcdef"
+    header = bytearray()
+    header.extend(encode_field_varint(6, 1))  # enc_type = XOR
+    header.extend(encode_field_varint(14, key))  # seq
+    header.extend(encode_field_bytes(1, bytes(b ^ key for b in uuid_plain)))  # pdata
+    frame = encode_field_bytes(1, bytes(header))
+
+    regions = _encrypted_regions(frame)
+    assert len(regions) == 1
+    region = regions[0]
+    plain = _xor(frame[region.start : region.end], region.key)
+
+    assert _UUID.search(plain.decode("latin1"))

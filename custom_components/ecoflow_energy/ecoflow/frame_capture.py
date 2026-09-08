@@ -20,7 +20,7 @@ import json
 import re
 import time
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, NamedTuple
 
 # Filler byte for masked identifiers. Replacing a secret with a run of the
 # same length keeps every byte offset in the frame intact, which is what a
@@ -172,27 +172,27 @@ def _mask_delimited_identifiers(payload: bytes) -> bytes:
     return bytes(out)
 
 
-def sanitize_frame(payload: bytes, secrets: list[str]) -> bytes:
-    """Mask identifying strings inside a raw frame.
-
-    Protobuf frames carry the device serial and, on some commands, the
-    account user id as plain ASCII. Each is replaced by a filler of equal
-    length, in every case variant the payload might use.
+def _plain_passes(payload: bytes, secrets: list[str]) -> bytes:
+    """Every mask this module applies, over bytes that are already plain.
 
     Named identifiers are masked first, then anything else shaped like a
     serial, then anything written as a UUID, then a lower-case hex run a
     hyphen joins to a serial-shaped run, then the city half of any time zone
     the device reports, then anything a device presents as a whole
-    length-delimited field of identifier-shaped characters. The second pass matters
-    because a frame
-    also carries the serial of every battery pack and of any attached
-    accessory, and the caller cannot name what it has not discovered yet. The
-    third and fourth catch identifiers too short, or too oddly shaped, for
-    the second to risk matching: a UUID by its own hyphenated shape, and a
-    hex run by the serial it is joined to - which is how a 12-character one
-    reached a public issue attachment before anyone noticed. Masking
-    preserves length, so byte offsets survive every pass and a field-layout
-    analysis still works.
+    length-delimited field of identifier-shaped characters. The second pass
+    matters because a frame also carries the serial of every battery pack
+    and of any attached accessory, and the caller cannot name what it has
+    not discovered yet. The third and fourth catch identifiers too short, or
+    too oddly shaped, for the second to risk matching: a UUID by its own
+    hyphenated shape, and a hex run by the serial it is joined to - which is
+    how a 12-character one reached a public issue attachment before anyone
+    noticed. Masking preserves length, so byte offsets survive every pass
+    and a field-layout analysis still works.
+
+    "Plain" is the operative word: none of these passes can see a string
+    once the device has XOR-masked it. `sanitize_frame` is what runs this
+    over both the frame at large and the one region a header may declare
+    encrypted.
     """
     sanitized = payload
     for secret in secrets:
@@ -209,6 +209,220 @@ def sanitize_frame(payload: bytes, secrets: list[str]) -> bytes:
         lambda m: m.group(1) + _MASK_BYTE * len(m.group(2)), sanitized
     )
     return _mask_delimited_identifiers(sanitized)
+
+
+# The device does not always send a string plainly. Some commands mark their
+# header `enc_type == 1` and XOR every byte of that header's `pdata` (or, on
+# a single-header frame with no `pdata`, the whole field-2 payload) with the
+# low byte of that header's own `seq`. None of the passes above can see a
+# string once this mask sits on top of it - it is neither the shape of a
+# serial, a UUID, a hex run, a time zone, nor a delimited identifier, because
+# XOR with a non-zero key does not preserve the alphabet a byte started in.
+_ENC_TYPE_XOR = 1
+_HDR_FIELD_PDATA = 1
+_HDR_FIELD_ENC_TYPE = 6
+_HDR_FIELD_SEQ = 14
+
+
+class _EncRegion(NamedTuple):
+    """One byte span a header declares XOR-masked.
+
+    ``key`` is ``None`` when the header set ``enc_type`` but named no
+    ``seq`` - the span exists but there is nothing to derive a key from, so
+    the region is walked and then left alone rather than guessed at.
+    """
+
+    start: int
+    end: int
+    key: int | None
+
+
+def _header_fields(mv: memoryview, start: int, end: int) -> dict[str, Any]:
+    """Walk one header submessage span, reading its enc_type, seq and pdata span.
+
+    ``start``/``end`` and the returned ``pdata_span`` are all offsets into
+    ``mv`` itself - the full frame, not a copy of the header - so a caller
+    can slice the region straight out of the original payload.
+    """
+    from .proto.decoder import _read_varint
+
+    out: dict[str, Any] = {}
+    i = start
+    while i < end:
+        key, i = _read_varint(mv, i)
+        if key is None:
+            break
+        fn, wt = key >> 3, key & 0x07
+        if wt == 0:
+            val, i = _read_varint(mv, i)
+            if val is None:
+                break
+            if fn == _HDR_FIELD_ENC_TYPE:
+                out["enc_type"] = val
+            elif fn == _HDR_FIELD_SEQ:
+                out["seq"] = val
+        elif wt == 2:
+            length, i = _read_varint(mv, i)
+            if length is None:
+                break
+            field_end = i + length
+            if field_end > end:
+                break
+            if fn == _HDR_FIELD_PDATA:
+                out["pdata_span"] = (i, field_end)
+            i = field_end
+        elif wt == 1:
+            i += 8
+        elif wt == 5:
+            i += 4
+        else:
+            break
+    return out
+
+
+def _encrypted_regions(payload: bytes) -> list[_EncRegion]:
+    """Byte spans of every payload a header declares XOR-masked.
+
+    Walks the outer frame exactly as `decode_header_message` does - field 1
+    (wire type 2) is a repeatable header submessage, field 2 (wire type 2)
+    is the payload, everything else is skipped by wire type - but records
+    byte spans instead of decoded values, because `sanitize_frame` needs to
+    slice and splice at those offsets rather than read them.
+
+    A region is emitted only when a header's `enc_type` is
+    `_ENC_TYPE_XOR`: its own `pdata` span if that field is present and
+    non-empty, else the frame's field-2 payload span if this is the only
+    header the frame carries (a shared payload with more than one header is
+    undecidable and gets no region at all). The frame analyzer this project
+    uses applies the same fallback, so the sanitizer and the analyzer agree
+    on what a frame is.
+
+    Wrapped so a malformed frame can never raise here: on any failure this
+    returns `[]` and the frame keeps the plain passes' behaviour, mirroring
+    the guarantee `decode_cmd_headers` makes for the same reason - a capture
+    path must never affect ingest.
+    """
+    try:
+        from .proto.decoder import _read_varint
+
+        mv = memoryview(payload)
+        n = len(mv)
+        i = 0
+        header_spans: list[tuple[int, int]] = []
+        payload_span: tuple[int, int] | None = None
+        while i < n:
+            field_key, i = _read_varint(mv, i)
+            if field_key is None:
+                break
+            fn, wt = field_key >> 3, field_key & 0x07
+            if fn == 1 and wt == 2:
+                length, i = _read_varint(mv, i)
+                if length is None:
+                    break
+                end = i + length
+                if end > n:
+                    break
+                header_spans.append((i, end))
+                i = end
+            elif fn == 2 and wt == 2:
+                length, i = _read_varint(mv, i)
+                if length is None:
+                    break
+                end = i + length
+                if end > n:
+                    break
+                payload_span = (i, end)
+                i = end
+            elif wt == 0:
+                val, i = _read_varint(mv, i)
+                if val is None:
+                    break
+            elif wt == 1:
+                i += 8
+            elif wt == 2:
+                length, i = _read_varint(mv, i)
+                if length is None:
+                    break
+                i += length
+            elif wt == 5:
+                i += 4
+            else:
+                break
+
+        regions: list[_EncRegion] = []
+        for start, end in header_spans:
+            fields = _header_fields(mv, start, end)
+            if fields.get("enc_type") != _ENC_TYPE_XOR:
+                continue
+            seq = fields.get("seq")
+            region_key = (seq & 0xFF) if isinstance(seq, int) else None
+            pdata_span = fields.get("pdata_span")
+            if pdata_span is not None and pdata_span[1] > pdata_span[0]:
+                regions.append(_EncRegion(pdata_span[0], pdata_span[1], region_key))
+            elif len(header_spans) == 1 and payload_span is not None:
+                regions.append(_EncRegion(payload_span[0], payload_span[1], region_key))
+        return regions
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _xor(blob: bytes, key: int) -> bytes:
+    """Apply the device's payload mask. Its own inverse; key 0 is a no-op."""
+    return blob if not key else bytes(value ^ key for value in blob)
+
+
+def sanitize_frame(payload: bytes, secrets: list[str]) -> bytes:
+    """Mask identifying strings inside a raw frame.
+
+    Protobuf frames carry the device serial and, on some commands, the
+    account user id as plain ASCII. Each is replaced by a filler of equal
+    length, in every case variant the payload might use. `_plain_passes`
+    holds the full set of masks this applies to bytes that are already
+    plain; see its docstring for what each one catches and why.
+
+    Some commands do not send a string plainly. A header whose `enc_type`
+    field (proto field 6) is 1 has XOR-masked its `pdata` (or, on a
+    single-header frame with no `pdata`, the shared field-2 payload) with
+    the low byte of that same header's own `seq` field (proto field 14) -
+    the key lives beside the ciphertext it protects, in the same header, and
+    nowhere else. None of the plain passes can see a string once this mask
+    sits on top of it, because XOR with a non-zero key does not preserve any
+    of the alphabets those passes look for. So every region a header
+    declares masked this way is un-XOR-ed, run back through the same plain
+    passes, and - only if that changed anything - XOR-ed again and spliced
+    back at the same offsets. A region nobody could derive a key for is
+    walked and then left untouched rather than guessed at.
+
+    Measured across the capture corpus and the tracked fixtures: 40 regions
+    in 40 frames carried a string this way with nothing to catch it - 36
+    serial numbers and 4 time zones, 3 of the time zones inside fixtures
+    this repo tracks and ships.
+
+    Three properties a later edit must not undo, each pinned by a test in
+    `tests/test_frame_capture.py`:
+
+    - The ciphertext for a region is always sliced from `payload`, the
+      **original** argument, never from `sanitized` - a region spliced
+      earlier in the loop must not corrupt a later one's input.
+    - The splice writes back at the same offsets it read from, and every
+      pass preserves length, so `len(sanitized) == len(payload)` always.
+    - Regions are walked from `payload` too, so an earlier splice can never
+      move a later region's offsets out from under it.
+    """
+    sanitized = _plain_passes(payload, secrets)
+    for region in _encrypted_regions(payload):
+        if region.key is None:
+            continue
+        inner = _xor(payload[region.start:region.end], region.key)
+        cleaned = _plain_passes(inner, secrets)
+        if cleaned == inner:
+            continue
+        sanitized = (
+            sanitized[:region.start]
+            + _xor(cleaned, region.key)
+            + sanitized[region.end:]
+        )
+    return sanitized
 
 
 def is_proto_frame(payload: bytes) -> bool:
