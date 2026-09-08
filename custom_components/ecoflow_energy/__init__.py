@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import re
 import time
+from datetime import datetime
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP
@@ -99,7 +100,7 @@ def _async_schedule_raw_capture_expiry(hass: HomeAssistant, entry: ConfigEntry) 
     # is reported as unsafe and the window never actually closes. It went
     # unnoticed because no test had ever let the timer fire.
     @callback
-    def _expire(_now) -> None:
+    def _expire(_now: datetime) -> None:
         _LOGGER.info("The raw data capture window has ended - switching it off.")
         _async_disable_raw_capture(hass, entry)
 

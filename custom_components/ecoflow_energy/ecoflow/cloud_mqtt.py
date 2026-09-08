@@ -336,7 +336,14 @@ class EcoFlowMQTTClient:
             self._log_issue("error", "MQTT: client creation failed: %s", exc)
             return False
 
-    def _on_connect(self, client, userdata, flags, rc, properties=None):
+    def _on_connect(
+        self,
+        client: mqtt.Client,
+        userdata: Any,
+        flags: Any,
+        rc: Any,
+        properties: Any = None,
+    ) -> None:
         """Callback on MQTT connection.
 
         Under paho-mqtt 2.x VERSION2 callbacks ``rc`` is a ReasonCode object
@@ -489,8 +496,13 @@ class EcoFlowMQTTClient:
                 self.status_handler("connect_failed", rc_val, reason)
 
     def _on_disconnect(
-        self, client, userdata, disconnect_flags, reason_code, properties
-    ):
+        self,
+        client: mqtt.Client,
+        userdata: Any,
+        disconnect_flags: Any,
+        reason_code: Any,
+        properties: Any,
+    ) -> None:
         """Callback on MQTT disconnect.
 
         ``reason_code`` is a ReasonCode object under paho-mqtt 2.x VERSION2
@@ -565,7 +577,7 @@ class EcoFlowMQTTClient:
             self.max_reconnect_delay,
         )
 
-    def _schedule_reconnect(self):
+    def _schedule_reconnect(self) -> None:
         """Signal that a reconnect is needed."""
         _LOGGER.debug(
             "MQTT: reconnect scheduled - attempts: %d/%d",
@@ -613,7 +625,9 @@ class EcoFlowMQTTClient:
                     return True
         return False
 
-    def _on_message(self, client, userdata, msg):
+    def _on_message(
+        self, client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage
+    ) -> None:
         """Callback for incoming MQTT messages."""
         if (
             msg.topic == f"/app/device/property/{self._device_sn}"
