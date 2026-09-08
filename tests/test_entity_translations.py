@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
+from typing import Any
 
 import pytest
 from ecoflow_energy import const as C
@@ -31,9 +32,9 @@ LANGS = ("en", "de")
 DIAGNOSTIC_SENSOR_KEYS = {"mqtt_status", "connection_mode"}
 
 
-def _collect(pattern: str) -> dict[str, object]:
+def _collect(pattern: str) -> dict[str, Any]:
     """Collect entity definitions from all const.py lists matching a pattern."""
-    defs: dict[str, object] = {}
+    defs: dict[str, Any] = {}
     for name in dir(C):
         if re.fullmatch(pattern, name) and isinstance(getattr(C, name), list):
             for item in getattr(C, name):

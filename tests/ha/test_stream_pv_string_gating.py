@@ -35,6 +35,8 @@ from custom_components.ecoflow_energy.const import (
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
 from custom_components.ecoflow_energy.sensor import async_setup_entry as sensor_setup
 
+from .conftest import add_entities_collector
+
 # Stream Ultra X, the four-string unit the report comes from.
 STREAM_DEVICE: dict[str, Any] = {
     "sn": "BK61TEST00000001",
@@ -94,7 +96,7 @@ async def _setup(
     }
 
     created: list[Any] = []
-    await sensor_setup(hass, entry, created.extend)
+    await sensor_setup(hass, entry, add_entities_collector(created))
     return coordinator, created
 
 

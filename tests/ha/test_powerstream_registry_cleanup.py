@@ -151,7 +151,9 @@ def test_every_current_powerstream_id_and_customization_survives(
     _async_remove_retired_platform_entities(hass, entry)
 
     assert set(current.values()) <= _ids(hass)
-    assert registry.async_get(current["solar_w"]).name == "Roof solar"
+    solar = registry.async_get(current["solar_w"])
+    assert solar is not None
+    assert solar.name == "Roof solar"
 
 
 def test_cleanup_is_platform_and_key_exact(hass: HomeAssistant) -> None:

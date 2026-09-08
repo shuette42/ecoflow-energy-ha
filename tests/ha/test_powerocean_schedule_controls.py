@@ -21,7 +21,6 @@ rather than compared as opaque bytes.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -61,6 +60,8 @@ from tests.test_powerocean_timer_task import (
     _header,
 )
 from tests.test_powerocean_timer_task_write import pdata_of
+
+from .conftest import add_entities_collector
 
 POWEROCEAN_DEVICE: dict[str, Any] = {
     "sn": "HJ31TEST00000001",
@@ -134,15 +135,6 @@ def _entry(
     )
 
 
-def _collector(target: list[Any]) -> Callable[[Iterable[Any], bool], None]:
-    """Adapt a plain list to the `AddEntitiesCallback` signature."""
-
-    def _add(new_entities: Iterable[Any], update_before_add: bool = False) -> None:
-        target.extend(new_entities)
-
-    return _add
-
-
 def _report(
     coordinator: EcoFlowDeviceCoordinator, payload: bytes, sn: str | None = None
 ) -> None:
@@ -173,8 +165,8 @@ async def _setup(
 
     switches: list[Any] = []
     numbers: list[Any] = []
-    await switch_setup(hass, entry, _collector(switches))
-    await number_setup(hass, entry, _collector(numbers))
+    await switch_setup(hass, entry, add_entities_collector(switches))
+    await number_setup(hass, entry, add_entities_collector(numbers))
     return coordinator, switches, numbers, mqtt
 
 
@@ -567,8 +559,8 @@ class TestNoSchedule:
         hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
             POWEROCEAN_DEVICE["sn"]: coordinator
         }
-        await switch_setup(hass, entry, _collector(added))
-        await number_setup(hass, entry, _collector(added))
+        await switch_setup(hass, entry, add_entities_collector(added))
+        await number_setup(hass, entry, add_entities_collector(added))
         assert _schedule_keys(added) == set()
 
         _report(coordinator, LIST_ARMED_1500W)
@@ -598,8 +590,8 @@ class TestStandardMode:
 
         switches: list[Any] = []
         numbers: list[Any] = []
-        await switch_setup(hass, entry, _collector(switches))
-        await number_setup(hass, entry, _collector(numbers))
+        await switch_setup(hass, entry, add_entities_collector(switches))
+        await number_setup(hass, entry, add_entities_collector(numbers))
 
         assert _schedule_keys(switches) == set()
         assert _schedule_keys(numbers) == set()

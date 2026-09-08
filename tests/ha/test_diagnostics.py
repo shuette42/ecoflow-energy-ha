@@ -807,8 +807,10 @@ class TestEnergyIntegratorDiagnostics:
             hass, standard_config_entry, MOCK_DELTA_DEVICE
         )
         coordinator._energy_integrator._state = {
-            "broken_energy_kwh": ("not", "a", "number"),
-            "short_energy_kwh": (1.0,),
+            # Both entries are malformed on purpose: the test is that a state
+            # file carrying them is survived rather than trusted.
+            "broken_energy_kwh": ("not", "a", "number"),  # type: ignore[dict-item]
+            "short_energy_kwh": (1.0,),  # type: ignore[dict-item]
             "solar_energy_kwh": (18.7, 1000.0, 150.0),
         }
 

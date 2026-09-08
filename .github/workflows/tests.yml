@@ -77,5 +77,11 @@ jobs:
           # the same source the test job uses, so both gates read the same
           # Home Assistant rather than two that drift apart.
           pip install -r requirements_test.txt
-      - name: Run mypy
+      # Two steps, not one invocation over both paths. The suite imports the
+      # integration under two module names (with and without the
+      # custom_components prefix), and mypy refuses a single run in which one
+      # file is reachable under two names. Each entry point is its own check.
+      - name: Run mypy over the integration
         run: mypy custom_components/ecoflow_energy
+      - name: Run mypy over the tests
+        run: mypy tests/

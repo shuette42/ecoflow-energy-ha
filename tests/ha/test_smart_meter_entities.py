@@ -49,6 +49,8 @@ from custom_components.ecoflow_energy.ecoflow.const import (
 )
 from custom_components.ecoflow_energy.sensor import async_setup_entry as sensor_setup
 
+from .conftest import add_entities_collector
+
 CAPTURE = (
     Path(__file__).parent.parent
     / "fixtures"
@@ -307,7 +309,7 @@ class TestTheCaptureReachesTheEntities:
         }
 
         created: list[Any] = []
-        await sensor_setup(hass, entry, created.extend)
+        await sensor_setup(hass, entry, add_entities_collector(created))
         values = {
             entity._definition.key: entity.native_value
             for entity in created
@@ -346,7 +348,7 @@ class TestTheCaptureReachesTheEntities:
         }
 
         created: list[Any] = []
-        await binary_sensor_setup(hass, entry, created.extend)
+        await binary_sensor_setup(hass, entry, add_entities_collector(created))
         values = {
             entity._definition.key: entity.is_on
             for entity in created
@@ -390,7 +392,7 @@ class TestTheNetCounterCanFall:
         coordinator._apply_data({"grid_net_energy_wh": 300.0})
 
         created: list[Any] = []
-        await sensor_setup(hass, entry, created.extend)
+        await sensor_setup(hass, entry, add_entities_collector(created))
         values = {
             entity._definition.key: entity.native_value
             for entity in created
@@ -448,7 +450,7 @@ class TestThePowerFactorClearSurvivesAMerge:
         coordinator._apply_data(under_load)
 
         created: list[Any] = []
-        await sensor_setup(hass, entry, created.extend)
+        await sensor_setup(hass, entry, add_entities_collector(created))
         values = {
             entity._definition.key: entity.native_value
             for entity in created

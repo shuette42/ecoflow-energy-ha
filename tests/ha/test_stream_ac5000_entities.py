@@ -11,7 +11,6 @@ fill it is permanent for that owner.
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -57,6 +56,8 @@ from custom_components.ecoflow_energy.sensor import (
     async_setup_entry as sensor_setup,
 )
 from custom_components.ecoflow_energy.switch import async_setup_entry as switch_setup
+
+from .conftest import add_entities_collector
 
 ES22_DEVICE: dict[str, Any] = {
     "sn": "ES22TEST00000001",
@@ -105,15 +106,6 @@ def _entry(device: dict[str, Any]) -> MockConfigEntry:
     )
 
 
-def _collector(target: list[Any]) -> Callable[[Iterable[Any], bool], None]:
-    """Adapt a plain list to the `AddEntitiesCallback` signature."""
-
-    def _add(new_entities: Iterable[Any], update_before_add: bool = False) -> None:
-        target.extend(new_entities)
-
-    return _add
-
-
 async def _setup_keys(
     hass: HomeAssistant,
     platform_setup,
@@ -128,7 +120,7 @@ async def _setup_keys(
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {ES22_DEVICE["sn"]: coordinator}
 
     created: list[Any] = []
-    await platform_setup(hass, entry, _collector(created))
+    await platform_setup(hass, entry, add_entities_collector(created))
     return {
         entity._definition.key for entity in created if hasattr(entity, "_definition")
     }
@@ -194,7 +186,7 @@ class TestStreamAC5000EntitySet:
         }
 
         created: list[Any] = []
-        await sensor_setup(hass, entry, _collector(created))
+        await sensor_setup(hass, entry, add_entities_collector(created))
         solar = next(
             entity
             for entity in created
@@ -265,7 +257,7 @@ class TestStreamAC5000TaskReadback:
             ES22_DEVICE["sn"]: coordinator
         }
         created: list[Any] = []
-        await number_setup(hass, entry, _collector(created))
+        await number_setup(hass, entry, add_entities_collector(created))
         number = next(
             entity
             for entity in created
@@ -388,12 +380,12 @@ class TestStreamAC5000Definitions:
     def test_every_control_is_enhanced_only(self) -> None:
         """This device has no Developer API at all, so with developer keys a
         control would be created that can neither write nor read back."""
-        for definition in STREAMAC5000_NUMBERS:
-            assert definition.enhanced_only is True, definition.key
-        for definition in STREAMAC5000_SWITCHES:
-            assert definition.enhanced_only is True, definition.key
-        for definition in STREAMAC5000_SELECTS:
-            assert definition.enhanced_only is True, definition.key
+        for number_def in STREAMAC5000_NUMBERS:
+            assert number_def.enhanced_only is True, number_def.key
+        for switch_def in STREAMAC5000_SWITCHES:
+            assert switch_def.enhanced_only is True, switch_def.key
+        for select_def in STREAMAC5000_SELECTS:
+            assert select_def.enhanced_only is True, select_def.key
 
     def test_a_control_is_named_after_the_reading_it_writes(self) -> None:
         """One value, one wording.

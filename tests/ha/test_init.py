@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP
@@ -1281,7 +1282,7 @@ class TestUnroutedDeviceProbeWiring:
         raw_capture: bool | None = True,
         capture_until: float | None = None,
     ) -> MockConfigEntry:
-        data = {
+        data: dict[str, Any] = {
             CONF_AUTH_METHOD: auth_method,
             CONF_MODE: MODE_ENHANCED,
             CONF_EMAIL: "test@example.com",
@@ -1654,6 +1655,7 @@ class TestRawCaptureWithoutASkippedDevice:
             await hass.async_block_till_done()
 
         mock_start.assert_awaited_once()
+        assert mock_start.await_args is not None
         probed = [item["sn"] for item in mock_start.await_args.args[1]]
         assert probed == [unsupported["sn"]]
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 from ecoflow_energy.const import (
@@ -48,9 +49,9 @@ def _frames() -> list[dict]:
     return json.loads(ES21_FRAMES.read_text(encoding="utf-8"))["frames"]
 
 
-def _parse_all() -> dict[str, object]:
+def _parse_all() -> dict[str, Any]:
     """Replay every captured frame the way the coordinator would."""
-    state: dict[str, object] = {}
+    state: dict[str, Any] = {}
     for frame in _frames():
         parsed = parse_stream_ac5000_message(bytes.fromhex(frame["hex"]))
         if parsed:

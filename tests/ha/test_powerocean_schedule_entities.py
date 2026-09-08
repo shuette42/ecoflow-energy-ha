@@ -47,6 +47,8 @@ from tests.test_powerocean_timer_task import (
     _header,
 )
 
+from .conftest import add_entities_collector
+
 POWEROCEAN_DEVICE: dict[str, Any] = {
     "sn": "HJ31TEST00000001",
     "name": "PowerOcean",
@@ -108,8 +110,8 @@ async def _setup(
 
     sensors: list[Any] = []
     binary_sensors: list[Any] = []
-    await sensor_setup(hass, entry, sensors.extend)
-    await binary_sensor_setup(hass, entry, binary_sensors.extend)
+    await sensor_setup(hass, entry, add_entities_collector(sensors))
+    await binary_sensor_setup(hass, entry, add_entities_collector(binary_sensors))
     return coordinator, sensors, binary_sensors
 
 
@@ -253,8 +255,8 @@ class TestStandardMode:
 
         sensors: list[Any] = []
         binary_sensors: list[Any] = []
-        await sensor_setup(hass, entry, sensors.extend)
-        await binary_sensor_setup(hass, entry, binary_sensors.extend)
+        await sensor_setup(hass, entry, add_entities_collector(sensors))
+        await binary_sensor_setup(hass, entry, add_entities_collector(binary_sensors))
 
         assert coordinator.enhanced_mode is False
         assert _schedule_keys(sensors) == set()

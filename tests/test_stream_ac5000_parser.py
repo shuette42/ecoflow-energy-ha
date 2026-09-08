@@ -873,8 +873,10 @@ class TestCaptureReplay:
             home = parsed.get("home_w")
             from_batt = parsed.get("home_from_batt_w")
             from_grid = parsed.get("home_from_grid_w")
-            if not all(
-                isinstance(v, (int, float)) for v in (home, from_batt, from_grid)
+            if not (
+                isinstance(home, (int, float))
+                and isinstance(from_batt, (int, float))
+                and isinstance(from_grid, (int, float))
             ):
                 continue
             total = from_batt + from_grid + (parsed.get("home_from_solar_w") or 0.0)
