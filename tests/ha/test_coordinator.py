@@ -2568,7 +2568,8 @@ class TestStaleDetection:
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """Availability stage progresses through healthy -> stale -> degraded -> unavailable."""
+        """Availability stage progresses through healthy -> stale -> degraded ->
+        unavailable."""
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
@@ -2602,7 +2603,8 @@ class TestStaleDetection:
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """PowerOcean stays available during a 600s stream gap (observed real behavior)."""
+        """PowerOcean stays available during a 600s stream gap (observed real
+        behavior)."""
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
@@ -3963,7 +3965,8 @@ class TestBpRemapping:
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """ems_work_state=0 maps to 'none' (not lost by zero-omission thanks to oneof)."""
+        """ems_work_state=0 maps to 'none' (not lost by zero-omission thanks to
+        oneof)."""
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
@@ -3982,7 +3985,8 @@ class TestBpRemapping:
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
-        # sys_grid_sta=0 would normally be "not_detected", but grid_is_energized=True overrides
+        # sys_grid_sta=0 would normally be "not_detected", but grid_is_energized=True
+        # overrides
         raw = {"sys_grid_sta": 0, "grid_is_energized": True}
         result = remap_bp_keys(raw, coordinator._bp_sn_to_index, coordinator.device_sn)
         assert result["grid_status"] == "ok"
@@ -4152,7 +4156,8 @@ class TestBpRemapping:
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """All packs are empty dicts (EMS module placeholders) - no pack sensors produced."""
+        """All packs are empty dicts (EMS module placeholders) - no pack sensors
+        produced."""
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
@@ -4407,7 +4412,8 @@ class TestBpRemapping:
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """_apply_data does not re-aggregate when no pack remain_watth keys in parsed."""
+        """_apply_data does not re-aggregate when no pack remain_watth keys in
+        parsed."""
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
@@ -5426,7 +5432,8 @@ class TestParseMessageGetReply:
         self,
         hass: HomeAssistant,
     ) -> None:
-        """SmartPlug get_reply with quotaMap is parsed via smartplug_http_quota parser."""
+        """SmartPlug get_reply with quotaMap is parsed via smartplug_http_quota
+        parser."""
         import json as json_mod
 
         from .conftest import MOCK_SMARTPLUG_DEVICE
@@ -5581,7 +5588,8 @@ class TestParseMessageGetReply:
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """PowerOcean JSON get_reply with quotaMap is parsed via powerocean_http_quota parser."""
+        """PowerOcean JSON get_reply with quotaMap is parsed via powerocean_http_quota
+        parser."""
         import json as json_mod
 
         enhanced_config_entry.add_to_hass(hass)
@@ -5615,7 +5623,8 @@ class TestParseMessageGetReply:
         hass: HomeAssistant,
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        """PowerOcean proto get_reply extracts EmsChangeReport (cmd_func=96, cmd_id=8)."""
+        """PowerOcean proto get_reply extracts EmsChangeReport (cmd_func=96,
+        cmd_id=8)."""
         from ecoflow_energy.ecoflow.proto.ecocharge_pb2 import JTS1EmsChangeReport
         from ecoflow_energy.ecoflow.proto_encoding import (
             encode_field_bytes,
@@ -6537,7 +6546,8 @@ class TestAppAuthMode:
         # age > CREDENTIAL_MAX_AGE_S regardless of CI system clock.
         coordinator._credential_obtained_ts = 1.0  # fixed positive value
 
-        # Replace the coroutine method with a sync no-op to avoid async scheduling issues
+        # Replace the coroutine method with a sync no-op to avoid async scheduling
+        # issues
         coordinator._proactive_credential_refresh = lambda: None  # type: ignore[assignment]
         with (
             patch.object(hass, "async_create_task") as mock_task,

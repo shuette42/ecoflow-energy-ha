@@ -53,7 +53,8 @@ from custom_components.ecoflow_energy.const import (  # noqa: E402
 )
 
 # ---------------------------------------------------------------------------
-# Enable custom integration discovery (required by pytest-homeassistant-custom-component)
+# Enable custom integration discovery (required by
+# pytest-homeassistant-custom-component)
 # ---------------------------------------------------------------------------
 
 

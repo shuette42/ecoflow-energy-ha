@@ -346,7 +346,8 @@ class EcoFlowMQTTClient:
         """
         rc_val = rc.value if hasattr(rc, "value") else rc
         if rc_val == 0:
-            # Subscribe to SET reply topics (all modes) for command acknowledgement tracking.
+            # Subscribe to SET reply topics (all modes) for command acknowledgement
+            # tracking.
             # A listen-only connection sends no commands, so there is nothing to
             # acknowledge - and skipping these keeps the account identifiers out
             # of the captured topic list.
@@ -356,7 +357,10 @@ class EcoFlowMQTTClient:
                 )
                 client.subscribe(set_reply_topic, qos=1)
                 if self._user_id:
-                    app_set_reply = f"/app/{self._user_id}/{self._device_sn}/thing/property/set_reply"
+                    app_set_reply = (
+                        f"/app/{self._user_id}/{self._device_sn}"
+                        "/thing/property/set_reply"
+                    )
                     client.subscribe(app_set_reply, qos=1)
 
             if self._subscribe_data:
@@ -367,7 +371,10 @@ class EcoFlowMQTTClient:
                 client.subscribe(topic_pb, qos=0)
 
                 if self._user_id:
-                    topic_reply = f"/app/{self._user_id}/{self._device_sn}/thing/property/get_reply"
+                    topic_reply = (
+                        f"/app/{self._user_id}/{self._device_sn}"
+                        "/thing/property/get_reply"
+                    )
                     client.subscribe(topic_reply, qos=1)
 
                     if self._capture_writes:
@@ -440,7 +447,8 @@ class EcoFlowMQTTClient:
                     except Exception as exc:
                         _LOGGER.warning("Post-connect latestQuotas error: %s", exc)
                 else:
-                    # Non-enhanced (SmartPlug, Delta): protobuf get-all + JSON latestQuotas
+                    # Non-enhanced (SmartPlug, Delta): protobuf get-all + JSON
+                    # latestQuotas
                     try:
                         self.send_get_all()
                         _LOGGER.debug(

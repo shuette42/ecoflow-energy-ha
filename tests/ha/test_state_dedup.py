@@ -587,7 +587,8 @@ class TestEnergyRounding:
         mock_integrator.flush.return_value = None
         coordinator._energy_integrator = mock_integrator
 
-        # Set up energy_from_api mapping (no API total in parsed → falls back to integrate)
+        # Set up energy_from_api mapping (no API total in parsed → falls back to
+        # integrate)
         coordinator._power_to_energy = {}
         coordinator._energy_from_api = [("fallback_power", "fallback_energy")]
 
@@ -608,7 +609,8 @@ class TestOptimisticDedupSync:
         hass: HomeAssistant,
         standard_config_entry: MockConfigEntry,
     ) -> None:
-        """_handle_coordinator_update must not re-write the value that _send_command already wrote."""
+        """_handle_coordinator_update must not re-write the value that _send_command
+        already wrote."""
         standard_config_entry.add_to_hass(hass)
         coordinator = _make_coordinator(hass, standard_config_entry)
         coordinator.async_set_updated_data({"ac_enabled": 1})
@@ -625,13 +627,15 @@ class TestOptimisticDedupSync:
             patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock),
             patch.object(switch, "async_write_ha_state") as mock_write,
         ):
-            # User turns off: optimistic write (count = 1), syncs _last_written_value = False
+            # User turns off: optimistic write (count = 1), syncs _last_written_value =
+            # False
             with patch("time.monotonic", return_value=1000.0):
                 await switch._send_command(False)
             assert mock_write.call_count == 1
             assert switch._last_written_value is False
 
-            # Coordinator tick during lock window - is_on still returns False (lock active).
+            # Coordinator tick during lock window - is_on still returns False (lock
+            # active).
             # Because _last_written_value is already False, no second write.
             with patch("time.monotonic", return_value=1001.0):  # still within 5 s lock
                 switch._handle_coordinator_update()
@@ -642,7 +646,8 @@ class TestOptimisticDedupSync:
         hass: HomeAssistant,
         standard_config_entry: MockConfigEntry,
     ) -> None:
-        """_handle_coordinator_update must not re-write the value that async_set_native_value already wrote."""
+        """_handle_coordinator_update must not re-write the value that
+        async_set_native_value already wrote."""
         standard_config_entry.add_to_hass(hass)
         coordinator = _make_coordinator(hass, standard_config_entry)
         coordinator.async_set_updated_data({"pd.soc": 80})
@@ -662,7 +667,8 @@ class TestOptimisticDedupSync:
             patch.object(coordinator, "async_send_set_command", new_callable=AsyncMock),
             patch.object(number, "async_write_ha_state") as mock_write,
         ):
-            # User sets 95: optimistic write (count = 1), mutates data, syncs _last_written_value = 95.0
+            # User sets 95: optimistic write (count = 1), mutates data, syncs
+            # _last_written_value = 95.0
             await number.async_set_native_value(95.0)
             assert mock_write.call_count == 1
             assert number._last_written_value == 95.0

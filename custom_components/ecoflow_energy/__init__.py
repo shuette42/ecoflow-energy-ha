@@ -558,7 +558,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # Reload integration when config entry data changes (e.g. mode switch via Options Flow)
+    # Reload integration when config entry data changes (e.g. mode switch via
+    # Options Flow)
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
 
     return True

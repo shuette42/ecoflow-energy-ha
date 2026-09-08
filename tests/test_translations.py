@@ -59,13 +59,15 @@ def _get_dict_keys(node: ast.expr) -> set[str]:
 
 
 def _find_async_show_form_calls(tree: ast.Module) -> list[dict]:
-    """Find all self.async_show_form() calls and extract step_id, placeholders, schema fields.
+    """Find all self.async_show_form() calls and extract step_id, placeholders, schema
+    fields.
 
     Returns a list of dicts:
         {
             "step_id": str,
             "placeholders": set[str],  # keys from description_placeholders={}
-            "schema_fields": set[str], # CONF_* keys from data_schema vol.Required/Optional
+            "schema_fields": set[str], # CONF_* keys from data_schema
+            # vol.Required/Optional
             "flow_type": "config" | "options",
             "class_name": str,
         }

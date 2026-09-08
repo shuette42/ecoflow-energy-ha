@@ -147,7 +147,8 @@ WAVE3_CONTROLS: dict[str, Wave3Control] = {
         maximum=None,
         step=None,
         allowed_values=(20, 40, 60, 80, 100),
-        modes=None,  # gated by exclusion (constant_temp), not inclusion - see write_refusal
+        # gated by exclusion (constant_temp), not inclusion - see write_refusal
+        modes=None,
         read_key="airflow_speed_pct",
     ),
     "target_temp_c": Wave3Control(
@@ -451,7 +452,10 @@ def write_refusal(
         return f"unknown WAVE 3 control: {key!r}"
 
     if key == "operating_submode" and value in _SUBMODE_WRITE_REFUSED_LABELS:
-        return f"{value!r} is never written by the app; observed writes are max, sleep, or eco"
+        return (
+            f"{value!r} is never written by the app; observed writes are max, "
+            "sleep, or eco"
+        )
 
     effective_mode = mode if mode is not None else state.get("operating_mode")
 

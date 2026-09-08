@@ -110,7 +110,8 @@ class CredentialsMixin(_Base):
             else:
                 self._log_event("credential_refresh_fail", "app-auth, no credentials")
                 _LOGGER.warning(
-                    "App-auth credential refresh failed for %s - triggering re-authentication",
+                    "App-auth credential refresh failed for %s - triggering "
+                    "re-authentication",
                     self.device_tag,
                 )
                 self._entry.async_start_reauth(self.hass)
@@ -131,7 +132,8 @@ class CredentialsMixin(_Base):
             else:
                 self._log_event("credential_refresh_fail", "developer-auth")
                 _LOGGER.warning(
-                    "MQTT credential refresh failed for %s - triggering re-authentication",
+                    "MQTT credential refresh failed for %s - triggering "
+                    "re-authentication",
                     self.device_tag,
                 )
                 self._entry.async_start_reauth(self.hass)
@@ -219,7 +221,8 @@ class CredentialsMixin(_Base):
                 self._log_event("credential_proactive_ok", "app-auth")
                 if cert_account != old_account or broker_changed:
                     _LOGGER.debug(
-                        "Proactive refresh: credentials changed for %s - force reconnect",
+                        "Proactive refresh: credentials changed for %s - "
+                        "force reconnect",
                         self.device_tag,
                     )
                     self.hass.async_add_executor_job(self._mqtt_client.force_reconnect)
@@ -238,7 +241,8 @@ class CredentialsMixin(_Base):
                 self._log_event("credential_proactive_ok", "developer-auth")
                 if cert_account != old_account or broker_changed:
                     _LOGGER.debug(
-                        "Proactive refresh: credentials changed for %s - force reconnect",
+                        "Proactive refresh: credentials changed for %s - "
+                        "force reconnect",
                         self.device_tag,
                     )
                     self.hass.async_add_executor_job(self._mqtt_client.force_reconnect)

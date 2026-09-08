@@ -74,7 +74,8 @@ DELTA3_SWITCH_PARAMS: dict[str, Delta3Switch] = {
     "bypass_out_disable_switch": Delta3Switch("cfgBypassOutDisable", 26),
 }
 
-# Energy backup is the only nested payload: {"cfgEnergyBackup": {"energyBackupEn": bool}}
+# Energy backup is the only nested payload:
+# {"cfgEnergyBackup": {"energyBackupEn": bool}}
 # On the binary channel it is equally nested: field 43 wraps an inner field 1.
 DELTA3_ENERGY_BACKUP_KEY = "energy_backup_switch"
 DELTA3_ENERGY_BACKUP_PARAMS_KEY = "cfgEnergyBackup"

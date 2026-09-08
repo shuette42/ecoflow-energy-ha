@@ -243,11 +243,24 @@ class OptionsFlowMixin(_Base):
             }
             device_options = {
                 sn: (
-                    f"{get_device_name('', sn) or DEVICE_TYPE_DISPLAY_NAMES.get(stored_types[sn], short_serial(sn))}"
+                    f"{
+                        get_device_name('', sn)
+                        or DEVICE_TYPE_DISPLAY_NAMES.get(
+                            stored_types[sn], short_serial(sn)
+                        )
+                    }"
                     f" ({short_serial(sn)})"
                     f"{unsupported_suffix(stored_types[sn])}"
-                    f"{' - requires Standard Mode' if stored_types[sn] == DEVICE_TYPE_POWERSTREAM else ''}"
-                    f"{' - requires Enhanced Mode' if stored_types[sn] in ENHANCED_ONLY_DEVICE_TYPES else ''}"
+                    f"{
+                        ' - requires Standard Mode'
+                        if stored_types[sn] == DEVICE_TYPE_POWERSTREAM
+                        else ''
+                    }"
+                    f"{
+                        ' - requires Enhanced Mode'
+                        if stored_types[sn] in ENHANCED_ONLY_DEVICE_TYPES
+                        else ''
+                    }"
                 )
                 for sn in current_device_sns
             }

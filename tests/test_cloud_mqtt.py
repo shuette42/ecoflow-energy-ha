@@ -1,4 +1,5 @@
-"""Tests for EcoFlowMQTTClient - subscribe_data, client creation, reconnect, disconnect."""
+"""Tests for EcoFlowMQTTClient - subscribe_data, client creation, reconnect,
+disconnect."""
 
 import logging
 import time
@@ -30,7 +31,8 @@ class TestSubscribeDataFlag:
 
     @patch("ecoflow_energy.ecoflow.cloud_mqtt.mqtt.Client")
     def test_standard_mode_no_data_subscriptions(self, mock_mqtt_cls):
-        """In Standard Mode (subscribe_data=False), _on_connect subscribes only to set_reply."""
+        """In Standard Mode (subscribe_data=False), _on_connect subscribes only to
+        set_reply."""
         mock_paho = MagicMock()
         mock_mqtt_cls.return_value = mock_paho
 
@@ -48,7 +50,8 @@ class TestSubscribeDataFlag:
 
     @patch("ecoflow_energy.ecoflow.cloud_mqtt.mqtt.Client")
     def test_enhanced_mode_subscribes_data_topics(self, mock_mqtt_cls):
-        """In Enhanced Mode (subscribe_data=True), _on_connect must subscribe to data topics."""
+        """In Enhanced Mode (subscribe_data=True), _on_connect must subscribe to data
+        topics."""
         mock_paho = MagicMock()
         mock_mqtt_cls.return_value = mock_paho
 
@@ -434,7 +437,8 @@ class TestShouldAttemptReconnect:
         assert client._should_attempt_reconnect() is True
 
     def test_effective_delay_never_exceeds_cap(self):
-        """Tier multipliers must not push the effective delay past max_reconnect_delay."""
+        """Tier multipliers must not push the effective delay past
+        max_reconnect_delay."""
         client = _make_client(base_reconnect_delay=5, max_reconnect_delay=60)
         client.reconnect_attempts = 7  # tier 3: 2x multiplier
         client.last_reconnect_time = 1000.0

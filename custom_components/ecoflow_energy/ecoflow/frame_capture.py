@@ -183,7 +183,8 @@ def sanitize_frame(payload: bytes, secrets: list[str]) -> bytes:
     serial, then anything written as a UUID, then a lower-case hex run a
     hyphen joins to a serial-shaped run, then the city half of any time zone
     the device reports, then anything a device presents as a whole
-    length-delimited field of identifier-shaped characters. The second pass matters because a frame
+    length-delimited field of identifier-shaped characters. The second pass matters
+    because a frame
     also carries the serial of every battery pack and of any attached
     accessory, and the caller cannot name what it has not discovered yet. The
     third and fourth catch identifiers too short, or too oddly shaped, for

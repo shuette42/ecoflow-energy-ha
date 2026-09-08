@@ -91,7 +91,8 @@ def _value_span_of_first_field(data: bytes, target_field: int) -> tuple[int, int
 
 
 def _single_byte_varint_span(pdata: bytes, target_field: int) -> tuple[int, int]:
-    """Return the (start, end) byte range of a field whose varint value fits one byte."""
+    """Return the (start, end) byte range of a field whose varint value fits one
+    byte."""
     pos = 0
     while pos < len(pdata):
         start = pos
