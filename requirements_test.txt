@@ -1,4 +1,17 @@
-# Test framework
-# Floor pinned to 0.13.316 because >=0.13.317 requires Python 3.14 (CI uses 3.13).
-# See .github/dependabot.yml ignore rule.
-pytest-homeassistant-custom-component>=0.13.316
+# Test framework.
+#
+# Pinned exactly rather than by floor, because this package decides which Home
+# Assistant the type gate reads its annotations from. A floor lets the resolver
+# pick, and the type gate can then turn red on a branch that changed nothing.
+#
+# The two lines are not a preference. Releases from 0.13.317 need Python 3.14,
+# and CI runs 3.13, so the resolver was already capped there by the interpreter
+# rather than by intent. Measured 2026-09-08: CI installed 0.13.316 and read
+# Home Assistant 2026.2.3, a workstation on Python 3.14 installed 0.13.321 and
+# read 2026.4.0. Both green, two months apart, and nothing said so.
+#
+# Raising either line is its own commit, with whatever the newer Home Assistant
+# reports fixed in it. Moving CI to Python 3.14 removes the split and is its own
+# piece of work; see the dependabot ignore rule.
+pytest-homeassistant-custom-component==0.13.316; python_version < "3.14"
+pytest-homeassistant-custom-component==0.13.321; python_version >= "3.14"
