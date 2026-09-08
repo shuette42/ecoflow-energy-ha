@@ -136,7 +136,9 @@ class ReconfigureFlowMixin(_Base):
                 except (aiohttp.ClientError, TimeoutError, OSError):
                     errors["base"] = "cannot_connect"
                 except (KeyError, ValueError, TypeError, AttributeError):
-                    _LOGGER.exception("Unexpected error during Enhanced reconfiguration")
+                    _LOGGER.exception(
+                        "Unexpected error during Enhanced reconfiguration"
+                    )
                     errors["base"] = "unknown"
 
         return self.async_show_form(

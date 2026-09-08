@@ -113,9 +113,7 @@ def test_no_full_serial_in_log_calls() -> None:
     offenders = _offenders(_BARE_SERIAL, _strip_masker_args)
     assert not offenders, (
         "log calls pass a full serial, use device_log_tag():\n"
-    ) + "\n".join(
-        offenders
-    )
+    ) + "\n".join(offenders)
 
 
 def test_no_unmasked_topic_in_log_calls() -> None:

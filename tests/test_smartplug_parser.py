@@ -371,27 +371,28 @@ class TestSmartPlugProto:
             encode_field_bytes,
             encode_field_varint,
         )
+
         # Build a plug_heartbeat_pack with known values
         pdata = bytearray()
-        pdata.extend(encode_field_varint(1, 0))        # err_code = 0
-        pdata.extend(encode_field_varint(2, 0))        # warn_code = 0
-        pdata.extend(encode_field_varint(5, 130))       # max_cur = 130 deciA -> 13.0A
-        pdata.extend(encode_field_varint(6, 35))        # temp = 35C
-        pdata.extend(encode_field_varint(7, 50))        # freq = 50Hz
-        pdata.extend(encode_field_varint(8, 650))       # current = 650mA -> 0.65A
-        pdata.extend(encode_field_varint(9, 230))       # volt = 230V
-        pdata.extend(encode_field_varint(10, 1500))     # watts = 1500 deciW -> 150.0W
-        pdata.extend(encode_field_varint(11, 1))        # switch_sta = on
-        pdata.extend(encode_field_varint(12, 512))      # brightness = 512
-        pdata.extend(encode_field_varint(13, 2500))     # max_watts = 2500W
+        pdata.extend(encode_field_varint(1, 0))  # err_code = 0
+        pdata.extend(encode_field_varint(2, 0))  # warn_code = 0
+        pdata.extend(encode_field_varint(5, 130))  # max_cur = 130 deciA -> 13.0A
+        pdata.extend(encode_field_varint(6, 35))  # temp = 35C
+        pdata.extend(encode_field_varint(7, 50))  # freq = 50Hz
+        pdata.extend(encode_field_varint(8, 650))  # current = 650mA -> 0.65A
+        pdata.extend(encode_field_varint(9, 230))  # volt = 230V
+        pdata.extend(encode_field_varint(10, 1500))  # watts = 1500 deciW -> 150.0W
+        pdata.extend(encode_field_varint(11, 1))  # switch_sta = on
+        pdata.extend(encode_field_varint(12, 512))  # brightness = 512
+        pdata.extend(encode_field_varint(13, 2500))  # max_watts = 2500W
 
         # Wrap in Header envelope (Send_Header_Msg)
         header = bytearray()
         header.extend(encode_field_bytes(1, bytes(pdata)))  # pdata
-        header.extend(encode_field_varint(2, 53))           # src (Plug)
-        header.extend(encode_field_varint(3, 32))           # dest (App)
-        header.extend(encode_field_varint(8, 2))            # cmd_func = 2
-        header.extend(encode_field_varint(9, 1))            # cmd_id = 1
+        header.extend(encode_field_varint(2, 53))  # src (Plug)
+        header.extend(encode_field_varint(3, 32))  # dest (App)
+        header.extend(encode_field_varint(8, 2))  # cmd_func = 2
+        header.extend(encode_field_varint(9, 1))  # cmd_id = 1
 
         msg = encode_field_bytes(1, bytes(header))
 
@@ -415,12 +416,17 @@ class TestSmartPlugProto:
             encode_field_bytes,
             encode_field_varint,
         )
+
         pdata = (
-            encode_field_varint(1, 65535)    # err_code = 65535 (sentinel)
-            + encode_field_varint(2, 65535)   # warn_code = 65535 (sentinel)
-            + encode_field_varint(10, 1500)   # watts (needed so result is not None)
+            encode_field_varint(1, 65535)  # err_code = 65535 (sentinel)
+            + encode_field_varint(2, 65535)  # warn_code = 65535 (sentinel)
+            + encode_field_varint(10, 1500)  # watts (needed so result is not None)
         )
-        header = encode_field_bytes(1, pdata) + encode_field_varint(8, 2) + encode_field_varint(9, 1)
+        header = (
+            encode_field_bytes(1, pdata)
+            + encode_field_varint(8, 2)
+            + encode_field_varint(9, 1)
+        )
         msg = encode_field_bytes(1, header)
 
         result = parse_smartplug_proto(msg)
@@ -434,8 +440,13 @@ class TestSmartPlugProto:
             encode_field_bytes,
             encode_field_varint,
         )
+
         pdata = encode_field_varint(10, 100) + encode_field_varint(11, 0)
-        header = encode_field_bytes(1, pdata) + encode_field_varint(8, 2) + encode_field_varint(9, 1)
+        header = (
+            encode_field_bytes(1, pdata)
+            + encode_field_varint(8, 2)
+            + encode_field_varint(9, 1)
+        )
         msg = encode_field_bytes(1, header)
 
         result = parse_smartplug_proto(msg)
@@ -538,7 +549,7 @@ class TestSmartPlugSetCommands:
         # Parse the outer Send_Header_Msg to get the Header bytes
         _, pos = _DecodeVarint(payload, 0)
         header_len, pos = _DecodeVarint(payload, pos)
-        header_bytes = payload[pos:pos + header_len]
+        header_bytes = payload[pos : pos + header_len]
 
         # Decode all varint fields from the header
         fields = _decode_varint_fields(header_bytes)
@@ -580,8 +591,8 @@ class TestSmartPlugSignedVarint:
         from ecoflow_energy.ecoflow.proto_encoding import encode_field_varint
 
         pdata = (
-            encode_field_varint(6, _neg64(-5))   # temp = -5 C
-            + encode_field_varint(10, 1500)      # watts = 150.0 W
+            encode_field_varint(6, _neg64(-5))  # temp = -5 C
+            + encode_field_varint(10, 1500)  # watts = 150.0 W
         )
         result = parse_smartplug_proto_heartbeat(bytes(pdata))
         assert result["temperature_c"] == pytest.approx(-5.0)
@@ -593,10 +604,7 @@ class TestSmartPlugSignedVarint:
             encode_field_varint,
         )
 
-        pdata = (
-            encode_field_varint(6, _neg64(-7))
-            + encode_field_varint(10, 100)
-        )
+        pdata = encode_field_varint(6, _neg64(-7)) + encode_field_varint(10, 100)
         header = (
             encode_field_bytes(1, pdata)
             + encode_field_varint(8, 2)

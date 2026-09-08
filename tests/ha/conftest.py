@@ -31,6 +31,7 @@ def _record_threads_before_test():
         if thread not in before and "_run_safe_shutdown_loop" in thread.name:
             thread.join(timeout=5)
 
+
 from custom_components.ecoflow_energy.const import (  # noqa: E402
     AUTH_METHOD_APP,
     CONF_ACCESS_KEY,
@@ -262,11 +263,13 @@ def mock_http_client():
         "custom_components.ecoflow_energy.coordinator.setup.EcoFlowHTTPQuota",
     ) as cls:
         instance = cls.return_value
-        instance.get_quota_all = AsyncMock(return_value={
-            "pd.soc": 75,
-            "pd.wattsInSum": 200,
-            "pd.wattsOutSum": 100,
-        })
+        instance.get_quota_all = AsyncMock(
+            return_value={
+                "pd.soc": 75,
+                "pd.wattsInSum": 200,
+                "pd.wattsOutSum": 100,
+            }
+        )
         yield instance
 
 

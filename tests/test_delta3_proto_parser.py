@@ -61,9 +61,7 @@ def _build_display_message() -> Delta3DisplayProperty:
     msg.pow_get_typec3 = 18.0
     msg.pow_get_qcusb1 = 10.0
     msg.pow_get_qcusb2 = 0.0
-    msg.pow_get_ac_out_list.pow_get_ac_out_item.extend(
-        [-120.0, 0.0, -35.0, 0.0, 0.0]
-    )
+    msg.pow_get_ac_out_list.pow_get_ac_out_item.extend([-120.0, 0.0, -35.0, 0.0, 0.0])
     msg.pow_get_12v_list.pow_get_12v_item.extend([12.0, 6.0])
     msg.flow_info_ac_out = 14
     msg.flow_info_ac2_out = 4
@@ -354,7 +352,9 @@ class TestBmsHeartbeat:
         msg = self._message()
         msg.accu_chg_energy = 0
         msg.accu_dsg_energy = 0
-        parsed = parse_delta3_bms_heartbeat(_decode(_build_frame(32, 50, msg.SerializeToString())))
+        parsed = parse_delta3_bms_heartbeat(
+            _decode(_build_frame(32, 50, msg.SerializeToString()))
+        )
         assert "bms_accu_chg_energy_kwh" not in parsed
         assert "bms_accu_dsg_energy_kwh" not in parsed
 
@@ -527,7 +527,11 @@ class TestAcChargeMode:
     """
 
     def test_each_mode_reaches_the_sensor_key(self):
-        for wire, label in ((0, "self_def_pow"), (1, "bat_optimal_pow"), (2, "silence")):
+        for wire, label in (
+            (0, "self_def_pow"),
+            (1, "bat_optimal_pow"),
+            (2, "silence"),
+        ):
             display = _build_display_message()
             display.ac_in_chg_mode = wire
 
@@ -545,9 +549,12 @@ class TestAcChargeMode:
         decoded = type(display).FromString(display.SerializeToString())
 
         assert decoded.HasField("ac_in_chg_mode")
-        assert parse_delta3_display_property(
-            {"ac_in_chg_mode": decoded.ac_in_chg_mode}
-        )["ac_charge_mode"] == "self_def_pow"
+        assert (
+            parse_delta3_display_property({"ac_in_chg_mode": decoded.ac_in_chg_mode})[
+                "ac_charge_mode"
+            ]
+            == "self_def_pow"
+        )
 
     def test_unknown_mode_writes_nothing(self):
         """A select showing an option the device did not report is worse than

@@ -323,7 +323,9 @@ def parse_delta_report(
             if iv in mapping:
                 parsed[key] = mapping[iv]
             else:
-                _LOGGER.debug("Unknown enum value for %s: %r (dropped)", key, parsed[key])
+                _LOGGER.debug(
+                    "Unknown enum value for %s: %r (dropped)", key, parsed[key]
+                )
                 del parsed[key]
 
     return parsed

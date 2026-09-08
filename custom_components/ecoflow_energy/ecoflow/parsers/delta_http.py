@@ -170,7 +170,6 @@ DELTA2MAX_HTTP_FIELD_MAP: dict[str, str] = {
 }
 
 
-
 def parse_delta_http_quota(quota_data: dict) -> dict[str, Any]:
     """Parse a Delta 2 Max GET /quota/all response into flat sensor keys.
 
@@ -291,7 +290,9 @@ def parse_delta_http_quota(quota_data: dict) -> dict[str, Any]:
             if iv in mapping:
                 result[key] = mapping[iv]
             else:
-                _LOGGER.debug("Unknown enum value for %s: %r (dropped)", key, result[key])
+                _LOGGER.debug(
+                    "Unknown enum value for %s: %r (dropped)", key, result[key]
+                )
                 del result[key]
 
     return result

@@ -292,9 +292,7 @@ class TestTheCaptureReachesTheEntities:
     """The point of the whole phase: a frame the reporter's meter sent, in,
     and Home Assistant states out."""
 
-    async def test_the_full_upload_fills_the_sensors(
-        self, hass: HomeAssistant
-    ) -> None:
+    async def test_the_full_upload_fills_the_sensors(self, hass: HomeAssistant) -> None:
         entry = _entry(BK21_DEVICE)
         entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(hass, entry, BK21_DEVICE)

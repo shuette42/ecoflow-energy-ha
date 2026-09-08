@@ -221,7 +221,11 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
     result = dict(parsed)
 
     for key, value in list(result.items()):
-        if isinstance(value, float) and isfinite(value) and abs(value) < _FLOAT_ZERO_EPS:
+        if (
+            isinstance(value, float)
+            and isfinite(value)
+            and abs(value) < _FLOAT_ZERO_EPS
+        ):
             result[key] = 0.0
 
     grid_state_raw = result.pop("_grid_connection_state_raw", None)

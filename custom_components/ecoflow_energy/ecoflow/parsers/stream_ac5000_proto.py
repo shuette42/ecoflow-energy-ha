@@ -461,6 +461,7 @@ _ES22_TREE: dict[tuple[int, int], dict[int, Any]] = {
     cmd: _compile(field_map) for cmd, field_map in _ES22_FIELD_MAP.items()
 }
 
+
 def _zero_fill_keys(
     cmd: tuple[int, int], paths: tuple[str, ...]
 ) -> dict[str, tuple[tuple[str, Any], ...]]:
@@ -558,12 +559,12 @@ def _read_field(mv: memoryview, pos: int, wire_type: int) -> tuple[bytes, int]:
         _, pos = _read_varint(mv, pos)
         return mv[start:pos].tobytes(), pos
     if wire_type == 1:
-        return mv[pos:pos + 8].tobytes(), pos + 8
+        return mv[pos : pos + 8].tobytes(), pos + 8
     if wire_type == 2:
         length, pos = _read_varint(mv, pos)
-        return mv[pos:pos + length].tobytes(), pos + length
+        return mv[pos : pos + length].tobytes(), pos + length
     if wire_type == 5:
-        return mv[pos:pos + 4].tobytes(), pos + 4
+        return mv[pos : pos + 4].tobytes(), pos + 4
     raise ValueError(f"unsupported wire type {wire_type}")
 
 
@@ -772,7 +773,11 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
     result = dict(parsed)
 
     for key, value in list(result.items()):
-        if isinstance(value, float) and isfinite(value) and abs(value) < _FLOAT_ZERO_EPS:
+        if (
+            isinstance(value, float)
+            and isfinite(value)
+            and abs(value) < _FLOAT_ZERO_EPS
+        ):
             result[key] = 0.0
 
     work_mode_raw = result.pop("_work_mode_raw", None)
@@ -813,7 +818,9 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
     home_from_grid = result.get("home_from_grid_w")
     home_from_batt = result.get("home_from_batt_w")
 
-    if isinstance(grid_to_batt, (int, float)) and isinstance(home_from_grid, (int, float)):
+    if isinstance(grid_to_batt, (int, float)) and isinstance(
+        home_from_grid, (int, float)
+    ):
         result["grid_import_power_w"] = float(home_from_grid) + float(grid_to_batt)
     if isinstance(batt_to_grid, (int, float)):
         # A solar-to-grid edge only exists on a unit with PV attached; its

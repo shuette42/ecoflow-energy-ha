@@ -103,9 +103,7 @@ class TestDelta3FieldMap:
         assert parse_delta3_http_quota({"cmsBattSoc": "not-a-number"}) == {}
 
     def test_remain_time_passes_through_uncapped(self) -> None:
-        result = parse_delta3_http_quota(
-            {"cmsChgRemTime": 143999, "cmsChgDsgState": 2}
-        )
+        result = parse_delta3_http_quota({"cmsChgRemTime": 143999, "cmsChgDsgState": 2})
         assert result["chg_remain_time_min"] == 143999
 
     def test_remain_time_needs_the_matching_state(self) -> None:

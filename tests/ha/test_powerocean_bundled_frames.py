@@ -374,8 +374,7 @@ def test_one_bad_header_keeps_the_rest_of_the_bundle() -> None:
     )
 
     with patch(
-        "custom_components.ecoflow_energy.coordinator.mqtt_ingest."
-        "flatten_heartbeat",
+        "custom_components.ecoflow_energy.coordinator.mqtt_ingest.flatten_heartbeat",
         side_effect=ValueError("bad header"),
     ):
         parsed = _PowerOceanParser()._parse_powerocean_proto_frame(frame)
@@ -397,9 +396,7 @@ def _inventory_frame(*pack_sns: bytes) -> bytes:
         encode_field_bytes(1, encode_field_bytes(1, b"EMSMODULEFAKE001")),
         encode_field_bytes(2, encode_field_bytes(1, b"PCSMODULEFAKE002")),
     ]
-    parts.extend(
-        encode_field_bytes(3, encode_field_bytes(1, sn)) for sn in pack_sns
-    )
+    parts.extend(encode_field_bytes(3, encode_field_bytes(1, sn)) for sn in pack_sns)
     return _build_header(96, 3, b"".join(parts))
 
 
@@ -421,9 +418,6 @@ def test_module_inventory_produces_no_sensor_values() -> None:
     )
 
     assert parsed is None
-
-
-
 
 
 def test_empty_pv_inv_companion_does_not_zero_heartbeat_value() -> None:

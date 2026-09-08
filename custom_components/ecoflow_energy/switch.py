@@ -77,7 +77,9 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up EcoFlow switches from a config entry."""
-    coordinators: dict[str, EcoFlowDeviceCoordinator] = hass.data[DOMAIN][entry.entry_id]
+    coordinators: dict[str, EcoFlowDeviceCoordinator] = hass.data[DOMAIN][
+        entry.entry_id
+    ]
     entities: list[EcoFlowSwitch] = []
 
     for coordinator in coordinators.values():
@@ -254,8 +256,12 @@ class EcoFlowSwitch(
             and self.coordinator.enhanced_mode
             and self._definition.key == "plug_switch"
         ):
-            payload = build_plug_switch_payload(turn_on, device_sn=self.coordinator.device_sn)
-            ok = await self.coordinator.async_send_proto_set_command(payload, "plug_switch")
+            payload = build_plug_switch_payload(
+                turn_on, device_sn=self.coordinator.device_sn
+            )
+            ok = await self.coordinator.async_send_proto_set_command(
+                payload, "plug_switch"
+            )
             if not ok:
                 raise_set_failed(self.entity_id)
             self._apply_optimistic(turn_on)
@@ -328,9 +334,7 @@ class EcoFlowSwitch(
         key = self._definition.key
 
         if key == "backup_socket_switch":
-            return await self.coordinator.async_set_stream_ac5000_backup_socket(
-                turn_on
-            )
+            return await self.coordinator.async_set_stream_ac5000_backup_socket(turn_on)
 
         if key == "backup_reserve_switch":
             # Config field 30 holds the on/off and the reserve level, so the
@@ -404,7 +408,9 @@ class EcoFlowSwitch(
 
         if self.coordinator.device_type == DEVICE_TYPE_DELTA:
             commands = _get_delta_switch_commands(self.coordinator.delta_profile)
-            declarative_templates = _get_delta_switch_declarative(self.coordinator.delta_profile)
+            declarative_templates = _get_delta_switch_declarative(
+                self.coordinator.delta_profile
+            )
         else:
             commands = _get_switch_commands(self.coordinator.device_type)
             declarative_templates = {}
@@ -470,7 +476,9 @@ def _get_switch_commands(device_type: str) -> dict[str, dict[str, dict[str, Any]
     return SWITCH_COMMANDS_R351
 
 
-def _get_delta_switch_commands(delta_profile: str) -> dict[str, dict[str, dict[str, Any]]]:
+def _get_delta_switch_commands(
+    delta_profile: str,
+) -> dict[str, dict[str, dict[str, Any]]]:
     """Return Delta switch command templates for the selected profile."""
     if delta_profile == DELTA_PROFILE_R331:
         return SWITCH_COMMANDS_R331

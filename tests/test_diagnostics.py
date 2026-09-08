@@ -32,9 +32,10 @@ def test_diagnostics_no_password_values_in_output():
     # Must not access email/password from entry.data. Access/secret key are
     # read for the read-only quota client (see runtime output-guard tests).
     dangerous_patterns = [
-        r'entry\.data\[.*(EMAIL|PASSWORD)',
-        r'entry\.data\.get\(.*(email|password)',
+        r"entry\.data\[.*(EMAIL|PASSWORD)",
+        r"entry\.data\.get\(.*(email|password)",
     ]
     for pattern in dangerous_patterns:
-        assert not re.search(pattern, source, re.IGNORECASE), \
+        assert not re.search(pattern, source, re.IGNORECASE), (
             f"diagnostics.py must not access email/password: {pattern}"
+        )

@@ -125,7 +125,10 @@ class EcoFlowDeviceCoordinator(
         stored_type = device_info.get("device_type", "")
         if stored_type == DEVICE_TYPE_UNKNOWN:
             from ..const import get_device_type
-            stored_type = get_device_type(device_info.get("product_name", ""), self.device_sn)
+
+            stored_type = get_device_type(
+                device_info.get("product_name", ""), self.device_sn
+            )
         self.device_type: str = stored_type
         product_name = device_info.get("product_name", "")
         display_name = DEVICE_TYPE_DISPLAY_NAMES.get(self.device_type, "")
@@ -157,8 +160,7 @@ class EcoFlowDeviceCoordinator(
         #   (power, battery, MPPT, grid phases, EMS state).
         #   HTTP fallback activates only when MQTT is stale (>35s).
         poll_interval = (
-            None if enhanced_mode
-            else timedelta(seconds=HTTP_FALLBACK_INTERVAL_S)
+            None if enhanced_mode else timedelta(seconds=HTTP_FALLBACK_INTERVAL_S)
         )
 
         super().__init__(
@@ -558,7 +560,6 @@ class EcoFlowDeviceCoordinator(
         """Return the MQTT client (or None if not set up)."""
         return self._mqtt_client
 
-
     @property
     def raw_frames(self) -> list[dict[str, Any]]:
         """Return the captured raw protobuf frames for diagnostics export."""
@@ -601,9 +602,7 @@ class EcoFlowDeviceCoordinator(
         client = self._mqtt_client
         return bool(client is not None and client.capture_writes)
 
-    def record_unknown_proto_fields(
-        self, cmd_key: str, fields: dict[int, Any]
-    ) -> None:
+    def record_unknown_proto_fields(self, cmd_key: str, fields: dict[int, Any]) -> None:
         """Merge one message's undeclared field numbers into the running set.
 
         Called from the Paho thread for every decoded push frame. The newest
@@ -655,11 +654,13 @@ class EcoFlowDeviceCoordinator(
 
     def _log_event(self, event_type: str, detail: str) -> None:
         """Record an event for diagnostics (bounded FIFO, max 50 entries)."""
-        self._event_log.append({
-            "ts": time.time(),
-            "type": event_type,
-            "detail": detail,
-        })
+        self._event_log.append(
+            {
+                "ts": time.time(),
+                "type": event_type,
+                "detail": detail,
+            }
+        )
 
     @property
     def device_info(self) -> DeviceInfo:

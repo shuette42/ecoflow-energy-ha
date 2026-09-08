@@ -281,19 +281,14 @@ class SetupFlowMixin(_Base):
                     )
                 return self._create_entry(mode=MODE_STANDARD)
 
-        device_options = {
-            d["sn"]: _device_label(d)
-            for d in self._devices
-        }
+        device_options = {d["sn"]: _device_label(d) for d in self._devices}
 
         # Two translation keys for one form - see the note in
         # `config_flow_options.py`. `_auth_type` is set before either path
         # reaches this step.
         return self.async_show_form(
             step_id=(
-                "devices_app"
-                if self._auth_type == AUTH_METHOD_APP
-                else "devices"
+                "devices_app" if self._auth_type == AUTH_METHOD_APP else "devices"
             ),
             data_schema=vol.Schema(
                 {
@@ -302,9 +297,9 @@ class SetupFlowMixin(_Base):
                         default=[
                             sn
                             for sn in device_options
-                            if next(
-                                d for d in self._devices if d["sn"] == sn
-                            ).get("device_type")
+                            if next(d for d in self._devices if d["sn"] == sn).get(
+                                "device_type"
+                            )
                             not in (
                                 (DEVICE_TYPE_POWERSTREAM,)
                                 if self._auth_type == AUTH_METHOD_APP

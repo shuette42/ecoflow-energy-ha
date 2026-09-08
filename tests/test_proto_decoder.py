@@ -29,9 +29,9 @@ from ecoflow_energy.ecoflow.proto_encoding import (
 def _build_frame(cmd_func: int, cmd_id: int, inner: bytes) -> bytes:
     """Build a minimal HeaderMessage frame for testing."""
     header = bytearray()
-    header.extend(encode_field_bytes(1, inner))       # pdata
-    header.extend(encode_field_varint(8, cmd_func))   # cmd_func
-    header.extend(encode_field_varint(9, cmd_id))     # cmd_id
+    header.extend(encode_field_bytes(1, inner))  # pdata
+    header.extend(encode_field_varint(8, cmd_func))  # cmd_func
+    header.extend(encode_field_varint(9, cmd_id))  # cmd_id
     return encode_field_bytes(1, bytes(header))
 
 
@@ -187,6 +187,7 @@ class TestRuntimeDecoder:
         from custom_components.ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
             JTS1EmsParamChangeReport,
         )
+
         msg = JTS1EmsParamChangeReport()
         msg.dev_soc = 47
         inner = msg.SerializeToString()
@@ -514,6 +515,4 @@ class TestFullPowerFrameFlag:
         msg.bp_soc = 50
         frame = _build_frame(96, 33, msg.SerializeToString())
 
-        assert (
-            decode_proto_runtime_frame(frame).mapped["_is_full_power_frame"] is False
-        )
+        assert decode_proto_runtime_frame(frame).mapped["_is_full_power_frame"] is False

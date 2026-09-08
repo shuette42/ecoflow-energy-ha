@@ -241,14 +241,14 @@ def _iter_fields(payload: bytes) -> list[tuple[int, int, bytes]]:
             _, pos = _read_varint(mv, pos)
             raw = mv[start:pos].tobytes()
         elif wire_type == 1:
-            raw = mv[pos:pos + 8].tobytes()
+            raw = mv[pos : pos + 8].tobytes()
             pos += 8
         elif wire_type == 2:
             length, pos = _read_varint(mv, pos)
-            raw = mv[pos:pos + length].tobytes()
+            raw = mv[pos : pos + length].tobytes()
             pos += length
         elif wire_type == 5:
-            raw = mv[pos:pos + 4].tobytes()
+            raw = mv[pos : pos + 4].tobytes()
             pos += 4
         else:
             break
@@ -283,7 +283,11 @@ def _finalize_stream_state(parsed: dict[str, Any]) -> dict[str, Any]:
     result = dict(parsed)
 
     for key, value in list(result.items()):
-        if isinstance(value, float) and isfinite(value) and abs(value) < _FLOAT_ZERO_EPS:
+        if (
+            isinstance(value, float)
+            and isfinite(value)
+            and abs(value) < _FLOAT_ZERO_EPS
+        ):
             result[key] = 0.0
 
     # A single unit is its own system, so a frame that carries only the

@@ -193,11 +193,15 @@ class TestStreamBackupReserveSet:
     and the coordinator's proto SET sender, with the #98-verified cmd_id=17."""
 
     def _make_entity(
-        self, hass, entry,
+        self,
+        hass,
+        entry,
     ) -> tuple[EcoFlowNumber, EcoFlowDeviceCoordinator]:
         entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
-            hass, entry, MOCK_STREAM_DEVICE,
+            hass,
+            entry,
+            MOCK_STREAM_DEVICE,
         )
         coordinator._device_data = {"backup_reserve_pct": 20}
         coordinator.async_set_updated_data(dict(coordinator._device_data))
@@ -504,9 +508,7 @@ class TestStreamSocLimitSet:
             hass, enhanced_config_entry, "stream_charge_limit"
         )
         discharge_definition = next(
-            item
-            for item in STREAM_NUMBERS
-            if item.key == "stream_discharge_limit"
+            item for item in STREAM_NUMBERS if item.key == "stream_discharge_limit"
         )
         discharge_entity = EcoFlowNumber(coordinator, discharge_definition)
         discharge_entity.async_write_ha_state = MagicMock()
@@ -748,9 +750,7 @@ class TestBackupReserveFloorFollowsTheDischargeLimit:
         limit = EcoFlowNumber(
             coordinator,
             next(
-                item
-                for item in STREAM_NUMBERS
-                if item.key == "stream_discharge_limit"
+                item for item in STREAM_NUMBERS if item.key == "stream_discharge_limit"
             ),
         )
         limit.async_write_ha_state = MagicMock()

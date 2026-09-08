@@ -41,7 +41,9 @@ class TestRegionAwareBroker:
 
     def test_string_port_is_accepted(self) -> None:
         """Ports arrive as strings from some responses."""
-        broker = broker_from_credentials({**EU_CREDENTIALS, "port": "8084"}, wss_mode=True)
+        broker = broker_from_credentials(
+            {**EU_CREDENTIALS, "port": "8084"}, wss_mode=True
+        )
 
         assert broker.port == 8084
 
@@ -60,7 +62,9 @@ class TestRegionAwareBroker:
         assert broker.host == "mqtt-a.ecoflow.com"
 
     def test_path_without_a_leading_slash_is_repaired(self) -> None:
-        broker = broker_from_credentials({**EU_CREDENTIALS, "path": "mqtt"}, wss_mode=True)
+        broker = broker_from_credentials(
+            {**EU_CREDENTIALS, "path": "mqtt"}, wss_mode=True
+        )
 
         assert broker.path == "/mqtt"
 

@@ -467,9 +467,7 @@ async def _skipped_devices_diagnostics(
 
         if not has_dev_creds:
             if not probe_eligible:
-                out["quota_note"] = (
-                    "not attempted: device requires Standard Mode"
-                )
+                out["quota_note"] = "not attempted: device requires Standard Mode"
             else:
                 out["quota_note"] = (
                     "developer credentials required to capture raw quota "
@@ -570,7 +568,9 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
     if coordinator.last_mqtt_ts > 0:
         last_mqtt_age_s = round(now - coordinator.last_mqtt_ts, 1)
 
-    data_keys = sorted(coordinator.device_data.keys()) if coordinator.device_data else []
+    data_keys = (
+        sorted(coordinator.device_data.keys()) if coordinator.device_data else []
+    )
 
     last_value_change_age_s: float | None = None
     if coordinator.last_value_change_ts > 0:
@@ -613,7 +613,9 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
             # answers carry anything new, which is why the two fields below
             # exist: a Standard Mode poll returning the cloud's stored copy
             # looks identical here to one returning a fresh reading (#267).
-            "update_interval": str(coordinator.update_interval) if coordinator.update_interval else None,
+            "update_interval": str(coordinator.update_interval)
+            if coordinator.update_interval
+            else None,
             "last_value_change_age_s": last_value_change_age_s,
             "unchanged_updates": coordinator.unchanged_updates,
             # A get-all reply repeats the scheduled-task list under one

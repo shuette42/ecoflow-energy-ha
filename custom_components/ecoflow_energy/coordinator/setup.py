@@ -49,7 +49,9 @@ class SetupMixin(_Base):
 
     async def async_setup(self) -> None:
         """Set up the data source for this device."""
-        self._auth_method = self._entry.data.get(CONF_AUTH_METHOD, AUTH_METHOD_DEVELOPER)
+        self._auth_method = self._entry.data.get(
+            CONF_AUTH_METHOD, AUTH_METHOD_DEVELOPER
+        )
         session = async_get_clientsession(self.hass)
 
         # Load energy integrator state from disk (non-blocking)
@@ -77,7 +79,10 @@ class SetupMixin(_Base):
 
         app_api = AppApiClient(session, email, password)
         if not await app_api.login():
-            _LOGGER.warning("App-auth: login failed for %s - triggering re-authentication", self.device_tag)
+            _LOGGER.warning(
+                "App-auth: login failed for %s - triggering re-authentication",
+                self.device_tag,
+            )
             self._entry.async_start_reauth(self.hass)
             return
 
@@ -90,7 +95,9 @@ class SetupMixin(_Base):
         # Fetch portal MQTT credentials (AES-decrypted app-* creds)
         creds = await app_api.get_mqtt_credentials()
         if creds is None:
-            _LOGGER.error("App-auth: failed to fetch MQTT credentials for %s", self.device_tag)
+            _LOGGER.error(
+                "App-auth: failed to fetch MQTT credentials for %s", self.device_tag
+            )
             self._entry.async_start_reauth(self.hass)
             return
 
@@ -111,7 +118,9 @@ class SetupMixin(_Base):
             mqtt_port=broker.port,
             wss_path=broker.path,
             wss_mode=True,
-            enhanced_mode=(self._enhanced_mode and self.device_type == DEVICE_TYPE_POWEROCEAN),
+            enhanced_mode=(
+                self._enhanced_mode and self.device_type == DEVICE_TYPE_POWEROCEAN
+            ),
             auth_error_handler=self._on_mqtt_auth_error,
             # Read once here, like the buffer depth in core.py: writing the
             # flag reloads the entry and builds a new client, so it never has
@@ -137,7 +146,8 @@ class SetupMixin(_Base):
 
         _LOGGER.debug(
             "App-auth setup complete for %s (enhanced=%s)",
-            self.device_tag, self._enhanced_mode,
+            self.device_tag,
+            self._enhanced_mode,
         )
 
     async def _setup_developer_auth(self, session: Any) -> None:
@@ -146,14 +156,20 @@ class SetupMixin(_Base):
         secret_key = self._entry.data.get(CONF_SECRET_KEY)
 
         if not access_key or not secret_key:
-            _LOGGER.error("Developer API keys missing for %s - triggering re-authentication", self.device_tag)
+            _LOGGER.error(
+                "Developer API keys missing for %s - triggering re-authentication",
+                self.device_tag,
+            )
             self._entry.async_start_reauth(self.hass)
             return
 
         self._iot_api = IoTApiClient(session, access_key, secret_key)
 
         self._http_client = EcoFlowHTTPQuota(
-            session, access_key, secret_key, self.device_sn,
+            session,
+            access_key,
+            secret_key,
+            self.device_sn,
         )
 
         # Standard Mode: HTTP polling is the primary data source.
@@ -193,12 +209,14 @@ class SetupMixin(_Base):
         if subscribe_mqtt:
             _LOGGER.debug(
                 "Standard Mode + MQTT push: HTTP every %ds + MQTT real-time for %s",
-                HTTP_FALLBACK_INTERVAL_S, self.device_tag,
+                HTTP_FALLBACK_INTERVAL_S,
+                self.device_tag,
             )
         else:
             _LOGGER.debug(
                 "Standard Mode: HTTP polling every %ds for %s",
-                HTTP_FALLBACK_INTERVAL_S, self.device_tag,
+                HTTP_FALLBACK_INTERVAL_S,
+                self.device_tag,
             )
 
     def _start_mqtt(self) -> None:
@@ -232,8 +250,11 @@ class SetupMixin(_Base):
     async def _async_shutdown_cleanup(self) -> None:
         """Drain in-flight writes, then stop MQTT and coordinator resources."""
         for handle in (
-            self._keepalive_unsub, self._quotas_unsub, self._ping_unsub,
-            self._stale_check_unsub, self._credential_refresh_unsub,
+            self._keepalive_unsub,
+            self._quotas_unsub,
+            self._ping_unsub,
+            self._stale_check_unsub,
+            self._credential_refresh_unsub,
             self._powerocean_soc_debounce_unsub,
         ):
             if handle is not None:
@@ -259,16 +280,13 @@ class SetupMixin(_Base):
         task_errors: list[BaseException] = []
         while self._powerocean_soc_flush_tasks or self._powerocean_soc_write_tasks:
             tasks = tuple(
-                self._powerocean_soc_flush_tasks
-                | self._powerocean_soc_write_tasks
+                self._powerocean_soc_flush_tasks | self._powerocean_soc_write_tasks
             )
             outcomes = await asyncio.gather(*tasks, return_exceptions=True)
             self._powerocean_soc_flush_tasks.difference_update(tasks)
             self._powerocean_soc_write_tasks.difference_update(tasks)
             task_errors.extend(
-                outcome
-                for outcome in outcomes
-                if isinstance(outcome, BaseException)
+                outcome for outcome in outcomes if isinstance(outcome, BaseException)
             )
         # Set iteration order is deliberately irrelevant to the propagated
         # outcome: task failures are sorted before ordered teardown stages.
@@ -289,9 +307,7 @@ class SetupMixin(_Base):
             finally:
                 self._mqtt_client = None
         try:
-            await self.hass.async_add_executor_job(
-                self._energy_integrator.force_flush
-            )
+            await self.hass.async_add_executor_job(self._energy_integrator.force_flush)
         except BaseException as err:  # noqa: BLE001
             cleanup_errors.append(err)
         try:

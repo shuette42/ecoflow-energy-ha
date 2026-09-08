@@ -52,7 +52,9 @@ class CredentialsMixin(_Base):
 
     def _on_mqtt_auth_error(self) -> None:
         """Handle MQTT AUTH error (rc=5) - schedule credential refresh."""
-        _LOGGER.warning("MQTT AUTH error for %s - scheduling credential refresh", self.device_tag)
+        _LOGGER.warning(
+            "MQTT AUTH error for %s - scheduling credential refresh", self.device_tag
+        )
         self._log_event("reauth", "mqtt_auth_error")
         self.hass.loop.call_soon_threadsafe(
             self.hass.async_create_task,
@@ -74,28 +76,43 @@ class CredentialsMixin(_Base):
             email = self._entry.data.get(CONF_EMAIL, "")
             password = self._entry.data.get(CONF_PASSWORD, "")
             if not email or not password:
-                _LOGGER.warning("App-auth credential refresh failed for %s - no credentials", self.device_tag)
+                _LOGGER.warning(
+                    "App-auth credential refresh failed for %s - no credentials",
+                    self.device_tag,
+                )
                 self._entry.async_start_reauth(self.hass)
                 return
 
             app_api = AppApiClient(session, email, password)
             if not await app_api.login():
-                _LOGGER.warning("App-auth credential refresh failed for %s - login failed", self.device_tag)
+                _LOGGER.warning(
+                    "App-auth credential refresh failed for %s - login failed",
+                    self.device_tag,
+                )
                 self._entry.async_start_reauth(self.hass)
                 return
 
             creds = await app_api.get_mqtt_credentials()
             if creds is not None:
-                cert_account = creds.get("certificateAccount") or creds.get("userName", "")
-                cert_password = creds.get("certificatePassword") or creds.get("password", "")
+                cert_account = creds.get("certificateAccount") or creds.get(
+                    "userName", ""
+                )
+                cert_password = creds.get("certificatePassword") or creds.get(
+                    "password", ""
+                )
                 self._mqtt_client.update_credentials(cert_account, cert_password)
                 self._adopt_broker(creds)
                 self._credential_obtained_ts = time.monotonic()
                 self._log_event("credential_refresh_ok", "app-auth")
-                _LOGGER.debug("App-auth MQTT credentials refreshed for %s", self.device_tag)
+                _LOGGER.debug(
+                    "App-auth MQTT credentials refreshed for %s", self.device_tag
+                )
             else:
                 self._log_event("credential_refresh_fail", "app-auth, no credentials")
-                _LOGGER.warning("App-auth credential refresh failed for %s - triggering re-authentication", self.device_tag)
+                _LOGGER.warning(
+                    "App-auth credential refresh failed for %s - triggering re-authentication",
+                    self.device_tag,
+                )
                 self._entry.async_start_reauth(self.hass)
         else:
             # Developer-auth: use IoT API
@@ -113,7 +130,10 @@ class CredentialsMixin(_Base):
                 _LOGGER.debug("MQTT credentials refreshed for %s", self.device_tag)
             else:
                 self._log_event("credential_refresh_fail", "developer-auth")
-                _LOGGER.warning("MQTT credential refresh failed for %s - triggering re-authentication", self.device_tag)
+                _LOGGER.warning(
+                    "MQTT credential refresh failed for %s - triggering re-authentication",
+                    self.device_tag,
+                )
                 self._entry.async_start_reauth(self.hass)
 
     # ------------------------------------------------------------------
@@ -125,7 +145,8 @@ class CredentialsMixin(_Base):
         if self._shutdown:
             return
         self._credential_refresh_unsub = self.hass.loop.call_later(
-            CREDENTIAL_REFRESH_CHECK_S, self._check_credential_age,
+            CREDENTIAL_REFRESH_CHECK_S,
+            self._check_credential_age,
         )
 
     def _check_credential_age(self) -> None:
@@ -138,20 +159,25 @@ class CredentialsMixin(_Base):
             if age >= CREDENTIAL_MAX_AGE_S:
                 _LOGGER.debug(
                     "Credentials for %s are %.0fh old - proactive refresh",
-                    self.device_tag, age / 3600,
+                    self.device_tag,
+                    age / 3600,
                 )
-                self._log_event("credential_proactive_refresh", f"age={age / 3600:.0f}h")
+                self._log_event(
+                    "credential_proactive_refresh", f"age={age / 3600:.0f}h"
+                )
                 self.hass.async_create_task(self._proactive_credential_refresh())
             else:
                 _LOGGER.debug(
                     "Credentials for %s are %.0fh old - still fresh",
-                    self.device_tag, age / 3600,
+                    self.device_tag,
+                    age / 3600,
                 )
 
         # Re-schedule
         if not self._shutdown:
             self._credential_refresh_unsub = self.hass.loop.call_later(
-                CREDENTIAL_REFRESH_CHECK_S, self._check_credential_age,
+                CREDENTIAL_REFRESH_CHECK_S,
+                self._check_credential_age,
             )
 
     async def _proactive_credential_refresh(self) -> None:
@@ -173,20 +199,29 @@ class CredentialsMixin(_Base):
 
             app_api = AppApiClient(session, email, password)
             if not await app_api.login():
-                _LOGGER.debug("Proactive credential refresh: login failed for %s", self.device_tag)
+                _LOGGER.debug(
+                    "Proactive credential refresh: login failed for %s", self.device_tag
+                )
                 self._log_event("credential_proactive_fail", "login failed")
                 return
 
             creds = await app_api.get_mqtt_credentials()
             if creds is not None:
-                cert_account = creds.get("certificateAccount") or creds.get("userName", "")
-                cert_password = creds.get("certificatePassword") or creds.get("password", "")
+                cert_account = creds.get("certificateAccount") or creds.get(
+                    "userName", ""
+                )
+                cert_password = creds.get("certificatePassword") or creds.get(
+                    "password", ""
+                )
                 self._mqtt_client.update_credentials(cert_account, cert_password)
                 broker_changed = self._adopt_broker(creds)
                 self._credential_obtained_ts = time.monotonic()
                 self._log_event("credential_proactive_ok", "app-auth")
                 if cert_account != old_account or broker_changed:
-                    _LOGGER.debug("Proactive refresh: credentials changed for %s - force reconnect", self.device_tag)
+                    _LOGGER.debug(
+                        "Proactive refresh: credentials changed for %s - force reconnect",
+                        self.device_tag,
+                    )
                     self.hass.async_add_executor_job(self._mqtt_client.force_reconnect)
             else:
                 self._log_event("credential_proactive_fail", "no credentials")
@@ -202,8 +237,10 @@ class CredentialsMixin(_Base):
                 self._credential_obtained_ts = time.monotonic()
                 self._log_event("credential_proactive_ok", "developer-auth")
                 if cert_account != old_account or broker_changed:
-                    _LOGGER.debug("Proactive refresh: credentials changed for %s - force reconnect", self.device_tag)
+                    _LOGGER.debug(
+                        "Proactive refresh: credentials changed for %s - force reconnect",
+                        self.device_tag,
+                    )
                     self.hass.async_add_executor_job(self._mqtt_client.force_reconnect)
             else:
                 self._log_event("credential_proactive_fail", "api failed")
-

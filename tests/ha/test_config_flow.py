@@ -198,10 +198,12 @@ class TestPowerStreamModeBoundary:
             result = await hass.config_entries.options.async_init(entry.entry_id)
 
         options = result["data_schema"].schema[CONF_DEVICES].config["options"]
-        assert options == [{
-            "value": POWERSTREAM_DEVICE["sn"],
-            "label": "PowerStream (HW51...0001) - requires Standard Mode",
-        }]
+        assert options == [
+            {
+                "value": POWERSTREAM_DEVICE["sn"],
+                "label": "PowerStream (HW51...0001) - requires Standard Mode",
+            }
+        ]
 
 
 SMART_METER_DEVICE = {
@@ -267,10 +269,12 @@ async def _advance_developer_flow_with_enhanced_only_device(
     ) as mock_cls:
         api = mock_cls.return_value
         api.get_mqtt_credentials = AsyncMock(return_value=MOCK_MQTT_CREDENTIALS)
-        api.get_device_list = AsyncMock(return_value=[
-            {"sn": device["sn"], "productName": "", "online": 1},
-            {"sn": "HJ31TEST00000001", "productName": "PowerOcean", "online": 1},
-        ])
+        api.get_device_list = AsyncMock(
+            return_value=[
+                {"sn": device["sn"], "productName": "", "online": 1},
+                {"sn": "HJ31TEST00000001", "productName": "PowerOcean", "online": 1},
+            ]
+        )
 
         result = await _select_mode(hass, MODE_STANDARD)
         return await hass.config_entries.flow.async_configure(
@@ -438,10 +442,12 @@ class TestEnhancedOnlyModeBoundary:
             result = await hass.config_entries.options.async_init(entry.entry_id)
 
         options = result["data_schema"].schema[CONF_DEVICES].config["options"]
-        assert options == [{
-            "value": device["sn"],
-            "label": expected_label,
-        }]
+        assert options == [
+            {
+                "value": device["sn"],
+                "label": expected_label,
+            }
+        ]
 
 
 # ===========================================================================
@@ -524,9 +530,11 @@ class TestDeveloperStep:
         ):
             api = mock_cls.return_value
             api.get_mqtt_credentials = AsyncMock(return_value=MOCK_MQTT_CREDENTIALS)
-            api.get_device_list = AsyncMock(return_value=[
-                {"sn": "SN001", "productName": "Delta 2 Max", "online": 1},
-            ])
+            api.get_device_list = AsyncMock(
+                return_value=[
+                    {"sn": "SN001", "productName": "Delta 2 Max", "online": 1},
+                ]
+            )
 
             result = await _select_mode(hass, MODE_STANDARD)
             result = await hass.config_entries.flow.async_configure(
@@ -691,7 +699,12 @@ class TestAppCredentialsStep:
                 "custom_components.ecoflow_energy.config_flow_setup.get_app_device_list",
                 new_callable=AsyncMock,
                 return_value=[
-                    {"sn": "HJ31TEST00000001", "product_name": "PowerOcean", "online": 1, "device_type": "powerocean"},
+                    {
+                        "sn": "HJ31TEST00000001",
+                        "product_name": "PowerOcean",
+                        "online": 1,
+                        "device_type": "powerocean",
+                    },
                 ],
             ),
         ):
@@ -700,7 +713,9 @@ class TestAppCredentialsStep:
                 {CONF_EMAIL: "test@example.com", CONF_PASSWORD: "secret"},
             )
             assert result["type"] is FlowResultType.FORM
-            assert result["step_id"] == "devices_app"  # account sign-in renders its own help text
+            assert (
+                result["step_id"] == "devices_app"
+            )  # account sign-in renders its own help text
 
     async def test_full_path_creates_entry(self, hass: HomeAssistant) -> None:
         """Full app-auth path: login -> devices -> entry created (no mode step)."""
@@ -715,7 +730,12 @@ class TestAppCredentialsStep:
                 "custom_components.ecoflow_energy.config_flow_setup.get_app_device_list",
                 new_callable=AsyncMock,
                 return_value=[
-                    {"sn": "HJ31TEST00000001", "product_name": "PowerOcean", "online": 1, "device_type": "powerocean"},
+                    {
+                        "sn": "HJ31TEST00000001",
+                        "product_name": "PowerOcean",
+                        "online": 1,
+                        "device_type": "powerocean",
+                    },
                 ],
             ),
         ):
@@ -724,7 +744,9 @@ class TestAppCredentialsStep:
                 {CONF_EMAIL: "test@example.com", CONF_PASSWORD: "secret"},
             )
             # Should be on devices step now
-            assert result["step_id"] == "devices_app"  # account sign-in renders its own help text
+            assert (
+                result["step_id"] == "devices_app"
+            )  # account sign-in renders its own help text
 
             # Select the device - should create entry directly (no mode step)
             result = await hass.config_entries.flow.async_configure(
@@ -755,10 +777,12 @@ class TestDevicesStep:
         ):
             api = mock_cls.return_value
             api.get_mqtt_credentials = AsyncMock(return_value=MOCK_MQTT_CREDENTIALS)
-            api.get_device_list = AsyncMock(return_value=[
-                {"sn": "SN001", "productName": "Delta 2 Max", "online": 1},
-                {"sn": "SN002", "productName": "PowerOcean", "online": 1},
-            ])
+            api.get_device_list = AsyncMock(
+                return_value=[
+                    {"sn": "SN001", "productName": "Delta 2 Max", "online": 1},
+                    {"sn": "SN002", "productName": "PowerOcean", "online": 1},
+                ]
+            )
 
             result = await _select_mode(hass, MODE_STANDARD)
             return await hass.config_entries.flow.async_configure(
@@ -795,10 +819,20 @@ class TestDevicesStep:
         ) as mock_cls:
             api = mock_cls.return_value
             api.get_mqtt_credentials = AsyncMock(return_value=MOCK_MQTT_CREDENTIALS)
-            api.get_device_list = AsyncMock(return_value=[
-                {"sn": "R351FAKE00000001", "productName": "Delta 2 Max", "online": 1},
-                {"sn": "ZZ99FAKE00000001", "productName": "Mystery Box", "online": 1},
-            ])
+            api.get_device_list = AsyncMock(
+                return_value=[
+                    {
+                        "sn": "R351FAKE00000001",
+                        "productName": "Delta 2 Max",
+                        "online": 1,
+                    },
+                    {
+                        "sn": "ZZ99FAKE00000001",
+                        "productName": "Mystery Box",
+                        "online": 1,
+                    },
+                ]
+            )
             result = await _select_mode(hass, MODE_STANDARD)
             result = await hass.config_entries.flow.async_configure(
                 result["flow_id"],
@@ -809,7 +843,9 @@ class TestDevicesStep:
             opt["value"]: opt["label"]
             for opt in result["data_schema"].schema[CONF_DEVICES].config["options"]
         }
-        assert labels["ZZ99FAKE00000001"].endswith(" - not supported yet (no data exposed)")
+        assert labels["ZZ99FAKE00000001"].endswith(
+            " - not supported yet (no data exposed)"
+        )
         assert "not supported" not in labels["R351FAKE00000001"]
 
     async def test_empty_selection_shows_error(self, hass: HomeAssistant) -> None:
@@ -840,9 +876,11 @@ class TestAbort:
         ):
             api = mock_cls.return_value
             api.get_mqtt_credentials = AsyncMock(return_value=MOCK_MQTT_CREDENTIALS)
-            api.get_device_list = AsyncMock(return_value=[
-                {"sn": "SN001", "productName": "Delta 2 Max", "online": 1},
-            ])
+            api.get_device_list = AsyncMock(
+                return_value=[
+                    {"sn": "SN001", "productName": "Delta 2 Max", "online": 1},
+                ]
+            )
 
             result = await _select_mode(hass, MODE_STANDARD)
             result = await hass.config_entries.flow.async_configure(
@@ -863,9 +901,11 @@ class TestAbort:
         ):
             api = mock_cls.return_value
             api.get_mqtt_credentials = AsyncMock(return_value=MOCK_MQTT_CREDENTIALS)
-            api.get_device_list = AsyncMock(return_value=[
-                {"sn": "SN001", "productName": "Delta 2 Max", "online": 1},
-            ])
+            api.get_device_list = AsyncMock(
+                return_value=[
+                    {"sn": "SN001", "productName": "Delta 2 Max", "online": 1},
+                ]
+            )
 
             result = await _select_mode(hass, MODE_STANDARD)
             result = await hass.config_entries.flow.async_configure(
@@ -899,8 +939,13 @@ class TestOptionsFlow:
                 CONF_SECRET_KEY: "sk",
                 CONF_MODE: MODE_STANDARD,
                 CONF_DEVICES: [
-                    {"sn": "SN001", "name": "Delta 2 Max", "product_name": "Delta 2 Max",
-                     "device_type": "delta", "online": 1},
+                    {
+                        "sn": "SN001",
+                        "name": "Delta 2 Max",
+                        "product_name": "Delta 2 Max",
+                        "device_type": "delta",
+                        "online": 1,
+                    },
                 ],
             },
             unique_id="ak",
@@ -922,8 +967,13 @@ class TestOptionsFlow:
                 CONF_PASSWORD: "secret",
                 CONF_USER_ID: "uid",
                 CONF_DEVICES: [
-                    {"sn": "SN001", "name": "Delta 2 Max", "product_name": "Delta 2 Max",
-                     "device_type": "delta", "online": 1},
+                    {
+                        "sn": "SN001",
+                        "name": "Delta 2 Max",
+                        "product_name": "Delta 2 Max",
+                        "device_type": "delta",
+                        "online": 1,
+                    },
                 ],
             },
             unique_id="ak",
@@ -946,8 +996,13 @@ class TestOptionsFlow:
                 CONF_PASSWORD: "secret",
                 CONF_USER_ID: "uid",
                 CONF_DEVICES: [
-                    {"sn": "SN001", "name": "Delta 2 Max", "product_name": "Delta 2 Max",
-                     "device_type": "delta", "online": 1},
+                    {
+                        "sn": "SN001",
+                        "name": "Delta 2 Max",
+                        "product_name": "Delta 2 Max",
+                        "device_type": "delta",
+                        "online": 1,
+                    },
                 ],
                 **capture,
             },
@@ -1058,9 +1113,11 @@ class TestOptionsFlow:
         with patch(
             "custom_components.ecoflow_energy.config_flow_options.IoTApiClient",
         ) as mock_cls:
-            mock_cls.return_value.get_device_list = AsyncMock(return_value=[
-                {"sn": "SN001", "productName": "Delta 2 Max", "online": 1},
-            ])
+            mock_cls.return_value.get_device_list = AsyncMock(
+                return_value=[
+                    {"sn": "SN001", "productName": "Delta 2 Max", "online": 1},
+                ]
+            )
             result = await hass.config_entries.options.async_init(entry.entry_id)
         assert result["type"] is FlowResultType.FORM
         assert result["step_id"] == "init"
@@ -1071,9 +1128,11 @@ class TestOptionsFlow:
         with patch(
             "custom_components.ecoflow_energy.config_flow_options.IoTApiClient",
         ) as mock_cls:
-            mock_cls.return_value.get_device_list = AsyncMock(return_value=[
-                {"sn": "SN001", "productName": "Delta 2 Max", "online": 1},
-            ])
+            mock_cls.return_value.get_device_list = AsyncMock(
+                return_value=[
+                    {"sn": "SN001", "productName": "Delta 2 Max", "online": 1},
+                ]
+            )
             result = await hass.config_entries.options.async_init(entry.entry_id)
             result = await hass.config_entries.options.async_configure(
                 result["flow_id"],
@@ -1089,9 +1148,11 @@ class TestOptionsFlow:
         with patch(
             "custom_components.ecoflow_energy.config_flow_options.IoTApiClient",
         ) as mock_cls:
-            mock_cls.return_value.get_device_list = AsyncMock(return_value=[
-                {"sn": "SN001", "productName": "Delta 2 Max", "online": 1},
-            ])
+            mock_cls.return_value.get_device_list = AsyncMock(
+                return_value=[
+                    {"sn": "SN001", "productName": "Delta 2 Max", "online": 1},
+                ]
+            )
             result = await hass.config_entries.options.async_init(entry.entry_id)
             result = await hass.config_entries.options.async_configure(
                 result["flow_id"],
@@ -1106,9 +1167,11 @@ class TestOptionsFlow:
         with patch(
             "custom_components.ecoflow_energy.config_flow_options.IoTApiClient",
         ) as mock_cls:
-            mock_cls.return_value.get_device_list = AsyncMock(return_value=[
-                {"sn": "SN001", "productName": "Delta 2 Max", "online": 1},
-            ])
+            mock_cls.return_value.get_device_list = AsyncMock(
+                return_value=[
+                    {"sn": "SN001", "productName": "Delta 2 Max", "online": 1},
+                ]
+            )
             result = await hass.config_entries.options.async_init(entry.entry_id)
             result = await hass.config_entries.options.async_configure(
                 result["flow_id"],
@@ -1125,9 +1188,11 @@ class TestOptionsFlow:
         with patch(
             "custom_components.ecoflow_energy.config_flow_options.IoTApiClient",
         ) as mock_cls:
-            mock_cls.return_value.get_device_list = AsyncMock(return_value=[
-                {"sn": "SN001", "productName": "Delta 2 Max", "online": 1},
-            ])
+            mock_cls.return_value.get_device_list = AsyncMock(
+                return_value=[
+                    {"sn": "SN001", "productName": "Delta 2 Max", "online": 1},
+                ]
+            )
             result = await hass.config_entries.options.async_init(entry.entry_id)
             result = await hass.config_entries.options.async_configure(
                 result["flow_id"],
@@ -1152,8 +1217,13 @@ class TestOptionsFlow:
                 CONF_USER_ID: "uid",
                 CONF_MODE: MODE_STANDARD,
                 CONF_DEVICES: [
-                    {"sn": "SN001", "name": "Delta 2 Max", "product_name": "Delta 2 Max",
-                     "device_type": "delta", "online": 1},
+                    {
+                        "sn": "SN001",
+                        "name": "Delta 2 Max",
+                        "product_name": "Delta 2 Max",
+                        "device_type": "delta",
+                        "online": 1,
+                    },
                 ],
             },
             unique_id="uid",
@@ -1181,7 +1251,9 @@ class TestOptionsFlow:
             result = await hass.config_entries.options.async_init(entry.entry_id)
             mock_cls.assert_not_called()
         assert result["type"] is FlowResultType.FORM
-        assert result["step_id"] == "init_app"  # account sign-in renders its own help text
+        assert (
+            result["step_id"] == "init_app"
+        )  # account sign-in renders its own help text
 
     async def test_options_app_auth_refreshes_device_list(
         self, hass: HomeAssistant
@@ -1217,7 +1289,9 @@ class TestOptionsFlow:
 
         mock_login.assert_awaited_once()
         assert result["type"] is FlowResultType.FORM
-        assert result["step_id"] == "init_app"  # account sign-in renders its own help text
+        assert (
+            result["step_id"] == "init_app"
+        )  # account sign-in renders its own help text
 
         options = result["data_schema"].schema[CONF_DEVICES].config["options"]
         values = [opt["value"] for opt in options]
@@ -1264,7 +1338,9 @@ class TestOptionsFlow:
             opt["value"]: opt["label"]
             for opt in result["data_schema"].schema[CONF_DEVICES].config["options"]
         }
-        assert labels["ZZ99FAKE00000001"].endswith(" - not supported yet (no data exposed)")
+        assert labels["ZZ99FAKE00000001"].endswith(
+            " - not supported yet (no data exposed)"
+        )
         assert "not supported" not in labels["R351FAKE00000001"]
 
     async def test_options_stored_fallback_reclassifies(
@@ -1323,7 +1399,9 @@ class TestOptionsFlow:
             result = await hass.config_entries.options.async_init(entry.entry_id)
 
         assert result["type"] is FlowResultType.FORM
-        assert result["step_id"] == "init_app"  # account sign-in renders its own help text
+        assert (
+            result["step_id"] == "init_app"
+        )  # account sign-in renders its own help text
 
         options = result["data_schema"].schema[CONF_DEVICES].config["options"]
         assert [opt["value"] for opt in options] == ["SN001"]
@@ -1368,7 +1446,9 @@ class TestOptionsFlow:
             opt["value"]: opt["label"]
             for opt in result["data_schema"].schema[CONF_DEVICES].config["options"]
         }
-        assert labels["ZZ99FAKE00000001"].endswith(" - not supported yet (no data exposed)")
+        assert labels["ZZ99FAKE00000001"].endswith(
+            " - not supported yet (no data exposed)"
+        )
         assert "not supported" not in labels["R351FAKE00000001"]
 
     async def test_options_enhanced_login_validates(self, hass: HomeAssistant) -> None:
@@ -1377,9 +1457,11 @@ class TestOptionsFlow:
         with patch(
             "custom_components.ecoflow_energy.config_flow_options.IoTApiClient",
         ) as mock_cls:
-            mock_cls.return_value.get_device_list = AsyncMock(return_value=[
-                {"sn": "SN001", "productName": "Delta 2 Max", "online": 1},
-            ])
+            mock_cls.return_value.get_device_list = AsyncMock(
+                return_value=[
+                    {"sn": "SN001", "productName": "Delta 2 Max", "online": 1},
+                ]
+            )
             result = await hass.config_entries.options.async_init(entry.entry_id)
             result = await hass.config_entries.options.async_configure(
                 result["flow_id"],
@@ -1406,9 +1488,11 @@ class TestOptionsFlow:
         with patch(
             "custom_components.ecoflow_energy.config_flow_options.IoTApiClient",
         ) as mock_cls:
-            mock_cls.return_value.get_device_list = AsyncMock(return_value=[
-                {"sn": "SN001", "productName": "Delta 2 Max", "online": 1},
-            ])
+            mock_cls.return_value.get_device_list = AsyncMock(
+                return_value=[
+                    {"sn": "SN001", "productName": "Delta 2 Max", "online": 1},
+                ]
+            )
             result = await hass.config_entries.options.async_init(entry.entry_id)
             result = await hass.config_entries.options.async_configure(
                 result["flow_id"],
@@ -1439,9 +1523,11 @@ class TestOptionsFlow:
         with patch(
             "custom_components.ecoflow_energy.config_flow_options.IoTApiClient",
         ) as mock_cls:
-            mock_cls.return_value.get_device_list = AsyncMock(return_value=[
-                {"sn": "SN001", "productName": "Delta 2 Max", "online": 1},
-            ])
+            mock_cls.return_value.get_device_list = AsyncMock(
+                return_value=[
+                    {"sn": "SN001", "productName": "Delta 2 Max", "online": 1},
+                ]
+            )
             result = await hass.config_entries.options.async_init(entry.entry_id)
             result = await hass.config_entries.options.async_configure(
                 result["flow_id"],
@@ -1493,9 +1579,13 @@ class TestOptionsDeveloperStep:
                 CONF_PASSWORD: "test_password",
                 CONF_USER_ID: "uid123",
                 CONF_DEVICES: [
-                    {"sn": "HJ31FAKE00000001", "name": "PowerOcean",
-                     "product_name": "PowerOcean", "device_type": "powerocean",
-                     "online": 1},
+                    {
+                        "sn": "HJ31FAKE00000001",
+                        "name": "PowerOcean",
+                        "product_name": "PowerOcean",
+                        "device_type": "powerocean",
+                        "online": 1,
+                    },
                 ],
             },
             unique_id="test@example.com",
@@ -1548,9 +1638,15 @@ class TestOptionsDeveloperStep:
         with patch(
             "custom_components.ecoflow_energy.config_flow_options.IoTApiClient",
         ) as mock_cls:
-            mock_cls.return_value.get_device_list = AsyncMock(return_value=[
-                {"sn": "HJ31FAKE00000001", "productName": "PowerOcean", "online": 1},
-            ])
+            mock_cls.return_value.get_device_list = AsyncMock(
+                return_value=[
+                    {
+                        "sn": "HJ31FAKE00000001",
+                        "productName": "PowerOcean",
+                        "online": 1,
+                    },
+                ]
+            )
             result = await hass.config_entries.options.async_configure(
                 result["flow_id"],
                 {CONF_ACCESS_KEY: "test_ak", CONF_SECRET_KEY: "test_sk"},
@@ -1620,9 +1716,13 @@ class TestOptionsEnhancedStepErrors:
                 CONF_SECRET_KEY: "sk",
                 CONF_MODE: MODE_STANDARD,
                 CONF_DEVICES: [
-                    {"sn": "SN001", "name": "Delta 2 Max",
-                     "product_name": "Delta 2 Max", "device_type": "delta",
-                     "online": 1},
+                    {
+                        "sn": "SN001",
+                        "name": "Delta 2 Max",
+                        "product_name": "Delta 2 Max",
+                        "device_type": "delta",
+                        "online": 1,
+                    },
                 ],
             },
             unique_id="ak",
@@ -1643,9 +1743,11 @@ class TestOptionsEnhancedStepErrors:
         with patch(
             "custom_components.ecoflow_energy.config_flow_options.IoTApiClient",
         ) as mock_cls:
-            mock_cls.return_value.get_device_list = AsyncMock(return_value=[
-                {"sn": "SN001", "productName": "Delta 2 Max", "online": 1},
-            ])
+            mock_cls.return_value.get_device_list = AsyncMock(
+                return_value=[
+                    {"sn": "SN001", "productName": "Delta 2 Max", "online": 1},
+                ]
+            )
             result = await hass.config_entries.options.async_init(entry.entry_id)
             result = await hass.config_entries.options.async_configure(
                 result["flow_id"],
@@ -1685,8 +1787,13 @@ class TestReauthFlow:
                 CONF_SECRET_KEY: "old_sk",
                 CONF_MODE: MODE_STANDARD,
                 CONF_DEVICES: [
-                    {"sn": "SN001", "name": "Delta 2 Max", "product_name": "Delta 2 Max",
-                     "device_type": "delta", "online": 1},
+                    {
+                        "sn": "SN001",
+                        "name": "Delta 2 Max",
+                        "product_name": "Delta 2 Max",
+                        "device_type": "delta",
+                        "online": 1,
+                    },
                 ],
             },
             unique_id="old_ak",
@@ -1708,8 +1815,13 @@ class TestReauthFlow:
                 CONF_PASSWORD: "old_pass",
                 CONF_USER_ID: "old_uid",
                 CONF_DEVICES: [
-                    {"sn": "SN001", "name": "PowerOcean", "product_name": "PowerOcean",
-                     "device_type": "powerocean", "online": 1},
+                    {
+                        "sn": "SN001",
+                        "name": "PowerOcean",
+                        "product_name": "PowerOcean",
+                        "device_type": "powerocean",
+                        "online": 1,
+                    },
                 ],
             },
             unique_id="old_ak",
@@ -1899,8 +2011,13 @@ class TestReconfigureFlow:
                 CONF_SECRET_KEY: "old_sk",
                 CONF_MODE: MODE_STANDARD,
                 CONF_DEVICES: [
-                    {"sn": "SN001", "name": "Delta 2 Max", "product_name": "Delta 2 Max",
-                     "device_type": "delta", "online": 1},
+                    {
+                        "sn": "SN001",
+                        "name": "Delta 2 Max",
+                        "product_name": "Delta 2 Max",
+                        "device_type": "delta",
+                        "online": 1,
+                    },
                 ],
             },
             unique_id="old_ak",
@@ -1922,8 +2039,13 @@ class TestReconfigureFlow:
                 CONF_PASSWORD: "old_pass",
                 CONF_USER_ID: "old_uid",
                 CONF_DEVICES: [
-                    {"sn": "SN001", "name": "PowerOcean", "product_name": "PowerOcean",
-                     "device_type": "powerocean", "online": 1},
+                    {
+                        "sn": "SN001",
+                        "name": "PowerOcean",
+                        "product_name": "PowerOcean",
+                        "device_type": "powerocean",
+                        "online": 1,
+                    },
                 ],
             },
             unique_id="old_ak",
@@ -2089,8 +2211,13 @@ class TestAppAuthReauthFlow:
                 CONF_PASSWORD: "old_pass",
                 CONF_USER_ID: "old_uid",
                 CONF_DEVICES: [
-                    {"sn": "SN001", "name": "PowerOcean", "product_name": "PowerOcean",
-                     "device_type": "powerocean", "online": 1},
+                    {
+                        "sn": "SN001",
+                        "name": "PowerOcean",
+                        "product_name": "PowerOcean",
+                        "device_type": "powerocean",
+                        "online": 1,
+                    },
                 ],
             },
             unique_id="old@example.com",
@@ -2174,8 +2301,13 @@ class TestAppAuthReconfigureFlow:
                 CONF_PASSWORD: "old_pass",
                 CONF_USER_ID: "old_uid",
                 CONF_DEVICES: [
-                    {"sn": "SN001", "name": "PowerOcean", "product_name": "PowerOcean",
-                     "device_type": "powerocean", "online": 1},
+                    {
+                        "sn": "SN001",
+                        "name": "PowerOcean",
+                        "product_name": "PowerOcean",
+                        "device_type": "powerocean",
+                        "online": 1,
+                    },
                 ],
             },
             unique_id="old@example.com",
@@ -2267,9 +2399,13 @@ class TestReauthReconfigureExceptions:
                 CONF_SECRET_KEY: "old_sk",
                 CONF_MODE: MODE_STANDARD,
                 CONF_DEVICES: [
-                    {"sn": "SN001", "name": "Delta 2 Max",
-                     "product_name": "Delta 2 Max", "device_type": "delta",
-                     "online": 1},
+                    {
+                        "sn": "SN001",
+                        "name": "Delta 2 Max",
+                        "product_name": "Delta 2 Max",
+                        "device_type": "delta",
+                        "online": 1,
+                    },
                 ],
             },
             unique_id="old_ak",
@@ -2291,9 +2427,13 @@ class TestReauthReconfigureExceptions:
                 CONF_PASSWORD: "old_pass",
                 CONF_USER_ID: "old_uid",
                 CONF_DEVICES: [
-                    {"sn": "SN001", "name": "PowerOcean",
-                     "product_name": "PowerOcean", "device_type": "powerocean",
-                     "online": 1},
+                    {
+                        "sn": "SN001",
+                        "name": "PowerOcean",
+                        "product_name": "PowerOcean",
+                        "device_type": "powerocean",
+                        "online": 1,
+                    },
                 ],
             },
             unique_id="old_ak",
@@ -2314,9 +2454,13 @@ class TestReauthReconfigureExceptions:
                 CONF_PASSWORD: "old_pass",
                 CONF_USER_ID: "old_uid",
                 CONF_DEVICES: [
-                    {"sn": "SN001", "name": "PowerOcean",
-                     "product_name": "PowerOcean", "device_type": "powerocean",
-                     "online": 1},
+                    {
+                        "sn": "SN001",
+                        "name": "PowerOcean",
+                        "product_name": "PowerOcean",
+                        "device_type": "powerocean",
+                        "online": 1,
+                    },
                 ],
             },
             unique_id="old@example.com",
@@ -2542,24 +2686,30 @@ class TestDeviceLabel:
         """
         from custom_components.ecoflow_energy.config_flow_setup import _device_label
 
-        label = _device_label({
-            "sn": "ZZ99FAKE00000001",
-            "product_name": "Mystery Box",
-            "device_type": "unknown",
-            "online": 1,
-        })
-        assert label == "Mystery Box (ZZ99...0001) - not supported yet (no data exposed)"
+        label = _device_label(
+            {
+                "sn": "ZZ99FAKE00000001",
+                "product_name": "Mystery Box",
+                "device_type": "unknown",
+                "online": 1,
+            }
+        )
+        assert (
+            label == "Mystery Box (ZZ99...0001) - not supported yet (no data exposed)"
+        )
 
     def test_known_device_type_is_not_marked(self) -> None:
         """A supported device carries no marker."""
         from custom_components.ecoflow_energy.config_flow_setup import _device_label
 
-        label = _device_label({
-            "sn": "R351FAKE00000001",
-            "product_name": "Delta 2 Max",
-            "device_type": "delta",
-            "online": 1,
-        })
+        label = _device_label(
+            {
+                "sn": "R351FAKE00000001",
+                "product_name": "Delta 2 Max",
+                "device_type": "delta",
+                "online": 1,
+            }
+        )
         assert label == "Delta 2 Max (R351...0001)"
 
     def test_missing_device_type_is_not_marked(self) -> None:
@@ -2575,8 +2725,12 @@ class TestDeviceLabel:
             {"sn": "HJ36FAKE00000001", "product_name": "PowerOcean", "online": 1}
         )
         assert "not supported" not in _device_label(
-            {"sn": "HJ36FAKE00000001", "product_name": "PowerOcean",
-             "device_type": "", "online": 1}
+            {
+                "sn": "HJ36FAKE00000001",
+                "product_name": "PowerOcean",
+                "device_type": "",
+                "online": 1,
+            }
         )
 
     def test_app_path_device_without_product_name_is_not_marked(self) -> None:
@@ -2593,9 +2747,11 @@ class TestDeviceLabel:
         )
         from custom_components.ecoflow_energy.config_flow_setup import _device_label
 
-        devices = EcoFlowEnergyConfigFlow._normalize_app_devices([
-            {"sn": "J329FAKE00000001", "product_name": "", "online": 1},
-        ])
+        devices = EcoFlowEnergyConfigFlow._normalize_app_devices(
+            [
+                {"sn": "J329FAKE00000001", "product_name": "", "online": 1},
+            ]
+        )
 
         # The rendered label first: it is the thing the user sees, and it
         # pins the whole name fallback chain, not only the type field.
@@ -2606,13 +2762,18 @@ class TestDeviceLabel:
         """Being offline and being unsupported are separate facts."""
         from custom_components.ecoflow_energy.config_flow_setup import _device_label
 
-        label = _device_label({
-            "sn": "ZZ99FAKE00000001",
-            "product_name": "Mystery Box",
-            "device_type": "unknown",
-            "online": 0,
-        })
-        assert label == "Mystery Box (ZZ99...0001) (offline) - not supported yet (no data exposed)"
+        label = _device_label(
+            {
+                "sn": "ZZ99FAKE00000001",
+                "product_name": "Mystery Box",
+                "device_type": "unknown",
+                "online": 0,
+            }
+        )
+        assert (
+            label
+            == "Mystery Box (ZZ99...0001) (offline) - not supported yet (no data exposed)"
+        )
 
 
 class TestNormalizeDevices:
@@ -2624,11 +2785,13 @@ class TestNormalizeDevices:
             EcoFlowEnergyConfigFlow,
         )
 
-        result = EcoFlowEnergyConfigFlow._normalize_devices([
-            {"productName": "Delta 2 Max", "online": 1},
-            {"sn": "", "productName": "PowerOcean", "online": 1},
-            {"sn": "R351FAKE00000001", "productName": "Delta 2 Max", "online": 1},
-        ])
+        result = EcoFlowEnergyConfigFlow._normalize_devices(
+            [
+                {"productName": "Delta 2 Max", "online": 1},
+                {"sn": "", "productName": "PowerOcean", "online": 1},
+                {"sn": "R351FAKE00000001", "productName": "Delta 2 Max", "online": 1},
+            ]
+        )
         assert len(result) == 1
         assert result[0]["sn"] == "R351FAKE00000001"
 
@@ -2638,11 +2801,13 @@ class TestNormalizeDevices:
             EcoFlowEnergyConfigFlow,
         )
 
-        result = EcoFlowEnergyConfigFlow._normalize_app_devices([
-            {"product_name": "PowerOcean", "online": 1},
-            {"sn": "", "product_name": "Smart Plug", "online": 1},
-            {"sn": "HJ31FAKE00000001", "product_name": "PowerOcean", "online": 1},
-        ])
+        result = EcoFlowEnergyConfigFlow._normalize_app_devices(
+            [
+                {"product_name": "PowerOcean", "online": 1},
+                {"sn": "", "product_name": "Smart Plug", "online": 1},
+                {"sn": "HJ31FAKE00000001", "product_name": "PowerOcean", "online": 1},
+            ]
+        )
         assert len(result) == 1
         assert result[0]["sn"] == "HJ31FAKE00000001"
 
@@ -2652,14 +2817,16 @@ class TestNormalizeDevices:
             EcoFlowEnergyConfigFlow,
         )
 
-        result = EcoFlowEnergyConfigFlow._normalize_app_devices([
-            {
-                "sn": "HJ31FAKE00000001",
-                "product_name": "",
-                "online": 1,
-                "device_type": "unknown",
-            },
-        ])
+        result = EcoFlowEnergyConfigFlow._normalize_app_devices(
+            [
+                {
+                    "sn": "HJ31FAKE00000001",
+                    "product_name": "",
+                    "online": 1,
+                    "device_type": "unknown",
+                },
+            ]
+        )
 
         assert result[0]["device_type"] == "powerocean"
 
@@ -2669,14 +2836,16 @@ class TestNormalizeDevices:
             EcoFlowEnergyConfigFlow,
         )
 
-        result = EcoFlowEnergyConfigFlow._normalize_app_devices([
-            {
-                "sn": "HJ31FAKE00000001",
-                "product_name": "",
-                "online": 1,
-                "device_type": "",
-            },
-        ])
+        result = EcoFlowEnergyConfigFlow._normalize_app_devices(
+            [
+                {
+                    "sn": "HJ31FAKE00000001",
+                    "product_name": "",
+                    "online": 1,
+                    "device_type": "",
+                },
+            ]
+        )
 
         assert result[0]["device_type"] == "powerocean"
 
@@ -2686,14 +2855,16 @@ class TestNormalizeDevices:
             EcoFlowEnergyConfigFlow,
         )
 
-        result = EcoFlowEnergyConfigFlow._normalize_app_devices([
-            {
-                "sn": "HJ31FAKE00000001",
-                "product_name": "",
-                "online": 1,
-                "device_type": None,
-            },
-        ])
+        result = EcoFlowEnergyConfigFlow._normalize_app_devices(
+            [
+                {
+                    "sn": "HJ31FAKE00000001",
+                    "product_name": "",
+                    "online": 1,
+                    "device_type": None,
+                },
+            ]
+        )
 
         assert result[0]["device_type"] == "powerocean"
 

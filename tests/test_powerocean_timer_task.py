@@ -196,9 +196,7 @@ def _time_table(start: int, end: int) -> str:
 def _window(start: int, end: int) -> str | None:
     """Read one packed window back out through the parser."""
     task = {"task_index": 1, "time_table": _time_table(start, end)}
-    return remap_timer_task_keys({"time_task_cfg": [task]}, set())[
-        "schedule_1_window"
-    ]
+    return remap_timer_task_keys({"time_task_cfg": [task]}, set())["schedule_1_window"]
 
 
 def test_the_packing_helper_reproduces_the_captured_block() -> None:

@@ -71,7 +71,11 @@ _PROTO_PLAIN_FIELDS: dict[str, str] = {
 # Nested per-outlet arrays: protobuf submessage name -> (HTTP outer key,
 # protobuf item name, HTTP item key).
 _PROTO_LIST_FIELDS: dict[str, tuple[str, str, str]] = {
-    "pow_get_ac_out_list": ("powGetAcOutList", "pow_get_ac_out_item", "powGetAcOutItem"),
+    "pow_get_ac_out_list": (
+        "powGetAcOutList",
+        "pow_get_ac_out_item",
+        "powGetAcOutItem",
+    ),
     "pow_get_12v_list": ("powGet12vList", "pow_get_12v_item", "powGet12vItem"),
 }
 
@@ -175,7 +179,9 @@ def _port_priority_values(fields: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(item, dict):
             continue
         port_type = item.get("power_outage_port_type")
-        stem = PORT_PRIORITY_TYPES.get(port_type) if isinstance(port_type, int) else None
+        stem = (
+            PORT_PRIORITY_TYPES.get(port_type) if isinstance(port_type, int) else None
+        )
         if stem is None:
             # Type 0 is the enum's null member. The app skips those items too.
             continue
@@ -368,7 +374,11 @@ def parse_delta3_bms_heartbeat(fields: dict[str, Any]) -> dict[str, Any]:
 
     for proto_key, sensor_key in _BMS_ENERGY_FIELDS.items():
         value = fields.get(proto_key)
-        if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0:
+        if (
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and value > 0
+        ):
             result[sensor_key] = float(value) / 1000.0
 
     return result

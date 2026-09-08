@@ -36,7 +36,7 @@ def test_generate_client_id_hash_verification():
     # Find the user_id to split around it
     idx = rest.index(f"_{user_id}_")
     uuid_part = rest[:idx]
-    after_user = rest[idx + len(f"_{user_id}_"):]
+    after_user = rest[idx + len(f"_{user_id}_") :]
 
     # after_user = appKey_timestamp_hash
     app_key = after_user[:32]

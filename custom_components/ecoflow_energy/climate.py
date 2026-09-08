@@ -99,7 +99,9 @@ async def async_setup_entry(
     The platform is forwarded for every config entry; a PowerOcean or Delta
     entry comes out of this with an empty list.
     """
-    coordinators: dict[str, EcoFlowDeviceCoordinator] = hass.data[DOMAIN][entry.entry_id]
+    coordinators: dict[str, EcoFlowDeviceCoordinator] = hass.data[DOMAIN][
+        entry.entry_id
+    ]
     entities = [
         EcoFlowWave3Climate(coordinator)
         for coordinator in coordinators.values()

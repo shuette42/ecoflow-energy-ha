@@ -222,7 +222,9 @@ class TestDerivedValues:
     def test_battery_power_comes_from_the_edges(
         self, edges: dict[str, float], batt_w: float
     ) -> None:
-        result = parse_stream_ac5000_message(_build_frame(254, 39, bytes(_edges(**edges))))
+        result = parse_stream_ac5000_message(
+            _build_frame(254, 39, bytes(_edges(**edges)))
+        )
         assert result is not None
         assert result["batt_w"] == pytest.approx(batt_w, rel=1e-5)
 
@@ -246,7 +248,9 @@ class TestDerivedValues:
         report zero battery power to a PV owner while the pack fills, and the
         charge counter would miss the whole solar contribution.
         """
-        result = parse_stream_ac5000_message(_build_frame(254, 39, bytes(_edges(**edges))))
+        result = parse_stream_ac5000_message(
+            _build_frame(254, 39, bytes(_edges(**edges)))
+        )
         assert result is not None
         assert result["batt_w"] == pytest.approx(batt_w, rel=1e-5)
 
@@ -282,7 +286,9 @@ class TestDerivedValues:
     def test_signed_battery_power_splits_one_way_only(
         self, edges: dict[str, float], charge: float, discharge: float
     ) -> None:
-        result = parse_stream_ac5000_message(_build_frame(254, 39, bytes(_edges(**edges))))
+        result = parse_stream_ac5000_message(
+            _build_frame(254, 39, bytes(_edges(**edges)))
+        )
         assert result is not None
         assert result["batt_charge_power_w"] == pytest.approx(charge, rel=1e-5)
         assert result["batt_discharge_power_w"] == pytest.approx(discharge, rel=1e-5)
@@ -371,7 +377,9 @@ class TestDerivedValues:
         """254/40 f22 reads 600000/1200000 and stayed there while the account
         limit went to 2500 W, the output limit to 2400 W and the discharge task
         to 1400 W. It is neither, so it is left alone."""
-        inner = _sub(22, encode_field_varint(1, 600000) + encode_field_varint(3, 1200000))
+        inner = _sub(
+            22, encode_field_varint(1, 600000) + encode_field_varint(3, 1200000)
+        )
         assert parse_stream_ac5000_message(_build_frame(254, 40, bytes(inner))) is None
 
     @pytest.mark.parametrize(
@@ -523,7 +531,9 @@ class TestScheduledTasks:
         task was invisible, so the write path never removed it and every later
         discharge write landed on top of it.
         """
-        per_device = encode_field_bytes(1, b"ES22TEST00000001") + encode_field_varint(2, 100)
+        per_device = encode_field_bytes(1, b"ES22TEST00000001") + encode_field_varint(
+            2, 100
+        )
         charge = (
             encode_field_varint(2, 1)
             + encode_field_varint(3, 1)
@@ -863,7 +873,9 @@ class TestCaptureReplay:
             home = parsed.get("home_w")
             from_batt = parsed.get("home_from_batt_w")
             from_grid = parsed.get("home_from_grid_w")
-            if not all(isinstance(v, (int, float)) for v in (home, from_batt, from_grid)):
+            if not all(
+                isinstance(v, (int, float)) for v in (home, from_batt, from_grid)
+            ):
                 continue
             total = from_batt + from_grid + (parsed.get("home_from_solar_w") or 0.0)
             assert abs(home - total) <= 2, frame["ts_iso"]
@@ -944,13 +956,19 @@ class TestLinkedUnitBlock:
 
     def test_entry_without_a_power_value_is_not_reported(self) -> None:
         """An absent field means unchanged here, so it must not read as zero."""
-        entry = _sub(1, encode_field_bytes(1, b"ES22TESTUNITAAAA") + encode_field_varint(2, 87))
-        result = parse_stream_ac5000_message(_build_frame(254, 39, bytes(_sub(54, entry))))
+        entry = _sub(
+            1, encode_field_bytes(1, b"ES22TESTUNITAAAA") + encode_field_varint(2, 87)
+        )
+        result = parse_stream_ac5000_message(
+            _build_frame(254, 39, bytes(_sub(54, entry)))
+        )
         assert result is None or "_unit_batt_w_by_sn" not in result
 
     def test_entry_without_a_serial_is_not_reported(self) -> None:
         entry = _sub(1, encode_field_varint(2, 87) + encode_field_varint(4, 1378))
-        result = parse_stream_ac5000_message(_build_frame(254, 39, bytes(_sub(54, entry))))
+        result = parse_stream_ac5000_message(
+            _build_frame(254, 39, bytes(_sub(54, entry)))
+        )
         assert result is None or "_unit_batt_w_by_sn" not in result
 
     def test_absent_block_produces_no_key(self) -> None:
@@ -1013,7 +1031,9 @@ class TestLinkedUnitBlock:
             if system is None:
                 continue
             total = sum(_read_unit_entries(pdata).values())
-            assert abs(total - system / 2) <= 35, f"{frame['ts']}: {total} vs {system / 2}"
+            assert abs(total - system / 2) <= 35, (
+                f"{frame['ts']}: {total} vs {system / 2}"
+            )
             checked += 1
         assert checked == 6
 
@@ -1158,15 +1178,11 @@ class TestTaskListShrink:
 
     @staticmethod
     def _frames() -> dict[str, dict]:
-        data = json.loads(
-            (FIXTURES / "es22_task_delete_masked.json").read_text()
-        )
+        data = json.loads((FIXTURES / "es22_task_delete_masked.json").read_text())
         return {frame["role"]: frame for frame in data["frames"]}
 
     def _parse(self, role: str) -> dict | None:
-        return parse_stream_ac5000_message(
-            bytes.fromhex(self._frames()[role]["hex"])
-        )
+        return parse_stream_ac5000_message(bytes.fromhex(self._frames()[role]["hex"]))
 
     def test_the_fixture_carries_the_capture_it_claims_to(self) -> None:
         """Positive control. A shrunk fixture would let the rest pass blind."""
@@ -1240,7 +1256,6 @@ class TestTaskListShrink:
         result = self._parse("delete_ack")
         assert not [key for key in (result or {}) if key.startswith("scheduled_")]
 
-
     def test_the_cleared_keys_per_kind_add_up_to_the_empty_list_keys(self) -> None:
         """The per-kind clear derives its keys, so nothing may fall outside it.
 
@@ -1299,6 +1314,4 @@ class TestTaskListShrink:
         )
         assert result is not None
         assert result["scheduled_charge_power_w"] == 600
-        assert not [
-            key for key in result if key.startswith("scheduled_discharge_")
-        ]
+        assert not [key for key in result if key.startswith("scheduled_discharge_")]

@@ -75,7 +75,9 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up EcoFlow numbers from a config entry."""
-    coordinators: dict[str, EcoFlowDeviceCoordinator] = hass.data[DOMAIN][entry.entry_id]
+    coordinators: dict[str, EcoFlowDeviceCoordinator] = hass.data[DOMAIN][
+        entry.entry_id
+    ]
     entities: list[EcoFlowNumber] = []
 
     for coordinator in coordinators.values():
@@ -204,9 +206,7 @@ class EcoFlowNumber(
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        rollback = getattr(
-            self.coordinator, "_powerocean_soc_rollback_generation", 0
-        )
+        rollback = getattr(self.coordinator, "_powerocean_soc_rollback_generation", 0)
         if rollback != self._seen_rollback_generation:
             # A write of ours was rejected and the coordinator restored the
             # device value. Holding the optimistic lock now would keep showing
@@ -432,9 +432,7 @@ class EcoFlowNumber(
             self._apply_optimistic_number(value)
             return
         if self.coordinator.device_type == DEVICE_TYPE_STREAM_AC5000:
-            ok = await self._async_set_stream_ac5000_value(
-                self._definition.key, value
-            )
+            ok = await self._async_set_stream_ac5000_value(self._definition.key, value)
             if not ok:
                 raise_set_failed(self.entity_id)
             self._apply_optimistic_number(value)
@@ -611,7 +609,9 @@ class EcoFlowNumber(
             backup = int_value
             solar = max(int(current_solar), backup)  # enforce backup <= solar
             self.coordinator.mark_user_surplus_set()
-            ok = await self.coordinator.async_set_powerocean_soc_debounced(backup, solar)
+            ok = await self.coordinator.async_set_powerocean_soc_debounced(
+                backup, solar
+            )
             if not ok:
                 raise_set_failed(self.entity_id)
             self._apply_optimistic_number(value)
@@ -630,7 +630,9 @@ class EcoFlowNumber(
             solar = int_value
             backup = min(int(current_backup), solar)  # enforce backup <= solar
             self.coordinator.mark_user_surplus_set()
-            ok = await self.coordinator.async_set_powerocean_soc_debounced(backup, solar)
+            ok = await self.coordinator.async_set_powerocean_soc_debounced(
+                backup, solar
+            )
             if not ok:
                 raise_set_failed(self.entity_id)
             self._apply_optimistic_number(value)
@@ -665,9 +667,7 @@ class EcoFlowNumber(
         this). Stream numbers are sent as protobuf ConfigWrite frames.
         """
         if key == "backup_reserve":
-            return await self.coordinator.async_set_stream_backup_reserve(
-                int(value)
-            )
+            return await self.coordinator.async_set_stream_backup_reserve(int(value))
         if key in ("stream_charge_limit", "stream_discharge_limit"):
             try:
                 if key == "stream_charge_limit":
@@ -723,16 +723,12 @@ class EcoFlowNumber(
                     kind, int(value)
                 )
             if key == "max_grid_output_power_w":
-                return (
-                    await self.coordinator.async_set_stream_ac5000_grid_output_power(
-                        int(value)
-                    )
+                return await self.coordinator.async_set_stream_ac5000_grid_output_power(
+                    int(value)
                 )
             if key == "max_grid_input_power_w":
-                return (
-                    await self.coordinator.async_set_stream_ac5000_grid_input_power(
-                        int(value)
-                    )
+                return await self.coordinator.async_set_stream_ac5000_grid_input_power(
+                    int(value)
                 )
         except DeviceValueNotReported:
             # Sending a guessed counterpart would change a setting the user did

@@ -49,7 +49,9 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up EcoFlow binary sensors from a config entry."""
-    coordinators: dict[str, EcoFlowDeviceCoordinator] = hass.data[DOMAIN][entry.entry_id]
+    coordinators: dict[str, EcoFlowDeviceCoordinator] = hass.data[DOMAIN][
+        entry.entry_id
+    ]
     entities: list[EcoFlowBinarySensor] = []
 
     for coordinator in coordinators.values():
@@ -127,7 +129,9 @@ class EcoFlowBinarySensor(
         if definition.device_class:
             self._attr_device_class = BinarySensorDeviceClass(definition.device_class)
         if definition.entity_category:
-            self._attr_entity_category = _ENTITY_CATEGORY_MAP.get(definition.entity_category)
+            self._attr_entity_category = _ENTITY_CATEGORY_MAP.get(
+                definition.entity_category
+            )
         if definition.disabled_by_default:
             self._attr_entity_registry_enabled_default = False
 

@@ -167,9 +167,7 @@ class TestReadBack:
         coordinator, _ = _coordinator(hass, {state_key: 47})
         assert _select(coordinator, key).current_option is None
 
-    async def test_each_entity_reads_its_own_field(
-        self, hass: HomeAssistant
-    ) -> None:
+    async def test_each_entity_reads_its_own_field(self, hass: HomeAssistant) -> None:
         """Four distinct values at once, none crossed."""
         coordinator, _ = _coordinator(
             hass,
@@ -181,7 +179,9 @@ class TestReadBack:
             },
         )
 
-        assert _select(coordinator, "device_idle_shutdown").current_option == "30_minutes"
+        assert (
+            _select(coordinator, "device_idle_shutdown").current_option == "30_minutes"
+        )
         assert _select(coordinator, "ac1_idle_shutdown").current_option == "1_hour"
         assert _select(coordinator, "ac2_idle_shutdown").current_option == "4_hours"
         assert _select(coordinator, "dc_idle_shutdown").current_option == "24_hours"
@@ -265,14 +265,10 @@ class TestPlatformGating:
         keys = await self._setup(hass)
         assert set(SETTINGS) <= keys
 
-    async def test_the_screen_timeout_is_still_there(
-        self, hass: HomeAssistant
-    ) -> None:
+    async def test_the_screen_timeout_is_still_there(self, hass: HomeAssistant) -> None:
         assert "screen_timeout" in await self._setup(hass)
 
-    async def test_standard_mode_gets_none_of_them(
-        self, hass: HomeAssistant
-    ) -> None:
+    async def test_standard_mode_gets_none_of_them(self, hass: HomeAssistant) -> None:
         """No standby field is in the polled quota, so with developer keys the
         entity would accept a change and never show one."""
         keys = await self._setup(hass, enhanced=False)

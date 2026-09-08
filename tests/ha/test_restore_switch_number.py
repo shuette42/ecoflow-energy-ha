@@ -63,7 +63,10 @@ async def _add_switch(switch: EcoFlowSwitch, last_state: object) -> None:
     with (
         patch.object(CoordinatorEntity, "async_added_to_hass", new_callable=AsyncMock),
         patch.object(
-            switch, "async_get_last_state", new_callable=AsyncMock, return_value=last_state
+            switch,
+            "async_get_last_state",
+            new_callable=AsyncMock,
+            return_value=last_state,
         ),
     ):
         await switch.async_added_to_hass()

@@ -301,7 +301,9 @@ class EcoFlowMQTTClient:
         """Create the Paho client. Caller must hold ``_client_lock``."""
         try:
             if not self._cert_account or not self._cert_password:
-                self._log_issue("error", "MQTT: certificate_account or certificate_password missing")
+                self._log_issue(
+                    "error", "MQTT: certificate_account or certificate_password missing"
+                )
                 return False
 
             if self._wss_mode:
@@ -349,7 +351,9 @@ class EcoFlowMQTTClient:
             # acknowledge - and skipping these keeps the account identifiers out
             # of the captured topic list.
             if not self._listen_only:
-                set_reply_topic = f"/open/{self._cert_account}/{self._device_sn}/set_reply"
+                set_reply_topic = (
+                    f"/open/{self._cert_account}/{self._device_sn}/set_reply"
+                )
                 client.subscribe(set_reply_topic, qos=1)
                 if self._user_id:
                     app_set_reply = f"/app/{self._user_id}/{self._device_sn}/thing/property/set_reply"
@@ -375,8 +379,7 @@ class EcoFlowMQTTClient:
                         # are captured rather than parsed: a value an owner
                         # asked for is not a value the device reported.
                         topic_write = (
-                            f"/app/{self._user_id}/{self._device_sn}"
-                            "/thing/property/set"
+                            f"/app/{self._user_id}/{self._device_sn}/thing/property/set"
                         )
                         client.subscribe(topic_write, qos=1)
                         self._writes_subscribed = True
@@ -384,15 +387,17 @@ class EcoFlowMQTTClient:
                 if not self._notified_connected:
                     self._notified_connected = True
                     _LOGGER.debug(
-                    "MQTT connected - data topics: %s | %s | set_reply",
-                    self.mask_topic(topic_json),
-                    self.mask_topic(topic_pb),
-                )
+                        "MQTT connected - data topics: %s | %s | set_reply",
+                        self.mask_topic(topic_json),
+                        self.mask_topic(topic_pb),
+                    )
             else:
                 # Standard Mode: no data subscriptions, MQTT is for SET commands only
                 if not self._notified_connected:
                     self._notified_connected = True
-                    _LOGGER.debug("MQTT connected - SET-only mode (set_reply subscribed)")
+                    _LOGGER.debug(
+                        "MQTT connected - SET-only mode (set_reply subscribed)"
+                    )
 
             self.last_connect_time = time.monotonic()
             self.connected = True
@@ -408,29 +413,39 @@ class EcoFlowMQTTClient:
                     # Enhanced: EnergyStreamSwitch + get-all + latestQuotas
                     try:
                         payload = build_energy_stream_activate_payload()
-                        set_topic = f"/app/{self._user_id}/{self._device_sn}/thing/property/set"
+                        set_topic = (
+                            f"/app/{self._user_id}/{self._device_sn}/thing/property/set"
+                        )
                         client.publish(set_topic, payload, qos=1)
                         # This path goes straight to paho and would otherwise
                         # never be recorded as ours.
                         self._note_own_publish(payload)
-                        _LOGGER.debug("EnergyStreamSwitch sent - energy_stream_report activated")
+                        _LOGGER.debug(
+                            "EnergyStreamSwitch sent - energy_stream_report activated"
+                        )
                     except Exception as exc:
                         _LOGGER.warning("EnergyStreamSwitch error: %s", exc)
                     try:
                         self.send_get_all()
-                        _LOGGER.debug("Post-connect get-all sent - requesting full state")
+                        _LOGGER.debug(
+                            "Post-connect get-all sent - requesting full state"
+                        )
                     except Exception as exc:
                         _LOGGER.warning("Post-connect get-all error: %s", exc)
                     try:
                         self.send_latest_quotas()
-                        _LOGGER.debug("Post-connect latestQuotas sent - minimizing data gap")
+                        _LOGGER.debug(
+                            "Post-connect latestQuotas sent - minimizing data gap"
+                        )
                     except Exception as exc:
                         _LOGGER.warning("Post-connect latestQuotas error: %s", exc)
                 else:
                     # Non-enhanced (SmartPlug, Delta): protobuf get-all + JSON latestQuotas
                     try:
                         self.send_get_all()
-                        _LOGGER.debug("Post-connect get-all sent - requesting full state")
+                        _LOGGER.debug(
+                            "Post-connect get-all sent - requesting full state"
+                        )
                     except Exception as exc:
                         _LOGGER.warning("Post-connect get-all error: %s", exc)
                     try:
@@ -445,9 +460,16 @@ class EcoFlowMQTTClient:
             reason = CONNECT_REASONS.get(rc_val, "unknown error")
             auth_failure = rc_val in (4, 5, 134, 135)
             if auth_failure:
-                self._log_issue("warning", "MQTT connect failed: rc=%s (%s) - scheduling credential refresh", rc_val, reason)
+                self._log_issue(
+                    "warning",
+                    "MQTT connect failed: rc=%s (%s) - scheduling credential refresh",
+                    rc_val,
+                    reason,
+                )
             else:
-                self._log_issue("error", "MQTT connect failed: rc=%s (%s)", rc_val, reason)
+                self._log_issue(
+                    "error", "MQTT connect failed: rc=%s (%s)", rc_val, reason
+                )
             self.connected = False
             if auth_failure and self._auth_error_handler:
                 self._auth_error_handler()
@@ -458,7 +480,9 @@ class EcoFlowMQTTClient:
             if self.status_handler:
                 self.status_handler("connect_failed", rc_val, reason)
 
-    def _on_disconnect(self, client, userdata, disconnect_flags, reason_code, properties):
+    def _on_disconnect(
+        self, client, userdata, disconnect_flags, reason_code, properties
+    ):
         """Callback on MQTT disconnect.
 
         ``reason_code`` is a ReasonCode object under paho-mqtt 2.x VERSION2
@@ -470,7 +494,9 @@ class EcoFlowMQTTClient:
         self._notified_connected = False
 
         current_time = time.monotonic()
-        duration = current_time - self.last_connect_time if self.last_connect_time > 0 else 0
+        duration = (
+            current_time - self.last_connect_time if self.last_connect_time > 0 else 0
+        )
         self.last_disconnect_time = current_time
 
         if was_connected or rc_val != 0:
@@ -482,7 +508,10 @@ class EcoFlowMQTTClient:
                 _log = _LOGGER.debug
             _log(
                 "MQTT disconnect: rc=%s, was_connected=%s, duration=%.1fs, attempts=%d",
-                rc_val, was_connected, duration, self.reconnect_attempts,
+                rc_val,
+                was_connected,
+                duration,
+                self.reconnect_attempts,
             )
 
         if rc_val != 0:
@@ -496,10 +525,15 @@ class EcoFlowMQTTClient:
         current_time = time.monotonic()
 
         if self.reconnect_attempts >= self.max_reconnect_attempts:
-            if (current_time - self._last_counter_reset_time) >= self._counter_reset_interval:
+            if (
+                current_time - self._last_counter_reset_time
+            ) >= self._counter_reset_interval:
                 self._last_counter_reset_time = current_time
                 self.reconnect_attempts = 0
-                _LOGGER.debug("MQTT: counter reset after %ds - starting new cycle", self._counter_reset_interval)
+                _LOGGER.debug(
+                    "MQTT: counter reset after %ds - starting new cycle",
+                    self._counter_reset_interval,
+                )
             else:
                 return False
 
@@ -519,13 +553,17 @@ class EcoFlowMQTTClient:
     def _get_reconnect_delay(self) -> float:
         """Calculate delay until next reconnect attempt."""
         return min(
-            self.base_reconnect_delay * (2 ** self.reconnect_attempts),
+            self.base_reconnect_delay * (2**self.reconnect_attempts),
             self.max_reconnect_delay,
         )
 
     def _schedule_reconnect(self):
         """Signal that a reconnect is needed."""
-        _LOGGER.debug("MQTT: reconnect scheduled - attempts: %d/%d", self.reconnect_attempts, self.max_reconnect_attempts)
+        _LOGGER.debug(
+            "MQTT: reconnect scheduled - attempts: %d/%d",
+            self.reconnect_attempts,
+            self.max_reconnect_attempts,
+        )
 
     # send_ping publishes JSON to the same /app/device/property/{sn} topic the
     # client subscribes to - the broker echoes it back. Marker covers both
@@ -558,7 +596,9 @@ class EcoFlowMQTTClient:
         digest = hashlib.blake2b(payload, digest_size=16).digest()
         now = monotonic()
         with self._own_publish_lock:
-            while self._own_publishes and now - self._own_publishes[0][0] > OWN_ECHO_TTL_S:
+            while (
+                self._own_publishes and now - self._own_publishes[0][0] > OWN_ECHO_TTL_S
+            ):
                 self._own_publishes.popleft()
             for _sent_at, seen in self._own_publishes:
                 if seen == digest:
@@ -607,9 +647,15 @@ class EcoFlowMQTTClient:
                     # False instead of an AttributeError.
                     return False
 
-                keepalive = DEFAULT_WSS_KEEPALIVE if self._wss_mode else DEFAULT_MQTT_KEEPALIVE
+                keepalive = (
+                    DEFAULT_WSS_KEEPALIVE if self._wss_mode else DEFAULT_MQTT_KEEPALIVE
+                )
 
-                _LOGGER.debug("Connecting to %s (%s)", self.broker, "WSS" if self._wss_mode else "TCP")
+                _LOGGER.debug(
+                    "Connecting to %s (%s)",
+                    self.broker,
+                    "WSS" if self._wss_mode else "TCP",
+                )
                 broker = self._broker
                 client.connect(broker.host, broker.port, keepalive)
                 return True
@@ -629,7 +675,8 @@ class EcoFlowMQTTClient:
 
         _LOGGER.debug(
             "MQTT: reconnect attempt %d/%d",
-            self.reconnect_attempts, self.max_reconnect_attempts,
+            self.reconnect_attempts,
+            self.max_reconnect_attempts,
         )
         return self.force_reconnect()
 
@@ -645,7 +692,9 @@ class EcoFlowMQTTClient:
         caller skips instead.
         """
         if not self._client_lock.acquire(blocking=False):
-            _LOGGER.debug("Force-reconnect: skipped - another reconnect already in flight")
+            _LOGGER.debug(
+                "Force-reconnect: skipped - another reconnect already in flight"
+            )
             return False
         try:
             _LOGGER.debug("Force-reconnect: disconnecting and recreating client...")
@@ -660,9 +709,7 @@ class EcoFlowMQTTClient:
 
             # Recreate the client (generates new ClientID for WSS)
             if not self._create_client_unlocked():
-                self._log_retryable(
-                    "Force-reconnect: client recreation failed"
-                )
+                self._log_retryable("Force-reconnect: client recreation failed")
                 return False
 
             client = self.client
@@ -676,11 +723,17 @@ class EcoFlowMQTTClient:
                 return False
 
             try:
-                keepalive = DEFAULT_WSS_KEEPALIVE if self._wss_mode else DEFAULT_MQTT_KEEPALIVE
+                keepalive = (
+                    DEFAULT_WSS_KEEPALIVE if self._wss_mode else DEFAULT_MQTT_KEEPALIVE
+                )
                 broker = self._broker
                 client.connect(broker.host, broker.port, keepalive)
                 self._start_network_loop()
-                _LOGGER.debug("Force-reconnect: success at %s (%s)", self.broker, "WSS" if self._wss_mode else "TCP")
+                _LOGGER.debug(
+                    "Force-reconnect: success at %s (%s)",
+                    self.broker,
+                    "WSS" if self._wss_mode else "TCP",
+                )
                 return True
             except Exception as exc:
                 self._log_retryable("Force-reconnect failed: %s", exc)
@@ -751,7 +804,11 @@ class EcoFlowMQTTClient:
         return self.connected and client is not None and client.is_connected()
 
     def publish(
-        self, topic: str, payload: str | bytes, qos: int = 1, wait: bool = False,
+        self,
+        topic: str,
+        payload: str | bytes,
+        qos: int = 1,
+        wait: bool = False,
     ) -> bool:
         """Publish a message to the EcoFlow cloud broker.
 
@@ -794,7 +851,9 @@ class EcoFlowMQTTClient:
         except (RuntimeError, ValueError) as exc:
             # paho raises ValueError when the outgoing queue is full and
             # RuntimeError when the message can no longer be delivered.
-            _LOGGER.debug("Publish not acknowledged (%s): %s", self.mask_topic(topic), exc)
+            _LOGGER.debug(
+                "Publish not acknowledged (%s): %s", self.mask_topic(topic), exc
+            )
             return False
         except Exception as exc:
             _LOGGER.error("Publish failed (%s): %s", self.mask_topic(topic), exc)
@@ -826,14 +885,16 @@ class EcoFlowMQTTClient:
             return False
 
         topic = f"/app/{self._user_id}/{self._device_sn}/thing/property/get"
-        payload = json.dumps({
-            "from": "Android",
-            "id": str(int(time.time() * 1000)),
-            "moduleType": 0,
-            "operateType": "latestQuotas",
-            "params": {},
-            "version": "1.0",
-        })
+        payload = json.dumps(
+            {
+                "from": "Android",
+                "id": str(int(time.time() * 1000)),
+                "moduleType": 0,
+                "operateType": "latestQuotas",
+                "params": {},
+                "version": "1.0",
+            }
+        )
         return self.publish(topic, payload, qos=1)
 
     def send_get_all(self) -> bool:
@@ -878,16 +939,26 @@ class EcoFlowMQTTClient:
         if not self.is_connected():
             return False
         topic = f"/app/device/property/{self._device_sn}"
-        payload = json.dumps({
-            "command": "ping",
-            "value": int(time.time()) % 100000,
-            "deviceSn": self._device_sn,
-        })
+        payload = json.dumps(
+            {
+                "command": "ping",
+                "value": int(time.time()) % 100000,
+                "deviceSn": self._device_sn,
+            }
+        )
         return self.publish(topic, payload, qos=0)
 
     def get_status(self) -> tuple:
         """Return the current connection status."""
         if self.is_connected():
-            uptime = time.monotonic() - self.last_connect_time if self.last_connect_time > 0 else 0
+            uptime = (
+                time.monotonic() - self.last_connect_time
+                if self.last_connect_time > 0
+                else 0
+            )
             return "connected", 0, f"Connected ({int(uptime)}s)"
-        return "disconnected", self.reconnect_attempts, f"Disconnected (attempt {self.reconnect_attempts})"
+        return (
+            "disconnected",
+            self.reconnect_attempts,
+            f"Disconnected (attempt {self.reconnect_attempts})",
+        )

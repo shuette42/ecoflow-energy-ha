@@ -284,6 +284,7 @@ class TestDeviceDiagnostics:
         )
         # Simulate stale MQTT → HTTP fallback activated
         from datetime import timedelta
+
         coordinator.update_interval = timedelta(seconds=30)
         result = _device_diagnostics(coordinator)
         assert result["data_freshness"]["http_fallback_active"] is True
@@ -500,9 +501,7 @@ class TestDeltaThreeRawQuotaDiagnostics:
 
         assert "raw_quota" in result
         assert result["raw_quota"]["captured"] is True
-        assert (
-            result["raw_quota"]["values"]["ems_heating_rod.heatingPower"] == 1750
-        )
+        assert result["raw_quota"]["values"]["ems_heating_rod.heatingPower"] == 1750
         assert result["raw_quota"]["values"]["bpSoc"] == 74
 
     async def test_powerocean_raw_quota_redacts_serials_in_keys(
@@ -782,7 +781,7 @@ class TestEnergyIntegratorDiagnostics:
         hass: HomeAssistant,
         standard_config_entry: MockConfigEntry,
     ) -> None:
-        """"This device integrates nothing" is an answer, not a missing section.
+        """ "This device integrates nothing" is an answer, not a missing section.
 
         An absent section cannot be told apart from a download taken with a
         version that never had one.
@@ -1078,9 +1077,7 @@ class TestRedactSerials:
         prevent. Pinned so the narrowing is a decision on record and not a
         surprise to whoever meets it.
         """
-        out = _redact_serials(
-            {"HJ31TESTSERIAL01": 1, "SEozMVRFU1RTRVJJQUwwMQ==": 2}
-        )
+        out = _redact_serials({"HJ31TESTSERIAL01": 1, "SEozMVRFU1RTRVJJQUwwMQ==": 2})
 
         assert out == {REDACTED: 2}
 
@@ -1115,9 +1112,7 @@ class TestBase64SerialsInBothQuotaSections:
                 {
                     "sn": "HJ31TESTSERIAL01",
                     "raw_quota": {
-                        "error_code.emsErrCode.moduleSn": (
-                            "SEozMVRFU1RTRVJJQUwwMQ=="
-                        ),
+                        "error_code.emsErrCode.moduleSn": ("SEozMVRFU1RTRVJJQUwwMQ=="),
                         "error_code.bpErrCode": [
                             {"moduleSn": "SEozQVpESDVaRzVFMDA3NQ=="},
                             {"moduleSn": "SEozQVpESDVaRzU4MDUxMg=="},
@@ -1188,20 +1183,14 @@ class TestDeviceNameSerialTail:
         assert _serial_tails([""]) == ()
 
     def test_tails_are_unique(self) -> None:
-        assert _serial_tails(
-            ["HW52ZAB412340001", "HJ31ZAB412340001"]
-        ) == ("0001",)
+        assert _serial_tails(["HW52ZAB412340001", "HJ31ZAB412340001"]) == ("0001",)
 
     def test_name_key_is_masked(self) -> None:
-        out = _redact_serials(
-            {"device_name": "PowerOcean (0001)"}, tails=("0001",)
-        )
+        out = _redact_serials({"device_name": "PowerOcean (0001)"}, tails=("0001",))
         assert out["device_name"] == f"PowerOcean ({REDACTED})"
 
     def test_a_name_without_the_tail_is_left_alone(self) -> None:
-        out = _redact_serials(
-            {"device_name": "Garage charger"}, tails=("0001",)
-        )
+        out = _redact_serials({"device_name": "Garage charger"}, tails=("0001",))
         assert out["device_name"] == "Garage charger"
 
     def test_other_keys_keep_values_that_look_like_a_tail(self) -> None:
@@ -1210,9 +1199,7 @@ class TestDeviceNameSerialTail:
         A four-character run is common in ordinary readings, and blanking it
         everywhere would corrupt the artefact device support is built from.
         """
-        out = _redact_serials(
-            {"order_id": "0001", "count": 1}, tails=("0001",)
-        )
+        out = _redact_serials({"order_id": "0001", "count": 1}, tails=("0001",))
         assert out["order_id"] == "0001"
         assert out["count"] == 1
 
@@ -1265,9 +1252,7 @@ class TestDeviceNameSerialTail:
         assert out["product_name"] is None
 
     def test_masking_is_case_insensitive(self) -> None:
-        out = _redact_serials(
-            {"device_name": "Stream AC Pro (ab12)"}, tails=("AB12",)
-        )
+        out = _redact_serials({"device_name": "Stream AC Pro (ab12)"}, tails=("AB12",))
         assert out["device_name"] == f"Stream AC Pro ({REDACTED})"
 
     async def test_download_no_longer_carries_both_ends_of_the_serial(
@@ -1350,9 +1335,7 @@ class TestDeltaThreeRawQuotaCapture:
 class TestSkippedDeviceRawQuotaDiagnostics:
     """Raw quota capture for unsupported/skipped devices (issue #135)."""
 
-    DIAG_QUOTA_PATH = (
-        "custom_components.ecoflow_energy.diagnostics.EcoFlowHTTPQuota"
-    )
+    DIAG_QUOTA_PATH = "custom_components.ecoflow_energy.diagnostics.EcoFlowHTTPQuota"
     # Fictional serial on a prefix no parser claims.
     SKIPPED_SN = "SM3ATEST00000001"
     # A 16-char alphanumeric quota value that looks like a serial and must
@@ -1495,14 +1478,17 @@ class TestRawFrameDiagnostics:
         coordinator = EcoFlowDeviceCoordinator(
             hass, standard_config_entry, MOCK_DELTA_DEVICE
         )
-        coordinator._raw_frames.add("property:proto/96.33", {
-            "ts": 1784973604.0,
-            "topic": "property",
-            "size": 42,
-            "parsed_keys": 5,
-            "cmds": [{"cmd_func": 96, "cmd_id": 33}],
-            "hex": "0a02ffff",
-        })
+        coordinator._raw_frames.add(
+            "property:proto/96.33",
+            {
+                "ts": 1784973604.0,
+                "topic": "property",
+                "size": 42,
+                "parsed_keys": 5,
+                "cmds": [{"cmd_func": 96, "cmd_id": 33}],
+                "hex": "0a02ffff",
+            },
+        )
 
         result = _device_diagnostics(coordinator)
 
@@ -1534,23 +1520,27 @@ class TestRawFrameDiagnostics:
         coordinator = EcoFlowDeviceCoordinator(
             hass, standard_config_entry, MOCK_DELTA_DEVICE
         )
-        coordinator._raw_frames.add("property:proto/96.33", {
-            "ts": 1784973604.0,
-            "topic": "property",
-            "size": 42,
-            "hex": "0a02ffff",
-        })
+        coordinator._raw_frames.add(
+            "property:proto/96.33",
+            {
+                "ts": 1784973604.0,
+                "topic": "property",
+                "size": 42,
+                "hex": "0a02ffff",
+            },
+        )
 
         # No client at all is the honest "not watching", not an omission.
-        assert _device_diagnostics(coordinator)["raw_frames"][
-            "app_writes_watched"
-        ] is False
+        assert (
+            _device_diagnostics(coordinator)["raw_frames"]["app_writes_watched"]
+            is False
+        )
 
         coordinator._mqtt_client = self._watching_client()
 
-        assert _device_diagnostics(coordinator)["raw_frames"][
-            "app_writes_watched"
-        ] is True
+        assert (
+            _device_diagnostics(coordinator)["raw_frames"]["app_writes_watched"] is True
+        )
 
     @staticmethod
     def _watching_client() -> Mock:
@@ -1594,12 +1584,15 @@ class TestRawFrameDiagnostics:
             hass, standard_config_entry, MOCK_DELTA_DEVICE
         )
         for index in range(30):
-            coordinator._raw_frames.add("property:proto/96.33", {
-                "ts": 1784973604.0 + index * 3,
-                "topic": "property",
-                "size": 42,
-                "hex": "0a02ffff",
-            })
+            coordinator._raw_frames.add(
+                "property:proto/96.33",
+                {
+                    "ts": 1784973604.0 + index * 3,
+                    "topic": "property",
+                    "size": 42,
+                    "hex": "0a02ffff",
+                },
+            )
 
         section = _device_diagnostics(coordinator)["raw_frames"]
 
@@ -1649,15 +1642,16 @@ class TestRawFrameDiagnostics:
         with patch(
             "custom_components.ecoflow_energy.const.time.time", return_value=now
         ):
-            coordinator = EcoFlowDeviceCoordinator(
-                hass, entry, MOCK_POWEROCEAN_DEVICE
-            )
-        coordinator._raw_frames.add("property:proto/96.33", {
-            "ts": 1784973604.0,
-            "topic": "property",
-            "size": 42,
-            "hex": "0a02ffff",
-        })
+            coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_POWEROCEAN_DEVICE)
+        coordinator._raw_frames.add(
+            "property:proto/96.33",
+            {
+                "ts": 1784973604.0,
+                "topic": "property",
+                "size": 42,
+                "hex": "0a02ffff",
+            },
+        )
 
         section = _device_diagnostics(coordinator)["raw_frames"]
 
@@ -1683,14 +1677,16 @@ class TestUnroutedDeviceCapture:
             "verdict": "listening",
         }
         probe.topics = ["/app/{sn}/thing/property/get_reply"]
-        probe.frames = [{
-            "ts": 1784973604.0,
-            "topic": "get_reply",
-            "size": 120,
-            "format": "proto",
-            "cmds": [{"cmd_func": 96, "cmd_id": 33}],
-            "hex": "0a02ffff",
-        }]
+        probe.frames = [
+            {
+                "ts": 1784973604.0,
+                "topic": "get_reply",
+                "size": 120,
+                "format": "proto",
+                "cmds": [{"cmd_func": 96, "cmd_id": 33}],
+                "hex": "0a02ffff",
+            }
+        ]
         # Mirrors the real probe's sampling report. A bare MagicMock here
         # would satisfy the export and then fail to serialise, which is not
         # what the leak assertion below is meant to be testing.
@@ -1707,14 +1703,18 @@ class TestUnroutedDeviceCapture:
         return probe
 
     async def test_capture_is_attached_to_the_matching_device(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        skipped = [{
-            "sn_prefix": "RE11",
-            "sn": "RE11TEST00000001",
-            "product_name": "",
-            "reason": "no parser available for this device type",
-        }]
+        skipped = [
+            {
+                "sn_prefix": "RE11",
+                "sn": "RE11TEST00000001",
+                "product_name": "",
+                "reason": "no parser available for this device type",
+            }
+        ]
 
         result = await _skipped_devices_diagnostics(
             hass, enhanced_config_entry, skipped, [self._probe()]
@@ -1735,14 +1735,18 @@ class TestUnroutedDeviceCapture:
         assert capture["frames"][0]["ts_iso"].startswith("2026-")
 
     async def test_full_serial_never_reaches_the_output(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        skipped = [{
-            "sn_prefix": "RE11",
-            "sn": "RE11TEST00000001",
-            "product_name": "",
-            "reason": "no parser available for this device type",
-        }]
+        skipped = [
+            {
+                "sn_prefix": "RE11",
+                "sn": "RE11TEST00000001",
+                "product_name": "",
+                "reason": "no parser available for this device type",
+            }
+        ]
 
         result = await _skipped_devices_diagnostics(
             hass, enhanced_config_entry, skipped, [self._probe()]
@@ -1751,7 +1755,9 @@ class TestUnroutedDeviceCapture:
         assert "RE11TEST00000001" not in json.dumps(result)
 
     async def test_no_probe_says_so_instead_of_staying_silent(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """A failed probe start must be visible, not just absent.
 
@@ -1759,12 +1765,14 @@ class TestUnroutedDeviceCapture:
         version that has no capture at all, and the reader has no way to
         tell which one they are looking at.
         """
-        skipped = [{
-            "sn_prefix": "RE11",
-            "sn": "RE11TEST00000001",
-            "product_name": "",
-            "reason": "no parser available for this device type",
-        }]
+        skipped = [
+            {
+                "sn_prefix": "RE11",
+                "sn": "RE11TEST00000001",
+                "product_name": "",
+                "reason": "no parser available for this device type",
+            }
+        ]
 
         result = await _skipped_devices_diagnostics(
             hass, enhanced_config_entry, skipped, []
@@ -1774,15 +1782,19 @@ class TestUnroutedDeviceCapture:
         assert "frames" not in result[0]["raw_capture"]
 
     async def test_intentionally_unprobed_powerstream_reports_mode_boundary(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        skipped = [{
-            "sn_prefix": "HW51",
-            "sn": "HW51TEST00000001",
-            "product_name": "PowerStream",
-            "reason": "PowerStream requires Standard Mode",
-            "probe_eligible": False,
-        }]
+        skipped = [
+            {
+                "sn_prefix": "HW51",
+                "sn": "HW51TEST00000001",
+                "product_name": "PowerStream",
+                "reason": "PowerStream requires Standard Mode",
+                "probe_eligible": False,
+            }
+        ]
 
         result = await _skipped_devices_diagnostics(
             hass, enhanced_config_entry, skipped, []
@@ -1801,17 +1813,23 @@ class TestUnroutedDeviceCapture:
         assert "HW51TEST00000001" not in rendered
 
     async def test_probe_for_another_device_is_not_attached(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
     ) -> None:
-        skipped = [{
-            "sn_prefix": "RE11",
-            "sn": "RE11TEST00000001",
-            "product_name": "",
-            "reason": "no parser available for this device type",
-        }]
+        skipped = [
+            {
+                "sn_prefix": "RE11",
+                "sn": "RE11TEST00000001",
+                "product_name": "",
+                "reason": "no parser available for this device type",
+            }
+        ]
 
         result = await _skipped_devices_diagnostics(
-            hass, enhanced_config_entry, skipped,
+            hass,
+            enhanced_config_entry,
+            skipped,
             [self._probe("SM3ATEST00000001")],
         )
 
@@ -1822,15 +1840,19 @@ class TestUnroutedDeviceCapture:
 
     @staticmethod
     def _skipped() -> list[dict[str, str]]:
-        return [{
-            "sn_prefix": "RE11",
-            "sn": "RE11TEST00000001",
-            "product_name": "",
-            "reason": "no parser available for this device type",
-        }]
+        return [
+            {
+                "sn_prefix": "RE11",
+                "sn": "RE11TEST00000001",
+                "product_name": "",
+                "reason": "no parser available for this device type",
+            }
+        ]
 
     async def test_capture_switched_off_does_not_blame_the_sign_in(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """The ordinary case must not read as a broken account.
 
@@ -1840,9 +1862,11 @@ class TestUnroutedDeviceCapture:
         reader after a fault that is not there, in a file whose own device
         list proves the sign-in worked.
         """
-        capture = (await _skipped_devices_diagnostics(
-            hass, enhanced_config_entry, self._skipped(), []
-        ))[0]["raw_capture"]
+        capture = (
+            await _skipped_devices_diagnostics(
+                hass, enhanced_config_entry, self._skipped(), []
+            )
+        )[0]["raw_capture"]
 
         assert capture["capture_enabled"] is False
         assert "switched off" in capture["hint"]
@@ -1850,7 +1874,9 @@ class TestUnroutedDeviceCapture:
         assert "sign-in" not in capture["hint"]
 
     async def test_capture_on_without_a_probe_names_the_sign_in(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """With the capture on, a missing session is the login after all."""
         now = 1_800_000_000.0
@@ -1868,15 +1894,17 @@ class TestUnroutedDeviceCapture:
         with patch(
             "custom_components.ecoflow_energy.const.time.time", return_value=now
         ):
-            capture = (await _skipped_devices_diagnostics(
-                hass, entry, self._skipped(), []
-            ))[0]["raw_capture"]
+            capture = (
+                await _skipped_devices_diagnostics(hass, entry, self._skipped(), [])
+            )[0]["raw_capture"]
 
         assert capture["capture_enabled"] is True
         assert "did not succeed" in capture["hint"]
 
     async def test_expired_window_reads_as_off_not_as_a_failure(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """A stored flag past its deadline is off, and must say so.
 
@@ -1898,21 +1926,25 @@ class TestUnroutedDeviceCapture:
         with patch(
             "custom_components.ecoflow_energy.const.time.time", return_value=now
         ):
-            capture = (await _skipped_devices_diagnostics(
-                hass, entry, self._skipped(), []
-            ))[0]["raw_capture"]
+            capture = (
+                await _skipped_devices_diagnostics(hass, entry, self._skipped(), [])
+            )[0]["raw_capture"]
 
         assert capture["capture_enabled"] is False
         assert "switched off" in capture["hint"]
         assert "did not succeed" not in capture["hint"]
 
     async def test_developer_entry_names_the_mode_not_the_login(
-        self, hass: HomeAssistant, standard_config_entry: MockConfigEntry,
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
     ) -> None:
         """On developer keys the capture does not exist, which is not a fault."""
-        capture = (await _skipped_devices_diagnostics(
-            hass, standard_config_entry, self._skipped(), []
-        ))[0]["raw_capture"]
+        capture = (
+            await _skipped_devices_diagnostics(
+                hass, standard_config_entry, self._skipped(), []
+            )
+        )[0]["raw_capture"]
 
         assert capture["capture_enabled"] is False
         assert "developer keys" in capture["hint"]
@@ -2250,7 +2282,10 @@ class TestRedactionDoesNotEatTheEvidence:
         payload = {
             "raw_frames": {
                 "frames": [
-                    {"hex": "0a370a12c7768a2197331002182020012801", "sn": "HJ31TEST00000001"}
+                    {
+                        "hex": "0a370a12c7768a2197331002182020012801",
+                        "sn": "HJ31TEST00000001",
+                    }
                 ]
             }
         }
@@ -2284,7 +2319,12 @@ class TestDataFreshness:
         return next(iter(hass.data[DOMAIN][entry.entry_id].values()))
 
     async def test_a_fresh_reading_resets_the_unchanged_run(
-        self, hass, standard_config_entry, mock_iot_api, mock_mqtt_client, mock_http_client
+        self,
+        hass,
+        standard_config_entry,
+        mock_iot_api,
+        mock_mqtt_client,
+        mock_http_client,
     ) -> None:
         """A value the device had not sent before counts as news."""
         coordinator = await self._coordinator(hass, standard_config_entry)
@@ -2299,7 +2339,12 @@ class TestDataFreshness:
         assert freshness["last_value_change_age_s"] < 5
 
     async def test_a_repeated_payload_is_counted_as_nothing_new(
-        self, hass, standard_config_entry, mock_iot_api, mock_mqtt_client, mock_http_client
+        self,
+        hass,
+        standard_config_entry,
+        mock_iot_api,
+        mock_mqtt_client,
+        mock_http_client,
     ) -> None:
         """The case the file could not show: polls succeed, values stand still.
 
@@ -2359,7 +2404,12 @@ class TestDataFreshness:
         assert coordinator.last_value_change_ts > first_change
 
     async def test_a_device_that_never_reported_says_so(
-        self, hass, standard_config_entry, mock_iot_api, mock_mqtt_client, mock_http_client
+        self,
+        hass,
+        standard_config_entry,
+        mock_iot_api,
+        mock_mqtt_client,
+        mock_http_client,
     ) -> None:
         """No reading yet is not the same as a reading that has not moved."""
         await self._coordinator(hass, standard_config_entry)

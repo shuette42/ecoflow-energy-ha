@@ -112,13 +112,23 @@ def test_write_refusal_matrix() -> None:
     refused outright because the app never writes them (only max/sleep/eco
     are on record).
     """
-    assert write_refusal("operating_submode", "eco", {"operating_mode": "fan"}) is not None
-    assert write_refusal("operating_submode", "eco", {"operating_mode": "cooling"}) is None
-    assert write_refusal("operating_submode", "none", {"operating_mode": "cooling"}) is not None
+    assert (
+        write_refusal("operating_submode", "eco", {"operating_mode": "fan"}) is not None
+    )
+    assert (
+        write_refusal("operating_submode", "eco", {"operating_mode": "cooling"}) is None
+    )
+    assert (
+        write_refusal("operating_submode", "none", {"operating_mode": "cooling"})
+        is not None
+    )
 
     # R2 - fan speed is fixed while the unit is in constant_temp, and 50 is
     # not one of the five speeds the app ever writes.
-    assert write_refusal("airflow_speed_pct", 60, {"operating_mode": "constant_temp"}) is not None
+    assert (
+        write_refusal("airflow_speed_pct", 60, {"operating_mode": "constant_temp"})
+        is not None
+    )
     with pytest.raises(Wave3WriteRefused):
         build_write("airflow_speed_pct", 50, DEVICE_SN)
     build_write("airflow_speed_pct", 60, DEVICE_SN)  # does not raise
@@ -136,7 +146,10 @@ def test_write_refusal_matrix() -> None:
         build_write("target_temp_c", 22.3, DEVICE_SN)
 
     # R4 - humidity only applies in dehumidify, and 85 is outside 40..80.
-    assert write_refusal("target_humidity_pct", 60.0, {"operating_mode": "cooling"}) is not None
+    assert (
+        write_refusal("target_humidity_pct", 60.0, {"operating_mode": "cooling"})
+        is not None
+    )
     with pytest.raises(Wave3WriteRefused):
         build_write("target_humidity_pct", 85, DEVICE_SN)
 
@@ -206,7 +219,9 @@ def test_float32_writes_refuse_nested_and_submessage() -> None:
     from ecoflow_energy.ecoflow.energy_stream import build_delta3_config_write_payload
 
     with pytest.raises(ValueError):
-        build_delta3_config_write_payload(156, 27.0, DEVICE_SN, float32=True, nested=True)
+        build_delta3_config_write_payload(
+            156, 27.0, DEVICE_SN, float32=True, nested=True
+        )
     with pytest.raises(ValueError):
         build_delta3_config_write_payload(
             156, 27.0, DEVICE_SN, float32=True, submessage=b"\x01"

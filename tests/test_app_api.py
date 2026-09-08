@@ -306,7 +306,9 @@ class TestGetMqttCredentials:
             result = await client.get_mqtt_credentials()
 
         assert result == expected_creds
-        mock_get.assert_called_once_with(session, "valid_token", base_url=client._base_url)
+        mock_get.assert_called_once_with(
+            session, "valid_token", base_url=client._base_url
+        )
 
     @pytest.mark.asyncio
     async def test_no_token_returns_none(self):

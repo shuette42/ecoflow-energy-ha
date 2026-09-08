@@ -613,11 +613,7 @@ class MqttIngestMixin(_Base):
 
                 result = decode_proto_runtime_frame(payload)
                 self._record_unknown_fields(result.mapped)
-                raw = {
-                    k: v
-                    for k, v in result.mapped.items()
-                    if not k.startswith("_")
-                }
+                raw = {k: v for k, v in result.mapped.items() if not k.startswith("_")}
                 # Delta 3 generation: status frame and battery heartbeat.
                 # Both feed the same parser as the HTTP path, so the sensor
                 # keys are identical in Standard and Enhanced Mode.
@@ -656,9 +652,8 @@ class MqttIngestMixin(_Base):
                     parsed = remap_ev_charging_keys(raw)
                     return parsed if parsed else None
                 # Enhanced Mode: change reports and battery heartbeat
-                if (
-                    result.mapped.get("_is_ems_change")
-                    or result.mapped.get("_is_bp_heartbeat")
+                if result.mapped.get("_is_ems_change") or result.mapped.get(
+                    "_is_bp_heartbeat"
                 ):
                     if not raw:
                         return None
@@ -675,9 +670,7 @@ class MqttIngestMixin(_Base):
 
         return None
 
-    def _parse_powerocean_proto_frame(
-        self, payload: bytes
-    ) -> dict[str, Any] | None:
+    def _parse_powerocean_proto_frame(self, payload: bytes) -> dict[str, Any] | None:
         """Decode and merge every PowerOcean header in one MQTT envelope.
 
         Get-All replies contain many independent headers, while normal pushes
@@ -769,9 +762,7 @@ class MqttIngestMixin(_Base):
                 # in it, which is why this command decodes an empty payload at
                 # all: it is the only frame that says a schedule was deleted.
                 if result.mapped.get("_is_timer_task_list"):
-                    merged.update(
-                        remap_timer_task_keys(raw, self._schedule_indices)
-                    )
+                    merged.update(remap_timer_task_keys(raw, self._schedule_indices))
                     continue
                 if (
                     result.mapped.get("_is_ems_change")
