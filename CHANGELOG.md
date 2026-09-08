@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.21.0] - 2026-09-08
+
+### Changed
+
+- Nothing about the software changes for anyone using it. Internally, the table that decides which protobuf message a device's frame is read as now exists once per device type instead of once for the whole integration. Until now a single table answered for every device, and two device families that use the same command numbers for different messages were kept apart only by the order in which the code happens to ask, which no test could check. Each family now has its own table and the caller has to say which device it is decoding for, so one family can never read another family's message by accident. Every frame in the recordings on file was replayed before and after the change and produced exactly the same readings.
+
 ## [1.20.0] - 2026-09-07
 
 ### Added

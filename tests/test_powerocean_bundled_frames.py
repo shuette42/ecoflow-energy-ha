@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from ecoflow_energy.ecoflow.const import DEVICE_TYPE_POWEROCEAN
 from ecoflow_energy.ecoflow.parsers.powerocean_proto import (
     flatten_heartbeat,
     remap_bp_keys,
@@ -99,7 +100,9 @@ _PG_SECOND_UNIT_PDATA = bytes.fromhex(
 
 def test_powerglow_report_maps_all_four_heating_rod_readings() -> None:
     """A heating rod drawing power reports its two readings and two setpoints."""
-    results = decode_proto_runtime_headers(_build_header(212, 8, _PG_HEATING_PDATA))
+    results = decode_proto_runtime_headers(
+        _build_header(212, 8, _PG_HEATING_PDATA), device_type=DEVICE_TYPE_POWEROCEAN
+    )
 
     assert len(results) == 1
     assert results[0].mapped["_is_heating_rod_param"] is True
@@ -115,7 +118,9 @@ def test_powerglow_report_maps_all_four_heating_rod_readings() -> None:
 
 def test_powerglow_idle_report_is_a_real_zero_watts() -> None:
     """An idle rod reports 0 W rather than omitting the reading."""
-    results = decode_proto_runtime_headers(_build_header(212, 8, _PG_IDLE_PDATA))
+    results = decode_proto_runtime_headers(
+        _build_header(212, 8, _PG_IDLE_PDATA), device_type=DEVICE_TYPE_POWEROCEAN
+    )
     raw = {k: v for k, v in results[0].mapped.items() if not k.startswith("_")}
 
     assert remap_heating_rod_keys(raw) == {
@@ -133,7 +138,9 @@ def test_powerglow_target_power_is_not_an_echo_of_the_drawn_power() -> None:
     that separates the two fields, since they sit one watt apart whenever the
     rod is actually heating.
     """
-    results = decode_proto_runtime_headers(_build_header(212, 8, _PG_STANDBY_PDATA))
+    results = decode_proto_runtime_headers(
+        _build_header(212, 8, _PG_STANDBY_PDATA), device_type=DEVICE_TYPE_POWEROCEAN
+    )
     raw = {k: v for k, v in results[0].mapped.items() if not k.startswith("_")}
 
     assert remap_heating_rod_keys(raw) == {
@@ -152,7 +159,9 @@ def test_powerglow_field_map_holds_at_a_lower_draw() -> None:
     the layout - it is what keeps the whole-watt reading of fields 4 and 5 from
     resting on a single magnitude.
     """
-    results = decode_proto_runtime_headers(_build_header(212, 8, _PG_SECOND_UNIT_PDATA))
+    results = decode_proto_runtime_headers(
+        _build_header(212, 8, _PG_SECOND_UNIT_PDATA), device_type=DEVICE_TYPE_POWEROCEAN
+    )
     raw = {k: v for k, v in results[0].mapped.items() if not k.startswith("_")}
 
     assert remap_heating_rod_keys(raw) == {
@@ -165,7 +174,9 @@ def test_powerglow_field_map_holds_at_a_lower_draw() -> None:
 
 def test_powerglow_serial_never_reaches_a_sensor_key() -> None:
     """The rod's own serial identifies the report and is not published."""
-    results = decode_proto_runtime_headers(_build_header(212, 8, _PG_HEATING_PDATA))
+    results = decode_proto_runtime_headers(
+        _build_header(212, 8, _PG_HEATING_PDATA), device_type=DEVICE_TYPE_POWEROCEAN
+    )
     raw = {k: v for k, v in results[0].mapped.items() if not k.startswith("_")}
 
     assert raw["hr_sn"] == "X" * 16
@@ -216,7 +227,7 @@ def test_runtime_decodes_every_header_with_its_own_sequence() -> None:
         ),
     )
 
-    decoded = decode_proto_runtime_headers(bundle)
+    decoded = decode_proto_runtime_headers(bundle, device_type=DEVICE_TYPE_POWEROCEAN)
 
     assert [item.parse_path for item in decoded] == [
         "typed_runtime:energy_stream_report",
@@ -236,7 +247,7 @@ def test_single_header_runtime_api_remains_compatible() -> None:
     stream = JTS1EnergyStreamReport(mppt_pwr=1234.0, sys_load_pwr=200.0)
     frame = _build_header(96, 33, stream.SerializeToString())
 
-    result = decode_proto_runtime_frame(frame)
+    result = decode_proto_runtime_frame(frame, device_type=DEVICE_TYPE_POWEROCEAN)
 
     assert len(result.headers) == 1
     assert result.parse_path == "typed_runtime:energy_stream_report"
@@ -248,8 +259,8 @@ def test_empty_known_companion_header_is_guarded_not_decoded() -> None:
     """A zero-length known pdata does not create a bogus protobuf result."""
     frame = _build_header(96, 39, b"", seq=77, encrypted=True)
 
-    assert decode_proto_runtime_headers(frame) == []
-    result = decode_proto_runtime_frame(frame)
+    assert decode_proto_runtime_headers(frame, device_type=DEVICE_TYPE_POWEROCEAN) == []
+    result = decode_proto_runtime_frame(frame, device_type=DEVICE_TYPE_POWEROCEAN)
     assert result.parse_path == "typed_runtime:guarded_no_inner_payload"
     assert result.parse_reason_code == "typed_inner_payload_missing"
 
@@ -259,7 +270,7 @@ def test_pv_inverter_stream_has_sensor_key() -> None:
     message = JTS1EmsPVInvEnergyStreamReport(pv_inv_pwr=987.0)
     frame = _build_header(96, 39, message.SerializeToString())
 
-    result = decode_proto_runtime_headers(frame)[0]
+    result = decode_proto_runtime_headers(frame, device_type=DEVICE_TYPE_POWEROCEAN)[0]
 
     assert result.mapped["_is_pv_inv_energy_stream"] is True
     assert result.mapped["pv_inverter_power_w"] == 987.0
@@ -451,7 +462,7 @@ def test_multi_header_frame_with_outer_payload_still_decodes() -> None:
         + encode_field_bytes(2, stream.SerializeToString())
     )
 
-    result = decode_proto_runtime_frame(frame)
+    result = decode_proto_runtime_frame(frame, device_type=DEVICE_TYPE_POWEROCEAN)
 
     assert result.parse_path == "typed_runtime:energy_stream_report"
     assert result.parse_reason_code == "typed_source_payload_field"
@@ -469,7 +480,7 @@ def test_invalid_pdata_hex_falls_back_to_full_frame() -> None:
         "ecoflow_energy.ecoflow.proto.runtime.decode_header_message",
         return_value=([{"cmd_func": 96, "cmd_id": 33, "pdata": "zznothex"}], None),
     ):
-        result = decode_proto_runtime_frame(frame)
+        result = decode_proto_runtime_frame(frame, device_type=DEVICE_TYPE_POWEROCEAN)
 
     assert result.parse_reason_code == "typed_source_full_frame_invalid_pdata"
     assert result.parse_path == "typed_runtime:energy_stream_report"
@@ -490,7 +501,7 @@ def test_enc_type_flag_with_plaintext_pdata_still_decodes() -> None:
         xor_payload=False,
     ) + _build_header(96, 39, b"", seq=0x1333)
 
-    decoded = decode_proto_runtime_headers(frame)
+    decoded = decode_proto_runtime_headers(frame, device_type=DEVICE_TYPE_POWEROCEAN)
 
     assert len(decoded) == 1
     assert decoded[0].parse_path == "typed_runtime:energy_stream_report"
@@ -508,7 +519,7 @@ def test_cmd_func_and_cmd_id_come_from_the_same_header() -> None:
         96, 33, stream.SerializeToString()
     )
 
-    decoded = decode_proto_runtime_headers(frame)
+    decoded = decode_proto_runtime_headers(frame, device_type=DEVICE_TYPE_POWEROCEAN)
 
     assert len(decoded) == 1
     assert decoded[0].parse_path == "typed_runtime:energy_stream_report"
@@ -541,7 +552,7 @@ def test_real_r374_get_all_fixture_decodes_all_supported_headers() -> None:
     }
     assert {(96, 1), (96, 8), (96, 33), (96, 39)} <= command_pairs
 
-    decoded = decode_proto_runtime_headers(frame)
+    decoded = decode_proto_runtime_headers(frame, device_type=DEVICE_TYPE_POWEROCEAN)
     parse_paths = {result.parse_path for result in decoded}
 
     assert {
@@ -549,12 +560,21 @@ def test_real_r374_get_all_fixture_decodes_all_supported_headers() -> None:
         "typed_runtime:ems_change",
         "typed_runtime:energy_stream_report",
     } <= parse_paths
-    assert len(decode_proto_runtime_frame(frame).headers) == 19
+    assert (
+        len(
+            decode_proto_runtime_frame(
+                frame, device_type=DEVICE_TYPE_POWEROCEAN
+            ).headers
+        )
+        == 19
+    )
 
 
 def _ems_state_keys(frame: bytes) -> dict[str, object]:
     """Decode a bundle and return the cmd_id=17 report as sensor keys."""
-    for result in decode_proto_runtime_headers(frame):
+    for result in decode_proto_runtime_headers(
+        frame, device_type=DEVICE_TYPE_POWEROCEAN
+    ):
         if result.parse_path == "typed_runtime:ems_state":
             raw = {
                 key: value
@@ -574,7 +594,12 @@ def test_r374_fixture_carries_a_cmd_17_report() -> None:
     """
     frame = _R374_GET_ALL_FIXTURE.read_bytes()
 
-    paths = [result.parse_path for result in decode_proto_runtime_headers(frame)]
+    paths = [
+        result.parse_path
+        for result in decode_proto_runtime_headers(
+            frame, device_type=DEVICE_TYPE_POWEROCEAN
+        )
+    ]
 
     assert "typed_runtime:ems_state" in paths
     assert "typed_runtime:ems_change" in paths
@@ -665,7 +690,9 @@ def test_non_zero_lifetime_energy_total_is_still_converted() -> None:
 
 def _ems_change_keys(frame: bytes) -> dict[str, object]:
     """Decode a bundle and return the cmd_id=8 report as sensor keys."""
-    for result in decode_proto_runtime_headers(frame):
+    for result in decode_proto_runtime_headers(
+        frame, device_type=DEVICE_TYPE_POWEROCEAN
+    ):
         if result.parse_path == "typed_runtime:ems_change":
             raw = {
                 key: value
@@ -719,7 +746,9 @@ def test_module_inventory_decodes_every_serial_in_its_role() -> None:
     )
     assert len(payload) == 80
 
-    decoded = decode_proto_runtime_headers(_build_header(96, 3, payload))
+    decoded = decode_proto_runtime_headers(
+        _build_header(96, 3, payload), device_type=DEVICE_TYPE_POWEROCEAN
+    )
 
     assert len(decoded) == 1
     assert decoded[0].parse_path == "typed_runtime:error_change"

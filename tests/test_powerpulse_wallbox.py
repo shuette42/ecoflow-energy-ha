@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import pytest
 
+from custom_components.ecoflow_energy.ecoflow.const import DEVICE_TYPE_POWEROCEAN
 from custom_components.ecoflow_energy.ecoflow.parsers.powerocean_proto import (
     remap_ev_charging_keys,
 )
@@ -42,7 +43,7 @@ FRAME_CHARGING = bytes.fromhex(
 
 def _from_frame(frame: bytes) -> dict:
     """Run a complete MQTT frame through the real decode path."""
-    results = decode_proto_runtime_headers(frame)
+    results = decode_proto_runtime_headers(frame, device_type=DEVICE_TYPE_POWEROCEAN)
     mapped = [r.mapped for r in results if r.mapped.get("_is_ev_charging_param")]
     assert mapped, "the 209/8 header was not routed"
     raw = {k: v for k, v in mapped[0].items() if not k.startswith("_")}
@@ -130,8 +131,10 @@ class TestRegistry:
 
         registry = _build_cmd_registry()
 
-        assert (209, 8) in registry
-        assert registry[(209, 8)].flags == {"_is_ev_charging_param": True}
+        assert (209, 8) in registry[DEVICE_TYPE_POWEROCEAN]
+        assert registry[DEVICE_TYPE_POWEROCEAN][(209, 8)].flags == {
+            "_is_ev_charging_param": True
+        }
 
     def test_unknown_status_value_is_dropped_not_passed_through(self) -> None:
         """An enum sensor raises on any value outside its options list, so a

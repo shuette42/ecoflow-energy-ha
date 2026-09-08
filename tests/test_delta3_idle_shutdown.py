@@ -26,6 +26,7 @@ from ecoflow_energy.const import (
     DELTA3_IDLE_SHUTDOWNS,
     DELTA3_SELECTS,
 )
+from ecoflow_energy.ecoflow.const import DEVICE_TYPE_DELTA3
 from ecoflow_energy.ecoflow.delta3_commands import (
     DELTA3_SELECT_FIELDS,
     build_proto_command,
@@ -60,7 +61,7 @@ def _frame(inner: bytes) -> bytes:
 
 
 def _decode(frame: bytes) -> dict:
-    result = decode_proto_runtime_frame(frame)
+    result = decode_proto_runtime_frame(frame, device_type=DEVICE_TYPE_DELTA3)
     return {k: v for k, v in result.mapped.items() if not k.startswith("_")}
 
 

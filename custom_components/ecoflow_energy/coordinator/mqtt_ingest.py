@@ -582,11 +582,13 @@ class MqttIngestMixin(_Base):
 
         if b"\x0a" in payload[:4]:
             try:
-                # Device-type routing comes first: (cmd_func, cmd_id) pairs are
-                # not unique across device classes. The Stream AC Pro uses the
-                # very same (254, 21) main status frame as the Delta 3
-                # generation, so a generic registry lookup would hand a Stream
-                # frame to the Delta 3 parser and drop the Stream telemetry.
+                # These families keep their own parsers and never reach the
+                # command registry: (cmd_func, cmd_id) pairs are not unique
+                # across device classes, and the Stream AC Pro uses the very
+                # same (254, 21) main status frame as the Delta 3 generation.
+                # Since ADR-024 the registry is keyed per device type as well,
+                # so the split below is the parser choice, not the guard that
+                # keeps one family from reading another family's message.
                 if self.device_type == DEVICE_TYPE_STREAM:
                     return parse_stream_proto_message(payload)
                 # Same reason: an ES22 shares (32, 2) and (32, 50) with the
@@ -611,7 +613,9 @@ class MqttIngestMixin(_Base):
                 if self.device_type == DEVICE_TYPE_POWEROCEAN:
                     return self._parse_powerocean_proto_frame(payload)
 
-                result = decode_proto_runtime_frame(payload)
+                result = decode_proto_runtime_frame(
+                    payload, device_type=self.device_type
+                )
                 self._record_unknown_fields(result.mapped)
                 raw = {k: v for k, v in result.mapped.items() if not k.startswith("_")}
                 # Delta 3 generation: status frame and battery heartbeat.
@@ -683,7 +687,9 @@ class MqttIngestMixin(_Base):
         # The envelope decode stays guarded because the get_reply caller has no
         # guard of its own and runs on the Paho thread.
         try:
-            results = decode_proto_runtime_headers(payload)
+            results = decode_proto_runtime_headers(
+                payload, device_type=self.device_type
+            )
         except Exception:
             _LOGGER.debug(
                 "PowerOcean protobuf decode error for %s",

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import pytest
 
+from custom_components.ecoflow_energy.ecoflow.const import DEVICE_TYPE_POWEROCEAN
 from custom_components.ecoflow_energy.ecoflow.parsers.powerocean_proto import (
     remap_pile_charging_keys,
 )
@@ -119,7 +120,7 @@ def _header(cmd_func: int, cmd_id: int, pdata: bytes) -> bytes:
 
 def _from_frame(frame: bytes) -> dict:
     """Run a complete MQTT frame through the real decode path."""
-    results = decode_proto_runtime_headers(frame)
+    results = decode_proto_runtime_headers(frame, device_type=DEVICE_TYPE_POWEROCEAN)
     mapped = [r.mapped for r in results if r.mapped.get("_is_pile_charging_param")]
     assert mapped, "the 241/3 header was not routed"
     raw = {k: v for k, v in mapped[0].items() if not k.startswith("_")}
@@ -214,7 +215,9 @@ class TestOtherAccessoriesAndEdges:
 
     def test_a_rod_only_frame_still_routes_but_yields_nothing(self) -> None:
         frame = _header(241, 3, HEATING_ROD_REPORT)
-        results = decode_proto_runtime_headers(frame)
+        results = decode_proto_runtime_headers(
+            frame, device_type=DEVICE_TYPE_POWEROCEAN
+        )
         mapped = [r.mapped for r in results if r.mapped.get("_is_pile_charging_param")]
         assert mapped, "the tuple is registered regardless of the accessory"
         raw = {k: v for k, v in mapped[0].items() if not k.startswith("_")}
@@ -227,7 +230,9 @@ class TestOtherAccessoriesAndEdges:
         diagnostics of every system with a rod - noise that would bury a
         real unknown field the next time one appears.
         """
-        (result,) = decode_proto_runtime_headers(_header(241, 3, HEATING_ROD_REPORT))
+        (result,) = decode_proto_runtime_headers(
+            _header(241, 3, HEATING_ROD_REPORT), device_type=DEVICE_TYPE_POWEROCEAN
+        )
         assert "_unknown_fields" not in result.mapped
         assert "third_plug_param_report" in result.mapped
 
@@ -266,7 +271,9 @@ class TestOtherAccessoriesAndEdges:
         assert remap_pile_charging_keys(raw) == {"ev_charge_power_w": 0.0}
 
     def test_the_command_tuple_is_routed_with_its_own_flag(self) -> None:
-        results = decode_proto_runtime_headers(FRAME_CHARGING_MID_ORDER)
+        results = decode_proto_runtime_headers(
+            FRAME_CHARGING_MID_ORDER, device_type=DEVICE_TYPE_POWEROCEAN
+        )
         flags = {
             k
             for r in results

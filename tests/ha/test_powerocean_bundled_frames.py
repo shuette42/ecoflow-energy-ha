@@ -5,7 +5,10 @@ from unittest.mock import patch
 import pytest
 
 from custom_components.ecoflow_energy.coordinator.mqtt_ingest import MqttIngestMixin
-from custom_components.ecoflow_energy.ecoflow.const import device_log_tag
+from custom_components.ecoflow_energy.ecoflow.const import (
+    DEVICE_TYPE_POWEROCEAN,
+    device_log_tag,
+)
 from custom_components.ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
     JTS1BpHeartbeatReport,
     JTS1EmsChangeReport,
@@ -24,6 +27,9 @@ class _PowerOceanParser(MqttIngestMixin):
     """Minimal parser host for the frame merge test."""
 
     device_sn = "R374MASKEDTEST"
+    # The registry is keyed per device type since ADR-024, and the mixin
+    # reads this attribute on the frame path.
+    device_type = DEVICE_TYPE_POWEROCEAN
     # The mixin logs through the coordinator tag, so the stub carries the
     # same masked form the real coordinator computes.
     device_tag = device_log_tag(device_sn)
