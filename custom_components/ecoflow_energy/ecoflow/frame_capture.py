@@ -293,9 +293,9 @@ def _encrypted_regions(payload: bytes) -> list[_EncRegion]:
     `_ENC_TYPE_XOR`: its own `pdata` span if that field is present and
     non-empty, else the frame's field-2 payload span if this is the only
     header the frame carries (a shared payload with more than one header is
-    undecidable and gets no region at all). `scripts/probe/analyze_delta3_proto.py`
-    applies this same fallback so the sanitizer and the analyzer that reads
-    its output agree on what a frame is.
+    undecidable and gets no region at all). The frame analyzer this project
+    uses applies the same fallback, so the sanitizer and the analyzer agree
+    on what a frame is.
 
     Wrapped so a malformed frame can never raise here: on any failure this
     returns `[]` and the frame keeps the plain passes' behaviour, mirroring

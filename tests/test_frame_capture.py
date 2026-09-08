@@ -103,6 +103,7 @@ def _enc_header(
     pdata_plain: bytes | None,
     enc_type: int | None = 1,
     seq: int | None = 7,
+    prefix: bytes = b"",
 ) -> bytes:
     """Build one repeated-header entry with `pdata` XOR-masked as a device does.
 
@@ -111,8 +112,14 @@ def _enc_header(
     frame, but only when `enc_type == 1` - a device never masks a header it
     did not flag, and a header carrying no `seq` has no key to mask with
     either, so the stored bytes are the plaintext unchanged in both cases.
+
+    `prefix` is raw bytes written before `enc_type`, for a test that needs
+    control over what sits ahead of the header's own fields - a real device
+    never sends this, `_header_fields` walks straight past whatever bytes
+    it turns out to be.
     """
     header = bytearray()
+    header.extend(prefix)
     if enc_type is not None:
         header.extend(encode_field_varint(6, enc_type))
     header.extend(encode_field_varint(8, cmd_func))
@@ -654,7 +661,15 @@ class TestEncryptedRegionMasking:
         assert _unmask_pdata(header) == b"\x12\x0c" + b"X" * 12
 
     def test_a_named_secret_under_the_mask_is_masked(self) -> None:
-        secret = "HJ31TESTBAM40TX5"
+        """The account id, an example of a secret only `secrets` can see.
+
+        `"a1b2c3d4e5"` is invisible to every shape-based pass - too short
+        and mixed with digits for `_SERIAL_RUN`, no hyphens for `_UUID_RUN`
+        or `_JOINED_HEX_RUN`, no region prefix for `_TIME_ZONE`, and mixed
+        case rules out `_mask_delimited_identifiers`. A serial-shaped value
+        here would pass whether or not `secrets` ever reached the region.
+        """
+        secret = "a1b2c3d4e5"
         plain = secret.encode()
         frame = _enc_header(254, 39, pdata_plain=plain, seq=self._KEY)
 
@@ -680,6 +695,12 @@ class TestEncryptedRegionMasking:
     def test_a_zero_key_region_is_still_masked(self) -> None:
         """`seq & 0xFF == 0`: the plaintext sits there unencrypted, and it
         is still masked - XOR by zero is a no-op, not a reason to skip.
+
+        This assertion also holds with the region walk removed entirely: a
+        key-0 region is plaintext before that walk ever runs, and the
+        whole-frame `_SERIAL_RUN` pass finds it there on its own. The test
+        exists to document the intent - `key is None` skips, `key == 0`
+        does not - not to guard an outcome the region path alone produces.
         """
         plain = b"HJ31TESTMASK0001"
         seq = 256  # seq & 0xFF == 0
@@ -805,6 +826,66 @@ class TestEncryptedRegionMasking:
         header = _decode_first_header(result)
         assert _unmask_pdata(header) == plain
 
+    def test_the_region_pass_does_not_overwrite_the_raw_pass_mask(self) -> None:
+        """The "leave an unchanged region alone" short-circuit, pinned.
+
+        The plaintext here has nothing any pass can mask - lowercase
+        letters match none of them - but at key `0x20` its ciphertext
+        happens to spell an upper-case run the whole-frame pass masks
+        before the region walk ever starts (XOR-ing ASCII with `0x20`
+        flips case, nothing more). Unmasking that region again recovers
+        the same harmless plaintext, so the region pass finds nothing to
+        change. Without the short-circuit it splices the *original*
+        ciphertext back into that span regardless, undoing the mask the
+        whole-frame pass had already written there. Plan decision 4 calls
+        the combination of the two passes strictly additive; this is the
+        case that additivity depends on.
+        """
+        plain = b"abcdefghijklmnop"
+        key = 0x20
+        ciphertext = bytes(b ^ key for b in plain)
+        assert re.fullmatch(rb"[A-Z]{16}", ciphertext), "must mask under the raw pass"
+        frame = _enc_header(254, 39, pdata_plain=plain, seq=key)
+
+        result = sanitize_frame(frame, [])
+
+        header = _decode_first_header(result)
+        assert bytes.fromhex(header["pdata"]) == b"X" * 16
+
+    def test_a_prefix_the_whole_frame_pass_masks_is_still_read_from_the_original(
+        self,
+    ) -> None:
+        """The property: regions are walked from `payload`, not `sanitized`.
+
+        An 18-byte identifier-shaped run placed before this header's own
+        `enc_type` field is exactly what `_SERIAL_RUN` looks for on the
+        whole frame - and being greedy, it also swallows the adjacent
+        `enc_type` tag byte (`0x30`, itself `[A-Z0-9]`), leaving only the
+        tag's *value* byte standing alone where a field boundary used to
+        be. Walking that masked span as if it were the frame - the
+        property this test pins - never lands on a byte pair that reads
+        `enc_type == 1` again, so the header's real region would be walked
+        straight past. Walking the pristine `payload` still finds it,
+        which the two assertions below check separately: first that the
+        walk itself diverges, then that `sanitize_frame` uses the walk that
+        still finds the header.
+        """
+        prefix = b"PLPOQNY5B2NPSEJEJ6"
+        plain = b"HJ31TESTMASK0001"
+        frame = _enc_header(254, 39, pdata_plain=plain, seq=self._KEY, prefix=prefix)
+
+        payload_regions = _encrypted_regions(frame)
+        sanitized_regions = _encrypted_regions(_plain_passes(frame, []))
+        assert payload_regions and not sanitized_regions, (
+            payload_regions,
+            sanitized_regions,
+        )
+
+        result = sanitize_frame(frame, [])
+
+        header = _decode_first_header(result)
+        assert _unmask_pdata(header) == b"X" * 16
+
 
 class TestMaskingDoesNotCorruptRealFrames:
     """The guard the history of this mask asks for.
@@ -830,8 +911,14 @@ class TestMaskingDoesNotCorruptRealFrames:
                 continue
             if not isinstance(data, dict):
                 continue
-            for frame in data.get("frames") or []:
-                raw = frame.get("hex")
+            # A fixture holding exactly one frame stores it inline, keyed
+            # `frame_hex` or `hex`, with no `frames` list around it -
+            # `tests/fixtures/delta3/p231_status_frame.json` is this shape.
+            frames = data.get("frames") or (
+                [data] if data.get("frame_hex") or data.get("hex") else []
+            )
+            for frame in frames:
+                raw = frame.get("hex") or frame.get("frame_hex")
                 if raw:
                     found.append((path.name, bytes.fromhex(raw)))
         return found
@@ -858,8 +945,11 @@ class TestMaskingDoesNotCorruptRealFrames:
             if not isinstance(data, dict):
                 continue
             family = path.relative_to(root).parts[0]
-            for frame in data.get("frames") or []:
-                raw = frame.get("hex")
+            frames = data.get("frames") or (
+                [data] if data.get("frame_hex") or data.get("hex") else []
+            )
+            for frame in frames:
+                raw = frame.get("hex") or frame.get("frame_hex")
                 if raw:
                     found.append((family, path.name, bytes.fromhex(raw)))
         return found
@@ -1002,7 +1092,10 @@ class TestMaskingDoesNotCorruptRealFrames:
                 for match in identifier.findall(unmasked):
                     assert set(match) == {ord("X")}, (name, match)
 
-        assert checked >= 60, checked
+        # Measured on this corpus after the `frame_hex` fixture fix: 65
+        # regions unmasked. The floor sits below that with headroom, not on
+        # it, so one fixture removed does not silently pass.
+        assert checked >= 61, checked
 
 
 class TestIsProtoFrame:
