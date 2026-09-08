@@ -166,7 +166,7 @@ These sensors are pre-configured for the HA Energy Dashboard (`total_increasing`
 | MPPT 1/2 Fault Code | A raw code from the device, passed through unchanged. EcoFlow publishes no meaning for the values, so nothing here translates them, and "fault" is their field name rather than a verdict. An owner tracing one unit found the code following sunrise and sunset with no alert in the EcoFlow app, which points at a producing / not producing state rather than an error. Read it as unlabelled: for automations the power reading of the string itself is the better signal. | disabled |
 | PCS AC/DC Error Code | Inverter error codes | disabled |
 | PCS AC Warning Code | Inverter warnings | disabled |
-| WiFi / Ethernet / 4G Status | Connectivity status | disabled |
+| WiFi/Ethernet/4G Status | Connectivity status | disabled |
 | EMS LED Brightness | LED brightness setting | disabled |
 | EMS Work State | Internal work state | disabled |
 | Total Battery Capacity | System battery capacity | disabled |
