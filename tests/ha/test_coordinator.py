@@ -6547,8 +6547,12 @@ class TestAppAuthMode:
         coordinator._credential_obtained_ts = 1.0  # fixed positive value
 
         # Replace the coroutine method with a sync no-op to avoid async scheduling
-        # issues
-        coordinator._proactive_credential_refresh = lambda: None  # type: ignore[assignment]
+        # issues. Deliberate: the replacement is sync on purpose (so calling it
+        # here does not leave an unawaited coroutine behind), which is exactly
+        # what these two codes complain about.
+        coordinator._proactive_credential_refresh = (  # type: ignore[assignment, return-value]
+            lambda: None
+        )
         with (
             patch.object(hass, "async_create_task") as mock_task,
             patch(

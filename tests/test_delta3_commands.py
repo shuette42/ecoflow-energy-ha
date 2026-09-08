@@ -88,6 +88,7 @@ class TestEnvelope:
         all use `dirSrc`. Pinned so nobody "fixes" it back.
         """
         cmd = build_switch_command("ac_out_switch", True)
+        assert cmd is not None
         assert "dirSrc" in cmd
         assert "dirSoc" not in cmd
 
@@ -107,18 +108,28 @@ class TestSwitchCommands:
     def test_flat_switches_map_to_the_documented_param(
         self, key: str, params_key: str
     ) -> None:
-        assert build_switch_command(key, True)["params"] == {params_key: True}
-        assert build_switch_command(key, False)["params"] == {params_key: False}
+        cmd_on = build_switch_command(key, True)
+        cmd_off = build_switch_command(key, False)
+        assert cmd_on is not None
+        assert cmd_off is not None
+        assert cmd_on["params"] == {params_key: True}
+        assert cmd_off["params"] == {params_key: False}
 
     def test_energy_backup_is_nested(self) -> None:
         """cfgEnergyBackup is the only control with a nested payload."""
         cmd = build_switch_command("energy_backup_switch", True)
+        assert cmd is not None
         assert cmd["params"] == {"cfgEnergyBackup": {"energyBackupEn": True}}
 
     def test_values_are_real_booleans(self) -> None:
         """The contract types these as bool, not 0/1."""
-        params = build_switch_command("ac_out_switch", 1)["params"]
-        assert params["cfgAcOutOpen"] is True
+        # Deliberate: the contract types this argument bool. Passing 1 is the
+        # point of the test - it proves a truthy int still coerces to True
+        # instead of being rejected or stored verbatim. Do not "fix" this to
+        # True, that would delete the coercion check while leaving it green.
+        cmd = build_switch_command("ac_out_switch", 1)  # type: ignore[arg-type]
+        assert cmd is not None
+        assert cmd["params"]["cfgAcOutOpen"] is True
 
     def test_unknown_key_returns_none(self) -> None:
         assert build_switch_command("no_such_switch", True) is None
@@ -136,7 +147,9 @@ class TestNumberCommands:
     def test_in_range_values_pass_through(
         self, key: str, params_key: str, value: int
     ) -> None:
-        assert build_number_command(key, value)["params"] == {params_key: value}
+        cmd = build_number_command(key, value)
+        assert cmd is not None
+        assert cmd["params"] == {params_key: value}
 
     @pytest.mark.parametrize(
         ("key", "params_key", "low", "high"),
@@ -149,22 +162,29 @@ class TestNumberCommands:
     def test_values_are_clamped_to_the_vendor_range(
         self, key: str, params_key: str, low: int, high: int
     ) -> None:
-        assert build_number_command(key, low - 10)["params"][params_key] == low
-        assert build_number_command(key, high + 10)["params"][params_key] == high
-        assert build_number_command(key, low)["params"][params_key] == low
-        assert build_number_command(key, high)["params"][params_key] == high
+        below_range = build_number_command(key, low - 10)
+        above_range = build_number_command(key, high + 10)
+        at_low = build_number_command(key, low)
+        at_high = build_number_command(key, high)
+        assert below_range is not None
+        assert above_range is not None
+        assert at_low is not None
+        assert at_high is not None
+        assert below_range["params"][params_key] == low
+        assert above_range["params"][params_key] == high
+        assert at_low["params"][params_key] == low
+        assert at_high["params"][params_key] == high
 
     def test_backup_reserve_tops_out_at_fifty_not_hundred(self) -> None:
         """Easy to get wrong: this is a ratio, not a SoC target."""
-        assert (
-            build_number_command("backup_reserve_soc", 100)["params"][
-                "cfgBackupReverseSoc"
-            ]
-            == 50
-        )
+        cmd = build_number_command("backup_reserve_soc", 100)
+        assert cmd is not None
+        assert cmd["params"]["cfgBackupReverseSoc"] == 50
 
     def test_float_input_is_rounded_to_int(self) -> None:
-        params = build_number_command("max_charge_soc", 79.6)["params"]
+        cmd = build_number_command("max_charge_soc", 79.6)
+        assert cmd is not None
+        params = cmd["params"]
         assert params["cfgMaxChgSoc"] == 80
         assert isinstance(params["cfgMaxChgSoc"], int)
 
@@ -201,14 +221,17 @@ class TestProtoCommands:
         ],
     )
     def test_switch_payload_bytes(self, key: str, expected_pdata: str) -> None:
-        frame = build_proto_command(build_switch_command(key, True), self.SN)
+        cmd = build_switch_command(key, True)
+        assert cmd is not None
+        frame = build_proto_command(cmd, self.SN)
         assert frame is not None
         assert self._pdata(frame) == expected_pdata
 
     def test_switch_off_writes_zero(self) -> None:
-        frame = build_proto_command(
-            build_switch_command("beeper_switch", False), self.SN
-        )
+        cmd = build_switch_command("beeper_switch", False)
+        assert cmd is not None
+        frame = build_proto_command(cmd, self.SN)
+        assert frame is not None
         assert self._pdata(frame) == "4800"
 
     @pytest.mark.parametrize(
@@ -222,25 +245,30 @@ class TestProtoCommands:
     def test_number_payload_bytes(
         self, key: str, value: int, expected_pdata: str
     ) -> None:
-        frame = build_proto_command(build_number_command(key, value), self.SN)
+        cmd = build_number_command(key, value)
+        assert cmd is not None
+        frame = build_proto_command(cmd, self.SN)
         assert frame is not None
         assert self._pdata(frame) == expected_pdata
 
     def test_number_values_stay_inside_the_vendor_range(self) -> None:
         """The clamp is shared with the HTTP path, so it applies here too."""
-        frame = build_proto_command(
-            build_number_command("max_charge_soc", 200), self.SN
-        )
+        cmd = build_number_command("max_charge_soc", 200)
+        assert cmd is not None
+        frame = build_proto_command(cmd, self.SN)
+        assert frame is not None
         assert self._pdata(frame) == "880264"  # clamped to 100
-        frame = build_proto_command(
-            build_number_command("backup_reserve_soc", 99), self.SN
-        )
+        cmd = build_number_command("backup_reserve_soc", 99)
+        assert cmd is not None
+        frame = build_proto_command(cmd, self.SN)
+        assert frame is not None
         assert self._pdata(frame) == "b00632"  # clamped to 50
 
     def test_frame_carries_the_hardware_verified_header(self) -> None:
-        frame = build_proto_command(
-            build_switch_command("beeper_switch", True), self.SN
-        )
+        cmd = build_switch_command("beeper_switch", True)
+        assert cmd is not None
+        frame = build_proto_command(cmd, self.SN)
+        assert frame is not None
         headers, _ = decode_header_message(frame)
         header = headers[0]
         assert header["src"] == 32
@@ -263,9 +291,13 @@ class TestProtoCommands:
     def test_every_control_has_a_binary_counterpart(self) -> None:
         """One table drives both wires, so neither can lose a control."""
         for key in DELTA3_SWITCH_PARAMS:
-            assert build_proto_command(build_switch_command(key, True), self.SN)
+            switch_cmd = build_switch_command(key, True)
+            assert switch_cmd is not None
+            assert build_proto_command(switch_cmd, self.SN)
         for key in DELTA3_NUMBER_PARAMS:
-            assert build_proto_command(build_number_command(key, 10), self.SN)
+            number_cmd = build_number_command(key, 10)
+            assert number_cmd is not None
+            assert build_proto_command(number_cmd, self.SN)
 
     def test_unknown_parameter_returns_none(self) -> None:
         command = {"cmdId": 17, "params": {"cfgSomethingElse": 1}}
@@ -291,6 +323,7 @@ class TestAcCharging:
 
     def test_power_always_carries_the_mode(self) -> None:
         command = build_number_command("ac_charge_power_limit", 1200)
+        assert command is not None
         assert command["params"] == {
             "cfgPlugInInfoAcInChgPowMax": 1200,
             "cfgAcInChgMode": 0,
@@ -305,6 +338,7 @@ class TestAcCharging:
         self, requested: int, expected: int
     ) -> None:
         command = build_number_command("ac_charge_power_limit", requested)
+        assert command is not None
         assert command["params"]["cfgPlugInInfoAcInChgPowMax"] == expected
 
     def test_mode_field_number(self) -> None:
@@ -312,9 +346,9 @@ class TestAcCharging:
 
     def test_both_fields_reach_one_binary_frame(self) -> None:
         """The pair must survive into the frame, not just into the params."""
-        frame = build_proto_command(
-            build_number_command("ac_charge_power_limit", 800), self.SN
-        )
+        cmd = build_number_command("ac_charge_power_limit", 800)
+        assert cmd is not None
+        frame = build_proto_command(cmd, self.SN)
         assert frame is not None
         headers, _ = decode_header_message(frame)
         pdata = bytes.fromhex(headers[0]["pdata"])
@@ -323,9 +357,10 @@ class TestAcCharging:
 
     def test_fields_are_in_ascending_order(self) -> None:
         """Matching the app's own serialisation removes one variable."""
-        frame = build_proto_command(
-            build_number_command("ac_charge_power_limit", 1200), self.SN
-        )
+        cmd = build_number_command("ac_charge_power_limit", 1200)
+        assert cmd is not None
+        frame = build_proto_command(cmd, self.SN)
+        assert frame is not None
         headers, _ = decode_header_message(frame)
         pdata = bytes.fromhex(headers[0]["pdata"])
         assert pdata.index(b"\xb0\x03") < pdata.index(b"\xe8\x07")

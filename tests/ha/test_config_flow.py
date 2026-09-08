@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import aiohttp
 import pytest
 from homeassistant import config_entries
-from homeassistant.config_entries import SOURCE_REAUTH, SOURCE_RECONFIGURE
+from homeassistant.config_entries import (
+    SOURCE_REAUTH,
+    SOURCE_RECONFIGURE,
+    ConfigFlowContext,
+    ConfigFlowResult,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -124,7 +130,9 @@ class TestPowerStreamModeBoundary:
         )
 
         assert result["type"] is FlowResultType.FORM
-        assert result["errors"]["base"] == "powerstream_requires_standard"
+        errors = result["errors"]
+        assert errors is not None
+        assert errors["base"] == "powerstream_requires_standard"
 
     async def test_app_auth_options_reject_before_entry_mutation(
         self, hass: HomeAssistant
@@ -168,7 +176,9 @@ class TestPowerStreamModeBoundary:
             )
 
         assert result["type"] is FlowResultType.FORM
-        assert result["errors"]["base"] == "powerstream_requires_standard"
+        errors = result["errors"]
+        assert errors is not None
+        assert errors["base"] == "powerstream_requires_standard"
         assert entry.data == before
 
     async def test_options_stored_fallback_keeps_standard_mode_hint(
@@ -197,7 +207,9 @@ class TestPowerStreamModeBoundary:
         ):
             result = await hass.config_entries.options.async_init(entry.entry_id)
 
-        options = result["data_schema"].schema[CONF_DEVICES].config["options"]
+        schema = result["data_schema"]
+        assert schema is not None
+        options = schema.schema[CONF_DEVICES].config["options"]
         assert options == [
             {
                 "value": POWERSTREAM_DEVICE["sn"],
@@ -349,7 +361,9 @@ class TestEnhancedOnlyModeBoundary:
         )
 
         assert result["type"] is FlowResultType.FORM
-        assert result["errors"]["base"] == "device_requires_enhanced"
+        errors = result["errors"]
+        assert errors is not None
+        assert errors["base"] == "device_requires_enhanced"
 
     @pytest.mark.parametrize("device,expected_label", ENHANCED_ONLY_DEVICE_CASES)
     async def test_app_flow_preselects_the_device_and_accepts_it(
@@ -411,7 +425,9 @@ class TestEnhancedOnlyModeBoundary:
             )
 
         assert result["type"] is FlowResultType.FORM
-        assert result["errors"]["base"] == "device_requires_enhanced"
+        errors = result["errors"]
+        assert errors is not None
+        assert errors["base"] == "device_requires_enhanced"
         assert entry.data == before
 
     @pytest.mark.parametrize("device,expected_label", ENHANCED_ONLY_DEVICE_CASES)
@@ -441,7 +457,9 @@ class TestEnhancedOnlyModeBoundary:
         ):
             result = await hass.config_entries.options.async_init(entry.entry_id)
 
-        options = result["data_schema"].schema[CONF_DEVICES].config["options"]
+        schema = result["data_schema"]
+        assert schema is not None
+        options = schema.schema[CONF_DEVICES].config["options"]
         assert options == [
             {
                 "value": device["sn"],
@@ -500,7 +518,9 @@ class TestDeveloperStep:
                 {CONF_ACCESS_KEY: "bad_key", CONF_SECRET_KEY: "bad_secret"},
             )
             assert result["type"] is FlowResultType.FORM
-            assert result["errors"]["base"] == "invalid_auth"
+            errors = result["errors"]
+            assert errors is not None
+            assert errors["base"] == "invalid_auth"
 
     async def test_no_devices_error(self, hass: HomeAssistant) -> None:
         """Valid auth but no devices shows error."""
@@ -519,7 +539,9 @@ class TestDeveloperStep:
                 {CONF_ACCESS_KEY: "ak", CONF_SECRET_KEY: "sk"},
             )
             assert result["type"] is FlowResultType.FORM
-            assert result["errors"]["base"] == "no_devices"
+            errors = result["errors"]
+            assert errors is not None
+            assert errors["base"] == "no_devices"
 
     async def test_success_advances_to_devices(self, hass: HomeAssistant) -> None:
         """Valid credentials + devices advances to device selection."""
@@ -568,7 +590,9 @@ class TestDeveloperStep:
             )
             assert result["type"] is FlowResultType.FORM
             assert result["step_id"] == "developer"
-            assert result["errors"]["base"] == expected_error
+            errors = result["errors"]
+            assert errors is not None
+            assert errors["base"] == expected_error
 
 
 # ===========================================================================
@@ -590,7 +614,9 @@ class TestAppCredentialsStep:
                 {CONF_EMAIL: "test@example.com", CONF_PASSWORD: "wrong"},
             )
             assert result["type"] is FlowResultType.FORM
-            assert result["errors"]["base"] == "enhanced_login_failed"
+            errors = result["errors"]
+            assert errors is not None
+            assert errors["base"] == "enhanced_login_failed"
 
     async def test_connection_error(self, hass: HomeAssistant) -> None:
         """Connection error during app login shows cannot_connect."""
@@ -605,7 +631,9 @@ class TestAppCredentialsStep:
                 {CONF_EMAIL: "test@example.com", CONF_PASSWORD: "secret"},
             )
             assert result["type"] is FlowResultType.FORM
-            assert result["errors"]["base"] == "cannot_connect"
+            errors = result["errors"]
+            assert errors is not None
+            assert errors["base"] == "cannot_connect"
 
     async def test_unknown_error(self, hass: HomeAssistant) -> None:
         """A parsing error during app login shows unknown."""
@@ -620,7 +648,9 @@ class TestAppCredentialsStep:
                 {CONF_EMAIL: "test@example.com", CONF_PASSWORD: "test_password"},
             )
             assert result["type"] is FlowResultType.FORM
-            assert result["errors"]["base"] == "unknown"
+            errors = result["errors"]
+            assert errors is not None
+            assert errors["base"] == "unknown"
 
     async def test_empty_credentials_error(self, hass: HomeAssistant) -> None:
         """Empty email/password shows enhanced_login_failed without calling login."""
@@ -634,7 +664,9 @@ class TestAppCredentialsStep:
                 {CONF_EMAIL: "", CONF_PASSWORD: ""},
             )
             assert result["type"] is FlowResultType.FORM
-            assert result["errors"]["base"] == "enhanced_login_failed"
+            errors = result["errors"]
+            assert errors is not None
+            assert errors["base"] == "enhanced_login_failed"
             mock_login.assert_not_called()
 
     async def test_devices_without_sn_shows_no_devices(
@@ -662,7 +694,9 @@ class TestAppCredentialsStep:
                 {CONF_EMAIL: "test@example.com", CONF_PASSWORD: "test_password"},
             )
             assert result["type"] is FlowResultType.FORM
-            assert result["errors"]["base"] == "no_devices"
+            errors = result["errors"]
+            assert errors is not None
+            assert errors["base"] == "no_devices"
 
     async def test_no_devices_shows_error(self, hass: HomeAssistant) -> None:
         """Successful login but no devices shows error."""
@@ -684,7 +718,9 @@ class TestAppCredentialsStep:
                 {CONF_EMAIL: "test@example.com", CONF_PASSWORD: "secret"},
             )
             assert result["type"] is FlowResultType.FORM
-            assert result["errors"]["base"] == "no_devices"
+            errors = result["errors"]
+            assert errors is not None
+            assert errors["base"] == "no_devices"
 
     async def test_success_advances_to_devices(self, hass: HomeAssistant) -> None:
         """Successful login + devices advances to device selection."""
@@ -839,9 +875,11 @@ class TestDevicesStep:
                 {CONF_ACCESS_KEY: "ak", CONF_SECRET_KEY: "sk"},
             )
 
+        schema = result["data_schema"]
+        assert schema is not None
         labels = {
             opt["value"]: opt["label"]
-            for opt in result["data_schema"].schema[CONF_DEVICES].config["options"]
+            for opt in schema.schema[CONF_DEVICES].config["options"]
         }
         assert labels["ZZ99FAKE00000001"].endswith(
             " - not supported yet (no data exposed)"
@@ -857,7 +895,9 @@ class TestDevicesStep:
         )
         assert result["type"] is FlowResultType.FORM
         assert result["step_id"] == "devices"
-        assert result["errors"]["base"] == "no_devices"
+        errors = result["errors"]
+        assert errors is not None
+        assert errors["base"] == "no_devices"
 
 
 # ===========================================================================
@@ -1178,7 +1218,9 @@ class TestOptionsFlow:
                 {CONF_MODE: MODE_STANDARD, CONF_DEVICES: []},
             )
         assert result["type"] is FlowResultType.FORM
-        assert result["errors"]["base"] == "no_devices"
+        errors = result["errors"]
+        assert errors is not None
+        assert errors["base"] == "no_devices"
 
     async def test_options_enhanced_to_standard_removes_credentials(
         self, hass: HomeAssistant
@@ -1293,7 +1335,9 @@ class TestOptionsFlow:
             result["step_id"] == "init_app"
         )  # account sign-in renders its own help text
 
-        options = result["data_schema"].schema[CONF_DEVICES].config["options"]
+        schema = result["data_schema"]
+        assert schema is not None
+        options = schema.schema[CONF_DEVICES].config["options"]
         values = [opt["value"] for opt in options]
         assert values == ["SN001", "SN002"]
 
@@ -1334,9 +1378,11 @@ class TestOptionsFlow:
         ):
             result = await hass.config_entries.options.async_init(entry.entry_id)
 
+        schema = result["data_schema"]
+        assert schema is not None
         labels = {
             opt["value"]: opt["label"]
-            for opt in result["data_schema"].schema[CONF_DEVICES].config["options"]
+            for opt in schema.schema[CONF_DEVICES].config["options"]
         }
         assert labels["ZZ99FAKE00000001"].endswith(
             " - not supported yet (no data exposed)"
@@ -1381,9 +1427,11 @@ class TestOptionsFlow:
         ):
             result = await hass.config_entries.options.async_init(entry.entry_id)
 
+        schema = result["data_schema"]
+        assert schema is not None
         labels = {
             opt["value"]: opt["label"]
-            for opt in result["data_schema"].schema[CONF_DEVICES].config["options"]
+            for opt in schema.schema[CONF_DEVICES].config["options"]
         }
         assert "not supported" not in labels["R351FAKE00000001"]
 
@@ -1403,7 +1451,9 @@ class TestOptionsFlow:
             result["step_id"] == "init_app"
         )  # account sign-in renders its own help text
 
-        options = result["data_schema"].schema[CONF_DEVICES].config["options"]
+        schema = result["data_schema"]
+        assert schema is not None
+        options = schema.schema[CONF_DEVICES].config["options"]
         assert [opt["value"] for opt in options] == ["SN001"]
 
     async def test_options_stored_fallback_marks_unsupported(
@@ -1442,9 +1492,11 @@ class TestOptionsFlow:
         ):
             result = await hass.config_entries.options.async_init(entry.entry_id)
 
+        schema = result["data_schema"]
+        assert schema is not None
         labels = {
             opt["value"]: opt["label"]
-            for opt in result["data_schema"].schema[CONF_DEVICES].config["options"]
+            for opt in schema.schema[CONF_DEVICES].config["options"]
         }
         assert labels["ZZ99FAKE00000001"].endswith(
             " - not supported yet (no data exposed)"
@@ -1478,7 +1530,9 @@ class TestOptionsFlow:
                 {CONF_EMAIL: "test@example.com", CONF_PASSWORD: "wrong"},
             )
         assert result["type"] is FlowResultType.FORM
-        assert result["errors"]["base"] == "enhanced_login_failed"
+        errors = result["errors"]
+        assert errors is not None
+        assert errors["base"] == "enhanced_login_failed"
 
     async def test_options_switch_to_enhanced_saves_credentials(
         self, hass: HomeAssistant
@@ -1555,7 +1609,9 @@ class TestOptionsFlow:
 
         assert result["type"] is FlowResultType.FORM
         assert result["step_id"] == "init"
-        options = result["data_schema"].schema[CONF_DEVICES].config["options"]
+        schema = result["data_schema"]
+        assert schema is not None
+        options = schema.schema[CONF_DEVICES].config["options"]
         assert [opt["value"] for opt in options] == ["SN001"]
 
 
@@ -1631,7 +1687,9 @@ class TestOptionsDeveloperStep:
             mock_cls.assert_not_called()
         assert result["type"] is FlowResultType.FORM
         assert result["step_id"] == "developer"
-        assert result["errors"]["base"] == "invalid_auth"
+        errors = result["errors"]
+        assert errors is not None
+        assert errors["base"] == "invalid_auth"
 
     async def test_valid_keys_save_options(self, hass: HomeAssistant) -> None:
         """Valid keys save the options and persist Standard mode credentials."""
@@ -1676,7 +1734,9 @@ class TestOptionsDeveloperStep:
             )
         assert result["type"] is FlowResultType.FORM
         assert result["step_id"] == "developer"
-        assert result["errors"]["base"] == "invalid_auth"
+        errors = result["errors"]
+        assert errors is not None
+        assert errors["base"] == "invalid_auth"
 
     async def test_network_error_shows_cannot_connect(
         self, hass: HomeAssistant
@@ -1695,7 +1755,9 @@ class TestOptionsDeveloperStep:
             )
         assert result["type"] is FlowResultType.FORM
         assert result["step_id"] == "developer"
-        assert result["errors"]["base"] == "cannot_connect"
+        errors = result["errors"]
+        assert errors is not None
+        assert errors["base"] == "cannot_connect"
 
 
 # ===========================================================================
@@ -1766,7 +1828,9 @@ class TestOptionsEnhancedStepErrors:
             )
         assert result["type"] is FlowResultType.FORM
         assert result["step_id"] == "enhanced"
-        assert result["errors"]["base"] == "enhanced_login_failed"
+        errors = result["errors"]
+        assert errors is not None
+        assert errors["base"] == "enhanced_login_failed"
 
 
 # ===========================================================================
@@ -1858,7 +1922,9 @@ class TestReauthFlow:
                 {CONF_ACCESS_KEY: "bad_key", CONF_SECRET_KEY: "bad_secret"},
             )
         assert result["type"] is FlowResultType.FORM
-        assert result["errors"]["base"] == "invalid_auth"
+        errors = result["errors"]
+        assert errors is not None
+        assert errors["base"] == "invalid_auth"
 
     async def test_reauth_success_standard(self, hass: HomeAssistant) -> None:
         """Successful reauth for Standard Mode updates entry and aborts."""
@@ -1970,7 +2036,9 @@ class TestReauthFlow:
                 {CONF_EMAIL: "test@example.com", CONF_PASSWORD: "wrong"},
             )
         assert result["type"] is FlowResultType.FORM
-        assert result["errors"]["base"] == "enhanced_login_failed"
+        errors = result["errors"]
+        assert errors is not None
+        assert errors["base"] == "enhanced_login_failed"
 
     async def test_reauth_connection_error(self, hass: HomeAssistant) -> None:
         """Connection error during reauth shows cannot_connect."""
@@ -1991,7 +2059,9 @@ class TestReauthFlow:
                 {CONF_ACCESS_KEY: "ak", CONF_SECRET_KEY: "sk"},
             )
         assert result["type"] is FlowResultType.FORM
-        assert result["errors"]["base"] == "cannot_connect"
+        errors = result["errors"]
+        assert errors is not None
+        assert errors["base"] == "cannot_connect"
 
 
 # ===========================================================================
@@ -2081,7 +2151,9 @@ class TestReconfigureFlow:
                 {CONF_ACCESS_KEY: "bad_key", CONF_SECRET_KEY: "bad_secret"},
             )
         assert result["type"] is FlowResultType.FORM
-        assert result["errors"]["base"] == "invalid_auth"
+        errors = result["errors"]
+        assert errors is not None
+        assert errors["base"] == "invalid_auth"
 
     async def test_reconfigure_success_standard(self, hass: HomeAssistant) -> None:
         """Successful reconfigure for Standard Mode updates entry."""
@@ -2169,7 +2241,9 @@ class TestReconfigureFlow:
             )
         assert result["type"] is FlowResultType.FORM
         assert result["step_id"] == "reconfigure_enhanced"
-        assert result["errors"]["base"] == "enhanced_login_failed"
+        errors = result["errors"]
+        assert errors is not None
+        assert errors["base"] == "enhanced_login_failed"
 
     async def test_reconfigure_connection_error(self, hass: HomeAssistant) -> None:
         """Connection error shows cannot_connect."""
@@ -2189,7 +2263,9 @@ class TestReconfigureFlow:
                 {CONF_ACCESS_KEY: "ak", CONF_SECRET_KEY: "sk"},
             )
         assert result["type"] is FlowResultType.FORM
-        assert result["errors"]["base"] == "cannot_connect"
+        errors = result["errors"]
+        assert errors is not None
+        assert errors["base"] == "cannot_connect"
 
 
 # ===========================================================================
@@ -2279,7 +2355,9 @@ class TestAppAuthReauthFlow:
                 {CONF_EMAIL: "test@example.com", CONF_PASSWORD: "wrong"},
             )
         assert result["type"] is FlowResultType.FORM
-        assert result["errors"]["base"] == "enhanced_login_failed"
+        errors = result["errors"]
+        assert errors is not None
+        assert errors["base"] == "enhanced_login_failed"
 
 
 # ===========================================================================
@@ -2365,7 +2443,9 @@ class TestAppAuthReconfigureFlow:
                 {CONF_EMAIL: "test@example.com", CONF_PASSWORD: "wrong"},
             )
         assert result["type"] is FlowResultType.FORM
-        assert result["errors"]["base"] == "enhanced_login_failed"
+        errors = result["errors"]
+        assert errors is not None
+        assert errors["base"] == "enhanced_login_failed"
 
 
 # ===========================================================================
@@ -2471,7 +2551,7 @@ class TestReauthReconfigureExceptions:
         return entry
 
     async def _init_flow(self, hass: HomeAssistant, entry, source: str):
-        context = {"source": source, "entry_id": entry.entry_id}
+        context: ConfigFlowContext = {"source": source, "entry_id": entry.entry_id}
         data = entry.data if source == SOURCE_REAUTH else None
         return await hass.config_entries.flow.async_init(
             DOMAIN, context=context, data=data
@@ -2521,7 +2601,9 @@ class TestReauthReconfigureExceptions:
             )
         assert result["type"] is FlowResultType.FORM
         assert result["step_id"] == step_id
-        assert result["errors"]["base"] == expected_error
+        errors = result["errors"]
+        assert errors is not None
+        assert errors["base"] == expected_error
 
     @pytest.mark.parametrize(("side_effect", "expected_error"), EXCEPTION_ERROR_CASES)
     @pytest.mark.parametrize(
@@ -2556,7 +2638,9 @@ class TestReauthReconfigureExceptions:
             )
         assert result["type"] is FlowResultType.FORM
         assert result["step_id"] == step_id
-        assert result["errors"]["base"] == expected_error
+        errors = result["errors"]
+        assert errors is not None
+        assert errors["base"] == expected_error
 
     @pytest.mark.parametrize(("side_effect", "expected_error"), EXCEPTION_ERROR_CASES)
     @pytest.mark.parametrize(
@@ -2590,7 +2674,9 @@ class TestReauthReconfigureExceptions:
             )
         assert result["type"] is FlowResultType.FORM
         assert result["step_id"] == step_id
-        assert result["errors"]["base"] == expected_error
+        errors = result["errors"]
+        assert errors is not None
+        assert errors["base"] == expected_error
 
     @pytest.mark.parametrize(
         ("source", "step_id"),
@@ -2619,7 +2705,9 @@ class TestReauthReconfigureExceptions:
             mock_login.assert_not_called()
         assert result["type"] is FlowResultType.FORM
         assert result["step_id"] == step_id
-        assert result["errors"]["base"] == "enhanced_login_failed"
+        errors = result["errors"]
+        assert errors is not None
+        assert errors["base"] == "enhanced_login_failed"
 
     @pytest.mark.parametrize(
         ("source", "step_id"),
@@ -2647,7 +2735,9 @@ class TestReauthReconfigureExceptions:
             mock_login.assert_not_called()
         assert result["type"] is FlowResultType.FORM
         assert result["step_id"] == step_id
-        assert result["errors"]["base"] == "enhanced_login_failed"
+        errors = result["errors"]
+        assert errors is not None
+        assert errors["base"] == "enhanced_login_failed"
 
 
 # ===========================================================================
@@ -2937,7 +3027,7 @@ class TestPickerHelpMatchesTheModeItRenders:
     RECORDING_PHRASES = ("recording below", "Aufzeichnung der Diagnosedaten")
 
     @staticmethod
-    def _render(template: str, placeholders: dict[str, str]) -> str:
+    def _render(template: str, placeholders: Mapping[str, str]) -> str:
         """Resolve a translation string the way the frontend would.
 
         Only the two forms this repo uses are handled: plain `{token}` and
@@ -2951,7 +3041,7 @@ class TestPickerHelpMatchesTheModeItRenders:
             token, body = match.group(1), match.group(2)
             if token not in placeholders:
                 raise AssertionError(f"flow supplied no placeholder {token!r}")
-            arms = dict(re.findall(r"(\w+)\s*\{([^{}]*)\}", body))
+            arms: dict[str, str] = dict(re.findall(r"(\w+)\s*\{([^{}]*)\}", body))
             return arms.get(placeholders[token], arms.get("other", ""))
 
         rendered = re.sub(
@@ -2964,7 +3054,7 @@ class TestPickerHelpMatchesTheModeItRenders:
         return rendered
 
     @staticmethod
-    async def _open(hass: HomeAssistant, entry) -> dict:
+    async def _open(hass: HomeAssistant, entry) -> ConfigFlowResult:
         """Open the options form without letting it reach the network.
 
         Both branches of the device-list fetch are stubbed, so which mode is
@@ -2987,7 +3077,7 @@ class TestPickerHelpMatchesTheModeItRenders:
             return await hass.config_entries.options.async_init(entry.entry_id)
 
     @classmethod
-    def _devices_help(cls, result: dict) -> str:
+    def _devices_help(cls, result: ConfigFlowResult) -> str:
         """The help text the user is shown, for the step actually rendered.
 
         Reading the step id off the result rather than assuming `init` is
@@ -3017,7 +3107,9 @@ class TestPickerHelpMatchesTheModeItRenders:
         entry = TestOptionsFlow()._create_standard_entry(hass)
         result = await self._open(hass, entry)
 
-        schema_keys = {key.schema for key in result["data_schema"].schema}
+        schema = result["data_schema"]
+        assert schema is not None
+        schema_keys = {key.schema for key in schema.schema}
         assert CONF_RAW_CAPTURE not in schema_keys
 
         text = self._devices_help(result)
@@ -3037,7 +3129,9 @@ class TestPickerHelpMatchesTheModeItRenders:
         )
         result = await self._open(hass, entry)
 
-        schema_keys = {key.schema for key in result["data_schema"].schema}
+        schema = result["data_schema"]
+        assert schema is not None
+        schema_keys = {key.schema for key in schema.schema}
         assert CONF_RAW_CAPTURE in schema_keys
 
         assert "recording below" in self._devices_help(result)
