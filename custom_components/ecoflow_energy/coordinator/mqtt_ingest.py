@@ -611,7 +611,9 @@ class MqttIngestMixin(_Base):
                 if self.device_type == DEVICE_TYPE_POWEROCEAN:
                     return self._parse_powerocean_proto_frame(payload)
 
-                result = decode_proto_runtime_frame(payload)
+                result = decode_proto_runtime_frame(
+                    payload, device_type=self.device_type
+                )
                 self._record_unknown_fields(result.mapped)
                 raw = {k: v for k, v in result.mapped.items() if not k.startswith("_")}
                 # Delta 3 generation: status frame and battery heartbeat.
@@ -683,7 +685,9 @@ class MqttIngestMixin(_Base):
         # The envelope decode stays guarded because the get_reply caller has no
         # guard of its own and runs on the Paho thread.
         try:
-            results = decode_proto_runtime_headers(payload)
+            results = decode_proto_runtime_headers(
+                payload, device_type=self.device_type
+            )
         except Exception:
             _LOGGER.debug(
                 "PowerOcean protobuf decode error for %s",

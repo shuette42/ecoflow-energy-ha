@@ -5,6 +5,7 @@ import importlib.machinery
 import logging
 import sys
 
+from ecoflow_energy.ecoflow.const import DEVICE_TYPE_POWEROCEAN
 from ecoflow_energy.ecoflow.energy_stream import (
     build_energy_stream_activate_payload,
     build_energy_stream_deactivate_payload,
@@ -67,7 +68,7 @@ class TestRuntimeDecoder:
         inner = msg.SerializeToString()
 
         frame = _build_frame(96, 33, inner)
-        result = decode_proto_runtime_frame(frame)
+        result = decode_proto_runtime_frame(frame, device_type=DEVICE_TYPE_POWEROCEAN)
 
         assert result.parse_path == "typed_runtime:energy_stream_report"
         assert result.mapped["solar"] == 3500.0
@@ -86,7 +87,7 @@ class TestRuntimeDecoder:
         inner = msg.SerializeToString()
         frame = _build_frame(96, 33, inner)
 
-        result = decode_proto_runtime_frame(frame)
+        result = decode_proto_runtime_frame(frame, device_type=DEVICE_TYPE_POWEROCEAN)
         assert result.mapped["solar"] == 0.0
         assert result.mapped["home_direct"] == 0.0
         assert result.mapped["batt_pb"] == 0.0
@@ -107,7 +108,9 @@ class TestRuntimeDecoder:
         # power cap - the concrete field this reporting was built for.
         inner += encode_field_varint(5064, 1000)
 
-        result = decode_proto_runtime_frame(_build_frame(96, 33, inner))
+        result = decode_proto_runtime_frame(
+            _build_frame(96, 33, inner), device_type=DEVICE_TYPE_POWEROCEAN
+        )
 
         assert result.mapped["_unknown_fields"] == {5064: 1000}
         assert result.mapped["_cmd_key"] == "96/33"
@@ -124,7 +127,9 @@ class TestRuntimeDecoder:
         msg.bp_soc = 50
         inner = msg.SerializeToString() + encode_field_bytes(4242, b"HJ32TESTSERIAL01")
 
-        result = decode_proto_runtime_frame(_build_frame(96, 33, inner))
+        result = decode_proto_runtime_frame(
+            _build_frame(96, 33, inner), device_type=DEVICE_TYPE_POWEROCEAN
+        )
 
         assert result.mapped["_unknown_fields"] == {4242: "16 bytes"}
         assert "HJ32TESTSERIAL01" not in str(result.mapped)
@@ -137,7 +142,9 @@ class TestRuntimeDecoder:
         for number in range(3000, 3100):
             inner += encode_field_varint(number, 1)
 
-        result = decode_proto_runtime_frame(_build_frame(96, 33, inner))
+        result = decode_proto_runtime_frame(
+            _build_frame(96, 33, inner), device_type=DEVICE_TYPE_POWEROCEAN
+        )
 
         assert len(result.mapped["_unknown_fields"]) == _UNKNOWN_FIELDS_MAX
 
@@ -151,7 +158,9 @@ class TestRuntimeDecoder:
         """
         inner = encode_field_varint(5064, 1000)
 
-        result = decode_proto_runtime_frame(_build_frame(96, 33, inner))
+        result = decode_proto_runtime_frame(
+            _build_frame(96, 33, inner), device_type=DEVICE_TYPE_POWEROCEAN
+        )
 
         assert "_unknown_fields" not in result.mapped
 
@@ -163,7 +172,7 @@ class TestRuntimeDecoder:
         inner = msg.SerializeToString()
         frame = _build_frame(96, 8, inner)
 
-        result = decode_proto_runtime_frame(frame)
+        result = decode_proto_runtime_frame(frame, device_type=DEVICE_TYPE_POWEROCEAN)
         assert result.parse_path == "typed_runtime:ems_change"
         assert result.mapped.get("ems_work_mode") == 3
         assert "ems_word_mode" not in result.mapped
@@ -172,7 +181,7 @@ class TestRuntimeDecoder:
         """Unknown cmd_id should return no_match."""
         inner = b"\x08\x01"  # random varint
         frame = _build_frame(96, 999, inner)
-        result = decode_proto_runtime_frame(frame)
+        result = decode_proto_runtime_frame(frame, device_type=DEVICE_TYPE_POWEROCEAN)
         assert result.parse_path == "typed_runtime:no_match"
         assert result.mapped["_is_energy_stream"] is False
 
@@ -193,7 +202,7 @@ class TestRuntimeDecoder:
         inner = msg.SerializeToString()
         frame = _build_frame(96, 13, inner)
 
-        result = decode_proto_runtime_frame(frame)
+        result = decode_proto_runtime_frame(frame, device_type=DEVICE_TYPE_POWEROCEAN)
         assert result.parse_path == "typed_runtime:ems_param_change"
         assert result.mapped.get("ems_app_surplus_pct") == 47
         assert "dev_soc" not in result.mapped
@@ -393,9 +402,10 @@ class TestPowerOceanCorpusFields:
         from ecoflow_energy.ecoflow.proto.runtime import _build_cmd_registry
 
         seen: dict[str, set[int]] = {}
-        for config in _build_cmd_registry().values():
-            for field in config.msg_class.DESCRIPTOR.fields:
-                seen.setdefault(field.name, set()).add(field.number)
+        for table in _build_cmd_registry().values():
+            for config in table.values():
+                for field in config.msg_class.DESCRIPTOR.fields:
+                    seen.setdefault(field.name, set()).add(field.number)
 
         clashes = {n: v for n, v in seen.items() if len(v) > 1 and n != "bp_soc"}
 
@@ -505,7 +515,7 @@ class TestFullPowerFrameFlag:
         msg.sys_grid_pwr = 500.0
         frame = _build_frame(96, 33, msg.SerializeToString())
 
-        result = decode_proto_runtime_frame(frame)
+        result = decode_proto_runtime_frame(frame, device_type=DEVICE_TYPE_POWEROCEAN)
 
         assert result.mapped["_is_full_power_frame"] is False
         # The zero-fill still runs: an absent power field is a real zero to
@@ -518,4 +528,9 @@ class TestFullPowerFrameFlag:
         msg.bp_soc = 50
         frame = _build_frame(96, 33, msg.SerializeToString())
 
-        assert decode_proto_runtime_frame(frame).mapped["_is_full_power_frame"] is False
+        assert (
+            decode_proto_runtime_frame(
+                frame, device_type=DEVICE_TYPE_POWEROCEAN
+            ).mapped["_is_full_power_frame"]
+            is False
+        )

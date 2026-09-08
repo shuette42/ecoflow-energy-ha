@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ecoflow_energy.ecoflow.const import DEVICE_TYPE_DELTA3, DEVICE_TYPE_POWEROCEAN
 from ecoflow_energy.ecoflow.parsers.delta3_http import parse_delta3_http_quota
 from ecoflow_energy.ecoflow.parsers.delta3_proto import (
     parse_delta3_bms_heartbeat,
@@ -115,7 +116,7 @@ EQUIVALENT_HTTP_QUOTA: dict = {
 
 def _decode(frame: bytes) -> dict:
     """Run a frame through the runtime decoder and strip internal flags."""
-    result = decode_proto_runtime_frame(frame)
+    result = decode_proto_runtime_frame(frame, device_type=DEVICE_TYPE_DELTA3)
     return {k: v for k, v in result.mapped.items() if not k.startswith("_")}
 
 
@@ -124,7 +125,7 @@ class TestDisplayPropertyFrame:
 
     def test_frame_is_routed_to_the_delta3_decoder(self):
         frame = _build_frame(254, 21, _build_display_message().SerializeToString())
-        result = decode_proto_runtime_frame(frame)
+        result = decode_proto_runtime_frame(frame, device_type=DEVICE_TYPE_DELTA3)
         assert result.parse_path == "typed_runtime:delta3_display_property"
         assert result.mapped["_is_delta3_display"] is True
 
@@ -239,7 +240,9 @@ class TestCmsHeartbeatFrame:
         return _build_frame(32, 2, msg.SerializeToString())
 
     def test_frame_is_routed_to_the_delta3_decoder(self):
-        result = decode_proto_runtime_frame(self._frame())
+        result = decode_proto_runtime_frame(
+            self._frame(), device_type=DEVICE_TYPE_DELTA3
+        )
         assert result.parse_path == "typed_runtime:delta3_cms_heartbeat"
         assert result.mapped["_is_delta3_cms_heartbeat"] is True
 
@@ -308,7 +311,9 @@ class TestBmsHeartbeat:
         return _build_frame(32, 50, self._message().SerializeToString())
 
     def test_frame_is_routed_to_the_bms_decoder(self):
-        result = decode_proto_runtime_frame(self._frame())
+        result = decode_proto_runtime_frame(
+            self._frame(), device_type=DEVICE_TYPE_DELTA3
+        )
         assert result.parse_path == "typed_runtime:delta3_bms_heartbeat"
         assert result.mapped["_is_delta3_bms_heartbeat"] is True
 
@@ -396,7 +401,7 @@ class TestRegistryKeysRemainStable:
         msg = JTS1EnergyStreamReport()
         msg.mppt_pwr = 1500.0
         frame = _build_frame(96, 33, msg.SerializeToString())
-        result = decode_proto_runtime_frame(frame)
+        result = decode_proto_runtime_frame(frame, device_type=DEVICE_TYPE_POWEROCEAN)
         assert result.parse_path == "typed_runtime:energy_stream_report"
         assert result.mapped["solar"] == 1500.0
 
@@ -404,7 +409,7 @@ class TestRegistryKeysRemainStable:
         msg = Delta3DisplayProperty()
         msg.pow_in_sum_w = 100.0
         frame = _build_frame(254, 22, msg.SerializeToString())
-        result = decode_proto_runtime_frame(frame)
+        result = decode_proto_runtime_frame(frame, device_type=DEVICE_TYPE_DELTA3)
         assert result.parse_path == "typed_runtime:no_match"
 
 
@@ -424,7 +429,7 @@ class TestMultiHeaderEnvelope:
             + _build_frame(32, 2, heartbeat.SerializeToString())
         )
 
-        decoded = decode_proto_runtime_headers(frame)
+        decoded = decode_proto_runtime_headers(frame, device_type=DEVICE_TYPE_DELTA3)
 
         assert [item.parse_path for item in decoded] == [
             "typed_runtime:delta3_display_property",
@@ -434,7 +439,7 @@ class TestMultiHeaderEnvelope:
         assert decoded[1].mapped["v1p0"]["lcd_show_soc"] == 85
 
         # The legacy single-result API keeps the whole header list.
-        first = decode_proto_runtime_frame(frame)
+        first = decode_proto_runtime_frame(frame, device_type=DEVICE_TYPE_DELTA3)
         assert first.parse_path == "typed_runtime:delta3_display_property"
         assert len(first.headers) == 3
 
@@ -451,7 +456,7 @@ class TestMultiHeaderEnvelope:
             + encode_field_bytes(2, display.SerializeToString())
         )
 
-        result = decode_proto_runtime_frame(frame)
+        result = decode_proto_runtime_frame(frame, device_type=DEVICE_TYPE_DELTA3)
 
         assert result.parse_path == "typed_runtime:delta3_display_property"
         assert result.parse_reason_code == "typed_source_payload_field"
@@ -506,7 +511,7 @@ class TestAcChargePowerLimit:
         )
         frame = bytes.fromhex(json.loads(fixture.read_text())["frame_hex"])
 
-        result = decode_proto_runtime_frame(frame)
+        result = decode_proto_runtime_frame(frame, device_type=DEVICE_TYPE_DELTA3)
         parsed = parse_delta3_display_property(
             {k: v for k, v in result.mapped.items() if not k.startswith("_")}
         )
@@ -594,7 +599,9 @@ def _bms_reports(frame: bytes) -> list[dict]:
     """Every BMS heartbeat in one envelope, in the order the device sent them."""
     return [
         {k: v for k, v in result.mapped.items() if not k.startswith("_")}
-        for result in decode_proto_runtime_headers(frame)
+        for result in decode_proto_runtime_headers(
+            frame, device_type=DEVICE_TYPE_DELTA3
+        )
         if result.mapped.get("_is_delta3_bms_heartbeat")
     ]
 

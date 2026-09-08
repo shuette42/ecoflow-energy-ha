@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from base64 import b64encode
 
+from custom_components.ecoflow_energy.ecoflow.const import DEVICE_TYPE_POWEROCEAN
 from custom_components.ecoflow_energy.ecoflow.parsers.powerocean_proto import (
     remap_timer_task_keys,
 )
@@ -60,7 +61,9 @@ def _header(cmd_func: int, cmd_id: int, pdata: bytes) -> bytes:
 
 def _decode(pdata: bytes) -> dict:
     """Run one payload through the registry the way a real frame does."""
-    result = decode_proto_runtime_frame(_header(96, 10, pdata))
+    result = decode_proto_runtime_frame(
+        _header(96, 10, pdata), device_type=DEVICE_TYPE_POWEROCEAN
+    )
     assert result.mapped.get("_is_timer_task_list"), result.parse_path
     return {k: v for k, v in result.mapped.items() if not k.startswith("_")}
 

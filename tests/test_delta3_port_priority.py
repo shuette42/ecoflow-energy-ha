@@ -352,7 +352,9 @@ class TestDelta3PlusIsReadByTheExistingParser:
 
         merged: dict = {}
         for frame in json.loads(cls.FRAMES.read_text())["frames"]:
-            result = decode_proto_runtime_frame(bytes.fromhex(frame["hex"]))
+            result = decode_proto_runtime_frame(
+                bytes.fromhex(frame["hex"]), device_type=DEVICE_TYPE_DELTA3
+            )
             raw = {k: v for k, v in result.mapped.items() if not k.startswith("_")}
             flags = result.mapped
             if flags.get("_is_delta3_display"):

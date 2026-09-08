@@ -5,11 +5,12 @@ Each command tuple maps to a CmdConfig that defines message class, flags, field
 renames, and zero-fill rules. The generic decode loop handles all message types
 uniformly.
 
-Contract: the registry is device-type agnostic. A command tuple is NOT unique
-across device classes - the Stream AC Pro and the Delta 3 generation both use
-(254, 21) as their main status frame. Callers must therefore route by device
-type BEFORE consuming a decode result, and must never treat a registry hit as
-proof that the frame belongs to the device they are decoding for.
+Contract: the registry is namespaced by device type (ADR-024). A command
+tuple is NOT unique across device classes - the Stream AC Pro and the Delta 3
+generation both use (254, 21) as their main status frame - so every table
+lives under its own `DEVICE_TYPE_*` key and every entry point below requires
+the caller's device type as a keyword argument. There is no default and no
+union lookup: a caller that cannot name its device type cannot decode.
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from google.protobuf.json_format import MessageToDict
 from google.protobuf.message import DecodeError
 from google.protobuf.unknown_fields import UnknownFieldSet
 
+from ..const import DEVICE_TYPE_DELTA3, DEVICE_TYPE_POWEROCEAN
 from .decoder import decode_header_message
 
 _LOGGER = logging.getLogger(__name__)
@@ -62,14 +64,16 @@ class CmdConfig:
     decode_empty_payload: bool = False
 
 
-def _build_cmd_registry() -> dict[tuple[int, int], CmdConfig]:
-    """Build (cmd_func, cmd_id) -> CmdConfig registry.
+def _build_cmd_registry() -> dict[str, dict[tuple[int, int], CmdConfig]]:
+    """Build device_type -> (cmd_func, cmd_id) -> CmdConfig registry (ADR-024).
 
-    Lazy-loaded to avoid an import-time pb2 dependency. The key is the full
-    command tuple because cmd_id values are only unique within a command
-    family: PowerOcean uses cmd_func=96, the Delta 3 generation uses 254
-    (system status) and 32 (battery heartbeat), and their cmd_id ranges
-    overlap.
+    Lazy-loaded to avoid an import-time pb2 dependency. Each device type owns
+    a full table of its own; nothing is shared between PowerOcean and Delta 3
+    here, because cmd_id values are only unique within a command family:
+    PowerOcean uses cmd_func=96, the Delta 3 generation uses 254 (system
+    status) and 32 (battery heartbeat), and their cmd_id ranges overlap. The
+    device-type namespace is what keeps a Delta 3 frame from ever reaching a
+    PowerOcean CmdConfig, or the reverse.
     """
     try:
         from . import ecocharge_pb2 as pb2
@@ -79,6 +83,14 @@ def _build_cmd_registry() -> dict[tuple[int, int], CmdConfig]:
         )
         return {}
 
+    return {
+        DEVICE_TYPE_POWEROCEAN: _build_powerocean_table(pb2),
+        DEVICE_TYPE_DELTA3: _build_delta3_table(pb2),
+    }
+
+
+def _build_powerocean_table(pb2: Any) -> dict[tuple[int, int], CmdConfig]:
+    """PowerOcean's (cmd_func, cmd_id) -> CmdConfig table."""
     return {
         (96, 33): CmdConfig(
             msg_class=pb2.JTS1EnergyStreamReport,
@@ -183,7 +195,12 @@ def _build_cmd_registry() -> dict[tuple[int, int], CmdConfig]:
             flags={"_is_timer_task_list": True},
             decode_empty_payload=True,
         ),
-        # --- Delta 3 generation ---
+    }
+
+
+def _build_delta3_table(pb2: Any) -> dict[tuple[int, int], CmdConfig]:
+    """Delta 3 generation's (cmd_func, cmd_id) -> CmdConfig table."""
+    return {
         # Main status frame: full every 120 s, incremental about every 2 s.
         (254, 21): CmdConfig(
             msg_class=pb2.Delta3DisplayProperty,
@@ -203,9 +220,9 @@ def _build_cmd_registry() -> dict[tuple[int, int], CmdConfig]:
         # This tuple is NOT Delta 3 exclusive, and the entry does not make it
         # so: the Stream family uses (32, 50) for its own battery message,
         # where field 25 is the precise state of charge rather than a float
-        # SoC. Stream frames never reach this registry because `mqtt_ingest`
-        # routes by device type first - which is exactly the routing contract
-        # in this module's docstring, and the reason it exists.
+        # SoC. A Stream frame cannot land in this table at all - it is looked
+        # up under DEVICE_TYPE_STREAM, which owns its own parser and never
+        # reaches this registry (ADR-024).
         (32, 50): CmdConfig(
             msg_class=pb2.Delta3BmsHeartbeat,
             parse_path="typed_runtime:delta3_bms_heartbeat",
@@ -214,8 +231,36 @@ def _build_cmd_registry() -> dict[tuple[int, int], CmdConfig]:
     }
 
 
-_CMD_REGISTRY: dict[tuple[int, int], CmdConfig] | None = None
+_CMD_REGISTRY: dict[str, dict[tuple[int, int], CmdConfig]] | None = None
+_LOGGED_UNKNOWN_DEVICE_TYPES: set[str] = set()
 _FULL_POWER_KEYS = frozenset({"solar", "home_direct", "batt_pb", "grid_raw_f2"})
+
+
+def _registry_for(device_type: str) -> dict[tuple[int, int], CmdConfig]:
+    """Return the (cmd_func, cmd_id) table for one device type (ADR-024).
+
+    An unregistered tuple inside a known table is skipped silently, exactly
+    as before this split. A device type with no table at all is treated the
+    same way and returns an empty dict - never a union of every table, and
+    never a raise. The production callers run on the Paho thread inside a
+    broad `except Exception`, where a raise would cost the whole frame
+    instead of just the one command it could not place. A device type
+    missing its table is logged once per process, not once per frame, so a
+    steady stream of frames from an unmapped device does not spam the log.
+    """
+    global _CMD_REGISTRY
+    if _CMD_REGISTRY is None:
+        _CMD_REGISTRY = _build_cmd_registry()
+    table = _CMD_REGISTRY.get(device_type)
+    if table is None:
+        if device_type not in _LOGGED_UNKNOWN_DEVICE_TYPES:
+            _LOGGED_UNKNOWN_DEVICE_TYPES.add(device_type)
+            _LOGGER.debug(
+                "No protobuf command registry table for device type %s",
+                device_type,
+            )
+        return {}
+    return table
 
 
 def _empty_mapped() -> dict[str, Any]:
@@ -339,7 +384,7 @@ def _header_carries_no_pdata(header: dict[str, Any]) -> bool:
 
 
 def _typed_map_from_candidates(
-    header: dict[str, Any], candidates: list[tuple[bytes, str]]
+    header: dict[str, Any], candidates: list[tuple[bytes, str]], device_type: str
 ) -> tuple[dict[str, Any], str, bytes, str] | None:
     """Pick the first candidate that yields a usable mapping.
 
@@ -351,7 +396,7 @@ def _typed_map_from_candidates(
     """
     ranked_fallback: tuple[dict[str, Any], str, bytes, str] | None = None
     for source, reason_code in candidates:
-        typed = _typed_runtime_map([header], source)
+        typed = _typed_runtime_map([header], source, device_type)
         if typed is None:
             continue
         mapped, parse_path = typed
@@ -418,13 +463,11 @@ def unknown_field_summary(msg: Any) -> dict[int, Any]:
 
 
 def _typed_runtime_map(
-    headers: list[dict], source: bytes
+    headers: list[dict], source: bytes, device_type: str
 ) -> tuple[dict[str, Any], str] | None:
     """Declarative decode: command tuple -> MessageToDict -> rename -> flags."""
-    global _CMD_REGISTRY
-    if _CMD_REGISTRY is None:
-        _CMD_REGISTRY = _build_cmd_registry()
-    if not _CMD_REGISTRY:
+    registry = _registry_for(device_type)
+    if not registry:
         return None
 
     cmd_func = _header_value(headers, "cmd_func")
@@ -433,7 +476,7 @@ def _typed_runtime_map(
     if not isinstance(cmd_func, int) or not isinstance(cmd_id, int):
         return None
 
-    config = _CMD_REGISTRY.get((cmd_func, cmd_id))
+    config = registry.get((cmd_func, cmd_id))
     if config is None:
         return None
 
@@ -516,6 +559,8 @@ def _typed_runtime_map(
 def decode_proto_runtime_headers(
     payload_bytes: bytes,
     decoded_frame: tuple[list[dict], bytes | None] | None = None,
+    *,
+    device_type: str,
 ) -> list[ProtoRuntimeDecodeResult]:
     """Decode every typed header in one EcoFlow protobuf envelope.
 
@@ -526,16 +571,17 @@ def decode_proto_runtime_headers(
 
     `decoded_frame` lets a caller that already ran ``decode_header_message``
     hand the result over, so the envelope is not decoded twice per message.
+
+    `device_type` is required and keyword-only (ADR-024): it selects which
+    device type's table is consulted, and there is no default that would fall
+    back to searching every table.
     """
     if decoded_frame is not None:
         headers, payload = decoded_frame
     else:
         headers, payload = decode_header_message(payload_bytes)
 
-    global _CMD_REGISTRY
-    if _CMD_REGISTRY is None:
-        _CMD_REGISTRY = _build_cmd_registry()
-    registry = _CMD_REGISTRY or {}
+    registry = _registry_for(device_type)
 
     decoded: list[ProtoRuntimeDecodeResult] = []
     for header in headers or []:
@@ -575,7 +621,7 @@ def decode_proto_runtime_headers(
         ):
             candidates = [(b"", "typed_source_header_pdata_empty")]
 
-        best = _typed_map_from_candidates(header, candidates)
+        best = _typed_map_from_candidates(header, candidates, device_type)
         if best is None:
             continue
         mapped, parse_path, source, reason_code = best
@@ -593,10 +639,18 @@ def decode_proto_runtime_headers(
     return decoded
 
 
-def decode_proto_runtime_frame(payload_bytes: bytes) -> ProtoRuntimeDecodeResult:
-    """Decode one EcoFlow protobuf frame, preserving the legacy first result API."""
+def decode_proto_runtime_frame(
+    payload_bytes: bytes, *, device_type: str
+) -> ProtoRuntimeDecodeResult:
+    """Decode one EcoFlow protobuf frame, preserving the legacy first result API.
+
+    `device_type` is required and keyword-only (ADR-024), same contract as
+    `decode_proto_runtime_headers`.
+    """
     headers, payload = decode_header_message(payload_bytes)
-    decoded = decode_proto_runtime_headers(payload_bytes, (headers, payload))
+    decoded = decode_proto_runtime_headers(
+        payload_bytes, (headers, payload), device_type=device_type
+    )
     if decoded:
         first = decoded[0]
         # Keep the complete header list for callers that reuse it for generic
@@ -614,10 +668,8 @@ def decode_proto_runtime_frame(payload_bytes: bytes) -> ProtoRuntimeDecodeResult
     cmd_func = _header_value(headers, "cmd_func")
     cmd_id = _header_value(headers, "cmd_id")
 
-    global _CMD_REGISTRY
-    if _CMD_REGISTRY is None:
-        _CMD_REGISTRY = _build_cmd_registry()
-    typed_eligible = (cmd_func, cmd_id) in (_CMD_REGISTRY or {})
+    registry = _registry_for(device_type)
+    typed_eligible = (cmd_func, cmd_id) in registry
 
     if payload is not None:
         source = payload
@@ -648,7 +700,7 @@ def decode_proto_runtime_frame(payload_bytes: bytes) -> ProtoRuntimeDecodeResult
         source = payload_bytes
         reason_code = "typed_source_full_frame"
 
-    typed = _typed_runtime_map(headers, source)
+    typed = _typed_runtime_map(headers, source, device_type)
     if typed is not None:
         mapped, parse_path = typed
         return ProtoRuntimeDecodeResult(
