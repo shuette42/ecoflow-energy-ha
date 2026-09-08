@@ -20,9 +20,11 @@ class TestDecodeVersion:
         assert decode_version(0) == ""
         assert decode_version(-1) == ""
         assert decode_version(0x1_0000_0000) == ""
-        assert decode_version("1.2.3") == ""
-        assert decode_version(None) == ""
-        assert decode_version(1.5) == ""
+        # The wrong types are the subject: the helper has to refuse a string,
+        # nothing at all and a float rather than decode them.
+        assert decode_version("1.2.3") == ""  # type: ignore[arg-type]
+        assert decode_version(None) == ""  # type: ignore[arg-type]
+        assert decode_version(1.5) == ""  # type: ignore[arg-type]
 
     def test_rejects_bool(self):
         # bool is an int subclass; True would otherwise decode to v0.0.0.1.
