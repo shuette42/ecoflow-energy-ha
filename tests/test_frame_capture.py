@@ -709,9 +709,7 @@ class TestEncryptedRegionMasking:
 
     def test_each_header_uses_its_own_seq(self) -> None:
         """A frame-wide key would mask at most one of these two headers."""
-        header_a = _enc_header(
-            254, 39, pdata_plain=b"HJ31TESTMASK0001", seq=self._KEY
-        )
+        header_a = _enc_header(254, 39, pdata_plain=b"HJ31TESTMASK0001", seq=self._KEY)
         header_b = _enc_header(
             254, 40, pdata_plain=b"HJ31TESTMASK0002", seq=self._KEY + 1
         )

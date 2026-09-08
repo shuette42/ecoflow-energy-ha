@@ -50,6 +50,12 @@ jobs:
           pip install -r requirements-dev.txt
       - name: Run ruff
         run: ruff check custom_components/ tests/
+      # The formatter is a gate too. Without this step the reflow that made the
+      # tree consistent decays on the first pull request that does not run it,
+      # which happened within hours of that pass landing: three files arrived
+      # unformatted and nothing said so.
+      - name: Check formatting
+        run: ruff format --check custom_components/ tests/
 
   Types:
     name: Types

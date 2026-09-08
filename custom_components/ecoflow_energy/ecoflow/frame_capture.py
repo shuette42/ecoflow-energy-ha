@@ -413,14 +413,14 @@ def sanitize_frame(payload: bytes, secrets: list[str]) -> bytes:
     for region in _encrypted_regions(payload):
         if region.key is None:
             continue
-        inner = _xor(payload[region.start:region.end], region.key)
+        inner = _xor(payload[region.start : region.end], region.key)
         cleaned = _plain_passes(inner, secrets)
         if cleaned == inner:
             continue
         sanitized = (
-            sanitized[:region.start]
+            sanitized[: region.start]
             + _xor(cleaned, region.key)
-            + sanitized[region.end:]
+            + sanitized[region.end :]
         )
     return sanitized
 
