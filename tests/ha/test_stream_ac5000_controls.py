@@ -89,10 +89,17 @@ def _select(coordinator: EcoFlowDeviceCoordinator, key: str) -> EcoFlowSelect:
     return entity
 
 
+def _sender(coordinator: EcoFlowDeviceCoordinator) -> AsyncMock:
+    """Narrow the coordinator's mocked proto SET sender for assertions."""
+    sender = coordinator.async_send_proto_set_command
+    assert isinstance(sender, AsyncMock)
+    return sender
+
+
 def _sent(coordinator: EcoFlowDeviceCoordinator) -> tuple[dict, bytes]:
     """Return the header and pdata of the single frame that was sent."""
-    coordinator.async_send_proto_set_command.assert_called_once()
-    payload = coordinator.async_send_proto_set_command.call_args[0][0]
+    _sender(coordinator).assert_called_once()
+    payload = _sender(coordinator).call_args[0][0]
     assert isinstance(payload, bytes)
     headers, _ = decode_header_message(payload)
     assert headers
@@ -113,6 +120,7 @@ def _walk(buf: bytes):
     while offset < len(buf):
         key, offset = _varint(buf, offset)
         number, wire = key >> 3, key & 7
+        value: int | bytes
         if wire == 0:
             value, offset = _varint(buf, offset)
         elif wire == 2:
@@ -143,7 +151,7 @@ def _pdata_of(call) -> bytes:
 
 def _last_pdata(coordinator: EcoFlowDeviceCoordinator) -> bytes:
     """The task itself, when a removal of the other kind went out first."""
-    return _pdata_of(coordinator.async_send_proto_set_command.call_args_list[-1])
+    return _pdata_of(_sender(coordinator).call_args_list[-1])
 
 
 def _config_field(pdata: bytes) -> int:
@@ -259,7 +267,7 @@ class TestSocLimitNumbers:
             await entity.async_set_native_value(85)
 
         assert err.value.translation_key == "set_command_not_ready"
-        coordinator.async_send_proto_set_command.assert_not_called()
+        _sender(coordinator).assert_not_called()
 
     async def test_a_limit_the_device_would_reject_is_not_sent(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
@@ -276,7 +284,7 @@ class TestSocLimitNumbers:
             await entity.async_set_native_value(10)
 
         assert err.value.translation_key == "set_value_rejected"
-        coordinator.async_send_proto_set_command.assert_not_called()
+        _sender(coordinator).assert_not_called()
 
     @pytest.mark.parametrize(
         ("key", "value", "counterpart", "expected"),
@@ -331,7 +339,7 @@ class TestSocLimitNumbers:
             await entity.async_set_native_value(40)
 
         assert err.value.translation_key == "set_command_not_ready"
-        coordinator.async_send_proto_set_command.assert_not_called()
+        _sender(coordinator).assert_not_called()
 
     async def test_a_float_reserve_still_toggles_the_switch(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
@@ -371,7 +379,7 @@ class TestSocLimitNumbers:
             await entity.async_turn_off()
 
         assert err.value.translation_key == "set_command_not_ready"
-        coordinator.async_send_proto_set_command.assert_not_called()
+        _sender(coordinator).assert_not_called()
 
 
 class TestPowerSetpoints:
@@ -534,7 +542,7 @@ class TestPowerSetpoints:
 
         await entity.async_set_native_value(300)
 
-        sent = coordinator.async_send_proto_set_command.call_args_list
+        sent = _sender(coordinator).call_args_list
         assert len(sent) == 2
         remove = _pdata_of(sent[0])
         # operation 3 (remove), type 1 (charge), and it goes out first
@@ -567,7 +575,7 @@ class TestPowerSetpoints:
 
         await entity.async_set_native_value(300)
 
-        sent = coordinator.async_send_proto_set_command.call_args_list
+        sent = _sender(coordinator).call_args_list
         assert len(sent) == 2, "the parked charge task was not removed"
         # operation 3 (remove) naming task 1, the parked charge task
         assert bytes([0x08, 3, 0x10, 1]) in _pdata_of(sent[0])
@@ -588,7 +596,7 @@ class TestPowerSetpoints:
 
         await entity.async_set_native_value(300)
 
-        sent = coordinator.async_send_proto_set_command.call_args_list
+        sent = _sender(coordinator).call_args_list
         # operation 3 (remove) naming 2, the number reported, not the kind's 1
         assert bytes([0x08, 3, 0x10, 2]) in _pdata_of(sent[0])
 
@@ -631,7 +639,7 @@ class TestPowerSetpoints:
 
         await entity.async_set_native_value(300)
 
-        assert len(coordinator.async_send_proto_set_command.call_args_list) == 1
+        assert len(_sender(coordinator).call_args_list) == 1
 
     async def test_the_removed_task_stops_being_reported(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
@@ -677,10 +685,10 @@ class TestPowerSetpoints:
         entity = _number(coordinator, "scheduled_discharge_power_w")
 
         await entity.async_set_native_value(300)
-        coordinator.async_send_proto_set_command.reset_mock()
+        _sender(coordinator).reset_mock()
         await entity.async_set_native_value(400)
 
-        assert len(coordinator.async_send_proto_set_command.call_args_list) == 1
+        assert len(_sender(coordinator).call_args_list) == 1
 
     async def test_a_failed_removal_does_not_write_the_new_task(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
@@ -688,13 +696,13 @@ class TestPowerSetpoints:
         """Writing anyway would leave exactly the overlapping pair."""
         data = dict(REPORTED, scheduled_charge_power_w=600)
         coordinator = _coordinator(hass, enhanced_config_entry, data=data)
-        coordinator.async_send_proto_set_command.return_value = False
+        _sender(coordinator).return_value = False
         entity = _number(coordinator, "scheduled_discharge_power_w")
 
         with pytest.raises(HomeAssistantError):
             await entity.async_set_native_value(300)
 
-        assert len(coordinator.async_send_proto_set_command.call_args_list) == 1
+        assert len(_sender(coordinator).call_args_list) == 1
         # The task may well still be there, so it stays reported.
         assert coordinator.data["scheduled_charge_power_w"] == 600
 
@@ -711,7 +719,7 @@ class TestPowerSetpoints:
 
         await entity.async_set_native_value(300)
 
-        coordinator.async_send_proto_set_command.assert_called_once()
+        _sender(coordinator).assert_called_once()
         assert "custom mode" in caplog.text
 
     async def test_no_warning_in_custom_mode(
@@ -947,7 +955,7 @@ class TestGridOutputPower:
         with pytest.raises(HomeAssistantError):
             await entity.async_set_native_value(1000)
 
-        coordinator.async_send_proto_set_command.assert_not_called()
+        _sender(coordinator).assert_not_called()
 
     async def test_the_reported_ceiling_narrows_the_slider(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
@@ -1116,6 +1124,7 @@ class TestGridInputPower:
         assert entity.native_max_value >= max(recorded)
         # A range that admits them and a step that does not would still leave
         # the recorded values unreachable from the slider.
+        assert entity.native_step is not None
         assert all(value % entity.native_step == 0 for value in recorded)
 
     async def test_the_write_goes_out_under_the_device_config_lock(

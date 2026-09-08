@@ -4162,7 +4162,7 @@ class TestBpRemapping:
         coordinator = EcoFlowDeviceCoordinator(
             hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
         )
-        raw = {
+        raw: dict[str, Any] = {
             "all_packs": [
                 {},  # phantom
                 {},  # phantom
@@ -6550,8 +6550,8 @@ class TestAppAuthMode:
         # issues. Deliberate: the replacement is sync on purpose (so calling it
         # here does not leave an unawaited coroutine behind), which is exactly
         # what these two codes complain about.
-        coordinator._proactive_credential_refresh = (  # type: ignore[assignment, return-value]
-            lambda: None
+        coordinator._proactive_credential_refresh = (
+            lambda: None  # type: ignore[assignment, return-value]
         )
         with (
             patch.object(hass, "async_create_task") as mock_task,
@@ -6662,6 +6662,7 @@ class TestAppAuthMode:
         with patch.object(entry, "async_start_reauth") as mock_reauth:
             await coordinator._refresh_mqtt_credentials()
         mock_reauth.assert_called_once()
+        assert isinstance(coordinator._mqtt_client, MagicMock)
         coordinator._mqtt_client.update_credentials.assert_not_called()
 
     async def test_reactive_refresh_login_failure_triggers_reauth(
@@ -6731,6 +6732,7 @@ class TestAppAuthMode:
         with patch.object(entry, "async_start_reauth") as mock_reauth:
             await coordinator._proactive_credential_refresh()
         mock_reauth.assert_not_called()
+        assert isinstance(coordinator._mqtt_client, MagicMock)
         coordinator._mqtt_client.update_credentials.assert_not_called()
         assert coordinator.event_log == []
 
@@ -6851,6 +6853,7 @@ class TestSnapshotContinuity:
             return_value=1000.0 + STALE_THRESHOLD_S + 10,
         ):
             coordinator._check_stale()
+            assert coordinator._stale_check_unsub is not None
             coordinator._stale_check_unsub.cancel()
 
         # Snapshot data must still be available (stale, not hard unavailable)
@@ -6882,6 +6885,7 @@ class TestSnapshotContinuity:
             return_value=1000.0 + SOFT_UNAVAILABLE_S + 10,
         ):
             coordinator._check_stale()
+            assert coordinator._stale_check_unsub is not None
             coordinator._stale_check_unsub.cancel()
 
         # Data should persist in degraded stage (not yet hard unavailable)
@@ -6916,6 +6920,7 @@ class TestSnapshotContinuity:
             return_value=1000.0 + HARD_UNAVAILABLE_S + 10,
         ):
             coordinator._check_stale()
+            assert coordinator._stale_check_unsub is not None
             coordinator._stale_check_unsub.cancel()
 
         # Data should be expired
@@ -6951,6 +6956,7 @@ class TestSnapshotContinuity:
             return_value=1000.0 + HARD_UNAVAILABLE_S + 10,
         ):
             coordinator._check_stale()
+            assert coordinator._stale_check_unsub is not None
             coordinator._stale_check_unsub.cancel()
 
         assert coordinator.snapshot.data == {}
@@ -7231,6 +7237,7 @@ class TestDeveloperCredentialRefresh:
 
         await coordinator._refresh_mqtt_credentials()
 
+        assert isinstance(coordinator._mqtt_client, MagicMock)
         coordinator._mqtt_client.update_credentials.assert_not_called()
         assert coordinator.event_log == []
 
@@ -7258,6 +7265,7 @@ class TestDeveloperCredentialRefresh:
         ):
             await coordinator._refresh_mqtt_credentials()
 
+        assert isinstance(coordinator._mqtt_client, MagicMock)
         coordinator._mqtt_client.update_credentials.assert_called_once_with(
             "new-account",
             "new-password",
@@ -7280,6 +7288,7 @@ class TestDeveloperCredentialRefresh:
         with patch.object(standard_config_entry, "async_start_reauth") as mock_reauth:
             await coordinator._refresh_mqtt_credentials()
 
+        assert isinstance(coordinator._mqtt_client, MagicMock)
         coordinator._mqtt_client.update_credentials.assert_not_called()
         assert coordinator.event_log[-1]["type"] == "credential_refresh_fail"
         assert coordinator.event_log[-1]["detail"] == "developer-auth"
@@ -7296,6 +7305,7 @@ class TestDeveloperCredentialRefresh:
 
         await coordinator._proactive_credential_refresh()
 
+        assert isinstance(coordinator._mqtt_client, MagicMock)
         coordinator._mqtt_client.update_credentials.assert_not_called()
         assert coordinator.event_log == []
 
@@ -7311,6 +7321,7 @@ class TestDeveloperCredentialRefresh:
         reconnect exactly like a changed account does.
         """
         coordinator = self._coordinator(hass, standard_config_entry)
+        assert isinstance(coordinator._mqtt_client, MagicMock)
         coordinator._mqtt_client.update_broker.return_value = True
         coordinator._iot_api = MagicMock()
         coordinator._iot_api.refresh_credentials = AsyncMock(
@@ -7357,6 +7368,7 @@ class TestDeveloperCredentialRefresh:
 
         await coordinator._refresh_mqtt_credentials()
 
+        assert isinstance(coordinator._mqtt_client, MagicMock)
         coordinator._mqtt_client.update_broker.assert_called_once_with(
             ("mqtt-a.ecoflow.com", 8085, "/mqtt")
         )
@@ -7389,6 +7401,7 @@ class TestDeveloperCredentialRefresh:
         ):
             await coordinator._proactive_credential_refresh()
 
+        assert isinstance(coordinator._mqtt_client, MagicMock)
         coordinator._mqtt_client.update_credentials.assert_called_once_with(
             "old-account",
             "rotated-password",
@@ -7416,6 +7429,7 @@ class TestDeveloperCredentialRefresh:
         with patch.object(hass, "async_add_executor_job") as mock_exec:
             await coordinator._proactive_credential_refresh()
 
+        assert isinstance(coordinator._mqtt_client, MagicMock)
         coordinator._mqtt_client.update_credentials.assert_called_once_with(
             "new-account",
             "new-password",
@@ -7438,6 +7452,7 @@ class TestDeveloperCredentialRefresh:
         with patch.object(standard_config_entry, "async_start_reauth") as mock_reauth:
             await coordinator._proactive_credential_refresh()
 
+        assert isinstance(coordinator._mqtt_client, MagicMock)
         coordinator._mqtt_client.update_credentials.assert_not_called()
         assert coordinator.event_log[-1]["type"] == "credential_proactive_fail"
         assert coordinator.event_log[-1]["detail"] == "api failed"

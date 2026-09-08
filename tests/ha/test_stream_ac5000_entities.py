@@ -11,8 +11,10 @@ fill it is permanent for that owner.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
+from unittest.mock import MagicMock
 
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -103,6 +105,15 @@ def _entry(device: dict[str, Any]) -> MockConfigEntry:
     )
 
 
+def _collector(target: list[Any]) -> Callable[[Iterable[Any], bool], None]:
+    """Adapt a plain list to the `AddEntitiesCallback` signature."""
+
+    def _add(new_entities: Iterable[Any], update_before_add: bool = False) -> None:
+        target.extend(new_entities)
+
+    return _add
+
+
 async def _setup_keys(
     hass: HomeAssistant,
     platform_setup,
@@ -117,7 +128,7 @@ async def _setup_keys(
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {ES22_DEVICE["sn"]: coordinator}
 
     created: list[Any] = []
-    await platform_setup(hass, entry, created.extend)
+    await platform_setup(hass, entry, _collector(created))
     return {
         entity._definition.key for entity in created if hasattr(entity, "_definition")
     }
@@ -183,7 +194,7 @@ class TestStreamAC5000EntitySet:
         }
 
         created: list[Any] = []
-        await sensor_setup(hass, entry, created.extend)
+        await sensor_setup(hass, entry, _collector(created))
         solar = next(
             entity
             for entity in created
@@ -254,7 +265,7 @@ class TestStreamAC5000TaskReadback:
             ES22_DEVICE["sn"]: coordinator
         }
         created: list[Any] = []
-        await number_setup(hass, entry, created.extend)
+        await number_setup(hass, entry, _collector(created))
         number = next(
             entity
             for entity in created
@@ -319,7 +330,7 @@ class TestStreamAC5000Definitions:
     def test_a_zero_does_not_announce_an_accessory(self) -> None:
         """The gate itself, not just the flag that switches it on."""
 
-        class _Stub:
+        class _Stub(MagicMock):
             device_data = {"solar_w": 0.0, "grid_phase_a_active_power_w": 0.0}
             data: dict[str, Any] = {}
 
@@ -377,11 +388,11 @@ class TestStreamAC5000Definitions:
     def test_every_control_is_enhanced_only(self) -> None:
         """This device has no Developer API at all, so with developer keys a
         control would be created that can neither write nor read back."""
-        for definition in (
-            *STREAMAC5000_NUMBERS,
-            *STREAMAC5000_SWITCHES,
-            *STREAMAC5000_SELECTS,
-        ):
+        for definition in STREAMAC5000_NUMBERS:
+            assert definition.enhanced_only is True, definition.key
+        for definition in STREAMAC5000_SWITCHES:
+            assert definition.enhanced_only is True, definition.key
+        for definition in STREAMAC5000_SELECTS:
             assert definition.enhanced_only is True, definition.key
 
     def test_a_control_is_named_after_the_reading_it_writes(self) -> None:
