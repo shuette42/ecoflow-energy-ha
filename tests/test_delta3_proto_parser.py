@@ -408,6 +408,13 @@ class TestRegistryKeysRemainStable:
     def test_unknown_command_pair_is_ignored(self):
         msg = Delta3DisplayProperty()
         msg.pow_in_sum_w = 100.0
+        # Positive control: the registered neighbour of this cmd_id has to
+        # decode, or no_match below would also hold for an empty table.
+        control = decode_proto_runtime_frame(
+            _build_frame(254, 21, msg.SerializeToString()),
+            device_type=DEVICE_TYPE_DELTA3,
+        )
+        assert control.parse_path == "typed_runtime:delta3_display_property"
         frame = _build_frame(254, 22, msg.SerializeToString())
         result = decode_proto_runtime_frame(frame, device_type=DEVICE_TYPE_DELTA3)
         assert result.parse_path == "typed_runtime:no_match"

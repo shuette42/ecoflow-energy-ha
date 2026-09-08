@@ -256,7 +256,8 @@ def _registry_for(device_type: str) -> dict[tuple[int, int], CmdConfig]:
         if device_type not in _LOGGED_UNKNOWN_DEVICE_TYPES:
             _LOGGED_UNKNOWN_DEVICE_TYPES.add(device_type)
             _LOGGER.debug(
-                "No protobuf command registry table for device type %s",
+                "Device type %s has no protobuf command registry table; "
+                "its frames are read by its own parser or not at all",
                 device_type,
             )
         return {}

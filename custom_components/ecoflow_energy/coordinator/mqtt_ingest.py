@@ -582,11 +582,13 @@ class MqttIngestMixin(_Base):
 
         if b"\x0a" in payload[:4]:
             try:
-                # Device-type routing comes first: (cmd_func, cmd_id) pairs are
-                # not unique across device classes. The Stream AC Pro uses the
-                # very same (254, 21) main status frame as the Delta 3
-                # generation, so a generic registry lookup would hand a Stream
-                # frame to the Delta 3 parser and drop the Stream telemetry.
+                # These families keep their own parsers and never reach the
+                # command registry: (cmd_func, cmd_id) pairs are not unique
+                # across device classes, and the Stream AC Pro uses the very
+                # same (254, 21) main status frame as the Delta 3 generation.
+                # Since ADR-024 the registry is keyed per device type as well,
+                # so the split below is the parser choice, not the guard that
+                # keeps one family from reading another family's message.
                 if self.device_type == DEVICE_TYPE_STREAM:
                     return parse_stream_proto_message(payload)
                 # Same reason: an ES22 shares (32, 2) and (32, 50) with the

@@ -162,6 +162,9 @@ class TestRuntimeDecoder:
             _build_frame(96, 33, inner), device_type=DEVICE_TYPE_POWEROCEAN
         )
 
+        # Positive control: the frame has to have reached its registry entry,
+        # or the absent summary below would only prove that nothing decoded.
+        assert result.parse_path == "typed_runtime:energy_stream_report"
         assert "_unknown_fields" not in result.mapped
 
     def test_ems_change_report_rename(self):
@@ -180,6 +183,13 @@ class TestRuntimeDecoder:
     def test_unknown_cmd_id(self):
         """Unknown cmd_id should return no_match."""
         inner = b"\x08\x01"  # random varint
+        # Positive control: the same command family with a registered cmd_id
+        # must decode, so no_match below cannot come from an empty table.
+        control = decode_proto_runtime_frame(
+            _build_frame(96, 8, JTS1EmsChangeReport(bp_soc=80).SerializeToString()),
+            device_type=DEVICE_TYPE_POWEROCEAN,
+        )
+        assert control.parse_path == "typed_runtime:ems_change"
         frame = _build_frame(96, 999, inner)
         result = decode_proto_runtime_frame(frame, device_type=DEVICE_TYPE_POWEROCEAN)
         assert result.parse_path == "typed_runtime:no_match"
@@ -528,9 +538,9 @@ class TestFullPowerFrameFlag:
         msg.bp_soc = 50
         frame = _build_frame(96, 33, msg.SerializeToString())
 
-        assert (
-            decode_proto_runtime_frame(
-                frame, device_type=DEVICE_TYPE_POWEROCEAN
-            ).mapped["_is_full_power_frame"]
-            is False
-        )
+        result = decode_proto_runtime_frame(frame, device_type=DEVICE_TYPE_POWEROCEAN)
+
+        # Positive control: `_is_full_power_frame` is False in the empty
+        # mapping too, so the parse path has to say the frame was read.
+        assert result.parse_path == "typed_runtime:energy_stream_report"
+        assert result.mapped["_is_full_power_frame"] is False

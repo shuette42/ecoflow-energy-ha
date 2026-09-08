@@ -13,8 +13,16 @@ table being keyed on something that is not a real device type.
 
 from __future__ import annotations
 
+import logging
+
+import pytest
 from ecoflow_energy.ecoflow import const as ef_const
-from ecoflow_energy.ecoflow.const import DEVICE_TYPE_DELTA3, DEVICE_TYPE_POWEROCEAN
+from ecoflow_energy.ecoflow.const import (
+    DEVICE_TYPE_DELTA3,
+    DEVICE_TYPE_POWEROCEAN,
+    DEVICE_TYPE_SMARTPLUG,
+)
+from ecoflow_energy.ecoflow.proto import runtime
 from ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
     Delta3DisplayProperty,
     JTS1EnergyStreamReport,
@@ -128,3 +136,53 @@ class TestRegistryNamespaces:
                     )
                 else:
                     seen[key] = (device_type, config)
+
+
+class TestDeviceTypeWithoutATable:
+    """A device type that has no table of its own must stay harmless.
+
+    The SmartPlug, the Delta generation and the PowerStream reach the same
+    decode entry point but are read by their own parsers afterwards. They
+    have no registry table, and what happens to them decides whether the
+    fallback in `coordinator/mqtt_ingest.py` still gets its headers.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _forget_logged_types(self):
+        """The dedupe set is process-global and never reset by the product.
+
+        Without this the log assertion below would only hold when this test
+        happens to run first, and the suite runs under `pytest-randomly`.
+        """
+        runtime._LOGGED_UNKNOWN_DEVICE_TYPES.clear()
+        yield
+        runtime._LOGGED_UNKNOWN_DEVICE_TYPES.clear()
+
+    def test_a_device_type_without_a_table_gets_an_empty_one(self):
+        assert runtime._registry_for(DEVICE_TYPE_SMARTPLUG) == {}
+        # Not a union of every table, which is the shape ADR-024 removes.
+        assert runtime._registry_for("not_a_device_type_at_all") == {}
+
+    def test_the_missing_table_is_logged_once_per_process(self, caplog):
+        with caplog.at_level(logging.DEBUG, logger=runtime.__name__):
+            for _ in range(5):
+                runtime._registry_for(DEVICE_TYPE_SMARTPLUG)
+
+        lines = [
+            r for r in caplog.records if "no protobuf command" in r.message.lower()
+        ]
+        assert len(lines) == 1
+        assert DEVICE_TYPE_SMARTPLUG in str(lines[0].args)
+
+    def test_the_headers_survive_so_the_fallback_still_runs(self):
+        """`_parse_proto_device_data` is handed `result.headers` afterwards.
+
+        A frame from a device type with no table must therefore come back
+        with its header list intact rather than as nothing at all.
+        """
+        result = runtime.decode_proto_runtime_frame(
+            _powerocean_frame(), device_type=DEVICE_TYPE_SMARTPLUG
+        )
+
+        assert result.parse_path == "typed_runtime:no_match"
+        assert len(result.headers) == 1
