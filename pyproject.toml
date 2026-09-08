@@ -9,6 +9,12 @@ ignore = []
 
 [tool.mypy]
 python_version = "3.13"
+# A function without annotations is not checked leniently, it is not checked at
+# all: the checker walks past it and says nothing. With this on, writing one is
+# itself the finding. The integration reached it with six functions to fix, so
+# it is on here and deliberately not on for the suite, where a thousand test
+# methods still carry no return annotation.
+disallow_untyped_defs = true
 ignore_missing_imports = true
 exclude = "ecocharge_pb2\\.py$"
 
@@ -44,3 +50,8 @@ disable_error_code = ["empty-body"]
 [[tool.mypy.overrides]]
 module = ["tests.*", "conftest"]
 disable_error_code = ["method-assign"]
+# The suite still has about a thousand test methods with no return annotation.
+# Requiring them is its own piece of work and its own decision; until then the
+# rule holds for the integration, where it costs nothing, and not here, where
+# it would mean a thousand edits nobody has asked for.
+disallow_untyped_defs = false

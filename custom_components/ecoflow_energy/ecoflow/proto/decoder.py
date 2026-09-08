@@ -37,7 +37,7 @@ _HEADER_FIELDS = {
 }
 
 
-def _read_varint(mv, i):
+def _read_varint(mv: memoryview | bytes, i: int) -> tuple[int | None, int]:
     """Read a variable-length integer from protobuf wire format at position i.
 
     Returns ``(None, len(mv))`` on truncated or oversized (>64-bit) input so
