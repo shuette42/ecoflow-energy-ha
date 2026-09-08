@@ -21,7 +21,6 @@ Entity behaviour lives in tests/ha/test_delta3_idle_shutdown_entity.py.
 from __future__ import annotations
 
 import pytest
-
 from ecoflow_energy.const import (
     DELTA3_IDLE_SHUTDOWN_VALUES,
     DELTA3_IDLE_SHUTDOWNS,

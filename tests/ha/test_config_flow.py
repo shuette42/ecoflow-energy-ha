@@ -5,14 +5,13 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
+import aiohttp
 import pytest
 from homeassistant import config_entries
+from homeassistant.config_entries import SOURCE_REAUTH, SOURCE_RECONFIGURE
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
-
-import aiohttp
-from homeassistant.config_entries import SOURCE_REAUTH, SOURCE_RECONFIGURE
 
 from custom_components.ecoflow_energy.const import (
     AUTH_METHOD_APP,
@@ -32,7 +31,11 @@ from custom_components.ecoflow_energy.const import (
     RAW_CAPTURE_DURATION_S,
 )
 
-from .conftest import MOCK_DELTA_DEVICE, MOCK_MQTT_CREDENTIALS, MOCK_POWEROCEAN_DEVICE  # noqa: F401
+from .conftest import (  # noqa: F401
+    MOCK_DELTA_DEVICE,
+    MOCK_MQTT_CREDENTIALS,
+    MOCK_POWEROCEAN_DEVICE,
+)
 
 # Fixed wall-clock reference - never derive a deadline from the real clock.
 FIXED_NOW = 1_800_000_000.0
@@ -58,11 +61,10 @@ async def _select_mode(hass: HomeAssistant, mode: str = MODE_STANDARD):
     )
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "user"
-    result = await hass.config_entries.flow.async_configure(
+    return await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {CONF_MODE: mode},
     )
-    return result
 
 
 async def _advance_app_flow_with_powerstream(hass: HomeAssistant):
@@ -759,11 +761,10 @@ class TestDevicesStep:
             ])
 
             result = await _select_mode(hass, MODE_STANDARD)
-            result = await hass.config_entries.flow.async_configure(
+            return await hass.config_entries.flow.async_configure(
                 result["flow_id"],
                 {CONF_ACCESS_KEY: "ak", CONF_SECRET_KEY: "sk"},
             )
-            return result
 
     async def test_devices_form_shown(self, hass: HomeAssistant) -> None:
         result = await self._advance_to_devices(hass)

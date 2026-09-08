@@ -9,21 +9,20 @@ from ecoflow_energy.ecoflow.energy_stream import (
     build_energy_stream_activate_payload,
     build_energy_stream_deactivate_payload,
 )
-from ecoflow_energy.ecoflow.proto_encoding import (
-    encode_field_bytes,
-    encode_field_varint,
-)
 from ecoflow_energy.ecoflow.proto.decoder import decode_header_message
 from ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
     JTS1EmsChangeReport,
     JTS1EmsParamChangeReport,
-    JTS1EmsHeartbeat,
     JTS1EnergyStreamReport,
 )
 from ecoflow_energy.ecoflow.proto.runtime import (
     _UNKNOWN_FIELDS_MAX,
     _build_cmd_registry,
     decode_proto_runtime_frame,
+)
+from ecoflow_energy.ecoflow.proto_encoding import (
+    encode_field_bytes,
+    encode_field_varint,
 )
 
 
@@ -236,7 +235,7 @@ class TestProtobufImportFailure:
         proto_pkg = sys.modules.get(proto_pkg_key)
         had_attr = hasattr(proto_pkg, "ecocharge_pb2")
         if had_attr:
-            saved_attr = getattr(proto_pkg, "ecocharge_pb2")
+            saved_attr = proto_pkg.ecocharge_pb2
             delattr(proto_pkg, "ecocharge_pb2")
 
         # Install a blocking meta path finder (modern find_spec API) that
@@ -246,7 +245,7 @@ class TestProtobufImportFailure:
             def find_spec(self, fullname, path, target=None):
                 if fullname == pb2_key:
                     raise ImportError("mocked: protobuf module not installed")
-                return None
+                return
 
         blocker = _BlockPb2Finder()
         sys.meta_path.insert(0, blocker)
@@ -266,7 +265,7 @@ class TestProtobufImportFailure:
             if saved_module is not None:
                 sys.modules[pb2_key] = saved_module
             if had_attr:
-                setattr(proto_pkg, "ecocharge_pb2", saved_attr)
+                proto_pkg.ecocharge_pb2 = saved_attr
 
 
 class TestDecoderMalformedInput:

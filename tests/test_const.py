@@ -5,28 +5,23 @@ from __future__ import annotations
 import ast
 import json
 import re
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 from ecoflow_energy.const import (
-    DELTA_PROFILE_R331,
-    DELTA_PROFILE_R351,
-    POWEROCEAN_SENSORS,
+    DELTA2MAX_BINARY_SENSORS,
+    DELTA2MAX_NUMBERS,
     DELTA2MAX_SENSORS,
+    DELTA2MAX_SWITCHES,
+    DELTA3_POWER_TO_ENERGY,
     DELTA3_SELECTS,
     DELTA3_SENSORS,
-    DELTA3_POWER_TO_ENERGY,
-    SMARTPLUG_SENSORS,
-    STREAM_SENSORS,
-    STREAM_NUMBERS,
-    STREAM_BINARY_SENSORS,
-    DELTA2MAX_BINARY_SENSORS,
-    DELTA2MAX_SWITCHES,
-    DELTA2MAX_NUMBERS,
+    DELTA_PROFILE_R331,
+    DELTA_PROFILE_R351,
+    ENHANCED_ONLY_DEVICE_TYPES,
     POWEROCEAN_BINARY_SENSORS,
-    STREAM_SWITCHES,
-    SMARTPLUG_SWITCHES,
-    SMARTPLUG_NUMBERS,
+    POWEROCEAN_SENSORS,
     RAW_FRAME_BUNDLE_HARD_CAP,
     RAW_FRAME_BUNDLE_MAX_BYTES,
     RAW_FRAME_KEYS_MAX,
@@ -35,15 +30,21 @@ from ecoflow_energy.const import (
     RAW_FRAME_MAX_BYTES,
     RAW_FRAME_PER_KEY_MAX,
     SCHEDULE_MAX_INDEX,
-    WAVE3_SENSORS,
+    SMARTPLUG_NUMBERS,
+    SMARTPLUG_SENSORS,
+    SMARTPLUG_SWITCHES,
+    STREAM_BINARY_SENSORS,
+    STREAM_NUMBERS,
+    STREAM_SENSORS,
+    STREAM_SWITCHES,
     WAVE3_BINARY_SENSORS,
-    WAVE3_SWITCHES,
     WAVE3_NUMBERS,
     WAVE3_SELECTS,
-    ENHANCED_ONLY_DEVICE_TYPES,
+    WAVE3_SENSORS,
+    WAVE3_SWITCHES,
+    get_delta_profile,
     get_device_name,
     get_device_type,
-    get_delta_profile,
 )
 from ecoflow_energy.ecoflow.const import (
     _POWERSTREAM_KEYWORDS,
@@ -1204,7 +1205,7 @@ class TestFrameCaptureFootprint:
                     widest, offender = size, path.name
 
         assert widest, "no captured frames found under tests/fixtures"
-        assert RAW_FRAME_BUNDLE_MAX_BYTES >= widest, (
+        assert widest <= RAW_FRAME_BUNDLE_MAX_BYTES, (
             f"{offender} holds a {widest} B frame the cap would cut"
         )
 

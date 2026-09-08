@@ -9,6 +9,7 @@ to the event loop with ``hass.loop.call_soon_threadsafe()``.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import logging
@@ -16,8 +17,9 @@ import ssl
 import threading
 import time
 from collections import deque
+from collections.abc import Callable
 from time import monotonic
-from typing import Any, Callable
+from typing import Any
 
 import paho.mqtt.client as mqtt
 
@@ -598,11 +600,18 @@ class EcoFlowMQTTClient:
                 if self.is_connected():
                     return True
 
+                client = self.client
+                if client is None:
+                    # Every real caller creates the client before connecting;
+                    # this only turns a future ordering mistake into a clean
+                    # False instead of an AttributeError.
+                    return False
+
                 keepalive = DEFAULT_WSS_KEEPALIVE if self._wss_mode else DEFAULT_MQTT_KEEPALIVE
 
                 _LOGGER.debug("Connecting to %s (%s)", self.broker, "WSS" if self._wss_mode else "TCP")
                 broker = self._broker
-                self.client.connect(broker.host, broker.port, keepalive)
+                client.connect(broker.host, broker.port, keepalive)
                 return True
             except Exception as exc:
                 self._log_issue("warning", "MQTT connection error: %s", exc)
@@ -640,14 +649,12 @@ class EcoFlowMQTTClient:
             return False
         try:
             _LOGGER.debug("Force-reconnect: disconnecting and recreating client...")
-            try:
-                self.client.loop_stop()
-            except Exception:
-                pass
-            try:
-                self.client.disconnect()
-            except Exception:
-                pass
+            existing = self.client
+            if existing is not None:
+                with contextlib.suppress(Exception):
+                    existing.loop_stop()
+                with contextlib.suppress(Exception):
+                    existing.disconnect()
             self.connected = False
             self.client = None
 
@@ -658,10 +665,20 @@ class EcoFlowMQTTClient:
                 )
                 return False
 
+            client = self.client
+            if client is None:
+                # _create_client_unlocked() sets self.client on every success
+                # path; this only guards a future refactor from silently
+                # reintroducing the gap.
+                self._log_retryable(
+                    "Force-reconnect: client missing after successful creation"
+                )
+                return False
+
             try:
                 keepalive = DEFAULT_WSS_KEEPALIVE if self._wss_mode else DEFAULT_MQTT_KEEPALIVE
                 broker = self._broker
-                self.client.connect(broker.host, broker.port, keepalive)
+                client.connect(broker.host, broker.port, keepalive)
                 self._start_network_loop()
                 _LOGGER.debug("Force-reconnect: success at %s (%s)", self.broker, "WSS" if self._wss_mode else "TCP")
                 return True
@@ -699,8 +716,16 @@ class EcoFlowMQTTClient:
         line that says too much is a smaller problem than a device that does
         not connect.
         """
-        self.client.loop_start()
-        thread = getattr(self.client, "_thread", None)
+        client = self.client
+        if client is None:
+            # Both callers create the client first, so this is a reconnect
+            # having swapped it away between their check and this call. Say
+            # so rather than returning silently: the caller believes a
+            # network loop is running after this returns.
+            _LOGGER.debug("No client to start the network loop on")
+            return
+        client.loop_start()
+        thread = getattr(client, "_thread", None)
         if thread is None:
             return
         try:
@@ -744,8 +769,16 @@ class EcoFlowMQTTClient:
             return False
         if not self.is_connected():
             return False
+        # A fresh local read, not the self.client already implied by
+        # is_connected() above: force_reconnect() swaps self.client to None
+        # from another thread (see is_connected()'s own docstring for the
+        # same hazard), so re-reading self.client a second time below would
+        # race against that swap instead of being guarded against it.
+        client = self.client
+        if client is None:
+            return False
         try:
-            result = self.client.publish(topic, payload, qos=qos)
+            result = client.publish(topic, payload, qos=qos)
             if result.rc != 0:
                 return False
             self._note_own_publish(payload)

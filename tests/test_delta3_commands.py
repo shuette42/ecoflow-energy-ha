@@ -26,6 +26,7 @@ from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
     encode_field_varint,
 )
 
+
 def _varint_field(pdata: bytes, field_number: int) -> int | None:
     """Read one varint field out of a pdata blob, or None if it is absent."""
     i = 0

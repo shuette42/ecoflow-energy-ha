@@ -25,10 +25,8 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
-
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.const import (
@@ -54,7 +52,6 @@ from custom_components.ecoflow_energy.number import (
 from custom_components.ecoflow_energy.switch import (
     async_setup_entry as switch_setup,
 )
-
 from tests.test_powerocean_timer_task import (
     LIST_ARMED_1000W,
     LIST_ARMED_1500W,

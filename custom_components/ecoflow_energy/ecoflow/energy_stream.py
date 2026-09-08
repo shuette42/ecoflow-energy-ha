@@ -773,7 +773,7 @@ def build_delta3_config_write_payload(
     device_sn: str,
     seq: int = 0,
     nested: bool = False,
-    companions: tuple[tuple[int, int], ...] = (),
+    companions: tuple[tuple[int, int | float], ...] = (),
     submessage: bytes | None = None,
     source: str | None = None,
     dest: int = 2,
@@ -838,13 +838,34 @@ def build_delta3_config_write_payload(
     elif submessage is not None:
         pdata = encode_field_bytes(config_field, submessage)
     elif nested:
+        if not isinstance(value, int):
+            # Every current caller with nested=True passes an already-int
+            # value (float32=True is what routes a float through
+            # encode_field_fixed32 instead) - this guards a future caller
+            # that violates that contract, raising here rather than letting
+            # encode_varint fail deeper on a bitwise op over a float.
+            raise TypeError(
+                "nested ConfigWrite fields take an int value; float32=True "
+                "routes floats through fixed32 instead"
+            )
         pdata = encode_field_bytes(config_field, encode_field_varint(1, value))
     else:
         # Ascending field order, which is what the app's protobuf runtime
         # emits. Whether the device cares is unproven; matching the app costs
         # nothing and removes one variable.
         fields = sorted([(config_field, value), *companions])
-        pdata = b"".join(encode_field_varint(f, v) for f, v in fields)
+        int_fields: list[tuple[int, int]] = []
+        for f, v in fields:
+            if not isinstance(v, int):
+                # Same guard as the nested branch above: a genuine float only
+                # ever reaches this function with float32=True, which never
+                # falls into this branch.
+                raise TypeError(
+                    "varint ConfigWrite fields take int values; float32=True "
+                    "routes floats through fixed32 instead"
+                )
+            int_fields.append((f, v))
+        pdata = b"".join(encode_field_varint(f, v) for f, v in int_fields)
 
     header = bytearray()
     header.extend(encode_field_bytes(1, pdata))              # pdata

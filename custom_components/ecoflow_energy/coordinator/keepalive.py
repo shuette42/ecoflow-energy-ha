@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+from typing import TYPE_CHECKING
 
 from ..const import (
     DEVICE_TYPE_SMARTPLUG,
@@ -15,8 +16,13 @@ from ..const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+if TYPE_CHECKING:
+    from ._typing import CoordinatorState as _Base
+else:
+    _Base = object
 
-class KeepaliveMixin:
+
+class KeepaliveMixin(_Base):
     """Mixin providing EnergyStreamSwitch, latestQuotas, and ping keep-alives."""
 
     # ------------------------------------------------------------------

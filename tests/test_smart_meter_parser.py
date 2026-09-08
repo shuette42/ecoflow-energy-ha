@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from ecoflow_energy.ecoflow.parsers.smart_meter_proto import (
     _ENERGY_RECORD_MAP,
     _SMART_METER_FIELD_MAP,

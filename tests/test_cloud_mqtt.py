@@ -8,13 +8,13 @@ from ecoflow_energy.ecoflow.cloud_mqtt import EcoFlowMQTTClient
 
 
 def _make_client(**kwargs) -> EcoFlowMQTTClient:
-    defaults = dict(
-        certificate_account="test_account",
-        certificate_password="test_password",
-        device_sn="TEST1234SN",
-        message_handler=MagicMock(),
-        wss_mode=False,
-    )
+    defaults = {
+        "certificate_account": "test_account",
+        "certificate_password": "test_password",
+        "device_sn": "TEST1234SN",
+        "message_handler": MagicMock(),
+        "wss_mode": False,
+    }
     defaults.update(kwargs)
     return EcoFlowMQTTClient(**defaults)
 
@@ -331,6 +331,22 @@ class TestPublishDelivery:
 
         assert client.send_proto_set(b"\x00", wait=True) is False
         info.wait_for_publish.assert_called_once()
+
+    def test_publish_survives_client_swapped_to_none_mid_check(self, caplog):
+        """force_reconnect() runs on a separate thread and can swap
+        self.client to None between the is_connected() gate and the actual
+        publish call. That is a normal reconnect race, not a device fault -
+        publish() must return False for it without an ERROR log line.
+        """
+        client = _make_client()
+        client.is_connected = lambda: True
+        client.client = None
+
+        with caplog.at_level(logging.DEBUG):
+            result = client.publish("test/topic", "payload")
+
+        assert result is False
+        assert [r for r in caplog.records if r.levelno >= logging.ERROR] == []
 
 
 # ===========================================================================

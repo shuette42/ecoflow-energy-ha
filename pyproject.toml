@@ -1,0 +1,26 @@
+[tool.ruff]
+target-version = "py313"
+extend-exclude = ["custom_components/ecoflow_energy/ecoflow/proto/ecocharge_pb2.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RET", "C4"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.13"
+ignore_missing_imports = true
+exclude = "ecocharge_pb2\\.py$"
+
+[[tool.mypy.overrides]]
+module = "ecoflow_energy.ecoflow.proto.ecocharge_pb2"
+follow_imports = "skip"
+ignore_errors = true
+
+# ADR-022 decision 3: this module declares the state the coordinator mixins
+# borrow, purely for the type checker - every method ends in `...` and the
+# file is never imported at runtime. mypy's `empty-body` check flags the
+# four methods whose return type is not `None`; nothing else in the module
+# is exempted.
+[[tool.mypy.overrides]]
+module = "ecoflow_energy.coordinator._typing"
+disable_error_code = ["empty-body"]

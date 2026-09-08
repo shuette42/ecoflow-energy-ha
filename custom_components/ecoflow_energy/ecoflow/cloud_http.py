@@ -105,7 +105,7 @@ class EcoFlowHTTPQuota:
         """Flatten nested objects for API signature (EcoFlow spec)."""
         items: list[tuple[str, str]] = []
         if isinstance(obj, dict):
-            for k in obj.keys():
+            for k in obj:
                 new_key = f"{parent}.{k}" if parent else k
                 items.extend(self._flatten(obj[k], new_key))
         elif isinstance(obj, list):
@@ -204,12 +204,7 @@ class EcoFlowHTTPQuota:
                     ) as resp:
                         return await self._handle_response(resp, purpose=purpose)
 
-            except (
-                aiohttp.ClientError,
-                TimeoutError,
-                asyncio.TimeoutError,
-                self._RetryableAPIError,
-            ) as exc:
+            except (aiohttp.ClientError, TimeoutError, self._RetryableAPIError) as exc:
                 # aiohttp exceptions can embed RequestInfo, including the
                 # signed URL and full serial query. Keep only the exception
                 # class; retries are coalesced into one terminal outcome.

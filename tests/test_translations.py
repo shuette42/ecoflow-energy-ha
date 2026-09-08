@@ -152,21 +152,21 @@ def _extract_schema_keys(node: ast.expr) -> set[str]:
         if not isinstance(child, ast.Call):
             continue
         # Match vol.Required(...) or vol.Optional(...)
-        if isinstance(child.func, ast.Attribute) and child.func.attr in (
-            "Required",
-            "Optional",
+        if (
+            isinstance(child.func, ast.Attribute)
+            and child.func.attr in ("Required", "Optional")
+            and child.args
         ):
-            if child.args:
-                arg = child.args[0]
-                # Direct string literal
-                s = _get_string_value(arg)
-                if s:
-                    keys.add(s)
-                # CONF_* name reference - resolve from const.py
-                elif isinstance(arg, ast.Name):
-                    resolved = _resolve_const(arg.id)
-                    if resolved:
-                        keys.add(resolved)
+            arg = child.args[0]
+            # Direct string literal
+            s = _get_string_value(arg)
+            if s:
+                keys.add(s)
+            # CONF_* name reference - resolve from const.py
+            elif isinstance(arg, ast.Name):
+                resolved = _resolve_const(arg.id)
+                if resolved:
+                    keys.add(resolved)
     return keys
 
 

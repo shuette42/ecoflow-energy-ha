@@ -24,44 +24,46 @@ from .const import (
     DEVICE_TYPE_STREAM_AC5000,
     DEVICE_TYPE_WAVE3,
     DOMAIN,
-    EcoFlowNumberDef,
-    filter_defs_for_serial,
     NUMBER_COMMANDS,
     POWEROCEAN_NUMBERS,
     SMARTPLUG_NUMBER_COMMANDS,
     SMARTPLUG_NUMBERS,
     STREAM_NUMBERS,
     STREAMAC5000_NUMBERS,
+    WAVE3_NUMBERS,
+    EcoFlowNumberDef,
+    filter_defs_for_serial,
     supports_stream_ac5000_controls,
     supports_stream_controls,
-    WAVE3_NUMBERS,
 )
 from .coordinator import DeviceValueNotReported, EcoFlowDeviceCoordinator
-from .entity import (
-    raise_set_gone,
-    as_known_int,
-    EcoFlowWriteGateMixin,
-    reading_reported,
-    raise_set_failed,
-    raise_set_not_ready,
-    raise_set_rejected,
-    raise_set_unsupported,
-)
-from .ecoflow.delta3_commands import (
-    build_number_command as build_delta3_number_command,
-    build_port_priority_command,
-    port_priority_soc_bounds,
-)
-from .ecoflow.wave3_commands import Wave3WriteRefused
 from .ecoflow.const import (
     schedule_power_max_w,
     schedule_power_min_w,
+)
+from .ecoflow.delta3_commands import (
+    build_number_command as build_delta3_number_command,
+)
+from .ecoflow.delta3_commands import (
+    build_port_priority_command,
+    port_priority_soc_bounds,
 )
 from .ecoflow.energy_stream import stream_backup_reserve_floor
 from .ecoflow.parsers.delta3_proto import port_priority_keys
 from .ecoflow.parsers.smartplug import (
     build_plug_brightness_payload,
     build_plug_max_watts_payload,
+)
+from .ecoflow.wave3_commands import Wave3WriteRefused
+from .entity import (
+    EcoFlowWriteGateMixin,
+    as_known_int,
+    raise_set_failed,
+    raise_set_gone,
+    raise_set_not_ready,
+    raise_set_rejected,
+    raise_set_unsupported,
+    reading_reported,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -291,10 +293,15 @@ class EcoFlowNumber(
             # Never widen past the declared rating, and never collapse the
             # range: a ceiling the device has not reported sensibly would
             # otherwise leave a control that cannot be moved.
-            upper = min(float(ceiling), self._attr_native_max_value)
-            if upper <= self._attr_native_min_value:
+            # Named apart from `upper` above: mypy infers a function-scope
+            # variable's type from its first binding (the `tuple[int, int]`
+            # unpack a few lines up), and this branch never runs alongside
+            # that one - reusing the name would make the checker flag its
+            # own float here as incompatible with that unrelated int.
+            ceiling_upper = min(float(ceiling), self._attr_native_max_value)
+            if ceiling_upper <= self._attr_native_min_value:
                 return None
-            return self._attr_native_min_value, upper
+            return self._attr_native_min_value, ceiling_upper
         if self._is_stream_backup_reserve():
             data = self.coordinator.data or {}
             # Read through `as_known_int`, not raw: HA hands `number.set_value`
@@ -647,7 +654,11 @@ class EcoFlowNumber(
             return None
         return int(key[len("schedule_") : -len("_power_w")])
 
-    async def _async_set_stream_value(self, key: str, value: float) -> bool:
+    # Every path through this function either returns or ends in
+    # raise_set_unsupported/raise_set_not_ready/raise_set_rejected, all typed
+    # NoReturn in entity.py. Ruff's RET503 does not resolve NoReturn across
+    # that import, so it sees the trailing call as a fall-through.
+    async def _async_set_stream_value(self, key: str, value: float) -> bool:  # noqa: RET503
         """Set a Stream AC Pro number value via WSS Protobuf SET.
 
         JSON SET does not work on the /app/ WSS topic (SmartPlug proves
@@ -682,7 +693,9 @@ class EcoFlowNumber(
         # wrong thing to tell the user.
         raise_set_unsupported(self.entity_id)
 
-    async def _async_set_stream_ac5000_value(self, key: str, value: float) -> bool:
+    # Same NoReturn gap as _async_set_stream_value above: raise_set_unsupported
+    # always raises, ruff's RET503 does not see it across the import.
+    async def _async_set_stream_ac5000_value(self, key: str, value: float) -> bool:  # noqa: RET503
         """Set a STREAM AC 5000 number via a 254/38 config write.
 
         Most of these read a value the device reported before they can send:

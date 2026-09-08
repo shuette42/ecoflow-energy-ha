@@ -1,6 +1,5 @@
 """Tests for diagnostics - verifies no credentials are exposed."""
 
-import json
 import re
 from pathlib import Path
 

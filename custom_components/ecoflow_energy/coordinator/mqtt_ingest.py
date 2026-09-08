@@ -6,7 +6,7 @@ import json
 import logging
 import re
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..const import (
     DEVICE_TYPE_DELTA,
@@ -23,14 +23,22 @@ from ..const import (
     RAW_FRAME_BUNDLE_MAX_BYTES,
     RAW_FRAME_MAX_BYTES,
 )
+from ..ecoflow.frame_capture import (
+    build_frame_entry,
+    decode_cmd_headers,
+    frame_budget,
+    frame_key,
+    is_proto_frame,
+    sanitize_frame,
+)
 from ..ecoflow.parsers.delta import parse_delta_report
-from ..ecoflow.parsers.delta_http import parse_delta_http_quota
 from ..ecoflow.parsers.delta3_http import parse_delta3_http_quota
 from ..ecoflow.parsers.delta3_proto import (
     parse_delta3_bms_heartbeat,
     parse_delta3_cms_heartbeat,
     parse_delta3_display_property,
 )
+from ..ecoflow.parsers.delta_http import parse_delta_http_quota
 from ..ecoflow.parsers.powerocean import parse_powerocean_http_quota
 from ..ecoflow.parsers.powerocean_proto import (
     flatten_heartbeat,
@@ -43,25 +51,17 @@ from ..ecoflow.parsers.powerocean_proto import (
     remap_proto_keys,
     remap_timer_task_keys,
 )
+from ..ecoflow.parsers.powerstream_http import parse_powerstream_quota
 from ..ecoflow.parsers.smart_meter_proto import parse_smart_meter_message
 from ..ecoflow.parsers.smartplug import (
     parse_smartplug_http_quota,
     parse_smartplug_report,
 )
 from ..ecoflow.parsers.solar_tracker_proto import parse_solar_tracker_message
-from ..ecoflow.parsers.wave3_proto import parse_wave3_message
 from ..ecoflow.parsers.stream_ac5000_proto import parse_stream_ac5000_message
-from ..ecoflow.parsers.powerstream_http import parse_powerstream_quota
 from ..ecoflow.parsers.stream_http import parse_stream_quota
 from ..ecoflow.parsers.stream_proto import parse_stream_proto_message
-from ..ecoflow.frame_capture import (
-    build_frame_entry,
-    decode_cmd_headers,
-    frame_budget,
-    frame_key,
-    is_proto_frame,
-    sanitize_frame,
-)
+from ..ecoflow.parsers.wave3_proto import parse_wave3_message
 from ..ecoflow.proto.runtime import (
     decode_proto_runtime_frame,
     decode_proto_runtime_headers,
@@ -125,7 +125,13 @@ def _collect_total_increasing_keys() -> frozenset[str]:
     return frozenset(keys)
 
 
-class MqttIngestMixin:
+if TYPE_CHECKING:
+    from ._typing import CoordinatorState as _Base
+else:
+    _Base = object
+
+
+class MqttIngestMixin(_Base):
     """Mixin providing MQTT message parsing and monotonic enforcement."""
 
     # ------------------------------------------------------------------
@@ -419,7 +425,16 @@ class MqttIngestMixin:
             # this field means the write was not ours to warn about. Delta 3
             # keeps the unconditional warning below - its sender does not
             # record, and its app traffic has not shown this shape yet.
-            sent_at = self._config_writes_sent.get(ack.action_id)
+            # A missing action_id (the field absent from the ACK) can never
+            # be a key in `_config_writes_sent`, so it already fell into the
+            # "not sent by us" branch below - this just makes that visible
+            # to the type checker instead of relying on `None` never
+            # matching an int key.
+            sent_at = (
+                self._config_writes_sent.get(ack.action_id)
+                if ack.action_id is not None
+                else None
+            )
             if sent_at is None or time.monotonic() - sent_at > 30:
                 _LOGGER.debug(
                     "Device %s rejected a setting this integration did not "
@@ -686,7 +701,12 @@ class MqttIngestMixin:
 
         # One malformed header must not cost the keys already merged from the
         # others, so every result is merged under its own guard.
-        first_copy: dict[tuple[int, int], bytes] = {}
+        # Keyed on whatever (cmd_func, cmd_id) a header actually carries:
+        # decoder.py decodes them as two independent proto fields, so a
+        # malformed header can have one without the other. `_first_copy_wins`
+        # already accepts `tuple[int | None, int | None]` for exactly that
+        # reason - this declaration only had to catch up to it.
+        first_copy: dict[tuple[int | None, int | None], bytes] = {}
         # Counted once per bundle, however many later copies disagree: the
         # question this answers is how often the choice of copy mattered, and
         # a bundle with three copies still only made one choice.
@@ -756,15 +776,14 @@ class MqttIngestMixin:
                 if (
                     result.mapped.get("_is_ems_change")
                     or result.mapped.get("_is_bp_heartbeat")
-                ):
-                    if raw:
-                        merged.update(
-                            remap_bp_keys(
-                                raw,
-                                self._bp_sn_to_index,
-                                self.device_sn,
-                            )
+                ) and raw:
+                    merged.update(
+                        remap_bp_keys(
+                            raw,
+                            self._bp_sn_to_index,
+                            self.device_sn,
                         )
+                    )
             except Exception:
                 _LOGGER.debug(
                     "PowerOcean protobuf decode error for %s (%s)",

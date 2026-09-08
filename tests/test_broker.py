@@ -1,7 +1,6 @@
 """Broker address resolution from the credential response (issue #184)."""
 
 import pytest
-
 from ecoflow_energy.ecoflow.broker import broker_from_credentials
 from ecoflow_energy.ecoflow.const import (
     MQTT_HOST,

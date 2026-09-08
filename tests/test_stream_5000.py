@@ -10,11 +10,9 @@ frame has confirmed.
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 
 import pytest
-
 from ecoflow_energy.const import (
     STREAM_AC5000_CONTROL_PREFIXES,
     STREAMAC5000_NUMBERS,
@@ -23,17 +21,17 @@ from ecoflow_energy.const import (
     supports_stream_ac5000_controls,
 )
 from ecoflow_energy.ecoflow.const import (
-    DEVICE_TYPE_STREAM_AC5000,
     _SN_PREFIX_MAP,
+    DEVICE_TYPE_STREAM_AC5000,
     get_device_name,
     get_device_type,
+)
+from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (
+    parse_stream_ac5000_message,
 )
 from ecoflow_energy.ecoflow.proto_encoding import (
     encode_field_bytes,
     encode_field_varint,
-)
-from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (
-    parse_stream_ac5000_message,
 )
 from ecoflow_energy.number import _get_number_defs
 from ecoflow_energy.select import _get_select_defs
@@ -200,7 +198,7 @@ class TestControlsAreGated:
             if device_type == DEVICE_TYPE_STREAM_AC5000
         }
         assert family == {"ES21", "ES22"}
-        assert STREAM_AC5000_CONTROL_PREFIXES == {"ES21", "ES22"}
+        assert {"ES21", "ES22"} == STREAM_AC5000_CONTROL_PREFIXES
         assert family - STREAM_AC5000_CONTROL_PREFIXES == set()
 
 

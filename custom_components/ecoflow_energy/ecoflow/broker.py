@@ -86,9 +86,7 @@ def _protocol_matches(value: Any, *, wss_mode: bool) -> bool:
         return wss_mode
     if protocol in ("mqtts", "ssl", "tls"):
         return not wss_mode
-    if protocol in ("ws", "websocket", "mqtt", "tcp"):
-        return False
-    return True
+    return protocol not in ("ws", "websocket", "mqtt", "tcp")
 
 
 def _clean_host(value: Any) -> str:

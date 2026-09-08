@@ -4,20 +4,16 @@ import json
 from pathlib import Path
 
 import pytest
-
 from ecoflow_energy.ecoflow.parsers.powerocean import (
-    parse_powerocean_http_quota,
-    _extract_battery_pack,
-    _extract_energy_stream,
     _extract_all_battery_packs,
-    _extract_ems_extended,
+    _extract_battery_pack,
     _is_real_battery_pack,
+    parse_powerocean_http_quota,
 )
 from ecoflow_energy.ecoflow.parsers.powerocean_proto import (
     remap_bp_keys,
     remap_ems_param_change_keys,
 )
-
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "powerocean"
 

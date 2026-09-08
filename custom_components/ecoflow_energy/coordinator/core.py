@@ -37,9 +37,9 @@ from ..const import (
     DELTA_POWER_TO_ENERGY,
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_DELTA3,
+    DEVICE_TYPE_DISPLAY_NAMES,
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_POWERSTREAM,
-    DEVICE_TYPE_DISPLAY_NAMES,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
     DEVICE_TYPE_STREAM_AC5000,
@@ -631,9 +631,7 @@ class EcoFlowDeviceCoordinator(
                 known = {}
                 self._unknown_proto_fields[cmd_key] = known
             for number, value in fields.items():
-                if number in known:
-                    known[number] = value
-                elif len(known) < UNKNOWN_FIELD_NUMBERS_MAX:
+                if number in known or len(known) < UNKNOWN_FIELD_NUMBERS_MAX:
                     known[number] = value
 
     @property

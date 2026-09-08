@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import aiohttp
 import voluptuous as vol
-
 from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
@@ -28,7 +27,13 @@ from .ecoflow.iot_api import IoTApiClient
 _LOGGER = logging.getLogger(__name__)
 
 
-class ReconfigureFlowMixin:
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigFlow as _Base
+else:
+    _Base = object
+
+
+class ReconfigureFlowMixin(_Base):
     """Reconfigure steps, composed into EcoFlowEnergyConfigFlow."""
 
     # ------------------------------------------------------------------

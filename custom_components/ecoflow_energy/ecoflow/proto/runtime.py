@@ -541,6 +541,12 @@ def decode_proto_runtime_headers(
             continue
         cmd_func = header.get("cmd_func")
         cmd_id = header.get("cmd_id")
+        if not isinstance(cmd_func, int) or not isinstance(cmd_id, int):
+            # decoder.py always stores cmd_func/cmd_id as int when the header
+            # carries them at all; a non-int here only means one of them is
+            # missing, which fails the registry lookup below identically -
+            # this just makes that fact visible to the type checker too.
+            continue
         if (cmd_func, cmd_id) not in registry:
             continue
 

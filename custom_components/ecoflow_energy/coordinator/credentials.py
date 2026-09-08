@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+from typing import TYPE_CHECKING
 
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
@@ -18,8 +19,13 @@ from ..ecoflow.broker import broker_from_credentials
 
 _LOGGER = logging.getLogger(__name__)
 
+if TYPE_CHECKING:
+    from ._typing import CoordinatorState as _Base
+else:
+    _Base = object
 
-class CredentialsMixin:
+
+class CredentialsMixin(_Base):
     """Mixin providing reactive and proactive MQTT credential refresh."""
 
     def _adopt_broker(self, credentials: dict | None) -> bool:

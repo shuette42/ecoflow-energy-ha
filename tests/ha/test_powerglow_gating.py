@@ -14,7 +14,6 @@ from typing import Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
-
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.const import (
@@ -30,10 +29,10 @@ from custom_components.ecoflow_energy.const import (
     MODE_ENHANCED,
     POWEROCEAN_SENSORS,
 )
+from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
 from custom_components.ecoflow_energy.ecoflow.parsers.powerocean_proto import (
     SCHEDULE_MAX_INDEX,
 )
-from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
 from custom_components.ecoflow_energy.sensor import async_setup_entry as sensor_setup
 
 POWEROCEAN_DEVICE: dict[str, Any] = {
@@ -120,7 +119,7 @@ class TestDefinitions:
         marked = {
             sensor.key for sensor in POWEROCEAN_SENSORS if sensor.accessory
         }
-        assert HEATING_ROD_KEYS <= marked
+        assert marked >= HEATING_ROD_KEYS
 
     def test_no_other_powerocean_sensor_is_gated(self) -> None:
         """A gated definition without a matching parser key would never be

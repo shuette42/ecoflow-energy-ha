@@ -12,8 +12,8 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from . import _safe_float
 from ..proto_encoding import encode_field_bytes, encode_field_varint, encode_varint
+from . import _safe_float
 
 
 def _to_signed64(val: int) -> int:
@@ -75,9 +75,7 @@ def parse_smartplug_http_quota(quota_data: dict) -> dict[str, Any]:
     # --- Switch state ---
     if f"{_prefix}switchSta" in quota_data:
         val = quota_data[f"{_prefix}switchSta"]
-        if isinstance(val, bool):
-            result["switch_state"] = 1 if val else 0
-        elif isinstance(val, (int, float)):
+        if isinstance(val, (bool, int, float)):
             result["switch_state"] = 1 if val else 0
 
     # --- Diagnostics ---
@@ -259,11 +257,8 @@ def parse_smartplug_report(data: dict[str, Any]) -> dict[str, Any]:
 
     # Switch state: handle bool and int
     switch_val = params.get("switchSta")
-    if switch_val is not None:
-        if isinstance(switch_val, bool):
-            result["switch_state"] = 1 if switch_val else 0
-        elif isinstance(switch_val, (int, float)):
-            result["switch_state"] = 1 if switch_val else 0
+    if switch_val is not None and isinstance(switch_val, (bool, int, float)):
+        result["switch_state"] = 1 if switch_val else 0
 
     return result
 

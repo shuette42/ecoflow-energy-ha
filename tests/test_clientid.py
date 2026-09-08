@@ -1,7 +1,6 @@
 """Tests for EcoFlow ClientID generator."""
 
 import hashlib
-import re
 
 from ecoflow_energy.ecoflow.clientid import BT, generate_client_id
 
@@ -9,7 +8,6 @@ from ecoflow_energy.ecoflow.clientid import BT, generate_client_id
 def test_generate_client_id_format():
     """ClientID must match WEB_{uuid}_{userId}_{appKey}_{ts}_{hash}."""
     cid = generate_client_id("123456789")
-    parts = cid.split("_")
     # WEB, uuid (5 parts with hyphens joined = 1 part here split further)
     assert cid.startswith("WEB_")
     # Must contain the user_id

@@ -3,12 +3,10 @@
 import hashlib
 import hmac
 import time
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from ecoflow_energy.ecoflow.iot_api import IoTApiClient
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -16,7 +14,7 @@ from ecoflow_energy.ecoflow.iot_api import IoTApiClient
 
 def _make_client(access_key="test_ak", secret_key="test_sk", base_url=None):
     session = MagicMock()
-    kwargs = dict(session=session, access_key=access_key, secret_key=secret_key)
+    kwargs = {"session": session, "access_key": access_key, "secret_key": secret_key}
     if base_url:
         kwargs["base_url"] = base_url
     return IoTApiClient(**kwargs), session

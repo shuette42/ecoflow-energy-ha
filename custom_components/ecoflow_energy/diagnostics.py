@@ -10,7 +10,7 @@ import base64
 import logging
 import re
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -480,7 +480,11 @@ async def _skipped_devices_diagnostics(
 
         sn = item.get("sn")
         response: dict | None = None
-        if sn:
+        # `has_dev_creds` (checked above, with a `continue` on False) already
+        # guarantees session/access_key/secret_key are all set here - this
+        # just states that invariant where the values are used instead of
+        # leaving it two branches back.
+        if sn and session is not None and access_key and secret_key:
             try:
                 client = EcoFlowHTTPQuota(session, access_key, secret_key, sn)
                 response = await client.get_quota_all(diagnostic=True)
@@ -757,6 +761,6 @@ def _format_event_log(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
         entry = dict(event)
         ts = entry.get("ts")
         if isinstance(ts, (int, float)) and ts > 0:
-            entry["ts_iso"] = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+            entry["ts_iso"] = datetime.fromtimestamp(ts, tz=UTC).isoformat()
         formatted.append(entry)
     return formatted

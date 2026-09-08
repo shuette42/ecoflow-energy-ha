@@ -19,11 +19,6 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .ecoflow.delta3_commands import (
-    build_port_priority_command,
-    build_switch_command as build_delta3_switch_command,
-)
-from .ecoflow.parsers.delta3_proto import port_priority_keys
 from .const import (
     DELTA2MAX_SWITCHES,
     DELTA3_SWITCHES,
@@ -36,11 +31,7 @@ from .const import (
     DEVICE_TYPE_STREAM_AC5000,
     DEVICE_TYPE_WAVE3,
     DOMAIN,
-    EcoFlowSwitchDef,
-    filter_defs_for_serial,
     POWEROCEAN_SWITCHES,
-    supports_stream_ac5000_controls,
-    supports_stream_controls,
     SMARTPLUG_SWITCH_COMMANDS,
     SMARTPLUG_SWITCHES,
     STREAM_SWITCHES,
@@ -50,18 +41,29 @@ from .const import (
     SWITCH_DECLARATIVE_R331,
     SWITCH_DECLARATIVE_R351,
     WAVE3_SWITCHES,
+    EcoFlowSwitchDef,
+    filter_defs_for_serial,
+    supports_stream_ac5000_controls,
+    supports_stream_controls,
 )
 from .coordinator import DeviceValueNotReported, EcoFlowDeviceCoordinator
+from .ecoflow.delta3_commands import (
+    build_port_priority_command,
+)
+from .ecoflow.delta3_commands import (
+    build_switch_command as build_delta3_switch_command,
+)
+from .ecoflow.parsers.delta3_proto import port_priority_keys
 from .ecoflow.parsers.smartplug import build_plug_switch_payload
 from .ecoflow.wave3_commands import Wave3WriteRefused
 from .entity import (
     EcoFlowWriteGateMixin,
-    reading_reported,
     raise_set_failed,
     raise_set_gone,
     raise_set_not_ready,
     raise_set_rejected,
     raise_set_unsupported,
+    reading_reported,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -314,7 +316,10 @@ class EcoFlowSwitch(
                 self.coordinator.data[state_key] = turn_on
         self._apply_optimistic(turn_on)
 
-    async def _async_set_stream_ac5000(self, turn_on: bool) -> bool:
+    # Same NoReturn gap as number.py's _async_set_stream_value:
+    # raise_set_unsupported always raises, ruff's RET503 does not see it
+    # across the import from entity.py.
+    async def _async_set_stream_ac5000(self, turn_on: bool) -> bool:  # noqa: RET503
         """Send one of the two STREAM AC 5000 switches as a config write.
 
         Both halves go out through the coordinator so they queue behind any
@@ -408,10 +413,7 @@ class EcoFlowSwitch(
         decl = declarative_templates.get(self._definition.key)
         if decl is not None:
             invert = decl.get("invert", False)
-            if invert:
-                value = 0 if turn_on else 1
-            else:
-                value = 1 if turn_on else 0
+            value = (0 if turn_on else 1) if invert else (1 if turn_on else 0)
 
             params = {decl["param_key"]: value}
             if "extra_params" in decl:

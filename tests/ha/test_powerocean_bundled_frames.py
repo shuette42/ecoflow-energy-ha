@@ -1,12 +1,11 @@
 """Coordinator-level regression tests for bundled PowerOcean frames."""
 
-import base64
 from unittest.mock import patch
 
 import pytest
 
-from custom_components.ecoflow_energy.ecoflow.const import device_log_tag
 from custom_components.ecoflow_energy.coordinator.mqtt_ingest import MqttIngestMixin
+from custom_components.ecoflow_energy.ecoflow.const import device_log_tag
 from custom_components.ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
     JTS1BpHeartbeatReport,
     JTS1EmsChangeReport,

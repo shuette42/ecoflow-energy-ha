@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import aiohttp
 import voluptuous as vol
-
 from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.selector import SelectSelector, SelectSelectorConfig
+from homeassistant.helpers.selector import (
+    SelectOptionDict,
+    SelectSelector,
+    SelectSelectorConfig,
+)
 
 from .config_flow_setup import (
     SetupFlowMixin,
@@ -69,8 +72,16 @@ async def _async_fetch_app_devices(
     return SetupFlowMixin._normalize_app_devices(raw_devices)
 
 
-class OptionsFlowMixin:
+if TYPE_CHECKING:
+    from homeassistant.config_entries import OptionsFlow as _Base
+else:
+    _Base = object
+
+
+class OptionsFlowMixin(_Base):
     """Options flow steps, composed into EcoFlowOptionsFlow."""
+
+    _all_devices: list[dict[str, Any]]
 
     @staticmethod
     def _stored_device_type(stored: dict[str, dict[str, Any]], sn: str) -> str:
@@ -251,7 +262,7 @@ class OptionsFlowMixin:
             ): SelectSelector(
                 SelectSelectorConfig(
                     options=[
-                        {"value": sn, "label": label}
+                        SelectOptionDict(value=sn, label=label)
                         for sn, label in device_options.items()
                     ],
                     multiple=True,
@@ -385,8 +396,7 @@ class OptionsFlowMixin:
                     password=password,
                     user_id=user_id,
                 )
-            else:
-                errors["base"] = "enhanced_login_failed"
+            errors["base"] = "enhanced_login_failed"
 
         return self.async_show_form(
             step_id="enhanced",

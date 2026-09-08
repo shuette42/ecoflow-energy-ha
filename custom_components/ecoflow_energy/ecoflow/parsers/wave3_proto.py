@@ -72,8 +72,9 @@ of the three yet - reading them back is Phase B work.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from math import isfinite
-from typing import Any, Mapping
+from typing import Any
 
 from ..firmware import decode_version
 from ..proto.decoder import _read_varint, decode_header_message

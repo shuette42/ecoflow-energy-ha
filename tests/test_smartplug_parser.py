@@ -1,7 +1,6 @@
 """Tests for the Smart Plug HTTP Quota, MQTT report, and Protobuf parsers."""
 
 import pytest
-
 from ecoflow_energy.ecoflow.parsers.smartplug import (
     build_plug_brightness_payload,
     build_plug_max_watts_payload,
@@ -531,7 +530,9 @@ class TestSmartPlugSetCommands:
         # isRwCmd would be field 19, wire type 0: tag = (19 << 3) | 0 = 0x98 0x01
         # isQueue would be field 20, wire type 0: tag = (20 << 3) | 0 = 0xA0 0x01
         # Check these tags don't appear in the header (inner of outer field 1)
-        from ecoflow_energy.ecoflow.parsers.smartplug import _decode_varint_fields, _extract_pdata
+        from ecoflow_energy.ecoflow.parsers.smartplug import (
+            _decode_varint_fields,
+        )
         from google.protobuf.internal.decoder import _DecodeVarint
 
         # Parse the outer Send_Header_Msg to get the Header bytes

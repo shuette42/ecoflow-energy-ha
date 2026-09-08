@@ -6,11 +6,11 @@ import itertools
 import struct
 import time
 from datetime import timedelta
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
-
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.const import (
@@ -20,18 +20,13 @@ from custom_components.ecoflow_energy.const import (
     CONF_EMAIL,
     CONF_MODE,
     CONF_PASSWORD,
-    CONF_RAW_CAPTURE,
-    CONF_RAW_CAPTURE_UNTIL,
     CONF_USER_ID,
     CREDENTIAL_MAX_AGE_S,
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
-    DEVICE_TYPE_SMARTPLUG,
-    DEVICE_TYPE_STREAM,
     DEVICE_TYPE_UNKNOWN,
     DOMAIN,
-    ENERGY_STREAM_KEEPALIVE_S,
     HARD_UNAVAILABLE_S,
     HTTP_FALLBACK_INTERVAL_S,
     MODE_ENHANCED,
@@ -49,7 +44,6 @@ from custom_components.ecoflow_energy.const import (
     STREAM_POWER_TO_ENERGY,
 )
 from custom_components.ecoflow_energy.coordinator import (
-    DeviceSnapshot,
     EcoFlowDeviceCoordinator,
 )
 from custom_components.ecoflow_energy.ecoflow.parsers.powerocean_proto import (
@@ -64,14 +58,12 @@ from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
 )
 
 from .conftest import (
-    MOCK_DELTA_DEVICE,
     MOCK_DELTA3_DEVICE,
-    MOCK_MQTT_CREDENTIALS,
+    MOCK_DELTA_DEVICE,
     MOCK_POWEROCEAN_DEVICE,
     MOCK_SMARTPLUG_DEVICE,
     MOCK_STREAM_DEVICE,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers for battery state derivation tests (#63)
@@ -3507,14 +3499,8 @@ class TestApplyData:
 class TestProtoKeyRemapping:
     async def test_remap_energy_stream_keys(
         self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Protobuf keys are remapped to sensor keys."""
-        enhanced_config_entry.add_to_hass(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
-        )
         raw = {
             "solar": 3200,
             "home_direct": 1500,
@@ -3532,14 +3518,8 @@ class TestProtoKeyRemapping:
 
     async def test_remap_derives_grid_import_export(
         self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Grid import/export splits are computed from grid_w."""
-        enhanced_config_entry.add_to_hass(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
-        )
         # Positive grid_w = import
         result = remap_proto_keys({"grid_raw_f2": 500})
         assert result["grid_import_power_w"] == 500
@@ -3552,14 +3532,8 @@ class TestProtoKeyRemapping:
 
     async def test_remap_derives_batt_charge_discharge(
         self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Battery charge/discharge splits are computed from batt_w."""
-        enhanced_config_entry.add_to_hass(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
-        )
         # Positive batt_w = charging
         result = remap_proto_keys({"batt_pb": 1200})
         assert result["batt_charge_power_w"] == 1200
@@ -3572,28 +3546,16 @@ class TestProtoKeyRemapping:
 
     async def test_remap_preserves_unknown_keys(
         self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Keys not in the mapping are passed through unchanged."""
-        enhanced_config_entry.add_to_hass(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
-        )
         result = remap_proto_keys({"solar": 100, "some_new_field": 42})
         assert result["solar_w"] == 100
         assert result["some_new_field"] == 42
 
     async def test_remap_zero_values(
         self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Zero power values produce zero derived splits."""
-        enhanced_config_entry.add_to_hass(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
-        )
         result = remap_proto_keys({"grid_raw_f2": 0.0, "batt_pb": 0.0})
         assert result["grid_w"] == 0.0
         assert result["grid_import_power_w"] == 0.0
@@ -3611,14 +3573,8 @@ class TestProtoKeyRemapping:
 class TestHeartbeatExtraction:
     async def test_mppt_per_string(
         self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """MPPT per-string data extracted from nested mppt_heart_beat."""
-        enhanced_config_entry.add_to_hass(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
-        )
         raw = {
             "mppt_heart_beat": [
                 {
@@ -3642,14 +3598,8 @@ class TestHeartbeatExtraction:
 
     async def test_grid_phase_from_load_info(
         self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Grid phase data extracted from pcs_load_info nested array."""
-        enhanced_config_entry.add_to_hass(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
-        )
         raw = {
             "pcs_load_info": [
                 {"vol": 230.5, "amp": 10.2, "pwr": 2300.0},
@@ -3667,14 +3617,8 @@ class TestHeartbeatExtraction:
 
     async def test_grid_phase_from_pcs_phase(
         self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Grid phase data from pcs_a/b/c_phase fallback."""
-        enhanced_config_entry.add_to_hass(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
-        )
         raw = {
             "pcs_a_phase": {"vol": 230.0, "amp": 10.0, "act_pwr": -2200.0},
             "pcs_b_phase": {"vol": 231.0, "amp": 11.0, "act_pwr": -2500.0},
@@ -3688,36 +3632,24 @@ class TestHeartbeatExtraction:
 
     async def test_grid_status_derived_from_phase_voltage(
         self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Grid status derived as 'ok' when phase A voltage > 50V."""
-        enhanced_config_entry.add_to_hass(hass)
         raw = {"pcs_a_phase": {"vol": 230.0, "amp": 10.0, "act_pwr": -2000.0}}
         result = flatten_heartbeat(raw)
         assert result["grid_status"] == "ok"
 
     async def test_grid_status_not_detected_low_voltage(
         self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Grid status 'not_detected' when phase A voltage <= 50V."""
-        enhanced_config_entry.add_to_hass(hass)
         raw = {"pcs_a_phase": {"vol": 0.0, "amp": 0.0, "act_pwr": 0.0}}
         result = flatten_heartbeat(raw)
         assert result["grid_status"] == "not_detected"
 
     async def test_empty_heartbeat(
         self,
-        hass: HomeAssistant,
-        enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Empty heartbeat produces empty result."""
-        enhanced_config_entry.add_to_hass(hass)
-        coordinator = EcoFlowDeviceCoordinator(
-            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
-        )
         result = flatten_heartbeat({})
         assert result == {}
 
@@ -4758,12 +4690,12 @@ class TestParseMessageProtobuf:
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """_parse_message decodes a protobuf energy_stream frame for PowerOcean."""
+        from custom_components.ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
+            JTS1EnergyStreamReport,
+        )
         from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
             encode_field_bytes,
             encode_field_varint,
-        )
-        from custom_components.ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
-            JTS1EnergyStreamReport,
         )
 
         enhanced_config_entry.add_to_hass(hass)
@@ -4824,12 +4756,12 @@ class TestParseMessageProtobuf:
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """E2E: bp_heartbeat proto frame with 2 packs survives underscore filter."""
+        from custom_components.ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
+            JTS1BpHeartbeatReport,
+        )
         from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
             encode_field_bytes,
             encode_field_varint,
-        )
-        from custom_components.ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
-            JTS1BpHeartbeatReport,
         )
 
         enhanced_config_entry.add_to_hass(hass)
@@ -5396,7 +5328,10 @@ class TestParseMessageGetReply:
     ) -> None:
         """PowerOcean proto get_reply extracts EmsChangeReport (cmd_func=96, cmd_id=8)."""
         from ecoflow_energy.ecoflow.proto.ecocharge_pb2 import JTS1EmsChangeReport
-        from ecoflow_energy.ecoflow.proto_encoding import encode_field_bytes, encode_field_varint
+        from ecoflow_energy.ecoflow.proto_encoding import (
+            encode_field_bytes,
+            encode_field_varint,
+        )
 
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
@@ -5428,7 +5363,10 @@ class TestParseMessageGetReply:
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Proto get_reply without cmd_func=96/cmd_id=8 header returns None."""
-        from ecoflow_energy.ecoflow.proto_encoding import encode_field_bytes, encode_field_varint
+        from ecoflow_energy.ecoflow.proto_encoding import (
+            encode_field_bytes,
+            encode_field_varint,
+        )
 
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
@@ -6282,7 +6220,6 @@ class TestAppAuthMode:
         )
         # Use a fixed monotonic value far in the past via mock to guarantee
         # age > CREDENTIAL_MAX_AGE_S regardless of CI system clock.
-        now = time.monotonic()
         coordinator._credential_obtained_ts = 1.0  # fixed positive value
 
         # Replace the coroutine method with a sync no-op to avoid async scheduling issues

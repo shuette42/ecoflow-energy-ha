@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import Any
 
 from homeassistant.core import HomeAssistant
-
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.binary_sensor import (
@@ -46,11 +45,13 @@ from custom_components.ecoflow_energy.ecoflow.const import (
     get_device_name,
     get_device_type,
 )
+from custom_components.ecoflow_energy.entity import reading_reported
 from custom_components.ecoflow_energy.number import async_setup_entry as number_setup
 from custom_components.ecoflow_energy.select import async_setup_entry as select_setup
-from custom_components.ecoflow_energy.entity import reading_reported
 from custom_components.ecoflow_energy.sensor import (
     _get_sensor_defs,
+)
+from custom_components.ecoflow_energy.sensor import (
     async_setup_entry as sensor_setup,
 )
 from custom_components.ecoflow_energy.switch import async_setup_entry as switch_setup

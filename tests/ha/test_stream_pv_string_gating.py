@@ -17,7 +17,6 @@ from typing import Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
-
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.const import (
@@ -123,7 +122,7 @@ class TestDefinitions:
     def test_the_higher_strings_are_gated(self) -> None:
         gated = {sensor.key for sensor in STREAM_SENSORS if sensor.accessory}
 
-        assert HIGHER_STRING_KEYS <= gated
+        assert gated >= HIGHER_STRING_KEYS
 
     def test_the_lower_strings_are_not(self) -> None:
         """Both modes fill strings 1 and 2, so gating them would delay them
@@ -170,7 +169,7 @@ class TestGating:
         _, created = await _setup(hass, TWO_STRING_REPORT)
         keys = _keys(created)
 
-        assert LOWER_STRING_KEYS <= keys
+        assert keys >= LOWER_STRING_KEYS
         assert "soc_pct" in keys
 
     async def test_a_four_string_report_creates_all_of_them(

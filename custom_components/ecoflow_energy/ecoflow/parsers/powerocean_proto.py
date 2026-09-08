@@ -9,14 +9,12 @@ No Home Assistant dependencies - stdlib only.
 
 from __future__ import annotations
 
-from base64 import b64decode
-
 import logging
+from base64 import b64decode
 from typing import Any
 
 from ..const import device_log_tag
 from .powerocean import (
-    ENERGY_TOTAL_PLACEHOLDER_WH,
     _CHG_DSG_STATE_MAP,
     _FEED_MODE_MAP,
     _GRID_STATUS_MAP,
@@ -25,6 +23,7 @@ from .powerocean import (
     _WORK_MODE_INT_MAP,
     _WORK_MODE_MAP,
     _WORK_STATE_MAP,
+    ENERGY_TOTAL_PLACEHOLDER_WH,
     drop_invalid_percentages,
 )
 
@@ -117,10 +116,10 @@ def _apply_enum_mappings(result: dict[str, Any]) -> None:
             else:
                 result[sensor_key] = "connected" if iv == 1 else "disconnected"
 
-    for sensor_key, mapping in _PROTO_ENUM_STR.items():
+    for sensor_key, str_mapping in _PROTO_ENUM_STR.items():
         if sensor_key in result:
             raw_val = str(result[sensor_key])
-            result[sensor_key] = mapping.get(raw_val, raw_val)
+            result[sensor_key] = str_mapping.get(raw_val, raw_val)
 
     # grid_is_energized (bool, field 752) overrides sys_grid_sta when present.
     # The EcoFlow app uses gridIsEnergized for the main grid display.

@@ -420,11 +420,11 @@ def _extract_energy_stream(quota_data: dict, result: dict) -> None:
         "emsWordMode": ("ems_work_mode", _WORK_MODE_MAP),
         "pcsRunSta": ("pcs_run_state", _PCS_RUN_STATE_MAP),
     }
-    for http_key, (sensor_key, mapping) in _ems_enum_str.items():
+    for http_key, (sensor_key, str_mapping) in _ems_enum_str.items():
         full_key = ems_prefix + http_key
         if full_key in quota_data:
             raw = quota_data[full_key]
-            result[sensor_key] = mapping.get(str(raw), str(raw))
+            result[sensor_key] = str_mapping.get(str(raw), str(raw))
 
     # Energy totals from energy_stream if available
     _energy_keys = {

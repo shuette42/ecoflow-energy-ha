@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import aiohttp
 import voluptuous as vol
-
 from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.selector import SelectSelector, SelectSelectorConfig
+from homeassistant.helpers.selector import (
+    SelectOptionDict,
+    SelectSelector,
+    SelectSelectorConfig,
+)
 
 from .const import (
     AUTH_METHOD_APP,
@@ -95,7 +98,13 @@ def _device_label(device: dict[str, Any]) -> str:
     return f"{name} ({sn_short}){status}" if name else f"{sn_short}{status}"
 
 
-class SetupFlowMixin:
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigFlow as _Base
+else:
+    _Base = object
+
+
+class SetupFlowMixin(_Base):
     """Initial setup steps, composed into EcoFlowEnergyConfigFlow."""
 
     # ------------------------------------------------------------------
@@ -305,7 +314,7 @@ class SetupFlowMixin:
                     ): SelectSelector(
                         SelectSelectorConfig(
                             options=[
-                                {"value": sn, "label": label}
+                                SelectOptionDict(value=sn, label=label)
                                 for sn, label in device_options.items()
                             ],
                             multiple=True,

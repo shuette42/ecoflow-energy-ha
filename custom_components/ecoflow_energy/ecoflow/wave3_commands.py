@@ -45,7 +45,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, NamedTuple
 
-from .delta3_commands import parse_config_write_ack  # noqa: F401 - re-exported for the coordinator
+from .delta3_commands import (
+    parse_config_write_ack,  # noqa: F401 - re-exported for the coordinator
+)
 from .energy_stream import build_delta3_config_write_payload
 from .parsers.wave3_proto import (
     _DISPLAY_TEMPERATURE_SOURCE_NAMES,

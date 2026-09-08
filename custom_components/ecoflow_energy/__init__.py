@@ -24,23 +24,23 @@ from .const import (
     CONF_RAW_CAPTURE_UNTIL,
     DATA_DEVICE_PROBES,
     DATA_SKIPPED_DEVICES,
-    DEVICE_TYPE_POWERSTREAM,
     DEVICE_TYPE_DISPLAY_NAMES,
-    ENHANCED_ONLY_DEVICE_TYPES,
+    DEVICE_TYPE_POWERSTREAM,
     DEVICE_TYPE_UNKNOWN,
     DOMAIN,
+    ENHANCED_ONLY_DEVICE_TYPES,
     MODE_ENHANCED,
     PLATFORMS,
     get_device_type,
     raw_capture_window_open,
 )
-from .ecoflow.const import device_log_tag
 from .coordinator import EcoFlowDeviceCoordinator
 from .device_probe import (
     UnroutedDeviceProbe,
     async_start_probe_watchdog,
     async_start_probes,
 )
+from .ecoflow.const import device_log_tag
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -314,7 +314,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
         and await _async_raw_capture_active(hass, entry)
     )
 
-    skipped_devices: list[dict[str, str]] = []
+    skipped_devices: list[dict[str, str | bool]] = []
     for device_info in devices:
         sn = device_info["sn"]
         # Both device producers may pass product_name through as null, so
@@ -465,8 +465,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
     # Off by default. The capture helps exactly one person - whoever
     # volunteered - and costs an extra connection plus a larger diagnostics
     # download, so it is opt-in and expires on its own.
-    probe_devices = [
-        device for device in skipped_devices if device.get("probe_eligible", True)
+    # A skipped device carries one non-string value, `probe_eligible`, and
+    # `async_start_probes` reads only `sn` and `product_name`. Name those two
+    # rather than filtering on the type of the value: a key added later with
+    # a non-string value would be dropped by a type filter without anything
+    # saying so, and a probe that never starts is the quietest way for that
+    # to show up.
+    probe_devices: list[dict[str, str]] = [
+        {
+            key: value
+            for key in ("sn", "product_name")
+            if isinstance(value := device.get(key, ""), str)
+        }
+        for device in skipped_devices
+        if device.get("probe_eligible", True)
     ]
     if capture_on and probe_devices:
         probes = await async_start_probes(

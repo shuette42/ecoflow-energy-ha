@@ -17,7 +17,6 @@ from __future__ import annotations
 from typing import Any
 
 from homeassistant.core import HomeAssistant
-
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.binary_sensor import (
@@ -41,7 +40,6 @@ from custom_components.ecoflow_energy.const import (
 )
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
 from custom_components.ecoflow_energy.sensor import async_setup_entry as sensor_setup
-
 from tests.test_powerocean_timer_task import (
     LIST_ARMED_1000W,
     LIST_ARMED_1500W,

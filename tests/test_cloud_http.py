@@ -9,19 +9,19 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
 import pytest
-
-REPO_ROOT = Path(__file__).resolve().parent.parent
-
 from ecoflow_energy.ecoflow.cloud_http import (
     _HTTP_FAILURE_SUMMARY_INTERVAL_S,
     EcoFlowHTTPQuota,
 )
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
 
 class TestHTTPClientInit:
     def test_default_base_url(self):
-        from ecoflow_energy.ecoflow.const import IOT_API_BASE
         from unittest.mock import MagicMock
+
+        from ecoflow_energy.ecoflow.const import IOT_API_BASE
 
         client = EcoFlowHTTPQuota(
             session=MagicMock(),
@@ -186,7 +186,6 @@ class TestSignature:
             device_sn="unused",
         )
         fixed_nonce = 345164
-        fixed_ts = "1671171709428"
 
         with patch("ecoflow_energy.ecoflow.cloud_http.time") as mock_time, \
              patch("ecoflow_energy.ecoflow.cloud_http.random") as mock_random:

@@ -13,7 +13,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from ecoflow_energy.const import POWERSTREAM_POWER_TO_ENERGY, POWERSTREAM_SENSORS
 from ecoflow_energy.ecoflow.parsers.powerstream_http import parse_powerstream_quota
 

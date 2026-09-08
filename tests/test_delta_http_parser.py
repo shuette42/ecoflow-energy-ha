@@ -1,12 +1,10 @@
 """Tests for Delta 2 Max HTTP quota API response parser."""
 
 import pytest
-
 from ecoflow_energy.ecoflow.parsers.delta_http import (
     DELTA2MAX_HTTP_FIELD_MAP,
     parse_delta_http_quota,
 )
-
 
 # ===========================================================================
 # Basic Mapping

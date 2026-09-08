@@ -17,6 +17,8 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
+    DELTA2MAX_SENSORS,
+    DELTA3_SENSORS,
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
@@ -28,10 +30,6 @@ from .const import (
     DEVICE_TYPE_STREAM_AC5000,
     DEVICE_TYPE_WAVE3,
     DOMAIN,
-    DELTA2MAX_SENSORS,
-    DELTA3_SENSORS,
-    EcoFlowSensorDef,
-    filter_defs_for_serial,
     POWEROCEAN_SENSORS,
     POWERSTREAM_SENSORS,
     SMARTMETER_SENSORS,
@@ -40,6 +38,8 @@ from .const import (
     STREAM_SENSORS,
     STREAMAC5000_SENSORS,
     WAVE3_SENSORS,
+    EcoFlowSensorDef,
+    filter_defs_for_serial,
 )
 from .coordinator import EcoFlowDeviceCoordinator
 from .entity import EcoFlowWriteGateMixin, reading_reported
@@ -215,8 +215,17 @@ class EcoFlowSensor(
             # or "WORKMODE_SELFUSE" are invalid and would block entity setup.
             if self._definition.options and str(last.native_value) not in self._definition.options:
                 return
-            self._restored_value = last.native_value
-            self._last_written_value = last.native_value
+            # Home Assistant's stored type also allows a date, datetime or
+            # Decimal, and no sensor this integration owns produces one, so
+            # nothing reachable is dropped here. The guard covers both
+            # assignments below rather than only the first, and the value is
+            # bound to a local because a property access is not narrowed by
+            # the check itself.
+            restored = last.native_value
+            if not isinstance(restored, (str, int, float)):
+                return
+            self._restored_value = restored
+            self._last_written_value = restored
             # Seed the energy integrator so a lost or corrupt state file
             # does not reset totals to zero. A restored value above the
             # stored total is taken at once (ADR-010 addendum A1); a stale

@@ -21,7 +21,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from ecoflow_energy.ecoflow.parsers.stream_proto import _iter_fields, _pdata_candidates
 from ecoflow_energy.ecoflow.parsers.wave3_proto import (
     _ERRCODE_LIST_FIELD,

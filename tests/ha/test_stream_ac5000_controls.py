@@ -19,7 +19,6 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.const import (
@@ -27,9 +26,10 @@ from custom_components.ecoflow_energy.const import (
     STREAMAC5000_SELECTS,
     STREAMAC5000_SWITCHES,
 )
-from custom_components.ecoflow_energy.ecoflow.stream_ac5000_commands import TASK_REMOVE
-from custom_components.ecoflow_energy.switch import EcoFlowSwitch
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
+from custom_components.ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (
+    parse_stream_ac5000_message,
+)
 from custom_components.ecoflow_energy.ecoflow.proto.decoder import (
     decode_header_message,
 )
@@ -38,12 +38,10 @@ from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
     encode_field_varint,
     encode_varint,
 )
+from custom_components.ecoflow_energy.ecoflow.stream_ac5000_commands import TASK_REMOVE
 from custom_components.ecoflow_energy.number import EcoFlowNumber
 from custom_components.ecoflow_energy.select import EcoFlowSelect
-
-from custom_components.ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (
-    parse_stream_ac5000_message,
-)
+from custom_components.ecoflow_energy.switch import EcoFlowSwitch
 
 from .test_stream_ac5000_entities import ES22_DEVICE
 

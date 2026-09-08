@@ -7,7 +7,7 @@ import json
 import logging
 import time
 from functools import partial
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..const import (
     AUTH_METHOD_APP,
@@ -39,7 +39,13 @@ class DeviceValueNotReported(Exception):
     """
 
 
-class SetCommandsMixin:
+if TYPE_CHECKING:
+    from ._typing import CoordinatorState as _Base
+else:
+    _Base = object
+
+
+class SetCommandsMixin(_Base):
     """Mixin providing SET command dispatch and SoC debounce."""
 
     # ------------------------------------------------------------------
@@ -203,7 +209,7 @@ class SetCommandsMixin:
         """Forget exactly the flush task that completed."""
         self._powerocean_soc_flush_tasks.discard(task)
 
-    def _powerocean_soc_write_done(self, task: asyncio.Future[object]) -> None:
+    def _powerocean_soc_write_done(self, task: asyncio.Future[bool]) -> None:
         """Forget exactly the coordinator-owned direct write that completed."""
         self._powerocean_soc_write_tasks.discard(task)
         # ConfigEntry reports task failures too, but retrieving the result here

@@ -250,7 +250,7 @@ class TestVariantGating:
     def test_max_plus_keeps_them(self) -> None:
         keys = {d.key for d in filter_defs_for_serial(DELTA3_SWITCHES, "D3M1TEST00000001")}
 
-        assert self.PORT_PRIORITY_SWITCHES <= keys
+        assert keys >= self.PORT_PRIORITY_SWITCHES
 
     @pytest.mark.parametrize(
         "serial",
