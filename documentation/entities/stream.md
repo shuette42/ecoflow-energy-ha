@@ -151,21 +151,33 @@ The LED control reproduces the hardware-confirmed app ConfigWrite field `384` wi
 
 The Stream Micro is a grid-tie solar inverter: two solar strings, one single-phase grid connection, no battery and no AC outlets. It speaks the same protocol as the rest of the Stream family and shares this parser, but not the whole entity set.
 
-**Totals:** 21 sensors, no binary sensors, no numbers.
+**Totals:** 21 sensor definitions, no binary sensors, no numbers. 17 are listed in the table below; the other 4 are the PV 3/4 power and energy sensors, which stay in the shared Stream definition list but never populate on a two-string unit - see the note after the table.
 
 **Enhanced Mode only.** The Stream Micro is not exposed through the EcoFlow Developer API, so it needs the EcoFlow account sign-in.
 
-### What it reports
+## Sensors - Stream Micro (`BK01`)
 
-| Group | Entities |
-|:---|:---|
-| Solar | PV 1 Power, PV 2 Power (enabled) · PV Voltage, PV Current, PV 2 Voltage, PV 2 Current (disabled diagnostics) |
-| Grid | AC Voltage, AC Current, AC Frequency, AC Grid Connection Power (enabled) · Grid Connection Power (disabled diagnostic) |
-| Configuration | Grid Connection State, Feed-in Power Limit (enabled diagnostics) |
-| Device | WiFi Signal, LED Brightness (disabled diagnostics) |
-| Energy Dashboard | PV 1 Energy, PV 2 Energy (disabled by default, enable them for **Solar production**) |
+| Entity | Unit | Category | Default | Description |
+|:---|:---:|:---:|:---:|:---|
+| PV 1 Power | W | - | enabled | Solar string 1 |
+| PV 2 Power | W | - | enabled | Solar string 2 |
+| PV Voltage | V | diagnostic | disabled | Input voltage of string 1 |
+| PV Current | A | diagnostic | disabled | Input current of string 1 |
+| PV 2 Voltage | V | diagnostic | disabled | Input voltage of string 2 |
+| PV 2 Current | A | diagnostic | disabled | Input current of string 2 |
+| AC Voltage | V | - | enabled | AC line voltage |
+| AC Current | A | - | enabled | AC line current |
+| AC Frequency | Hz | - | enabled | AC line frequency |
+| AC Grid Connection Power | W | - | enabled | Signed grid connection ("Netz-Anschluss": negative = input, positive = output/feed-in) |
+| Grid Connection Power | W | diagnostic | disabled | Raw grid connection reading |
+| Grid Connection State | - | diagnostic | enabled | `feed_grid`, `grid_in`, `not_online` or `invalid` |
+| Feed-in Power Limit | W | diagnostic | enabled | The feed-in cap configured in the EcoFlow app (read-only here) |
+| WiFi Signal | dBm | diagnostic | disabled | Signal strength of the device's WiFi module (negative, closer to zero is better) |
+| LED Brightness | % | diagnostic | disabled | Current LED brightness |
+| PV 1 Energy | kWh | diagnostic | disabled | Per-string solar production, disabled by default (enable it for **Solar production**) |
+| PV 2 Energy | kWh | diagnostic | disabled | Per-string solar production, disabled by default (enable it for **Solar production**) |
 
-PV 3 and PV 4 are not created here. They are *accessory* entities across the whole Stream family, so a two-string unit never gains them.
+PV 3 and PV 4 are not created here, on either the power or the energy side. They are *accessory* entities across the whole Stream family, so a two-string unit never gains them.
 
 ### What it deliberately does not get
 

@@ -32,21 +32,21 @@ The fields were observed in live iOS MQTT captures on `/app/{userId}/{sn}/thing/
 
 House, grid, and solar flow values are meter-dependent and disabled by default unless an EcoFlow-compatible meter is paired in the app.
 
-| Entity | Confirmed / observed field |
-|:---|:---|
-| Solar Power | `254/21` field `517` |
-| Home Power | `254/21` field `516` |
-| Grid Power | `254/21` field `515` |
-| Home From Battery | `254/21` field `1003` |
-| Home From Grid | `254/21` field `1004` |
-| AC Outlet 1 Power | `254/21` field `1210` |
-| AC Outlet 2 Power | `254/21` field `1211` |
-| LED Brightness | `254/21` field `994`, set reply field `384` |
-| AC Outlet 1 State | `254/21` field `980` |
-| AC Outlet 2 State | `254/21` field `982` |
-| Backup Reserve | `254/21` field `461`, set reply field `102` |
-| Max Charge SoC | `254/21` field `270` |
-| Min Discharge SoC | `254/21` field `271` |
+| Entity | Type | Confirmed / observed field |
+|:---|:---|:---|
+| Solar Power | sensor | `254/21` field `517` |
+| Home Power | sensor | `254/21` field `516` |
+| Grid Power | sensor | `254/21` field `515` |
+| Home From Battery | sensor | `254/21` field `1003` |
+| Home From Grid | sensor | `254/21` field `1004` |
+| AC Outlet 1 Power | sensor | `254/21` field `1210` |
+| AC Outlet 2 Power | sensor | `254/21` field `1211` |
+| LED Brightness | sensor | `254/21` field `994`, set reply field `384` |
+| AC Outlet 1 | binary sensor | `254/21` field `980` |
+| AC Outlet 2 | binary sensor | `254/21` field `982` |
+| Backup Reserve | sensor | `254/21` field `461`, set reply field `102` |
+| Max Charge SoC | number | `254/21` field `270` |
+| Min Discharge SoC | number | `254/21` field `271` |
 
 ## Capture Notes
 

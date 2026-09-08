@@ -23,7 +23,8 @@
 
 ## Highlights
 
-- **Over 200 sensors per device** - power, energy, battery packs, temperature, diagnostics
+- **In the HACS default store** - installable from HACS directly, no custom repository to add
+- **Up to 235 sensors on one device** - power, energy, battery packs, temperature, diagnostics
 - **Energy Dashboard ready** - local Riemann-sum kWh with gap detection
 - **Real-time out of the box** - Enhanced Mode: ~2-4 s updates for all devices
 - **Full PowerOcean control** - Backup Reserve, Solar Surplus Threshold, Work Mode (Self-use / AI Schedule)
@@ -177,6 +178,8 @@ Or: **HACS** > **Integrations** > **Explore & Download** > search **EcoFlow Ener
 Download the [latest release](https://github.com/shuette42/ecoflow-energy-ha/releases), copy `custom_components/ecoflow_energy/` to your HA `config/custom_components/`, restart.
 
 </details>
+
+Already running a different EcoFlow integration? It can stay installed while you try this one. [Moving from another EcoFlow integration](documentation/migration-from-another-integration.md) describes what carries over, what has to be re-pointed by hand, and an order of steps that keeps the old entities running until the new ones are confirmed.
 
 ### 2. Configure
 
@@ -414,23 +417,22 @@ automation:
 
 ---
 
-## How It Compares
+## How It Works
 
 <details>
-<summary><b>EcoFlow Energy vs other integrations</b></summary>
+<summary><b>The design decisions behind the integration</b></summary>
 
-| | EcoFlow Energy | Others |
-|:---|:---|:---|
-| Data source | MQTT push + HTTP fallback | HTTP only or basic MQTT |
-| Portal login | Not required | Required |
-| Reconnect | 4-tier, never gives up | Simple retry |
-| Fallback | Auto HTTP when MQTT stale | None |
-| Stream health | 3-state monitoring | Not tracked |
-| Energy tracking | Local Riemann-sum | API totals |
-| Device types | Heterogeneous in one integration | Single type |
-| PowerOcean control | Backup Reserve, Solar Surplus, Work Mode (verified app-replay) | Read-only or untested |
-| Control | Optimistic lock, zero-flicker | Read-only or basic |
-| Offline handling | Expected, no error spam | Error |
+| | |
+|:---|:---|
+| Data source | MQTT push, with HTTP polling as the fallback in Standard Mode |
+| Sign-in | Standard Mode uses the Developer Portal access and secret key; Enhanced Mode signs in with the EcoFlow account |
+| Reconnect | Four-tier backoff that keeps retrying instead of giving up |
+| Fallback | Switches to HTTP polling when the MQTT stream goes stale (Standard Mode) |
+| Stream health | Three states, live, stale and offline, published as a diagnostic sensor |
+| Energy tracking | Local Riemann sum with gap detection, adopting the device's own lifetime counters where it reports them |
+| Devices | Every supported model in one integration, on one config entry per account |
+| Controls | Each write is the frame the EcoFlow app sends for the same setting, and the entity shows what the device reports back |
+| Offline devices | An expected state that does not fill the log with errors |
 
 </details>
 

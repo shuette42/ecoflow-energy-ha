@@ -22,3 +22,7 @@ Complete list of all sensors, switches, numbers, and binary sensors per device:
 - [WAVE 3](entities/wave-3.md) - 18 sensors, 5 binary sensors, 4 switches, 5 numbers, 5 selects, 1 climate (`AC71`) - a portable air conditioner, Enhanced Mode only
 
 Counts are the device-specific entity definitions. Every device additionally exposes 2 universal diagnostic sensors (connection status and active mode) that are not included above.
+
+## Guides
+
+- [Moving from another EcoFlow integration](migration-from-another-integration.md) - what carries over, what has to be re-pointed by hand, and an order of steps that keeps the old entities running until the new ones are confirmed
