@@ -207,7 +207,7 @@ class TestStreamBackupReserveSet:
         coordinator.async_set_updated_data(dict(coordinator._device_data))
         defn = next(d for d in STREAM_NUMBERS if d.key == "backup_reserve")
         entity = EcoFlowNumber(coordinator, defn)
-        entity.async_write_ha_state = MagicMock()
+        entity.async_write_ha_state = MagicMock()  # type: ignore[misc]
         return entity, coordinator
 
     async def test_set_builds_cmd_id_17_payload(
@@ -286,7 +286,7 @@ class TestStreamLedBrightnessSet:
             item for item in STREAM_NUMBERS if item.key == "led_brightness"
         )
         entity = EcoFlowNumber(coordinator, definition)
-        entity.async_write_ha_state = MagicMock()
+        entity.async_write_ha_state = MagicMock()  # type: ignore[misc]
         return entity, coordinator
 
     async def test_set_builds_captured_field_384_frame(
@@ -396,7 +396,7 @@ class TestStreamSocLimitSet:
         coordinator.async_set_updated_data(dict(values))
         definition = next(item for item in STREAM_NUMBERS if item.key == key)
         entity = EcoFlowNumber(coordinator, definition)
-        entity.async_write_ha_state = MagicMock()
+        entity.async_write_ha_state = MagicMock()  # type: ignore[misc]
         coordinator.async_send_proto_set_command = AsyncMock(return_value=True)
         return entity, coordinator
 
@@ -514,7 +514,7 @@ class TestStreamSocLimitSet:
             item for item in STREAM_NUMBERS if item.key == "stream_discharge_limit"
         )
         discharge_entity = EcoFlowNumber(coordinator, discharge_definition)
-        discharge_entity.async_write_ha_state = MagicMock()
+        discharge_entity.async_write_ha_state = MagicMock()  # type: ignore[misc]
 
         first_started = asyncio.Event()
         release_first = asyncio.Event()
@@ -582,7 +582,7 @@ class TestBackupReserveFloorFollowsTheDischargeLimit:
             item for item in (definitions or STREAM_NUMBERS) if item.key == key
         )
         entity = EcoFlowNumber(coordinator, definition)
-        entity.async_write_ha_state = MagicMock()
+        entity.async_write_ha_state = MagicMock()  # type: ignore[misc]
         return entity, coordinator
 
     async def test_a_reported_limit_lifts_the_floor(
@@ -758,7 +758,7 @@ class TestBackupReserveFloorFollowsTheDischargeLimit:
                 item for item in STREAM_NUMBERS if item.key == "stream_discharge_limit"
             ),
         )
-        limit.async_write_ha_state = MagicMock()
+        limit.async_write_ha_state = MagicMock()  # type: ignore[misc]
         assert entity.native_min_value == 23
 
         await limit.async_set_native_value(40.0)

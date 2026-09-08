@@ -117,7 +117,7 @@ def _coordinator(
 def _select(coordinator: EcoFlowDeviceCoordinator, key: str) -> EcoFlowSelect:
     defn = next(d for d in DELTA3_SELECTS if d.key == key)
     entity = EcoFlowSelect(coordinator, defn)
-    entity.async_write_ha_state = MagicMock()
+    entity.async_write_ha_state = MagicMock()  # type: ignore[misc]
     entity.entity_id = f"select.{key}"
     return entity
 

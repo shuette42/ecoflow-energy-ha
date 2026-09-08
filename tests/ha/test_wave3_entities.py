@@ -57,6 +57,7 @@ from custom_components.ecoflow_energy.const import (
     WAVE3_SWITCHES,
 )
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
+from custom_components.ecoflow_energy.coordinator.state_apply import _registry_device
 from custom_components.ecoflow_energy.diagnostics import (
     async_get_config_entry_diagnostics,
 )
@@ -173,7 +174,7 @@ def _coordinator(
 def _switch(coordinator: EcoFlowDeviceCoordinator, key: str) -> EcoFlowSwitch:
     defn = next(d for d in WAVE3_SWITCHES if d.key == key)
     entity = EcoFlowSwitch(coordinator, defn)
-    entity.async_write_ha_state = MagicMock()
+    entity.async_write_ha_state = MagicMock()  # type: ignore[misc]
     entity.entity_id = f"switch.{key}"
     return entity
 
@@ -181,7 +182,7 @@ def _switch(coordinator: EcoFlowDeviceCoordinator, key: str) -> EcoFlowSwitch:
 def _number(coordinator: EcoFlowDeviceCoordinator, key: str) -> EcoFlowNumber:
     defn = next(d for d in WAVE3_NUMBERS if d.key == key)
     entity = EcoFlowNumber(coordinator, defn)
-    entity.async_write_ha_state = MagicMock()
+    entity.async_write_ha_state = MagicMock()  # type: ignore[misc]
     entity.entity_id = f"number.{key}"
     return entity
 
@@ -189,7 +190,7 @@ def _number(coordinator: EcoFlowDeviceCoordinator, key: str) -> EcoFlowNumber:
 def _select(coordinator: EcoFlowDeviceCoordinator, key: str) -> EcoFlowSelect:
     defn = next(d for d in WAVE3_SELECTS if d.key == key)
     entity = EcoFlowSelect(coordinator, defn)
-    entity.async_write_ha_state = MagicMock()
+    entity.async_write_ha_state = MagicMock()  # type: ignore[misc]
     entity.entity_id = f"select.{key}"
     return entity
 
@@ -471,7 +472,7 @@ class TestTheCaptureReachesTheEntities:
         with patch(_CLOCK, return_value=1000.0):
             coordinator._apply_data(parsed)
 
-        device = registry.async_get_device(identifiers={(DOMAIN, WAVE3_DEVICE["sn"])})
+        device = _registry_device(registry, WAVE3_DEVICE["sn"], entry.entry_id)
         assert device is not None
         assert device.sw_version == "v1.1.0.104"
         assert "firmware_version" not in coordinator.data
@@ -523,10 +524,7 @@ class TestTheCaptureReachesTheEntities:
             coordinator._apply_data(dict(parsed))
 
         registry = dr.async_get(hass)
-        assert (
-            registry.async_get_device(identifiers={(DOMAIN, WAVE3_DEVICE["sn"])})
-            is None
-        )
+        assert _registry_device(registry, WAVE3_DEVICE["sn"], entry.entry_id) is None
 
         # Platform setup registers the device afterwards, as it does in
         # real use.
@@ -539,7 +537,7 @@ class TestTheCaptureReachesTheEntities:
         with patch(_CLOCK, return_value=1300.0):
             coordinator._apply_data(dict(parsed))
 
-        device = registry.async_get_device(identifiers={(DOMAIN, WAVE3_DEVICE["sn"])})
+        device = _registry_device(registry, WAVE3_DEVICE["sn"], entry.entry_id)
         assert device is not None
         assert device.sw_version == "v1.1.0.104"
 
@@ -666,6 +664,13 @@ class TestTheEntitiesReachTheWire:
         assert _sent_pdata(mqtt) == "c80901"
 
 
+def _cancel_stale_check(coordinator: EcoFlowDeviceCoordinator) -> None:
+    """Cancel the watch `_check_stale` arms for itself before it fires."""
+    if coordinator._stale_check_unsub is not None:
+        coordinator._stale_check_unsub.cancel()
+        coordinator._stale_check_unsub = None
+
+
 class TestStandbyCadence:
     """In standby the WAVE 3 pushes its full status every 120 s and nothing
     in between. Under the 35 s default the coordinator re-sent its initial
@@ -717,13 +722,14 @@ class TestStandbyCadence:
         coordinator._mqtt_client = mqtt
         coordinator._last_mqtt_ts = 1000.0
         coordinator._log_event = MagicMock()
-        # The check reschedules itself on the real clock; keep it out of the
-        # test's teardown, where the mocked client would meet a real age.
-        coordinator._schedule_stale_check = MagicMock()
         mqtt.reconnect_attempts = 0
 
+        # `_check_stale` re-arms itself at the end of its own body rather than
+        # through `_schedule_stale_check`, so each call leaves a handle behind
+        # and the next call overwrites the reference to it. Cancel per call.
         with patch(self._AVAIL_CLOCK, return_value=1100.0):
             coordinator._check_stale()
+        _cancel_stale_check(coordinator)
         assert not any(
             call.args and call.args[0] == "stale_reactivate"
             for call in coordinator._log_event.call_args_list
@@ -736,6 +742,7 @@ class TestStandbyCadence:
         # Positive control: past the threshold the cheap remedy still runs.
         with patch(self._AVAIL_CLOCK, return_value=1000.0 + 300.0):
             coordinator._check_stale()
+        _cancel_stale_check(coordinator)
         assert any(
             call.args and call.args[0] == "stale_reactivate"
             for call in coordinator._log_event.call_args_list
@@ -793,7 +800,7 @@ class TestRegistryLookup:
 def _climate(coordinator: EcoFlowDeviceCoordinator) -> EcoFlowWave3Climate:
     """Build one WAVE 3 climate entity directly, same shape as `_switch`."""
     entity = EcoFlowWave3Climate(coordinator)
-    entity.async_write_ha_state = MagicMock()
+    entity.async_write_ha_state = MagicMock()  # type: ignore[misc]
     entity.entity_id = "climate.wave_3"
     return entity
 

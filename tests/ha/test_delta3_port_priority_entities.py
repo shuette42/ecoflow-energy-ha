@@ -131,7 +131,7 @@ def _coordinator(
 def _switch(coordinator: EcoFlowDeviceCoordinator, key: str) -> EcoFlowSwitch:
     defn = next(d for d in DELTA3_SWITCHES if d.key == key)
     entity = EcoFlowSwitch(coordinator, defn)
-    entity.async_write_ha_state = MagicMock()
+    entity.async_write_ha_state = MagicMock()  # type: ignore[misc]
     entity.entity_id = f"switch.{key}"
     return entity
 
@@ -139,7 +139,7 @@ def _switch(coordinator: EcoFlowDeviceCoordinator, key: str) -> EcoFlowSwitch:
 def _number(coordinator: EcoFlowDeviceCoordinator, key: str) -> EcoFlowNumber:
     defn = next(d for d in DELTA3_NUMBERS if d.key == key)
     entity = EcoFlowNumber(coordinator, defn)
-    entity.async_write_ha_state = MagicMock()
+    entity.async_write_ha_state = MagicMock()  # type: ignore[misc]
     entity.entity_id = f"number.{key}"
     return entity
 

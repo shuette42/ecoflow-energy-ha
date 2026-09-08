@@ -112,7 +112,7 @@ def _coordinator(
 def _select(coordinator: EcoFlowDeviceCoordinator) -> EcoFlowSelect:
     defn = next(d for d in DELTA3_SELECTS if d.key == DELTA3_SCREEN_TIMEOUT_KEY)
     entity = EcoFlowSelect(coordinator, defn)
-    entity.async_write_ha_state = MagicMock()
+    entity.async_write_ha_state = MagicMock()  # type: ignore[misc]
     entity.entity_id = f"select.{DELTA3_SCREEN_TIMEOUT_KEY}"
     return entity
 

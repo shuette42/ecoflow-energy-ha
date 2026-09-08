@@ -1,5 +1,9 @@
 [tool.ruff]
-target-version = "py313"
+# The oldest runtime the integration ships to, NOT the CI interpreter. This
+# tells the formatter which syntax it may emit, and 3.14 lets it write PEP 758
+# unparenthesized except clauses, which do not parse on any older Python. HACS
+# declares a minimum of Home Assistant 2025.1.0, which runs on 3.12 and 3.13.
+target-version = "py312"
 line-length = 88
 extend-exclude = ["custom_components/ecoflow_energy/ecoflow/proto/ecocharge_pb2.py"]
 
@@ -8,7 +12,7 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "RET", "C4"]
 ignore = []
 
 [tool.mypy]
-python_version = "3.13"
+python_version = "3.14"
 # A function without annotations is not checked leniently, it is not checked at
 # all: the checker walks past it and says nothing. With this on, writing one is
 # itself the finding. The integration reached it with six functions to fix, so
