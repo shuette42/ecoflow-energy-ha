@@ -14,7 +14,7 @@ Nothing here asks you to remove anything first. Both integrations are ordinary c
 | Detailed history | No | Same reason, and it is short-lived on every entity anyway: the recorder purges it after ten days by default. |
 | Automations and scripts | No, they need editing | They reference entity ids, so each one has to point at the new id. |
 | Dashboards | No, they need editing | Same reason. Cards reference entity ids. |
-| Helpers, template sensors, utility meters | No, they need editing | Same reason. A utility meter also restarts its own counting when you re-point it. |
+| Helpers, template sensors, utility meters | No, they need editing | Same reason. A utility meter needs its source changed, and it is worth reading what it shows afterwards before you rely on the number. |
 | Energy dashboard slots | No, they need re-selecting | Each slot points at one entity id and has to be pointed at the new one. |
 | The device itself and its cloud account | Yes | Nothing on the device or in your EcoFlow account is changed by any of this. |
 
