@@ -50,8 +50,15 @@ disable_error_code = ["empty-body"]
 [[tool.mypy.overrides]]
 module = ["tests.*", "conftest"]
 disable_error_code = ["method-assign"]
-# The suite still has about a thousand test methods with no return annotation.
-# Requiring them is its own piece of work and its own decision; until then the
-# rule holds for the integration, where it costs nothing, and not here, where
-# it would mean a thousand edits nobody has asked for.
+# The suite still has about a thousand test methods with no return annotation,
+# and requiring them buys almost nothing: what a signature on a test method
+# would say is `-> None`, and nobody reads it.
+#
+# What does matter is the line below. Without it the checker skips the *body*
+# of every unannotated function, so a third of this suite was never looked at
+# and "no issues found" meant "none in the two thirds I read". Measured
+# 2026-09-08: turning it on surfaced ten findings in that invisible third, all
+# of shapes already fixed elsewhere. Coverage comes from here, not from the
+# annotations.
 disallow_untyped_defs = false
+check_untyped_defs = true

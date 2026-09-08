@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 from ecoflow_energy.ecoflow.parsers.powerocean import (
@@ -1034,19 +1035,19 @@ class TestMultiBatteryPack:
 
     def test_aggregate_bp_skips_phantom(self):
         """_extract_battery_pack picks first real pack, not phantom."""
-        data = {
+        data: dict[str, Any] = {
             "bp_addr.PHANTOM": {},
             "bp_addr.REAL": {"bpSoh": 98, "bpCycles": 42},
         }
-        result = {}
+        result: dict[str, Any] = {}
         _extract_battery_pack(data, result)
         assert result["bp_soh_pct"] == 98.0
         assert result["bp_cycles"] == 42.0
 
     def test_aggregate_bp_phantom_only(self):
         """Only phantom packs - no aggregate sensors produced."""
-        data = {"bp_addr.PHANTOM": {}}
-        result = {}
+        data: dict[str, Any] = {"bp_addr.PHANTOM": {}}
+        result: dict[str, Any] = {}
         _extract_battery_pack(data, result)
         assert "bp_soh_pct" not in result
 

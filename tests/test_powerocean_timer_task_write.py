@@ -207,7 +207,8 @@ def test_power_change_refuses_to_invent_an_echoed_field(dropped):
         "time_table": CAPTURE_TIME_TABLE,
         "armed": True,
     }
-    kwargs[dropped] = None
+    # Dropping one argument is the subject: the builder must refuse it.
+    kwargs[dropped] = None  # type: ignore[assignment]
     with pytest.raises(TypeError, match=dropped):
         build("power", **kwargs)
 

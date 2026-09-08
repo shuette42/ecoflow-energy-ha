@@ -234,6 +234,7 @@ class TestProtobufImportFailure:
         # Remove the attribute from the parent package so Python cannot
         # short-circuit the import via the package namespace.
         proto_pkg = sys.modules.get(proto_pkg_key)
+        assert proto_pkg is not None
         had_attr = hasattr(proto_pkg, "ecocharge_pb2")
         if had_attr:
             saved_attr = proto_pkg.ecocharge_pb2
@@ -266,7 +267,9 @@ class TestProtobufImportFailure:
             if saved_module is not None:
                 sys.modules[pb2_key] = saved_module
             if had_attr:
-                proto_pkg.ecocharge_pb2 = saved_attr
+                # Put back what the test removed above; the module has no
+                # such attribute declared, which is why it is set by name.
+                proto_pkg.ecocharge_pb2 = saved_attr  # type: ignore[attr-defined]
 
 
 class TestDecoderMalformedInput:
