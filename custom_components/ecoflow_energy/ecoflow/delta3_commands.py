@@ -44,8 +44,8 @@ _DIR_SRC = 1
 class Delta3Switch(NamedTuple):
     """One boolean control, with both wire representations."""
 
-    params_key: str      # JSON params key on the HTTP endpoint
-    config_field: int    # ConfigWrite field number on the app channel
+    params_key: str  # JSON params key on the HTTP endpoint
+    config_field: int  # ConfigWrite field number on the app channel
 
 
 class Delta3Select(NamedTuple):
@@ -412,8 +412,8 @@ def build_proto_command(
 class Delta3ConfigAck(NamedTuple):
     """Decoded ConfigWriteAck: which field was written and whether it took."""
 
-    action_id: int | None    # echoes the written ConfigWrite field number
-    config_ok: int | None    # 1 = applied
+    action_id: int | None  # echoes the written ConfigWrite field number
+    config_ok: int | None  # 1 = applied
 
     @property
     def applied(self) -> bool:

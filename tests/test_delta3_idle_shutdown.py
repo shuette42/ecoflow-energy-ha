@@ -268,7 +268,9 @@ class TestCommand:
             for key, entry in DELTA3_SELECT_FIELDS.items()
             if entry.config_field in taken
         }
-        assert not clashing, f"select fields already used by another control: {clashing}"
+        assert not clashing, (
+            f"select fields already used by another control: {clashing}"
+        )
 
     def test_no_params_key_is_silently_overwritten(self) -> None:
         """The reverse lookup is built by dict splat.

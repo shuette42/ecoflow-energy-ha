@@ -151,9 +151,7 @@ class TestPowerGlowHeatingRod:
         and produce the same entity.
         """
         for spelling in ("curTemp", "currentTemp", "temp"):
-            result = parse_powerocean_http_quota(
-                {f"ems_heating_rod.{spelling}": 58}
-            )
+            result = parse_powerocean_http_quota({f"ems_heating_rod.{spelling}": 58})
             assert result["heating_rod_water_temp_c"] == 58.0, spelling
 
     def test_heating_rod_targets_are_read(self):
@@ -179,9 +177,7 @@ class TestPowerGlowHeatingRod:
         divisor unchanged and would therefore keep passing if the scaling were
         silently altered. This one pins the contract at a value that cannot.
         """
-        result = parse_powerocean_http_quota(
-            {"ems_heating_rod.heatingPower": 1750}
-        )
+        result = parse_powerocean_http_quota({"ems_heating_rod.heatingPower": 1750})
 
         assert result["heating_rod_power_w"] == 1750.0
 
@@ -401,8 +397,7 @@ class TestMPPTStrings:
         )
 
         five_strings = [
-            {"pwr": 100.0 * n, "vol": 30.0 + n, "amp": float(n)}
-            for n in range(1, 6)
+            {"pwr": 100.0 * n, "vol": 30.0 + n, "amp": float(n)} for n in range(1, 6)
         ]
         http_result = parse_powerocean_http_quota(
             {"mpptHeartBeat": [{"mpptPv": five_strings}]}
@@ -818,31 +813,57 @@ class TestMultiBatteryPack:
 
     # Shape of a real two-pack reading; the serials are invented.
     PACK1_DATA = {
-        "bpPwr": 2486.4836, "bpSoc": 76, "bpSoh": 100,
-        "bpCycles": 464, "bpVol": 54.671, "bpAmp": 45.48085,
-        "bpRemainWatth": 3891.2, "bpMaxCellTemp": 23.0,
-        "bpMinCellTemp": 21.0, "bpEnvTemp": 33.0,
-        "bpCalendarSoh": 100.0, "bpCycleSoh": 100.0,
-        "bpMaxMosTemp": 41.0, "bpHvMosTemp": 41.0,
-        "bpLvMosTemp": 38.0, "bpBusVol": 809.11285,
-        "bpPtcTemp": 22.0, "bpCellMaxVol": 3422.0,
-        "bpCellMinVol": 3414.0, "bpDesignCap": 100000,
-        "bpFullCap": 100000, "bpErrCode": 0,
-        "bpAccuChgEnergy": 2238706, "bpAccuDsgEnergy": 2147108,
+        "bpPwr": 2486.4836,
+        "bpSoc": 76,
+        "bpSoh": 100,
+        "bpCycles": 464,
+        "bpVol": 54.671,
+        "bpAmp": 45.48085,
+        "bpRemainWatth": 3891.2,
+        "bpMaxCellTemp": 23.0,
+        "bpMinCellTemp": 21.0,
+        "bpEnvTemp": 33.0,
+        "bpCalendarSoh": 100.0,
+        "bpCycleSoh": 100.0,
+        "bpMaxMosTemp": 41.0,
+        "bpHvMosTemp": 41.0,
+        "bpLvMosTemp": 38.0,
+        "bpBusVol": 809.11285,
+        "bpPtcTemp": 22.0,
+        "bpCellMaxVol": 3422.0,
+        "bpCellMinVol": 3414.0,
+        "bpDesignCap": 100000,
+        "bpFullCap": 100000,
+        "bpErrCode": 0,
+        "bpAccuChgEnergy": 2238706,
+        "bpAccuDsgEnergy": 2147108,
     }
 
     PACK2_DATA = {
-        "bpPwr": 2529.1938, "bpSoc": 76, "bpSoh": 100,
-        "bpCycles": 464, "bpVol": 54.698, "bpAmp": 46.23924,
-        "bpRemainWatth": 3891.2, "bpMaxCellTemp": 24.0,
-        "bpMinCellTemp": 21.0, "bpEnvTemp": 34.0,
-        "bpCalendarSoh": 100.0, "bpCycleSoh": 100.0,
-        "bpMaxMosTemp": 42.0, "bpHvMosTemp": 42.0,
-        "bpLvMosTemp": 39.0, "bpBusVol": 809.7283,
-        "bpPtcTemp": 22.0, "bpCellMaxVol": 3420.0,
-        "bpCellMinVol": 3412.0, "bpDesignCap": 100000,
-        "bpFullCap": 100000, "bpErrCode": 0,
-        "bpAccuChgEnergy": 2207455, "bpAccuDsgEnergy": 2122737,
+        "bpPwr": 2529.1938,
+        "bpSoc": 76,
+        "bpSoh": 100,
+        "bpCycles": 464,
+        "bpVol": 54.698,
+        "bpAmp": 46.23924,
+        "bpRemainWatth": 3891.2,
+        "bpMaxCellTemp": 24.0,
+        "bpMinCellTemp": 21.0,
+        "bpEnvTemp": 34.0,
+        "bpCalendarSoh": 100.0,
+        "bpCycleSoh": 100.0,
+        "bpMaxMosTemp": 42.0,
+        "bpHvMosTemp": 42.0,
+        "bpLvMosTemp": 39.0,
+        "bpBusVol": 809.7283,
+        "bpPtcTemp": 22.0,
+        "bpCellMaxVol": 3420.0,
+        "bpCellMinVol": 3412.0,
+        "bpDesignCap": 100000,
+        "bpFullCap": 100000,
+        "bpErrCode": 0,
+        "bpAccuChgEnergy": 2207455,
+        "bpAccuDsgEnergy": 2122737,
     }
 
     def _two_pack_data(self):
@@ -1550,7 +1571,11 @@ class TestEmsParamChangeKeys:
     def test_out_of_range_surplus_becomes_none(self, value):
         """A placeholder becomes an explicit None, the key stays present."""
         result = remap_ems_param_change_keys(
-            {"ems_app_surplus_pct": value, "breaker_capacity_max": 35, "smart_ctrl": False}
+            {
+                "ems_app_surplus_pct": value,
+                "breaker_capacity_max": 35,
+                "smart_ctrl": False,
+            }
         )
         assert "ems_app_surplus_pct" in result
         assert result["ems_app_surplus_pct"] is None

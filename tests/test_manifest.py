@@ -70,5 +70,12 @@ class TestManifest:
 
     def test_required_keys_present(self):
         m = _load_manifest()
-        for key in ("domain", "name", "version", "config_flow", "iot_class", "requirements"):
+        for key in (
+            "domain",
+            "name",
+            "version",
+            "config_flow",
+            "iot_class",
+            "requirements",
+        ):
             assert key in m, f"Required key '{key}' missing from manifest.json"

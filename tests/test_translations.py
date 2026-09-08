@@ -599,8 +599,7 @@ class TestDevicePickerExplanation:
         """The text has to carry the marker, its cost and the way out."""
         lang = cls._lang(path)
         assert cls.MARKER in text, (
-            f"{path.name}: text does not mention the '{cls.MARKER}' marker "
-            f"it explains"
+            f"{path.name}: text does not mention the '{cls.MARKER}' marker it explains"
         )
         assert cls.CONSEQUENCE[lang] in text, (
             f"{path.name}: text names the marker without saying what an "
@@ -682,8 +681,7 @@ class TestDevicePickerExplanation:
         plain_help = steps["init"]["data_description"]["devices"]
 
         assert phrase in app_help, (
-            f"{path.name}: the account rendering no longer says what to "
-            f"switch on"
+            f"{path.name}: the account rendering no longer says what to switch on"
         )
         assert phrase not in plain_help, (
             f"{path.name}: the developer-keys rendering mentions the "
@@ -696,9 +694,7 @@ class TestDevicePickerExplanation:
         """The picker is reached from setup too, and was equally mode-blind."""
         steps = _get_config_steps(_load_translations(path))
         assert "devices_app" in steps
-        assert (
-            steps["devices"]["description"] != steps["devices_app"]["description"]
-        )
+        assert steps["devices"]["description"] != steps["devices_app"]["description"]
 
     @pytest.mark.parametrize("path", [STRINGS_PATH, EN_PATH, DE_PATH])
     def test_no_translation_uses_syntax_home_assistant_cannot_parse(
@@ -729,9 +725,7 @@ class TestDevicePickerExplanation:
 
         walk(_load_translations(path))
 
-        assert not failures, (
-            f"{path.name}: Home Assistant cannot parse {failures}"
-        )
+        assert not failures, f"{path.name}: Home Assistant cannot parse {failures}"
 
     def test_strings_and_en_are_the_same_text(self) -> None:
         """`strings.json` and `en.json` are one language, so they must agree.
@@ -746,9 +740,9 @@ class TestDevicePickerExplanation:
         strings = _load_translations(STRINGS_PATH)
         english = _load_translations(EN_PATH)
         for section in ("config", "options"):
-            assert strings.get(section, {}).get("step") == english.get(
-                section, {}
-            ).get("step"), (
+            assert strings.get(section, {}).get("step") == english.get(section, {}).get(
+                "step"
+            ), (
                 f"strings.json and en.json disagree in the '{section}' steps; "
                 f"the rendered text is en.json, so the difference ships"
             )
@@ -776,7 +770,9 @@ class TestDevicePickerExplanation:
             ),
         )
         for label, en_text, de_text in pairs:
-            assert en_text != de_text, f"{label}: de.json still carries the English text"
+            assert en_text != de_text, (
+                f"{label}: de.json still carries the English text"
+            )
 
     def test_marker_names_the_consequence(self) -> None:
         """The marker says what it costs, not only that something is off.

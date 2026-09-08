@@ -82,9 +82,7 @@ def _async_disable_raw_capture(hass: HomeAssistant, entry: ConfigEntry) -> None:
     hass.config_entries.async_update_entry(entry, data=new_data)
 
 
-def _async_schedule_raw_capture_expiry(
-    hass: HomeAssistant, entry: ConfigEntry
-) -> None:
+def _async_schedule_raw_capture_expiry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Switch the capture off when its window closes, without a restart.
 
     The check at setup only runs on startup and reload. Without this timer a
@@ -116,12 +114,15 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
     if config_entry.version < 3:
         _LOGGER.debug(
             "Migrating config entry %s from version %d to 3",
-            config_entry.entry_id, config_entry.version,
+            config_entry.entry_id,
+            config_entry.version,
         )
         new_data = {**config_entry.data}
         new_data.setdefault(CONF_AUTH_METHOD, AUTH_METHOD_DEVELOPER)
         hass.config_entries.async_update_entry(
-            config_entry, data=new_data, version=3,
+            config_entry,
+            data=new_data,
+            version=3,
         )
         _LOGGER.info(
             "Migration of config entry %s to version 3 successful",
@@ -167,33 +168,65 @@ _WITHDRAWN_ENTITY_SUFFIXES: tuple[str, ...] = (
 # history survive the corrected classification. A key on another platform is
 # a different entity: the current read-only sensor ``led_brightness`` survives,
 # while the historical writable number with the same key does not.
-_HW51_LEGACY_STREAM_SENSOR_KEYS: frozenset[str] = frozenset({
-    "ac_current_a", "ac_grid_connection_power_w", "ac_outlet_1_w",
-    "ac_outlet_2_w", "batt_charge_capacity_ah", "batt_charge_energy_kwh",
-    "batt_charge_discharge_state", "batt_charge_power_w",
-    "batt_design_cap_mah", "batt_discharge_capacity_ah",
-    "batt_discharge_energy_kwh", "batt_discharge_power_w",
-    "batt_full_cap_mah", "batt_max_cell_temp_c", "batt_max_cell_vol_mv",
-    "batt_max_mos_temp_c", "batt_min_cell_temp_c", "batt_min_cell_vol_mv",
-    "batt_remain_cap_mah", "bms_soh_pct", "backup_reserve_pct",
-    "feed_grid_power_limit_w", "grid_connection_power_w",
-    "grid_connection_state", "home_energy_kwh", "home_from_batt_w",
-    "home_from_grid_w", "home_from_solar_w", "home_w", "pv3_energy_kwh",
-    "pv3_w", "pv4_energy_kwh", "pv4_w", "pv_current_a", "pv_voltage_v",
-    "pv2_current_a", "soc_precise_pct", "sys_grid_connection_power_w",
-})
+_HW51_LEGACY_STREAM_SENSOR_KEYS: frozenset[str] = frozenset(
+    {
+        "ac_current_a",
+        "ac_grid_connection_power_w",
+        "ac_outlet_1_w",
+        "ac_outlet_2_w",
+        "batt_charge_capacity_ah",
+        "batt_charge_energy_kwh",
+        "batt_charge_discharge_state",
+        "batt_charge_power_w",
+        "batt_design_cap_mah",
+        "batt_discharge_capacity_ah",
+        "batt_discharge_energy_kwh",
+        "batt_discharge_power_w",
+        "batt_full_cap_mah",
+        "batt_max_cell_temp_c",
+        "batt_max_cell_vol_mv",
+        "batt_max_mos_temp_c",
+        "batt_min_cell_temp_c",
+        "batt_min_cell_vol_mv",
+        "batt_remain_cap_mah",
+        "bms_soh_pct",
+        "backup_reserve_pct",
+        "feed_grid_power_limit_w",
+        "grid_connection_power_w",
+        "grid_connection_state",
+        "home_energy_kwh",
+        "home_from_batt_w",
+        "home_from_grid_w",
+        "home_from_solar_w",
+        "home_w",
+        "pv3_energy_kwh",
+        "pv3_w",
+        "pv4_energy_kwh",
+        "pv4_w",
+        "pv_current_a",
+        "pv_voltage_v",
+        "pv2_current_a",
+        "soc_precise_pct",
+        "sys_grid_connection_power_w",
+    }
+)
 _HW51_LEGACY_STREAM_KEYS_BY_DOMAIN: dict[str, frozenset[str]] = {
     "sensor": _HW51_LEGACY_STREAM_SENSOR_KEYS,
-    "binary_sensor": frozenset({
-        "ac_outlet_1_enabled", "ac_outlet_2_enabled",
-    }),
+    "binary_sensor": frozenset(
+        {
+            "ac_outlet_1_enabled",
+            "ac_outlet_2_enabled",
+        }
+    ),
     "switch": frozenset({"ac_outlet_1_switch", "ac_outlet_2_switch"}),
-    "number": frozenset({
-        "backup_reserve",
-        "led_brightness",
-        "stream_charge_limit",
-        "stream_discharge_limit",
-    }),
+    "number": frozenset(
+        {
+            "backup_reserve",
+            "led_brightness",
+            "stream_charge_limit",
+            "stream_discharge_limit",
+        }
+    ),
 }
 _HW51_SERIAL_RE = re.compile(r"^HW51[A-Z0-9]{11,}$")
 
@@ -203,14 +236,16 @@ _HW51_SERIAL_RE = re.compile(r"^HW51[A-Z0-9]{11,}$")
 # so a control entity (number/select/switch) with the same unique-id key
 # survives untouched.
 _AC71_RETIRED_KEYS_BY_DOMAIN: dict[str, frozenset[str]] = {
-    "sensor": frozenset({
-        "operating_mode",
-        "target_temp_c",
-        "airflow_speed_pct",
-        "operating_submode",
-        "target_humidity_pct",
-        "screen_brightness_pct",
-    }),
+    "sensor": frozenset(
+        {
+            "operating_mode",
+            "target_temp_c",
+            "airflow_speed_pct",
+            "operating_submode",
+            "target_humidity_pct",
+            "screen_brightness_pct",
+        }
+    ),
     "binary_sensor": frozenset({"running"}),
 }
 _AC71_SERIAL_RE = re.compile(r"^AC71[A-Z0-9]{11,}$")
@@ -218,15 +253,15 @@ _AC71_SERIAL_RE = re.compile(r"^AC71[A-Z0-9]{11,}$")
 # One row per retired-entity generation: a serial-prefix pattern paired with
 # the platform/key pairs that generation's retirement removes. Table-driven
 # so the next retirement is one more row rather than a near-duplicate helper.
-_RETIRED_KEYS_BY_SERIAL: tuple[tuple[re.Pattern[str], dict[str, frozenset[str]]], ...] = (
+_RETIRED_KEYS_BY_SERIAL: tuple[
+    tuple[re.Pattern[str], dict[str, frozenset[str]]], ...
+] = (
     (_HW51_SERIAL_RE, _HW51_LEGACY_STREAM_KEYS_BY_DOMAIN),
     (_AC71_SERIAL_RE, _AC71_RETIRED_KEYS_BY_DOMAIN),
 )
 
 
-def _async_remove_withdrawn_entities(
-    hass: HomeAssistant, entry: ConfigEntry
-) -> None:
+def _async_remove_withdrawn_entities(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Drop registry entries for entities this integration no longer offers.
 
     Runs before the platforms are set up, so a withdrawn entity never briefly
@@ -240,9 +275,7 @@ def _async_remove_withdrawn_entities(
             continue
         if not existing.unique_id.endswith(_WITHDRAWN_ENTITY_SUFFIXES):
             continue
-        _LOGGER.debug(
-            "Removing withdrawn entity %s", existing.entity_id
-        )
+        _LOGGER.debug("Removing withdrawn entity %s", existing.entity_id)
         registry.async_remove(existing.entity_id)
 
 
@@ -302,17 +335,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
     standard_count = len(devices) - enhanced_count
     _LOGGER.debug(
         "EcoFlow Energy: %d device(s) configured (Enhanced: %d, Standard: %d)",
-        len(devices), enhanced_count, standard_count,
+        len(devices),
+        enhanced_count,
+        standard_count,
     )
 
     # Read before the loop, because the coordinators built inside it read the
     # same window to pick their frame-buffer depth. The check has a side
     # effect - an expired flag is switched off - and a coordinator created
     # before that happened would keep a deep buffer for a window that closed.
-    capture_on = (
-        entry.data.get(CONF_AUTH_METHOD) == AUTH_METHOD_APP
-        and await _async_raw_capture_active(hass, entry)
-    )
+    capture_on = entry.data.get(
+        CONF_AUTH_METHOD
+    ) == AUTH_METHOD_APP and await _async_raw_capture_active(hass, entry)
 
     skipped_devices: list[dict[str, str | bool]] = []
     for device_info in devices:
@@ -334,14 +368,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
                 "Skipping PowerStream %s: this device requires Standard Mode",
                 device_log_tag(sn),
             )
-            skipped_devices.append({
-                "sn_prefix": sn[:4],
-                "device_tag": device_log_tag(sn),
-                "sn": sn,
-                "product_name": product_name or "PowerStream",
-                "reason": "PowerStream requires Standard Mode",
-                "probe_eligible": False,
-            })
+            skipped_devices.append(
+                {
+                    "sn_prefix": sn[:4],
+                    "device_tag": device_log_tag(sn),
+                    "sn": sn,
+                    "product_name": product_name or "PowerStream",
+                    "reason": "PowerStream requires Standard Mode",
+                    "probe_eligible": False,
+                }
+            )
             continue
         if (
             entry.data.get(CONF_AUTH_METHOD) != AUTH_METHOD_APP
@@ -356,14 +392,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
                 label,
                 device_log_tag(sn),
             )
-            skipped_devices.append({
-                "sn_prefix": sn[:4],
-                "device_tag": device_log_tag(sn),
-                "sn": sn,
-                "product_name": product_name or label,
-                "reason": f"{label} requires Enhanced Mode",
-                "probe_eligible": False,
-            })
+            skipped_devices.append(
+                {
+                    "sn_prefix": sn[:4],
+                    "device_tag": device_log_tag(sn),
+                    "sn": sn,
+                    "product_name": product_name or label,
+                    "reason": f"{label} requires Enhanced Mode",
+                    "probe_eligible": False,
+                }
+            )
             continue
         if not device_type or device_type == DEVICE_TYPE_UNKNOWN:
             # One WARNING per unsupported device per setup: the user sees
@@ -401,17 +439,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
                 product_name or "unknown product",
                 how_to_help,
             )
-            skipped_devices.append({
-                "sn_prefix": sn[:4],
-                "device_tag": device_log_tag(sn),
-                # Full SN is carried in-memory only so diagnostics can fetch
-                # this device's raw quota to help add parser support. It is
-                # never persisted and never included in diagnostics output
-                # (only the prefix is exposed there).
-                "sn": sn,
-                "product_name": product_name,
-                "reason": "no parser available for this device type",
-            })
+            skipped_devices.append(
+                {
+                    "sn_prefix": sn[:4],
+                    "device_tag": device_log_tag(sn),
+                    # Full SN is carried in-memory only so diagnostics can fetch
+                    # this device's raw quota to help add parser support. It is
+                    # never persisted and never included in diagnostics output
+                    # (only the prefix is exposed there).
+                    "sn": sn,
+                    "product_name": product_name,
+                    "reason": "no parser available for this device type",
+                }
+            )
             continue
         device_info = {**device_info, "device_type": device_type}
         coordinator = EcoFlowDeviceCoordinator(hass, entry, device_info)

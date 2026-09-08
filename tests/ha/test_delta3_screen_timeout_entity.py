@@ -130,14 +130,10 @@ class TestReadBack:
     async def test_each_reported_value_shows_its_label(
         self, hass: HomeAssistant, seconds: int, option: str
     ) -> None:
-        coordinator, _ = _coordinator(
-            hass, {DELTA3_SCREEN_TIMEOUT_STATE_KEY: seconds}
-        )
+        coordinator, _ = _coordinator(hass, {DELTA3_SCREEN_TIMEOUT_STATE_KEY: seconds})
         assert _select(coordinator).current_option == option
 
-    async def test_zero_reads_never_rather_than_off(
-        self, hass: HomeAssistant
-    ) -> None:
+    async def test_zero_reads_never_rather_than_off(self, hass: HomeAssistant) -> None:
         """The whole feature turns on this one value being read correctly.
 
         Zero is the app's "Never": the screen stays lit. Showing it as an

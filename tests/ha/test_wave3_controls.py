@@ -45,10 +45,7 @@ CAPTURE = (
     Path(__file__).parent.parent / "fixtures" / "wave3" / "ac71_frames_plan046.json"
 )
 SET_REPLY_CAPTURE = (
-    Path(__file__).parent.parent
-    / "fixtures"
-    / "wave3"
-    / "ac71_set_reply_20260907.json"
+    Path(__file__).parent.parent / "fixtures" / "wave3" / "ac71_set_reply_20260907.json"
 )
 
 FULL_DISPLAY_INDEX = 0  # 254/21, masked, full field dump - operating_mode "fan"
@@ -164,9 +161,7 @@ class TestWave3SendSet:
         with patch(_CLOCK, return_value=1000.0):
             coordinator._apply_data(full)
 
-        mode_switch = coordinator._parse_message(
-            TOPIC, _mode_change_frame(486, 1)
-        )
+        mode_switch = coordinator._parse_message(TOPIC, _mode_change_frame(486, 1))
         assert mode_switch == {"operating_mode": "cooling"}
         with patch(_CLOCK, return_value=1002.0):
             coordinator._apply_data(mode_switch)
@@ -274,9 +269,7 @@ class TestWave3ConfigWriteAck:
             coordinator._on_mqtt_message(SET_REPLY_TOPIC, _set_reply_frame())
 
         assert coordinator.event_log[-1]["type"] == "set_reply"
-        assert not any(
-            e["type"] == "set_rejected" for e in coordinator.event_log
-        )
+        assert not any(e["type"] == "set_rejected" for e in coordinator.event_log)
         # Positive control: without it, dropping WAVE 3 out of the ack gate
         # entirely leaves this test green too (PLAN-047 review lens A,
         # LOW-2) - this asserts the gate actually looked at the ack, not
@@ -305,9 +298,7 @@ class TestWave3ConfigWriteAck:
         with caplog.at_level("DEBUG"):
             coordinator._on_mqtt_message(SET_REPLY_TOPIC, payload)
 
-        assert not any(
-            e["type"] == "set_rejected" for e in coordinator.event_log
-        )
+        assert not any(e["type"] == "set_rejected" for e in coordinator.event_log)
         assert not [r for r in caplog.records if r.levelno == logging.WARNING]
         debug_hits = [
             r

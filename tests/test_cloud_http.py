@@ -73,12 +73,16 @@ class TestSignature:
         headers = client._sign_headers({"sn": "SN123"})
         nonce = headers["nonce"]
         assert len(nonce) == 6, f"Nonce must be 6 digits, got {len(nonce)}"
-        assert re.match(r"^\d{6}$", nonce), f"Nonce must be 6-digit numeric, got '{nonce}'"
+        assert re.match(r"^\d{6}$", nonce), (
+            f"Nonce must be 6-digit numeric, got '{nonce}'"
+        )
 
     def test_sign_is_hex(self):
         client = self._make_client()
         headers = client._sign_headers({"foo": "bar"})
-        assert re.match(r"^[0-9a-f]{64}$", headers["sign"]), "Sign must be 64-char hex (SHA256)"
+        assert re.match(r"^[0-9a-f]{64}$", headers["sign"]), (
+            "Sign must be 64-char hex (SHA256)"
+        )
 
     def test_flatten_nested(self):
         client = self._make_client()
@@ -135,8 +139,10 @@ class TestSignature:
         fixed_nonce = 345164
         fixed_ts = "1700000000000"
 
-        with patch("ecoflow_energy.ecoflow.cloud_http.time") as mock_time, \
-             patch("ecoflow_energy.ecoflow.cloud_http.random") as mock_random:
+        with (
+            patch("ecoflow_energy.ecoflow.cloud_http.time") as mock_time,
+            patch("ecoflow_energy.ecoflow.cloud_http.random") as mock_random,
+        ):
             mock_time.time.return_value = 1700000000.0
             mock_random.randint.return_value = fixed_nonce
 
@@ -158,8 +164,10 @@ class TestSignature:
         fixed_nonce = 537642
         fixed_ts = "1700000000000"
 
-        with patch("ecoflow_energy.ecoflow.cloud_http.time") as mock_time, \
-             patch("ecoflow_energy.ecoflow.cloud_http.random") as mock_random:
+        with (
+            patch("ecoflow_energy.ecoflow.cloud_http.time") as mock_time,
+            patch("ecoflow_energy.ecoflow.cloud_http.random") as mock_random,
+        ):
             mock_time.time.return_value = 1700000000.0
             mock_random.randint.return_value = fixed_nonce
 
@@ -187,22 +195,29 @@ class TestSignature:
         )
         fixed_nonce = 345164
 
-        with patch("ecoflow_energy.ecoflow.cloud_http.time") as mock_time, \
-             patch("ecoflow_energy.ecoflow.cloud_http.random") as mock_random:
+        with (
+            patch("ecoflow_energy.ecoflow.cloud_http.time") as mock_time,
+            patch("ecoflow_energy.ecoflow.cloud_http.random") as mock_random,
+        ):
             mock_time.time.return_value = 1671171709.428
             mock_random.randint.return_value = fixed_nonce
 
             # JSON body from the official example
-            headers = client._sign_headers({
-                "sn": "123456789",
-                "params": {
-                    "cmdSet": 11,
-                    "id": 24,
-                    "eps": 0,
-                },
-            })
+            headers = client._sign_headers(
+                {
+                    "sn": "123456789",
+                    "params": {
+                        "cmdSet": 11,
+                        "id": 24,
+                        "eps": 0,
+                    },
+                }
+            )
 
-        assert headers["sign"] == "07c13b65e037faf3b153d51613638fa80003c4c38d2407379a7f52851af1473e"
+        assert (
+            headers["sign"]
+            == "07c13b65e037faf3b153d51613638fa80003c4c38d2407379a7f52851af1473e"
+        )
 
 
 class TestRateLimit:
@@ -235,7 +250,9 @@ class TestError8521Retry:
         """Error 8521 on first attempt, success on second → returns data."""
         mock_resp_fail = AsyncMock()
         mock_resp_fail.ok = True
-        mock_resp_fail.json = AsyncMock(return_value={"code": "8521", "message": "server error"})
+        mock_resp_fail.json = AsyncMock(
+            return_value={"code": "8521", "message": "server error"}
+        )
 
         mock_resp_ok = AsyncMock()
         mock_resp_ok.ok = True
@@ -266,7 +283,9 @@ class TestError8521Retry:
         """Error 8521 on all attempts → returns None."""
         mock_resp = AsyncMock()
         mock_resp.ok = True
-        mock_resp.json = AsyncMock(return_value={"code": "8521", "message": "server error"})
+        mock_resp.json = AsyncMock(
+            return_value={"code": "8521", "message": "server error"}
+        )
 
         mock_session = MagicMock()
         mock_session.get = MagicMock(
@@ -285,18 +304,14 @@ class TestError8521Retry:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_six_exhausted_8521_polls_have_only_terminal_summary(
-        self, caplog
-    ):
+    async def test_six_exhausted_8521_polls_have_only_terminal_summary(self, caplog):
         mock_resp = AsyncMock()
         mock_resp.ok = True
         mock_resp.json = AsyncMock(
             return_value={"code": "8521", "message": "server error"}
         )
         mock_session = MagicMock()
-        mock_session.get = MagicMock(
-            return_value=AsyncContextManager(mock_resp)
-        )
+        mock_session.get = MagicMock(return_value=AsyncContextManager(mock_resp))
         client = EcoFlowHTTPQuota(
             session=mock_session,
             access_key="ak",
@@ -315,9 +330,7 @@ class TestError8521Retry:
                 "ecoflow_energy.ecoflow.cloud_http.asyncio.sleep",
                 new_callable=AsyncMock,
             ),
-            caplog.at_level(
-                logging.DEBUG, logger="ecoflow_energy.ecoflow.cloud_http"
-            ),
+            caplog.at_level(logging.DEBUG, logger="ecoflow_energy.ecoflow.cloud_http"),
         ):
             for _ in range(6):
                 assert await client.get_quota_all() is None
@@ -334,22 +347,19 @@ class TestError8521Retry:
         assert not [r for r in records if "8521" in r.getMessage()]
         assert [
             r.getMessage() for r in records if "failure persists" in r.getMessage()
-        ] == [
-            "HTTP poll failure persists for SN12-eaa5: "
-            "kind=transport repeated=5"
-        ]
+        ] == ["HTTP poll failure persists for SN12-eaa5: kind=transport repeated=5"]
 
     @pytest.mark.asyncio
     async def test_non_8521_error_not_retried(self):
         """Other API errors (e.g. code=1) are NOT retried."""
         mock_resp = AsyncMock()
         mock_resp.ok = True
-        mock_resp.json = AsyncMock(return_value={"code": "1", "message": "invalid param"})
+        mock_resp.json = AsyncMock(
+            return_value={"code": "1", "message": "invalid param"}
+        )
 
         mock_session = MagicMock()
-        mock_session.get = MagicMock(
-            return_value=AsyncContextManager(mock_resp)
-        )
+        mock_session.get = MagicMock(return_value=AsyncContextManager(mock_resp))
 
         client = EcoFlowHTTPQuota(
             session=mock_session,
@@ -400,9 +410,7 @@ class TestOutageLogHygiene:
     def _success():
         response = AsyncMock()
         response.ok = True
-        response.json = AsyncMock(
-            return_value={"code": "0", "data": {"soc": 85}}
-        )
+        response.json = AsyncMock(return_value={"code": "0", "data": {"soc": 85}})
         return response
 
     @staticmethod
@@ -422,9 +430,7 @@ class TestOutageLogHygiene:
         session.get = MagicMock(side_effect=aiohttp.ClientError("offline"))
         client = self._client(session)
 
-        with caplog.at_level(
-            logging.DEBUG, logger="ecoflow_energy.ecoflow.cloud_http"
-        ):
+        with caplog.at_level(logging.DEBUG, logger="ecoflow_energy.ecoflow.cloud_http"):
             await client.get_quota_all()
             await client.get_quota_all()
 
@@ -432,15 +438,18 @@ class TestOutageLogHygiene:
             errors = [r for r in caplog.records if r.levelno == logging.ERROR]
             assert len(warnings) == 1
             assert errors == []
-            assert len([
-                record
-                for record in caplog.records
-                if record.name == "ecoflow_energy.ecoflow.cloud_http"
-            ]) == 1
-
-            session.get = MagicMock(
-                return_value=AsyncContextManager(self._success())
+            assert (
+                len(
+                    [
+                        record
+                        for record in caplog.records
+                        if record.name == "ecoflow_energy.ecoflow.cloud_http"
+                    ]
+                )
+                == 1
             )
+
+            session.get = MagicMock(return_value=AsyncContextManager(self._success()))
             await client.get_quota_all()
             recoveries = [
                 r
@@ -462,15 +471,11 @@ class TestOutageLogHygiene:
         )
         client = self._client(session)
 
-        with caplog.at_level(
-            logging.DEBUG, logger="ecoflow_energy.ecoflow.cloud_http"
-        ):
+        with caplog.at_level(logging.DEBUG, logger="ecoflow_energy.ecoflow.cloud_http"):
             await client.get_quota_all()
             await client.get_quota_all()
 
-        assert len(
-            [r for r in caplog.records if r.levelno == logging.WARNING]
-        ) == 1
+        assert len([r for r in caplog.records if r.levelno == logging.WARNING]) == 1
         assert client.last_error_code == "1"
 
     @pytest.mark.asyncio
@@ -481,9 +486,7 @@ class TestOutageLogHygiene:
         session.get = MagicMock(side_effect=aiohttp.ClientError("offline"))
         client = self._client(session)
 
-        with caplog.at_level(
-            logging.DEBUG, logger="ecoflow_energy.ecoflow.cloud_http"
-        ):
+        with caplog.at_level(logging.DEBUG, logger="ecoflow_energy.ecoflow.cloud_http"):
             await client.get_quota_all()
             session.get = MagicMock(
                 return_value=AsyncContextManager(self._generic_failure("41"))
@@ -495,7 +498,9 @@ class TestOutageLogHygiene:
             )
             await client.get_quota_all()
 
-        warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+        warnings = [
+            r.getMessage() for r in caplog.records if r.levelno == logging.WARNING
+        ]
         assert len(warnings) == 3
         assert "transport failure" in warnings[0]
         assert "code=41" in warnings[1]
@@ -516,9 +521,7 @@ class TestOutageLogHygiene:
                     start + _HTTP_FAILURE_SUMMARY_INTERVAL_S,
                 ],
             ),
-            caplog.at_level(
-                logging.DEBUG, logger="ecoflow_energy.ecoflow.cloud_http"
-            ),
+            caplog.at_level(logging.DEBUG, logger="ecoflow_energy.ecoflow.cloud_http"),
         ):
             client._note_failure("transport", "first failure", "poll")
             client._note_failure("transport", "same failure", "poll")
@@ -527,8 +530,7 @@ class TestOutageLogHygiene:
         messages = [record.getMessage() for record in caplog.records]
         assert messages == [
             "first failure",
-            "HTTP poll failure persists for HW51-860d: "
-            "kind=transport repeated=2",
+            "HTTP poll failure persists for HW51-860d: kind=transport repeated=2",
         ]
 
     @pytest.mark.asyncio
@@ -537,26 +539,18 @@ class TestOutageLogHygiene:
         session.get = MagicMock(side_effect=aiohttp.ClientError("offline"))
         client = self._client(session)
 
-        with caplog.at_level(
-            logging.DEBUG, logger="ecoflow_energy.ecoflow.cloud_http"
-        ):
+        with caplog.at_level(logging.DEBUG, logger="ecoflow_energy.ecoflow.cloud_http"):
             await client.get_quota_all(diagnostic=True)
 
-        assert not [
-            r for r in caplog.records if r.levelno >= logging.WARNING
-        ]
+        assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
 
     @pytest.mark.asyncio
-    async def test_explicit_set_transport_failure_is_debug_only(
-        self, caplog
-    ) -> None:
+    async def test_explicit_set_transport_failure_is_debug_only(self, caplog) -> None:
         session = MagicMock()
         session.put = MagicMock(side_effect=aiohttp.ClientError("offline"))
         client = self._client(session)
 
-        with caplog.at_level(
-            logging.DEBUG, logger="ecoflow_energy.ecoflow.cloud_http"
-        ):
+        with caplog.at_level(logging.DEBUG, logger="ecoflow_energy.ecoflow.cloud_http"):
             await client.set_quota({"params": {"enabled": 1}})
 
         assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
@@ -567,28 +561,21 @@ class TestOutageLogHygiene:
         )
 
     @pytest.mark.asyncio
-    async def test_successful_action_does_not_recover_poll_outage(
-        self, caplog
-    ) -> None:
+    async def test_successful_action_does_not_recover_poll_outage(self, caplog) -> None:
         session = MagicMock()
         session.get = MagicMock(side_effect=aiohttp.ClientError("offline"))
-        session.put = MagicMock(
-            return_value=AsyncContextManager(self._success())
-        )
+        session.put = MagicMock(return_value=AsyncContextManager(self._success()))
         client = self._client(session)
 
-        with caplog.at_level(
-            logging.DEBUG, logger="ecoflow_energy.ecoflow.cloud_http"
-        ):
+        with caplog.at_level(logging.DEBUG, logger="ecoflow_energy.ecoflow.cloud_http"):
             await client.get_quota_all()
             await client.set_quota({"params": {"enabled": 1}})
             await client.get_quota_all()
 
-        assert len(
-            [r for r in caplog.records if r.levelno == logging.WARNING]
-        ) == 1
+        assert len([r for r in caplog.records if r.levelno == logging.WARNING]) == 1
         assert not [
-            r for r in caplog.records
+            r
+            for r in caplog.records
             if r.levelno == logging.INFO and "recovered" in r.getMessage()
         ]
 
@@ -598,8 +585,7 @@ class TestOutageLogHygiene:
     ) -> None:
         full_sn = "HW51FULLSERIAL0001"
         full_url = (
-            "https://api-e.ecoflow.com/iot-open/sign/device/quota/all"
-            f"?sn={full_sn}"
+            f"https://api-e.ecoflow.com/iot-open/sign/device/quota/all?sn={full_sn}"
         )
         request_info = MagicMock()
         request_info.real_url = full_url
@@ -619,9 +605,7 @@ class TestOutageLogHygiene:
             min_interval=0,
         )
 
-        with caplog.at_level(
-            logging.DEBUG, logger="ecoflow_energy.ecoflow.cloud_http"
-        ):
+        with caplog.at_level(logging.DEBUG, logger="ecoflow_energy.ecoflow.cloud_http"):
             await client.get_quota_all()
 
         rendered = "\n".join(record.getMessage() for record in caplog.records)
@@ -637,10 +621,12 @@ class TestError1006Handling:
     def _make_1006_response(self):
         resp = AsyncMock()
         resp.ok = True
-        resp.json = AsyncMock(return_value={
-            "code": "1006",
-            "message": "current device is not allowed to get device info",
-        })
+        resp.json = AsyncMock(
+            return_value={
+                "code": "1006",
+                "message": "current device is not allowed to get device info",
+            }
+        )
         return resp
 
     def _make_success_response(self):
@@ -684,9 +670,7 @@ class TestError1006Handling:
         assert mock_session.get.call_count == 1
 
     @pytest.mark.asyncio
-    async def test_six_poll_1006_failures_are_bounded_by_summary_interval(
-        self, caplog
-    ):
+    async def test_six_poll_1006_failures_are_bounded_by_summary_interval(self, caplog):
         mock_session = MagicMock()
         mock_session.get = MagicMock(
             return_value=AsyncContextManager(self._make_1006_response())
@@ -699,9 +683,7 @@ class TestError1006Handling:
                 "ecoflow_energy.ecoflow.cloud_http.time.monotonic",
                 side_effect=[0.0, 50.0, 100.0, 150.0, 299.0, 300.0],
             ),
-            caplog.at_level(
-                logging.DEBUG, logger="ecoflow_energy.ecoflow.cloud_http"
-            ),
+            caplog.at_level(logging.DEBUG, logger="ecoflow_energy.ecoflow.cloud_http"),
         ):
             for _ in range(6):
                 await client.get_quota_all()
@@ -715,10 +697,7 @@ class TestError1006Handling:
         assert not [r for r in records if r.levelno >= logging.ERROR]
         assert [
             r.getMessage() for r in records if "failure persists" in r.getMessage()
-        ] == [
-            "HTTP poll failure persists for SN12-eaa5: "
-            "kind=api:1006 repeated=5"
-        ]
+        ] == ["HTTP poll failure persists for SN12-eaa5: kind=api:1006 repeated=5"]
         assert len(records) == 2
 
     @pytest.mark.asyncio
@@ -735,9 +714,7 @@ class TestError1006Handling:
                 "ecoflow_energy.ecoflow.cloud_http.time.monotonic",
                 side_effect=[0.0, 10.0],
             ),
-            caplog.at_level(
-                logging.DEBUG, logger="ecoflow_energy.ecoflow.cloud_http"
-            ),
+            caplog.at_level(logging.DEBUG, logger="ecoflow_energy.ecoflow.cloud_http"),
         ):
             await client.get_quota_all()
             mock_session.get = MagicMock(
@@ -750,14 +727,17 @@ class TestError1006Handling:
             await client.get_quota_all()
 
         assert client.last_error_code == "1006"
-        assert len(
-            [r for r in caplog.records if r.levelno == logging.WARNING]
-        ) == 2
-        assert len([
-            r
-            for r in caplog.records
-            if r.levelno == logging.INFO and "recovered" in r.getMessage()
-        ]) == 1
+        assert len([r for r in caplog.records if r.levelno == logging.WARNING]) == 2
+        assert (
+            len(
+                [
+                    r
+                    for r in caplog.records
+                    if r.levelno == logging.INFO and "recovered" in r.getMessage()
+                ]
+            )
+            == 1
+        )
 
     @pytest.mark.asyncio
     async def test_action_success_does_not_reset_poll_1006(self, caplog):
@@ -776,17 +756,13 @@ class TestError1006Handling:
                 "ecoflow_energy.ecoflow.cloud_http.time.monotonic",
                 side_effect=[0.0, 10.0],
             ),
-            caplog.at_level(
-                logging.DEBUG, logger="ecoflow_energy.ecoflow.cloud_http"
-            ),
+            caplog.at_level(logging.DEBUG, logger="ecoflow_energy.ecoflow.cloud_http"),
         ):
             await client.get_quota_all()
             await client.set_quota({"params": {"enabled": True}})
             await client.get_quota_all()
 
-        assert len(
-            [r for r in caplog.records if r.levelno == logging.WARNING]
-        ) == 1
+        assert len([r for r in caplog.records if r.levelno == logging.WARNING]) == 1
         assert not [
             r
             for r in caplog.records
@@ -794,9 +770,7 @@ class TestError1006Handling:
         ]
 
     @pytest.mark.asyncio
-    async def test_diagnostic_1006_and_8521_do_not_mutate_poll_latch(
-        self, caplog
-    ):
+    async def test_diagnostic_1006_and_8521_do_not_mutate_poll_latch(self, caplog):
         mock_session = MagicMock()
         mock_session.get = MagicMock(
             return_value=AsyncContextManager(self._make_1006_response())
@@ -813,9 +787,7 @@ class TestError1006Handling:
                 "ecoflow_energy.ecoflow.cloud_http.asyncio.sleep",
                 new_callable=AsyncMock,
             ),
-            caplog.at_level(
-                logging.DEBUG, logger="ecoflow_energy.ecoflow.cloud_http"
-            ),
+            caplog.at_level(logging.DEBUG, logger="ecoflow_energy.ecoflow.cloud_http"),
         ):
             await client.get_quota_all()
             latch = (
@@ -885,10 +857,12 @@ class TestFullSerialNeverLogged:
         mock_session = MagicMock()
         mock_session.get = MagicMock(
             return_value=AsyncContextManager(
-                self._response({
-                    "code": "1006",
-                    "message": "current device is not allowed to get device info",
-                })
+                self._response(
+                    {
+                        "code": "1006",
+                        "message": "current device is not allowed to get device info",
+                    }
+                )
             )
         )
         client = self._make_client(mock_session)
@@ -957,12 +931,16 @@ class TestFullSerialNeverLogged:
 class TestDeadCodeRemoved:
     def test_no_powerocean_quota_keys(self):
         """POWEROCEAN_QUOTA_KEYS was dead code and must be removed."""
-        source = (REPO_ROOT / "custom_components/ecoflow_energy/ecoflow/cloud_http.py").read_text()
+        source = (
+            REPO_ROOT / "custom_components/ecoflow_energy/ecoflow/cloud_http.py"
+        ).read_text()
         assert "POWEROCEAN_QUOTA_KEYS" not in source
 
     def test_no_get_powerocean_quota(self):
         """get_powerocean_quota was dead code and must be removed."""
-        source = (REPO_ROOT / "custom_components/ecoflow_energy/ecoflow/cloud_http.py").read_text()
+        source = (
+            REPO_ROOT / "custom_components/ecoflow_energy/ecoflow/cloud_http.py"
+        ).read_text()
         assert "get_powerocean_quota" not in source
 
     def test_iot_quota_path_is_only_used_for_writes(self):
@@ -971,7 +949,9 @@ class TestDeadCodeRemoved:
         It was removed once as dead code. Reads must keep using the /quota/all
         endpoint, so guard that the path is reachable from set_quota only.
         """
-        source = (REPO_ROOT / "custom_components/ecoflow_energy/ecoflow/cloud_http.py").read_text()
+        source = (
+            REPO_ROOT / "custom_components/ecoflow_energy/ecoflow/cloud_http.py"
+        ).read_text()
         assert "IOT_QUOTA_PATH" in source
         set_quota_body = source.split("async def set_quota")[1].split("async def")[0]
         assert "IOT_QUOTA_PATH" in set_quota_body

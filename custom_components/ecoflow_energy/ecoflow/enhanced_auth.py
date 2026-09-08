@@ -34,8 +34,8 @@ _AES_IV = b"ojsajkqjwk1w2dfg"
 
 # EcoFlow has regional API endpoints - try EU first, then global fallback
 _AUTH_BASE_URLS = [
-    IOT_API_BASE,                  # https://api-e.ecoflow.com (EU)
-    "https://api.ecoflow.com",     # global fallback
+    IOT_API_BASE,  # https://api-e.ecoflow.com (EU)
+    "https://api.ecoflow.com",  # global fallback
 ]
 
 
@@ -124,9 +124,7 @@ async def get_enhanced_credentials(
         return None
 
 
-def _decrypt_certification(
-    token: str, encrypted_data: str
-) -> dict[str, Any] | None:
+def _decrypt_certification(token: str, encrypted_data: str) -> dict[str, Any] | None:
     """Decrypt AES-CFB encrypted certification data.
 
     Algorithm (from EcoFlow Portal JS, module 78829):
@@ -141,7 +139,9 @@ def _decrypt_certification(
         key = hashlib.sha256(token.encode()).digest()
         cipher = Cipher(algorithms.AES(key), CFB(_AES_IV))
         decryptor = cipher.decryptor()
-        plaintext = decryptor.update(base64.b64decode(encrypted_data)) + decryptor.finalize()
+        plaintext = (
+            decryptor.update(base64.b64decode(encrypted_data)) + decryptor.finalize()
+        )
 
         # Remove PKCS7 padding (validate all padding bytes)
         if plaintext:

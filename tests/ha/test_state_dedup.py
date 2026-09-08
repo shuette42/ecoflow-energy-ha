@@ -245,7 +245,9 @@ class TestSwitchDedup:
         coordinator = _make_coordinator(hass, standard_config_entry)
         coordinator.async_set_updated_data({"ac_enabled": 1})
 
-        defn = EcoFlowSwitchDef(key="ac_switch", name="AC Output", state_key="ac_enabled")
+        defn = EcoFlowSwitchDef(
+            key="ac_switch", name="AC Output", state_key="ac_enabled"
+        )
         switch = EcoFlowSwitch(coordinator, defn)
 
         with patch.object(switch, "async_write_ha_state") as mock_write:
@@ -272,7 +274,9 @@ class TestSwitchDedup:
         coordinator = _make_coordinator(hass, standard_config_entry)
         coordinator.async_set_updated_data({"ac_enabled": 1})
 
-        defn = EcoFlowSwitchDef(key="ac_switch", name="AC Output", state_key="ac_enabled")
+        defn = EcoFlowSwitchDef(
+            key="ac_switch", name="AC Output", state_key="ac_enabled"
+        )
         switch = EcoFlowSwitch(coordinator, defn)
 
         with (
@@ -301,8 +305,10 @@ class TestNumberDedup:
         coordinator.async_set_updated_data({"pd.soc": 80})
 
         defn = EcoFlowNumberDef(
-            key="max_charge_soc", name="Max Charge SoC",
-            state_key="pd.soc", unit="%",
+            key="max_charge_soc",
+            name="Max Charge SoC",
+            state_key="pd.soc",
+            unit="%",
         )
         number = EcoFlowNumber(coordinator, defn)
 
@@ -331,8 +337,10 @@ class TestNumberDedup:
         coordinator.async_set_updated_data({"pd.soc": 80})
 
         defn = EcoFlowNumberDef(
-            key="max_charge_soc", name="Max Charge SoC",
-            state_key="pd.soc", unit="%",
+            key="max_charge_soc",
+            name="Max Charge SoC",
+            state_key="pd.soc",
+            unit="%",
         )
         number = EcoFlowNumber(coordinator, defn)
 
@@ -354,8 +362,14 @@ class TestEnumLiveValueGuard:
     """An out-of-options live value must not reach the state machine."""
 
     _DEF = EcoFlowSensorDef(
-        "ems_feed_mode", "EMS Feed Mode", None, "enum", None,
-        "mdi:cog", "diagnostic", options=["off", "no_limit", "zero", "limit"],
+        "ems_feed_mode",
+        "EMS Feed Mode",
+        None,
+        "enum",
+        None,
+        "mdi:cog",
+        "diagnostic",
+        options=["off", "no_limit", "zero", "limit"],
     )
 
     async def test_unknown_live_enum_value_falls_back_to_restored(
@@ -480,7 +494,9 @@ class TestAvailabilityWriteGate:
         coordinator = _make_coordinator(hass, standard_config_entry)
         coordinator.async_set_updated_data({"ac_enabled": 1})
 
-        defn = EcoFlowSwitchDef(key="ac_switch", name="AC Output", state_key="ac_enabled")
+        defn = EcoFlowSwitchDef(
+            key="ac_switch", name="AC Output", state_key="ac_enabled"
+        )
         switch = EcoFlowSwitch(coordinator, defn)
 
         with patch.object(switch, "async_write_ha_state") as mock_write:
@@ -505,8 +521,10 @@ class TestAvailabilityWriteGate:
         coordinator.async_set_updated_data({"pd.soc": 80})
 
         defn = EcoFlowNumberDef(
-            key="max_charge_soc", name="Max Charge SoC",
-            state_key="pd.soc", unit="%",
+            key="max_charge_soc",
+            name="Max Charge SoC",
+            state_key="pd.soc",
+            unit="%",
         )
         number = EcoFlowNumber(coordinator, defn)
 
@@ -595,7 +613,9 @@ class TestOptimisticDedupSync:
         coordinator = _make_coordinator(hass, standard_config_entry)
         coordinator.async_set_updated_data({"ac_enabled": 1})
 
-        defn = EcoFlowSwitchDef(key="ac_switch", name="AC Output", state_key="ac_enabled")
+        defn = EcoFlowSwitchDef(
+            key="ac_switch", name="AC Output", state_key="ac_enabled"
+        )
         switch = EcoFlowSwitch(coordinator, defn)
 
         # Establish baseline: set _last_written_value directly (entity has no hass yet)
@@ -628,8 +648,10 @@ class TestOptimisticDedupSync:
         coordinator.async_set_updated_data({"pd.soc": 80})
 
         defn = EcoFlowNumberDef(
-            key="max_charge_soc", name="Max Charge SoC",
-            state_key="pd.soc", unit="%",
+            key="max_charge_soc",
+            name="Max Charge SoC",
+            state_key="pd.soc",
+            unit="%",
         )
         number = EcoFlowNumber(coordinator, defn)
 
@@ -667,13 +689,17 @@ class TestFailedSendNoOptimistic:
         coordinator = _make_coordinator(hass, standard_config_entry)
         coordinator.async_set_updated_data({"ac_enabled": 1})
 
-        defn = EcoFlowSwitchDef(key="ac_switch", name="AC Output", state_key="ac_enabled")
+        defn = EcoFlowSwitchDef(
+            key="ac_switch", name="AC Output", state_key="ac_enabled"
+        )
         switch = EcoFlowSwitch(coordinator, defn)
 
         with (
             patch.object(
-                coordinator, "async_send_set_command",
-                new_callable=AsyncMock, return_value=False,
+                coordinator,
+                "async_send_set_command",
+                new_callable=AsyncMock,
+                return_value=False,
             ),
             patch.object(switch, "async_write_ha_state") as mock_write,
             pytest.raises(HomeAssistantError),
@@ -696,13 +722,17 @@ class TestFailedSendNoOptimistic:
         coordinator._enhanced_mode = True
         coordinator.async_set_updated_data({"switch_state": 1})
 
-        defn = EcoFlowSwitchDef(key="plug_switch", name="Plug", state_key="switch_state")
+        defn = EcoFlowSwitchDef(
+            key="plug_switch", name="Plug", state_key="switch_state"
+        )
         switch = EcoFlowSwitch(coordinator, defn)
 
         with (
             patch.object(
-                coordinator, "async_send_proto_set_command",
-                new_callable=AsyncMock, return_value=False,
+                coordinator,
+                "async_send_proto_set_command",
+                new_callable=AsyncMock,
+                return_value=False,
             ),
             patch.object(switch, "async_write_ha_state") as mock_write,
             pytest.raises(HomeAssistantError),
@@ -723,13 +753,17 @@ class TestFailedSendNoOptimistic:
         coordinator = _make_coordinator(hass, standard_config_entry)
         coordinator.async_set_updated_data({"ac_enabled": 1})
 
-        defn = EcoFlowSwitchDef(key="ac_switch", name="AC Output", state_key="ac_enabled")
+        defn = EcoFlowSwitchDef(
+            key="ac_switch", name="AC Output", state_key="ac_enabled"
+        )
         switch = EcoFlowSwitch(coordinator, defn)
 
         with (
             patch.object(
-                coordinator, "async_send_set_command",
-                new_callable=AsyncMock, return_value=True,
+                coordinator,
+                "async_send_set_command",
+                new_callable=AsyncMock,
+                return_value=True,
             ),
             patch.object(switch, "async_write_ha_state") as mock_write,
         ):
@@ -749,15 +783,19 @@ class TestFailedSendNoOptimistic:
         coordinator.async_set_updated_data({"max_charge_soc": 80})
 
         defn = EcoFlowNumberDef(
-            key="max_charge_soc", name="Max Charge SoC",
-            state_key="max_charge_soc", unit="%",
+            key="max_charge_soc",
+            name="Max Charge SoC",
+            state_key="max_charge_soc",
+            unit="%",
         )
         number = EcoFlowNumber(coordinator, defn)
 
         with (
             patch.object(
-                coordinator, "async_send_set_command",
-                new_callable=AsyncMock, return_value=False,
+                coordinator,
+                "async_send_set_command",
+                new_callable=AsyncMock,
+                return_value=False,
             ),
             patch.object(number, "async_write_ha_state") as mock_write,
             pytest.raises(HomeAssistantError),
@@ -779,15 +817,19 @@ class TestFailedSendNoOptimistic:
         coordinator.async_set_updated_data({"max_power_w": 2000})
 
         defn = EcoFlowNumberDef(
-            key="max_watts", name="Max Power Limit",
-            state_key="max_power_w", unit="W",
+            key="max_watts",
+            name="Max Power Limit",
+            state_key="max_power_w",
+            unit="W",
         )
         number = EcoFlowNumber(coordinator, defn)
 
         with (
             patch.object(
-                coordinator, "async_send_set_command",
-                new_callable=AsyncMock, return_value=False,
+                coordinator,
+                "async_send_set_command",
+                new_callable=AsyncMock,
+                return_value=False,
             ),
             patch.object(number, "async_write_ha_state") as mock_write,
             pytest.raises(HomeAssistantError),
@@ -865,7 +907,9 @@ class TestEnergyRestoreSeed:
         """
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
-            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE,
+            hass,
+            enhanced_config_entry,
+            MOCK_POWEROCEAN_DEVICE,
         )
         integrator = coordinator._energy_integrator
         integrator._state["solar_energy_kwh"] = (100.0, time.monotonic() - 30.0, 0.0)
@@ -885,8 +929,12 @@ class TestEnergyRestoreSeed:
         coordinator = _make_coordinator(hass, standard_config_entry)
 
         definition = EcoFlowSensorDef(
-            "solar_energy_kwh", "Solar Energy", "kWh", "energy",
-            "total_increasing", "mdi:solar-power",
+            "solar_energy_kwh",
+            "Solar Energy",
+            "kWh",
+            "energy",
+            "total_increasing",
+            "mdi:solar-power",
         )
         sensor = EcoFlowSensor(coordinator, definition)
         sensor.hass = hass
@@ -894,8 +942,15 @@ class TestEnergyRestoreSeed:
         mock_last = MagicMock()
         mock_last.native_value = 10.5
         with (
-            patch.object(CoordinatorEntity, "async_added_to_hass", new_callable=AsyncMock),
-            patch.object(sensor, "async_get_last_sensor_data", new_callable=AsyncMock, return_value=mock_last),
+            patch.object(
+                CoordinatorEntity, "async_added_to_hass", new_callable=AsyncMock
+            ),
+            patch.object(
+                sensor,
+                "async_get_last_sensor_data",
+                new_callable=AsyncMock,
+                return_value=mock_last,
+            ),
         ):
             await sensor.async_added_to_hass()
 
@@ -912,7 +967,12 @@ class TestEnergyRestoreSeed:
         coordinator = _make_coordinator(hass, standard_config_entry)
 
         definition = EcoFlowSensorDef(
-            "soc", "SoC", "%", "battery", "measurement", "mdi:battery",
+            "soc",
+            "SoC",
+            "%",
+            "battery",
+            "measurement",
+            "mdi:battery",
         )
         sensor = EcoFlowSensor(coordinator, definition)
         sensor.hass = hass
@@ -920,8 +980,15 @@ class TestEnergyRestoreSeed:
         mock_last = MagicMock()
         mock_last.native_value = 85.0
         with (
-            patch.object(CoordinatorEntity, "async_added_to_hass", new_callable=AsyncMock),
-            patch.object(sensor, "async_get_last_sensor_data", new_callable=AsyncMock, return_value=mock_last),
+            patch.object(
+                CoordinatorEntity, "async_added_to_hass", new_callable=AsyncMock
+            ),
+            patch.object(
+                sensor,
+                "async_get_last_sensor_data",
+                new_callable=AsyncMock,
+                return_value=mock_last,
+            ),
         ):
             await sensor.async_added_to_hass()
 
@@ -950,8 +1017,14 @@ class TestEnumRestoreDiscard:
         coordinator = _make_coordinator(hass, standard_config_entry)
 
         definition = EcoFlowSensorDef(
-            "ems_feed_mode", "EMS Feed Mode", None, "enum", None,
-            "mdi:cog", "diagnostic", options=["off", "no_limit", "zero", "limit"],
+            "ems_feed_mode",
+            "EMS Feed Mode",
+            None,
+            "enum",
+            None,
+            "mdi:cog",
+            "diagnostic",
+            options=["off", "no_limit", "zero", "limit"],
         )
         sensor = EcoFlowSensor(coordinator, definition)
         sensor.hass = hass
@@ -959,8 +1032,15 @@ class TestEnumRestoreDiscard:
         mock_last = MagicMock()
         mock_last.native_value = "0"
         with (
-            patch.object(CoordinatorEntity, "async_added_to_hass", new_callable=AsyncMock),
-            patch.object(sensor, "async_get_last_sensor_data", new_callable=AsyncMock, return_value=mock_last),
+            patch.object(
+                CoordinatorEntity, "async_added_to_hass", new_callable=AsyncMock
+            ),
+            patch.object(
+                sensor,
+                "async_get_last_sensor_data",
+                new_callable=AsyncMock,
+                return_value=mock_last,
+            ),
         ):
             await sensor.async_added_to_hass()
 
@@ -976,8 +1056,14 @@ class TestEnumRestoreDiscard:
         coordinator = _make_coordinator(hass, standard_config_entry)
 
         definition = EcoFlowSensorDef(
-            "ems_work_mode", "EMS Work Mode", None, "enum", None,
-            "mdi:cog", "diagnostic", options=["self_use", "time_of_use", "backup"],
+            "ems_work_mode",
+            "EMS Work Mode",
+            None,
+            "enum",
+            None,
+            "mdi:cog",
+            "diagnostic",
+            options=["self_use", "time_of_use", "backup"],
         )
         sensor = EcoFlowSensor(coordinator, definition)
         sensor.hass = hass
@@ -985,8 +1071,15 @@ class TestEnumRestoreDiscard:
         mock_last = MagicMock()
         mock_last.native_value = "WORKMODE_SELFUSE"
         with (
-            patch.object(CoordinatorEntity, "async_added_to_hass", new_callable=AsyncMock),
-            patch.object(sensor, "async_get_last_sensor_data", new_callable=AsyncMock, return_value=mock_last),
+            patch.object(
+                CoordinatorEntity, "async_added_to_hass", new_callable=AsyncMock
+            ),
+            patch.object(
+                sensor,
+                "async_get_last_sensor_data",
+                new_callable=AsyncMock,
+                return_value=mock_last,
+            ),
         ):
             await sensor.async_added_to_hass()
 
@@ -1002,8 +1095,14 @@ class TestEnumRestoreDiscard:
         coordinator = _make_coordinator(hass, standard_config_entry)
 
         definition = EcoFlowSensorDef(
-            "ems_feed_mode", "EMS Feed Mode", None, "enum", None,
-            "mdi:cog", "diagnostic", options=["off", "no_limit", "zero", "limit"],
+            "ems_feed_mode",
+            "EMS Feed Mode",
+            None,
+            "enum",
+            None,
+            "mdi:cog",
+            "diagnostic",
+            options=["off", "no_limit", "zero", "limit"],
         )
         sensor = EcoFlowSensor(coordinator, definition)
         sensor.hass = hass
@@ -1011,8 +1110,15 @@ class TestEnumRestoreDiscard:
         mock_last = MagicMock()
         mock_last.native_value = "limit"
         with (
-            patch.object(CoordinatorEntity, "async_added_to_hass", new_callable=AsyncMock),
-            patch.object(sensor, "async_get_last_sensor_data", new_callable=AsyncMock, return_value=mock_last),
+            patch.object(
+                CoordinatorEntity, "async_added_to_hass", new_callable=AsyncMock
+            ),
+            patch.object(
+                sensor,
+                "async_get_last_sensor_data",
+                new_callable=AsyncMock,
+                return_value=mock_last,
+            ),
         ):
             await sensor.async_added_to_hass()
 
@@ -1028,7 +1134,13 @@ class TestEnumRestoreDiscard:
         coordinator = _make_coordinator(hass, standard_config_entry)
 
         definition = EcoFlowSensorDef(
-            "soc_pct", "Battery SoC", "%", "battery", "measurement", "mdi:battery", None,
+            "soc_pct",
+            "Battery SoC",
+            "%",
+            "battery",
+            "measurement",
+            "mdi:battery",
+            None,
         )
         sensor = EcoFlowSensor(coordinator, definition)
         sensor.hass = hass
@@ -1036,8 +1148,15 @@ class TestEnumRestoreDiscard:
         mock_last = MagicMock()
         mock_last.native_value = 85.0
         with (
-            patch.object(CoordinatorEntity, "async_added_to_hass", new_callable=AsyncMock),
-            patch.object(sensor, "async_get_last_sensor_data", new_callable=AsyncMock, return_value=mock_last),
+            patch.object(
+                CoordinatorEntity, "async_added_to_hass", new_callable=AsyncMock
+            ),
+            patch.object(
+                sensor,
+                "async_get_last_sensor_data",
+                new_callable=AsyncMock,
+                return_value=mock_last,
+            ),
         ):
             await sensor.async_added_to_hass()
 

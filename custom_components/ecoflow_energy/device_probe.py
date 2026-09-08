@@ -315,7 +315,9 @@ class UnroutedDeviceProbe:
         # Assistant deliberately does not wait for those either. One
         # reconnect attempt is short enough to be worth waiting for.
         self.hass.async_create_task(
-            _run(), f"ecoflow probe reconnect {device_log_tag(self.device_sn)}", eager_start=True
+            _run(),
+            f"ecoflow probe reconnect {device_log_tag(self.device_sn)}",
+            eager_start=True,
         )
 
     def _reconnect(self) -> None:
@@ -334,7 +336,9 @@ class UnroutedDeviceProbe:
             self._client.try_reconnect()
         except Exception:  # noqa: BLE001
             _LOGGER.debug(
-                "Probe reconnect failed for %s", device_log_tag(self.device_sn), exc_info=True
+                "Probe reconnect failed for %s",
+                device_log_tag(self.device_sn),
+                exc_info=True,
             )
         if self._stopped:
             # A stop landed while the attempt ran. The flag is set before the
@@ -362,7 +366,9 @@ class UnroutedDeviceProbe:
             return await self.hass.async_add_executor_job(self._connect)
         except Exception:  # noqa: BLE001
             _LOGGER.debug(
-                "Probe connect failed for %s", device_log_tag(self.device_sn), exc_info=True
+                "Probe connect failed for %s",
+                device_log_tag(self.device_sn),
+                exc_info=True,
             )
             return False
 
@@ -395,7 +401,9 @@ class UnroutedDeviceProbe:
             await self.hass.async_add_executor_job(self._client.disconnect)
         except Exception:  # noqa: BLE001
             _LOGGER.debug(
-                "Probe disconnect failed for %s", device_log_tag(self.device_sn), exc_info=True
+                "Probe disconnect failed for %s",
+                device_log_tag(self.device_sn),
+                exc_info=True,
             )
 
     def _on_message(self, topic: str, payload: bytes) -> None:

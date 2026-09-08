@@ -59,7 +59,9 @@ class HttpPollMixin(_Base):
                 return dict(self._device_data)
 
             self._consecutive_http_failures += 1
-            self._log_event("http_fail", f"consecutive={self._consecutive_http_failures}")
+            self._log_event(
+                "http_fail", f"consecutive={self._consecutive_http_failures}"
+            )
             if self._consecutive_http_failures >= 3:
                 self._device_available = False
                 self._snapshot = DeviceSnapshot(
@@ -97,7 +99,8 @@ class HttpPollMixin(_Base):
             ):
                 _LOGGER.warning(
                     "HTTP quota failed %d consecutive times for %s - triggering re-authentication",
-                    self._consecutive_http_failures, self.device_tag,
+                    self._consecutive_http_failures,
+                    self.device_tag,
                 )
                 self._entry.async_start_reauth(self.hass)
             return dict(self._device_data)

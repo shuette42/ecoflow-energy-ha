@@ -12,6 +12,7 @@ from ecoflow_energy.ecoflow.iot_api import IoTApiClient
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_client(access_key="test_ak", secret_key="test_sk", base_url=None):
     session = MagicMock()
     kwargs = {"session": session, "access_key": access_key, "secret_key": secret_key}
@@ -268,7 +269,9 @@ class TestErrorHandling:
     @pytest.mark.asyncio
     async def test_empty_api_response_returns_none(self):
         client, session = _make_client()
-        session.get = MagicMock(return_value=_mock_response({"code": "1234", "data": None}))
+        session.get = MagicMock(
+            return_value=_mock_response({"code": "1234", "data": None})
+        )
         result = await client.get_mqtt_credentials()
         assert result is None
 
@@ -299,7 +302,9 @@ class TestDeviceList:
     @pytest.mark.asyncio
     async def test_device_list_empty_returns_none(self):
         client, session = _make_client()
-        session.get = MagicMock(return_value=_mock_response({"data": None, "code": "0"}))
+        session.get = MagicMock(
+            return_value=_mock_response({"data": None, "code": "0"})
+        )
         result = await client.get_device_list()
         assert result is None
 

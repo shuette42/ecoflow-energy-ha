@@ -156,7 +156,9 @@ class TestSessionReadings:
 
     def test_energy_over_duration_matches_the_power(self) -> None:
         parsed = _from_frame(FRAME_CHARGING_MID_ORDER)
-        implied = parsed["ev_session_energy_wh"] / (parsed["ev_session_duration_s"] / 3600)
+        implied = parsed["ev_session_energy_wh"] / (
+            parsed["ev_session_duration_s"] / 3600
+        )
         # 364 Wh in 18 min is 1213 W, against 1355 W now; the session
         # started below the setting. Same order of magnitude, same unit.
         assert 1000 < implied < parsed["ev_charge_power_w"]
@@ -182,7 +184,11 @@ class TestSessionReadings:
         assert parsed["ev_charge_status"] == "charging"
         # 10548 Wh in 6420 s is 5914 W on average against 4011 W now: the
         # session ran higher earlier. Same unit either way.
-        assert 3000 < parsed["ev_session_energy_wh"] / (parsed["ev_session_duration_s"] / 3600) < 7000
+        assert (
+            3000
+            < parsed["ev_session_energy_wh"] / (parsed["ev_session_duration_s"] / 3600)
+            < 7000
+        )
 
     def test_suspended_by_the_vehicle(self) -> None:
         parsed = _from_frame(FRAME_SUSPENDED_BY_VEHICLE)
@@ -233,8 +239,14 @@ class TestOtherAccessoriesAndEdges:
 
     def test_every_documented_status_number_maps_to_the_209_name(self) -> None:
         names = {
-            0: "none", 1: "available", 2: "preparing", 3: "charging",
-            4: "suspended_charger", 5: "suspended_vehicle", 6: "finishing", 9: "faulted",
+            0: "none",
+            1: "available",
+            2: "preparing",
+            3: "charging",
+            4: "suspended_charger",
+            5: "suspended_vehicle",
+            6: "finishing",
+            9: "faulted",
         }
         for number, name in names.items():
             raw = {"pile_charging_param_report": {"charging_status": number}}
@@ -242,7 +254,11 @@ class TestOtherAccessoriesAndEdges:
 
     def test_placeholder_and_empty_vehicle_are_absent(self) -> None:
         for text in ("-1", ""):
-            raw = {"pile_charging_param_report": {"vehicle_info": {"charge_vehicle_id": text}}}
+            raw = {
+                "pile_charging_param_report": {
+                    "vehicle_info": {"charge_vehicle_id": text}
+                }
+            }
             assert remap_pile_charging_keys(raw) == {"ev_vehicle_id": None}
 
     def test_nothing_is_invented_for_a_missing_order(self) -> None:
@@ -251,6 +267,11 @@ class TestOtherAccessoriesAndEdges:
 
     def test_the_command_tuple_is_routed_with_its_own_flag(self) -> None:
         results = decode_proto_runtime_headers(FRAME_CHARGING_MID_ORDER)
-        flags = {k for r in results for k, v in r.mapped.items() if k.startswith("_is_") and v}
+        flags = {
+            k
+            for r in results
+            for k, v in r.mapped.items()
+            if k.startswith("_is_") and v
+        }
         assert "_is_pile_charging_param" in flags
         assert "_is_ev_charging_param" not in flags

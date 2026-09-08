@@ -445,7 +445,9 @@ class TestStreamProtoParser:
         assert "_grid_connection_state_raw" not in result
 
 
-BK01_CAPTURE = Path(__file__).parent / "fixtures" / "stream" / "bk01_capture_masked.json"
+BK01_CAPTURE = (
+    Path(__file__).parent / "fixtures" / "stream" / "bk01_capture_masked.json"
+)
 
 # Battery keys the Stream Micro must never produce. Any of these appearing in
 # a parsed capture frame means a non-battery field leaked into a battery path.
@@ -477,8 +479,7 @@ class TestStreamMicroCaptureReplay:
         assert len(frames) == 24
 
         parsed = [
-            parse_stream_proto_message(bytes.fromhex(frame["hex"]))
-            for frame in frames
+            parse_stream_proto_message(bytes.fromhex(frame["hex"])) for frame in frames
         ]
         assert all(result is not None for result in parsed)
 

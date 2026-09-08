@@ -95,9 +95,7 @@ def _find_coordinator_state(tree: ast.Module) -> ast.ClassDef:
     for node in ast.walk(tree):
         if isinstance(node, ast.ClassDef) and node.name == "CoordinatorState":
             return node
-    raise AssertionError(
-        "CoordinatorState class not found in coordinator/_typing.py"
-    )
+    raise AssertionError("CoordinatorState class not found in coordinator/_typing.py")
 
 
 def _declared_names(typing_source: str) -> dict[str, str]:

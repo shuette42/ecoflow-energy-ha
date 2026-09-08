@@ -141,9 +141,7 @@ class TestDefinitions:
         that is not fitted, so the stronger gate must stay off."""
         gated = [sensor for sensor in STREAM_SENSORS if sensor.accessory]
 
-        assert not [
-            sensor.key for sensor in gated if sensor.accessory_needs_nonzero
-        ]
+        assert not [sensor.key for sensor in gated if sensor.accessory_needs_nonzero]
 
     def test_the_gate_does_not_change_the_default(self) -> None:
         """The gate decides whether the entity exists, the default whether it
@@ -163,9 +161,7 @@ class TestGating:
 
         assert not _keys(created) & HIGHER_STRING_KEYS
 
-    async def test_the_lower_strings_are_unaffected(
-        self, hass: HomeAssistant
-    ) -> None:
+    async def test_the_lower_strings_are_unaffected(self, hass: HomeAssistant) -> None:
         _, created = await _setup(hass, TWO_STRING_REPORT)
         keys = _keys(created)
 
@@ -215,9 +211,7 @@ class TestLateReport:
 
         assert _keys(created) & HIGHER_STRING_KEYS == {"pv3_w"}
 
-    async def test_no_duplicate_on_further_updates(
-        self, hass: HomeAssistant
-    ) -> None:
+    async def test_no_duplicate_on_further_updates(self, hass: HomeAssistant) -> None:
         coordinator, created = await _setup(hass, TWO_STRING_REPORT)
 
         for watts in (402.0, 411.0):

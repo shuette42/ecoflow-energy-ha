@@ -10,15 +10,30 @@ import struct
 from typing import Any
 
 _HEADER_FIELDS = {
-    1: ("pdata", "bytes"), 2: ("src", "i32"), 3: ("dest", "i32"),
-    4: ("d_src", "i32"), 5: ("d_dest", "i32"), 6: ("enc_type", "i32"),
-    7: ("check_type", "i32"), 8: ("cmd_func", "i32"), 9: ("cmd_id", "i32"),
-    10: ("data_len", "i32"), 11: ("need_ack", "i32"), 12: ("is_ack", "i32"),
-    14: ("seq", "i32"), 15: ("product_id", "i32"), 16: ("version", "i32"),
-    17: ("payload_ver", "i32"), 18: ("time_snap", "i32"),
-    19: ("is_rw_cmd", "i32"), 20: ("is_queue", "i32"),
-    21: ("ack_type", "i32"), 22: ("code", "str"), 23: ("from", "str"),
-    24: ("module_sn", "str"), 25: ("device_sn", "str"),
+    1: ("pdata", "bytes"),
+    2: ("src", "i32"),
+    3: ("dest", "i32"),
+    4: ("d_src", "i32"),
+    5: ("d_dest", "i32"),
+    6: ("enc_type", "i32"),
+    7: ("check_type", "i32"),
+    8: ("cmd_func", "i32"),
+    9: ("cmd_id", "i32"),
+    10: ("data_len", "i32"),
+    11: ("need_ack", "i32"),
+    12: ("is_ack", "i32"),
+    14: ("seq", "i32"),
+    15: ("product_id", "i32"),
+    16: ("version", "i32"),
+    17: ("payload_ver", "i32"),
+    18: ("time_snap", "i32"),
+    19: ("is_rw_cmd", "i32"),
+    20: ("is_queue", "i32"),
+    21: ("ack_type", "i32"),
+    22: ("code", "str"),
+    23: ("from", "str"),
+    24: ("module_sn", "str"),
+    25: ("device_sn", "str"),
 }
 
 
@@ -76,7 +91,7 @@ def _decode_single_header(hdr: bytes) -> dict:
             length, i = _read_varint(mv, i)
             if length is None:
                 break
-            sub = mv[i:i + length].tobytes()
+            sub = mv[i : i + length].tobytes()
             i += length
             if typ == "str":
                 out[name] = _try_utf8(sub)
@@ -87,13 +102,13 @@ def _decode_single_header(hdr: bytes) -> dict:
         elif wt == 5:
             if i + 4 > len(mv):
                 break
-            f = struct.unpack("<f", mv[i:i + 4])[0]
+            f = struct.unpack("<f", mv[i : i + 4])[0]
             i += 4
             out[name] = f
         elif wt == 1:
             if i + 8 > len(mv):
                 break
-            out[name] = int.from_bytes(mv[i:i + 8], "little")
+            out[name] = int.from_bytes(mv[i : i + 8], "little")
             i += 8
         else:
             break
@@ -115,14 +130,14 @@ def decode_header_message(b: bytes) -> tuple[list[dict], bytes | None]:
             length, i = _read_varint(mv, i)
             if length is None:
                 break
-            hdr = mv[i:i + length].tobytes()
+            hdr = mv[i : i + length].tobytes()
             i += length
             headers.append(_decode_single_header(hdr))
         elif fn == 2 and wt == 2:
             length, i = _read_varint(mv, i)
             if length is None:
                 break
-            payload = mv[i:i + length].tobytes()
+            payload = mv[i : i + length].tobytes()
             i += length
         else:
             if wt == 0:

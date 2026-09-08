@@ -64,9 +64,15 @@ class TestSubscribeDataFlag:
 
         # Must subscribe to quota, property, and set_reply topics
         topics_subscribed = [call[0][0] for call in mock_paho.subscribe.call_args_list]
-        assert any("/quota" in t for t in topics_subscribed), "Missing /quota subscription"
-        assert any("/property/" in t for t in topics_subscribed), "Missing /property subscription"
-        assert any("/set_reply" in t for t in topics_subscribed), "Missing /set_reply subscription"
+        assert any("/quota" in t for t in topics_subscribed), (
+            "Missing /quota subscription"
+        )
+        assert any("/property/" in t for t in topics_subscribed), (
+            "Missing /property subscription"
+        )
+        assert any("/set_reply" in t for t in topics_subscribed), (
+            "Missing /set_reply subscription"
+        )
 
 
 class TestCaptureWritesReportsTheSubscription:
@@ -365,7 +371,7 @@ class TestReconnectDelay:
         client = _make_client(base_reconnect_delay=5)
         client.reconnect_attempts = 3
         delay = client._get_reconnect_delay()
-        assert delay == 5 * (2 ** 3)  # 40
+        assert delay == 5 * (2**3)  # 40
 
     def test_get_reconnect_delay_capped(self):
         client = _make_client(base_reconnect_delay=5, max_reconnect_delay=60)
@@ -588,7 +594,9 @@ class TestPingEchoFilter:
         client = _make_client(message_handler=handler)
 
         payload = b'{"command": "ping", "value": 123, "deviceSn": "TEST1234SN"}'
-        client._on_message(None, None, self._msg("/app/device/property/TEST1234SN", payload))
+        client._on_message(
+            None, None, self._msg("/app/device/property/TEST1234SN", payload)
+        )
 
         handler.assert_not_called()
 
@@ -597,7 +605,9 @@ class TestPingEchoFilter:
         client = _make_client(message_handler=handler)
 
         payload = b'{"command":"ping","value":123,"deviceSn":"TEST1234SN"}'
-        client._on_message(None, None, self._msg("/app/device/property/TEST1234SN", payload))
+        client._on_message(
+            None, None, self._msg("/app/device/property/TEST1234SN", payload)
+        )
 
         handler.assert_not_called()
 
@@ -607,7 +617,9 @@ class TestPingEchoFilter:
         client = _make_client(message_handler=handler)
 
         payload = b"\x0a\x12\x08\x01"
-        client._on_message(None, None, self._msg("/app/device/property/TEST1234SN", payload))
+        client._on_message(
+            None, None, self._msg("/app/device/property/TEST1234SN", payload)
+        )
 
         handler.assert_called_once_with("/app/device/property/TEST1234SN", payload)
 
@@ -617,7 +629,9 @@ class TestPingEchoFilter:
         client = _make_client(message_handler=handler)
 
         payload = b'{"command": "ping"}'
-        client._on_message(None, None, self._msg("/open/acct/TEST1234SN/quota", payload))
+        client._on_message(
+            None, None, self._msg("/open/acct/TEST1234SN/quota", payload)
+        )
 
         handler.assert_called_once()
 
@@ -1057,9 +1071,7 @@ class TestOwnPublishEchoFilter:
             None, None, self._msg("/app/device/property/TEST1234SN", device_frame)
         )
 
-        handler.assert_called_once_with(
-            "/app/device/property/TEST1234SN", device_frame
-        )
+        handler.assert_called_once_with("/app/device/property/TEST1234SN", device_frame)
 
     def test_the_echo_record_expires(self):
         """A payload that never came back must not pin memory or match later."""

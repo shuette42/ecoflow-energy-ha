@@ -29,10 +29,7 @@ from ecoflow_energy.ecoflow.proto_encoding import (
 )
 
 _R374_GET_ALL_FIXTURE = (
-    Path(__file__).parent
-    / "fixtures"
-    / "powerocean"
-    / "r374_get_all_masked.bin"
+    Path(__file__).parent / "fixtures" / "powerocean" / "r374_get_all_masked.bin"
 )
 
 
@@ -155,9 +152,7 @@ def test_powerglow_field_map_holds_at_a_lower_draw() -> None:
     the layout - it is what keeps the whole-watt reading of fields 4 and 5 from
     resting on a single magnitude.
     """
-    results = decode_proto_runtime_headers(
-        _build_header(212, 8, _PG_SECOND_UNIT_PDATA)
-    )
+    results = decode_proto_runtime_headers(_build_header(212, 8, _PG_SECOND_UNIT_PDATA))
     raw = {k: v for k, v in results[0].mapped.items() if not k.startswith("_")}
 
     assert remap_heating_rod_keys(raw) == {
@@ -542,8 +537,7 @@ def test_real_r374_get_all_fixture_decodes_all_supported_headers() -> None:
     assert payload is None
     assert len(headers) == 19
     command_pairs = {
-        (header.get("cmd_func"), header.get("cmd_id"))
-        for header in headers
+        (header.get("cmd_func"), header.get("cmd_id")) for header in headers
     }
     assert {(96, 1), (96, 8), (96, 33), (96, 39)} <= command_pairs
 
@@ -700,9 +694,7 @@ def _inventory_pdata(
         encode_field_bytes(1, encode_field_bytes(1, ems_sn)),
         encode_field_bytes(2, encode_field_bytes(1, pcs_sn)),
     ]
-    parts.extend(
-        encode_field_bytes(3, encode_field_bytes(1, sn)) for sn in pack_sns
-    )
+    parts.extend(encode_field_bytes(3, encode_field_bytes(1, sn)) for sn in pack_sns)
     return b"".join(parts)
 
 
@@ -739,11 +731,6 @@ def test_module_inventory_decodes_every_serial_in_its_role() -> None:
         {"module_sn": _b64(b"BPTESTPACK000001")},
         {"module_sn": _b64(b"BPTESTPACK000002")},
     ]
-
-
-
-
-
 
 
 def test_cmd_8_now_surfaces_sg_ready_and_the_battery_limit_reason() -> None:

@@ -29,7 +29,8 @@ _CLOCK = "custom_components.ecoflow_energy.ecoflow.energy_integrator.time.monoto
 
 
 async def test_state_file_path_is_under_the_test_tmp_dir(
-    hass: HomeAssistant, tmp_path: Path,
+    hass: HomeAssistant,
+    tmp_path: Path,
 ) -> None:
     """The integrator's state path lives under pytest's own tmp dir.
 

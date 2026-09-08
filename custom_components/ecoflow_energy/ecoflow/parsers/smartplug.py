@@ -315,14 +315,14 @@ def _extract_pdata(payload: bytes) -> bytes | None:
         # Outer: field 1 (length-delimited) = Header
         _, pos = _DecodeVarint(payload, 0)
         header_len, pos = _DecodeVarint(payload, pos)
-        header_bytes = payload[pos:pos + header_len]
+        header_bytes = payload[pos : pos + header_len]
         if not header_bytes or header_bytes[0:1] != b"\x0a":
             return None
 
         # Header: field 1 (length-delimited) = pdata
         _, pos2 = _DecodeVarint(header_bytes, 0)
         pdata_len, pos2 = _DecodeVarint(header_bytes, pos2)
-        return header_bytes[pos2:pos2 + pdata_len]
+        return header_bytes[pos2 : pos2 + pdata_len]
     except Exception:
         return None
 
@@ -332,13 +332,13 @@ def _extract_pdata(payload: bytes) -> bytes | None:
 _PLUG_HEARTBEAT_FIELDS: dict[int, tuple[str, float, bool]] = {
     1: ("error_code", 1.0, False),
     2: ("warning_code", 1.0, False),
-    5: ("max_current_a", 0.1, False),       # deciA -> A
+    5: ("max_current_a", 0.1, False),  # deciA -> A
     6: ("temperature_c", 1.0, False),
     7: ("frequency_hz", 1.0, False),
-    8: ("current_a", 0.001, False),          # mA -> A
+    8: ("current_a", 0.001, False),  # mA -> A
     9: ("voltage_v", 1.0, False),
-    10: ("power_w", 0.1, False),             # deciW -> W
-    11: ("switch_state", 1.0, True),         # bool
+    10: ("power_w", 0.1, False),  # deciW -> W
+    11: ("switch_state", 1.0, True),  # bool
     12: ("led_brightness", 100.0 / 1023.0, False),  # 0-1023 -> 0-100%
     13: ("max_power_w", 1.0, False),
 }
@@ -397,8 +397,8 @@ def parse_smartplug_proto(payload: bytes) -> dict[str, Any] | None:
 #   src=32 (App), dest=53 (Plug), cmd_func=2, need_ack=1
 # Payload (pdata) is specific to each command.
 
-_PLUG_SRC = 32    # Client/App
-_PLUG_DEST = 53   # Smart Plug
+_PLUG_SRC = 32  # Client/App
+_PLUG_DEST = 53  # Smart Plug
 
 
 def _encode_field_string(field_number: int, value: str) -> bytes:
@@ -409,7 +409,10 @@ def _encode_field_string(field_number: int, value: str) -> bytes:
 
 
 def _build_plug_set_payload(
-    cmd_id: int, pdata: bytes, device_sn: str = "", seq: int = 0,
+    cmd_id: int,
+    pdata: bytes,
+    device_sn: str = "",
+    seq: int = 0,
 ) -> bytes:
     """Build a Send_Header_Msg for a SmartPlug SET command.
 
@@ -430,22 +433,24 @@ def _build_plug_set_payload(
         seq = int(time.time() * 1000) & 0x7FFFFFFF
 
     header = bytearray()
-    header.extend(encode_field_bytes(1, pdata))              # pdata (field 1)
-    header.extend(encode_field_varint(2, _PLUG_SRC))         # src = 32 (field 2)
-    header.extend(encode_field_varint(3, _PLUG_DEST))        # dest = 53 (field 3)
-    header.extend(encode_field_varint(8, 2))                 # cmdFunc = 2 (field 8)
-    header.extend(encode_field_varint(9, cmd_id))            # cmdId (field 9)
-    header.extend(encode_field_varint(10, len(pdata)))       # dataLen (field 10)
-    header.extend(encode_field_varint(11, 1))                # needAck = 1 (field 11)
-    header.extend(encode_field_varint(14, seq))              # seq (field 14)
+    header.extend(encode_field_bytes(1, pdata))  # pdata (field 1)
+    header.extend(encode_field_varint(2, _PLUG_SRC))  # src = 32 (field 2)
+    header.extend(encode_field_varint(3, _PLUG_DEST))  # dest = 53 (field 3)
+    header.extend(encode_field_varint(8, 2))  # cmdFunc = 2 (field 8)
+    header.extend(encode_field_varint(9, cmd_id))  # cmdId (field 9)
+    header.extend(encode_field_varint(10, len(pdata)))  # dataLen (field 10)
+    header.extend(encode_field_varint(11, 1))  # needAck = 1 (field 11)
+    header.extend(encode_field_varint(14, seq))  # seq (field 14)
     if device_sn:
-        header.extend(_encode_field_string(25, device_sn))    # deviceSn (field 25)
+        header.extend(_encode_field_string(25, device_sn))  # deviceSn (field 25)
 
     return encode_field_bytes(1, bytes(header))
 
 
 def build_plug_switch_payload(
-    on: bool, device_sn: str = "", seq: int = 0,
+    on: bool,
+    device_sn: str = "",
+    seq: int = 0,
 ) -> bytes:
     """Build a plug_switch_message SET payload.
 
@@ -463,7 +468,9 @@ def build_plug_switch_payload(
 
 
 def build_plug_brightness_payload(
-    brightness: int, device_sn: str = "", seq: int = 0,
+    brightness: int,
+    device_sn: str = "",
+    seq: int = 0,
 ) -> bytes:
     """Build a brightness_pack SET payload.
 
@@ -482,7 +489,9 @@ def build_plug_brightness_payload(
 
 
 def build_plug_max_watts_payload(
-    max_watts: int, device_sn: str = "", seq: int = 0,
+    max_watts: int,
+    device_sn: str = "",
+    seq: int = 0,
 ) -> bytes:
     """Build a max_watts_pack SET payload.
 
@@ -508,9 +517,9 @@ def build_plug_get_all_payload() -> bytes:
     on /app/device/property/{SN}.
     """
     header = bytearray()
-    header.extend(encode_field_varint(2, 32))             # src = 32 (App)
-    header.extend(encode_field_varint(3, 32))             # dest = 32
-    header.extend(encode_field_varint(14, 0x1234))        # seq = 4660 (fixed)
-    header.extend(_encode_field_string(23, "app"))         # from = "app"
+    header.extend(encode_field_varint(2, 32))  # src = 32 (App)
+    header.extend(encode_field_varint(3, 32))  # dest = 32
+    header.extend(encode_field_varint(14, 0x1234))  # seq = 4660 (fixed)
+    header.extend(_encode_field_string(23, "app"))  # from = "app"
 
     return encode_field_bytes(1, bytes(header))

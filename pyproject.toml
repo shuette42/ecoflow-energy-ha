@@ -1,5 +1,6 @@
 [tool.ruff]
 target-version = "py313"
+line-length = 88
 extend-exclude = ["custom_components/ecoflow_energy/ecoflow/proto/ecocharge_pb2.py"]
 
 [tool.ruff.lint]

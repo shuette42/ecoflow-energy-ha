@@ -57,9 +57,7 @@ def _from_payload(payload: bytes) -> dict:
 
     msg = pb2.EVChargingParamReport()
     msg.ParseFromString(payload)
-    return remap_ev_charging_keys(
-        MessageToDict(msg, preserving_proto_field_name=True)
-    )
+    return remap_ev_charging_keys(MessageToDict(msg, preserving_proto_field_name=True))
 
 
 class TestChargingFrame:
@@ -80,7 +78,9 @@ class TestChargingFrame:
         """
         result = _from_frame(FRAME_CHARGING)
 
-        average_w = result["ev_session_energy_wh"] * 3600 / result["ev_session_duration_s"]
+        average_w = (
+            result["ev_session_energy_wh"] * 3600 / result["ev_session_duration_s"]
+        )
 
         # The average sits below the instantaneous reading because the session
         # started single-phase at about 1200 W and stepped up later.

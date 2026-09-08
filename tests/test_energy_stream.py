@@ -166,7 +166,9 @@ class TestPowerOceanSocSetPayload:
     """3-field SoC SET that replicates the official EcoFlow app payload."""
 
     def test_payload_structure(self):
-        payload = build_powerocean_soc_set_payload(60, 100, seq=99999, device_sn="HJ31TEST")
+        payload = build_powerocean_soc_set_payload(
+            60, 100, seq=99999, device_sn="HJ31TEST"
+        )
         assert isinstance(payload, bytes)
         assert payload[0] == 0x0A
 
@@ -464,7 +466,7 @@ def _decode_header_fields(payload: bytes) -> dict[int, list]:
     tag, pos = _read_test_varint(mv, pos)
     assert (tag >> 3) == 1 and (tag & 0x07) == 2
     length, pos = _read_test_varint(mv, pos)
-    header = mv[pos:pos + length]
+    header = mv[pos : pos + length]
 
     fields: dict[int, list] = {}
     hpos = 0
@@ -477,7 +479,7 @@ def _decode_header_fields(payload: bytes) -> dict[int, list]:
             fields.setdefault(fnum, []).append(val)
         elif wtype == 2:
             flen, hpos = _read_test_varint(header, hpos)
-            fields.setdefault(fnum, []).append(header[hpos:hpos + flen].tobytes())
+            fields.setdefault(fnum, []).append(header[hpos : hpos + flen].tobytes())
             hpos += flen
         else:  # pragma: no cover - unexpected wire type in test frame
             raise AssertionError(f"unexpected wire type {wtype} for field {fnum}")
@@ -547,11 +549,11 @@ class TestStreamBackupReservePayload:
         """
         payload = build_stream_backup_reserve_payload(50, self.SN, seq=1)
         header = _decode_header_fields(payload)
-        assert header[4] == [1]    # d_src
-        assert header[5] == [1]    # d_dest
-        assert header[7] == [3]    # check_type
-        assert header[16] == [3]   # version
-        assert header[17] == [1]   # payload_ver
+        assert header[4] == [1]  # d_src
+        assert header[5] == [1]  # d_dest
+        assert header[7] == [3]  # check_type
+        assert header[16] == [3]  # version
+        assert header[17] == [1]  # payload_ver
 
     def test_cmd_func_254_present(self):
         """cmd_func=254 (field 8, varint) must be encoded in the header."""
@@ -584,11 +586,11 @@ class TestStreamBackupReservePayload:
         pdata = memoryview(self._inner_pdata(payload))
         pos = 0
         tag, pos = _read_test_varint(pdata, pos)
-        assert (tag >> 3) == 102          # field number
-        assert (tag & 0x07) == 0          # varint wire type
+        assert (tag >> 3) == 102  # field number
+        assert (tag & 0x07) == 0  # varint wire type
         value, pos = _read_test_varint(pdata, pos)
         assert value == 50
-        assert pos == len(pdata)          # field 102 is the only pdata content
+        assert pos == len(pdata)  # field 102 is the only pdata content
 
     def test_field_102_encodes_value(self):
         """Different backup_soc values encode on field 102."""

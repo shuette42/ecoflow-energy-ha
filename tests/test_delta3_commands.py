@@ -156,9 +156,12 @@ class TestNumberCommands:
 
     def test_backup_reserve_tops_out_at_fifty_not_hundred(self) -> None:
         """Easy to get wrong: this is a ratio, not a SoC target."""
-        assert build_number_command("backup_reserve_soc", 100)["params"][
-            "cfgBackupReverseSoc"
-        ] == 50
+        assert (
+            build_number_command("backup_reserve_soc", 100)["params"][
+                "cfgBackupReverseSoc"
+            ]
+            == 50
+        )
 
     def test_float_input_is_rounded_to_int(self) -> None:
         params = build_number_command("max_charge_soc", 79.6)["params"]
@@ -188,13 +191,13 @@ class TestProtoCommands:
     @pytest.mark.parametrize(
         ("key", "expected_pdata"),
         [
-            ("beeper_switch", "4801"),                  # field 9
-            ("ac_out_switch", "e00401"),                # field 76
-            ("ac2_out_switch", "c81701"),               # field 377
-            ("dc_12v_out_switch", "900101"),            # field 18
-            ("xboost_switch", "c80101"),                # field 25
-            ("bypass_out_disable_switch", "d00101"),    # field 26
-            ("energy_backup_switch", "da02020801"),     # field 43, nested
+            ("beeper_switch", "4801"),  # field 9
+            ("ac_out_switch", "e00401"),  # field 76
+            ("ac2_out_switch", "c81701"),  # field 377
+            ("dc_12v_out_switch", "900101"),  # field 18
+            ("xboost_switch", "c80101"),  # field 25
+            ("bypass_out_disable_switch", "d00101"),  # field 26
+            ("energy_backup_switch", "da02020801"),  # field 43, nested
         ],
     )
     def test_switch_payload_bytes(self, key: str, expected_pdata: str) -> None:
@@ -203,15 +206,17 @@ class TestProtoCommands:
         assert self._pdata(frame) == expected_pdata
 
     def test_switch_off_writes_zero(self) -> None:
-        frame = build_proto_command(build_switch_command("beeper_switch", False), self.SN)
+        frame = build_proto_command(
+            build_switch_command("beeper_switch", False), self.SN
+        )
         assert self._pdata(frame) == "4800"
 
     @pytest.mark.parametrize(
         ("key", "value", "expected_pdata"),
         [
-            ("max_charge_soc", 80, "880250"),        # field 33
-            ("min_discharge_soc", 10, "90020a"),     # field 34
-            ("backup_reserve_soc", 30, "b0061e"),    # field 102
+            ("max_charge_soc", 80, "880250"),  # field 33
+            ("min_discharge_soc", 10, "90020a"),  # field 34
+            ("backup_reserve_soc", 30, "b0061e"),  # field 102
         ],
     )
     def test_number_payload_bytes(
@@ -223,9 +228,13 @@ class TestProtoCommands:
 
     def test_number_values_stay_inside_the_vendor_range(self) -> None:
         """The clamp is shared with the HTTP path, so it applies here too."""
-        frame = build_proto_command(build_number_command("max_charge_soc", 200), self.SN)
+        frame = build_proto_command(
+            build_number_command("max_charge_soc", 200), self.SN
+        )
         assert self._pdata(frame) == "880264"  # clamped to 100
-        frame = build_proto_command(build_number_command("backup_reserve_soc", 99), self.SN)
+        frame = build_proto_command(
+            build_number_command("backup_reserve_soc", 99), self.SN
+        )
         assert self._pdata(frame) == "b00632"  # clamped to 50
 
     def test_frame_carries_the_hardware_verified_header(self) -> None:

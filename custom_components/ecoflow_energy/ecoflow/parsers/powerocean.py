@@ -141,9 +141,7 @@ def drop_invalid_percentages(result: dict[str, Any]) -> None:
     for key in PERCENT_SENSOR_KEYS.intersection(result):
         value = result[key]
         if isinstance(value, (int, float)) and not 0.0 <= value <= 100.0:
-            _LOGGER.debug(
-                "Discarding out-of-range percentage %s=%r", key, value
-            )
+            _LOGGER.debug("Discarding out-of-range percentage %s=%r", key, value)
             del result[key]
 
 
@@ -244,7 +242,11 @@ def parse_powerocean_http_quota(quota_data: dict) -> dict[str, Any]:
         if isinstance(pvs, list):
             for i, pv in enumerate(pvs[:4], start=1):
                 if isinstance(pv, dict):
-                    for field, suffix in [("pwr", "power_w"), ("vol", "voltage_v"), ("amp", "current_a")]:
+                    for field, suffix in [
+                        ("pwr", "power_w"),
+                        ("vol", "voltage_v"),
+                        ("amp", "current_a"),
+                    ]:
                         if field in pv:
                             v = _safe_float(pv[field])
                             if v is not None:
@@ -258,7 +260,11 @@ def parse_powerocean_http_quota(quota_data: dict) -> dict[str, Any]:
         "reactPwr": "reactive_power_var",
         "apparentPwr": "apparent_power_va",
     }
-    for phase_key, phase_label in [("pcsAPhase", "a"), ("pcsBPhase", "b"), ("pcsCPhase", "c")]:
+    for phase_key, phase_label in [
+        ("pcsAPhase", "a"),
+        ("pcsBPhase", "b"),
+        ("pcsCPhase", "c"),
+    ]:
         for api_field, sensor_suffix in _phase_fields.items():
             flat_key = f"{phase_key}.{api_field}"
             if flat_key in quota_data:
@@ -499,8 +505,7 @@ def _extract_all_battery_packs(quota_data: dict) -> dict[str, Any]:
     # Sort the bp_addr.{sn} keys so pack numbering is deterministic
     # regardless of dict insertion order in the API response.
     pack_keys = sorted(
-        k for k in quota_data
-        if k.startswith("bp_addr.") and k != "bp_addr.updateTime"
+        k for k in quota_data if k.startswith("bp_addr.") and k != "bp_addr.updateTime"
     )
     for key in pack_keys:
         val = quota_data[key]

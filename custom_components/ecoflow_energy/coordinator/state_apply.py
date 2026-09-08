@@ -26,7 +26,9 @@ from ..ecoflow.parsers.wave3_proto import (
 _LOGGER = logging.getLogger(__name__)
 
 
-def _registry_device(registry: dr.DeviceRegistry, device_sn: str, entry_id: str) -> dr.DeviceEntry | None:
+def _registry_device(
+    registry: dr.DeviceRegistry, device_sn: str, entry_id: str
+) -> dr.DeviceEntry | None:
     """Look a device up by its identifier on whichever registry API is present.
 
     Home Assistant 2026.9 deprecates `async_get_device` for identifier lookups,
@@ -39,6 +41,7 @@ def _registry_device(registry: dr.DeviceRegistry, device_sn: str, entry_id: str)
     if lookup is not None:
         return lookup((DOMAIN, device_sn), entry_id)
     return registry.async_get_device(identifiers={(DOMAIN, device_sn)})
+
 
 # ADR-013: at most two writes per divergent (app, ems) pair per process
 # lifetime. The first write can only be judged against a report that left
@@ -227,7 +230,9 @@ class StateApplyMixin(_Base):
                 self._sw_version = firmware
                 self._firmware["pd_firm_ver"] = {"decoded": firmware}
                 registry = dr.async_get(self.hass)
-                device = _registry_device(registry, self.device_sn, self._entry.entry_id)
+                device = _registry_device(
+                    registry, self.device_sn, self._entry.entry_id
+                )
                 # The registry's own state is the comparison (PLAN-047
                 # review F2), not `_sw_version`: the device registry entry
                 # is created when the platforms add their entities, which
@@ -258,8 +263,10 @@ class StateApplyMixin(_Base):
         # all known packs contribute even if only one pack reported this tick.
         if any(k.endswith("_remain_watth") and k.startswith("pack") for k in parsed):
             self._device_data["bp_remain_watth"] = sum(
-                v for k, v in self._device_data.items()
-                if k.startswith("pack") and k.endswith("_remain_watth")
+                v
+                for k, v in self._device_data.items()
+                if k.startswith("pack")
+                and k.endswith("_remain_watth")
                 and isinstance(v, (int, float))
             )
 
@@ -353,7 +360,10 @@ class StateApplyMixin(_Base):
                     "PowerOcean surplus auto-sync (%s): EMS still reports "
                     "%d after %d writes of %d; no further writes until the "
                     "app value, the EMS value or a user setting changes",
-                    self.device_tag, ems_int, record["writes"], app_int,
+                    self.device_tag,
+                    ems_int,
+                    record["writes"],
+                    app_int,
                 )
                 self._log_event(
                     "surplus_auto_sync_stopped",
@@ -406,7 +416,10 @@ class StateApplyMixin(_Base):
         record["writes"] += 1
         _LOGGER.info(
             "PowerOcean surplus auto-sync (%s): app=%d ems=%d -> SET both=%d",
-            self.device_tag, app_int, ems_int, app_int,
+            self.device_tag,
+            app_int,
+            ems_int,
+            app_int,
         )
         self._log_event(
             "surplus_auto_sync",
@@ -465,12 +478,12 @@ class StateApplyMixin(_Base):
 
     # Battery state derivation parameters (#63, #50).
     # These are class-level so tests can override without touching instance state.
-    BATT_WINDOW_S = 120       # 2-minute rolling window (confirmation does the rest)
-    BATT_MIN_SAMPLES = 10     # minimum samples before derivation is trusted
-    BATT_OUTER_W = 150        # |avg| > 150W -> charging/discharging
-    BATT_INNER_W = 50         # |avg| < 50W  -> standby
-    BATT_MIN_HOLD_S = 120     # min seconds a state must be held before it can change
-    BATT_CONFIRM_S = 600      # a diverging candidate must persist this long to commit
+    BATT_WINDOW_S = 120  # 2-minute rolling window (confirmation does the rest)
+    BATT_MIN_SAMPLES = 10  # minimum samples before derivation is trusted
+    BATT_OUTER_W = 150  # |avg| > 150W -> charging/discharging
+    BATT_INNER_W = 50  # |avg| < 50W  -> standby
+    BATT_MIN_HOLD_S = 120  # min seconds a state must be held before it can change
+    BATT_CONFIRM_S = 600  # a diverging candidate must persist this long to commit
 
     def _derive_battery_state(self) -> None:
         """Derive battery charge/discharge state from a rolling-average power (#63, #50).
@@ -512,9 +525,7 @@ class StateApplyMixin(_Base):
         now_mono = time.monotonic()
         self._batt_w_samples.append((now_mono, float(batt_w)))
         cutoff = now_mono - self.BATT_WINDOW_S
-        self._batt_w_samples = [
-            (t, v) for t, v in self._batt_w_samples if t >= cutoff
-        ]
+        self._batt_w_samples = [(t, v) for t, v in self._batt_w_samples if t >= cutoff]
 
         if len(self._batt_w_samples) < self.BATT_MIN_SAMPLES:
             return
@@ -579,8 +590,6 @@ class StateApplyMixin(_Base):
             now_mono - self._batt_pending_since if prev is not None else 0.0,
             len(self._batt_w_samples),
         )
-
-
 
     # ------------------------------------------------------------------
     # Energy integration (Riemann sum)

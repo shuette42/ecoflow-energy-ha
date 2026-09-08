@@ -136,7 +136,9 @@ class ReauthFlowMixin(_Base):
                 except (aiohttp.ClientError, TimeoutError, OSError):
                     errors["base"] = "cannot_connect"
                 except (KeyError, ValueError, TypeError, AttributeError):
-                    _LOGGER.exception("Unexpected error during Enhanced re-authentication")
+                    _LOGGER.exception(
+                        "Unexpected error during Enhanced re-authentication"
+                    )
                     errors["base"] = "unknown"
 
         return self.async_show_form(

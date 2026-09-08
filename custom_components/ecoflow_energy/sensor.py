@@ -63,7 +63,9 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up EcoFlow sensors from a config entry."""
-    coordinators: dict[str, EcoFlowDeviceCoordinator] = hass.data[DOMAIN][entry.entry_id]
+    coordinators: dict[str, EcoFlowDeviceCoordinator] = hass.data[DOMAIN][
+        entry.entry_id
+    ]
     registry = er.async_get(hass)
     entities: list[SensorEntity] = []
 
@@ -193,9 +195,13 @@ class EcoFlowSensor(
         if definition.state_class:
             self._attr_state_class = _STATE_CLASS_MAP.get(definition.state_class)
         if definition.entity_category:
-            self._attr_entity_category = _ENTITY_CATEGORY_MAP.get(definition.entity_category)
+            self._attr_entity_category = _ENTITY_CATEGORY_MAP.get(
+                definition.entity_category
+            )
         if definition.suggested_display_precision is not None:
-            self._attr_suggested_display_precision = definition.suggested_display_precision
+            self._attr_suggested_display_precision = (
+                definition.suggested_display_precision
+            )
         if definition.disabled_by_default:
             self._attr_entity_registry_enabled_default = False
         if definition.options:
@@ -209,11 +215,16 @@ class EcoFlowSensor(
     async def async_added_to_hass(self) -> None:
         """Restore last known value when entity is added."""
         await super().async_added_to_hass()
-        if (last := await self.async_get_last_sensor_data()) and last.native_value is not None:
+        if (
+            last := await self.async_get_last_sensor_data()
+        ) and last.native_value is not None:
             # Enum sensors: discard restored values not in options list.
             # After migrating from numeric to enum, old values like "0"
             # or "WORKMODE_SELFUSE" are invalid and would block entity setup.
-            if self._definition.options and str(last.native_value) not in self._definition.options:
+            if (
+                self._definition.options
+                and str(last.native_value) not in self._definition.options
+            ):
                 return
             # Home Assistant's stored type also allows a date, datetime or
             # Decimal, and no sensor this integration owns produces one, so

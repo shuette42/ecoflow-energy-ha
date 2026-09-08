@@ -133,8 +133,17 @@ class OptionsFlowMixin(_Base):
                         raw = await api.get_device_list()
                         if raw:
                             self._all_devices = SetupFlowMixin._normalize_devices(raw)
-                    except (aiohttp.ClientError, TimeoutError, OSError, KeyError, ValueError, TypeError):
-                        _LOGGER.warning("Options flow: failed to fetch device list", exc_info=True)
+                    except (
+                        aiohttp.ClientError,
+                        TimeoutError,
+                        OSError,
+                        KeyError,
+                        ValueError,
+                        TypeError,
+                    ):
+                        _LOGGER.warning(
+                            "Options flow: failed to fetch device list", exc_info=True
+                        )
             elif auth_method == AUTH_METHOD_APP:
                 email = self.config_entry.data.get(CONF_EMAIL)
                 password = self.config_entry.data.get(CONF_PASSWORD)
@@ -174,13 +183,11 @@ class OptionsFlowMixin(_Base):
             known_devices = {
                 d["sn"]: d
                 for d in (
-                    self._all_devices
-                    or self.config_entry.data.get(CONF_DEVICES, [])
+                    self._all_devices or self.config_entry.data.get(CONF_DEVICES, [])
                 )
             }
             selected_powerstream = any(
-                self._stored_device_type(known_devices, sn)
-                == DEVICE_TYPE_POWERSTREAM
+                self._stored_device_type(known_devices, sn) == DEVICE_TYPE_POWERSTREAM
                 for sn in selected_sns
             )
             selected_enhanced_only = any(
@@ -207,7 +214,9 @@ class OptionsFlowMixin(_Base):
                 self._pending_mode = new_mode
                 self._pending_devices = selected_sns
                 return await self.async_step_enhanced()
-            elif new_mode != MODE_ENHANCED and not self.config_entry.data.get(CONF_ACCESS_KEY):
+            elif new_mode != MODE_ENHANCED and not self.config_entry.data.get(
+                CONF_ACCESS_KEY
+            ):
                 # Switching to Standard but no Developer API keys stored
                 if CONF_RAW_CAPTURE in user_input:
                     self._pending_raw_capture = user_input[CONF_RAW_CAPTURE]
@@ -220,15 +229,9 @@ class OptionsFlowMixin(_Base):
                 return self._save_options(new_mode, selected_sns)
 
         if self._all_devices:
-            device_options = {
-                d["sn"]: _device_label(d)
-                for d in self._all_devices
-            }
+            device_options = {d["sn"]: _device_label(d) for d in self._all_devices}
         else:
-            stored = {
-                d["sn"]: d
-                for d in self.config_entry.data.get(CONF_DEVICES, [])
-            }
+            stored = {d["sn"]: d for d in self.config_entry.data.get(CONF_DEVICES, [])}
             # Prefix-derived name first, same order as _device_label: the
             # type table alone would label an ES21 "STREAM AC 5000" and a
             # P231 "Delta 3 Series" whenever this fallback branch renders.
@@ -297,9 +300,7 @@ class OptionsFlowMixin(_Base):
         # parse error in the log, and a value chosen in Python would take
         # the sentence out of the translation files and leave it English.
         return self.async_show_form(
-            step_id=(
-                "init_app" if auth_method == AUTH_METHOD_APP else "init"
-            ),
+            step_id=("init_app" if auth_method == AUTH_METHOD_APP else "init"),
             data_schema=vol.Schema(schema),
             errors=errors,
         )

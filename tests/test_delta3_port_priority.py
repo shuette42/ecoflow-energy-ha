@@ -218,9 +218,7 @@ class TestWriter:
         assert item.power_outage_port_enable is False
         assert item.power_outage_min_soc == 35
 
-    @pytest.mark.parametrize(
-        ("stem", "port_type"), [("dc", 1), ("ac1", 2), ("ac2", 3)]
-    )
+    @pytest.mark.parametrize(("stem", "port_type"), [("dc", 1), ("ac1", 2), ("ac2", 3)])
     def test_port_enum_follows_the_app(self, stem: str, port_type: int) -> None:
         command = build_port_priority_command(stem, True, 40)
 
@@ -248,7 +246,9 @@ class TestVariantGating:
     }
 
     def test_max_plus_keeps_them(self) -> None:
-        keys = {d.key for d in filter_defs_for_serial(DELTA3_SWITCHES, "D3M1TEST00000001")}
+        keys = {
+            d.key for d in filter_defs_for_serial(DELTA3_SWITCHES, "D3M1TEST00000001")
+        }
 
         assert keys >= self.PORT_PRIORITY_SWITCHES
 
@@ -266,7 +266,9 @@ class TestVariantGating:
         assert not (self.PORT_PRIORITY_NUMBERS & number_keys)
 
     def test_other_delta3_variants_keep_everything_else(self) -> None:
-        keys = {d.key for d in filter_defs_for_serial(DELTA3_SWITCHES, "P231TEST00000001")}
+        keys = {
+            d.key for d in filter_defs_for_serial(DELTA3_SWITCHES, "P231TEST00000001")
+        }
 
         assert "ac_out_switch" in keys
         assert "bypass_out_disable_switch" in keys
@@ -328,12 +330,7 @@ class TestDelta3PlusIsReadByTheExistingParser:
     as the frames behind it, so they are the test.
     """
 
-    FRAMES = (
-        Path(__file__).parent
-        / "fixtures"
-        / "delta3"
-        / "p351_frames_masked.json"
-    )
+    FRAMES = Path(__file__).parent / "fixtures" / "delta3" / "p351_frames_masked.json"
 
     @classmethod
     def _parsed(cls) -> dict:
@@ -396,9 +393,7 @@ class TestDelta3PlusIsReadByTheExistingParser:
         spread = parsed["bms_max_cell_vol_mv"] - parsed["bms_min_cell_vol_mv"]
         assert parsed["bms_cell_vol_diff_mv"] == spread
 
-        from_capacity = (
-            parsed["bms_remain_cap_mah"] / parsed["bms_full_cap_mah"] * 100
-        )
+        from_capacity = parsed["bms_remain_cap_mah"] / parsed["bms_full_cap_mah"] * 100
         assert abs(from_capacity - parsed["cms_batt_soc"]) <= 2
 
     def test_the_solar_inputs_add_up_to_the_reported_total(self) -> None:

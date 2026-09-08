@@ -83,9 +83,7 @@ class TestListenOnly:
     async def test_no_write_path_is_configured(self, hass: HomeAssistant) -> None:
         """A device we know nothing about must never be written to."""
         with patch("ecoflow_energy.device_probe.EcoFlowMQTTClient") as mock_client:
-            UnroutedDeviceProbe(
-                hass, SKIPPED_SN, "Ocean 2", "acc", "pw", "user123"
-            )
+            UnroutedDeviceProbe(hass, SKIPPED_SN, "Ocean 2", "acc", "pw", "user123")
 
         kwargs = mock_client.call_args.kwargs
         # enhanced_mode alone does NOT make this listen-only: it suppresses
@@ -199,7 +197,7 @@ class TestListenOnly:
         client.client = paho
 
         with caplog.at_level(logging.DEBUG):
-            client._on_connect(paho, None, {}, 5)          # bad credentials
+            client._on_connect(paho, None, {}, 5)  # bad credentials
             client.reconnect_attempts = 3
             client._on_disconnect(paho, None, None, 7, None)  # sustained failure
 
@@ -309,7 +307,9 @@ class TestListenOnly:
             return battery if next(counter) % 200 == 0 else frequent
 
         with (
-            patch("ecoflow_energy.device_probe.decode_cmd_headers", side_effect=headers),
+            patch(
+                "ecoflow_energy.device_probe.decode_cmd_headers", side_effect=headers
+            ),
             patch(
                 "ecoflow_energy.ecoflow.frame_capture.time.time",
                 side_effect=lambda: next(clock),
@@ -325,9 +325,7 @@ class TestListenOnly:
         # Both types keep their full span, not their last few minutes.
         assert frames[-1]["ts"] - frames[0]["ts"] > 6 * 3600 - 5
 
-    async def test_frames_are_exported_oldest_first(
-        self, hass: HomeAssistant
-    ) -> None:
+    async def test_frames_are_exported_oldest_first(self, hass: HomeAssistant) -> None:
         """Buckets are internal; a reader sees one chronological stream."""
         probe = _probe(hass)
         clock = _fake_clock(1.0)
@@ -374,8 +372,7 @@ class TestListenOnly:
         assert sampling["keys_tracked"] == RAW_FRAME_KEYS_MAX
         assert len(probe.frames) <= RAW_FRAME_KEYS_MAX * RAW_FRAME_PER_KEY_MAX
         assert all(
-            key["kept"] <= RAW_FRAME_PER_KEY_MAX
-            for key in sampling["per_key"].values()
+            key["kept"] <= RAW_FRAME_PER_KEY_MAX for key in sampling["per_key"].values()
         )
         assert sampling["frames_seen"] == 5_000
 
@@ -545,9 +542,7 @@ class TestStayingConnected:
         for probe in probes:
             probe._client.try_reconnect.assert_called_once()
 
-    async def test_watchdog_stops_when_unsubscribed(
-        self, hass: HomeAssistant
-    ) -> None:
+    async def test_watchdog_stops_when_unsubscribed(self, hass: HomeAssistant) -> None:
         """The capture expires on its own - the timer must go with it."""
         probe = _probe(hass)
         probe._client.is_connected.return_value = False
@@ -814,9 +809,7 @@ class TestConnectionReport:
 
 
 class TestStartProbes:
-    async def test_no_skipped_devices_starts_nothing(
-        self, hass: HomeAssistant
-    ) -> None:
+    async def test_no_skipped_devices_starts_nothing(self, hass: HomeAssistant) -> None:
         assert await async_start_probes(hass, [], "a@b.c", "pw") == []
 
     async def test_missing_credentials_starts_nothing(
@@ -835,9 +828,7 @@ class TestStartProbes:
         with patch("ecoflow_energy.ecoflow.app_api.AppApiClient", return_value=api):
             assert await async_start_probes(hass, skipped, "a@b.c", "pw") == []
 
-    async def test_probe_started_per_skipped_device(
-        self, hass: HomeAssistant
-    ) -> None:
+    async def test_probe_started_per_skipped_device(self, hass: HomeAssistant) -> None:
         skipped = [
             {"sn": SKIPPED_SN, "product_name": "Ocean 2"},
             {"sn": "SM3ATEST00000001", "product_name": "Smart Meter"},
@@ -888,9 +879,7 @@ class TestStartProbes:
             patch.object(
                 UnroutedDeviceProbe, "async_start", AsyncMock(return_value=True)
             ),
-            patch(
-                "ecoflow_energy.device_probe.EcoFlowMQTTClient"
-            ) as mock_client,
+            patch("ecoflow_energy.device_probe.EcoFlowMQTTClient") as mock_client,
         ):
             await async_start_probes(
                 hass, [{"sn": SKIPPED_SN, "product_name": ""}], "a@b.c", "pw"
@@ -901,9 +890,7 @@ class TestStartProbes:
         assert kwargs["mqtt_port"] == 8085
         assert kwargs["wss_path"] == "/mqtt-us"
 
-    async def test_device_without_serial_is_skipped(
-        self, hass: HomeAssistant
-    ) -> None:
+    async def test_device_without_serial_is_skipped(self, hass: HomeAssistant) -> None:
         api = MagicMock()
         api.login = AsyncMock(return_value=True)
         api.get_mqtt_credentials = AsyncMock(

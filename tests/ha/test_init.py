@@ -65,7 +65,9 @@ class TestSetupEntry:
             "custom_components.ecoflow_energy.coordinator.EcoFlowDeviceCoordinator.async_config_entry_first_refresh",
             new_callable=AsyncMock,
         ):
-            result = await hass.config_entries.async_setup(standard_config_entry.entry_id)
+            result = await hass.config_entries.async_setup(
+                standard_config_entry.entry_id
+            )
             await hass.async_block_till_done()
 
         assert result is True
@@ -91,10 +93,12 @@ class TestSetupEntry:
         mock_app_api = MagicMock()
         mock_app_api.login = AsyncMock(return_value=True)
         mock_app_api.user_id = "uid"
-        mock_app_api.get_mqtt_credentials = AsyncMock(return_value={
-            "userName": "app-user",
-            "password": "app-pass",
-        })
+        mock_app_api.get_mqtt_credentials = AsyncMock(
+            return_value={
+                "userName": "app-user",
+                "password": "app-pass",
+            }
+        )
 
         with (
             patch(
@@ -106,7 +110,9 @@ class TestSetupEntry:
                 new_callable=AsyncMock,
             ),
         ):
-            result = await hass.config_entries.async_setup(enhanced_config_entry.entry_id)
+            result = await hass.config_entries.async_setup(
+                enhanced_config_entry.entry_id
+            )
             await hass.async_block_till_done()
 
         assert result is True
@@ -293,9 +299,9 @@ class TestShutdownStopsConnections:
 
         probe = MagicMock()
         probe.async_stop = AsyncMock()
-        hass.data.setdefault(DATA_DEVICE_PROBES, {})[
-            standard_config_entry.entry_id
-        ] = [probe]
+        hass.data.setdefault(DATA_DEVICE_PROBES, {})[standard_config_entry.entry_id] = [
+            probe
+        ]
 
         with patch(
             "custom_components.ecoflow_energy.coordinator.EcoFlowDeviceCoordinator.async_shutdown",
@@ -483,6 +489,7 @@ class TestUnsupportedDeviceSkip:
         entry.add_to_hass(hass)
 
         import logging
+
         caplog.set_level(logging.WARNING)
 
         with (
@@ -512,7 +519,8 @@ class TestUnsupportedDeviceSkip:
             }
         ]
         warnings = [
-            r.getMessage() for r in caplog.records
+            r.getMessage()
+            for r in caplog.records
             if r.levelno == logging.WARNING and "Smart Meter" in r.getMessage()
         ]
         assert len(warnings) == 1
@@ -596,10 +604,12 @@ class TestUnsupportedDeviceSkip:
         mock_app_api = MagicMock()
         mock_app_api.login = AsyncMock(return_value=True)
         mock_app_api.user_id = "uid"
-        mock_app_api.get_mqtt_credentials = AsyncMock(return_value={
-            "userName": "app-user",
-            "password": "app-pass",
-        })
+        mock_app_api.get_mqtt_credentials = AsyncMock(
+            return_value={
+                "userName": "app-user",
+                "password": "app-pass",
+            }
+        )
 
         with (
             patch(
@@ -653,10 +663,12 @@ class TestUnsupportedDeviceSkip:
         mock_app_api = MagicMock()
         mock_app_api.login = AsyncMock(return_value=True)
         mock_app_api.user_id = "uid"
-        mock_app_api.get_mqtt_credentials = AsyncMock(return_value={
-            "userName": "app-user",
-            "password": "app-pass",
-        })
+        mock_app_api.get_mqtt_credentials = AsyncMock(
+            return_value={
+                "userName": "app-user",
+                "password": "app-pass",
+            }
+        )
 
         with (
             patch(
@@ -706,10 +718,12 @@ class TestUnsupportedDeviceSkip:
         mock_app_api = MagicMock()
         mock_app_api.login = AsyncMock(return_value=True)
         mock_app_api.user_id = "uid"
-        mock_app_api.get_mqtt_credentials = AsyncMock(return_value={
-            "userName": "app-user",
-            "password": "app-pass",
-        })
+        mock_app_api.get_mqtt_credentials = AsyncMock(
+            return_value={
+                "userName": "app-user",
+                "password": "app-pass",
+            }
+        )
 
         with (
             patch(
@@ -761,12 +775,15 @@ class TestUnsupportedDeviceSkip:
         mock_app_api = MagicMock()
         mock_app_api.login = AsyncMock(return_value=True)
         mock_app_api.user_id = "uid"
-        mock_app_api.get_mqtt_credentials = AsyncMock(return_value={
-            "userName": "app-user",
-            "password": "app-pass",
-        })
+        mock_app_api.get_mqtt_credentials = AsyncMock(
+            return_value={
+                "userName": "app-user",
+                "password": "app-pass",
+            }
+        )
 
         import logging
+
         caplog.set_level(logging.WARNING)
 
         with (
@@ -785,7 +802,8 @@ class TestUnsupportedDeviceSkip:
         assert result is True
         # Exactly one WARNING for the skipped device
         warnings = [
-            r for r in caplog.records
+            r
+            for r in caplog.records
             if r.levelno == logging.WARNING and "Skipping unsupported" in r.message
         ]
         assert len(warnings) == 1
@@ -832,12 +850,15 @@ class TestUnsupportedDeviceSkip:
         mock_app_api = MagicMock()
         mock_app_api.login = AsyncMock(return_value=True)
         mock_app_api.user_id = "uid"
-        mock_app_api.get_mqtt_credentials = AsyncMock(return_value={
-            "userName": "app-user",
-            "password": "app-pass",
-        })
+        mock_app_api.get_mqtt_credentials = AsyncMock(
+            return_value={
+                "userName": "app-user",
+                "password": "app-pass",
+            }
+        )
 
         import logging
+
         caplog.set_level(logging.WARNING)
 
         with (
@@ -854,7 +875,8 @@ class TestUnsupportedDeviceSkip:
             await hass.async_block_till_done()
 
         message = next(
-            r.getMessage() for r in caplog.records
+            r.getMessage()
+            for r in caplog.records
             if r.levelno == logging.WARNING and "Skipping unsupported" in r.message
         )
         assert "switch on the raw data capture" in message
@@ -897,6 +919,7 @@ class TestUnsupportedDeviceSkip:
         entry.add_to_hass(hass)
 
         import logging
+
         caplog.set_level(logging.WARNING)
 
         with patch(
@@ -907,7 +930,8 @@ class TestUnsupportedDeviceSkip:
             await hass.async_block_till_done()
 
         message = next(
-            r.getMessage() for r in caplog.records
+            r.getMessage()
+            for r in caplog.records
             if r.levelno == logging.WARNING and "Skipping unsupported" in r.message
         )
         assert "switch on the raw data capture" not in message
@@ -955,6 +979,7 @@ class TestUnsupportedDeviceSkip:
         entry.add_to_hass(hass)
 
         import logging
+
         caplog.set_level(logging.WARNING)
 
         with patch(
@@ -965,7 +990,8 @@ class TestUnsupportedDeviceSkip:
             await hass.async_block_till_done()
 
         message = next(
-            r.getMessage() for r in caplog.records
+            r.getMessage()
+            for r in caplog.records
             if r.levelno == logging.WARNING and "Skipping unsupported" in r.message
         )
         assert entry.data[CONF_AUTH_METHOD] == AUTH_METHOD_DEVELOPER
@@ -1003,10 +1029,12 @@ class TestUnsupportedDeviceSkip:
         mock_app_api = MagicMock()
         mock_app_api.login = AsyncMock(return_value=True)
         mock_app_api.user_id = "uid"
-        mock_app_api.get_mqtt_credentials = AsyncMock(return_value={
-            "userName": "app-user",
-            "password": "app-pass",
-        })
+        mock_app_api.get_mqtt_credentials = AsyncMock(
+            return_value={
+                "userName": "app-user",
+                "password": "app-pass",
+            }
+        )
 
         with (
             patch(
@@ -1134,10 +1162,12 @@ class TestAppAuthSetup:
         mock_app_api = MagicMock()
         mock_app_api.login = AsyncMock(return_value=True)
         mock_app_api.user_id = "uid"
-        mock_app_api.get_mqtt_credentials = AsyncMock(return_value={
-            "userName": "app-user",
-            "password": "app-pass",
-        })
+        mock_app_api.get_mqtt_credentials = AsyncMock(
+            return_value={
+                "userName": "app-user",
+                "password": "app-pass",
+            }
+        )
 
         with (
             patch(
@@ -1185,10 +1215,12 @@ class TestAppAuthSetup:
         mock_app_api = MagicMock()
         mock_app_api.login = AsyncMock(return_value=True)
         mock_app_api.user_id = "uid"
-        mock_app_api.get_mqtt_credentials = AsyncMock(return_value={
-            "userName": "app-user",
-            "password": "app-pass",
-        })
+        mock_app_api.get_mqtt_credentials = AsyncMock(
+            return_value={
+                "userName": "app-user",
+                "password": "app-pass",
+            }
+        )
 
         with (
             patch(
@@ -1273,7 +1305,9 @@ class TestUnroutedDeviceProbeWiring:
         return entry
 
     async def test_capture_is_off_unless_switched_on(
-        self, hass: HomeAssistant, mock_mqtt_client,
+        self,
+        hass: HomeAssistant,
+        mock_mqtt_client,
     ) -> None:
         """Nobody gets an extra connection they did not ask for."""
         entry = self._entry(hass, AUTH_METHOD_APP, raw_capture=None)
@@ -1289,7 +1323,9 @@ class TestUnroutedDeviceProbeWiring:
         assert entry.entry_id not in hass.data.get(DATA_DEVICE_PROBES, {})
 
     async def test_upgrade_from_a_build_without_the_switch_starts_nothing(
-        self, hass: HomeAssistant, mock_mqtt_client,
+        self,
+        hass: HomeAssistant,
+        mock_mqtt_client,
     ) -> None:
         """An entry created before the switch existed must come up with it off.
 
@@ -1313,7 +1349,9 @@ class TestUnroutedDeviceProbeWiring:
         assert CONF_RAW_CAPTURE_UNTIL not in entry.data
 
     async def test_a_running_capture_gets_a_watchdog(
-        self, hass: HomeAssistant, mock_mqtt_client,
+        self,
+        hass: HomeAssistant,
+        mock_mqtt_client,
     ) -> None:
         """Without it the recording ends at the first dropped session.
 
@@ -1350,7 +1388,9 @@ class TestUnroutedDeviceProbeWiring:
         unsub.assert_called_once()
 
     async def test_no_watchdog_without_probes(
-        self, hass: HomeAssistant, mock_mqtt_client,
+        self,
+        hass: HomeAssistant,
+        mock_mqtt_client,
     ) -> None:
         """Nothing to keep alive means no timer."""
         entry = self._entry(hass, AUTH_METHOD_APP)
@@ -1372,7 +1412,9 @@ class TestUnroutedDeviceProbeWiring:
         mock_watchdog.assert_not_called()
 
     async def test_probes_from_a_previous_run_are_stopped_on_reload(
-        self, hass: HomeAssistant, mock_mqtt_client,
+        self,
+        hass: HomeAssistant,
+        mock_mqtt_client,
     ) -> None:
         """A capture that was running before the update must not survive it.
 
@@ -1406,12 +1448,12 @@ class TestUnroutedDeviceProbeWiring:
         assert not hass.data.get(DATA_DEVICE_PROBES, {}).get(entry.entry_id)
 
     async def test_expired_window_does_not_start_and_switches_itself_off(
-        self, hass: HomeAssistant, mock_mqtt_client,
+        self,
+        hass: HomeAssistant,
+        mock_mqtt_client,
     ) -> None:
         """The deadline is wall-clock, so a restart cannot renew it."""
-        entry = self._entry(
-            hass, AUTH_METHOD_APP, capture_until=FIXED_NOW - 1
-        )
+        entry = self._entry(hass, AUTH_METHOD_APP, capture_until=FIXED_NOW - 1)
 
         with (
             patch("custom_components.ecoflow_energy.time.time", return_value=FIXED_NOW),
@@ -1430,7 +1472,9 @@ class TestUnroutedDeviceProbeWiring:
         assert CONF_RAW_CAPTURE_UNTIL not in entry.data
 
     async def test_probe_started_and_stopped(
-        self, hass: HomeAssistant, mock_mqtt_client,
+        self,
+        hass: HomeAssistant,
+        mock_mqtt_client,
     ) -> None:
         """Capture runs for the skipped device and is torn down on unload."""
         entry = self._entry(hass, AUTH_METHOD_APP)
@@ -1458,7 +1502,10 @@ class TestUnroutedDeviceProbeWiring:
         assert entry.entry_id not in hass.data.get(DATA_DEVICE_PROBES, {})
 
     async def test_no_probe_in_standard_mode(
-        self, hass: HomeAssistant, mock_mqtt_client, mock_http_client,
+        self,
+        hass: HomeAssistant,
+        mock_mqtt_client,
+        mock_http_client,
     ) -> None:
         """Standard mode has the raw quota route and needs no listener."""
         entry = MockConfigEntry(
@@ -1494,9 +1541,7 @@ class TestRawCaptureWithoutASkippedDevice:
     the whole capture path unreached.
     """
 
-    def _entry(
-        self, hass: HomeAssistant, *, capture_until: float
-    ) -> MockConfigEntry:
+    def _entry(self, hass: HomeAssistant, *, capture_until: float) -> MockConfigEntry:
         entry = MockConfigEntry(
             domain=DOMAIN,
             title="EcoFlow Energy",
@@ -1516,7 +1561,10 @@ class TestRawCaptureWithoutASkippedDevice:
         return entry
 
     async def test_a_supported_device_never_gets_a_probe_session(
-        self, hass: HomeAssistant, mock_mqtt_client, mock_enhanced_auth,
+        self,
+        hass: HomeAssistant,
+        mock_mqtt_client,
+        mock_enhanced_auth,
     ) -> None:
         """Deepening a buffer must never cost an extra connection.
 
@@ -1546,7 +1594,10 @@ class TestRawCaptureWithoutASkippedDevice:
         assert not hass.data.get(DATA_DEVICE_PROBES, {}).get(entry.entry_id)
 
     async def test_a_probe_covers_only_the_device_with_no_parser(
-        self, hass: HomeAssistant, mock_mqtt_client, mock_enhanced_auth,
+        self,
+        hass: HomeAssistant,
+        mock_mqtt_client,
+        mock_enhanced_auth,
     ) -> None:
         """The window being open is not what decides that a probe starts.
 
@@ -1618,7 +1669,10 @@ class TestRawCaptureWithoutASkippedDevice:
         )
 
     async def test_the_window_still_ends_on_its_own(
-        self, hass: HomeAssistant, mock_mqtt_client, mock_enhanced_auth,
+        self,
+        hass: HomeAssistant,
+        mock_mqtt_client,
+        mock_enhanced_auth,
     ) -> None:
         """Otherwise the flag stays on for good on such an account.
 
@@ -1665,7 +1719,10 @@ class TestRawCaptureWithoutASkippedDevice:
         assert CONF_RAW_CAPTURE_UNTIL not in entry.data
 
     async def test_an_expired_window_is_switched_off_at_setup(
-        self, hass: HomeAssistant, mock_mqtt_client, mock_enhanced_auth,
+        self,
+        hass: HomeAssistant,
+        mock_mqtt_client,
+        mock_enhanced_auth,
     ) -> None:
         """A restart past the deadline has to clear the flag here too.
 
