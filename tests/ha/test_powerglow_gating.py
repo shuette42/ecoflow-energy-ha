@@ -35,6 +35,8 @@ from custom_components.ecoflow_energy.ecoflow.parsers.powerocean_proto import (
 )
 from custom_components.ecoflow_energy.sensor import async_setup_entry as sensor_setup
 
+from .conftest import add_entities_collector
+
 POWEROCEAN_DEVICE: dict[str, Any] = {
     "sn": "HJ31TEST00000001",
     "name": "PowerOcean",
@@ -104,7 +106,7 @@ async def _setup(
     }
 
     created: list[Any] = []
-    await sensor_setup(hass, entry, created.extend)
+    await sensor_setup(hass, entry, add_entities_collector(created))
     return coordinator, created
 
 
@@ -231,7 +233,7 @@ class TestLateAccessory:
             second["sn"]: without_rod,
         }
         created: list[Any] = []
-        await sensor_setup(hass, entry, created.extend)
+        await sensor_setup(hass, entry, add_entities_collector(created))
 
         with_rod.set_device_value("heating_rod_power_w", 1750.0)
         with_rod.async_set_updated_data(dict(with_rod.device_data))
@@ -265,7 +267,7 @@ class TestUnload:
         }
 
         calls: list[Any] = []
-        await sensor_setup(hass, entry, calls.append)
+        await sensor_setup(hass, entry, add_entities_collector(calls))
         assert coordinator._listeners
         calls.clear()
 

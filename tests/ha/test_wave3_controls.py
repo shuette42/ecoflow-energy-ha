@@ -159,6 +159,7 @@ class TestWave3SendSet:
         coordinator = _coordinator(hass)
         full = coordinator._parse_message(TOPIC, _frame(FULL_DISPLAY_INDEX))
         with patch(_CLOCK, return_value=1000.0):
+            assert full is not None
             coordinator._apply_data(full)
 
         mode_switch = coordinator._parse_message(TOPIC, _mode_change_frame(486, 1))
@@ -185,6 +186,7 @@ class TestWave3SendSet:
     ) -> None:
         coordinator = _coordinator(hass)
         full = coordinator._parse_message(TOPIC, _frame(FULL_DISPLAY_INDEX))
+        assert full is not None
         with patch(_CLOCK, return_value=1000.0):
             coordinator._apply_data(full)
         assert coordinator.data["operating_mode"] == "fan"

@@ -111,6 +111,7 @@ def _walk(buf: bytes):
     while offset < len(buf):
         key, offset = _varint(buf, offset)
         number, wire = key >> 3, key & 7
+        value: int | bytes
         if wire == 0:
             value, offset = _varint(buf, offset)
         elif wire == 2:

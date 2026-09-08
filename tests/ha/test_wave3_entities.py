@@ -306,6 +306,7 @@ class TestWave3Controls:
             await entity.async_set_native_value(22.0)
 
         assert excinfo.value.translation_key == "set_value_rejected"
+        assert excinfo.value.translation_placeholders is not None
         assert (
             excinfo.value.translation_placeholders["reason"]
             == "no setpoint in fan mode"

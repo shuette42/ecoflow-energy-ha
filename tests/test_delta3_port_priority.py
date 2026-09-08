@@ -17,6 +17,8 @@ from custom_components.ecoflow_energy.const import (
     DELTA3_NUMBERS,
     DELTA3_SWITCHES,
     DEVICE_TYPE_DELTA3,
+    EcoFlowNumberDef,
+    EcoFlowSwitchDef,
     excluded_keys_for_serial,
     filter_defs_for_serial,
 )
@@ -190,7 +192,9 @@ class TestWriter:
 
     def test_frame_carries_field_376_as_a_submessage(self) -> None:
         command = build_port_priority_command("ac2", True, 40)
+        assert command is not None
         frame = build_proto_command(command, "D3M1TESTSERIAL01", seq=1234)
+        assert frame is not None
         headers, _ = decode_header_message(frame)
         header = headers[0]
         pdata = bytes.fromhex(header["pdata"])
@@ -204,7 +208,9 @@ class TestWriter:
     def test_frame_round_trips_through_the_read_back_message(self) -> None:
         """What we write must decode as what the device sends us."""
         command = build_port_priority_command("dc", False, 35)
+        assert command is not None
         frame = build_proto_command(command, "D3M1TESTSERIAL01", seq=7)
+        assert frame is not None
         pdata = bytes.fromhex(decode_header_message(frame)[0][0]["pdata"])
 
         # Strip the field 376 header (tag + length) and parse the payload.
@@ -222,6 +228,7 @@ class TestWriter:
     def test_port_enum_follows_the_app(self, stem: str, port_type: int) -> None:
         command = build_port_priority_command(stem, True, 40)
 
+        assert command is not None
         assert command["params"]["cfgPowerOutagesList"]["portType"] == port_type
 
     def test_unknown_port_returns_none(self) -> None:
@@ -311,11 +318,11 @@ class TestEntityReach:
     """These values travel on the push path only."""
 
     def test_every_port_priority_control_is_enhanced_only(self) -> None:
-        controls = [
-            d
-            for d in (*DELTA3_SWITCHES, *DELTA3_NUMBERS)
-            if d.key.startswith("port_priority_")
+        every: list[EcoFlowNumberDef | EcoFlowSwitchDef] = [
+            *DELTA3_SWITCHES,
+            *DELTA3_NUMBERS,
         ]
+        controls = [d for d in every if d.key.startswith("port_priority_")]
 
         assert len(controls) == 6
         assert all(d.enhanced_only for d in controls)

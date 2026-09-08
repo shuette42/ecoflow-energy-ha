@@ -39,6 +39,8 @@ from custom_components.ecoflow_energy.ecoflow.const import (
 )
 from custom_components.ecoflow_energy.sensor import async_setup_entry as sensor_setup
 
+from .conftest import add_entities_collector
+
 CAPTURE = (
     Path(__file__).parent.parent
     / "fixtures"
@@ -101,7 +103,7 @@ async def _setup_entities(
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {device["sn"]: coordinator}
 
     created: list[Any] = []
-    await sensor_setup(hass, entry, created.extend)
+    await sensor_setup(hass, entry, add_entities_collector(created))
     return [entity for entity in created if hasattr(entity, "_definition")]
 
 
@@ -162,7 +164,7 @@ class TestTheCaptureReachesTheEntities:
         }
 
         created: list[Any] = []
-        await sensor_setup(hass, entry, created.extend)
+        await sensor_setup(hass, entry, add_entities_collector(created))
         values = {
             entity._definition.key: entity.native_value
             for entity in created
@@ -193,7 +195,7 @@ class TestTheCaptureReachesTheEntities:
         }
 
         created: list[Any] = []
-        await sensor_setup(hass, entry, created.extend)
+        await sensor_setup(hass, entry, add_entities_collector(created))
         values = {
             entity._definition.key: entity.native_value
             for entity in created

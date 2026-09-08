@@ -238,7 +238,8 @@ class TestPowerOceanNumberBasic:
             hass,
             enhanced_config_entry,
         )
-        coordinator.async_set_updated_data(None)
+        # Passing nothing is the subject: the entity must report nothing back.
+        coordinator.async_set_updated_data(None)  # type: ignore[arg-type]
         assert entity.native_value is None
 
 

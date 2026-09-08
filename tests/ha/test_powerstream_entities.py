@@ -33,6 +33,8 @@ from custom_components.ecoflow_energy.const import (
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
 from custom_components.ecoflow_energy.sensor import async_setup_entry as sensor_setup
 
+from .conftest import add_entities_collector
+
 CAPTURE = (
     Path(__file__).parent.parent / "fixtures" / "powerstream" / "hw51_quota_masked.json"
 )
@@ -136,7 +138,7 @@ class TestThePlatform:
         }
 
         created: list[Any] = []
-        await sensor_setup(hass, powerstream_entry, created.extend)
+        await sensor_setup(hass, powerstream_entry, add_entities_collector(created))
         keys = {
             entity._definition.key
             for entity in created
@@ -155,7 +157,7 @@ class TestThePlatform:
         await coordinator.async_refresh()
 
         created: list[Any] = []
-        await sensor_setup(hass, coordinator._entry, created.extend)
+        await sensor_setup(hass, coordinator._entry, add_entities_collector(created))
         states = {
             entity._definition.key: entity.native_value
             for entity in created

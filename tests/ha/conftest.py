@@ -7,14 +7,30 @@ a real (in-memory) Home Assistant instance via the ``hass`` fixture.
 from __future__ import annotations
 
 import threading
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Iterable
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+
+def add_entities_collector(target: list[Any]) -> AddEntitiesCallback:
+    """Collect the entities a platform creates into `target`.
+
+    A platform's setup takes a callback with an optional second argument, so a
+    bare `list.extend` does not fit the signature Home Assistant declares even
+    though it works at runtime. This is that callback, in one place rather than
+    redefined in every file that sets a platform up.
+    """
+
+    def _add(new_entities: Iterable[Any], update_before_add: bool = False) -> None:
+        target.extend(new_entities)
+
+    return _add
 
 
 @pytest.fixture(autouse=True)

@@ -54,7 +54,7 @@ from custom_components.ecoflow_energy.number import (
     async_setup_entry as number_setup,
 )
 
-from .conftest import MOCK_STREAM_DEVICE
+from .conftest import MOCK_STREAM_DEVICE, add_entities_collector
 from .test_stream_ac5000_entities import ES22_DEVICE
 
 BK31_DEVICE: dict[str, Any] = {
@@ -167,7 +167,7 @@ class TestStreamNumberPlatformSetup:
             BK31_DEVICE["sn"]: coordinator
         }
         created: list[Any] = []
-        await number_setup(hass, entry, created.extend)
+        await number_setup(hass, entry, add_entities_collector(created))
         return {
             entity._definition.key
             for entity in created
@@ -406,6 +406,7 @@ class TestStreamSocLimitSet:
             decode_header_message,
         )
 
+        assert isinstance(coordinator.async_send_proto_set_command, AsyncMock)
         payload = coordinator.async_send_proto_set_command.call_args.args[0]
         headers, _ = decode_header_message(payload)
         return headers[0], bytes.fromhex(headers[0]["pdata"])
@@ -484,6 +485,7 @@ class TestStreamSocLimitSet:
             await entity.async_set_native_value(90)
 
         assert err.value.translation_key == "set_command_not_ready"
+        assert isinstance(coordinator.async_send_proto_set_command, AsyncMock)
         coordinator.async_send_proto_set_command.assert_not_called()
 
     async def test_rejects_limits_that_cross(
@@ -499,6 +501,7 @@ class TestStreamSocLimitSet:
             await entity.async_set_native_value(19)
 
         assert err.value.translation_key == "set_value_rejected"
+        assert isinstance(coordinator.async_send_proto_set_command, AsyncMock)
         coordinator.async_send_proto_set_command.assert_not_called()
 
     async def test_concurrent_limits_preserve_both_changes(
@@ -607,6 +610,7 @@ class TestBackupReserveFloorFollowsTheDischargeLimit:
             {"min_discharge_soc_pct": 20, "backup_reserve_pct": 23},
         )
         entity._handle_coordinator_update()
+        assert isinstance(entity.async_write_ha_state, MagicMock)
         entity.async_write_ha_state.reset_mock()
 
         coordinator.async_set_updated_data(
@@ -628,6 +632,7 @@ class TestBackupReserveFloorFollowsTheDischargeLimit:
             {"min_discharge_soc_pct": 20, "backup_reserve_pct": 23},
         )
         entity._handle_coordinator_update()
+        assert isinstance(entity.async_write_ha_state, MagicMock)
         entity.async_write_ha_state.reset_mock()
 
         coordinator.async_set_updated_data(dict(coordinator._device_data))

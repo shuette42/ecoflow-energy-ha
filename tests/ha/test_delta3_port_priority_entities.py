@@ -15,6 +15,7 @@ switch platform gained together with this feature.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -145,6 +146,7 @@ def _number(coordinator: EcoFlowDeviceCoordinator, key: str) -> EcoFlowNumber:
 
 def _sent_item(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]:
     """Return the port priority payload handed to the coordinator."""
+    assert isinstance(coordinator.async_send_delta3_set, AsyncMock)
     coordinator.async_send_delta3_set.assert_called_once()
     command = coordinator.async_send_delta3_set.call_args[0][0]
     return command["params"]["cfgPowerOutagesList"]
@@ -198,6 +200,7 @@ class TestSwitchCarriesTheReportedCutoff:
             await entity.async_turn_on()
 
         assert err.value.translation_key == "set_command_not_ready"
+        assert isinstance(coordinator.async_send_delta3_set, AsyncMock)
         coordinator.async_send_delta3_set.assert_not_called()
 
     async def test_a_refused_write_does_not_move_the_switch(
@@ -220,6 +223,7 @@ class TestSwitchCarriesTheReportedCutoff:
 
         await entity.async_turn_on()
 
+        assert isinstance(coordinator.async_send_delta3_set, AsyncMock)
         command = coordinator.async_send_delta3_set.call_args[0][0]
         assert "cfgPowerOutagesList" not in command["params"]
 
@@ -260,6 +264,7 @@ class TestNumberCarriesTheReportedFlag:
             await entity.async_set_native_value(20.0)
 
         assert err.value.translation_key == "set_command_not_ready"
+        assert isinstance(coordinator.async_send_delta3_set, AsyncMock)
         coordinator.async_send_delta3_set.assert_not_called()
 
     async def test_the_regular_numbers_are_untouched(self, hass: HomeAssistant) -> None:
@@ -268,6 +273,7 @@ class TestNumberCarriesTheReportedFlag:
 
         await entity.async_set_native_value(80.0)
 
+        assert isinstance(coordinator.async_send_delta3_set, AsyncMock)
         command = coordinator.async_send_delta3_set.call_args[0][0]
         assert "cfgPowerOutagesList" not in command["params"]
 
@@ -337,7 +343,13 @@ class TestSwitchPlatformGating:
         coordinator, entry = _coordinator(hass, device, REPORTED, enhanced)
         hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {device["sn"]: coordinator}
         created: list[Any] = []
-        await switch_setup(hass, entry, created.extend)
+
+        def _collect(
+            new_entities: Iterable[Any], update_before_add: bool = False
+        ) -> None:
+            created.extend(new_entities)
+
+        await switch_setup(hass, entry, _collect)
         return {e._definition.key for e in created}
 
     async def test_max_plus_in_enhanced_mode_gets_them(
@@ -400,6 +412,7 @@ class TestWritesInSuccession:
         await switch.async_turn_on()  # AC 1 -> non-essential
         await number.async_set_native_value(25)  # ... before the device echoes
 
+        assert isinstance(coordinator.async_send_delta3_set, AsyncMock)
         sent = coordinator.async_send_delta3_set.call_args[0][0]
         item = sent["params"]["cfgPowerOutagesList"]
 
@@ -418,6 +431,7 @@ class TestWritesInSuccession:
         await number.async_set_native_value(20)
         await switch.async_turn_off()
 
+        assert isinstance(coordinator.async_send_delta3_set, AsyncMock)
         item = coordinator.async_send_delta3_set.call_args[0][0]["params"][
             "cfgPowerOutagesList"
         ]
@@ -453,6 +467,7 @@ class TestDerivedBoundsArePublished:
         coordinator, _ = _coordinator(hass, DELTA3_MAX_PLUS, REPORTED)
         number = _number(coordinator, "port_priority_ac1_soc")
         number._handle_coordinator_update()
+        assert isinstance(number.async_write_ha_state, MagicMock)
         number.async_write_ha_state.reset_mock()
 
         assert (number.native_min_value, number.native_max_value) == (5, 95)
@@ -464,6 +479,7 @@ class TestDerivedBoundsArePublished:
         number._handle_coordinator_update()
 
         assert (number.native_min_value, number.native_max_value) == (25, 75)
+        assert isinstance(number.async_write_ha_state, MagicMock)
         assert number.async_write_ha_state.called
 
     async def test_unchanged_limits_do_not_force_a_write(
@@ -473,6 +489,7 @@ class TestDerivedBoundsArePublished:
         coordinator, _ = _coordinator(hass, DELTA3_MAX_PLUS, REPORTED)
         number = _number(coordinator, "port_priority_ac1_soc")
         number._handle_coordinator_update()
+        assert isinstance(number.async_write_ha_state, MagicMock)
         number.async_write_ha_state.reset_mock()
 
         coordinator.async_set_updated_data(dict(coordinator._device_data))

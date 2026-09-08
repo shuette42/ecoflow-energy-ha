@@ -61,6 +61,8 @@ from tests.test_powerocean_timer_task import (
 )
 from tests.test_powerocean_timer_task_write import pdata_of
 
+from .conftest import add_entities_collector
+
 POWEROCEAN_DEVICE: dict[str, Any] = {
     "sn": "HJ31TEST00000001",
     "name": "PowerOcean",
@@ -72,14 +74,19 @@ POWEROCEAN_DEVICE: dict[str, Any] = {
 GET_REPLY = f"/app/user123/{POWEROCEAN_DEVICE['sn']}/thing/property/get_reply"
 
 
-class FakeMqtt:
+class FakeMqtt(MagicMock):
     """Records what the coordinator hands the broker.
 
     Only the two methods the SET path calls. The payload is kept so the test
     can decode what actually went out rather than trust the return value.
+
+    Subclasses `MagicMock` so the assignment to the coordinator's
+    `EcoFlowMQTTClient | None`-typed attribute type-checks; the methods below
+    are real overrides and shadow Mock's auto-attribute behaviour.
     """
 
     def __init__(self, connected: bool = True, delivers: bool = True) -> None:
+        super().__init__()
         self._connected = connected
         self.delivers = delivers
         self.sent: list[bytes] = []
@@ -158,8 +165,8 @@ async def _setup(
 
     switches: list[Any] = []
     numbers: list[Any] = []
-    await switch_setup(hass, entry, switches.extend)
-    await number_setup(hass, entry, numbers.extend)
+    await switch_setup(hass, entry, add_entities_collector(switches))
+    await number_setup(hass, entry, add_entities_collector(numbers))
     return coordinator, switches, numbers, mqtt
 
 
@@ -209,6 +216,7 @@ def _fields(payload: bytes) -> dict[int, Any]:
     while pos < len(body):
         key, pos = _varint(body, pos)
         field, wire = key >> 3, key & 0x07
+        value: int | bytes
         if wire == 0:
             value, pos = _varint(body, pos)
         elif wire == 2:
@@ -551,8 +559,8 @@ class TestNoSchedule:
         hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
             POWEROCEAN_DEVICE["sn"]: coordinator
         }
-        await switch_setup(hass, entry, added.extend)
-        await number_setup(hass, entry, added.extend)
+        await switch_setup(hass, entry, add_entities_collector(added))
+        await number_setup(hass, entry, add_entities_collector(added))
         assert _schedule_keys(added) == set()
 
         _report(coordinator, LIST_ARMED_1500W)
@@ -582,8 +590,8 @@ class TestStandardMode:
 
         switches: list[Any] = []
         numbers: list[Any] = []
-        await switch_setup(hass, entry, switches.extend)
-        await number_setup(hass, entry, numbers.extend)
+        await switch_setup(hass, entry, add_entities_collector(switches))
+        await number_setup(hass, entry, add_entities_collector(numbers))
 
         assert _schedule_keys(switches) == set()
         assert _schedule_keys(numbers) == set()

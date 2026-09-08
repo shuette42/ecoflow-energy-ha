@@ -58,6 +58,8 @@ from custom_components.ecoflow_energy.select import (
     async_setup_entry as select_setup,
 )
 
+from .conftest import add_entities_collector
+
 DELTA3_MAX_PLUS: dict[str, Any] = {
     "sn": "D3M1TEST00000001",
     "name": "Delta 3 Max Plus",
@@ -170,6 +172,7 @@ class TestWrite:
 
         await entity.async_select_option("30_seconds")
 
+        assert isinstance(coordinator.async_send_delta3_set, AsyncMock)
         command = coordinator.async_send_delta3_set.call_args[0][0]
         assert command["params"] == {SCREEN_TIMEOUT_PARAMS_KEY: 30}
 
@@ -179,6 +182,7 @@ class TestWrite:
 
         await entity.async_select_option("never")
 
+        assert isinstance(coordinator.async_send_delta3_set, AsyncMock)
         command = coordinator.async_send_delta3_set.call_args[0][0]
         assert command["params"] == {SCREEN_TIMEOUT_PARAMS_KEY: 0}
 
@@ -227,6 +231,7 @@ class TestWrite:
 
         await entity.async_select_option("2_hours")
 
+        assert isinstance(coordinator.async_send_delta3_set, AsyncMock)
         coordinator.async_send_delta3_set.assert_not_called()
 
 
@@ -283,7 +288,7 @@ class TestPlatformGating:
             DELTA3_MAX_PLUS["sn"]: coordinator
         }
         created: list[Any] = []
-        await select_setup(hass, entry, created.extend)
+        await select_setup(hass, entry, add_entities_collector(created))
         return {e._definition.key for e in created}
 
     async def test_enhanced_mode_gets_the_select(self, hass: HomeAssistant) -> None:

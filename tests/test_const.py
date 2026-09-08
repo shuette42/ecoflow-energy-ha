@@ -400,11 +400,13 @@ def _extract_sensor_keys(var_name: str) -> list[str]:
             value = node.value
 
         if target_name == var_name and isinstance(value, ast.List):
-            keys = []
+            keys: list[str] = []
             for elt in value.elts:
                 if isinstance(elt, ast.Call) and elt.args:
                     first_arg = elt.args[0]
-                    if isinstance(first_arg, ast.Constant):
+                    if isinstance(first_arg, ast.Constant) and isinstance(
+                        first_arg.value, str
+                    ):
                         keys.append(first_arg.value)
             return keys
     return []

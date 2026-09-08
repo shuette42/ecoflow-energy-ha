@@ -226,7 +226,11 @@ _FULL = {
     },
 }
 
-_EXPECTED = {**_INCREMENTAL, **_WITH_ENERGY_RECORD, **_FULL}
+_EXPECTED: dict[int, dict[str, Any]] = {
+    **_INCREMENTAL,
+    **_WITH_ENERGY_RECORD,
+    **_FULL,
+}
 
 # Upload periods only, nothing readable.
 _RUNTIME_ONLY = (3, 7, 12)

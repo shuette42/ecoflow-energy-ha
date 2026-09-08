@@ -12,8 +12,16 @@ python_version = "3.13"
 ignore_missing_imports = true
 exclude = "ecocharge_pb2\\.py$"
 
+# Both module names are real. mypy computes `ecoflow_energy.*` when it is
+# pointed at custom_components/, and `custom_components.ecoflow_energy.*` when
+# it reaches the same file through a test that imports it by that path. An
+# override naming only one of them is silently inactive for the other, and the
+# gate then answers differently depending on what it was pointed at.
 [[tool.mypy.overrides]]
-module = "ecoflow_energy.ecoflow.proto.ecocharge_pb2"
+module = [
+    "ecoflow_energy.ecoflow.proto.ecocharge_pb2",
+    "custom_components.ecoflow_energy.ecoflow.proto.ecocharge_pb2",
+]
 follow_imports = "skip"
 ignore_errors = true
 
@@ -23,5 +31,16 @@ ignore_errors = true
 # four methods whose return type is not `None`; nothing else in the module
 # is exempted.
 [[tool.mypy.overrides]]
-module = "ecoflow_energy.coordinator._typing"
+module = [
+    "ecoflow_energy.coordinator._typing",
+    "custom_components.ecoflow_energy.coordinator._typing",
+]
 disable_error_code = ["empty-body"]
+
+# A test replaces a method on an instance to observe what the code under test
+# does with it. That is the point of the test, not a mistake, and it is the
+# only check switched off here: everything else the type checker reports about
+# the suite is fixed rather than silenced.
+[[tool.mypy.overrides]]
+module = ["tests.*", "conftest"]
+disable_error_code = ["method-assign"]
