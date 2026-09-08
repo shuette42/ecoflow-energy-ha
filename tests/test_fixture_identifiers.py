@@ -133,9 +133,7 @@ def test_no_identifier_survived_masking(path: Path) -> None:
             assert not _UUID.search(region_text), (
                 f"{where}: unmasked UUID under the mask"
             )
-            assert not _MAC.search(region_text), (
-                f"{where}: unmasked MAC under the mask"
-            )
+            assert not _MAC.search(region_text), f"{where}: unmasked MAC under the mask"
             for run in _RUN.findall(region_text):
                 if run in _PLACEHOLDERS:
                     continue
