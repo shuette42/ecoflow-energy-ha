@@ -333,8 +333,8 @@ class TestAnchoredStringMasking:
     """
 
     SN = "HJ31TESTBAM40TX5"
-    FIELD2 = b"3D1A32AC"
-    FIELD5 = b"Ecoflow_0379"
+    FIELD2 = b"A1B2C3D4"
+    FIELD5 = b"Ecoflow_1234"
 
     @staticmethod
     def _wrap(depth: int, payload: bytes) -> bytes:
@@ -1182,9 +1182,9 @@ class TestEncryptedRegionMasking:
         """
         record = (
             encode_field_varint(1, 1)
-            + encode_field_bytes(2, b"3D1A32AC")
+            + encode_field_bytes(2, b"A1B2C3D4")
             + encode_field_bytes(3, b"HJ31TESTBAM40TX5")
-            + encode_field_bytes(5, b"Ecoflow_0379")
+            + encode_field_bytes(5, b"Ecoflow_1234")
         )
         plain = encode_field_bytes(1, record)
         frame = _enc_header(2, 133, pdata_plain=plain, seq=self._KEY)
@@ -1196,7 +1196,7 @@ class TestEncryptedRegionMasking:
         assert len(regions) == 1 and regions[0].key == self._KEY, regions
         region = regions[0]
         unmasked = _xor(result[region.start : region.end], self._KEY)
-        for value in (b"3D1A32AC", b"HJ31TESTBAM40TX5", b"Ecoflow_0379"):
+        for value in (b"A1B2C3D4", b"HJ31TESTBAM40TX5", b"Ecoflow_1234"):
             assert value not in unmasked
             at = plain.index(value)
             assert unmasked[at : at + len(value)] == b"X" * len(value), value

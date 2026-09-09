@@ -268,16 +268,16 @@ def test_the_gate_sees_a_string_beside_a_serial() -> None:
     """
     record = (
         encode_field_varint(1, 1)
-        + encode_field_bytes(2, b"3D1A32AC")
+        + encode_field_bytes(2, b"A1B2C3D4")
         + encode_field_bytes(3, b"X" * 16)
-        + encode_field_bytes(5, b"Ecoflow_0379")
+        + encode_field_bytes(5, b"Ecoflow_1234")
     )
     frame = _wrap_as_record(record)
 
     findings = _leaks(frame)
     assert len(findings) == 2, findings
-    assert any("3D1A32AC" in finding for finding in findings), findings
-    assert any("Ecoflow_0379" in finding for finding in findings), findings
+    assert any("A1B2C3D4" in finding for finding in findings), findings
+    assert any("Ecoflow_1234" in finding for finding in findings), findings
 
     assert _leaks(sanitize_frame(frame, [])) == []
 
@@ -294,9 +294,9 @@ def test_the_gate_sees_a_string_beside_a_serial_under_the_mask() -> None:
     key = 0x99
     record = (
         encode_field_varint(1, 1)
-        + encode_field_bytes(2, b"3D1A32AC")
+        + encode_field_bytes(2, b"A1B2C3D4")
         + encode_field_bytes(3, b"X" * 16)
-        + encode_field_bytes(5, b"Ecoflow_0379")
+        + encode_field_bytes(5, b"Ecoflow_1234")
     )
     plain = encode_field_bytes(1, record)
     header = bytearray()
@@ -308,8 +308,8 @@ def test_the_gate_sees_a_string_beside_a_serial_under_the_mask() -> None:
     findings = [f for f in _leaks(frame) if "beside a serial under the mask" in f]
 
     assert len(findings) == 2, findings
-    assert any("3D1A32AC" in f for f in findings), findings
-    assert any("Ecoflow_0379" in f for f in findings), findings
+    assert any("A1B2C3D4" in f for f in findings), findings
+    assert any("Ecoflow_1234" in f for f in findings), findings
     assert _leaks(sanitize_frame(frame, [])) == []
 
 
@@ -320,7 +320,7 @@ def test_the_gate_is_quiet_without_a_serial() -> None:
     yields no candidates at all, however identifier-shaped its neighbours are.
     """
     record = encode_field_bytes(2, b"plug_and_play") + encode_field_bytes(
-        3, b"3D1A32AC"
+        3, b"A1B2C3D4"
     )
     frame = _wrap_as_record(record)
 
