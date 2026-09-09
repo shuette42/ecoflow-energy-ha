@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
-- The diagnostics download masks two more things a device says about its neighbours: the name and the short id that sit beside a serial in the same record. On a PowerPulse 2 those read `Ecoflow_0378` and `BD1954BF` and were left in plain text in a download the owner had shared, while the serial next to them was masked. The masking now treats a serial as the boundary: any string of eight or more characters that shares a protobuf record with a serial is replaced by `X`, whatever its spelling, so a name an owner typed is covered as well. Measured over every capture on file: the four values are the only fields touched, and no reading, length or header field changes. The fixture check that guards this repository sees the same shape now.
+- The diagnostics download masks two more things a device says about its neighbours: the name and the short id that sit beside a serial in the same record. On a PowerPulse 2 those are a network name of the form `Ecoflow_` plus four digits and an eight-character hex id, and both were left in plain text in a download the owner had shared, while the serial next to them was masked. The masking now treats a serial as the boundary: any string of eight or more characters that shares a protobuf record with a serial is replaced by `X`, whatever its spelling, so a name an owner typed is covered as well. Measured over every capture on file: the four values are the only fields touched, and no reading, length or header field changes. The fixture check that guards this repository sees the same shape now.
 
 ### Changed
 
