@@ -459,6 +459,65 @@ class TestAnchoredStringMasking:
         assert self.FIELD2 not in result
         assert self.FIELD5 not in result
 
+    def test_a_name_after_the_serial_with_an_alphanumeric_tag_is_masked(self) -> None:
+        """Field 8 follows the serial with the tag byte `B`, which is in
+        `[A-Z0-9]`: the free-running serial pass would swallow that tag and
+        blind the walk to the rest of the message. The anchored pass runs
+        before it for exactly this case. Red when the pass moves back behind
+        `_SERIAL_RUN`.
+        """
+        record = (
+            encode_field_varint(1, 1)
+            + encode_field_bytes(3, self.SN.encode())
+            + encode_field_bytes(8, self.FIELD5)
+        )
+        frame = self._wrap(3, record)
+
+        result = sanitize_frame(frame, [])
+
+        assert self.FIELD5 not in result
+        at = frame.index(self.FIELD5)
+        assert result[at : at + len(self.FIELD5)] == b"X" * len(self.FIELD5)
+        assert self.SN.encode() not in result
+
+    def test_a_dotted_or_slashed_sibling_of_eight_characters_survives(self) -> None:
+        """The alphabet is the boundary for these, not the floor: both are
+        long enough to be candidates and are kept only because `.` and `/`
+        are outside `[A-Za-z0-9_-]`. Red when either character joins it.
+        """
+        record = (
+            encode_field_varint(1, 1)
+            + encode_field_bytes(2, b"V1.0.1.2")
+            + encode_field_bytes(3, self.SN.encode())
+            + encode_field_bytes(4, b"Asia/Tokyo")
+        )
+        frame = self._wrap(3, record)
+
+        result = _mask_anchored_strings(frame)
+
+        assert result == frame
+
+    def test_the_anchor_itself_is_not_a_candidate(self) -> None:
+        """A serial matches the candidate shape too, and is left to the
+        serial pass: the anchored pass never touches it, so two serials in
+        one message anchor each other and both survive this pass intact.
+        Red when the anchor exclusion is dropped.
+        """
+        other = "HJ31OTHERPACK001"
+        record = (
+            encode_field_varint(1, 1)
+            + encode_field_bytes(2, self.FIELD2)
+            + encode_field_bytes(3, self.SN.encode())
+            + encode_field_bytes(4, other.encode())
+        )
+        frame = self._wrap(3, record)
+
+        result = _mask_anchored_strings(frame)
+
+        assert self.SN.encode() in result
+        assert other.encode() in result
+        assert self.FIELD2 not in result
+
     def test_the_anchor_does_not_reach_across_messages(self) -> None:
         anchored = self._record(field2=None, field3=self.SN.encode())
         unanchored = encode_field_varint(1, 2) + encode_field_bytes(2, b"Guest_Network")
@@ -541,6 +600,10 @@ class TestAnchoredStringMasking:
 
         assert self.FIELD5 not in result_at_cap
         assert result_below_cap == below_cap
+        # The cap is the depth the collateral was measured at (ADR-025
+        # decision 3), so moving it is a measurement, not an edit. Pinned
+        # here because the two assertions above move with the constant.
+        assert _ANCHOR_DEPTH == 6
 
 
 class TestUUIDMasking:

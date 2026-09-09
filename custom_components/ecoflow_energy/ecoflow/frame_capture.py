@@ -202,16 +202,35 @@ def _mask_delimited_identifiers(payload: bytes) -> bytes:
 # cap would mask the tail of a long value and leave its front standing,
 # which is worse than either choice (ADR-016, amendment).
 #
-# Two couplings this pass depends on, both already relied on by
-# `_JOINED_HEX_RUN`: it runs after `_SERIAL_RUN`, so the anchor it finds is
-# usually a run of `X` - which still matches `_SERIAL_RUN` only because
-# `_MASK_BYTE` is inside `[A-Z0-9]`; and a whole field the delimited pass
-# has already masked matches the candidate shape and is re-masked `X` for
-# `X`, which changes nothing.
+# This pass runs before the free-running ones, right after the named
+# secrets, and the order is load-bearing. `_SERIAL_RUN` is greedy and knows
+# nothing about fields: when the byte after a serial is itself in
+# `[A-Z0-9]` it is swallowed too, and for a length-delimited field that byte
+# is the tag - fields 6, 8, 9, 10 and 11 carry the tags `2`, `B`, `J`, `R`
+# and `Z`. A tag turned to `X` reads as a varint, and the walk loses the
+# rest of that message, name included. Measured: a name at field 8 after
+# the serial survived when this pass ran last, and is masked when it runs
+# first. Every pass is `X` for `X` idempotent, so the order costs nothing.
 #
-# Found 2026-09-09 in a reporter's diagnostics download, in message `2/133`
-# of a PowerPulse 2, six frames, while the serial beside them was masked
-# (PLAN-133, ADR-025).
+# Two couplings remain, both already relied on by `_JOINED_HEX_RUN`: the
+# anchor accepts a run of `X` as well as a real serial - a named secret
+# masked one line earlier, or a fixture already masked on disk, still
+# anchors, and the fixture gate walks masked files with this same helper -
+# which holds only because `_MASK_BYTE` is inside `[A-Z0-9]`; and a
+# 12-character identifier this pass masks is what the delimited pass would
+# have masked anyway, `X` for `X`.
+#
+# A field that holds a whole sub-message is a candidate too when every one
+# of its bytes happens to fall in the alphabet, and would be masked whole,
+# children included. No such field exists on file; it is recorded rather
+# than guarded against, because a guard would need to parse the value to
+# decide, and a value that parses as a message is exactly what a name
+# cannot be told from.
+#
+# Found 2026-09-09 in a reporter's diagnostics downloads, in message `2/133`
+# of a PowerPulse 2: 9 frames in two downloads, 18 occurrences of four
+# distinct values, while the serial beside them was masked (PLAN-133,
+# ADR-025).
 _ANCHORED_STRING = re.compile(rb"[A-Za-z0-9_-]{8,}")
 _ANCHOR_DEPTH = 6
 
@@ -318,22 +337,24 @@ def _mask_anchored_strings(payload: bytes) -> bytes:
 def _plain_passes(payload: bytes, secrets: list[str]) -> bytes:
     """Every mask this module applies, over bytes that are already plain.
 
-    Named identifiers are masked first, then anything else shaped like a
+    Named identifiers are masked first, then any string that shares a
+    protobuf message with a serial, then anything else shaped like a
     serial, then anything written as a UUID, then a lower-case hex run a
     hyphen joins to a serial-shaped run, then the city half of any time zone
-    the device reports, then anything a device presents as a whole
-    length-delimited field of identifier-shaped characters, and last any
-    string that shares a protobuf message with a serial. The second pass
-    matters because a frame also carries the serial of every battery pack
-    and of any attached accessory, and the caller cannot name what it has
-    not discovered yet. The third and fourth catch identifiers too short, or
-    too oddly shaped, for the second to risk matching: a UUID by its own
-    hyphenated shape, and a hex run by the serial it is joined to - which is
-    how a 12-character one reached a public issue attachment before anyone
-    noticed. The seventh catches what no shape can: a neighbour's name and
-    short id, by their position beside its serial. Masking preserves length,
-    so byte offsets survive every pass and a field-layout analysis still
-    works.
+    the device reports, and last anything a device presents as a whole
+    length-delimited field of identifier-shaped characters. The second pass
+    catches what no shape can: a neighbour's name and short id, by their
+    position beside its serial - and it runs before the free-running passes
+    because those can mask the tag byte after a serial and blind a walk
+    that reads fields. The third matters because a frame also carries the
+    serial of every battery pack and of any attached accessory, and the
+    caller cannot name what it has not discovered yet. The fourth and fifth
+    catch identifiers too short, or too oddly shaped, for the third to risk
+    matching: a UUID by its own hyphenated shape, and a hex run by the
+    serial it is joined to - which is how a 12-character one reached a
+    public issue attachment before anyone noticed. Masking preserves
+    length, so byte offsets survive every pass and a field-layout analysis
+    still works.
 
     "Plain" is the operative word: none of these passes can see a string
     once the device has XOR-masked it. `sanitize_frame` is what runs this
@@ -348,14 +369,14 @@ def _plain_passes(payload: bytes, secrets: list[str]) -> bytes:
             raw = variant.encode("ascii", "ignore")
             if raw and raw in sanitized:
                 sanitized = sanitized.replace(raw, _MASK_BYTE * len(raw))
+    sanitized = _mask_anchored_strings(sanitized)
     sanitized = _SERIAL_RUN.sub(lambda m: _MASK_BYTE * len(m.group()), sanitized)
     sanitized = _UUID_RUN.sub(lambda m: _MASK_BYTE * len(m.group()), sanitized)
     sanitized = _JOINED_HEX_RUN.sub(lambda m: _MASK_BYTE * len(m.group()), sanitized)
     sanitized = _TIME_ZONE.sub(
         lambda m: m.group(1) + _MASK_BYTE * len(m.group(2)), sanitized
     )
-    sanitized = _mask_delimited_identifiers(sanitized)
-    return _mask_anchored_strings(sanitized)
+    return _mask_delimited_identifiers(sanitized)
 
 
 # The device does not always send a string plainly. Some commands mark their

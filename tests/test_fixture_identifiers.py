@@ -122,7 +122,8 @@ def _leaks(raw: bytes) -> list[str]:
     for region in _encrypted_regions(raw):
         if region.key is None:
             continue
-        region_text = _xor(raw[region.start : region.end], region.key).decode("latin1")
+        region_raw = _xor(raw[region.start : region.end], region.key)
+        region_text = region_raw.decode("latin1")
         if _UUID.search(region_text):
             findings.append("unmasked UUID under the mask")
         if _MAC.search(region_text):
@@ -132,6 +133,16 @@ def _leaks(raw: bytes) -> list[str]:
                 continue
             if set(run) != {"X"}:
                 findings.append(f"unmasked run under the mask {run!r}")
+        for start, end in _anchored_string_fields(region_raw):
+            value = region_raw[start:end]
+            if set(value) == {ord("X")}:
+                continue
+            decoded = value.decode("latin1")
+            if decoded in _PLACEHOLDERS:
+                continue
+            findings.append(
+                f"unmasked string beside a serial under the mask {decoded!r}"
+            )
 
     return findings
 
@@ -268,6 +279,37 @@ def test_the_gate_sees_a_string_beside_a_serial() -> None:
     assert any("3D1A32AC" in finding for finding in findings), findings
     assert any("Ecoflow_0379" in finding for finding in findings), findings
 
+    assert _leaks(sanitize_frame(frame, [])) == []
+
+
+def test_the_gate_sees_a_string_beside_a_serial_under_the_mask() -> None:
+    """Positive control for the region branch of the anchored check.
+
+    The product masks a neighbour's name under the XOR mask by running the
+    same passes over the unmasked region (ADR-023, ADR-025); the gate has
+    to see it there too, or it would accept a fixture the product would
+    have cleaned. Same record as above, carried as the XOR-ed `pdata` of a
+    header that declares `enc_type = 1` and its own `seq`.
+    """
+    key = 0x99
+    record = (
+        encode_field_varint(1, 1)
+        + encode_field_bytes(2, b"3D1A32AC")
+        + encode_field_bytes(3, b"X" * 16)
+        + encode_field_bytes(5, b"Ecoflow_0379")
+    )
+    plain = encode_field_bytes(1, record)
+    header = bytearray()
+    header.extend(encode_field_varint(6, 1))
+    header.extend(encode_field_varint(14, key))
+    header.extend(encode_field_bytes(1, bytes(b ^ key for b in plain)))
+    frame = encode_field_bytes(1, bytes(header))
+
+    findings = [f for f in _leaks(frame) if "beside a serial under the mask" in f]
+
+    assert len(findings) == 2, findings
+    assert any("3D1A32AC" in f for f in findings), findings
+    assert any("Ecoflow_0379" in f for f in findings), findings
     assert _leaks(sanitize_frame(frame, [])) == []
 
 
