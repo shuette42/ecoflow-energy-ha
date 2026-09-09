@@ -172,6 +172,149 @@ def _mask_delimited_identifiers(payload: bytes) -> bytes:
     return bytes(out)
 
 
+# A device also sends a record about a neighbour: a serial, and beside it a
+# short id and a name. On file the id is eight upper-case hex characters and
+# the name is `Ecoflow_` plus four digits - a lower-case run and an
+# underscore - so neither is reachable by any shape above: eight is under
+# `_IDENT_MIN`, and the alphabet the delimited pass tests is upper case only.
+# Widening that alphabet was measured and rejected: it costs a key string
+# (`plug_and_play`, nine times in the same device's frames) and still reaches
+# no name under twelve characters. A name an owner typed has no spelling to
+# catch at all.
+#
+# What such a record does have is the serial, and the serial is the boundary
+# (ADR-016). Within one protobuf message - the fields read from one delimited
+# span - a whole delimited field that is serial-shaped anchors the message,
+# and every other whole delimited field of eight or more characters from
+# `[A-Za-z0-9_-]` in that same message is masked. Nothing is masked in a
+# message without an anchor, so the key string above survives and so does
+# ordinary binary. Measured 2026-09-09 over 20,324 hex blobs of every family
+# on file: 18 of 18 values reached, 0 other fields touched. The other whole
+# fields that share a message with a serial anywhere on file are `ios`,
+# `android` (seven characters, which is why the floor is eight), `V0.0.0`
+# (the dot stays outside the alphabet for it), `Europe/Berlin` (the slash
+# likewise) and fields that are not printable at all.
+#
+# The walk descends into every delimited span as if it were a message, to
+# `_ANCHOR_DEPTH` levels below the payload it receives, because the record
+# sits three levels down (frame, header, `pdata`, record list) and the
+# collateral above was measured at six. A candidate has no upper bound: a
+# cap would mask the tail of a long value and leave its front standing,
+# which is worse than either choice (ADR-016, amendment).
+#
+# Two couplings this pass depends on, both already relied on by
+# `_JOINED_HEX_RUN`: it runs after `_SERIAL_RUN`, so the anchor it finds is
+# usually a run of `X` - which still matches `_SERIAL_RUN` only because
+# `_MASK_BYTE` is inside `[A-Z0-9]`; and a whole field the delimited pass
+# has already masked matches the candidate shape and is re-masked `X` for
+# `X`, which changes nothing.
+#
+# Found 2026-09-09 in a reporter's diagnostics download, in message `2/133`
+# of a PowerPulse 2, six frames, while the serial beside them was masked
+# (PLAN-133, ADR-025).
+_ANCHORED_STRING = re.compile(rb"[A-Za-z0-9_-]{8,}")
+_ANCHOR_DEPTH = 6
+
+
+def _delimited_spans_by_message(payload: bytes) -> list[list[tuple[int, int]]]:
+    """The whole delimited fields of every message the walk can read.
+
+    One inner list per message, each entry a `(start, end)` span into
+    `payload` itself, so a caller can test and mask in place. The payload is
+    depth 0; every delimited span is read as a message of its own down to
+    `_ANCHOR_DEPTH`, and a span below the cap is not descended into. Each
+    descent is into a strictly shorter span, so the walk ends, and the cap
+    bounds it at `_ANCHOR_DEPTH + 1` visits per byte.
+
+    Within a message the walk is tolerant the way `_header_fields` is: it
+    reads fields until the first one it cannot read and keeps what it read,
+    because a frame is at its most interesting when it does not parse, and
+    a truncated later field must not cost an intact earlier one its record.
+    A field number of zero is not valid protobuf and ends the message too,
+    which is what keeps a string read as a message from yielding much.
+    Wrapped so a malformed payload can never raise: on any failure the
+    messages read so far are returned, and a capture path never affects
+    ingest.
+    """
+    from .proto.decoder import _read_varint
+
+    messages: list[list[tuple[int, int]]] = []
+    try:
+        mv = memoryview(payload)
+        pending: list[tuple[int, int, int]] = [(0, len(mv), 0)]
+        while pending:
+            start, end, depth = pending.pop()
+            spans: list[tuple[int, int]] = []
+            i = start
+            while i < end:
+                key, i = _read_varint(mv, i)
+                if key is None:
+                    break
+                fn, wt = key >> 3, key & 0x07
+                if fn == 0:
+                    break
+                if wt == 0:
+                    val, i = _read_varint(mv, i)
+                    if val is None:
+                        break
+                elif wt == 2:
+                    length, i = _read_varint(mv, i)
+                    if length is None:
+                        break
+                    field_end = i + length
+                    if field_end > end:
+                        break
+                    spans.append((i, field_end))
+                    if depth < _ANCHOR_DEPTH and length:
+                        pending.append((i, field_end, depth + 1))
+                    i = field_end
+                elif wt == 1:
+                    i += 8
+                elif wt == 5:
+                    i += 4
+                else:
+                    break
+            if spans:
+                messages.append(spans)
+    except Exception:  # noqa: BLE001
+        pass
+    return messages
+
+
+def _anchored_string_fields(payload: bytes) -> list[tuple[int, int]]:
+    """Spans of every string that sits beside a serial in its own message.
+
+    A message is anchored when one of its whole delimited fields matches
+    `_SERIAL_RUN`; an anchor is never itself a candidate. In an anchored
+    message every other whole delimited field that matches
+    `_ANCHORED_STRING` is returned. A message without an anchor yields
+    nothing, whatever it carries. The fixture gate imports this so it sees
+    exactly what the product sees.
+    """
+    found: list[tuple[int, int]] = []
+    for spans in _delimited_spans_by_message(payload):
+        anchored = any(_SERIAL_RUN.fullmatch(payload, s, e) for s, e in spans)
+        if not anchored:
+            continue
+        for s, e in spans:
+            if _SERIAL_RUN.fullmatch(payload, s, e):
+                continue
+            if _ANCHORED_STRING.fullmatch(payload, s, e):
+                found.append((s, e))
+    return found
+
+
+def _mask_anchored_strings(payload: bytes) -> bytes:
+    """Mask every string `_anchored_string_fields` finds, length preserved."""
+    spans = _anchored_string_fields(payload)
+    if not spans:
+        return payload
+    out = bytearray(payload)
+    for start, end in spans:
+        out[start:end] = _MASK_BYTE * (end - start)
+    return bytes(out)
+
+
 def _plain_passes(payload: bytes, secrets: list[str]) -> bytes:
     """Every mask this module applies, over bytes that are already plain.
 
@@ -179,15 +322,18 @@ def _plain_passes(payload: bytes, secrets: list[str]) -> bytes:
     serial, then anything written as a UUID, then a lower-case hex run a
     hyphen joins to a serial-shaped run, then the city half of any time zone
     the device reports, then anything a device presents as a whole
-    length-delimited field of identifier-shaped characters. The second pass
+    length-delimited field of identifier-shaped characters, and last any
+    string that shares a protobuf message with a serial. The second pass
     matters because a frame also carries the serial of every battery pack
     and of any attached accessory, and the caller cannot name what it has
     not discovered yet. The third and fourth catch identifiers too short, or
     too oddly shaped, for the second to risk matching: a UUID by its own
     hyphenated shape, and a hex run by the serial it is joined to - which is
     how a 12-character one reached a public issue attachment before anyone
-    noticed. Masking preserves length, so byte offsets survive every pass
-    and a field-layout analysis still works.
+    noticed. The seventh catches what no shape can: a neighbour's name and
+    short id, by their position beside its serial. Masking preserves length,
+    so byte offsets survive every pass and a field-layout analysis still
+    works.
 
     "Plain" is the operative word: none of these passes can see a string
     once the device has XOR-masked it. `sanitize_frame` is what runs this
@@ -208,7 +354,8 @@ def _plain_passes(payload: bytes, secrets: list[str]) -> bytes:
     sanitized = _TIME_ZONE.sub(
         lambda m: m.group(1) + _MASK_BYTE * len(m.group(2)), sanitized
     )
-    return _mask_delimited_identifiers(sanitized)
+    sanitized = _mask_delimited_identifiers(sanitized)
+    return _mask_anchored_strings(sanitized)
 
 
 # The device does not always send a string plainly. Some commands mark their

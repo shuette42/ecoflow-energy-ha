@@ -19,7 +19,12 @@ import re
 from pathlib import Path
 
 import pytest
-from ecoflow_energy.ecoflow.frame_capture import _encrypted_regions, _xor
+from ecoflow_energy.ecoflow.frame_capture import (
+    _anchored_string_fields,
+    _encrypted_regions,
+    _xor,
+    sanitize_frame,
+)
 from ecoflow_energy.ecoflow.proto_encoding import (
     encode_field_bytes,
     encode_field_varint,
@@ -78,17 +83,65 @@ def test_the_fixture_tree_is_not_empty() -> None:
     assert len(files) >= 6, [str(p) for p in files]
 
 
+def _leaks(raw: bytes) -> list[str]:
+    """Every identifier a masked frame should no longer carry, as messages.
+
+    One entry per finding rather than the first failed assertion, so a single
+    dirty frame reports everything wrong with it in one run. Covers the same
+    ground the fixture gate used to check inline: a UUID or MAC anywhere in
+    the frame text, an unmasked identifier run, the same three checks again on
+    every region an `enc_type == 1` header XOR-hides (PLAN-128), and a
+    neighbour's name or short id sitting beside its own serial
+    (`_anchored_string_fields`, PLAN-133, ADR-025).
+    """
+    findings: list[str] = []
+    text = raw.decode("latin1")
+    if _UUID.search(text):
+        findings.append("unmasked UUID")
+    if _MAC.search(text):
+        findings.append("unmasked MAC")
+    for run in _RUN.findall(text):
+        if run in _PLACEHOLDERS:
+            continue
+        if set(run) != {"X"}:
+            findings.append(f"unmasked run {run!r}")
+
+    for start, end in _anchored_string_fields(raw):
+        value = raw[start:end]
+        if set(value) == {ord("X")}:
+            continue
+        decoded = value.decode("latin1")
+        if decoded in _PLACEHOLDERS:
+            continue
+        findings.append(f"unmasked string beside a serial {decoded!r}")
+
+    # The mask under the mask: unmask every region the header itself declares
+    # XOR-ed and run the same checks over that plaintext. A region with no
+    # `seq` has no key to derive and is left alone here too - `sanitize_frame`
+    # cannot mask what it cannot decrypt either.
+    for region in _encrypted_regions(raw):
+        if region.key is None:
+            continue
+        region_text = _xor(raw[region.start : region.end], region.key).decode("latin1")
+        if _UUID.search(region_text):
+            findings.append("unmasked UUID under the mask")
+        if _MAC.search(region_text):
+            findings.append("unmasked MAC under the mask")
+        for run in _RUN.findall(region_text):
+            if run in _PLACEHOLDERS:
+                continue
+            if set(run) != {"X"}:
+                findings.append(f"unmasked run under the mask {run!r}")
+
+    return findings
+
+
 @pytest.mark.parametrize("path", _fixture_files(), ids=lambda p: p.name)
 def test_no_identifier_survived_masking(path: Path) -> None:
-    """No serial, UUID, MAC or account id may reach a public fixture.
+    """No serial, UUID, MAC, account id, or neighbour string may reach a public fixture.
 
-    A header whose `enc_type` field is 1 XOR-masks its own `pdata` (or, on a
-    single-header frame, the shared payload) with the low byte of its own
-    `seq` field (PLAN-128). None of the checks above can see a string once
-    that mask sits on top of it, so every region `_encrypted_regions` finds
-    is un-XOR-ed with the header's own key and re-checked with the same
-    `_UUID`/`_MAC`/`_RUN` patterns. Measured on this corpus: 0 new failures
-    over 164 hex blobs and 67 `enc_type == 1` headers.
+    Measured on this corpus: 164 hex blobs across the fixture tree, 67
+    `enc_type == 1` headers, 0 leaks from any of the checks `_leaks` runs.
     """
     text_of_file = path.read_bytes().decode("latin1")
     try:
@@ -110,36 +163,10 @@ def test_no_identifier_survived_masking(path: Path) -> None:
         hex_payload = frame.get("hex") or frame.get("frame_hex")
         if not hex_payload:
             continue
-        text = bytes.fromhex(hex_payload).decode("latin1")
-        where = f"{path.name}[{index}]"
-        assert not _UUID.search(text), f"{where}: unmasked UUID"
-        assert not _MAC.search(text), f"{where}: unmasked MAC"
-        for run in _RUN.findall(text):
-            if run in _PLACEHOLDERS:
-                continue
-            assert set(run) == {"X"}, f"{where}: unmasked run {run!r}"
-
-        # The mask under the mask: unmask every region the header itself
-        # declares XOR-ed and run the same three checks over that plaintext.
-        # A region with no `seq` has no key to derive and is left alone here
-        # too - `sanitize_frame` cannot mask what it cannot decrypt either.
         raw_frame = bytes.fromhex(hex_payload)
-        for region in _encrypted_regions(raw_frame):
-            if region.key is None:
-                continue
-            region_text = _xor(raw_frame[region.start : region.end], region.key).decode(
-                "latin1"
-            )
-            assert not _UUID.search(region_text), (
-                f"{where}: unmasked UUID under the mask"
-            )
-            assert not _MAC.search(region_text), f"{where}: unmasked MAC under the mask"
-            for run in _RUN.findall(region_text):
-                if run in _PLACEHOLDERS:
-                    continue
-                assert set(run) == {"X"}, (
-                    f"{where}: unmasked run under the mask {run!r}"
-                )
+        where = f"{path.name}[{index}]"
+        findings = _leaks(raw_frame)
+        assert findings == [], f"{where}: {findings}"
 
         # Only where the field is an actual MQTT topic. Several fixtures reuse
         # the same key for the message type ("property", "get_reply"), which
@@ -208,3 +235,51 @@ def test_the_region_check_has_a_positive_control() -> None:
     plain = _xor(frame[region.start : region.end], region.key)
 
     assert _UUID.search(plain.decode("latin1"))
+
+
+def _wrap_as_record(record: bytes) -> bytes:
+    """Nest a record three levels deep, the way a real frame carries it.
+
+    `frame -> header -> pdata -> record list` (PLAN-133, ADR-025): a payload
+    handed straight to `_leaks` is depth 0, and the record only becomes a
+    message of its own once the walk has descended three delimited fields.
+    """
+    return encode_field_bytes(1, encode_field_bytes(1, encode_field_bytes(1, record)))
+
+
+def test_the_gate_sees_a_string_beside_a_serial() -> None:
+    """Positive control: a name and a short id beside an anchor both leak.
+
+    The anchor here is an already-masked serial (`X` * 16) rather than a real
+    one, on purpose: that is what a real frame looks like after the serial
+    pass has already run and before the anchored-string pass runs after it,
+    which is the exact order `_plain_passes` uses.
+    """
+    record = (
+        encode_field_varint(1, 1)
+        + encode_field_bytes(2, b"3D1A32AC")
+        + encode_field_bytes(3, b"X" * 16)
+        + encode_field_bytes(5, b"Ecoflow_0379")
+    )
+    frame = _wrap_as_record(record)
+
+    findings = _leaks(frame)
+    assert len(findings) == 2, findings
+    assert any("3D1A32AC" in finding for finding in findings), findings
+    assert any("Ecoflow_0379" in finding for finding in findings), findings
+
+    assert _leaks(sanitize_frame(frame, [])) == []
+
+
+def test_the_gate_is_quiet_without_a_serial() -> None:
+    """Negative control: the same shapes without an anchor leak nothing.
+
+    Without a whole field that fullmatches a serial, `_anchored_string_fields`
+    yields no candidates at all, however identifier-shaped its neighbours are.
+    """
+    record = encode_field_bytes(2, b"plug_and_play") + encode_field_bytes(
+        3, b"3D1A32AC"
+    )
+    frame = _wrap_as_record(record)
+
+    assert _leaks(frame) == []
