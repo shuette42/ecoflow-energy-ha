@@ -13,9 +13,14 @@ from ecoflow_energy.const import (
     RAW_FRAME_MAX_BYTES,
 )
 from ecoflow_energy.ecoflow.frame_capture import (
+    _ANCHOR_DEPTH,
+    _SERIAL_RUN,
     WRITE_CLASS_RESERVE,
     TypedFrameBuffer,
+    _anchored_string_fields,
+    _delimited_spans_by_message,
     _encrypted_regions,
+    _mask_anchored_strings,
     _plain_passes,
     _slot,
     _xor,
@@ -313,6 +318,292 @@ class TestDelimitedIdentifierMasking:
         result = sanitize_frame(payload, [])
 
         assert result == b"\x12\x10" + b"X" * 16
+
+
+class TestAnchoredStringMasking:
+    """The seventh pass: a neighbour's name and short id, masked by position.
+
+    Neither the delimited pass nor any shape pattern above it can see these
+    values on their own - the id is eight hex characters, under `_IDENT_MIN`,
+    and the name mixes a lower-case run with an underscore, outside every
+    alphabet above. The serial beside them is the boundary: within one
+    protobuf message, a whole field that is serial-shaped anchors every
+    other whole field of eight or more identifier-shaped characters
+    (PLAN-133, ADR-025).
+    """
+
+    SN = "HJ31TESTBAM40TX5"
+    FIELD2 = b"3D1A32AC"
+    FIELD5 = b"Ecoflow_0379"
+
+    @staticmethod
+    def _wrap(depth: int, payload: bytes) -> bytes:
+        """Nest `payload` `depth` delimited levels deep in field 1.
+
+        Matches how far `_delimited_spans_by_message` must descend before it
+        reads `payload` as a message of its own.
+        """
+        for _ in range(depth):
+            payload = encode_field_bytes(1, payload)
+        return payload
+
+    @classmethod
+    def _record(
+        cls,
+        *,
+        field2: bytes | None = FIELD2,
+        field3: bytes | None = None,
+        field5: bytes | None = FIELD5,
+    ) -> bytes:
+        """One record: a sequence number, then the fields under test."""
+        out = encode_field_varint(1, 1)
+        if field2 is not None:
+            out += encode_field_bytes(2, field2)
+        if field3 is not None:
+            out += encode_field_bytes(3, field3)
+        if field5 is not None:
+            out += encode_field_bytes(5, field5)
+        return out
+
+    @classmethod
+    def _depth3_frame(cls, **field_kwargs: bytes | None) -> bytes:
+        """A record wrapped 3 delimited levels down: frame, header, pdata."""
+        record = cls._record(field3=cls.SN.encode(), **field_kwargs)
+        return cls._wrap(3, record)
+
+    def test_the_record_the_other_passes_missed_is_masked(self) -> None:
+        frame = self._depth3_frame()
+        field2_offset = frame.index(self.FIELD2)
+        field5_offset = frame.index(self.FIELD5)
+
+        result = sanitize_frame(frame, [])
+
+        assert self.FIELD2 not in result
+        assert self.FIELD5 not in result
+        assert result[field2_offset : field2_offset + len(self.FIELD2)] == (
+            b"X" * len(self.FIELD2)
+        )
+        assert result[field5_offset : field5_offset + len(self.FIELD5)] == (
+            b"X" * len(self.FIELD5)
+        )
+
+    def test_the_earlier_passes_alone_leave_both_values(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The control: without this pass, neither value is touched."""
+        import ecoflow_energy.ecoflow.frame_capture as frame_capture_module
+
+        monkeypatch.setattr(frame_capture_module, "_mask_anchored_strings", lambda p: p)
+        frame = self._depth3_frame()
+
+        result = sanitize_frame(frame, [])
+
+        assert b"X" * len(self.SN) in result
+        assert self.FIELD2 in result
+        assert self.FIELD5 in result
+
+    def test_the_eight_character_hex_id_is_masked(self) -> None:
+        frame = self._depth3_frame(field5=None)
+        offset = frame.index(self.FIELD2)
+
+        result = sanitize_frame(frame, [])
+
+        assert self.FIELD2 not in result
+        assert result[offset : offset + 8] == b"X" * 8
+
+    def test_the_name_with_an_underscore_is_masked(self) -> None:
+        frame = self._depth3_frame(field2=None)
+        offset = frame.index(self.FIELD5)
+
+        result = sanitize_frame(frame, [])
+
+        assert self.FIELD5 not in result
+        assert result[offset : offset + 12] == b"X" * 12
+
+    def test_a_string_without_a_serial_beside_it_survives(self) -> None:
+        """`653` is not serial-shaped, so the message has no anchor at all."""
+        record = encode_field_varint(1, 1)
+        record += encode_field_bytes(2, self.FIELD2)
+        record += encode_field_bytes(3, b"653")
+        record += encode_field_bytes(7, b"plug_and_play")
+        frame = self._wrap(3, record)
+
+        assert sanitize_frame(frame, []) == frame
+
+    def test_a_sibling_outside_the_shape_survives(self) -> None:
+        """Under the floor, and outside the alphabet, in the same message.
+
+        The serial goes last: right after its raw run, `_SERIAL_RUN` (an
+        earlier, free-running pass) would otherwise swallow the very next
+        tag byte too, whenever that byte happens to also read as
+        `[A-Z0-9]` - corrupting the field this test means to check.
+        """
+        record = encode_field_varint(1, 1)
+        record += encode_field_bytes(6, b"android")
+        record += encode_field_bytes(8, b"V0.0.0")
+        record += encode_field_bytes(3, self.SN.encode())
+        frame = self._wrap(3, record)
+
+        result = sanitize_frame(frame, [])
+
+        assert b"android" in result
+        assert b"V0.0.0" in result
+
+    def test_a_serial_already_masked_is_still_the_anchor(self) -> None:
+        """A serial `_SERIAL_RUN` already turned into filler still matches."""
+        record = self._record(field3=b"X" * len(self.SN))
+        frame = self._wrap(3, record)
+
+        result = _mask_anchored_strings(frame)
+
+        assert self.FIELD2 not in result
+        assert self.FIELD5 not in result
+
+    def test_a_name_after_the_serial_with_an_alphanumeric_tag_is_masked(self) -> None:
+        """Field 8 follows the serial with the tag byte `B`, which is in
+        `[A-Z0-9]`: the free-running serial pass would swallow that tag and
+        blind the walk to the rest of the message. The anchored pass runs
+        before it for exactly this case. Red when the pass moves back behind
+        `_SERIAL_RUN`.
+        """
+        record = (
+            encode_field_varint(1, 1)
+            + encode_field_bytes(3, self.SN.encode())
+            + encode_field_bytes(8, self.FIELD5)
+        )
+        frame = self._wrap(3, record)
+
+        result = sanitize_frame(frame, [])
+
+        assert self.FIELD5 not in result
+        at = frame.index(self.FIELD5)
+        assert result[at : at + len(self.FIELD5)] == b"X" * len(self.FIELD5)
+        assert self.SN.encode() not in result
+
+    def test_a_dotted_or_slashed_sibling_of_eight_characters_survives(self) -> None:
+        """The alphabet is the boundary for these, not the floor: both are
+        long enough to be candidates and are kept only because `.` and `/`
+        are outside `[A-Za-z0-9_-]`. Red when either character joins it.
+        """
+        record = (
+            encode_field_varint(1, 1)
+            + encode_field_bytes(2, b"V1.0.1.2")
+            + encode_field_bytes(3, self.SN.encode())
+            + encode_field_bytes(4, b"Asia/Tokyo")
+        )
+        frame = self._wrap(3, record)
+
+        result = _mask_anchored_strings(frame)
+
+        assert result == frame
+
+    def test_the_anchor_itself_is_not_a_candidate(self) -> None:
+        """A serial matches the candidate shape too, and is left to the
+        serial pass: the anchored pass never touches it, so two serials in
+        one message anchor each other and both survive this pass intact.
+        Red when the anchor exclusion is dropped.
+        """
+        other = "HJ31OTHERPACK001"
+        record = (
+            encode_field_varint(1, 1)
+            + encode_field_bytes(2, self.FIELD2)
+            + encode_field_bytes(3, self.SN.encode())
+            + encode_field_bytes(4, other.encode())
+        )
+        frame = self._wrap(3, record)
+
+        result = _mask_anchored_strings(frame)
+
+        assert self.SN.encode() in result
+        assert other.encode() in result
+        assert self.FIELD2 not in result
+
+    def test_the_anchor_does_not_reach_across_messages(self) -> None:
+        anchored = self._record(field2=None, field3=self.SN.encode())
+        unanchored = encode_field_varint(1, 2) + encode_field_bytes(2, b"Guest_Network")
+        pdata = encode_field_bytes(9, anchored) + encode_field_bytes(10, unanchored)
+        frame = self._wrap(2, pdata)
+
+        result = sanitize_frame(frame, [])
+
+        assert self.FIELD5 not in result
+        assert b"Guest_Network" in result
+
+    def test_masking_preserves_length_and_the_bytes_around_it(self) -> None:
+        """Isolate the pass: `sanitize_frame` would also mask the serial
+        between the two spans through the free-running shape pass, which
+        would make the "everything else is untouched" claim false for the
+        wrong reason.
+        """
+        frame = self._depth3_frame()
+        field2_offset = frame.index(self.FIELD2)
+        field5_offset = frame.index(self.FIELD5)
+
+        result = _mask_anchored_strings(frame)
+
+        assert len(result) == len(frame)
+        assert result[:field2_offset] == frame[:field2_offset]
+        between_start = field2_offset + len(self.FIELD2)
+        assert result[between_start:field5_offset] == frame[between_start:field5_offset]
+        after_start = field5_offset + len(self.FIELD5)
+        assert result[after_start:] == frame[after_start:]
+
+    def test_a_truncated_frame_comes_out_no_worse(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # (a) cut inside the record itself: no exception, and whatever the
+        # six earlier passes already masked must not be undone.
+        frame = self._depth3_frame()
+        cut = frame[:-4]
+
+        result = sanitize_frame(cut, [])
+        assert result == _plain_passes(cut, [])
+
+        import ecoflow_energy.ecoflow.frame_capture as frame_capture_module
+
+        monkeypatch.setattr(frame_capture_module, "_mask_anchored_strings", lambda p: p)
+        six_passes_only = sanitize_frame(cut, [])
+        for index, byte in enumerate(six_passes_only):
+            if byte == ord("X"):
+                assert result[index] == ord("X")
+        monkeypatch.undo()
+
+        # (b) a two-header frame whose second header is cut short: the
+        # intact first header's record is still masked. The second header
+        # uses different values so the assertions below can only pass if
+        # they came from the intact first one.
+        header1 = self._wrap(3, self._record(field3=self.SN.encode()))
+        header2 = self._wrap(
+            3,
+            self._record(
+                field2=b"AABBCCDD", field3=self.SN.encode(), field5=b"Other_0001"
+            ),
+        )[:-6]
+        two_header_frame = header1 + header2
+
+        result2 = sanitize_frame(two_header_frame, [])
+
+        assert self.FIELD5 not in result2
+        assert self.FIELD2 not in result2
+
+    def test_a_record_at_the_depth_cap_is_masked_and_one_below_is_not(self) -> None:
+        """Isolate the pass itself: `sanitize_frame` would still mask the
+        serial at any depth through the free-running shape pass, which would
+        hide whether the anchored pass reached the record at all.
+        """
+        record = self._record(field3=self.SN.encode())
+        at_cap = self._wrap(_ANCHOR_DEPTH, record)
+        below_cap = self._wrap(_ANCHOR_DEPTH + 1, record)
+
+        result_at_cap = _mask_anchored_strings(at_cap)
+        result_below_cap = _mask_anchored_strings(below_cap)
+
+        assert self.FIELD5 not in result_at_cap
+        assert result_below_cap == below_cap
+        # The cap is the depth the collateral was measured at (ADR-025
+        # decision 3), so moving it is a measurement, not an edit. Pinned
+        # here because the two assertions above move with the constant.
+        assert _ANCHOR_DEPTH == 6
 
 
 class TestUUIDMasking:
@@ -881,6 +1172,37 @@ class TestEncryptedRegionMasking:
         header = _decode_first_header(result)
         assert _unmask_pdata(header) == b"X" * 16
 
+    def test_an_anchored_record_under_the_mask_is_masked(self) -> None:
+        """A neighbour's name beside a serial is masked under the XOR mask too.
+
+        The seventh pass runs inside `_plain_passes`, so a region a header
+        declares masked gets it by the same route as the six before it
+        (ADR-025 decision 5). Red when the pass is called from
+        `sanitize_frame` over the raw frame instead of from the helper.
+        """
+        record = (
+            encode_field_varint(1, 1)
+            + encode_field_bytes(2, b"3D1A32AC")
+            + encode_field_bytes(3, b"HJ31TESTBAM40TX5")
+            + encode_field_bytes(5, b"Ecoflow_0379")
+        )
+        plain = encode_field_bytes(1, record)
+        frame = _enc_header(2, 133, pdata_plain=plain, seq=self._KEY)
+
+        result = sanitize_frame(frame, [])
+
+        assert len(result) == len(frame)
+        regions = _encrypted_regions(frame)
+        assert len(regions) == 1 and regions[0].key == self._KEY, regions
+        region = regions[0]
+        unmasked = _xor(result[region.start : region.end], self._KEY)
+        for value in (b"3D1A32AC", b"HJ31TESTBAM40TX5", b"Ecoflow_0379"):
+            assert value not in unmasked
+            at = plain.index(value)
+            assert unmasked[at : at + len(value)] == b"X" * len(value), value
+        assert result[: region.start] == frame[: region.start]
+        assert result[region.end :] == frame[region.end :]
+
 
 class TestMaskingDoesNotCorruptRealFrames:
     """The guard the history of this mask asks for.
@@ -1091,6 +1413,37 @@ class TestMaskingDoesNotCorruptRealFrames:
         # regions unmasked. The floor sits below that with headroom, not on
         # it, so one fixture removed does not silently pass.
         assert checked >= 61, checked
+
+    def test_no_string_beside_a_serial_survives_in_a_tracked_frame(self) -> None:
+        """The guard for PLAN-133: nothing beside a serial is left standing.
+
+        Walks every tracked frame through `sanitize_frame`, then asks the
+        product's own walker what still sits beside a serial - on the frame
+        and under every region it unmasks - and requires every answer to be
+        a run of X. The floor counts ANCHORED MESSAGES the walker found, not
+        frames visited: a walker that silently stopped finding serials would
+        satisfy an empty loop just as well as a clean one.
+        """
+        anchored = 0
+        for name, raw in self._captures():
+            sanitized = sanitize_frame(raw, [])
+            views = [sanitized]
+            for region in _encrypted_regions(sanitized):
+                if region.key is None:
+                    continue
+                views.append(_xor(sanitized[region.start : region.end], region.key))
+            for view in views:
+                for spans in _delimited_spans_by_message(view):
+                    if any(_SERIAL_RUN.fullmatch(view, s, e) for s, e in spans):
+                        anchored += 1
+                for start, end in _anchored_string_fields(view):
+                    assert set(view[start:end]) == {ord("X")}, (name, view[start:end])
+
+        # Measured on this corpus on 2026-09-09: 162 anchored messages over
+        # 162 frames - every frame's header carries the device serial, so
+        # the header itself is the anchored message. The floor sits below
+        # that with headroom, so one fixture removed does not silently pass.
+        assert anchored >= 150, anchored
 
 
 class TestIsProtoFrame:
