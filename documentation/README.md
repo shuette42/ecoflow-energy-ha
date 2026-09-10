@@ -23,6 +23,10 @@ Complete list of all sensors, switches, numbers, and binary sensors per device:
 
 Counts are the device-specific entity definitions. Every device additionally exposes 2 universal diagnostic sensors (connection status and active mode) that are not included above.
 
+## Architecture
+
+- [Architecture decisions](architecture/decisions.md) - the decision register (`ADR-NNN`) that code comments and tests cite: what was decided, why, what was rejected, and what it changed in the code. Start with [architecture/README.md](architecture/README.md) for how to read it.
+
 ## Guides
 
 - [Moving from another EcoFlow integration](migration-from-another-integration.md) - what carries over, what has to be re-pointed by hand, and an order of steps that keeps the old entities running until the new ones are confirmed

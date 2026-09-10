@@ -10,6 +10,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- The architecture decisions behind the integration are now part of the public documentation: [documentation/architecture/decisions.md](documentation/architecture/decisions.md) is the register that code comments and tests cite as `ADR-NNN`, with the context, the decision, the trade-offs and the alternatives for each. Until now those numbers pointed at a file that was never published; a contributor asked, and he was right to. A few numbers concern the maintainer's own working setup rather than the product and are listed as such. Nothing in the software changes.
 - Nothing about the software changes for anyone using it. Internally, the table that decides which protobuf message a device's frame is read as now exists once per device type instead of once for the whole integration. Until now a single table answered for every device, and two device families that use the same command numbers for different messages were kept apart only by the order in which the code happens to ask, which no test could check. Each family now has its own table and the caller has to say which device it is decoding for, so one family can never read another family's message by accident. Every frame in the recordings on file was replayed before and after the change and produced exactly the same readings.
 
 ## [1.20.0] - 2026-09-07
