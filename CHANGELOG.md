@@ -547,7 +547,7 @@ All notable changes to this project will be documented in this file.
 - PowerOcean: "Battery Remaining Capacity" (`bp_remain_watth`) now shows total capacity across all battery packs instead of only Pack 1 - affects both Standard Mode (HTTP) and Enhanced Mode (Protobuf) (#10)
 
 ### Removed
-- Temporary workarounds from v1.6.5–v1.6.8 (proto3 global flag, optimistic lock, zero-fill, HTTP sync loop) - all replaced by proper `optional` field presence
+- Temporary workarounds from v1.6.5-v1.6.8 (proto3 global flag, optimistic lock, zero-fill, HTTP sync loop) - all replaced by proper `optional` field presence
 
 ## [1.6.7] - 2026-03-31
 
@@ -597,7 +597,7 @@ All notable changes to this project will be documented in this file.
 ## [1.6.0] - 2026-03-30
 
 ### Added
-- PowerOcean: battery SoC limit control - Max Charge SoC (50–100%) and Min Discharge SoC (0–30%) as number entities (Enhanced Mode only)
+- PowerOcean: battery SoC limit control - Max Charge SoC (50-100%) and Min Discharge SoC (0-30%) as number entities (Enhanced Mode only)
 - PowerOcean: SysBatChgDsgSet protobuf SET command (cmd_func=96, cmd_id=112) for real-time SoC limit adjustment via WSS
 
 ### Changed
@@ -801,7 +801,7 @@ All notable changes to this project will be documented in this file.
 - HA Recorder warnings for `total_increasing` sensors (battery cycles, energy totals) - monotonic filter drops micro-regressions from API
 
 ### Changed
-- Delta devices now subscribe to `/open/.../quota` MQTT topic for event-driven updates (~1–30 s)
+- Delta devices now subscribe to `/open/.../quota` MQTT topic for event-driven updates (~1-30 s)
 - HTTP polling (~30 s) remains as automatic fallback when MQTT is unavailable
 
 ## [1.0.0] - 2026-03-26

@@ -12,7 +12,7 @@ Three checks:
    describe how protocol knowledge was obtained beyond observed traffic and
    the public app bundle, paths into the private part of the working tree,
    internal plan numbers, names of internal tooling, device serials that are
-   not obvious dummies, and em dashes.
+   not obvious dummies, and em or en dashes.
 2. Every ``ADR-NNN`` cited anywhere in the public tree resolves: either a
    heading in the register, or a number the register lists as internal or
    unused. A code comment pointing at a decision nobody can read is what this
@@ -100,30 +100,22 @@ FORBIDDEN: dict[str, re.Pattern[str]] = {
         + r"|\."
         + _term("cla", "ude")
         + "/"
-        + r"|(?<![\w./-])scripts/|\bPLAN-[0-9]{3}\b|agent-memory"
+        + r"|(?<![\w./-])scripts/|\bPLAN-[0-9]{2,4}\b|agent-memory"
     ),
     "internal tooling name": re.compile(_TOOLING_NAMES),
-    "em dash": re.compile("\u2014"),
+    "em or en dash": re.compile("[\u2013\u2014]"),
     "device serial": re.compile(
-        r"\b(?:HJ3[0-9]|HW5[0-9]|R35[0-9]|R33[0-9]|BK[0-9]{2}|C376|D3M1|D3N1"
+        r"\b(?:HJ3[0-9A-Z]|HW5[0-9]|R3[357][0-9]|BK[0-9]{2}|C376|D3M1|D3N1"
         r"|P321|P231|AC71|ES2[12]|RE1[17]|J32[0-9A-Z]|HZ31|S02F)[A-Z0-9]{12}\b"
     ),
 }
 
-# A serial-shaped value is a dummy when it says so, is a masked run, or is
-# already a fixture value in the test tree (which the fixture gate keeps free
-# of real serials): the Smart Plug test serial is one of them.
+# A serial-shaped value is a dummy when it says so, is a masked run, or is one
+# of the fixture serials named here. The list is explicit on purpose: deriving
+# it from the test tree would whitelist whatever reaches `tests/`, and the
+# fixture gate reads `tests/fixtures/`, not the Python files.
 _DUMMY_SERIAL = re.compile(r"TEST|X{4,}")
-
-
-def _test_tree_serials() -> set[str]:
-    found: set[str] = set()
-    for file in (REPO_ROOT / "tests").rglob("*.py"):
-        found.update(
-            m.group() for m in FORBIDDEN["device serial"].finditer(file.read_text())
-        )
-    return found
-
+_FIXTURE_SERIALS = frozenset({_term("HW52", "ZAB412340001")})  # Smart Plug conftest
 
 # What each pattern must catch: the positive control for check 3, assembled
 # the same way so the sample never appears in the file either.
@@ -131,7 +123,7 @@ KNOWN_BAD: dict[str, str] = {
     "protocol-source term": "taken from the " + _term("decomp", "iled") + " bundle",
     "private path or plan number": "see docs/captures/x.json and PLAN-128",
     "internal tooling name": "the " + _term("reverse-", "engineer") + " pass found it",
-    "em dash": "one \u2014 two",
+    "em or en dash": "one \u2014 two \u2013 three",
     # Assembled, so the scan of the test tree below does not read this very
     # file and file the control away as a known dummy.
     "device serial": "the unit " + _term("HJ31", "A1B2C3D4E5F6") + " reported",
@@ -148,11 +140,10 @@ _NOT_IN_REGISTER = re.compile(
 
 def _leaks(text: str) -> list[str]:
     findings: list[str] = []
-    known = _test_tree_serials()
     for label, pattern in FORBIDDEN.items():
         for match in pattern.finditer(text):
             if label == "device serial" and (
-                _DUMMY_SERIAL.search(match.group()) or match.group() in known
+                _DUMMY_SERIAL.search(match.group()) or match.group() in _FIXTURE_SERIALS
             ):
                 continue
             findings.append(f"{label}: {match.group()!r}")
@@ -178,9 +169,16 @@ def test_every_forbidden_pattern_catches_its_sample(label: str) -> None:
     assert any(f.startswith(label) for f in _leaks(KNOWN_BAD[label])), label
 
 
+def test_the_serial_pattern_covers_every_prefix_the_register_names() -> None:
+    """Positive control for the prefix alternation, one sample per family
+    that the first version missed (HJ3C, R371, R374)."""
+    for prefix in ("HJ3C", "R371", "R374", "HJ31", "BK21", "J32E"):
+        sample = "unit " + _term(prefix, "A1B2C3D4E5F6") + " reported"
+        assert any(f.startswith("device serial") for f in _leaks(sample)), prefix
+
+
 def test_a_dummy_serial_is_not_a_finding() -> None:
     assert _leaks("the fixture serial HJ31TESTBAM40TX5 and HJ31XXXXXXXXXXXX") == []
-    assert _term("HW52", "ZAB412340001") in _test_tree_serials()
     assert _leaks("the Smart Plug fixture " + _term("HW52", "ZAB412340001")) == []
 
 
@@ -206,11 +204,17 @@ def test_every_cited_decision_resolves_in_the_register() -> None:
     match = _NOT_IN_REGISTER.search(text)
     if match:
         listed.update(_ADR.findall(match.group("body")))
+    # The sentence occurs twice (the register's intro and ADR-026 decision 2);
+    # `search` binds the intro, which is the one a reader meets first. The
+    # three numbers are a contract: a change here is a decision, not a drift.
+    assert match, "the register no longer states the numbers it does not carry"
+    assert listed == {"001", "003", "009"}, sorted(listed)
     cited = _cited_numbers()
-    # Floors, so a broken scan or an emptied register cannot pass silently.
-    # Measured 2026-09-10: 15 distinct numbers cited, 22 public headings.
-    assert len(cited) >= 12, sorted(cited)
-    assert len(headings) >= 20, sorted(headings)
+    # Floors at the measured values, so a deleted decision or a broken scan
+    # turns the test red. Measured 2026-09-10: 15 distinct numbers cited, 23
+    # public headings.
+    assert len(cited) >= 15, sorted(cited)
+    assert len(headings) >= 23, sorted(headings)
     unresolved = sorted(cited - headings - listed)
     assert not unresolved, f"cited but not in the register: {unresolved}"
     assert not headings & listed, sorted(headings & listed)

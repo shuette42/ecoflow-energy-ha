@@ -60,7 +60,7 @@ are described by what they are rather than where they sit; see
 - (-) Legacy API (`branches/main/protection`) returns 404, confusing any check that reads the legacy endpoint
 - (-) Newer, less community documentation available
 
-**Consequences:** A check of the branch protection must read the rulesets API endpoint, not just the legacy branch protection endpoint. Current ruleset `main-protection` (ID 14528936) requires: status checks (Run tests, HACS Validation, Hassfest), non-fast-forward, maintainer bypass. Needs extension: tag protection for `v*`.
+**Consequences:** A check of the branch protection must read the rulesets API endpoint, not just the legacy branch protection endpoint. Current ruleset `main-protection` requires status checks (Run tests, HACS Validation, Hassfest) and non-fast-forward. Needs extension: tag protection for `v*`.
 
 ---
 
@@ -1309,7 +1309,7 @@ Watch for the thing this design cannot prevent: a family table that is simply wr
    2a 0c "Ecoflow_1234"    5: a name, lower case and an underscore
 ```
 
-The record sits three delimited levels below the frame: frame, header submessage (field 1), `pdata` (header field 1), record list (field 1, repeated), record. Measured 2026-09-09 over 20,324 hex blobs (the local capture corpus and the tracked fixtures): 9 frames carry the record (6 in that download, 3 in an earlier download from the same installation), 18 values in all, nowhere else in the corpus, not on the text path, not under an XOR mask.
+The record sits three delimited levels below the frame: frame, header submessage (field 1), `pdata` (header field 1), record list (field 1, repeated), record. Measured 2026-09-09 over 20,324 hex blobs (the local capture corpus and the tracked fixtures): 9 frames carry the record (6 in that download, 3 in an earlier one), 18 values in all, nowhere else in the corpus, not on the text path, not under an XOR mask.
 
 Every existing pass is blind by construction. `_SERIAL_RUN` needs 15 characters (`frame_capture.py:35`). `_mask_delimited_identifiers` tests a whole delimited field, which is exactly the shape here, and requires `_IDENT_MIN = 12` to `_IDENT_MAX = 32` bytes all in `_IDENT_ALPHABET`, upper case and digits (`:55-56`, `:139`, `:164-167`): the hex id is 8 bytes, and the name carries lower case and an underscore. The fixture gate's `_RUN`, `[0-9A-Za-z]{12,}` (`tests/test_fixture_identifiers.py:41`), fails for the same two reasons, the underscore splitting the name into 7 + 4.
 
@@ -1372,9 +1372,9 @@ Two more things the review pinned that the design had left to prose: the alphabe
 **Status:** Accepted
 **Date:** 2026-09-10
 
-**Context:** Code comments and tests cite decisions by number. Forty-nine references of the form `ADR-NNN` sit under `custom_components/`, `tests/` and the CHANGELOG, and the description of PR #380 cites the decision it implements. The register those references pointed at was never part of the repository: it lived beside the tree as a private file, so every citation resolved for the maintainer and for nobody else. A contributor reading PR #380 asked whether the decisions could be read.
+**Context:** Code comments and tests cite decisions by number. A hundred and eleven references of the form `ADR-NNN` sit under `custom_components/` and `tests/`, forty-nine of them in the integration itself, and the description of PR #380 cites the decision it implements. The register those references pointed at was never part of the repository: it lived beside the tree as a private file, so every citation resolved for the maintainer and for nobody else. A contributor reading PR #380 asked whether the decisions could be read.
 
-Three forces shape the answer. First, most of what a decision records is exactly what a contributor needs: what was measured, what was chosen, what was rejected and why, what changed in the code. Second, some of the material a decision rests on cannot be public: downloads from owners who report by mail, raw device captures, and a few decisions about how the repository itself is worked on rather than about how the integration behaves. Third, a number that has been cited from code cannot move. Renumbering would break forty-nine citations at once and turn the CHANGELOG's older entries into pointers at nothing.
+Three forces shape the answer. First, most of what a decision records is exactly what a contributor needs: what was measured, what was chosen, what was rejected and why, what changed in the code. Second, some of the material a decision rests on cannot be public: downloads from owners who report by mail, raw device captures, and a few decisions about how the repository itself is worked on rather than about how the integration behaves. Third, a number that has been cited from code cannot move. Renumbering would break a hundred and eleven citations at once, and the numbers are the only thing tying a line of code to the measurement behind it.
 
 **Decision:**
 
@@ -1396,7 +1396,7 @@ Three forces shape the answer. First, most of what a decision records is exactly
 
 **Alternatives considered:**
 1. A second, public copy beside the private register. Rejected: two files with one number series drift on the first amendment that lands in only one of them, and the private one would stay the one that gets written first.
-2. Renumber, so the public series has no gaps. Rejected: forty-nine citations in code, tests and the CHANGELOG would break at once, and older CHANGELOG entries cannot be rewritten without changing history.
+2. Renumber, so the public series has no gaps. Rejected: a hundred and eleven citations in the code and the tests would break at once, and the numbers are the only thing tying a line of code to the measurement behind it.
 3. Publish everything, including the decisions that stay internal. Rejected: two of them are not about the integration at all, and one records a source of protocol knowledge that the repository does not rely on and does not describe.
 4. Keep the register private and remove the citations from the code. Rejected: the citations are the most useful comments in the tree, because each one points at the measurement behind a line that would otherwise look arbitrary. Removing them keeps the register consistent by making the code poorer.
 
