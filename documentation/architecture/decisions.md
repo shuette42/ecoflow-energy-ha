@@ -1467,7 +1467,7 @@ Three forces shape the answer. First, most of what a decision records is exactly
 
 ## ADR-027: PowerOcean scheduled charge tasks are read and operated as the device reports them; creating and deleting stay in the app; the bounds are the app's rule, not a measured device limit
 
-**Status:** Accepted (decided in public on #328 on 2026-08-30 and restated at the stable release on 2026-08-31; shipped in v1.18.0, first in the v1.18.0-beta.30 pre-release; three of the four entities withheld in v1.18.1 and restored with the bounds in v1.19.0, first in the v1.19.0-beta.2 pre-release; recorded here 2026-09-10)
+**Status:** Accepted (decided in public on #328 on 2026-08-30 and restated at the stable release on 2026-08-31; shipped in v1.18.0, first in the v1.18.0-beta.30 pre-release; three of the four entities withheld in v1.18.1 and restored with the bounds in v1.19.0, first in the v1.19.0-beta.2 pre-release; recorded here 2026-09-10; see the addendum of 2026-09-10 for the feed-to-grid family asked for on #381)
 **Date:** 2026-08-30
 **Depends on:** ADR-011 decision 2 (an explicit unknown is the contract between parser and entity). **Related:** ADR-024 (the list message sits in the PowerOcean's own table since PR #380)
 
@@ -1500,6 +1500,17 @@ What is not on record. Whether the device rejects, clamps or accepts a charge po
 4. A target state of charge per schedule. Not possible: the message has no such field.
 
 **Consequences:** The schedule entities shipped in v1.18.0 and were confirmed on hardware other than the maintainer's on 2026-09-03 (#328). The optional check @stuartglewis31 offered on 2026-09-02, whether the device rejects a value above 6000 W, stays optional; nothing waits on it. #381 (opened 2026-09-09 by @paddy2k) asks for a schedule type that feeds power to the grid, with enable, disable and an export rate from Home Assistant: enabling, disabling and modifying a reported schedule is the shape decision 1 supports, and a schedule that has to be created is the case decision 2 leaves in the app. Whether the device carries a feed-to-grid kind on the same list, and what its fields are, is the open question this decision leaves and does not promise; the diagnostics download attached to #381, taken while such a schedule was created, enabled, disabled, modified and deleted, is the evidence to read first.
+
+### Addendum 2026-09-10: the feed-to-grid schedule is a second family with the same shape, and the device pushes its list unasked
+
+The download attached to #381 has been read. @paddy2k recorded, in one timed session on 2026-09-09, a feed-to-grid schedule being created, disabled, enabled, changed in power, changed in window, changed in repeat kind three ways and deleted, on a `J327` PowerOcean with two such schedules already on the unit. What it answers:
+
+- **It is not on the same list.** The feed-to-grid schedule is written with `(96, 143)` and reported in `(96, 145)` on request and in `(96, 14)` unasked, a message that rides in the same bundle as the main status report. The grid-charge schedule of decision 1 is written with `(96, 125)` and reported in `(96, 10)`. The integration reads `(96, 10)` and nothing else of this kind, so a feed-to-grid schedule is invisible in Home Assistant today, on every installation, and nothing is broken on the reporter's unit.
+- **It has the same shape.** Each entry carries an index, an enable flag, a kind (`2` on every feed-to-grid entry; the earlier #328 unit showed a separate list of kind `3` whose meaning is not measured), a power in watts, a device-computed running flag, and a sub-record with the repeat kind, its parameter and one or two time windows. The window, the weekday mask and the one-off date encode exactly as in decision 1's family, disable is the flag omitted rather than sent as false, and every write was acknowledged within the same second with the change visible in the next list, asked and unasked. Decision 3's read-back therefore exists for this family too, and decision 5's no-polling holds, because `(96, 14)` arrives without being asked.
+- **What decision 1 would give it needs no new evidence:** a switch, a power number, a window sensor and a running binary sensor per reported feed-to-grid schedule, which are the reporter's three asks (enable, disable, export rate) exactly. Creating and deleting stay in the app under decision 2, unchanged.
+- **What is still not on record:** the app's ceiling for the export power, which decision 4 would take as the bound, and whether two feed-to-grid schedules may overlap. Neither blocks reading the list.
+
+This addendum records the answer, not a commitment: nothing is scheduled for it, and its scope is decided after the running release cycle. The full field-level reading is kept with the maintainer's working notes.
 
 ---
 
