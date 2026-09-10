@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.22.0] - 2026-09-10
+
+### Added
+
+- The EcoFlow Ocean 2 home battery (serial prefixes `RE11` and `RE17`) is now a supported device (beta.1). It gets 88 sensors, 38 of them enabled by default: solar, home, grid and battery power with their charge, discharge, import and export halves, state of charge, remaining energy, the inverter's AC output, the grid frequency, the charge or discharge state, six energy totals for the Energy Dashboard, the voltage on each grid phase, voltage, current and power of each PV string, and state of charge, power, state of health, cycle count and remaining energy of each battery module, with the module temperature and the highest cell voltage as diagnostics. Where a reading means the same thing as on a PowerOcean it is the same entity, so a dashboard built for one carries over to the other. Inverter-side phase readings, PV string 3 and battery modules 3 to 6 exist but are disabled by default, because the one installation on file has two modules and two populated strings; a larger one enables them. It is available with the EcoFlow account sign-in only: the Developer API refuses the device with error 1006, which is what #145 was opened on. The two prefixes are the 10 kW and the 12 kW rating of one product with one message family, so both get the same device and the same entities; no `RE17` recording is on file yet, and the first report from one is the check on that. Read-only: not one write to an Ocean 2 has been observed on the wire, so there are no controls. The field mapping is @jensfr1's, worked out for his own standalone Ocean 2 integration and offered here with his agreement; it was pinned field by field against a seven-hour diagnostics download from a second owner's installation, which is also the test fixture, and three readings were corrected against those frames on the way: the battery power's sign, the module cell voltage's unit, and the meaning of the two extra figures in each phase record. The device's configured feed-in limit, which travels next to the readings, is deliberately not a sensor. (Ref #145)
+
 ## [1.21.0] - 2026-09-08
 
 ### Added
