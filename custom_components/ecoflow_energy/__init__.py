@@ -309,19 +309,21 @@ def _async_remove_retired_platform_entities(
             break
 
 
-# The four wallbox sensor keys the PowerPulse 2 took over from the PowerOcean
-# in PLAN-132. They are defined on BOTH lists on purpose: the PowerPulse 1
+# The five wallbox sensor keys the retired `(241, 3)` relay used to fill on
+# the PowerOcean for a coupled PowerPulse 2. Four of them the PowerPulse 2
+# now reports on its own device; the fifth, `ev_vehicle_id`, the relay filled
+# with a placeholder because the PowerPulse 2 does not report a vehicle at
+# all, so its row is as dead as the other four once the relay is gone. All
+# five stay DEFINED on the PowerOcean list on purpose: the PowerPulse 1
 # (`AC31`) still reports them through the PowerOcean on `(209, 8)` and would
-# lose every wallbox entity if the PowerOcean definitions went away with the
-# `(241, 3)` relay. `ev_vehicle_id` is not here because the PowerPulse 2 does
-# not report a vehicle at all - it stays a PowerOcean-side reading of the
-# PowerPulse 1.
+# lose every wallbox entity if the definitions went away with the relay.
 _POWERPULSE2_RELAYED_SENSOR_KEYS: frozenset[str] = frozenset(
     {
         "ev_charge_power_w",
         "ev_session_energy_wh",
         "ev_session_duration_s",
         "ev_charge_status",
+        "ev_vehicle_id",
     }
 )
 
@@ -337,28 +339,30 @@ def _async_remove_relayed_wallbox_entities(
     """Drop the PowerOcean-side copies of a PowerPulse 2's wallbox readings.
 
     Until PLAN-132 a `C376` reported through the PowerOcean it was coupled
-    to, so its four readings carried `<powerocean_sn>_<key>`. The wallbox has
+    to, so its readings carried `<powerocean_sn>_<key>`. The wallbox has
     its own device type now and reports on its own channel, and the relay
-    (`(241, 3)`) is retired - those four registry entries are fed by nothing
-    and would sit on the PowerOcean's page permanently unavailable.
+    (`(241, 3)`) is retired - those five registry entries are fed by nothing
+    and would sit on the PowerOcean's page permanently unavailable. The
+    first pre-release removed four and left `Wallbox Vehicle` standing;
+    v1.21.0-beta.3 removes it too.
 
     They are removed rather than renamed onto the wallbox's serial. The
     reporter who owns both devices was asked on #7 and answered on
-    2026-09-09 that he uses none of the four and that a break in their
+    2026-09-09 that he uses none of the five and that a break in their
     history is fine, so the value a migration would have bought is not there
     - and `async_migrate_entries` raises `ValueError` on a unique id that is
     already taken, which inside `async_setup_entry` takes down the whole
     config entry rather than one wallbox.
 
     Nothing is removed when the entry also holds a PowerPulse 1 (`AC31`).
-    That wallbox reports the same four keys through the same PowerOcean on
+    That wallbox reports the same five keys through the same PowerOcean on
     `(209, 8)`, which this change does not touch, so on such an entry a
     `<powerocean_sn>_<key>` entity may be its live reading rather than a
     stale relay copy, and the two are not distinguishable from a unique id.
     Leaving a stale row is the smaller harm.
 
     Nothing is removed either when the entry holds no PowerPulse 2 (`C376`)
-    at all. The four rows only exist because a `C376` used to relay through
+    at all. The five rows only exist because a `C376` used to relay through
     the PowerOcean, so a plain PowerOcean entry that never had one has no
     stale copy to clean up.
     """
