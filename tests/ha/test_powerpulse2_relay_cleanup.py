@@ -1,13 +1,13 @@
 """Removal of the PowerOcean-side relay copies of a PowerPulse 2's readings.
 
 Until PLAN-132 a `C376` reported through the PowerOcean it was coupled to, so
-its four wallbox readings carried `<powerocean_sn>_<key>`. The wallbox now
-reads on its own channel and the `(241, 3)` relay is retired, so those four
+its five wallbox readings carried `<powerocean_sn>_<key>`. The wallbox now
+reads on its own channel and the `(241, 3)` relay is retired, so those five
 registry entries are fed by nothing and would sit on the PowerOcean's page
 permanently unavailable - hence they are removed.
 
 The one case that must NOT remove anything is an entry that also holds a
-PowerPulse 1 (`AC31`): that older wallbox reports the same four keys through
+PowerPulse 1 (`AC31`): that older wallbox reports the same five keys through
 the same PowerOcean on a different, untouched channel, and a unique id alone
 cannot tell its live reading apart from the PowerPulse 2's stale relay copy.
 """
@@ -44,6 +44,7 @@ RELAYED_KEYS = (
     "ev_session_energy_wh",
     "ev_session_duration_s",
     "ev_charge_status",
+    "ev_vehicle_id",
 )
 
 POWEROCEAN_DEVICE: dict[str, Any] = {
@@ -102,7 +103,7 @@ def _ids(hass: HomeAssistant) -> set[str]:
 
 
 def _register_relayed(hass: HomeAssistant, entry: MockConfigEntry) -> dict[str, str]:
-    """Register the four PowerOcean-side wallbox entries a pre-migration
+    """Register the five PowerOcean-side wallbox entries a pre-migration
     install still carries, keyed by the sensor key they were registered
     under."""
     return {
@@ -112,7 +113,7 @@ def _register_relayed(hass: HomeAssistant, entry: MockConfigEntry) -> dict[str, 
 
 
 class TestRelayedCopiesAreRemoved:
-    def test_the_four_relay_entries_are_removed(self, hass: HomeAssistant) -> None:
+    def test_the_five_relay_entries_are_removed(self, hass: HomeAssistant) -> None:
         entry = _entry(hass, [POWEROCEAN_DEVICE, POWERPULSE2_DEVICE])
         stale = _register_relayed(hass, entry)
         # Positive control: without this, "not in the registry afterwards"
@@ -123,16 +124,19 @@ class TestRelayedCopiesAreRemoved:
 
         assert not _ids(hass) & set(stale.values())
 
-    def test_the_vehicle_id_entry_survives(self, hass: HomeAssistant) -> None:
-        """`ev_vehicle_id` is not one of the four relayed keys - it belongs
-        to the PowerPulse 1 reading, never the PowerPulse 2."""
+    def test_the_vehicle_id_entry_is_removed_as_well(self, hass: HomeAssistant) -> None:
+        """The relay filled `ev_vehicle_id` with a placeholder for a wallbox
+        that reports no vehicle, so the row exists on a reporter's PowerOcean
+        (diagnostics of 2026-08-29 list the key) and nothing fills it once the
+        relay is gone. beta.2 left it standing; it goes with the other four."""
         entry = _entry(hass, [POWEROCEAN_DEVICE, POWERPULSE2_DEVICE])
-        _register_relayed(hass, entry)
-        vehicle_id = _register(hass, entry, "sensor", f"{POWEROCEAN_SN}_ev_vehicle_id")
+        stale = _register_relayed(hass, entry)
+        vehicle_id = stale["ev_vehicle_id"]
+        assert vehicle_id in _ids(hass)
 
         _async_remove_relayed_wallbox_entities(hass, entry)
 
-        assert vehicle_id in _ids(hass)
+        assert vehicle_id not in _ids(hass)
 
     def test_an_unrelated_powerocean_entity_survives(self, hass: HomeAssistant) -> None:
         entry = _entry(hass, [POWEROCEAN_DEVICE, POWERPULSE2_DEVICE])
@@ -149,7 +153,7 @@ class TestPowerPulse1KeepsTheRelay:
         self, hass: HomeAssistant
     ) -> None:
         """The most important case: a PowerPulse 1 (`AC31`) on the same
-        entry reports the same four keys through the same PowerOcean on a
+        entry reports the same five keys through the same PowerOcean on a
         channel this change does not touch, and a unique id cannot tell its
         live reading apart from the PowerPulse 2's dead relay copy. In doubt,
         nothing is removed."""
@@ -181,7 +185,7 @@ class TestNoPowerPulse2:
     def test_nothing_is_removed_without_a_powerpulse_2_in_the_entry(
         self, hass: HomeAssistant
     ) -> None:
-        """The four rows only ever exist because a `C376` used to relay
+        """The five rows only ever exist because a `C376` used to relay
         through the PowerOcean. A plain PowerOcean entry that never had one
         has nothing stale to clean up, and must not lose a live reading that
         merely happens to share a key name."""
@@ -197,11 +201,11 @@ class TestIdempotency:
     def test_running_twice_changes_nothing_further(self, hass: HomeAssistant) -> None:
         entry = _entry(hass, [POWEROCEAN_DEVICE, POWERPULSE2_DEVICE])
         _register_relayed(hass, entry)
-        vehicle_id = _register(hass, entry, "sensor", f"{POWEROCEAN_SN}_ev_vehicle_id")
+        solar = _register(hass, entry, "sensor", f"{POWEROCEAN_SN}_solar_w")
 
         _async_remove_relayed_wallbox_entities(hass, entry)
         remaining_after_first = _ids(hass)
         _async_remove_relayed_wallbox_entities(hass, entry)
 
         assert _ids(hass) == remaining_after_first
-        assert vehicle_id in _ids(hass)
+        assert solar in _ids(hass)
