@@ -95,10 +95,10 @@ FRAME_CHARGING_LATER_SESSION = bytes.fromhex(
 )
 
 # The heating rod's report on the old (241, 3) tuple, lifted verbatim out of
-# the 22.08. get-all reply (`docs/captures/hj31-powerglow-20260822.json`): the
-# rod's address and masked serial in field 1 - the serial wins the oneof, so
-# the address is not in the decoded dict - and its two setpoints in field 3
-# (1998 W drawn, 2500 W target). No wallbox part at all. This is an
+# the reporter's 22.08. get-all reply: the rod's address and masked serial in
+# field 1 - the serial wins the oneof, so the address is not in the decoded
+# dict - and its two setpoints in field 3 (1998 W drawn, 2500 W target). No
+# wallbox part at all. This is an
 # `EDevParamReport` payload, the retired tuple's message; it does not parse
 # as `HRChargingParamReport`, the rod's own `(212, 8)` message tested below.
 HEATING_ROD_REPORT = bytes.fromhex(

@@ -27,6 +27,7 @@ from .const import (
     DATA_SKIPPED_DEVICES,
     DEVICE_TYPE_DISPLAY_NAMES,
     DEVICE_TYPE_POWEROCEAN,
+    DEVICE_TYPE_POWERPULSE2,
     DEVICE_TYPE_POWERSTREAM,
     DEVICE_TYPE_UNKNOWN,
     DOMAIN,
@@ -355,6 +356,11 @@ def _async_remove_relayed_wallbox_entities(
     `<powerocean_sn>_<key>` entity may be its live reading rather than a
     stale relay copy, and the two are not distinguishable from a unique id.
     Leaving a stale row is the smaller harm.
+
+    Nothing is removed either when the entry holds no PowerPulse 2 (`C376`)
+    at all. The four rows only exist because a `C376` used to relay through
+    the PowerOcean, so a plain PowerOcean entry that never had one has no
+    stale copy to clean up.
     """
     devices = entry.data.get(CONF_DEVICES, [])
     if any(
@@ -366,10 +372,18 @@ def _async_remove_relayed_wallbox_entities(
             "which reports the same keys through the PowerOcean"
         )
         return
-    powerocean_sns = {
-        device["sn"]
+    device_types = {
+        get_device_type(device.get("product_name") or "", sn)
         for device in devices
-        if get_device_type(device.get("product_name") or "", device["sn"])
+        if (sn := device.get("sn", ""))
+    }
+    if DEVICE_TYPE_POWERPULSE2 not in device_types:
+        return
+    powerocean_sns = {
+        sn
+        for device in devices
+        if (sn := device.get("sn", ""))
+        and get_device_type(device.get("product_name") or "", sn)
         == DEVICE_TYPE_POWEROCEAN
     }
     if not powerocean_sns:

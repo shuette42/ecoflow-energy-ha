@@ -8,7 +8,7 @@ Full list of all entities created for the EcoFlow PowerPulse 2 wallbox (C376 ser
 
 The PowerPulse 2 is its own device type and does not need a paired PowerOcean. Earlier releases only saw these readings once a PowerOcean was coupled to relay them, so a wallbox without one showed nothing at all. The integration now reads the wallbox's own reporting channel directly.
 
-Four of the sensors below - Wallbox Charging Power, Wallbox Session Energy, Wallbox Session Duration and Wallbox Charging Status - used to live on the PowerOcean device. They kept their name, their entity ID and their recorded history when they moved here; nothing needs to be reconfigured or re-added to the Energy Dashboard.
+Four of the sensors below - Wallbox Charging Power, Wallbox Session Energy, Wallbox Session Duration and Wallbox Charging Status - used to live on the PowerOcean device when a PowerPulse 2 was coupled to one. They now live here, under entity IDs built from the wallbox's own serial number, and the four PowerOcean-side entries are removed from the entity registry on the first start after the update. History and statistics recorded under the old IDs do not carry over, and an automation, a dashboard card or an Energy Dashboard slot that named one of them needs the new entity. The vehicle reading stays on the PowerOcean, because only the earlier PowerPulse reports one. Nothing changes for the earlier PowerPulse (`AC31` series): it keeps reporting through its PowerOcean on the same five entities as before.
 
 Read-only. The integration cannot start, stop or configure a charging session.
 
@@ -60,6 +60,10 @@ Wallbox Session Start, Wallbox Session Duration, Wallbox Session Energy and Wall
 ### The cable lock can take a while to appear
 
 Wallbox Cable Lock is only carried in the wallbox's bundled status report, never in a single push update. A setup that only sees pushes will not see this entity until the wallbox happens to send its bundle, which can take a while after startup.
+
+### The wallbox is quiet between changes
+
+The PowerPulse 2 reports when something changes and otherwise stays silent, charging or not. Over a complete seven-hour recording the longest silence was 50 minutes. The integration therefore waits 20 minutes before it asks the wallbox for a fresh report and keeps the entities available through an hour of silence; on every other device type that watch is much shorter. A wallbox that has gone offline is shown as unavailable after an hour, not after ten minutes.
 
 ### Single-phase charging
 

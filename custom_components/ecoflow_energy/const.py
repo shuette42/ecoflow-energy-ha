@@ -119,6 +119,19 @@ SMARTPLUG_STALE_THRESHOLD_S = (
 # runs is repaired as fast as on any other device.
 WAVE3_STALE_THRESHOLD_S = 270.0
 WAVE3_SOFT_UNAVAILABLE_S = 540.0
+# The PowerPulse 2 pushes when something changes and otherwise stays quiet,
+# charging or not. Measured over a complete 7 h capture (one session, no
+# disconnect, 83 pushes): the median gap is 50 s, 16 gaps exceed 10 min, 5
+# exceed 20 min and the longest is 50 min. Under the defaults the coordinator
+# would re-request and then reconnect through every quiet spell and mark the
+# wallbox unavailable for most of an idle hour. Stale at 20 min re-requests
+# a handful of times a day, soft at 40 min, and hard above the longest
+# silence on record, so a quiet wallbox is listened to rather than declared
+# gone. All three apply always: the unit is Enhanced-only and has no fast
+# cadence to fall back to.
+POWERPULSE2_STALE_THRESHOLD_S = 1200.0
+POWERPULSE2_SOFT_UNAVAILABLE_S = 2400.0
+POWERPULSE2_HARD_UNAVAILABLE_S = 3600.0
 MQTT_HEALTH_CHECK_INTERVAL_S = (
     5.0  # Run stale/reconnect health checks independently from stale threshold
 )
@@ -7044,16 +7057,16 @@ POWERPULSE2_SENSORS: list[EcoFlowSensorDef] = [
         suggested_display_precision=0,
     ),
     # The lifetime counter's value when the current session began - jumps to
-    # a new value every session, so it is a snapshot rather than a counter
-    # and cannot be `total_increasing` (it would read as a meter reset on
-    # every charge). Same reasoning `ev_session_energy_wh` above already
-    # applies with `total`.
+    # a new value every session, so it is a snapshot rather than a counter.
+    # No state class at all: as `total` it would be offered to the Energy
+    # Dashboard and summed by long-term statistics, and a meter reading
+    # frozen at session start is neither energy delivered nor a rate.
     EcoFlowSensorDef(
         "ev_session_start_energy_wh",
         "Wallbox Session Start Meter",
         "Wh",
         "energy",
-        "total",
+        None,
         "mdi:counter",
         "diagnostic",
         enhanced_only=True,

@@ -223,15 +223,25 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
 
     status_raw = result.pop("_plug_status_raw", None)
     if isinstance(status_raw, int):
-        result["ev_charge_status"] = _PLUG_STATUS_NAMES.get(status_raw)
+        status_name = _PLUG_STATUS_NAMES.get(status_raw)
+        # An unknown state would crash the enum sensor with "not in list of
+        # options", so it is dropped rather than passed through - the same
+        # reasoning powerocean_proto.py applies to the AC31 path that feeds
+        # this same ev_charge_status key.
+        if status_name is not None:
+            result["ev_charge_status"] = status_name
 
     session_status_raw = result.pop("_session_status_raw", None)
     if isinstance(session_status_raw, int):
-        result["ev_session_status"] = _SESSION_STATUS_NAMES.get(session_status_raw)
+        session_status_name = _SESSION_STATUS_NAMES.get(session_status_raw)
+        if session_status_name is not None:  # same reasoning as above
+            result["ev_session_status"] = session_status_name
 
     phase_mode_raw = result.pop("_phase_mode_raw", None)
     if isinstance(phase_mode_raw, int):
-        result["ev_phase_mode"] = _PHASE_MODE_NAMES.get(phase_mode_raw)
+        phase_mode_name = _PHASE_MODE_NAMES.get(phase_mode_raw)
+        if phase_mode_name is not None:  # same reasoning as above
+            result["ev_phase_mode"] = phase_mode_name
 
     max_current_raw = result.pop("_max_current_da_raw", None)
     if isinstance(max_current_raw, int):

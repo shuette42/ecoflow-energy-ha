@@ -268,3 +268,67 @@ class TestEnergyStateClasses:
             d for d in POWERPULSE2_SENSORS if d.key == "ev_session_energy_wh"
         )
         assert definition.state_class != "total_increasing"
+
+
+class TestAvailabilityThresholds:
+    """A complete 7 h capture had 83 pushes, a median gap of 50 s, 16 gaps
+    over 10 minutes and 5 over 20 minutes, the longest 50 minutes - the
+    PowerPulse 2 constants in const.py are sized against that capture, not
+    against the shared defaults every other device type falls back to."""
+
+    def _coordinator(
+        self, hass: HomeAssistant, device: dict[str, Any]
+    ) -> EcoFlowDeviceCoordinator:
+        entry = _entry(device)
+        entry.add_to_hass(hass)
+        return EcoFlowDeviceCoordinator(hass, entry, device)
+
+    async def test_a_powerpulse2_coordinator_uses_its_own_thresholds(
+        self, hass: HomeAssistant
+    ) -> None:
+        from custom_components.ecoflow_energy.const import (
+            POWERPULSE2_HARD_UNAVAILABLE_S,
+            POWERPULSE2_SOFT_UNAVAILABLE_S,
+            POWERPULSE2_STALE_THRESHOLD_S,
+            SOFT_UNAVAILABLE_S,
+            STALE_THRESHOLD_S,
+        )
+
+        coordinator = self._coordinator(hass, POWERPULSE2_DEVICE)
+        assert coordinator._stale_threshold_s() == POWERPULSE2_STALE_THRESHOLD_S
+        assert coordinator._soft_unavailable_s() == POWERPULSE2_SOFT_UNAVAILABLE_S
+        assert coordinator._hard_unavailable_s() == POWERPULSE2_HARD_UNAVAILABLE_S
+
+        # The band keeps at least the default width: a unit that misses a
+        # handful of pushes reads as stale, not degraded.
+        assert (
+            POWERPULSE2_SOFT_UNAVAILABLE_S - POWERPULSE2_STALE_THRESHOLD_S
+            >= SOFT_UNAVAILABLE_S - STALE_THRESHOLD_S
+        )
+        # The longest gap in the reference capture was 50 minutes; the
+        # hard-unavailable threshold has to clear it with room to spare.
+        assert POWERPULSE2_HARD_UNAVAILABLE_S > 50 * 60
+
+    async def test_a_powerocean_coordinator_keeps_the_default_thresholds(
+        self, hass: HomeAssistant
+    ) -> None:
+        from custom_components.ecoflow_energy.const import (
+            HARD_UNAVAILABLE_S,
+            SOFT_UNAVAILABLE_S,
+            STALE_THRESHOLD_S,
+        )
+        from custom_components.ecoflow_energy.ecoflow.const import (
+            DEVICE_TYPE_POWEROCEAN,
+        )
+
+        powerocean_device: dict[str, Any] = {
+            "sn": "HJ31TEST00000099",
+            "name": "PowerOcean",
+            "product_name": "PowerOcean",
+            "device_type": DEVICE_TYPE_POWEROCEAN,
+            "online": 1,
+        }
+        coordinator = self._coordinator(hass, powerocean_device)
+        assert coordinator._stale_threshold_s() == STALE_THRESHOLD_S
+        assert coordinator._soft_unavailable_s() == SOFT_UNAVAILABLE_S
+        assert coordinator._hard_unavailable_s() == HARD_UNAVAILABLE_S

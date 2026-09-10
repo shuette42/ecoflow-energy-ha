@@ -53,12 +53,12 @@ HEATING_ROD_KEYS = {
 }
 
 # The PowerPulse wallbox was the second accessory to use the same gate
-# (PLAN-079). All five wallbox readings are gone from POWEROCEAN_SENSORS as
-# of PLAN-132 Phase 3: the four still-live ones moved to their own device
-# type (POWERPULSE2_SENSORS) in Phase 2, and the last one, the vehicle
-# identifier, had nothing on the wallbox side to move onto and was withdrawn
-# rather than migrated. Nothing on the PowerOcean side is gated behind the
-# wallbox accessory anymore.
+# (PLAN-079). The five wallbox readings are still defined on POWEROCEAN_SENSORS
+# because the PowerPulse 1 (`AC31`) keeps reporting them through the
+# PowerOcean on `(209, 8)`; the PowerPulse 2 has its own device type and its
+# own copy of four of them (POWERPULSE2_SENSORS) since PLAN-132, and no longer
+# reaches the PowerOcean at all. Nothing on the PowerOcean side is gated behind
+# the wallbox accessory anymore.
 
 # The scheduled charge tasks are the third user of the gate (#328). A
 # PowerOcean only has one when its owner created it in the app, and the slot

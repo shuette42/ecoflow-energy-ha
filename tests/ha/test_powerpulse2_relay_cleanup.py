@@ -177,6 +177,22 @@ class TestNoPowerOcean:
         assert registered in _ids(hass)
 
 
+class TestNoPowerPulse2:
+    def test_nothing_is_removed_without_a_powerpulse_2_in_the_entry(
+        self, hass: HomeAssistant
+    ) -> None:
+        """The four rows only ever exist because a `C376` used to relay
+        through the PowerOcean. A plain PowerOcean entry that never had one
+        has nothing stale to clean up, and must not lose a live reading that
+        merely happens to share a key name."""
+        entry = _entry(hass, [POWEROCEAN_DEVICE])
+        stale = _register_relayed(hass, entry)
+
+        _async_remove_relayed_wallbox_entities(hass, entry)
+
+        assert set(stale.values()) <= _ids(hass)
+
+
 class TestIdempotency:
     def test_running_twice_changes_nothing_further(self, hass: HomeAssistant) -> None:
         entry = _entry(hass, [POWEROCEAN_DEVICE, POWERPULSE2_DEVICE])

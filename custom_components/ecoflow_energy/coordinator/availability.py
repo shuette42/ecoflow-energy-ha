@@ -8,11 +8,15 @@ from datetime import timedelta
 from typing import TYPE_CHECKING
 
 from ..const import (
+    DEVICE_TYPE_POWERPULSE2,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_WAVE3,
     HARD_UNAVAILABLE_S,
     HTTP_FALLBACK_INTERVAL_S,
     MQTT_HEALTH_CHECK_INTERVAL_S,
+    POWERPULSE2_HARD_UNAVAILABLE_S,
+    POWERPULSE2_SOFT_UNAVAILABLE_S,
+    POWERPULSE2_STALE_THRESHOLD_S,
     SMARTPLUG_HARD_UNAVAILABLE_S,
     SMARTPLUG_SOFT_UNAVAILABLE_S,
     SMARTPLUG_STALE_THRESHOLD_S,
@@ -102,6 +106,8 @@ class AvailabilityMixin(_Base):
         """Return the soft-unavailable threshold for this device."""
         if self._enhanced_mode and self.device_type == DEVICE_TYPE_SMARTPLUG:
             return SMARTPLUG_SOFT_UNAVAILABLE_S
+        if self.device_type == DEVICE_TYPE_POWERPULSE2:
+            return POWERPULSE2_SOFT_UNAVAILABLE_S
         if self._wave3_idle():
             return WAVE3_SOFT_UNAVAILABLE_S
         return SOFT_UNAVAILABLE_S
@@ -110,6 +116,8 @@ class AvailabilityMixin(_Base):
         """Return the hard-unavailable threshold for this device."""
         if self._enhanced_mode and self.device_type == DEVICE_TYPE_SMARTPLUG:
             return SMARTPLUG_HARD_UNAVAILABLE_S
+        if self.device_type == DEVICE_TYPE_POWERPULSE2:
+            return POWERPULSE2_HARD_UNAVAILABLE_S
         return HARD_UNAVAILABLE_S
 
     @property
@@ -137,6 +145,8 @@ class AvailabilityMixin(_Base):
         """Return the MQTT stale threshold for this device."""
         if self._enhanced_mode and self.device_type == DEVICE_TYPE_SMARTPLUG:
             return SMARTPLUG_STALE_THRESHOLD_S
+        if self.device_type == DEVICE_TYPE_POWERPULSE2:
+            return POWERPULSE2_STALE_THRESHOLD_S
         if self._wave3_idle():
             return WAVE3_STALE_THRESHOLD_S
         return STALE_THRESHOLD_S
