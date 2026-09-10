@@ -133,11 +133,19 @@ Force-reconnect triggers at stale threshold (unchanged) but is decoupled from en
 
 **Consequences:** The PowerOcean sensor count in README and `documentation/` changes, so the device table needs updating in the same PR. The unsupported-device WARNING for HF33/C376 remains until handled separately. Exact quota key spelling is unconfirmed - the vendor doc and the reporter disagree on form (`hrEnergyStream[].hrPwr` vs `ems_heating_rod.heatingPower`), so a raw quota dump from a PowerOcean with both accessories attached gates implementation. Absent accessories must yield no key at all rather than `0.0`, per the phase-container contract (`tests/test_powerocean_bundled_frames.py:270-282`) and the `total_increasing` zero rule.
 
+### Addendum 2026-09-10: the accessory shape shipped, entities are created on a reported reading, and the PowerGlow stays an accessory by ADR-008's own criterion
+
+**What shipped, on two paths.** The four PowerGlow readings (drawn power, water temperature, target power, target temperature) exist as `POWEROCEAN_SENSORS` entries since v1.16.0, read from the polled quota under `ems_heating_rod.<name>`, each name looked up under every spelling the accessory is known to use. Since v1.18.0 the same four are also filled with account sign-in, from the report the PowerOcean forwards on message `(212, 8)`, decoded in `parsers/powerocean_proto.py` and remapped onto the same four keys, roughly every seventeen seconds; that rests on a diagnostics download from @Xygen of just under ten hours. So the decision's "parsed in `ecoflow/parsers/powerocean.py`" reads today as "parsed by the PowerOcean parsers, quota and stream"; there is still no new parser module and no prefix entry, which is what the decision meant.
+
+**Two sentences of this record are retired.** The trade-off "every PowerOcean owner gets accessory entity definitions registered (disabled), because entity creation is unconditional per device type" stopped being true in v1.16.0: a definition marked `accessory=True` is skipped at setup until the device has reported the reading, added without a reload when the first report arrives, and a leftover entry from an earlier release is dropped on the first update that carries device data without the accessory (`sensor.py:80-84`, `_watch_for_accessory`, `_drop_stale_accessory_entity`). A PowerOcean owner without a PowerGlow has no heating-rod entity at all. And the gate in the Consequences, "a raw quota dump from a PowerOcean with both accessories attached gates implementation", is closed: the quota spelling was settled as `ems_heating_rod.*` with candidates per reading, and the stream path was added beside it. The unsupported-device WARNING for `HF33` at setup remains, as the Consequences say.
+
+**The PowerGlow stays an accessory.** On #7 on 2026-09-09 @Xygen asks for the PowerGlow as its own device, as the PowerPulse 2 is becoming under ADR-008. ADR-008's criterion answers it without a new investigation: if the PowerOcean carries the accessory, it stays an accessory. The PowerOcean carries the PowerGlow on `212`, in the captures on file that include one, his own among them, and that report is what fills the four entities today. The PowerPulse 2 is the exception the criterion produces, because the PowerOcean does not carry it, not a precedent for moving every accessory. This addendum is the record of that answer so a further request does not reopen it; what a later capture could change is the criterion's input, not the criterion.
+
 ---
 
 ## ADR-008: PowerPulse 2 (C376) is its own device; ADR-007 stands for everything else
 
-**Status:** Accepted
+**Status:** Accepted (decided 2026-08-24; implementation pending, no code on `main` as of 2026-09-10, to ship as a 1.21.0 pre-release; condition 1 met by ADR-024 since PR #380, see the addendum of 2026-09-10)
 **Date:** 2026-08-24
 **Supersedes:** ADR-007, for the serial prefix `C376` only. ADR-007 remains in force for `HF33` and for the PowerPulse 1 (`AC31`).
 
@@ -317,6 +325,14 @@ This drops `async_migrate_entries` from the plan entirely, and with it the
 `ValueError` on a taken unique id that would have failed the whole config entry
 from inside `async_setup_entry`. The first migration of that kind in this tree
 is not written for a case whose only known owner declined it.
+
+### Addendum 2026-09-10: condition 1 is met; the rest is design until it lands
+
+**Condition 1 is met by ADR-024.** The sentence in the addendum of 2026-09-08, "Condition 1, the per-family command registry, is untouched and still binding", was written before PR #380 merged later that day. Since a7af66d the registry is one table per device type and the device type is passed in, which is the namespace condition 1 asks for. A wallbox parser can now own its own table without touching the PowerOcean's.
+
+**Nothing else of this decision is on `main` as of 2026-09-10.** There is no PowerPulse 2 device type, no `powerpulse_proto.py`, no `C376` entry in the prefix map. `(241, 3)` is still registered in the PowerOcean table and still fills the five `ev_*` keys, so a `C376` owner with a PowerOcean keeps the relayed readings he has today. The removal helper the addendum of 2026-09-09 (later the same day) names, and the removal of `(241, 3)` from the PowerOcean table, are the design for the implementation, not a description of the tree; the same holds for the earlier addendum's mention of `powerpulse_proto.py` being "on the branch". `ev_vehicle_id` was never in the withdrawn-suffix list on `main`, which is consistent with the final addendum keeping it. Condition 2 is met by the capture the addendum of 2026-09-08 records. The implementation is intended for a 1.21.0 pre-release.
+
+**Prefix scope, open.** On #7 on 2026-09-09 @AlexanderSeggerman reports a PowerPulse 2 under the serial prefix `C374`, listed as not supported and delivering no data. This ADR names `C376` only. Whether `C374` is the same device family, and therefore a second entry for the same type, is not decided here; it needs a question to the reporter and a frame before it needs a decision.
 
 ---
 
@@ -519,7 +535,7 @@ Seven tests hold `_loaded = True` by hand: `tests/ha/test_coordinator.py:1300, 2
 
 **Consequences:** ADR-013's regression tests are written against a harness that reads nothing from earlier runs. `tests/test_energy_integrator.py` already builds every integrator on `tmp_path` and is unaffected. The four leftover files in the plugin directory on the maintainer's machine are deleted in the fix phase, by hand, once. Not solved here: nothing about production persistence, and nothing about `tests/` outside `tests/ha/`, which never build a `hass`.
 
-### Addendum 2026-09-04: the hook is not in CI, so the fixture re-points the directory itself
+### Addendum 2026-09-04: the hook was not in CI at the time, so the fixture re-points the directory itself
 
 **What was measured.** The one line marked ASSUMED at decision time ("whether `hass_tmp_config_dir` exists at the `>=0.13.316` floor is not checked; it exists at 0.13.321, CI installs the latest, and a green CI run is the proof") is now measured and false, and "CI installs the latest" was the wrong premise. CI run 33858344140 on PR #346 failed eight tests, four of them in `test_harness_isolation.py`, with `AttributeError: 'module' object at pytest_homeassistant_custom_component.plugins has no attribute 'get_test_config_dir'`. The 0.13.316 wheel, unpacked and read: `plugins.py` has no `hass_config_dir`, no `hass_tmp_config_dir` and no `get_test_config_dir`, and its `hass` fixture (`plugins.py:564-570`) takes `hass_fixture_setup, load_registries, hass_storage, request, mock_recorder_before_hass` and nothing else; `common.py:196` still has `get_test_config_dir` and `async_test_home_assistant(config_dir=...)` at `:219-226`. The hook this ADR built on was added at the fixture level between 0.13.316 and 0.13.321.
 
@@ -551,6 +567,16 @@ The gap is structural, not a stale pin. CI runs Python 3.13 (`.github/workflows/
 - (+) No copy per test, no leftover to remove
 - (-) The isolation now rests on `Config.config_dir` being assignable rather than on a plugin contract; the path test is the detector
 - (-) The CI-line question (Python 3.14, exact plugin pin, which Home Assistant CI covers) is now written down and unanswered
+
+### Addendum 2026-09-10: CI moved to Python 3.14 with an exact pin, so the hook is in CI now and the decision stands anyway
+
+**The open question of option 1 is answered.** PR #374 (4ea6080, merged 2026-09-08) moved every CI job to Python 3.14 and replaced the floor in `requirements_test.txt` with an exact pin, `pytest-homeassistant-custom-component==0.13.364`, which carries Home Assistant 2026.9.1. The pin's own comment says why: a floor let the resolver pick, and the type gate had been reading annotations seven months behind the release people actually have. The Home Assistant line CI covers is therefore 2026.9.1, and raising the pin is its own commit with whatever the newer Home Assistant reports fixed in it.
+
+**Consequently the plugin's `hass_config_dir` and `hass_tmp_config_dir` hook is present in CI**, since 0.13.364 is well past the release that added it. That does not reopen the decision. The re-point was chosen because it references nothing version-specific: `tests/ha/conftest.py` still overrides `hass` by name and sets `hass.config.config_dir = str(tmp_path)`, and it works identically on a plugin with the hook and on one without. Switching to the hook now would tie the isolation to one plugin version again, which is what the amendment refused. The three tests of `test_harness_isolation.py` are unchanged.
+
+**The local 3.13 check described above is retired in effect.** That mode still builds a Python 3.13 environment and still refuses unless the plugin is below 0.13.317, but it installs the same pinned file, which now names a release that needs Python 3.14. It can no longer produce a green run. Either it gets its own pin at 0.13.316 as a deliberate "does this still hold on the oldest line" check, or it goes; that is an open item for the maintainer, and CI is the gate either way.
+
+**Two details of the addendum above are dated by this.** "CI runs Python 3.13" and "on 3.13 the floor is a de-facto pin" were true on 2026-09-04 and are not true now; the trade-off "the CI-line question is now written down and unanswered" is closed by PR #374.
 
 ---
 
@@ -662,6 +688,19 @@ What this decision rests on, by source:
 8. Omit the key on the field-10 sentinel - rejected in decision 3: the last value would stand for hours.
 
 **Consequences:** The field evidence, the file map and the test list with a mutation per test are on file. Round 2 is a separate plan that starts from the reporter's five sanitized `set`/`set_reply` frames and must answer three things this ADR leaves open: whether an angle write in auto flips the mode, what range the app offers, and what read-back a scan has. The release target (1.19.0-beta.5 or 1.20.0-beta.1) is the maintainer's call and is put to the maintainer with a recommendation for 1.20.0. Not solved here: the field-10 name conflict between the vendor schema and the app label (recorded, the label stands on the app check), the light level's scale, Standard Mode for this family, and BLE.
+
+### Addendum 2026-09-10: the offset is the client's own and symmetric, the offered range is 10 to 109, the third mode value has a name, and one path is corrected
+
+**What the public app bundle adds, stated on #339 on 2026-09-07.** Four things, each marked by what carries it:
+
+1. **The +10 offset is the client's own and runs both ways.** The app subtracts ten when it writes an angle and adds ten when it reads one. Carried by the public app bundle, and consistent with the reporter's captured 25 degree run, whose write carries raw 15 on field 11. So the offset is not a device quirk the reporter has to defend, and decision 3's "raw + 10" on the read path is the mirror of the app's own write. Confirmed on the read side by the reporter's app cross-check at raw 0, 10 and 75; the write side rests on the bundle and the one captured run, and a maintainer-side replay is still to come.
+2. **The offered range is 10 to 109 degrees, as the owner sees it.** The app only sends an angle inside its own range and drops anything outside it without a message. Carried by the public app bundle only. What the device itself accepts, clamps or rejects at either end has not been observed, and a capture of one run to each end of the range is what would settle it; the maintainer asked for it in the same reply. This answers "what range the app offers" from the Consequences above by description, not by measurement.
+3. **The third mode value is a re-track.** The bundle's own label for it is a fresh tracking sweep that settles back to `auto`. Decision 2 stands: no frame on file carries a third value on field 3 (the parser's map still holds `manual` and `auto` and reads anything else as an explicit `None`), and every scan frame reads back as `auto`. What shape the re-track takes in Home Assistant, if any, is round 2's question; it is not a state and it is not invented here.
+4. **The client waits for no confirmation.** It updates its display at once and relies on the regular status report to show the settled value, which is consistent with the reporter's `set_reply` frames being a reply the client ignores rather than no reply existing. A control built here confirms the same way, from the next status report. That also answers "what read-back a scan has": the report after the sweep, reading `auto`.
+
+Left where they were: the tracking counter (field 24) has a name in the bundle, a plain counter, and how it increments is device behaviour, unconfirmed, so it stays out; whether an angle write in auto flips the mode is still open and still needs the reporter's frames.
+
+**One path in decision 5 is corrected.** `ENHANCED_ONLY_DEVICE_TYPES` lives in the integration's `const.py`, not in `ecoflow/const.py`, and since ADR-020 it holds three members: the smart meter, the solar tracker and the WAVE 3. The eight membership sites and the single error key are as decided.
 
 ---
 
@@ -883,13 +922,17 @@ The eight characters exist to tell devices apart, and the reporter's installatio
 
 ## ADR-020: WAVE 3 controls inherit the read-path keys; shared ConfigWrite builder; refusal rules in the core library
 
-**Status:** Accepted (implemented on feature/161-wave3-controls, PR #360, 2026-09-07). **Date:** 2026-09-07. **Depends on:** ADR-014 dec 6, ADR-011 dec 2, ADR-018. **Decision:** the WAVE 3 setpoint sensors and the running flag become the controls under their read-path keys in the same beta cycle, retired by entity domain through one table-driven helper; the write path is the shared ConfigWrite builder with `dest` and a float32 form, a WAVE 3 control table in the core library that also owns the app's refusal rules, one coordinator method that evaluates them against accumulated state, and the acknowledgement gate widened for logging only; the read-back is the device's own push. **Trade-offs:** (+) one key per fact, (+) rules testable without HA, (+) no second builder, (-) the domain change is visible to the maintainer's beta.1 install, (-) two labels a select offers are refused as writes until captured. **Alternatives:** coexisting sensors and controls (rejected: two names for one fact, and the cost of not coexisting is zero today); a WAVE 3 builder (rejected: same header but one byte); a pending-write registry keyed by seq (deferred: no `config_ok=False` on record).
+**Status:** Accepted (decided 2026-09-07; PR #360, merged 2026-09-07; shipped in v1.20.0, first in the v1.20.0-beta.2 pre-release; amended 2026-09-10, see the addendum). **Date:** 2026-09-07. **Depends on:** ADR-014 dec 6, ADR-011 dec 2, ADR-018. **Decision:** the WAVE 3 setpoint sensors and the running flag become the controls under their read-path keys in the same beta cycle, retired by entity domain through one table-driven helper; the write path is the shared ConfigWrite builder with `dest` and a float32 form, a WAVE 3 control table in the core library that also owns the app's refusal rules, one coordinator method that evaluates them against accumulated state, and the acknowledgement gate widened for logging only; the read-back is the device's own push. **Trade-offs:** (+) one key per fact, (+) rules testable without HA, (+) no second builder, (-) the domain change is visible to the maintainer's beta.1 install, (-) two labels a select offers are refused as writes until captured. **Alternatives:** coexisting sensors and controls (rejected: two names for one fact, and the cost of not coexisting is zero today); a WAVE 3 builder (rejected: same header but one byte); a pending-write registry keyed by seq (deferred: no `config_ok=False` on record).
+
+### Addendum 2026-09-10: one builder, two coordinator entry points
+
+The decision says "one coordinator method" and the trade-offs say "no second builder". Since ADR-021 shipped the constant temperature band, the band has its own trio beside the single-field set: `build_band_write` and `band_write_refusal` in `ecoflow/wave3_commands.py` and `async_send_wave3_band` in `coordinator/set_commands.py`. Both trios end in the same shared ConfigWrite builder and the same transport, so the builder claim holds and the method count does not. Read the decision as: one control table, one shared builder, two coordinator entry points over it (the single-field set and the band pair), and no refusal rule outside `wave3_commands.py`. The band's own record is ADR-021 and its addendum.
 
 ---
 
 ## ADR-021: The WAVE 3 climate entity is a facade over the existing control path, not a second path
 
-**Status:** Proposed. **Date:** 2026-09-07. **Depends on:** ADR-020.
+**Status:** Accepted (decided 2026-09-07; shipped in v1.20.0, first in the v1.20.0-beta.4 pre-release; amended 2026-09-10, see the addendum). **Date:** 2026-09-07. **Depends on:** ADR-020.
 
 **Context:** The WAVE 3 (AC71) carries fourteen controls in Home Assistant since ADR-020: four switches, five numbers, five selects, all against real hardware on 2026-09-07, all writing through one path (`coordinator.async_send_wave3_set(key, value)` to `write_refusal()` against accumulated state to `build_write()` against a control table to one ConfigWrite frame). Phase C adds a `climate` entity so the thermostat card, `climate.set_temperature` and scheduler integrations reach the device. The open question is not whether the entity works but whether it is a second way to the same data, which the architecture forbids. A capture of the vendor app on 2026-09-07 (472 frames, 50 ConfigWrite, positive control on the name join) settles the one protocol question the entity depended on: the constant temperature band is written as a single ConfigWrite carrying both limits, pdata `f5 09 <float32 LE upper> fd 09 <float32 LE lower>`, twelve bytes, upper first, in twelve of twelve band writes, never one limit alone. Its acknowledgement echoes field 158 only, so the acknowledgement is not a read-back of the lower limit.
 
@@ -922,11 +965,21 @@ The eight characters exist to tell devices apart, and the reporter's installatio
 5. Filter `fan_modes` and `preset_modes` by the current mode so no offered option can be refused. Rejected: it gives the climate entity a different vocabulary from the select that shares its table, and the option list would change shape underneath the card as the mode changes.
 6. Ship the band read-only, with `TARGET_TEMPERATURE_RANGE` declared but `set_temperature` rejecting in HEAT_COOL. Rejected: this was the correct answer only while the frame was unproven, and the capture proves it.
 
+### Addendum 2026-09-10: what shipped beside the facade, and the wait a bundled gesture makes
+
+Three things are on `main` that the decision does not say, all shipped in v1.20.0.
+
+**The band is a second entry point, not a second path.** Decision 1 counts "one `write_refusal()`, one builder, one coordinator method". The implementation gave the band its own refusal function, its own builder wrapper and its own coordinator method (`band_write_refusal`, `build_band_write`, `async_send_wave3_band`), because the band is one frame carrying two limits and the single-field set cannot express it. Both end in the same shared ConfigWrite builder and both rules live in `ecoflow/wave3_commands.py`. The constraint decision 1 imposes, that the entity owns no state and no rule, holds: the climate entity still reads every value from coordinator data and delegates every refusal. Read decision 1 as: one control table, one shared builder, two coordinator entry points, no rule outside the core library.
+
+**A bundled mode switch waits for the device before it sends the setpoint (beta.5).** Home Assistant lets one `set_temperature` call carry a mode and a setpoint. Measured on hardware on 2026-09-07: the two writes went out 13 ms apart, the device acknowledged both and applied only the first. It applies the mode switch, reports its own stored values for the new mode 1.0 to 2.6 s later, and a setpoint arriving inside that window is dropped; the same setpoint sent on its own, with the mode settled, is applied, which separates a device race from a defect in the frame. So a bundled call now sends the mode, waits for the device's own report of it (`MODE_SETTLE_TIMEOUT_S = 6.0`, polled every `MODE_SETTLE_POLL_S = 0.25` s, in `_await_mode`), and only then sends the setpoint. When the wait expires the setpoint is sent anyway, since a refusal would be worse than a write the device may still take. This is a wait, not a rollback, and decision 8 stands: nothing is written that the user did not ask for.
+
+**In that gesture the refusal is judged against the target mode.** Decision 1 says refusals are evaluated "against accumulated state". For the setpoint half of a bundled call the entity passes the target mode to `async_send_wave3_set`, so `write_refusal` judges the setpoint against the mode the user just chose rather than the mode the device still reports during the settle window. Without that, the rule that accepts a setpoint in cooling and heating only would refuse a bundled COOL-plus-setpoint call from a unit still reporting FAN mode, before the mode switch had been reported. The rule is still the core library's; only the mode it is asked about comes from the gesture.
+
 ---
 
 ## ADR-022: A mixin declares the state it borrows by inheriting one declaration-only base under `TYPE_CHECKING`; ruff runs the full set minus line length
 
-**Status:** Accepted (decided 2026-09-07; implemented 2026-09-08, PR #365 as 7b74925)
+**Status:** Accepted (decided 2026-09-07; implemented 2026-09-08, PR #365 as 7b74925; decision 7 amended the same day by PR #366, #367 and #374, see the addendum)
 **Date:** 2026-09-07
 **Depends on:** the inventory measured before this decision (ruff 0.15.18, mypy 2.1.0, `mypy custom_components/ecoflow_energy --ignore-missing-imports` -> 728 errors in 26 of 62 files)
 
@@ -1187,6 +1240,14 @@ The MRO row is the behaviour-neutrality claim, taken from the interpreter rather
 
 **Consequences:** a new `coordinator/_typing.py` that nothing imports at runtime; thirteen mixin files gain the four-line `_Base` idiom and lose nothing else; `OptionsFlowMixin` gains one own-state annotation for `_all_devices`; a root `pyproject.toml` with `[tool.ruff]` and `[tool.mypy]` and no `[project]`; two new tests, the AST declaration check with both controls recorded and the MRO pin; `.github/workflows/tests.yml` gains the two gates, each blocking from the pull request that brings its count to zero. The 107 non-mixin mypy errors are not pre-decided here: the thirty-six `has-type` and most of the twenty-six `assignment` errors fall out with the declarations, and the remainder (`cloud_mqtt.py` six, `parsers` four, `decoder.py` three, `diagnostics.py` three, and the singles) are ordinary type errors fixed one at a time, none of them silenced by an ignore without a line beside it naming why. Watch for the failure this design cannot prevent: a mixin added later without the `_Base` idiom re-opens forty errors in one file at once - which the gate catches on that mixin's first pull request, and which is the point of having one.
 
+### Addendum 2026-09-10: line length is a gate, the formatter is checked, the target is the oldest runtime, and four numbers moved
+
+**Decision 7 as it stands on `main`.** The deferral of `E501` and `ruff format` held for one day. PR #366 ran the formatter over the integration and the tests, PR #367 enforced the line length and rewrapped what the formatter leaves alone, both merged 2026-09-08 before v1.20.0. The configuration now reads `line-length = 88`, `ignore = []`, and the Lint job runs `ruff format --check` beside `ruff check`. The check exists for a measured reason: within hours of the reflow landing, three files arrived unformatted on a pull request and nothing said so. The title of this decision, "minus line length", describes the shape at decision time; the full set, line length included, is what gates the repository since PR #367. Rejected alternative 8 was rejected for timing, and the timing changed.
+
+**`target-version` is `py312`, the oldest runtime the integration ships to, not the CI interpreter.** PR #374 set it, with the reason in the file: the setting tells the formatter which syntax it may emit, and a target of 3.14 lets it write unparenthesized `except A, B:` clauses that parse on no older Python, while the HACS minimum of Home Assistant 2025.1.0 runs on 3.12 and 3.13. The type checker's `python_version` is `"3.14"`, the interpreter it runs on, which is a different question with a different answer.
+
+**Four numbers moved on implementation.** The declaration test's floor is `MIN_DECLARATIONS_CHECKED = 75`, not 60. The per-module override for the generated protobuf module lists both module names, `ecoflow_energy.ecoflow.proto.ecocharge_pb2` and `custom_components.ecoflow_energy.ecoflow.proto.ecocharge_pb2`, deliberately: mypy computes the short name when pointed at `custom_components/` and the long name when it reaches the same file through a test that imports it by that path, and an override naming only one is silently inactive for the other run. So decision 6's "never `custom_components.ecoflow_energy.*`" reads today as "both, because the tests reach the same file under the longer name"; the positive-control discipline it describes is unchanged. The idiom sits in twelve mixin files (eight coordinator mixins, four flow mixins), not thirteen; thirteen counted the final coordinator class in the error inventory. And the pins are `ruff==0.16.6` and `mypy==2.3.1`, with `disallow_untyped_defs = true` on for the integration and an `empty-body` override for the declaration module; the file is the source for the current strictness.
+
 ---
 
 ## ADR-023: A payload the device XOR-masked is unmasked, masked by the same six passes, and masked back; the key is the header's own `seq`, the raw pass keeps running over the whole frame, and there is no second level
@@ -1235,13 +1296,13 @@ Three structural numbers decide the shape. 535 frames carry more than one header
 
 **Consequences:** `frame_capture.py` gains `_plain_passes` (today's body, unmoved), `_EncRegion`, `_encrypted_regions`, `_xor`, and a four-line loop in `sanitize_frame`; the docstring names the mask, the key and where the key lives. `tests/test_frame_capture.py` gains `TestEncryptedRegionMasking` with twenty cases - including the mutation control that the raw pass alone misses the value, the two-headers-two-keys case that fails on a frame-wide key, the original-versus-output slice case, and the truncated frame that must come out no worse - and `TestMaskingDoesNotCorruptRealFrames` gains an under-the-mask sweep with a floor on regions inspected, so a broken walk cannot pass as a clean run. The corpus sweep imports `_encrypted_regions` rather than copying it. Three tracked fixtures are regenerated through the product's own output, never by hand. Watch for the thing this design cannot prevent: a device that masks with something other than `seq & 0xFF`, which would decode to garbage, match nothing, and report clean - the sweep's per-pass counts going to zero on a family that used to have hits is the only signal, and it is a number somebody has to read.
 
-*Addendum 2026-09-09 (ADR-025):* the six passes became seven. `_plain_passes` ends with the anchored-string pass, so every string beside a serial is masked under the XOR mask by the same route, and nothing else in this decision moves.
+*Addendum 2026-09-09 (ADR-025), corrected 2026-09-10:* the six passes became seven. The anchored-string pass runs second in `_plain_passes`, right after the named secrets and before every free-running pass (ADR-025 amendment), so every string beside a serial is masked under the XOR mask by the same route; the last pass is still the length-delimited one, and nothing else in this decision moves.
 
 ---
 
 ## ADR-024: The protobuf command registry gets one table per device type; the device type is the namespace and is passed in, not guessed
 
-**Status:** Accepted (decided 2026-09-08; implemented and merged the same day as a7af66d, PR #380, shipping in v1.21.0)
+**Status:** Accepted (decided 2026-09-08; implemented and merged the same day as a7af66d, PR #380; shipped in v1.21.0-beta.1, v1.21.0 not yet released)
 **Date:** 2026-09-08
 **Satisfies:** ADR-008, condition 1. That condition is binding before the PowerPulse 2 (`C376`) can become its own device type.
 
@@ -1295,7 +1356,7 @@ Watch for the thing this design cannot prevent: a family table that is simply wr
 
 ## ADR-025: A string beside a serial in the same protobuf message is masked by that neighbourhood; the serial is the anchor, the walk descends six levels over the whole payload, and the fixture gate walks with the product's own helper
 
-**Status:** Accepted (decided 2026-09-09; implemented the same day in PR #382 with the amendment below)
+**Status:** Accepted (decided 2026-09-09; implemented the same day in PR #382 with the amendment below; shipped in v1.21.0-beta.1, v1.21.0 not yet released)
 **Date:** 2026-09-09
 **Depends on:** ADR-016 (the serial as the boundary, `_MASK_BYTE` inside `[A-Z0-9]`, a widening needs a frame that shows it); ADR-023 (`_plain_passes` as the one place every pass lives, `_read_varint` as the one owner of varint semantics, the fixture gate importing the product's own walker); the length-delimited pass (`_mask_delimited_identifiers` and its floor of 12)
 
@@ -1401,3 +1462,77 @@ Three forces shape the answer. First, most of what a decision records is exactly
 4. Keep the register private and remove the citations from the code. Rejected: the citations are the most useful comments in the tree, because each one points at the measurement behind a line that would otherwise look arbitrary. Removing them keeps the register consistent by making the code poorer.
 
 **Consequences:** `documentation/architecture/decisions.md` is created with every public decision, and `documentation/architecture/README.md` says how to read it and what the gaps mean; `documentation/README.md` links both. The internal annex replaces the former private register and carries the internal decisions and the per-decision evidence lists; the private register is removed so that nothing can be written there by habit. `tests/test_public_docs_boundary.py` runs with the suite. Watch for the two things the test cannot see: an owner identified by the combination of device, date and account shape, and a measurement whose number is right but whose "on file" no longer has a file behind it. Both are caught only by reading.
+
+---
+
+## ADR-027: PowerOcean scheduled charge tasks are read and operated as the device reports them; creating and deleting stay in the app; the bounds are the app's rule, not a measured device limit
+
+**Status:** Accepted (decided in public on #328 on 2026-08-30 and restated at the stable release on 2026-08-31; shipped in v1.18.0, first in the v1.18.0-beta.30 pre-release; three of the four entities withheld in v1.18.1 and restored with the bounds in v1.19.0, first in the v1.19.0-beta.2 pre-release; recorded here 2026-09-10)
+**Date:** 2026-08-30
+**Depends on:** ADR-011 decision 2 (an explicit unknown is the contract between parser and entity). **Related:** ADR-024 (the list message sits in the PowerOcean's own table since PR #380)
+
+**Context:** Owners on a dynamic tariff schedule grid charging into the cheap hours from the EcoFlow app, and Home Assistant had no view of it. @stuartglewis31 on #328 recorded a session with a timed log: creating a schedule, switching it off, changing its power, switching it back on, off again, deleting it. Every action is in the file with the device acknowledging it, and the power change shows as the number going from 1000 to 1500 at the minute he made it. The recording also covered what had been thought missing: five reads before the creation show no schedule at all, so it holds a schedule being created from nothing.
+
+What the messages carry. The device sends its whole schedule list in one message, `(96, 10)`, and that message rides inside the get-all reply the integration already receives, twice under the same sequence number, with the two copies able to disagree; the first copy is the one read. The list arrives both when asked for and unasked, so a write can be confirmed from the device's own list rather than from an acknowledgement. The time window is carried as minutes since midnight packed into one number, 1200 and 1230 for 20:00 to 20:30; the 20:00 half is anchored twice, by the log and by the device's own running flag flipping at that minute. The repeat kind and its parameter are two separate fields whose meaning depends on the kind: weekly carries the chosen weekdays as a bitmask, a one-off carries its date. That was settled on the maintainer's own PowerOcean by predicting the number for two day sets and two time windows before reading them back, and the reporter's single sample fits the same rule. A target state of charge is not on this path: the message has no such field, which is what the app screen says from the other side.
+
+What is not on record. Whether the device rejects, clamps or accepts a charge power beyond the app's range has never been observed; only the app's rule is known. The 20:30 end time was in the field, but the schedule was deleted before the window closed, so a run to the natural end is the one thing that capture left open.
+
+**Decision:**
+
+1. **Each schedule the device reports gets four entities:** a switch that arms and disarms it, a number for its charge power, a sensor with the time window written as `20:00-20:30`, and a binary sensor for whether it is charging right now, taken from the device's own running flag rather than inferred from the clock. Reading and operating an existing schedule is the supported shape.
+2. **Creating and deleting a schedule stay in the app.** Without a create there is no safe way to undo a delete, so neither is exposed. Creating was first ruled out for a second reason, that it would have meant inventing a repeat pattern on hardware that charges from the grid; since the repeat fields were decoded on 2026-08-30 that reason is gone, and creation is not built, has no date, and is only no longer off the table.
+3. **A write is confirmed from the schedule list the device sends back**, not from the acknowledgement, so a control shows what took rather than what was asked for. A schedule deleted in the app has its readings go to unknown, and a further write to it fails with a message saying why instead of doing nothing.
+4. **The charge-power number enforces the app's own bounds and nothing more:** steps of 100 W, a floor of 100 W per online battery pack, and a ceiling per model taken from the serial prefix, 6000 W on the reporter's single-phase 6 kW unit. A value outside them is refused rather than rounded or sent. The bounds are the app's rule; the device's own limit is unobserved and is not claimed.
+5. **The list is read from the reply the integration already receives.** No timer polls it.
+
+**Trade-offs:**
+- (+) The device is the source of truth for every state shown, and a write that did not take cannot look as if it did
+- (+) Nothing is sent that the app would refuse to send, so the integration cannot put the hardware somewhere the app cannot
+- (+) A schedule the owner created in the app is fully operable from Home Assistant on the first list that carries it
+- (-) An owner cannot create a schedule from Home Assistant, so an automation that needs one must start from a schedule that already exists in the app
+- (-) The ceiling is the app's; if the device would take more, that headroom is unreachable from here, and if it would take less, a value inside the app's range could still be refused by the device without the integration knowing
+- (-) The end of the window rests on one field position anchored once; a run to a natural end would confirm it and none is on file
+
+**Alternatives considered:**
+1. Create and delete schedules through the integration. Rejected in decision 2: a delete without a create is a one-way door, and a create needs a repeat pattern the integration would have to compose; possible since the fields were decoded, not built, no date.
+2. No bounds on the charge-power number, letting the device answer. Rejected: v1.18.1 withheld the switch, the number and the window for a day precisely because the evidence did not establish writable bounds, and a value the app would never send is not a value to try first on hardware that charges from the grid.
+3. Poll the schedule list on a timer. Rejected in decision 5: the device sends the list asked and unasked, inside a reply already received.
+4. A target state of charge per schedule. Not possible: the message has no such field.
+
+**Consequences:** The schedule entities shipped in v1.18.0 and were confirmed on hardware other than the maintainer's on 2026-09-03 (#328). The optional check @stuartglewis31 offered on 2026-09-02, whether the device rejects a value above 6000 W, stays optional; nothing waits on it. #381 (opened 2026-09-09 by @paddy2k) asks for a schedule type that feeds power to the grid, with enable, disable and an export rate from Home Assistant: enabling, disabling and modifying a reported schedule is the shape decision 1 supports, and a schedule that has to be created is the case decision 2 leaves in the app. Whether the device carries a feed-to-grid kind on the same list, and what its fields are, is the open question this decision leaves and does not promise; the diagnostics download attached to #381, taken while such a schedule was created, enabled, disabled, modified and deleted, is the evidence to read first.
+
+---
+
+## ADR-028: The Ocean 2 under `RE11` and `RE17` is one device type; a field position inferred from a name is marked as such until a frame confirms it
+
+**Status:** Accepted (decided in public on #145 on 2026-09-07; not implemented: as of 2026-09-10 neither prefix is in the prefix map and no Ocean 2 parser or entity list exists on `main`; the read path is expected from a contributor's pull request)
+**Date:** 2026-09-07
+**Depends on:** ADR-014 decision 1 (one type for two prefixes that send one message); ADR-011 decision 2
+
+**Context:** #145 tracks Ocean 2 support. @jensfr1 is preparing the parser and supplied a field mapping with three battery-block corrections; the maintainer's check on 2026-09-07 found all three hold, and one is stronger than stated: the value read as capacity is remaining energy in watt hours, the one read as state of charge is the state of health, and the cell voltage is a maximum cell voltage that already arrives in volts, so both the quantity and the scale of that reading were wrong. The energy-stream block carries seven readings, not four: load, grid, solar and battery power, plus a solar-charger power, an inverter-side solar power and a battery state of charge, and the client keeps two of those blocks side by side, which is the likely reason for the two block numbers in the mapping.
+
+Two prefixes are in play. The vendor's own device list carries `RE11` and `RE17` with different power ratings, 10 kW against 12 kW, and the public app bundle has no separate handling for `RE17` anywhere: same message families, same payload shape, same screens. An `RE17` owner (@Fvdzandt, from #343) has been pointed at the thread.
+
+What is on file and what is not. A 16 h diagnostics download from an `RE11` has already shaped the tree twice: it holds nine bundles of 12 to 14 messages each, which is why the frame buffer is sized by what the Ocean 2 sends rather than by a fixed count, and an Ocean 2 get-all reply of 53 KiB in one frame forced the last raise of the capture limit (v1.17.0). What is not on file is a raw capture that pins the field numbers of the mapping: names and types are visible in the bundle, field numbers are not, and neither is whether the energy-stream block arrives once or twice per message; the maintainer stated on 2026-09-07 that no raw Ocean 2 capture usable for that is on his side. No `RE17` frame is on file at all. One value is known not to be a reading: the feed-in ceiling, which the app resolves per serial to bound a slider, so a sensor built on it would report the app's own setting back to the owner.
+
+**Decision:**
+
+1. **One device type for `RE11` and `RE17`.** Both prefixes map to it in the prefix map with one display name. A second type for `RE17` would change no parser, no entity and no name, which is the synonym test ADR-014 decision 1 applied to the tracker's two prefixes. The 12 kW rating is a rating, not a message.
+2. **No keyword, no rating check.** The app path returns an empty product name for every device, so the prefix is the whole classification, and nothing in the parser or the entity list branches on which of the two it is.
+3. **A field position inferred from a name is marked as inferred until a frame confirms it.** The ask on #145 is a few minutes of listen-only capture from either prefix, taken on v1.17.0 or later so it arrives whole. The ask does not block the pull request: the maintainer said the capture may arrive after the contributor's own work lands. Until it does, the mapping's positions are recorded as inferred in the parser, and the first frame is the check that turns each one into a measured fact or a correction.
+4. **The first `RE17` frame is the check on decision 1.** The identity rests on the bundle for `RE17`, where ADR-014 had frames for both prefixes. If an `RE17` frame shows a different message family, that is the moment for a second parser table, not a second type; if it shows the same, nothing changes.
+5. **The feed-in ceiling is not a sensor.**
+
+**Trade-offs:**
+- (+) One type, one parser, one name; an `RE17` owner gets the same entities on the day the read path lands
+- (+) The two corrections of the wrong quantity and wrong scale go in before anything ships, not as a migration after
+- (-) `RE17` is mapped on the bundle's evidence alone; decision 4 is the safeguard, and until an `RE17` frame arrives it is a stated risk
+- (-) Decision 3 is looser than ADR-014, which had a frame for every shipped value before the parser merged; a position that is wrong ships as unknown or as the wrong reading until the first capture, and the marking is what keeps that visible
+
+**Alternatives considered:**
+1. Two device types by power rating. Rejected in decision 1.
+2. Map `RE11` now and `RE17` when a frame shows it. Rejected: an `RE17` owner would be refused as unsupported by the same integration whose author has said in public the two are one read path, and the cost of being wrong is one parser table, caught by decision 4.
+3. Block the read path until a frame is on file. Not chosen: the maintainer said on #145 that the capture may follow the contributor's work; decision 3 keeps the inference visible instead of hiding it behind a merged parser.
+4. A feed-in ceiling sensor. Rejected in decision 5.
+
+**Consequences:** The implementation lands with the contributor's pull request, and the register gets that PR and its release in this status line then. Nothing is owed to @jensfr1 before he is ready, as stated on #145 on 2026-08-23 and 2026-09-07. The one ask stands: a few minutes of listen-only capture from an `RE11` or `RE17`, on v1.17.0 or later, attached to #145. The unsupported-device notice for both prefixes stays until the read path lands.
