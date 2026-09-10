@@ -67,6 +67,15 @@ DEVICE_TYPE_WAVE3 = "wave3"
 # `proto/runtime.py`); that relay path is retired in the same change that
 # adds this type, so a `C376` is never read twice (#7, #247).
 DEVICE_TYPE_POWERPULSE2 = "powerpulse2"
+# Ocean 2 home battery (`RE11` 10 kW, `RE17` 12 kW). Enhanced-only, same
+# reasoning as WAVE 3 and PowerPulse 2 above: the Developer API answers
+# every quota read with error 1006 and the app channel gives no product
+# name, so the serial prefix is the whole classification (#145, ADR-028).
+# Both prefixes map to the one type: EcoFlow's own device list carries them
+# as 10 kW and 12 kW variants of the same product, sharing the same message
+# families (254/39 display, 254/46 battery module) - the first RE17 frame
+# on file will confirm the field map still applies unchanged.
+DEVICE_TYPE_OCEAN2 = "ocean2"
 DEVICE_TYPE_UNKNOWN = "unknown"
 
 # Keywords used to classify devices from productName strings.
@@ -260,6 +269,10 @@ _SN_PREFIX_MAP = {
     # every other Enhanced-only type above. A `C376` no longer needs a
     # coupled PowerOcean to report at all.
     "C376": DEVICE_TYPE_POWERPULSE2,
+    # Ocean 2 (#145, ADR-028): RE11 (10 kW) and RE17 (12 kW) share the same
+    # message families, so both prefixes classify to the one type.
+    "RE11": DEVICE_TYPE_OCEAN2,
+    "RE17": DEVICE_TYPE_OCEAN2,
 }
 
 _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
@@ -282,6 +295,8 @@ _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
     # WAVE 3: the app names it "WAVE 3-<tail>", neither channel gives a
     # product name, so `get_device_name` renders "WAVE 3 (0052)" from here.
     "AC71": "WAVE 3",
+    "RE11": "Ocean 2",
+    "RE17": "Ocean 2",
 }
 
 # --- Scheduled charge task: the charge power range the app offers ---

@@ -130,6 +130,13 @@ class TestDeviceTypeRouting:
         assert get_device_name("", "HZ31TEST00000001") == "Solar Tracker (0001)"
         assert get_device_name("", "S02FTEST00000002") == "Solar Tracker (0002)"
 
+    def test_both_ocean2_prefixes_classify(self) -> None:
+        """RE11 (10 kW) and RE17 (12 kW) are one product, two prefixes
+        (#145, ADR-028) - same reasoning as the solar tracker above.
+        """
+        assert get_device_type("", "RE11TEST00000001") == "ocean2"
+        assert get_device_type("", "RE17TEST00000002") == "ocean2"
+
     def test_the_real_stream_family_still_routes(self) -> None:
         """The check above must not cost the devices it sits in front of.
 
@@ -1194,10 +1201,11 @@ class TestFrameCaptureFootprint:
     # The widest bundle measured on real hardware, in bytes, and how many
     # messages it carried. An Ocean 2 (RE11, issue #145) bundles its battery
     # report as 12 to 14 messages at 4956 to 5899 B; all nine in a 16 hour
-    # capture were cut at 4096. Same provenance problem as the figure above:
-    # what survives of that frame is a 4096 B prefix beside a recorded size,
-    # so it cannot become a fixture until a download taken under this budget
-    # replaces it.
+    # capture were cut at 4096. A later download from the same unit, taken
+    # on v1.18.0 under this budget, came through whole (69 frames, none
+    # truncated) and is the fixture under tests/fixtures/ocean2/ - its
+    # widest bundle is 5873 B in 14 messages, 26 B short of the figure
+    # here, which therefore stays as the measured maximum.
     _WIDEST_OBSERVED_BUNDLE_BYTES = 5899
     _WIDEST_OBSERVED_BUNDLE_MESSAGES = 14
 
@@ -1223,19 +1231,36 @@ class TestFrameCaptureFootprint:
         assert budget >= self._WIDEST_OBSERVED_BUNDLE_BYTES
 
     def test_the_bundle_budget_carries_every_tracked_fixture(self) -> None:
-        """Whatever a fixture holds must survive the cap whole."""
-        widest = 0
-        offender = ""
+        """Whatever a fixture holds must survive the budget whole.
+
+        The budget is the one `frame_budget` grants that frame from the
+        messages its own headers declare, not the bundle floor: a 14-message
+        Ocean 2 bundle claims 14 message budgets and is carried at 5873 B,
+        where a check against the 4096 B floor alone would refuse a fixture
+        the capture path demonstrably kept.
+        """
+        from ecoflow_energy.ecoflow.frame_capture import (
+            decode_cmd_headers,
+            frame_budget,
+        )
+
+        seen = 0
         for path in sorted((REPO_ROOT / "tests/fixtures").rglob("*.json")):
             for frame in _captured_frames(json.loads(path.read_text())):
-                size = len(frame) // 2
-                if size > widest:
-                    widest, offender = size, path.name
+                payload = bytes.fromhex(frame)
+                seen += 1
+                budget = frame_budget(
+                    decode_cmd_headers(payload),
+                    RAW_FRAME_MAX_BYTES,
+                    RAW_FRAME_BUNDLE_MAX_BYTES,
+                    RAW_FRAME_BUNDLE_HARD_CAP,
+                )
+                assert len(payload) <= budget, (
+                    f"{path.name} holds a {len(payload)} B frame the budget "
+                    f"of {budget} B would cut"
+                )
 
-        assert widest, "no captured frames found under tests/fixtures"
-        assert widest <= RAW_FRAME_BUNDLE_MAX_BYTES, (
-            f"{offender} holds a {widest} B frame the cap would cut"
-        )
+        assert seen, "no captured frames found under tests/fixtures"
 
 
 class TestTheScheduleChargePowerCeiling:

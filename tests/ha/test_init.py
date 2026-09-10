@@ -1266,9 +1266,12 @@ class TestAppAuthSetup:
 class TestUnroutedDeviceProbeWiring:
     """A skipped device is the one case where raw capture is the only route."""
 
+    # A prefix no parser routes. The Ocean 2 (RE11) was the example here until
+    # PLAN-135 gave it a parser; a probe for a routed device would be a second
+    # session on a stream the coordinator already reads.
     UNSUPPORTED = {
-        "sn": "RE11ZZ1234500001",
-        "name": "Ocean 2",
+        "sn": "ZZ01ZZ1234500001",
+        "name": "Unmapped Device",
         "product_name": "",
         "device_type": "unknown",
         "online": 1,
@@ -1612,8 +1615,8 @@ class TestRawCaptureWithoutASkippedDevice:
         dropping the first one.
         """
         unsupported = {
-            "sn": "RE11ZZ1234500001",
-            "name": "Ocean 2",
+            "sn": "ZZ01ZZ1234500001",
+            "name": "Unmapped Device",
             "product_name": "",
             "device_type": "unknown",
             "online": 1,
