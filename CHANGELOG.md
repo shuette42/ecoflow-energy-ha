@@ -10,6 +10,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- The architecture decisions behind the integration are now part of the public documentation: [documentation/architecture/decisions.md](documentation/architecture/decisions.md) is the register that code comments and tests cite as `ADR-NNN`, with the context, the decision, the trade-offs and the alternatives for each. Until now those numbers pointed at a file that was never published; a contributor asked, and he was right to. A few numbers concern the maintainer's own working setup rather than the product and are listed as such. Nothing in the software changes.
 - Nothing about the software changes for anyone using it. Internally, the table that decides which protobuf message a device's frame is read as now exists once per device type instead of once for the whole integration. Until now a single table answered for every device, and two device families that use the same command numbers for different messages were kept apart only by the order in which the code happens to ask, which no test could check. Each family now has its own table and the caller has to say which device it is decoding for, so one family can never read another family's message by accident. Every frame in the recordings on file was replayed before and after the change and produced exactly the same readings.
 
 ## [1.20.0] - 2026-09-07
@@ -546,7 +547,7 @@ All notable changes to this project will be documented in this file.
 - PowerOcean: "Battery Remaining Capacity" (`bp_remain_watth`) now shows total capacity across all battery packs instead of only Pack 1 - affects both Standard Mode (HTTP) and Enhanced Mode (Protobuf) (#10)
 
 ### Removed
-- Temporary workarounds from v1.6.5–v1.6.8 (proto3 global flag, optimistic lock, zero-fill, HTTP sync loop) - all replaced by proper `optional` field presence
+- Temporary workarounds from v1.6.5-v1.6.8 (proto3 global flag, optimistic lock, zero-fill, HTTP sync loop) - all replaced by proper `optional` field presence
 
 ## [1.6.7] - 2026-03-31
 
@@ -596,7 +597,7 @@ All notable changes to this project will be documented in this file.
 ## [1.6.0] - 2026-03-30
 
 ### Added
-- PowerOcean: battery SoC limit control - Max Charge SoC (50–100%) and Min Discharge SoC (0–30%) as number entities (Enhanced Mode only)
+- PowerOcean: battery SoC limit control - Max Charge SoC (50-100%) and Min Discharge SoC (0-30%) as number entities (Enhanced Mode only)
 - PowerOcean: SysBatChgDsgSet protobuf SET command (cmd_func=96, cmd_id=112) for real-time SoC limit adjustment via WSS
 
 ### Changed
@@ -800,7 +801,7 @@ All notable changes to this project will be documented in this file.
 - HA Recorder warnings for `total_increasing` sensors (battery cycles, energy totals) - monotonic filter drops micro-regressions from API
 
 ### Changed
-- Delta devices now subscribe to `/open/.../quota` MQTT topic for event-driven updates (~1–30 s)
+- Delta devices now subscribe to `/open/.../quota` MQTT topic for event-driven updates (~1-30 s)
 - HTTP polling (~30 s) remains as automatic fallback when MQTT is unavailable
 
 ## [1.0.0] - 2026-03-26
