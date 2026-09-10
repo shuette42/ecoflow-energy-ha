@@ -6967,11 +6967,25 @@ POWERPULSE2_SENSORS: list[EcoFlowSensorDef] = [
         enhanced_only=True,
         suggested_display_precision=2,
     ),
-    # A configured limit, not a live measurement - hence diagnostic even
-    # though it carries the same device/state class as the phase currents.
+    # Two configured currents, not live measurements - hence diagnostic even
+    # though they carry the same device/state class as the phase currents.
+    # The maximum current is the limit set on the wallbox (heartbeat field
+    # 18); the charging current is the session setpoint (field 17). They
+    # agree while charging at the limit and differ otherwise, see #7.
     EcoFlowSensorDef(
         "ev_max_current_a",
         "Wallbox Maximum Current",
+        "A",
+        "current",
+        "measurement",
+        "mdi:current-ac",
+        "diagnostic",
+        enhanced_only=True,
+        suggested_display_precision=1,
+    ),
+    EcoFlowSensorDef(
+        "ev_charge_current_a",
+        "Wallbox Charging Current",
         "A",
         "current",
         "measurement",

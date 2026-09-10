@@ -2,7 +2,7 @@
 
 Full list of all entities created for the EcoFlow PowerPulse 2 wallbox (C376 series).
 
-**Totals:** 16 sensors, 1 binary sensor
+**Totals:** 17 sensors, 1 binary sensor
 
 > **Enhanced Mode only.** The wallbox reports through the account connection, not through the EcoFlow Developer API. A Standard Mode setup gets error 1006 and no entities fill; set the integration up with an EcoFlow account e-mail and password instead.
 
@@ -25,8 +25,9 @@ Read-only. The integration cannot start, stop or configure a charging session.
 | Wallbox Current L1 | A | - | enabled | Current on phase 1 |
 | Wallbox Current L2 | A | - | enabled | Current on phase 2. Reads 0 A while charging single-phase |
 | Wallbox Current L3 | A | - | enabled | Current on phase 3. Reads 0 A while charging single-phase |
-| Wallbox Maximum Current | A | diagnostic | enabled | The configured current limit, not a live measurement |
-| Wallbox Phase Mode | - | diagnostic | enabled | `single_phase` or `three_phase` |
+| Wallbox Maximum Current | A | diagnostic | enabled | The maximum current configured on the wallbox, not a live measurement |
+| Wallbox Charging Current | A | diagnostic | enabled | The charging current set for the session, not a live measurement. Equals the maximum current while charging at the limit and can sit below it otherwise |
+| Wallbox Phase Mode | - | diagnostic | enabled | `single_phase` or `three_phase`: the phase mode in effect right now. The app's phase selection (automatic, single or three) is a setting the wallbox reports elsewhere and is not shown; under automatic this reads whichever mode the wallbox is in |
 | Wallbox Session Status | - | diagnostic | enabled | `idle`, `charging` or `finished` |
 | Wallbox Session Duration | s | diagnostic | enabled | How long the current session has been running. Absent while no session is running, see the note below |
 | Wallbox Charging Status | - | - | enabled | Available, preparing, charging, paused by charger, paused by vehicle, finishing, or fault |

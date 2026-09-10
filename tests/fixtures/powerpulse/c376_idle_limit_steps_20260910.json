@@ -1,0 +1,19 @@
+{
+  "source": "Diagnostics download attached to issue #7 on 2026-09-10 by the second PowerPulse 2 owner (integration v1.21.0-beta.3), idle wallbox, no vehicle, while he stepped the configured maximum current down from 16 A to 6 A. Serial masked by the download itself; frames are XOR-masked property pushes.",
+  "frames": [
+    {
+      "ts_iso": "2026-09-10T12:15:28.759689+00:00",
+      "topic": "property",
+      "cmds": [{"cmd_func": 2, "cmd_id": 33}],
+      "configured_max_current_a": 10,
+      "hex": "0ab2020a8e028b82918783838383b380b9a48b839383a683838383be83838383c683838383ce83838383d683838383de83838383e683838383c1aa8b8293381dd8a683838383be4f26e9c0c66363eac0cedb94eac0d63a1e41b8defffe46b8e6e39746b8cb381dd80382870b82bf1382e72382832b82823b828146828383c3c24b82e75b828366828383838369828f4f26e9c06363eac0db94eac071828f3a1e41b8fffe46b8e39746b87982819d9d018181838309818194944381196a7657854b81125080538122905b811908d86381381dd86b8157917381867b81cb6980898b8393839b83a383ab837180878b8393bf7980998b8293829993dbdbdbdbdbdbdbdbdbdbdbdbdbdbdbdba381ab820387832b85831002182020013001380340024821508e02580170838f717881b601800103880101"
+    },
+    {
+      "ts_iso": "2026-09-10T12:31:30.469435+00:00",
+      "topic": "property",
+      "cmds": [{"cmd_func": 2, "cmd_id": 33}],
+      "configured_max_current_a": 6,
+      "hex": "0ab2020a8e02bcb5a6b0b4b4b4b484b78e93bcb4a4b491b4b4b4b489b4b4b4b4f1b4b4b4b4f9b4b4b4b4e1b4b4b4b4e9b4b4b4b4d1b4b4b4b4f69dbcb5a40f2aef91b4b4b4b4897b0ad3f7f1adf7d3f7f92305d3f7e1f01f708fe99cf6708fd1c8c9718ffc0f2aef34b5b03cb58824b58814b5b41cb5b50cb5b671b5b4b4f4f57cb5d06cb5b451b5b4b4b4b45eb5b87b0ad3f7adf7d3f72305d3f746b5b8f01f708f9cf6708fc8c9718f4eb5b6aaaa36b6b6b4b43eb6b6acac74b62e5d4160b27cb62567b764b615a76cb62e3fef54b60f2aef5cb660a644b6b14cb6fc5eb7bebcb4a4b4acb494b49cb446b7b0bcb5a4884eb7aebcb5a4b5aea4ecececececececececececececececec94b69cb534b0b41cb2b41002182020013001380340024821508e02580170b49d717881b601800103880101"
+    }
+  ]
+}
