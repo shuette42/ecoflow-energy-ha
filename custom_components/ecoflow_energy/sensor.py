@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
+import homeassistant.util.dt as dt_util
 from homeassistant.components.sensor import (
     RestoreSensor,
     SensorDeviceClass,
@@ -22,6 +25,7 @@ from .const import (
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
+    DEVICE_TYPE_POWERPULSE2,
     DEVICE_TYPE_POWERSTREAM,
     DEVICE_TYPE_SMART_METER,
     DEVICE_TYPE_SMARTPLUG,
@@ -31,6 +35,7 @@ from .const import (
     DEVICE_TYPE_WAVE3,
     DOMAIN,
     POWEROCEAN_SENSORS,
+    POWERPULSE2_SENSORS,
     POWERSTREAM_SENSORS,
     SMARTMETER_SENSORS,
     SMARTPLUG_SENSORS,
@@ -187,8 +192,8 @@ class EcoFlowSensor(
         self._attr_translation_key = definition.translation_key or definition.key
         self._attr_native_unit_of_measurement = definition.unit
         self._attr_icon = definition.icon
-        self._restored_value: float | int | str | None = None
-        self._last_written_value: float | int | str | None = None
+        self._restored_value: datetime | float | int | str | None = None
+        self._last_written_value: datetime | float | int | str | None = None
 
         if definition.device_class:
             self._attr_device_class = SensorDeviceClass(definition.device_class)
@@ -226,14 +231,15 @@ class EcoFlowSensor(
                 and str(last.native_value) not in self._definition.options
             ):
                 return
-            # Home Assistant's stored type also allows a date, datetime or
-            # Decimal, and no sensor this integration owns produces one, so
-            # nothing reachable is dropped here. The guard covers both
-            # assignments below rather than only the first, and the value is
-            # bound to a local because a property access is not narrowed by
-            # the check itself.
+            # Home Assistant's stored type also allows a date or Decimal;
+            # only datetime is reachable here, from the one `timestamp`
+            # device class sensor (`ev_session_start_ts`), stored as the
+            # datetime `native_value` below already returns. The guard
+            # covers both assignments below rather than only the first, and
+            # the value is bound to a local because a property access is not
+            # narrowed by the check itself.
             restored = last.native_value
-            if not isinstance(restored, (str, int, float)):
+            if not isinstance(restored, (str, int, float, datetime)):
                 return
             self._restored_value = restored
             self._last_written_value = restored
@@ -259,7 +265,7 @@ class EcoFlowSensor(
         self._write_state_if_changed(self.native_value)
 
     @property
-    def native_value(self) -> float | int | str | None:
+    def native_value(self) -> datetime | float | int | str | None:
         """Return the sensor value, falling back to restored state.
 
         A key PRESENT with value None is an explicit clear from the parser
@@ -277,6 +283,14 @@ class EcoFlowSensor(
             # async_added_to_hass.
             if self._definition.options and str(val) not in self._definition.options:
                 return self._restored_value
+            # `timestamp` device class needs a timezone-aware datetime, but
+            # the parser hands over the raw Unix-seconds value straight off
+            # the wire (e.g. `ev_session_start_ts`) - HA would otherwise log
+            # a warning on every write and show the entity as unknown.
+            if self._definition.device_class == "timestamp":
+                if isinstance(val, (int, float)):
+                    return dt_util.utc_from_timestamp(val)
+                return None
             return self._round_value(val)
         return self._restored_value
 
@@ -351,4 +365,6 @@ def _get_sensor_defs(device_type: str) -> list[EcoFlowSensorDef]:
         return SOLARTRACKER_SENSORS
     if device_type == DEVICE_TYPE_WAVE3:
         return WAVE3_SENSORS
+    if device_type == DEVICE_TYPE_POWERPULSE2:
+        return POWERPULSE2_SENSORS
     return []

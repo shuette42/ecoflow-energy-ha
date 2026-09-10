@@ -833,6 +833,10 @@ _PRECISION_WAIVED = {
         "the wallbox reports the vehicle as a string, so there is no number "
         "to round - the charger sends '653', not 653"
     ),
+    "ev_session_start_ts": (
+        "a timestamp entity, rendered as a datetime rather than a number, so "
+        "a display precision has nothing to act on"
+    ),
 }
 
 # One waiver per schedule slot the device can report. The window is a text

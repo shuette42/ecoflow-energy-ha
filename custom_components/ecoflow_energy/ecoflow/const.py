@@ -58,6 +58,15 @@ DEVICE_TYPE_SOLAR_TRACKER = "solar_tracker"
 # the app channel carries no product name either, so the type is reached
 # through the serial prefix below and never through a keyword (#161).
 DEVICE_TYPE_WAVE3 = "wave3"
+# PowerPulse 2 wallbox (`C376`). Enhanced-only, same reasoning as WAVE 3
+# above: it has its own account-channel connection and its own protocol
+# envelope (cmd_func 2, HeartBeat/ParamReport), so it is reached through the
+# serial prefix below and never through a keyword. Until PLAN-132 this
+# device had no channel of its own and was read as an accessory relayed by
+# the PowerOcean it happened to be coupled to (`(241, 3)` in
+# `proto/runtime.py`); that relay path is retired in the same change that
+# adds this type, so a `C376` is never read twice (#7, #247).
+DEVICE_TYPE_POWERPULSE2 = "powerpulse2"
 DEVICE_TYPE_UNKNOWN = "unknown"
 
 # Keywords used to classify devices from productName strings.
@@ -246,6 +255,11 @@ _SN_PREFIX_MAP = {
     # classified by name alone and skipped as unsupported. Further `AC71*`
     # regional variants join here as owners report them, like the BK series.
     "AC71": DEVICE_TYPE_WAVE3,
+    # PowerPulse 2 wallbox (#7, #247, PLAN-132): its own account-channel
+    # connection and its own protocol, reached through this prefix like
+    # every other Enhanced-only type above. A `C376` no longer needs a
+    # coupled PowerOcean to report at all.
+    "C376": DEVICE_TYPE_POWERPULSE2,
 }
 
 _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
@@ -370,13 +384,14 @@ def get_device_type(product_name: str, sn: str = "") -> str:
     Returns DEVICE_TYPE_POWEROCEAN, DEVICE_TYPE_DELTA, DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_SMARTPLUG, DEVICE_TYPE_STREAM, DEVICE_TYPE_STREAM_AC5000,
     DEVICE_TYPE_POWERSTREAM, DEVICE_TYPE_SMART_METER,
-    DEVICE_TYPE_SOLAR_TRACKER, DEVICE_TYPE_WAVE3, or DEVICE_TYPE_UNKNOWN.
+    DEVICE_TYPE_SOLAR_TRACKER, DEVICE_TYPE_WAVE3, DEVICE_TYPE_POWERPULSE2,
+    or DEVICE_TYPE_UNKNOWN.
 
-    The Smart Meter, the Solar Tracker and the WAVE 3 have no keyword of
-    their own: all three are reached by their serial prefix only. None of
-    their names matches any keyword list below, and the app API reports an
-    empty product name for each, so a keyword would be an assumption about
-    a string no capture has ever shown.
+    The Smart Meter, the Solar Tracker, the WAVE 3 and the PowerPulse 2 have
+    no keyword of their own: all four are reached by their serial prefix
+    only. None of their names matches any keyword list below, and the app
+    API reports an empty product name for each, so a keyword would be an
+    assumption about a string no capture has ever shown.
     """
     # The prefix is exact evidence, the product name a substring guess, so
     # the prefix wins. Every prefix mapped before this ordering existed

@@ -1490,6 +1490,51 @@
           "faulted": "Fault"
         }
       },
+      "ev_voltage_l1_v": {
+        "name": "Wallbox Voltage L1"
+      },
+      "ev_voltage_l2_v": {
+        "name": "Wallbox Voltage L2"
+      },
+      "ev_voltage_l3_v": {
+        "name": "Wallbox Voltage L3"
+      },
+      "ev_current_l1_a": {
+        "name": "Wallbox Current L1"
+      },
+      "ev_current_l2_a": {
+        "name": "Wallbox Current L2"
+      },
+      "ev_current_l3_a": {
+        "name": "Wallbox Current L3"
+      },
+      "ev_max_current_a": {
+        "name": "Wallbox Maximum Current"
+      },
+      "ev_phase_mode": {
+        "name": "Wallbox Phase Mode",
+        "state": {
+          "single_phase": "Single Phase",
+          "three_phase": "Three Phase"
+        }
+      },
+      "ev_session_status": {
+        "name": "Wallbox Session Status",
+        "state": {
+          "idle": "Idle",
+          "charging": "Charging",
+          "finished": "Finished"
+        }
+      },
+      "ev_session_start_ts": {
+        "name": "Wallbox Session Start"
+      },
+      "ev_session_start_energy_wh": {
+        "name": "Wallbox Session Start Meter"
+      },
+      "ev_total_energy_wh": {
+        "name": "Wallbox Total Energy"
+      },
       "inv_output_w": {
         "name": "Inverter Output Power"
       },
@@ -1763,6 +1808,9 @@
       },
       "bms_communication_error": {
         "name": "Battery Communication Error"
+      },
+      "ev_cable_lock_enabled": {
+        "name": "Wallbox Cable Lock"
       }
     },
     "switch": {

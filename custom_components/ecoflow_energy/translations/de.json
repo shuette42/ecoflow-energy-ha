@@ -1490,6 +1490,51 @@
           "faulted": "Störung"
         }
       },
+      "ev_voltage_l1_v": {
+        "name": "Wallbox-Spannung L1"
+      },
+      "ev_voltage_l2_v": {
+        "name": "Wallbox-Spannung L2"
+      },
+      "ev_voltage_l3_v": {
+        "name": "Wallbox-Spannung L3"
+      },
+      "ev_current_l1_a": {
+        "name": "Wallbox-Stromstärke L1"
+      },
+      "ev_current_l2_a": {
+        "name": "Wallbox-Stromstärke L2"
+      },
+      "ev_current_l3_a": {
+        "name": "Wallbox-Stromstärke L3"
+      },
+      "ev_max_current_a": {
+        "name": "Wallbox-Maximalstrom"
+      },
+      "ev_phase_mode": {
+        "name": "Wallbox-Phasenmodus",
+        "state": {
+          "single_phase": "Einphasig",
+          "three_phase": "Dreiphasig"
+        }
+      },
+      "ev_session_status": {
+        "name": "Wallbox-Sitzungsstatus",
+        "state": {
+          "idle": "Bereit",
+          "charging": "Lädt",
+          "finished": "Beendet"
+        }
+      },
+      "ev_session_start_ts": {
+        "name": "Wallbox-Sitzungsbeginn"
+      },
+      "ev_session_start_energy_wh": {
+        "name": "Wallbox-Zählerstand bei Sitzungsbeginn"
+      },
+      "ev_total_energy_wh": {
+        "name": "Wallbox-Gesamtenergie"
+      },
       "inv_output_w": {
         "name": "Wechselrichter-Ausgangsleistung"
       },
@@ -1763,6 +1808,9 @@
       },
       "bms_communication_error": {
         "name": "Batterie-Kommunikationsfehler"
+      },
+      "ev_cable_lock_enabled": {
+        "name": "Wallbox-Kabelverriegelung"
       }
     },
     "switch": {

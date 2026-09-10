@@ -52,17 +52,13 @@ HEATING_ROD_KEYS = {
     "heating_rod_target_temp_c",
 }
 
-# The PowerPulse wallbox is the second accessory to use the same gate
-# (PLAN-079). It is listed here so the assertions below stay a statement about
-# which readings are optional, rather than a count that any new definition
-# silently changes.
-WALLBOX_KEYS = {
-    "ev_charge_power_w",
-    "ev_session_energy_wh",
-    "ev_session_duration_s",
-    "ev_charge_status",
-    "ev_vehicle_id",
-}
+# The PowerPulse wallbox was the second accessory to use the same gate
+# (PLAN-079). The five wallbox readings are still defined on POWEROCEAN_SENSORS
+# because the PowerPulse 1 (`AC31`) keeps reporting them through the
+# PowerOcean on `(209, 8)`; the PowerPulse 2 has its own device type and its
+# own copy of four of them (POWERPULSE2_SENSORS) since PLAN-132, and no longer
+# reaches the PowerOcean at all. Nothing on the PowerOcean side is gated behind
+# the wallbox accessory anymore.
 
 # The scheduled charge tasks are the third user of the gate (#328). A
 # PowerOcean only has one when its owner created it in the app, and the slot
@@ -72,7 +68,19 @@ SCHEDULE_KEYS = {
     f"schedule_{index}_window" for index in range(1, SCHEDULE_MAX_INDEX + 1)
 }
 
-ACCESSORY_KEYS = HEATING_ROD_KEYS | WALLBOX_KEYS | SCHEDULE_KEYS
+# The PowerPulse 1 (`AC31`) wallbox, which still reports through the
+# PowerOcean on `(209, 8)`. The PowerPulse 2 left this list with PLAN-132 and
+# reads off its own channel, but these five definitions stay: they are the
+# `AC31`'s only entities, and it has no device type of its own.
+WALLBOX_KEYS = {
+    "ev_charge_power_w",
+    "ev_session_energy_wh",
+    "ev_session_duration_s",
+    "ev_charge_status",
+    "ev_vehicle_id",
+}
+
+ACCESSORY_KEYS = HEATING_ROD_KEYS | SCHEDULE_KEYS | WALLBOX_KEYS
 
 
 def _entry(devices: list[dict[str, Any]] | None = None) -> MockConfigEntry:

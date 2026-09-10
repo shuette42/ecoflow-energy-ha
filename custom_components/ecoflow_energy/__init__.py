@@ -26,6 +26,8 @@ from .const import (
     DATA_DEVICE_PROBES,
     DATA_SKIPPED_DEVICES,
     DEVICE_TYPE_DISPLAY_NAMES,
+    DEVICE_TYPE_POWEROCEAN,
+    DEVICE_TYPE_POWERPULSE2,
     DEVICE_TYPE_POWERSTREAM,
     DEVICE_TYPE_UNKNOWN,
     DOMAIN,
@@ -307,10 +309,104 @@ def _async_remove_retired_platform_entities(
             break
 
 
+# The four wallbox sensor keys the PowerPulse 2 took over from the PowerOcean
+# in PLAN-132. They are defined on BOTH lists on purpose: the PowerPulse 1
+# (`AC31`) still reports them through the PowerOcean on `(209, 8)` and would
+# lose every wallbox entity if the PowerOcean definitions went away with the
+# `(241, 3)` relay. `ev_vehicle_id` is not here because the PowerPulse 2 does
+# not report a vehicle at all - it stays a PowerOcean-side reading of the
+# PowerPulse 1.
+_POWERPULSE2_RELAYED_SENSOR_KEYS: frozenset[str] = frozenset(
+    {
+        "ev_charge_power_w",
+        "ev_session_energy_wh",
+        "ev_session_duration_s",
+        "ev_charge_status",
+    }
+)
+
+# The PowerPulse 1, which keeps reporting through the PowerOcean. It is not a
+# device type of its own - it is skipped at setup like any unsupported device
+# - so the only thing that names it is its serial prefix.
+_POWERPULSE1_SN_PREFIX = "AC31"
+
+
+def _async_remove_relayed_wallbox_entities(
+    hass: HomeAssistant, entry: ConfigEntry
+) -> None:
+    """Drop the PowerOcean-side copies of a PowerPulse 2's wallbox readings.
+
+    Until PLAN-132 a `C376` reported through the PowerOcean it was coupled
+    to, so its four readings carried `<powerocean_sn>_<key>`. The wallbox has
+    its own device type now and reports on its own channel, and the relay
+    (`(241, 3)`) is retired - those four registry entries are fed by nothing
+    and would sit on the PowerOcean's page permanently unavailable.
+
+    They are removed rather than renamed onto the wallbox's serial. The
+    reporter who owns both devices was asked on #7 and answered on
+    2026-09-09 that he uses none of the four and that a break in their
+    history is fine, so the value a migration would have bought is not there
+    - and `async_migrate_entries` raises `ValueError` on a unique id that is
+    already taken, which inside `async_setup_entry` takes down the whole
+    config entry rather than one wallbox.
+
+    Nothing is removed when the entry also holds a PowerPulse 1 (`AC31`).
+    That wallbox reports the same four keys through the same PowerOcean on
+    `(209, 8)`, which this change does not touch, so on such an entry a
+    `<powerocean_sn>_<key>` entity may be its live reading rather than a
+    stale relay copy, and the two are not distinguishable from a unique id.
+    Leaving a stale row is the smaller harm.
+
+    Nothing is removed either when the entry holds no PowerPulse 2 (`C376`)
+    at all. The four rows only exist because a `C376` used to relay through
+    the PowerOcean, so a plain PowerOcean entry that never had one has no
+    stale copy to clean up.
+    """
+    devices = entry.data.get(CONF_DEVICES, [])
+    if any(
+        str(device.get("sn", "")).startswith(_POWERPULSE1_SN_PREFIX)
+        for device in devices
+    ):
+        _LOGGER.debug(
+            "Keeping relayed wallbox entities: this entry holds a PowerPulse 1, "
+            "which reports the same keys through the PowerOcean"
+        )
+        return
+    device_types = {
+        get_device_type(device.get("product_name") or "", sn)
+        for device in devices
+        if (sn := device.get("sn", ""))
+    }
+    if DEVICE_TYPE_POWERPULSE2 not in device_types:
+        return
+    powerocean_sns = {
+        sn
+        for device in devices
+        if (sn := device.get("sn", ""))
+        and get_device_type(device.get("product_name") or "", sn)
+        == DEVICE_TYPE_POWEROCEAN
+    }
+    if not powerocean_sns:
+        return
+
+    registry = er.async_get(hass)
+    for existing in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if existing.platform != DOMAIN:
+            continue
+        serial, separator, key = existing.unique_id.partition("_")
+        if not separator or serial not in powerocean_sns:
+            continue
+        if key not in _POWERPULSE2_RELAYED_SENSOR_KEYS:
+            continue
+        _LOGGER.debug("Removing relayed wallbox entity %s", existing.entity_id)
+        registry.async_remove(existing.entity_id)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> bool:
     """Set up EcoFlow Energy from a config entry."""
     _async_remove_withdrawn_entities(hass, entry)
     _async_remove_retired_platform_entities(hass, entry)
+    _async_remove_relayed_wallbox_entities(hass, entry)
 
     # Auto-upgrade: Enhanced Mode entries with email+password -> app-auth.
     # This lets existing Enhanced users benefit from the app-auth path
