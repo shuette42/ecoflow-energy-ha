@@ -1713,6 +1713,75 @@
       },
       "condensate_water_level": {
         "name": "Condensate Water Level"
+      },
+      "pcs_ac_power_w": {
+        "name": "Inverter AC Power"
+      },
+      "inv_phase_a_voltage_v": {
+        "name": "Inverter Phase A Voltage"
+      },
+      "inv_phase_a_current_a": {
+        "name": "Inverter Phase A Current"
+      },
+      "inv_phase_a_active_power_w": {
+        "name": "Inverter Phase A Active Power"
+      },
+      "inv_phase_a_reactive_power_var": {
+        "name": "Inverter Phase A Reactive Power"
+      },
+      "inv_phase_a_apparent_power_va": {
+        "name": "Inverter Phase A Apparent Power"
+      },
+      "inv_phase_b_voltage_v": {
+        "name": "Inverter Phase B Voltage"
+      },
+      "inv_phase_b_current_a": {
+        "name": "Inverter Phase B Current"
+      },
+      "inv_phase_b_active_power_w": {
+        "name": "Inverter Phase B Active Power"
+      },
+      "inv_phase_b_reactive_power_var": {
+        "name": "Inverter Phase B Reactive Power"
+      },
+      "inv_phase_b_apparent_power_va": {
+        "name": "Inverter Phase B Apparent Power"
+      },
+      "inv_phase_c_voltage_v": {
+        "name": "Inverter Phase C Voltage"
+      },
+      "inv_phase_c_current_a": {
+        "name": "Inverter Phase C Current"
+      },
+      "inv_phase_c_active_power_w": {
+        "name": "Inverter Phase C Active Power"
+      },
+      "inv_phase_c_reactive_power_var": {
+        "name": "Inverter Phase C Reactive Power"
+      },
+      "inv_phase_c_apparent_power_va": {
+        "name": "Inverter Phase C Apparent Power"
+      },
+      "pack6_soc": {
+        "name": "Pack 6 SoC"
+      },
+      "pack6_power_w": {
+        "name": "Pack 6 Power"
+      },
+      "pack6_soh": {
+        "name": "Pack 6 SoH"
+      },
+      "pack6_cycles": {
+        "name": "Pack 6 Cycles"
+      },
+      "pack6_remain_watth": {
+        "name": "Pack 6 Remaining Capacity"
+      },
+      "pack6_max_cell_temp_c": {
+        "name": "Pack 6 Cell Temp (Max)"
+      },
+      "pack6_cell_max_vol_mv": {
+        "name": "Pack 6 Cell Voltage (Max)"
       }
     },
     "binary_sensor": {

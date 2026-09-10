@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 from ..const import (
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_DELTA3,
+    DEVICE_TYPE_OCEAN2,
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_POWERPULSE2,
     DEVICE_TYPE_POWERSTREAM,
@@ -40,6 +41,7 @@ from ..ecoflow.parsers.delta3_proto import (
     parse_delta3_display_property,
 )
 from ..ecoflow.parsers.delta_http import parse_delta_http_quota
+from ..ecoflow.parsers.ocean2_proto import parse_ocean2_message
 from ..ecoflow.parsers.powerocean import parse_powerocean_http_quota
 from ..ecoflow.parsers.powerocean_proto import (
     flatten_heartbeat,
@@ -498,6 +500,11 @@ class MqttIngestMixin(_Base):
                 # so it routes by device type before the registry lookup.
                 if self.device_type == DEVICE_TYPE_WAVE3:
                     return parse_wave3_message(payload)
+                # Ocean 2 (#145, PLAN-135): its own parser on cmd_func 254,
+                # decoding every header itself and registered in no
+                # device-type table, the same shape as the WAVE 3 above.
+                if self.device_type == DEVICE_TYPE_OCEAN2:
+                    return parse_ocean2_message(payload)
                 # PowerPulse 2 (#7, #247, PLAN-132): its own envelope on
                 # cmd_func 2, never registered in any device-type registry
                 # table - the parser decodes every header itself, the same
@@ -617,6 +624,11 @@ class MqttIngestMixin(_Base):
                 # the meter above.
                 if self.device_type == DEVICE_TYPE_WAVE3:
                     return parse_wave3_message(payload)
+                # Ocean 2 (#145, PLAN-135): its own parser on cmd_func 254,
+                # decoding every header itself and registered in no
+                # device-type table, the same shape as the WAVE 3 above.
+                if self.device_type == DEVICE_TYPE_OCEAN2:
+                    return parse_ocean2_message(payload)
                 # PowerPulse 2 (#7, #247, PLAN-132): its own envelope on
                 # cmd_func 2, decoded header by header inside the parser and
                 # registered in no device-type table, the same shape as the

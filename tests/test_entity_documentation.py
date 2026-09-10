@@ -119,6 +119,7 @@ FAMILY_TO_FILE: dict[str, str] = {
     "SOLARTRACKER": "solar-tracker.md",
     "WAVE3": "wave-3.md",
     "POWERPULSE2": "powerpulse-2.md",
+    "OCEAN2": "ocean-2.md",
 }
 
 # Doc files that document a SUBSET of a family's entities under their own
@@ -1092,6 +1093,7 @@ _ENTITY_REFERENCE_SIMPLE_DEVICES: tuple[tuple[str, str, str], ...] = (
     ("STREAM AC 5000", const.DEVICE_TYPE_STREAM_AC5000, "ES22XXXXXXXXXXXX"),
     ("Smart Meter", const.DEVICE_TYPE_SMART_METER, "BK21XXXXXXXXXXXX"),
     ("Solar Tracker", const.DEVICE_TYPE_SOLAR_TRACKER, "HZ31XXXXXXXXXXXX"),
+    ("Ocean 2", const.DEVICE_TYPE_OCEAN2, "RE11XXXXXXXXXXXX"),
 )
 
 

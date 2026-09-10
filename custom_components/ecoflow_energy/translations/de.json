@@ -1713,6 +1713,75 @@
       },
       "condensate_water_level": {
         "name": "Kondenswasserstand"
+      },
+      "pcs_ac_power_w": {
+        "name": "Wechselrichter AC-Leistung"
+      },
+      "inv_phase_a_voltage_v": {
+        "name": "Wechselrichter Phase A Spannung"
+      },
+      "inv_phase_a_current_a": {
+        "name": "Wechselrichter Phase A Strom"
+      },
+      "inv_phase_a_active_power_w": {
+        "name": "Wechselrichter Phase A Wirkleistung"
+      },
+      "inv_phase_a_reactive_power_var": {
+        "name": "Wechselrichter Phase A Blindleistung"
+      },
+      "inv_phase_a_apparent_power_va": {
+        "name": "Wechselrichter Phase A Scheinleistung"
+      },
+      "inv_phase_b_voltage_v": {
+        "name": "Wechselrichter Phase B Spannung"
+      },
+      "inv_phase_b_current_a": {
+        "name": "Wechselrichter Phase B Strom"
+      },
+      "inv_phase_b_active_power_w": {
+        "name": "Wechselrichter Phase B Wirkleistung"
+      },
+      "inv_phase_b_reactive_power_var": {
+        "name": "Wechselrichter Phase B Blindleistung"
+      },
+      "inv_phase_b_apparent_power_va": {
+        "name": "Wechselrichter Phase B Scheinleistung"
+      },
+      "inv_phase_c_voltage_v": {
+        "name": "Wechselrichter Phase C Spannung"
+      },
+      "inv_phase_c_current_a": {
+        "name": "Wechselrichter Phase C Strom"
+      },
+      "inv_phase_c_active_power_w": {
+        "name": "Wechselrichter Phase C Wirkleistung"
+      },
+      "inv_phase_c_reactive_power_var": {
+        "name": "Wechselrichter Phase C Blindleistung"
+      },
+      "inv_phase_c_apparent_power_va": {
+        "name": "Wechselrichter Phase C Scheinleistung"
+      },
+      "pack6_soc": {
+        "name": "Pack 6 SoC"
+      },
+      "pack6_power_w": {
+        "name": "Pack 6 Leistung"
+      },
+      "pack6_soh": {
+        "name": "Pack 6 SoH"
+      },
+      "pack6_cycles": {
+        "name": "Pack 6 Zyklen"
+      },
+      "pack6_remain_watth": {
+        "name": "Pack 6 Restkapazität"
+      },
+      "pack6_max_cell_temp_c": {
+        "name": "Pack 6 Zelltemperatur (max.)"
+      },
+      "pack6_cell_max_vol_mv": {
+        "name": "Pack 6 Zellspannung (max.)"
       }
     },
     "binary_sensor": {
