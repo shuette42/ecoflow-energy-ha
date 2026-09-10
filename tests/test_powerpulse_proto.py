@@ -21,6 +21,7 @@ from ecoflow_energy.ecoflow.parsers.powerpulse_proto import (
 )
 
 FIXTURE = Path(__file__).parent / "fixtures" / "powerpulse" / "c376_frames_plan132.json"
+IDLE_LIMIT_FIXTURE = FIXTURE.with_name("c376_idle_limit_steps_20260910.json")
 
 
 def _frames() -> list[dict[str, Any]]:
@@ -54,7 +55,8 @@ def test_masked_property_frame_reports_charging_session() -> None:
     assert result["ev_current_l1_a"] == 9.66
     assert result["ev_current_l2_a"] == 9.66
     assert result["ev_current_l3_a"] == 9.71
-    assert result["ev_max_current_a"] == 10.0
+    assert result["ev_max_current_a"] == 16.0
+    assert result["ev_charge_current_a"] == 10.0
     assert result["ev_phase_mode"] == "three_phase"
     assert result["ev_session_start_ts"] == 1788786565
     assert result["ev_session_duration_s"] == 120
@@ -77,6 +79,7 @@ def test_unmasked_get_reply_bundle_reports_finished_session() -> None:
     assert result["ev_current_l2_a"] == 0.0
     assert result["ev_current_l3_a"] == 0.0
     assert result["ev_max_current_a"] == 16.0
+    assert result["ev_charge_current_a"] == 16.0
     assert result["ev_phase_mode"] == "three_phase"
     assert result["ev_session_start_ts"] == 1788782107
     assert result["ev_session_duration_s"] == 1648
@@ -258,3 +261,25 @@ def test_session_start_plus_duration_tracks_capture_time_on_property_frames() ->
         assert 0 <= drift <= 3
         checked += 1
     assert checked == 5
+
+
+def test_maximum_current_follows_the_configured_limit_on_an_idle_wallbox() -> None:
+    """Field 18 is the limit; field 17 is the session setpoint (#7, 2026-09-10).
+
+    The second owner stepped his limit from 16 A down to 6 A on an idle
+    wallbox and the first pre-release's sensor stayed at 6 A throughout. In
+    his download the field the sensor read (17) is 60 in every heartbeat
+    while the field beside it (18) is 100 and then 60 at the minutes he
+    chose 10 A and 6 A. Both frames pin both keys, so swapping the two
+    fields back fails on the first frame and not only on the second.
+    """
+    frames = json.loads(IDLE_LIMIT_FIXTURE.read_text())["frames"]
+    assert len(frames) == 2
+    for frame in frames:
+        result = parse_powerpulse_message(bytes.fromhex(frame["hex"]))
+        assert result is not None, frame["ts_iso"]
+        assert result["ev_max_current_a"] == float(frame["configured_max_current_a"])
+        assert result["ev_charge_current_a"] == 6.0
+        assert result["ev_charge_status"] == "available"
+        assert result["ev_phase_mode"] == "single_phase"
+        assert "ev_session_energy_wh" not in result

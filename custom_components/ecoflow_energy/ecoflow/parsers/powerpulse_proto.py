@@ -45,12 +45,24 @@ Field notes:
   `44` (the lifetime counter now) always satisfy `44 - 43 == 42` in every
   captured frame that carries a session. That identity is the test suite's
   main correctness check.
-- `17` (the configured maximum current) is deci-amps on the wire; divided
-  by ten it lines up with the amp values the vendor app shows (6, 8, 10, 16
-  in this capture).
+- `17` and `18` are two different current settings, both deci-amps on the
+  wire, and they are easy to confuse because on a charging wallbox they
+  often agree. `18` is the configured maximum current, the limit the vendor
+  app calls the maximum output current: in the second owner's idle-wallbox
+  recording (#7, 2026-09-10) it followed his setting step by step (110, 100,
+  60 for 11, 10, 6 A) while `17` sat at 60 throughout, and in the first
+  owner's charging capture it is a constant 160 for his 16 A limit. `17` is
+  the charging current setpoint of the session: 6, 8, 10 and 16 A in the
+  first capture, where it moved with what the app showed while charging.
+  The first pre-release published `17` as the maximum current; the second
+  owner's live test showed the sensor stuck at 6 A while he stepped the
+  limit, which is how the two were told apart.
 - `21` (phase mode) is 1 while only the first phase current in field `8`
   carries a real reading and 0 while all three do - confirmed against
-  every captured frame, not inferred from the field name.
+  every captured frame, not inferred from the field name. It is the phase
+  mode in effect, not the app's phase selection: that setting has a third
+  value, automatic, which this field never carries (the second owner's
+  test on #7 confirmed the field reads 1 or 0 under automatic as well).
 - `20` (`input_phase`) is constant across the whole capture and is not
   mapped. `29` and `30` do not walk as clean protobuf in this capture and
   are left alone rather than guessed at.
@@ -91,7 +103,8 @@ _CHARGE_READINGS_FIELD = 8
 # module docstring.
 _HEARTBEAT_FIELD_MAP: dict[int, tuple[str, str]] = {
     1: ("_plug_status_raw", _TYPE_INT),
-    17: ("_max_current_da_raw", _TYPE_INT),
+    17: ("_charge_current_da_raw", _TYPE_INT),
+    18: ("_max_current_da_raw", _TYPE_INT),
     21: ("_phase_mode_raw", _TYPE_INT),
     40: ("_session_start_ts_raw", _TYPE_INT),
     41: ("_session_duration_s_raw", _TYPE_INT),
@@ -246,6 +259,10 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
     max_current_raw = result.pop("_max_current_da_raw", None)
     if isinstance(max_current_raw, int):
         result["ev_max_current_a"] = round(max_current_raw / 10.0, 1)
+
+    charge_current_raw = result.pop("_charge_current_da_raw", None)
+    if isinstance(charge_current_raw, int):
+        result["ev_charge_current_a"] = round(charge_current_raw / 10.0, 1)
 
     cable_lock_raw = result.pop("_cable_lock_raw", None)
     if isinstance(cable_lock_raw, int):

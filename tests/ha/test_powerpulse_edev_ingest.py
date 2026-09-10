@@ -228,7 +228,8 @@ async def test_powerpulse2_property_push_lands_in_device_data(
     assert parsed is not None
     assert parsed["ev_charge_status"] == "charging"
     assert parsed["ev_charge_power_w"] == 6599.2
-    assert parsed["ev_max_current_a"] == 10.0
+    assert parsed["ev_max_current_a"] == 16.0
+    assert parsed["ev_charge_current_a"] == 10.0
     assert parsed["ev_phase_mode"] == "three_phase"
     assert parsed["ev_total_energy_wh"] == 102266
 

@@ -1511,6 +1511,9 @@
       "ev_max_current_a": {
         "name": "Wallbox-Maximalstrom"
       },
+      "ev_charge_current_a": {
+        "name": "Wallbox-Ladestrom"
+      },
       "ev_phase_mode": {
         "name": "Wallbox-Phasenmodus",
         "state": {
