@@ -242,6 +242,14 @@ WAVE3_DEVICE = {
     "online": 1,
 }
 
+OCEAN2_DEVICE = {
+    "sn": "RE11TEST00000001",
+    "name": "Ocean 2",
+    "product_name": "",
+    "device_type": "ocean2",
+    "online": 1,
+}
+
 # One case per member of ENHANCED_ONLY_DEVICE_TYPES. A type dropped from
 # that set silently loses its guard coverage along with its parametrize
 # case, so this list is the thing to extend when another type joins it.
@@ -260,6 +268,11 @@ ENHANCED_ONLY_DEVICE_CASES = [
         WAVE3_DEVICE,
         "WAVE 3 (0001) (AC71...0001) - requires Enhanced Mode",
         id="wave3",
+    ),
+    pytest.param(
+        OCEAN2_DEVICE,
+        "Ocean 2 (0001) (RE11...0001) - requires Enhanced Mode",
+        id="ocean2",
     ),
 ]
 

@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -40,6 +41,7 @@ from custom_components.ecoflow_energy.ecoflow.const import (
 )
 from custom_components.ecoflow_energy.sensor import _get_sensor_defs
 from custom_components.ecoflow_energy.sensor import async_setup_entry as sensor_setup
+from tests.ha.conftest import add_entities_collector
 
 FIXTURE = (
     Path(__file__).parent.parent / "fixtures" / "ocean2" / "re11_frames_plan135.json"
@@ -67,6 +69,7 @@ _ENABLED_BY_DEFAULT: set[str] = (
         "bp_remain_watth",
         "pcs_ac_power_w",
         "pcs_ac_freq_hz",
+        "batt_charge_discharge_state",
         "solar_energy_kwh",
         "home_energy_kwh",
         "grid_import_energy_kwh",
@@ -74,11 +77,7 @@ _ENABLED_BY_DEFAULT: set[str] = (
         "batt_charge_energy_kwh",
         "batt_discharge_energy_kwh",
     }
-    | {
-        f"grid_phase_{p}_{q}"
-        for p in "abc"
-        for q in ("voltage_v", "current_a", "active_power_w")
-    }
+    | {f"grid_phase_{p}_voltage_v" for p in "abc"}
     | {f"mppt_pv{n}_{q}" for n in (1, 2) for q in ("voltage_v", "current_a", "power_w")}
     | {
         f"pack{n}_{q}"
@@ -165,9 +164,57 @@ class TestOcean2EntitySet:
             OCEAN2_DEVICE["sn"]: coordinator
         }
         created: list[Any] = []
-        await sensor_setup(hass, entry, created.extend)
+        await sensor_setup(hass, entry, add_entities_collector(created))
         keys = {e._definition.key for e in created if hasattr(e, "_definition")}
         assert keys == {s.key for s in OCEAN2_SENSORS}
+
+
+class TestOcean2Platforms:
+    def test_the_control_platforms_offer_nothing(self) -> None:
+        from custom_components.ecoflow_energy.binary_sensor import (
+            _get_binary_sensor_defs,
+        )
+        from custom_components.ecoflow_energy.number import _get_number_defs
+        from custom_components.ecoflow_energy.select import _get_select_defs
+        from custom_components.ecoflow_energy.switch import _get_switch_defs
+
+        sn = OCEAN2_DEVICE["sn"]
+        assert _get_binary_sensor_defs(DEVICE_TYPE_OCEAN2) == []
+        assert _get_switch_defs(DEVICE_TYPE_OCEAN2, sn) == []
+        assert _get_number_defs(DEVICE_TYPE_OCEAN2, sn) == []
+        assert _get_select_defs(DEVICE_TYPE_OCEAN2, sn) == []
+
+    async def test_the_coordinator_keeps_the_default_thresholds(
+        self, hass: HomeAssistant
+    ) -> None:
+        """The unit pushes every couple of seconds and answers the 30 s
+        quota poll, so the defaults sized for the PowerOcean apply; the two
+        quiet Enhanced-only types (WAVE 3, PowerPulse 2) needed their own."""
+        from custom_components.ecoflow_energy.const import (
+            HARD_UNAVAILABLE_S,
+            SOFT_UNAVAILABLE_S,
+            STALE_THRESHOLD_S,
+        )
+
+        coordinator = _coordinator(hass, OCEAN2_DEVICE)
+        assert coordinator._stale_threshold_s() == STALE_THRESHOLD_S
+        assert coordinator._soft_unavailable_s() == SOFT_UNAVAILABLE_S
+        assert coordinator._hard_unavailable_s() == HARD_UNAVAILABLE_S
+
+    async def test_the_charge_state_is_derived_from_battery_power(
+        self, hass: HomeAssistant
+    ) -> None:
+        """The coordinator derives the state from a rolling average of the
+        signed battery power, for this type as for the PowerOcean, so the
+        sensor defined for it has a value to show."""
+        coordinator = _coordinator(hass, OCEAN2_DEVICE)
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.time.monotonic"
+        ) as mock_mono:
+            for i in range(coordinator.BATT_MIN_SAMPLES + 1):
+                mock_mono.return_value = 1000.0 + i * 3.0
+                coordinator._apply_data({"batt_w": 2500.0})
+        assert coordinator.device_data.get("batt_charge_discharge_state") == "charging"
 
 
 class TestOcean2Ingest:
@@ -185,7 +232,7 @@ class TestOcean2Ingest:
             _topic(OCEAN2_DEVICE["sn"], frame["topic"]), bytes.fromhex(frame["hex"])
         )
         assert parsed is not None
-        assert parsed["solar_w"] == 6687.0
+        assert parsed["solar_w"] == 6670.0
         assert "pcs_ac_power_w" in parsed
         # A get_reply carries the richer module form the parser does not
         # read, so no pack key arrives on this topic.

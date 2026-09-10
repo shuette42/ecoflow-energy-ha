@@ -93,11 +93,23 @@ also opposite of the first reading's label, but consistent with its
 "opposite signs" measurement, which was correct.
 
 The desired output convention (`batt_w > 0` is charging, matching
-`parsers/powerocean_proto.py`) is therefore reached by negating `65.20` and
-using `87.4`/`7.4` as-is - the reverse of the precedence formula as first
-written ("`65.20`, then `-87.4`, then `-7.4`"). Proof frames: 32 vs
+`parsers/powerocean_proto.py`) is therefore reached by using `87.4`/`7.4`
+as-is and negating `65.20` where it is the only source. Proof frames: 32 vs
 34/35/36 and 46 vs 40 above; the module-level check below confirms it a
 second, independent way.
+
+Precedence between the blocks - the snapshot wins, coherence over
+resolution. Blocks 7 and 87 carry home, grid, solar and battery power as one
+snapshot, quantised to 10 W; block 65 and block 4 carry solar (`65.4`),
+battery (`65.20`) and grid (`4.13`) to full float resolution but from their
+own instants. Measured over the ten full-upload frames, the load balance
+`home = solar + grid + battery` closes with a mean residual of 29 W when
+every term comes from block 87 and of 55 W when grid comes from `4.13`
+(capture 35: 17 W against 305 W). A dashboard adds these four up, so the
+four are published from one snapshot: block 87 first, block 7 where 87 is
+absent, and the block 65 / block 4 figures only where neither snapshot block
+carries the reading (a small incremental with block 65 alone). The 10 W
+quantisation is below the display precision of every entity built on them.
 
 Module power sign (`5.1`) - checked directly within single bundles, no
 cross-frame timing assumption needed. Capture 32 (12:12:02), module 1's six
@@ -113,13 +125,25 @@ convention - unlike `65.20`, which shares the same physical quantity at the
 system level but the opposite sign.
 
 Grid sign (`4.13`, `87.2`, `7.2`) - confirmed import-positive as-is (no
-flip), via the same load-balance check. Frame 28 has the largest grid
-reading in the capture (-200.75 W) and is the frame that best separates the
-two hypotheses: reading it as import-positive gives a balance error of
-+35.75 W (1635 + (-200.75) + 0 = 1434.25 against a home of 1470); reading it
-as export-positive (negating it) gives +365.75 W (25% off). Every other
-full-upload frame agrees with the import-positive reading to within a few
-percent.
+flip), via the same load-balance check. Frame 28 is a frame with a clear
+grid reading (-200.75 W on `4.13`, -170 W on `87.2`) and no battery flow, so
+it separates the two hypotheses cleanly: reading it as import-positive gives
+a balance error of +35.75 W (1635 + (-200.75) + 0 = 1434.25 against a home
+of 1470); reading it as export-positive (negating it) gives +365.75 W (25%
+off). Every other full-upload frame agrees with the import-positive reading
+to within a few percent.
+
+Block 4.4 - the grid-port phase records - publishes only the phase voltage
+and the shared frequency. Their subfield 2 sits at 0.84 to 0.90 A and
+subfield 4 within 6 W of zero in every frame on file while the grid power
+swings from -374 W to +42 W and the inverter phases carry up to 3.5 kW, so
+whatever those two are, they are not the grid current and the grid power,
+and they stay unmapped until a frame says what they measure.
+
+Module fields 6, 21 and 54 (cell voltage, temperature, remaining energy)
+are floats on the wire and are published as whole numbers: the entities
+built on them display without decimals, and a millivolt, a degree and a
+watt hour are the resolution the vendor app shows.
 """
 
 from __future__ import annotations
@@ -140,9 +164,9 @@ from .stream_proto import (
 _DISPLAY_CMD = (254, 39)
 _MODULE_CMD = (254, 46)
 
-# Two modules exist on the reference hardware; the PowerOcean pack sensors
-# this parser reuses cap at 5, so 6 leaves headroom without inventing a
-# number phase 3 has not decided yet.
+# Two modules exist on the reference hardware; the entity layer defines six
+# packs (const.py, OCEAN2_SENSORS), so a record beyond that has no entity
+# and is dropped here rather than published under a key nothing reads.
 _MAX_MODULES = 6
 
 # Block 65 (system), nested under top-level field 65. 65.7 (feed-in ceiling)
@@ -191,15 +215,14 @@ _INV_PHASE_VALUE_FIELDS: dict[int, tuple[str, str]] = {
 # Grid-port phase records live at block4.4, one repeated field 1 per phase.
 # Subfield 3 (frequency) is the same across every record and is not phase
 # indexed - it becomes pcs_ac_freq_hz, read once from whichever record has
-# it first.
+# it first. Subfields 2 and 4 are deliberately absent: see the module
+# docstring, they do not track the grid current or power.
 _GRID_PHASE_CONTAINER_FIELD = 4
 _GRID_PHASE_RECORD_FIELD = 1
 _GRID_PHASE_INDEX_FIELD = 5
 _GRID_PHASE_FREQ_FIELD = 3
 _GRID_PHASE_VALUE_FIELDS: dict[int, tuple[str, str]] = {
     1: ("voltage_v", _TYPE_FLOAT),
-    2: ("current_a", _TYPE_FLOAT),
-    4: ("active_power_w", _TYPE_FLOAT),
 }
 
 # PV string records live at block4.14, one repeated field 1 per string.
@@ -346,7 +369,7 @@ def _decode_pv_strings(container_raw: bytes) -> dict[str, Any]:
 
 
 def _decode_inverter_block(raw: bytes) -> dict[str, Any]:
-    """Decode block 4: AC output, grid_w (highest precedence), phases, PV."""
+    """Decode block 4: AC output, the unrounded grid_w, phases, PV."""
     result: dict[str, Any] = {}
     fields = _iter_fields(raw)
     result.update(_decode_mapped(fields, _INVERTER_FIELD_MAP))
@@ -367,13 +390,14 @@ def _decode_inverter_block(raw: bytes) -> dict[str, Any]:
 def _decode_display_message(pdata: bytes) -> dict[str, Any]:
     """Decode one display upload (254/39), full or incremental.
 
-    Precedence, weakest to strongest: block 7, then block 87 (overrides 7
-    field-by-field when present), then block 65 for solar_w/soc_pct/
-    bp_remain_watth/batt_w (65.4/65.20 win over both snapshot blocks when
-    present), then block 4 for grid_w (4.13 wins over both snapshot blocks)
-    plus the AC/phase/PV-string keys that only block 4 carries. Precedence
-    is applied explicitly here rather than by relying on the device's
-    top-level field order, which is not part of the wire contract.
+    Precedence, weakest to strongest: block 4 (grid_w from 4.13, plus the
+    AC/phase/PV-string keys only it carries), then block 65 (solar_w and
+    batt_w from 65.4/65.20, plus soc_pct and bp_remain_watth only it
+    carries), then block 7, then block 87 overriding 7 field by field. The
+    four power readings therefore come from one snapshot whenever a snapshot
+    block is present - see the module docstring on coherence. Precedence is
+    applied explicitly here rather than by relying on the device's top-level
+    field order, which is not part of the wire contract.
     """
     top = _iter_fields(pdata)
     result: dict[str, Any] = {}
@@ -383,10 +407,8 @@ def _decode_display_message(pdata: bytes) -> dict[str, Any]:
     block65 = _first_container(top, 65)
     block4 = _first_container(top, 4)
 
-    if block7 is not None:
-        result.update(_decode_mapped(_iter_fields(block7), _SNAPSHOT_FIELD_MAP))
-    if block87 is not None:
-        result.update(_decode_mapped(_iter_fields(block87), _SNAPSHOT_FIELD_MAP))
+    if block4 is not None:
+        result.update(_decode_inverter_block(block4))
 
     if block65 is not None:
         system_fields = _iter_fields(block65)
@@ -397,8 +419,10 @@ def _decode_display_message(pdata: bytes) -> dict[str, Any]:
             # charge-positive output convention - see module docstring.
             result["batt_w"] = -batt_raw
 
-    if block4 is not None:
-        result.update(_decode_inverter_block(block4))
+    if block7 is not None:
+        result.update(_decode_mapped(_iter_fields(block7), _SNAPSHOT_FIELD_MAP))
+    if block87 is not None:
+        result.update(_decode_mapped(_iter_fields(block87), _SNAPSHOT_FIELD_MAP))
 
     return result
 
@@ -427,7 +451,12 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
     result = dict(parsed)
 
     for key, value in list(result.items()):
-        if not isinstance(value, float) or not isfinite(value):
+        if not isinstance(value, float):
+            continue
+        if not isfinite(value):
+            # A NaN or an infinity is not a reading; publishing it would
+            # put "unknown" on the entity and a NaN into the recorder.
+            del result[key]
             continue
         if abs(value) < _FLOAT_ZERO_EPS:
             result[key] = 0.0

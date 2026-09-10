@@ -19,7 +19,13 @@ from typing import Any
 
 import pytest
 from ecoflow_energy.ecoflow.parsers.ocean2_proto import parse_ocean2_message
+from ecoflow_energy.ecoflow.parsers.stream_proto import _decode_scalar, _iter_fields
 from ecoflow_energy.ecoflow.proto.decoder import _decode_single_header, _read_varint
+from ecoflow_energy.ecoflow.proto_encoding import (
+    encode_field_bytes,
+    encode_field_fixed32,
+    encode_field_varint,
+)
 
 FIXTURE = Path(__file__).parent / "fixtures" / "ocean2" / "re11_frames_plan135.json"
 
@@ -100,15 +106,24 @@ def _wrap_as_headers(spans: list[bytes]) -> bytes:
 # --- display upload: full frames ---------------------------------------
 
 
-def test_full_upload_frame_46_battery_charging_and_pv_strings() -> None:
-    """Capture 46: three PV strings, an inverter phase reading, a charging
-    battery (65.20 raw is +4328 here; SoC and remaining-Wh both rose in the
-    surrounding frames, so the negated value is the correct charge-positive
-    reading - see the parser module docstring)."""
+def test_full_upload_frame_46_battery_discharging_and_pv_strings() -> None:
+    """Capture 46: three PV strings, an inverter phase reading, a
+    discharging battery: 65.20 raw is +4328 (discharge-positive on the
+    wire), 87.4 is -4330 (charge-positive), SoC fell 81 -> 62 and remaining
+    energy 6292 -> 6287 Wh across the neighbouring frames. The published
+    batt_w is the block 87 snapshot as-is, and solar_w is its 6670 rather
+    than the unrounded 6687 of 65.4 (snapshot coherence, module docstring).
+    """
     result = _parse(46)
     assert result is not None
-    assert result["solar_w"] == 6687.0
-    assert result["batt_w"] == pytest.approx(-4328.0)
+    assert result["solar_w"] == 6670.0
+    assert result["home_w"] == 11000.0
+    assert result["batt_w"] == pytest.approx(-4330.0)
+    assert result["batt_discharge_power_w"] == pytest.approx(4330.0)
+    assert result["batt_charge_power_w"] == 0.0
+    assert result["grid_w"] == 0.0
+    assert result["grid_import_power_w"] == 0.0
+    assert result["grid_export_power_w"] == 0.0
     assert result["pcs_ac_power_w"] == pytest.approx(10476.576, abs=0.01)
     assert result["inv_phase_a_active_power_w"] == pytest.approx(3516, abs=1)
     for label in ("a", "b", "c"):
@@ -117,22 +132,28 @@ def test_full_upload_frame_46_battery_charging_and_pv_strings() -> None:
         assert f"mppt_pv{string}_voltage_v" in result
 
 
-def test_full_upload_frame_36_negation_and_block87_precedence() -> None:
-    """Capture 36: proves the 65.20 negation (raw -4999 -> output +4999,
-    within 9 W of the untouched 87.4 fallback reading of +4990, matching the
-    document's own note of a 9 W disagreement between the two blocks at this
-    frame) and that block 87 wins home_w over block 7 (10 vs 630)."""
+def test_full_upload_frame_36_snapshot_wins_and_grid_split() -> None:
+    """Capture 36: block 87 wins home_w over block 7 (10 vs 630), batt_w is
+    87.4 as-is (+4990, charging; 65.20 reads -4999 and would agree once
+    negated), grid_w is the snapshot's -380 rather than 4.13's -373.80, and
+    the export split follows. Only the voltage and the frequency come out of
+    the grid-port phase records."""
     result = _parse(36)
     assert result is not None
-    assert result["batt_w"] == pytest.approx(4999.0)
+    assert result["batt_w"] == pytest.approx(4990.0)
+    assert result["batt_charge_power_w"] == pytest.approx(4990.0)
+    assert result["batt_discharge_power_w"] == 0.0
     assert result["home_w"] == 10.0
-    assert result["grid_w"] == pytest.approx(-373.80, abs=0.01)
-    grid_voltage_keys = [
-        key
-        for key in result
-        if key.startswith("grid_phase_") and key.endswith("_voltage_v")
+    assert result["grid_w"] == pytest.approx(-380.0)
+    assert result["grid_export_power_w"] == pytest.approx(380.0)
+    assert result["grid_import_power_w"] == 0.0
+    grid_keys = sorted(key for key in result if key.startswith("grid_phase_"))
+    assert grid_keys == [
+        "grid_phase_a_voltage_v",
+        "grid_phase_b_voltage_v",
+        "grid_phase_c_voltage_v",
     ]
-    assert len(grid_voltage_keys) == 3
+    assert result["pcs_ac_freq_hz"] == pytest.approx(50.0, abs=0.1)
 
 
 def test_full_upload_frame_28_mppt_and_pcs_ac_precision() -> None:
@@ -144,7 +165,9 @@ def test_full_upload_frame_28_mppt_and_pcs_ac_precision() -> None:
     assert result is not None
     assert result["soc_pct"] == 99
     assert result["bp_remain_watth"] == 10047
-    assert result["solar_w"] == 1635.0
+    # solar_w is the block 87 snapshot (1640), not the unrounded 65.4 (1635).
+    assert result["solar_w"] == 1640.0
+    assert result["grid_w"] == -170.0
     assert result["mppt_pv1_voltage_v"] == pytest.approx(511.647, abs=0.001)
     assert result["mppt_pv1_current_a"] == pytest.approx(1.96595, abs=0.00001)
     assert result["mppt_pv1_power_w"] == pytest.approx(1006.736, abs=0.001)
@@ -330,7 +353,91 @@ def test_system_and_snapshot_battery_blocks_agree_in_magnitude() -> None:
             checked += 1
             assert (raw65 > 0) != (raw87 > 0) or (raw65 == 0 and raw87 == 0)
             assert abs(raw65 + raw87) <= 200.0
-    assert checked >= 8
+    # 15 frames carry both blocks in this fixture; a floor near that number
+    # is what catches a decoder that quietly stops seeing one of them.
+    assert checked >= 15
+
+
+def test_snapshot_blocks_beat_the_unrounded_fields_where_both_exist() -> None:
+    """Capture 35: the frame where the block 4 grid reading disagrees most
+    with the snapshot (4.13 = -371.68 against 87.2 = -50). The published
+    grid_w is the snapshot's, so home = solar + grid - battery (battery
+    charge-positive) closes on the same instant: 10820 = 6590 - 50 + 4280."""
+    result = _parse(35)
+    assert result is not None
+    assert result["home_w"] == 10820.0
+    assert result["solar_w"] == 6590.0
+    assert result["grid_w"] == -50.0
+    assert result["batt_w"] == -4280.0
+    assert result["solar_w"] + result["grid_w"] - result["batt_w"] == result["home_w"]
+
+
+def test_a_module_backlog_keeps_the_newest_record_whatever_the_order() -> None:
+    """Capture 1 reversed: the same 14 headers, newest heartbeat first.
+    A parser that kept the last record in header order would now publish
+    the oldest heartbeat per module; the result must equal the original."""
+    original = parse_ocean2_message(_payload(1))
+    assert original is not None
+    spans = _split_header_spans(_payload(1))
+    reversed_frame = _wrap_as_headers(list(reversed(spans)))
+    assert parse_ocean2_message(reversed_frame) == original
+    # And the order genuinely changes which record comes last: the first
+    # and last field-37 timestamps differ.
+    stamps = []
+    for span in spans:
+        header = _decode_single_header(span)
+        for field_num, wire_type, raw in _iter_fields(bytes.fromhex(header["pdata"])):
+            if field_num == 5 and wire_type == 2:
+                stamps.append(
+                    next(
+                        int(_decode_scalar(swt, sraw, "int"))
+                        for sfn, swt, sraw in _iter_fields(raw)
+                        if sfn == 37
+                    )
+                )
+    assert stamps[0] != stamps[-1]
+
+
+def _module_frame(index: int, timestamp: int, remain_wh: float) -> bytes:
+    """One 254/46 header carrying a field-5 record for module ``index``."""
+    record = (
+        encode_field_varint(15, index)
+        + encode_field_varint(37, timestamp)
+        + encode_field_fixed32(54, remain_wh)
+    )
+    pdata = encode_field_bytes(5, record)
+    header = (
+        encode_field_bytes(1, pdata)
+        + encode_field_varint(8, 254)
+        + encode_field_varint(9, 46)
+    )
+    return encode_field_bytes(1, header)
+
+
+def test_a_module_index_beyond_the_entity_layer_is_dropped() -> None:
+    """Six packs exist in the entity layer; a seventh record has no entity
+    and must not surface under a key nothing reads. A record for module 2
+    built the same way does surface, so the guard, not the builder, is what
+    the first assertion proves."""
+    assert parse_ocean2_message(_module_frame(7, 1, 1234.0)) is None
+    ok = parse_ocean2_message(_module_frame(2, 1, 1234.0))
+    assert ok is not None
+    assert ok["pack2_remain_watth"] == 1234
+
+
+def test_a_non_finite_reading_is_dropped_not_published() -> None:
+    """A NaN in 7.1 must not become home_w; the sibling 7.4 still lands."""
+    block7 = encode_field_fixed32(1, float("nan")) + encode_field_fixed32(4, 500.0)
+    pdata = encode_field_bytes(7, block7)
+    header = (
+        encode_field_bytes(1, pdata)
+        + encode_field_varint(8, 254)
+        + encode_field_varint(9, 39)
+    )
+    result = parse_ocean2_message(encode_field_bytes(1, header))
+    assert result is not None
+    assert "home_w" not in result
+    assert result["batt_w"] == 500.0
 
 
 def test_block87_home_precedence_over_block7_at_frame_35() -> None:

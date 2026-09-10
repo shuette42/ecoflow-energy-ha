@@ -400,11 +400,11 @@ def get_device_type(product_name: str, sn: str = "") -> str:
     DEVICE_TYPE_SMARTPLUG, DEVICE_TYPE_STREAM, DEVICE_TYPE_STREAM_AC5000,
     DEVICE_TYPE_POWERSTREAM, DEVICE_TYPE_SMART_METER,
     DEVICE_TYPE_SOLAR_TRACKER, DEVICE_TYPE_WAVE3, DEVICE_TYPE_POWERPULSE2,
-    or DEVICE_TYPE_UNKNOWN.
+    DEVICE_TYPE_OCEAN2, or DEVICE_TYPE_UNKNOWN.
 
-    The Smart Meter, the Solar Tracker, the WAVE 3 and the PowerPulse 2 have
-    no keyword of their own: all four are reached by their serial prefix
-    only. None of their names matches any keyword list below, and the app
+    The Smart Meter, the Solar Tracker, the WAVE 3, the PowerPulse 2 and the
+    Ocean 2 have no keyword of their own: all five are reached by their
+    serial prefix only. None of their names matches any keyword list below, and the app
     API reports an empty product name for each, so a keyword would be an
     assumption about a string no capture has ever shown.
     """

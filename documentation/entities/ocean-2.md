@@ -2,7 +2,7 @@
 
 Full list of all entities created for the EcoFlow Ocean 2 home battery (RE11 and RE17 series).
 
-**Totals:** 93 sensors
+**Totals:** 88 sensors
 
 > **Enhanced Mode only.** The Ocean 2 reports through the account connection, not through the EcoFlow Developer API. A Standard Mode setup gets error 1006 and no entities fill; set the integration up with an EcoFlow account e-mail and password instead.
 
@@ -27,9 +27,10 @@ Read-only. The integration does not send commands to the Ocean 2; not one write 
 | Grid Import Power | W | - | enabled | Import part of Grid Power, 0 W while exporting |
 | Grid Export Power | W | - | enabled | Export part of Grid Power, 0 W while importing |
 | Battery SOC | % | - | enabled | State of charge of the whole battery |
-| Battery Remaining Capacity | Wh | - | enabled | Energy left in the whole battery; the sum of the pack readings below |
+| Battery Remaining Capacity | Wh | - | enabled | Energy left in the whole battery, as the device reports it; the pack readings below add up to roughly the same figure |
 | Inverter AC Power | W | - | enabled | Total AC output of the inverter, unrounded |
 | Grid Frequency | Hz | diagnostic | enabled | Frequency at the grid connection |
+| Battery Charge/Discharge State | - | diagnostic | enabled | `charging`, `discharging` or `standby`, derived from Battery Power with a short hold so a swing around zero does not flicker |
 | Solar Energy | kWh | - | enabled | Solar Power integrated over time |
 | Home Energy | kWh | - | enabled | Home Power integrated over time |
 | Grid Import Energy | kWh | - | enabled | Grid Import Power integrated over time |
@@ -37,14 +38,8 @@ Read-only. The integration does not send commands to the Ocean 2; not one write 
 | Battery Charge Energy | kWh | - | enabled | Battery Charge Power integrated over time |
 | Battery Discharge Energy | kWh | - | enabled | Battery Discharge Power integrated over time |
 | Grid Phase A Voltage | V | diagnostic | enabled | Voltage on phase A at the grid connection |
-| Grid Phase A Current | A | diagnostic | enabled | Current on phase A at the grid connection |
-| Grid Phase A Active Power | W | diagnostic | enabled | Active power on phase A at the grid connection |
 | Grid Phase B Voltage | V | diagnostic | enabled | Voltage on phase B at the grid connection |
-| Grid Phase B Current | A | diagnostic | enabled | Current on phase B at the grid connection |
-| Grid Phase B Active Power | W | diagnostic | enabled | Active power on phase B at the grid connection |
 | Grid Phase C Voltage | V | diagnostic | enabled | Voltage on phase C at the grid connection |
-| Grid Phase C Current | A | diagnostic | enabled | Current on phase C at the grid connection |
-| Grid Phase C Active Power | W | diagnostic | enabled | Active power on phase C at the grid connection |
 | Inverter Phase A Voltage | V | diagnostic | disabled | Voltage on phase A at the inverter output |
 | Inverter Phase A Current | A | diagnostic | disabled | Current on phase A at the inverter output |
 | Inverter Phase A Active Power | W | diagnostic | disabled | Active power on phase A at the inverter output |
@@ -133,6 +128,10 @@ Pack readings arrive in a separate report the device sends every few seconds for
 ### PV string 3
 
 The one recording on file has a third PV string connector with nothing on it: 33 to 36 V open-circuit voltage, 0 A, 0 W throughout. Its three entities are therefore disabled by default. An installation with three strings enables them.
+
+### Grid phase current and power are not published
+
+The grid-port records the device sends carry two more figures per phase. In the recording on file they sit at under one ampere and within a few watts of zero throughout, while the grid power swings by hundreds of watts and the inverter phases carry kilowatts, so they are not the grid current and grid power, and what they are is not settled. Only the phase voltage and the grid frequency come from those records.
 
 ### The feed-in limit is not a sensor
 

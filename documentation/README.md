@@ -21,7 +21,7 @@ Complete list of all sensors, switches, numbers, and binary sensors per device:
 - [Solar Tracker](entities/solar-tracker.md) - 6 sensors (`HZ31` and `S02F`) - one product under two serial prefixes, read-only in this release, Enhanced Mode only
 - [WAVE 3](entities/wave-3.md) - 18 sensors, 5 binary sensors, 4 switches, 5 numbers, 5 selects, 1 climate (`AC71`) - a portable air conditioner, Enhanced Mode only
 - [PowerPulse 2](entities/powerpulse-2.md) - 16 sensors, 1 binary sensor (`C376`) - a wallbox, read-only, Enhanced Mode only, no PowerOcean required
-- [Ocean 2](entities/ocean-2.md) - 93 sensors (`RE11` and `RE17`) - a home battery, one product under two serial prefixes, read-only, Enhanced Mode only
+- [Ocean 2](entities/ocean-2.md) - 88 sensors (`RE11` and `RE17`) - a home battery, one product under two serial prefixes, read-only, Enhanced Mode only
 
 Counts are the device-specific entity definitions. Every device additionally exposes 2 universal diagnostic sensors (connection status and active mode) that are not included above.
 
