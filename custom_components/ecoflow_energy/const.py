@@ -20,6 +20,7 @@ from .ecoflow.const import (  # noqa: E402
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
+    DEVICE_TYPE_POWERPULSE2,
     DEVICE_TYPE_POWERSTREAM,
     DEVICE_TYPE_SMART_METER,
     DEVICE_TYPE_SMARTPLUG,
@@ -320,6 +321,7 @@ DEVICE_TYPE_DISPLAY_NAMES: dict[str, str] = {
     DEVICE_TYPE_SMART_METER: "Smart Meter",
     DEVICE_TYPE_SOLAR_TRACKER: "Solar Tracker",
     DEVICE_TYPE_WAVE3: "WAVE 3",
+    DEVICE_TYPE_POWERPULSE2: "PowerPulse 2",
 }
 
 # Device types that only report over the account channel (app-auth WSS).
@@ -331,6 +333,7 @@ ENHANCED_ONLY_DEVICE_TYPES: frozenset[str] = frozenset(
         DEVICE_TYPE_SMART_METER,
         DEVICE_TYPE_SOLAR_TRACKER,
         DEVICE_TYPE_WAVE3,
+        DEVICE_TYPE_POWERPULSE2,
     }
 )
 
@@ -1265,11 +1268,19 @@ POWEROCEAN_SENSORS: list[EcoFlowSensorDef] = [
         "diagnostic",
         options=["standby", "discharging", "charging"],
     ),
-    # --- PowerPulse wallbox (accessory) ---
+    # --- PowerPulse 1 wallbox (AC31, accessory) ---
     # Forwarded by the PowerOcean on cmd_func 209, so these only exist once a
     # wallbox has actually reported. Every value describes the current
     # charging session and resets when the next one opens - which is why the
     # session energy is `total` and never `total_increasing`.
+    #
+    # The PowerPulse 2 (`C376`) once shared these definitions, over the
+    # PowerOcean's 241 relay. It has its own device type and its own list
+    # since PLAN-132, and the relay is retired - but the `AC31` still reports
+    # here and would lose every wallbox entity if these went with it. The
+    # keys are the same on both lists on purpose: one physical quantity, two
+    # physical wallboxes, and a unique id carries the serial of the device it
+    # belongs to.
     EcoFlowSensorDef(
         "ev_charge_power_w",
         "Wallbox Charging Power",
@@ -6850,6 +6861,232 @@ WAVE3_SELECTS: list[EcoFlowSelectDef] = [
         tuple(WAVE3_SCREEN_OFF_TIME_VALUES.values()),
         icon="mdi:monitor-off",
         value_map=WAVE3_SCREEN_OFF_TIME_VALUES,
+    ),
+]
+
+# PowerPulse 2 wallbox (`C376`), standalone device type since PLAN-132.
+# `ev_charge_power_w`, `ev_session_energy_wh`, `ev_session_duration_s` and
+# `ev_charge_status` moved here unchanged from POWEROCEAN_SENSORS, where
+# they were an `accessory` reading relayed through the PowerOcean on
+# cmd_func 209. On its own device the wallbox is not an optional bolt-on -
+# every PowerPulse 2 has these readings - so `accessory` is dropped for the
+# four of them: the entities are created for every device of this type
+# instead of waiting for a first report. `ev_cable_lock_enabled` below is
+# the one exception, kept as an accessory-style wait (see its own list).
+#
+# All entries are `enhanced_only`: developer keys never carry this device's
+# telemetry, only the app/Enhanced Mode channel does.
+POWERPULSE2_SENSORS: list[EcoFlowSensorDef] = [
+    EcoFlowSensorDef(
+        "ev_charge_power_w",
+        "Wallbox Charging Power",
+        "W",
+        "power",
+        "measurement",
+        "mdi:ev-station",
+        None,
+        enhanced_only=True,
+        suggested_display_precision=0,
+    ),
+    EcoFlowSensorDef(
+        "ev_voltage_l1_v",
+        "Wallbox Voltage L1",
+        "V",
+        "voltage",
+        "measurement",
+        "mdi:sine-wave",
+        None,
+        enhanced_only=True,
+        suggested_display_precision=1,
+    ),
+    EcoFlowSensorDef(
+        "ev_voltage_l2_v",
+        "Wallbox Voltage L2",
+        "V",
+        "voltage",
+        "measurement",
+        "mdi:sine-wave",
+        None,
+        enhanced_only=True,
+        suggested_display_precision=1,
+    ),
+    EcoFlowSensorDef(
+        "ev_voltage_l3_v",
+        "Wallbox Voltage L3",
+        "V",
+        "voltage",
+        "measurement",
+        "mdi:sine-wave",
+        None,
+        enhanced_only=True,
+        suggested_display_precision=1,
+    ),
+    EcoFlowSensorDef(
+        "ev_current_l1_a",
+        "Wallbox Current L1",
+        "A",
+        "current",
+        "measurement",
+        "mdi:current-ac",
+        None,
+        enhanced_only=True,
+        suggested_display_precision=2,
+    ),
+    EcoFlowSensorDef(
+        "ev_current_l2_a",
+        "Wallbox Current L2",
+        "A",
+        "current",
+        "measurement",
+        "mdi:current-ac",
+        None,
+        enhanced_only=True,
+        suggested_display_precision=2,
+    ),
+    EcoFlowSensorDef(
+        "ev_current_l3_a",
+        "Wallbox Current L3",
+        "A",
+        "current",
+        "measurement",
+        "mdi:current-ac",
+        None,
+        enhanced_only=True,
+        suggested_display_precision=2,
+    ),
+    # A configured limit, not a live measurement - hence diagnostic even
+    # though it carries the same device/state class as the phase currents.
+    EcoFlowSensorDef(
+        "ev_max_current_a",
+        "Wallbox Maximum Current",
+        "A",
+        "current",
+        "measurement",
+        "mdi:current-ac",
+        "diagnostic",
+        enhanced_only=True,
+        suggested_display_precision=1,
+    ),
+    EcoFlowSensorDef(
+        "ev_phase_mode",
+        "Wallbox Phase Mode",
+        None,
+        "enum",
+        None,
+        "mdi:transmission-tower",
+        "diagnostic",
+        enhanced_only=True,
+        options=["single_phase", "three_phase"],
+    ),
+    EcoFlowSensorDef(
+        "ev_session_status",
+        "Wallbox Session Status",
+        None,
+        "enum",
+        None,
+        "mdi:progress-clock",
+        "diagnostic",
+        enhanced_only=True,
+        options=["idle", "charging", "finished"],
+    ),
+    EcoFlowSensorDef(
+        "ev_session_duration_s",
+        "Wallbox Session Duration",
+        "s",
+        "duration",
+        "measurement",
+        "mdi:timer-outline",
+        "diagnostic",
+        enhanced_only=True,
+        suggested_display_precision=0,
+    ),
+    EcoFlowSensorDef(
+        "ev_charge_status",
+        "Wallbox Charging Status",
+        None,
+        "enum",
+        None,
+        "mdi:ev-station",
+        None,
+        enhanced_only=True,
+        options=[
+            "none",
+            "available",
+            "preparing",
+            "charging",
+            "suspended_charger",
+            "suspended_vehicle",
+            "finishing",
+            "faulted",
+        ],
+    ),
+    # Unix seconds on the wire; the sensor platform converts it to a UTC
+    # datetime for the `timestamp` device class (see EcoFlowSensor.native_value).
+    EcoFlowSensorDef(
+        "ev_session_start_ts",
+        "Wallbox Session Start",
+        None,
+        "timestamp",
+        None,
+        "mdi:clock-start",
+        "diagnostic",
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "ev_session_energy_wh",
+        "Wallbox Session Energy",
+        "Wh",
+        "energy",
+        "total",
+        "mdi:ev-plug-type2",
+        None,
+        enhanced_only=True,
+        suggested_display_precision=0,
+    ),
+    # The lifetime counter's value when the current session began - jumps to
+    # a new value every session, so it is a snapshot rather than a counter
+    # and cannot be `total_increasing` (it would read as a meter reset on
+    # every charge). Same reasoning `ev_session_energy_wh` above already
+    # applies with `total`.
+    EcoFlowSensorDef(
+        "ev_session_start_energy_wh",
+        "Wallbox Session Start Meter",
+        "Wh",
+        "energy",
+        "total",
+        "mdi:counter",
+        "diagnostic",
+        enhanced_only=True,
+        suggested_display_precision=0,
+    ),
+    # The genuine lifetime counter (field 44): monotonic across the whole
+    # capture (84944 -> 104680 Wh), unlike the session-scoped snapshot above.
+    EcoFlowSensorDef(
+        "ev_total_energy_wh",
+        "Wallbox Total Energy",
+        "Wh",
+        "energy",
+        "total_increasing",
+        "mdi:lightning-bolt",
+        None,
+        enhanced_only=True,
+        suggested_display_precision=0,
+    ),
+]
+
+POWERPULSE2_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
+    # Only carried in the ParamReport (2/34) message, which this device only
+    # sends inside a get_reply bundle - never on the plain property-push
+    # topic. A session that only sees pushes never reports this key, so it
+    # is an accessory wait rather than an unconditional entity.
+    EcoFlowBinarySensorDef(
+        "ev_cable_lock_enabled",
+        "Wallbox Cable Lock",
+        None,
+        "mdi:lock",
+        "diagnostic",
+        enhanced_only=True,
+        accessory=True,
     ),
 ]
 

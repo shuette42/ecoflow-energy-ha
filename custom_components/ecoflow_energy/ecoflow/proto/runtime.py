@@ -172,17 +172,6 @@ def _build_powerocean_table(pb2: Any) -> dict[tuple[int, int], CmdConfig]:
             parse_path="typed_runtime:heating_rod_param",
             flags={"_is_heating_rod_param": True},
         ),
-        # PowerPulse 2 wallbox (C376), forwarded by the PowerOcean on the
-        # accessory relay family 241 rather than on 209. Three reporter
-        # captures (#247) carry its whole session on this one tuple - power,
-        # order energy, order duration, status and vehicle together - and
-        # never a 209/8 beside it. The heating rod reports on the same tuple
-        # at its own address without the wallbox field; the remap drops it.
-        (241, 3): CmdConfig(
-            msg_class=pb2.EDevParamReport,
-            parse_path="typed_runtime:edev_param_report",
-            flags={"_is_pile_charging_param": True},
-        ),
         # The device's scheduled charge tasks, the whole list in one
         # message. It rides inside the get-all reply the integration already
         # receives, twice under the same sequence number, and the two copies

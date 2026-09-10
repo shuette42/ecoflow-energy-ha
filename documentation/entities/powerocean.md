@@ -22,7 +22,7 @@ Full list of all entities created for PowerOcean devices.
 > history.
 
 > **The wallbox readings are optional and need Enhanced Mode.** They belong to
-> a PowerPulse wallbox coupled to your PowerOcean, so they are only created once
+> a PowerPulse 1 wallbox coupled to your PowerOcean, so they are only created once
 > your system actually reports a charging session. A PowerOcean without a
 > wallbox gets no wallbox entities. Coupled to a PowerOcean the wallbox reports
 > its session through the PowerOcean rather than on its own, and that message
@@ -30,6 +30,10 @@ Full list of all entities created for PowerOcean devices.
 > five readings describe the **current charging session** and reset when the next
 > one starts, so the session energy is not a meter and is not meant for the
 > Energy Dashboard. There are no wallbox controls.
+>
+> **The PowerPulse 2 is a device of its own** and is not listed here. It
+> reports straight from the box on its own channel and needs no PowerOcean
+> at all - see [PowerPulse 2](powerpulse-2.md).
 
 > **The schedule readings are optional and need Enhanced Mode.** A PowerOcean
 > only has a schedule if you created one yourself in the EcoFlow app, and most
@@ -188,18 +192,6 @@ These sensors are pre-configured for the HA Energy Dashboard (`total_increasing`
 | Battery Limit Reason | Why the system is limiting the battery | disabled |
 | SG Ready State | Current SG Ready operating state | disabled |
 
-## Sensors - PowerPulse Wallbox (accessory, Enhanced Mode)
-
-Created only once a coupled wallbox reports a charging session. See the note at the top.
-
-| Entity | Description | Default |
-|---|---|---|
-| Wallbox Charging Power | Power currently going into the vehicle, in watts | enabled |
-| Wallbox Session Energy | Energy delivered in the current charging session, in watt hours. Resets when the next session starts, so it is not a lifetime counter | enabled |
-| Wallbox Session Duration | How long the current session has been running, in seconds | enabled |
-| Wallbox Charging Status | Available, preparing, charging, paused by charger, paused by vehicle, finishing, or fault | enabled |
-| Wallbox Vehicle | The vehicle the charger has recognized. Empty until a car is identified | enabled |
-
 ---
 
 ## Scheduled Charge Tasks (accessory, Enhanced Mode)
@@ -266,6 +258,20 @@ Each battery pack creates 24 sensors (7 core + 17 diagnostic). Pack 1 core senso
 | Pack N Error Code | - |
 
 > **Multi-pack users:** Enable additional pack sensors in the entity list. Each physical BP5000 pack maps to Pack 1, Pack 2, etc.
+
+---
+
+## Sensors - PowerPulse Wallbox (accessory, Enhanced Mode)
+
+Created only once a coupled wallbox reports a charging session. See the note at the top. These are the PowerPulse 1; the PowerPulse 2 has [its own page](powerpulse-2.md).
+
+| Entity | Description | Default |
+|---|---|---|
+| Wallbox Charging Power | Power currently going into the vehicle, in watts | enabled |
+| Wallbox Session Energy | Energy delivered in the current charging session, in watt hours. Resets when the next session starts, so it is not a lifetime counter | enabled |
+| Wallbox Session Duration | How long the current session has been running, in seconds | enabled |
+| Wallbox Charging Status | Available, preparing, charging, paused by charger, paused by vehicle, finishing, or fault | enabled |
+| Wallbox Vehicle | The vehicle the charger has recognized. Empty until a car is identified | enabled |
 
 ---
 

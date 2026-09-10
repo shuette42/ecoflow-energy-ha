@@ -1411,9 +1411,6 @@
       "ev_session_duration_s": {
         "name": "Wallbox Session Duration"
       },
-      "ev_vehicle_id": {
-        "name": "Wallbox Vehicle"
-      },
       "ev_charge_status": {
         "name": "Wallbox Charging Status",
         "state": {

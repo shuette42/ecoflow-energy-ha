@@ -12,6 +12,7 @@ from ..const import (
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
+    DEVICE_TYPE_POWERPULSE2,
     DEVICE_TYPE_POWERSTREAM,
     DEVICE_TYPE_SMART_METER,
     DEVICE_TYPE_SMARTPLUG,
@@ -47,10 +48,10 @@ from ..ecoflow.parsers.powerocean_proto import (
     remap_ems_state_keys,
     remap_ev_charging_keys,
     remap_heating_rod_keys,
-    remap_pile_charging_keys,
     remap_proto_keys,
     remap_timer_task_keys,
 )
+from ..ecoflow.parsers.powerpulse_proto import parse_powerpulse_message
 from ..ecoflow.parsers.powerstream_http import parse_powerstream_quota
 from ..ecoflow.parsers.smart_meter_proto import parse_smart_meter_message
 from ..ecoflow.parsers.smartplug import (
@@ -497,6 +498,12 @@ class MqttIngestMixin(_Base):
                 # so it routes by device type before the registry lookup.
                 if self.device_type == DEVICE_TYPE_WAVE3:
                     return parse_wave3_message(payload)
+                # PowerPulse 2 (#7, #247, PLAN-132): its own envelope on
+                # cmd_func 2, never registered in any device-type registry
+                # table - the parser decodes every header itself, the same
+                # way the WAVE 3 parser above does.
+                if self.device_type == DEVICE_TYPE_POWERPULSE2:
+                    return parse_powerpulse_message(payload)
                 return self._parse_proto_device_data(payload)
             return None
 
@@ -610,6 +617,13 @@ class MqttIngestMixin(_Base):
                 # the meter above.
                 if self.device_type == DEVICE_TYPE_WAVE3:
                     return parse_wave3_message(payload)
+                # PowerPulse 2 (#7, #247, PLAN-132): its own envelope on
+                # cmd_func 2, decoded header by header inside the parser and
+                # registered in no device-type table, the same shape as the
+                # WAVE 3 above. This is the bundled get_reply, which is where
+                # the settings read-back (2/34) arrives.
+                if self.device_type == DEVICE_TYPE_POWERPULSE2:
+                    return parse_powerpulse_message(payload)
                 if self.device_type == DEVICE_TYPE_POWEROCEAN:
                     return self._parse_powerocean_proto_frame(payload)
 
@@ -751,14 +765,6 @@ class MqttIngestMixin(_Base):
                     continue
                 if result.mapped.get("_is_ev_charging_param"):
                     merged.update(remap_ev_charging_keys(raw))
-                    continue
-                # The same wallbox session on the accessory relay (241/3),
-                # where a PowerPulse 2 reports. The heating rod shares the
-                # tuple and maps to nothing, so a rod-only header leaves the
-                # wallbox keys untouched. Only here: every PowerOcean frame,
-                # push or get-all, goes through this loop.
-                if result.mapped.get("_is_pile_charging_param"):
-                    merged.update(remap_pile_charging_keys(raw))
                     continue
                 if result.mapped.get("_is_heating_rod_param"):
                     merged.update(remap_heating_rod_keys(raw))
