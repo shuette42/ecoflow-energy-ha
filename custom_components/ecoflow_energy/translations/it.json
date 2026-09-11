@@ -10,14 +10,14 @@
       },
       "developer": {
         "title": "Credenziali EcoFlow Developer",
-        "description": "Inserisci il tuo Access Key e Secret Key dall'[EcoFlow Developer Portal]({developer_portal_url}).",
+        "description": "Inserisci Access Key e Secret Key dall'[EcoFlow Developer Portal]({developer_portal_url}).",
         "data": {
           "access_key": "Access Key",
           "secret_key": "Secret Key"
         }
       },
       "app_credentials": {
-        "title": "Login app EcoFlow",
+        "title": "Accesso all'app EcoFlow",
         "description": "Inserisci l'e-mail e la password che usi per l'app EcoFlow. Tutti i dispositivi associati al tuo account verranno rilevati automaticamente.",
         "data": {
           "email": "E-mail",
@@ -26,7 +26,7 @@
       },
       "devices": {
         "title": "Seleziona i dispositivi",
-        "description": "Seleziona i dispositivi EcoFlow che vuoi aggiungere a Home Assistant.\n\nUn dispositivo contrassegnato \"not supported yet\" non ha ancora un parser qui, quindi produrrà solo due sensori diagnostici. Vale comunque la pena aggiungerlo, perché è da un download della diagnostica di quel dispositivo, allegato a una issue su GitHub, che nasce il supporto per un nuovo modello. Il tuo download della diagnostica contiene già i dati grezzi che un dispositivo del genere invia, quindi non serve attivare nulla prima.",
+        "description": "Seleziona i dispositivi EcoFlow che vuoi aggiungere a Home Assistant.\n\nUn dispositivo contrassegnato \"not supported yet\" non ha ancora un parser qui, quindi produrrà solo due sensori diagnostici. Vale comunque la pena aggiungerlo, perché è da un download della diagnostica di quel dispositivo, allegato a una segnalazione su GitHub, che nasce il supporto per un nuovo modello. Il tuo download della diagnostica contiene già i dati grezzi che un dispositivo del genere invia, quindi non serve attivare nulla prima.",
         "data": {
           "devices": "Dispositivi"
         }
@@ -65,7 +65,7 @@
       },
       "reconfigure_confirm": {
         "title": "Aggiorna le credenziali EcoFlow",
-        "description": "Inserisci il tuo Access Key e Secret Key attuali dall'[EcoFlow Developer Portal]({developer_portal_url}).",
+        "description": "Inserisci Access Key e Secret Key attuali dall'[EcoFlow Developer Portal]({developer_portal_url}).",
         "data": {
           "access_key": "Access Key",
           "secret_key": "Secret Key"
@@ -81,17 +81,17 @@
       },
       "devices_app": {
         "title": "Seleziona i dispositivi",
-        "description": "Seleziona i dispositivi EcoFlow che vuoi aggiungere a Home Assistant.\n\nUn dispositivo contrassegnato \"not supported yet\" non ha ancora un parser qui, quindi produrrà solo due sensori diagnostici. Vale comunque la pena aggiungerlo, perché è da un download della diagnostica di quel dispositivo, allegato a una issue su GitHub, che nasce il supporto per un nuovo modello. Attiva prima la registrazione dei dati diagnostici nelle opzioni dell'integrazione e scarica dopo, perché con l'accesso tramite account il download non contiene da solo quei dati grezzi.",
+        "description": "Seleziona i dispositivi EcoFlow che vuoi aggiungere a Home Assistant.\n\nUn dispositivo contrassegnato \"not supported yet\" non ha ancora un parser qui, quindi produrrà solo due sensori diagnostici. Vale comunque la pena aggiungerlo, perché è da un download della diagnostica di quel dispositivo, allegato a una segnalazione su GitHub, che nasce il supporto per un nuovo modello. Attiva prima la registrazione dei dati diagnostici nelle opzioni dell'integrazione e scarica dopo, perché con l'accesso tramite account il download non contiene da solo quei dati grezzi.",
         "data": {
           "devices": "Dispositivi"
         }
       }
     },
     "error": {
-      "cannot_connect": "Connessione all'API EcoFlow non riuscita. Controlla le tue credenziali.",
+      "cannot_connect": "Impossibile connettersi all'API EcoFlow. Controlla le tue credenziali.",
       "invalid_auth": "Access Key o Secret Key non validi.",
       "no_devices": "Nessun dispositivo trovato. Assicurati che i dispositivi siano associati nell'app EcoFlow.",
-      "enhanced_login_failed": "Login in modalità Enhanced non riuscito. Controlla e-mail e password della tua app EcoFlow.",
+      "enhanced_login_failed": "Accesso in modalità Enhanced non riuscito. Controlla e-mail e password della tua app EcoFlow.",
       "enhanced_decrypt_failed": "Decifratura delle credenziali della modalità Enhanced non riuscita.",
       "powerstream_requires_standard": "PowerStream richiede la modalità Standard con le chiavi Developer API.",
       "device_requires_enhanced": "Questo dispositivo richiede la modalità Enhanced con il tuo account EcoFlow.",
@@ -114,8 +114,8 @@
           "raw_capture": "Registra dati diagnostici aggiuntivi per 24 ore"
         },
         "data_description": {
-          "devices": "Selezionare un dispositivo è ciò che fa sì che questa integrazione lo legga. Un dispositivo contrassegnato \"not supported yet\" non ha ancora un parser qui, quindi produce due sensori diagnostici e nient'altro. Vale comunque la pena lasciarlo selezionato, perché è da un download della diagnostica di quel dispositivo, allegato a una issue su GitHub, che nasce il supporto per un nuovo modello. Il tuo download della diagnostica contiene già i dati grezzi che un dispositivo del genere invia, quindi non serve attivare nulla prima.",
-          "raw_capture": "Conserva una parte maggiore dei messaggi grezzi inviati dai tuoi dispositivi, registra ogni dispositivo che questa integrazione non supporta ancora e registra le impostazioni che l'app EcoFlow scrive sui tuoi dispositivi mentre è attiva. Quest'ultima è la strada per costruire un controllo per un modello che qui nessuno possiede: cambiare una volta l'impostazione nell'app, con questa opzione attiva, mostra cosa accetta il dispositivo. Vale la pena attivarla solo se è stata richiesta in una issue su GitHub, perché i dati sono utili solo allegati a un download della diagnostica. Non viene mai inviato nulla ai tuoi dispositivi e la registrazione si interrompe da sola dopo 24 ore."
+          "devices": "Selezionare un dispositivo è ciò che fa sì che questa integrazione lo legga. Un dispositivo contrassegnato \"not supported yet\" non ha ancora un parser qui, quindi produce due sensori diagnostici e nient'altro. Vale comunque la pena lasciarlo selezionato, perché è da un download della diagnostica di quel dispositivo, allegato a una segnalazione su GitHub, che nasce il supporto per un nuovo modello. Il tuo download della diagnostica contiene già i dati grezzi che un dispositivo del genere invia, quindi non serve attivare nulla prima.",
+          "raw_capture": "Conserva una parte maggiore dei messaggi grezzi inviati dai tuoi dispositivi, registra ogni dispositivo che questa integrazione non supporta ancora e registra le impostazioni che l'app EcoFlow scrive sui tuoi dispositivi mentre è attiva. Quest'ultima è la strada per costruire un controllo per un modello che qui nessuno possiede: cambiare una volta l'impostazione nell'app, con questa opzione attiva, mostra cosa accetta il dispositivo. Vale la pena attivarla solo se è stata richiesta in una segnalazione su GitHub, perché i dati sono utili solo allegati a un download della diagnostica. Non viene mai inviato nulla ai tuoi dispositivi e la registrazione si interrompe da sola dopo 24 ore."
         }
       },
       "developer": {
@@ -143,15 +143,15 @@
           "raw_capture": "Registra dati diagnostici aggiuntivi per 24 ore"
         },
         "data_description": {
-          "devices": "Selezionare un dispositivo è ciò che fa sì che questa integrazione lo legga. Un dispositivo contrassegnato \"not supported yet\" non ha ancora un parser qui, quindi produce due sensori diagnostici e nient'altro. Vale comunque la pena lasciarlo selezionato, perché è da un download della diagnostica di quel dispositivo, allegato a una issue su GitHub, che nasce il supporto per un nuovo modello. Attiva prima la registrazione dei dati diagnostici qui sotto e scarica dopo, perché con l'accesso tramite account il download non contiene da solo quei dati grezzi.",
-          "raw_capture": "Conserva una parte maggiore dei messaggi grezzi inviati dai tuoi dispositivi, registra ogni dispositivo che questa integrazione non supporta ancora e registra le impostazioni che l'app EcoFlow scrive sui tuoi dispositivi mentre è attiva. Quest'ultima è la strada per costruire un controllo per un modello che qui nessuno possiede: cambiare una volta l'impostazione nell'app, con questa opzione attiva, mostra cosa accetta il dispositivo. Vale la pena attivarla solo se è stata richiesta in una issue su GitHub, perché i dati sono utili solo allegati a un download della diagnostica. Non viene mai inviato nulla ai tuoi dispositivi e la registrazione si interrompe da sola dopo 24 ore."
+          "devices": "Selezionare un dispositivo è ciò che fa sì che questa integrazione lo legga. Un dispositivo contrassegnato \"not supported yet\" non ha ancora un parser qui, quindi produce due sensori diagnostici e nient'altro. Vale comunque la pena lasciarlo selezionato, perché è da un download della diagnostica di quel dispositivo, allegato a una segnalazione su GitHub, che nasce il supporto per un nuovo modello. Attiva prima la registrazione dei dati diagnostici qui sotto e scarica dopo, perché con l'accesso tramite account il download non contiene da solo quei dati grezzi.",
+          "raw_capture": "Conserva una parte maggiore dei messaggi grezzi inviati dai tuoi dispositivi, registra ogni dispositivo che questa integrazione non supporta ancora e registra le impostazioni che l'app EcoFlow scrive sui tuoi dispositivi mentre è attiva. Quest'ultima è la strada per costruire un controllo per un modello che qui nessuno possiede: cambiare una volta l'impostazione nell'app, con questa opzione attiva, mostra cosa accetta il dispositivo. Vale la pena attivarla solo se è stata richiesta in una segnalazione su GitHub, perché i dati sono utili solo allegati a un download della diagnostica. Non viene mai inviato nulla ai tuoi dispositivi e la registrazione si interrompe da sola dopo 24 ore."
         }
       }
     },
     "error": {
-      "cannot_connect": "Connessione all'API EcoFlow non riuscita.",
+      "cannot_connect": "Impossibile connettersi all'API EcoFlow.",
       "invalid_auth": "Credenziali API non valide.",
-      "enhanced_login_failed": "Login in modalità Enhanced non riuscito.",
+      "enhanced_login_failed": "Accesso in modalità Enhanced non riuscito.",
       "enhanced_decrypt_failed": "Decifratura delle credenziali della modalità Enhanced non riuscita.",
       "no_devices": "Seleziona almeno un dispositivo.",
       "powerstream_requires_standard": "PowerStream richiede la modalità Standard con le chiavi Developer API.",
@@ -225,10 +225,10 @@
         "name": "Potenza connessione rete AC"
       },
       "home_from_batt_w": {
-        "name": "Casa da batteria"
+        "name": "Casa dalla batteria"
       },
       "home_from_grid_w": {
-        "name": "Casa da rete"
+        "name": "Casa dalla rete"
       },
       "ac_outlet_1_w": {
         "name": "Potenza presa AC 1"
@@ -240,7 +240,7 @@
         "name": "Potenza connessione rete"
       },
       "sys_grid_connection_power_w": {
-        "name": "Potenza connessione rete sistema"
+        "name": "Potenza connessione rete (sistema)"
       },
       "batt_design_cap_mah": {
         "name": "Capacità nominale"
@@ -330,10 +330,10 @@
         "name": "Frequenza rete"
       },
       "ems_bp_alive_num": {
-        "name": "Pacchi batteria online"
+        "name": "Pack batteria online"
       },
       "bp_online_sum": {
-        "name": "Pacchi batteria online (EMS)"
+        "name": "Pack batteria online (EMS)"
       },
       "mppt_pv1_power_w": {
         "name": "Potenza stringa PV 1"
@@ -438,7 +438,7 @@
           "ac_makeup": "Integrazione AC",
           "drm": "DRM",
           "remote_schedule": "Programmazione remota",
-          "standby": "Standby",
+          "standby": "In attesa",
           "soc_calibration": "Calibrazione SoC",
           "timer": "Timer",
           "fcr": "FCR",
@@ -450,9 +450,9 @@
       "pcs_run_state": {
         "name": "Stato inverter",
         "state": {
-          "standby": "Standby",
-          "running": "In funzione",
-          "stopped": "Fermo"
+          "standby": "In attesa",
+          "running": "In esecuzione",
+          "stopped": "Fermato"
         }
       },
       "grid_status": {
@@ -474,8 +474,8 @@
       "batt_charge_discharge_state": {
         "name": "Stato carica/scarica batteria",
         "state": {
-          "standby": "Standby",
-          "discharging": "In scarica",
+          "standby": "In attesa",
+          "discharging": "In scaricamento",
           "charging": "In carica"
         }
       },
@@ -546,7 +546,7 @@
         "name": "DC-DC 12V"
       },
       "car_out_w": {
-        "name": "Uscita auto"
+        "name": "Uscita presa auto"
       },
       "usb1_w": {
         "name": "USB 1"
@@ -651,7 +651,7 @@
         "name": "Stato carica/scarica",
         "state": {
           "idle": "Inattivo",
-          "discharging": "In scarica",
+          "discharging": "In scaricamento",
           "charging": "In carica"
         }
       },
@@ -660,7 +660,7 @@
         "state": {
           "idle": "Inattivo",
           "charging": "In carica",
-          "discharging": "In scarica"
+          "discharging": "In scaricamento"
         }
       },
       "charger_type": {
@@ -852,13 +852,13 @@
         "name": "Modalità di connessione"
       },
       "pack1_soc": {
-        "name": "Pack 1 SoC"
+        "name": "SoC pack 1"
       },
       "pack1_power_w": {
         "name": "Potenza pack 1"
       },
       "pack1_soh": {
-        "name": "Pack 1 SoH"
+        "name": "SoH pack 1"
       },
       "pack1_cycles": {
         "name": "Cicli pack 1"
@@ -882,7 +882,7 @@
         "name": "Temperatura ambiente pack 1"
       },
       "pack1_calendar_soh": {
-        "name": "SoH calendario pack 1"
+        "name": "SoH calendariale pack1"
       },
       "pack1_cycle_soh": {
         "name": "SoH cicli pack 1"
@@ -924,13 +924,13 @@
         "name": "Codice errore pack 1"
       },
       "pack2_soc": {
-        "name": "Pack 2 SoC"
+        "name": "SoC pack 2"
       },
       "pack2_power_w": {
         "name": "Potenza pack 2"
       },
       "pack2_soh": {
-        "name": "Pack 2 SoH"
+        "name": "SoH pack 2"
       },
       "pack2_cycles": {
         "name": "Cicli pack 2"
@@ -954,7 +954,7 @@
         "name": "Temperatura ambiente pack 2"
       },
       "pack2_calendar_soh": {
-        "name": "SoH calendario pack 2"
+        "name": "SoH calendariale pack2"
       },
       "pack2_cycle_soh": {
         "name": "SoH cicli pack 2"
@@ -996,13 +996,13 @@
         "name": "Codice errore pack 2"
       },
       "pack3_soc": {
-        "name": "Pack 3 SoC"
+        "name": "SoC pack 3"
       },
       "pack3_power_w": {
         "name": "Potenza pack 3"
       },
       "pack3_soh": {
-        "name": "Pack 3 SoH"
+        "name": "SoH pack 3"
       },
       "pack3_cycles": {
         "name": "Cicli pack 3"
@@ -1026,7 +1026,7 @@
         "name": "Temperatura ambiente pack 3"
       },
       "pack3_calendar_soh": {
-        "name": "SoH calendario pack 3"
+        "name": "SoH calendariale pack3"
       },
       "pack3_cycle_soh": {
         "name": "SoH cicli pack 3"
@@ -1068,13 +1068,13 @@
         "name": "Codice errore pack 3"
       },
       "pack4_soc": {
-        "name": "Pack 4 SoC"
+        "name": "SoC pack 4"
       },
       "pack4_power_w": {
         "name": "Potenza pack 4"
       },
       "pack4_soh": {
-        "name": "Pack 4 SoH"
+        "name": "SoH pack 4"
       },
       "pack4_cycles": {
         "name": "Cicli pack 4"
@@ -1098,7 +1098,7 @@
         "name": "Temperatura ambiente pack 4"
       },
       "pack4_calendar_soh": {
-        "name": "SoH calendario pack 4"
+        "name": "SoH calendariale pack4"
       },
       "pack4_cycle_soh": {
         "name": "SoH cicli pack 4"
@@ -1140,13 +1140,13 @@
         "name": "Codice errore pack 4"
       },
       "pack5_soc": {
-        "name": "Pack 5 SoC"
+        "name": "SoC pack 5"
       },
       "pack5_power_w": {
         "name": "Potenza pack 5"
       },
       "pack5_soh": {
-        "name": "Pack 5 SoH"
+        "name": "SoH pack 5"
       },
       "pack5_cycles": {
         "name": "Cicli pack 5"
@@ -1170,7 +1170,7 @@
         "name": "Temperatura ambiente pack 5"
       },
       "pack5_calendar_soh": {
-        "name": "SoH calendario pack 5"
+        "name": "SoH calendariale pack5"
       },
       "pack5_cycle_soh": {
         "name": "SoH cicli pack 5"
@@ -1272,8 +1272,8 @@
           "startup_inner_bp": "Avvio (batteria int.)",
           "startup_pv": "Avvio (PV)",
           "startup_grid": "Avvio (rete)",
-          "running": "In funzione",
-          "stop": "Fermo",
+          "running": "In esecuzione",
+          "stop": "Fermato",
           "maintain": "Manutenzione"
         }
       },
@@ -1341,7 +1341,7 @@
         }
       },
       "home_from_solar_w": {
-        "name": "Casa da solare"
+        "name": "Casa dal solare"
       },
       "pv1_energy_kwh": {
         "name": "Energia PV 1"
@@ -1374,7 +1374,7 @@
         "name": "Stato calibrazione SoC"
       },
       "parallel_mode": {
-        "name": "Modalità parallelo"
+        "name": "Modalità in parallelo"
       },
       "battery_limit_reason": {
         "name": "Motivo limitazione batteria"
@@ -1434,7 +1434,7 @@
         "name": "Salute reale batteria"
       },
       "bms_calendar_soh_pct": {
-        "name": "Salute calendario batteria"
+        "name": "Salute calendariale batteria"
       },
       "bms_cycle_soh_pct": {
         "name": "Salute cicli batteria"
@@ -1445,7 +1445,7 @@
       "work_mode": {
         "name": "Modalità di funzionamento",
         "state": {
-          "self_powered": "Autoalimentato",
+          "self_powered": "Autoalimentata",
           "intelligent_plus": "Modalità intelligente+",
           "custom": "Personalizzata"
         }
@@ -1720,7 +1720,7 @@
     },
     "binary_sensor": {
       "ac_enabled": {
-        "name": "AC attivo"
+        "name": "Uscita AC attiva"
       },
       "dc_out_enabled": {
         "name": "Uscita DC attiva"
@@ -1804,7 +1804,7 @@
         "name": "Guasto"
       },
       "draining": {
-        "name": "Scarico condensa in corso"
+        "name": "Scarico in corso"
       },
       "pet_care_alarm": {
         "name": "Allarme Pet Care"
@@ -2030,7 +2030,7 @@
         "state": {
           "self_use": "Autoconsumo",
           "ai_schedule": "Programmazione AI",
-          "self_powered": "Autoalimentato",
+          "self_powered": "Autoalimentata",
           "intelligent_plus": "Modalità intelligente+",
           "custom": "Personalizzata"
         }
@@ -2101,9 +2101,9 @@
       "operating_mode": {
         "name": "Modalità operativa",
         "state": {
-          "cooling": "Raffreddamento",
-          "heating": "Riscaldamento",
-          "fan": "Ventilazione",
+          "cooling": "Freddo",
+          "heating": "Caldo",
+          "fan": "Solo ventilatore",
           "dehumidify": "Deumidificazione",
           "constant_temp": "Temperatura costante"
         }
@@ -2183,7 +2183,7 @@
       "message": "La wallbox riporta {status}, che non consente questa azione."
     },
     "powerpulse_descriptor_missing": {
-      "message": "La wallbox non ha ancora riportato il suo indirizzo. Attendi il suo prossimo report delle impostazioni."
+      "message": "La wallbox non ha ancora riportato il suo indirizzo. Attendi la prossima comunicazione delle impostazioni."
     },
     "powerpulse_sibling_missing": {
       "message": "Il comando della wallbox passa attraverso il PowerOcean dello stesso account, e questa voce non ne contiene nessuno o ne contiene più di uno."

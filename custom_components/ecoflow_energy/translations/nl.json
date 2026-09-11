@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Verbindingsmodus",
-        "description": "Kies hoe je verbinding wilt maken met je EcoFlow-apparaten.\n\n**Standard** - Officiële EcoFlow IoT API. Ondersteund door EcoFlow. Updates elke 10-30 seconden. Vereist Developer API keys.\n\n**Enhanced** - Door de community ontwikkelde realtime verbinding. Updates elke ~3 seconden. Vereist je EcoFlow-app-login. Onofficieel - gebruik op eigen risico.",
+        "description": "Kies hoe je verbinding wilt maken met je EcoFlow-apparaten.\n\n**Standard** - Officiële EcoFlow IoT API. Ondersteund door EcoFlow. Updates elke 10-30 seconden. Vereist Developer API-sleutels.\n\n**Enhanced** - Door de community ontwikkelde realtime verbinding. Updates elke ~3 seconden. Vereist de inloggegevens van je EcoFlow-app. Onofficieel - gebruik op eigen risico.",
         "data": {
           "mode": "Verbindingsmodus"
         }
@@ -26,7 +26,7 @@
       },
       "devices": {
         "title": "Apparaten selecteren",
-        "description": "Selecteer de EcoFlow-apparaten die je aan Home Assistant wilt toevoegen.\n\nEen apparaat met de markering \"not supported yet\" heeft hier geen parser en levert daarom alleen twee diagnostische sensoren. Het toch toevoegen is de moeite waard, want uit een diagnostische download ervan, bijgevoegd bij een GitHub-issue, wordt de ondersteuning voor een nieuw model opgebouwd. Je diagnostische download bevat de ruwe data van zo'n apparaat al, dus er hoeft vooraf niets te worden ingeschakeld.",
+        "description": "Selecteer de EcoFlow-apparaten die je aan Home Assistant wilt toevoegen.\n\nEen apparaat met de markering \"not supported yet\" heeft hier geen parser en levert daarom alleen twee diagnostische sensoren. Het toch toevoegen is de moeite waard, want uit een download van diagnostische gegevens ervan, bijgevoegd bij een GitHub-issue, wordt de ondersteuning voor een nieuw model opgebouwd. Je download van diagnostische gegevens bevat de ruwe data van zo'n apparaat al, dus er hoeft vooraf niets te worden ingeschakeld.",
         "data": {
           "devices": "Apparaten"
         }
@@ -81,25 +81,25 @@
       },
       "devices_app": {
         "title": "Apparaten selecteren",
-        "description": "Selecteer de EcoFlow-apparaten die je aan Home Assistant wilt toevoegen.\n\nEen apparaat met de markering \"not supported yet\" heeft hier geen parser en levert daarom alleen twee diagnostische sensoren. Het toch toevoegen is de moeite waard, want uit een diagnostische download ervan, bijgevoegd bij een GitHub-issue, wordt de ondersteuning voor een nieuw model opgebouwd. Schakel eerst de opname van diagnostische gegevens in de integratie-opties in en download daarna, want bij aanmelding met je account bevat de download die ruwe data niet vanzelf.",
+        "description": "Selecteer de EcoFlow-apparaten die je aan Home Assistant wilt toevoegen.\n\nEen apparaat met de markering \"not supported yet\" heeft hier geen parser en levert daarom alleen twee diagnostische sensoren. Het toch toevoegen is de moeite waard, want uit een download van diagnostische gegevens ervan, bijgevoegd bij een GitHub-issue, wordt de ondersteuning voor een nieuw model opgebouwd. Schakel eerst de opname van diagnostische gegevens in de integratie-opties in en download daarna, want bij aanmelding met je account bevat de download die ruwe data niet vanzelf.",
         "data": {
           "devices": "Apparaten"
         }
       }
     },
     "error": {
-      "cannot_connect": "Verbinding met de EcoFlow API is mislukt. Controleer je inloggegevens.",
+      "cannot_connect": "Kan geen verbinding maken met de EcoFlow API. Controleer je inloggegevens.",
       "invalid_auth": "Ongeldige toegangssleutel of geheime sleutel.",
       "no_devices": "Geen apparaten gevonden. Zorg dat de apparaten in de EcoFlow-app gekoppeld zijn.",
       "enhanced_login_failed": "Aanmelden in de Enhanced-modus is mislukt. Controleer het e-mailadres en wachtwoord van je EcoFlow-app.",
       "enhanced_decrypt_failed": "Ontsleutelen van de inloggegevens voor de Enhanced-modus is mislukt.",
-      "powerstream_requires_standard": "PowerStream vereist de Standard-modus met Developer API keys.",
+      "powerstream_requires_standard": "PowerStream vereist de Standard-modus met Developer API-sleutels.",
       "device_requires_enhanced": "Dit apparaat vereist de Enhanced-modus met je EcoFlow-account.",
       "unknown": "Er is een onverwachte fout opgetreden."
     },
     "abort": {
       "already_configured": "Dit EcoFlow-account is al geconfigureerd.",
-      "reauth_successful": "Opnieuw authenticeren is gelukt.",
+      "reauth_successful": "Herauthenticatie geslaagd.",
       "reconfigure_successful": "Inloggegevens zijn bijgewerkt."
     }
   },
@@ -114,13 +114,13 @@
           "raw_capture": "24 uur lang extra diagnostische gegevens opnemen"
         },
         "data_description": {
-          "devices": "Een apparaat selecteren is wat deze integratie ertoe brengt het uit te lezen. Een apparaat met de markering \"not supported yet\" heeft hier geen parser en levert daarom twee diagnostische sensoren en verder niets. Het geselecteerd laten is toch de moeite waard, want uit een diagnostische download ervan, bijgevoegd bij een GitHub-issue, wordt de ondersteuning voor een nieuw model opgebouwd. Je diagnostische download bevat de ruwe data van zo'n apparaat al, dus er hoeft vooraf niets te worden ingeschakeld.",
-          "raw_capture": "Bewaart meer van de ruwe berichten die je apparaten sturen, neemt elk apparaat op dat deze integratie nog niet ondersteunt, en legt vast welke instellingen de EcoFlow-app naar je apparaten schrijft zolang dit loopt. Dat laatste is hoe een bediening wordt gebouwd voor een model dat hier niemand bezit: de instelling één keer in de app wijzigen terwijl dit aanstaat, laat zien wat het apparaat accepteert. Alleen de moeite waard om in te schakelen als daar in een GitHub-issue om is gevraagd, want de gegevens zijn alleen nuttig als bijlage bij een diagnostische download. Er wordt nooit iets naar je apparaten gestuurd, en de opname stopt vanzelf na 24 uur."
+          "devices": "Een apparaat selecteren is wat deze integratie ertoe brengt het uit te lezen. Een apparaat met de markering \"not supported yet\" heeft hier geen parser en levert daarom twee diagnostische sensoren en verder niets. Het geselecteerd laten is toch de moeite waard, want uit een download van diagnostische gegevens ervan, bijgevoegd bij een GitHub-issue, wordt de ondersteuning voor een nieuw model opgebouwd. Je download van diagnostische gegevens bevat de ruwe data van zo'n apparaat al, dus er hoeft vooraf niets te worden ingeschakeld.",
+          "raw_capture": "Bewaart meer van de ruwe berichten die je apparaten sturen, neemt elk apparaat op dat deze integratie nog niet ondersteunt, en legt vast welke instellingen de EcoFlow-app naar je apparaten schrijft zolang dit loopt. Dat laatste is hoe een bedieningselement wordt gebouwd voor een model dat hier niemand bezit: de instelling één keer in de app wijzigen terwijl dit aanstaat, laat zien wat het apparaat accepteert. Alleen de moeite waard om in te schakelen als daar in een GitHub-issue om is gevraagd, want de gegevens zijn alleen nuttig als bijlage bij een download van diagnostische gegevens. Er wordt nooit iets naar je apparaten gestuurd, en de opname stopt vanzelf na 24 uur."
         }
       },
       "developer": {
         "title": "Developer API-inloggegevens",
-        "description": "De Standard-modus vereist Developer API keys van het EcoFlow IoT Developer Portal.",
+        "description": "De Standard-modus vereist Developer API-sleutels van het EcoFlow IoT Developer Portal.",
         "data": {
           "access_key": "Toegangssleutel",
           "secret_key": "Geheime sleutel"
@@ -143,18 +143,18 @@
           "raw_capture": "24 uur lang extra diagnostische gegevens opnemen"
         },
         "data_description": {
-          "devices": "Een apparaat selecteren is wat deze integratie ertoe brengt het uit te lezen. Een apparaat met de markering \"not supported yet\" heeft hier geen parser en levert daarom twee diagnostische sensoren en verder niets. Het geselecteerd laten is toch de moeite waard, want uit een diagnostische download ervan, bijgevoegd bij een GitHub-issue, wordt de ondersteuning voor een nieuw model opgebouwd. Schakel hieronder eerst de opname van diagnostische gegevens in en download daarna, want bij aanmelding met je account bevat de download die ruwe data niet vanzelf.",
-          "raw_capture": "Bewaart meer van de ruwe berichten die je apparaten sturen, neemt elk apparaat op dat deze integratie nog niet ondersteunt, en legt vast welke instellingen de EcoFlow-app naar je apparaten schrijft zolang dit loopt. Dat laatste is hoe een bediening wordt gebouwd voor een model dat hier niemand bezit: de instelling één keer in de app wijzigen terwijl dit aanstaat, laat zien wat het apparaat accepteert. Alleen de moeite waard om in te schakelen als daar in een GitHub-issue om is gevraagd, want de gegevens zijn alleen nuttig als bijlage bij een diagnostische download. Er wordt nooit iets naar je apparaten gestuurd, en de opname stopt vanzelf na 24 uur."
+          "devices": "Een apparaat selecteren is wat deze integratie ertoe brengt het uit te lezen. Een apparaat met de markering \"not supported yet\" heeft hier geen parser en levert daarom twee diagnostische sensoren en verder niets. Het geselecteerd laten is toch de moeite waard, want uit een download van diagnostische gegevens ervan, bijgevoegd bij een GitHub-issue, wordt de ondersteuning voor een nieuw model opgebouwd. Schakel hieronder eerst de opname van diagnostische gegevens in en download daarna, want bij aanmelding met je account bevat de download die ruwe data niet vanzelf.",
+          "raw_capture": "Bewaart meer van de ruwe berichten die je apparaten sturen, neemt elk apparaat op dat deze integratie nog niet ondersteunt, en legt vast welke instellingen de EcoFlow-app naar je apparaten schrijft zolang dit loopt. Dat laatste is hoe een bedieningselement wordt gebouwd voor een model dat hier niemand bezit: de instelling één keer in de app wijzigen terwijl dit aanstaat, laat zien wat het apparaat accepteert. Alleen de moeite waard om in te schakelen als daar in een GitHub-issue om is gevraagd, want de gegevens zijn alleen nuttig als bijlage bij een download van diagnostische gegevens. Er wordt nooit iets naar je apparaten gestuurd, en de opname stopt vanzelf na 24 uur."
         }
       }
     },
     "error": {
-      "cannot_connect": "Verbinding met de EcoFlow API is mislukt.",
+      "cannot_connect": "Kan geen verbinding maken met de EcoFlow API.",
       "invalid_auth": "Ongeldige API-inloggegevens.",
       "enhanced_login_failed": "Aanmelden in de Enhanced-modus is mislukt.",
       "enhanced_decrypt_failed": "Ontsleutelen van de Enhanced-modus-inloggegevens is mislukt.",
       "no_devices": "Selecteer minstens één apparaat.",
-      "powerstream_requires_standard": "PowerStream vereist de Standard-modus met Developer API keys.",
+      "powerstream_requires_standard": "PowerStream vereist de Standard-modus met Developer API-sleutels.",
       "device_requires_enhanced": "Dit apparaat vereist de Enhanced-modus met je EcoFlow-account.",
       "unknown": "Er is een onverwachte fout opgetreden."
     }
@@ -463,7 +463,7 @@
         }
       },
       "pcs_power_factor": {
-        "name": "Arbeidsfactor"
+        "name": "Vermogensfactor"
       },
       "ems_feed_power_limit_w": {
         "name": "Limiet terugleververmogen"
@@ -591,10 +591,10 @@
         "name": "AC-uitgangsstroom"
       },
       "solar_in_amp_a": {
-        "name": "Zonnestroom"
+        "name": "Stroom zonne-ingang"
       },
       "solar2_in_amp_a": {
-        "name": "Zonnestroom 2"
+        "name": "Stroom zonne-ingang 2"
       },
       "batt_temp_c": {
         "name": "Batterijtemperatuur"
@@ -1241,21 +1241,21 @@
       "wifi_status": {
         "name": "WiFi-status",
         "state": {
-          "disconnected": "Niet verbonden",
+          "disconnected": "Verbroken",
           "connected": "Verbonden"
         }
       },
       "ethernet_status": {
         "name": "Ethernet-status",
         "state": {
-          "disconnected": "Niet verbonden",
+          "disconnected": "Verbroken",
           "connected": "Verbonden"
         }
       },
       "cellular_status": {
         "name": "4G-status",
         "state": {
-          "disconnected": "Niet verbonden",
+          "disconnected": "Verbroken",
           "connected": "Verbonden"
         }
       },
@@ -1545,7 +1545,7 @@
         "name": "Uitgangsenergie omvormer"
       },
       "plug_total_w": {
-        "name": "Vermogen slimme stekkers"
+        "name": "Vermogen Smart Plugs"
       },
       "permanent_watts_w": {
         "name": "Aangepast verbruiksvermogen"
@@ -1615,7 +1615,7 @@
         "name": "Netto-energie fase C"
       },
       "grid_power_factor": {
-        "name": "Arbeidsfactor"
+        "name": "Vermogensfactor"
       },
       "schedule_1_window": {
         "name": "Tijdvenster schema 1"
@@ -1667,7 +1667,7 @@
         "name": "Omgevingstemperatuur"
       },
       "humi_ambient_pct": {
-        "name": "Omgevingsvochtigheid"
+        "name": "Omgevingsluchtvochtigheid"
       },
       "ac_input_power_w": {
         "name": "AC-ingangsvermogen"
@@ -1747,7 +1747,7 @@
         "name": "AFCI-storing string 2"
       },
       "battery_line_off": {
-        "name": "Batterijlijn losgekoppeld"
+        "name": "Batterijverbinding verbroken"
       },
       "battery_relay_fault": {
         "name": "Storing batterijrelais"
@@ -1931,7 +1931,7 @@
         "name": "Drempel zonne-overschot"
       },
       "standby_timeout": {
-        "name": "Stand-by time-out"
+        "name": "Stand-by-time-out"
       },
       "car_standby_timeout": {
         "name": "Time-out 12V-poort"
@@ -1964,7 +1964,7 @@
         "name": "AC 2 afschakelniveau"
       },
       "port_priority_dc_soc": {
-        "name": "DC afschakelniveau"
+        "name": "DC-afschakelniveau"
       },
       "max_charge_soc_pct": {
         "name": "Maximale laad-SoC"
@@ -2015,7 +2015,7 @@
         "name": "Ventilatorsnelheid"
       },
       "target_humidity_pct": {
-        "name": "Doelvochtigheid"
+        "name": "Doelluchtvochtigheid"
       },
       "screen_brightness_pct": {
         "name": "Schermhelderheid"
@@ -2086,7 +2086,7 @@
         }
       },
       "dc_idle_shutdown": {
-        "name": "12 V uitschakeling bij inactiviteit",
+        "name": "12V-uitschakeling bij inactiviteit",
         "state": {
           "30_minutes": "30 min",
           "1_hour": "1 u",
@@ -2186,7 +2186,7 @@
       "message": "De laadpaal heeft zijn adres nog niet gerapporteerd. Wacht op zijn volgende instellingenrapport."
     },
     "powerpulse_sibling_missing": {
-      "message": "De opdracht voor de laadpaal loopt via de PowerOcean van hetzelfde account, en deze invoer bevat er geen of meer dan één."
+      "message": "De opdracht voor de laadpaal loopt via de PowerOcean van hetzelfde account, en deze config-entry bevat er geen of meer dan één."
     },
     "powerpulse_sibling_offline": {
       "message": "De PowerOcean die de opdracht voor de laadpaal doorgeeft, is niet verbonden."
