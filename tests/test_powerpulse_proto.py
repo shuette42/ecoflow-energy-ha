@@ -283,3 +283,119 @@ def test_maximum_current_follows_the_configured_limit_on_an_idle_wallbox() -> No
         assert result["ev_charge_status"] == "available"
         assert result["ev_phase_mode"] == "single_phase"
         assert "ev_session_energy_wh" not in result
+
+
+# --- The second prefix, C374 (#7, recording of 2026-09-11) ---------------
+#
+# Six of the eight HeartBeats kept from a 30-minute recording of several
+# short charging sessions (four session starts in the kept frames: one drawing
+# 16 A per phase from the grid, the others solar-controlled at 9.5 to 12.4 A
+# setpoints) on a wallbox that reports under `C374`. The two frames the
+# builder leaves out read as an identifier run in their masked bytes; the one
+# at 13:14:40, status `preparing` with every session field at 0, is covered
+# by the `_finalize` test below instead.
+
+C374_FIXTURE = FIXTURE.with_name("c374_frames_20260911.json")
+
+
+def _c374_results() -> list[tuple[str, dict[str, Any]]]:
+    out = []
+    for frame in json.loads(C374_FIXTURE.read_text())["frames"]:
+        result = parse_powerpulse_message(bytes.fromhex(frame["hex"]))
+        assert result is not None, frame["ts_iso"]
+        out.append((frame["ts_iso"], result))
+    return out
+
+
+def test_c374_frames_decode_with_the_c376_field_map() -> None:
+    """Same envelope, same fields, same scaling: every C374 HeartBeat parses
+    and the lifetime identity `44 - 43 == 42` holds on all of them.
+
+    The floor is the fixture's own frame count, so a fixture rebuilt with
+    fewer frames fails here rather than passing on a smaller set.
+    """
+    results = _c374_results()
+    assert len(results) == 6
+    for ts_iso, result in results:
+        assert result["ev_max_current_a"] == 20.0, ts_iso
+        assert result["ev_phase_mode"] == "three_phase", ts_iso
+        assert (
+            result["ev_total_energy_wh"] - result["ev_session_start_energy_wh"]
+            == result["ev_session_energy_wh"]
+        ), ts_iso
+    totals = [r["ev_total_energy_wh"] for _, r in results]
+    assert totals == [688, 1651, 2273, 2882, 3432, 3629]
+
+
+def test_c374_power_is_below_and_near_the_per_phase_sum() -> None:
+    """The three charging frames: 11.4 kW at 15.9 A, 8.7 kW at 12.1 A and
+    6.6 kW at 9.2 A, each just under the sum of the three phase products.
+    """
+    checked = 0
+    for ts_iso, result in _c374_results():
+        currents = (
+            result["ev_current_l1_a"],
+            result["ev_current_l2_a"],
+            result["ev_current_l3_a"],
+        )
+        if max(currents) <= 0.5:
+            continue
+        voltages = (
+            result["ev_voltage_l1_v"],
+            result["ev_voltage_l2_v"],
+            result["ev_voltage_l3_v"],
+        )
+        phase_sum = sum(v * i for v, i in zip(voltages, currents, strict=True))
+        assert 0.9 * phase_sum < result["ev_charge_power_w"] < phase_sum, ts_iso
+        assert result["ev_charge_status"] == "charging", ts_iso
+        checked += 1
+    assert checked == 3
+
+
+def test_c374_reports_preparing_between_sessions() -> None:
+    """Plug status 2 is `preparing`: cable attached, nothing flowing.
+
+    Neither C376 recording ever showed it. In the C374 recording it sits
+    between two sessions at 13:37:00 with power 0, currents at the noise
+    floor and the session status at idle, and the next session starts six
+    minutes later. Before the entry the parser dropped the value and the
+    sensor kept reading `finishing` from the session before.
+    """
+    by_ts = {ts[11:19]: r for ts, r in _c374_results()}
+    result = by_ts["13:37:00"]
+    assert result["ev_charge_status"] == "preparing"
+    assert result["ev_session_status"] == "idle"
+    assert result["ev_charge_power_w"] == 0.0
+    # The session fields still describe the session that just ended, the
+    # same way they do in `finishing`; only `available` withholds them.
+    assert result["ev_session_energy_wh"] == 916
+    assert result["ev_session_start_ts"] == 1789133366
+    statuses = [r["ev_charge_status"] for _, r in _c374_results()]
+    assert statuses.count("preparing") == 1
+    assert statuses.count("charging") == 3
+    assert statuses.count("finishing") == 2
+
+
+def test_zero_session_start_timestamp_is_withheld_not_published() -> None:
+    """A start timestamp of 0 never reaches the timestamp sensor.
+
+    The first C374 frame (13:14:40, left out of the fixture by the
+    identifier-run gate) carries status `preparing` with fields 40 to 43
+    all 0. Status 2 does not withhold the session fields, so without the
+    guard the sensor would show 1970-01-01. The other three zeros are real
+    readings and stay.
+    """
+    result = _finalize(
+        {
+            "_plug_status_raw": 2,
+            "_session_start_ts_raw": 0,
+            "_session_duration_s_raw": 0,
+            "_session_energy_wh_raw": 0,
+            "_session_start_energy_wh_raw": 0,
+        }
+    )
+    assert result["ev_charge_status"] == "preparing"
+    assert "ev_session_start_ts" not in result
+    assert result["ev_session_duration_s"] == 0
+    assert result["ev_session_energy_wh"] == 0
+    assert result["ev_session_start_energy_wh"] == 0

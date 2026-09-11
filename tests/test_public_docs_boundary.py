@@ -105,7 +105,7 @@ FORBIDDEN: dict[str, re.Pattern[str]] = {
     "internal tooling name": re.compile(_TOOLING_NAMES),
     "em or en dash": re.compile("[\u2013\u2014]"),
     "device serial": re.compile(
-        r"\b(?:HJ3[0-9A-Z]|HW5[0-9]|R3[357][0-9]|BK[0-9]{2}|C376|D3M1|D3N1"
+        r"\b(?:HJ3[0-9A-Z]|HW5[0-9]|R3[357][0-9]|BK[0-9]{2}|C37[46]|D3M1|D3N1"
         r"|P321|P231|AC71|ES2[12]|RE1[17]|J32[0-9A-Z]|HZ31|S02F)[A-Z0-9]{12}\b"
     ),
 }
