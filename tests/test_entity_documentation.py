@@ -57,6 +57,7 @@ DEF_CLASSES: dict[str, type] = {
     "switches": const.EcoFlowSwitchDef,
     "numbers": const.EcoFlowNumberDef,
     "selects": const.EcoFlowSelectDef,
+    "buttons": const.EcoFlowButtonDef,
 }
 
 # Longest suffix first, so "_BINARY_SENSORS" is tried before "_SENSORS" (a
@@ -67,6 +68,7 @@ _SUFFIX_TO_PLATFORM: dict[str, str] = {
     "_SWITCHES": "switches",
     "_NUMBERS": "numbers",
     "_SELECTS": "selects",
+    "_BUTTONS": "buttons",
 }
 _SUFFIXES_LONGEST_FIRST = sorted(_SUFFIX_TO_PLATFORM, key=len, reverse=True)
 
@@ -150,6 +152,7 @@ _PLATFORM_KEYWORDS: tuple[tuple[str, str], ...] = (
     ("switch", "switches"),
     ("number", "numbers"),
     ("select", "selects"),
+    ("button", "buttons"),
     ("sensor", "sensors"),  # after "binary sensor" - would also match it
 )
 
@@ -159,6 +162,7 @@ _TYPE_COLUMN_MAP: dict[str, str] = {
     "switch": "switches",
     "number": "numbers",
     "select": "selects",
+    "button": "buttons",
     "climate": "climate",
 }
 

@@ -68,6 +68,7 @@ BINARY_SENSOR_DEFS = _collect(r"[A-Z0-9]+_BINARY_SENSORS")
 SWITCH_DEFS = _collect(r"[A-Z0-9]+_SWITCHES")
 NUMBER_DEFS = _collect(r"[A-Z0-9]+_NUMBERS")
 SELECT_DEFS = _collect(r"[A-Z0-9]+_SELECTS")
+BUTTON_DEFS = _collect(r"[A-Z0-9]+_BUTTONS")
 
 PLATFORM_KEYS = {
     "sensor": _labels(r"[A-Z0-9]+_SENSORS") | DIAGNOSTIC_SENSOR_KEYS,
@@ -75,6 +76,7 @@ PLATFORM_KEYS = {
     "switch": _labels(r"[A-Z0-9]+_SWITCHES"),
     "number": _labels(r"[A-Z0-9]+_NUMBERS"),
     "select": _labels(r"[A-Z0-9]+_SELECTS"),
+    "button": _labels(r"[A-Z0-9]+_BUTTONS"),
 }
 
 

@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from ..ecoflow.energy_integrator import EnergyIntegrator
     from ..ecoflow.frame_capture import TypedFrameBuffer
     from ..ecoflow.iot_api import IoTApiClient
-    from .core import DeviceSnapshot
+    from .core import DeviceSnapshot, EcoFlowDeviceCoordinator, WallboxActionPending
 
 
 class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
@@ -50,6 +50,8 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
     _iot_api: IoTApiClient | None
     _config_writes_sent: dict[int, float]
     _device_config_lock: asyncio.Lock
+    _wallbox_action_lock: asyncio.Lock
+    _wallbox_action_pending: WallboxActionPending | None
     _powerocean_soc_pending: tuple[int, int] | None
     _powerocean_soc_pending_revision: int
     _powerocean_soc_debounce_unsub: asyncio.TimerHandle | None
@@ -107,6 +109,8 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
 
     def set_device_value(self, key: str, value: Any) -> None: ...
 
+    def powerocean_sibling(self) -> EcoFlowDeviceCoordinator | None: ...
+
     def _log_event(self, event_type: str, detail: str) -> None: ...
 
     def latch_schedule_armed(self, state_key: str, armed: bool) -> None: ...
@@ -124,6 +128,8 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
     def _apply_data(self, parsed: dict[str, Any]) -> None: ...
 
     def _resolve_soc(self, parsed: dict[str, Any]) -> None: ...
+
+    def _resolve_wallbox_action(self, parsed: dict[str, Any]) -> None: ...
 
     def _integrate_energy(self, parsed: dict[str, Any]) -> None: ...
 

@@ -100,8 +100,28 @@ def _leaks(raw: bytes) -> list[str]:
         findings.append("unmasked UUID")
     if _MAC.search(text):
         findings.append("unmasked MAC")
-    for run in _RUN.findall(text):
+    # A serial masked to `X` and then re-masked with the region's key reads
+    # as a run of `X ^ key` on the wire, which for many keys is itself
+    # alphanumeric (`0x36` gives `n`, `0x1e` gives `F`). The product
+    # sanitizer's own output on the 2026-08-24 settings report tripped this
+    # pass that way on 2026-09-11. Such a run is skipped here only when its
+    # plaintext under the region's key is entirely the mask byte. A declared
+    # key is not proof of a mask (a header can set the flag and send plain
+    # bytes), so a run whose plaintext is anything else stays a finding, and
+    # a region without a key is scanned on the wire like everything else.
+    keyed_regions = [
+        region for region in _encrypted_regions(raw) if region.key is not None
+    ]
+    for match in _RUN.finditer(text):
+        run = match.group()
         if run in _PLACEHOLDERS:
+            continue
+        if any(
+            region.start <= match.start()
+            and match.end() <= region.end
+            and set(_xor(raw[match.start() : match.end()], region.key)) == {ord("X")}
+            for region in keyed_regions
+        ):
             continue
         if set(run) != {"X"}:
             findings.append(f"unmasked run {run!r}")
@@ -325,3 +345,63 @@ def test_the_gate_is_quiet_without_a_serial() -> None:
     frame = _wrap_as_record(record)
 
     assert _leaks(frame) == []
+
+
+_RUN_DATA_SYNC_FIXTURE = (
+    FIXTURE_ROOT / "powerpulse" / "c376_run_data_sync_20260824.json"
+)
+
+
+def _run_data_sync_frame() -> bytes:
+    """The first PowerPulse 2 settings report on file, masked with `X` under
+    the XOR mask; on the wire the masked serial reads as sixteen `n`."""
+    frames = json.loads(_RUN_DATA_SYNC_FIXTURE.read_text())["frames"]
+    return bytes.fromhex(frames[0]["hex"])
+
+
+def test_a_masked_serial_under_a_keyed_region_is_not_a_wire_leak() -> None:
+    """Negative control: the product sanitizer's own output must pass.
+
+    `X ^ 0x36` is `n`, so the wire bytes of this frame carry a sixteen-`n`
+    run where the serial was. The region's plaintext is what gets checked,
+    and there the run is `X` * 16.
+    """
+    raw = _run_data_sync_frame()
+    assert b"n" * 16 in raw, "the control frame no longer shows the shape"
+    region = next(r for r in _encrypted_regions(raw) if r.key is not None)
+    assert b"X" * 16 in _xor(raw[region.start : region.end], region.key)
+    assert _leaks(raw) == []
+
+
+def test_a_plain_serial_in_a_region_that_only_declares_a_key_is_a_leak() -> None:
+    """Positive control for the wire skip itself: a header that declares the
+    mask but sends plain bytes carries the serial on the wire. Its plaintext
+    under the key is not the mask byte, so the skip must not apply and the
+    wire scan reports it. Without the skip the result is the same; with an
+    unconditional skip it would be empty.
+    """
+    key = 0x1E
+    serial = b"C376TESTPLAIN001"
+    header = bytearray()
+    header.extend(encode_field_varint(6, 1))  # enc_type = XOR, declared
+    header.extend(encode_field_varint(14, key))  # seq
+    header.extend(encode_field_bytes(1, serial))  # pdata NOT masked
+    frame = encode_field_bytes(1, bytes(header))
+    region = next(r for r in _encrypted_regions(frame) if r.key is not None)
+    assert region.start <= frame.index(serial) < region.end
+    assert any("unmasked run" in f for f in _leaks(frame)), _leaks(frame)
+
+
+def test_a_real_serial_under_a_keyed_region_is_still_a_leak() -> None:
+    """Positive control: skipping the wire scan inside a keyed region must
+    not let an unmasked serial hide there. The same frame with a serial-shaped
+    run written into the plaintext and re-masked is reported under the mask.
+    """
+    raw = bytearray(_run_data_sync_frame())
+    region = next(r for r in _encrypted_regions(bytes(raw)) if r.key is not None)
+    plain = bytearray(_xor(bytes(raw[region.start : region.end]), region.key))
+    at = plain.index(b"X" * 16)
+    plain[at : at + 16] = b"C376TEST00000001"
+    raw[region.start : region.end] = _xor(bytes(plain), region.key)
+    findings = _leaks(bytes(raw))
+    assert any("under the mask" in finding for finding in findings), findings

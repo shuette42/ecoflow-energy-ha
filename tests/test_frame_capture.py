@@ -1383,6 +1383,76 @@ class TestMaskingDoesNotCorruptRealFrames:
         assert checked["stream"] >= 320, checked
         assert checked["stream_ac5000"] >= 1050, checked
 
+    def test_sanitizing_the_products_own_output_again_changes_nothing(
+        self,
+    ) -> None:
+        """A masked region must survive a second pass unchanged.
+
+        `X ^ key` is alphanumeric for many keys, so on the wire a masked
+        serial can spell a sixteen-character run that the plain passes read
+        as a serial and overwrite, and under the mask that overwrite is no
+        longer `X`. Measured 2026-09-11 on the PowerPulse 2 settings-report
+        fixture: two of nine frames (keys 0x1e and 0x0a, wire runs `F` and
+        `R`) came back corrupted. Every frame of that fixture is the control.
+        """
+        import json
+        from pathlib import Path
+
+        fixture = (
+            Path(__file__).parent
+            / "fixtures"
+            / "powerpulse"
+            / "c376_run_data_sync_20260824.json"
+        )
+        frames = json.loads(fixture.read_text())["frames"]
+        wire_runs_seen = 0
+        for frame in frames:
+            raw = bytes.fromhex(frame["hex"])
+            if re.search(rb"[A-Z0-9]{12,}", raw):
+                wire_runs_seen += 1
+            assert sanitize_frame(raw, []) == raw
+        # The control only means something if the shape is present.
+        assert wire_runs_seen >= 2, wire_runs_seen
+
+    def test_a_wire_run_over_unmasked_plaintext_is_still_rewritten(self) -> None:
+        """Negative control for the restore above: it is limited to bytes whose
+        plaintext already carries the mask byte. Plaintext `y` under key 0x3e
+        reads as `G` on the wire; the plain passes leave lowercase alone and
+        rewrite the uppercase wire run, and that rewrite must stay.
+        """
+        key = 0x3E
+        plain = b"y" * 16
+        header = bytearray()
+        header.extend(encode_field_varint(6, 1))  # enc_type = XOR
+        header.extend(encode_field_varint(14, key))  # seq
+        header.extend(encode_field_bytes(1, _xor(plain, key)))  # pdata
+        frame = encode_field_bytes(1, bytes(header))
+        assert b"G" * 16 in frame
+        sanitized = sanitize_frame(frame, [])
+        assert b"X" * 16 in sanitized
+        assert b"G" * 16 not in sanitized
+
+    def test_a_plain_serial_in_a_region_that_only_declares_a_key_stays_masked(
+        self,
+    ) -> None:
+        """Negative control for the restore: a header that declares the mask
+        but sends plain bytes carries the serial on the wire. The raw pass
+        masks it; the restore must not hand any byte of it back, even the
+        ones that equal `X ^ key` by coincidence (with key 0x1e, `F`), which
+        a per-byte restore did (review finding of 2026-09-11).
+        """
+        key = 0x1E
+        serial = b"C376TESTPLAINFF1"  # two F, the byte `X ^ 0x1e` spells
+        header = bytearray()
+        header.extend(encode_field_varint(6, 1))  # enc_type = XOR, declared
+        header.extend(encode_field_varint(14, key))  # seq
+        header.extend(encode_field_bytes(1, serial))  # pdata NOT masked
+        frame = encode_field_bytes(1, bytes(header))
+        sanitized = sanitize_frame(frame, [])
+        assert b"X" * 16 in sanitized
+        assert serial not in sanitized
+        assert b"F" not in sanitized[frame.index(serial) : frame.index(serial) + 16]
+
     def test_no_identifier_survives_under_the_mask(self) -> None:
         """The guard for PLAN-128: an encrypted region must be clean too.
 

@@ -1,0 +1,104 @@
+{
+ "note": "PowerPulse 2 (C376) EDevRunDataSync 241/44 frames from the wallbox's own property topic, 2026-08-24 settings session; pdata masked with seq & 0xFF on the wire; the 16-byte wallbox serial inside dev_info replaced by sixteen X, the repository's mask byte, before re-masking. Fields 1 (dev_addr 215) and 2 (serial) of pdata.f1.f1 are the accessory descriptor the app copies into 241/100 writes; field 3 is present here and absent in every captured write.",
+ "frames": [
+  {
+   "ts_iso": "2026-08-24T13:43:30.816166+00:00",
+   "topic": "property",
+   "cmds": [
+    {
+     "cmd_func": 241,
+     "cmd_id": 44
+    }
+   ],
+   "hex": "0a88010a643c543c213ee13724266e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e2e37147174733e2626341696371c263c32030401022432030401022e391639060a0e36760a7c383c3624362c3614361e3604360e369c373037372f2f3436cc373c3e3626362e3616361e361002182020013001380340f101482c5064580170b68ad7027881b601800103880101"
+  },
+  {
+   "ts_iso": "2026-08-24T13:45:41.097387+00:00",
+   "topic": "property",
+   "cmds": [
+    {
+     "cmd_func": 241,
+     "cmd_id": 44
+    }
+   ],
+   "hex": "0a8b010a691479140916c91f0c0e46464646464646464646464646464646061f3c5d141e141e141e0e1d061d3e1e361e2e1f240e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e561e4ec892b3ca1846c892b3ca187ef290b3ca1876881c6e1d641d1e1e1e9e1f1ee61f1f9b1c2c191a1f1002182020013001380340f101482c5069709e8cd7027881b601800103880101"
+  },
+  {
+   "ts_iso": "2026-08-24T13:47:50.639822+00:00",
+   "topic": "property",
+   "cmds": [
+    {
+     "cmd_func": 241,
+     "cmd_id": 44
+    }
+   ],
+   "hex": "0a88010a640068001d02dd0b181a52525252525252525252525252525252120b284d484f021a1a082aaa0b201a000e3f383d3e180e3f383d3e12052a053a36320a4a364004000a180a100a280a220a380a320aa00b0c0b0b1313080af00b00020a1a0a120a2a0a220a1002182020013001380340f101482c50645801708a8ed7027881b601800103880101"
+  },
+  {
+   "ts_iso": "2026-08-24T13:50:01.933248+00:00",
+   "topic": "property",
+   "cmds": [
+    {
+     "cmd_func": 241,
+     "cmd_id": 44
+    }
+   ],
+   "hex": "0a8f010a6bf291f2eff02ff9eae8a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0e0f9dab6bab4f0e8e8fcd858f9d2e8f2fccdcacfcceafccdcacfcce0f7d8f7c8c4c0f8b8c4b2f6f2f8eaf8e2f8daf8d0f8caf8c0f852f9fef9f9e1e1faf802f9e9f03e13492cfee8f9e04812f9d830f9d0f81002182020013001380340f101482c506b580170f88fd7027881b601800103880101"
+  },
+  {
+   "ts_iso": "2026-08-24T13:52:10.465068+00:00",
+   "topic": "property",
+   "cmds": [
+    {
+     "cmd_func": 241,
+     "cmd_id": 44
+    }
+   ],
+   "hex": "0a88010a64f29af2eff02ff9eae8a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0e0f9dabfbabdf0e8e8fad858f9d2e8f2fccdcacfcceafccdcacfcce0f7d8f7c8c4c0f8b8c4b2f6f2f8eaf8e2f8daf8d0f8caf8c0f852f9fef9f9e1e1faf802f9f2f0f8e8f8e0f8d8f8d0f81002182020013001380340f101482c5064580170f891d7027881b601800103880101"
+  },
+  {
+   "ts_iso": "2026-08-24T13:54:20.157958+00:00",
+   "topic": "property",
+   "cmds": [
+    {
+     "cmd_func": 241,
+     "cmd_id": 44
+    }
+   ],
+   "hex": "0a88010a64fa92fae7f827f1e2e0a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8e8f1d2b7b2b5f8e0e0f2d050f1dae0faf4c5c2c7c4e2f4c5c2c7c4e8ffd0ffc0ccc8f0b0ccbafefaf0e2f0eaf0d2f0d8f0c2f0c8f05af1f6f1f1e9e9f2f00af1faf8f0e0f0e8f0d0f0d8f01002182020013001380340f101482c5064580170f093d7027881b601800103880101"
+  },
+  {
+   "ts_iso": "2026-08-24T13:56:29.778005+00:00",
+   "topic": "property",
+   "cmds": [
+    {
+     "cmd_func": 241,
+     "cmd_id": 44
+    }
+   ],
+   "hex": "0a88010a64e880e8f5ea35e3f0f2babababababababababababababababafae3c0a5a0a7eaf2f2e0c242e3c8f2e8e6d7d0d5d6f0e6d7d0d5d6faedc2edd2dedae2a2dea8ece8e2f0e2f8e2c0e2cae2d0e2dae248e3e4e3e3fbfbe0e218e3e8eae2f2e2fae2c2e2cae21002182020013001380340f101482c5064580170e295d7027881b601800103880101"
+  },
+  {
+   "ts_iso": "2026-08-24T13:58:39.344049+00:00",
+   "topic": "property",
+   "cmds": [
+    {
+     "cmd_func": 241,
+     "cmd_id": 44
+    }
+   ],
+   "hex": "0a88010a64dfb7dfc2dd02d4c7c58d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8dcdd4f7929790ddc5c5d7f575d4ffc5dfd1e0e7e2e1c7d1e0e7e2e1cddaf5dae5e9edd795e99fdbdfd5c7d5cfd5f7d5fdd5e7d5edd57fd4d3d4d4ccccd7d52fd4dfddd5c5d5cdd5f5d5fdd51002182020013001380340f101482c5064580170d597d7027881b601800103880101"
+  },
+  {
+   "ts_iso": "2026-08-24T13:59:19.958536+00:00",
+   "topic": "property",
+   "cmds": [
+    {
+     "cmd_func": 241,
+     "cmd_id": 44
+    }
+   ],
+   "hex": "0a88010a642c442c312ef12734367e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e3e27046164632e3636240686270c362c22131411123422131411123e290629161a1e26661a6c282c2634263c2604260e2614261e268c272027273f3f2426dc272c2e2636263e2606260e261002182020013001380340f101482c5064580170a698d7027881b601800103880101"
+  }
+ ]
+}

@@ -2144,6 +2144,14 @@
           "never": "Never"
         }
       }
+    },
+    "button": {
+      "ev_start_charging": {
+        "name": "Wallbox Start Charging"
+      },
+      "ev_stop_charging": {
+        "name": "Wallbox Stop Charging"
+      }
     }
   },
   "exceptions": {
@@ -2161,6 +2169,27 @@
     },
     "set_value_rejected": {
       "message": "{entity} cannot be set to that value: {reason}"
+    },
+    "powerpulse_action_in_progress": {
+      "message": "A start or stop for this wallbox is still waiting for the device to confirm."
+    },
+    "powerpulse_action_not_confirmed": {
+      "message": "The wallbox did not report the requested state within the time allowed. Its sensors show what it reports."
+    },
+    "powerpulse_action_not_delivered": {
+      "message": "The wallbox command did not reach the PowerOcean."
+    },
+    "powerpulse_action_state": {
+      "message": "The wallbox reports {status}, which does not allow this action."
+    },
+    "powerpulse_descriptor_missing": {
+      "message": "The wallbox has not reported its address yet. Wait for its next settings report."
+    },
+    "powerpulse_sibling_missing": {
+      "message": "The wallbox command travels through the PowerOcean of the same account, and this entry holds none or more than one."
+    },
+    "powerpulse_sibling_offline": {
+      "message": "The PowerOcean that carries the wallbox command is not connected."
     }
   }
 }

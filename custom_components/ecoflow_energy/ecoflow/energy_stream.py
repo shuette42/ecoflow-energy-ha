@@ -8,6 +8,7 @@ Reverse-engineered from EcoFlow Portal JavaScript bundle.
 """
 
 import time
+from typing import Literal
 
 from .parsers.powerocean_proto import SCHEDULE_MAX_INDEX
 from .proto_encoding import (
@@ -182,6 +183,7 @@ def _build_powerocean_set_envelope(
     product_id: int | None = None,
     version: int = 3,
     source: str = "ios",
+    cmd_func: int = 96,
 ) -> bytes:
     """Build the PowerOcean SET envelope around a pre-encoded inner pdata.
 
@@ -226,6 +228,11 @@ def _build_powerocean_set_envelope(
             first written for came from an iOS client, the scheduled-task
             capture from an Android one. Nothing shows the device reading it,
             but matching the capture removes a variable.
+        cmd_func: Field 8. 96 for every PowerOcean SET command this envelope
+            was written for. The PowerPulse 2 start/stop command addresses
+            the wallbox accessory through the same PowerOcean set topic and
+            carries 241 here instead (four app frames, PLAN-115 section 1) -
+            the default keeps every existing PowerOcean write byte-identical.
     """
     if seq == 0:
         seq = int(time.time() * 1000) & 0x7FFFFFFF
@@ -238,7 +245,7 @@ def _build_powerocean_set_envelope(
     header.extend(encode_field_varint(5, 1))  # d_dest
     if check_type is not None:
         header.extend(encode_field_varint(7, check_type))  # check_type
-    header.extend(encode_field_varint(8, 96))  # cmd_func
+    header.extend(encode_field_varint(8, cmd_func))  # cmd_func
     header.extend(encode_field_varint(9, cmd_id))  # cmd_id
     header.extend(encode_field_varint(10, len(pdata)))  # data_len
     header.extend(encode_field_varint(11, 1))  # need_ack
@@ -252,6 +259,48 @@ def _build_powerocean_set_envelope(
         header.extend(encode_field_bytes(25, device_sn.encode("ascii")))
 
     return encode_field_bytes(1, bytes(header))
+
+
+def build_powerpulse_charge_action_payload(
+    action: Literal["start", "stop"],
+    dev_addr: int,
+    dev_sn: str,
+    seq: int = 0,
+) -> bytes:
+    """Build EDevOnOffSet (241/100): the PowerPulse 2 start/stop command.
+
+    Sent on the PowerOcean's own set topic, addressed to the wallbox
+    accessory by its bus address and serial (`dev_info`, fields 1 and 2
+    only - the settings report's `dev_info` carries a third field that no
+    captured write has). `on_off_set` (field 2 of `pdata`) is 1 for stop,
+    2 for start. Byte-for-byte from the four app frames of one recording
+    of a real charging session being stopped and started twice (PLAN-136,
+    ADR-009 decision 1). The frames carry no device serial
+    (field 25) and no product id (field 15) at the envelope level, so
+    neither is passed to `_build_powerocean_set_envelope` here.
+
+    Args:
+        action: "start" or "stop".
+        dev_addr: The wallbox's bus address as reported by the wallbox's
+            own settings message (`EDevRunDataSync`, 241/44) - 215 on every
+            capture on file, never a constant assumed by this function.
+        dev_sn: The wallbox's 16-character serial, from the same report.
+        seq: Sequence number. Default 0 generates from timestamp.
+    """
+    if action not in ("start", "stop"):
+        raise ValueError(f"action must be 'start' or 'stop', got {action!r}")
+    if len(dev_sn) != 16 or not dev_sn.isascii() or not dev_sn.isalnum():
+        raise ValueError(
+            f"dev_sn must be 16 alphanumeric ASCII characters, got {dev_sn!r}"
+        )
+
+    dev_info = encode_field_varint(1, dev_addr) + encode_field_bytes(
+        2, dev_sn.encode("ascii")
+    )
+    pdata = encode_field_bytes(1, dev_info) + encode_field_varint(
+        2, 1 if action == "stop" else 2
+    )
+    return _build_powerocean_set_envelope(pdata, cmd_id=100, seq=seq, cmd_func=241)
 
 
 def build_work_mode_set_payload(work_mode: int, seq: int = 0) -> bytes:

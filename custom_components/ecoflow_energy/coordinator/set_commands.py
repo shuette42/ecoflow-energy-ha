@@ -7,12 +7,17 @@ import json
 import logging
 import time
 from functools import partial
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal, cast
+
+from homeassistant.exceptions import HomeAssistantError
 
 from ..const import (
     AUTH_METHOD_APP,
+    DOMAIN,
     POWEROCEAN_SOC_DEBOUNCE_S,
     POWEROCEAN_SOC_STATE_KEYS,
+    POWERPULSE2_CHARGE_ACTION_PRECONDITION,
+    POWERPULSE2_CHARGE_ACTION_WINDOW_S,
 )
 from ..ecoflow.const import (
     POWEROCEAN_SCHEDULE_POWER_STEP_W,
@@ -41,6 +46,7 @@ class DeviceValueNotReported(Exception):
 
 if TYPE_CHECKING:
     from ._typing import CoordinatorState as _Base
+    from .core import WallboxActionPending
 else:
     _Base = object
 
@@ -1047,6 +1053,121 @@ class SetCommandsMixin(_Base):
             _LOGGER.debug("Proto SET not delivered: %s (%s)", label, self.device_tag)
             self._log_event(f"proto_set_{label}_fail", "")
         return ok
+
+    async def async_set_powerpulse_charge_action(self, action: str) -> None:
+        """Start or stop the linked PowerPulse 2's charging session (ADR-009).
+
+        Unlike every other SET method in this file, this one raises rather
+        than returning a bool: there is no button entity to translate a
+        failure into a `HomeAssistantError` on this coordinator's behalf
+        (Phase 3b), and every failure here already has an exact reason.
+
+        The command leaves on the sibling PowerOcean's set topic (decision
+        2) and is confirmed on this coordinator's own wallbox heartbeat
+        (decision 4) - two coordinators, one action. The precondition and
+        in-progress checks, the publish, and the pending record all happen
+        under `self._wallbox_action_lock` so a second press cannot slip past
+        the in-progress check before the first press's record exists. The
+        confirmation wait happens outside the lock, since it may run for up
+        to `POWERPULSE2_CHARGE_ACTION_WINDOW_S[action]` seconds and must not
+        block a second, later press from being refused promptly.
+        """
+        from ..ecoflow.energy_stream import build_powerpulse_charge_action_payload
+        from .core import WallboxActionPending
+
+        async with self._wallbox_action_lock:
+            if self._shutdown:
+                # A press during teardown must not report success for a
+                # command that was never sent (issue #185 is the rule).
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerpulse_action_not_delivered",
+                )
+            if action not in POWERPULSE2_CHARGE_ACTION_WINDOW_S:
+                raise ValueError(f"action must be 'start' or 'stop', got {action!r}")
+            typed_action = cast("Literal['start', 'stop']", action)
+            if self._wallbox_action_pending is not None:
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerpulse_action_in_progress",
+                )
+            sibling = self.powerocean_sibling()
+            if sibling is None:
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerpulse_sibling_missing",
+                )
+            if sibling._mqtt_client is None or not sibling._mqtt_client.is_connected():
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerpulse_sibling_offline",
+                )
+            dev_addr = self._device_data.get("ev_charger_dev_addr")
+            dev_sn = self._device_data.get("ev_charger_sn")
+            if (
+                not isinstance(dev_addr, int)
+                or not isinstance(dev_sn, str)
+                or len(dev_sn) != 16
+            ):
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerpulse_descriptor_missing",
+                )
+            status = self._device_data.get("ev_charge_status")
+            if status not in POWERPULSE2_CHARGE_ACTION_PRECONDITION[typed_action]:
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerpulse_action_state",
+                    translation_placeholders={"status": str(status)},
+                )
+            payload = build_powerpulse_charge_action_payload(
+                typed_action, dev_addr, dev_sn
+            )
+            future: asyncio.Future[str] = self.hass.loop.create_future()
+            record = WallboxActionPending(
+                action=typed_action, issued_at=time.monotonic(), future=future
+            )
+            # The record lives exactly as long as this call: every exit,
+            # the failed publish, the timeout, the confirmation and a
+            # cancelled press alike, clears it in the `finally` below. A
+            # record that outlived a cancelled press would refuse every
+            # later press as in progress until the entry reloaded (review
+            # finding of 2026-09-11).
+            self._wallbox_action_pending = record
+            try:
+                delivered = await sibling.async_send_proto_set_command(
+                    payload, f"powerpulse_{typed_action}"
+                )
+                if not delivered:
+                    self._log_event(f"powerpulse_{typed_action}_not_delivered", "")
+                    raise HomeAssistantError(
+                        translation_domain=DOMAIN,
+                        translation_key="powerpulse_action_not_delivered",
+                    )
+            except BaseException:
+                self._clear_wallbox_action(record)
+                raise
+
+        try:
+            confirmed_status = await asyncio.wait_for(
+                future, POWERPULSE2_CHARGE_ACTION_WINDOW_S[typed_action]
+            )
+        except TimeoutError:
+            last_status = self._device_data.get("ev_charge_status")
+            self._log_event(f"powerpulse_{typed_action}_unconfirmed", str(last_status))
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="powerpulse_action_not_confirmed",
+            ) from None
+        else:
+            self._log_event(f"powerpulse_{typed_action}", str(confirmed_status))
+        finally:
+            self._clear_wallbox_action(record)
+
+    def _clear_wallbox_action(self, record: WallboxActionPending) -> None:
+        """Drop the pending record if it is still the one this call set."""
+        if self._wallbox_action_pending is record:
+            self._wallbox_action_pending = None
 
     async def async_send_delta3_set(self, command: dict[str, Any]) -> bool:
         """Apply a Delta 3 setting on whichever channel this entry is using.

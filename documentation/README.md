@@ -20,7 +20,7 @@ Complete list of all sensors, switches, numbers, and binary sensors per device:
 - [Smart Meter](entities/smart-meter.md) - 18 sensors, 3 binary sensors (`BK21`) - a grid meter, read-only, Enhanced Mode only
 - [Solar Tracker](entities/solar-tracker.md) - 6 sensors (`HZ31` and `S02F`) - one product under two serial prefixes, read-only in this release, Enhanced Mode only
 - [WAVE 3](entities/wave-3.md) - 18 sensors, 5 binary sensors, 4 switches, 5 numbers, 5 selects, 1 climate (`AC71`) - a portable air conditioner, Enhanced Mode only
-- [PowerPulse 2](entities/powerpulse-2.md) - 17 sensors, 1 binary sensor (`C376`) - a wallbox, read-only, Enhanced Mode only, no PowerOcean required
+- [PowerPulse 2](entities/powerpulse-2.md) - 17 sensors, 1 binary sensor, 2 buttons (`C376`) - a wallbox; start and stop with one PowerOcean in the same integration entry, Enhanced Mode only, no PowerOcean required for the readings
 
 Counts are the device-specific entity definitions. Every device additionally exposes 2 universal diagnostic sensors (connection status and active mode) that are not included above.
 
