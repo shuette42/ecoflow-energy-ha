@@ -15,6 +15,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.ecoflow_energy.const import (
     DEVICE_TYPE_POWEROCEAN,
     POWEROCEAN_NUMBERS,
+    POWEROCEAN_SCHEDULE_PREFIXES,
     SCHEDULE_MAX_INDEX,
 )
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
@@ -38,16 +39,37 @@ class TestGetNumberDefs:
         assert defs is POWEROCEAN_NUMBERS
 
     def test_powerocean_number_keys(self):
-        """Two sliders every PowerOcean has, plus one charge power per
-        scheduled task slot. The schedule ones are accessory-gated, so a
+        """Two sliders every PowerOcean has, plus one power per scheduled
+        task slot on each of the two families: the charge schedule and the
+        feed-to-grid schedule. The schedule ones are accessory-gated, so a
         device without a schedule never sees them."""
         defs = _get_number_defs(DEVICE_TYPE_POWEROCEAN)
         keys = {d.key for d in defs}
 
         assert keys == {"backup_reserve", "solar_surplus_threshold"} | {
-            f"schedule_{index}_power_w" for index in range(1, SCHEDULE_MAX_INDEX + 1)
+            f"{prefix}_{index}_power_w"
+            for prefix in POWEROCEAN_SCHEDULE_PREFIXES
+            for index in range(1, SCHEDULE_MAX_INDEX + 1)
         }
-        assert not any(d.accessory for d in defs if not d.key.startswith("schedule_"))
+        schedule_heads = tuple(f"{prefix}_" for prefix in POWEROCEAN_SCHEDULE_PREFIXES)
+        assert not any(
+            d.accessory for d in defs if not d.key.startswith(schedule_heads)
+        )
+        assert all(d.accessory for d in defs if d.key.startswith(schedule_heads))
+
+    def test_feed_schedule_power_declares_the_recorded_app_range(self):
+        """100 W floor, 5000 W placeholder ceiling, 100 W step (#381).
+
+        The ceiling is only the range shown until `ems_feed_power_limit_w`
+        arrives; the entity then follows that reading."""
+        defs = _get_number_defs(DEVICE_TYPE_POWEROCEAN)
+        for index in range(1, SCHEDULE_MAX_INDEX + 1):
+            d = next(d for d in defs if d.key == f"feed_schedule_{index}_power_w")
+            assert d.min_value == 100
+            assert d.max_value == 5000
+            assert d.step == 100
+            assert d.unit == "W"
+            assert d.enhanced_only and d.accessory
 
     def test_powerocean_numbers_are_enhanced_only(self):
         defs = _get_number_defs(DEVICE_TYPE_POWEROCEAN)

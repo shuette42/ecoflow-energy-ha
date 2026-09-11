@@ -31,6 +31,7 @@ from .const import (
     DEVICE_TYPE_STREAM_AC5000,
     DEVICE_TYPE_WAVE3,
     DOMAIN,
+    POWEROCEAN_SCHEDULE_PREFIXES,
     POWEROCEAN_SWITCHES,
     SMARTPLUG_SWITCH_COMMANDS,
     SMARTPLUG_SWITCHES,
@@ -236,9 +237,10 @@ class EcoFlowSwitch(
         """
         schedule_slot = self._schedule_slot()
         if schedule_slot is not None:
+            prefix, slot = schedule_slot
             try:
                 ok = await self.coordinator.async_set_powerocean_schedule_armed(
-                    schedule_slot, turn_on
+                    prefix, slot, turn_on
                 )
             except DeviceValueNotReported:
                 # The slot is not in the device's task list. The switch is
@@ -359,14 +361,22 @@ class EcoFlowSwitch(
         self._optimistic_lock_until = time.monotonic() + OPTIMISTIC_LOCK_S
         self._write_state_always(turn_on)
 
-    def _schedule_slot(self) -> int | None:
-        """Return the slot number for a PowerOcean schedule switch, else None."""
+    def _schedule_slot(self) -> tuple[str, int] | None:
+        """Return the (family prefix, slot) for a PowerOcean schedule switch.
+
+        Two families share this shape - the charge schedule (`schedule_`) and
+        the feed-to-grid schedule (`feed_schedule_`) - and the prefix travels
+        with the slot so the caller can route the write to the right task
+        list without a second lookup.
+        """
         if self.coordinator.device_type != DEVICE_TYPE_POWEROCEAN:
             return None
         key = self._definition.key
-        if not key.startswith("schedule_") or not key.endswith("_enabled"):
-            return None
-        return int(key[len("schedule_") : -len("_enabled")])
+        for prefix in POWEROCEAN_SCHEDULE_PREFIXES:
+            head = f"{prefix}_"
+            if key.startswith(head) and key.endswith("_enabled"):
+                return prefix, int(key[len(head) : -len("_enabled")])
+        return None
 
     def _port_priority_stem(self) -> str | None:
         """Return the port stem for a port priority switch, else None."""
