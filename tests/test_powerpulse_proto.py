@@ -287,9 +287,10 @@ def test_maximum_current_follows_the_configured_limit_on_an_idle_wallbox() -> No
 
 # --- The second prefix, C374 (#7, recording of 2026-09-11) ---------------
 #
-# Six of the eight HeartBeats of a 30-minute recording with three short
-# charging sessions (one at the 20 A limit from the grid, two solar-controlled
-# at 9 to 12 A) on a wallbox that reports under `C374`. The two frames the
+# Six of the eight HeartBeats kept from a 30-minute recording of several
+# short charging sessions (four session starts in the kept frames: one drawing
+# 16 A per phase from the grid, the others solar-controlled at 9.5 to 12.4 A
+# setpoints) on a wallbox that reports under `C374`. The two frames the
 # builder leaves out read as an identifier run in their masked bytes; the one
 # at 13:14:40, status `preparing` with every session field at 0, is covered
 # by the `_finalize` test below instead.
