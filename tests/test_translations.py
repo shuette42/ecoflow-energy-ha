@@ -626,8 +626,8 @@ class TestDevicePickerExplanation:
         "de": "Diagnose-Download",
         "fr": "téléchargement des diagnostics",
         "it": "download della diagnostica",
-        "nl": "diagnostische download",
-        "pl": "pobranie diagnostyki",
+        "nl": "download van diagnostische gegevens",
+        "pl": "plik diagnostyki",
     }
     # The word each language uses for the raw data recording, so the test can
     # tell the account rendering (which names it) from the developer-keys one.

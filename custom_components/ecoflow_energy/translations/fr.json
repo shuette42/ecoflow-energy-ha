@@ -3,14 +3,14 @@
     "step": {
       "user": {
         "title": "Mode de connexion",
-        "description": "Choisis comment te connecter à tes appareils EcoFlow.\n\n**Standard** - EcoFlow IoT API officielle. Prise en charge par EcoFlow. Mises à jour toutes les 10-30 secondes. Nécessite des clés Developer API.\n\n**Enhanced** - Connexion en temps réel développée par la communauté. Mises à jour toutes les ~3 secondes. Nécessite tes identifiants de l'application EcoFlow. Non officiel - à utiliser à tes risques et périls.",
+        "description": "Choisissez comment vous connecter à vos appareils EcoFlow.\n\n**Standard** - EcoFlow IoT API officielle. Prise en charge par EcoFlow. Mises à jour toutes les 10 à 30 secondes. Nécessite des clés Developer API.\n\n**Enhanced** - Connexion en temps réel développée par la communauté. Mises à jour toutes les 3 secondes environ. Nécessite vos identifiants de l'application EcoFlow. Non officielle - à utiliser à vos risques et périls.",
         "data": {
           "mode": "Mode de connexion"
         }
       },
       "developer": {
         "title": "Identifiants développeur EcoFlow",
-        "description": "Saisis ta clé d'accès (Access Key) et ta clé secrète (Secret Key) depuis le [EcoFlow Developer Portal]({developer_portal_url}).",
+        "description": "Saisissez votre clé d'accès (Access Key) et votre clé secrète (Secret Key) obtenues sur le [EcoFlow Developer Portal]({developer_portal_url}).",
         "data": {
           "access_key": "Clé d'accès",
           "secret_key": "Clé secrète"
@@ -18,22 +18,22 @@
       },
       "app_credentials": {
         "title": "Connexion à l'application EcoFlow",
-        "description": "Saisis l'e-mail et le mot de passe que tu utilises pour l'application EcoFlow. Tous les appareils liés à ton compte seront découverts automatiquement.",
+        "description": "Saisissez le courriel et le mot de passe que vous utilisez pour l'application EcoFlow. Tous les appareils liés à votre compte seront découverts automatiquement.",
         "data": {
-          "email": "E-mail",
+          "email": "Courriel",
           "password": "Mot de passe"
         }
       },
       "devices": {
         "title": "Sélectionner les appareils",
-        "description": "Sélectionne les appareils EcoFlow que tu veux ajouter à Home Assistant.\n\nUn appareil marqué \"not supported yet\" n'a pas d'analyseur ici, il ne produira donc que deux capteurs de diagnostic. L'ajouter vaut quand même la peine, car c'est à partir d'un téléchargement des diagnostics de cet appareil, joint à une issue GitHub, que la prise en charge d'un nouveau modèle est construite. Ton téléchargement des diagnostics contient déjà les données brutes qu'un tel appareil envoie, il n'y a donc rien à activer au préalable.",
+        "description": "Sélectionnez les appareils EcoFlow que vous souhaitez ajouter à Home Assistant.\n\nUn appareil marqué \"not supported yet\" n'a pas d'analyseur ici, il ne produira donc que deux capteurs de diagnostic. L'ajouter vaut quand même la peine, car c'est à partir d'un téléchargement des diagnostics de cet appareil, joint à une issue GitHub, que la prise en charge d'un nouveau modèle est construite. Votre téléchargement des diagnostics contient déjà les données brutes qu'un tel appareil envoie, il n'y a donc rien à activer au préalable.",
         "data": {
           "devices": "Appareils"
         }
       },
       "reauth_confirm": {
         "title": "Ré-authentifier EcoFlow Energy",
-        "description": "Tes identifiants de l'API EcoFlow ne sont plus valides. Saisis ta clé d'accès et ta clé secrète mises à jour depuis l'EcoFlow Developer Portal.",
+        "description": "Vos identifiants de l'API EcoFlow ne sont plus valides. Saisissez votre clé d'accès et votre clé secrète mises à jour, obtenues sur l'EcoFlow Developer Portal.",
         "data": {
           "access_key": "Clé d'accès",
           "secret_key": "Clé secrète"
@@ -41,31 +41,31 @@
       },
       "reauth_enhanced": {
         "title": "Ré-authentifier le mode Enhanced",
-        "description": "Tes identifiants de l'application EcoFlow ne sont plus valides. Saisis ton e-mail et ton mot de passe mis à jour.",
+        "description": "Vos identifiants de l'application EcoFlow ne sont plus valides. Saisissez votre courriel et votre mot de passe mis à jour.",
         "data": {
-          "email": "E-mail",
+          "email": "Courriel",
           "password": "Mot de passe"
         }
       },
       "reauth_app": {
         "title": "Ré-authentifier l'application EcoFlow",
-        "description": "Tes identifiants de l'application EcoFlow ne sont plus valides. Saisis ton e-mail et ton mot de passe mis à jour.",
+        "description": "Vos identifiants de l'application EcoFlow ne sont plus valides. Saisissez votre courriel et votre mot de passe mis à jour.",
         "data": {
-          "email": "E-mail",
+          "email": "Courriel",
           "password": "Mot de passe"
         }
       },
       "reconfigure_app": {
         "title": "Mettre à jour les identifiants de l'application EcoFlow",
-        "description": "Saisis l'e-mail et le mot de passe de ton application EcoFlow.",
+        "description": "Saisissez le courriel et le mot de passe de votre application EcoFlow.",
         "data": {
-          "email": "E-mail",
+          "email": "Courriel",
           "password": "Mot de passe"
         }
       },
       "reconfigure_confirm": {
         "title": "Mettre à jour les identifiants EcoFlow",
-        "description": "Saisis ta clé d'accès et ta clé secrète actuelles depuis le [EcoFlow Developer Portal]({developer_portal_url}).",
+        "description": "Saisissez votre clé d'accès et votre clé secrète actuelles, obtenues sur le [EcoFlow Developer Portal]({developer_portal_url}).",
         "data": {
           "access_key": "Clé d'accès",
           "secret_key": "Clé secrète"
@@ -73,28 +73,28 @@
       },
       "reconfigure_enhanced": {
         "title": "Mettre à jour les identifiants du mode Enhanced",
-        "description": "Saisis l'e-mail et le mot de passe de ton application EcoFlow.",
+        "description": "Saisissez le courriel et le mot de passe de votre application EcoFlow.",
         "data": {
-          "email": "E-mail",
+          "email": "Courriel",
           "password": "Mot de passe"
         }
       },
       "devices_app": {
         "title": "Sélectionner les appareils",
-        "description": "Sélectionne les appareils EcoFlow que tu veux ajouter à Home Assistant.\n\nUn appareil marqué \"not supported yet\" n'a pas d'analyseur ici, il ne produira donc que deux capteurs de diagnostic. L'ajouter vaut quand même la peine, car c'est à partir d'un téléchargement des diagnostics de cet appareil, joint à une issue GitHub, que la prise en charge d'un nouveau modèle est construite. Active d'abord l'enregistrement des données de diagnostic dans les options de l'intégration, puis télécharge ensuite, car avec la connexion par compte le téléchargement ne contient pas ces données brutes de lui-même.",
+        "description": "Sélectionnez les appareils EcoFlow que vous souhaitez ajouter à Home Assistant.\n\nUn appareil marqué \"not supported yet\" n'a pas d'analyseur ici, il ne produira donc que deux capteurs de diagnostic. L'ajouter vaut quand même la peine, car c'est à partir d'un téléchargement des diagnostics de cet appareil, joint à une issue GitHub, que la prise en charge d'un nouveau modèle est construite. Activez d'abord l'enregistrement des données de diagnostic dans les options de l'intégration, puis téléchargez, car avec la connexion par compte, le téléchargement ne contient pas ces données brutes par lui-même.",
         "data": {
           "devices": "Appareils"
         }
       }
     },
     "error": {
-      "cannot_connect": "Échec de la connexion à l'API EcoFlow. Vérifie tes identifiants.",
-      "invalid_auth": "Clé d'accès ou clé secrète invalide.",
-      "no_devices": "Aucun appareil trouvé. Assure-toi que des appareils sont liés dans l'application EcoFlow.",
-      "enhanced_login_failed": "Échec de la connexion en mode Enhanced. Vérifie l'e-mail et le mot de passe de ton application EcoFlow.",
+      "cannot_connect": "Échec de connexion à l'API EcoFlow. Vérifiez vos identifiants.",
+      "invalid_auth": "Clé d'accès ou clé secrète non valide.",
+      "no_devices": "Aucun appareil trouvé. Assurez-vous que des appareils sont liés dans l'application EcoFlow.",
+      "enhanced_login_failed": "Échec de connexion en mode Enhanced. Vérifiez le courriel et le mot de passe de votre application EcoFlow.",
       "enhanced_decrypt_failed": "Échec du déchiffrement des identifiants du mode Enhanced.",
       "powerstream_requires_standard": "PowerStream nécessite le mode Standard avec des clés Developer API.",
-      "device_requires_enhanced": "Cet appareil nécessite le mode Enhanced avec ton compte EcoFlow.",
+      "device_requires_enhanced": "Cet appareil nécessite le mode Enhanced avec votre compte EcoFlow.",
       "unknown": "Une erreur inattendue s'est produite."
     },
     "abort": {
@@ -107,20 +107,20 @@
     "step": {
       "init": {
         "title": "Options EcoFlow Energy",
-        "description": "**Standard** - EcoFlow IoT API officielle. Prise en charge par EcoFlow. Mises à jour toutes les 10-30 secondes.\n\n**Enhanced** - Connexion en temps réel développée par la communauté. Mises à jour toutes les ~3 secondes. Non officiel - à utiliser à tes risques et périls.\n\nChanger de mode peut nécessiter de nouveaux identifiants.",
+        "description": "**Standard** - EcoFlow IoT API officielle. Prise en charge par EcoFlow. Mises à jour toutes les 10 à 30 secondes.\n\n**Enhanced** - Connexion en temps réel développée par la communauté. Mises à jour toutes les 3 secondes environ. Non officielle - à utiliser à vos risques et périls.\n\nChanger de mode peut nécessiter de nouveaux identifiants.",
         "data": {
           "mode": "Mode de connexion",
           "devices": "Appareils",
           "raw_capture": "Enregistrer des données de diagnostic supplémentaires pendant 24 heures"
         },
         "data_description": {
-          "devices": "Sélectionner un appareil est ce qui amène cette intégration à le lire. Un appareil marqué \"not supported yet\" n'a pas d'analyseur ici, il produit donc deux capteurs de diagnostic et rien d'autre. Le laisser sélectionné vaut quand même la peine, car c'est à partir d'un téléchargement des diagnostics de cet appareil, joint à une issue GitHub, que la prise en charge d'un nouveau modèle est construite. Ton téléchargement des diagnostics contient déjà les données brutes qu'un tel appareil envoie, il n'y a donc rien à activer au préalable.",
-          "raw_capture": "Conserve davantage des messages bruts envoyés par tes appareils, enregistre tout appareil que cette intégration ne prend pas encore en charge, et enregistre les réglages que l'application EcoFlow écrit sur tes appareils pendant que c'est actif. Ce dernier point est la façon dont une commande est construite pour un modèle que personne ici ne possède : modifier une fois le réglage dans l'application, avec ceci activé, montre ce que l'appareil accepte. À n'activer que si cela a été demandé dans une issue GitHub, car les données ne sont utiles que jointes à un téléchargement des diagnostics. Rien n'est jamais envoyé à tes appareils, et l'enregistrement s'arrête de lui-même après 24 heures."
+          "devices": "C'est la sélection d'un appareil qui amène cette intégration à le lire. Un appareil marqué \"not supported yet\" n'a pas d'analyseur ici, il produit donc deux capteurs de diagnostic et rien d'autre. Le laisser sélectionné vaut quand même la peine, car c'est à partir d'un téléchargement des diagnostics de cet appareil, joint à une issue GitHub, que la prise en charge d'un nouveau modèle est construite. Votre téléchargement des diagnostics contient déjà les données brutes qu'un tel appareil envoie, il n'y a donc rien à activer au préalable.",
+          "raw_capture": "Conserve une plus grande part des messages bruts envoyés par vos appareils, enregistre tout appareil que cette intégration ne prend pas encore en charge, et enregistre les réglages que l'application EcoFlow écrit sur vos appareils tant que l'enregistrement est actif. C'est ainsi qu'une commande est construite pour un modèle que personne ici ne possède : modifier une fois le réglage dans l'application, avec cette option activée, montre ce que l'appareil accepte. À n'activer que si cela a été demandé dans une issue GitHub, car les données ne sont utiles que jointes à un téléchargement des diagnostics. Rien n'est jamais envoyé à vos appareils, et l'enregistrement s'arrête de lui-même après 24 heures."
         }
       },
       "developer": {
         "title": "Identifiants Developer API",
-        "description": "Le mode Standard nécessite des clés Developer API depuis l'EcoFlow IoT Developer Portal.",
+        "description": "Le mode Standard nécessite des clés Developer API obtenues sur l'EcoFlow IoT Developer Portal.",
         "data": {
           "access_key": "Clé d'accès",
           "secret_key": "Clé secrète"
@@ -128,34 +128,34 @@
       },
       "enhanced": {
         "title": "Identifiants du mode Enhanced",
-        "description": "Saisis l'e-mail et le mot de passe de ton application EcoFlow.",
+        "description": "Saisissez le courriel et le mot de passe de votre application EcoFlow.",
         "data": {
-          "email": "E-mail",
+          "email": "Courriel",
           "password": "Mot de passe"
         }
       },
       "init_app": {
         "title": "Options EcoFlow Energy",
-        "description": "**Standard** - EcoFlow IoT API officielle. Prise en charge par EcoFlow. Mises à jour toutes les 10-30 secondes.\n\n**Enhanced** - Connexion en temps réel développée par la communauté. Mises à jour toutes les ~3 secondes. Non officiel - à utiliser à tes risques et périls.\n\nChanger de mode peut nécessiter de nouveaux identifiants.",
+        "description": "**Standard** - EcoFlow IoT API officielle. Prise en charge par EcoFlow. Mises à jour toutes les 10 à 30 secondes.\n\n**Enhanced** - Connexion en temps réel développée par la communauté. Mises à jour toutes les 3 secondes environ. Non officielle - à utiliser à vos risques et périls.\n\nChanger de mode peut nécessiter de nouveaux identifiants.",
         "data": {
           "mode": "Mode de connexion",
           "devices": "Appareils",
           "raw_capture": "Enregistrer des données de diagnostic supplémentaires pendant 24 heures"
         },
         "data_description": {
-          "devices": "Sélectionner un appareil est ce qui amène cette intégration à le lire. Un appareil marqué \"not supported yet\" n'a pas d'analyseur ici, il produit donc deux capteurs de diagnostic et rien d'autre. Le laisser sélectionné vaut quand même la peine, car c'est à partir d'un téléchargement des diagnostics de cet appareil, joint à une issue GitHub, que la prise en charge d'un nouveau modèle est construite. Active d'abord l'enregistrement des données de diagnostic ci-dessous, puis télécharge ensuite, car avec la connexion par compte le téléchargement ne contient pas ces données brutes de lui-même.",
-          "raw_capture": "Conserve davantage des messages bruts envoyés par tes appareils, enregistre tout appareil que cette intégration ne prend pas encore en charge, et enregistre les réglages que l'application EcoFlow écrit sur tes appareils pendant que c'est actif. Ce dernier point est la façon dont une commande est construite pour un modèle que personne ici ne possède : modifier une fois le réglage dans l'application, avec ceci activé, montre ce que l'appareil accepte. À n'activer que si cela a été demandé dans une issue GitHub, car les données ne sont utiles que jointes à un téléchargement des diagnostics. Rien n'est jamais envoyé à tes appareils, et l'enregistrement s'arrête de lui-même après 24 heures."
+          "devices": "C'est la sélection d'un appareil qui amène cette intégration à le lire. Un appareil marqué \"not supported yet\" n'a pas d'analyseur ici, il produit donc deux capteurs de diagnostic et rien d'autre. Le laisser sélectionné vaut quand même la peine, car c'est à partir d'un téléchargement des diagnostics de cet appareil, joint à une issue GitHub, que la prise en charge d'un nouveau modèle est construite. Activez d'abord l'enregistrement des données de diagnostic ci-dessous, puis téléchargez, car avec la connexion par compte, le téléchargement ne contient pas ces données brutes par lui-même.",
+          "raw_capture": "Conserve une plus grande part des messages bruts envoyés par vos appareils, enregistre tout appareil que cette intégration ne prend pas encore en charge, et enregistre les réglages que l'application EcoFlow écrit sur vos appareils tant que l'enregistrement est actif. C'est ainsi qu'une commande est construite pour un modèle que personne ici ne possède : modifier une fois le réglage dans l'application, avec cette option activée, montre ce que l'appareil accepte. À n'activer que si cela a été demandé dans une issue GitHub, car les données ne sont utiles que jointes à un téléchargement des diagnostics. Rien n'est jamais envoyé à vos appareils, et l'enregistrement s'arrête de lui-même après 24 heures."
         }
       }
     },
     "error": {
-      "cannot_connect": "Échec de la connexion à l'API EcoFlow.",
-      "invalid_auth": "Identifiants API invalides.",
-      "enhanced_login_failed": "Échec de la connexion en mode Enhanced.",
+      "cannot_connect": "Échec de connexion à l'API EcoFlow.",
+      "invalid_auth": "Identifiants API non valides.",
+      "enhanced_login_failed": "Échec de connexion en mode Enhanced.",
       "enhanced_decrypt_failed": "Échec du déchiffrement des identifiants du mode Enhanced.",
-      "no_devices": "Sélectionne au moins un appareil.",
+      "no_devices": "Veuillez sélectionner au moins un appareil.",
       "powerstream_requires_standard": "PowerStream nécessite le mode Standard avec des clés Developer API.",
-      "device_requires_enhanced": "Cet appareil nécessite le mode Enhanced avec ton compte EcoFlow.",
+      "device_requires_enhanced": "Cet appareil nécessite le mode Enhanced avec votre compte EcoFlow.",
       "unknown": "Une erreur inattendue s'est produite."
     }
   },
@@ -195,7 +195,7 @@
         "name": "Puissance solaire tierce"
       },
       "home_w": {
-        "name": "Puissance domestique"
+        "name": "Puissance de la maison"
       },
       "grid_w": {
         "name": "Puissance réseau"
@@ -225,10 +225,10 @@
         "name": "Puissance de raccordement AC au réseau"
       },
       "home_from_batt_w": {
-        "name": "Maison depuis la batterie"
+        "name": "Maison alimentée par la batterie"
       },
       "home_from_grid_w": {
-        "name": "Maison depuis le réseau"
+        "name": "Maison alimentée par le réseau"
       },
       "ac_outlet_1_w": {
         "name": "Puissance prise AC 1"
@@ -273,7 +273,7 @@
         "name": "Énergie solaire"
       },
       "home_energy_kwh": {
-        "name": "Énergie domestique"
+        "name": "Énergie de la maison"
       },
       "grid_import_energy_kwh": {
         "name": "Énergie importée du réseau"
@@ -425,7 +425,7 @@
           "off": "Désactivé",
           "no_limit": "Sans limite",
           "zero": "Injection zéro",
-          "limit": "Limitée"
+          "limit": "Limité"
         }
       },
       "ems_work_mode": {
@@ -438,7 +438,7 @@
           "ac_makeup": "Complément AC",
           "drm": "DRM",
           "remote_schedule": "Planification à distance",
-          "standby": "Veille",
+          "standby": "En veille",
           "soc_calibration": "Étalonnage SoC",
           "timer": "Minuterie",
           "fcr": "FCR",
@@ -450,8 +450,8 @@
       "pcs_run_state": {
         "name": "État de l'onduleur",
         "state": {
-          "standby": "Veille",
-          "running": "En marche",
+          "standby": "En veille",
+          "running": "En cours d'exécution",
           "stopped": "Arrêté"
         }
       },
@@ -474,8 +474,8 @@
       "batt_charge_discharge_state": {
         "name": "État de charge/décharge batterie",
         "state": {
-          "standby": "Veille",
-          "discharging": "En décharge",
+          "standby": "En veille",
+          "discharging": "Décharge",
           "charging": "En charge"
         }
       },
@@ -651,7 +651,7 @@
         "name": "État de charge/décharge",
         "state": {
           "idle": "Inactif",
-          "discharging": "En décharge",
+          "discharging": "Décharge",
           "charging": "En charge"
         }
       },
@@ -660,7 +660,7 @@
         "state": {
           "idle": "Inactif",
           "charging": "En charge",
-          "discharging": "En décharge"
+          "discharging": "Décharge"
         }
       },
       "charger_type": {
@@ -1239,7 +1239,7 @@
         "name": "Avertissement AC onduleur"
       },
       "wifi_status": {
-        "name": "État WiFi",
+        "name": "État Wi-Fi",
         "state": {
           "disconnected": "Déconnecté",
           "connected": "Connecté"
@@ -1272,7 +1272,7 @@
           "startup_inner_bp": "Démarrage (batterie int.)",
           "startup_pv": "Démarrage (PV)",
           "startup_grid": "Démarrage (réseau)",
-          "running": "En marche",
+          "running": "En cours d'exécution",
           "stop": "Arrêté",
           "maintain": "Maintenance"
         }
@@ -1326,7 +1326,7 @@
         "name": "Courant AC"
       },
       "wifi_rssi_dbm": {
-        "name": "Signal WiFi"
+        "name": "Signal Wi-Fi"
       },
       "feed_grid_power_limit_w": {
         "name": "Limite de puissance d'injection"
@@ -1341,7 +1341,7 @@
         }
       },
       "home_from_solar_w": {
-        "name": "Maison depuis le solaire"
+        "name": "Maison alimentée par le solaire"
       },
       "pv1_energy_kwh": {
         "name": "Énergie PV 1"
@@ -1484,8 +1484,8 @@
           "available": "Disponible",
           "preparing": "Préparation",
           "charging": "En charge",
-          "suspended_charger": "En pause par le chargeur",
-          "suspended_vehicle": "En pause par le véhicule",
+          "suspended_charger": "Mise en pause par le chargeur",
+          "suspended_vehicle": "Mise en pause par le véhicule",
           "finishing": "Finalisation",
           "faulted": "Défaut"
         }
@@ -1618,28 +1618,28 @@
         "name": "Facteur de puissance"
       },
       "schedule_1_window": {
-        "name": "Fenêtre du planning 1"
+        "name": "Fenêtre de la planification 1"
       },
       "schedule_2_window": {
-        "name": "Fenêtre du planning 2"
+        "name": "Fenêtre de la planification 2"
       },
       "schedule_3_window": {
-        "name": "Fenêtre du planning 3"
+        "name": "Fenêtre de la planification 3"
       },
       "schedule_4_window": {
-        "name": "Fenêtre du planning 4"
+        "name": "Fenêtre de la planification 4"
       },
       "schedule_5_window": {
-        "name": "Fenêtre du planning 5"
+        "name": "Fenêtre de la planification 5"
       },
       "schedule_6_window": {
-        "name": "Fenêtre du planning 6"
+        "name": "Fenêtre de la planification 6"
       },
       "schedule_7_window": {
-        "name": "Fenêtre du planning 7"
+        "name": "Fenêtre de la planification 7"
       },
       "schedule_8_window": {
-        "name": "Fenêtre du planning 8"
+        "name": "Fenêtre de la planification 8"
       },
       "tilt_angle_deg": {
         "name": "Angle d'inclinaison"
@@ -1715,7 +1715,7 @@
         "name": "Puissance d'entrée PV"
       },
       "condensate_water_level": {
-        "name": "Niveau d'eau de condensation"
+        "name": "Niveau des condensats"
       }
     },
     "binary_sensor": {
@@ -1765,28 +1765,28 @@
         "name": "Prise de secours"
       },
       "schedule_1_running": {
-        "name": "Planning 1 en cours"
+        "name": "Planification 1 en cours"
       },
       "schedule_2_running": {
-        "name": "Planning 2 en cours"
+        "name": "Planification 2 en cours"
       },
       "schedule_3_running": {
-        "name": "Planning 3 en cours"
+        "name": "Planification 3 en cours"
       },
       "schedule_4_running": {
-        "name": "Planning 4 en cours"
+        "name": "Planification 4 en cours"
       },
       "schedule_5_running": {
-        "name": "Planning 5 en cours"
+        "name": "Planification 5 en cours"
       },
       "schedule_6_running": {
-        "name": "Planning 6 en cours"
+        "name": "Planification 6 en cours"
       },
       "schedule_7_running": {
-        "name": "Planning 7 en cours"
+        "name": "Planification 7 en cours"
       },
       "schedule_8_running": {
-        "name": "Planning 8 en cours"
+        "name": "Planification 8 en cours"
       },
       "grid_l1_connected": {
         "name": "Phase A connectée"
@@ -1875,28 +1875,28 @@
         "name": "Prise AC 2"
       },
       "schedule_1_enabled": {
-        "name": "Planning 1 activé"
+        "name": "Planification 1 activée"
       },
       "schedule_2_enabled": {
-        "name": "Planning 2 activé"
+        "name": "Planification 2 activée"
       },
       "schedule_3_enabled": {
-        "name": "Planning 3 activé"
+        "name": "Planification 3 activée"
       },
       "schedule_4_enabled": {
-        "name": "Planning 4 activé"
+        "name": "Planification 4 activée"
       },
       "schedule_5_enabled": {
-        "name": "Planning 5 activé"
+        "name": "Planification 5 activée"
       },
       "schedule_6_enabled": {
-        "name": "Planning 6 activé"
+        "name": "Planification 6 activée"
       },
       "schedule_7_enabled": {
-        "name": "Planning 7 activé"
+        "name": "Planification 7 activée"
       },
       "schedule_8_enabled": {
-        "name": "Planning 8 activé"
+        "name": "Planification 8 activée"
       },
       "power": {
         "name": "Alimentation"
@@ -1934,7 +1934,7 @@
         "name": "Délai de mise en veille"
       },
       "car_standby_timeout": {
-        "name": "Délai du port 12V"
+        "name": "Délai d'arrêt du port 12V"
       },
       "screen_brightness": {
         "name": "Luminosité de l'écran"
@@ -1985,28 +1985,28 @@
         "name": "Puissance d'entrée max depuis le réseau"
       },
       "schedule_1_power_w": {
-        "name": "Puissance de charge planning 1"
+        "name": "Puissance de charge planification 1"
       },
       "schedule_2_power_w": {
-        "name": "Puissance de charge planning 2"
+        "name": "Puissance de charge planification 2"
       },
       "schedule_3_power_w": {
-        "name": "Puissance de charge planning 3"
+        "name": "Puissance de charge planification 3"
       },
       "schedule_4_power_w": {
-        "name": "Puissance de charge planning 4"
+        "name": "Puissance de charge planification 4"
       },
       "schedule_5_power_w": {
-        "name": "Puissance de charge planning 5"
+        "name": "Puissance de charge planification 5"
       },
       "schedule_6_power_w": {
-        "name": "Puissance de charge planning 6"
+        "name": "Puissance de charge planification 6"
       },
       "schedule_7_power_w": {
-        "name": "Puissance de charge planning 7"
+        "name": "Puissance de charge planification 7"
       },
       "schedule_8_power_w": {
-        "name": "Puissance de charge planning 8"
+        "name": "Puissance de charge planification 8"
       },
       "target_temp_c": {
         "name": "Température cible"
@@ -2101,7 +2101,7 @@
       "operating_mode": {
         "name": "Mode de fonctionnement",
         "state": {
-          "cooling": "Refroidissement",
+          "cooling": "Climatisation",
           "heating": "Chauffage",
           "fan": "Ventilation",
           "dehumidify": "Déshumidification",
@@ -2114,7 +2114,7 @@
           "none": "Aucun",
           "normal": "Normal",
           "max": "Max",
-          "sleep": "Sommeil",
+          "sleep": "Nuit",
           "eco": "Éco"
         }
       },
@@ -2156,13 +2156,13 @@
   },
   "exceptions": {
     "set_command_failed": {
-      "message": "La commande pour {entity} n'a pas atteint l'appareil. Vérifie que l'appareil est connecté et réessaie."
+      "message": "La commande pour {entity} n'a pas atteint l'appareil. Vérifiez que l'appareil est connecté et réessayez."
     },
     "set_command_gone": {
-      "message": "{entity} ne peut pas être réglé - l'appareil ne signale plus ce planning. Vérifie si le planning existe encore dans l'application EcoFlow."
+      "message": "{entity} ne peut pas être réglé - l'appareil ne signale plus cette planification. Vérifiez si la planification existe encore dans l'application EcoFlow."
     },
     "set_command_not_ready": {
-      "message": "{entity} ne peut pas encore être réglé - l'appareil n'a pas signalé son réglage actuel. Réessaie dans un instant."
+      "message": "{entity} ne peut pas encore être réglé - l'appareil n'a pas signalé son réglage actuel. Réessayez dans un instant."
     },
     "set_command_unsupported": {
       "message": "{entity} ne prend pas en charge cette commande sur cet appareil."
@@ -2183,7 +2183,7 @@
       "message": "La wallbox signale {status}, ce qui ne permet pas cette action."
     },
     "powerpulse_descriptor_missing": {
-      "message": "La wallbox n'a pas encore signalé son adresse. Attends son prochain rapport de réglages."
+      "message": "La wallbox n'a pas encore signalé son adresse. Attendez son prochain rapport de réglages."
     },
     "powerpulse_sibling_missing": {
       "message": "La commande de la wallbox transite par le PowerOcean du même compte, et cette entrée n'en contient aucun ou plus d'un."

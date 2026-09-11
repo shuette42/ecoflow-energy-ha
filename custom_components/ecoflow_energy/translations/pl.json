@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Tryb połączenia",
-        "description": "Wybierz, jak połączyć się ze swoimi urządzeniami EcoFlow.\n\n**Standard** - Oficjalne EcoFlow IoT API. Wspierane przez EcoFlow. Aktualizacje co 10-30 sekund. Wymaga kluczy Developer API.\n\n**Enhanced** - Tworzone przez społeczność połączenie w czasie rzeczywistym. Aktualizacje co ~3 sekundy. Wymaga danych logowania do aplikacji EcoFlow. Nieoficjalne - używasz na własne ryzyko.",
+        "description": "Wybierz, jak połączyć się ze swoimi urządzeniami EcoFlow.\n\n**Standard** - Oficjalne EcoFlow IoT API. Wspierane przez EcoFlow. Aktualizacje co 10-30 sekund. Wymaga kluczy Developer API.\n\n**Enhanced** - Połączenie w czasie rzeczywistym tworzone przez społeczność. Aktualizacje co ~3 sekundy. Wymaga danych logowania do aplikacji EcoFlow. Nieoficjalne - używasz na własne ryzyko.",
         "data": {
           "mode": "Tryb połączenia"
         }
@@ -18,7 +18,7 @@
       },
       "app_credentials": {
         "title": "Logowanie do aplikacji EcoFlow",
-        "description": "Wprowadź adres e-mail i hasło, których używasz w aplikacji EcoFlow. Wszystkie urządzenia powiązane z twoim kontem zostaną wykryte automatycznie.",
+        "description": "Wprowadź adres e-mail i hasło, których używasz w aplikacji EcoFlow. Wszystkie urządzenia powiązane z Twoim kontem zostaną wykryte automatycznie.",
         "data": {
           "email": "E-mail",
           "password": "Hasło"
@@ -26,7 +26,7 @@
       },
       "devices": {
         "title": "Wybierz urządzenia",
-        "description": "Wybierz urządzenia EcoFlow, które chcesz dodać do Home Assistant.\n\nUrządzenie oznaczone jako \"not supported yet\" nie ma tu parsera, więc utworzy tylko dwa czujniki diagnostyczne. Mimo to warto je dodać, bo to pobranie diagnostyki z niego, dołączone do zgłoszenia na GitHub, jest tym, z czego powstaje obsługa nowego modelu. Twoje pobranie diagnostyki już zawiera surowe dane, które takie urządzenie zgłasza, więc nie trzeba niczego wcześniej włączać.",
+        "description": "Wybierz urządzenia EcoFlow, które chcesz dodać do Home Assistant.\n\nUrządzenie oznaczone jako \"not supported yet\" nie ma tu parsera, więc utworzy tylko dwa czujniki diagnostyczne. Mimo to warto je dodać, bo pobrany z niego plik diagnostyki, dołączony do zgłoszenia na GitHub, jest tym, z czego powstaje obsługa nowego modelu. Pobrany plik diagnostyki już zawiera surowe dane, które takie urządzenie zgłasza, więc nie trzeba niczego wcześniej włączać.",
         "data": {
           "devices": "Urządzenia"
         }
@@ -81,7 +81,7 @@
       },
       "devices_app": {
         "title": "Wybierz urządzenia",
-        "description": "Wybierz urządzenia EcoFlow, które chcesz dodać do Home Assistant.\n\nUrządzenie oznaczone jako \"not supported yet\" nie ma tu parsera, więc utworzy tylko dwa czujniki diagnostyczne. Mimo to warto je dodać, bo to pobranie diagnostyki z niego, dołączone do zgłoszenia na GitHub, jest tym, z czego powstaje obsługa nowego modelu. Najpierw włącz nagrywanie danych diagnostycznych w opcjach integracji, a pobierz dopiero potem, bo przy logowaniu kontem pobranie samo z siebie nie zawiera tych surowych danych.",
+        "description": "Wybierz urządzenia EcoFlow, które chcesz dodać do Home Assistant.\n\nUrządzenie oznaczone jako \"not supported yet\" nie ma tu parsera, więc utworzy tylko dwa czujniki diagnostyczne. Mimo to warto je dodać, bo pobrany z niego plik diagnostyki, dołączony do zgłoszenia na GitHub, jest tym, z czego powstaje obsługa nowego modelu. Najpierw włącz nagrywanie danych diagnostycznych w opcjach integracji, a pobierz dopiero potem, bo przy logowaniu kontem pobrany plik sam z siebie nie zawiera tych surowych danych.",
         "data": {
           "devices": "Urządzenia"
         }
@@ -94,7 +94,7 @@
       "enhanced_login_failed": "Logowanie w trybie Enhanced nie powiodło się. Sprawdź adres e-mail i hasło do aplikacji EcoFlow.",
       "enhanced_decrypt_failed": "Odszyfrowanie danych logowania trybu Enhanced nie powiodło się.",
       "powerstream_requires_standard": "PowerStream wymaga trybu Standard z kluczami Developer API.",
-      "device_requires_enhanced": "To urządzenie wymaga trybu Enhanced z twoim kontem EcoFlow.",
+      "device_requires_enhanced": "To urządzenie wymaga trybu Enhanced z Twoim kontem EcoFlow.",
       "unknown": "Wystąpił nieoczekiwany błąd."
     },
     "abort": {
@@ -107,15 +107,15 @@
     "step": {
       "init": {
         "title": "Opcje EcoFlow Energy",
-        "description": "**Standard** - Oficjalne EcoFlow IoT API. Wspierane przez EcoFlow. Aktualizacje co 10-30 sekund.\n\n**Enhanced** - Tworzone przez społeczność połączenie w czasie rzeczywistym. Aktualizacje co ~3 sekundy. Nieoficjalne - używasz na własne ryzyko.\n\nZmiana trybu może wymagać nowych danych dostępowych.",
+        "description": "**Standard** - Oficjalne EcoFlow IoT API. Wspierane przez EcoFlow. Aktualizacje co 10-30 sekund.\n\n**Enhanced** - Połączenie w czasie rzeczywistym tworzone przez społeczność. Aktualizacje co ~3 sekundy. Nieoficjalne - używasz na własne ryzyko.\n\nZmiana trybu może wymagać nowych danych dostępowych.",
         "data": {
           "mode": "Tryb połączenia",
           "devices": "Urządzenia",
           "raw_capture": "Nagrywaj dodatkowe dane diagnostyczne przez 24 godziny"
         },
         "data_description": {
-          "devices": "Wybranie urządzenia sprawia, że ta integracja je odczytuje. Urządzenie oznaczone jako \"not supported yet\" nie ma tu parsera, więc tworzy dwa czujniki diagnostyczne i nic więcej. Mimo to warto zostawić je zaznaczone, bo to pobranie diagnostyki z niego, dołączone do zgłoszenia na GitHub, jest tym, z czego powstaje obsługa nowego modelu. Twoje pobranie diagnostyki już zawiera surowe dane, które takie urządzenie zgłasza, więc nie trzeba niczego wcześniej włączać.",
-          "raw_capture": "Zachowuje więcej surowych wiadomości wysyłanych przez twoje urządzenia, nagrywa każde urządzenie, którego ta integracja jeszcze nie obsługuje, i zapisuje ustawienia, które aplikacja EcoFlow wysyła do twoich urządzeń w czasie nagrywania. To ostatnie to sposób na zbudowanie sterowania dla modelu, którego nikt tu nie ma: jednorazowa zmiana ustawienia w aplikacji przy włączonym nagrywaniu pokazuje, co urządzenie przyjmuje. Warto włączać tylko wtedy, gdy poproszono o to w zgłoszeniu na GitHub, bo dane są przydatne jedynie dołączone do pobrania diagnostyki. Nic nigdy nie jest wysyłane do twoich urządzeń, a nagrywanie zatrzymuje się samo po 24 godzinach."
+          "devices": "Wybranie urządzenia sprawia, że ta integracja je odczytuje. Urządzenie oznaczone jako \"not supported yet\" nie ma tu parsera, więc tworzy dwa czujniki diagnostyczne i nic więcej. Mimo to warto zostawić je zaznaczone, bo pobrany z niego plik diagnostyki, dołączony do zgłoszenia na GitHub, jest tym, z czego powstaje obsługa nowego modelu. Pobrany plik diagnostyki już zawiera surowe dane, które takie urządzenie zgłasza, więc nie trzeba niczego wcześniej włączać.",
+          "raw_capture": "Zachowuje więcej surowych wiadomości wysyłanych przez Twoje urządzenia, nagrywa każde urządzenie, którego ta integracja jeszcze nie obsługuje, i zapisuje ustawienia, które aplikacja EcoFlow wysyła do Twoich urządzeń w czasie nagrywania. To ostatnie to sposób na zbudowanie sterowania dla modelu, którego nikt tu nie ma: jednorazowa zmiana ustawienia w aplikacji przy włączonym nagrywaniu pokazuje, co urządzenie przyjmuje. Warto włączać tylko wtedy, gdy poproszono o to w zgłoszeniu na GitHub, bo dane są przydatne jedynie dołączone do pobranego pliku diagnostyki. Nic nigdy nie jest wysyłane do Twoich urządzeń, a nagrywanie zatrzymuje się samo po 24 godzinach."
         }
       },
       "developer": {
@@ -136,15 +136,15 @@
       },
       "init_app": {
         "title": "Opcje EcoFlow Energy",
-        "description": "**Standard** - Oficjalne EcoFlow IoT API. Wspierane przez EcoFlow. Aktualizacje co 10-30 sekund.\n\n**Enhanced** - Tworzone przez społeczność połączenie w czasie rzeczywistym. Aktualizacje co ~3 sekundy. Nieoficjalne - używasz na własne ryzyko.\n\nZmiana trybu może wymagać nowych danych dostępowych.",
+        "description": "**Standard** - Oficjalne EcoFlow IoT API. Wspierane przez EcoFlow. Aktualizacje co 10-30 sekund.\n\n**Enhanced** - Połączenie w czasie rzeczywistym tworzone przez społeczność. Aktualizacje co ~3 sekundy. Nieoficjalne - używasz na własne ryzyko.\n\nZmiana trybu może wymagać nowych danych dostępowych.",
         "data": {
           "mode": "Tryb połączenia",
           "devices": "Urządzenia",
           "raw_capture": "Nagrywaj dodatkowe dane diagnostyczne przez 24 godziny"
         },
         "data_description": {
-          "devices": "Wybranie urządzenia sprawia, że ta integracja je odczytuje. Urządzenie oznaczone jako \"not supported yet\" nie ma tu parsera, więc tworzy dwa czujniki diagnostyczne i nic więcej. Mimo to warto zostawić je zaznaczone, bo to pobranie diagnostyki z niego, dołączone do zgłoszenia na GitHub, jest tym, z czego powstaje obsługa nowego modelu. Najpierw włącz poniżej nagrywanie danych diagnostycznych, a pobierz dopiero potem, bo przy logowaniu kontem pobranie samo z siebie nie zawiera tych surowych danych.",
-          "raw_capture": "Zachowuje więcej surowych wiadomości wysyłanych przez twoje urządzenia, nagrywa każde urządzenie, którego ta integracja jeszcze nie obsługuje, i zapisuje ustawienia, które aplikacja EcoFlow wysyła do twoich urządzeń w czasie nagrywania. To ostatnie to sposób na zbudowanie sterowania dla modelu, którego nikt tu nie ma: jednorazowa zmiana ustawienia w aplikacji przy włączonym nagrywaniu pokazuje, co urządzenie przyjmuje. Warto włączać tylko wtedy, gdy poproszono o to w zgłoszeniu na GitHub, bo dane są przydatne jedynie dołączone do pobrania diagnostyki. Nic nigdy nie jest wysyłane do twoich urządzeń, a nagrywanie zatrzymuje się samo po 24 godzinach."
+          "devices": "Wybranie urządzenia sprawia, że ta integracja je odczytuje. Urządzenie oznaczone jako \"not supported yet\" nie ma tu parsera, więc tworzy dwa czujniki diagnostyczne i nic więcej. Mimo to warto zostawić je zaznaczone, bo pobrany z niego plik diagnostyki, dołączony do zgłoszenia na GitHub, jest tym, z czego powstaje obsługa nowego modelu. Najpierw włącz poniżej nagrywanie danych diagnostycznych, a pobierz dopiero potem, bo przy logowaniu kontem pobrany plik sam z siebie nie zawiera tych surowych danych.",
+          "raw_capture": "Zachowuje więcej surowych wiadomości wysyłanych przez Twoje urządzenia, nagrywa każde urządzenie, którego ta integracja jeszcze nie obsługuje, i zapisuje ustawienia, które aplikacja EcoFlow wysyła do Twoich urządzeń w czasie nagrywania. To ostatnie to sposób na zbudowanie sterowania dla modelu, którego nikt tu nie ma: jednorazowa zmiana ustawienia w aplikacji przy włączonym nagrywaniu pokazuje, co urządzenie przyjmuje. Warto włączać tylko wtedy, gdy poproszono o to w zgłoszeniu na GitHub, bo dane są przydatne jedynie dołączone do pobranego pliku diagnostyki. Nic nigdy nie jest wysyłane do Twoich urządzeń, a nagrywanie zatrzymuje się samo po 24 godzinach."
         }
       }
     },
@@ -155,7 +155,7 @@
       "enhanced_decrypt_failed": "Odszyfrowanie danych logowania trybu Enhanced nie powiodło się.",
       "no_devices": "Wybierz co najmniej jedno urządzenie.",
       "powerstream_requires_standard": "PowerStream wymaga trybu Standard z kluczami Developer API.",
-      "device_requires_enhanced": "To urządzenie wymaga trybu Enhanced z twoim kontem EcoFlow.",
+      "device_requires_enhanced": "To urządzenie wymaga trybu Enhanced z Twoim kontem EcoFlow.",
       "unknown": "Wystąpił nieoczekiwany błąd."
     }
   },
@@ -165,10 +165,10 @@
         "name": "SoC"
       },
       "pow_in_sum_w": {
-        "name": "Wejście łącznie"
+        "name": "Łączna moc wejściowa"
       },
       "pow_out_sum_w": {
-        "name": "Wyjście łącznie"
+        "name": "Łączna moc wyjściowa"
       },
       "pv1_in_w": {
         "name": "Wejście solarne 1"
@@ -192,7 +192,7 @@
         "name": "Moc solarna"
       },
       "third_party_solar_w": {
-        "name": "Moc solarna zewnętrzna"
+        "name": "Moc solarna z innych źródeł"
       },
       "home_w": {
         "name": "Moc domu"
@@ -225,10 +225,10 @@
         "name": "Moc przyłącza sieci AC"
       },
       "home_from_batt_w": {
-        "name": "Dom z baterii"
+        "name": "Zasilanie domu z baterii"
       },
       "home_from_grid_w": {
-        "name": "Dom z sieci"
+        "name": "Zasilanie domu z sieci"
       },
       "ac_outlet_1_w": {
         "name": "Moc gniazda AC 1"
@@ -422,7 +422,7 @@
       "ems_feed_mode": {
         "name": "Tryb oddawania do sieci",
         "state": {
-          "off": "Wyłączony",
+          "off": "Wyłączono",
           "no_limit": "Bez limitu",
           "zero": "Zerowe oddawanie",
           "limit": "Ograniczone"
@@ -438,7 +438,7 @@
           "ac_makeup": "Uzupełnianie AC",
           "drm": "DRM",
           "remote_schedule": "Zdalny harmonogram",
-          "standby": "Czuwanie",
+          "standby": "Tryb czuwania",
           "soc_calibration": "Kalibracja SoC",
           "timer": "Programator",
           "fcr": "FCR",
@@ -450,8 +450,8 @@
       "pcs_run_state": {
         "name": "Stan falownika",
         "state": {
-          "standby": "Czuwanie",
-          "running": "Praca",
+          "standby": "Tryb czuwania",
+          "running": "Pracuje",
           "stopped": "Zatrzymany"
         }
       },
@@ -474,7 +474,7 @@
       "batt_charge_discharge_state": {
         "name": "Stan ładowania/rozładowania baterii",
         "state": {
-          "standby": "Czuwanie",
+          "standby": "Tryb czuwania",
           "discharging": "Rozładowywanie",
           "charging": "Ładowanie"
         }
@@ -519,10 +519,10 @@
         "name": "Dokładny SoC"
       },
       "watts_in_sum": {
-        "name": "Wejście łącznie"
+        "name": "Łączna moc wejściowa"
       },
       "watts_out_sum": {
-        "name": "Wyjście łącznie"
+        "name": "Łączna moc wyjściowa"
       },
       "ac_in_w": {
         "name": "Wejście AC"
@@ -650,7 +650,7 @@
       "chg_dsg_state": {
         "name": "Stan ładowania/rozładowania",
         "state": {
-          "idle": "Bezczynny",
+          "idle": "Brak aktywności",
           "discharging": "Rozładowywanie",
           "charging": "Ładowanie"
         }
@@ -658,7 +658,7 @@
       "ems_chg_state": {
         "name": "Stan ładowania EMS",
         "state": {
-          "idle": "Bezczynny",
+          "idle": "Brak aktywności",
           "charging": "Ładowanie",
           "discharging": "Rozładowywanie"
         }
@@ -676,7 +676,7 @@
       "mppt_chg_state": {
         "name": "Stan ładowania MPPT",
         "state": {
-          "idle": "Bezczynny",
+          "idle": "Brak aktywności",
           "charging": "Ładowanie"
         }
       },
@@ -1241,22 +1241,22 @@
       "wifi_status": {
         "name": "Stan WiFi",
         "state": {
-          "disconnected": "Rozłączony",
-          "connected": "Połączony"
+          "disconnected": "Rozłączono",
+          "connected": "Połączono"
         }
       },
       "ethernet_status": {
         "name": "Stan Ethernet",
         "state": {
-          "disconnected": "Rozłączony",
-          "connected": "Połączony"
+          "disconnected": "Rozłączono",
+          "connected": "Połączono"
         }
       },
       "cellular_status": {
         "name": "Stan 4G",
         "state": {
-          "disconnected": "Rozłączony",
-          "connected": "Połączony"
+          "disconnected": "Rozłączono",
+          "connected": "Połączono"
         }
       },
       "ems_led_brightness": {
@@ -1267,12 +1267,12 @@
         "state": {
           "none": "Brak",
           "init": "Inicjalizacja",
-          "idle": "Bezczynny",
+          "idle": "Brak aktywności",
           "startup_ext_bp": "Uruchamianie (bateria zewn.)",
           "startup_inner_bp": "Uruchamianie (bateria wewn.)",
           "startup_pv": "Uruchamianie (PV)",
           "startup_grid": "Uruchamianie (sieć)",
-          "running": "Praca",
+          "running": "Pracuje",
           "stop": "Zatrzymany",
           "maintain": "Konserwacja"
         }
@@ -1336,12 +1336,12 @@
         "state": {
           "invalid": "Nieprawidłowy",
           "grid_in": "Pobór z sieci",
-          "not_online": "Niepołączony",
+          "not_online": "Nie połączono",
           "feed_grid": "Oddawanie do sieci"
         }
       },
       "home_from_solar_w": {
-        "name": "Dom z energii solarnej"
+        "name": "Zasilanie domu z energii solarnej"
       },
       "pv1_energy_kwh": {
         "name": "Energia PV 1"
@@ -1524,7 +1524,7 @@
       "ev_session_status": {
         "name": "Stan sesji wallboxa",
         "state": {
-          "idle": "Bezczynna",
+          "idle": "Brak aktywności",
           "charging": "Ładowanie",
           "finished": "Zakończona"
         }
@@ -1548,7 +1548,7 @@
         "name": "Moc obciążenia Smart Plug"
       },
       "permanent_watts_w": {
-        "name": "Niestandardowa moc obciążenia"
+        "name": "Zadana moc obciążenia"
       },
       "lower_limit_pct": {
         "name": "Limit rozładowania"
@@ -2128,9 +2128,9 @@
       "mood_light_mode": {
         "name": "Oświetlenie nastrojowe",
         "state": {
-          "off": "Wyłączone",
-          "on": "Włączone",
-          "screen_time": "Zgodnie z ekranem"
+          "off": "Wyłączono",
+          "on": "Włączono",
+          "screen_time": "Razem z ekranem"
         }
       },
       "screen_off_time_s": {
@@ -2162,7 +2162,7 @@
       "message": "Nie można ustawić {entity} - urządzenie nie zgłasza już tego harmonogramu. Sprawdź, czy harmonogram nadal istnieje w aplikacji EcoFlow."
     },
     "set_command_not_ready": {
-      "message": "Nie można jeszcze ustawić {entity} - urządzenie nie zgłosiło jeszcze swojego bieżącego ustawienia. Spróbuj ponownie za chwilę."
+      "message": "Nie można jeszcze ustawić {entity} - urządzenie nie zgłosiło swojego bieżącego ustawienia. Spróbuj ponownie za chwilę."
     },
     "set_command_unsupported": {
       "message": "{entity} nie obsługuje tego polecenia na tym urządzeniu."
