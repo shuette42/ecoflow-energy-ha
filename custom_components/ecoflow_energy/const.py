@@ -55,6 +55,7 @@ PLATFORMS: list[Platform] = [
     Platform.NUMBER,
     Platform.SELECT,
     Platform.CLIMATE,
+    Platform.BUTTON,
 ]
 
 # Config entry keys
@@ -463,6 +464,21 @@ class EcoFlowSwitchDef:
     # created on the first report that carries its state key rather than on
     # every device. See _watch_for_accessory() in switch.py.
     accessory: bool = False
+
+
+@dataclass(frozen=True)
+class EcoFlowButtonDef:
+    key: str
+    name: str
+    action: str
+    state_key: str
+    icon: str | None = None
+    # Same meaning as on the switch, sensor and number definitions: the
+    # descriptor this button depends on only exists on the app channel.
+    enhanced_only: bool = True
+    # Created once the descriptor state_key has been reported, same as an
+    # accessory switch. See _watch_for_accessory() in button.py.
+    accessory: bool = True
 
 
 @dataclass(frozen=True)
@@ -7132,6 +7148,28 @@ POWERPULSE2_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
         "diagnostic",
         enhanced_only=True,
         accessory=True,
+    ),
+]
+
+
+# The wallbox's own start/stop controls (ADR-009). Created on the descriptor
+# report (ev_charger_sn), same accessory gate as the cable lock binary sensor
+# above, and require exactly one sibling PowerOcean coordinator in the entry
+# - the platform setup checks that, not this list.
+POWERPULSE2_BUTTONS: list[EcoFlowButtonDef] = [
+    EcoFlowButtonDef(
+        "ev_start_charging",
+        "Wallbox Start Charging",
+        "start",
+        "ev_charger_sn",
+        "mdi:play",
+    ),
+    EcoFlowButtonDef(
+        "ev_stop_charging",
+        "Wallbox Stop Charging",
+        "stop",
+        "ev_charger_sn",
+        "mdi:stop",
     ),
 ]
 

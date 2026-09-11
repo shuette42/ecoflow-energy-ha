@@ -2144,6 +2144,14 @@
           "never": "Never"
         }
       }
+    },
+    "button": {
+      "ev_start_charging": {
+        "name": "Wallbox Start Charging"
+      },
+      "ev_stop_charging": {
+        "name": "Wallbox Stop Charging"
+      }
     }
   },
   "exceptions": {
