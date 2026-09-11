@@ -46,6 +46,7 @@ class DeviceValueNotReported(Exception):
 
 if TYPE_CHECKING:
     from ._typing import CoordinatorState as _Base
+    from .core import WallboxActionPending
 else:
     _Base = object
 
@@ -1076,7 +1077,12 @@ class SetCommandsMixin(_Base):
 
         async with self._wallbox_action_lock:
             if self._shutdown:
-                return
+                # A press during teardown must not report success for a
+                # command that was never sent (issue #185 is the rule).
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerpulse_action_not_delivered",
+                )
             if action not in POWERPULSE2_CHARGE_ACTION_WINDOW_S:
                 raise ValueError(f"action must be 'start' or 'stop', got {action!r}")
             typed_action = cast("Literal['start', 'stop']", action)
@@ -1118,36 +1124,50 @@ class SetCommandsMixin(_Base):
                 typed_action, dev_addr, dev_sn
             )
             future: asyncio.Future[str] = self.hass.loop.create_future()
-            self._wallbox_action_pending = WallboxActionPending(
+            record = WallboxActionPending(
                 action=typed_action, issued_at=time.monotonic(), future=future
             )
-            delivered = await sibling.async_send_proto_set_command(
-                payload, f"powerpulse_{typed_action}"
-            )
-            if not delivered:
-                self._wallbox_action_pending = None
-                self._log_event(f"powerpulse_{typed_action}_not_delivered", "")
-                raise HomeAssistantError(
-                    translation_domain=DOMAIN,
-                    translation_key="powerpulse_action_not_delivered",
+            # The record lives exactly as long as this call: every exit,
+            # the failed publish, the timeout, the confirmation and a
+            # cancelled press alike, clears it in the `finally` below. A
+            # record that outlived a cancelled press would refuse every
+            # later press as in progress until the entry reloaded (review
+            # finding of 2026-09-11).
+            self._wallbox_action_pending = record
+            try:
+                delivered = await sibling.async_send_proto_set_command(
+                    payload, f"powerpulse_{typed_action}"
                 )
+                if not delivered:
+                    self._log_event(f"powerpulse_{typed_action}_not_delivered", "")
+                    raise HomeAssistantError(
+                        translation_domain=DOMAIN,
+                        translation_key="powerpulse_action_not_delivered",
+                    )
+            except BaseException:
+                self._clear_wallbox_action(record)
+                raise
 
         try:
             confirmed_status = await asyncio.wait_for(
-                asyncio.shield(future),
-                POWERPULSE2_CHARGE_ACTION_WINDOW_S[typed_action],
+                future, POWERPULSE2_CHARGE_ACTION_WINDOW_S[typed_action]
             )
         except TimeoutError:
             last_status = self._device_data.get("ev_charge_status")
-            self._wallbox_action_pending = None
             self._log_event(f"powerpulse_{typed_action}_unconfirmed", str(last_status))
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="powerpulse_action_not_confirmed",
             ) from None
         else:
-            self._wallbox_action_pending = None
             self._log_event(f"powerpulse_{typed_action}", str(confirmed_status))
+        finally:
+            self._clear_wallbox_action(record)
+
+    def _clear_wallbox_action(self, record: WallboxActionPending) -> None:
+        """Drop the pending record if it is still the one this call set."""
+        if self._wallbox_action_pending is record:
+            self._wallbox_action_pending = None
 
     async def async_send_delta3_set(self, command: dict[str, Any]) -> bool:
         """Apply a Delta 3 setting on whichever channel this entry is using.

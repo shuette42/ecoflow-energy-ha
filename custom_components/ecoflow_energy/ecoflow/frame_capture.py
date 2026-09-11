@@ -589,20 +589,32 @@ def sanitize_frame(payload: bytes, secrets: list[str]) -> bytes:
             if on_the_wire == ciphertext:
                 continue
             # The plain passes rewrote ciphertext that happened to spell an
-            # identifier on the wire. Where the plaintext under those bytes is
-            # already the mask byte, the region was masked before and the
-            # rewrite corrupts it: `X ^ key` is itself alphanumeric for many
-            # keys (0x1e gives F, 0x0a gives R), so the product's own output,
-            # sanitized a second time, came back with `F` where `X` had been
-            # (measured 2026-09-11 on the PowerPulse 2 settings-report
-            # fixture). Those bytes go back to the ciphertext; any other
-            # rewrite in the region stays, as before.
+            # identifier on the wire. Where the plaintext under a whole
+            # rewritten span is already the mask byte, the region was masked
+            # before and the rewrite corrupts it: `X ^ key` is itself
+            # alphanumeric for many keys (0x1e gives F, 0x0a gives R), so the
+            # product's own output, sanitized a second time, came back with
+            # `F` where `X` had been (measured 2026-09-11 on the PowerPulse 2
+            # settings-report fixture). Such a span goes back to the
+            # ciphertext. The decision is per span, never per byte: a header
+            # can declare a mask it does not carry (`_pdata_candidates` keeps
+            # a fallback for exactly that), and there a real identifier sits
+            # on the wire whose bytes equal `X ^ key` only by coincidence, one
+            # here and one there; restoring those would hand back one letter
+            # of it per frame. Any span whose plaintext is not all mask bytes
+            # keeps the rewrite, as before.
             restored = bytearray(on_the_wire)
-            for offset, (before, after) in enumerate(
-                zip(ciphertext, on_the_wire, strict=True)
-            ):
-                if before != after and inner[offset] == _MASK_BYTE[0]:
-                    restored[offset] = before
+            offset = 0
+            length = len(ciphertext)
+            while offset < length:
+                if ciphertext[offset] == on_the_wire[offset]:
+                    offset += 1
+                    continue
+                span_start = offset
+                while offset < length and ciphertext[offset] != on_the_wire[offset]:
+                    offset += 1
+                if all(byte == _MASK_BYTE[0] for byte in inner[span_start:offset]):
+                    restored[span_start:offset] = ciphertext[span_start:offset]
             sanitized = (
                 sanitized[: region.start] + bytes(restored) + sanitized[region.end :]
             )

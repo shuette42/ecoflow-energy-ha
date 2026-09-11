@@ -247,6 +247,24 @@ class TestButtonAvailability:
         _mqtt(oceans[0]).is_connected.return_value = True
         assert button_entity.available is True
 
+    async def test_available_follows_the_wallbox_own_availability(
+        self, hass: HomeAssistant
+    ) -> None:
+        """A wallbox marked unreachable takes its buttons with it, whatever
+        the sibling's connection says."""
+        entry, _oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+        _report_descriptor(wallbox)
+
+        entities: list[Any] = []
+        await button_setup(hass, entry, add_entities_collector(entities))
+        button_entity = entities[0]
+        assert button_entity.available is True
+
+        wallbox._device_available = False
+        assert button_entity.available is False
+        wallbox._device_available = True
+        assert button_entity.available is True
+
 
 class TestButtonPress:
     async def test_press_calls_the_coordinator_action_with_start_or_stop(

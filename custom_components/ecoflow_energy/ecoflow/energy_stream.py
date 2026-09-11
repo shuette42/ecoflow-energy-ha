@@ -273,9 +273,9 @@ def build_powerpulse_charge_action_payload(
     accessory by its bus address and serial (`dev_info`, fields 1 and 2
     only - the settings report's `dev_info` carries a third field that no
     captured write has). `on_off_set` (field 2 of `pdata`) is 1 for stop,
-    2 for start. Byte-for-byte from four app frames observed starting and
-    stopping a real charging session (docs/plans/completed/PLAN-115,
-    section 1, ADR-009 decision 1). The frames carry no device serial
+    2 for start. Byte-for-byte from the four app frames of one recording
+    of a real charging session being stopped and started twice (PLAN-136,
+    ADR-009 decision 1). The frames carry no device serial
     (field 25) and no product id (field 15) at the envelope level, so
     neither is passed to `_build_powerocean_set_envelope` here.
 
@@ -289,8 +289,10 @@ def build_powerpulse_charge_action_payload(
     """
     if action not in ("start", "stop"):
         raise ValueError(f"action must be 'start' or 'stop', got {action!r}")
-    if len(dev_sn) != 16 or not dev_sn.isascii():
-        raise ValueError(f"dev_sn must be 16 ASCII characters, got {dev_sn!r}")
+    if len(dev_sn) != 16 or not dev_sn.isascii() or not dev_sn.isalnum():
+        raise ValueError(
+            f"dev_sn must be 16 alphanumeric ASCII characters, got {dev_sn!r}"
+        )
 
     dev_info = encode_field_varint(1, dev_addr) + encode_field_bytes(
         2, dev_sn.encode("ascii")

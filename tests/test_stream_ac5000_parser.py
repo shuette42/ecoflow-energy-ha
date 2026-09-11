@@ -1059,7 +1059,7 @@ class TestPvStrings:
 
     The reporter downloaded the diagnostics moments after noting his app:
     strings 1 to 4 at 0, 34, 50 and 102 W, third-party solar 80 W, app solar
-    total 265 W. See `docs/captures/es21-20260816T072152.json`.
+    total 265 W. From the ES21 recording of 2026-08-16 on issue #231.
     """
 
     @staticmethod

@@ -2,13 +2,11 @@
 accessory descriptor read from the wallbox's own settings report
 (PLAN-136 Phase 2, ADR-009).
 
-The four app frames are byte-for-byte captures of a real charging session
-started and stopped from the vendor app
-(`docs/plans/completed/PLAN-115-powerpulse2-start-stop-control.md`,
-section 1; ADR-009 decision 1). The descriptor frames are the wallbox's own
+The four app frames are byte-for-byte captures from one recording of a
+real charging session stopped and started twice from the vendor app
+(PLAN-136, ADR-009 decision 1). The descriptor frames are the wallbox's own
 settings report, sanitized into
-`tests/fixtures/powerpulse/c376_run_data_sync_20260824.json`
-(`docs/review/2026-09-11-plan136-descriptor-measurement.md`).
+`tests/fixtures/powerpulse/c376_run_data_sync_20260824.json`.
 """
 
 from __future__ import annotations
@@ -111,6 +109,16 @@ def test_builder_rejects_bad_input(action: str, dev_addr: int, dev_sn: str) -> N
         build_powerpulse_charge_action_payload(action, dev_addr, dev_sn)
 
 
+def test_builder_rejects_a_serial_with_control_characters() -> None:
+    """Sixteen ASCII bytes are not a serial when they are not alphanumeric:
+    a nested submessage of small values is ASCII too (review finding of
+    2026-09-11)."""
+    with pytest.raises(ValueError):
+        build_powerpulse_charge_action_payload(
+            "stop", 215, "C376TEST0000\x01\x02\x03\x04"
+        )
+
+
 def test_settings_report_yields_the_descriptor_on_all_nine_frames() -> None:
     frames = json.loads(RUN_DATA_SYNC_FIXTURE.read_text())["frames"]
     checked = 0
@@ -144,6 +152,24 @@ def test_settings_report_rejects_a_serial_that_is_not_16_bytes() -> None:
     from ecoflow_energy.ecoflow.proto_encoding import encode_field_varint
 
     dev_info = encode_field_varint(1, DEV_ADDR) + encode_field_bytes(2, b"short")
+    body = encode_field_bytes(1, dev_info)
+    pdata = encode_field_bytes(1, body)
+
+    built = _build_powerocean_set_envelope(pdata, cmd_id=44, cmd_func=241)
+    result = parse_powerpulse_message(built)
+
+    if result is not None:
+        assert "ev_charger_dev_addr" not in result
+        assert "ev_charger_sn" not in result
+
+
+def test_settings_report_rejects_a_serial_that_is_not_alphanumeric() -> None:
+    """Sixteen ASCII bytes of small values are what a nested submessage looks
+    like, not a serial (review finding of 2026-09-11)."""
+    from ecoflow_energy.ecoflow.proto_encoding import encode_field_varint
+
+    not_a_serial = b"C376TEST0000" + bytes([1, 2, 3, 4])
+    dev_info = encode_field_varint(1, DEV_ADDR) + encode_field_bytes(2, not_a_serial)
     body = encode_field_bytes(1, dev_info)
     pdata = encode_field_bytes(1, body)
 

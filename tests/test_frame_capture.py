@@ -1432,6 +1432,27 @@ class TestMaskingDoesNotCorruptRealFrames:
         assert b"X" * 16 in sanitized
         assert b"G" * 16 not in sanitized
 
+    def test_a_plain_serial_in_a_region_that_only_declares_a_key_stays_masked(
+        self,
+    ) -> None:
+        """Negative control for the restore: a header that declares the mask
+        but sends plain bytes carries the serial on the wire. The raw pass
+        masks it; the restore must not hand any byte of it back, even the
+        ones that equal `X ^ key` by coincidence (with key 0x1e, `F`), which
+        a per-byte restore did (review finding of 2026-09-11).
+        """
+        key = 0x1E
+        serial = b"C376TESTPLAINFF1"  # two F, the byte `X ^ 0x1e` spells
+        header = bytearray()
+        header.extend(encode_field_varint(6, 1))  # enc_type = XOR, declared
+        header.extend(encode_field_varint(14, key))  # seq
+        header.extend(encode_field_bytes(1, serial))  # pdata NOT masked
+        frame = encode_field_bytes(1, bytes(header))
+        sanitized = sanitize_frame(frame, [])
+        assert b"X" * 16 in sanitized
+        assert serial not in sanitized
+        assert b"F" not in sanitized[frame.index(serial) : frame.index(serial) + 16]
+
     def test_no_identifier_survives_under_the_mask(self) -> None:
         """The guard for PLAN-128: an encrypted region must be clean too.
 

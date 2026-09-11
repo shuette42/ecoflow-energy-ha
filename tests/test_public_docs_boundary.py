@@ -158,6 +158,48 @@ def test_public_file_stays_inside_the_boundary(path: Path) -> None:
     assert not findings, f"{path.relative_to(REPO_ROOT)}: {findings[:5]}"
 
 
+# The code trees cite plan numbers by convention (`PLAN-136` beside the code
+# it produced) and name `scripts/` in docstrings that tell a maintainer which
+# tool to run, so those two halves of the prose pattern do not apply there.
+# A path into a gitignored tree does: nobody outside this checkout can follow
+# it, and it says where the private material lives (public-repo-boundary,
+# rule 3). Found 2026-09-11 in a builder docstring and a test module docstring
+# that the prose scan above never reads.
+_CODE_TREES = (REPO_ROOT / "custom_components", REPO_ROOT / "tests")
+_PRIVATE_PATH_IN_CODE = re.compile(
+    r"docs/captures|docs/plans|docs/review|docs/repo|docs/"
+    + _term("ap", "k")
+    + r"|\."
+    + _term("cla", "ude")
+    + "/|agent-memory"
+)
+# This file spells the pattern and its sample, so it is the one file exempt.
+_CODE_FILES = sorted(
+    file
+    for tree in _CODE_TREES
+    for file in tree.rglob("*.py")
+    if file.is_file() and file.resolve() != Path(__file__).resolve()
+)
+
+
+@pytest.mark.parametrize(
+    "path", _CODE_FILES, ids=lambda p: str(p.relative_to(REPO_ROOT))
+)
+def test_code_file_names_no_private_path(path: Path) -> None:
+    text = path.read_text(encoding="utf-8", errors="replace")
+    found = [match.group() for match in _PRIVATE_PATH_IN_CODE.finditer(text)]
+    assert not found, f"{path.relative_to(REPO_ROOT)}: {found[:5]}"
+
+
+def test_the_code_file_set_is_not_empty() -> None:
+    assert len(_CODE_FILES) >= 100, len(_CODE_FILES)
+
+
+def test_the_code_private_path_pattern_catches_its_sample() -> None:
+    sample = "built from docs/captures/x.json, see docs/review/y.md"
+    assert len(_PRIVATE_PATH_IN_CODE.findall(sample)) == 2
+
+
 def test_the_public_file_set_is_not_empty() -> None:
     assert len(PUBLIC_FILES) >= 10, PUBLIC_FILES
 

@@ -308,10 +308,13 @@ def _decode_run_data_sync_fields(pdata: bytes) -> dict[str, Any]:
     PLAN-136 records why. The settings block behind `dev_info` (`f4.f8`) is
     a later plan; nothing else from this message is parsed here.
 
-    Both keys are emitted only when `dev_addr` is present and `dev_sn`
-    decodes as exactly 16 ASCII bytes; otherwise an empty dict is returned,
-    which is a clean decode of a frame this function does not (yet) read
-    fully, not an error. The serial is never logged.
+    Both keys are emitted only when `dev_addr` is present and `dev_sn` is
+    exactly 16 alphanumeric ASCII bytes (every EcoFlow serial on file is);
+    otherwise an empty dict is returned, which is a clean decode of a frame
+    this function does not (yet) read fully, not an error. The serial is
+    never logged. The first `dev_info` of the first body wins: no captured
+    frame carries two, and a bundle with two such headers would let the
+    later one overwrite the earlier in the caller's merge.
     """
     result: dict[str, Any] = {}
     for field_num, wire_type, body in _iter_fields(pdata):
@@ -329,9 +332,14 @@ def _decode_run_data_sync_fields(pdata: bytes) -> dict[str, Any]:
                         dev_addr = value
                 elif leaf_num == 2 and leaf_wire == 2 and len(leaf_raw) == 16:
                     try:
-                        dev_sn = leaf_raw.decode("ascii")
+                        decoded_sn = leaf_raw.decode("ascii")
                     except UnicodeDecodeError:
-                        dev_sn = None
+                        decoded_sn = None
+                    dev_sn = (
+                        decoded_sn
+                        if decoded_sn is not None and decoded_sn.isalnum()
+                        else None
+                    )
             if dev_addr is not None and dev_sn is not None:
                 result["ev_charger_dev_addr"] = dev_addr
                 result["ev_charger_sn"] = dev_sn

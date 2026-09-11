@@ -160,8 +160,7 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
         # and display names follow the BK series (Stream Ultra / Ultra X):
         # `pvN_w` / "PV N Power".
         #
-        # From the ES21 capture on issue #231, stored as
-        # `docs/captures/es21-20260816T072152.json`. `.3` equals the sum of
+        # From the ES21 recording of 2026-08-16 on issue #231. `.3` equals the sum of
         # `.9` through `.12` exactly in all 7 of its frames that carry `.3`,
         # totals 28.52 W to 310.96 W. The reporter noted his app at the end of
         # that capture and the two frames either side of the moment bracket

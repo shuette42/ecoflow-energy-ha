@@ -100,25 +100,27 @@ def _leaks(raw: bytes) -> list[str]:
         findings.append("unmasked UUID")
     if _MAC.search(text):
         findings.append("unmasked MAC")
-    # A region the header declares XOR-masked is checked on its plaintext
-    # below, not on its wire bytes: a serial masked to `X` and then re-masked
-    # with the key reads as a run of `X ^ key` on the wire, which for many
-    # keys is itself alphanumeric (`0x36` gives `n`, `0x1e` gives `F`). The
-    # product sanitizer's own output on the 2026-08-24 settings report tripped
-    # this pass that way on 2026-09-11. A region without a key is not skipped:
-    # nothing can check it on its plaintext, so the wire scan is all it gets.
+    # A serial masked to `X` and then re-masked with the region's key reads
+    # as a run of `X ^ key` on the wire, which for many keys is itself
+    # alphanumeric (`0x36` gives `n`, `0x1e` gives `F`). The product
+    # sanitizer's own output on the 2026-08-24 settings report tripped this
+    # pass that way on 2026-09-11. Such a run is skipped here only when its
+    # plaintext under the region's key is entirely the mask byte. A declared
+    # key is not proof of a mask (a header can set the flag and send plain
+    # bytes), so a run whose plaintext is anything else stays a finding, and
+    # a region without a key is scanned on the wire like everything else.
     keyed_regions = [
-        (region.start, region.end)
-        for region in _encrypted_regions(raw)
-        if region.key is not None
+        region for region in _encrypted_regions(raw) if region.key is not None
     ]
     for match in _RUN.finditer(text):
         run = match.group()
         if run in _PLACEHOLDERS:
             continue
         if any(
-            start <= match.start() and match.end() <= end
-            for start, end in keyed_regions
+            region.start <= match.start()
+            and match.end() <= region.end
+            and set(_xor(raw[match.start() : match.end()], region.key)) == {ord("X")}
+            for region in keyed_regions
         ):
             continue
         if set(run) != {"X"}:
@@ -369,6 +371,25 @@ def test_a_masked_serial_under_a_keyed_region_is_not_a_wire_leak() -> None:
     region = next(r for r in _encrypted_regions(raw) if r.key is not None)
     assert b"X" * 16 in _xor(raw[region.start : region.end], region.key)
     assert _leaks(raw) == []
+
+
+def test_a_plain_serial_in_a_region_that_only_declares_a_key_is_a_leak() -> None:
+    """Positive control for the wire skip itself: a header that declares the
+    mask but sends plain bytes carries the serial on the wire. Its plaintext
+    under the key is not the mask byte, so the skip must not apply and the
+    wire scan reports it. Without the skip the result is the same; with an
+    unconditional skip it would be empty.
+    """
+    key = 0x1E
+    serial = b"C376TESTPLAIN001"
+    header = bytearray()
+    header.extend(encode_field_varint(6, 1))  # enc_type = XOR, declared
+    header.extend(encode_field_varint(14, key))  # seq
+    header.extend(encode_field_bytes(1, serial))  # pdata NOT masked
+    frame = encode_field_bytes(1, bytes(header))
+    region = next(r for r in _encrypted_regions(frame) if r.key is not None)
+    assert region.start <= frame.index(serial) < region.end
+    assert any("unmasked run" in f for f in _leaks(frame)), _leaks(frame)
 
 
 def test_a_real_serial_under_a_keyed_region_is_still_a_leak() -> None:

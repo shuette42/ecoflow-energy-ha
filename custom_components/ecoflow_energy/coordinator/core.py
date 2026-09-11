@@ -475,9 +475,10 @@ class EcoFlowDeviceCoordinator(
     def powerocean_sibling(self) -> EcoFlowDeviceCoordinator | None:
         """Return the entry's one PowerOcean coordinator, or None (ADR-009).
 
-        Resolved fresh at the moment of a wallbox press rather than cached at
-        setup, per decision 2: coordinators can be reloaded independently of
-        each other within the same config entry. Returns None with zero
+        Resolved fresh at the moment of a press and of every availability
+        read rather than cached at setup, per decision 2: during teardown
+        the entry's coordinator table is popped, and the sibling must then
+        resolve to None so the buttons read unavailable. Returns None with zero
         PowerOcean coordinators (no route to send on) and also with two or
         more (no way to tell which one carries this wallbox) - decision 3.
         """

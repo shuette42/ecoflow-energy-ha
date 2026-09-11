@@ -238,6 +238,58 @@ async def test_stop_while_charging_is_not_confirmed_by_another_charging_frame(
     assert wallbox._wallbox_action_pending is None
 
 
+async def test_a_cancelled_press_clears_the_record(hass: HomeAssistant) -> None:
+    """A press cancelled while waiting (automation timeout, HA stop) must not
+    leave the pending record behind, or every later press would be refused
+    as in progress until the entry reloaded (review finding of 2026-09-11).
+    """
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    _apply_status(wallbox, 3)  # charging
+
+    task = asyncio.create_task(wallbox.async_set_powerpulse_charge_action("stop"))
+    await asyncio.sleep(0.05)
+    assert _mqtt(oceans[0]).send_proto_set.call_count == 1
+    assert wallbox._wallbox_action_pending is not None
+
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert wallbox._wallbox_action_pending is None
+
+    # The next press goes through, and is not refused as in progress.
+    task = asyncio.create_task(wallbox.async_set_powerpulse_charge_action("stop"))
+    await asyncio.sleep(0.05)
+    assert _mqtt(oceans[0]).send_proto_set.call_count == 2
+    _apply_status(wallbox, 6)  # finishing - confirms
+    await task
+
+
+async def test_shutdown_while_pending_cancels_the_wait(hass: HomeAssistant) -> None:
+    """Tearing the wallbox coordinator down while a press waits cancels the
+    wait and clears the record; nothing is published again."""
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    _apply_status(wallbox, 3)  # charging
+
+    task = asyncio.create_task(wallbox.async_set_powerpulse_charge_action("stop"))
+    await asyncio.sleep(0.05)
+    assert _mqtt(oceans[0]).send_proto_set.call_count == 1
+
+    await wallbox.async_shutdown()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert wallbox._wallbox_action_pending is None
+    assert _mqtt(oceans[0]).send_proto_set.call_count == 1
+
+    # A press on the torn-down coordinator raises rather than reporting
+    # success for a command that was never sent.
+    with pytest.raises(HomeAssistantError) as err:
+        await wallbox.async_set_powerpulse_charge_action("stop")
+    assert err.value.translation_key == "powerpulse_action_not_delivered"
+    assert _mqtt(oceans[0]).send_proto_set.call_count == 1
+
+
 async def test_no_confirming_frame_times_out(hass: HomeAssistant) -> None:
     _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
     _set_descriptor(wallbox)
