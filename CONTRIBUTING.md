@@ -103,10 +103,16 @@ The file-by-file walk, with the WAVE 3 as the worked example, is in
   again, which double-counts energy for every affected user. "No value yet" is
   the absence of the key.
 - **Translations for every new entity.** Each entity key needs an entry in
-  `strings.json` and in both `translations/en.json` and `translations/de.json`.
-  This is enforced by the test suite in both directions: a key without
-  translations fails, and a translation without a matching key fails as an
-  orphan. Entities with enum states need their state translations too.
+  `strings.json` and in every file under `translations/` (English, German,
+  French, Italian, Dutch, Polish). This is enforced by the test suite in both
+  directions and for every language: a key without a translation fails, and a
+  translation without a matching key fails as an orphan. Entities with enum
+  states need their state translations too. Write the English and, if you can,
+  the German; for the languages you do not speak, copy the English text into
+  the file so the key sets stay identical, and say so in the PR. Those texts
+  are translated before the merge. Home Assistant renders English for any key
+  a language file lacks, so a copied text is never worse than a missing one,
+  but the tests do not accept a missing one.
 - **Updated device counts.** The sensor counts in `README.md` and in
   `documentation/entities/` are per device type. If your PR adds sensors, adjust
   the numbers in the same PR.
