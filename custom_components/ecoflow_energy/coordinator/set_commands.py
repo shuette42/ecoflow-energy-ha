@@ -62,7 +62,66 @@ class _PowerOceanScheduleFamily:
 
     build_payload: Callable[..., bytes]
     log_label: str
+    power_label: str
+    range_source: str
     power_bounds: Callable[[dict[str, Any], str], tuple[int, int]]
+    read_echoed: Callable[[dict[str, Any], str, str], dict[str, Any]]
+
+
+def _read_timer_task_echoed(
+    data: dict[str, Any], prefix: str, slot: str
+) -> dict[str, Any]:
+    """Charge schedule: four scalar fields, every one of them required.
+
+    `time_table` is the one decoded varint the read path publishes, and a
+    `time_param` is on every captured task of this family.
+    """
+    echoed: dict[str, Any] = {}
+    for name, suffix in (
+        ("task_type", "type"),
+        ("time_mode", "time_mode"),
+        ("time_param", "time_param"),
+        ("time_table", "time_table"),
+    ):
+        value = as_known_int(data.get(f"{prefix}{suffix}"))
+        if value is None:
+            raise DeviceValueNotReported(f"{slot} {suffix}")
+        echoed[name] = value
+    return echoed
+
+
+def _read_tou_task_echoed(
+    data: dict[str, Any], prefix: str, slot: str
+) -> dict[str, Any]:
+    """Feed-to-grid schedule: three required fields and one optional.
+
+    `time_table` is a list of one or two windows, as the packed field on the
+    wire carries it. `time_param` may be absent: the daily task (time_mode
+    65) never carries it in any of the nine captured writes, so None means
+    "omit field 2", not "the device has not reported it yet".
+    """
+    task_type = as_known_int(data.get(f"{prefix}type"))
+    if task_type is None:
+        raise DeviceValueNotReported(f"{slot} type")
+    time_mode = as_known_int(data.get(f"{prefix}time_mode"))
+    if time_mode is None:
+        raise DeviceValueNotReported(f"{slot} time_mode")
+    time_table = data.get(f"{prefix}time_table")
+    if not (
+        isinstance(time_table, list)
+        and 1 <= len(time_table) <= 2
+        and all(
+            isinstance(value, int) and not isinstance(value, bool)
+            for value in time_table
+        )
+    ):
+        raise DeviceValueNotReported(f"{slot} time_table")
+    return {
+        "task_type": task_type,
+        "time_mode": time_mode,
+        "time_param": as_known_int(data.get(f"{prefix}time_param")),
+        "time_table": time_table,
+    }
 
 
 def _schedule_power_bounds(data: dict[str, Any], device_sn: str) -> tuple[int, int]:
@@ -103,14 +162,20 @@ def _powerocean_schedule_families() -> dict[str, _PowerOceanScheduleFamily]:
 
     return {
         "schedule": _PowerOceanScheduleFamily(
-            build_timer_task_set_payload,
-            "powerocean_schedule",
-            _schedule_power_bounds,
+            build_payload=build_timer_task_set_payload,
+            log_label="powerocean_schedule",
+            power_label="charge power",
+            range_source="this model accepts",
+            power_bounds=_schedule_power_bounds,
+            read_echoed=_read_timer_task_echoed,
         ),
         "feed_schedule": _PowerOceanScheduleFamily(
-            build_tou_task_set_payload,
-            "powerocean_feed_schedule",
-            _feed_schedule_power_bounds,
+            build_payload=build_tou_task_set_payload,
+            log_label="powerocean_feed_schedule",
+            power_label="export power",
+            range_source="the feed power limit allows",
+            power_bounds=_feed_schedule_power_bounds,
+            read_echoed=_read_tou_task_echoed,
         ),
     }
 
@@ -551,10 +616,13 @@ class SetCommandsMixin(_Base):
     #
     # Both families are a slot the owner already created in the app, share
     # the arm/disarm/power operations, and go through the identical lock,
-    # seed/rollback and DeviceValueNotReported checks below. Only the wire
-    # builder, the log label and the power range differ, so those three are
-    # the whole per-family table (`_powerocean_schedule_families`); the two
-    # methods that use it never branch on `family` themselves.
+    # seed/rollback and DeviceValueNotReported checks below. What differs -
+    # the wire builder, the log label, the power range and its wording, and
+    # the shape of the echoed fields (one scalar window on the charge
+    # schedule, a list of up to two on the feed-to-grid schedule, whose
+    # `time_param` may be absent) - lives in the per-family table
+    # (`_powerocean_schedule_families`); the two methods that use it never
+    # branch on `family` themselves.
 
     async def async_set_powerocean_schedule_armed(
         self,
@@ -661,39 +729,7 @@ class SetCommandsMixin(_Base):
         async with self._device_config_lock:
             data = self.device_data
 
-            task_type = as_known_int(data.get(f"{prefix}type"))
-            if task_type is None:
-                raise DeviceValueNotReported(f"{family} {task_index} type")
-            time_mode = as_known_int(data.get(f"{prefix}time_mode"))
-            if time_mode is None:
-                raise DeviceValueNotReported(f"{family} {task_index} time_mode")
-
-            time_table: int | list[int]
-            if family == "feed_schedule":
-                raw_table = data.get(f"{prefix}time_table")
-                if not (
-                    isinstance(raw_table, list)
-                    and 1 <= len(raw_table) <= 2
-                    and all(
-                        isinstance(value, int) and not isinstance(value, bool)
-                        for value in raw_table
-                    )
-                ):
-                    raise DeviceValueNotReported(f"{family} {task_index} time_table")
-                time_table = raw_table
-                # The daily task (time_mode=65) never carries this field on
-                # the wire in any of the nine captured writes - None means
-                # "omit field 2", not "the device has not reported it yet",
-                # the one echoed field this family does not require.
-                time_param = as_known_int(data.get(f"{prefix}time_param"))
-            else:
-                time_param = as_known_int(data.get(f"{prefix}time_param"))
-                if time_param is None:
-                    raise DeviceValueNotReported(f"{family} {task_index} time_param")
-                table_value = as_known_int(data.get(f"{prefix}time_table"))
-                if table_value is None:
-                    raise DeviceValueNotReported(f"{family} {task_index} time_table")
-                time_table = table_value
+            echoed = config.read_echoed(data, prefix, f"{family} {task_index}")
 
             armed = data.get(f"{prefix}enabled")
             if not isinstance(armed, bool):
@@ -708,12 +744,12 @@ class SetCommandsMixin(_Base):
             floor, ceiling = config.power_bounds(data, self.device_sn)
             if power_w < floor or power_w > ceiling:
                 raise ValueError(
-                    f"charge power {power_w} W is outside the range this model "
-                    f"accepts ({floor}-{ceiling} W)"
+                    f"{config.power_label} {power_w} W is outside the range "
+                    f"{config.range_source} ({floor}-{ceiling} W)"
                 )
             if power_w % POWEROCEAN_SCHEDULE_POWER_STEP_W:
                 raise ValueError(
-                    f"charge power {power_w} W is not a multiple of "
+                    f"{config.power_label} {power_w} W is not a multiple of "
                     f"{POWEROCEAN_SCHEDULE_POWER_STEP_W} W"
                 )
 
@@ -724,11 +760,8 @@ class SetCommandsMixin(_Base):
                 task_index,
                 device_sn=self.device_sn,
                 power_w=power_w,
-                task_type=task_type,
-                time_mode=time_mode,
-                time_param=time_param,
-                time_table=time_table,
                 armed=armed,
+                **echoed,
             )
             self._seed_device_values(**{state_key: power_w})
             if not await self.async_send_proto_set_command(

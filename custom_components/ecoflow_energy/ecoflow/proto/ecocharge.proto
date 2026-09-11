@@ -567,13 +567,14 @@ message EmsAllTimerTaskReport {
 //
 // The same task-list shape as `EmsAllTimerTaskReport` above, on a different
 // header and with a different field layout. Evidence is the reporter capture
-// on #381 (J327, account sign-in): nine writes against slot 4 (create, two
-// disable/enable pairs, a power change, three repeat changes, a delete) and
+// on #381 (J327, account sign-in): nine writes against slot 4 (create,
+// disable, enable, a power change, a window change, three repeat changes, a
+// delete) and
 // nine list pushes on cmd_id 14, all decoded byte for byte against this
 // declaration before it was written.
 //
 // The layout is not a copy of the timer family's numbering. `type` sits at
-// field 5, `sys_meter_dsg_pwr` is renamed `sys_meter_dsg_pwr` and sits at
+// field 5, the timer task's `sys_chg_dsg_pwr` is `sys_meter_dsg_pwr` here and sits at
 // field 6, `is_effect` moves to field 7, and fields 8, 9 and 10 of the timer
 // task (`time_mode`, `time_param`, `time_table`) are replaced by one field 8
 // holding them as a nested message. Every write in the capture carries tag

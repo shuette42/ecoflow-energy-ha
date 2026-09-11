@@ -84,7 +84,8 @@ _LOGGER = logging.getLogger(__name__)
 # round and by accident, which is why the choice is made here instead.
 #
 # The feed-to-grid schedule list rides the same get-all reply and is treated
-# the same way, on the same evidence that the first copy is the current one.
+# the same way by analogy: no paired-unit capture carries `96/14`, so the
+# only effect of listing it is that a disagreeing pair is counted.
 _FIRST_COPY_WINS: frozenset[tuple[int, int]] = frozenset({(96, 10), (96, 14)})
 
 # Two PowerOcean single-phase units run as a pair are one cloud device whose

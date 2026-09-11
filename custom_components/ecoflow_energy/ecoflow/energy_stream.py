@@ -11,7 +11,7 @@ import time
 from collections.abc import Sequence
 from typing import Literal
 
-from .parsers.powerocean_proto import SCHEDULE_MAX_INDEX
+from .parsers.powerocean_proto import _MINUTES_PER_DAY, SCHEDULE_MAX_INDEX
 from .proto_encoding import (
     encode_field_bytes,
     encode_field_fixed32,
@@ -652,11 +652,11 @@ def build_timer_task_set_payload(
 TOU_TASK_CMD_ID = 143
 
 # `is_cfg`, field 2. Same convention as the timer family - 1 create, 2 modify,
-# 3 delete - and here it is observed directly rather than inferred: every
-# write in the #381 capture that is not the initial create carries `is_cfg=2`,
-# including the power change (12:04:22), which on the timer family was never
-# captured with `is_cfg=1` either but had to be reasoned about from the create
-# frame alone.
+# 3 delete - and here the modify is observed rather than inferred: every
+# change to an existing task in the #381 capture, the power change at
+# 12:04:22 included, carries `is_cfg=2` (the create carries 1, the delete 3).
+# On the timer family no power change was ever captured, so 2 was reasoned
+# there from the create frame; here it is on the wire.
 _TOU_TASK_MODIFY = 2
 
 _TOU_TASK_OPERATIONS = ("arm", "disarm", "power")
@@ -665,18 +665,19 @@ _TOU_TASK_OPERATIONS = ("arm", "disarm", "power")
 def _tou_task_window(value: object) -> int:
     """Check one packed `start | end << 16` window, in minutes since midnight.
 
-    Refuses anything that cannot be a time of day. The bound is a day, 1440
-    minutes, not the device's own answer - no capture has ever shown a
+    Refuses anything that cannot be a time of day, with the same bound the
+    read path applies in `_format_window`: an edge is a minute of the day,
+    0 to 1439. Not the device's own answer - no capture has ever shown a
     rejection, because no capture has ever tried a window outside a day.
     """
     if isinstance(value, bool) or not isinstance(value, int):
         raise TypeError(f"time_table window must be an int, got {type(value).__name__}")
     start = value & 0xFFFF
     end = (value >> 16) & 0xFFFF
-    if not (0 <= start <= 1440) or not (0 <= end <= 1440):
+    if not (0 <= start < _MINUTES_PER_DAY) or not (0 <= end < _MINUTES_PER_DAY):
         raise ValueError(
             f"time_table window out of range: start={start} end={end}, "
-            "must be 0..1440 minutes"
+            f"must be 0..{_MINUTES_PER_DAY - 1} minutes"
         )
     return value
 
