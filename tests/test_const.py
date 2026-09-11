@@ -19,6 +19,7 @@ from ecoflow_energy.const import (
     DELTA3_SENSORS,
     DELTA_PROFILE_R331,
     DELTA_PROFILE_R351,
+    DEVICE_TYPE_DISPLAY_NAMES,
     ENHANCED_ONLY_DEVICE_TYPES,
     POWEROCEAN_BINARY_SENSORS,
     POWEROCEAN_SENSORS,
@@ -129,6 +130,19 @@ class TestDeviceTypeRouting:
         assert get_device_type("", "S02FTEST00000002") == "solar_tracker"
         assert get_device_name("", "HZ31TEST00000001") == "Solar Tracker (0001)"
         assert get_device_name("", "S02FTEST00000002") == "Solar Tracker (0002)"
+
+    def test_both_powerpulse2_prefixes_classify_and_are_named(self) -> None:
+        """One wallbox, two account prefixes (#7): `C376` from the two
+        recordings the parser was built from, `C374` from a third owner's
+        recording of 2026-09-11 that carries the same messages, fields and
+        scaling. The app API names neither and the prefix table carries no
+        name for them, so both fall through to the device type's display
+        name, which is the one the two owners on record see.
+        """
+        for sn in ("C376TEST00000001", "C374TEST00000002"):
+            assert get_device_type("", sn) == "powerpulse2", sn
+            assert get_device_name("", sn) == "", sn
+            assert DEVICE_TYPE_DISPLAY_NAMES[get_device_type("", sn)] == "PowerPulse 2"
 
     def test_the_real_stream_family_still_routes(self) -> None:
         """The check above must not cost the devices it sits in front of.

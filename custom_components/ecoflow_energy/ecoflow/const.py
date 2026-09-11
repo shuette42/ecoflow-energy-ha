@@ -260,6 +260,12 @@ _SN_PREFIX_MAP = {
     # every other Enhanced-only type above. A `C376` no longer needs a
     # coupled PowerOcean to report at all.
     "C376": DEVICE_TYPE_POWERPULSE2,
+    # Second account prefix of the same wallbox (#7, 2026-09-11). One owner's
+    # recording of three charging sessions under `C374` carries the same
+    # message families, field numbers and scaling as the `C376` recordings
+    # the parser was built from (ADR-008, prefix scope). The app API gives
+    # it no product name either.
+    "C374": DEVICE_TYPE_POWERPULSE2,
 }
 
 _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {

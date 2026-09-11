@@ -1,6 +1,6 @@
 # PowerPulse 2 - Entity Reference
 
-Full list of all entities created for the EcoFlow PowerPulse 2 wallbox (C376 series).
+Full list of all entities created for the EcoFlow PowerPulse 2 wallbox (`C376` and `C374` series).
 
 **Totals:** 17 sensors, 1 binary sensor, 2 buttons (with a PowerOcean on the same account)
 
@@ -63,7 +63,7 @@ A start is offered only from `finishing`, the state a stopped session sits in wi
 
 ### The four session readings are absent, not zero, between sessions
 
-Wallbox Session Start, Wallbox Session Duration, Wallbox Session Energy and Wallbox Session Start Meter only exist while a session is actually running. Once the session ends, the wallbox stops reporting them and the entities go unavailable instead of settling on the last session's numbers - showing the previous session's duration or energy as if it were still counting would be worse than showing nothing.
+Wallbox Session Start, Wallbox Session Duration, Wallbox Session Energy and Wallbox Session Start Meter only exist while a session is actually running. Once the session ends, the wallbox stops reporting them and the entities go unavailable instead of settling on the last session's numbers - showing the previous session's duration or energy as if it were still counting would be worse than showing nothing. In `preparing` (cable attached, nothing flowing yet) the wallbox still reports them, and Wallbox Session Start is withheld when the wallbox reports it as zero, which it does before the first session after a restart.
 
 ### The cable lock can take a while to appear
 

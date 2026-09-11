@@ -1,4 +1,4 @@
-"""Protobuf telemetry parser for the EcoFlow PowerPulse 2 wallbox (C376).
+"""Protobuf telemetry parser for the EcoFlow PowerPulse 2 wallbox (C376, C374).
 
 Derived from an 11-frame capture of a live PowerPulse 2 charging session
 (PLAN-132, issue #7), spanning an idle plug, a single-phase charge, a
@@ -43,9 +43,14 @@ Field notes:
   read; `9` and `8.2` are left unmapped entirely, the same reasoning
   `wave3_proto.py` applies to its own duplicate fields - two sources for
   one entity disagree the moment a frame like that one arrives, and `44` is
-  the field the session identity below is defined against.
-- `42` and `46` are the same session-energy counter; only `42` is read, for
-  the same reason.
+  the field the session identity below is defined against. The `C374`
+  recording (#7, 2026-09-11) confirms the choice from the other side: its
+  first frame carries `44` as 0 and `9` as 504, and the session that
+  follows starts from `43` = 504, so `9` is not a safe stand-in for `44`.
+- `42` and `46` read as the same session-energy counter on the `C376`
+  frames; on the `C374` frames `46` is a different, smaller number (0 to
+  190 Wh against 184 to 1147 Wh) whose meaning is not known. Only `42` is
+  read, and it is the one the `44 - 43 == 42` identity holds for on both.
 - `43` (the lifetime counter's value when the current session began) and
   `44` (the lifetime counter now) always satisfy `44 - 43 == 42` in every
   captured frame that carries a session. That identity is the test suite's
@@ -143,7 +148,16 @@ _PARAM_REPORT_FIELD_MAP: dict[int, tuple[str, str]] = {
 # spellings are the ones that entity already declares in its `options` list,
 # so value 6 is `finishing` and not `finished` - a state outside the declared
 # options is an error in Home Assistant, not a wording preference.
-_PLUG_STATUS_NAMES: dict[int, str] = {1: "available", 3: "charging", 6: "finishing"}
+_PLUG_STATUS_NAMES: dict[int, str] = {
+    1: "available",
+    # Cable attached, no charge running: the two frames on file (a `C374`,
+    # #7, 2026-09-11) sit before a session with power 0, currents 0.01 A and
+    # field 101 at idle, and a session follows minutes later. Without this
+    # entry the sensor kept its previous state through such a frame.
+    2: "preparing",
+    3: "charging",
+    6: "finishing",
+}
 # Field 101 is a different number on the wire (0/2/3 where field 1 has
 # 1/3/6), so it keeps a key of its own.
 _SESSION_STATUS_NAMES: dict[int, str] = {0: "idle", 2: "charging", 3: "finished"}
@@ -294,6 +308,12 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
             value = result.pop(raw_key, None)
             if value is not None:
                 result[final_key] = value
+        # A start timestamp of 0 is "no session yet", not 1970-01-01: the
+        # first frame of the `C374` recording (status `preparing`, all four
+        # session fields 0) would otherwise put that date on the timestamp
+        # sensor. The other three are honest zeros and stay.
+        if result.get("ev_session_start_ts") == 0:
+            del result["ev_session_start_ts"]
 
     return result
 
