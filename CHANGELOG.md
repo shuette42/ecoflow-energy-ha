@@ -10,6 +10,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- `strings.json` now carries the same entity names and states as the rendered `translations/en.json`. The two files are one language, and the test that held them together only compared the setup steps, so the entity section had drifted by 114 keys: 108 entity names and enum states existed only in the rendered file, and the three connectivity sensors still read `Not Detected` / `OK` in `strings.json` while the integration reports `Disconnected` / `Connected`. Nothing changes in Home Assistant, which reads only the rendered file. The test now compares the whole document, so the two cannot drift again.
 - A diagnostics download that is masked a second time keeps its masked frames intact. A serial the masking has already replaced can, under a payload the device XOR-masks, read on the wire as a run of one letter that happens to look like a serial again; the masking rewrote that run and left a stray letter where the mask byte had been. Found while building a test fixture from the masking's own output: two of nine frames came back changed. The masking now restores such a run only when everything under it is already the mask byte, so a payload whose header claims a mask it does not carry is still masked as before. Measured over every recording on file: nothing else moves.
 
 ## [1.21.0] - 2026-09-11
