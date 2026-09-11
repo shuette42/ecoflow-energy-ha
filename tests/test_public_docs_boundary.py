@@ -206,9 +206,11 @@ def test_every_cited_decision_resolves_in_the_register() -> None:
         listed.update(_ADR.findall(match.group("body")))
     # The sentence occurs twice (the register's intro and ADR-026 decision 2);
     # `search` binds the intro, which is the one a reader meets first. The
-    # three numbers are a contract: a change here is a decision, not a drift.
+    # two numbers are a contract: a change here is a decision, not a drift.
+    # ADR-009 left this set on 2026-09-11, when the wallbox write decision it
+    # was reserved for was recorded under its own heading.
     assert match, "the register no longer states the numbers it does not carry"
-    assert listed == {"001", "003", "009"}, sorted(listed)
+    assert listed == {"001", "003"}, sorted(listed)
     cited = _cited_numbers()
     # Floors at the measured values, so a deleted decision or a broken scan
     # turns the test red. Measured 2026-09-10: 15 distinct numbers cited, 23
