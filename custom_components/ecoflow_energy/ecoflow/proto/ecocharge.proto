@@ -563,6 +563,59 @@ message EmsAllTimerTaskReport {
   repeated EmsTimerTaskCfg time_task_cfg = 1;
 }
 
+// --- PowerOcean feed-to-grid schedule tasks (cmd_func 96, cmd_id 14/143/145) ---
+//
+// The same task-list shape as `EmsAllTimerTaskReport` above, on a different
+// header and with a different field layout. Evidence is the reporter capture
+// on #381 (J327, account sign-in): nine writes against slot 4 (create, two
+// disable/enable pairs, a power change, three repeat changes, a delete) and
+// nine list pushes on cmd_id 14, all decoded byte for byte against this
+// declaration before it was written.
+//
+// The layout is not a copy of the timer family's numbering. `type` sits at
+// field 5, `sys_meter_dsg_pwr` is renamed `sys_meter_dsg_pwr` and sits at
+// field 6, `is_effect` moves to field 7, and fields 8, 9 and 10 of the timer
+// task (`time_mode`, `time_param`, `time_table`) are replaced by one field 8
+// holding them as a nested message. Every write in the capture carries tag
+// byte 0x42, field 8 wire type 2, confirming the nesting rather than three
+// flat fields.
+//
+// `time_table` is declared `repeated uint32`, not `bytes` as the timer
+// family declares it. The timer family's single window fits in one
+// four-byte varint and the declaration keeps the block opaque on purpose
+// (see the comment above `EmsTimerTaskCfg`). This family's window can hold
+// two entries - every capture with two active windows shows an eight-byte
+// block, two packed varints back to back - so the field is declared as the
+// packed repeated type it is on the wire and protobuf unpacks it directly;
+// there is no second, opaque encoding to guess at, because there is nothing
+// left to guess: `MessageToDict` hands back the list of ints as they arrived.
+message EmsTouSubTimerTaskInfo {
+  oneof _time_mode { uint32 time_mode = 1; }
+  oneof _time_param { uint32 time_param = 2; }
+  repeated uint32 time_table = 3;
+}
+
+message EmsTouTaskCfg {
+  oneof _role { uint32 role = 1; }
+  oneof _is_cfg { uint32 is_cfg = 2; }
+  oneof _task_index { uint32 task_index = 3; }
+  oneof _is_enable { bool is_enable = 4; }
+  oneof _type { uint32 type = 5; }
+  oneof _sys_meter_dsg_pwr { uint32 sys_meter_dsg_pwr = 6; }
+  oneof _is_effect { bool is_effect = 7; }
+  oneof _tou_sub_info { EmsTouSubTimerTaskInfo tou_sub_info = 8; }
+}
+
+// The whole feed-to-grid schedule, reported on cmd_id 14. Field 2,
+// `pou_task_cfg`, is the device's declared name for a second list on the
+// same message and is never populated in any capture held here - declared so
+// a future frame that does carry it is not filed as unknown, never read
+// because there is nothing yet to read it against.
+message EmsAllTouTaskReport {
+  repeated EmsTouTaskCfg tou_task_cfg = 1;
+  repeated EmsTouTaskCfg pou_task_cfg = 2;
+}
+
 // --- Delta 3 generation (portable power stations) ---
 //
 // The Delta 3 generation publishes protobuf only - it never answers the

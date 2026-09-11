@@ -405,6 +405,9 @@ class EcoFlowDeviceCoordinator(
         # deleted and its keys have to be retracted - nothing else would ever
         # clear them. Written only from the MQTT ingest thread.
         self._schedule_indices: set[int] = set()
+        # Same bookkeeping as `_schedule_indices`, for the feed-to-grid
+        # schedule's own, independent index space (cmd_id 14).
+        self._feed_schedule_indices: set[int] = set()
         # How many bundles carried copies of the schedule list that disagreed.
         # The first copy is taken as current; this counts how often that
         # choice mattered, so the rule can be re-judged from data rather than

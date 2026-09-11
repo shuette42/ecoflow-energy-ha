@@ -50,6 +50,7 @@ from ..ecoflow.parsers.powerocean_proto import (
     remap_heating_rod_keys,
     remap_proto_keys,
     remap_timer_task_keys,
+    remap_tou_task_keys,
 )
 from ..ecoflow.parsers.powerpulse_proto import parse_powerpulse_message
 from ..ecoflow.parsers.powerstream_http import parse_powerstream_quota
@@ -81,7 +82,10 @@ _LOGGER = logging.getLogger(__name__)
 # disarmed from the app. The first copy is the current one there, so first
 # wins. Merging by header order would decide the same thing the other way
 # round and by accident, which is why the choice is made here instead.
-_FIRST_COPY_WINS: frozenset[tuple[int, int]] = frozenset({(96, 10)})
+#
+# The feed-to-grid schedule list rides the same get-all reply and is treated
+# the same way, on the same evidence that the first copy is the current one.
+_FIRST_COPY_WINS: frozenset[tuple[int, int]] = frozenset({(96, 10), (96, 14)})
 
 # Two PowerOcean single-phase units run as a pair are one cloud device whose
 # get-all reply carries every EMS message twice, one copy per unit, under one
@@ -775,6 +779,12 @@ class MqttIngestMixin(_Base):
                 # all: it is the only frame that says a schedule was deleted.
                 if result.mapped.get("_is_timer_task_list"):
                     merged.update(remap_timer_task_keys(raw, self._schedule_indices))
+                    continue
+                # The feed-to-grid schedule, the device's second task list on
+                # its own header. Same empty-payload-is-a-deletion reasoning
+                # as the timer list above.
+                if result.mapped.get("_is_tou_task_list"):
+                    merged.update(remap_tou_task_keys(raw, self._feed_schedule_indices))
                     continue
                 if (
                     result.mapped.get("_is_ems_change")

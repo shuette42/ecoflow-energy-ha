@@ -929,3 +929,135 @@ def remap_timer_task_keys(
     known_indices.update(reported)
 
     return result
+
+
+# Every key one reported feed-to-grid schedule produces, mirroring
+# `_SCHEDULE_KEY_SUFFIXES` above so an index that disappears from the list can
+# be retracted in full - nothing else would ever clear these keys either.
+_TOU_TASK_KEY_SUFFIXES: tuple[str, ...] = (
+    "enabled",
+    "running",
+    "power_w",
+    "window",
+    "type",
+    "time_mode",
+    "time_param",
+    "time_table",
+)
+
+
+def _format_windows(values: list[int] | None) -> str | None:
+    """Render up to two packed windows as `HH:MM-HH:MM, HH:MM-HH:MM`.
+
+    Each entry uses the same `_format_window` as the single-window family -
+    the reporter capture on #381 shows the identical `start | end << 16`
+    split, verified byte for byte against the frames that carry it. Any entry
+    that cannot be read, or an empty list, refuses the whole string: half of a
+    schedule is worse than none, the same rule the single-window renderer
+    already applies to itself.
+    """
+    if not values:
+        return None
+    rendered: list[str] = []
+    for value in values:
+        window = _format_window(value)
+        if window is None:
+            return None
+        rendered.append(window)
+    return ", ".join(rendered)
+
+
+def remap_tou_task_keys(raw: dict[str, Any], known_indices: set[int]) -> dict[str, Any]:
+    """Remap the feed-to-grid schedule list (cmd_func 96, cmd_id 14).
+
+    Same list-and-retract shape as `remap_timer_task_keys` above, on the
+    device's second task list. `tou_task_cfg` carries the feed-to-grid tasks;
+    `pou_task_cfg` is declared on the message and never populated in any
+    capture held here, so nothing here reads it. `known_indices` is a second,
+    independent set from the timer family's own - the two lists have
+    independent index spaces (the reporter capture on #381 carries feed
+    indices 2, 3 and 4), and the `feed_schedule_` prefix keeps their published
+    keys apart from `schedule_` the same way the two index sets keep the
+    retraction bookkeeping apart.
+
+    A bool not serialised is a False the device chose to express that way,
+    not a value that has not arrived yet - `is_enable` and `is_effect` are
+    read as False when missing for exactly that reason, mirroring the timer
+    family. The window, power and echoed fields follow the opposite rule:
+    none of them has ever been observed missing on a reported task, so a
+    number that is absent publishes as None rather than a stale reading.
+    """
+    tasks = raw.get("tou_task_cfg")
+    if not isinstance(tasks, list):
+        tasks = []
+
+    result: dict[str, Any] = {}
+    reported: set[int] = set()
+
+    for task in tasks:
+        if not isinstance(task, dict):
+            continue
+        index = task.get("task_index")
+        if not isinstance(index, int) or isinstance(index, bool):
+            continue
+        if index < 1 or index > SCHEDULE_MAX_INDEX:
+            _LOGGER.debug(
+                "PowerOcean feed schedule list carries index %s, outside 1 to %s",
+                index,
+                SCHEDULE_MAX_INDEX,
+            )
+            continue
+        if index in reported:
+            _LOGGER.debug(
+                "PowerOcean feed schedule list carries index %s twice, "
+                "reporting the last of them",
+                index,
+            )
+        reported.add(index)
+
+        prefix = f"feed_schedule_{index}_"
+        result[f"{prefix}enabled"] = bool(task.get("is_enable", False))
+        result[f"{prefix}running"] = bool(task.get("is_effect", False))
+
+        power = task.get("sys_meter_dsg_pwr")
+        result[f"{prefix}power_w"] = (
+            power if isinstance(power, int) and not isinstance(power, bool) else None
+        )
+
+        sub_info = task.get("tou_sub_info")
+        sub_info = sub_info if isinstance(sub_info, dict) else {}
+
+        time_table = sub_info.get("time_table")
+        if isinstance(time_table, list) and all(
+            isinstance(value, int) and not isinstance(value, bool)
+            for value in time_table
+        ):
+            result[f"{prefix}time_table"] = time_table
+        else:
+            time_table = None
+            result[f"{prefix}time_table"] = None
+        result[f"{prefix}window"] = _format_windows(time_table)
+
+        type_value = task.get("type")
+        result[f"{prefix}type"] = (
+            type_value
+            if isinstance(type_value, int) and not isinstance(type_value, bool)
+            else None
+        )
+
+        for proto_key in ("time_mode", "time_param"):
+            value = sub_info.get(proto_key)
+            result[f"{prefix}{proto_key}"] = (
+                value
+                if isinstance(value, int) and not isinstance(value, bool)
+                else None
+            )
+
+    for index in sorted(known_indices - reported):
+        for suffix in _TOU_TASK_KEY_SUFFIXES:
+            result[f"feed_schedule_{index}_{suffix}"] = None
+
+    known_indices.clear()
+    known_indices.update(reported)
+
+    return result

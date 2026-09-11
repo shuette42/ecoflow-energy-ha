@@ -71,6 +71,7 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
     _raw_frames: TypedFrameBuffer
     _raw_frames_lock: threading.Lock
     _schedule_indices: set[int]
+    _feed_schedule_indices: set[int]
     _schedule_divergent_bundles: int
     _energy_from_api: list[tuple[str, str]]
     _power_to_energy: dict[str, str]

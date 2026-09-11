@@ -1,0 +1,244 @@
+{
+  "_source": "Reporter diagnostics download attached to #381 on 2026-09-09 (J327 PowerOcean, account sign-in, v1.20.0). Serials as the diagnostics masking left them (sixteen X). Times UTC. pdata is the inner payload of the named header, frame is the whole captured message. The 96/14 list was pushed after six of the nine writes (create, power, the three repeat changes, delete); after disable, enable and the window change no push was seen, only the app-requested 96/145 reply shows those.",
+  "writes_96_143": [
+    {
+      "utc": "12:04:06",
+      "meaning": "create index 4, 1300 W, daily (time_mode 65), windows 21:00-21:30 and 22:00-22:30",
+      "pdata": "100118042001280230940a420c08411a08ec89a828a88a982a",
+      "ack_pdata": "08021004",
+      "seq": 155761484,
+      "envelope": {
+        "src": 32,
+        "dest": 96,
+        "d_src": 1,
+        "d_dest": 1,
+        "seq": 155761484,
+        "product_id": 1,
+        "version": 19,
+        "payload_ver": 1
+      },
+      "frame": "0a560a19100118042001280230940a420c08411a08ec89a828a88a982a10201860200128014060488f015019580170ccf6a24a7801800113880101ba0107616e64726f6964ca011058585858585858585858585858585858"
+    },
+    {
+      "utc": "12:04:12",
+      "meaning": "disable: is_cfg 2, is_enable omitted",
+      "pdata": "10021804",
+      "ack_pdata": "1004",
+      "seq": 120381487,
+      "envelope": {
+        "src": 32,
+        "dest": 96,
+        "d_src": 1,
+        "d_dest": 1,
+        "seq": 120381487,
+        "product_id": 1,
+        "version": 19,
+        "payload_ver": 1
+      }
+    },
+    {
+      "utc": "12:04:14",
+      "meaning": "enable: is_cfg 2, is_enable 1",
+      "pdata": "100218042001",
+      "ack_pdata": "1004",
+      "seq": 138571488,
+      "envelope": {
+        "src": 32,
+        "dest": 96,
+        "d_src": 1,
+        "d_dest": 1,
+        "seq": 138571488,
+        "product_id": 1,
+        "version": 19,
+        "payload_ver": 1
+      }
+    },
+    {
+      "utc": "12:04:22",
+      "meaning": "power 1300 -> 2600 W, full body",
+      "pdata": "100218042001280230a814420c08411a08ec89a828a88a982a",
+      "ack_pdata": "08021004",
+      "seq": 214331490,
+      "envelope": {
+        "src": 32,
+        "dest": 96,
+        "d_src": 1,
+        "d_dest": 1,
+        "seq": 214331490,
+        "product_id": 1,
+        "version": 19,
+        "payload_ver": 1
+      }
+    },
+    {
+      "utc": "12:04:30",
+      "meaning": "second window end 22:30 -> 23:00, full body",
+      "pdata": "100218042001280230a814420c08411a08ec89a828a88a902b",
+      "ack_pdata": "08021004",
+      "seq": 299461493,
+      "envelope": {
+        "src": 32,
+        "dest": 96,
+        "d_src": 1,
+        "d_dest": 1,
+        "seq": 299461493,
+        "product_id": 1,
+        "version": 19,
+        "payload_ver": 1
+      }
+    },
+    {
+      "utc": "12:04:37",
+      "meaning": "repeat -> one-off 2026-09-09 (time_mode 68, time_param 1037609)",
+      "pdata": "100218042001280230a8144210084410a9aa3f1a08ec89a828a88a902b",
+      "ack_pdata": "08021004",
+      "seq": 371571496,
+      "envelope": {
+        "src": 32,
+        "dest": 96,
+        "d_src": 1,
+        "d_dest": 1,
+        "seq": 371571496,
+        "product_id": 1,
+        "version": 19,
+        "payload_ver": 1
+      }
+    },
+    {
+      "utc": "12:04:44",
+      "meaning": "repeat -> weekly Wed+Thu (time_mode 66, time_param 12)",
+      "pdata": "100218042001280230a814420e0842100c1a08ec89a828a88a902b",
+      "ack_pdata": "08021004",
+      "seq": 440231498,
+      "envelope": {
+        "src": 32,
+        "dest": 96,
+        "d_src": 1,
+        "d_dest": 1,
+        "seq": 440231498,
+        "product_id": 1,
+        "version": 19,
+        "payload_ver": 1
+      }
+    },
+    {
+      "utc": "12:04:49",
+      "meaning": "weekly Wed only (time_mode 66, time_param 4)",
+      "pdata": "100218042001280230a814420e084210041a08ec89a828a88a902b",
+      "ack_pdata": "08021004",
+      "seq": 491801501,
+      "envelope": {
+        "src": 32,
+        "dest": 96,
+        "d_src": 1,
+        "d_dest": 1,
+        "seq": 491801501,
+        "product_id": 1,
+        "version": 19,
+        "payload_ver": 1
+      }
+    },
+    {
+      "utc": "12:04:54",
+      "meaning": "delete: is_cfg 3 (out of scope, builder must refuse)",
+      "pdata": "100318042001",
+      "ack_pdata": "1004",
+      "seq": 537951503,
+      "envelope": {
+        "src": 32,
+        "dest": 96,
+        "d_src": 1,
+        "d_dest": 1,
+        "seq": 537951503,
+        "product_id": 1,
+        "version": 19,
+        "payload_ver": 1
+      }
+    }
+  ],
+  "lists_96_14": [
+    {
+      "utc": "12:00:39",
+      "topic": "get_reply",
+      "pdata": "0a17100218032001280230ac1b3801420808411a04b285f01f0a1b100218022001280230b4103800420c08411a08e083c815fc87d023"
+    },
+    {
+      "utc": "12:01:40",
+      "topic": "get_reply",
+      "pdata": "0a17100218032001280230ac1b3801420808411a04b285f01f0a1b100218022001280230b4103800420c08411a08e083c815fc87d023"
+    },
+    {
+      "utc": "12:01:43",
+      "topic": "get_reply",
+      "pdata": "0a17100218032001280230ac1b3801420808411a04b285f01f0a1b100218022001280230b4103800420c08411a08e083c815fc87d023"
+    },
+    {
+      "utc": "12:04:06",
+      "topic": "property",
+      "pdata": "0a17100218032001280230ac1b3801420808411a04b285f01f0a1b100218022001280230b4103800420c08411a08e083c815fc87d0230a1b100118042001280230940a3800420c08411a08ec89a828a88a982a"
+    },
+    {
+      "utc": "12:04:22",
+      "topic": "property",
+      "pdata": "0a17100218032001280230ac1b3801420808411a04b285f01f0a1b100218022001280230b4103800420c08411a08e083c815fc87d0230a1b100218042001280230a8143800420c08411a08ec89a828a88a982a"
+    },
+    {
+      "utc": "12:04:39",
+      "topic": "property",
+      "pdata": "0a17100218032001280230ac1b3801420808411a04b285f01f0a1b100218022001280230b4103800420c08411a08e083c815fc87d0230a1f100218042001280230a81438004210084410a9aa3f1a08ec89a828a88a902b"
+    },
+    {
+      "utc": "12:04:45",
+      "topic": "property",
+      "pdata": "0a17100218032001280230ac1b3801420808411a04b285f01f0a1b100218022001280230b4103800420c08411a08e083c815fc87d0230a1d100218042001280230a8143800420e0842100c1a08ec89a828a88a902b"
+    },
+    {
+      "utc": "12:04:51",
+      "topic": "property",
+      "pdata": "0a17100218032001280230ac1b3801420808411a04b285f01f0a1b100218022001280230b4103800420c08411a08e083c815fc87d0230a1d100218042001280230a8143800420e084210041a08ec89a828a88a902b"
+    },
+    {
+      "utc": "12:04:55",
+      "topic": "property",
+      "pdata": "0a17100218032001280230ac1b3801420808411a04b285f01f0a1b100218022001280230b4103800420c08411a08e083c815fc87d023"
+    }
+  ],
+  "list_replies_96_145": [
+    {
+      "utc": "12:01:40",
+      "pdata": "0a17100218032001280230ac1b3801420808411a04b285f01f0a1b100218022001280230b4103800420c08411a08e083c815fc87d023"
+    },
+    {
+      "utc": "12:02:35",
+      "pdata": "0a17100218032001280230ac1b3801420808411a04b285f01f0a1b100218022001280230b4103800420c08411a08e083c815fc87d023"
+    },
+    {
+      "utc": "12:04:06",
+      "pdata": "0a17100218032001280230ac1b3801420808411a04b285f01f0a1b100218022001280230b4103800420c08411a08e083c815fc87d0230a1b100118042001280230940a3800420c08411a08ec89a828a88a982a"
+    },
+    {
+      "utc": "12:04:22",
+      "pdata": "0a17100218032001280230ac1b3801420808411a04b285f01f0a1b100218022001280230b4103800420c08411a08e083c815fc87d0230a1b100218042001280230a8143800420c08411a08ec89a828a88a982a"
+    },
+    {
+      "utc": "12:04:31",
+      "pdata": "0a17100218032001280230ac1b3801420808411a04b285f01f0a1b100218022001280230b4103800420c08411a08e083c815fc87d0230a1b100218042001280230a8143800420c08411a08ec89a828a88a902b"
+    },
+    {
+      "utc": "12:04:38",
+      "pdata": "0a17100218032001280230ac1b3801420808411a04b285f01f0a1b100218022001280230b4103800420c08411a08e083c815fc87d0230a1f100218042001280230a81438004210084410a9aa3f1a08ec89a828a88a902b"
+    },
+    {
+      "utc": "12:04:45",
+      "pdata": "0a17100218032001280230ac1b3801420808411a04b285f01f0a1b100218022001280230b4103800420c08411a08e083c815fc87d0230a1d100218042001280230a8143800420e0842100c1a08ec89a828a88a902b"
+    },
+    {
+      "utc": "12:04:50",
+      "pdata": "0a17100218032001280230ac1b3801420808411a04b285f01f0a1b100218022001280230b4103800420c08411a08e083c815fc87d0230a1d100218042001280230a8143800420e084210041a08ec89a828a88a902b"
+    },
+    {
+      "utc": "12:04:54",
+      "pdata": "0a17100218032001280230ac1b3801420808411a04b285f01f0a1b100218022001280230b4103800420c08411a08e083c815fc87d023"
+    }
+  ]
+}

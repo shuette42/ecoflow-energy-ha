@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.23.0] - Unreleased
+
+### Added
+
 ## [1.22.0] - Unreleased
 
 ### Added
