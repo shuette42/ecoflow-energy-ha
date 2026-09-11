@@ -96,6 +96,17 @@ LIST_SLOTS_2_3_4 = bytes.fromhex(
 # 12:04:55: slot 4 gone again, byte-identical to the 12:00:39 list.
 LIST_SLOTS_2_3_AGAIN = LIST_SLOTS_2_3
 
+# Constructed, not recorded: the 12:04:22 list with slot 4's field 4 dropped
+# (entry length 0x1b -> 0x19). The device never pushed a list after the
+# disable at 12:04:12, so no captured list shows a disarmed feed task; the
+# omission is how both families express "off" on the wire (the 12:04:12
+# write body is exactly that), so this is the frame the device would send.
+LIST_SLOTS_2_3_4_DISARMED = bytes.fromhex(
+    "0a17100218032001280230ac1b3801420808411a04b285f01f"
+    "0a1b100218022001280230b4103800420c08411a08e083c815fc87d023"
+    "0a1910021804280230a8143800420c08411a08ec89a828a88a982a"
+)
+
 # writes_96_143, the recorded bodies a builder must reproduce byte for byte.
 ENABLE_SLOT4_PDATA = bytes.fromhex("100218042001")
 DISABLE_SLOT4_PDATA = bytes.fromhex("10021804")
@@ -469,6 +480,43 @@ class TestTheNumber:
         assert coordinator.device_data["feed_schedule_4_power_w"] == 2600
 
 
+class TestTheEchoedFields:
+    """A power write hands the task back whole, so the fields the device owns
+    have to be there. A slot whose type or windows are unreported is refused
+    as not ready, and nothing is sent.
+    """
+
+    async def test_an_unreported_type_refuses_the_write(
+        self, hass: HomeAssistant
+    ) -> None:
+        coordinator, _, numbers, mqtt = await _setup(hass, LIST_SLOTS_2_3_4)
+        coordinator._apply_data(
+            {"ems_feed_power_limit_w": 5000, "feed_schedule_4_type": None}
+        )
+        number = _prepare(_by_key(numbers, "feed_schedule_4_power_w"), hass)
+
+        with pytest.raises(HomeAssistantError) as raised:
+            await number.async_set_native_value(2600)
+
+        assert raised.value.translation_key == "set_command_not_ready"
+        assert mqtt.sent == []
+
+    async def test_an_empty_window_list_refuses_the_write(
+        self, hass: HomeAssistant
+    ) -> None:
+        coordinator, _, numbers, mqtt = await _setup(hass, LIST_SLOTS_2_3_4)
+        coordinator._apply_data(
+            {"ems_feed_power_limit_w": 5000, "feed_schedule_4_time_table": []}
+        )
+        number = _prepare(_by_key(numbers, "feed_schedule_4_power_w"), hass)
+
+        with pytest.raises(HomeAssistantError) as raised:
+            await number.async_set_native_value(2600)
+
+        assert raised.value.translation_key == "set_command_not_ready"
+        assert mqtt.sent == []
+
+
 class TestRetraction:
     """What happens after the owner deletes the slot in the app.
 
@@ -494,6 +542,75 @@ class TestRetraction:
         assert mqtt.sent == []
         assert coordinator.device_data["feed_schedule_2_enabled"] is True
         assert coordinator.device_data["feed_schedule_3_enabled"] is True
+
+    async def test_the_number_says_gone_rather_than_try_again(
+        self, hass: HomeAssistant
+    ) -> None:
+        """The number tells a retracted slot from a not-yet-ready one by the
+        arming flag of its own family, published as None once the slot has
+        left the list."""
+        coordinator, _, numbers, mqtt = await _setup(hass, LIST_SLOTS_2_3_4)
+        coordinator._apply_data({"ems_feed_power_limit_w": 5000})
+        number = _prepare(_by_key(numbers, "feed_schedule_4_power_w"), hass)
+
+        _report(coordinator, LIST_SLOTS_2_3_AGAIN)
+
+        with pytest.raises(HomeAssistantError) as raised:
+            await number.async_set_native_value(2600)
+
+        assert raised.value.translation_key == "set_command_gone"
+        assert mqtt.sent == []
+
+
+class TestReadBack:
+    """The device's list is the word on a switch write.
+
+    No captured list follows a plain on or off on this family, so the switch
+    keeps what it was set to until the next list arrives; a list that was
+    already in flight when the write went out must not undo it, and a list
+    after the hold must.
+    """
+
+    async def test_a_stale_list_cannot_revert_a_flag_just_written(
+        self, hass: HomeAssistant
+    ) -> None:
+        coordinator, switches, numbers, mqtt = await _setup(hass, LIST_SLOTS_2_3_4)
+        coordinator._apply_data({"ems_feed_power_limit_w": 5000})
+        switch = _prepare(_by_key(switches, "feed_schedule_4_enabled"), hass)
+        number = _prepare(_by_key(numbers, "feed_schedule_4_power_w"), hass)
+
+        await switch.async_turn_off()
+        _report(coordinator, LIST_SLOTS_2_3_4)
+        await number.async_set_native_value(2600)
+
+        assert coordinator.device_data["feed_schedule_4_enabled"] is False
+        assert 4 not in _fields(mqtt.sent[1])
+
+    async def test_a_list_that_agrees_ends_the_hold(self, hass: HomeAssistant) -> None:
+        coordinator, switches, _, _ = await _setup(hass, LIST_SLOTS_2_3_4_DISARMED)
+        switch = _prepare(_by_key(switches, "feed_schedule_4_enabled"), hass)
+        assert switch.is_on is False
+
+        await switch.async_turn_on()
+        assert coordinator._schedule_armed_latch
+
+        _report(coordinator, LIST_SLOTS_2_3_4)
+
+        assert coordinator._schedule_armed_latch == {}
+        assert coordinator.device_data["feed_schedule_4_enabled"] is True
+
+    async def test_the_device_wins_once_the_hold_is_over(
+        self, hass: HomeAssistant
+    ) -> None:
+        coordinator, switches, _, _ = await _setup(hass, LIST_SLOTS_2_3_4)
+        switch = _prepare(_by_key(switches, "feed_schedule_4_enabled"), hass)
+
+        await switch.async_turn_off()
+        coordinator._schedule_armed_latch["feed_schedule_4_enabled"] = (False, 0.0)
+        _report(coordinator, LIST_SLOTS_2_3_4)
+
+        assert coordinator.device_data["feed_schedule_4_enabled"] is True
+        assert coordinator._schedule_armed_latch == {}
 
 
 class TestTheSensors:
