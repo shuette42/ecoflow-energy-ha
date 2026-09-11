@@ -29,8 +29,9 @@ key's reachability and read as covered while nothing dispatches it.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import pytest
 from ecoflow_energy import const as C
