@@ -19,6 +19,11 @@ Two message types carry readings, both under cmd_func 2:
 - `34` ParamReport, seen only inside the three `get_reply` bundles. Of its
   fields only `19` (the cable-lock toggle) is mapped; the rest of its
   message is unrelated configuration this integration does not read yet.
+- `241/44` EDevRunDataSync, on the wallbox's own property topic, about once
+  a second (PLAN-136). Only the accessory descriptor nested inside it -
+  the bus address and the wallbox's own serial - is read; the settings
+  block behind it is a later plan. No entity is built from these two
+  fields; they exist to build the start/stop command's addressing.
 
 HeartBeat's field `8` is a nested record carrying the live charge readings
 (power, the three phase voltages, the three phase currents); it is pulled
@@ -293,6 +298,48 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def _decode_run_data_sync_fields(pdata: bytes) -> dict[str, Any]:
+    """Decode EDevRunDataSync (241/44): the accessory descriptor only.
+
+    Walks `pdata` field 1 (the message body) -> field 1 (`dev_info`) ->
+    fields 1 (`dev_addr`, varint) and 2 (`dev_sn`, 16-byte serial). Field 3
+    of `dev_info` (present on every settings report, absent on every
+    captured write) is ignored - the descriptor measurement note of
+    PLAN-136 records why. The settings block behind `dev_info` (`f4.f8`) is
+    a later plan; nothing else from this message is parsed here.
+
+    Both keys are emitted only when `dev_addr` is present and `dev_sn`
+    decodes as exactly 16 ASCII bytes; otherwise an empty dict is returned,
+    which is a clean decode of a frame this function does not (yet) read
+    fully, not an error. The serial is never logged.
+    """
+    result: dict[str, Any] = {}
+    for field_num, wire_type, body in _iter_fields(pdata):
+        if field_num != 1 or wire_type != 2:
+            continue
+        for sub_num, sub_wire, dev_info in _iter_fields(body):
+            if sub_num != 1 or sub_wire != 2:
+                continue
+            dev_addr: int | None = None
+            dev_sn: str | None = None
+            for leaf_num, leaf_wire, leaf_raw in _iter_fields(dev_info):
+                if leaf_num == 1 and leaf_wire == 0:
+                    value = _decode_scalar(leaf_wire, leaf_raw, _TYPE_INT)
+                    if isinstance(value, int):
+                        dev_addr = value
+                elif leaf_num == 2 and leaf_wire == 2 and len(leaf_raw) == 16:
+                    try:
+                        dev_sn = leaf_raw.decode("ascii")
+                    except UnicodeDecodeError:
+                        dev_sn = None
+            if dev_addr is not None and dev_sn is not None:
+                result["ev_charger_dev_addr"] = dev_addr
+                result["ev_charger_sn"] = dev_sn
+            break
+        break
+    return result
+
+
 def parse_powerpulse_message(payload: bytes) -> dict[str, Any] | None:
     """Parse a PowerPulse 2 (C376) protobuf frame into flat sensor keys."""
     try:
@@ -307,6 +354,8 @@ def parse_powerpulse_message(payload: bytes) -> dict[str, Any] | None:
                 decoder = _decode_heartbeat_fields
             elif cmd_key == (2, 34):
                 decoder = _decode_param_report_fields
+            elif cmd_key == (241, 44):
+                decoder = _decode_run_data_sync_fields
             else:
                 continue
 

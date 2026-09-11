@@ -100,8 +100,26 @@ def _leaks(raw: bytes) -> list[str]:
         findings.append("unmasked UUID")
     if _MAC.search(text):
         findings.append("unmasked MAC")
-    for run in _RUN.findall(text):
+    # A region the header declares XOR-masked is checked on its plaintext
+    # below, not on its wire bytes: a serial masked to `X` and then re-masked
+    # with the key reads as a run of `X ^ key` on the wire, which for many
+    # keys is itself alphanumeric (`0x36` gives `n`, `0x1e` gives `F`). The
+    # product sanitizer's own output on the 2026-08-24 settings report tripped
+    # this pass that way on 2026-09-11. A region without a key is not skipped:
+    # nothing can check it on its plaintext, so the wire scan is all it gets.
+    keyed_regions = [
+        (region.start, region.end)
+        for region in _encrypted_regions(raw)
+        if region.key is not None
+    ]
+    for match in _RUN.finditer(text):
+        run = match.group()
         if run in _PLACEHOLDERS:
+            continue
+        if any(
+            start <= match.start() and match.end() <= end
+            for start, end in keyed_regions
+        ):
             continue
         if set(run) != {"X"}:
             findings.append(f"unmasked run {run!r}")
@@ -325,3 +343,44 @@ def test_the_gate_is_quiet_without_a_serial() -> None:
     frame = _wrap_as_record(record)
 
     assert _leaks(frame) == []
+
+
+_RUN_DATA_SYNC_FIXTURE = (
+    FIXTURE_ROOT / "powerpulse" / "c376_run_data_sync_20260824.json"
+)
+
+
+def _run_data_sync_frame() -> bytes:
+    """The first PowerPulse 2 settings report on file, masked with `X` under
+    the XOR mask; on the wire the masked serial reads as sixteen `n`."""
+    frames = json.loads(_RUN_DATA_SYNC_FIXTURE.read_text())["frames"]
+    return bytes.fromhex(frames[0]["hex"])
+
+
+def test_a_masked_serial_under_a_keyed_region_is_not_a_wire_leak() -> None:
+    """Negative control: the product sanitizer's own output must pass.
+
+    `X ^ 0x36` is `n`, so the wire bytes of this frame carry a sixteen-`n`
+    run where the serial was. The region's plaintext is what gets checked,
+    and there the run is `X` * 16.
+    """
+    raw = _run_data_sync_frame()
+    assert b"n" * 16 in raw, "the control frame no longer shows the shape"
+    region = next(r for r in _encrypted_regions(raw) if r.key is not None)
+    assert b"X" * 16 in _xor(raw[region.start : region.end], region.key)
+    assert _leaks(raw) == []
+
+
+def test_a_real_serial_under_a_keyed_region_is_still_a_leak() -> None:
+    """Positive control: skipping the wire scan inside a keyed region must
+    not let an unmasked serial hide there. The same frame with a serial-shaped
+    run written into the plaintext and re-masked is reported under the mask.
+    """
+    raw = bytearray(_run_data_sync_frame())
+    region = next(r for r in _encrypted_regions(bytes(raw)) if r.key is not None)
+    plain = bytearray(_xor(bytes(raw[region.start : region.end]), region.key))
+    at = plain.index(b"X" * 16)
+    plain[at : at + 16] = b"C376TEST00000001"
+    raw[region.start : region.end] = _xor(bytes(plain), region.key)
+    findings = _leaks(bytes(raw))
+    assert any("under the mask" in finding for finding in findings), findings
