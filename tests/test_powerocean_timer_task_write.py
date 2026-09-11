@@ -15,7 +15,7 @@ from __future__ import annotations
 import pytest
 
 from custom_components.ecoflow_energy.ecoflow.energy_stream import (
-    TIMER_TASK_POWER_MAX_W,
+    POWEROCEAN_TASK_POWER_MAX_W,
     build_timer_task_set_payload,
 )
 from custom_components.ecoflow_energy.ecoflow.proto.decoder import (
@@ -291,7 +291,7 @@ def test_a_bool_is_not_a_task_index():
         build_timer_task_set_payload("arm", True, device_sn=CAPTURE_SN)
 
 
-@pytest.mark.parametrize("watts", [-1, TIMER_TASK_POWER_MAX_W + 1])
+@pytest.mark.parametrize("watts", [-1, POWEROCEAN_TASK_POWER_MAX_W + 1])
 def test_the_power_is_bounded(watts):
     with pytest.raises(ValueError, match="power_w"):
         build_power(watts=watts, armed=True)
