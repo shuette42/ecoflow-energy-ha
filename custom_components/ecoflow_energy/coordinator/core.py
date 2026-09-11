@@ -98,6 +98,23 @@ class DeviceSnapshot:
     key_count: int = 0
 
 
+@dataclass(frozen=True)
+class WallboxActionPending:
+    """One PowerPulse 2 start/stop action awaiting device confirmation (ADR-009).
+
+    `future` resolves with the confirming `ev_charge_status` when the
+    wallbox's own heartbeat reports it, or is cancelled on coordinator
+    shutdown. `issued_at` is monotonic and is not currently compared against
+    an ingest receive timestamp - the mqtt_ingest path does not stamp one
+    (checked 2026-09-11), so the field is carried for a future comparison
+    rather than used by one now.
+    """
+
+    action: str
+    issued_at: float
+    future: asyncio.Future[str]
+
+
 class EcoFlowDeviceCoordinator(
     SetupMixin,
     CredentialsMixin,
@@ -324,6 +341,11 @@ class EcoFlowDeviceCoordinator(
         # fields lose one of the two changes by restoring a stale companion
         # over it.
         self._device_config_lock = asyncio.Lock()
+        # PowerPulse 2 start/stop (ADR-009): serializes the check-and-publish
+        # of one wallbox action so a second press cannot slip past the
+        # in-progress check before the first one's record is set.
+        self._wallbox_action_lock = asyncio.Lock()
+        self._wallbox_action_pending: WallboxActionPending | None = None
         self._credential_obtained_ts: float = 0.0
         self._credential_refresh_unsub: asyncio.TimerHandle | None = None
         self._event_log: deque[dict[str, Any]] = deque(maxlen=50)
@@ -449,6 +471,27 @@ class EcoFlowDeviceCoordinator(
     def device_data(self) -> dict[str, Any]:
         """Return the current device data dict."""
         return self._device_data
+
+    def powerocean_sibling(self) -> EcoFlowDeviceCoordinator | None:
+        """Return the entry's one PowerOcean coordinator, or None (ADR-009).
+
+        Resolved fresh at the moment of a wallbox press rather than cached at
+        setup, per decision 2: coordinators can be reloaded independently of
+        each other within the same config entry. Returns None with zero
+        PowerOcean coordinators (no route to send on) and also with two or
+        more (no way to tell which one carries this wallbox) - decision 3.
+        """
+        coordinators: dict[str, EcoFlowDeviceCoordinator] = self.hass.data.get(
+            DOMAIN, {}
+        ).get(self._entry.entry_id, {})
+        matches = [
+            coordinator
+            for coordinator in coordinators.values()
+            if coordinator.device_type == DEVICE_TYPE_POWEROCEAN
+        ]
+        if len(matches) != 1:
+            return None
+        return matches[0]
 
     @property
     def last_value_change_ts(self) -> float:

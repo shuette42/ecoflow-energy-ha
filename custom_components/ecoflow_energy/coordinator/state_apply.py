@@ -15,6 +15,7 @@ from ..const import (
     DEVICE_TYPE_WAVE3,
     DOMAIN,
     POWEROCEAN_SCHEDULE_ARMED_LATCH_S,
+    POWERPULSE2_CHARGE_ACTION_CONFIRMED,
 )
 from ..ecoflow.parsers.stream_ac5000_proto import UNIT_POWER_BY_SN_KEY
 from ..ecoflow.parsers.stream_proto import SOC_FALLBACK_KEY
@@ -175,6 +176,28 @@ class StateApplyMixin(_Base):
             if expired:
                 del self._schedule_armed_latch[key]
 
+    def _resolve_wallbox_action(self, parsed: dict[str, Any]) -> None:
+        """Resolve a pending PowerPulse 2 start/stop against the arriving frame.
+
+        ADR-009 decision 4: the check runs on the frame being applied, never
+        on the accumulated store, so a stale reading already in
+        `self._device_data` cannot confirm an action that has not actually
+        happened yet. `future.done()` is checked because a resolved-but-not-
+        yet-cleared record could otherwise be resolved a second time by a
+        later confirming frame (e.g. "finishing" then "available" both
+        confirm a stop).
+        """
+        record = self._wallbox_action_pending
+        if record is None or record.future.done():
+            return
+        if "ev_charge_status" not in parsed:
+            return
+        status = parsed["ev_charge_status"]
+        if status in POWERPULSE2_CHARGE_ACTION_CONFIRMED.get(
+            record.action, frozenset()
+        ):
+            record.future.set_result(status)
+
     def latch_schedule_armed(self, state_key: str, armed: bool) -> None:
         """Start the hold for one arming flag this integration just sent."""
         self._schedule_armed_latch[state_key] = (
@@ -214,6 +237,7 @@ class StateApplyMixin(_Base):
         self._resolve_unit_power(parsed)
         self._resolve_soc(parsed)
         self._resolve_schedule_armed(parsed)
+        self._resolve_wallbox_action(parsed)
 
         # WAVE 3 (#161): the RuntimePropertyUpload carries its own firmware
         # revision, the first device in this integration to report one over

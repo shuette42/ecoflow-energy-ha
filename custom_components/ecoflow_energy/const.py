@@ -132,6 +132,24 @@ WAVE3_SOFT_UNAVAILABLE_S = 540.0
 POWERPULSE2_STALE_THRESHOLD_S = 1200.0
 POWERPULSE2_SOFT_UNAVAILABLE_S = 2400.0
 POWERPULSE2_HARD_UNAVAILABLE_S = 3600.0
+# ADR-009 decision 4: the confirmation window per action. Twice the relayed
+# latency on file (7 s stop->finishing, 10 s start->charging) and the values
+# the contributor's own integration tested live against real hardware, so
+# the first hardware run from this integration compares like for like.
+POWERPULSE2_CHARGE_ACTION_WINDOW_S: dict[str, float] = {"stop": 15.0, "start": 30.0}
+# ADR-009 decision 5: the wallbox status an action may be sent from. Start
+# only from "finishing" (the only start transition observed on file); stop
+# only from "charging".
+POWERPULSE2_CHARGE_ACTION_PRECONDITION: dict[str, frozenset[str]] = {
+    "start": frozenset({"finishing"}),
+    "stop": frozenset({"charging"}),
+}
+# ADR-009 decision 4: the `ev_charge_status` that confirms the action once it
+# arrives on the wallbox's own heartbeat.
+POWERPULSE2_CHARGE_ACTION_CONFIRMED: dict[str, frozenset[str]] = {
+    "start": frozenset({"charging"}),
+    "stop": frozenset({"finishing", "available"}),
+}
 MQTT_HEALTH_CHECK_INTERVAL_S = (
     5.0  # Run stale/reconnect health checks independently from stale threshold
 )

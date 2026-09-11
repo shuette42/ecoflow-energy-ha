@@ -2161,6 +2161,27 @@
     },
     "set_value_rejected": {
       "message": "{entity} kann nicht auf diesen Wert gesetzt werden: {reason}"
+    },
+    "powerpulse_action_in_progress": {
+      "message": "Ein Start oder Stopp für diese Wallbox wartet noch auf die Bestätigung durch das Gerät."
+    },
+    "powerpulse_action_not_confirmed": {
+      "message": "Die Wallbox hat den angeforderten Status nicht innerhalb der zulässigen Zeit gemeldet. Ihre Sensoren zeigen, was sie tatsächlich meldet."
+    },
+    "powerpulse_action_not_delivered": {
+      "message": "Der Wallbox-Befehl hat das PowerOcean nicht erreicht."
+    },
+    "powerpulse_action_state": {
+      "message": "Die Wallbox meldet {status}, das lässt diese Aktion nicht zu."
+    },
+    "powerpulse_descriptor_missing": {
+      "message": "Die Wallbox hat ihre Adresse noch nicht gemeldet. Warte auf ihren nächsten Einstellungsbericht."
+    },
+    "powerpulse_sibling_missing": {
+      "message": "Der Wallbox-Befehl läuft über das PowerOcean desselben Kontos, und dieser Eintrag enthält keines oder mehr als eines."
+    },
+    "powerpulse_sibling_offline": {
+      "message": "Das PowerOcean, über das der Wallbox-Befehl läuft, ist nicht verbunden."
     }
   }
 }
