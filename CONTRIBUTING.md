@@ -74,6 +74,9 @@ A genuinely new device type is one whose own serial number answers a quota
 request, or that delivers its own push stream. Those get their own parser under
 `ecoflow/parsers/` and their own entry in the serial-prefix map.
 
+The file-by-file walk, with the WAVE 3 as the worked example, is in
+[documentation/add-your-device.md](documentation/add-your-device.md).
+
 ### What a device-support PR must include
 
 - **Read-only first.** Sensors and binary sensors only. Do not add switches,

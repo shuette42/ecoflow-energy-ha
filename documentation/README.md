@@ -31,3 +31,4 @@ Counts are the device-specific entity definitions. Every device additionally exp
 ## Guides
 
 - [Moving from another EcoFlow integration](migration-from-another-integration.md) - what carries over, what has to be re-pointed by hand, and an order of steps that keeps the old entities running until the new ones are confirmed
+- [Adding your device](add-your-device.md) - every file a new device touches, with the WAVE 3 as the worked example, and the four things a contributor cannot guess: the capture, the scaling, the read-back, the mode
