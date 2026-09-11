@@ -1560,7 +1560,7 @@ What is on file and what is not. A 16 h diagnostics download from an `RE11` has 
 
 ## ADR-009: The PowerPulse 2 start and stop command leaves on the PowerOcean's set topic and is confirmed on the wallbox's own topic; the device's addressing decides the route, the entity's source decides the confirmation
 
-**Status:** Proposed (decided 2026-09-11; to ship as v1.22.0-beta.1)
+**Status:** Accepted (decided 2026-09-11; implemented the same day, Docker-verified in Enhanced Mode; ships as v1.22.0-beta.1, the first hardware run on #7 decides the next pre-release or the stable release)
 **Date:** 2026-09-11
 **Depends on:** ADR-008 (the wallbox is its own device with its own coordinator and its own connection), ADR-024 (the wallbox owns its own message table). **Changes:** the paragraph of ADR-008 that kept writes out of scope; ADR-008 carries an addendum pointing here.
 
