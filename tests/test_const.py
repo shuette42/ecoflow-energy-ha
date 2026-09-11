@@ -512,9 +512,10 @@ class TestPowerOceanSensors:
     def test_existing_sensors_count(self):
         """Core sensor count, excluding optional Plus and extended EMS fields.
 
-        Includes the accessory readings (heating rod, wallbox, and the eight
-        scheduled-charge slots): they are defined on the PowerOcean and gated
-        at entity creation, not here.
+        Includes the accessory readings (heating rod, wallbox, the eight
+        scheduled-charge slots and the eight feed-to-grid schedule slots):
+        they are defined on the PowerOcean and gated at entity creation, not
+        here.
         """
         keys = _extract_sensor_keys("POWEROCEAN_SENSORS")
         non_pack = [k for k in keys if not k.startswith("pack")]
@@ -525,7 +526,7 @@ class TestPowerOceanSensors:
         }
         ems_extended = _PO_EMS_EXTENDED
         original = [k for k in non_pack if k not in ems_extended and k not in mppt_plus]
-        assert len(original) == 81, f"Expected 81 core sensors, got {len(original)}"
+        assert len(original) == 89, f"Expected 89 core sensors, got {len(original)}"
 
     def test_mppt_plus_sensor_count(self):
         """6 PowerOcean Plus MPPT sensors (strings 3 and 4)."""
@@ -558,9 +559,9 @@ class TestPowerOceanSensors:
         assert len(found) == 28, f"Expected 28 EMS extended sensors, got {len(found)}"
 
     def test_total_sensor_count(self):
-        """Total PowerOcean sensors = 81 + 6 + 120 + 28 = 235."""
+        """Total PowerOcean sensors = 89 + 6 + 120 + 28 = 243."""
         keys = _extract_sensor_keys("POWEROCEAN_SENSORS")
-        assert len(keys) == 235, f"Expected 235 total sensors, got {len(keys)}"
+        assert len(keys) == 243, f"Expected 243 total sensors, got {len(keys)}"
 
     def test_only_soc_has_battery_device_class(self):
         """Only the primary soc_pct should have device_class='battery'.
@@ -860,6 +861,15 @@ _PRECISION_WAIVED.update(
     {
         f"schedule_{_index}_window": (
             "the charge window is text, 'HH:MM-HH:MM', so there is no number to round"
+        )
+        for _index in range(1, SCHEDULE_MAX_INDEX + 1)
+    }
+)
+_PRECISION_WAIVED.update(
+    {
+        f"feed_schedule_{_index}_window": (
+            "the feed-to-grid window is text, one or two 'HH:MM-HH:MM' spans, "
+            "so there is no number to round"
         )
         for _index in range(1, SCHEDULE_MAX_INDEX + 1)
     }

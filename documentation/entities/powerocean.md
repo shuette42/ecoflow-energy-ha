@@ -39,12 +39,13 @@ Full list of all entities created for PowerOcean devices.
 > only has a schedule if you created one yourself in the EcoFlow app, and most
 > systems never do, so having no schedule entities at all is the normal case
 > and not a fault. Four entities appear for each schedule your system reports:
-> a switch that turns it on and off, its charge power, the time of day it runs
-> and whether it is charging right now. Every change is confirmed against the
-> list the PowerOcean sends back, so the switch shows what the device did and
-> not merely what was asked of it. The list travels on the PowerOcean's
-> real-time stream, which is why these entities need the EcoFlow account
-> sign-in.
+> a switch that turns it on and off, its power, the time of day it runs
+> and whether it is running right now. This holds for both kinds of schedule
+> the app offers, the charge schedule and the feed-to-grid schedule, each
+> with its own entities. Every change is confirmed against the list the
+> PowerOcean sends back, so the switch shows what the device did and not
+> merely what was asked of it. The list travels on the PowerOcean's real-time
+> stream, which is why these entities need the EcoFlow account sign-in.
 >
 > **Creating and deleting a schedule stays in the EcoFlow app.** Home Assistant
 > can operate a schedule you made there, not invent one: without a way to
@@ -210,6 +211,25 @@ Further schedules follow the same pattern: Schedule 2 Enabled, Schedule 2 Charge
 Charge Power takes the same range the app offers for the same setting. It moves in steps of 100 W, its minimum is 100 W for every online battery pack your system reports (200 W with two packs), and its maximum comes from the model: 10000 W on the three-phase 10 kW unit, 8000 W on the 8 kW one, 12000 W on the 12 kW one, 6000 W on the 6 kW and single-phase units, and 29900 W on a PowerOcean Plus. A value outside that range, or one that is not a multiple of 100, is refused rather than quietly rounded.
 
 A schedule set in the app to run loads from the battery rather than to charge it keeps the same four entities, and its power is the discharge limit. Which direction a schedule has is set in the app and is not shown as an entity.
+
+---
+
+## Feed-to-Grid Schedules (accessory, Enhanced Mode)
+
+Created only for the feed-to-grid schedules your system actually reports, up to eight. These are the schedules the app calls "feed power to grid": a time of day during which the PowerOcean exports a set power from the battery to the grid. They are a separate list from the charge schedules above, numbered on their own, so Feed Schedule 3 and Schedule 3 are two different schedules. See the note at the top.
+
+| Entity | Type | Description | Default |
+|:---|:---:|:---|:---:|
+| Feed Schedule 1 Enabled | Switch | Turns the feed-to-grid schedule on and off. Reads back from the list the device sends, so it shows the state the PowerOcean actually holds | enabled |
+| Feed Schedule 1 Export Power | Number | The power the schedule exports to the grid, in watts | enabled |
+| Feed Schedule 1 Window | Sensor | The time of day the schedule runs, written as `21:00-21:30`. A feed-to-grid schedule can have two windows, shown as `21:00-21:30, 22:00-23:00` | enabled |
+| Feed Schedule 1 Running | Binary sensor | Whether the schedule is exporting right now. Stays off while the schedule exists but its window has not opened yet | enabled |
+
+Further schedules follow the same pattern: Feed Schedule 2 Enabled, Feed Schedule 2 Export Power, and so on up to Feed Schedule 8.
+
+Export Power moves in steps of 100 W from a minimum of 100 W. Its maximum is your system's own **Feed Power Limit** once the PowerOcean has reported it (the same ceiling the app applies to this setting); until that reading arrives the slider shows 5000 W, and a write is refused rather than sent against an unknown limit. A value outside the range, or one that is not a multiple of 100, is refused rather than quietly rounded. To export nothing, switch the schedule off rather than setting the power to zero, which is a value the app never sends.
+
+The PowerOcean confirms a changed power or repeat setting with a fresh list right away. After a plain on or off it has not been seen to send one on its own, so the switch keeps the state it was set to until the next list arrives, and that list is the device's word. The days a schedule repeats on, or the single date it runs on, are set in the app and are not shown as an entity.
 
 ---
 

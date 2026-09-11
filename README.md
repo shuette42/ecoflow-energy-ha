@@ -24,7 +24,7 @@
 ## Highlights
 
 - **In the HACS default store** - installable from HACS directly, no custom repository to add
-- **Up to 235 sensors on one device** - power, energy, battery packs, temperature, diagnostics
+- **Up to 243 sensors on one device** - power, energy, battery packs, temperature, diagnostics
 - **Energy Dashboard ready** - local Riemann-sum kWh with gap detection
 - **Real-time out of the box** - Enhanced Mode: ~2-4 s updates for all devices
 - **Full PowerOcean control** - Backup Reserve, Solar Surplus Threshold, Work Mode (Self-use / AI Schedule)
@@ -40,8 +40,8 @@
 
 | Device | Serial prefix | Connection | Sensors | Controls | Energy Dashboard | Update |
 |:---|:---|:---|:---:|:---|:---:|:---|
-| **PowerOcean** | `HJ31` `HJ32` `HJ35` `HJ36` `HJ37` `J32B` `J329` `J327`\* `J32D`\* `J32E`\* | Standard, Enhanced | 235 + 13 binary | 8 switches · 10 numbers · 1 select (Enhanced) | 6 | ~30 s / ~3 s |
-| **PowerOcean Plus** | `R371` `R372` `R374` `HJ3C` | Enhanced only | 235 + 13 binary | 8 switches · 10 numbers · 1 select | 6 | ~3 s |
+| **PowerOcean** | `HJ31` `HJ32` `HJ35` `HJ36` `HJ37` `J32B` `J329` `J327`\* `J32D`\* `J32E`\* | Standard, Enhanced | 243 + 21 binary | 16 switches · 18 numbers · 1 select (Enhanced) | 6 | ~30 s / ~3 s |
+| **PowerOcean Plus** | `R371` `R372` `R374` `HJ3C` | Enhanced only | 243 + 21 binary | 16 switches · 18 numbers · 1 select | 6 | ~3 s |
 | **Delta 2 Max** | `R351` `R331` | Standard, MQTT push | 94 + 4 binary | 7 switches · 8 numbers | 4 | ~30 s |
 | **Delta 3** | `D3M1` `D3N1` `P321` `P231` `P351` | Standard, Enhanced | 47 (`D3M`: + 1 binary) | 7 switches · 4 numbers · 5 selects (`D3M`: 10 · 7 · 5) | 4 | ~30 s / ~2 s |
 | **Smart Plug** | `HW52` | Standard, Enhanced | 11 + 1 binary | 1 switch · 2 numbers | 1 | ~30 s / ~3 s |

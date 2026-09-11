@@ -548,44 +548,49 @@ def test_template_family_matches_const_py(tf: TemplateFamily):
     )
 
 
-_SCHEDULE_RANGE_PATTERN = re.compile(r"up to Schedule (\d+)")
+# The two PowerOcean schedule families, each documented as one literal
+# "<Family> 1 ..." row per platform plus the prose "up to <Family> N".
+_SCHEDULE_FAMILIES = ("Schedule", "Feed Schedule")
 
 
+@pytest.mark.parametrize("family", _SCHEDULE_FAMILIES)
 @pytest.mark.parametrize(
     "platform", ["sensors", "binary_sensors", "switches", "numbers"]
 )
-def test_schedule_template_matches_const_py(platform: str):
+def test_schedule_template_matches_const_py(platform: str, family: str):
     """Same idea as test_template_family_matches_const_py, but the Schedule
-    table is a different shape: it already carries a 'Type' column and its
-    one literal row names real instance 1 ('Schedule 1 Enabled', ...) rather
-    than a placeholder ('Schedule N Enabled') - so this reads that row
+    tables are a different shape: they already carry a 'Type' column and
+    their one literal row names real instance 1 ('Schedule 1 Enabled', ...)
+    rather than a placeholder ('Schedule N Enabled') - so this reads that row
     straight from the already-parsed, already-platform-routed doc tables
-    instead of a raw section scan, and spans all four platforms the
-    Scheduled Charge Tasks table produces.
+    instead of a raw section scan, and spans all four platforms each
+    schedule table produces. Two families: the charge schedule ('Schedule')
+    and the feed-to-grid schedule ('Feed Schedule').
     """
     doc_text = (DOCS_DIR / "powerocean.md").read_text(encoding="utf-8")
-    match = _SCHEDULE_RANGE_PATTERN.search(doc_text)
-    assert match, "could not find 'up to Schedule N' in powerocean.md"
+    match = re.search(rf"up to {family} (\d+)", doc_text)
+    assert match, f"could not find 'up to {family} N' in powerocean.md"
     instance_range = range(1, int(match.group(1)) + 1)
 
     rows = _doc_tables("powerocean.md")[platform]
-    schedule_1_rows = [name for name, _line in rows if name.startswith("Schedule 1 ")]
-    assert schedule_1_rows, (
-        f"no literal 'Schedule 1 ...' row routed to platform {platform!r} in "
+    head = f"{family} 1 "
+    first_rows = [name for name, _line in rows if name.startswith(head)]
+    assert first_rows, (
+        f"no literal '{family} 1 ...' row routed to platform {platform!r} in "
         f"powerocean.md"
     )
-    suffixes = {name[len("Schedule 1 ") :] for name in schedule_1_rows}
+    suffixes = {name[len(head) :] for name in first_rows}
 
-    expected = {f"Schedule {i} {suffix}" for i in instance_range for suffix in suffixes}
+    expected = {f"{family} {i} {suffix}" for i in instance_range for suffix in suffixes}
     actual = {
         d.name
         for d in DEFINITION_LISTS["POWEROCEAN"][platform]
-        if re.match(r"^Schedule \d+ ", d.name)
+        if re.match(rf"^{family} \d+ ", d.name)
     }
     missing = expected - actual
     extra = actual - expected
     assert not missing and not extra, (
-        f"POWEROCEAN_{platform.upper()}'s Schedule template (instance range "
+        f"POWEROCEAN_{platform.upper()}'s {family} template (instance range "
         f"{instance_range.start}-{instance_range.stop - 1}, read from "
         f"powerocean.md) does not match const.py exactly.\n"
         f"missing from const.py: {sorted(missing)}\n"
@@ -698,6 +703,38 @@ EXCLUDE_FROM_UNDOCUMENTED: tuple[Exclusion, ...] = (
         "switches",
         re.compile(r"^Schedule ([2-9]|[1-9]\d+) "),
         "same schedule-pattern prose as the sensors above",
+    ),
+    Exclusion(
+        "POWEROCEAN",
+        "sensors",
+        re.compile(r"^Feed Schedule ([2-9]|[1-9]\d+) "),
+        "only 'Feed Schedule 1 ...' is a literal table row in "
+        "'## Feed-to-Grid Schedules'; slots 2-8 are covered by the prose "
+        "'Further schedules follow the same pattern ... up to Feed Schedule 8'",
+    ),
+    Exclusion(
+        "POWEROCEAN",
+        "binary_sensors",
+        re.compile(r"^Feed Schedule ([2-9]|[1-9]\d+) "),
+        "only 'Feed Schedule 1 ...' is a literal table row in "
+        "'## Feed-to-Grid Schedules'; slots 2-8 are covered by the prose "
+        "'Further schedules follow the same pattern ... up to Feed Schedule 8'",
+    ),
+    Exclusion(
+        "POWEROCEAN",
+        "numbers",
+        re.compile(r"^Feed Schedule ([2-9]|[1-9]\d+) "),
+        "only 'Feed Schedule 1 ...' is a literal table row in "
+        "'## Feed-to-Grid Schedules'; slots 2-8 are covered by the prose "
+        "'Further schedules follow the same pattern ... up to Feed Schedule 8'",
+    ),
+    Exclusion(
+        "POWEROCEAN",
+        "switches",
+        re.compile(r"^Feed Schedule ([2-9]|[1-9]\d+) "),
+        "only 'Feed Schedule 1 ...' is a literal table row in "
+        "'## Feed-to-Grid Schedules'; slots 2-8 are covered by the prose "
+        "'Further schedules follow the same pattern ... up to Feed Schedule 8'",
     ),
     Exclusion(
         "DELTA2MAX",

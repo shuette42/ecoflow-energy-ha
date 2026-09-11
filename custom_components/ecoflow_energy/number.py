@@ -26,6 +26,7 @@ from .const import (
     DOMAIN,
     NUMBER_COMMANDS,
     POWEROCEAN_NUMBERS,
+    POWEROCEAN_SCHEDULE_PREFIXES,
     SMARTPLUG_NUMBER_COMMANDS,
     SMARTPLUG_NUMBERS,
     STREAM_NUMBERS,
@@ -38,6 +39,7 @@ from .const import (
 )
 from .coordinator import DeviceValueNotReported, EcoFlowDeviceCoordinator
 from .ecoflow.const import (
+    POWEROCEAN_FEED_SCHEDULE_POWER_MIN_W,
     schedule_power_max_w,
     schedule_power_min_w,
 )
@@ -276,11 +278,15 @@ class EcoFlowNumber(
         priority cutoffs and the Stream backup reserve. The third, the STREAM
         AC 5000 grid-tied output, follows a ceiling only EcoFlow can raise.
         The scheduled charge power is a fourth of a different kind: its floor
-        follows the reported pack count, its ceiling the model.
+        follows the reported pack count, its ceiling the model. The
+        feed-to-grid schedule's export power is a fifth: its floor is fixed
+        and its ceiling follows the device's own feed limit once reported,
+        the declared range otherwise.
         Every other number keeps the range its definition declares.
         """
-        if self._schedule_slot() is not None:
-            return self._schedule_power_bounds()
+        schedule_slot = self._schedule_slot()
+        if schedule_slot is not None:
+            return self._schedule_power_bounds(schedule_slot[0])
         if self._port_priority_stem() is not None:
             lower, upper = self._port_priority_bounds()
             return float(lower), float(upper)
@@ -347,16 +353,31 @@ class EcoFlowNumber(
             and supports_stream_controls(self.coordinator.device_sn)
         )
 
-    def _schedule_power_bounds(self) -> tuple[float, float]:
-        """Return the charge power range the app would offer for this unit.
+    def _schedule_power_bounds(self, prefix: str) -> tuple[float, float] | None:
+        """Return the power range the app would offer for this unit's slot.
 
-        The floor is 100 W per online battery pack and the ceiling comes from
-        the serial prefix, which is exactly how the app builds this prompt:
-        neither is a device-reported rating, and no frame carries one. A pack
-        count that has not arrived yet gives the one-pack floor rather than
-        zero, because the app cannot send zero and what the device would do
-        with it has never been seen.
+        The charge schedule (`schedule`) keeps its existing rule: the floor is
+        100 W per online battery pack and the ceiling comes from the serial
+        prefix, which is exactly how the app builds this prompt - neither is
+        a device-reported rating, and no frame carries one. A pack count that
+        has not arrived yet gives the one-pack floor rather than zero, because
+        the app cannot send zero and what the device would do with it has
+        never been seen.
+
+        The feed-to-grid schedule (`feed_schedule`) has a fixed floor and a
+        ceiling that is a real device reading, `ems_feed_power_limit_w`, once
+        it has been reported. Before that - or if it reads back at or below
+        the floor, which no capture has ever shown - `None` falls through to
+        the declared range so the control still has bounds to offer.
         """
+        if prefix == "feed_schedule":
+            ceiling = as_known_int(
+                (self.coordinator.data or {}).get("ems_feed_power_limit_w")
+            )
+            if ceiling is None or ceiling <= POWEROCEAN_FEED_SCHEDULE_POWER_MIN_W:
+                return None
+            return float(POWEROCEAN_FEED_SCHEDULE_POWER_MIN_W), float(ceiling)
+
         packs = as_known_int((self.coordinator.data or {}).get("bp_online_sum"))
         upper = schedule_power_max_w(self.coordinator.device_sn)
         lower = schedule_power_min_w(packs)
@@ -551,11 +572,12 @@ class EcoFlowNumber(
         key = self._definition.key
         int_value = int(value)
 
-        slot = self._schedule_slot()
-        if slot is not None:
+        schedule_slot = self._schedule_slot()
+        if schedule_slot is not None:
+            prefix, slot = schedule_slot
             try:
                 ok = await self.coordinator.async_set_powerocean_schedule_power(
-                    slot, int_value
+                    prefix, slot, int_value
                 )
             except DeviceValueNotReported:
                 # The write needs four fields the device owns, and composing
@@ -567,7 +589,7 @@ class EcoFlowNumber(
                 # armed flag tells them apart, because a retracted slot
                 # publishes it as None.
                 if not isinstance(
-                    self.coordinator.device_data.get(f"schedule_{slot}_enabled"),
+                    self.coordinator.device_data.get(f"{prefix}_{slot}_enabled"),
                     bool,
                 ):
                     raise_set_gone(self.entity_id)
@@ -640,21 +662,26 @@ class EcoFlowNumber(
 
         raise_set_unsupported(self.entity_id)
 
-    def _schedule_slot(self) -> int | None:
-        """Return the slot number for a PowerOcean schedule number, else None.
+    def _schedule_slot(self) -> tuple[str, int] | None:
+        """Return the (family prefix, slot) for a PowerOcean schedule number.
 
         The device type is checked before the key, as the switch does: the
         write this routes to is a PowerOcean frame, so a key of the same shape
         on another device must not reach it. No other device defines one
         today, and this is here so that adding one cannot quietly change where
-        it is sent.
+        it is sent. Two families share this shape - the charge schedule
+        (`schedule_`) and the feed-to-grid schedule (`feed_schedule_`) - and
+        the prefix travels with the slot so the caller can route the write to
+        the right task list without a second lookup.
         """
         if self.coordinator.device_type != DEVICE_TYPE_POWEROCEAN:
             return None
         key = self._definition.key
-        if not key.startswith("schedule_") or not key.endswith("_power_w"):
-            return None
-        return int(key[len("schedule_") : -len("_power_w")])
+        for prefix in POWEROCEAN_SCHEDULE_PREFIXES:
+            head = f"{prefix}_"
+            if key.startswith(head) and key.endswith("_power_w"):
+                return prefix, int(key[len(head) : -len("_power_w")])
+        return None
 
     # Every path through this function either returns or ends in
     # raise_set_unsupported/raise_set_not_ready/raise_set_rejected, all typed

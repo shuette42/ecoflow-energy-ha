@@ -65,7 +65,9 @@ HEATING_ROD_KEYS = {
 # numbering comes from the device, so every slot the parser can report has a
 # definition that only becomes an entity once that slot is reported.
 SCHEDULE_KEYS = {
-    f"schedule_{index}_window" for index in range(1, SCHEDULE_MAX_INDEX + 1)
+    f"{prefix}_{index}_window"
+    for prefix in ("schedule", "feed_schedule")
+    for index in range(1, SCHEDULE_MAX_INDEX + 1)
 }
 
 # The PowerPulse 1 (`AC31`) wallbox, which still reports through the

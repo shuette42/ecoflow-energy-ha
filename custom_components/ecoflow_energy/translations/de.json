@@ -1641,6 +1641,30 @@
       "schedule_8_window": {
         "name": "Zeitplan 8 Zeitfenster"
       },
+      "feed_schedule_1_window": {
+        "name": "Einspeise-Zeitplan 1 Zeitfenster"
+      },
+      "feed_schedule_2_window": {
+        "name": "Einspeise-Zeitplan 2 Zeitfenster"
+      },
+      "feed_schedule_3_window": {
+        "name": "Einspeise-Zeitplan 3 Zeitfenster"
+      },
+      "feed_schedule_4_window": {
+        "name": "Einspeise-Zeitplan 4 Zeitfenster"
+      },
+      "feed_schedule_5_window": {
+        "name": "Einspeise-Zeitplan 5 Zeitfenster"
+      },
+      "feed_schedule_6_window": {
+        "name": "Einspeise-Zeitplan 6 Zeitfenster"
+      },
+      "feed_schedule_7_window": {
+        "name": "Einspeise-Zeitplan 7 Zeitfenster"
+      },
+      "feed_schedule_8_window": {
+        "name": "Einspeise-Zeitplan 8 Zeitfenster"
+      },
       "tilt_angle_deg": {
         "name": "Neigungswinkel"
       },
@@ -1788,6 +1812,30 @@
       "schedule_8_running": {
         "name": "Zeitplan 8 läuft"
       },
+      "feed_schedule_1_running": {
+        "name": "Einspeise-Zeitplan 1 läuft"
+      },
+      "feed_schedule_2_running": {
+        "name": "Einspeise-Zeitplan 2 läuft"
+      },
+      "feed_schedule_3_running": {
+        "name": "Einspeise-Zeitplan 3 läuft"
+      },
+      "feed_schedule_4_running": {
+        "name": "Einspeise-Zeitplan 4 läuft"
+      },
+      "feed_schedule_5_running": {
+        "name": "Einspeise-Zeitplan 5 läuft"
+      },
+      "feed_schedule_6_running": {
+        "name": "Einspeise-Zeitplan 6 läuft"
+      },
+      "feed_schedule_7_running": {
+        "name": "Einspeise-Zeitplan 7 läuft"
+      },
+      "feed_schedule_8_running": {
+        "name": "Einspeise-Zeitplan 8 läuft"
+      },
       "grid_l1_connected": {
         "name": "Phase A verbunden"
       },
@@ -1898,6 +1946,30 @@
       "schedule_8_enabled": {
         "name": "Zeitplan 8 aktiv"
       },
+      "feed_schedule_1_enabled": {
+        "name": "Einspeise-Zeitplan 1 aktiv"
+      },
+      "feed_schedule_2_enabled": {
+        "name": "Einspeise-Zeitplan 2 aktiv"
+      },
+      "feed_schedule_3_enabled": {
+        "name": "Einspeise-Zeitplan 3 aktiv"
+      },
+      "feed_schedule_4_enabled": {
+        "name": "Einspeise-Zeitplan 4 aktiv"
+      },
+      "feed_schedule_5_enabled": {
+        "name": "Einspeise-Zeitplan 5 aktiv"
+      },
+      "feed_schedule_6_enabled": {
+        "name": "Einspeise-Zeitplan 6 aktiv"
+      },
+      "feed_schedule_7_enabled": {
+        "name": "Einspeise-Zeitplan 7 aktiv"
+      },
+      "feed_schedule_8_enabled": {
+        "name": "Einspeise-Zeitplan 8 aktiv"
+      },
       "power": {
         "name": "Betrieb"
       },
@@ -2007,6 +2079,30 @@
       },
       "schedule_8_power_w": {
         "name": "Zeitplan 8 Ladeleistung"
+      },
+      "feed_schedule_1_power_w": {
+        "name": "Einspeise-Zeitplan 1 Einspeiseleistung"
+      },
+      "feed_schedule_2_power_w": {
+        "name": "Einspeise-Zeitplan 2 Einspeiseleistung"
+      },
+      "feed_schedule_3_power_w": {
+        "name": "Einspeise-Zeitplan 3 Einspeiseleistung"
+      },
+      "feed_schedule_4_power_w": {
+        "name": "Einspeise-Zeitplan 4 Einspeiseleistung"
+      },
+      "feed_schedule_5_power_w": {
+        "name": "Einspeise-Zeitplan 5 Einspeiseleistung"
+      },
+      "feed_schedule_6_power_w": {
+        "name": "Einspeise-Zeitplan 6 Einspeiseleistung"
+      },
+      "feed_schedule_7_power_w": {
+        "name": "Einspeise-Zeitplan 7 Einspeiseleistung"
+      },
+      "feed_schedule_8_power_w": {
+        "name": "Einspeise-Zeitplan 8 Einspeiseleistung"
       },
       "target_temp_c": {
         "name": "Zieltemperatur"

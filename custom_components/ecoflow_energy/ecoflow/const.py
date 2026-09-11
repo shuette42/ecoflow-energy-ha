@@ -335,6 +335,20 @@ POWEROCEAN_SCHEDULE_POWER_STEP_W = 100
 POWEROCEAN_SCHEDULE_POWER_MIN_W = 100
 POWEROCEAN_SCHEDULE_POWER_MAX_DEFAULT_W = 10000
 
+# The feed-to-grid schedule's own power range (ADR-027 addendum, #381) -
+# narrower than the charge schedule above because it is a separate app
+# prompt, not because the wire says so. 100 W is one step above zero: the
+# disable switch is how a slot is made to export nothing, and zero has never
+# been seen in a power field of either schedule family. 5000 W is the one app
+# maximum on record (#381, reporter, 2026-09-10, equal to his own Feed Power
+# Limit) and stands only as a placeholder until the device's own
+# `ems_feed_power_limit_w` reading arrives; the number entity narrows to that
+# reading, uncapped, once it does - a unit with a higher feed limit must not
+# be clipped to this default. The step is the same 100 W grid, so no second
+# step constant exists.
+POWEROCEAN_FEED_SCHEDULE_POWER_MIN_W = 100
+POWEROCEAN_FEED_SCHEDULE_POWER_MAX_DEFAULT_W = 5000
+
 
 def schedule_power_max_w(sn: str) -> int:
     """Return the scheduled charge power ceiling for this unit, in watts."""

@@ -29,6 +29,8 @@ from .ecoflow.const import (  # noqa: E402
     DEVICE_TYPE_STREAM_AC5000,
     DEVICE_TYPE_UNKNOWN,  # noqa: F401
     DEVICE_TYPE_WAVE3,
+    POWEROCEAN_FEED_SCHEDULE_POWER_MAX_DEFAULT_W,
+    POWEROCEAN_FEED_SCHEDULE_POWER_MIN_W,
     POWEROCEAN_SCHEDULE_POWER_MAX_DEFAULT_W,
     POWEROCEAN_SCHEDULE_POWER_MIN_W,
     POWEROCEAN_SCHEDULE_POWER_STEP_W,
@@ -2096,6 +2098,18 @@ POWEROCEAN_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
 #
 # Both the task list and the command that changes it live on the app channel,
 # so with developer keys these would be created and never fill.
+#
+# The feed-to-grid schedule below is the TOU task family (96/14 list, 96/143
+# write): the same shape as the charge schedule above, sent to a separate
+# device task list with its own index space (ADR-027 addendum, #381), and
+# gated the same way. Creating and deleting a task both stay in the app, for
+# the same reason as the charge schedule.
+#
+# The single registration of which key prefixes are a PowerOcean schedule
+# slot - both the entity loops below and the switch/number platforms read
+# from here rather than repeating the two strings.
+POWEROCEAN_SCHEDULE_PREFIXES: tuple[str, ...] = ("schedule", "feed_schedule")
+
 for _schedule_index in range(1, SCHEDULE_MAX_INDEX + 1):
     POWEROCEAN_SENSORS.append(
         EcoFlowSensorDef(
@@ -2114,6 +2128,30 @@ for _schedule_index in range(1, SCHEDULE_MAX_INDEX + 1):
         EcoFlowBinarySensorDef(
             f"schedule_{_schedule_index}_running",
             f"Schedule {_schedule_index} Running",
+            "running",
+            "mdi:calendar-check",
+            None,
+            enhanced_only=True,
+            accessory=True,
+        )
+    )
+    POWEROCEAN_SENSORS.append(
+        EcoFlowSensorDef(
+            f"feed_schedule_{_schedule_index}_window",
+            f"Feed Schedule {_schedule_index} Window",
+            None,
+            None,
+            None,
+            "mdi:calendar-clock",
+            None,
+            enhanced_only=True,
+            accessory=True,
+        )
+    )
+    POWEROCEAN_BINARY_SENSORS.append(
+        EcoFlowBinarySensorDef(
+            f"feed_schedule_{_schedule_index}_running",
+            f"Feed Schedule {_schedule_index} Running",
             "running",
             "mdi:calendar-check",
             None,
@@ -2215,6 +2253,34 @@ for _schedule_index in range(1, SCHEDULE_MAX_INDEX + 1):
             "mdi:battery-charging-outline",
             POWEROCEAN_SCHEDULE_POWER_MIN_W,
             POWEROCEAN_SCHEDULE_POWER_MAX_DEFAULT_W,
+            POWEROCEAN_SCHEDULE_POWER_STEP_W,
+            enhanced_only=True,
+            accessory=True,
+        )
+    )
+    POWEROCEAN_SWITCHES.append(
+        EcoFlowSwitchDef(
+            f"feed_schedule_{_schedule_index}_enabled",
+            f"Feed Schedule {_schedule_index} Enabled",
+            f"feed_schedule_{_schedule_index}_enabled",
+            "mdi:calendar-check-outline",
+            enhanced_only=True,
+            accessory=True,
+        )
+    )
+    # 100 W is one step above zero (the switch above is how a slot exports
+    # nothing) and 5000 W is the one app maximum on record - see the comment
+    # on the two constants in ecoflow/const.py. The entity narrows the
+    # ceiling to the device's own `ems_feed_power_limit_w` once it arrives.
+    POWEROCEAN_NUMBERS.append(
+        EcoFlowNumberDef(
+            f"feed_schedule_{_schedule_index}_power_w",
+            f"Feed Schedule {_schedule_index} Export Power",
+            f"feed_schedule_{_schedule_index}_power_w",
+            "W",
+            "mdi:transmission-tower-export",
+            POWEROCEAN_FEED_SCHEDULE_POWER_MIN_W,
+            POWEROCEAN_FEED_SCHEDULE_POWER_MAX_DEFAULT_W,
             POWEROCEAN_SCHEDULE_POWER_STEP_W,
             enhanced_only=True,
             accessory=True,
