@@ -1306,6 +1306,10 @@ Three structural numbers decide the shape. 535 frames carry more than one header
 
 ---
 
+### Addendum 2026-09-11: a masked region survives a second pass unchanged
+
+The raw pass runs over the whole frame first, and on the wire a masked region reads as `X ^ key`, which for many keys is itself a letter or digit (`0x1e` gives `F`, `0x0a` gives `R`). A masked serial can therefore spell a sixteen-character run on the wire, and the raw pass rewrote it as if it were a serial, which under the mask is no longer `X`. The region pass did not repair it, because the plaintext it read was already clean. Measured on 2026-09-11 when the PowerPulse 2 settings-report fixture, masked by this very function, went through it a second time: two of nine frames came back corrupted. Now, where the plaintext under a rewritten byte is already the mask byte, the byte goes back to its ciphertext; every other rewrite stays, so a header that declares a mask it does not carry is still handled as before. The three properties above are unchanged. Two tests pin it, one with the fixture and one with a synthetic region whose plaintext is not the mask byte.
+
 ## ADR-024: The protobuf command registry gets one table per device type; the device type is the namespace and is passed in, not guessed
 
 **Status:** Accepted (decided 2026-09-08; implemented and merged the same day as a7af66d, PR #380; shipped in v1.21.0-beta.1, v1.21.0 not yet released)

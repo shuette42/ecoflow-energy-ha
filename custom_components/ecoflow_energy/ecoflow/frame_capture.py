@@ -581,9 +581,31 @@ def sanitize_frame(payload: bytes, secrets: list[str]) -> bytes:
     for region in _encrypted_regions(payload):
         if region.key is None:
             continue
-        inner = _xor(payload[region.start : region.end], region.key)
+        ciphertext = payload[region.start : region.end]
+        inner = _xor(ciphertext, region.key)
         cleaned = _plain_passes(inner, secrets)
         if cleaned == inner:
+            on_the_wire = sanitized[region.start : region.end]
+            if on_the_wire == ciphertext:
+                continue
+            # The plain passes rewrote ciphertext that happened to spell an
+            # identifier on the wire. Where the plaintext under those bytes is
+            # already the mask byte, the region was masked before and the
+            # rewrite corrupts it: `X ^ key` is itself alphanumeric for many
+            # keys (0x1e gives F, 0x0a gives R), so the product's own output,
+            # sanitized a second time, came back with `F` where `X` had been
+            # (measured 2026-09-11 on the PowerPulse 2 settings-report
+            # fixture). Those bytes go back to the ciphertext; any other
+            # rewrite in the region stays, as before.
+            restored = bytearray(on_the_wire)
+            for offset, (before, after) in enumerate(
+                zip(ciphertext, on_the_wire, strict=True)
+            ):
+                if before != after and inner[offset] == _MASK_BYTE[0]:
+                    restored[offset] = before
+            sanitized = (
+                sanitized[: region.start] + bytes(restored) + sanitized[region.end :]
+            )
             continue
         sanitized = (
             sanitized[: region.start]
