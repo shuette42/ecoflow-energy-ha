@@ -439,6 +439,46 @@ automation:
 
 ---
 
+## When the Connection Drops
+
+<details>
+<summary><b>How the connection recovers on its own</b></summary>
+
+**While data is flowing.** In Enhanced Mode the device pushes its readings and the integration keeps that connection busy so the server does not close it. A PowerOcean is asked for its live stream again every 20 seconds, every device is asked for its latest values every 30 seconds, and a ping goes out every 60 seconds. A Smart Plug also gets a full snapshot every 120 seconds, because it reports in bursts with quiet stretches in between.
+
+**When the connection breaks.** The integration reconnects by itself, with a growing pause between attempts: 5 seconds, then 10, 20, 40, and from there a fixed 60 seconds. Each attempt uses a new client identity, which is what gets a session accepted again after the server has dropped the old one. After ten attempts it pauses for up to five minutes and then starts a fresh cycle. There is no attempt limit at which it stops trying.
+
+**What the entities do meanwhile.** Nothing disappears the moment data stops. The integration counts the age of the last reading and moves through three stages:
+
+| Stage | Age of the last reading | What you see |
+|:---|:---|:---|
+| Stale | over 35 seconds | Entities keep their values, reconnect attempts are running |
+| Degraded | over 5 minutes | Entities keep their values, and those values are visibly old |
+| Unavailable | over 10 minutes | Entities go unavailable in Home Assistant |
+
+Some devices report less often, and those get longer windows so a quiet device is not declared gone:
+
+| Device | Stale | Degraded | Unavailable |
+|:---|:---|:---|:---|
+| Smart Plug (with account sign-in) | 3 minutes | 6 minutes | 10 minutes |
+| WAVE 3 in standby | 4.5 minutes | 9 minutes | 10 minutes |
+| PowerPulse 2 | 20 minutes | 40 minutes | 60 minutes |
+
+A WAVE 3 that is running pushes every couple of seconds and uses the standard windows. The PowerPulse 2 windows always apply: it pushes when something changes and otherwise stays quiet for long stretches, charging or not.
+
+In Standard Mode the HTTP poll decides availability instead. Entities go unavailable when the polls themselves keep failing, not when a push pauses.
+
+**What clears it.** The next frame received from the device. The stage resets immediately, the entities pick up the new values, and nothing needs to be restarted or reloaded.
+
+**Where to look.** Every device has two diagnostic sensors:
+
+- **MQTT Status** reports the connection itself: `receiving` while frames arrive, `connected_stale` while the connection is open but the device is quiet, `disconnected` while a reconnect is pending.
+- **Connection Mode** reports which path is in use: `standard`, `enhanced`, or `enhanced_fallback` when the integration has fallen back to polling.
+
+</details>
+
+---
+
 ## Troubleshooting
 
 <details>
