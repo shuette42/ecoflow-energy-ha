@@ -24,7 +24,10 @@ CONFIG_FLOW_PATHS = sorted(
 EN_PATH = TRANSLATIONS_DIR / "en.json"
 DE_PATH = TRANSLATIONS_DIR / "de.json"
 
-TRANSLATION_FILES = {"en": EN_PATH, "de": DE_PATH}
+# Every shipped language. A file missing here is a file no test reads, so a
+# new language is added to this tuple in the same commit that adds the file.
+LANGS = ("en", "de", "fr", "it", "nl", "pl")
+TRANSLATION_FILES = {lang: TRANSLATIONS_DIR / f"{lang}.json" for lang in LANGS}
 
 
 # ---------------------------------------------------------------------------
@@ -527,6 +530,14 @@ class TestLanguageConsistency:
 STRINGS_PATH = Path("custom_components/ecoflow_energy/strings.json")
 ENTITY_PATH = Path("custom_components/ecoflow_energy/entity.py")
 
+# The source file and every rendered language, for tests about the text itself.
+ALL_PATHS = [STRINGS_PATH, *TRANSLATION_FILES.values()]
+
+
+def _lang_of(path: Path) -> str:
+    """`strings.json` is English; every other file is named by its language."""
+    return "en" if path.name == "strings.json" else path.stem
+
 
 def _raised_translation_keys() -> set[str]:
     """Collect translation_key values passed to HomeAssistantError in entity.py."""
@@ -554,7 +565,7 @@ class TestExceptionTranslations:
         keys = _raised_translation_keys()
         assert keys, "No HomeAssistantError translation keys found in entity.py"
 
-        for path in (STRINGS_PATH, EN_PATH, DE_PATH):
+        for path in ALL_PATHS:
             exceptions = json.loads(path.read_text()).get("exceptions", {})
             missing = keys - set(exceptions)
             assert not missing, f"{path.name} is missing exception messages: {missing}"
@@ -566,18 +577,19 @@ class TestExceptionTranslations:
     def test_exception_placeholders_match_across_languages(self):
         placeholder_re = re.compile(r"\{(\w+)\}")
         per_lang: dict[str, dict[str, set[str]]] = {}
-        for lang, path in {"en": EN_PATH, "de": DE_PATH}.items():
+        for lang, path in TRANSLATION_FILES.items():
             exceptions = json.loads(path.read_text()).get("exceptions", {})
             per_lang[lang] = {
                 key: set(placeholder_re.findall(content["message"]))
                 for key, content in exceptions.items()
             }
 
-        for key, en_placeholders in per_lang["en"].items():
-            assert per_lang["de"].get(key) == en_placeholders, (
-                f"Exception '{key}' placeholders differ: "
-                f"en={en_placeholders}, de={per_lang['de'].get(key)}"
-            )
+        for lang in LANGS[1:]:
+            for key, en_placeholders in per_lang["en"].items():
+                assert per_lang[lang].get(key) == en_placeholders, (
+                    f"Exception '{key}' placeholders differ: "
+                    f"en={en_placeholders}, {lang}={per_lang[lang].get(key)}"
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -601,12 +613,36 @@ class TestDevicePickerExplanation:
     # what an unsupported device costs him, and what he can do about it.
     # Asserting only that the text mentions the marker passes on a stub that
     # repeats the marker and explains nothing.
-    CONSEQUENCE = {"en": "diagnostic sensors", "de": "Diagnose-Sensoren"}
-    REMEDY = {"en": "diagnostics download", "de": "Diagnose-Download"}
+    CONSEQUENCE = {
+        "en": "diagnostic sensors",
+        "de": "Diagnose-Sensoren",
+        "fr": "capteurs de diagnostic",
+        "it": "sensori diagnostici",
+        "nl": "diagnostische sensoren",
+        "pl": "czujniki diagnostyczne",
+    }
+    REMEDY = {
+        "en": "diagnostics download",
+        "de": "Diagnose-Download",
+        "fr": "téléchargement des diagnostics",
+        "it": "download della diagnostica",
+        "nl": "diagnostische download",
+        "pl": "pobranie diagnostyki",
+    }
+    # The word each language uses for the raw data recording, so the test can
+    # tell the account rendering (which names it) from the developer-keys one.
+    RECORDING = {
+        "en": "recording",
+        "de": "Aufzeichnung",
+        "fr": "enregistrement",
+        "it": "registrazione",
+        "nl": "opname",
+        "pl": "nagrywanie",
+    }
 
     @staticmethod
     def _lang(path: Path) -> str:
-        return "de" if path.name == "de.json" else "en"
+        return _lang_of(path)
 
     @classmethod
     def _assert_explains(cls, path: Path, text: str) -> None:
@@ -624,7 +660,7 @@ class TestDevicePickerExplanation:
             f"owner can do about it"
         )
 
-    @pytest.mark.parametrize("path", [STRINGS_PATH, EN_PATH, DE_PATH])
+    @pytest.mark.parametrize("path", ALL_PATHS, ids=lambda p: p.name)
     def test_config_devices_step_explains_the_marker(self, path: Path) -> None:
         """The fresh-setup picker explains what the marker costs."""
         step = _get_config_steps(_load_translations(path)).get("devices", {})
@@ -632,7 +668,7 @@ class TestDevicePickerExplanation:
         assert text, f"{path.name}: config step 'devices' has no description"
         self._assert_explains(path, text)
 
-    @pytest.mark.parametrize("path", [STRINGS_PATH, EN_PATH, DE_PATH])
+    @pytest.mark.parametrize("path", ALL_PATHS, ids=lambda p: p.name)
     def test_options_init_explains_the_marker(self, path: Path) -> None:
         """The options picker explains it too, not only the fresh setup."""
         step = _get_options_steps(_load_translations(path)).get("init", {})
@@ -644,7 +680,7 @@ class TestDevicePickerExplanation:
         )
         self._assert_explains(path, text)
 
-    @pytest.mark.parametrize("path", [STRINGS_PATH, EN_PATH, DE_PATH])
+    @pytest.mark.parametrize("path", ALL_PATHS, ids=lambda p: p.name)
     def test_both_sign_in_methods_get_their_own_step(self, path: Path) -> None:
         """One form, two translation keys, and both must stay complete.
 
@@ -678,7 +714,7 @@ class TestDevicePickerExplanation:
         shared = plain_help[: plain_help.rindex(".", 0, len(plain_help) - 200) + 1]
         assert app_help.startswith(shared[:80])
 
-    @pytest.mark.parametrize("path", [STRINGS_PATH, EN_PATH, DE_PATH])
+    @pytest.mark.parametrize("path", ALL_PATHS, ids=lambda p: p.name)
     def test_only_the_account_rendering_mentions_the_recording(
         self, path: Path
     ) -> None:
@@ -688,7 +724,7 @@ class TestDevicePickerExplanation:
         dialog never shows. The instruction belongs to the account
         rendering alone, in every language.
         """
-        phrase = "Aufzeichnung" if path is DE_PATH else "recording"
+        phrase = self.RECORDING[self._lang(path)]
         steps = _get_options_steps(_load_translations(path))
 
         app_help = steps["init_app"]["data_description"]["devices"]
@@ -703,14 +739,14 @@ class TestDevicePickerExplanation:
             f"(#296)"
         )
 
-    @pytest.mark.parametrize("path", [STRINGS_PATH, EN_PATH, DE_PATH])
+    @pytest.mark.parametrize("path", ALL_PATHS, ids=lambda p: p.name)
     def test_the_setup_step_is_split_the_same_way(self, path: Path) -> None:
         """The picker is reached from setup too, and was equally mode-blind."""
         steps = _get_config_steps(_load_translations(path))
         assert "devices_app" in steps
         assert steps["devices"]["description"] != steps["devices_app"]["description"]
 
-    @pytest.mark.parametrize("path", [STRINGS_PATH, EN_PATH, DE_PATH])
+    @pytest.mark.parametrize("path", ALL_PATHS, ids=lambda p: p.name)
     def test_no_translation_uses_syntax_home_assistant_cannot_parse(
         self, path: Path
     ) -> None:
@@ -779,8 +815,9 @@ class TestDevicePickerExplanation:
                 f"only in en.json: {sorted(only_english)[:5]}"
             )
 
-    def test_german_is_actually_translated(self) -> None:
-        """The German help texts are German, not the English left in place.
+    @pytest.mark.parametrize("lang", LANGS[1:])
+    def test_the_language_is_actually_translated(self, lang: str) -> None:
+        """The help texts are in their language, not the English left in place.
 
         One English fragment is deliberate: the marker itself is built as a
         hardcoded English literal in `unsupported_suffix()` and never passes
@@ -788,7 +825,7 @@ class TestDevicePickerExplanation:
         German user actually sees. That is a phrase, not the whole text.
         """
         english = _load_translations(EN_PATH)
-        german = _load_translations(DE_PATH)
+        german = _load_translations(TRANSLATION_FILES[lang])
         pairs = (
             (
                 "config devices description",
@@ -803,7 +840,7 @@ class TestDevicePickerExplanation:
         )
         for label, en_text, de_text in pairs:
             assert en_text != de_text, (
-                f"{label}: de.json still carries the English text"
+                f"{label}: {lang}.json still carries the English text"
             )
 
     def test_marker_names_the_consequence(self) -> None:

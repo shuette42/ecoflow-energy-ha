@@ -30,6 +30,7 @@
 - **Full PowerOcean control** - Backup Reserve, Solar Surplus Threshold, Work Mode (Self-use / AI Schedule)
 - **Delta switches & numbers** - AC/DC output, charge speed, backup reserve, screen settings
 - **Auto-discovery** - all devices bound to your EcoFlow account
+- **Six languages** - English, German, French, Italian, Dutch and Polish, for every entity name, state, setup screen and error message
 - **4-tier reconnect** - never gives up on the connection
 - **Automatic fallback** - MQTT stale? Transparent switch to HTTP polling (Standard Mode)
 - **Offline tolerance** - mobile devices offline = expected, not an error

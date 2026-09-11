@@ -26,7 +26,7 @@ import pytest
 from ecoflow_energy import const as C
 
 TRANSLATIONS_DIR = Path("custom_components/ecoflow_energy/translations")
-LANGS = ("en", "de")
+LANGS = ("en", "de", "fr", "it", "nl", "pl")
 
 # Diagnostic sensors created directly in sensor.py (not definition-driven)
 DIAGNOSTIC_SENSOR_KEYS = {"mqtt_status", "connection_mode"}

@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.23.0] - Unreleased
+
+### Added
+
+- The integration speaks six languages: French, Italian, Dutch and Polish join English and German. Every entity name, every state, every setup and options screen and every error message is translated, 829 texts per language, and the test suite holds all six files to the same key set so a text added in one language cannot go missing in another. Home Assistant picks the file matching its configured language; a language not on the list falls back to English as before.
+
 ## [1.22.0] - Unreleased
 
 ### Added
