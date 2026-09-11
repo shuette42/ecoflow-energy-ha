@@ -223,6 +223,18 @@ def _load_translations(path: Path) -> dict:
     return json.loads(path.read_text())
 
 
+def _flatten(tree: dict, prefix: str = "") -> dict[str, str]:
+    """Flatten a translation tree to `a.b.c -> text` for set arithmetic."""
+    flat: dict[str, str] = {}
+    for key, value in tree.items():
+        path = f"{prefix}{key}"
+        if isinstance(value, dict):
+            flat.update(_flatten(value, f"{path}."))
+        else:
+            flat[path] = value
+    return flat
+
+
 def _get_config_steps(translations: dict) -> dict:
     return translations.get("config", {}).get("step", {})
 
@@ -738,15 +750,33 @@ class TestDevicePickerExplanation:
         suite green. `strings.json` is the file a reviewer reads and
         `en.json` is the file Home Assistant renders, so any divergence
         between them is a mistake rather than a translation.
+
+        The whole document is compared, not only the flow steps. Until
+        2026-09-11 this test read the `config` and `options` steps alone,
+        and the `entity` section had drifted by 114 keys underneath it:
+        108 entity names and states that existed only in `en.json`, and
+        six states for the three connectivity sensors that `strings.json`
+        still spelled `not_detected` / `ok` while the definitions and the
+        rendered file said `disconnected` / `connected`.
         """
         strings = _load_translations(STRINGS_PATH)
         english = _load_translations(EN_PATH)
-        for section in ("config", "options"):
-            assert strings.get(section, {}).get("step") == english.get(section, {}).get(
-                "step"
-            ), (
-                f"strings.json and en.json disagree in the '{section}' steps; "
-                f"the rendered text is en.json, so the difference ships"
+        assert set(strings) == set(english), (
+            f"strings.json sections {sorted(strings)} and "
+            f"en.json sections {sorted(english)} differ"
+        )
+        for section in sorted(strings):
+            only_strings = (
+                _flatten(strings[section]).items() - _flatten(english[section]).items()
+            )
+            only_english = (
+                _flatten(english[section]).items() - _flatten(strings[section]).items()
+            )
+            assert not only_strings and not only_english, (
+                f"strings.json and en.json disagree in '{section}'; the rendered "
+                f"text is en.json, so the difference ships. "
+                f"Only in strings.json: {sorted(only_strings)[:5]}, "
+                f"only in en.json: {sorted(only_english)[:5]}"
             )
 
     def test_german_is_actually_translated(self) -> None:
