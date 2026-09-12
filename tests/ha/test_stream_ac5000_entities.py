@@ -16,6 +16,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.binary_sensor import (
@@ -124,6 +125,27 @@ async def _setup_keys(
     return {
         entity._definition.key for entity in created if hasattr(entity, "_definition")
     }
+
+
+async def _setup_with_coordinator(
+    hass: HomeAssistant,
+    reported: dict[str, Any] | None = None,
+) -> tuple[EcoFlowDeviceCoordinator, list[Any]]:
+    """Run the sensor platform setup and return coordinator plus entities.
+
+    `_setup_keys` throws the coordinator away; PLAN-142's tests need to push
+    further updates through it after setup, so they use this instead.
+    """
+    entry = _entry(ES22_DEVICE)
+    entry.add_to_hass(hass)
+    coordinator = EcoFlowDeviceCoordinator(hass, entry, ES22_DEVICE)
+    if reported:
+        coordinator.async_set_updated_data(dict(reported))
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {ES22_DEVICE["sn"]: coordinator}
+
+    created: list[Any] = []
+    await sensor_setup(hass, entry, add_entities_collector(created))
+    return coordinator, created
 
 
 class TestStreamAC5000Routing:
@@ -541,3 +563,93 @@ class TestTaskListShrinkRouting:
             self.SET_REPLY_TOPIC, self._frame("delete_ack")
         )
         assert result is None
+
+
+class TestAccessoryAfterRestart:
+    """PLAN-142: a registry entry from an earlier run is not silenced by a
+    restart that lands before the reading's next non-zero frame.
+
+    `solar_w` and the meter fields carry `accessory_needs_nonzero`: the
+    parser zero-fills them on every `254/39` frame, so a running instance
+    shows 0 W rather than a stale value, but the old setup-time gate could
+    not tell a device that has never reported from one whose earlier run
+    already discovered the reading.
+    """
+
+    async def test_a_reading_the_owner_has_is_created_at_setup(
+        self, hass: HomeAssistant
+    ) -> None:
+        registry = er.async_get(hass)
+        registry.async_get_or_create(
+            "sensor",
+            DOMAIN,
+            f"{ES22_DEVICE['sn']}_solar_w",
+        )
+
+        coordinator, created = await _setup_with_coordinator(hass)
+
+        keys = {
+            entity._definition.key
+            for entity in created
+            if hasattr(entity, "_definition")
+        }
+        assert "solar_w" in keys
+
+        solar = next(
+            entity
+            for entity in created
+            if getattr(entity, "_definition", None) is not None
+            and entity._definition.key == "solar_w"
+        )
+        coordinator.set_device_value("solar_w", 0.0)
+        coordinator.async_set_updated_data({"solar_w": 0.0})
+        await hass.async_block_till_done()
+
+        assert solar.native_value == 0
+
+    async def test_an_entry_the_integration_disabled_is_still_pending(
+        self, hass: HomeAssistant
+    ) -> None:
+        """The integration's own stale-entry cleanup still owns this case;
+        the setup-time bypass only fires for an entry nobody disabled."""
+        registry = er.async_get(hass)
+        registry.async_get_or_create(
+            "sensor",
+            DOMAIN,
+            f"{ES22_DEVICE['sn']}_solar_w",
+            disabled_by=er.RegistryEntryDisabler.INTEGRATION,
+        )
+
+        _, created = await _setup_with_coordinator(hass)
+
+        keys = {
+            entity._definition.key
+            for entity in created
+            if hasattr(entity, "_definition")
+        }
+        assert "solar_w" not in keys
+
+    async def test_no_duplicate_when_the_reading_later_turns_nonzero(
+        self, hass: HomeAssistant
+    ) -> None:
+        registry = er.async_get(hass)
+        registry.async_get_or_create(
+            "sensor",
+            DOMAIN,
+            f"{ES22_DEVICE['sn']}_solar_w",
+        )
+
+        coordinator, created = await _setup_with_coordinator(hass)
+
+        for watts in (0.0, 81.0, 90.0):
+            coordinator.set_device_value("solar_w", watts)
+            coordinator.async_set_updated_data(dict(coordinator.device_data))
+            await hass.async_block_till_done()
+
+        added = [
+            entity
+            for entity in created
+            if getattr(entity, "_definition", None) is not None
+            and entity._definition.key == "solar_w"
+        ]
+        assert len(added) == 1

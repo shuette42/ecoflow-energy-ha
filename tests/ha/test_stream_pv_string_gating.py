@@ -271,6 +271,27 @@ class TestStaleEntries:
 
         assert registry.async_get(enabled.entity_id) is not None
 
+    async def test_a_plain_accessory_entry_is_still_gated(
+        self, hass: HomeAssistant
+    ) -> None:
+        """PLAN-142 only bypasses the gate for `accessory_needs_nonzero`.
+
+        A plain accessory's key never arrives when the accessory itself is
+        absent, so an entity created from just the registry entry would be
+        stuck on its restored value forever. `pv3_w` has no such flag, so an
+        enabled leftover entry must not shortcut setup for it.
+        """
+        registry = er.async_get(hass)
+        registry.async_get_or_create(
+            "sensor",
+            DOMAIN,
+            f"{STREAM_DEVICE['sn']}_pv3_w",
+        )
+
+        _, created = await _setup(hass)
+
+        assert "pv3_w" not in _keys(created)
+
     async def test_nothing_is_removed_before_data_arrives(
         self, hass: HomeAssistant
     ) -> None:

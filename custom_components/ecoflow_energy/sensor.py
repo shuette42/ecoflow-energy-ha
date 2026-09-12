@@ -85,6 +85,11 @@ async def async_setup_entry(
             if sensor_def.accessory and not reading_reported(
                 coordinator, sensor_def.key, sensor_def.accessory_needs_nonzero
             ):
+                if sensor_def.accessory_needs_nonzero and _owner_already_has_accessory(
+                    registry, coordinator, sensor_def
+                ):
+                    entities.append(EcoFlowSensor(coordinator, sensor_def))
+                    continue
                 pending.append(sensor_def)
                 continue
             entities.append(EcoFlowSensor(coordinator, sensor_def))
@@ -99,6 +104,35 @@ async def async_setup_entry(
             )
 
     async_add_entities(entities)
+
+
+@callback
+def _owner_already_has_accessory(
+    registry: er.EntityRegistry,
+    coordinator: EcoFlowDeviceCoordinator,
+    definition: EcoFlowSensorDef,
+) -> bool:
+    """Whether a live registry entry for this accessory already exists.
+
+    Scope is deliberately `accessory_needs_nonzero` only, checked by the
+    caller. A reading that is zero-filled on every frame (the ES22's
+    Third-Party Solar Power overnight, or for good on a unit with no meter
+    feeding it) has already been discovered once if an earlier run left a
+    registry entry nobody, including the integration, disabled. Waiting for
+    a second non-zero frame before recreating it only produces
+    `unavailable` for as long as the reading happens to sit at zero. A
+    plain accessory's key never arrives at all when the accessory itself is
+    absent, so applying this to those would leave an entity stuck forever
+    on its restored value; the gate keeps deciding their first appearance.
+    """
+    unique_id = f"{coordinator.device_sn}_{definition.key}"
+    entity_id = registry.async_get_entity_id("sensor", DOMAIN, unique_id)
+    if entity_id is None:
+        return False
+    entry = registry.async_get(entity_id)
+    if entry is None:
+        return False
+    return entry.disabled_by is not er.RegistryEntryDisabler.INTEGRATION
 
 
 @callback
