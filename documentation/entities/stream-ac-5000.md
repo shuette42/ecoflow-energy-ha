@@ -46,7 +46,7 @@ Full list of all entities created for the STREAM AC 5000.
 
 ## Sensors - PV Strings
 
-The MPPT reading, and a different quantity from Third-Party Solar Power above. The EcoFlow app shows the unit's own strings and a separate third-party figure side by side, and adds them for the solar total it displays. Each of these five appears once that string has actually produced something, so a unit with no PV on the EcoFlow gains none of them and a string that is never wired does not become an entity reading zero forever. Once a string has its entity it keeps it, and reads 0 W overnight rather than holding the last daylight value.
+The MPPT reading, and a different quantity from Third-Party Solar Power above. The EcoFlow app shows the unit's own strings and a separate third-party figure side by side, and adds them for the solar total it displays. Each of these five appears once that string has actually produced something, so a unit with no PV on the EcoFlow gains none of them and a string that is never wired does not become an entity reading zero forever. Once a string has its entity it keeps it, and reads 0 W overnight rather than holding the last daylight value. This holds across a restart of Home Assistant as well: a string the owner already has is created at once and reads 0 W until the sun is back, rather than sitting unavailable until the first daylight reading.
 
 | Entity | Unit | Category | Default | Description |
 |:---|:---:|:---:|:---:|:---|
@@ -169,7 +169,7 @@ So for an optimiser that wants to command power rather than cap it, **unlink the
 
 Two readings go with the meter, and it is worth knowing which before unlinking. Measured on a unit four days after its meter was removed:
 
-- **Third-Party Solar Power disappears entirely**, and the sensor goes unavailable. This figure is inferred from the house flows rather than measured, so with no meter there is nothing to infer it from. The PV String sensors are unaffected: those come from the unit's own MPPT and need no meter.
+- **Third-Party Solar Power goes to 0 W and stays there.** It is inferred from the house flows rather than measured, so with no meter there is nothing to infer it from; it no longer goes unavailable. The PV String sensors are unaffected: those come from the unit's own MPPT and need no meter.
 - **Grid Power and the per-phase meter values stop updating.** They do not go unavailable: on the unit measured, Grid Power held a single value taken shortly after startup and never moved again. Treat it as stale rather than as a reading.
 
 Home Power is unaffected and keeps arriving at the usual rate, as does everything read from the flow matrix, which is why battery power, grid import and grid export and their counters keep working normally with no meter at all.

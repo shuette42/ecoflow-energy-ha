@@ -607,20 +607,27 @@ class TestAccessoryAfterRestart:
 
         assert solar.native_value == 0
 
-    async def test_an_entry_the_integration_disabled_is_still_pending(
+    async def test_an_entry_the_integration_disabled_stays_pending_and_is_dropped(
         self, hass: HomeAssistant
     ) -> None:
         """The integration's own stale-entry cleanup still owns this case;
-        the setup-time bypass only fires for an entry nobody disabled."""
+        the setup-time bypass only fires for an entry nobody disabled.
+
+        Both halves of that sentence are asserted: the entry does not become
+        an entity at setup, and once the device's first frame arrives - here
+        the zero fill `accessory_needs_nonzero` reads on every `254/39` -
+        `_watch_for_accessory`'s cleanup still removes it, exactly as it did
+        before this change.
+        """
         registry = er.async_get(hass)
-        registry.async_get_or_create(
+        entry = registry.async_get_or_create(
             "sensor",
             DOMAIN,
             f"{ES22_DEVICE['sn']}_solar_w",
             disabled_by=er.RegistryEntryDisabler.INTEGRATION,
         )
 
-        _, created = await _setup_with_coordinator(hass)
+        coordinator, created = await _setup_with_coordinator(hass)
 
         keys = {
             entity._definition.key
@@ -629,9 +636,20 @@ class TestAccessoryAfterRestart:
         }
         assert "solar_w" not in keys
 
+        coordinator.set_device_value("solar_w", 0.0)
+        coordinator.async_set_updated_data({"solar_w": 0.0})
+        await hass.async_block_till_done()
+
+        assert registry.async_get(entry.entity_id) is None
+
     async def test_no_duplicate_when_the_reading_later_turns_nonzero(
         self, hass: HomeAssistant
     ) -> None:
+        """Guards two failure shapes at once: a dead `_watch_for_accessory`
+        listener (nothing shows up for a sibling reading that starts
+        pending) and a dropped `continue` after the setup-time bypass
+        (`solar_w` would be appended twice - once by the bypass, once more
+        whenever it later crosses zero through the normal path)."""
         registry = er.async_get(hass)
         registry.async_get_or_create(
             "sensor",
@@ -641,15 +659,24 @@ class TestAccessoryAfterRestart:
 
         coordinator, created = await _setup_with_coordinator(hass)
 
+        def _by_key(key: str) -> list[Any]:
+            return [
+                entity
+                for entity in created
+                if getattr(entity, "_definition", None) is not None
+                and entity._definition.key == key
+            ]
+
+        # solar_w bypassed the gate and was created at setup already.
+        assert len(_by_key("solar_w")) == 1
+
+        # pv1_w has no registry entry, so it starts pending and can only
+        # appear through _watch_for_accessory's listener.
         for watts in (0.0, 81.0, 90.0):
             coordinator.set_device_value("solar_w", watts)
+            coordinator.set_device_value("pv1_w", watts)
             coordinator.async_set_updated_data(dict(coordinator.device_data))
             await hass.async_block_till_done()
 
-        added = [
-            entity
-            for entity in created
-            if getattr(entity, "_definition", None) is not None
-            and entity._definition.key == "solar_w"
-        ]
-        assert len(added) == 1
+        assert len(_by_key("solar_w")) == 1
+        assert len(_by_key("pv1_w")) == 1
