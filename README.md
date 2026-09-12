@@ -285,6 +285,8 @@ On a **Stream Micro** there is no battery, so solar production is the whole pict
 
 ## Automation Examples
 
+See also [A caravan on a limited campsite hookup](documentation/guides/caravan-limited-shore-power.md) for a full package that buffers a small campsite pillar with a Delta and a smart plug.
+
 <details>
 <summary><b>Charge Delta when PowerOcean is full</b></summary>
 

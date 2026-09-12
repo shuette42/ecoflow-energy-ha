@@ -32,3 +32,4 @@ Counts are the device-specific entity definitions. Every device additionally exp
 
 - [Moving from another EcoFlow integration](migration-from-another-integration.md) - what carries over, what has to be re-pointed by hand, and an order of steps that keeps the old entities running until the new ones are confirmed
 - [Adding your device](add-your-device.md) - every file a new device touches, with the WAVE 3 as the worked example, and the four things a contributor cannot guess: the capture, the scaling, the read-back, the mode
+- [A caravan on a limited campsite hookup](guides/caravan-limited-shore-power.md) - buffering a small pillar fuse with a Delta and a smart plug, the charge power regulation that keeps the plug from tripping, and the load shedding that keeps the lights on when it does anyway
