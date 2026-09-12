@@ -526,11 +526,22 @@ class TestLanguageConsistency:
 
 STRINGS_PATH = Path("custom_components/ecoflow_energy/strings.json")
 ENTITY_PATH = Path("custom_components/ecoflow_energy/entity.py")
+# The wallbox start/stop command raises its own errors from the coordinator
+# rather than from an entity (ADR-009); the gate reads that file too.
+SET_COMMANDS_PATH = Path("custom_components/ecoflow_energy/coordinator/set_commands.py")
+RAISING_PATHS = (ENTITY_PATH, SET_COMMANDS_PATH)
 
 
 def _raised_translation_keys() -> set[str]:
-    """Collect translation_key values passed to HomeAssistantError in entity.py."""
-    tree = ast.parse(ENTITY_PATH.read_text())
+    """Collect translation_key values passed to HomeAssistantError."""
+    keys: set[str] = set()
+    for path in RAISING_PATHS:
+        keys |= _raised_translation_keys_in(path)
+    return keys
+
+
+def _raised_translation_keys_in(path: Path) -> set[str]:
+    tree = ast.parse(path.read_text())
     keys: set[str] = set()
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
@@ -550,9 +561,25 @@ def _raised_translation_keys() -> set[str]:
 class TestExceptionTranslations:
     """A raised error the user cannot read is as silent as no error at all."""
 
+    def test_the_gate_reads_both_raising_files(self):
+        """Positive control: a file the walker cannot read would make the
+        set below empty for that file and the message check vacuous."""
+        assert _raised_translation_keys_in(ENTITY_PATH)
+        wallbox_keys = _raised_translation_keys_in(SET_COMMANDS_PATH)
+        assert {
+            "powerpulse_action_in_progress",
+            "powerpulse_action_not_confirmed",
+            "powerpulse_action_not_delivered",
+            "powerpulse_action_state",
+            "powerpulse_descriptor_missing",
+            "powerpulse_own_channel_offline",
+            "powerpulse_sibling_missing",
+            "powerpulse_sibling_offline",
+        } <= wallbox_keys
+
     def test_every_raised_key_has_a_message(self):
         keys = _raised_translation_keys()
-        assert keys, "No HomeAssistantError translation keys found in entity.py"
+        assert keys, "No HomeAssistantError translation keys found"
 
         for path in (STRINGS_PATH, EN_PATH, DE_PATH):
             exceptions = json.loads(path.read_text()).get("exceptions", {})

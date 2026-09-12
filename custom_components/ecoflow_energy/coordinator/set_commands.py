@@ -1102,6 +1102,15 @@ class SetCommandsMixin(_Base):
                 )
             route = self.charge_action_route()
             if route is None:
+                # Two or more PowerOceans, or the entry's coordinator table
+                # is already gone (teardown, ADR-009 decision 2): the first
+                # has a message of its own, the second is a press that
+                # cannot be delivered any more.
+                if self._powerocean_coordinators() is None:
+                    raise HomeAssistantError(
+                        translation_domain=DOMAIN,
+                        translation_key="powerpulse_action_not_delivered",
+                    )
                 raise HomeAssistantError(
                     translation_domain=DOMAIN,
                     translation_key="powerpulse_sibling_missing",
@@ -1110,12 +1119,12 @@ class SetCommandsMixin(_Base):
             if route == "sibling":
                 sibling = self.powerocean_sibling()
                 if sibling is None:
-                    # charge_action_route() just reported exactly one match;
-                    # a mismatch here means the coordinator table changed
-                    # between the two calls (ADR-009 decision 2 teardown).
+                    # Unreachable within one event-loop tick: the route was
+                    # resolved from the same table a moment ago. Kept as a
+                    # guard against the two calls ever straddling an await.
                     raise HomeAssistantError(
                         translation_domain=DOMAIN,
-                        translation_key="powerpulse_sibling_missing",
+                        translation_key="powerpulse_action_not_delivered",
                     )
                 sibling_mqtt = sibling._mqtt_client
                 if sibling_mqtt is None or not sibling_mqtt.is_connected():

@@ -477,8 +477,9 @@ class EcoFlowButtonDef:
     # Same meaning as on the switch, sensor and number definitions: the
     # descriptor this button depends on only exists on the app channel.
     enhanced_only: bool = True
-    # Created once the descriptor state_key has been reported, same as an
-    # accessory switch. See _watch_for_accessory() in button.py.
+    # Created once its gate reading has been reported: the descriptor
+    # state_key with a sibling PowerOcean in the entry, the wallbox's own
+    # charge status without one. See _gate_key() in button.py.
     accessory: bool = True
 
 
@@ -7153,10 +7154,12 @@ POWERPULSE2_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
 ]
 
 
-# The wallbox's own start/stop controls (ADR-009). Created on the descriptor
-# report (ev_charger_sn), same accessory gate as the cable lock binary sensor
-# above, and require exactly one sibling PowerOcean coordinator in the entry
-# - the platform setup checks that, not this list.
+# The wallbox's own start/stop controls (ADR-009). With one PowerOcean in
+# the entry they are created on the descriptor report (ev_charger_sn), the
+# same accessory gate as the cable lock binary sensor above, and send through
+# that PowerOcean; without one they are created on the first heartbeat and
+# send on the wallbox's own topic (PLAN-140). Two or more PowerOceans get no
+# buttons. The platform setup decides the route, not this list.
 POWERPULSE2_BUTTONS: list[EcoFlowButtonDef] = [
     EcoFlowButtonDef(
         "ev_start_charging",

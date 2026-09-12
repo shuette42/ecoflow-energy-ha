@@ -53,7 +53,11 @@ Start and stop of a charging session are available as two buttons when the accou
 | Wallbox Start Charging | enabled | Starts a charging session that the wallbox has stopped, that is, while Wallbox Charging Status reads `finishing`. The press returns once the wallbox itself reports `charging`, or fails after 30 s if it does not |
 | Wallbox Stop Charging | enabled | Stops the running session, while Wallbox Charging Status reads `charging`. The press returns once the wallbox reports `finishing` or `available`, or fails after 15 s if it does not |
 
-The two buttons exist only when the same integration entry holds exactly one PowerOcean. The command travels through the PowerOcean, the way the EcoFlow app sends it, and the confirmation is read from the wallbox's own reporting: nothing is shown as done until the wallbox says so, and a press in a state the action does not fit (a start while charging, a stop while idle) fails with a message naming the state instead of sending anything. A wallbox on an account without a PowerOcean gets no buttons; whether it accepts the command on its own channel has not been observed. The buttons are unavailable while the PowerOcean's connection is down.
+The command takes one of two routes, the way the EcoFlow app sends it in each setup, and the confirmation is always read from the wallbox's own reporting: nothing is shown as done until the wallbox says so, and a press in a state the action does not fit (a start while charging, a stop while idle) fails with a message naming the state instead of sending anything.
+
+- **One PowerOcean in the same integration entry:** the command travels through the PowerOcean, addressed to the wallbox by the address the wallbox reports. The buttons appear once the wallbox has reported that address, and are unavailable while the PowerOcean's connection is down.
+- **No PowerOcean in the entry:** the command goes on the wallbox's own channel. The buttons appear with the wallbox's first status report, and are unavailable while the wallbox's own connection is down.
+- **Two or more PowerOceans in the entry:** no buttons; neither route has been observed on such an account.
 
 A start is offered only from `finishing`, the state a stopped session sits in with the cable attached. Starting from `available` (no session) has not been observed and is not offered.
 

@@ -472,16 +472,23 @@ class EcoFlowDeviceCoordinator(
         """Return the current device data dict."""
         return self._device_data
 
-    def _powerocean_coordinators(self) -> list[EcoFlowDeviceCoordinator]:
+    def _powerocean_coordinators(self) -> list[EcoFlowDeviceCoordinator] | None:
         """The entry's PowerOcean coordinators, read fresh from `hass.data`.
 
         Not cached at setup, per ADR-009 decision 2: during teardown the
         entry's coordinator table is popped, and everything built on this
-        list must then see an empty entry so the buttons read unavailable.
+        list must then see no entry at all. That case returns None, and an
+        entry that simply holds no PowerOcean returns an empty list - the
+        two are not the same thing since PLAN-140, where "no PowerOcean" is
+        a route of its own (review finding of 2026-09-12: a popped table
+        read as "zero PowerOceans" would have published on the wallbox's
+        own topic during teardown).
         """
-        coordinators: dict[str, EcoFlowDeviceCoordinator] = self.hass.data.get(
+        coordinators: dict[str, EcoFlowDeviceCoordinator] | None = self.hass.data.get(
             DOMAIN, {}
-        ).get(self._entry.entry_id, {})
+        ).get(self._entry.entry_id)
+        if coordinators is None or coordinators.get(self.device_sn) is not self:
+            return None
         return [
             coordinator
             for coordinator in coordinators.values()
@@ -496,7 +503,7 @@ class EcoFlowDeviceCoordinator(
         `charge_action_route()` tells the two apart.
         """
         matches = self._powerocean_coordinators()
-        if len(matches) != 1:
+        if matches is None or len(matches) != 1:
             return None
         return matches[0]
 
@@ -509,13 +516,17 @@ class EcoFlowDeviceCoordinator(
         own set topic (ADR-009 addendum of 2026-09-12, from one recording of
         the app doing exactly that). `None`: two or more PowerOceans, where
         the relayed command has no way to pick the parent and the own-topic
-        command has not been observed on such an account. Resolved fresh on
+        command has not been observed on such an account - and also while
+        the entry is torn down and its coordinator table is gone, so a press
+        racing the unload sends nothing on either route. Resolved fresh on
         every call, like `powerocean_sibling()`.
         """
-        count = len(self._powerocean_coordinators())
-        if count == 1:
+        matches = self._powerocean_coordinators()
+        if matches is None:
+            return None
+        if len(matches) == 1:
             return "sibling"
-        if count == 0:
+        if not matches:
             return "own"
         return None
 

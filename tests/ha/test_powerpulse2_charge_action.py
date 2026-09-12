@@ -460,6 +460,33 @@ async def test_two_poweroceans_in_entry_refuses(hass: HomeAssistant) -> None:
     assert _mqtt(wallbox).send_proto_set.call_count == 0
 
 
+@pytest.mark.parametrize("ocean_devices", [[], [POWEROCEAN_DEVICE]])
+async def test_a_torn_down_entry_sends_on_neither_route(
+    hass: HomeAssistant, ocean_devices: list[dict[str, Any]]
+) -> None:
+    """A press racing the unload publishes nothing (review finding 2026-09-12).
+
+    With the entry's coordinator table popped, an entry that held one
+    PowerOcean must not fall through to the own route as if it held none:
+    the route is None, the press fails as not delivered, and no client
+    publishes - on both routes.
+    """
+    entry, oceans, wallbox = _wire_entry(hass, ocean_devices)
+    _set_descriptor(wallbox)
+    _apply_status(wallbox, 3)
+    hass.data[DOMAIN].pop(entry.entry_id)
+
+    assert wallbox.charge_action_route() is None
+    with pytest.raises(HomeAssistantError) as excinfo:
+        await wallbox.async_set_powerpulse_charge_action("stop")
+
+    assert excinfo.value.translation_key == "powerpulse_action_not_delivered"
+    assert _mqtt(wallbox).send_proto_set.call_count == 0
+    for ocean in oceans:
+        assert _mqtt(ocean).send_proto_set.call_count == 0
+    assert wallbox._wallbox_action_pending is None
+
+
 async def test_sibling_offline_refuses(hass: HomeAssistant) -> None:
     _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
     _mqtt(oceans[0]).is_connected.return_value = False

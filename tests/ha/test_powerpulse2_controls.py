@@ -348,6 +348,26 @@ class TestButtonAvailability:
 
         assert button_entity.available is False
 
+    @pytest.mark.parametrize("ocean_devices", [[], [POWEROCEAN_DEVICE]])
+    async def test_available_is_false_once_the_entry_table_is_gone(
+        self, hass: HomeAssistant, ocean_devices: list[dict[str, Any]]
+    ) -> None:
+        """Teardown pops the entry's coordinator table (ADR-009 decision 2).
+        A button on either route reads unavailable from then on; the own
+        route in particular must not read "no PowerOcean, so mine"."""
+        entry, _oceans, wallbox = _wire_entry(hass, ocean_devices)
+        _report_descriptor(wallbox)
+        wallbox.set_device_value("ev_charge_status", "charging")
+
+        entities: list[Any] = []
+        await button_setup(hass, entry, add_entities_collector(entities))
+        button_entity = entities[0]
+        assert button_entity.available is True
+
+        hass.data[DOMAIN].pop(entry.entry_id)
+
+        assert button_entity.available is False
+
 
 class TestButtonPress:
     async def test_press_calls_the_coordinator_action_with_start_or_stop(
