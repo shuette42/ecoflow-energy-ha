@@ -97,6 +97,8 @@ The integration enforces the app's `backup_reserve <= solar_surplus_threshold` c
 
 **Note:** All credentials (API keys or email/password) are stored in Home Assistant's encrypted configuration storage (`.storage/core.config_entries`). This is standard Home Assistant behavior.
 
+**Who may control the device is decided by Home Assistant, not by the integration.** The writable entities act on the physical system: a backup reserve set to zero or a work mode change reaches the battery. Anyone who can reach your Home Assistant frontend can use them, so keep Home Assistant's own user accounts and access controls as tight as the devices behind them deserve.
+
 </details>
 
 <details>
@@ -416,6 +418,13 @@ automation:
 
 </details>
 
+<details>
+<summary><b>Stream AC 5000 alongside a PowerOcean (Gen 1), by @Polarlander11</b></summary>
+
+Two automations that let a Stream AC 5000 run next to a first-generation PowerOcean without the two fighting over the same energy: by day the Stream charges only from real grid surplus, and only while the PowerOcean battery is not being drawn down; from the evening it discharges at a rate that spreads its usable capacity over the night, keeping a 25 % reserve and stopping at sunrise. The two windows never overlap, because the Stream holds one planned charge or discharge task at a time. The guide, with the complete YAML and a measured inverter efficiency figure, is in [#393](https://github.com/shuette42/ecoflow-energy-ha/issues/393#issuecomment-5647636137).
+
+</details>
+
 ---
 
 ## How It Works
@@ -555,6 +564,8 @@ Since v1.8.3, the integration handles this gracefully: error 1006 is logged once
 <summary><b>Download diagnostics</b></summary>
 
 **Settings > Devices & Services > EcoFlow Energy > 3-dot menu > Download Diagnostics** - connection status, data freshness, no credentials exposed.
+
+Have a quick look through the file before you attach it to a public issue. The redaction removes the keys, the account and every serial shape it knows, and it is checked against every recording on file, but a field EcoFlow adds later is unknown until someone sees it. Treat the redaction as a strong safety net, not as a guarantee.
 
 In Enhanced Mode the download also carries a sample of the raw messages your devices send, including devices that are already supported - a supported device is not a dead end for improving it. The **Record extra diagnostic data for 24 hours** option in the integration options only makes that sample deeper, so switch it on when an issue asks for it and take the download while it is still running. It stops by itself after 24 hours and never sends anything to your devices.
 

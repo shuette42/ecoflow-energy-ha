@@ -103,7 +103,7 @@ body:
     id: diagnostics
     attributes:
       label: Diagnostics
-      description: If possible, download the integration diagnostics (Settings > Integrations > EcoFlow Energy > 3 dots > Download Diagnostics) and paste or attach the JSON. It carries at most the first four characters of a serial, plus the same short tag the log uses, so a log and a download can be matched up.
+      description: If possible, download the integration diagnostics (Settings > Integrations > EcoFlow Energy > 3 dots > Download Diagnostics) and paste or attach the JSON. It carries at most the first four characters of a serial, plus the same short tag the log uses, so a log and a download can be matched up. Have a quick look through the file before you post it; the redaction covers everything it knows, and a field EcoFlow adds later is unknown until someone sees it.
       render: json
     validations:
       required: false

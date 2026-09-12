@@ -14,6 +14,9 @@ from homeassistant.helpers.selector import (
     SelectOptionDict,
     SelectSelector,
     SelectSelectorConfig,
+    TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
 )
 
 from .config_flow_setup import (
@@ -50,6 +53,8 @@ from .ecoflow.enhanced_auth import enhanced_login, get_app_device_list
 from .ecoflow.iot_api import IoTApiClient
 
 _LOGGER = logging.getLogger(__name__)
+
+_PASSWORD_SELECTOR = TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD))
 
 
 async def _async_fetch_app_devices(
@@ -372,7 +377,7 @@ class OptionsFlowMixin(_Base):
             data_schema=vol.Schema(
                 {
                     vol.Required(CONF_ACCESS_KEY): str,
-                    vol.Required(CONF_SECRET_KEY): str,
+                    vol.Required(CONF_SECRET_KEY): _PASSWORD_SELECTOR,
                 }
             ),
             errors=errors,
@@ -417,7 +422,7 @@ class OptionsFlowMixin(_Base):
             data_schema=vol.Schema(
                 {
                     vol.Required(CONF_EMAIL, default=current_email): str,
-                    vol.Required(CONF_PASSWORD): str,
+                    vol.Required(CONF_PASSWORD): _PASSWORD_SELECTOR,
                 }
             ),
             errors=errors,

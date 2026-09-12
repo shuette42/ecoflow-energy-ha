@@ -10,6 +10,11 @@ import aiohttp
 import voluptuous as vol
 from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.selector import (
+    TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
+)
 
 from .const import (
     AUTH_METHOD_APP,
@@ -26,6 +31,8 @@ from .ecoflow.enhanced_auth import enhanced_login
 from .ecoflow.iot_api import IoTApiClient
 
 _LOGGER = logging.getLogger(__name__)
+
+_PASSWORD_SELECTOR = TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD))
 
 
 if TYPE_CHECKING:
@@ -97,7 +104,7 @@ class ReauthFlowMixin(_Base):
                         CONF_ACCESS_KEY,
                         default=reauth_entry.data.get(CONF_ACCESS_KEY, ""),
                     ): str,
-                    vol.Required(CONF_SECRET_KEY): str,
+                    vol.Required(CONF_SECRET_KEY): _PASSWORD_SELECTOR,
                 }
             ),
             errors=errors,
@@ -149,7 +156,7 @@ class ReauthFlowMixin(_Base):
                         CONF_EMAIL,
                         default=reauth_entry.data.get(CONF_EMAIL, ""),
                     ): str,
-                    vol.Required(CONF_PASSWORD): str,
+                    vol.Required(CONF_PASSWORD): _PASSWORD_SELECTOR,
                 }
             ),
             errors=errors,
@@ -197,7 +204,7 @@ class ReauthFlowMixin(_Base):
                         CONF_EMAIL,
                         default=reauth_entry.data.get(CONF_EMAIL, ""),
                     ): str,
-                    vol.Required(CONF_PASSWORD): str,
+                    vol.Required(CONF_PASSWORD): _PASSWORD_SELECTOR,
                 }
             ),
             errors=errors,
