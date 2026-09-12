@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import itertools
+import logging
 import struct
 import time
 from datetime import timedelta
@@ -8473,6 +8474,36 @@ class TestLinkedUnitPower:
             "own_pv_matched": False,
         }
 
+    async def test_a_block_with_no_own_entry_is_logged_once(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """On a single unit this is the one failure that looks like no PV."""
+        coordinator = self._coordinator(hass, enhanced_config_entry)
+        foreign = {"_unit_pv_by_sn": {"ES22TESTUNITBBBB": dict(self.NEIGHBOUR_STRINGS)}}
+        with caplog.at_level(logging.WARNING):
+            coordinator._apply_data(dict(foreign))
+            coordinator._apply_data(dict(foreign))
+        hits = [r for r in caplog.records if "PV string block" in r.getMessage()]
+        assert len(hits) == 1
+        assert "ES22..." in hits[0].getMessage()
+        assert "ES22TESTUNITBBBB" not in hits[0].getMessage()
+
+    async def test_an_own_entry_is_not_logged(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        coordinator = self._coordinator(hass, enhanced_config_entry)
+        with caplog.at_level(logging.WARNING):
+            coordinator._apply_data(
+                {"_unit_pv_by_sn": {"ES22TESTUNITAAAA": dict(self.OWN_STRINGS)}}
+            )
+        assert not [r for r in caplog.records if "PV string block" in r.getMessage()]
+
     async def test_both_blocks_in_one_frame_keep_both_counters(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
     ) -> None:
@@ -8521,7 +8552,7 @@ class TestLinkedUnitPower:
             "own_pv_matched": True,
         }
 
-    async def test_the_real_pair_frames_end_to_end(
+    async def test_the_real_pair_frames_are_claimed_by_serial(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
     ) -> None:
         """The reporter's frames through parser and coordinator, as each unit.
@@ -8531,7 +8562,9 @@ class TestLinkedUnitPower:
         same frame, lifts entry B and never A's. At runtime B is only ever
         handed its own frames, which carry the block empty and publish
         nothing - routing the master frame to B is the separate step named
-        on #401, and this test says what B would do with it.
+        on #401, and this test says what B would do with it. Handing B the
+        whole master dict lands every other key of that frame on B too;
+        only the per-unit blocks are asserted here.
         """
         import json
         from pathlib import Path

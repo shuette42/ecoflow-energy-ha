@@ -96,6 +96,7 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
     _last_stale_reconnect_ts: float
     _stale_reactivate_tried: bool
     _unit_power_stats: dict[str, Any] | None
+    _unit_pv_unmatched_logged: bool
 
     # -- group (C): implemented by core.py or by a sibling mixin --
     @property

@@ -269,6 +269,8 @@ class EcoFlowDeviceCoordinator(
         # that looks exactly like a device that does not send the block, and
         # nothing else in a diagnostics download tells the two apart.
         self._unit_power_stats: dict[str, Any] | None = None
+        # Said once per coordinator: a PV block that lists units, none ours.
+        self._unit_pv_unmatched_logged = False
         # Whether a Stream ever reported the system state of charge; once it
         # has, a unit's own figure no longer stands in for it (#323).
         self._soc_from_system = False

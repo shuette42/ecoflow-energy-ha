@@ -1250,6 +1250,9 @@ class TestLinkedPairPvStrings:
             _build_frame(254, 39, bytes(_sub(50, _sub(1, inner))))
         )
         assert result is None or UNIT_PV_BY_SN_KEY not in result
+        # Nor does it fall back to the flat keys the old walk produced.
+        for key in PV_KEYS:
+            assert result is None or key not in result, key
 
     def test_an_entry_without_strings_fills_its_own_zeros(self) -> None:
         """The night fill runs per entry, so one idle unit does not zero the other."""

@@ -156,6 +156,21 @@ class StateApplyMixin(_Base):
             stats["own_pv_matched"] = own_strings is not None
             if isinstance(own_strings, dict):
                 parsed.update(own_strings)
+            elif not self._unit_pv_unmatched_logged:
+                # The one failure this can have that looks like a unit
+                # without PV: the block lists units and none is this one.
+                # On a single unit that would leave five on-by-default
+                # entities stale with nothing in the log, so it is said
+                # once, with the serials as the device wrote them.
+                self._unit_pv_unmatched_logged = True
+                _LOGGER.warning(
+                    "%s: the PV string block lists %d unit(s) (%s) and none "
+                    "is this device's serial; its PV String sensors are not "
+                    "updated from it",
+                    self.device_tag,
+                    len(strings),
+                    ", ".join(f"{serial[:4]}..." for serial in strings),
+                )
 
         if stats:
             self._unit_power_stats = stats
