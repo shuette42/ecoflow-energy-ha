@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (
     _TASK_KEYS,
+    UNIT_PV_BY_SN_KEY,
     parse_stream_ac5000_message,
 )
 from ecoflow_energy.ecoflow.proto_encoding import (
@@ -22,6 +23,22 @@ FIXTURES = Path(__file__).parent / "fixtures" / "stream_ac5000"
 GET_REPLY = FIXTURES / "es22_get_reply_masked.json"
 PUSHES = FIXTURES / "es22_push_capture_masked.json"
 ES21_PV = FIXTURES / "es21_pv_masked.json"
+ES21_PAIR = FIXTURES / "es21_pair_pv_masked.json"
+PV_KEYS = ("pv_total_w", "pv1_w", "pv2_w", "pv3_w", "pv4_w")
+
+
+def _own_strings(parsed: dict) -> dict:
+    """The one unit's PV entry of a single-unit frame, keyed by serial upstream.
+
+    A parsed frame never carries the five PV keys flat any more: they sit
+    under the serial of the unit they belong to, and the coordinator lifts
+    its own. The single-unit fixtures carry exactly one entry, so this is it.
+    """
+    entries = parsed[UNIT_PV_BY_SN_KEY]
+    assert len(entries) == 1, list(entries)
+    return next(iter(entries.values()))
+
+
 TASK_FRAMES = FIXTURES / "es22_task_frames_masked.json"
 
 
@@ -1080,25 +1097,36 @@ class TestPvStrings:
     def test_the_strings_match_the_app_reading(self) -> None:
         """The frame closest before the moment he read his app."""
         parsed = self._at("2026-08-16T07:21:30")
-        assert parsed["pv_total_w"] == pytest.approx(195.91, abs=0.01)
-        assert parsed["pv2_w"] == pytest.approx(36.57, abs=0.01)
-        assert parsed["pv3_w"] == pytest.approx(55.32, abs=0.01)
-        assert parsed["pv4_w"] == pytest.approx(104.02, abs=0.01)
+        strings = _own_strings(parsed)
+        assert strings["pv_total_w"] == pytest.approx(195.91, abs=0.01)
+        assert strings["pv2_w"] == pytest.approx(36.57, abs=0.01)
+        assert strings["pv3_w"] == pytest.approx(55.32, abs=0.01)
+        assert strings["pv4_w"] == pytest.approx(104.02, abs=0.01)
         # String 1 was idle throughout the capture and the app showed 0 W.
         # The field is absent, and the fill is what turns that into a reading.
-        assert parsed["pv1_w"] == 0.0
+        assert strings["pv1_w"] == 0.0
         # The third-party figure is a different quantity, not the total.
         assert parsed["solar_w"] == pytest.approx(81.0)
+
+    def test_the_strings_never_reach_the_frame_flat(self) -> None:
+        """Only the coordinator may lift a unit's strings, by its serial (#401)."""
+        for frame in _load(ES21_PV):
+            parsed = parse_stream_ac5000_message(bytes.fromhex(frame["hex"])) or {}
+            for key in PV_KEYS:
+                assert key not in parsed, (frame["ts_iso"], key)
 
     def test_the_total_equals_the_sum_of_the_strings(self) -> None:
         """The identity the block has to preserve, on every real frame."""
         checked = 0
         for frame in _load(ES21_PV):
             parsed = parse_stream_ac5000_message(bytes.fromhex(frame["hex"])) or {}
-            total = parsed.get("pv_total_w")
+            if UNIT_PV_BY_SN_KEY not in parsed:
+                continue
+            entry = _own_strings(parsed)
+            total = entry.get("pv_total_w")
             if total is None or total == 0.0:
                 continue
-            strings = sum(parsed[f"pv{n}_w"] for n in (1, 2, 3, 4))
+            strings = sum(entry[f"pv{n}_w"] for n in (1, 2, 3, 4))
             assert strings == pytest.approx(total, abs=0.01), frame["ts_iso"]
             checked += 1
         assert checked >= 7
@@ -1110,12 +1138,12 @@ class TestPvStrings:
         five holding their last daylight reading until sunrise. Both frames
         here carry `f50.1`, one a full get-all and one a delta.
         """
-        daylight = self._at("2026-08-15T07:34:19")
+        daylight = _own_strings(self._at("2026-08-15T07:34:19"))
         assert daylight["pv_total_w"] == pytest.approx(310.96, abs=0.01)
 
         for stamp in ("2026-08-15T22:15:26", "2026-08-16T00:27:49"):
-            night = self._at(stamp)
-            for key in ("pv_total_w", "pv1_w", "pv2_w", "pv3_w", "pv4_w"):
+            night = _own_strings(self._at(stamp))
+            for key in PV_KEYS:
                 assert night[key] == 0.0, (stamp, key)
 
     def test_battery_power_carries_the_charge_from_the_unit_own_strings(self) -> None:
@@ -1160,11 +1188,148 @@ class TestPvStrings:
         seen = 0
         for frame in _load(PUSHES) + _load(GET_REPLY):
             parsed = parse_stream_ac5000_message(bytes.fromhex(frame["hex"])) or {}
-            for key in ("pv_total_w", "pv1_w", "pv2_w", "pv3_w", "pv4_w"):
-                if key in parsed:
-                    assert parsed[key] == 0.0, (frame["ts_iso"], key)
+            if UNIT_PV_BY_SN_KEY not in parsed:
+                continue
+            entry = _own_strings(parsed)
+            for key in PV_KEYS:
+                if key in entry:
+                    assert entry[key] == 0.0, (frame["ts_iso"], key)
                     seen += 1
         assert seen >= 5
+
+
+def _pv_entry(serial: bytes, *strings: float) -> bytes:
+    """Build one `f50.1` entry: serial, then strings 1 to 4 on `.9` to `.12`."""
+    inner = encode_field_bytes(1, serial)
+    inner += _encode_fixed32_field(3, sum(strings))
+    for field, watts in zip((9, 10, 11, 12), strings, strict=True):
+        inner += _encode_fixed32_field(field, watts)
+    return _sub(1, inner)
+
+
+class TestLinkedPairPvStrings:
+    """`f50` carries one `f50.1` entry per linked unit, each with its serial.
+
+    Issue #401: on the reporter's linked pair the master's frames carry both
+    units' string readings, one entry after the other, and decoded flat the
+    last entry won - unit 0166 published 0085's four strings. The fixture is
+    his own frames with the two masked serials made distinct: entry 1 is the
+    connection owner (0166), entry 2 the neighbour (0085).
+    """
+
+    @staticmethod
+    def _frames() -> list[dict]:
+        return json.loads(ES21_PAIR.read_text(encoding="utf-8"))["frames"]
+
+    @staticmethod
+    def _units() -> tuple[str, str]:
+        fixture = json.loads(ES21_PAIR.read_text(encoding="utf-8"))
+        return fixture["unit_a"], fixture["unit_b"]
+
+    def test_two_entries_survive_each_other(self) -> None:
+        """Two synthetic entries, distinct on every string, both come back."""
+        block = _sub(
+            50,
+            _pv_entry(b"ES21TESTUNITAAAA", 232.5, 475.7, 482.1, 290.0)
+            + _pv_entry(b"ES21TESTUNITBBBB", 337.0, 129.0, 233.0, 666.0),
+        )
+        result = parse_stream_ac5000_message(_build_frame(254, 39, bytes(block)))
+        assert result is not None
+        entries = result[UNIT_PV_BY_SN_KEY]
+        assert set(entries) == {"ES21TESTUNITAAAA", "ES21TESTUNITBBBB"}
+        assert entries["ES21TESTUNITAAAA"]["pv2_w"] == pytest.approx(475.7, abs=0.01)
+        assert entries["ES21TESTUNITBBBB"]["pv2_w"] == pytest.approx(129.0)
+        assert entries["ES21TESTUNITBBBB"]["pv_total_w"] == pytest.approx(1365.0)
+        for key in PV_KEYS:
+            assert key not in result
+
+    def test_an_entry_without_a_serial_is_not_reported(self) -> None:
+        """Nobody can claim it, so nobody publishes it."""
+        inner = _encode_fixed32_field(3, 100.0) + _encode_fixed32_field(9, 100.0)
+        result = parse_stream_ac5000_message(
+            _build_frame(254, 39, bytes(_sub(50, _sub(1, inner))))
+        )
+        assert result is None or UNIT_PV_BY_SN_KEY not in result
+
+    def test_an_entry_without_strings_fills_its_own_zeros(self) -> None:
+        """The night fill runs per entry, so one idle unit does not zero the other."""
+        block = _sub(
+            50,
+            _sub(1, encode_field_bytes(1, b"ES21TESTUNITAAAA"))
+            + _pv_entry(b"ES21TESTUNITBBBB", 10.0, 20.0, 30.0, 40.0),
+        )
+        result = parse_stream_ac5000_message(_build_frame(254, 39, bytes(block)))
+        assert result is not None
+        entries = result[UNIT_PV_BY_SN_KEY]
+        assert entries["ES21TESTUNITAAAA"] == dict.fromkeys(PV_KEYS, 0.0)
+        assert entries["ES21TESTUNITBBBB"]["pv4_w"] == pytest.approx(40.0)
+
+    def test_the_real_master_frames_carry_both_units(self) -> None:
+        """Every `f50` frame on 0166's connection lists both serials."""
+        unit_a, unit_b = self._units()
+        seen = 0
+        for frame in self._frames():
+            if frame["connection"] != "unit_a":
+                continue
+            parsed = parse_stream_ac5000_message(bytes.fromhex(frame["hex"]))
+            assert parsed is not None, frame["ts"]
+            entries = parsed[UNIT_PV_BY_SN_KEY]
+            assert set(entries) == {unit_a, unit_b}, frame["ts"]
+            # The owner's entry keeps the identity exactly. The neighbour's
+            # arrives relayed as whole watts, and its total is the device's
+            # own sum before rounding: 1365 against 1366, 1371 against 1372,
+            # 1367 against 1369 on the three frames.
+            for serial, entry in entries.items():
+                strings = sum(entry[f"pv{n}_w"] for n in (1, 2, 3, 4))
+                tolerance = 0.01 if serial == unit_a else 2.0
+                assert strings == pytest.approx(entry["pv_total_w"], abs=tolerance), (
+                    serial
+                )
+            for key in PV_KEYS:
+                assert key not in parsed
+            seen += 1
+        assert seen == 3
+
+    def test_the_first_frame_matches_the_reporter_reading(self) -> None:
+        """08:22:35 UTC: entry 1 is 0166's shape, entry 2 is 0085's.
+
+        The bug was exactly this frame decoded flat: 337 / 129 / 233 / 666 W
+        under 0166, which is 0085's set.
+        """
+        unit_a, unit_b = self._units()
+        frame = self._frames()[0]
+        parsed = parse_stream_ac5000_message(bytes.fromhex(frame["hex"]))
+        assert parsed is not None
+        own = parsed[UNIT_PV_BY_SN_KEY][unit_a]
+        assert [own[f"pv{n}_w"] for n in (1, 2, 3, 4)] == pytest.approx(
+            [232.5, 475.7, 482.1, 290.0], abs=0.05
+        )
+        assert own["pv_total_w"] == pytest.approx(1480.3, abs=0.05)
+        other = parsed[UNIT_PV_BY_SN_KEY][unit_b]
+        assert [other[f"pv{n}_w"] for n in (1, 2, 3, 4)] == [337.0, 129.0, 233.0, 666.0]
+        assert other["pv_total_w"] == 1366.0
+
+    def test_the_slave_connection_carries_the_block_empty(self) -> None:
+        """0085's own frames say nothing about strings, so nothing is published."""
+        frame = next(f for f in self._frames() if f["connection"] == "unit_b")
+        parsed = parse_stream_ac5000_message(bytes.fromhex(frame["hex"])) or {}
+        assert UNIT_PV_BY_SN_KEY not in parsed
+        for key in PV_KEYS:
+            assert key not in parsed
+
+    def test_fixture_carries_no_real_identifier(self) -> None:
+        import re
+
+        fixture = json.loads(ES21_PAIR.read_text(encoding="utf-8"))
+        allowed = {fixture["unit_a"].encode(), fixture["unit_b"].encode()}
+        for frame in fixture["frames"]:
+            raw = bytes.fromhex(frame["hex"])
+            runs = [
+                run
+                for run in re.findall(rb"[A-Z0-9]{15,}", raw)
+                if set(run) != {ord("X")} and run not in allowed
+            ]
+            assert not runs, runs
 
 
 class TestTaskListShrink:

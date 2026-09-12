@@ -17,7 +17,10 @@ from ..const import (
     POWEROCEAN_SCHEDULE_ARMED_LATCH_S,
     POWERPULSE2_CHARGE_ACTION_CONFIRMED,
 )
-from ..ecoflow.parsers.stream_ac5000_proto import UNIT_POWER_BY_SN_KEY
+from ..ecoflow.parsers.stream_ac5000_proto import (
+    UNIT_POWER_BY_SN_KEY,
+    UNIT_PV_BY_SN_KEY,
+)
 from ..ecoflow.parsers.stream_proto import SOC_FALLBACK_KEY
 from ..ecoflow.parsers.wave3_proto import (
     WAVE3_ACTIVE_MODE_INPUTS,
@@ -116,13 +119,15 @@ class StateApplyMixin(_Base):
             parsed["soc_pct"] = fallback
 
     def _resolve_unit_power(self, parsed: dict[str, Any]) -> None:
-        """Take this unit's own entry out of a STREAM per-unit block.
+        """Take this unit's own entry out of the STREAM per-unit blocks.
 
         Two or three STREAM units linked on one account are reported as one
         system: the state of charge is their mean and the battery power their
         sum. The device also sends the underlying per-unit readings, each
         stamped with the serial it belongs to, and this picks out the one that
-        is ours.
+        is ours. Two blocks carry such entries: `f54` with the battery power
+        per unit, and `f50` with the PV strings per unit (#401 - decoded flat,
+        the master's frame left the neighbour's strings on the master's page).
 
         A foreign entry is never published here. Both units have their own
         coordinator, their own connection and their own device page, so a
@@ -130,20 +135,30 @@ class StateApplyMixin(_Base):
         another coordinator would give one value two sources, and on the only
         capture that exists just one of the two streams carried the block at
         all. What that leaves is visible in diagnostics rather than guessed at:
-        if the block lists units and none of them is this one, the counters
-        below say so.
+        if a block lists units and none of them is this one, the counters
+        below say so. Each block keeps its own pair of counters, because a
+        frame carries either, both or neither.
         """
-        entries = parsed.pop(UNIT_POWER_BY_SN_KEY, None)
-        if not isinstance(entries, dict) or not entries:
-            return
+        power = parsed.pop(UNIT_POWER_BY_SN_KEY, None)
+        strings = parsed.pop(UNIT_PV_BY_SN_KEY, None)
+        stats = dict(self._unit_power_stats or {})
 
-        own = entries.get(self.device_sn)
-        self._unit_power_stats = {
-            "units_listed": len(entries),
-            "own_unit_matched": own is not None,
-        }
-        if own is not None:
-            parsed["unit_batt_w"] = own
+        if isinstance(power, dict) and power:
+            own = power.get(self.device_sn)
+            stats["units_listed"] = len(power)
+            stats["own_unit_matched"] = own is not None
+            if own is not None:
+                parsed["unit_batt_w"] = own
+
+        if isinstance(strings, dict) and strings:
+            own_strings = strings.get(self.device_sn)
+            stats["pv_units_listed"] = len(strings)
+            stats["own_pv_matched"] = own_strings is not None
+            if isinstance(own_strings, dict):
+                parsed.update(own_strings)
+
+        if stats:
+            self._unit_power_stats = stats
 
     def _resolve_schedule_armed(self, parsed: dict[str, Any]) -> None:
         """Hold a just-written arming flag against a frame that predates it.

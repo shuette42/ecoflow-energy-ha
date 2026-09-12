@@ -8420,6 +8420,175 @@ class TestLinkedUnitPower:
         coordinator._apply_data({"soc_pct": 76})
         assert coordinator.data["unit_batt_w"] == 689.0
 
+    # --- the PV block, the same rule (#401) ---
+
+    OWN_STRINGS = {
+        "pv_total_w": 1480.3,
+        "pv1_w": 232.5,
+        "pv2_w": 475.7,
+        "pv3_w": 482.1,
+        "pv4_w": 290.0,
+    }
+    NEIGHBOUR_STRINGS = {
+        "pv_total_w": 1366.0,
+        "pv1_w": 337.0,
+        "pv2_w": 129.0,
+        "pv3_w": 233.0,
+        "pv4_w": 666.0,
+    }
+
+    async def test_own_strings_become_the_sensor_values(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """The master's frame lists both units; only its own strings land."""
+        coordinator = self._coordinator(hass, enhanced_config_entry)
+        coordinator._apply_data(
+            {
+                "_unit_pv_by_sn": {
+                    "ES22TESTUNITAAAA": dict(self.OWN_STRINGS),
+                    "ES22TESTUNITBBBB": dict(self.NEIGHBOUR_STRINGS),
+                }
+            }
+        )
+        for key, value in self.OWN_STRINGS.items():
+            assert coordinator.data[key] == value, key
+        assert "_unit_pv_by_sn" not in coordinator.data
+        assert coordinator._unit_power_stats == {
+            "pv_units_listed": 2,
+            "own_pv_matched": True,
+        }
+
+    async def test_a_neighbour_string_set_is_never_published(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """Exactly the #401 shape: the last entry is the other unit's."""
+        coordinator = self._coordinator(hass, enhanced_config_entry)
+        coordinator._apply_data(
+            {"_unit_pv_by_sn": {"ES22TESTUNITBBBB": dict(self.NEIGHBOUR_STRINGS)}}
+        )
+        for key in self.NEIGHBOUR_STRINGS:
+            assert key not in coordinator.data, key
+        assert coordinator._unit_power_stats == {
+            "pv_units_listed": 1,
+            "own_pv_matched": False,
+        }
+
+    async def test_both_blocks_in_one_frame_keep_both_counters(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        coordinator = self._coordinator(hass, enhanced_config_entry)
+        coordinator._apply_data(
+            {
+                "_unit_batt_w_by_sn": {
+                    "ES22TESTUNITAAAA": 2400.0,
+                    "ES22TESTUNITBBBB": 0.0,
+                },
+                "_unit_pv_by_sn": {
+                    "ES22TESTUNITAAAA": dict(self.OWN_STRINGS),
+                    "ES22TESTUNITBBBB": dict(self.NEIGHBOUR_STRINGS),
+                },
+            }
+        )
+        assert coordinator.data["unit_batt_w"] == 2400.0
+        assert coordinator.data["pv4_w"] == 290.0
+        assert coordinator._unit_power_stats == {
+            "units_listed": 2,
+            "own_unit_matched": True,
+            "pv_units_listed": 2,
+            "own_pv_matched": True,
+        }
+
+    async def test_a_frame_with_one_block_keeps_the_other_counter(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """The reporter's 08:23:10 frame carries `f50` without `f54`."""
+        coordinator = self._coordinator(hass, enhanced_config_entry)
+        coordinator._apply_data(
+            {
+                "_unit_batt_w_by_sn": {
+                    "ES22TESTUNITAAAA": 2400.0,
+                    "ES22TESTUNITBBBB": 0.0,
+                }
+            }
+        )
+        coordinator._apply_data(
+            {"_unit_pv_by_sn": {"ES22TESTUNITAAAA": dict(self.OWN_STRINGS)}}
+        )
+        assert coordinator._unit_power_stats == {
+            "units_listed": 2,
+            "own_unit_matched": True,
+            "pv_units_listed": 1,
+            "own_pv_matched": True,
+        }
+
+    async def test_the_real_pair_frames_end_to_end(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """The reporter's frames through parser and coordinator, as each unit.
+
+        The claim is by serial, not by connection: unit A (the connection
+        owner) lifts entry A out of the master frame, and unit B, handed the
+        same frame, lifts entry B and never A's. At runtime B is only ever
+        handed its own frames, which carry the block empty and publish
+        nothing - routing the master frame to B is the separate step named
+        on #401, and this test says what B would do with it.
+        """
+        import json
+        from pathlib import Path
+
+        from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (
+            parse_stream_ac5000_message,
+        )
+
+        fixture = json.loads(
+            (
+                Path(__file__).parent.parent
+                / "fixtures"
+                / "stream_ac5000"
+                / "es21_pair_pv_masked.json"
+            ).read_text(encoding="utf-8")
+        )
+        master = next(f for f in fixture["frames"] if f["connection"] == "unit_a")
+        slave = next(f for f in fixture["frames"] if f["connection"] == "unit_b")
+        master_parsed = parse_stream_ac5000_message(bytes.fromhex(master["hex"]))
+        slave_parsed = parse_stream_ac5000_message(bytes.fromhex(slave["hex"]))
+        assert master_parsed is not None and slave_parsed is not None
+        pv_keys = ("pv_total_w", "pv1_w", "pv2_w", "pv3_w", "pv4_w")
+
+        enhanced_config_entry.add_to_hass(hass)
+        unit_a = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, {**self.ES22_DEVICE, "sn": fixture["unit_a"]}
+        )
+        unit_b = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, {**self.ES22_DEVICE, "sn": fixture["unit_b"]}
+        )
+
+        unit_a._apply_data(dict(master_parsed))
+        assert [unit_a.data[f"pv{n}_w"] for n in (1, 2, 3, 4)] == pytest.approx(
+            [232.5, 475.7, 482.1, 290.0], abs=0.05
+        )
+        assert unit_a.data["unit_batt_w"] == 2400.0
+
+        unit_b._apply_data(dict(slave_parsed))
+        for key in pv_keys:
+            assert key not in unit_b.data, key
+        assert unit_b._unit_power_stats is None
+
+        unit_b._apply_data(dict(master_parsed))
+        assert [unit_b.data[f"pv{n}_w"] for n in (1, 2, 3, 4)] == [
+            337.0,
+            129.0,
+            233.0,
+            666.0,
+        ]
+        assert unit_b.data["unit_batt_w"] == 0.0
+        assert unit_b._unit_power_stats == {
+            "units_listed": 2,
+            "own_unit_matched": True,
+            "pv_units_listed": 2,
+            "own_pv_matched": True,
+        }
+
 
 class TestAppWriteCapture:
     """Frames the vendor app writes, recorded as evidence and never parsed.

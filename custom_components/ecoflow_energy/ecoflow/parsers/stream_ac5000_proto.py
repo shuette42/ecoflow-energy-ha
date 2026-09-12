@@ -41,6 +41,12 @@ Data shape:
 - What a task does is read from which of those two containers it carries,
   never from ``f40.1.2``: see `_TASK_BLOCKS`.
 
+- ``f50`` the MPPT block, one ``f50.1`` entry per linked unit, each stamped
+  with that unit's serial in `.1` - the same shape as ``f54``. On a linked
+  pair the master's connection carries both units' entries in one frame
+  (issue #401), so the block is decoded one entry at a time and handed to
+  the coordinator keyed by serial: see `_decode_pv_entry`.
+
 Not mapped: ``f50.1.4`` latches at rest (see the field map); ``f38.1`` and
 ``f44`` repeat pack readings `32/50` already carries, and mapping both
 makes the keys flap; ``f38.1.3``/``f44.2`` look like a cycle count but
@@ -80,6 +86,8 @@ _UNIT_POWER_SCALE = 0.5
 # Key the coordinator consumes and removes: the serial decides which unit a
 # reading belongs to, and only the coordinator knows which serial it is.
 UNIT_POWER_BY_SN_KEY = "_unit_batt_w_by_sn"
+# The same for the MPPT block: serial -> the five PV keys of that unit.
+UNIT_PV_BY_SN_KEY = "_unit_pv_by_sn"
 
 # f11 node totals arrive in half-watt units.
 _HALF_WATT = 0.5
@@ -178,13 +186,18 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
         # missing is an app reading taken at that moment, which is what would
         # say the term belongs to string 1 rather than to another of the four.
         #
-        # `.1` is the device serial; `.2`, `.4`, `.5`, `.6` and `.7` are
-        # unmapped. `.4` is worth a note: it equals `.3` minus `.7` in all 6
-        # frames that carry it, including the 00:27 night frame where it
-        # reads 1999 against `.7` = -1999 with `.3` absent. That is the
-        # arithmetic saying an absent `.3` is zero rather than unknown, which
-        # is what `_ZERO_FILL_PATHS` below acts on. The meaning of `.7` is
-        # still open.
+        # `.1` is the unit serial, and on a linked pair it is what tells the
+        # entries apart: the master's frames carry one `f50.1` per unit
+        # (issue #401, two entries in every full frame, each with its own
+        # `.1`), so the block is read per entry and the coordinator keeps the
+        # entry stamped with its own serial, exactly as it does for `f54`.
+        # `.2`, `.4`, `.5`, `.6` and `.7` are unmapped. `.4` is worth a
+        # note: it equals `.3` minus `.7` in all 6 frames that carry it,
+        # including the 00:27 night frame where it reads 1999 against `.7`
+        # = -1999 with `.3` absent. That is the arithmetic saying an absent
+        # `.3` is zero rather than unknown, which is what
+        # `_PV_ZERO_FILL_PATHS` below acts on. The meaning of `.7` is still
+        # open.
         #
         # `f11.3` is the same MPPT total in half-watts (203 / 173 / 34 / 28 /
         # 308 against 195.91 / 174.48 / 34.24 / 28.52 / 310.96 in the same
@@ -354,22 +367,29 @@ _ZERO_FILL_PATHS: dict[tuple[int, int], tuple[str, ...]] = {
         "12.5",
         "12.6",
         "12.7",
-        # The `f50.1` group arrives on every unit, with or without PV, so
-        # filling on it would hand a PV-less ES22 five keys reading 0 W.
-        # That is what `accessory_needs_nonzero` on all five definitions
-        # is for: the keys exist, the entities do not, until a string has
-        # actually produced. Filling on the group rather than on `.3` is
-        # what closes the night: at 22:15 and again at 00:27 the capture
-        # carries `f50.1` with neither `.3` nor a string in it, in a full
-        # get-all as well as in a delta, so keying the fill on `.3` would
-        # leave all five holding their last daylight reading until dawn.
-        "50.1.3",
-        "50.1.9",
-        "50.1.10",
-        "50.1.11",
-        "50.1.12",
+        # `50.1` is deliberately absent here for the reason `40.1.3` is: the
+        # block is collected per entry, so its fill runs per entry, in
+        # `_PV_ZERO_FILL_PATHS`.
     ),
 }
+
+# The same rule inside one `f50.1` entry, applied per entry.
+#
+# The entry arrives on every unit, with or without PV, so filling on it
+# hands a PV-less ES22 five keys reading 0 W. That is what
+# `accessory_needs_nonzero` on all five definitions is for: the keys exist,
+# the entities do not, until a string has actually produced. Filling on the
+# entry rather than on `.3` is what closes the night: at 22:15 and again at
+# 00:27 the capture carries `f50.1` with neither `.3` nor a string in it, in
+# a full get-all as well as in a delta, so keying the fill on `.3` would
+# leave all five holding their last daylight reading until dawn.
+_PV_ZERO_FILL_PATHS: tuple[str, ...] = (
+    "50.1.3",
+    "50.1.9",
+    "50.1.10",
+    "50.1.11",
+    "50.1.12",
+)
 
 # The same rule inside one task, applied per task rather than per frame: a
 # container in one task says nothing about the next.
@@ -398,8 +418,13 @@ _TASK_ZERO_FILL_PATHS: tuple[str, ...] = ("40.1.3", "40.1.8.3.3", "40.1.9.1")
 #
 # Collecting the bytes rather than splitting the decode inline also gives each
 # task its own set of seen groups, which the kind rule below depends on.
+#
+# `50.1` repeats the same way on a linked pair: the master's frames carry one
+# entry per unit, and decoded flat the last one wins. On the #401 frames that
+# was the neighbour's, so unit 0166 published 0085's four strings and its
+# total, and 0085, whose own connection carries the block empty, got none.
 _REPEATED_GROUPS: dict[tuple[int, int], dict[str, str]] = {
-    (254, 39): {"40.1": "_task_blocks"},
+    (254, 39): {"40.1": "_task_blocks", "50.1": "_pv_blocks"},
 }
 
 # kind -> the container that carries that kind's power. What a task does is
@@ -492,6 +517,14 @@ _TASK_ZERO_FILL_KEYS = _zero_fill_keys((254, 39), _TASK_ZERO_FILL_PATHS)
 # out of the compiled tree rather than compiled again, so it cannot drift.
 _TASK_TREE: dict[int, Any] = _ES22_TREE[(254, 39)][40][1]
 _TASK_PREFIX = "40.1."
+
+# The same for one `f50.1` entry.
+_PV_ZERO_FILL_KEYS = _zero_fill_keys((254, 39), _PV_ZERO_FILL_PATHS)
+_PV_TREE: dict[int, Any] = _ES22_TREE[(254, 39)][50][1]
+_PV_PREFIX = "50.1."
+# The serial inside one entry, read off the raw bytes as `f54.1.1` is: the
+# field map holds numbers, and a string has no scale.
+_PV_SERIAL_FIELD = 1
 
 
 def _read_varint(mv: memoryview, pos: int) -> tuple[int, int]:
@@ -647,6 +680,36 @@ def _decode_task(block: bytes) -> dict[str, Any]:
             task.setdefault(key, zero)
     task["_task_kinds"] = tuple(kind for kind, group in _TASK_BLOCKS if group in seen)
     return task
+
+
+def _decode_pv_entry(block: bytes) -> tuple[str | None, dict[str, Any]]:
+    """Decode one `50.1` entry on its own: (unit serial, its five PV keys).
+
+    Its own result and its own fill, for the reason `_decode_task` gives: a
+    string present in one unit's entry says nothing about the other's, and
+    an entry that arrives without strings is that unit reporting none. The
+    serial is read the way `_read_unit_entries` reads it from `f54`, and an
+    entry without one returns ``None`` for it - the coordinator cannot claim
+    such an entry, and it is not published.
+
+    A block that will not decode costs its own entry and no more.
+    """
+    entry: dict[str, Any] = {}
+    seen: set[str] = {"50.1"}
+    try:
+        _walk(block, _PV_TREE, entry, seen, _PV_PREFIX)
+    except (IndexError, ValueError):
+        return None, {}
+    serial = None
+    for num, wire, value in _iter_fields(block):
+        if num == _PV_SERIAL_FIELD and wire == 2:
+            serial = _serial_text(value)
+    for group, defaults in _PV_ZERO_FILL_KEYS.items():
+        if group not in seen:
+            continue
+        for key, zero in defaults:
+            entry.setdefault(key, zero)
+    return serial, entry
 
 
 # Every key one task list readback can produce, in the order the two kinds are
@@ -888,6 +951,19 @@ def _iter_fields(payload: bytes) -> list[tuple[int, int, bytes]]:
     return fields
 
 
+def _serial_text(value: bytes) -> str | None:
+    """The unit serial a per-unit entry is stamped with, or None.
+
+    A serial is upper-case alphanumeric ASCII and nothing else; a diagnostics
+    export masks it to a run of X of the same length, which still passes,
+    so a masked fixture keeps its entries apart by length alone.
+    """
+    text = value.decode("ascii", "ignore")
+    if len(text) == len(value) and text.isalnum() and text.isupper():
+        return text
+    return None
+
+
 def _read_unit_entries(payload: bytes) -> dict[str, float]:
     """Return battery power in watts per unit serial, from the `f54` block.
 
@@ -919,9 +995,7 @@ def _read_unit_entries(payload: bytes) -> dict[str, float]:
             power: int | None = None
             for num, wire, value in _iter_fields(entry_raw):
                 if num == _UNIT_SERIAL_FIELD and wire == 2:
-                    text = value.decode("ascii", "ignore")
-                    if len(text) == len(value) and text.isalnum() and text.isupper():
-                        serial = text
+                    serial = _serial_text(value)
                 elif num == _UNIT_POWER_FIELD and wire == 0:
                     decoded = _decode_scalar(0, value, _TYPE_INT)
                     if isinstance(decoded, int):
@@ -996,6 +1070,15 @@ def parse_stream_ac5000_message(payload: bytes) -> dict[str, Any] | None:
                 for parent, child, marker in _EMPTY_GROUP_CLEARS.get(cmd_key, ()):
                     if parent in seen_groups and child not in seen_groups:
                         decoded[marker] = True
+                pv_blocks = decoded.pop("_pv_blocks", None)
+                if pv_blocks:
+                    by_serial: dict[str, dict[str, Any]] = {}
+                    for block in pv_blocks:
+                        serial, entry = _decode_pv_entry(block)
+                        if serial is not None and entry:
+                            by_serial[serial] = entry
+                    if by_serial:
+                        decoded[UNIT_PV_BY_SN_KEY] = by_serial
                 if cmd_key == _CMD_TELEMETRY:
                     try:
                         unit_entries = _read_unit_entries(pdata)

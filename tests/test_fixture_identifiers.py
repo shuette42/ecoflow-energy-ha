@@ -46,8 +46,20 @@ _MAC = re.compile(r"(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}")
 _RUN = re.compile(r"[0-9A-Za-z]{12,}")
 
 # Deliberate placeholders that are not identifiers and must not be masked
-# further, since masking them would hide what the field is.
-_PLACEHOLDERS = frozenset({"AABBCCDDEEFF"})
+# further, since masking them would hide what the field is. The four unit
+# serials are the synthetic stand-ins of the linked-pair fixtures: the export
+# masks both units to the same run of X, and a per-unit block is only a test
+# of anything once its two entries can be told apart (#177 for `f54`, #401
+# for `f50`).
+_PLACEHOLDERS = frozenset(
+    {
+        "AABBCCDDEEFF",
+        "ES21TESTUNITAAAA",
+        "ES21TESTUNITBBBB",
+        "ES22TESTUNITAAAA",
+        "ES22TESTUNITBBBB",
+    }
+)
 
 
 def _fixture_files() -> list[Path]:
