@@ -3256,12 +3256,29 @@ class TestSecretFieldsAreMasked:
         the schema *definitions* - including the reauth and reconfigure
         secret-key field, which no other test in this file drives - not
         coverage of one runtime path to reach them.
+
+        The grep alone only proves a site *names* a password selector, not
+        that the name resolves to one at runtime - a `_PASSWORD_SELECTOR`
+        constant reassigned to `str`, or built with `TextSelectorType.TEXT`,
+        would still read as a password selector by name (PLAN-141 review
+        finding 2). So every module that had a match is also imported and
+        its `_PASSWORD_SELECTOR` constant is checked directly.
+
+        The regex allows the field name and the closing paren to be on
+        separate lines - the shape `CONF_ACCESS_KEY`/`CONF_EMAIL` already use
+        elsewhere in these files with a `default=...` clause - even though no
+        current `CONF_SECRET_KEY`/`CONF_PASSWORD` site is written that way
+        (finding 3): a future site in that form must still be caught.
         """
+        import importlib
         import re
         from pathlib import Path
 
+        from homeassistant.helpers.selector import TextSelector
+
         pattern = re.compile(
-            r"vol\.Required\((CONF_SECRET_KEY|CONF_PASSWORD)\):\s*([^,]+)"
+            r"vol\.Required\(\s*(CONF_SECRET_KEY|CONF_PASSWORD)\b[^:]*?\)\s*:\s*([^,\n]+)",
+            re.DOTALL,
         )
         sources = {
             path: path.read_text()
@@ -3289,6 +3306,19 @@ class TestSecretFieldsAreMasked:
                 "TextSelectorType.PASSWORD" in validator
                 or "_PASSWORD_SELECTOR" in validator
             ), f"{path.name}: {field} uses {validator!r}, not a password selector"
+
+        for path in {path for path, _, _ in matches}:
+            mod = importlib.import_module(
+                f"custom_components.ecoflow_energy.{path.stem}"
+            )
+            selector = mod._PASSWORD_SELECTOR
+            assert isinstance(selector, TextSelector), (
+                f"{path.name}: _PASSWORD_SELECTOR is {selector!r}, not a TextSelector"
+            )
+            assert selector.config["type"] == "password", (
+                f"{path.name}: _PASSWORD_SELECTOR type is "
+                f"{selector.config['type']!r}, not 'password'"
+            )
 
     async def test_developer_and_app_credential_steps_render_password_selectors(
         self, hass: HomeAssistant

@@ -421,7 +421,7 @@ automation:
 <details>
 <summary><b>Stream AC 5000 alongside a PowerOcean (Gen 1), by @Polarlander11</b></summary>
 
-Two automations that let a Stream AC 5000 run next to a first-generation PowerOcean without the two fighting over the same energy: by day the Stream charges only from real grid surplus, and only while the PowerOcean battery is not being drawn down; from the evening it discharges at a rate that spreads its usable capacity over the night, keeping a 25 % reserve and stopping at sunrise. The two windows never overlap, because the Stream holds one planned charge or discharge task at a time. The guide, with the complete YAML and a measured inverter efficiency figure, is in [#393](https://github.com/shuette42/ecoflow-energy-ha/issues/393#issuecomment-5647636137).
+Two automations that let a Stream AC 5000 run next to a first-generation PowerOcean without the two fighting over the same energy: by day the Stream charges only from real grid surplus, and only while the PowerOcean battery is not being drawn down; from the evening it discharges at a rate that spreads its usable capacity over the night, keeping a 25 % reserve and stopping at sunrise. The two windows never overlap by design. The guide, with the complete YAML and a measured inverter efficiency figure, is in [#393](https://github.com/shuette42/ecoflow-energy-ha/issues/393#issuecomment-5647636137).
 
 </details>
 
