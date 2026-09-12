@@ -184,6 +184,7 @@ def _build_powerocean_set_envelope(
     version: int = 3,
     source: str = "ios",
     cmd_func: int = 96,
+    dest: int = 96,
 ) -> bytes:
     """Build the PowerOcean SET envelope around a pre-encoded inner pdata.
 
@@ -233,6 +234,12 @@ def _build_powerocean_set_envelope(
             the wallbox accessory through the same PowerOcean set topic and
             carries 241 here instead (four app frames, PLAN-115 section 1) -
             the default keeps every existing PowerOcean write byte-identical.
+        dest: Field 3, the module the command is addressed to. 96 on every
+            PowerOcean write and on the relayed wallbox command, both of
+            which the PowerOcean's EMS receives. A write on the PowerPulse
+            2's own set topic carries 2 here (five app frames of one
+            recording, PLAN-140); the default keeps every existing frame
+            byte-identical.
     """
     if seq == 0:
         seq = int(time.time() * 1000) & 0x7FFFFFFF
@@ -240,7 +247,7 @@ def _build_powerocean_set_envelope(
     header = bytearray()
     header.extend(encode_field_bytes(1, pdata))  # pdata
     header.extend(encode_field_varint(2, 32))  # src
-    header.extend(encode_field_varint(3, 96))  # dest
+    header.extend(encode_field_varint(3, dest))  # dest
     header.extend(encode_field_varint(4, 1))  # d_src
     header.extend(encode_field_varint(5, 1))  # d_dest
     if check_type is not None:
@@ -301,6 +308,47 @@ def build_powerpulse_charge_action_payload(
         2, 1 if action == "stop" else 2
     )
     return _build_powerocean_set_envelope(pdata, cmd_id=100, seq=seq, cmd_func=241)
+
+
+def build_powerpulse_standalone_charge_ctrl_payload(
+    action: Literal["start", "stop"],
+    device_sn: str,
+    seq: int = 0,
+) -> bytes:
+    """Build ChargerCtrl (2/81): start or stop a PowerPulse 2 on its own topic.
+
+    The route for a wallbox on an account without a PowerOcean (PLAN-140,
+    ADR-009 addendum). Sent on the wallbox's own set topic, addressed to
+    module 2 with the wallbox's own serial in the envelope. `charge_ctrl`
+    (field 4 of `pdata`) is 2 for stop and 1 for start - the mirror image of
+    the relayed command's `on_off_set`, and not a typo: five app frames of
+    one recording of a real charging session stopped, started, stopped,
+    started and stopped, laid against the wallbox's own heartbeat, show
+    `finishing` 1-2 s after every 2 and `charging` 17 s after the 1. The
+    device answers each with an empty `set_reply` carrying the same seq.
+
+    The envelope differs from the relayed command in two fields only:
+    `dest` is 2 instead of 96, and field 25 carries the wallbox's serial.
+    Everything else (src 32, d_src/d_dest 1, check_type 3, need_ack 1,
+    version 3, payload_ver 1, from "ios") is identical.
+
+    Args:
+        action: "start" or "stop".
+        device_sn: The wallbox's own 16-character serial (the coordinator's
+            `device_sn`), not the accessory descriptor.
+        seq: Sequence number. Default 0 generates from timestamp.
+    """
+    if action not in ("start", "stop"):
+        raise ValueError(f"action must be 'start' or 'stop', got {action!r}")
+    if len(device_sn) != 16 or not device_sn.isascii() or not device_sn.isalnum():
+        raise ValueError(
+            f"device_sn must be 16 alphanumeric ASCII characters, got {device_sn!r}"
+        )
+
+    pdata = encode_field_varint(4, 2 if action == "stop" else 1)
+    return _build_powerocean_set_envelope(
+        pdata, cmd_id=81, seq=seq, device_sn=device_sn, cmd_func=2, dest=2
+    )
 
 
 def build_work_mode_set_payload(work_mode: int, seq: int = 0) -> bytes:

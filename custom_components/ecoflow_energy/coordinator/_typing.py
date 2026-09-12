@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
@@ -110,6 +110,8 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
     def set_device_value(self, key: str, value: Any) -> None: ...
 
     def powerocean_sibling(self) -> EcoFlowDeviceCoordinator | None: ...
+
+    def charge_action_route(self) -> Literal["sibling", "own"] | None: ...
 
     def _log_event(self, event_type: str, detail: str) -> None: ...
 

@@ -18,6 +18,7 @@ import pytest
 from ecoflow_energy.ecoflow.energy_stream import (
     _build_powerocean_set_envelope,
     build_powerpulse_charge_action_payload,
+    build_powerpulse_standalone_charge_ctrl_payload,
 )
 from ecoflow_energy.ecoflow.parsers.powerpulse_proto import parse_powerpulse_message
 from ecoflow_energy.ecoflow.proto.decoder import decode_header_message
@@ -26,6 +27,7 @@ from ecoflow_energy.ecoflow.proto_encoding import encode_field_bytes
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "powerpulse"
 RUN_DATA_SYNC_FIXTURE = FIXTURE_DIR / "c376_run_data_sync_20260824.json"
 HEARTBEAT_FIXTURE = FIXTURE_DIR / "c376_frames_plan132.json"
+STANDALONE_CTRL_FIXTURE = FIXTURE_DIR / "c376_standalone_charge_ctrl_20260912.json"
 
 DEV_ADDR = 215
 DEV_SN = "X" * 16
@@ -190,3 +192,65 @@ def test_heartbeat_parsing_is_unchanged() -> None:
     assert "ev_charge_status" in result
     assert "ev_charger_dev_addr" not in result
     assert "ev_charger_sn" not in result
+
+
+# (frame index, seq, action) - the five `set` frames of one recording of a
+# real charging session stopped, started, stopped, started and stopped from
+# the vendor app on an account with no PowerOcean (PLAN-140, ADR-009
+# addendum of 2026-09-12).
+STANDALONE_SET_FRAMES = [
+    (2, 7, "stop"),
+    (4, 8, "start"),
+    (9, 100, "stop"),
+    (13, 125, "start"),
+    (24, 126, "stop"),
+]
+
+
+@pytest.mark.parametrize("frame_index,seq,action", STANDALONE_SET_FRAMES)
+def test_standalone_builder_reproduces_the_five_app_frames_byte_for_byte(
+    frame_index: int, seq: int, action: str
+) -> None:
+    frames = json.loads(STANDALONE_CTRL_FIXTURE.read_text())["frames"]
+    expected = bytes.fromhex(frames[frame_index]["hex"])
+    built = build_powerpulse_standalone_charge_ctrl_payload(action, DEV_SN, seq=seq)
+    assert built == expected
+
+
+def test_standalone_stop_envelope_addresses_module_2_with_the_wallbox_serial() -> None:
+    built = build_powerpulse_standalone_charge_ctrl_payload("stop", DEV_SN, seq=7)
+    headers, _ = decode_header_message(built)
+    header = headers[0]
+
+    assert header["dest"] == 2
+    assert header["cmd_func"] == 2
+    assert header["cmd_id"] == 81
+    assert header["need_ack"] == 1
+    assert header["device_sn"] == DEV_SN
+    assert bytes.fromhex(header["pdata"]) == b"\x20\x02"
+
+
+def test_standalone_start_envelope_carries_the_start_pdata() -> None:
+    built = build_powerpulse_standalone_charge_ctrl_payload("start", DEV_SN, seq=8)
+    headers, _ = decode_header_message(built)
+    assert bytes.fromhex(headers[0]["pdata"]) == b"\x20\x01"
+
+
+def test_relayed_envelope_default_dest_did_not_move() -> None:
+    """The `dest` default stays 96 - only the standalone builder passes 2."""
+    built = build_powerpulse_charge_action_payload("stop", DEV_ADDR, DEV_SN, seq=85)
+    headers, _ = decode_header_message(built)
+    assert headers[0]["dest"] == 96
+
+
+@pytest.mark.parametrize(
+    "action,device_sn",
+    [
+        ("pause", DEV_SN),
+        ("stop", ""),
+        ("stop", "X" * 15),
+    ],
+)
+def test_standalone_builder_rejects_bad_input(action: str, device_sn: str) -> None:
+    with pytest.raises(ValueError):
+        build_powerpulse_standalone_charge_ctrl_payload(action, device_sn)

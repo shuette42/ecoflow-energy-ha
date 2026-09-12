@@ -35,6 +35,10 @@ from custom_components.ecoflow_energy.const import (
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
 from custom_components.ecoflow_energy.ecoflow.energy_stream import (
     build_powerpulse_charge_action_payload,
+    build_powerpulse_standalone_charge_ctrl_payload,
+)
+from custom_components.ecoflow_energy.ecoflow.proto.decoder import (
+    decode_header_message,
 )
 from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
     encode_field_bytes,
@@ -340,16 +344,105 @@ async def test_descriptor_missing_refuses(hass: HomeAssistant) -> None:
     assert _mqtt(oceans[0]).send_proto_set.call_count == 0
 
 
-async def test_no_powerocean_in_entry_refuses(hass: HomeAssistant) -> None:
+async def test_no_powerocean_in_entry_sends_on_the_wallbox_own_topic_and_confirms(
+    hass: HomeAssistant,
+) -> None:
+    """No PowerOcean in the entry takes the own route (PLAN-140): no sibling
+    lookup, no descriptor needed, published through the wallbox's own MQTT
+    client on module 2 with the wallbox's own serial."""
     _entry_obj, _oceans, wallbox = _wire_entry(hass, [])
-    _set_descriptor(wallbox)
-    _apply_status(wallbox, 3)
+    _apply_status(wallbox, 3)  # charging
+
+    with patch(
+        "custom_components.ecoflow_energy.ecoflow.energy_stream.time.time",
+        return_value=1_700_000_000.0,
+    ):
+        expected_seq = int(1_700_000_000.0 * 1000) & 0x7FFFFFFF
+        expected = build_powerpulse_standalone_charge_ctrl_payload(
+            "stop", wallbox.device_sn, seq=expected_seq
+        )
+        task = asyncio.create_task(wallbox.async_set_powerpulse_charge_action("stop"))
+        await asyncio.sleep(0.05)
+
+    assert _mqtt(wallbox).send_proto_set.call_count == 1
+    published = _mqtt(wallbox).send_proto_set.call_args.args[0]
+    assert published == expected
+    headers, _ = decode_header_message(published)
+    header = headers[0]
+    assert header["cmd_func"] == 2
+    assert header["cmd_id"] == 81
+    assert header["dest"] == 2
+    assert header["device_sn"] == wallbox.device_sn
+    assert bytes.fromhex(header["pdata"]) == b"\x20\x02"
+
+    _apply_status(wallbox, 6)  # finishing - confirms
+    await task
+    assert wallbox._wallbox_action_pending is None
+
+
+async def test_own_route_start_from_finishing_confirms_on_charging(
+    hass: HomeAssistant,
+) -> None:
+    _entry_obj, _oceans, wallbox = _wire_entry(hass, [])
+    _apply_status(wallbox, 6)  # finishing
+
+    task = asyncio.create_task(wallbox.async_set_powerpulse_charge_action("start"))
+    await asyncio.sleep(0.05)
+
+    assert _mqtt(wallbox).send_proto_set.call_count == 1
+    published = _mqtt(wallbox).send_proto_set.call_args.args[0]
+    headers, _ = decode_header_message(published)
+    assert bytes.fromhex(headers[0]["pdata"]) == b"\x20\x01"
+
+    _apply_status(wallbox, 3)  # charging - confirms
+    await task
+    assert wallbox._wallbox_action_pending is None
+
+
+async def test_own_route_offline_refuses(hass: HomeAssistant) -> None:
+    _entry_obj, _oceans, wallbox = _wire_entry(hass, [])
+    _apply_status(wallbox, 3)  # charging
+    _mqtt(wallbox).is_connected.return_value = False
 
     with pytest.raises(HomeAssistantError) as excinfo:
         await wallbox.async_set_powerpulse_charge_action("stop")
 
-    assert excinfo.value.translation_key == "powerpulse_sibling_missing"
+    assert excinfo.value.translation_key == "powerpulse_own_channel_offline"
     assert _mqtt(wallbox).send_proto_set.call_count == 0
+
+
+async def test_own_route_precondition_refuses(hass: HomeAssistant) -> None:
+    _entry_obj, _oceans, wallbox = _wire_entry(hass, [])
+    _apply_status(wallbox, 1)  # available - stop is not a valid action here
+
+    with pytest.raises(HomeAssistantError) as excinfo:
+        await wallbox.async_set_powerpulse_charge_action("stop")
+
+    assert excinfo.value.translation_key == "powerpulse_action_state"
+    assert _mqtt(wallbox).send_proto_set.call_count == 0
+
+
+async def test_own_route_publish_not_delivered_clears_the_record(
+    hass: HomeAssistant,
+) -> None:
+    _entry_obj, _oceans, wallbox = _wire_entry(hass, [])
+    _mqtt(wallbox).send_proto_set.return_value = False
+    _apply_status(wallbox, 3)  # charging
+
+    with pytest.raises(HomeAssistantError) as excinfo:
+        await wallbox.async_set_powerpulse_charge_action("stop")
+
+    assert excinfo.value.translation_key == "powerpulse_action_not_delivered"
+    assert _mqtt(wallbox).send_proto_set.call_count == 1
+    assert wallbox._wallbox_action_pending is None
+
+    # A second press is refused for the same reason, not as "in progress" -
+    # the failed record was cleared, not left behind.
+    with pytest.raises(HomeAssistantError) as excinfo:
+        await wallbox.async_set_powerpulse_charge_action("stop")
+
+    assert excinfo.value.translation_key == "powerpulse_action_not_delivered"
+    assert _mqtt(wallbox).send_proto_set.call_count == 2
 
 
 async def test_two_poweroceans_in_entry_refuses(hass: HomeAssistant) -> None:
@@ -364,6 +457,7 @@ async def test_two_poweroceans_in_entry_refuses(hass: HomeAssistant) -> None:
     assert excinfo.value.translation_key == "powerpulse_sibling_missing"
     for ocean in oceans:
         assert _mqtt(ocean).send_proto_set.call_count == 0
+    assert _mqtt(wallbox).send_proto_set.call_count == 0
 
 
 async def test_sibling_offline_refuses(hass: HomeAssistant) -> None:

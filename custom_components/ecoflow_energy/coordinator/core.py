@@ -20,7 +20,7 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -472,27 +472,52 @@ class EcoFlowDeviceCoordinator(
         """Return the current device data dict."""
         return self._device_data
 
-    def powerocean_sibling(self) -> EcoFlowDeviceCoordinator | None:
-        """Return the entry's one PowerOcean coordinator, or None (ADR-009).
+    def _powerocean_coordinators(self) -> list[EcoFlowDeviceCoordinator]:
+        """The entry's PowerOcean coordinators, read fresh from `hass.data`.
 
-        Resolved fresh at the moment of a press and of every availability
-        read rather than cached at setup, per decision 2: during teardown
-        the entry's coordinator table is popped, and the sibling must then
-        resolve to None so the buttons read unavailable. Returns None with zero
-        PowerOcean coordinators (no route to send on) and also with two or
-        more (no way to tell which one carries this wallbox) - decision 3.
+        Not cached at setup, per ADR-009 decision 2: during teardown the
+        entry's coordinator table is popped, and everything built on this
+        list must then see an empty entry so the buttons read unavailable.
         """
         coordinators: dict[str, EcoFlowDeviceCoordinator] = self.hass.data.get(
             DOMAIN, {}
         ).get(self._entry.entry_id, {})
-        matches = [
+        return [
             coordinator
             for coordinator in coordinators.values()
             if coordinator.device_type == DEVICE_TYPE_POWEROCEAN
         ]
+
+    def powerocean_sibling(self) -> EcoFlowDeviceCoordinator | None:
+        """Return the entry's one PowerOcean coordinator, or None (ADR-009).
+
+        Returns None with zero PowerOcean coordinators and also with two or
+        more (no way to tell which one carries this wallbox) - decision 3.
+        `charge_action_route()` tells the two apart.
+        """
+        matches = self._powerocean_coordinators()
         if len(matches) != 1:
             return None
         return matches[0]
+
+    def charge_action_route(self) -> Literal["sibling", "own"] | None:
+        """Which route a PowerPulse 2 start/stop command takes (PLAN-140).
+
+        `"sibling"`: exactly one PowerOcean in the entry - `241/100` on its
+        set topic, addressed to the wallbox accessory (ADR-009 decisions
+        1-3). `"own"`: no PowerOcean in the entry - `2/81` on the wallbox's
+        own set topic (ADR-009 addendum of 2026-09-12, from one recording of
+        the app doing exactly that). `None`: two or more PowerOceans, where
+        the relayed command has no way to pick the parent and the own-topic
+        command has not been observed on such an account. Resolved fresh on
+        every call, like `powerocean_sibling()`.
+        """
+        count = len(self._powerocean_coordinators())
+        if count == 1:
+            return "sibling"
+        if count == 0:
+            return "own"
+        return None
 
     @property
     def last_value_change_ts(self) -> float:

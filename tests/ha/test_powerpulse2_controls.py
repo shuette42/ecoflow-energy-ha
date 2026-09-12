@@ -175,9 +175,47 @@ class TestButtonCreation:
         for e in entities:
             assert e.device_info == wallbox.device_info
 
-    async def test_zero_buttons_without_a_powerocean_sibling(
+    async def test_two_buttons_without_a_powerocean_once_the_heartbeat_reports(
         self, hass: HomeAssistant
     ) -> None:
+        """No PowerOcean in the entry routes through the wallbox's own MQTT
+        client (PLAN-140). The descriptor never arrives on this account, so
+        the heartbeat (`ev_charge_status`) is the gate instead."""
+        entry, _oceans, wallbox = _wire_entry(hass, [])
+        wallbox.set_device_value("ev_charge_status", "available")
+
+        entities: list[Any] = []
+        await button_setup(hass, entry, add_entities_collector(entities))
+
+        assert len(entities) == 2
+        unique_ids = {e.unique_id for e in entities}
+        assert unique_ids == {
+            f"{POWERPULSE2_SN}_ev_start_charging",
+            f"{POWERPULSE2_SN}_ev_stop_charging",
+        }
+        for e in entities:
+            assert e.device_info == wallbox.device_info
+
+    async def test_zero_buttons_without_a_powerocean_before_the_first_heartbeat(
+        self, hass: HomeAssistant
+    ) -> None:
+        entry, _oceans, wallbox = _wire_entry(hass, [])
+
+        entities: list[Any] = []
+        await button_setup(hass, entry, add_entities_collector(entities))
+        assert entities == []
+
+        wallbox.set_device_value("ev_charge_status", "charging")
+        wallbox.async_update_listeners()
+
+        assert len(entities) == 2
+
+    async def test_the_descriptor_alone_does_not_create_buttons_on_the_own_route(
+        self, hass: HomeAssistant
+    ) -> None:
+        """On the own route the gate is the heartbeat, not the descriptor -
+        a wallbox without a PowerOcean sibling never reports the descriptor
+        at all (it comes from `241/44`, which such an account never sends)."""
         entry, _oceans, wallbox = _wire_entry(hass, [])
         _report_descriptor(wallbox)
 
@@ -264,6 +302,51 @@ class TestButtonAvailability:
         assert button_entity.available is False
         wallbox._device_available = True
         assert button_entity.available is True
+
+    async def test_available_follows_the_wallbox_own_connection_without_a_powerocean(
+        self, hass: HomeAssistant
+    ) -> None:
+        """No sibling in the entry (PLAN-140): the wallbox's own MQTT client
+        decides availability, and the charge state never flips it."""
+        entry, _oceans, wallbox = _wire_entry(hass, [])
+        wallbox.set_device_value("ev_charge_status", "available")
+
+        entities: list[Any] = []
+        await button_setup(hass, entry, add_entities_collector(entities))
+        button_entity = entities[0]
+
+        for status in ("available", "charging", "finishing"):
+            wallbox.set_device_value("ev_charge_status", status)
+            assert button_entity.available is True
+
+        _mqtt(wallbox).is_connected.return_value = False
+        assert button_entity.available is False
+
+        _mqtt(wallbox).is_connected.return_value = True
+        assert button_entity.available is True
+
+    async def test_available_is_false_when_a_second_powerocean_appears_after_setup(
+        self, hass: HomeAssistant
+    ) -> None:
+        """A second PowerOcean joining the entry after setup makes the route
+        ambiguous (`charge_action_route()` returns None), so a button
+        created on the "sibling" route goes unavailable."""
+        entry, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+        _report_descriptor(wallbox)
+
+        entities: list[Any] = []
+        await button_setup(hass, entry, add_entities_collector(entities))
+        button_entity = entities[0]
+        assert button_entity.available is True
+
+        second_ocean = EcoFlowDeviceCoordinator(hass, entry, POWEROCEAN2_DEVICE)
+        second_ocean._mqtt_client = _connected_mqtt()
+        coordinators: dict[str, EcoFlowDeviceCoordinator] = hass.data[DOMAIN][
+            entry.entry_id
+        ]
+        coordinators[second_ocean.device_sn] = second_ocean
+
+        assert button_entity.available is False
 
 
 class TestButtonPress:

@@ -46,7 +46,7 @@ class DeviceValueNotReported(Exception):
 
 if TYPE_CHECKING:
     from ._typing import CoordinatorState as _Base
-    from .core import WallboxActionPending
+    from .core import EcoFlowDeviceCoordinator, WallboxActionPending
 else:
     _Base = object
 
@@ -1055,24 +1055,33 @@ class SetCommandsMixin(_Base):
         return ok
 
     async def async_set_powerpulse_charge_action(self, action: str) -> None:
-        """Start or stop the linked PowerPulse 2's charging session (ADR-009).
+        """Start or stop this PowerPulse 2's charging session (ADR-009).
 
         Unlike every other SET method in this file, this one raises rather
         than returning a bool: there is no button entity to translate a
         failure into a `HomeAssistantError` on this coordinator's behalf
         (Phase 3b), and every failure here already has an exact reason.
 
-        The command leaves on the sibling PowerOcean's set topic (decision
-        2) and is confirmed on this coordinator's own wallbox heartbeat
-        (decision 4) - two coordinators, one action. The precondition and
-        in-progress checks, the publish, and the pending record all happen
-        under `self._wallbox_action_lock` so a second press cannot slip past
-        the in-progress check before the first press's record exists. The
-        confirmation wait happens outside the lock, since it may run for up
-        to `POWERPULSE2_CHARGE_ACTION_WINDOW_S[action]` seconds and must not
-        block a second, later press from being refused promptly.
+        `charge_action_route()` decides which of two commands is sent. With
+        exactly one PowerOcean in the entry, the command leaves on that
+        sibling's set topic (decision 2) - the route used above. With none,
+        it leaves on this coordinator's own set topic instead, addressed to
+        the wallbox itself (PLAN-140, ADR-009 addendum of 2026-09-12, from
+        one recording of the app doing exactly that on an account with no
+        PowerOcean). Either way the command is confirmed on this
+        coordinator's own wallbox heartbeat (decision 4). The precondition
+        and in-progress checks, the publish, and the pending record all
+        happen under `self._wallbox_action_lock` so a second press cannot
+        slip past the in-progress check before the first press's record
+        exists. The confirmation wait happens outside the lock, since it may
+        run for up to `POWERPULSE2_CHARGE_ACTION_WINDOW_S[action]` seconds
+        and must not block a second, later press from being refused
+        promptly.
         """
-        from ..ecoflow.energy_stream import build_powerpulse_charge_action_payload
+        from ..ecoflow.energy_stream import (
+            build_powerpulse_charge_action_payload,
+            build_powerpulse_standalone_charge_ctrl_payload,
+        )
         from .core import WallboxActionPending
 
         async with self._wallbox_action_lock:
@@ -1091,38 +1100,56 @@ class SetCommandsMixin(_Base):
                     translation_domain=DOMAIN,
                     translation_key="powerpulse_action_in_progress",
                 )
-            sibling = self.powerocean_sibling()
-            if sibling is None:
+            route = self.charge_action_route()
+            if route is None:
                 raise HomeAssistantError(
                     translation_domain=DOMAIN,
                     translation_key="powerpulse_sibling_missing",
                 )
-            if sibling._mqtt_client is None or not sibling._mqtt_client.is_connected():
-                raise HomeAssistantError(
-                    translation_domain=DOMAIN,
-                    translation_key="powerpulse_sibling_offline",
+            sender: EcoFlowDeviceCoordinator
+            if route == "sibling":
+                sibling = self.powerocean_sibling()
+                if sibling is None:
+                    # charge_action_route() just reported exactly one match;
+                    # a mismatch here means the coordinator table changed
+                    # between the two calls (ADR-009 decision 2 teardown).
+                    raise HomeAssistantError(
+                        translation_domain=DOMAIN,
+                        translation_key="powerpulse_sibling_missing",
+                    )
+                sibling_mqtt = sibling._mqtt_client
+                if sibling_mqtt is None or not sibling_mqtt.is_connected():
+                    raise HomeAssistantError(
+                        translation_domain=DOMAIN,
+                        translation_key="powerpulse_sibling_offline",
+                    )
+                dev_addr = self._device_data.get("ev_charger_dev_addr")
+                dev_sn = self._device_data.get("ev_charger_sn")
+                if (
+                    not isinstance(dev_addr, int)
+                    or not isinstance(dev_sn, str)
+                    or len(dev_sn) != 16
+                ):
+                    raise HomeAssistantError(
+                        translation_domain=DOMAIN,
+                        translation_key="powerpulse_descriptor_missing",
+                    )
+                self._require_wallbox_action_state(typed_action)
+                sender = sibling
+                payload = build_powerpulse_charge_action_payload(
+                    typed_action, dev_addr, dev_sn
                 )
-            dev_addr = self._device_data.get("ev_charger_dev_addr")
-            dev_sn = self._device_data.get("ev_charger_sn")
-            if (
-                not isinstance(dev_addr, int)
-                or not isinstance(dev_sn, str)
-                or len(dev_sn) != 16
-            ):
-                raise HomeAssistantError(
-                    translation_domain=DOMAIN,
-                    translation_key="powerpulse_descriptor_missing",
+            else:
+                if self._mqtt_client is None or not self._mqtt_client.is_connected():
+                    raise HomeAssistantError(
+                        translation_domain=DOMAIN,
+                        translation_key="powerpulse_own_channel_offline",
+                    )
+                self._require_wallbox_action_state(typed_action)
+                sender = cast("EcoFlowDeviceCoordinator", self)
+                payload = build_powerpulse_standalone_charge_ctrl_payload(
+                    typed_action, self.device_sn
                 )
-            status = self._device_data.get("ev_charge_status")
-            if status not in POWERPULSE2_CHARGE_ACTION_PRECONDITION[typed_action]:
-                raise HomeAssistantError(
-                    translation_domain=DOMAIN,
-                    translation_key="powerpulse_action_state",
-                    translation_placeholders={"status": str(status)},
-                )
-            payload = build_powerpulse_charge_action_payload(
-                typed_action, dev_addr, dev_sn
-            )
             future: asyncio.Future[str] = self.hass.loop.create_future()
             record = WallboxActionPending(
                 action=typed_action, issued_at=time.monotonic(), future=future
@@ -1135,7 +1162,7 @@ class SetCommandsMixin(_Base):
             # finding of 2026-09-11).
             self._wallbox_action_pending = record
             try:
-                delivered = await sibling.async_send_proto_set_command(
+                delivered = await sender.async_send_proto_set_command(
                     payload, f"powerpulse_{typed_action}"
                 )
                 if not delivered:
@@ -1163,6 +1190,21 @@ class SetCommandsMixin(_Base):
             self._log_event(f"powerpulse_{typed_action}", str(confirmed_status))
         finally:
             self._clear_wallbox_action(record)
+
+    def _require_wallbox_action_state(self, action: Literal["start", "stop"]) -> None:
+        """Raise unless the wallbox's last reported state allows `action`.
+
+        Start only from `finishing`, stop only from `charging` (ADR-009
+        decision 6), on both routes, checked after the route's own
+        preconditions so the message names the first thing that is wrong.
+        """
+        status = self._device_data.get("ev_charge_status")
+        if status not in POWERPULSE2_CHARGE_ACTION_PRECONDITION[action]:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="powerpulse_action_state",
+                translation_placeholders={"status": str(status)},
+            )
 
     def _clear_wallbox_action(self, record: WallboxActionPending) -> None:
         """Drop the pending record if it is still the one this call set."""

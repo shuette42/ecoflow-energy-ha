@@ -2177,7 +2177,7 @@
       "message": "The wallbox did not report the requested state within the time allowed. Its sensors show what it reports."
     },
     "powerpulse_action_not_delivered": {
-      "message": "The wallbox command did not reach the PowerOcean."
+      "message": "The wallbox command could not be sent."
     },
     "powerpulse_action_state": {
       "message": "The wallbox reports {status}, which does not allow this action."
@@ -2185,8 +2185,11 @@
     "powerpulse_descriptor_missing": {
       "message": "The wallbox has not reported its address yet. Wait for its next settings report."
     },
+    "powerpulse_own_channel_offline": {
+      "message": "The wallbox's own connection is not up, so the command cannot be sent."
+    },
     "powerpulse_sibling_missing": {
-      "message": "The wallbox command travels through the PowerOcean of the same account, and this entry holds none or more than one."
+      "message": "This entry holds more than one PowerOcean, and the wallbox command cannot tell which one carries the wallbox."
     },
     "powerpulse_sibling_offline": {
       "message": "The PowerOcean that carries the wallbox command is not connected."
