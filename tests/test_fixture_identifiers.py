@@ -62,6 +62,21 @@ _PLACEHOLDERS = frozenset(
 )
 
 
+def _is_masked(run: str) -> bool:
+    """Whether an alphanumeric run is the mask, give or take a tag byte.
+
+    A masked serial is a run of `X`. On the wire a serial is followed by the
+    next field's tag byte, and when that byte is itself a letter or digit the
+    run the sweep sees is the mask plus one character - `0x4d`, field 9 of a
+    parallel energy stream row, is `M` (PLAN-148). What matters is whether
+    anything identifier-shaped survived beside the mask, and the threshold
+    for that is the same twelve characters `_RUN` uses: strip the mask from
+    both ends and judge what is left by the rule everything else is judged
+    by.
+    """
+    return len(run.strip("X")) < 12
+
+
 def _fixture_files() -> list[Path]:
     """Every fixture file, not only the JSON ones.
 
@@ -135,7 +150,7 @@ def _leaks(raw: bytes) -> list[str]:
             for region in keyed_regions
         ):
             continue
-        if set(run) != {"X"}:
+        if not _is_masked(run):
             findings.append(f"unmasked run {run!r}")
 
     for start, end in _anchored_string_fields(raw):
@@ -163,7 +178,7 @@ def _leaks(raw: bytes) -> list[str]:
         for run in _RUN.findall(region_text):
             if run in _PLACEHOLDERS:
                 continue
-            if set(run) != {"X"}:
+            if not _is_masked(run):
                 findings.append(f"unmasked run under the mask {run!r}")
         for start, end in _anchored_string_fields(region_raw):
             value = region_raw[start:end]

@@ -93,6 +93,35 @@ message JTS1EnergyStreamReport {
   optional float pv2_pwr = 7;
 }
 
+// --- Parallel Energy Stream Report (cmd_func=96, cmd_id=50) ---
+//
+// A PowerOcean that runs as a parallel pair does not send cmd_id=33 at all.
+// Its energy stream is this list instead: one row per unit, each stamped with
+// that unit's serial in dev_sn, plus one row with no dev_sn that carries the
+// system totals (#347, the reporter's diagnostics of 2026-09-05: 625 rows in
+// 54 minutes, no cmd_id=33 anywhere in the download; the unit rows' bp_pwr
+// sum to the total row's to 0.001 W in every decoded frame). The five
+// readings share their numbering with JTS1EnergyStreamReport, so the total
+// row maps onto the same sensor keys. Fields 9 and 10 (both float) appear
+// on the wire and stay undeclared: on the pair field 9 equals mppt_pwr, on a
+// J329 it does not, and nothing reads either.
+//
+// sys_grid_pwr on a unit row is the flow between the two units, not the
+// meter: the two unit rows are near-equal and opposite while the total row
+// sits near zero. A per-unit grid sensor must not come from it.
+message JTS1ParallelEnergyStream {
+  float sys_load_pwr = 1;
+  float sys_grid_pwr = 2;
+  float mppt_pwr = 3;
+  float bp_pwr = 4;
+  uint32 bp_soc = 5;
+  string dev_sn = 6;
+}
+
+message JTS1ParallelEnergyStreamReport {
+  repeated JTS1ParallelEnergyStream para_energy_stream = 1;
+}
+
 // --- PV Inverter Energy Stream Report (cmd_func=96, cmd_id=39) ---
 message JTS1EmsPVInvEnergyStreamReport {
   float pv_inv_pwr = 1;

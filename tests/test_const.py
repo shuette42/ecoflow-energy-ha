@@ -1237,19 +1237,38 @@ class TestFrameCaptureFootprint:
         assert budget >= self._WIDEST_OBSERVED_BUNDLE_BYTES
 
     def test_the_bundle_budget_carries_every_tracked_fixture(self) -> None:
-        """Whatever a fixture holds must survive the cap whole."""
-        widest = 0
-        offender = ""
+        """Whatever a fixture holds must survive the budget whole.
+
+        Judged by the budget the capture path actually grants a frame, from
+        the frame's own header count, not by the floor alone: a pair of J32E
+        bundles 35 messages into 7791 B (#347), which the floor would cut and
+        the per-message budget carries. A frame whose headers do not decode
+        counts as one message, the same rule `frame_budget` applies.
+        """
+        from ecoflow_energy.ecoflow.frame_capture import frame_budget
+        from ecoflow_energy.ecoflow.proto.decoder import decode_header_message
+
+        checked = 0
         for path in sorted((REPO_ROOT / "tests/fixtures").rglob("*.json")):
             for frame in _captured_frames(json.loads(path.read_text())):
-                size = len(frame) // 2
-                if size > widest:
-                    widest, offender = size, path.name
+                raw = bytes.fromhex(frame)
+                try:
+                    headers, _ = decode_header_message(raw)
+                except Exception:  # noqa: BLE001
+                    headers = []
+                budget = frame_budget(
+                    headers or [],
+                    RAW_FRAME_MAX_BYTES,
+                    RAW_FRAME_BUNDLE_MAX_BYTES,
+                    RAW_FRAME_BUNDLE_HARD_CAP,
+                )
+                checked += 1
+                assert len(raw) <= budget, (
+                    f"{path.name} holds a {len(raw)} B frame of "
+                    f"{len(headers or [])} messages the budget would cut"
+                )
 
-        assert widest, "no captured frames found under tests/fixtures"
-        assert widest <= RAW_FRAME_BUNDLE_MAX_BYTES, (
-            f"{offender} holds a {widest} B frame the cap would cut"
-        )
+        assert checked >= 40, "no captured frames found under tests/fixtures"
 
 
 class TestTheScheduleChargePowerCeiling:

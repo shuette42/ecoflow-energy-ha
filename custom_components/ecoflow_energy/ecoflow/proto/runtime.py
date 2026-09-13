@@ -16,6 +16,7 @@ union lookup: a caller that cannot name its device type cannot decode.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -55,6 +56,14 @@ class CmdConfig:
     rename: dict[str, str] = field(default_factory=dict)
     zero_fill: frozenset[str] = field(default_factory=frozenset)
     flatten_key: str | None = None
+    # Which item of a repeated container stands for the device. `None` keeps
+    # the first item and attaches the whole list as `all_packs`, the battery
+    # heartbeat's convention. A callable receives every item and returns the
+    # one to flatten, or `None` when no item qualifies, in which case the
+    # message decodes nothing rather than a row that means something else.
+    flatten_select: Callable[[list[dict[str, Any]]], dict[str, Any] | None] | None = (
+        None
+    )
     # Whether a header of this command with a zero-length payload still
     # decodes. Off everywhere else on purpose: an empty companion header is
     # normally noise, and decoding it would let zero-fill publish readings
@@ -89,6 +98,22 @@ def _build_cmd_registry() -> dict[str, dict[tuple[int, int], CmdConfig]]:
     }
 
 
+def _parallel_system_row(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Return the system-total row of a parallel energy stream, or None.
+
+    The total row is the one without `dev_sn`. In every decoded frame of the
+    #347 download it is the first row, but the order is the device's to
+    change, so the row is chosen by what it lacks rather than by position.
+    A list with no such row yields nothing: every remaining row belongs to
+    one unit, and publishing one of those as the system would show a single
+    inverter's share under the whole system's name.
+    """
+    for row in rows:
+        if "dev_sn" not in row:
+            return row
+    return None
+
+
 def _build_powerocean_table(pb2: Any) -> dict[tuple[int, int], CmdConfig]:
     """PowerOcean's (cmd_func, cmd_id) -> CmdConfig table."""
     return {
@@ -104,6 +129,29 @@ def _build_powerocean_table(pb2: Any) -> dict[tuple[int, int], CmdConfig]:
                 "bp_soc": "soc",
             },
             zero_fill=frozenset({"solar", "home_direct", "batt_pb", "grid_raw_f2"}),
+        ),
+        # A parallel pair sends its energy stream as this list and never as
+        # cmd_id=33 (#347): one row per unit stamped with its serial, plus one
+        # row without a serial that carries the system totals. The total row
+        # is the one a single device would have sent on cmd_id=33, so it
+        # takes the same renames, the same zero-fill and the same flags and
+        # lands on the same sensor keys. The unit rows are not read here: a
+        # per-unit entity set is its own change, and a unit row's grid figure
+        # is the flow between the units, not the meter.
+        (96, 50): CmdConfig(
+            msg_class=pb2.JTS1ParallelEnergyStreamReport,
+            parse_path="typed_runtime:parallel_energy_stream_report",
+            flags={"_is_energy_stream": True, "_is_energy_stream_report": True},
+            rename={
+                "mppt_pwr": "solar",
+                "sys_load_pwr": "home_direct",
+                "bp_pwr": "batt_pb",
+                "sys_grid_pwr": "grid_raw_f2",
+                "bp_soc": "soc",
+            },
+            zero_fill=frozenset({"solar", "home_direct", "batt_pb", "grid_raw_f2"}),
+            flatten_key="para_energy_stream",
+            flatten_select=_parallel_system_row,
         ),
         (96, 39): CmdConfig(
             msg_class=pb2.JTS1EmsPVInvEnergyStreamReport,
@@ -488,7 +536,15 @@ def _typed_runtime_map(
     fields = MessageToDict(msg, preserving_proto_field_name=True)
 
     # 3. For repeated messages, extract first element (keep all for multi-pack)
-    if config.flatten_key:
+    if config.flatten_key and config.flatten_select is not None:
+        items = fields.get(config.flatten_key, [])
+        chosen = config.flatten_select(
+            [item for item in items if isinstance(item, dict)]
+        )
+        if chosen is None:
+            return None
+        fields = chosen
+    elif config.flatten_key:
         items = fields.get(config.flatten_key, [])
         if items:
             # Keep first item as before (backward compatible for existing bp_* sensors)
