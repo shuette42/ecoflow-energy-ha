@@ -1295,10 +1295,12 @@ class SetCommandsMixin(_Base):
                     max_current_a, dev_addr, dev_sn, sibling.device_sn
                 )
             except ValueError:
+                # The range is already checked above; a ValueError here can
+                # only be a malformed serial (dev_sn/sibling.device_sn) - the
+                # same failure mode as the descriptor check just above.
                 raise HomeAssistantError(
                     translation_domain=DOMAIN,
-                    translation_key="powerpulse_max_current_range",
-                    translation_placeholders={"min": str(low), "max": str(high)},
+                    translation_key="powerpulse_descriptor_missing",
                 ) from None
             future: asyncio.Future[str | float] = self.hass.loop.create_future()
             record = WallboxActionPending(
@@ -1333,10 +1335,15 @@ class SetCommandsMixin(_Base):
         except TimeoutError:
             last_reported = self._device_data.get("ev_max_current_a")
             self._log_event("powerpulse_max_current_unconfirmed", str(last_reported))
+            reported = (
+                f"{last_reported:g} A"
+                if isinstance(last_reported, (int, float))
+                else "no value yet"
+            )
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="powerpulse_max_current_not_confirmed",
-                translation_placeholders={"reported": str(last_reported)},
+                translation_placeholders={"reported": reported},
             ) from None
         else:
             self._log_event("powerpulse_max_current", str(confirmed_value))

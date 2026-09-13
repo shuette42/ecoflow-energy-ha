@@ -2192,7 +2192,7 @@
       "message": "Der Maximalstrom lässt sich nur über eine PowerOcean im selben Konto setzen; dieser Eintrag hat keine."
     },
     "powerpulse_max_current_not_confirmed": {
-      "message": "Die Wallbox hat den neuen Maximalstrom nicht innerhalb der erlaubten Zeit gemeldet. Zuletzt gemeldet: {reported} A."
+      "message": "Die Wallbox hat den neuen Maximalstrom nicht innerhalb der erlaubten Zeit gemeldet. Zuletzt gemeldet: {reported}."
     },
     "powerpulse_max_current_range": {
       "message": "Die Wallbox nimmt einen Maximalstrom zwischen {min} und {max} A an."

@@ -9,6 +9,7 @@ coordinator method directly - that is what distinguishes this file from that one
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -520,6 +521,39 @@ class TestNumberCreation:
 
         assert entities == []
 
+    async def test_max_current_number_reads_the_new_value_from_a_real_frame(
+        self, hass: HomeAssistant
+    ) -> None:
+        """A real `2/34` ParamReport frame, parsed and applied through the
+        normal MQTT ingest path (`_parse_message` + `_apply_data`), reaches
+        `coordinator.data` and therefore the entity's `native_value` - not
+        just the `set_device_value` + `async_set_updated_data` shortcut the
+        other creation tests use (PLAN-146 review F-05).
+        """
+        entry, _oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+        _report_descriptor(wallbox)
+
+        entities: list[Any] = []
+        await number_setup(hass, entry, add_entities_collector(entities))
+        assert _max_current_entities(entities) == []
+
+        fixture_path = (
+            Path(__file__).resolve().parents[1]
+            / "fixtures"
+            / "powerpulse"
+            / "c376_param_set_echo_20260824.json"
+        )
+        fixture = json.loads(fixture_path.read_text())
+        raw = bytes.fromhex(fixture["frames"][0]["hex"])
+        topic = f"/app/device/property/{POWERPULSE2_SN}"
+        parsed = wallbox._parse_message(topic, raw)
+        assert parsed is not None
+        wallbox._apply_data(parsed)
+
+        matches = _max_current_entities(entities)
+        assert len(matches) == 1
+        assert matches[0].native_value == 11
+
 
 class TestNumberSetValue:
     async def test_set_value_calls_the_coordinator_with_an_int_no_optimistic_apply(
@@ -570,3 +604,45 @@ class TestNumberAvailability:
 
         _mqtt(oceans[0]).is_connected.return_value = True
         assert number_entity.available is True
+
+    async def test_available_is_false_when_a_second_powerocean_appears_after_setup(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Mirrors `TestButtonAvailability`'s test of the same name: a
+        second PowerOcean joining the entry after setup makes the route
+        ambiguous (`charge_action_route()` returns None), so the number
+        goes unavailable too."""
+        entry, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+        wallbox.set_device_value("ev_max_current_a", 16.0)
+
+        entities: list[Any] = []
+        await number_setup(hass, entry, add_entities_collector(entities))
+        number_entity = _max_current_entities(entities)[0]
+        assert number_entity.available is True
+
+        second_ocean = EcoFlowDeviceCoordinator(hass, entry, POWEROCEAN2_DEVICE)
+        second_ocean._mqtt_client = _connected_mqtt()
+        coordinators: dict[str, EcoFlowDeviceCoordinator] = hass.data[DOMAIN][
+            entry.entry_id
+        ]
+        coordinators[second_ocean.device_sn] = second_ocean
+
+        assert number_entity.available is False
+
+    async def test_available_is_false_once_the_entry_table_is_gone(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Mirrors `TestButtonAvailability`'s test of the same name:
+        teardown pops the entry's coordinator table (ADR-009 decision 2),
+        and the number reads unavailable from then on."""
+        entry, _oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+        wallbox.set_device_value("ev_max_current_a", 16.0)
+
+        entities: list[Any] = []
+        await number_setup(hass, entry, add_entities_collector(entities))
+        number_entity = _max_current_entities(entities)[0]
+        assert number_entity.available is True
+
+        hass.data[DOMAIN].pop(entry.entry_id)
+
+        assert number_entity.available is False

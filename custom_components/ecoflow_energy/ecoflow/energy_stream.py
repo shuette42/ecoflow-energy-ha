@@ -326,7 +326,8 @@ def build_powerpulse_param_set_current_payload(
     message) is not the control: it stayed at 60 through the owner's whole
     6-16 A sweep while field 3 moved with every write.
 
-    Byte-for-byte from seven app writes of one recording (PLAN-146,
+    The envelope from the seven app writes of one recording, the current
+    payload from the one that set it (13:45:38) (PLAN-146,
     `tests/fixtures/powerpulse/c376_param_set_writes_20260824.json`). The
     wallbox echoes the new value on its own `2/34` ParamReport field 9
     within about a second, and on the next `2/33` HeartBeat field 18 -

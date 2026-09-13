@@ -2192,7 +2192,7 @@
       "message": "The maximum current can only be set through a PowerOcean on the same account; this entry has none."
     },
     "powerpulse_max_current_not_confirmed": {
-      "message": "The wallbox did not report the new maximum current within the time allowed. It last reported {reported} A."
+      "message": "The wallbox did not report the new maximum current within the time allowed. Its last reported value: {reported}."
     },
     "powerpulse_max_current_range": {
       "message": "The wallbox accepts a maximum current between {min} and {max} A."

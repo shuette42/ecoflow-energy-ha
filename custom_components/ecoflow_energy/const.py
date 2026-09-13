@@ -153,9 +153,10 @@ POWERPULSE2_CHARGE_ACTION_CONFIRMED: dict[str, frozenset[str]] = {
     "stop": frozenset({"finishing", "available"}),
 }
 # PLAN-146: the confirmation window for a maximum-current write. Measured 1-2 s
-# on the wallbox's own settings report (ParamReport 2/34) over eleven writes in
-# two recordings; the heartbeat alone can take up to ~60 s, so a wallbox that
-# stops sending the settings report fails loudly rather than silently.
+# on the wallbox's own settings report (ParamReport 2/34) over the ten writes
+# with an echo on file (seven on 2026-08-24, three on 2026-09-10); the
+# heartbeat alone can take up to ~60 s, so a wallbox that stops sending the
+# settings report fails loudly rather than silently.
 POWERPULSE2_MAX_CURRENT_WINDOW_S: float = 20.0
 # PLAN-146: the maximum current range, the owner's sweep on #7 covered end to
 # end (2026-09-10).
