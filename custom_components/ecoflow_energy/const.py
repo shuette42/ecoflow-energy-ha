@@ -7189,6 +7189,32 @@ POWERPULSE2_BUTTONS: list[EcoFlowButtonDef] = [
     ),
 ]
 
+# The wallbox's own maximum-current control (PLAN-146). The same key as the
+# sensor on purpose - one reading, the value the wallbox itself reports on
+# its settings report and heartbeat, so the number shows what the sensor
+# shows and a write returns only once the wallbox reports the new value
+# back. Created on the first `ev_max_current_a` report, the same accessory
+# pattern as the cable lock binary sensor and the start/stop buttons above.
+# Unlike those, the platform setup restricts this control to an entry with
+# exactly one PowerOcean: the write has no evidenced route on the wallbox's
+# own channel (PLAN-146 decision 2), so an entry with zero or two-or-more
+# PowerOceans gets no number at all - the coordinator write itself refuses
+# on the same condition, see async_set_powerpulse_max_current().
+POWERPULSE2_NUMBERS: list[EcoFlowNumberDef] = [
+    EcoFlowNumberDef(
+        "ev_max_current_a",
+        "Wallbox Maximum Current",
+        "ev_max_current_a",
+        "A",
+        "mdi:current-ac",
+        POWERPULSE2_MAX_CURRENT_RANGE_A[0],
+        POWERPULSE2_MAX_CURRENT_RANGE_A[1],
+        1,
+        enhanced_only=True,
+        accessory=True,
+    ),
+]
+
 
 # =====================================================================
 # Power → Energy mappings (Riemann sum integration per device type)

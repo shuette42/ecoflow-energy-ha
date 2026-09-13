@@ -38,6 +38,7 @@ from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinato
 from custom_components.ecoflow_energy.diagnostics import (
     async_get_config_entry_diagnostics,
 )
+from custom_components.ecoflow_energy.number import async_setup_entry as number_setup
 
 from .conftest import add_entities_collector
 
@@ -438,3 +439,134 @@ class TestDiagnosticsDoesNotLeakTheDescriptor:
         result = await async_get_config_entry_diagnostics(hass, standard_config_entry)
 
         assert secret_sn not in json.dumps(result)
+
+
+def _max_current_entities(entities: list[Any]) -> list[Any]:
+    """Filter setup's collected entities down to the wallbox's own number.
+
+    A PowerOcean sibling in the same entry contributes its own numbers
+    (backup reserve, solar surplus threshold) to the same collector, so a
+    bare `entities == []`/`len(entities)` would be testing the sibling's
+    entities as much as the wallbox's.
+    """
+    return [e for e in entities if e.unique_id == f"{POWERPULSE2_SN}_ev_max_current_a"]
+
+
+class TestNumberCreation:
+    """The wallbox maximum-current number (PLAN-146). Sibling route only -
+    no "own" route counterpart exists for this control, unlike the buttons.
+    """
+
+    async def test_max_current_number_created_with_one_sibling_after_first_report(
+        self, hass: HomeAssistant
+    ) -> None:
+        entry, _oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+        _report_descriptor(wallbox)
+
+        entities: list[Any] = []
+        await number_setup(hass, entry, add_entities_collector(entities))
+        assert _max_current_entities(entities) == []
+
+        wallbox.set_device_value("ev_max_current_a", 16.0)
+        wallbox.async_set_updated_data(dict(wallbox._device_data))
+
+        matches = _max_current_entities(entities)
+        assert len(matches) == 1
+        number_entity = matches[0]
+        assert number_entity.unique_id == f"{POWERPULSE2_SN}_ev_max_current_a"
+        assert number_entity.native_value == 16
+        assert number_entity.native_min_value == 6
+        assert number_entity.native_max_value == 16
+        assert number_entity.native_step == 1
+        assert number_entity.native_unit_of_measurement == "A"
+
+    async def test_no_max_current_number_without_a_powerocean_even_after_the_report(
+        self, hass: HomeAssistant
+    ) -> None:
+        """The "own" route has no evidenced write for this control (PLAN-146
+        decision 2), so no number appears even once the reading is there -
+        unlike the buttons, which do get created on this route."""
+        entry, _oceans, wallbox = _wire_entry(hass, [])
+        wallbox.set_device_value("ev_max_current_a", 16.0)
+
+        entities: list[Any] = []
+        await number_setup(hass, entry, add_entities_collector(entities))
+
+        assert entities == []
+
+    async def test_no_max_current_number_with_two_poweroceans(
+        self, hass: HomeAssistant
+    ) -> None:
+        entry, _oceans, wallbox = _wire_entry(
+            hass, [POWEROCEAN_DEVICE, POWEROCEAN2_DEVICE]
+        )
+        wallbox.set_device_value("ev_max_current_a", 16.0)
+
+        entities: list[Any] = []
+        await number_setup(hass, entry, add_entities_collector(entities))
+
+        assert _max_current_entities(entities) == []
+
+    async def test_no_max_current_number_in_standard_mode(
+        self, hass: HomeAssistant
+    ) -> None:
+        entry, _oceans, wallbox = _wire_entry(
+            hass, [POWEROCEAN_DEVICE], standard_mode=True
+        )
+        wallbox.set_device_value("ev_max_current_a", 16.0)
+
+        entities: list[Any] = []
+        await number_setup(hass, entry, add_entities_collector(entities))
+
+        assert entities == []
+
+
+class TestNumberSetValue:
+    async def test_set_value_calls_the_coordinator_with_an_int_no_optimistic_apply(
+        self, hass: HomeAssistant
+    ) -> None:
+        entry, _oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+        wallbox.set_device_value("ev_max_current_a", 16.0)
+        wallbox.async_set_updated_data(dict(wallbox._device_data))
+
+        entities: list[Any] = []
+        await number_setup(hass, entry, add_entities_collector(entities))
+        number_entity = _max_current_entities(entities)[0]
+
+        mock_set = AsyncMock()
+        with patch.object(wallbox, "async_set_powerpulse_max_current", mock_set):
+            await number_entity.async_set_native_value(11)
+
+        mock_set.assert_awaited_once_with(11)
+        assert isinstance(mock_set.await_args.args[0], int)
+        # No optimistic apply: the store still holds the value from before
+        # the write until the wallbox's own report changes it.
+        assert number_entity.native_value == 16
+
+        mock_set.reset_mock()
+        with (
+            patch.object(wallbox, "async_set_powerpulse_max_current", mock_set),
+            pytest.raises(HomeAssistantError),
+        ):
+            await number_entity.async_set_native_value(11.5)
+
+        mock_set.assert_not_called()
+
+
+class TestNumberAvailability:
+    async def test_number_available_follows_the_sibling_connection(
+        self, hass: HomeAssistant
+    ) -> None:
+        entry, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+        wallbox.set_device_value("ev_max_current_a", 16.0)
+
+        entities: list[Any] = []
+        await number_setup(hass, entry, add_entities_collector(entities))
+        number_entity = _max_current_entities(entities)[0]
+        assert number_entity.available is True
+
+        _mqtt(oceans[0]).is_connected.return_value = False
+        assert number_entity.available is False
+
+        _mqtt(oceans[0]).is_connected.return_value = True
+        assert number_entity.available is True

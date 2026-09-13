@@ -2022,6 +2022,9 @@
       },
       "pet_care_warning_temp_c": {
         "name": "Pet Care Warning Temperature"
+      },
+      "ev_max_current_a": {
+        "name": "Wallbox Maximum Current"
       }
     },
     "select": {

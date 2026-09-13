@@ -2,7 +2,7 @@
 
 Full list of all entities created for the EcoFlow PowerPulse 2 wallbox (`C376` and `C374` series).
 
-**Totals:** 17 sensors, 1 binary sensor, 2 buttons (with a PowerOcean on the same account)
+**Totals:** 17 sensors, 1 binary sensor, 1 number (with exactly one PowerOcean on the same account), 2 buttons (with a PowerOcean on the same account)
 
 > **Enhanced Mode only.** The wallbox reports through the account connection, not through the EcoFlow Developer API. A Standard Mode setup gets error 1006 and no entities fill; set the integration up with an EcoFlow account e-mail and password instead.
 
@@ -10,7 +10,7 @@ The PowerPulse 2 is its own device type and does not need a paired PowerOcean. E
 
 Four of the sensors below - Wallbox Charging Power, Wallbox Session Energy, Wallbox Session Duration and Wallbox Charging Status - used to live on the PowerOcean device when a PowerPulse 2 was coupled to one. They now live here, under entity IDs built from the wallbox's own serial number, and the PowerOcean-side entries, those four and the Wallbox Vehicle entry the relay filled with a placeholder, are removed from the entity registry on the first start after the update. History and statistics recorded under the old IDs do not carry over, and an automation, a dashboard card or an Energy Dashboard slot that named one of them needs the new entity. The PowerPulse 2 has no vehicle reading; only the earlier PowerPulse reports one, on its PowerOcean. Nothing changes for the earlier PowerPulse (`AC31` series): it keeps reporting through its PowerOcean on the same five entities as before.
 
-Start and stop of a charging session are available as two buttons when the account also holds one PowerOcean (see Buttons). The wallbox's settings (operating mode, maximum current, phase selection) are not configurable from Home Assistant.
+Start and stop of a charging session are available as two buttons when the account also holds one PowerOcean (see Buttons). The maximum current is configurable from Home Assistant under the same condition (see Numbers). The wallbox's other settings (operating mode, phase selection) are not.
 
 ---
 
@@ -43,6 +43,16 @@ Start and stop of a charging session are available as two buttons when the accou
 | Entity | Category | Default | Description |
 |:---|:---:|:---:|:---|
 | Wallbox Cable Lock | diagnostic | enabled | Whether the cable's permanent lock, used as a theft deterrent, is switched on |
+
+---
+
+## Numbers
+
+| Entity | Range | Step | Description |
+|:---|:---:|:---:|:---|
+| Wallbox Maximum Current | 6-16 A | 1 A | Sets the maximum current the wallbox may draw. Same reading as the Wallbox Maximum Current sensor above; a write returns once the wallbox reports the new value on its own settings report, or fails if it does not |
+
+Created only when the account holds exactly one PowerOcean - the sibling route the two buttons above also use. Unlike the buttons, this control has no second route: an account with no PowerOcean, or with two or more, gets no number, because no route from the wallbox's own channel has been observed for this write. Availability follows the sibling PowerOcean's connection, the same rule as the buttons on that route.
 
 ---
 

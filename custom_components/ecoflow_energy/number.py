@@ -19,6 +19,7 @@ from .const import (
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
+    DEVICE_TYPE_POWERPULSE2,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
     DEVICE_TYPE_STREAM_AC5000,
@@ -26,6 +27,7 @@ from .const import (
     DOMAIN,
     NUMBER_COMMANDS,
     POWEROCEAN_NUMBERS,
+    POWERPULSE2_NUMBERS,
     SMARTPLUG_NUMBER_COMMANDS,
     SMARTPLUG_NUMBERS,
     STREAM_NUMBERS,
@@ -81,6 +83,14 @@ async def async_setup_entry(
     entities: list[EcoFlowNumber] = []
 
     for coordinator in coordinators.values():
+        if (
+            coordinator.device_type == DEVICE_TYPE_POWERPULSE2
+            and coordinator.charge_action_route() != "sibling"
+        ):
+            # No evidenced write route on the wallbox's own channel
+            # (PLAN-146 decision 2): zero or two-or-more PowerOceans in the
+            # entry gets no number, whatever the wallbox itself has reported.
+            continue
         defs = filter_defs_for_serial(
             _get_number_defs(coordinator.device_type, coordinator.device_sn),
             coordinator.device_sn,
@@ -171,8 +181,24 @@ class EcoFlowNumber(
 
     @property
     def available(self) -> bool:
-        """Return True if entity is available."""
-        return self.coordinator.device_available and super().available
+        """Return True if entity is available.
+
+        The PowerPulse 2 maximum-current control only ever exists on the
+        sibling route (PLAN-146 decision 2), so availability also follows
+        the sibling PowerOcean's own MQTT connection, resolved fresh on every
+        read - the same rule `EcoFlowButton.available` applies to the wallbox
+        start/stop controls on that route.
+        """
+        if not (self.coordinator.device_available and super().available):
+            return False
+        if self.coordinator.device_type != DEVICE_TYPE_POWERPULSE2:
+            return True
+        sibling = self.coordinator.powerocean_sibling()
+        return (
+            sibling is not None
+            and sibling.mqtt_client is not None
+            and sibling.mqtt_client.is_connected()
+        )
 
     async def async_added_to_hass(self) -> None:
         """Restore the last known value when the entity is added.
@@ -421,6 +447,14 @@ class EcoFlowNumber(
 
     async def async_set_native_value(self, value: float) -> None:
         """Set a new value via the EcoFlow IoT API."""
+        if self.coordinator.device_type == DEVICE_TYPE_POWERPULSE2:
+            # No optimistic apply: the coordinator returns only once the
+            # wallbox has reported the new value on its own settings report,
+            # and that report is what updates the store (PLAN-146).
+            if int(value) != value:
+                raise_set_rejected(self.entity_id, "whole amps only")
+            await self.coordinator.async_set_powerpulse_max_current(int(value))
+            return
         # PowerOcean uses protobuf SET via Enhanced Mode (WSS)
         if self.coordinator.device_type == DEVICE_TYPE_POWEROCEAN:
             await self._async_set_powerocean_value(value)
@@ -782,4 +816,6 @@ def _get_number_defs(device_type: str, device_sn: str = "") -> list[EcoFlowNumbe
         return STREAMAC5000_NUMBERS
     if device_type == DEVICE_TYPE_WAVE3:
         return WAVE3_NUMBERS
+    if device_type == DEVICE_TYPE_POWERPULSE2:
+        return POWERPULSE2_NUMBERS
     return []
