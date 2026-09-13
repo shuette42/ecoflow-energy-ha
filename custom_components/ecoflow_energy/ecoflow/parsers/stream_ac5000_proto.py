@@ -373,7 +373,14 @@ _ZERO_FILL_PATHS: dict[tuple[int, int], tuple[str, ...]] = {
     ),
 }
 
-# The same rule inside one `f50.1` entry, applied per entry.
+# The same rule inside one `f50.1` entry, applied per entry - but keyed on
+# the entry's own fields, not unconditionally (PLAN-145). A linked pair's
+# 07:36:38 frame carries entry 1 with `.3` = 239 and `.9`/`.10`/`.11` = 72 /
+# 71 / 74, no `.12` at all: three of four strings sum to 217 against a
+# stated 239, so the fourth is producing and simply absent from this frame.
+# Filling it to 0 there would publish 0 W for a string the device's own
+# total says is live; leaving `pv4_w` out keeps the sensor at its last
+# reading instead.
 #
 # The entry arrives on every unit, with or without PV, so filling on it
 # hands a PV-less ES22 five keys reading 0 W. That is what
@@ -382,7 +389,9 @@ _ZERO_FILL_PATHS: dict[tuple[int, int], tuple[str, ...]] = {
 # entry rather than on `.3` is what closes the night: at 22:15 and again at
 # 00:27 the capture carries `f50.1` with neither `.3` nor a string in it, in
 # a full get-all as well as in a delta, so keying the fill on `.3` would
-# leave all five holding their last daylight reading until dawn.
+# leave all five holding their last daylight reading until dawn. The same
+# 00:25 and 04:14 night frames of the linked-pair capture carry neither `.3`
+# nor a string on either serial and must still fill all five to 0.
 _PV_ZERO_FILL_PATHS: tuple[str, ...] = (
     "50.1.3",
     "50.1.9",
@@ -692,6 +701,12 @@ def _decode_pv_entry(block: bytes) -> tuple[str | None, dict[str, Any]]:
     entry without one returns ``None`` for it - the coordinator cannot claim
     such an entry, and it is not published.
 
+    The fill runs only when none of the five keys came off the wire
+    (PLAN-145): a linked pair's 07:36:38 frame carries a total and three of
+    four strings, so the fourth is producing and simply not in this frame -
+    filling it to 0 there would publish a false reading for a live string.
+    A night entry with none of the five present still fills all five to 0.
+
     A block that will not decode costs its own entry and no more.
     """
     entry: dict[str, Any] = {}
@@ -704,8 +719,8 @@ def _decode_pv_entry(block: bytes) -> tuple[str | None, dict[str, Any]]:
     for num, wire, value in _iter_fields(block):
         if num == _PV_SERIAL_FIELD and wire == 2:
             serial = _serial_text(value)
-    for group, defaults in _PV_ZERO_FILL_KEYS.items():
-        if group not in seen:
+    for _group, defaults in _PV_ZERO_FILL_KEYS.items():
+        if any(key in entry for key, _zero in defaults):
             continue
         for key, zero in defaults:
             entry.setdefault(key, zero)

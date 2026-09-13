@@ -97,6 +97,7 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
     _stale_reactivate_tried: bool
     _unit_power_stats: dict[str, Any] | None
     _unit_pv_unmatched_logged: bool
+    _own_unit_entry_ts: dict[str, float]
 
     # -- group (C): implemented by core.py or by a sibling mixin --
     @property
@@ -111,6 +112,12 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
     def set_device_value(self, key: str, value: Any) -> None: ...
 
     def _powerocean_coordinators(self) -> list[EcoFlowDeviceCoordinator] | None: ...
+
+    def _linked_unit_coordinator(
+        self, serial: str
+    ) -> EcoFlowDeviceCoordinator | None: ...
+
+    def apply_linked_unit_entry(self, parsed: dict[str, Any]) -> None: ...
 
     def powerocean_sibling(self) -> EcoFlowDeviceCoordinator | None: ...
 
@@ -130,7 +137,9 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
 
     def _enforce_monotonic(self, parsed: dict[str, Any]) -> dict[str, Any]: ...
 
-    def _apply_data(self, parsed: dict[str, Any]) -> None: ...
+    def _apply_data(
+        self, parsed: dict[str, Any], *, own_connection: bool = True
+    ) -> None: ...
 
     def _resolve_soc(self, parsed: dict[str, Any]) -> None: ...
 

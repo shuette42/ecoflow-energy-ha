@@ -8388,9 +8388,14 @@ class TestLinkedUnitPower:
         }
         coordinator._apply_data(parsed)
         assert coordinator.data["unit_batt_w"] == 689.0
+        # The neighbour's entry (BBBB) is a foreign one on this own-connection
+        # frame, so it is handed over (PLAN-145); with no sibling registered
+        # in `hass.data` it is counted unrouted rather than delivered.
         assert coordinator._unit_power_stats == {
             "units_listed": 2,
             "own_unit_matched": True,
+            "units_handed_over": 1,
+            "units_unrouted": 1,
         }
 
     async def test_a_foreign_entry_is_never_published(
@@ -8400,9 +8405,13 @@ class TestLinkedUnitPower:
         coordinator = self._coordinator(hass, enhanced_config_entry)
         coordinator._apply_data({"_unit_batt_w_by_sn": {"ES22TESTUNITBBBB": 689.0}})
         assert "unit_batt_w" not in coordinator.data
+        # The foreign entry is handed over (PLAN-145); with no sibling
+        # registered in `hass.data` it is counted unrouted, never applied.
         assert coordinator._unit_power_stats == {
             "units_listed": 1,
             "own_unit_matched": False,
+            "units_handed_over": 1,
+            "units_unrouted": 1,
         }
 
     async def test_the_private_key_never_reaches_the_state(
@@ -8454,9 +8463,13 @@ class TestLinkedUnitPower:
         for key, value in self.OWN_STRINGS.items():
             assert coordinator.data[key] == value, key
         assert "_unit_pv_by_sn" not in coordinator.data
+        # The neighbour's string set is a foreign entry, handed over
+        # (PLAN-145) and counted unrouted with no sibling registered.
         assert coordinator._unit_power_stats == {
             "pv_units_listed": 2,
             "own_pv_matched": True,
+            "pv_units_handed_over": 1,
+            "pv_units_unrouted": 1,
         }
 
     async def test_a_neighbour_string_set_is_never_published(
@@ -8469,9 +8482,12 @@ class TestLinkedUnitPower:
         )
         for key in self.NEIGHBOUR_STRINGS:
             assert key not in coordinator.data, key
+        # Handed over (PLAN-145) and counted unrouted, no sibling registered.
         assert coordinator._unit_power_stats == {
             "pv_units_listed": 1,
             "own_pv_matched": False,
+            "pv_units_handed_over": 1,
+            "pv_units_unrouted": 1,
         }
 
     async def test_a_block_with_no_own_entry_is_logged_once(
@@ -8522,11 +8538,17 @@ class TestLinkedUnitPower:
         )
         assert coordinator.data["unit_batt_w"] == 2400.0
         assert coordinator.data["pv4_w"] == 290.0
+        # Both blocks carry a foreign (BBBB) entry, each handed over and
+        # counted unrouted with no sibling registered (PLAN-145).
         assert coordinator._unit_power_stats == {
             "units_listed": 2,
             "own_unit_matched": True,
+            "units_handed_over": 1,
+            "units_unrouted": 1,
             "pv_units_listed": 2,
             "own_pv_matched": True,
+            "pv_units_handed_over": 1,
+            "pv_units_unrouted": 1,
         }
 
     async def test_a_frame_with_one_block_keeps_the_other_counter(
@@ -8545,9 +8567,13 @@ class TestLinkedUnitPower:
         coordinator._apply_data(
             {"_unit_pv_by_sn": {"ES22TESTUNITAAAA": dict(self.OWN_STRINGS)}}
         )
+        # The first call's foreign BBBB entry was handed over and counted
+        # unrouted (PLAN-145); the second call carries only the own entry.
         assert coordinator._unit_power_stats == {
             "units_listed": 2,
             "own_unit_matched": True,
+            "units_handed_over": 1,
+            "units_unrouted": 1,
             "pv_units_listed": 1,
             "own_pv_matched": True,
         }
@@ -8615,12 +8641,250 @@ class TestLinkedUnitPower:
             666.0,
         ]
         assert unit_b.data["unit_batt_w"] == 0.0
+        # Both blocks carry unit_a's entry as foreign here, handed over and
+        # counted unrouted since no sibling is registered in `hass.data`
+        # (PLAN-145).
         assert unit_b._unit_power_stats == {
             "units_listed": 2,
             "own_unit_matched": True,
+            "units_handed_over": 1,
+            "units_unrouted": 1,
             "pv_units_listed": 2,
             "own_pv_matched": True,
+            "pv_units_handed_over": 1,
+            "pv_units_unrouted": 1,
         }
+
+
+def _pair_fixture() -> dict[str, Any]:
+    import json
+    from pathlib import Path
+
+    return json.loads(
+        (
+            Path(__file__).parent.parent
+            / "fixtures"
+            / "stream_ac5000"
+            / "es21_pair_pv_both_connections_masked.json"
+        ).read_text(encoding="utf-8")
+    )
+
+
+def _pair_frame(fixture: dict[str, Any], index: int) -> dict[str, Any]:
+    from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (
+        parse_stream_ac5000_message,
+    )
+
+    parsed = parse_stream_ac5000_message(bytes.fromhex(fixture["frames"][index]["hex"]))
+    assert parsed is not None, index
+    return dict(parsed)
+
+
+class TestLinkedUnitHandOver:
+    """A per-unit entry reaches the coordinator whose serial it carries (#401).
+
+    The block with both units' entries travels on one connection, and which
+    one is not fixed: on 2026-09-12 it was 0166's, on 2026-09-13 the daylight
+    block sat on the other connection and 0166 froze at 0 W for seven hours
+    on beta.6. The fixture is that third download, both connections, serials
+    by position (entry 1 the connection owner, entry 2 the neighbour).
+    """
+
+    ES21_DEVICE: dict[str, Any] = {
+        "name": "STREAM 5000",
+        "product_name": "STREAM 5000",
+        "device_type": "stream_ac5000",
+        "online": 1,
+    }
+    PV = ("pv1_w", "pv2_w", "pv3_w", "pv4_w")
+    A_LAST = [96.0, 92.0, 97.0, 32.0]
+    B_LAST = [99.99, 74.17, 84.52, 54.25]
+
+    def _pair(self, hass, entry, *, register=("a", "b")):
+        fixture = _pair_fixture()
+        entry.add_to_hass(hass)
+        unit_a = EcoFlowDeviceCoordinator(
+            hass, entry, {**self.ES21_DEVICE, "sn": fixture["unit_a"]}
+        )
+        unit_b = EcoFlowDeviceCoordinator(
+            hass, entry, {**self.ES21_DEVICE, "sn": fixture["unit_b"]}
+        )
+        table = {}
+        if "a" in register:
+            table[unit_a.device_sn] = unit_a
+        if "b" in register:
+            table[unit_b.device_sn] = unit_b
+        hass.data.setdefault(DOMAIN, {})[entry.entry_id] = table
+        return fixture, unit_a, unit_b
+
+    def _pv(self, coordinator) -> list[float]:
+        return [coordinator.data[key] for key in self.PV]
+
+    async def test_a_linked_unit_is_found_by_serial_or_not_at_all(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        fixture, unit_a, unit_b = self._pair(hass, enhanced_config_entry)
+        assert unit_b._linked_unit_coordinator(unit_a.device_sn) is unit_a
+        assert unit_b._linked_unit_coordinator("ES21NOSUCHUNIT00") is None
+        hass.data[DOMAIN].pop(enhanced_config_entry.entry_id)
+        unit_b._apply_data(_pair_frame(fixture, 19))
+        assert self._pv(unit_b) == pytest.approx(self.B_LAST, abs=0.05)
+        assert unit_b._unit_power_stats["pv_units_unrouted"] == 1
+        assert unit_a.data is None
+
+    async def test_a_handed_over_entry_reaches_the_sibling_without_marking_it_available(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        fixture, unit_a, unit_b = self._pair(hass, enhanced_config_entry)
+        last_mqtt_ts = unit_a._last_mqtt_ts
+        unit_a._device_available = False
+        unit_a._consecutive_http_failures = 3
+        unit_b._apply_data(_pair_frame(fixture, 19))
+        assert self._pv(unit_a) == self.A_LAST
+        assert unit_a.data["pv_total_w"] == 319.0
+        assert unit_a._device_available is False
+        assert unit_a._last_mqtt_ts == last_mqtt_ts
+        assert unit_a._consecutive_http_failures == 3
+        assert [e for e in unit_a.event_log if e["type"] == "mqtt_data"] == []
+        for coordinator in (unit_a, unit_b):
+            assert "_unit_pv_by_sn" not in coordinator.data
+            assert "_unit_batt_w_by_sn" not in coordinator.data
+        assert unit_b._unit_power_stats["pv_units_handed_over"] == 1
+        assert unit_a._unit_power_stats["pv_units_received"] == 1
+        # The receiver's own-connection counters describe only its own
+        # connection, which has not carried a block yet.
+        assert "pv_units_listed" not in unit_a._unit_power_stats
+
+    async def test_the_own_connection_wins_for_sixty_seconds(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        fixture, unit_a, unit_b = self._pair(hass, enhanced_config_entry)
+        clock = {"now": 1000.0}
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.state_apply.time.monotonic",
+            side_effect=lambda: clock["now"],
+        ):
+            # Frame 19 fed as if unit_a's own connection carried it: the
+            # claim is by serial, so unit_a lifts its own entry from it.
+            own = _pair_frame(fixture, 19)
+            unit_a._apply_data(dict(own))
+            assert self._pv(unit_a) == self.A_LAST
+            clock["now"] += 1.0
+            unit_b._apply_data(_pair_frame(fixture, 17))
+            assert self._pv(unit_a) == self.A_LAST
+            assert unit_a._unit_power_stats["pv_units_held"] == 1
+            assert "pv_units_received" not in unit_a._unit_power_stats
+            clock["now"] += 60.0
+            unit_b._apply_data(_pair_frame(fixture, 17))
+            assert self._pv(unit_a) == [72.0, 71.0, 74.0, 32.0]
+            assert unit_a.data["pv_total_w"] == 239.0
+            assert unit_a._unit_power_stats["pv_units_received"] == 1
+            clock["now"] += 1.0
+            unit_a._apply_data(dict(own))
+            assert self._pv(unit_a) == self.A_LAST
+
+    async def test_an_entry_for_an_unknown_serial_is_counted_and_dropped_quietly(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        fixture, unit_a, unit_b = self._pair(
+            hass, enhanced_config_entry, register=("b",)
+        )
+        caplog.set_level(logging.WARNING)
+        unit_b._apply_data(_pair_frame(fixture, 18))
+        assert self._pv(unit_b) == pytest.approx([77.85, 55.06, 65.19, 43.09], abs=0.05)
+        assert unit_b.data["unit_batt_w"] == 0.0
+        assert unit_b._unit_power_stats["pv_units_unrouted"] == 1
+        assert unit_b._unit_power_stats["units_unrouted"] == 1
+        assert unit_a.data is None
+        assert [r for r in caplog.records if r.levelno >= logging.WARNING] == []
+
+    async def test_the_whole_capture_on_the_connections_it_arrived_on(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """The report, replayed: on beta.6 unit_a ended this run at five zeros."""
+        fixture, unit_a, unit_b = self._pair(hass, enhanced_config_entry)
+        units = {"unit_a": unit_a, "unit_b": unit_b}
+        clock = {"now": 0.0}
+        last_own = {"unit_a": 0.0, "unit_b": 0.0}
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.state_apply.time.monotonic",
+            side_effect=lambda: clock["now"],
+        ):
+            for index, frame in enumerate(fixture["frames"]):
+                clock["now"] = float(frame["ts"])
+                last_own[frame["connection"]] = clock["now"]
+                units[frame["connection"]]._apply_data(_pair_frame(fixture, index))
+        assert self._pv(unit_a) == self.A_LAST
+        assert unit_a.data["pv_total_w"] == 319.0
+        assert unit_a.data["unit_batt_w"] == 414.0
+        assert self._pv(unit_b) == pytest.approx(self.B_LAST, abs=0.05)
+        assert unit_b.data["pv_total_w"] == pytest.approx(312.93, abs=0.05)
+        assert unit_b.data["unit_batt_w"] == 0.0
+        assert unit_a._unit_power_stats == {
+            "units_listed": 2,
+            "own_unit_matched": True,
+            "units_handed_over": 2,
+            "units_received": 16,
+            "pv_units_listed": 2,
+            "own_pv_matched": True,
+            "pv_units_handed_over": 2,
+            "pv_units_received": 14,
+        }
+        assert unit_b._unit_power_stats == {
+            "units_listed": 2,
+            "own_unit_matched": True,
+            "units_handed_over": 16,
+            "units_received": 2,
+            "pv_units_listed": 2,
+            "own_pv_matched": True,
+            "pv_units_handed_over": 14,
+            "pv_units_received": 2,
+        }
+        # No handed frame stamped either connection: each unit's liveness
+        # clock is that of its own last frame (unit_a frame 2, unit_b 20).
+        assert unit_a._last_mqtt_ts == float(fixture["frames"][2]["ts"])
+        assert unit_b._last_mqtt_ts == float(fixture["frames"][20]["ts"])
+        assert last_own == {
+            "unit_a": float(fixture["frames"][2]["ts"]),
+            "unit_b": float(fixture["frames"][20]["ts"]),
+        }
+
+    async def test_a_handed_over_entry_notifies_listeners_and_updates_the_snapshot(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        fixture, unit_a, unit_b = self._pair(hass, enhanced_config_entry)
+        listener = MagicMock()
+        unit_a.async_add_listener(listener)
+        clock = {"now": 1000.0}
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.state_apply.time.monotonic",
+            side_effect=lambda: clock["now"],
+        ):
+            unit_b._apply_data(_pair_frame(fixture, 19))
+            assert listener.call_count == 1
+            snapshot = unit_a.snapshot
+            assert snapshot.source == "mqtt"
+            assert snapshot.key_count == len(unit_a.data)
+            for key in ("pv_total_w", *self.PV):
+                assert key in snapshot.data, key
+            captured_at = snapshot.captured_at
+            # Held: unit_a's own connection delivers the block, then within
+            # the hold unit_b hands the same block over. Frame 19 carries
+            # `f50` alone, so the whole hand-over is held; frame 17 would
+            # also carry `f54`, which unit_a's own connection has not
+            # delivered and which therefore applies (the hold is per block).
+            clock["now"] += 1.0
+            unit_a._apply_data(_pair_frame(fixture, 19))
+            assert listener.call_count == 2
+            clock["now"] += 1.0
+            unit_b._apply_data(_pair_frame(fixture, 19))
+            assert listener.call_count == 2
+            assert unit_a._unit_power_stats["pv_units_held"] == 1
+            assert unit_a.snapshot.captured_at == clock["now"] - 1.0
+            assert unit_a.snapshot.captured_at != captured_at
 
 
 class TestAppWriteCapture:

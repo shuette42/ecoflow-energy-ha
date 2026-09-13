@@ -13,7 +13,7 @@ worked on rather than how the integration behaves and stay internal (ADR-003 was
 assigned twice; both records are internal).
 
 ADR-009 was reserved for the wallbox write decision until 2026-09-11 and stands
-at the end of this register, after ADR-028, in the order decisions were taken.
+after ADR-028, in the order decisions were taken; ADR-029 follows it.
 
 Measurements quoted below were taken on captures, downloads and fixtures that
 are described by what they are rather than where they sit; see
@@ -1641,3 +1641,38 @@ The integration since ADR-008 has one coordinator and one connection per device 
 **What does not change:** the settings writes (current, mode, phase, target) stay out of scope, on both routes; the ADR-008 addendum's line on that stands.
 
 **Consequences:** a second builder with the module and the serial as parameters of the same envelope, so that every earlier frame stays byte-identical; a route function on the wallbox coordinator that the button platform and the press both read; one more error message for a wallbox whose own connection is down; and the first hardware run of the own-topic route from this integration, which is the owner's to make on the pre-release that ships it. The relayed route is unchanged in every byte and every test.
+
+## ADR-029: A linked STREAM unit's per-unit reading is applied by the coordinator whose serial it carries, on whichever connection it arrives; the own connection is preferred for 60 s after it last delivered the block
+
+**Status:** Accepted (implemented in v1.22.0-beta.7)
+**Date:** 2026-09-13
+**Depends on:** ADR-014 decision 1 (no registration that names a fact the code already expresses)
+
+**Context:** Two STREAM 5000 units linked on one account each get their own coordinator and their own MQTT connection, and the device reports the per-unit readings, battery power (`f54`) and the four PV strings with their total (`f50`), as one list with one entry per unit, each stamped with that unit's serial. v1.22.0-beta.6 read the list per entry and had a coordinator publish only the entry stamped with its own serial, from its own connection; an entry stamped with the neighbour's serial was dropped, on the reasoning that handing it across would give one value two sources, and on the one capture then on file (#401, 2026-09-12) only one of the two connections carried the list at all.
+
+The reporter's third diagnostics download, taken on beta.6 on 2026-09-13, shows the list on both connections at different times of the same day, and the daylight list on the connection that had carried it empty the day before. The unit on the quiet side matched its own entry once, at 00:25 during the restart, when the strings were legitimately zero, and then saw no entry of its own for seven hours while its PV sensors sat at 0 W against 242 W in the app; the other unit gained PV entities it had never had. Which connection carries the list is therefore not a property of the pair that the integration can rely on.
+
+The same download shows a second thing: an entry can carry its total and three of its four strings and omit the fourth (07:36:38 and 07:36:42, `.12` absent while `.3` says 239 W against 217 W in the three present). The per-entry zero fill of beta.6 published 0 W for that string.
+
+**Decision:**
+
+1. **An entry belongs to the coordinator whose serial it carries, on whichever connection it arrives.** The device is the single source; a connection is a delivery. A coordinator that finds a foreign entry on its own connection hands it to the coordinator of that serial in the same config entry, found fresh from the entry's coordinator table on each call, never cached, so a table popped during teardown is read as "nobody to hand to". An entry whose serial no coordinator carries is counted in diagnostics and dropped without a log line.
+2. **A handed entry goes through the receiver's one apply path, with the connection-liveness head skipped.** The receiver applies it through the same method its own frames use, so change notes, the energy integrator, the snapshot and the listeners see one path; what it does not do is mark the receiver available, refresh its last-message clock, reset its HTTP failure count or log a data event, because the message arrived on the sibling's connection, not its own. A handed frame never hands on, which is what rules out two coordinators passing one entry back and forth.
+3. **The own connection wins for 60 s after it last delivered the block.** The two deliveries of one unit's entry differ: the owner's connection carries the strings fractional with the total equal to their sum, the neighbour's carries them in whole watts. Last-writer-wins would alternate a unit's reading between 232.5 and 233 at the push cadence and double the recorder writes for no information. A handed entry is dropped, and counted as held, while the receiver's own connection delivered that block less than 60 s ago; an own entry always applies. The anchor is the time the block last arrived on the own connection, per block, not the connection's last message: the failing unit pushed a frame every two seconds all night without the block, and a hold anchored on liveness would have held the relayed block out for good.
+4. **The per-entry zero fill runs only when the entry carries none of the five readings.** An entry with a total and a missing string leaves that key out, so the sensor keeps its last reading; the night shape, no total and no string, still fills all five to 0 W.
+5. **Diagnostics count both directions.** Next to the existing per-block "listed" and "own matched" fields, which keep describing the last block seen on the own connection, eight running totals: entries handed over, received, held and unrouted, for each of the two blocks.
+
+**Trade-offs:**
+- (+) Neither unit of a pair goes dark when the list moves to the other connection, whichever way it moves
+- (+) One apply path and one source per value: the two deliveries are copies of one device list stamped with one serial, and the hold makes exactly one of them authoritative at any moment, visibly (the held count)
+- (-) Up to 60 s of staleness when the list leaves a connection, against the seven hours it froze on beta.6
+- (-) The hold cannot be sized from the sample: the kept frames of the download are a selection (12011 seen, 12 kept on the quiet connection), so the own cadence of the block in daylight deltas is not known; 60 s is the value the same method already uses for its throttles
+- (-) A string omitted from an entry keeps its last value rather than showing what it is; the device's own total says it is producing, and nothing on the wire says how much
+
+**Alternatives considered:**
+1. Last-writer-wins between the two deliveries. Rejected: the two copies differ by rounding and would alternate at the push cadence.
+2. Anchor the hold on the connection's last message. Rejected: that is beta.6's failure restated, the connection was alive throughout while the block was absent from it.
+3. A second apply method for handed entries. Rejected: the next key added to the tail of the apply path would land in one of them and not the other; a flag on the one method keeps one path.
+4. Keep the fill and derive the missing string from the total. Rejected: the relayed copy's total is itself rounded and sits 1 to 2 W off the sum on frames where all four strings are present, so the derived value would be a guess presented as a reading.
+
+**Consequences:** `apply_linked_unit_entry` on the coordinator, a serial lookup beside the PowerOcean lookup that answers a different question, one constant for the hold, and a fixture from the reporter's third download with 21 real frames from both connections, serials rewritten by position, on which the whole day is replayed on the connections it arrived on; on beta.6 that replay ends with the quiet unit at five zeros. The reporter's pair is the first run of the hand-over on hardware.

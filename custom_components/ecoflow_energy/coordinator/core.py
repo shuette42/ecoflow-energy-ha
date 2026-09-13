@@ -271,6 +271,14 @@ class EcoFlowDeviceCoordinator(
         self._unit_power_stats: dict[str, Any] | None = None
         # Said once per coordinator: a PV block that lists units, none ours.
         self._unit_pv_unmatched_logged = False
+        # Monotonic time this coordinator's own connection last delivered a
+        # per-unit block, keyed by the block's parser key (PLAN-145, #401).
+        # Written only from an own-connection frame; a sibling's hand-over
+        # never touches it, which is what lets the hold in
+        # `_resolve_unit_power` tell "our connection is fresh" from "our
+        # connection is merely alive" - the two differed for seven hours in
+        # the 13.09. capture.
+        self._own_unit_entry_ts: dict[str, float] = {}
         # Whether a Stream ever reported the system state of charge; once it
         # has, a unit's own figure no longer stands in for it (#323).
         self._soc_from_system = False
@@ -497,6 +505,46 @@ class EcoFlowDeviceCoordinator(
             if coordinator.device_type == DEVICE_TYPE_POWEROCEAN
         ]
 
+    def _linked_unit_coordinator(self, serial: str) -> EcoFlowDeviceCoordinator | None:
+        """The entry's coordinator that carries `serial`, read fresh from `hass.data`.
+
+        A per-unit STREAM block (PLAN-145, #401) travels on whichever
+        linked unit's connection happened to deliver it, and the
+        coordinator that must publish an entry is the one whose serial it
+        names - not "which coordinators are of this device type", which is
+        the question `_powerocean_coordinators()` answers. That makes this
+        a lookup of its own rather than a filter on that one, returning the
+        matching coordinator or None rather than a list. No device-type
+        check: a serial that sits in this entry's table is one of this
+        account's own coordinators, and the per-unit block only ever lists
+        STREAM serials.
+
+        None in all three cases - the table popped, `self` no longer in it,
+        or `serial` absent - is "drop": unlike a PowerPulse 2 without a
+        PowerOcean, there is no alternate route for an entry nobody here
+        carries. The caller counts the drop and does not log it.
+        """
+        coordinators: dict[str, EcoFlowDeviceCoordinator] | None = self.hass.data.get(
+            DOMAIN, {}
+        ).get(self._entry.entry_id)
+        if coordinators is None or coordinators.get(self.device_sn) is not self:
+            return None
+        return coordinators.get(serial)
+
+    def apply_linked_unit_entry(self, parsed: dict[str, Any]) -> None:
+        """Apply a per-unit entry a linked sibling's connection delivered for us.
+
+        `parsed` is the parser's own shape restricted to this device's own
+        serial - `{UNIT_PV_BY_SN_KEY: {sn: five keys}, UNIT_POWER_BY_SN_KEY:
+        {sn: watts}}`, either or both - handed over by the sibling whose
+        connection actually carried the block (PLAN-145, #401). A thin call
+        to `_apply_data` with `own_connection=False`, so the value goes
+        through the identical apply path this device's own frames use, and
+        the sibling's connection never stands in for this device's own
+        liveness.
+        """
+        self._apply_data(parsed, own_connection=False)
+
     def powerocean_sibling(self) -> EcoFlowDeviceCoordinator | None:
         """Return the entry's one PowerOcean coordinator, or None (ADR-009).
 
@@ -604,7 +652,13 @@ class EcoFlowDeviceCoordinator(
     def linked_unit_stats(self) -> dict[str, Any] | None:
         """Return what the last STREAM per-unit block held, or None if unseen.
 
-        For diagnostics. Carries counts only, never a serial.
+        The four `*_listed` / `own_*_matched` fields describe the last block
+        seen on this device's own connection. The eight `*_handed_over` /
+        `*_received` / `*_held` / `*_unrouted` fields (PLAN-145, #401) are
+        running totals since start, covering both directions: entries this
+        coordinator passed to a linked sibling, and entries a sibling handed
+        to this coordinator. For diagnostics. Carries counts only, never a
+        serial.
         """
         return None if self._unit_power_stats is None else dict(self._unit_power_stats)
 

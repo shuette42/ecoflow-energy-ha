@@ -16,6 +16,7 @@ from ..const import (
     DOMAIN,
     POWEROCEAN_SCHEDULE_ARMED_LATCH_S,
     POWERPULSE2_CHARGE_ACTION_CONFIRMED,
+    STREAM_OWN_UNIT_ENTRY_HOLD_S,
 )
 from ..ecoflow.parsers.stream_ac5000_proto import (
     UNIT_POWER_BY_SN_KEY,
@@ -118,7 +119,9 @@ class StateApplyMixin(_Base):
         if fallback is not None and not self._soc_from_system:
             parsed["soc_pct"] = fallback
 
-    def _resolve_unit_power(self, parsed: dict[str, Any]) -> None:
+    def _resolve_unit_power(
+        self, parsed: dict[str, Any], *, own_connection: bool, now: float
+    ) -> None:
         """Take this unit's own entry out of the STREAM per-unit blocks.
 
         Two or three STREAM units linked on one account are reported as one
@@ -129,48 +132,102 @@ class StateApplyMixin(_Base):
         per unit, and `f50` with the PV strings per unit (#401 - decoded flat,
         the master's frame left the neighbour's strings on the master's page).
 
-        A foreign entry is never published here. Both units have their own
-        coordinator, their own connection and their own device page, so a
-        reading is either this device's or it is not shown - handing it to
-        another coordinator would give one value two sources, and on the only
-        capture that exists just one of the two streams carried the block at
-        all. What that leaves is visible in diagnostics rather than guessed at:
-        if a block lists units and none of them is this one, the counters
-        below say so. Each block keeps its own pair of counters, because a
-        frame carries either, both or neither.
+        A block travels on whichever unit's connection happened to carry it
+        (PLAN-145). A foreign entry seen on an own-connection frame is handed
+        to the coordinator whose serial it names, through the identical
+        `_apply_data` path its own frames use, with `own_connection=False` so
+        the hand-over never vouches for that coordinator's connection. This
+        device's own entry wins over a handed one for
+        `STREAM_OWN_UNIT_ENTRY_HOLD_S` after it last arrived on this device's
+        own connection: the two copies of one block differ (rounded, and a
+        push behind), and last-writer-wins would alternate a value at the
+        push cadence for no information. `own_connection=False` also skips
+        the hand-over loop entirely, which is what rules out ping-pong
+        between two coordinators handing each other the same entry back.
+
+        `*_listed` / `own_*_matched` describe only the last own-connection
+        block, unchanged from before. The eight hand-over counters
+        (`linked_unit_stats`) are running totals.
         """
         power = parsed.pop(UNIT_POWER_BY_SN_KEY, None)
         strings = parsed.pop(UNIT_PV_BY_SN_KEY, None)
         stats = dict(self._unit_power_stats or {})
+        handoffs: dict[str, dict[str, Any]] = {}
 
         if isinstance(power, dict) and power:
             own = power.get(self.device_sn)
-            stats["units_listed"] = len(power)
-            stats["own_unit_matched"] = own is not None
-            if own is not None:
-                parsed["unit_batt_w"] = own
+            if own_connection:
+                stats["units_listed"] = len(power)
+                stats["own_unit_matched"] = own is not None
+                if own is not None:
+                    parsed["unit_batt_w"] = own
+                    self._own_unit_entry_ts[UNIT_POWER_BY_SN_KEY] = now
+                for serial, value in power.items():
+                    if serial == self.device_sn:
+                        continue
+                    stats["units_handed_over"] = stats.get("units_handed_over", 0) + 1
+                    handoffs.setdefault(serial, {})[UNIT_POWER_BY_SN_KEY] = {
+                        serial: value
+                    }
+            elif own is not None:
+                since = self._own_unit_entry_ts.get(UNIT_POWER_BY_SN_KEY, float("-inf"))
+                if now - since >= STREAM_OWN_UNIT_ENTRY_HOLD_S:
+                    parsed["unit_batt_w"] = own
+                    stats["units_received"] = stats.get("units_received", 0) + 1
+                else:
+                    stats["units_held"] = stats.get("units_held", 0) + 1
 
         if isinstance(strings, dict) and strings:
             own_strings = strings.get(self.device_sn)
-            stats["pv_units_listed"] = len(strings)
-            stats["own_pv_matched"] = own_strings is not None
-            if isinstance(own_strings, dict):
-                parsed.update(own_strings)
-            elif not self._unit_pv_unmatched_logged:
-                # The one failure this can have that looks like a unit
-                # without PV: the block lists units and none is this one.
-                # On a single unit that would leave five on-by-default
-                # entities stale with nothing in the log, so it is said
-                # once, with the serials as the device wrote them.
-                self._unit_pv_unmatched_logged = True
-                _LOGGER.warning(
-                    "%s: the PV string block lists %d unit(s) (%s) and none "
-                    "is this device's serial; its PV String sensors are not "
-                    "updated from it",
-                    self.device_tag,
-                    len(strings),
-                    ", ".join(f"{serial[:4]}..." for serial in strings),
-                )
+            if own_connection:
+                stats["pv_units_listed"] = len(strings)
+                stats["own_pv_matched"] = own_strings is not None
+                if isinstance(own_strings, dict):
+                    parsed.update(own_strings)
+                    self._own_unit_entry_ts[UNIT_PV_BY_SN_KEY] = now
+                elif not self._unit_pv_unmatched_logged:
+                    # The one failure this can have that looks like a unit
+                    # without PV: the block lists units and none is this one.
+                    # On a single unit that would leave five on-by-default
+                    # entities stale with nothing in the log, so it is said
+                    # once, with the serials as the device wrote them.
+                    self._unit_pv_unmatched_logged = True
+                    _LOGGER.warning(
+                        "%s: the PV string block lists %d unit(s) (%s) and none "
+                        "is this device's serial; its PV String sensors are not "
+                        "updated from it",
+                        self.device_tag,
+                        len(strings),
+                        ", ".join(f"{serial[:4]}..." for serial in strings),
+                    )
+                for serial, value in strings.items():
+                    if serial == self.device_sn:
+                        continue
+                    stats["pv_units_handed_over"] = (
+                        stats.get("pv_units_handed_over", 0) + 1
+                    )
+                    handoffs.setdefault(serial, {})[UNIT_PV_BY_SN_KEY] = {serial: value}
+            elif isinstance(own_strings, dict):
+                since = self._own_unit_entry_ts.get(UNIT_PV_BY_SN_KEY, float("-inf"))
+                if now - since >= STREAM_OWN_UNIT_ENTRY_HOLD_S:
+                    parsed.update(own_strings)
+                    stats["pv_units_received"] = stats.get("pv_units_received", 0) + 1
+                else:
+                    stats["pv_units_held"] = stats.get("pv_units_held", 0) + 1
+
+        if own_connection:
+            for serial, handoff in handoffs.items():
+                sibling = self._linked_unit_coordinator(serial)
+                if sibling is None:
+                    for block_key in handoff:
+                        counter = (
+                            "units_unrouted"
+                            if block_key == UNIT_POWER_BY_SN_KEY
+                            else "pv_units_unrouted"
+                        )
+                        stats[counter] = stats.get(counter, 0) + 1
+                    continue
+                sibling.apply_linked_unit_entry(handoff)
 
         if stats:
             self._unit_power_stats = stats
@@ -239,19 +296,32 @@ class StateApplyMixin(_Base):
         """Drop the hold for one arming flag, used when the send failed."""
         self._schedule_armed_latch.pop(state_key, None)
 
-    def _apply_data(self, parsed: dict[str, Any]) -> None:
-        """Apply parsed data and notify listeners (HA event loop)."""
+    def _apply_data(
+        self, parsed: dict[str, Any], *, own_connection: bool = True
+    ) -> None:
+        """Apply parsed data and notify listeners (HA event loop).
+
+        `own_connection=False` is a hand-over from a linked STREAM sibling
+        (`apply_linked_unit_entry`, PLAN-145, #401): the entry travelled on
+        the sibling's connection, not this device's, so the liveness head
+        below - which would otherwise mark this device available on a
+        message it never received - is skipped. `now` is read unconditionally
+        because `_resolve_unit_power` needs it either way. Everything from
+        `_resolve_unit_power` onward runs the same for both, since a handed
+        value goes through the identical apply path an own frame uses.
+        """
         from .core import DeviceSnapshot
 
         now = time.monotonic()
-        self._last_mqtt_ts = now
-        self._device_available = True
-        # MQTT data proves credentials are valid - prevent false reauth (#2)
-        self._consecutive_http_failures = 0
-        # Rate-limited event log: at most once per 60s to avoid flooding the deque
-        if now - self._last_mqtt_event_ts > 60:
-            self._last_mqtt_event_ts = now
-            self._log_event("mqtt_data", f"keys={len(parsed)}")
+        if own_connection:
+            self._last_mqtt_ts = now
+            self._device_available = True
+            # MQTT data proves credentials are valid - prevent false reauth (#2)
+            self._consecutive_http_failures = 0
+            # Rate-limited event log: at most once per 60s to avoid flooding the deque
+            if now - self._last_mqtt_event_ts > 60:
+                self._last_mqtt_event_ts = now
+                self._log_event("mqtt_data", f"keys={len(parsed)}")
         self._enforce_monotonic(parsed)
         # Remove EMS raw battery state before update: bp_chg_dsg_sta reports the
         # controller MODE ("discharging" even at 0W/100% SoC), not the physical
@@ -264,7 +334,12 @@ class StateApplyMixin(_Base):
         # whose value the user has since superseded.
         if "ems_app_surplus_pct" in parsed:
             self._last_ems_param_change_ts = now
-        self._resolve_unit_power(parsed)
+        self._resolve_unit_power(parsed, own_connection=own_connection, now=now)
+        if not own_connection and not parsed:
+            # A fully held hand-over (every block it carried was dropped in
+            # favour of a fresher own reading) has nothing left to apply -
+            # no listener call, no snapshot (PLAN-145).
+            return
         self._resolve_soc(parsed)
         self._resolve_schedule_armed(parsed)
         self._resolve_wallbox_action(parsed)

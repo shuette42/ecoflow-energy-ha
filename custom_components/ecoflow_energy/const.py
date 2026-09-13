@@ -326,6 +326,10 @@ APP_SURPLUS_SYNC_USER_GRACE_S = (
 # nothing more; it matches the entity-side optimistic lock so both expire
 # together. A frame that agrees with the write clears it immediately.
 POWEROCEAN_SCHEDULE_ARMED_LATCH_S = 5.0
+# How long a linked STREAM unit's own connection is preferred over a per-unit
+# block a sibling hands over on its behalf (PLAN-145, #401): own wins for this
+# long after it last delivered the block, then a relayed copy is let through.
+STREAM_OWN_UNIT_ENTRY_HOLD_S = 60.0
 # coalesce slider-drag SETs into one frame; the device cannot keep up with 5%-step sets
 # at 100ms cadence and the EMS/App-layer fields desync
 POWEROCEAN_SOC_DEBOUNCE_S = 0.3
