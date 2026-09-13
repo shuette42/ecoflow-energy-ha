@@ -1,0 +1,114 @@
+{
+  "frames": [
+    {
+      "ts_iso": "2026-08-24T13:45:39.653372+00:00",
+      "topic": "property",
+      "cmds": [
+        {
+          "cmd_func": 2,
+          "cmd_id": 34
+        }
+      ],
+      "hex": "0a740a51111009190143391931d91b2918231d2c2b2e2d5b1d2c2b2e2d51774919411a7918711869006118991800911816891816811819b91816b11819a91819e91816e11816991b07911b16b91f19e11f19991e1910021820200130013803400248225051580170998cd7027881b601800103880101"
+    },
+    {
+      "ts_iso": "2026-08-24T13:49:05.549371+00:00",
+      "topic": "property",
+      "cmds": [
+        {
+          "cmd_func": 2,
+          "cmd_id": 34
+        }
+      ],
+      "hex": "0a750a529a9b82928ac8b292ba5290a293a896a7a0a5a6d096a7a0a5a6da3293c292ca91f293fa93e28bea9312938b1a939d02939d0a939232939d3a939222939262939d6a939d12908c1a909d3294926a949212959210021820200130013803400248225052580170928fd7027881b601800103880101"
+    },
+    {
+      "ts_iso": "2026-08-24T13:51:10.599855+00:00",
+      "topic": "property",
+      "cmds": [
+        {
+          "cmd_func": 2,
+          "cmd_id": 34
+        }
+      ],
+      "hex": "0a750a528988918199dba181a94183b180bb85b4b3b6b5c385b4b3b6b5c92180d181d982e180e980f198f98001809809808e11808e19808121808e29808131808171808e79808e01839f09838e218781798781018681100218202001300138034002482250525801708191d7027881b601800103880101"
+    },
+    {
+      "ts_iso": "2026-08-24T13:52:06.880041+00:00",
+      "topic": "property",
+      "cmds": [
+        {
+          "cmd_func": 2,
+          "cmd_id": 33
+        }
+      ],
+      "hex": "0ab1020a8c02e3eaf9efebebebebdbe8d1cce3ebfbebceebebebebd6ebebebebaeebebebeba6ebebebebbeebebebebb6ebebebeb8eebebebeba9c2e3eafb5d4cb8ceebebebebd6406a83a8aed0c382a8a641c882a8be35dcb9dcb68f2641d28e44ea21d1a35d4cb86beaef63ead77bea4bea4beaeb43eaea53eae92eeaebebabaa23ea8f33eaeb0eeaebebebeb01eae7406a83a8d0c382a841c882a819eae735dcb9dc8f2641d244ea21d111eae9cbcb69e9e9ebeb61e9e9f1f12be93d67463fed23e97de93be9eb33e95d4cb80be95d4cb803e9eb1be9eb13e9eb01e8e1e3ebfbebf3ebcbebc3eb19e8efe3eafbd711e8f1e3eafbeaf1fbb3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3cbe8c3ea6befeb43edeb1002182020013001380340024821508c02580170eb91d7027881b601800103880101"
+    },
+    {
+      "ts_iso": "2026-08-24T13:53:04.097958+00:00",
+      "topic": "property",
+      "cmds": [
+        {
+          "cmd_func": 2,
+          "cmd_id": 34
+        }
+      ],
+      "hex": "0a750a525f5e47564f0d77577f975567566d53626560631553626560631ff75607570f5437563f56274e2f56d7564edf5658c75658cf5657f75658ff5657e75657a75658af5658d75549df5558f75157af5157d7505710021820200130013803400248225052580170d792d7027881b601800103880101"
+    },
+    {
+      "ts_iso": "2026-08-24T13:54:06.938591+00:00",
+      "topic": "property",
+      "cmds": [
+        {
+          "cmd_func": 2,
+          "cmd_id": 33
+        }
+      ],
+      "hex": "0ab1020a8c02c4cddec8ccccccccfccff6ebc4ccdccce9ccccccccf1cccccccc89cccccccc81cccccccc99cccccccc91cccccccca9cccccccc8ee5c4cddc7a6b9fe9ccccccccf1c3f4a58f895418a58f81f5aaa58f992e3cfbf591cccccccca9750b23f6847a6b9f4ccdc844cdf05ccd6ccd6ccdcc64cdcd74cdce09cdcccc8c8d04cda814cdcc29cdcccccccc26cdc0c3f4a58f5418a58ff5aaa58f3ecdc02e3cfbf5cccccccc750b23f636cdceecec4ecececccc46ceced6d60cce1a406118ca04ce5ace1ccecc14ce7a6b9f2cce7a6b9f24cecc3ccecc34cecc26cfc6c4ccdcccd4cceccce4cc3ecfc8c4cddcf036cfd6c4cddccdd6dc94949494949494949494949494949494eccee4cd4cc8cc64cacc1002182020013001380340024821508c02580170cc93d7027881b601800103880101"
+    },
+    {
+      "ts_iso": "2026-08-24T13:55:10.676576+00:00",
+      "topic": "property",
+      "cmds": [
+        {
+          "cmd_func": 2,
+          "cmd_id": 34
+        }
+      ],
+      "hex": "0a750a52414059495113694961894b7948734d7c7b7e7d0b4d7c7b7e7d01e9481949114a2948214839503148c94850c14846d94846d14849e94846e14849f94849b94846b14846c94b57c14b46e94f49b14f49c94e4910021820200130013803400248225052580170c994d7027881b601800103880101"
+    },
+    {
+      "ts_iso": "2026-08-24T13:56:07.099092+00:00",
+      "topic": "property",
+      "cmds": [
+        {
+          "cmd_func": 2,
+          "cmd_id": 33
+        }
+      ],
+      "hex": "0ab1020a8c02bbb2a1b7b3b3b3b383b08994bbb3a3b396b3b3b3b38eb3b3b3b3f6b3b3b3b3feb3b3b3b3e6b3b3b3b3eeb3b3b3b3d6b3b3b3b3f19abbb2a30514e096b3b3b3b38e861ddbf0f6c1eddaf0fe5162daf0e66d84e184ee551aae8ad6efe86c89fb0514e033b2b73bb28f23b213b213b2b31bb2b20bb2b176b2b3b3f3f27bb2d76bb2b356b2b3b3b3b359b2bf861ddbf0c1eddaf05162daf041b2bf6d84e184551aae8aefe86c8949b2b1939331b1b1b3b339b1b1a9a973b1653f1e67b57bb125b163b1b36bb10514e053b10514e05bb1b343b1b34bb1b359b0b9bbb3a3b3abb393b39bb341b0b7bbb3a38f49b0a9bbb2a3b2a9a3ebebebebebebebebebebebebebebebeb93b19bb233b7b31bb5b31002182020013001380340024821508c02580170b395d7027881b601800103880101"
+    },
+    {
+      "ts_iso": "2026-08-24T13:58:10.586824+00:00",
+      "topic": "property",
+      "cmds": [
+        {
+          "cmd_func": 2,
+          "cmd_id": 34
+        }
+      ],
+      "hex": "0a750a5295948d9d85c7bd9db55d9fad9ca799a8afaaa9df99a8afaaa9d53d9ccd9dc59ffd9cf59ced84e59c1d9c84159c920d9c92059c9d3d9c92359c9d2d9c9d6d9c92659c921d9f83159f923d9b9d659b9d1d9a9d100218202001300138034002482250525801709d97d7027881b601800103880101"
+    },
+    {
+      "ts_iso": "2026-08-24T13:59:09.145032+00:00",
+      "topic": "property",
+      "cmds": [
+        {
+          "cmd_func": 2,
+          "cmd_id": 34
+        }
+      ],
+      "hex": "0a750a5204051c0c14562c0c24cc0e3c0d3608393e3b384e08393e3b3844ac0d5c0c540f6c0d640d7c15740d8c0d15840d039c0d03940d0cac0d03a40d0cbc0d0cfc0d03f40d038c0e12840e03ac0a0cf40a0c8c0b0c100218202001300138034002482250525801708c98d7027881b601800103880101"
+    }
+  ]
+}
