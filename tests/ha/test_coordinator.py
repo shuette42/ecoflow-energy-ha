@@ -8808,14 +8808,12 @@ class TestLinkedUnitHandOver:
         fixture, unit_a, unit_b = self._pair(hass, enhanced_config_entry)
         units = {"unit_a": unit_a, "unit_b": unit_b}
         clock = {"now": 0.0}
-        last_own = {"unit_a": 0.0, "unit_b": 0.0}
         with patch(
             "custom_components.ecoflow_energy.coordinator.state_apply.time.monotonic",
             side_effect=lambda: clock["now"],
         ):
             for index, frame in enumerate(fixture["frames"]):
                 clock["now"] = float(frame["ts"])
-                last_own[frame["connection"]] = clock["now"]
                 units[frame["connection"]]._apply_data(_pair_frame(fixture, index))
         assert self._pv(unit_a) == self.A_LAST
         assert unit_a.data["pv_total_w"] == 319.0
@@ -8847,10 +8845,47 @@ class TestLinkedUnitHandOver:
         # clock is that of its own last frame (unit_a frame 2, unit_b 20).
         assert unit_a._last_mqtt_ts == float(fixture["frames"][2]["ts"])
         assert unit_b._last_mqtt_ts == float(fixture["frames"][20]["ts"])
-        assert last_own == {
-            "unit_a": float(fixture["frames"][2]["ts"]),
-            "unit_b": float(fixture["frames"][20]["ts"]),
-        }
+
+    async def test_the_hold_follows_the_block_not_the_connection(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """An alive connection without the block holds nothing back.
+
+        The failing unit pushed a frame every two seconds all night without
+        `f50`; a hold anchored on the connection's last message would have
+        kept the relayed block out for good.
+        """
+        fixture, unit_a, unit_b = self._pair(hass, enhanced_config_entry)
+        clock = {"now": 1000.0}
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.state_apply.time.monotonic",
+            side_effect=lambda: clock["now"],
+        ):
+            unit_a._apply_data({"batt_soc_pct": 49.0})
+            assert unit_a._last_mqtt_ts == clock["now"]
+            clock["now"] += 1.0
+            unit_b._apply_data(_pair_frame(fixture, 19))
+            assert self._pv(unit_a) == self.A_LAST
+            assert unit_a._unit_power_stats["pv_units_received"] == 1
+            assert "pv_units_held" not in unit_a._unit_power_stats
+
+    async def test_a_sibling_that_raises_does_not_cost_the_sender_its_frame(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        fixture, unit_a, unit_b = self._pair(hass, enhanced_config_entry)
+
+        def _boom() -> None:
+            raise RuntimeError("listener broke")
+
+        unit_a.async_add_listener(_boom)
+        caplog.set_level(logging.ERROR)
+        unit_b._apply_data(_pair_frame(fixture, 19))
+        assert self._pv(unit_b) == pytest.approx(self.B_LAST, abs=0.05)
+        assert unit_b._unit_power_stats["pv_units_handoff_failed"] == 1
+        assert "handing a per-unit entry" in caplog.text
 
     async def test_a_handed_over_entry_notifies_listeners_and_updates_the_snapshot(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry

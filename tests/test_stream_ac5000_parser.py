@@ -1104,9 +1104,9 @@ class TestPvStrings:
         assert strings["pv3_w"] == pytest.approx(55.32, abs=0.01)
         assert strings["pv4_w"] == pytest.approx(104.02, abs=0.01)
         # String 1 was idle throughout the capture and the app showed 0 W.
-        # The frame carries a total and three other strings, so the fill
-        # does not run (PLAN-145) and the idle string's key is simply out.
-        assert "pv1_w" not in strings
+        # The field is absent, and the fill is what turns that into a
+        # reading: the three present strings account for the total exactly.
+        assert strings["pv1_w"] == 0.0
         # The third-party figure is a different quantity, not the total.
         assert parsed["solar_w"] == pytest.approx(81.0)
 
@@ -1120,10 +1120,9 @@ class TestPvStrings:
     def test_the_total_equals_the_sum_of_the_strings(self) -> None:
         """The identity the block has to preserve, on every real frame.
 
-        A string absent from the frame (PLAN-145: the fill no longer defaults
-        it once any of the five is present) is exactly the idle-and-omitted
-        case, so it contributes 0 to the sum - the same value the identity
-        already expects for a genuinely idle string.
+        Every key is read strictly: an idle string omitted from the wire is
+        filled to 0 because the present strings account for the total, and
+        this is the test that says the fill still does that.
         """
         checked = 0
         for frame in _load(ES21_PV):
@@ -1134,7 +1133,7 @@ class TestPvStrings:
             total = entry.get("pv_total_w")
             if total is None or total == 0.0:
                 continue
-            strings = sum(entry.get(f"pv{n}_w", 0.0) for n in (1, 2, 3, 4))
+            strings = sum(entry[f"pv{n}_w"] for n in (1, 2, 3, 4))
             assert strings == pytest.approx(total, abs=0.01), frame["ts_iso"]
             checked += 1
         assert checked >= 7
@@ -1247,6 +1246,22 @@ class TestLinkedPairPvStrings:
         parsed = parse_stream_ac5000_message(bytes.fromhex(frame["hex"]))
         assert parsed is not None, frame
         return parsed
+
+    def test_an_idle_string_omitted_from_the_own_copy_still_reads_zero(self) -> None:
+        """Frame 0 of the single-unit capture (06:42:06): one string, `.3` equal to it.
+
+        The unit's own copy omits an idle string and its total accounts for
+        the ones present, so the fill runs and the absent strings read 0 W.
+        """
+        frames = json.loads(ES21_PV.read_text(encoding="utf-8"))["frames"]
+        parsed = parse_stream_ac5000_message(bytes.fromhex(frames[0]["hex"]))
+        assert parsed is not None
+        strings = next(iter(parsed[UNIT_PV_BY_SN_KEY].values()))
+        assert set(strings) == set(PV_KEYS)
+        assert strings["pv_total_w"] > 0
+        present = [strings[f"pv{n}_w"] for n in (1, 2, 3, 4) if strings[f"pv{n}_w"] > 0]
+        assert len(present) == 1
+        assert present[0] == pytest.approx(strings["pv_total_w"], abs=0.01)
 
     def test_a_pv_entry_with_a_total_and_a_missing_string_leaves_that_key_out(
         self,

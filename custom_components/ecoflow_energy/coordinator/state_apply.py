@@ -227,7 +227,29 @@ class StateApplyMixin(_Base):
                         )
                         stats[counter] = stats.get(counter, 0) + 1
                     continue
-                sibling.apply_linked_unit_entry(handoff)
+                # The sibling's apply path pops and rewrites the dict it is
+                # given, so it gets a copy and the block keys are read first.
+                block_keys = tuple(handoff)
+                try:
+                    sibling.apply_linked_unit_entry(dict(handoff))
+                except Exception:  # noqa: BLE001 - the sibling's listeners are not ours
+                    # The hand-over runs the sibling's whole apply path,
+                    # listeners included, inside this frame. A listener of
+                    # theirs that raises must not cost this device its own
+                    # frame, so it is counted and logged, and the frame
+                    # goes on.
+                    for block_key in block_keys:
+                        counter = (
+                            "units_handoff_failed"
+                            if block_key == UNIT_POWER_BY_SN_KEY
+                            else "pv_units_handoff_failed"
+                        )
+                        stats[counter] = stats.get(counter, 0) + 1
+                    _LOGGER.exception(
+                        "%s: handing a per-unit entry to %s failed",
+                        self.device_tag,
+                        sibling.device_tag,
+                    )
 
         if stats:
             self._unit_power_stats = stats

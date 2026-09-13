@@ -653,12 +653,12 @@ class EcoFlowDeviceCoordinator(
         """Return what the last STREAM per-unit block held, or None if unseen.
 
         The four `*_listed` / `own_*_matched` fields describe the last block
-        seen on this device's own connection. The eight `*_handed_over` /
-        `*_received` / `*_held` / `*_unrouted` fields (PLAN-145, #401) are
-        running totals since start, covering both directions: entries this
-        coordinator passed to a linked sibling, and entries a sibling handed
-        to this coordinator. For diagnostics. Carries counts only, never a
-        serial.
+        seen on this device's own connection. The `*_handed_over` /
+        `*_received` / `*_held` / `*_unrouted` / `*_handoff_failed` fields
+        (PLAN-145, #401) are running totals since start, covering both
+        directions: entries this coordinator passed to a linked sibling, and
+        entries a sibling handed to this coordinator. For diagnostics.
+        Carries counts only, never a serial.
         """
         return None if self._unit_power_stats is None else dict(self._unit_power_stats)
 
