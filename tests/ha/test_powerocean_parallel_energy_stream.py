@@ -226,3 +226,29 @@ def test_single_unit_stream_on_96_33_is_unchanged() -> None:
     assert parsed["solar_w"] == 6730.0
     assert parsed["batt_discharge_power_w"] == 1200.0
     assert parsed["soc_pct"] == 55.0
+
+
+def test_a_second_list_in_one_bundle_is_dropped_like_every_ems_copy() -> None:
+    """Two 96/50 headers in one bundle: the first wins, per the pair rule."""
+    first = JTS1ParallelEnergyStreamReport(
+        para_energy_stream=[
+            JTS1ParallelEnergyStream(sys_load_pwr=500.0, bp_pwr=1000.0, bp_soc=90),
+            JTS1ParallelEnergyStream(bp_pwr=1000.0, bp_soc=90, dev_sn="A" * 16),
+        ]
+    )
+    second = JTS1ParallelEnergyStreamReport(
+        para_energy_stream=[
+            JTS1ParallelEnergyStream(sys_load_pwr=121.5, bp_pwr=-50.0, bp_soc=89),
+            JTS1ParallelEnergyStream(bp_pwr=-50.0, bp_soc=89, dev_sn="A" * 16),
+        ]
+    )
+    frame = _build_header(96, 50, first.SerializeToString()) + _build_header(
+        96, 50, second.SerializeToString()
+    )
+
+    parsed = _PowerOceanParser()._parse_powerocean_proto_frame(frame)
+
+    assert parsed is not None
+    assert parsed["home_w"] == 500.0
+    assert parsed["batt_w"] == 1000.0
+    assert parsed["soc_pct"] == 90.0

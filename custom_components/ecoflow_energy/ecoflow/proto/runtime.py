@@ -535,7 +535,9 @@ def _typed_runtime_map(
     # 2. Convert to dict (only present fields, proto field names preserved)
     fields = MessageToDict(msg, preserving_proto_field_name=True)
 
-    # 3. For repeated messages, extract first element (keep all for multi-pack)
+    # 3. For repeated messages, pick the item that stands for the device:
+    # the one the command's selector names, or else the first (keeping the
+    # whole list as `all_packs` for the multi-pack extraction).
     if config.flatten_key and config.flatten_select is not None:
         items = fields.get(config.flatten_key, [])
         chosen = config.flatten_select(

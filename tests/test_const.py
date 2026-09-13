@@ -1268,7 +1268,9 @@ class TestFrameCaptureFootprint:
                     f"{len(headers or [])} messages the budget would cut"
                 )
 
-        assert checked >= 40, "no captured frames found under tests/fixtures"
+        # 245 frames on 2026-09-13; a floor near the count, not at one, so a
+        # helper that stops yielding frames cannot pass as a clean sweep.
+        assert checked >= 200, f"only {checked} captured frames under tests/fixtures"
 
 
 class TestTheScheduleChargePowerCeiling:

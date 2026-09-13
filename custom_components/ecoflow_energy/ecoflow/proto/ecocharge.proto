@@ -98,7 +98,7 @@ message JTS1EnergyStreamReport {
 // A PowerOcean that runs as a parallel pair does not send cmd_id=33 at all.
 // Its energy stream is this list instead: one row per unit, each stamped with
 // that unit's serial in dev_sn, plus one row with no dev_sn that carries the
-// system totals (#347, the reporter's diagnostics of 2026-09-05: 625 rows in
+// system totals (#347, the reporter's diagnostics of 2026-09-05: 625 lists in
 // 54 minutes, no cmd_id=33 anywhere in the download; the unit rows' bp_pwr
 // sum to the total row's to 0.001 W in every decoded frame). The five
 // readings share their numbering with JTS1EnergyStreamReport, so the total
