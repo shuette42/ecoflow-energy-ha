@@ -50,7 +50,7 @@ class _PowerOceanParser(MqttIngestMixin):
 
     def __init__(self) -> None:
         self._bp_sn_to_index: dict[str, int] = {}
-        self._schedule_indices: dict[int, int] = {}
+        self._schedule_indices: set[int] = set()
 
 
 def _build_header(cmd_func: int, cmd_id: int, pdata: bytes) -> bytes:
