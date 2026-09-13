@@ -2185,6 +2185,15 @@
     "powerpulse_descriptor_missing": {
       "message": "Die Wallbox hat ihre Adresse noch nicht gemeldet. Warte auf ihren nächsten Einstellungsbericht."
     },
+    "powerpulse_max_current_needs_powerocean": {
+      "message": "Der Maximalstrom lässt sich nur über eine PowerOcean im selben Konto setzen; dieser Eintrag hat keine."
+    },
+    "powerpulse_max_current_not_confirmed": {
+      "message": "Die Wallbox hat den neuen Maximalstrom nicht innerhalb der erlaubten Zeit gemeldet. Zuletzt gemeldet: {reported} A."
+    },
+    "powerpulse_max_current_range": {
+      "message": "Die Wallbox nimmt einen Maximalstrom zwischen {min} und {max} A an."
+    },
     "powerpulse_own_channel_offline": {
       "message": "Die eigene Verbindung der Wallbox steht nicht, der Befehl kann nicht gesendet werden."
     },

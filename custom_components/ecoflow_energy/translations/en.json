@@ -2185,6 +2185,15 @@
     "powerpulse_descriptor_missing": {
       "message": "The wallbox has not reported its address yet. Wait for its next settings report."
     },
+    "powerpulse_max_current_needs_powerocean": {
+      "message": "The maximum current can only be set through a PowerOcean on the same account; this entry has none."
+    },
+    "powerpulse_max_current_not_confirmed": {
+      "message": "The wallbox did not report the new maximum current within the time allowed. It last reported {reported} A."
+    },
+    "powerpulse_max_current_range": {
+      "message": "The wallbox accepts a maximum current between {min} and {max} A."
+    },
     "powerpulse_own_channel_offline": {
       "message": "The wallbox's own connection is not up, so the command cannot be sent."
     },

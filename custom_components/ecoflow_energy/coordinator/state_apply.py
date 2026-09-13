@@ -325,18 +325,34 @@ class StateApplyMixin(_Base):
                 del self._schedule_armed_latch[key]
 
     def _resolve_wallbox_action(self, parsed: dict[str, Any]) -> None:
-        """Resolve a pending PowerPulse 2 start/stop against the arriving frame.
+        """Resolve a pending PowerPulse 2 write against the arriving frame.
 
-        ADR-009 decision 4: the check runs on the frame being applied, never
-        on the accumulated store, so a stale reading already in
-        `self._device_data` cannot confirm an action that has not actually
-        happened yet. `future.done()` is checked because a resolved-but-not-
-        yet-cleared record could otherwise be resolved a second time by a
-        later confirming frame (e.g. "finishing" then "available" both
-        confirm a stop).
+        ADR-009 decision 4, extended by PLAN-146: the check runs on the frame
+        being applied, never on the accumulated store, so a stale reading
+        already in `self._device_data` cannot confirm a write that has not
+        actually happened yet - a stale 16.0 sitting in the store must not
+        confirm a write to 16. `future.done()` is checked because a
+        resolved-but-not-yet-cleared record could otherwise be resolved a
+        second time by a later confirming frame (e.g. "finishing" then
+        "available" both confirm a stop).
+
+        A record with `expected_value` set (a setting write) is confirmed by
+        numeric equality on `record.state_key`, compared with a small
+        tolerance since the device reports one decimal. A record without it
+        (a start/stop) keeps the original status-membership check.
         """
         record = self._wallbox_action_pending
         if record is None or record.future.done():
+            return
+        if record.expected_value is not None:
+            if record.state_key not in parsed:
+                return
+            value = parsed[record.state_key]
+            if (
+                isinstance(value, (int, float))
+                and abs(value - record.expected_value) < 0.05
+            ):
+                record.future.set_result(value)
             return
         if "ev_charge_status" not in parsed:
             return

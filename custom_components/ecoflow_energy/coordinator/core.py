@@ -100,19 +100,27 @@ class DeviceSnapshot:
 
 @dataclass(frozen=True)
 class WallboxActionPending:
-    """One PowerPulse 2 start/stop action awaiting device confirmation (ADR-009).
+    """One PowerPulse 2 write awaiting device confirmation (ADR-009, PLAN-146).
 
-    `future` resolves with the confirming `ev_charge_status` when the
-    wallbox's own heartbeat reports it, or is cancelled on coordinator
-    shutdown. `issued_at` is monotonic and is not currently compared against
-    an ingest receive timestamp - the mqtt_ingest path does not stamp one
-    (checked 2026-09-11), so the field is carried for a future comparison
-    rather than used by one now.
+    `future` resolves with the confirming value when the wallbox reports it,
+    or is cancelled on coordinator shutdown. `issued_at` is monotonic and is
+    not currently compared against an ingest receive timestamp - the
+    mqtt_ingest path does not stamp one (checked 2026-09-11), so the field is
+    carried for a future comparison rather than used by one now.
+
+    A start/stop (`expected_value is None`) is confirmed by a status in
+    `POWERPULSE2_CHARGE_ACTION_CONFIRMED[action]` arriving on `state_key`
+    (`ev_charge_status`, the default). A setting write instead names its own
+    `state_key` and is confirmed the moment the arriving frame's value at
+    that key equals `expected_value` - a status-set membership check would
+    not apply to a numeric setting.
     """
 
     action: str
     issued_at: float
-    future: asyncio.Future[str]
+    future: asyncio.Future[str | float]
+    state_key: str = "ev_charge_status"
+    expected_value: float | None = None
 
 
 class EcoFlowDeviceCoordinator(

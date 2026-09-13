@@ -152,6 +152,14 @@ POWERPULSE2_CHARGE_ACTION_CONFIRMED: dict[str, frozenset[str]] = {
     "start": frozenset({"charging"}),
     "stop": frozenset({"finishing", "available"}),
 }
+# PLAN-146: the confirmation window for a maximum-current write. Measured 1-2 s
+# on the wallbox's own settings report (ParamReport 2/34) over eleven writes in
+# two recordings; the heartbeat alone can take up to ~60 s, so a wallbox that
+# stops sending the settings report fails loudly rather than silently.
+POWERPULSE2_MAX_CURRENT_WINDOW_S: float = 20.0
+# PLAN-146: the maximum current range, the owner's sweep on #7 covered end to
+# end (2026-09-10).
+POWERPULSE2_MAX_CURRENT_RANGE_A: tuple[int, int] = (6, 16)
 MQTT_HEALTH_CHECK_INTERVAL_S = (
     5.0  # Run stale/reconnect health checks independently from stale threshold
 )
