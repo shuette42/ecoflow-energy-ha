@@ -21,6 +21,7 @@ from ..const import (
 from ..ecoflow.parsers.stream_ac5000_proto import (
     UNIT_POWER_BY_SN_KEY,
     UNIT_PV_BY_SN_KEY,
+    UNIT_PV_ENTRY_SOC_KEY,
 )
 from ..ecoflow.parsers.stream_proto import SOC_FALLBACK_KEY
 from ..ecoflow.parsers.wave3_proto import (
@@ -119,6 +120,36 @@ class StateApplyMixin(_Base):
         if fallback is not None and not self._soc_from_system:
             parsed["soc_pct"] = fallback
 
+    def _claim_pv_entry(
+        self,
+        entry: dict[str, Any],
+        parsed: dict[str, Any],
+        stats: dict[str, Any],
+        *,
+        own_connection: bool,
+    ) -> dict[str, Any]:
+        """The five PV keys of an entry claimed as ours, with its identity noted.
+
+        The entry's own state of charge (`f50.1.2`) is taken out before the
+        keys are published. When the frame is this unit's own and carries its
+        precise state of charge as well, the two are written to the stats as
+        a pair. With serials masked in a diagnostics download, that pair is
+        the one thing that says whether the entry stamped with this unit's
+        serial is this unit's reading: on the pair frames on file the
+        connection owner's `soc_precise_pct` rounds to the `.2` of exactly
+        one entry, and on the reporter's third download that is the entry
+        with his serial on one connection and, at the restart, the other
+        entry on the other (#401, 2026-09-13). Only a frame that carries both
+        is recorded, so the pair is never stitched from two moments.
+        """
+        strings = dict(entry)
+        soc = strings.pop(UNIT_PV_ENTRY_SOC_KEY, None)
+        own = parsed.get("soc_precise_pct")
+        if own_connection and soc is not None and own is not None:
+            stats["own_pv_entry_soc_pct"] = soc
+            stats["own_soc_precise_pct"] = round(float(own), 2)
+        return strings
+
     def _resolve_unit_power(
         self, parsed: dict[str, Any], *, own_connection: bool, now: float
     ) -> None:
@@ -183,7 +214,11 @@ class StateApplyMixin(_Base):
                 stats["pv_units_listed"] = len(strings)
                 stats["own_pv_matched"] = own_strings is not None
                 if isinstance(own_strings, dict):
-                    parsed.update(own_strings)
+                    parsed.update(
+                        self._claim_pv_entry(
+                            own_strings, parsed, stats, own_connection=True
+                        )
+                    )
                     self._own_unit_entry_ts[UNIT_PV_BY_SN_KEY] = now
                 elif not self._unit_pv_unmatched_logged:
                     # The one failure this can have that looks like a unit
@@ -210,7 +245,11 @@ class StateApplyMixin(_Base):
             elif isinstance(own_strings, dict):
                 since = self._own_unit_entry_ts.get(UNIT_PV_BY_SN_KEY, float("-inf"))
                 if now - since >= STREAM_OWN_UNIT_ENTRY_HOLD_S:
-                    parsed.update(own_strings)
+                    parsed.update(
+                        self._claim_pv_entry(
+                            own_strings, parsed, stats, own_connection=False
+                        )
+                    )
                     stats["pv_units_received"] = stats.get("pv_units_received", 0) + 1
                 else:
                     stats["pv_units_held"] = stats.get("pv_units_held", 0) + 1

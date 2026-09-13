@@ -88,6 +88,12 @@ _UNIT_POWER_SCALE = 0.5
 UNIT_POWER_BY_SN_KEY = "_unit_batt_w_by_sn"
 # The same for the MPPT block: serial -> the five PV keys of that unit.
 UNIT_PV_BY_SN_KEY = "_unit_pv_by_sn"
+# Inside each `f50.1` entry: the state of charge the entry carries in `.2`,
+# whole percent. Never published; the coordinator records it next to the
+# unit's own precise state of charge so a diagnostics download shows
+# whether the entry stamped with this unit's serial is this unit's reading
+# (#401: with serials masked, that is the one identity the export can prove).
+UNIT_PV_ENTRY_SOC_KEY = "_unit_pv_entry_soc_pct"
 
 # f11 node totals arrive in half-watt units.
 _HALF_WATT = 0.5
@@ -545,6 +551,10 @@ _PV_PREFIX = "50.1."
 # The serial inside one entry, read off the raw bytes as `f54.1.1` is: the
 # field map holds numbers, and a string has no scale.
 _PV_SERIAL_FIELD = 1
+# `f50.1.2`, a float: the state of charge of the unit the entry belongs to.
+# Read beside the serial rather than through the tree so it stays out of the
+# published keys.
+_PV_SOC_FIELD = 2
 
 
 def _read_varint(mv: memoryview, pos: int) -> tuple[int, int]:
@@ -732,6 +742,8 @@ def _decode_pv_entry(block: bytes) -> tuple[str | None, dict[str, Any]]:
     for num, wire, value in _iter_fields(block):
         if num == _PV_SERIAL_FIELD and wire == 2:
             serial = _serial_text(value)
+        elif num == _PV_SOC_FIELD and wire == 5:
+            entry[UNIT_PV_ENTRY_SOC_KEY] = _decode_scalar(5, value, _TYPE_FLOAT)
     for _group, defaults in _PV_ZERO_FILL_KEYS.items():
         present = [key for key, _zero in defaults if key in entry]
         if present and not _pv_total_accounts_for(entry, defaults):

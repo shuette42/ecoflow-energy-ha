@@ -11,6 +11,7 @@ import pytest
 from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (
     _TASK_KEYS,
     UNIT_PV_BY_SN_KEY,
+    UNIT_PV_ENTRY_SOC_KEY,
     parse_stream_ac5000_message,
 )
 from ecoflow_energy.ecoflow.proto_encoding import (
@@ -1257,7 +1258,7 @@ class TestLinkedPairPvStrings:
         parsed = parse_stream_ac5000_message(bytes.fromhex(frames[0]["hex"]))
         assert parsed is not None
         strings = next(iter(parsed[UNIT_PV_BY_SN_KEY].values()))
-        assert set(strings) == set(PV_KEYS)
+        assert set(strings) - {UNIT_PV_ENTRY_SOC_KEY} == set(PV_KEYS)
         assert strings["pv_total_w"] > 0
         present = [strings[f"pv{n}_w"] for n in (1, 2, 3, 4) if strings[f"pv{n}_w"] > 0]
         assert len(present) == 1
@@ -1279,13 +1280,15 @@ class TestLinkedPairPvStrings:
         entries = parsed[UNIT_PV_BY_SN_KEY]
 
         entry_a = entries[unit_a]
-        assert entry_a == {
+        assert {k: v for k, v in entry_a.items() if k in PV_KEYS} == {
             "pv_total_w": pytest.approx(239.0),
             "pv1_w": pytest.approx(72.0),
             "pv2_w": pytest.approx(71.0),
             "pv3_w": pytest.approx(74.0),
         }
         assert "pv4_w" not in entry_a
+        # The entry's own state of charge rides along under a private key.
+        assert entry_a[UNIT_PV_ENTRY_SOC_KEY] == 49.0
 
         entry_b = entries[unit_b]
         for key in PV_KEYS:
@@ -1304,7 +1307,8 @@ class TestLinkedPairPvStrings:
             parsed = self._both_frame(index)
             entries = parsed[UNIT_PV_BY_SN_KEY]
             for serial in (unit_a, unit_b):
-                assert entries[serial] == dict.fromkeys(PV_KEYS, 0.0), (index, serial)
+                strings = {k: v for k, v in entries[serial].items() if k in PV_KEYS}
+                assert strings == dict.fromkeys(PV_KEYS, 0.0), (index, serial)
 
     def test_two_entries_survive_each_other(self) -> None:
         """Two synthetic entries, distinct on every string, both come back."""

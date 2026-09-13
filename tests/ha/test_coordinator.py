@@ -8643,7 +8643,11 @@ class TestLinkedUnitPower:
         assert unit_b.data["unit_batt_w"] == 0.0
         # Both blocks carry unit_a's entry as foreign here, handed over and
         # counted unrouted since no sibling is registered in `hass.data`
-        # (PLAN-145).
+        # (PLAN-145). B was handed A's whole frame as if it were its own, so
+        # the identity pair reads A's precise state of charge against B's
+        # entry: 48.2 against 48 on this frame, where both units sit at 48.
+        assert unit_b._unit_power_stats.pop("own_pv_entry_soc_pct") == 48.0
+        assert unit_b._unit_power_stats.pop("own_soc_precise_pct") == 48.2
         assert unit_b._unit_power_stats == {
             "units_listed": 2,
             "own_unit_matched": True,
@@ -8749,6 +8753,7 @@ class TestLinkedUnitHandOver:
         for coordinator in (unit_a, unit_b):
             assert "_unit_pv_by_sn" not in coordinator.data
             assert "_unit_batt_w_by_sn" not in coordinator.data
+            assert "_unit_pv_entry_soc_pct" not in coordinator.data
         assert unit_b._unit_power_stats["pv_units_handed_over"] == 1
         assert unit_a._unit_power_stats["pv_units_received"] == 1
         # The receiver's own-connection counters describe only its own
@@ -8821,6 +8826,19 @@ class TestLinkedUnitHandOver:
         assert self._pv(unit_b) == pytest.approx(self.B_LAST, abs=0.05)
         assert unit_b.data["pv_total_w"] == pytest.approx(312.93, abs=0.05)
         assert unit_b.data["unit_batt_w"] == 0.0
+        # The identity pair, recorded only from an own frame that carries
+        # both. On unit_b (frames 7-18, daylight) the entry stamped with its
+        # serial carries its own state of charge, 50 against 50.0 at 07:36:42.
+        # On unit_a the only such frame is the 00:25:17 restart, where the
+        # entry labelled unit_a reads 70 against 69.28 and the other entry 69:
+        # the one frame on file where the position rule of this fixture and
+        # the state of charge disagree, and the reason the pair is exported.
+        stats_b = unit_b._unit_power_stats
+        assert stats_b.pop("own_pv_entry_soc_pct") == 50.0
+        assert stats_b.pop("own_soc_precise_pct") == 50.0
+        stats_a = unit_a._unit_power_stats
+        assert stats_a.pop("own_pv_entry_soc_pct") == 70.0
+        assert stats_a.pop("own_soc_precise_pct") == 69.28
         assert unit_a._unit_power_stats == {
             "units_listed": 2,
             "own_unit_matched": True,
