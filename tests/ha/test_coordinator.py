@@ -8875,12 +8875,19 @@ class TestLinkedUnitHandOver:
         enhanced_config_entry: MockConfigEntry,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
+        """The sibling's whole apply path runs inside the sender's frame.
+
+        Whether a raising listener propagates out of `async_set_updated_data`
+        depends on the Home Assistant release (it does on 2026.9, not on the
+        release CI pins), so the raise is put on the sibling's entry point
+        itself and the guard is what is under test.
+        """
         fixture, unit_a, unit_b = self._pair(hass, enhanced_config_entry)
 
-        def _boom() -> None:
+        def _boom(parsed: dict[str, Any]) -> None:
             raise RuntimeError("listener broke")
 
-        unit_a.async_add_listener(_boom)
+        unit_a.apply_linked_unit_entry = _boom  # type: ignore[method-assign]
         caplog.set_level(logging.ERROR)
         unit_b._apply_data(_pair_frame(fixture, 19))
         assert self._pv(unit_b) == pytest.approx(self.B_LAST, abs=0.05)
