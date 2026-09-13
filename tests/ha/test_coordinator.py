@@ -8646,9 +8646,11 @@ class TestLinkedUnitPower:
         # (PLAN-145). B was handed A's whole frame as if it were its own, so
         # the identity pair reads A's precise state of charge against B's
         # entry: 48.2 against 48 on this frame, where both units sit at 48.
-        assert unit_b._unit_power_stats.pop("own_pv_entry_soc_pct") == 48.0
-        assert unit_b._unit_power_stats.pop("own_soc_precise_pct") == 48.2
-        assert unit_b._unit_power_stats == {
+        stats_b = unit_b._unit_power_stats
+        assert stats_b is not None
+        assert stats_b.pop("own_pv_entry_soc_pct") == 48.0
+        assert stats_b.pop("own_soc_precise_pct") == 48.2
+        assert stats_b == {
             "units_listed": 2,
             "own_unit_matched": True,
             "units_handed_over": 1,
@@ -8834,9 +8836,11 @@ class TestLinkedUnitHandOver:
         # the one frame on file where the position rule of this fixture and
         # the state of charge disagree, and the reason the pair is exported.
         stats_b = unit_b._unit_power_stats
+        assert stats_b is not None
         assert stats_b.pop("own_pv_entry_soc_pct") == 50.0
         assert stats_b.pop("own_soc_precise_pct") == 50.0
         stats_a = unit_a._unit_power_stats
+        assert stats_a is not None
         assert stats_a.pop("own_pv_entry_soc_pct") == 70.0
         assert stats_a.pop("own_soc_precise_pct") == 69.28
         assert unit_a._unit_power_stats == {
