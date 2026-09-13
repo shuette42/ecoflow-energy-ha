@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- The PowerPulse 2 wallbox's maximum charging current can now be set from Home Assistant. A number, Wallbox Maximum Current, on the wallbox device takes 6 to 16 A in whole amps and sends the same settings message the EcoFlow app sends: through the PowerOcean on the same account, addressed to the wallbox by the bus address and serial the wallbox itself reports, with the current in tenths of an ampere. The write only returns once the wallbox's own reporting shows the new value, on its settings report about a second later or on its next heartbeat, within 20 s; nothing is shown as done before the wallbox says so, and the number shows the same reading as the Wallbox Maximum Current sensor at all times. The message and its echo come from two recordings the owner on #7 had already sent: the app's settings writes of 24 August, among them one current write reproduced byte for byte in the tests and echoed by the wallbox eight seconds later, and his 6 to 16 A sweep of 10 September, where three of the steps sit in the recording with their echo. The range is the one that sweep covered on his 11 kW wallbox; a wallbox configured above 16 A in the app, as one on #7 is, can be lowered from Home Assistant but not raised above 16 A until a write above that is on record. The number exists only when the integration entry holds exactly one PowerOcean, because no recording shows this write on the wallbox's own channel; a wallbox on an account without a PowerOcean keeps its two buttons and gets no number yet. Operating mode and phase selection stay read-only. (Ref #7)
+
 ## [1.22.0] - Unreleased
 
 ### Added
