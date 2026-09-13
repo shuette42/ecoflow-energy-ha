@@ -18,6 +18,7 @@ import pytest
 from ecoflow_energy.ecoflow.energy_stream import (
     _build_powerocean_set_envelope,
     build_powerpulse_charge_action_payload,
+    build_powerpulse_param_set_current_payload,
     build_powerpulse_standalone_charge_ctrl_payload,
 )
 from ecoflow_energy.ecoflow.parsers.powerpulse_proto import parse_powerpulse_message
@@ -28,6 +29,7 @@ FIXTURE_DIR = Path(__file__).parent / "fixtures" / "powerpulse"
 RUN_DATA_SYNC_FIXTURE = FIXTURE_DIR / "c376_run_data_sync_20260824.json"
 HEARTBEAT_FIXTURE = FIXTURE_DIR / "c376_frames_plan132.json"
 STANDALONE_CTRL_FIXTURE = FIXTURE_DIR / "c376_standalone_charge_ctrl_20260912.json"
+PARAM_SET_WRITES_FIXTURE = FIXTURE_DIR / "c376_param_set_writes_20260824.json"
 
 DEV_ADDR = 215
 DEV_SN = "X" * 16
@@ -254,3 +256,118 @@ def test_relayed_envelope_default_dest_did_not_move() -> None:
 def test_standalone_builder_rejects_bad_input(action: str, device_sn: str) -> None:
     with pytest.raises(ValueError):
         build_powerpulse_standalone_charge_ctrl_payload(action, device_sn)
+
+
+def test_param_set_builder_reproduces_the_app_frame_byte_for_byte() -> None:
+    """Seven app writes of one maximum-current recording (PLAN-146).
+
+    Frame 0 (13:45:38, max_current_a=11) is rebuilt byte-for-byte from the
+    builder's inputs. The other six writes set values this fixture does not
+    decode a clean `max_current_a` for (later param changes on the same
+    topic), so they are only checked at the envelope level below - the
+    positive control that the fixture is what the docstring claims.
+    """
+    frames = json.loads(PARAM_SET_WRITES_FIXTURE.read_text())["frames"]
+    set_frames = [f for f in frames if f["topic"] == "set"]
+    assert len(set_frames) == 7
+
+    first = set_frames[0]
+    expected = bytes.fromhex(first["hex"])
+    headers, _ = decode_header_message(expected)
+    seq = headers[0]["seq"]
+    powerocean_sn = headers[0]["device_sn"]
+
+    built = build_powerpulse_param_set_current_payload(
+        max_current_a=11,
+        dev_addr=DEV_ADDR,
+        dev_sn=DEV_SN,
+        powerocean_sn=powerocean_sn,
+        seq=seq,
+    )
+    assert built == expected
+
+    for frame in set_frames:
+        header = decode_header_message(bytes.fromhex(frame["hex"]))[0][0]
+        assert header["cmd_func"] == 241
+        assert header["cmd_id"] == 102
+        assert header["check_type"] == 3
+        assert header["need_ack"] == 1
+        assert header["version"] == 3
+        assert header["payload_ver"] == 1
+        assert header["from"] == "ios"
+        assert "device_sn" in header
+
+
+def test_param_set_pdata_layout() -> None:
+    built = build_powerpulse_param_set_current_payload(
+        max_current_a=11,
+        dev_addr=DEV_ADDR,
+        dev_sn=DEV_SN,
+        powerocean_sn=DEV_SN,
+        seq=149,
+    )
+    headers, _ = decode_header_message(built)
+    pdata = bytes.fromhex(headers[0]["pdata"])
+
+    assert len(pdata) == 27
+    # dev_info (field 1, length-delimited, 21-byte content) comes first.
+    assert pdata[0:2] == bytes([0x0A, 0x15])
+    # EDevPileParamSet (field 4) follows, encoding {3: 110} (11.0 A).
+    assert pdata[23:27] == bytes.fromhex("2202186e")
+
+
+@pytest.mark.parametrize(
+    "max_current_a,dev_sn,powerocean_sn",
+    [
+        (5, DEV_SN, DEV_SN),
+        (17, DEV_SN, DEV_SN),
+        (11.0, DEV_SN, DEV_SN),
+        (True, DEV_SN, DEV_SN),
+        ("11", DEV_SN, DEV_SN),
+        (11, "short", DEV_SN),
+        (11, DEV_SN, "short"),
+    ],
+)
+def test_param_set_builder_rejects_bad_input(
+    max_current_a: object, dev_sn: str, powerocean_sn: str
+) -> None:
+    with pytest.raises(ValueError):
+        build_powerpulse_param_set_current_payload(
+            max_current_a, DEV_ADDR, dev_sn, powerocean_sn
+        )
+
+
+def test_param_set_envelope_differs_from_charge_action_only_by_device_sn() -> None:
+    charge_action = build_powerpulse_charge_action_payload(
+        "start", DEV_ADDR, DEV_SN, seq=42
+    )
+    param_set = build_powerpulse_param_set_current_payload(
+        max_current_a=11,
+        dev_addr=DEV_ADDR,
+        dev_sn=DEV_SN,
+        powerocean_sn=DEV_SN,
+        seq=42,
+    )
+    h_action = decode_header_message(charge_action)[0][0]
+    h_param = decode_header_message(param_set)[0][0]
+
+    for key in (
+        "src",
+        "dest",
+        "d_src",
+        "d_dest",
+        "check_type",
+        "cmd_func",
+        "need_ack",
+        "seq",
+        "version",
+        "payload_ver",
+        "from",
+    ):
+        assert h_action[key] == h_param[key]
+
+    assert h_action["cmd_id"] == 100
+    assert h_param["cmd_id"] == 102
+    assert h_action["data_len"] != h_param["data_len"]
+    assert "device_sn" not in h_action
+    assert h_param["device_sn"] == DEV_SN

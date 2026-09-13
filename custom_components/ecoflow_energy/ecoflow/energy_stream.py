@@ -310,6 +310,66 @@ def build_powerpulse_charge_action_payload(
     return _build_powerocean_set_envelope(pdata, cmd_id=100, seq=seq, cmd_func=241)
 
 
+def build_powerpulse_param_set_current_payload(
+    max_current_a: int, dev_addr: int, dev_sn: str, powerocean_sn: str, seq: int = 0
+) -> bytes:
+    """Build EDevParamSet (241/102): set the PowerPulse 2 maximum charge current.
+
+    Sent on the PowerOcean's own set topic, addressed to the wallbox
+    accessory the same way the start/stop command is: `dev_info` (`pdata`
+    field 1) carries the wallbox's bus address and 16-character serial, the
+    same two fields and nothing else - the generic `dev_info=1/data=2`
+    variant the message definitions on file also allow never appears on the
+    wire. The current itself sits one level deeper, in `pdata` field 4
+    (`EDevPileParamSet`), whose own field 3 (`current_ouput_max`) is the
+    value in deci-amps. `user_current_set` (field 6 of the same nested
+    message) is not the control: it stayed at 60 through the owner's whole
+    6-16 A sweep while field 3 moved with every write.
+
+    Byte-for-byte from seven app writes of one recording (PLAN-146,
+    `tests/fixtures/powerpulse/c376_param_set_writes_20260824.json`). The
+    wallbox echoes the new value on its own `2/34` ParamReport field 9
+    within about a second, and on the next `2/33` HeartBeat field 18 -
+    both already mapped in `powerpulse_proto.py` onto the same
+    `_max_current_da_raw` key. The envelope differs from the start/stop
+    command only by carrying the PowerOcean's serial in field 25, exactly
+    like every other PowerOcean write (`96/22` and friends);
+    `_build_powerocean_set_envelope`'s remaining defaults (check_type 3,
+    need_ack 1, version 3, payload_ver 1, `from` "ios", dest 96) already
+    match the captured frames.
+
+    Args:
+        max_current_a: The new maximum current in whole amps, 6-16
+            inclusive - the range the owner's sweep covered end to end
+            (comment on #7, 2026-09-10T14:44:43Z).
+        dev_addr: The wallbox's bus address as reported by its own settings
+            message (`EDevRunDataSync`, 241/44) - 215 on every capture on
+            file, never a constant assumed by this function.
+        dev_sn: The wallbox's 16-character serial, from the same report.
+        powerocean_sn: The PowerOcean's own serial (the topic owner),
+            carried in the envelope's field 25.
+        seq: Sequence number. Default 0 generates from timestamp.
+    """
+    if type(max_current_a) is not int or not (6 <= max_current_a <= 16):
+        raise ValueError(
+            f"max_current_a must be an int in 6..16, got {max_current_a!r}"
+        )
+    for name, sn in (("dev_sn", dev_sn), ("powerocean_sn", powerocean_sn)):
+        if len(sn) != 16 or not sn.isascii() or not sn.isalnum():
+            raise ValueError(
+                f"{name} must be 16 alphanumeric ASCII characters, got {sn!r}"
+            )
+
+    dev_info = encode_field_varint(1, dev_addr) + encode_field_bytes(
+        2, dev_sn.encode("ascii")
+    )
+    pile_param_set = encode_field_varint(3, max_current_a * 10)
+    pdata = encode_field_bytes(1, dev_info) + encode_field_bytes(4, pile_param_set)
+    return _build_powerocean_set_envelope(
+        pdata, cmd_id=102, seq=seq, cmd_func=241, device_sn=powerocean_sn
+    )
+
+
 def build_powerpulse_standalone_charge_ctrl_payload(
     action: Literal["start", "stop"],
     device_sn: str,

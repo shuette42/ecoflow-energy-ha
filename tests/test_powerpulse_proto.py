@@ -22,6 +22,8 @@ from ecoflow_energy.ecoflow.parsers.powerpulse_proto import (
 
 FIXTURE = Path(__file__).parent / "fixtures" / "powerpulse" / "c376_frames_plan132.json"
 IDLE_LIMIT_FIXTURE = FIXTURE.with_name("c376_idle_limit_steps_20260910.json")
+PARAM_SET_ECHO_FIXTURE = FIXTURE.with_name("c376_param_set_echo_20260824.json")
+PARAM_SET_ECHO_SWEEP_FIXTURE = FIXTURE.with_name("c376_param_set_echo_20260910.json")
 
 
 def _frames() -> list[dict[str, Any]]:
@@ -194,6 +196,37 @@ def test_cable_lock_false_value_reported() -> None:
     """
     result = _finalize({"_cable_lock_raw": 0})
     assert result["ev_cable_lock_enabled"] is False
+
+
+def test_param_report_carries_the_configured_maximum_current() -> None:
+    """`2/34` field 9 becomes `ev_max_current_a` (PLAN-146).
+
+    The 2026-08-24 recording's seven `ParamReport` frames: the first echoes
+    the 11 A write that triggered it, the remaining six echo a later 16 A
+    write. The 2026-09-10 sweep gives four more values end to end.
+    """
+    frames = json.loads(PARAM_SET_ECHO_FIXTURE.read_text())["frames"]
+    expected_by_index = {0: 11.0, 1: 16.0, 2: 16.0, 4: 16.0, 6: 16.0, 8: 16.0, 9: 16.0}
+    for index, value in expected_by_index.items():
+        result = parse_powerpulse_message(bytes.fromhex(frames[index]["hex"]))
+        assert result is not None
+        assert result["ev_max_current_a"] == value
+
+    sweep_frames = json.loads(PARAM_SET_ECHO_SWEEP_FIXTURE.read_text())["frames"]
+    for index, value in enumerate((6.0, 7.0, 14.0, 7.0)):
+        result = parse_powerpulse_message(bytes.fromhex(sweep_frames[index]["hex"]))
+        assert result is not None
+        assert result["ev_max_current_a"] == value
+
+
+def test_heartbeat_and_param_report_agree_on_the_key() -> None:
+    """The three `2/33` HeartBeat frames of the same recording feed the same
+    `ev_max_current_a` key as the `2/34` ParamReport frames (PLAN-146)."""
+    frames = json.loads(PARAM_SET_ECHO_FIXTURE.read_text())["frames"]
+    for index in (3, 5, 7):
+        result = parse_powerpulse_message(bytes.fromhex(frames[index]["hex"]))
+        assert result is not None
+        assert result["ev_max_current_a"] == 16.0
 
 
 def test_unmapped_enum_numbers_drop_the_key_instead_of_writing_none() -> None:

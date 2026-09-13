@@ -16,9 +16,12 @@ Two message types carry readings, both under cmd_func 2:
 - `33` HeartBeat, the periodic telemetry frame. Every captured frame carries
   one, either alone (`property` topic, XOR-masked, `enc_type == 1`) or as
   one header inside a 15-header `get_reply` bundle (unmasked).
-- `34` ParamReport, seen only inside the three `get_reply` bundles. Of its
-  fields only `19` (the cable-lock toggle) is mapped; the rest of its
-  message is unrelated configuration this integration does not read yet.
+- `34` ParamReport, seen inside the three `get_reply` bundles and, on the
+  seven writes of a maximum-current change, directly on the `property`
+  topic too (PLAN-146). Of its fields, `9` (the maximum charge current in
+  deci-amps, the same reading `2/33`'s field `18` reports) and `19` (the
+  cable-lock toggle) are mapped; the rest of its message is unrelated
+  configuration this integration does not read yet.
 - `241/44` EDevRunDataSync, on the wallbox's own property topic, about once
   a second (PLAN-136). Only the accessory descriptor nested inside it -
   the bus address and the wallbox's own serial - is read; the settings
@@ -136,8 +139,10 @@ _CHARGE_READINGS_FIELD_MAP: dict[int, tuple[str, str]] = {
     12: ("ev_current_l3_a", _TYPE_FLOAT),
 }
 
-# cmd_func 2, cmd_id 34 (ParamReport) - only the cable-lock toggle is mapped.
+# cmd_func 2, cmd_id 34 (ParamReport) - the maximum current (field 9, the
+# same raw key HeartBeat's field 18 feeds) and the cable-lock toggle.
 _PARAM_REPORT_FIELD_MAP: dict[int, tuple[str, str]] = {
+    9: ("_max_current_da_raw", _TYPE_INT),
     19: ("_cable_lock_raw", _TYPE_INT),
 }
 
@@ -228,7 +233,8 @@ def _decode_heartbeat_fields(pdata: bytes) -> dict[str, Any]:
 
 
 def _decode_param_report_fields(pdata: bytes) -> dict[str, Any]:
-    """Decode one ParamReport (2/34) message: only the cable lock."""
+    """Decode one ParamReport (2/34) message: the maximum current and the
+    cable lock."""
     result: dict[str, Any] = {}
     for field_num, wire_type, raw in _iter_fields(pdata):
         mapping = _PARAM_REPORT_FIELD_MAP.get(field_num)
