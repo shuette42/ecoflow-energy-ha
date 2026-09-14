@@ -66,6 +66,7 @@ _ALL_READINGS: dict[str, Any] = {
     "ev_session_status": "charging",
     "ev_session_duration_s": 1800,
     "ev_charge_status": "charging",
+    "ev_charge_mode": "solar",
     "ev_session_start_ts": 1757320000,
     "ev_session_energy_wh": 3200,
     "ev_session_start_energy_wh": 101480,

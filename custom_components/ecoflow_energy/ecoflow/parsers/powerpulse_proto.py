@@ -89,6 +89,15 @@ Field notes:
   idle plug. `44`, the running lifetime counter, is not part of this gate;
   it is valid regardless of session state and is only ever withheld if the
   device reports it as exactly zero (never observed in this capture).
+- `63` (`POLinkageParameter`, `Cp307Sys.proto:147`) is a nested record whose
+  sub-field `4` (`work_mode`) is the wallbox's own charging-mode setting:
+  1 fast, 2 solar, 3 custom, 4 smart. Pulled out of the generic field loop
+  the same way field `8` is. Confirmed byte-for-byte against five mode
+  writes and their heartbeat echoes in @Xygen's capture of 2026-09-13
+  (issue #7, PLAN-147): every write to `EDevPileParamSet.work_mode` (the
+  PowerOcean's `241/102` `pdata` field 4) shows up in this field within
+  0.7-56 s. The message's other sub-fields (`bind_state`, `online_state`,
+  `po_sn`, `ctrl_mode`) are not read.
 """
 
 from __future__ import annotations
@@ -110,6 +119,10 @@ from .stream_proto import (
 # loop in `_decode_heartbeat_fields`, the same way `wave3_proto.py` pulls its
 # own nested records out of its field loop.
 _CHARGE_READINGS_FIELD = 8
+
+# HeartBeat's nested PO-linkage record (PLAN-147). Only sub-field 4
+# (work_mode) is read; see the module docstring.
+_PO_LINKAGE_FIELD = 63
 
 # cmd_func 2, cmd_id 33 (HeartBeat) - top-level scalar fields only. Field 8
 # (nested) and field 9 (the `44` twin) are deliberately absent; see the
@@ -137,6 +150,12 @@ _CHARGE_READINGS_FIELD_MAP: dict[int, tuple[str, str]] = {
     10: ("ev_current_l1_a", _TYPE_FLOAT),
     11: ("ev_current_l2_a", _TYPE_FLOAT),
     12: ("ev_current_l3_a", _TYPE_FLOAT),
+}
+
+# HeartBeat field 63's sub-fields (PLAN-147). Only work_mode is read; the
+# other four (bind_state, online_state, po_sn, ctrl_mode) are left alone.
+_PO_LINKAGE_FIELD_MAP: dict[int, tuple[str, str]] = {
+    4: ("_charge_mode_raw", _TYPE_INT),
 }
 
 # cmd_func 2, cmd_id 34 (ParamReport) - the maximum current (field 9, the
@@ -167,6 +186,9 @@ _PLUG_STATUS_NAMES: dict[int, str] = {
 # 1/3/6), so it keeps a key of its own.
 _SESSION_STATUS_NAMES: dict[int, str] = {0: "idle", 2: "charging", 3: "finished"}
 _PHASE_MODE_NAMES: dict[int, str] = {0: "three_phase", 1: "single_phase"}
+# PLAN-147: the app's own labels for `EDevPileParamSet.work_mode`, confirmed
+# against @Xygen's capture of 2026-09-13 (issue #7).
+_CHARGE_MODE_NAMES: dict[int, str] = {1: "fast", 2: "solar", 3: "custom", 4: "smart"}
 
 # The plug status value that means "no session in progress". Everything in
 # `_SESSION_SCOPED_RAW_KEYS` is withheld while field 1 reports this value.
@@ -214,12 +236,29 @@ def _decode_charge_readings(raw: bytes) -> dict[str, Any]:
     return result
 
 
+def _decode_po_linkage(raw: bytes) -> dict[str, Any]:
+    """Decode HeartBeat's nested PO-linkage record (field 63, PLAN-147)."""
+    result: dict[str, Any] = {}
+    for sub_num, sub_wire, sub_raw in _iter_fields(raw):
+        mapping = _PO_LINKAGE_FIELD_MAP.get(sub_num)
+        if mapping is None:
+            continue
+        key, scalar_type = mapping
+        value = _decode_scalar(sub_wire, sub_raw, scalar_type)
+        if value is not None:
+            result[key] = value
+    return result
+
+
 def _decode_heartbeat_fields(pdata: bytes) -> dict[str, Any]:
     """Decode one HeartBeat (2/33) message: its scalars plus field 8."""
     result: dict[str, Any] = {}
     for field_num, wire_type, raw in _iter_fields(pdata):
         if field_num == _CHARGE_READINGS_FIELD and wire_type == 2:
             result.update(_decode_charge_readings(raw))
+            continue
+        if field_num == _PO_LINKAGE_FIELD and wire_type == 2:
+            result.update(_decode_po_linkage(raw))
             continue
 
         mapping = _HEARTBEAT_FIELD_MAP.get(field_num)
@@ -280,6 +319,12 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
         phase_mode_name = _PHASE_MODE_NAMES.get(phase_mode_raw)
         if phase_mode_name is not None:  # same reasoning as above
             result["ev_phase_mode"] = phase_mode_name
+
+    charge_mode_raw = result.pop("_charge_mode_raw", None)
+    if isinstance(charge_mode_raw, int):
+        charge_mode_name = _CHARGE_MODE_NAMES.get(charge_mode_raw)
+        if charge_mode_name is not None:  # same reasoning as above
+            result["ev_charge_mode"] = charge_mode_name
 
     max_current_raw = result.pop("_max_current_da_raw", None)
     if isinstance(max_current_raw, int):

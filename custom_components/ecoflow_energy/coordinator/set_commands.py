@@ -18,6 +18,9 @@ from ..const import (
     POWEROCEAN_SOC_STATE_KEYS,
     POWERPULSE2_CHARGE_ACTION_PRECONDITION,
     POWERPULSE2_CHARGE_ACTION_WINDOW_S,
+    POWERPULSE2_CHARGE_MODE_OPTIONS,
+    POWERPULSE2_CHARGE_MODE_WINDOW_S,
+    POWERPULSE2_CHARGE_MODE_WIRE,
     POWERPULSE2_MAX_CURRENT_RANGE_A,
     POWERPULSE2_MAX_CURRENT_WINDOW_S,
 )
@@ -1347,6 +1350,162 @@ class SetCommandsMixin(_Base):
             ) from None
         else:
             self._log_event("powerpulse_max_current", str(confirmed_value))
+        finally:
+            self._clear_wallbox_action(record)
+
+    async def async_set_powerpulse_charge_mode(self, option: str) -> None:
+        """Set this PowerPulse 2's charging mode (PLAN-147).
+
+        Same sibling-only routing as `async_set_powerpulse_max_current`: the
+        app's write path stays on a PowerOcean's set topic on every recording
+        on file, so an entry without a PowerOcean is refused rather than
+        guessed at (PLAN-147 decision 2).
+
+        `option` must be one of `POWERPULSE2_CHARGE_MODE_OPTIONS`. Both the
+        option check and the "smart" refusal run before the lock takes any
+        other action - before the in-progress check, before anything is
+        published - because neither one is a device failure that should
+        consume the pending-write slot. "smart" is refused because the app
+        never sends that mode without a `smart_mode` block (departure time,
+        charging target) this integration does not build, and a bare write
+        to it is unobserved (PLAN-147 decision 3); the option stays in the
+        select's list so the entity can still display the wallbox's own
+        smart-mode state.
+
+        Confirmation runs on `ev_charge_mode` reaching the requested option
+        on the frame being applied (`WallboxActionPending.expected_value`,
+        `_resolve_wallbox_action`), the same "never on the accumulated
+        store" reasoning `async_set_powerpulse_max_current` gives, within
+        `POWERPULSE2_CHARGE_MODE_WINDOW_S` (75 s - heartbeat cadence is 60 s
+        and the four echoes on file range from 0.7 to 56 s).
+        """
+        from ..ecoflow.energy_stream import build_powerpulse_param_set_mode_payload
+        from .core import WallboxActionPending
+
+        async with self._wallbox_action_lock:
+            if self._shutdown:
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerpulse_action_not_delivered",
+                )
+            if option not in POWERPULSE2_CHARGE_MODE_OPTIONS:
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerpulse_charge_mode_unknown",
+                    translation_placeholders={"option": str(option)},
+                )
+            if option == "smart":
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerpulse_charge_mode_smart_in_app",
+                )
+            if self._wallbox_action_pending is not None:
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerpulse_action_in_progress",
+                )
+            route = self.charge_action_route()
+            if route is None:
+                if self._powerocean_coordinators() is None:
+                    raise HomeAssistantError(
+                        translation_domain=DOMAIN,
+                        translation_key="powerpulse_action_not_delivered",
+                    )
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerpulse_sibling_missing",
+                )
+            if route == "own":
+                # The write path on the wallbox's own channel is unevidenced
+                # (PLAN-147 decision 2, the same reasoning
+                # async_set_powerpulse_max_current gives) - no recording
+                # shows the app doing this without a PowerOcean in the loop.
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerpulse_charge_mode_needs_powerocean",
+                )
+            sibling = self.powerocean_sibling()
+            if sibling is None:
+                # Unreachable within one event-loop tick: same guard as
+                # `async_set_powerpulse_max_current` above.
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerpulse_action_not_delivered",
+                )
+            sibling_mqtt = sibling._mqtt_client
+            if sibling_mqtt is None or not sibling_mqtt.is_connected():
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerpulse_sibling_offline",
+                )
+            dev_addr = self._device_data.get("ev_charger_dev_addr")
+            dev_sn = self._device_data.get("ev_charger_sn")
+            if (
+                not isinstance(dev_addr, int)
+                or not isinstance(dev_sn, str)
+                or len(dev_sn) != 16
+            ):
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerpulse_descriptor_missing",
+                )
+            work_mode = POWERPULSE2_CHARGE_MODE_WIRE[option]
+            try:
+                payload = build_powerpulse_param_set_mode_payload(
+                    work_mode, dev_addr, dev_sn, sibling.device_sn
+                )
+            except ValueError:
+                # The option and its wire value are already validated above;
+                # a ValueError here can only be a malformed serial
+                # (dev_sn/sibling.device_sn) - the same failure mode as the
+                # descriptor check just above.
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerpulse_descriptor_missing",
+                ) from None
+            future: asyncio.Future[str | float] = self.hass.loop.create_future()
+            record = WallboxActionPending(
+                action="charge_mode",
+                issued_at=time.monotonic(),
+                future=future,
+                state_key="ev_charge_mode",
+                expected_value=option,
+            )
+            # Same lifecycle as `async_set_powerpulse_max_current`: the
+            # record lives exactly as long as this call and is cleared on
+            # every exit in the `finally` below.
+            self._wallbox_action_pending = record
+            try:
+                delivered = await sibling.async_send_proto_set_command(
+                    payload, "powerpulse_charge_mode"
+                )
+                if not delivered:
+                    self._log_event("powerpulse_charge_mode_not_delivered", "")
+                    raise HomeAssistantError(
+                        translation_domain=DOMAIN,
+                        translation_key="powerpulse_action_not_delivered",
+                    )
+            except BaseException:
+                self._clear_wallbox_action(record)
+                raise
+
+        try:
+            confirmed_value = await asyncio.wait_for(
+                future, POWERPULSE2_CHARGE_MODE_WINDOW_S
+            )
+        except TimeoutError:
+            last_reported = self._device_data.get("ev_charge_mode")
+            self._log_event("powerpulse_charge_mode_unconfirmed", str(last_reported))
+            reported = (
+                last_reported if isinstance(last_reported, str) else "no value yet"
+            )
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="powerpulse_charge_mode_not_confirmed",
+                translation_placeholders={"reported": reported},
+            ) from None
+        else:
+            self._log_event("powerpulse_charge_mode", str(confirmed_value))
         finally:
             self._clear_wallbox_action(record)
 

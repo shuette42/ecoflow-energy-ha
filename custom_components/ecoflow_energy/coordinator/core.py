@@ -113,14 +113,17 @@ class WallboxActionPending:
     (`ev_charge_status`, the default). A setting write instead names its own
     `state_key` and is confirmed the moment the arriving frame's value at
     that key equals `expected_value` - a status-set membership check would
-    not apply to a numeric setting.
+    not apply to a numeric setting. `expected_value` is `float | str | None`
+    since PLAN-147: a numeric setting (max current) compares by tolerance,
+    a string setting (charging mode) compares by equality - see
+    `_resolve_wallbox_action` in state_apply.py.
     """
 
     action: str
     issued_at: float
     future: asyncio.Future[str | float]
     state_key: str = "ev_charge_status"
-    expected_value: float | None = None
+    expected_value: float | str | None = None
 
 
 class EcoFlowDeviceCoordinator(

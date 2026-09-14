@@ -337,9 +337,12 @@ class StateApplyMixin(_Base):
         "available" both confirm a stop).
 
         A record with `expected_value` set (a setting write) is confirmed by
-        numeric equality on `record.state_key`, compared with a small
-        tolerance since the device reports one decimal. A record without it
-        (a start/stop) keeps the original status-membership check.
+        equality on `record.state_key`: numeric equality with a small
+        tolerance since the device reports one decimal (max current), or
+        string equality for a setting the device reports as a name rather
+        than a number (charging mode, PLAN-147). A record without
+        `expected_value` (a start/stop) keeps the original status-membership
+        check.
         """
         record = self._wallbox_action_pending
         if record is None or record.future.done():
@@ -348,6 +351,10 @@ class StateApplyMixin(_Base):
             if record.state_key not in parsed:
                 return
             value = parsed[record.state_key]
+            if isinstance(record.expected_value, str):
+                if isinstance(value, str) and value == record.expected_value:
+                    record.future.set_result(value)
+                return
             if (
                 isinstance(value, (int, float))
                 and abs(value - record.expected_value) < 0.05

@@ -572,6 +572,7 @@ class TestNumberSetValue:
             await number_entity.async_set_native_value(11)
 
         mock_set.assert_awaited_once_with(11)
+        assert mock_set.await_args is not None
         assert isinstance(mock_set.await_args.args[0], int)
         # No optimistic apply: the store still holds the value from before
         # the write until the wallbox's own report changes it.

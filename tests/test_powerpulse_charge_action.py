@@ -19,6 +19,7 @@ from ecoflow_energy.ecoflow.energy_stream import (
     _build_powerocean_set_envelope,
     build_powerpulse_charge_action_payload,
     build_powerpulse_param_set_current_payload,
+    build_powerpulse_param_set_mode_payload,
     build_powerpulse_standalone_charge_ctrl_payload,
 )
 from ecoflow_energy.ecoflow.parsers.powerpulse_proto import parse_powerpulse_message
@@ -30,6 +31,7 @@ RUN_DATA_SYNC_FIXTURE = FIXTURE_DIR / "c376_run_data_sync_20260824.json"
 HEARTBEAT_FIXTURE = FIXTURE_DIR / "c376_frames_plan132.json"
 STANDALONE_CTRL_FIXTURE = FIXTURE_DIR / "c376_standalone_charge_ctrl_20260912.json"
 PARAM_SET_WRITES_FIXTURE = FIXTURE_DIR / "c376_param_set_writes_20260824.json"
+CHARGE_MODE_WRITES_FIXTURE = FIXTURE_DIR / "c376_charging_mode_writes_20260913.json"
 
 DEV_ADDR = 215
 DEV_SN = "X" * 16
@@ -371,3 +373,120 @@ def test_param_set_envelope_differs_from_charge_action_only_by_device_sn() -> No
     assert h_action["data_len"] != h_param["data_len"]
     assert "device_sn" not in h_action
     assert h_param["device_sn"] == DEV_SN
+
+
+# --- Charging mode (PLAN-147, @Xygen's capture of 2026-09-13, issue #7) -----
+
+
+def test_mode_builder_reproduces_the_fast_write_byte_for_byte() -> None:
+    """The Fast write (22:48:03.443 UTC) of the five recorded mode writes,
+    reproduced byte-for-byte from the builder's inputs."""
+    frames = json.loads(CHARGE_MODE_WRITES_FIXTURE.read_text())["frames"]
+    set_frames = [f for f in frames if f["topic"] == "set"]
+    assert len(set_frames) == 5
+
+    fast = next(f for f in set_frames if f["ts_iso"].startswith("2026-09-13T22:48:03"))
+    expected = bytes.fromhex(fast["hex"])
+    headers, _ = decode_header_message(expected)
+    seq = headers[0]["seq"]
+    powerocean_sn = headers[0]["device_sn"]
+
+    built = build_powerpulse_param_set_mode_payload(
+        work_mode=1,
+        dev_addr=DEV_ADDR,
+        dev_sn=DEV_SN,
+        powerocean_sn=powerocean_sn,
+        seq=seq,
+    )
+    assert built == expected
+
+    for frame in set_frames:
+        header = decode_header_message(bytes.fromhex(frame["hex"]))[0][0]
+        assert header["cmd_func"] == 241
+        assert header["cmd_id"] == 102
+        assert header["check_type"] == 3
+        assert header["need_ack"] == 1
+        assert header["version"] == 3
+        assert header["payload_ver"] == 1
+        assert header["from"] == "ios"
+        assert "device_sn" in header
+
+
+def test_mode_pdata_carries_only_work_mode() -> None:
+    """The app's Solar and Custom writes carry extra fields
+    (`switch_bits`/`solar_current_min`, `user_current_set`); this builder's
+    `EDevPileParamSet` (field 4) is the bare setting alone, `10 02` for
+    Solar and `10 03` for Custom - the shape the app itself uses for Fast
+    (PLAN-147 decision 2)."""
+    for work_mode in (2, 3):
+        built = build_powerpulse_param_set_mode_payload(
+            work_mode=work_mode,
+            dev_addr=DEV_ADDR,
+            dev_sn=DEV_SN,
+            powerocean_sn=DEV_SN,
+            seq=149,
+        )
+        headers, _ = decode_header_message(built)
+        pdata = bytes.fromhex(headers[0]["pdata"])
+        assert len(pdata) == 27
+        # dev_info (field 1) is unchanged from the current-set builder.
+        assert pdata[0:2] == bytes([0x0A, 0x15])
+        # EDevPileParamSet (field 4): tag, length 2, bare {2: work_mode}.
+        assert pdata[23:27] == bytes.fromhex(f"220210{work_mode:02x}")
+
+
+@pytest.mark.parametrize(
+    "work_mode,dev_sn,powerocean_sn",
+    [
+        (0, DEV_SN, DEV_SN),
+        (5, DEV_SN, DEV_SN),
+        (1.0, DEV_SN, DEV_SN),
+        (True, DEV_SN, DEV_SN),
+        ("1", DEV_SN, DEV_SN),
+        (1, "short", DEV_SN),
+        (1, DEV_SN, "short"),
+    ],
+)
+def test_mode_builder_rejects_bad_input(
+    work_mode: object, dev_sn: str, powerocean_sn: str
+) -> None:
+    with pytest.raises(ValueError):
+        build_powerpulse_param_set_mode_payload(
+            work_mode, DEV_ADDR, dev_sn, powerocean_sn
+        )
+
+
+def test_mode_envelope_differs_from_charge_action_only_by_device_sn() -> None:
+    charge_action = build_powerpulse_charge_action_payload(
+        "start", DEV_ADDR, DEV_SN, seq=42
+    )
+    mode_set = build_powerpulse_param_set_mode_payload(
+        work_mode=1,
+        dev_addr=DEV_ADDR,
+        dev_sn=DEV_SN,
+        powerocean_sn=DEV_SN,
+        seq=42,
+    )
+    h_action = decode_header_message(charge_action)[0][0]
+    h_mode = decode_header_message(mode_set)[0][0]
+
+    for key in (
+        "src",
+        "dest",
+        "d_src",
+        "d_dest",
+        "check_type",
+        "cmd_func",
+        "need_ack",
+        "seq",
+        "version",
+        "payload_ver",
+        "from",
+    ):
+        assert h_action[key] == h_mode[key]
+
+    assert h_action["cmd_id"] == 100
+    assert h_mode["cmd_id"] == 102
+    assert h_action["data_len"] != h_mode["data_len"]
+    assert "device_sn" not in h_action
+    assert h_mode["device_sn"] == DEV_SN

@@ -1,10 +1,13 @@
 """Select platform for EcoFlow Energy.
 
-Three settings so far: the PowerOcean work mode (self-use, AI schedule), the
-STREAM AC 5000 work mode, and the Delta 3 LCD screen timeout. All use the same
-optimistic-lock pattern as switch.py and number.py - after a SET the local
-state is updated immediately and device updates for the same key are ignored
-for five seconds.
+Four settings so far: the PowerOcean work mode (self-use, AI schedule), the
+STREAM AC 5000 work mode, the Delta 3 LCD screen timeout, and the PowerPulse 2
+charging mode. The first three use the same optimistic-lock pattern as
+switch.py and number.py - after a SET the local state is updated immediately
+and device updates for the same key are ignored for five seconds. The
+PowerPulse 2 one applies nothing on its own: the coordinator returns only once
+the wallbox has reported the new mode on its own heartbeat, and that report is
+what updates the store (PLAN-147, the same rule as its number in number.py).
 
 The two work modes share the entity key and nothing else: their modes and
 their wire values are unrelated, so each has its own branch.
@@ -34,10 +37,12 @@ from .const import (
     DELTA3_SELECTS,
     DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
+    DEVICE_TYPE_POWERPULSE2,
     DEVICE_TYPE_STREAM_AC5000,
     DEVICE_TYPE_WAVE3,
     DOMAIN,
     POWEROCEAN_SELECTS,
+    POWERPULSE2_SELECTS,
     STREAMAC5000_SELECTS,
     WAVE3_SELECTS,
     EcoFlowSelectDef,
@@ -81,6 +86,15 @@ async def async_setup_entry(
             _get_select_defs(coordinator.device_type, coordinator.device_sn),
             coordinator.device_sn,
         )
+        if (
+            coordinator.device_type == DEVICE_TYPE_POWERPULSE2
+            and coordinator.charge_action_route() != "sibling"
+        ):
+            # No evidenced write route on the wallbox's own channel
+            # (PLAN-147 decision 2, as for the number): zero or two-or-more
+            # PowerOceans in the entry gets no select, whatever the wallbox
+            # itself has reported.
+            continue
         for defn in defs:
             if defn.enhanced_only and not coordinator.enhanced_mode:
                 continue
@@ -111,8 +125,23 @@ class EcoFlowSelect(CoordinatorEntity[EcoFlowDeviceCoordinator], SelectEntity):
 
     @property
     def available(self) -> bool:
-        """Return True if the coordinator is available."""
-        return self.coordinator.device_available and super().available
+        """Return True if the coordinator is available.
+
+        The PowerPulse 2 charging-mode control only ever exists on the
+        sibling route (PLAN-147 decision 1), so availability also follows
+        the sibling PowerOcean's own MQTT connection, resolved fresh on every
+        read - the same rule the wallbox's number and buttons apply.
+        """
+        if not (self.coordinator.device_available and super().available):
+            return False
+        if self.coordinator.device_type != DEVICE_TYPE_POWERPULSE2:
+            return True
+        sibling = self.coordinator.powerocean_sibling()
+        return (
+            sibling is not None
+            and sibling.mqtt_client is not None
+            and sibling.mqtt_client.is_connected()
+        )
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -164,6 +193,15 @@ class EcoFlowSelect(CoordinatorEntity[EcoFlowDeviceCoordinator], SelectEntity):
                 self._definition.options,
                 self._definition.key,
             )
+            return
+
+        if self.coordinator.device_type == DEVICE_TYPE_POWERPULSE2:
+            # No optimistic apply: the coordinator returns only once the
+            # wallbox has reported the new mode on its own heartbeat, and
+            # that report is what updates the store. `smart` and an unknown
+            # option are refused inside the coordinator before anything is
+            # published (PLAN-147 decision 3).
+            await self.coordinator.async_set_powerpulse_charge_mode(option)
             return
 
         if self._definition.key == "work_mode":
@@ -280,4 +318,6 @@ def _get_select_defs(device_type: str, device_sn: str = "") -> list[EcoFlowSelec
         return STREAMAC5000_SELECTS
     if device_type == DEVICE_TYPE_WAVE3:
         return WAVE3_SELECTS
+    if device_type == DEVICE_TYPE_POWERPULSE2:
+        return POWERPULSE2_SELECTS
     return []

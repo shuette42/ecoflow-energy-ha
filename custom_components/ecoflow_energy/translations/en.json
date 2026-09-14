@@ -1490,6 +1490,15 @@
           "faulted": "Fault"
         }
       },
+      "ev_charge_mode": {
+        "name": "Wallbox Charging Mode",
+        "state": {
+          "fast": "Fast charging",
+          "solar": "Solar Mode",
+          "custom": "Custom",
+          "smart": "Smart Mode"
+        }
+      },
       "ev_voltage_l1_v": {
         "name": "Wallbox Voltage L1"
       },
@@ -2146,6 +2155,15 @@
           "10min": "10 min",
           "never": "Never"
         }
+      },
+      "ev_charge_mode": {
+        "name": "Wallbox Charging Mode",
+        "state": {
+          "fast": "Fast charging",
+          "solar": "Solar Mode",
+          "custom": "Custom",
+          "smart": "Smart Mode"
+        }
       }
     },
     "button": {
@@ -2184,6 +2202,18 @@
     },
     "powerpulse_action_state": {
       "message": "The wallbox reports {status}, which does not allow this action."
+    },
+    "powerpulse_charge_mode_needs_powerocean": {
+      "message": "The charging mode can only be set through a PowerOcean on the same account; this entry has none."
+    },
+    "powerpulse_charge_mode_not_confirmed": {
+      "message": "The wallbox did not report the new charging mode within the time allowed. Its last reported mode: {reported}."
+    },
+    "powerpulse_charge_mode_smart_in_app": {
+      "message": "Smart Mode needs a departure time and a charging target; set it in the EcoFlow app."
+    },
+    "powerpulse_charge_mode_unknown": {
+      "message": "{option} is not a charging mode this wallbox reports."
     },
     "powerpulse_descriptor_missing": {
       "message": "The wallbox has not reported its address yet. Wait for its next settings report."

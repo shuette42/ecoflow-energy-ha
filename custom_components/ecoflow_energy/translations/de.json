@@ -1490,6 +1490,15 @@
           "faulted": "Störung"
         }
       },
+      "ev_charge_mode": {
+        "name": "Wallbox-Lademodus",
+        "state": {
+          "fast": "Schnellladung",
+          "solar": "Solar Modus",
+          "custom": "Benutzerdefiniert",
+          "smart": "Smart Modus"
+        }
+      },
       "ev_voltage_l1_v": {
         "name": "Wallbox-Spannung L1"
       },
@@ -2146,6 +2155,15 @@
           "10min": "10 min",
           "never": "Nie"
         }
+      },
+      "ev_charge_mode": {
+        "name": "Wallbox-Lademodus",
+        "state": {
+          "fast": "Schnellladung",
+          "solar": "Solar Modus",
+          "custom": "Benutzerdefiniert",
+          "smart": "Smart Modus"
+        }
       }
     },
     "button": {
@@ -2184,6 +2202,18 @@
     },
     "powerpulse_action_state": {
       "message": "Die Wallbox meldet {status}, das lässt diese Aktion nicht zu."
+    },
+    "powerpulse_charge_mode_needs_powerocean": {
+      "message": "Der Lademodus lässt sich nur über eine PowerOcean im selben Konto setzen; dieser Eintrag hat keine."
+    },
+    "powerpulse_charge_mode_not_confirmed": {
+      "message": "Die Wallbox hat den neuen Lademodus nicht innerhalb der erlaubten Zeit gemeldet. Zuletzt gemeldet: {reported}."
+    },
+    "powerpulse_charge_mode_smart_in_app": {
+      "message": "Der Smart Modus braucht eine Abfahrtszeit und ein Ladeziel; das wird in der EcoFlow-App eingestellt."
+    },
+    "powerpulse_charge_mode_unknown": {
+      "message": "{option} ist kein Lademodus, den diese Wallbox meldet."
     },
     "powerpulse_descriptor_missing": {
       "message": "Die Wallbox hat ihre Adresse noch nicht gemeldet. Warte auf ihren nächsten Einstellungsbericht."
