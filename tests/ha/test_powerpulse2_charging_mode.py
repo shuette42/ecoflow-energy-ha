@@ -172,7 +172,15 @@ async def test_a_stale_value_in_the_store_does_not_confirm(
 ) -> None:
     """The check runs on the arriving frame, never on the store: a wallbox
     already reporting `fast` does not confirm a write to `fast` until a
-    frame carrying it arrives after the write."""
+    frame carrying it arrives after the write.
+
+    The frame WITHOUT the key is the part that tests this. A confirming
+    frame carrying the store's own value satisfies both a frame-only and a
+    store-fallback implementation; a keyless frame while the store already
+    holds the expected value is where the two differ. Mutation probe:
+    `value = parsed.get(key, self._device_data.get(key))` in
+    `_resolve_wallbox_action` confirms on the keyless frame and fails here.
+    """
     _entry_obj, _oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
     _set_descriptor(wallbox)
     _apply_frame(wallbox, _heartbeat_frame_with_mode(1, 1))  # fast already
@@ -181,6 +189,9 @@ async def test_a_stale_value_in_the_store_does_not_confirm(
     await asyncio.sleep(0.05)
     record = wallbox._wallbox_action_pending
     assert record is not None
+    assert not record.future.done()
+
+    _apply_status(wallbox, 1)  # a frame without the key, store still `fast`
     assert not record.future.done()
 
     _apply_frame(wallbox, _heartbeat_frame_with_mode(1, 1))

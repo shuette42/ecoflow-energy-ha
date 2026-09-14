@@ -548,6 +548,36 @@ def test_charge_mode_reported_on_every_plan132_frame() -> None:
     assert checked == 10
 
 
+def test_charge_mode_on_every_heartbeat_in_the_corpus() -> None:
+    """Every `2/33` in every powerpulse fixture carries the linkage record
+    with a mapped mode: 46 heartbeats in seven fixtures from six recordings
+    on 2026-09-14, with and without a PowerOcean on the account. The floor
+    sits at that count rather than at 1, so a parser that quietly stopped
+    reading the field on most frames, or a fixture that lost its heartbeats,
+    is caught (`verify-the-checker`, shape 3)."""
+    from ecoflow_energy.ecoflow.proto.decoder import decode_header_message
+
+    heartbeats = 0
+    modes: set[str] = set()
+    for path in sorted(FIXTURE.parent.glob("*.json")):
+        payload = json.loads(path.read_text())
+        frames = payload.get("frames") or payload.get("pushes") or []
+        for frame in frames:
+            raw = bytes.fromhex(frame.get("hex") or frame.get("frame_hex") or "")
+            headers, _ = decode_header_message(raw)
+            if not any(
+                h.get("cmd_func") == 2 and h.get("cmd_id") == 33 for h in headers
+            ):
+                continue
+            result = parse_powerpulse_message(raw)
+            assert result is not None, (path.name, frame.get("ts_iso"))
+            assert "ev_charge_mode" in result, (path.name, frame.get("ts_iso"))
+            heartbeats += 1
+            modes.add(result["ev_charge_mode"])
+    assert heartbeats >= 46
+    assert modes == {"fast", "solar", "custom", "smart"}
+
+
 def test_charge_mode_c374_frames_report_fast_then_solar() -> None:
     """The one real-frame source for `fast`: the `C374` recording (#7,
     2026-09-11) carries mode 1 on its first two heartbeats and mode 2 on the

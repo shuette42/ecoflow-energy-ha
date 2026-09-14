@@ -207,6 +207,15 @@ async def test_a_frame_with_the_old_value_does_not_confirm(
     assert pending is not None and not pending.future.done()
     assert not task.done()
 
+    # The store now holds the requested value, put there directly rather than
+    # by a frame; a frame without the key must not confirm from it (the
+    # frame-not-store rule, PLAN-147 review M1: a store-fallback mutation in
+    # `_resolve_wallbox_action` passes every other assertion in this file).
+    wallbox.set_device_value("ev_max_current_a", 11.0)
+    _apply_status(wallbox, 1)
+    assert pending is not None and not pending.future.done()
+    assert not task.done()
+
     _apply_frame(
         wallbox, _heartbeat_frame_with_max_current(1, 110)
     )  # 11.0 A - confirms

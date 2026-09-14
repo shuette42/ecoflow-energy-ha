@@ -324,8 +324,8 @@ def _build_powerpulse_dev_info(dev_addr: int, dev_sn: str) -> bytes:
     """Build the `dev_info` sub-message (`pdata` field 1) every PowerPulse 2
     `EDevParamSet` write addresses the wallbox accessory with: the bus
     address and 16-character serial, the same two fields and nothing else
-    (PLAN-146, PLAN-147) - never the caller's own validation, callers
-    validate `dev_sn` themselves via `_validate_powerpulse_serial` first.
+    (PLAN-146, PLAN-147). Does no validation of its own; callers run
+    `_validate_powerpulse_serial` first.
     """
     return encode_field_varint(1, dev_addr) + encode_field_bytes(
         2, dev_sn.encode("ascii")
@@ -397,13 +397,14 @@ def build_powerpulse_param_set_mode_payload(
     `build_powerpulse_param_set_current_payload` - `dev_info` (`pdata`
     field 1) carries the wallbox's bus address and serial, `EDevPileParamSet`
     (`pdata` field 4) carries the setting - but here field 4 holds only its
-    own field 2 (`work_mode`), nothing else. The app's own writes add
-    `switch_bits`/`solar_current_min` for Solar and `user_current_set` for
-    Custom; those are the wallbox's current settings echoed back on every
-    write regardless of mode, and the device keeps them when the field is
-    absent (proto3 optional field), so this integration deliberately sends
-    the bare setting alone - the shape the app itself uses for Fast
-    (PLAN-147 decision 2).
+    own field 2 (`work_mode`), nothing else. The app repeats per-mode
+    settings beside it (Custom: the configured current, field 6; Solar: the
+    flag bits and the solar minimum, fields 1 and 4; Smart: its targets,
+    fields 1 and 7) and sends Fast bare. Each of those fields is
+    presence-tracked, so a write that leaves one out should leave that
+    setting untouched - a reading of the message, not an observation, to be
+    confirmed on the owner's first run of the select (PLAN-147 decision 2).
+    Until then the bare write is the shape the app itself uses for Fast.
 
     Byte-for-byte from @Xygen's capture of 2026-09-13 (issue #7): the Fast
     write (22:48:03.443 UTC) is reproduced exactly in the tests, and the

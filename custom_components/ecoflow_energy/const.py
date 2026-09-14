@@ -7113,8 +7113,10 @@ POWERPULSE2_SENSORS: list[EcoFlowSensorDef] = [
     ),
     # The wallbox's own charging-mode setting (PLAN-147), read from its
     # heartbeat field 63 sub-field 4, the linkage record every heartbeat on
-    # file carries, with or without a PowerOcean on the account (42 heartbeats
-    # across five recordings, all four modes among them). `accessory=True`
+    # file carries, with or without a PowerOcean on the account (every `2/33`
+    # in the seven powerpulse fixtures, 46 of 46 on 2026-09-14, all four
+    # modes among them; `test_charge_mode_on_every_heartbeat_in_the_corpus`
+    # holds that floor). `accessory=True`
     # like `ev_charge_status` above: created on the first report. Mirrors
     # `ev_max_current_a`'s sensor + number pair: the sensor exists on every
     # route, the select below is sibling-only (async_set_powerpulse_charge_mode()).
