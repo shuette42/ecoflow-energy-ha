@@ -25,6 +25,7 @@ from .const import (
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
+    DEVICE_TYPE_OCEAN2,
     DEVICE_TYPE_POWERPULSE2,
     DEVICE_TYPE_POWERSTREAM,
     DEVICE_TYPE_SMART_METER,
@@ -42,6 +43,7 @@ from .const import (
     SOLARTRACKER_SENSORS,
     STREAM_SENSORS,
     STREAMAC5000_SENSORS,
+    OCEAN2_SENSORS,
     WAVE3_SENSORS,
     EcoFlowSensorDef,
     filter_defs_for_serial,
@@ -401,4 +403,6 @@ def _get_sensor_defs(device_type: str) -> list[EcoFlowSensorDef]:
         return WAVE3_SENSORS
     if device_type == DEVICE_TYPE_POWERPULSE2:
         return POWERPULSE2_SENSORS
+    if device_type == DEVICE_TYPE_OCEAN2:
+        return OCEAN2_SENSORS
     return []

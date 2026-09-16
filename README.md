@@ -53,12 +53,15 @@
 | **Smart Meter** | `BK21` | Enhanced only | 18 + 3 binary | none, read-only | 2 | ~3 s |
 | **Solar Tracker** | `HZ31` `S02F` | Enhanced only | 6 | none, read-only for now | none | ~3 s |
 | **WAVE 3** | `AC71` | Enhanced only | 18 + 5 binary | 4 switches · 5 numbers · 5 selects · 1 climate | 1 | ~2 s / 120 s |
+| **Ocean 2** | `RE11` `RE17` | Enhanced only | 20 | none, read-only | 6 | ~3 s |
 
 > **Connection.** Standard Mode reads through the IoT Developer API with your access and secret key; Enhanced Mode signs in with the EcoFlow account and receives pushes at the faster rate. **Enhanced only** means the serial prefix cannot currently be linked to a Developer API key, so Standard Mode reports error 1006 and the entities stay unavailable; the three starred PowerOcean prefixes are in the same position. This is an EcoFlow API limitation, not a configuration problem. Controls marked Enhanced exist only with the account sign-in. The Energy Dashboard column counts the sensors made for it; optional ones are disabled by default and depend on the installation, see the device notes below and the [Energy Dashboard](#energy-dashboard) section.
 >
 > **PowerOcean and PowerOcean Plus share one entity set.** A Plus unit simply reports more of it: per-phase reactive power (var) and apparent power (VA), plus MPPT strings 3 and 4. Those entities exist for every PowerOcean but are disabled by default, because a standard unit never sends them and the entity would sit at "unknown" forever. Enable them under **Settings > Devices & services > Entities** on a Plus device.
 >
 > **The Smart Meter reports six lifetime counters: import, export, net, and net per phase.** Import and export are the two entries for the Energy Dashboard, on the grid consumption and return-to-grid slots. Net and the three phase figures are import minus export, so they fall whenever the house feeds power back into the grid; that is a real reading, not a fault, and it is why those four do not belong in the dashboard's grid slots. Its connection state does report when the house is feeding into the grid, so the direction is visible even where the energy is not. See [entity reference](documentation/entities/smart-meter.md).
+>
+> **The Ocean 2 is not a PowerOcean.** It shares five letters of the name and no field layout: its telemetry arrives on `cmd_func` 254 with nested submessages, where the PowerOcean line uses the 96 family, so it has its own parser and its own entity set. `RE11` (10 kW) and `RE17` (12 kW) are one read path - EcoFlow's own device list separates them by power rating and by nothing else. Read-only: no write frame from an Ocean 2 has been observed. See [entity reference](documentation/entities/ocean-2.md).
 >
 > **Tip:** Other Delta-series devices (Delta Pro, Delta 2, etc.) should work automatically with the Delta sensor set. Base Delta 3 and Delta 3 Plus use the Delta 3 sensor set. The five AC-coupled Stream models share one sensor set.
 >

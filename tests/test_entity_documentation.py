@@ -121,6 +121,7 @@ FAMILY_TO_FILE: dict[str, str] = {
     "SOLARTRACKER": "solar-tracker.md",
     "WAVE3": "wave-3.md",
     "POWERPULSE2": "powerpulse-2.md",
+    "OCEAN2": "ocean-2.md",
 }
 
 # Doc files that document a SUBSET of a family's entities under their own

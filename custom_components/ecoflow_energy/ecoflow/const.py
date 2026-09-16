@@ -67,6 +67,14 @@ DEVICE_TYPE_WAVE3 = "wave3"
 # `proto/runtime.py`); that relay path is retired in the same change that
 # adds this type, so a `C376` is never read twice (#7, #247).
 DEVICE_TYPE_POWERPULSE2 = "powerpulse2"
+# Ocean 2 home battery (`RE11`, `RE17`). Enhanced-only and reached through the
+# serial prefix alone: the Developer API refuses every quota read for it with
+# error 1006, and neither channel carries a product name that any keyword list
+# here would match. Despite sharing five letters with the PowerOcean line it is
+# a different protocol - `cmd_func` 254 with nested submessages, where the
+# PowerOcean uses the 96 family - so it gets its own parser rather than a
+# routing entry (#145).
+DEVICE_TYPE_OCEAN2 = "ocean2"
 DEVICE_TYPE_UNKNOWN = "unknown"
 
 # Keywords used to classify devices from productName strings.
@@ -266,6 +274,18 @@ _SN_PREFIX_MAP = {
     # the parser was built from (ADR-008, prefix scope). The app API gives
     # it no product name either.
     "C374": DEVICE_TYPE_POWERPULSE2,
+    # Ocean 2 (#145). Mapped from a 16 h capture on the reporter's own unit
+    # and confirmed against a seven hour recording from a second, unrelated
+    # installation: the field numbers line up frame for frame, the
+    # load-bearing readings and the module block included.
+    "RE11": DEVICE_TYPE_OCEAN2,
+    # Ocean 2, 12 kW variant. EcoFlow's own device list carries `RE11` and
+    # `RE17` with different power ratings and nothing else: same message
+    # families, same payload shape, same screens, and no separate handling
+    # anywhere in the app client. For a read-only integration they are one
+    # device, so `RE17` is routed to the same parser rather than waiting for
+    # a capture that would only show the same frames again.
+    "RE17": DEVICE_TYPE_OCEAN2,
 }
 
 _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
@@ -283,6 +303,8 @@ _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
     "ES22": "STREAM AC 5000",
     "ES21": "STREAM 5000",
     "BK21": "Smart Meter",
+    "RE11": "Ocean 2",
+    "RE17": "Ocean 2",
     "HZ31": "Solar Tracker",
     "S02F": "Solar Tracker",
     # WAVE 3: the app names it "WAVE 3-<tail>", neither channel gives a

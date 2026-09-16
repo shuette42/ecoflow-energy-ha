@@ -19,6 +19,7 @@ from homeassistant.const import Platform
 from .ecoflow.const import (  # noqa: E402
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_DELTA3,
+    DEVICE_TYPE_OCEAN2,
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_POWERPULSE2,
     DEVICE_TYPE_POWERSTREAM,
@@ -383,6 +384,7 @@ DEVICE_TYPE_DISPLAY_NAMES: dict[str, str] = {
     DEVICE_TYPE_SOLAR_TRACKER: "Solar Tracker",
     DEVICE_TYPE_WAVE3: "WAVE 3",
     DEVICE_TYPE_POWERPULSE2: "PowerPulse 2",
+    DEVICE_TYPE_OCEAN2: "Ocean 2",
 }
 
 # Device types that only report over the account channel (app-auth WSS).
@@ -395,6 +397,7 @@ ENHANCED_ONLY_DEVICE_TYPES: frozenset[str] = frozenset(
         DEVICE_TYPE_SOLAR_TRACKER,
         DEVICE_TYPE_WAVE3,
         DEVICE_TYPE_POWERPULSE2,
+        DEVICE_TYPE_OCEAN2,
     }
 )
 
@@ -6953,6 +6956,51 @@ WAVE3_SELECTS: list[EcoFlowSelectDef] = [
 #
 # All entries are `enhanced_only`: developer keys never carry this device's
 # telemetry, only the app/Enhanced Mode channel does.
+# Ocean 2 (`RE11`, `RE17`). Enhanced mode only - the Developer API answers
+# error 1006 for this device, so every value here comes from the protobuf
+# stream.
+#
+# Deliberately few: these are the readings the app shows on its home screen,
+# and each one is confirmed against it. The unit reports considerably more -
+# per-module cell voltages, temperatures, cycle counts, per-phase
+# measurements - which needs its own entity set and follows separately.
+#
+# Solar strings 3 and 4 are off by default. A unit populates as many strings
+# as its MPPT inputs are wired, and an entity that never fills reads as a
+# broken sensor rather than an unused input.
+OCEAN2_SENSORS: list[EcoFlowSensorDef] = [
+    EcoFlowSensorDef("soc_pct", "Battery SOC", "%", "battery", "measurement", "mdi:battery", suggested_display_precision=0, enhanced_only=True),
+    # Signed: positive = charging, negative = discharging.
+    EcoFlowSensorDef("batt_w", "Battery Power", "W", "power", "measurement", "mdi:battery-charging", suggested_display_precision=0, enhanced_only=True),
+    # Energy left in the pack, not its capacity.
+    EcoFlowSensorDef("batt_remaining_wh", "Battery Remaining Energy", "Wh", "energy_storage", "measurement", "mdi:battery-70", suggested_display_precision=0, enhanced_only=True),
+    EcoFlowSensorDef("solar_w", "Solar Power", "W", "power", "measurement", "mdi:solar-power", suggested_display_precision=0, enhanced_only=True),
+    # Signed: positive = import from grid, negative = export.
+    EcoFlowSensorDef("grid_w", "Grid Power", "W", "power", "measurement", "mdi:transmission-tower", suggested_display_precision=0, enhanced_only=True),
+    # As the device reports it, not derived from the other three.
+    EcoFlowSensorDef("home_w", "Home Power", "W", "power", "measurement", "mdi:home-lightning-bolt", suggested_display_precision=0, enhanced_only=True),
+    EcoFlowSensorDef("pv1_w", "PV 1 Power", "W", "power", "measurement", "mdi:solar-power-variant", suggested_display_precision=0, enhanced_only=True),
+    EcoFlowSensorDef("pv2_w", "PV 2 Power", "W", "power", "measurement", "mdi:solar-power-variant", suggested_display_precision=0, enhanced_only=True),
+    EcoFlowSensorDef("pv3_w", "PV 3 Power", "W", "power", "measurement", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=0, disabled_by_default=True, enhanced_only=True),
+    EcoFlowSensorDef("pv4_w", "PV 4 Power", "W", "power", "measurement", "mdi:solar-power-variant", "diagnostic", suggested_display_precision=0, disabled_by_default=True, enhanced_only=True),
+    # Directional splits of grid_w and batt_w. The device reports one signed
+    # value per path; the energy dashboard needs two one-directional counters,
+    # because integrating a signed value cancels itself out.
+    EcoFlowSensorDef("grid_import_power_w", "Grid Import Power", "W", "power", "measurement", "mdi:transmission-tower-import", suggested_display_precision=0, enhanced_only=True),
+    EcoFlowSensorDef("grid_export_power_w", "Grid Export Power", "W", "power", "measurement", "mdi:transmission-tower-export", suggested_display_precision=0, enhanced_only=True),
+    EcoFlowSensorDef("batt_charge_power_w", "Battery Charge Power", "W", "power", "measurement", "mdi:battery-charging", suggested_display_precision=0, enhanced_only=True),
+    EcoFlowSensorDef("batt_discharge_power_w", "Battery Discharge Power", "W", "power", "measurement", "mdi:battery", suggested_display_precision=0, enhanced_only=True),
+    # Riemann sums over the power sensors above - the entities the energy
+    # dashboard is configured with.
+    EcoFlowSensorDef("solar_energy_kwh", "Solar Energy", "kWh", "energy", "total_increasing", "mdi:solar-power", suggested_display_precision=2, enhanced_only=True),
+    EcoFlowSensorDef("home_energy_kwh", "Home Energy", "kWh", "energy", "total_increasing", "mdi:home-lightning-bolt", suggested_display_precision=2, enhanced_only=True),
+    EcoFlowSensorDef("grid_import_energy_kwh", "Grid Import Energy", "kWh", "energy", "total_increasing", "mdi:transmission-tower-import", suggested_display_precision=2, enhanced_only=True),
+    EcoFlowSensorDef("grid_export_energy_kwh", "Grid Export Energy", "kWh", "energy", "total_increasing", "mdi:transmission-tower-export", suggested_display_precision=2, enhanced_only=True),
+    EcoFlowSensorDef("batt_charge_energy_kwh", "Battery Charge Energy", "kWh", "energy", "total_increasing", "mdi:battery-charging", suggested_display_precision=2, enhanced_only=True),
+    EcoFlowSensorDef("batt_discharge_energy_kwh", "Battery Discharge Energy", "kWh", "energy", "total_increasing", "mdi:battery", suggested_display_precision=2, enhanced_only=True),
+]
+
+
 POWERPULSE2_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef(
         "ev_charge_power_w",
@@ -7369,6 +7417,23 @@ WAVE3_POWER_TO_ENERGY: dict[str, str] = {
 }
 
 WAVE3_ENERGY_FROM_API: list[tuple[str, str]] = []
+
+
+# Every counter is integrated locally: the Ocean 2 exposes no lifetime totals
+# on the account channel. Per-string solar counters are deliberately absent -
+# `solar_energy_kwh` already covers the total, and summing per-string counters
+# on a dashboard would under-report on a unit whose higher strings are
+# disabled by default.
+OCEAN2_POWER_TO_ENERGY: dict[str, str] = {
+    "solar_w": "solar_energy_kwh",
+    "home_w": "home_energy_kwh",
+    "grid_import_power_w": "grid_import_energy_kwh",
+    "grid_export_power_w": "grid_export_energy_kwh",
+    "batt_charge_power_w": "batt_charge_energy_kwh",
+    "batt_discharge_power_w": "batt_discharge_energy_kwh",
+}
+
+OCEAN2_ENERGY_FROM_API: list[tuple[str, str]] = []
 
 
 # ===========================================================================

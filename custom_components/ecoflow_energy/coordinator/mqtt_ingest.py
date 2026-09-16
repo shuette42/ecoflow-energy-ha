@@ -19,6 +19,7 @@ from ..const import (
     DEVICE_TYPE_SOLAR_TRACKER,
     DEVICE_TYPE_STREAM,
     DEVICE_TYPE_STREAM_AC5000,
+    DEVICE_TYPE_OCEAN2,
     DEVICE_TYPE_WAVE3,
     RAW_FRAME_BUNDLE_HARD_CAP,
     RAW_FRAME_BUNDLE_MAX_BYTES,
@@ -53,6 +54,7 @@ from ..ecoflow.parsers.powerocean_proto import (
 )
 from ..ecoflow.parsers.powerpulse_proto import parse_powerpulse_message
 from ..ecoflow.parsers.powerstream_http import parse_powerstream_quota
+from ..ecoflow.parsers.ocean2_proto import parse_ocean2_proto_message
 from ..ecoflow.parsers.smart_meter_proto import parse_smart_meter_message
 from ..ecoflow.parsers.smartplug import (
     parse_smartplug_http_quota,
@@ -502,6 +504,12 @@ class MqttIngestMixin(_Base):
                 # cmd_func 2, never registered in any device-type registry
                 # table - the parser decodes every header itself, the same
                 # way the WAVE 3 parser above does.
+                # Ocean 2 (#145): its own (254, 39) telemetry frame with
+                # nested submessages, registered in no device-type table -
+                # the parser decodes every header itself, the same shape as
+                # the WAVE 3 and PowerPulse 2 above.
+                if self.device_type == DEVICE_TYPE_OCEAN2:
+                    return parse_ocean2_proto_message(payload)
                 if self.device_type == DEVICE_TYPE_POWERPULSE2:
                     return parse_powerpulse_message(payload)
                 return self._parse_proto_device_data(payload)
@@ -622,6 +630,12 @@ class MqttIngestMixin(_Base):
                 # registered in no device-type table, the same shape as the
                 # WAVE 3 above. This is the bundled get_reply, which is where
                 # the settings read-back (2/34) arrives.
+                # Ocean 2 (#145): its own (254, 39) telemetry frame with
+                # nested submessages, registered in no device-type table -
+                # the parser decodes every header itself, the same shape as
+                # the WAVE 3 and PowerPulse 2 above.
+                if self.device_type == DEVICE_TYPE_OCEAN2:
+                    return parse_ocean2_proto_message(payload)
                 if self.device_type == DEVICE_TYPE_POWERPULSE2:
                     return parse_powerpulse_message(payload)
                 if self.device_type == DEVICE_TYPE_POWEROCEAN:
