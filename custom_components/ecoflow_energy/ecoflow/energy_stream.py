@@ -496,7 +496,9 @@ def build_work_mode_set_payload(work_mode: int, seq: int = 0) -> bytes:
         5 = DRM, 6 = REMOTE_SCHED, 7 = STANDBY, 8 = SOC_CALIB,
         9 = TIMER, 10 = FCR, 11 = THIRD_PARTY, 12 = AI_SCHEDULE, 13 = KRAKEN
 
-    User-exposed subset (HA select): SELFUSE, TOU, BACKUP, AI_SCHEDULE.
+    User-exposed subset (HA select): SELFUSE, AI_SCHEDULE. TOU and BACKUP
+    are excluded because the device rejects them (`result=1`) without the
+    TouParam / BackupParam sub-data this function does not send.
 
     Args:
         work_mode: WorkMode enum value (0-13).
