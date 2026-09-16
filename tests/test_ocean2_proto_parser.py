@@ -11,7 +11,6 @@ from __future__ import annotations
 import struct
 
 import pytest
-
 from ecoflow_energy.ecoflow.const import (
     DEVICE_TYPE_OCEAN2,
     DEVICE_TYPE_POWEROCEAN,
@@ -131,9 +130,7 @@ class TestTelemetryFrame:
         # Block 87 carries only the home load here. Block 7's grid reading has
         # to survive, because telemetry is partial by design.
         parsed = parse_ocean2_proto_message(
-            _telemetry(
-                flow={7: _f32(1, 550.0) + _f32(2, -1200.0), 87: _f32(1, 560.0)}
-            )
+            _telemetry(flow={7: _f32(1, 550.0) + _f32(2, -1200.0), 87: _f32(1, 560.0)})
         )
         assert parsed is not None
         assert parsed["home_w"] == pytest.approx(560.0)
@@ -219,7 +216,11 @@ class TestRobustness:
         pdata = _msg(65, _f32(17, 81.5))
         masked = bytes(b ^ 0x2A for b in pdata)
         header = (
-            _msg(1, masked) + _vint(6, 1) + _vint(8, 254) + _vint(9, 39) + _vint(14, 0x2A)
+            _msg(1, masked)
+            + _vint(6, 1)
+            + _vint(8, 254)
+            + _vint(9, 39)
+            + _vint(14, 0x2A)
         )
         parsed = parse_ocean2_proto_message(_msg(1, header))
         assert parsed is not None

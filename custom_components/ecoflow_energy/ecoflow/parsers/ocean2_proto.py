@@ -73,6 +73,9 @@ def _decode_fields(raw: bytes) -> dict[int, list[Any]]:
     while pos < len(mv):
         tag, pos = _read_varint(mv, pos)
         field_num, wire_type = tag >> 3, tag & 0x07
+        # Annotated because the wire type decides what comes out: a varint, a
+        # float, or the raw bytes of a nested submessage.
+        value: Any
         if wire_type == 0:
             value, pos = _read_varint(mv, pos)
         elif wire_type == 1:
@@ -84,7 +87,7 @@ def _decode_fields(raw: bytes) -> dict[int, list[Any]]:
             length, pos = _read_varint(mv, pos)
             if pos + length > len(mv):
                 break
-            value = mv[pos:pos + length].tobytes()
+            value = mv[pos : pos + length].tobytes()
             pos += length
         elif wire_type == 5:
             if pos + 4 > len(mv):

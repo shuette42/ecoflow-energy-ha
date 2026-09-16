@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 from ..const import (
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_DELTA3,
+    DEVICE_TYPE_OCEAN2,
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_POWERPULSE2,
     DEVICE_TYPE_POWERSTREAM,
@@ -19,7 +20,6 @@ from ..const import (
     DEVICE_TYPE_SOLAR_TRACKER,
     DEVICE_TYPE_STREAM,
     DEVICE_TYPE_STREAM_AC5000,
-    DEVICE_TYPE_OCEAN2,
     DEVICE_TYPE_WAVE3,
     RAW_FRAME_BUNDLE_HARD_CAP,
     RAW_FRAME_BUNDLE_MAX_BYTES,
@@ -41,6 +41,7 @@ from ..ecoflow.parsers.delta3_proto import (
     parse_delta3_display_property,
 )
 from ..ecoflow.parsers.delta_http import parse_delta_http_quota
+from ..ecoflow.parsers.ocean2_proto import parse_ocean2_proto_message
 from ..ecoflow.parsers.powerocean import parse_powerocean_http_quota
 from ..ecoflow.parsers.powerocean_proto import (
     flatten_heartbeat,
@@ -54,7 +55,6 @@ from ..ecoflow.parsers.powerocean_proto import (
 )
 from ..ecoflow.parsers.powerpulse_proto import parse_powerpulse_message
 from ..ecoflow.parsers.powerstream_http import parse_powerstream_quota
-from ..ecoflow.parsers.ocean2_proto import parse_ocean2_proto_message
 from ..ecoflow.parsers.smart_meter_proto import parse_smart_meter_message
 from ..ecoflow.parsers.smartplug import (
     parse_smartplug_http_quota,
