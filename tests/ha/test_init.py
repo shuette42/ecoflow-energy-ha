@@ -1267,7 +1267,7 @@ class TestUnroutedDeviceProbeWiring:
     """A skipped device is the one case where raw capture is the only route."""
 
     UNSUPPORTED = {
-        "sn": "RE11ZZ1234500001",
+        "sn": "ZZ01ZZ1234500001",
         "name": "Ocean 2",
         "product_name": "",
         "device_type": "unknown",
@@ -1612,7 +1612,7 @@ class TestRawCaptureWithoutASkippedDevice:
         dropping the first one.
         """
         unsupported = {
-            "sn": "RE11ZZ1234500001",
+            "sn": "ZZ01ZZ1234500001",
             "name": "Ocean 2",
             "product_name": "",
             "device_type": "unknown",
