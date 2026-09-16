@@ -2034,6 +2034,9 @@
       },
       "ev_max_current_a": {
         "name": "Wallbox-Maximalstrom"
+      },
+      "ev_charge_current_a": {
+        "name": "Wallbox-Ladestrom"
       }
     },
     "select": {
@@ -2202,6 +2205,18 @@
     },
     "powerpulse_action_state": {
       "message": "Die Wallbox meldet {status}, das lässt diese Aktion nicht zu."
+    },
+    "powerpulse_charge_current_needs_own_channel": {
+      "message": "Der Ladestrom lässt sich nur an einer Wallbox ohne PowerOcean im selben Konto setzen; dieser Eintrag hat eine."
+    },
+    "powerpulse_charge_current_not_confirmed": {
+      "message": "Die Wallbox hat den neuen Ladestrom nicht innerhalb der erlaubten Zeit gemeldet. Zuletzt gemeldet: {reported}."
+    },
+    "powerpulse_charge_current_range": {
+      "message": "Die Wallbox nimmt einen Ladestrom zwischen {min} und {max} A an."
+    },
+    "powerpulse_charge_current_route_ambiguous": {
+      "message": "Dieser Eintrag enthält mehr als ein PowerOcean; der Ladestrom ist nur auf einer Wallbox ohne PowerOcean beobachtet, deshalb wird er auch hier abgelehnt."
     },
     "powerpulse_charge_mode_needs_powerocean": {
       "message": "Der Lademodus lässt sich nur über eine PowerOcean im selben Konto setzen; dieser Eintrag hat keine."

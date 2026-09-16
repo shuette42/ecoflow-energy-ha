@@ -2034,6 +2034,9 @@
       },
       "ev_max_current_a": {
         "name": "Wallbox Maximum Current"
+      },
+      "ev_charge_current_a": {
+        "name": "Wallbox Charging Current"
       }
     },
     "select": {
@@ -2202,6 +2205,18 @@
     },
     "powerpulse_action_state": {
       "message": "The wallbox reports {status}, which does not allow this action."
+    },
+    "powerpulse_charge_current_needs_own_channel": {
+      "message": "The charging current can only be set on a wallbox without a PowerOcean on the same account; this entry has one."
+    },
+    "powerpulse_charge_current_not_confirmed": {
+      "message": "The wallbox did not report the new charging current within the time allowed. Its last reported value: {reported}."
+    },
+    "powerpulse_charge_current_range": {
+      "message": "The wallbox accepts a charging current between {min} and {max} A."
+    },
+    "powerpulse_charge_current_route_ambiguous": {
+      "message": "This entry holds more than one PowerOcean; the charging current has only been observed writable on a wallbox with none, so it is refused here too."
     },
     "powerpulse_charge_mode_needs_powerocean": {
       "message": "The charging mode can only be set through a PowerOcean on the same account; this entry has none."

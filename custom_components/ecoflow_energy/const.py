@@ -6,7 +6,7 @@ import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 from homeassistant.const import Platform
 
@@ -158,6 +158,10 @@ POWERPULSE2_CHARGE_ACTION_CONFIRMED: dict[str, frozenset[str]] = {
 # heartbeat alone can take up to ~60 s, so a wallbox that stops sending the
 # settings report fails loudly rather than silently.
 POWERPULSE2_MAX_CURRENT_WINDOW_S: float = 20.0
+# The one confirmed round trip (write to echo) measured 358 ms; 20 s is the
+# same generous Home Assistant service-call allowance as the maximum-current
+# window above, for the same reason - not a measured worst case.
+POWERPULSE2_CHARGE_CURRENT_WINDOW_S: float = 20.0
 # PLAN-146: the maximum current range, the owner's sweep on #7 covered end to
 # end (2026-09-10).
 POWERPULSE2_MAX_CURRENT_RANGE_A: tuple[int, int] = (6, 16)
@@ -525,6 +529,11 @@ class EcoFlowNumberDef:
     # Same meaning as on the switch definition: created on the first report
     # that carries the state key. See _watch_for_accessory() in number.py.
     accessory: bool = False
+    # Restricts a PowerPulse 2 number to one write route (PLAN-140/146): "sibling"
+    # only exists with the write evidenced through a PowerOcean, "own" only on
+    # the wallbox's own channel. None (every other number in the app) means no
+    # restriction. See _get_number_defs() / async_setup_entry() in number.py.
+    powerpulse_route: Literal["sibling", "own"] | None = None
 
 
 @dataclass(frozen=True)
@@ -7226,17 +7235,27 @@ POWERPULSE2_BUTTONS: list[EcoFlowButtonDef] = [
     ),
 ]
 
-# The wallbox's own maximum-current control (PLAN-146). The same key as the
-# sensor on purpose - one reading, the value the wallbox itself reports on
-# its settings report and heartbeat, so the number shows what the sensor
-# shows and a write returns only once the wallbox reports the new value
-# back. Created on the first `ev_max_current_a` report, the same accessory
-# pattern as the cable lock binary sensor and the start/stop buttons above.
-# Unlike those, the platform setup restricts this control to an entry with
-# exactly one PowerOcean: the write has no evidenced route on the wallbox's
-# own channel (PLAN-146 decision 2), so an entry with zero or two-or-more
-# PowerOceans gets no number at all - the coordinator write itself refuses
-# on the same condition, see async_set_powerpulse_max_current().
+# The wallbox's own current controls. The same key as the matching sensor on
+# purpose - one reading, the value the wallbox itself reports, so the number
+# shows what the sensor shows and a write returns only once the wallbox
+# reports the new value back. Each control exists on exactly one write route,
+# named by `powerpulse_route` and enforced twice: here (`async_setup_entry()`
+# in number.py filters per definition) and in the matching coordinator write,
+# which refuses on the same condition.
+#
+# `ev_max_current_a` (PLAN-146) is sibling-only: the write has no evidenced
+# route on the wallbox's own channel (decision 2), so an entry with zero or
+# two-or-more PowerOceans gets no number at all - see
+# async_set_powerpulse_max_current(). It is an accessory entity, created on
+# the first `ev_max_current_a` report, the same pattern as the cable lock
+# binary sensor and the start/stop buttons above.
+#
+# `ev_charge_current_a` (issue #7, 2026-09-14 recording) is the mirror image:
+# own-channel-only, since the app's write for this field has only ever been
+# seen on a wallbox's own topic, never relayed through a PowerOcean - see
+# async_set_powerpulse_charge_current(). Accessory entity like
+# `ev_max_current_a` above: created on the first `ev_charge_current_a`
+# report rather than unconditionally, in case a device never sends field 17.
 POWERPULSE2_NUMBERS: list[EcoFlowNumberDef] = [
     EcoFlowNumberDef(
         "ev_max_current_a",
@@ -7249,6 +7268,20 @@ POWERPULSE2_NUMBERS: list[EcoFlowNumberDef] = [
         1,
         enhanced_only=True,
         accessory=True,
+        powerpulse_route="sibling",
+    ),
+    EcoFlowNumberDef(
+        "ev_charge_current_a",
+        "Wallbox Charging Current",
+        "ev_charge_current_a",
+        "A",
+        "mdi:current-ac",
+        POWERPULSE2_MAX_CURRENT_RANGE_A[0],
+        POWERPULSE2_MAX_CURRENT_RANGE_A[1],
+        1,
+        enhanced_only=True,
+        accessory=True,
+        powerpulse_route="own",
     ),
 ]
 

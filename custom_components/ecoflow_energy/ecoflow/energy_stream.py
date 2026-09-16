@@ -483,6 +483,64 @@ def build_powerpulse_standalone_charge_ctrl_payload(
     )
 
 
+def build_powerpulse_standalone_current_ctrl_payload(
+    current_a: int,
+    device_sn: str,
+    seq: int = 0,
+) -> bytes:
+    """Build ChargerCtrl (2/81): set the charge current on a standalone
+    PowerPulse 2 (a wallbox on an account without a PowerOcean, PLAN-140).
+
+    The deci-amp scaling of `current_ctrl` (field 5 of `pdata`) is
+    `VERIFIED` at four independent points, one of them a clean write-to-echo
+    round trip (`f5=60` at 16:48:17.006Z, echoed as `ev_charge_current_a ==
+    6.0` 358 ms later with no other write in between). Whether field 5 is
+    itself the write path for the charging current is only `LIKELY`, not
+    verified to the same degree: that one round trip is the sole
+    unambiguous case, and the recording's other current write, sent while
+    the wallbox was idle, was never confirmed within the recording, so it
+    cannot be attributed to field 5 with the same confidence. Every observed
+    current write on this route also carries field 7 (`work_mode=2`) as a
+    fixed companion - not the PLAN-147 charging-mode enum, since the
+    wallbox's own mode read-back stayed at 3 ("custom") across both writes
+    in the recording. No write in the recording omits it, so it is sent
+    byte-identical to the app rather than treated as optional (issue #7,
+    2026-09-14 recording).
+
+    `current_ctrl` (this field) is not `current_ouput_max`
+    (`EDevPileParamSet.current_ouput_max`, sent by
+    `build_powerpulse_param_set_current_payload` on the sibling route,
+    PLAN-146): that field sets the wallbox's configured ceiling and stayed
+    constant through this whole recording, while this one is the
+    session-adjustable current the app lets the owner change while charging.
+
+    The envelope is otherwise identical to
+    `build_powerpulse_standalone_charge_ctrl_payload`: `dest` 2, the
+    wallbox's own serial in field 25, `cmd_func` 2.
+
+    Args:
+        current_a: The new charge current in whole amps, 6-16 inclusive -
+            the same bound source as the sibling route's maximum current
+            (`POWERPULSE2_MAX_CURRENT_RANGE_A`); the floor is not otherwise
+            evidenced in the recording (60 is both the lowest value seen and
+            the device's resting value).
+        device_sn: The wallbox's own 16-character serial (the coordinator's
+            `device_sn`), not the accessory descriptor.
+        seq: Sequence number. Default 0 generates from timestamp.
+    """
+    if type(current_a) is not int or not (6 <= current_a <= 16):
+        raise ValueError(f"current_a must be an int in 6..16, got {current_a!r}")
+    if len(device_sn) != 16 or not device_sn.isascii() or not device_sn.isalnum():
+        raise ValueError(
+            f"device_sn must be 16 alphanumeric ASCII characters, got {device_sn!r}"
+        )
+
+    pdata = encode_field_varint(5, current_a * 10) + encode_field_varint(7, 2)
+    return _build_powerocean_set_envelope(
+        pdata, cmd_id=81, seq=seq, device_sn=device_sn, cmd_func=2, dest=2
+    )
+
+
 def build_work_mode_set_payload(work_mode: int, seq: int = 0) -> bytes:
     """Build SysWorkModeSet (cmd_id=98) for PowerOcean work mode selection.
 
