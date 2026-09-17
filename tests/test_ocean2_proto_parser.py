@@ -126,6 +126,15 @@ class TestTelemetryFrame:
         assert parsed is not None
         assert parsed["home_w"] == pytest.approx(560.0)
 
+    def test_block_87_wins_over_block_7_for_solar(self) -> None:
+        # Same precedence, checked on the field that used to take the
+        # opposite block (7 before 87) before the source-precedence fix.
+        parsed = parse_ocean2_proto_message(
+            _telemetry(flow={7: _f32(3, 3100.0), 87: _f32(3, 3210.0)})
+        )
+        assert parsed is not None
+        assert parsed["solar_w"] == pytest.approx(3210.0)
+
     def test_a_missing_field_does_not_overwrite_a_good_value(self) -> None:
         # Block 87 carries only the home load here. Block 7's grid reading has
         # to survive, because telemetry is partial by design.
@@ -136,13 +145,30 @@ class TestTelemetryFrame:
         assert parsed["home_w"] == pytest.approx(560.0)
         assert parsed["grid_w"] == pytest.approx(-1200.0)
 
-    def test_inverter_field_13_overrides_the_flow_block_grid_value(self) -> None:
-        # 4.13 is the finer-grained meter and appears in nearly every frame.
+    def test_the_flow_block_wins_over_inverter_field_13(self) -> None:
+        # Both read the grid from their own instant; the flow block is the
+        # one that balances with the other three readings of its instant.
         parsed = parse_ocean2_proto_message(
             _telemetry(flow={87: _f32(2, -1800.0)}, inverter=_f32(13, 1719.0))
         )
         assert parsed is not None
+        assert parsed["grid_w"] == pytest.approx(-1800.0)
+
+    def test_inverter_field_13_is_a_fallback_for_a_frame_without_the_flow_block(
+        self,
+    ) -> None:
+        parsed = parse_ocean2_proto_message(_telemetry(inverter=_f32(13, 1719.0)))
+        assert parsed is not None
         assert parsed["grid_w"] == pytest.approx(1719.0)
+
+    def test_the_flow_block_wins_over_the_summary_for_solar(self) -> None:
+        # 65.4 and 87.3 read the same quantity from different instants; the
+        # flow block is the one that balances with home/grid/battery.
+        parsed = parse_ocean2_proto_message(
+            _telemetry(summary=_f32(4, 3193.0), flow={87: _f32(3, 3210.0)})
+        )
+        assert parsed is not None
+        assert parsed["solar_w"] == pytest.approx(3210.0)
 
     def test_reads_per_string_pv_power(self) -> None:
         strings = _msg(14, _pv_string(1, 1780.0) + _pv_string(2, 1430.0))

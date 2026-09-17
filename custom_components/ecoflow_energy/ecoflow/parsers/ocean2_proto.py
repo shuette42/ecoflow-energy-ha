@@ -9,8 +9,17 @@ addition stays reviewable.
 Unlike the Stream and Delta 3 frames, an Ocean 2 telemetry payload is
 **nested**: the readings sit inside length-delimited sub-messages (65, 7/87,
 4) rather than at the top level. A flat field map like `_STREAM_FIELD_MAP`
-cannot express that, which is why this module carries its own small generic
-decoder instead of reusing `_decode_mapped_fields`.
+cannot express that, which is why decoding here reuses the declared-path
+walker (`_compile`/`_walk`) that `stream_ac5000_proto` already implements for
+the same shape, instead of a second copy of it.
+
+That walker writes one dict key per declared path and has no notion of one
+path superseding another, so the four power paths that exist in more than one
+block (65.4/7.3/87.3 for solar, 7.2/87.2/4.13 for grid, 65.20/7.4/87.4 for
+battery, 7.1/87.1 for the home load) are each declared under a distinct,
+block-prefixed key, and the precedence between them - block 87 over block 7
+over the summary/inverter fallback - is resolved afterwards in
+`_parse_telemetry`, not by the walker.
 
 Field assignments below were verified against live hardware in Enhanced mode
 by cross-checking every value against the EcoFlow app over several days,
@@ -35,201 +44,178 @@ from math import isfinite
 from typing import Any
 
 from ..proto.decoder import decode_header_message
-from .stream_proto import _pdata_candidates, _read_varint
+from .stream_ac5000_proto import (
+    _TYPE_FLOAT,
+    _compile,
+    _decode_scalar,
+    _iter_fields,
+    _walk,
+)
+from .stream_proto import _pdata_candidates
 
 # The two frames this device sends on cmd_func 254. Only 39 is mapped here.
 _CMD_FUNC = 254
 _CMD_ID_TELEMETRY = 39
 
-# Top-level sub-message numbers inside the telemetry payload.
-_BLOCK_SUMMARY = 65
-_BLOCK_FLOW = (7, 87)
-_BLOCK_INVERTER = 4
+# Declared paths -> (temporary key, scalar type, scale). Every power path
+# that exists in more than one block gets its own block-prefixed key here;
+# `_parse_telemetry` picks between them afterwards, the walker does not.
+_OCEAN2_FIELD_MAP: dict[str, tuple[str, str, float]] = {
+    # Block 65 - system summary. 65.6/65.7 look like grid readings and are
+    # not: 65.7 is the configured feed-in limit (constant 10000 on a unit
+    # capped at 10 kW, constant 0 on a zero-export unit), indistinguishable
+    # from a real meter at rest for a long time. 65.4 is read as a fallback
+    # for solar - the flow blocks below win when present.
+    "65.4": ("_summary_solar_w", _TYPE_FLOAT, 1),
+    "65.15": ("batt_remaining_wh", _TYPE_FLOAT, 1),
+    "65.17": ("soc_pct", _TYPE_FLOAT, 1),
+    "65.20": ("_summary_batt_w_signed", _TYPE_FLOAT, 1),
+    # Blocks 7 and 87 - the energy flow summary as the app shows it: home
+    # load, grid power, PV power, battery power (signed), all four sharing
+    # one measurement instant and balancing within it. Both can appear in
+    # the same frame and then differ slightly - block 7 trails by roughly
+    # one measurement cycle and drops fields more often.
+    "7.1": ("_flow7_home_w", _TYPE_FLOAT, 1),
+    "7.2": ("_flow7_grid_w", _TYPE_FLOAT, 1),
+    "7.3": ("_flow7_solar_w", _TYPE_FLOAT, 1),
+    "7.4": ("_flow7_batt_w", _TYPE_FLOAT, 1),
+    "87.1": ("_flow87_home_w", _TYPE_FLOAT, 1),
+    "87.2": ("_flow87_grid_w", _TYPE_FLOAT, 1),
+    "87.3": ("_flow87_solar_w", _TYPE_FLOAT, 1),
+    "87.4": ("_flow87_batt_w", _TYPE_FLOAT, 1),
+    # Block 4 - inverter. 4.13 is the grid meter at its own instant, positive
+    # = import. 4.14 (PV strings) is not declared here: it repeats per
+    # string, which one flat key cannot hold, so it is read separately below.
+    "4.13": ("_inverter_grid_w", _TYPE_FLOAT, 1),
+}
+_OCEAN2_TREE: dict[int, Any] = _compile(_OCEAN2_FIELD_MAP)
+# `_walk` only consults `repeated` for a path whose tree node is a dict, so
+# 4.14 needs a (content-free) dict node here purely to make it eligible for
+# that check - an undeclared field is otherwise skipped silently, never
+# raised, so this is not a workaround for an error path. `_pv_strings` reads
+# the collected raw bytes below, not through this tree.
+_OCEAN2_TREE[4][14] = {}
+_PV_STRINGS_GROUP = "4.14"
+_PV_STRINGS_KEY = "_pv_string_blocks"
 
 
-def _decode_fields(raw: bytes) -> dict[int, list[Any]]:
-    """Decode one protobuf message into {field number: [values]}.
+def _pick(values: dict[str, Any], *keys: str) -> float | None:
+    """Return the first present value among `keys`, in priority order."""
+    for key in keys:
+        if key in values:
+            return values[key]  # type: ignore[no-any-return]
+    return None
 
-    Values are floats for 32-bit fields, ints for varints and raw bytes for
-    length-delimited fields, which the callers decode recursively. Repeated
-    fields keep every occurrence: the PV string list relies on it.
+
+def _pv_strings(blocks: list[Any]) -> dict[str, float]:
+    """Decode the raw `4.14` occurrences collected by the walker.
+
+    Each occurrence holds one repeated field 1 per PV string, string number
+    in its own field 1 and power in field 4. One flat result can only hold
+    the last occurrence of a declared path, which is exactly what a repeated
+    group is for - see `_walk`'s docstring - so this reads the raw bytes
+    directly with `_iter_fields` rather than through the tree.
     """
-    out: dict[int, list[Any]] = {}
-    mv = memoryview(raw)
-    pos = 0
-    while pos < len(mv):
-        tag, pos = _read_varint(mv, pos)
-        field_num, wire_type = tag >> 3, tag & 0x07
-        # Annotated because the wire type decides what comes out: a varint, a
-        # float, or the raw bytes of a nested submessage.
-        value: Any
-        if wire_type == 0:
-            value, pos = _read_varint(mv, pos)
-        elif wire_type == 1:
-            if pos + 8 > len(mv):
-                break
-            value = struct.unpack_from("<d", mv, pos)[0]
-            pos += 8
-        elif wire_type == 2:
-            length, pos = _read_varint(mv, pos)
-            if pos + length > len(mv):
-                break
-            value = mv[pos : pos + length].tobytes()
-            pos += length
-        elif wire_type == 5:
-            if pos + 4 > len(mv):
-                break
-            value = struct.unpack_from("<f", mv, pos)[0]
-            pos += 4
-        else:
-            break
-        out.setdefault(field_num, []).append(value)
+    out: dict[str, float] = {}
+    for block in blocks:
+        if not isinstance(block, bytes):
+            continue
+        for field_num, wire_type, raw in _iter_fields(block):
+            if field_num != 1 or wire_type != 2:
+                continue
+            index: float | None = None
+            power: float | None = None
+            for sub_num, sub_wire, sub_raw in _iter_fields(raw):
+                if sub_num == 1:
+                    index = _decode_scalar(sub_wire, sub_raw, _TYPE_FLOAT)
+                elif sub_num == 4:
+                    power = _decode_scalar(sub_wire, sub_raw, _TYPE_FLOAT)
+            if (
+                index is None
+                or power is None
+                or not isfinite(index)
+                or not isfinite(power)
+                or not 1 <= index <= 4
+            ):
+                continue
+            out[f"pv{int(index)}_w"] = power
     return out
 
 
-def _num(fields: dict[int, list[Any]], key: int) -> float | None:
-    """Return a numeric field, or None when the message did not carry it.
+def _parse_telemetry(pdata: bytes) -> dict[str, Any]:
+    """Decode one cmd_id 39 payload into flat sensor keys.
 
-    The distinction matters more here than in a flat map. Ocean 2 telemetry
-    is partial by design - a single frame carries whatever changed - so a
-    missing field must never be written out as 0, which would show up as a
-    real reading of zero watts on a device that simply stayed silent.
+    `_walk`/`_read_field` raise `ValueError` on a wire type they do not know
+    (3/4, the deprecated proto2 group markers), which the caller in
+    `parse_ocean2_proto_message` catches around this whole call and drops the
+    candidate - the entire frame, not just the field that follows the bad
+    tag. Proto3 never emits those wire types, so this only fires on garbage,
+    and garbage is safer dropped whole than partially decoded. Accepted:
+    `stream_ac5000_proto.parse_stream_ac5000_message` takes the same trade.
     """
-    values = fields.get(key)
-    if not values or isinstance(values[0], bytes):
-        return None
-    value = float(values[0])
+    walked: dict[str, Any] = {}
+    seen: set[str] = set()
+    repeated = {_PV_STRINGS_GROUP: _PV_STRINGS_KEY}
+    _walk(pdata, _OCEAN2_TREE, walked, seen, repeated=repeated)
+
     # A NaN or an infinity reaching a sensor raises inside Home Assistant's
     # rounding and aborts the rest of that update, so it is dropped here -
-    # the same place the sibling parsers drop theirs.
-    if not isfinite(value):
-        return None
-    return value
+    # the same place the sibling parsers drop theirs. `_walk` itself has no
+    # notion of this; every numeric leaf declared above passes through it.
+    for key in [
+        key
+        for key, value in walked.items()
+        if isinstance(value, float) and not isfinite(value)
+    ]:
+        del walked[key]
 
-
-def _sub(fields: dict[int, list[Any]], key: int) -> dict[int, list[Any]] | None:
-    """Decode a nested sub-message, or None when it is absent."""
-    values = fields.get(key)
-    if not values or not isinstance(values[0], bytes):
-        return None
-    try:
-        return _decode_fields(values[0])
-    except (IndexError, ValueError):
-        return None
-
-
-def _parse_telemetry(pdata: bytes) -> dict[str, Any]:
-    """Decode one cmd_id 39 payload into flat sensor keys."""
-    fields = _decode_fields(pdata)
     out: dict[str, Any] = {}
 
-    # Block 65 - system summary.
-    #   4  PV power          15  remaining battery energy (Wh)
-    #   17 system SoC        20  battery power, signed, negative = charging
-    #
-    # 65.6 and 65.7 look like grid readings and are not. 65.7 is the
-    # configured feed-in limit: it reads a constant 10000 on a unit capped at
-    # 10 kW and a constant 0 on a zero-export unit, which is why it can pass
-    # for a plausible meter reading for a long time. The real grid power is
-    # 4.13 below.
-    summary = _sub(fields, _BLOCK_SUMMARY)
-    if summary:
-        pv_w = _num(summary, 4)
-        if pv_w is not None:
-            out["solar_w"] = pv_w
-        soc = _num(summary, 17)
-        if soc is not None:
-            out["soc_pct"] = soc
-        remaining = _num(summary, 15)
-        if remaining is not None:
-            out["batt_remaining_wh"] = remaining
+    soc = walked.get("soc_pct")
+    if soc is not None:
+        out["soc_pct"] = soc
+    remaining = walked.get("batt_remaining_wh")
+    if remaining is not None:
+        out["batt_remaining_wh"] = remaining
 
-    # Blocks 7 and 87 - the energy flow summary as the app shows it.
-    #   1 home load   2 grid power   3 PV power   4 battery power, signed
-    #
-    # This block balances within itself: PV minus battery minus grid equals
-    # the home load exactly, and all four values share one measurement
-    # instant. Block 4 further down updates field by field instead.
-    #
-    # Both blocks can appear in the same frame and then differ slightly -
-    # block 7 trails by roughly one measurement cycle and drops fields more
-    # often - so they are merged field by field with 87 winning. Observed
-    # 2026-07-28: block 7 reported 550 W of home load while block 87 reported
+    # Home load: only the flow blocks carry it, 87 over 7 - block 7 trails
+    # block 87 by roughly one measurement cycle and drops fields more often.
+    # Observed 2026-07-28: block 7 reported 550 W while block 87 reported
     # 560 W in the same frame, and the app showed 560 W.
-    for block in _BLOCK_FLOW:
-        flow = _sub(fields, block)
-        if not flow:
-            continue
-        home_w = _num(flow, 1)
-        if home_w is not None:
-            out["home_w"] = home_w
-        # Provisional: 4.13 below takes precedence.
-        grid_w = _num(flow, 2)
-        if grid_w is not None:
-            out["grid_w"] = grid_w
-        # Only as a fallback - block 65 is the better source for PV.
-        if "solar_w" not in out:
-            pv_w = _num(flow, 3)
-            if pv_w is not None:
-                out["solar_w"] = pv_w
-        batt_w = _num(flow, 4)
-        if batt_w is not None:
-            out["batt_w"] = batt_w
+    home_w = _pick(walked, "_flow87_home_w", "_flow7_home_w")
+    if home_w is not None:
+        out["home_w"] = home_w
 
-    # Block 4 - inverter.
-    #   1 total AC power   13 grid power   14.1 PV strings
-    inverter = _sub(fields, _BLOCK_INVERTER)
-    if inverter:
-        # 4.13 is the grid meter: positive = import, negative = export.
-        # Shown 2026-07-27 during a charge from the grid - 1719 W here while
-        # the inverter (4.1) drew -1530 W and the house needed about 190 W,
-        # and the sum adds up. It dropped to 0 within seconds of the charge
-        # ending.
-        grid_w = _num(inverter, 13)
-        if grid_w is not None:
-            out["grid_w"] = grid_w
+    # Grid power: the flow blocks read it at the same instant as the other
+    # three readings below and win; 4.13 is a finer-grained meter but reads
+    # its own instant (up to 6 W apart in the fixture) and is the fallback
+    # for a frame that lacks a flow block.
+    grid_w = _pick(walked, "_flow87_grid_w", "_flow7_grid_w", "_inverter_grid_w")
+    if grid_w is not None:
+        out["grid_w"] = grid_w
 
-        # 4.14 holds one sub-message per PV string, the string number in
-        # field 1 and its power in field 4. Strings are reported only when
-        # they change, so a frame may carry any subset - including none.
-        for entry in inverter.get(14, []):
-            if not isinstance(entry, bytes):
-                continue
-            try:
-                string = _decode_fields(entry)
-            except (IndexError, ValueError):
-                continue
-            for pv_raw in string.get(1, []):
-                if not isinstance(pv_raw, bytes):
-                    continue
-                try:
-                    pv = _decode_fields(pv_raw)
-                except (IndexError, ValueError):
-                    continue
-                index = _num(pv, 1)
-                power = _num(pv, 4)
-                if index is None or power is None or not 1 <= index <= 4:
-                    continue
-                out[f"pv{int(index)}_w"] = power
+    # Solar power: same reasoning - the flow blocks win (up to 17 W apart
+    # from 65.4 in the fixture), the system summary is the fallback.
+    solar_w = _pick(walked, "_flow87_solar_w", "_flow7_solar_w", "_summary_solar_w")
+    if solar_w is not None:
+        out["solar_w"] = solar_w
 
-    # Battery power when the flow block is absent.
-    #
-    # 65.20 was read as an absolute value, and it is not: it is signed with the
-    # opposite convention, negative while the pack charges. Measured on an RE11
-    # over 17 consecutive frames during a charge, where 65.20 ran -871, -862,
-    # -852 W against +880, +830, +850 W in block 87.4 - the magnitudes track
-    # each other within the usual inter-block lag, the sign is inverted. That
-    # matches the 13 non-zero frames in the second-installation recording where
-    # 65.20 equalled -(87.4) exactly.
-    #
-    # Reading it costs nothing and fixes a real gap: in a frame carrying only
-    # block 65 the old code left batt_w at its last flow value, so a pack
-    # charging at 5 kW kept reporting whatever it did when the last flow block
-    # arrived.
-    if "batt_w" not in out and summary:
-        batt_summary = _num(summary, 20)
-        if batt_summary is not None:
-            out["batt_w"] = -batt_summary
+    # Battery power: the flow blocks win here too. 65.20, read only as a
+    # fallback, is signed with the opposite convention - negative while the
+    # pack charges. Measured on an RE11 over 17 consecutive frames during a
+    # charge: 65.20 ran -871, -862, -852 W against +880, +830, +850 W in
+    # block 87.4, the magnitudes tracking within the usual inter-block lag
+    # and the sign inverted. That matches the 13 non-zero frames in the
+    # second-installation recording where 65.20 equalled -(87.4) exactly.
+    batt_w = _pick(walked, "_flow87_batt_w", "_flow7_batt_w")
+    if batt_w is not None:
+        out["batt_w"] = batt_w
+    elif "_summary_batt_w_signed" in walked:
+        out["batt_w"] = -walked["_summary_batt_w_signed"]
+
+    # 4.14 holds one sub-message per PV string, reported only when a string
+    # changes, so a frame may carry any subset - including none.
+    out.update(_pv_strings(walked.get(_PV_STRINGS_KEY, [])))
 
     return out
 
