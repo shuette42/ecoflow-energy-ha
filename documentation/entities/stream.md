@@ -6,7 +6,7 @@ Full list of all entities created for Stream devices.
 
 **The Stream Micro (`BK01`) does not.** It is a grid-tie inverter with two solar strings and no battery, and it gets a reduced set. See [Stream Micro (BK01)](#stream-micro-bk01) at the end of this page.
 
-**Totals:** 55 sensors, 2 binary sensors, 1 number. Stream AC Pro (`BK31`) adds 3 numbers. Four of the 55 are *accessory* entities (PV 3 and PV 4, power and energy) and exist only on a unit that reports those strings.
+**Totals:** 55 sensors, 2 binary sensors, 1 number. Stream AC Pro (`BK31`) adds 2 switches and 3 numbers. Four of the 55 are *accessory* entities (PV 3 and PV 4, power and energy) and exist only on a unit that reports those strings.
 
 > Entities marked with *disabled* are available but hidden by default. Enable them in **Settings > Devices > EcoFlow Stream > Entities** (click the filter icon and show disabled entities).
 
@@ -116,7 +116,12 @@ Also available as disabled diagnostics: **Battery Charge Capacity** and **Batter
 
 ## Switches
 
-None. The AC outlets are exposed read-only as binary sensors, because the write path for third-party control is not confirmed.
+Stream AC Pro (`BK31`) only: two switches, `AC Outlet 1` and `AC Outlet 2`, confirmed writable on live hardware. The other four models keep the read-only binary sensors above, since nothing confirms their write path.
+
+| Entity | Default | Description |
+|:---|:---:|:---|
+| AC Outlet 1 | enabled | Outlet 1 on/off control (BK31 only) |
+| AC Outlet 2 | enabled | Outlet 2 on/off control (BK31 only) |
 
 ---
 

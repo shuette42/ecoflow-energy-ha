@@ -41,7 +41,7 @@ House, grid, and solar flow values are meter-dependent and disabled by default u
 | Home From Grid | sensor | `254/21` field `1004` |
 | AC Outlet 1 Power | sensor | `254/21` field `1210` |
 | AC Outlet 2 Power | sensor | `254/21` field `1211` |
-| LED Brightness | sensor | `254/21` field `994`, set reply field `384` |
+| LED Brightness | sensor + number | `254/21` field `994`, set reply field `384` |
 | AC Outlet 1 | binary sensor | `254/21` field `980` |
 | AC Outlet 2 | binary sensor | `254/21` field `982` |
 | Backup Reserve | sensor | `254/21` field `461`, set reply field `102` |
