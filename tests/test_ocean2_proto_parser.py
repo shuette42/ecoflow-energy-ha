@@ -73,18 +73,18 @@ def _telemetry(
 
 class TestDeviceClassification:
     def test_serial_prefix_routes_to_ocean2(self) -> None:
-        assert get_device_type("", "RE11ZQH4SF000000") == DEVICE_TYPE_OCEAN2
+        assert get_device_type("", "RE11TEST00000001") == DEVICE_TYPE_OCEAN2
 
     def test_the_12kw_variant_shares_the_read_path(self) -> None:
         # RE11 and RE17 differ in power rating and in nothing this integration
         # reads: same message families, same payload shape.
-        assert get_device_type("", "RE17ZQH4SF000000") == DEVICE_TYPE_OCEAN2
+        assert get_device_type("", "RE17TEST00000001") == DEVICE_TYPE_OCEAN2
 
     def test_the_prefix_beats_a_powerocean_product_name(self) -> None:
         # "PowerOcean" as a product name would otherwise claim the unit and
         # hand it to a parser that decodes none of its frames. The prefix is
         # exact evidence and is checked first.
-        assert get_device_type("PowerOcean", "RE11ZQH4SF000000") == DEVICE_TYPE_OCEAN2
+        assert get_device_type("PowerOcean", "RE11TEST00000001") == DEVICE_TYPE_OCEAN2
 
     def test_powerocean_is_unaffected(self) -> None:
         assert get_device_type("PowerOcean", "HJ31000000000000") == (
@@ -93,8 +93,8 @@ class TestDeviceClassification:
 
     def test_display_name_falls_back_to_the_prefix(self) -> None:
         # The app API reports an empty product name for this device.
-        assert get_device_name("", "RE11ZQH4SF001234") == "Ocean 2 (1234)"
-        assert get_device_name("", "RE17ZQH4SF001234") == "Ocean 2 (1234)"
+        assert get_device_name("", "RE11TEST00001234") == "Ocean 2 (1234)"
+        assert get_device_name("", "RE17TEST00001234") == "Ocean 2 (1234)"
 
 
 class TestTelemetryFrame:
@@ -152,16 +152,31 @@ class TestTelemetryFrame:
         assert parsed["pv2_w"] == pytest.approx(1430.0)
 
     def test_reports_a_resting_battery_as_zero(self) -> None:
-        # The summary carries the battery as an absolute value, so a nonzero
-        # reading is ambiguous without the flow block - but an exact zero is
-        # not, and dropping it would freeze the sensor at its last value.
         parsed = parse_ocean2_proto_message(_telemetry(summary=_f32(20, 0.0)))
         assert parsed is not None
         assert parsed["batt_w"] == pytest.approx(0.0)
 
-    def test_leaves_an_unsigned_battery_reading_out(self) -> None:
-        parsed = parse_ocean2_proto_message(_telemetry(summary=_f32(20, 1500.0)))
-        assert parsed is None or "batt_w" not in parsed
+    @pytest.mark.parametrize(
+        ("summary_value", "expected"),
+        [(-871.0, 871.0), (1859.0, -1859.0)],
+    )
+    def test_the_summary_battery_field_is_signed_the_other_way(
+        self, summary_value: float, expected: float
+    ) -> None:
+        # Measured on an RE11 while charging: 65.20 runs negative where block
+        # 87.4 runs positive, so the sign is inverted rather than absent.
+        parsed = parse_ocean2_proto_message(_telemetry(summary=_f32(20, summary_value)))
+        assert parsed is not None
+        assert parsed["batt_w"] == pytest.approx(expected)
+
+    def test_the_flow_block_wins_over_the_summary(self) -> None:
+        # Both present: the flow block is the one that balances with the other
+        # three readings of its own instant.
+        parsed = parse_ocean2_proto_message(
+            _telemetry(summary=_f32(20, -871.0), flow={87: _f32(4, 880.0)})
+        )
+        assert parsed is not None
+        assert parsed["batt_w"] == pytest.approx(880.0)
 
 
 class TestDirectionalSplits:
@@ -199,6 +214,12 @@ class TestDirectionalSplits:
 
 
 class TestRobustness:
+    def test_drops_a_non_finite_reading(self) -> None:
+        # A NaN reaching a sensor raises inside Home Assistant's rounding and
+        # aborts the rest of that update.
+        parsed = parse_ocean2_proto_message(_telemetry(inverter=_f32(13, float("nan"))))
+        assert parsed is None or "grid_w" not in parsed
+
     def test_ignores_frames_from_other_command_ids(self) -> None:
         # cmd_id 46 is the per-module battery frame, which this parser does
         # not map yet. It must not be decoded through the telemetry layout.

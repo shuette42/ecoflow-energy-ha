@@ -31,9 +31,11 @@ situation as the J32D/J32E PowerOcean variants (#89, #145).
 from __future__ import annotations
 
 import struct
+from math import isfinite
 from typing import Any
 
 from ..proto.decoder import decode_header_message
+from .stream_proto import _pdata_candidates, _read_varint
 
 # The two frames this device sends on cmd_func 254. Only 39 is mapped here.
 _CMD_FUNC = 254
@@ -43,21 +45,6 @@ _CMD_ID_TELEMETRY = 39
 _BLOCK_SUMMARY = 65
 _BLOCK_FLOW = (7, 87)
 _BLOCK_INVERTER = 4
-
-
-def _read_varint(mv: memoryview, pos: int) -> tuple[int, int]:
-    """Read a varint, returning (value, next position)."""
-    shift = 0
-    result = 0
-    while True:
-        if pos >= len(mv) or shift > 63:
-            raise ValueError("truncated varint")
-        byte = mv[pos]
-        pos += 1
-        result |= (byte & 0x7F) << shift
-        if not byte & 0x80:
-            return result, pos
-        shift += 7
 
 
 def _decode_fields(raw: bytes) -> dict[int, list[Any]]:
@@ -111,7 +98,13 @@ def _num(fields: dict[int, list[Any]], key: int) -> float | None:
     values = fields.get(key)
     if not values or isinstance(values[0], bytes):
         return None
-    return float(values[0])
+    value = float(values[0])
+    # A NaN or an infinity reaching a sensor raises inside Home Assistant's
+    # rounding and aborts the rest of that update, so it is dropped here -
+    # the same place the sibling parsers drop theirs.
+    if not isfinite(value):
+        return None
+    return value
 
 
 def _sub(fields: dict[int, list[Any]], key: int) -> dict[int, list[Any]] | None:
@@ -125,30 +118,6 @@ def _sub(fields: dict[int, list[Any]], key: int) -> dict[int, list[Any]] | None:
         return None
 
 
-def _pdata_candidates(header: dict[str, Any]) -> list[bytes]:
-    """Return payload bytes to try for one header, most likely first.
-
-    Same masking scheme as the Stream frames: `enc_type == 1` means the
-    payload is XOR-masked with the low byte of that header's own sequence
-    number. The mask is per header, so a bundled frame needs it applied
-    header by header.
-    """
-    pdata_hex = header.get("pdata")
-    if not isinstance(pdata_hex, str) or not pdata_hex:
-        return []
-    try:
-        pdata = bytes.fromhex(pdata_hex)
-    except ValueError:
-        return []
-    if header.get("enc_type") != 1:
-        return [pdata]
-    seq = header.get("seq")
-    if not isinstance(seq, int) or not seq & 0xFF:
-        return [pdata]
-    xor_key = seq & 0xFF
-    return [bytes(value ^ xor_key for value in pdata), pdata]
-
-
 def _parse_telemetry(pdata: bytes) -> dict[str, Any]:
     """Decode one cmd_id 39 payload into flat sensor keys."""
     fields = _decode_fields(pdata)
@@ -156,7 +125,7 @@ def _parse_telemetry(pdata: bytes) -> dict[str, Any]:
 
     # Block 65 - system summary.
     #   4  PV power          15  remaining battery energy (Wh)
-    #   17 system SoC        20  battery power as an absolute value
+    #   17 system SoC        20  battery power, signed, negative = charging
     #
     # 65.6 and 65.7 look like grid readings and are not. 65.7 is the
     # configured feed-in limit: it reads a constant 10000 on a unit capped at
@@ -243,13 +212,24 @@ def _parse_telemetry(pdata: bytes) -> dict[str, Any]:
                     continue
                 out[f"pv{int(index)}_w"] = power
 
-    # The summary reports the battery as an absolute value, so the sign has
-    # to come from the flow block. When that block is absent the reading is
-    # ambiguous and stays out - except at exactly zero, where there is no
-    # sign to get wrong and dropping it would leave a resting battery
-    # showing its last charging value indefinitely.
-    if "batt_w" not in out and summary and _num(summary, 20) == 0:
-        out["batt_w"] = 0.0
+    # Battery power when the flow block is absent.
+    #
+    # 65.20 was read as an absolute value, and it is not: it is signed with the
+    # opposite convention, negative while the pack charges. Measured on an RE11
+    # over 17 consecutive frames during a charge, where 65.20 ran -871, -862,
+    # -852 W against +880, +830, +850 W in block 87.4 - the magnitudes track
+    # each other within the usual inter-block lag, the sign is inverted. That
+    # matches the 13 non-zero frames in the second-installation recording where
+    # 65.20 equalled -(87.4) exactly.
+    #
+    # Reading it costs nothing and fixes a real gap: in a frame carrying only
+    # block 65 the old code left batt_w at its last flow value, so a pack
+    # charging at 5 kW kept reporting whatever it did when the last flow block
+    # arrived.
+    if "batt_w" not in out and summary:
+        batt_summary = _num(summary, 20)
+        if batt_summary is not None:
+            out["batt_w"] = -batt_summary
 
     return out
 

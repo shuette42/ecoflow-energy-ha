@@ -8,6 +8,8 @@ The Ocean 2 reports through the account connection only, so it needs **Enhanced 
 
 Two serial prefixes, one device: `RE11` for the 10 kW unit and `RE17` for the 12 kW one. They differ in power rating and in nothing this integration reads.
 
+`RE11` is confirmed on two installations. `RE17` is routed on EcoFlow's own device list, which separates the two by power rating alone; no frame from an `RE17` exists yet, so if you own one, a note either way is welcome.
+
 Read-only. No write frame from an Ocean 2 has been observed, so there are no controls.
 
 **Despite the name, this is not a PowerOcean.** It carries its own telemetry frame on `cmd_func` 254 and shares no field layout with the `HJ31`/`J32x` line, which is why it has its own parser and its own entity set.
