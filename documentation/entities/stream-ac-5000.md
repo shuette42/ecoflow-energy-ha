@@ -24,7 +24,7 @@ Full list of all entities created for the STREAM AC 5000.
 |:---|:---:|:---:|:---:|:---|
 | Battery SOC | % | - | enabled | State of charge, as shown in the app. With units linked this is the system figure, the mean across them |
 | Battery SOC (Precise) | % | diagnostic | disabled | This unit's own state of charge, at higher resolution. On a single unit it tracks Battery SOC above; with units linked the two differ, and the app shows this one under the unit's name |
-| Precise SoC | % | diagnostic | disabled | Pack-level SoC, straight from the BMS, and also this unit's own rather than the system figure. It runs slightly above Battery SOC (Precise) directly above it. The two names are easy to confuse |
+| BMS SoC | % | diagnostic | disabled | Pack-level SoC, straight from the BMS, and also this unit's own rather than the system figure. It runs slightly above Battery SOC (Precise) directly above it. The two names are easy to confuse |
 | Battery SoH | % | - | enabled | State of health |
 | Battery Power | W | - | enabled | Signed battery power (positive = charging, negative = discharging), derived from the flows the device reports, including the charge from its own PV strings where it has them. With units linked this is the system figure, the sum across them |
 | Unit Battery Power | W | diagnostic | disabled | This unit's own share of the battery power above. On a single unit it repeats that reading, which is why it is off by default |
@@ -92,11 +92,11 @@ The settings that also have a control read back here, so an automation can see w
 | Battery Voltage | V | - | enabled | Pack voltage |
 | Battery Current | A | diagnostic | disabled | Pack current (positive = charging) |
 | Battery Temp | C | - | enabled | Pack temperature |
-| Cell Temp (Max) | C | diagnostic | disabled | Highest cell temperature |
-| Cell Temp (Min) | C | diagnostic | disabled | Lowest cell temperature |
-| MOSFET Temp (Max) | C | diagnostic | disabled | Highest MOSFET temperature |
-| Cell Voltage (Max) | mV | diagnostic | disabled | Highest cell voltage |
-| Cell Voltage (Min) | mV | diagnostic | disabled | Lowest cell voltage |
+| Max Cell Temp | C | diagnostic | disabled | Highest cell temperature |
+| Min Cell Temp | C | diagnostic | disabled | Lowest cell temperature |
+| Max MOSFET Temp | C | diagnostic | disabled | Highest MOSFET temperature |
+| Max Cell Voltage | mV | diagnostic | disabled | Highest cell voltage |
+| Min Cell Voltage | mV | diagnostic | disabled | Lowest cell voltage |
 | Design Capacity | mAh | diagnostic | disabled | Nameplate capacity |
 | Full Capacity | mAh | diagnostic | disabled | Present full-charge capacity |
 | Remaining Capacity | mAh | diagnostic | disabled | Charge left in the pack |

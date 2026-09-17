@@ -21,6 +21,7 @@ from ecoflow_energy.ecoflow.energy_stream import (
     build_powerpulse_param_set_current_payload,
     build_powerpulse_param_set_mode_payload,
     build_powerpulse_standalone_charge_ctrl_payload,
+    build_powerpulse_standalone_current_ctrl_payload,
 )
 from ecoflow_energy.ecoflow.parsers.powerpulse_proto import parse_powerpulse_message
 from ecoflow_energy.ecoflow.proto.decoder import decode_header_message
@@ -30,6 +31,9 @@ FIXTURE_DIR = Path(__file__).parent / "fixtures" / "powerpulse"
 RUN_DATA_SYNC_FIXTURE = FIXTURE_DIR / "c376_run_data_sync_20260824.json"
 HEARTBEAT_FIXTURE = FIXTURE_DIR / "c376_frames_plan132.json"
 STANDALONE_CTRL_FIXTURE = FIXTURE_DIR / "c376_standalone_charge_ctrl_20260912.json"
+STANDALONE_CURRENT_CTRL_FIXTURE = (
+    FIXTURE_DIR / "c376_standalone_current_ctrl_20260914.json"
+)
 PARAM_SET_WRITES_FIXTURE = FIXTURE_DIR / "c376_param_set_writes_20260824.json"
 CHARGE_MODE_WRITES_FIXTURE = FIXTURE_DIR / "c376_charging_mode_writes_20260913.json"
 
@@ -258,6 +262,85 @@ def test_relayed_envelope_default_dest_did_not_move() -> None:
 def test_standalone_builder_rejects_bad_input(action: str, device_sn: str) -> None:
     with pytest.raises(ValueError):
         build_powerpulse_standalone_charge_ctrl_payload(action, device_sn)
+
+
+# --- Standalone charge current (issue #7, 2026-09-14 recording) ------------
+
+# (frame index in the fixture's full frame list, seq, current_a in whole
+# amps) - the two `set` frames of one recording carrying `current_ctrl`
+# (field 5, deci-amps on the wire: 100 and 60) on a wallbox's own topic,
+# without a PowerOcean in the account (PLAN-140).
+STANDALONE_CURRENT_SET_FRAMES = [
+    (12, 205, 10),
+    (25, 27, 6),
+]
+
+
+@pytest.mark.parametrize("frame_index,seq,current_a", STANDALONE_CURRENT_SET_FRAMES)
+def test_standalone_current_builder_reproduces_the_two_app_frames_byte_for_byte(
+    frame_index: int, seq: int, current_a: int
+) -> None:
+    frames = json.loads(STANDALONE_CURRENT_CTRL_FIXTURE.read_text())["frames"]
+    expected = bytes.fromhex(frames[frame_index]["hex"])
+    built = build_powerpulse_standalone_current_ctrl_payload(current_a, DEV_SN, seq=seq)
+    assert built == expected
+
+
+def test_standalone_current_pdata_carries_field_5_before_field_7_in_deci_amps() -> None:
+    """`current_ctrl` (field 5, tag 0x28) precedes `work_mode` (field 7, tag
+    0x38) - the order both app frames use on the wire, verified against the
+    fixture's raw bytes rather than assumed from the message definition."""
+    built = build_powerpulse_standalone_current_ctrl_payload(6, DEV_SN, seq=27)
+    headers, _ = decode_header_message(built)
+    pdata = bytes.fromhex(headers[0]["pdata"])
+    assert pdata == bytes.fromhex("283c3802")  # field5=60 (0.1A), field7=2
+
+
+def test_standalone_current_envelope_differs_from_charge_ctrl_only_by_pdata() -> None:
+    current_built = build_powerpulse_standalone_current_ctrl_payload(6, DEV_SN, seq=42)
+    action_built = build_powerpulse_standalone_charge_ctrl_payload(
+        "stop", DEV_SN, seq=42
+    )
+    h_current = decode_header_message(current_built)[0][0]
+    h_action = decode_header_message(action_built)[0][0]
+
+    for key in (
+        "src",
+        "dest",
+        "d_src",
+        "d_dest",
+        "cmd_func",
+        "cmd_id",
+        "need_ack",
+        "seq",
+        "version",
+        "payload_ver",
+        "from",
+        "device_sn",
+    ):
+        assert h_current[key] == h_action[key]
+
+    assert h_current["data_len"] != h_action["data_len"]
+    assert bytes.fromhex(h_current["pdata"]) != bytes.fromhex(h_action["pdata"])
+
+
+@pytest.mark.parametrize(
+    "current_a,device_sn",
+    [
+        (5, DEV_SN),
+        (17, DEV_SN),
+        (6.0, DEV_SN),
+        (True, DEV_SN),
+        ("6", DEV_SN),
+        (6, ""),
+        (6, "X" * 15),
+    ],
+)
+def test_standalone_current_builder_rejects_bad_input(
+    current_a: object, device_sn: str
+) -> None:
+    with pytest.raises(ValueError):
+        build_powerpulse_standalone_current_ctrl_payload(current_a, device_sn)
 
 
 def test_param_set_builder_reproduces_the_app_frame_byte_for_byte() -> None:

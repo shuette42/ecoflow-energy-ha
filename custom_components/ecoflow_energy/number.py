@@ -83,18 +83,20 @@ async def async_setup_entry(
     entities: list[EcoFlowNumber] = []
 
     for coordinator in coordinators.values():
-        if (
-            coordinator.device_type == DEVICE_TYPE_POWERPULSE2
-            and coordinator.charge_action_route() != "sibling"
-        ):
-            # No evidenced write route on the wallbox's own channel
-            # (PLAN-146 decision 2): zero or two-or-more PowerOceans in the
-            # entry gets no number, whatever the wallbox itself has reported.
-            continue
         defs = filter_defs_for_serial(
             _get_number_defs(coordinator.device_type, coordinator.device_sn),
             coordinator.device_sn,
         )
+        if coordinator.device_type == DEVICE_TYPE_POWERPULSE2:
+            # Each PowerPulse 2 number exists on exactly one write route
+            # (PLAN-140/146), named by its own definition - a def without a
+            # route restriction (none exist today) passes through unfiltered.
+            route = coordinator.charge_action_route()
+            defs = [
+                defn
+                for defn in defs
+                if defn.powerpulse_route is None or defn.powerpulse_route == route
+            ]
         pending: list[EcoFlowNumberDef] = []
         for defn in defs:
             if defn.enhanced_only and not coordinator.enhanced_mode:
@@ -183,21 +185,38 @@ class EcoFlowNumber(
     def available(self) -> bool:
         """Return True if entity is available.
 
-        The PowerPulse 2 maximum-current control only ever exists on the
-        sibling route (PLAN-146 decision 2), so availability also follows
-        the sibling PowerOcean's own MQTT connection, resolved fresh on every
-        read - the same rule `EcoFlowButton.available` applies to the wallbox
-        start/stop controls on that route.
+        Each PowerPulse 2 number exists on exactly one write route
+        (PLAN-140/146), named by its own definition. Availability requires
+        both that the coordinator's currently resolved route
+        (`charge_action_route()`, fresh on every read) still matches the
+        definition's route - not just any route - and that the connection
+        matching route is up: a "sibling" control follows its PowerOcean's
+        own MQTT connection, an "own" control follows the wallbox's own
+        connection. The route match also covers teardown (the entry's
+        coordinator table gone resolves to no route at all) and a route that
+        has since become ambiguous, the same two cases
+        `EcoFlowButton.available` handles for the wallbox start/stop
+        controls, which are the ones created on both routes at once.
         """
         if not (self.coordinator.device_available and super().available):
             return False
         if self.coordinator.device_type != DEVICE_TYPE_POWERPULSE2:
             return True
-        sibling = self.coordinator.powerocean_sibling()
+        defn_route = self._definition.powerpulse_route
+        if defn_route is None:
+            return True
+        if self.coordinator.charge_action_route() != defn_route:
+            return False
+        if defn_route == "sibling":
+            sibling = self.coordinator.powerocean_sibling()
+            return (
+                sibling is not None
+                and sibling.mqtt_client is not None
+                and sibling.mqtt_client.is_connected()
+            )
         return (
-            sibling is not None
-            and sibling.mqtt_client is not None
-            and sibling.mqtt_client.is_connected()
+            self.coordinator.mqtt_client is not None
+            and self.coordinator.mqtt_client.is_connected()
         )
 
     async def async_added_to_hass(self) -> None:
@@ -449,11 +468,15 @@ class EcoFlowNumber(
         """Set a new value via the EcoFlow IoT API."""
         if self.coordinator.device_type == DEVICE_TYPE_POWERPULSE2:
             # No optimistic apply: the coordinator returns only once the
-            # wallbox has reported the new value on its own settings report,
-            # and that report is what updates the store (PLAN-146).
+            # wallbox has reported the new value on its own settings report
+            # or heartbeat, and that report is what updates the store
+            # (PLAN-146, PLAN-140).
             if int(value) != value:
                 raise_set_rejected(self.entity_id, "whole amps only")
-            await self.coordinator.async_set_powerpulse_max_current(int(value))
+            if self._definition.key == "ev_charge_current_a":
+                await self.coordinator.async_set_powerpulse_charge_current(int(value))
+            else:
+                await self.coordinator.async_set_powerpulse_max_current(int(value))
             return
         # PowerOcean uses protobuf SET via Enhanced Mode (WSS)
         if self.coordinator.device_type == DEVICE_TYPE_POWEROCEAN:

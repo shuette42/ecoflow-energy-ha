@@ -2,7 +2,7 @@
 
 Full list of all entities created for the EcoFlow PowerPulse 2 wallbox (`C376` and `C374` series).
 
-**Totals:** 18 sensors, 1 binary sensor, 1 number and 1 select (with exactly one PowerOcean on the same account), 2 buttons (with a PowerOcean on the same account)
+**Totals:** 18 sensors, 1 binary sensor, 1 select (with exactly one PowerOcean on the same account), 2 buttons (with a PowerOcean on the same account); one number with exactly one PowerOcean on the account (Wallbox Maximum Current) and a second, different number with none (Wallbox Charging Current)
 
 > **Enhanced Mode only.** The wallbox reports through the account connection, not through the EcoFlow Developer API. A Standard Mode setup gets error 1006 and no entities fill; set the integration up with an EcoFlow account e-mail and password instead.
 
@@ -52,8 +52,11 @@ Start and stop of a charging session are available as two buttons when the accou
 | Entity | Range | Step | Description |
 |:---|:---:|:---:|:---|
 | Wallbox Maximum Current | 6-16 A | 1 A | Sets the maximum current the wallbox may draw. Same reading as the Wallbox Maximum Current sensor above; a write returns once the wallbox reports the new value on its own settings report, or fails if it does not. The range is what one owner's sweep covered; a wallbox configured above 16 A in the app shows that value on the sensor and can be lowered from here, but not set above 16 A until such a write is on record |
+| Wallbox Charging Current | 6-16 A | 1 A | Sets the charging current for the running session. Same reading as the Wallbox Charging Current sensor above; a write returns once the wallbox's own heartbeat reports the new value, or fails if it does not. In the one recording on file, a write sent during an active session confirmed in under a second; a write sent to an idle wallbox left the reading unchanged for close to an hour, and the recording cannot say whether that was a slow but effective write or one the wallbox never took - the first real write to an idle wallbox is what settles it |
 
-Created only when the account holds exactly one PowerOcean - the sibling route the two buttons above also use. Unlike the buttons, this control has no second route: an account with no PowerOcean, or with two or more, gets no number, because no route from the wallbox's own channel has been observed for this write. Availability follows the sibling PowerOcean's connection, the same rule as the buttons on that route.
+Wallbox Maximum Current is created only when the account holds exactly one PowerOcean - the sibling route the two buttons above also use. Unlike the buttons, this control has no second route: an account with no PowerOcean, or with two or more, gets no number, because no route from the wallbox's own channel has been observed for this write. Availability follows the sibling PowerOcean's connection, the same rule as the buttons on that route.
+
+Wallbox Charging Current is the mirror image: created only when the account holds no PowerOcean at all, the wallbox's own channel. An account with one PowerOcean, or with two or more, gets no charging-current number, because no route through a PowerOcean has been observed for this write. It appears with the wallbox's first heartbeat rather than waiting on a separate settings report, since the reading is already in that first heartbeat.
 
 ---
 

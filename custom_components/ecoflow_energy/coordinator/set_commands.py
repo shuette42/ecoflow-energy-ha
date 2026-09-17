@@ -18,6 +18,7 @@ from ..const import (
     POWEROCEAN_SOC_STATE_KEYS,
     POWERPULSE2_CHARGE_ACTION_PRECONDITION,
     POWERPULSE2_CHARGE_ACTION_WINDOW_S,
+    POWERPULSE2_CHARGE_CURRENT_WINDOW_S,
     POWERPULSE2_CHARGE_MODE_OPTIONS,
     POWERPULSE2_CHARGE_MODE_WINDOW_S,
     POWERPULSE2_CHARGE_MODE_WIRE,
@@ -1350,6 +1351,126 @@ class SetCommandsMixin(_Base):
             ) from None
         else:
             self._log_event("powerpulse_max_current", str(confirmed_value))
+        finally:
+            self._clear_wallbox_action(record)
+
+    async def async_set_powerpulse_charge_current(self, current_a: int) -> None:
+        """Set this standalone PowerPulse 2's charge current (issue #7, 2026-09-14).
+
+        The mirror image of `async_set_powerpulse_max_current` above: this
+        write has only the own-channel route. The app's write for this field
+        has only ever been seen on a wallbox's own set topic, on an account
+        without a PowerOcean - never relayed through one, unlike the maximum
+        current (issue #7, 2026-09-14 recording). So `route == "sibling"` is
+        refused here, the opposite of the guard in
+        `async_set_powerpulse_max_current`.
+
+        No charging-state precondition: unlike start/stop there is no
+        recorded evaluation that assumes a particular session state before
+        this write, so none is enforced here either. Confirmation runs on
+        `ev_charge_current_a` reaching the requested value on the frame being
+        applied (`WallboxActionPending.expected_value`,
+        `_resolve_wallbox_action`), the same rule every other setting write in
+        this file follows.
+        """
+        from ..ecoflow.energy_stream import (
+            build_powerpulse_standalone_current_ctrl_payload,
+        )
+        from .core import WallboxActionPending
+
+        low, high = POWERPULSE2_MAX_CURRENT_RANGE_A
+
+        async with self._wallbox_action_lock:
+            if self._shutdown:
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerpulse_action_not_delivered",
+                )
+            if type(current_a) is not int or not (low <= current_a <= high):
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerpulse_charge_current_range",
+                    translation_placeholders={"min": str(low), "max": str(high)},
+                )
+            if self._wallbox_action_pending is not None:
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerpulse_action_in_progress",
+                )
+            route = self.charge_action_route()
+            if route is None:
+                if self._powerocean_coordinators() is None:
+                    raise HomeAssistantError(
+                        translation_domain=DOMAIN,
+                        translation_key="powerpulse_action_not_delivered",
+                    )
+                # Two or more PowerOceans (`charge_action_route()`): the
+                # own-topic write has only been observed on an account with
+                # none, so it is refused here too - not "sibling_missing",
+                # which frames this as picking a relay parent, the sibling
+                # route's failure mode, not this own-only one's.
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerpulse_charge_current_route_ambiguous",
+                )
+            if route == "sibling":
+                # The write path on a PowerOcean-coupled wallbox is
+                # unevidenced - the opposite of the guard in
+                # `async_set_powerpulse_max_current` above.
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerpulse_charge_current_needs_own_channel",
+                )
+            if self._mqtt_client is None or not self._mqtt_client.is_connected():
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerpulse_own_channel_offline",
+                )
+            payload = build_powerpulse_standalone_current_ctrl_payload(
+                current_a, self.device_sn
+            )
+            future: asyncio.Future[str | float] = self.hass.loop.create_future()
+            record = WallboxActionPending(
+                action="charge_current",
+                issued_at=time.monotonic(),
+                future=future,
+                state_key="ev_charge_current_a",
+                expected_value=float(current_a),
+            )
+            self._wallbox_action_pending = record
+            try:
+                delivered = await self.async_send_proto_set_command(
+                    payload, "powerpulse_charge_current"
+                )
+                if not delivered:
+                    self._log_event("powerpulse_charge_current_not_delivered", "")
+                    raise HomeAssistantError(
+                        translation_domain=DOMAIN,
+                        translation_key="powerpulse_action_not_delivered",
+                    )
+            except BaseException:
+                self._clear_wallbox_action(record)
+                raise
+
+        try:
+            confirmed_value = await asyncio.wait_for(
+                future, POWERPULSE2_CHARGE_CURRENT_WINDOW_S
+            )
+        except TimeoutError:
+            last_reported = self._device_data.get("ev_charge_current_a")
+            self._log_event("powerpulse_charge_current_unconfirmed", str(last_reported))
+            reported = (
+                f"{last_reported:g} A"
+                if isinstance(last_reported, (int, float))
+                else "no value yet"
+            )
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="powerpulse_charge_current_not_confirmed",
+                translation_placeholders={"reported": reported},
+            ) from None
+        else:
+            self._log_event("powerpulse_charge_current", str(confirmed_value))
         finally:
             self._clear_wallbox_action(record)
 
