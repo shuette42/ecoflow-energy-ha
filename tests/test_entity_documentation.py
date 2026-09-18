@@ -186,6 +186,7 @@ SKIP_SECTIONS: frozenset[tuple[str, str]] = frozenset(
     {
         ("powerocean.md", "Sensors - Battery Packs (up to 5x BP5000)"),
         ("delta-2-max.md", "Sensors - Expansion Battery Packs (disabled)"),
+        ("ocean-2.md", "Sensors - Battery Modules (up to 16)"),
     }
 )
 
@@ -449,6 +450,14 @@ TEMPLATE_FAMILIES: tuple[TemplateFamily, ...] = (
         "Slave ",
         "Sensors - Expansion Battery Packs (disabled)",
         re.compile(r"Two expansion packs \(Slave 1, Slave (\d+)\)"),
+    ),
+    TemplateFamily(
+        "ocean-2.md",
+        "OCEAN2",
+        "sensors",
+        "Module ",
+        "Sensors - Battery Modules (up to 16)",
+        re.compile(r"up to (\d+)"),
     ),
 )
 
@@ -777,6 +786,13 @@ EXCLUDE_FROM_UNDOCUMENTED: tuple[Exclusion, ...] = (
         "**Battery Charge Capacity** and **Battery Discharge Capacity** "
         "(Ah)'), never as a table row - same shape as the DELTA3 'Port "
         "Priority Active' entry above",
+    ),
+    Exclusion(
+        "OCEAN2",
+        "sensors",
+        re.compile(r"^Module \d+ "),
+        "documented via the 'Module N ...' template rows in "
+        "ocean-2.md, checked per instance by TEMPLATE_FAMILIES",
     ),
 )
 

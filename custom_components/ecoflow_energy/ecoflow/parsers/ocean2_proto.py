@@ -1,10 +1,10 @@
 """Protobuf telemetry parser for the EcoFlow Ocean 2 (`RE11`, `RE17`).
 
-Scope is deliberately narrow: the main telemetry frame (cmd_func 254 /
-cmd_id 39) and nothing else. The unit also emits a per-module battery frame
-on cmd_id 46 carrying cell voltages, temperatures and cycle counts; that is
-a separate map with its own entities and is left for a follow-up so this
-addition stays reviewable.
+Two frames on cmd_func 254: the main telemetry on cmd_id 39, and the
+per-module battery frame on cmd_id 46. They are shaped differently and are
+read by separate functions - telemetry carries every reading in one payload,
+while a module frame carries exactly one module and a frame bundles one
+header per module.
 
 Unlike the Stream and Delta 3 frames, an Ocean 2 telemetry payload is
 **nested**: the readings sit inside length-delimited sub-messages (65, 7/87,
@@ -29,8 +29,8 @@ unrelated installation: the numbers line up frame for frame, the load-bearing
 readings and the module block included.
 
 They come from https://github.com/jensfr1/ha-ecoflow-ocean2, a standalone
-Ocean 2 integration that decodes the full frame set - including the
-per-module battery data this parser leaves for a later change.
+Ocean 2 integration that decodes the full frame set, including the
+per-module battery data this parser reads below.
 
 Standard Mode is not an option for this device: the HTTP quota call answers
 error 1006 ("current device is not allowed to get device info"), the same
@@ -46,6 +46,7 @@ from typing import Any
 from ..proto.decoder import decode_header_message
 from .stream_ac5000_proto import (
     _TYPE_FLOAT,
+    _TYPE_INT,
     _compile,
     _decode_scalar,
     _iter_fields,
@@ -53,9 +54,10 @@ from .stream_ac5000_proto import (
 )
 from .stream_proto import _pdata_candidates
 
-# The two frames this device sends on cmd_func 254. Only 39 is mapped here.
+# The two frames this device sends on cmd_func 254.
 _CMD_FUNC = 254
 _CMD_ID_TELEMETRY = 39
+_CMD_ID_MODULE = 46
 
 # Declared paths -> (temporary key, scalar type, scale). Every power path
 # that exists in more than one block gets its own block-prefixed key here;
@@ -97,6 +99,123 @@ _OCEAN2_TREE: dict[int, Any] = _compile(_OCEAN2_FIELD_MAP)
 _OCEAN2_TREE[4][14] = {}
 _PV_STRINGS_GROUP = "4.14"
 _PV_STRINGS_KEY = "_pv_string_blocks"
+
+
+# Block 5 of the `254/46` frame - one battery module per header, with the
+# module number in 5.15.
+#
+# A frame bundles several of these headers, and the bundle size is not the
+# module count: a 98-record capture holds bundles of thirteen and fourteen
+# while carrying only two distinct module numbers, with field 37 - a
+# timestamp - stepping 3 to 7 seconds between the records inside one bundle.
+# It is a backlog of per-module heartbeats, not a snapshot of the pack. The
+# entities are still created on report rather than declared for a fixed
+# count: the module count is an installation choice either way, and keying
+# on the number actually seen is what makes the bundle case work at all.
+#
+# Three of these were corrected against the running unit on 2026-07-31, and
+# each correction was the wrong quantity rather than the wrong scale:
+#
+#   54  is the energy left in the module, not its capacity. Measured 4114 Wh
+#       at 81.5 % and 4137 Wh at 82.0 %, which puts the full pack near
+#       5046 Wh. Read as a capacity it falls while the module discharges -
+#       harmless on a desk, permanently misleading in service.
+#   39  is the state of health, not the state of charge: constant 100.0
+#       across a whole measurement while 38 moved. The pair 38/39 mirrors
+#       the 2/3 of the older generation. Read as a float; field 3 carries
+#       the same number as a varint.
+#    6  is a cell voltage in millivolts, not the pack voltage - it follows
+#       the load.
+#
+# The pack voltage does exist, in field 9. It was overlooked because 16.5 V
+# reads as implausibly low for a home battery - but the modules are wired 5S:
+# 16.46 V over 3.311 V per cell is exactly five cells in series. Confirmed
+# through the power balance, field 9 times field 10 hitting field 1 within
+# 1 % on both modules independently.
+_MODULE_FIELD_MAP: dict[str, tuple[str, str, float]] = {
+    "5.15": ("_index", _TYPE_INT, 1),
+    "5.1": ("power_w", _TYPE_FLOAT, 1),
+    # 39, not 3. Both read a constant 100 on a healthy pack, so the values
+    # cannot tell them apart - the wire type can: field 3 arrives as a varint
+    # and 39 as a float, checked on raw frames from an RE11. The pair 38/39
+    # mirrors the 2/3 of the older generation, 38 being the state of charge
+    # that actually moves. Declaring 3 as a float meant the walker rejected
+    # it on type and the entity stayed empty; no test caught that, because
+    # the tests built field 3 as a float themselves.
+    "5.39": ("soh_pct", _TYPE_FLOAT, 1),
+    "5.38": ("soc_pct", _TYPE_FLOAT, 1),
+    "5.54": ("remaining_wh", _TYPE_FLOAT, 1),
+    "5.17": ("cycles", _TYPE_INT, 1),
+    "5.9": ("voltage_v", _TYPE_FLOAT, 1),
+    "5.10": ("current_a", _TYPE_FLOAT, 1),
+    # Millivolts, like the PowerOcean cell-voltage entities - 3437 on a real
+    # frame. Published as mV rather than scaled to volts: 5 x 3.437 V is
+    # 17.19 V against 17.11 V in field 9, which is the 5S wiring and the
+    # cross-check that the field is a cell rather than the pack.
+    "5.6": ("cell_voltage_mv", _TYPE_FLOAT, 1),
+    # Temperatures, separated on 2026-08-01 by a load test rather than by
+    # their averages: 45 minutes of wallbox charging, up to 3.6 kW per
+    # module. What tells them apart is how they move, not how warm they are.
+    # 21, 30 and 31 hold the order 31 <= 21 <= 30 in every frame and rise
+    # together and slowly - cell minimum, average and maximum. 23/24/32/33
+    # follow the load within a minute, swinging 11 to 17 K at up to 7 K per
+    # minute, which is power electronics rather than cells.
+    "5.21": ("cell_temp_c", _TYPE_FLOAT, 1),
+    "5.30": ("cell_temp_max_c", _TYPE_FLOAT, 1),
+    "5.31": ("cell_temp_min_c", _TYPE_FLOAT, 1),
+    "5.23": ("_mos_a_c", _TYPE_FLOAT, 1),
+    "5.24": ("_mos_b_c", _TYPE_FLOAT, 1),
+    "5.32": ("_mos_c_c", _TYPE_FLOAT, 1),
+    "5.33": ("_mos_d_c", _TYPE_FLOAT, 1),
+}
+_MODULE_TREE: dict[int, Any] = _compile(_MODULE_FIELD_MAP)
+
+#: Highest module number that gets entity definitions. The reporter's unit
+#: has two, recordings from other installations carry fourteen; sixteen
+#: leaves headroom without costing anything, because every module entity is
+#: created on report rather than up front.
+MAX_MODULES = 16
+
+#: The four power-electronics readings are published as one maximum. They sit
+#: on different parts of the same board and the hottest is what matters; four
+#: near-identical entities per module would be noise at fourteen modules.
+_MOS_KEYS = ("_mos_a_c", "_mos_b_c", "_mos_c_c", "_mos_d_c")
+
+
+def _parse_module(pdata: bytes) -> dict[str, Any]:
+    """Decode one `cmd_id 46` payload into keys for a single module.
+
+    Returns an empty dict when the payload carries no usable module number:
+    without it there is nothing to attach the readings to, and guessing a
+    position would put one module's cell voltages under another's name.
+    """
+    walked: dict[str, Any] = {}
+    _walk(pdata, _MODULE_TREE, walked, set())
+
+    # Same guard `_parse_telemetry` applies to its own readings: a NaN or an
+    # infinity reaching a sensor raises inside Home Assistant's rounding and
+    # aborts the rest of that update, and `_walk` itself has no notion of this.
+    for key in [
+        key
+        for key, value in walked.items()
+        if isinstance(value, float) and not isfinite(value)
+    ]:
+        del walked[key]
+
+    index = walked.pop("_index", None)
+    if (
+        not isinstance(index, (int, float))
+        or not isfinite(index)
+        or not 1 <= int(index) <= MAX_MODULES
+    ):
+        return {}
+
+    mos = [walked.pop(key) for key in _MOS_KEYS if key in walked]
+    if mos:
+        walked["mos_temp_c"] = max(mos)
+
+    prefix = f"module{int(index)}_"
+    return {prefix + key: value for key, value in walked.items()}
 
 
 def _pick(values: dict[str, Any], *keys: str) -> float | None:
@@ -260,11 +379,16 @@ def parse_ocean2_proto_message(payload: bytes) -> dict[str, Any] | None:
     for header in headers:
         if header.get("cmd_func") != _CMD_FUNC:
             continue
-        if header.get("cmd_id") != _CMD_ID_TELEMETRY:
+        cmd_id = header.get("cmd_id")
+        if cmd_id not in (_CMD_ID_TELEMETRY, _CMD_ID_MODULE):
             continue
         for pdata in _pdata_candidates(header):
             try:
-                decoded = _parse_telemetry(pdata)
+                decoded = (
+                    _parse_telemetry(pdata)
+                    if cmd_id == _CMD_ID_TELEMETRY
+                    else _parse_module(pdata)
+                )
             except (IndexError, ValueError, struct.error):
                 # Only a payload that is not valid protobuf falls through to
                 # the next candidate; a clean decode ends the attempt whether

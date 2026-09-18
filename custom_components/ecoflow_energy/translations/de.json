@@ -1728,6 +1728,582 @@
       },
       "condensate_water_level": {
         "name": "Kondenswasserstand"
+      },
+      "module1_soc_pct": {
+        "name": "Modul 1 Ladestand"
+      },
+      "module1_power_w": {
+        "name": "Modul 1 Leistung"
+      },
+      "module1_remaining_wh": {
+        "name": "Modul 1 Verbleibende Energie"
+      },
+      "module1_soh_pct": {
+        "name": "Modul 1 Alterungszustand"
+      },
+      "module1_cycles": {
+        "name": "Modul 1 Ladezyklen"
+      },
+      "module1_cell_temp_c": {
+        "name": "Modul 1 Zelltemperatur"
+      },
+      "module1_cell_temp_min_c": {
+        "name": "Modul 1 Niedrigste Zelltemperatur"
+      },
+      "module1_cell_temp_max_c": {
+        "name": "Modul 1 Höchste Zelltemperatur"
+      },
+      "module1_mos_temp_c": {
+        "name": "Modul 1 Temperatur der Leistungselektronik"
+      },
+      "module1_voltage_v": {
+        "name": "Modul 1 Spannung"
+      },
+      "module1_current_a": {
+        "name": "Modul 1 Strom"
+      },
+      "module2_soc_pct": {
+        "name": "Modul 2 Ladestand"
+      },
+      "module2_power_w": {
+        "name": "Modul 2 Leistung"
+      },
+      "module2_remaining_wh": {
+        "name": "Modul 2 Verbleibende Energie"
+      },
+      "module2_soh_pct": {
+        "name": "Modul 2 Alterungszustand"
+      },
+      "module2_cycles": {
+        "name": "Modul 2 Ladezyklen"
+      },
+      "module2_cell_temp_c": {
+        "name": "Modul 2 Zelltemperatur"
+      },
+      "module2_cell_temp_min_c": {
+        "name": "Modul 2 Niedrigste Zelltemperatur"
+      },
+      "module2_cell_temp_max_c": {
+        "name": "Modul 2 Höchste Zelltemperatur"
+      },
+      "module2_mos_temp_c": {
+        "name": "Modul 2 Temperatur der Leistungselektronik"
+      },
+      "module2_voltage_v": {
+        "name": "Modul 2 Spannung"
+      },
+      "module2_current_a": {
+        "name": "Modul 2 Strom"
+      },
+      "module3_soc_pct": {
+        "name": "Modul 3 Ladestand"
+      },
+      "module3_power_w": {
+        "name": "Modul 3 Leistung"
+      },
+      "module3_remaining_wh": {
+        "name": "Modul 3 Verbleibende Energie"
+      },
+      "module3_soh_pct": {
+        "name": "Modul 3 Alterungszustand"
+      },
+      "module3_cycles": {
+        "name": "Modul 3 Ladezyklen"
+      },
+      "module3_cell_temp_c": {
+        "name": "Modul 3 Zelltemperatur"
+      },
+      "module3_cell_temp_min_c": {
+        "name": "Modul 3 Niedrigste Zelltemperatur"
+      },
+      "module3_cell_temp_max_c": {
+        "name": "Modul 3 Höchste Zelltemperatur"
+      },
+      "module3_mos_temp_c": {
+        "name": "Modul 3 Temperatur der Leistungselektronik"
+      },
+      "module3_voltage_v": {
+        "name": "Modul 3 Spannung"
+      },
+      "module3_current_a": {
+        "name": "Modul 3 Strom"
+      },
+      "module4_soc_pct": {
+        "name": "Modul 4 Ladestand"
+      },
+      "module4_power_w": {
+        "name": "Modul 4 Leistung"
+      },
+      "module4_remaining_wh": {
+        "name": "Modul 4 Verbleibende Energie"
+      },
+      "module4_soh_pct": {
+        "name": "Modul 4 Alterungszustand"
+      },
+      "module4_cycles": {
+        "name": "Modul 4 Ladezyklen"
+      },
+      "module4_cell_temp_c": {
+        "name": "Modul 4 Zelltemperatur"
+      },
+      "module4_cell_temp_min_c": {
+        "name": "Modul 4 Niedrigste Zelltemperatur"
+      },
+      "module4_cell_temp_max_c": {
+        "name": "Modul 4 Höchste Zelltemperatur"
+      },
+      "module4_mos_temp_c": {
+        "name": "Modul 4 Temperatur der Leistungselektronik"
+      },
+      "module4_voltage_v": {
+        "name": "Modul 4 Spannung"
+      },
+      "module4_current_a": {
+        "name": "Modul 4 Strom"
+      },
+      "module5_soc_pct": {
+        "name": "Modul 5 Ladestand"
+      },
+      "module5_power_w": {
+        "name": "Modul 5 Leistung"
+      },
+      "module5_remaining_wh": {
+        "name": "Modul 5 Verbleibende Energie"
+      },
+      "module5_soh_pct": {
+        "name": "Modul 5 Alterungszustand"
+      },
+      "module5_cycles": {
+        "name": "Modul 5 Ladezyklen"
+      },
+      "module5_cell_temp_c": {
+        "name": "Modul 5 Zelltemperatur"
+      },
+      "module5_cell_temp_min_c": {
+        "name": "Modul 5 Niedrigste Zelltemperatur"
+      },
+      "module5_cell_temp_max_c": {
+        "name": "Modul 5 Höchste Zelltemperatur"
+      },
+      "module5_mos_temp_c": {
+        "name": "Modul 5 Temperatur der Leistungselektronik"
+      },
+      "module5_voltage_v": {
+        "name": "Modul 5 Spannung"
+      },
+      "module5_current_a": {
+        "name": "Modul 5 Strom"
+      },
+      "module6_soc_pct": {
+        "name": "Modul 6 Ladestand"
+      },
+      "module6_power_w": {
+        "name": "Modul 6 Leistung"
+      },
+      "module6_remaining_wh": {
+        "name": "Modul 6 Verbleibende Energie"
+      },
+      "module6_soh_pct": {
+        "name": "Modul 6 Alterungszustand"
+      },
+      "module6_cycles": {
+        "name": "Modul 6 Ladezyklen"
+      },
+      "module6_cell_temp_c": {
+        "name": "Modul 6 Zelltemperatur"
+      },
+      "module6_cell_temp_min_c": {
+        "name": "Modul 6 Niedrigste Zelltemperatur"
+      },
+      "module6_cell_temp_max_c": {
+        "name": "Modul 6 Höchste Zelltemperatur"
+      },
+      "module6_mos_temp_c": {
+        "name": "Modul 6 Temperatur der Leistungselektronik"
+      },
+      "module6_voltage_v": {
+        "name": "Modul 6 Spannung"
+      },
+      "module6_current_a": {
+        "name": "Modul 6 Strom"
+      },
+      "module7_soc_pct": {
+        "name": "Modul 7 Ladestand"
+      },
+      "module7_power_w": {
+        "name": "Modul 7 Leistung"
+      },
+      "module7_remaining_wh": {
+        "name": "Modul 7 Verbleibende Energie"
+      },
+      "module7_soh_pct": {
+        "name": "Modul 7 Alterungszustand"
+      },
+      "module7_cycles": {
+        "name": "Modul 7 Ladezyklen"
+      },
+      "module7_cell_temp_c": {
+        "name": "Modul 7 Zelltemperatur"
+      },
+      "module7_cell_temp_min_c": {
+        "name": "Modul 7 Niedrigste Zelltemperatur"
+      },
+      "module7_cell_temp_max_c": {
+        "name": "Modul 7 Höchste Zelltemperatur"
+      },
+      "module7_mos_temp_c": {
+        "name": "Modul 7 Temperatur der Leistungselektronik"
+      },
+      "module7_voltage_v": {
+        "name": "Modul 7 Spannung"
+      },
+      "module7_current_a": {
+        "name": "Modul 7 Strom"
+      },
+      "module8_soc_pct": {
+        "name": "Modul 8 Ladestand"
+      },
+      "module8_power_w": {
+        "name": "Modul 8 Leistung"
+      },
+      "module8_remaining_wh": {
+        "name": "Modul 8 Verbleibende Energie"
+      },
+      "module8_soh_pct": {
+        "name": "Modul 8 Alterungszustand"
+      },
+      "module8_cycles": {
+        "name": "Modul 8 Ladezyklen"
+      },
+      "module8_cell_temp_c": {
+        "name": "Modul 8 Zelltemperatur"
+      },
+      "module8_cell_temp_min_c": {
+        "name": "Modul 8 Niedrigste Zelltemperatur"
+      },
+      "module8_cell_temp_max_c": {
+        "name": "Modul 8 Höchste Zelltemperatur"
+      },
+      "module8_mos_temp_c": {
+        "name": "Modul 8 Temperatur der Leistungselektronik"
+      },
+      "module8_voltage_v": {
+        "name": "Modul 8 Spannung"
+      },
+      "module8_current_a": {
+        "name": "Modul 8 Strom"
+      },
+      "module9_soc_pct": {
+        "name": "Modul 9 Ladestand"
+      },
+      "module9_power_w": {
+        "name": "Modul 9 Leistung"
+      },
+      "module9_remaining_wh": {
+        "name": "Modul 9 Verbleibende Energie"
+      },
+      "module9_soh_pct": {
+        "name": "Modul 9 Alterungszustand"
+      },
+      "module9_cycles": {
+        "name": "Modul 9 Ladezyklen"
+      },
+      "module9_cell_temp_c": {
+        "name": "Modul 9 Zelltemperatur"
+      },
+      "module9_cell_temp_min_c": {
+        "name": "Modul 9 Niedrigste Zelltemperatur"
+      },
+      "module9_cell_temp_max_c": {
+        "name": "Modul 9 Höchste Zelltemperatur"
+      },
+      "module9_mos_temp_c": {
+        "name": "Modul 9 Temperatur der Leistungselektronik"
+      },
+      "module9_voltage_v": {
+        "name": "Modul 9 Spannung"
+      },
+      "module9_current_a": {
+        "name": "Modul 9 Strom"
+      },
+      "module10_soc_pct": {
+        "name": "Modul 10 Ladestand"
+      },
+      "module10_power_w": {
+        "name": "Modul 10 Leistung"
+      },
+      "module10_remaining_wh": {
+        "name": "Modul 10 Verbleibende Energie"
+      },
+      "module10_soh_pct": {
+        "name": "Modul 10 Alterungszustand"
+      },
+      "module10_cycles": {
+        "name": "Modul 10 Ladezyklen"
+      },
+      "module10_cell_temp_c": {
+        "name": "Modul 10 Zelltemperatur"
+      },
+      "module10_cell_temp_min_c": {
+        "name": "Modul 10 Niedrigste Zelltemperatur"
+      },
+      "module10_cell_temp_max_c": {
+        "name": "Modul 10 Höchste Zelltemperatur"
+      },
+      "module10_mos_temp_c": {
+        "name": "Modul 10 Temperatur der Leistungselektronik"
+      },
+      "module10_voltage_v": {
+        "name": "Modul 10 Spannung"
+      },
+      "module10_current_a": {
+        "name": "Modul 10 Strom"
+      },
+      "module11_soc_pct": {
+        "name": "Modul 11 Ladestand"
+      },
+      "module11_power_w": {
+        "name": "Modul 11 Leistung"
+      },
+      "module11_remaining_wh": {
+        "name": "Modul 11 Verbleibende Energie"
+      },
+      "module11_soh_pct": {
+        "name": "Modul 11 Alterungszustand"
+      },
+      "module11_cycles": {
+        "name": "Modul 11 Ladezyklen"
+      },
+      "module11_cell_temp_c": {
+        "name": "Modul 11 Zelltemperatur"
+      },
+      "module11_cell_temp_min_c": {
+        "name": "Modul 11 Niedrigste Zelltemperatur"
+      },
+      "module11_cell_temp_max_c": {
+        "name": "Modul 11 Höchste Zelltemperatur"
+      },
+      "module11_mos_temp_c": {
+        "name": "Modul 11 Temperatur der Leistungselektronik"
+      },
+      "module11_voltage_v": {
+        "name": "Modul 11 Spannung"
+      },
+      "module11_current_a": {
+        "name": "Modul 11 Strom"
+      },
+      "module12_soc_pct": {
+        "name": "Modul 12 Ladestand"
+      },
+      "module12_power_w": {
+        "name": "Modul 12 Leistung"
+      },
+      "module12_remaining_wh": {
+        "name": "Modul 12 Verbleibende Energie"
+      },
+      "module12_soh_pct": {
+        "name": "Modul 12 Alterungszustand"
+      },
+      "module12_cycles": {
+        "name": "Modul 12 Ladezyklen"
+      },
+      "module12_cell_temp_c": {
+        "name": "Modul 12 Zelltemperatur"
+      },
+      "module12_cell_temp_min_c": {
+        "name": "Modul 12 Niedrigste Zelltemperatur"
+      },
+      "module12_cell_temp_max_c": {
+        "name": "Modul 12 Höchste Zelltemperatur"
+      },
+      "module12_mos_temp_c": {
+        "name": "Modul 12 Temperatur der Leistungselektronik"
+      },
+      "module12_voltage_v": {
+        "name": "Modul 12 Spannung"
+      },
+      "module12_current_a": {
+        "name": "Modul 12 Strom"
+      },
+      "module13_soc_pct": {
+        "name": "Modul 13 Ladestand"
+      },
+      "module13_power_w": {
+        "name": "Modul 13 Leistung"
+      },
+      "module13_remaining_wh": {
+        "name": "Modul 13 Verbleibende Energie"
+      },
+      "module13_soh_pct": {
+        "name": "Modul 13 Alterungszustand"
+      },
+      "module13_cycles": {
+        "name": "Modul 13 Ladezyklen"
+      },
+      "module13_cell_temp_c": {
+        "name": "Modul 13 Zelltemperatur"
+      },
+      "module13_cell_temp_min_c": {
+        "name": "Modul 13 Niedrigste Zelltemperatur"
+      },
+      "module13_cell_temp_max_c": {
+        "name": "Modul 13 Höchste Zelltemperatur"
+      },
+      "module13_mos_temp_c": {
+        "name": "Modul 13 Temperatur der Leistungselektronik"
+      },
+      "module13_voltage_v": {
+        "name": "Modul 13 Spannung"
+      },
+      "module13_current_a": {
+        "name": "Modul 13 Strom"
+      },
+      "module14_soc_pct": {
+        "name": "Modul 14 Ladestand"
+      },
+      "module14_power_w": {
+        "name": "Modul 14 Leistung"
+      },
+      "module14_remaining_wh": {
+        "name": "Modul 14 Verbleibende Energie"
+      },
+      "module14_soh_pct": {
+        "name": "Modul 14 Alterungszustand"
+      },
+      "module14_cycles": {
+        "name": "Modul 14 Ladezyklen"
+      },
+      "module14_cell_temp_c": {
+        "name": "Modul 14 Zelltemperatur"
+      },
+      "module14_cell_temp_min_c": {
+        "name": "Modul 14 Niedrigste Zelltemperatur"
+      },
+      "module14_cell_temp_max_c": {
+        "name": "Modul 14 Höchste Zelltemperatur"
+      },
+      "module14_mos_temp_c": {
+        "name": "Modul 14 Temperatur der Leistungselektronik"
+      },
+      "module14_voltage_v": {
+        "name": "Modul 14 Spannung"
+      },
+      "module14_current_a": {
+        "name": "Modul 14 Strom"
+      },
+      "module15_soc_pct": {
+        "name": "Modul 15 Ladestand"
+      },
+      "module15_power_w": {
+        "name": "Modul 15 Leistung"
+      },
+      "module15_remaining_wh": {
+        "name": "Modul 15 Verbleibende Energie"
+      },
+      "module15_soh_pct": {
+        "name": "Modul 15 Alterungszustand"
+      },
+      "module15_cycles": {
+        "name": "Modul 15 Ladezyklen"
+      },
+      "module15_cell_temp_c": {
+        "name": "Modul 15 Zelltemperatur"
+      },
+      "module15_cell_temp_min_c": {
+        "name": "Modul 15 Niedrigste Zelltemperatur"
+      },
+      "module15_cell_temp_max_c": {
+        "name": "Modul 15 Höchste Zelltemperatur"
+      },
+      "module15_mos_temp_c": {
+        "name": "Modul 15 Temperatur der Leistungselektronik"
+      },
+      "module15_voltage_v": {
+        "name": "Modul 15 Spannung"
+      },
+      "module15_current_a": {
+        "name": "Modul 15 Strom"
+      },
+      "module16_soc_pct": {
+        "name": "Modul 16 Ladestand"
+      },
+      "module16_power_w": {
+        "name": "Modul 16 Leistung"
+      },
+      "module16_remaining_wh": {
+        "name": "Modul 16 Verbleibende Energie"
+      },
+      "module16_soh_pct": {
+        "name": "Modul 16 Alterungszustand"
+      },
+      "module16_cycles": {
+        "name": "Modul 16 Ladezyklen"
+      },
+      "module16_cell_temp_c": {
+        "name": "Modul 16 Zelltemperatur"
+      },
+      "module16_cell_temp_min_c": {
+        "name": "Modul 16 Niedrigste Zelltemperatur"
+      },
+      "module16_cell_temp_max_c": {
+        "name": "Modul 16 Höchste Zelltemperatur"
+      },
+      "module16_mos_temp_c": {
+        "name": "Modul 16 Temperatur der Leistungselektronik"
+      },
+      "module16_voltage_v": {
+        "name": "Modul 16 Spannung"
+      },
+      "module16_current_a": {
+        "name": "Modul 16 Strom"
+      },
+      "module1_cell_voltage_mv": {
+        "name": "Modul 1 Höchste Zellspannung"
+      },
+      "module2_cell_voltage_mv": {
+        "name": "Modul 2 Höchste Zellspannung"
+      },
+      "module3_cell_voltage_mv": {
+        "name": "Modul 3 Höchste Zellspannung"
+      },
+      "module4_cell_voltage_mv": {
+        "name": "Modul 4 Höchste Zellspannung"
+      },
+      "module5_cell_voltage_mv": {
+        "name": "Modul 5 Höchste Zellspannung"
+      },
+      "module6_cell_voltage_mv": {
+        "name": "Modul 6 Höchste Zellspannung"
+      },
+      "module7_cell_voltage_mv": {
+        "name": "Modul 7 Höchste Zellspannung"
+      },
+      "module8_cell_voltage_mv": {
+        "name": "Modul 8 Höchste Zellspannung"
+      },
+      "module9_cell_voltage_mv": {
+        "name": "Modul 9 Höchste Zellspannung"
+      },
+      "module10_cell_voltage_mv": {
+        "name": "Modul 10 Höchste Zellspannung"
+      },
+      "module11_cell_voltage_mv": {
+        "name": "Modul 11 Höchste Zellspannung"
+      },
+      "module12_cell_voltage_mv": {
+        "name": "Modul 12 Höchste Zellspannung"
+      },
+      "module13_cell_voltage_mv": {
+        "name": "Modul 13 Höchste Zellspannung"
+      },
+      "module14_cell_voltage_mv": {
+        "name": "Modul 14 Höchste Zellspannung"
+      },
+      "module15_cell_voltage_mv": {
+        "name": "Modul 15 Höchste Zellspannung"
+      },
+      "module16_cell_voltage_mv": {
+        "name": "Modul 16 Höchste Zellspannung"
       }
     },
     "binary_sensor": {

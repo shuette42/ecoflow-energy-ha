@@ -37,6 +37,9 @@ from .ecoflow.const import (  # noqa: E402
     get_device_name,  # noqa: F401
     get_device_type,  # noqa: F401
 )
+from .ecoflow.parsers.ocean2_proto import (
+    MAX_MODULES as OCEAN2_MAX_MODULES,  # noqa: E402
+)
 from .ecoflow.parsers.powerocean_proto import SCHEDULE_MAX_INDEX  # noqa: E402
 
 DOMAIN = "ecoflow_energy"
@@ -7192,6 +7195,193 @@ OCEAN2_SENSORS: list[EcoFlowSensorDef] = [
         enhanced_only=True,
     ),
 ]
+
+
+def _build_ocean2_module_sensors(module_num: int) -> list[EcoFlowSensorDef]:
+    """Build the entity definitions for one Ocean 2 battery module.
+
+    Every one of these is an accessory: created once the module has actually
+    reported, never before. The module count is an installation choice rather
+    than a model difference - two on the unit this was mapped on; captures
+    from other systems show bundles of up to fourteen per-module headers in
+    one frame, which is a heartbeat backlog rather than fourteen distinct
+    modules (see the parser's own note on this). Declaring a fixed number as
+    disabled-by-default would still leave most owners with dozens of entities
+    their hardware can never fill, and the rest hunting through a disabled
+    list for the modules they do have.
+    """
+    m = f"module{module_num}"
+    n = module_num
+
+    core = [
+        # No battery device class: Home Assistant shows one battery figure per
+        # device, and that is the system state of charge. A per-module class
+        # would put sixteen competing battery icons on one device.
+        EcoFlowSensorDef(
+            f"{m}_soc_pct",
+            f"Module {n} SoC",
+            "%",
+            None,
+            "measurement",
+            "mdi:battery",
+            suggested_display_precision=1,
+            accessory=True,
+            enhanced_only=True,
+        ),
+        # Signed like the system reading: positive charges, negative discharges.
+        EcoFlowSensorDef(
+            f"{m}_power_w",
+            f"Module {n} Power",
+            "W",
+            "power",
+            "measurement",
+            "mdi:battery-charging",
+            suggested_display_precision=0,
+            accessory=True,
+            enhanced_only=True,
+        ),
+        # Energy left in this module, not its capacity.
+        EcoFlowSensorDef(
+            f"{m}_remaining_wh",
+            f"Module {n} Remaining Energy",
+            "Wh",
+            "energy_storage",
+            "measurement",
+            "mdi:battery-70",
+            suggested_display_precision=0,
+            accessory=True,
+            enhanced_only=True,
+        ),
+        EcoFlowSensorDef(
+            f"{m}_soh_pct",
+            f"Module {n} State of Health",
+            "%",
+            None,
+            "measurement",
+            "mdi:heart-pulse",
+            "diagnostic",
+            suggested_display_precision=1,
+            accessory=True,
+            enhanced_only=True,
+        ),
+        EcoFlowSensorDef(
+            f"{m}_cycles",
+            f"Module {n} Charge Cycles",
+            None,
+            None,
+            "total_increasing",
+            "mdi:counter",
+            "diagnostic",
+            suggested_display_precision=0,
+            accessory=True,
+            enhanced_only=True,
+        ),
+    ]
+
+    diagnostic = [
+        # Cell temperatures. The three hold the order min <= average <= max in
+        # every frame and move together and slowly.
+        EcoFlowSensorDef(
+            f"{m}_cell_temp_c",
+            f"Module {n} Cell Temperature",
+            "°C",
+            "temperature",
+            "measurement",
+            "mdi:thermometer",
+            "diagnostic",
+            suggested_display_precision=1,
+            disabled_by_default=True,
+            accessory=True,
+            enhanced_only=True,
+        ),
+        EcoFlowSensorDef(
+            f"{m}_cell_temp_min_c",
+            f"Module {n} Min Cell Temperature",
+            "°C",
+            "temperature",
+            "measurement",
+            "mdi:thermometer-low",
+            "diagnostic",
+            suggested_display_precision=1,
+            disabled_by_default=True,
+            accessory=True,
+            enhanced_only=True,
+        ),
+        EcoFlowSensorDef(
+            f"{m}_cell_temp_max_c",
+            f"Module {n} Max Cell Temperature",
+            "°C",
+            "temperature",
+            "measurement",
+            "mdi:thermometer-high",
+            "diagnostic",
+            suggested_display_precision=1,
+            disabled_by_default=True,
+            accessory=True,
+            enhanced_only=True,
+        ),
+        # The hottest of the four power-electronics readings, see the parser.
+        EcoFlowSensorDef(
+            f"{m}_mos_temp_c",
+            f"Module {n} Power Electronics Temperature",
+            "°C",
+            "temperature",
+            "measurement",
+            "mdi:thermometer-alert",
+            "diagnostic",
+            suggested_display_precision=1,
+            disabled_by_default=True,
+            accessory=True,
+            enhanced_only=True,
+        ),
+        # Pack voltage: low for a home battery because the modules are 5S.
+        EcoFlowSensorDef(
+            f"{m}_voltage_v",
+            f"Module {n} Voltage",
+            "V",
+            "voltage",
+            "measurement",
+            "mdi:flash",
+            "diagnostic",
+            suggested_display_precision=2,
+            disabled_by_default=True,
+            accessory=True,
+            enhanced_only=True,
+        ),
+        EcoFlowSensorDef(
+            f"{m}_current_a",
+            f"Module {n} Current",
+            "A",
+            "current",
+            "measurement",
+            "mdi:current-dc",
+            "diagnostic",
+            suggested_display_precision=2,
+            disabled_by_default=True,
+            accessory=True,
+            enhanced_only=True,
+        ),
+        # Highest cell voltage, not the pack - it follows the load.
+        EcoFlowSensorDef(
+            f"{m}_cell_voltage_mv",
+            f"Module {n} Max Cell Voltage",
+            "mV",
+            "voltage",
+            "measurement",
+            "mdi:flash-triangle-outline",
+            "diagnostic",
+            suggested_display_precision=0,
+            disabled_by_default=True,
+            accessory=True,
+            enhanced_only=True,
+        ),
+    ]
+
+    return core + diagnostic
+
+
+for _module_num in range(1, OCEAN2_MAX_MODULES + 1):
+    OCEAN2_SENSORS.extend(_build_ocean2_module_sensors(_module_num))
 
 
 POWERPULSE2_SENSORS: list[EcoFlowSensorDef] = [

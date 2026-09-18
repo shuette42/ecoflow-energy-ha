@@ -1728,6 +1728,582 @@
       },
       "condensate_water_level": {
         "name": "Condensate Water Level"
+      },
+      "module1_soc_pct": {
+        "name": "Module 1 SoC"
+      },
+      "module1_power_w": {
+        "name": "Module 1 Power"
+      },
+      "module1_remaining_wh": {
+        "name": "Module 1 Remaining Energy"
+      },
+      "module1_soh_pct": {
+        "name": "Module 1 State of Health"
+      },
+      "module1_cycles": {
+        "name": "Module 1 Charge Cycles"
+      },
+      "module1_cell_temp_c": {
+        "name": "Module 1 Cell Temperature"
+      },
+      "module1_cell_temp_min_c": {
+        "name": "Module 1 Min Cell Temperature"
+      },
+      "module1_cell_temp_max_c": {
+        "name": "Module 1 Max Cell Temperature"
+      },
+      "module1_mos_temp_c": {
+        "name": "Module 1 Power Electronics Temperature"
+      },
+      "module1_voltage_v": {
+        "name": "Module 1 Voltage"
+      },
+      "module1_current_a": {
+        "name": "Module 1 Current"
+      },
+      "module2_soc_pct": {
+        "name": "Module 2 SoC"
+      },
+      "module2_power_w": {
+        "name": "Module 2 Power"
+      },
+      "module2_remaining_wh": {
+        "name": "Module 2 Remaining Energy"
+      },
+      "module2_soh_pct": {
+        "name": "Module 2 State of Health"
+      },
+      "module2_cycles": {
+        "name": "Module 2 Charge Cycles"
+      },
+      "module2_cell_temp_c": {
+        "name": "Module 2 Cell Temperature"
+      },
+      "module2_cell_temp_min_c": {
+        "name": "Module 2 Min Cell Temperature"
+      },
+      "module2_cell_temp_max_c": {
+        "name": "Module 2 Max Cell Temperature"
+      },
+      "module2_mos_temp_c": {
+        "name": "Module 2 Power Electronics Temperature"
+      },
+      "module2_voltage_v": {
+        "name": "Module 2 Voltage"
+      },
+      "module2_current_a": {
+        "name": "Module 2 Current"
+      },
+      "module3_soc_pct": {
+        "name": "Module 3 SoC"
+      },
+      "module3_power_w": {
+        "name": "Module 3 Power"
+      },
+      "module3_remaining_wh": {
+        "name": "Module 3 Remaining Energy"
+      },
+      "module3_soh_pct": {
+        "name": "Module 3 State of Health"
+      },
+      "module3_cycles": {
+        "name": "Module 3 Charge Cycles"
+      },
+      "module3_cell_temp_c": {
+        "name": "Module 3 Cell Temperature"
+      },
+      "module3_cell_temp_min_c": {
+        "name": "Module 3 Min Cell Temperature"
+      },
+      "module3_cell_temp_max_c": {
+        "name": "Module 3 Max Cell Temperature"
+      },
+      "module3_mos_temp_c": {
+        "name": "Module 3 Power Electronics Temperature"
+      },
+      "module3_voltage_v": {
+        "name": "Module 3 Voltage"
+      },
+      "module3_current_a": {
+        "name": "Module 3 Current"
+      },
+      "module4_soc_pct": {
+        "name": "Module 4 SoC"
+      },
+      "module4_power_w": {
+        "name": "Module 4 Power"
+      },
+      "module4_remaining_wh": {
+        "name": "Module 4 Remaining Energy"
+      },
+      "module4_soh_pct": {
+        "name": "Module 4 State of Health"
+      },
+      "module4_cycles": {
+        "name": "Module 4 Charge Cycles"
+      },
+      "module4_cell_temp_c": {
+        "name": "Module 4 Cell Temperature"
+      },
+      "module4_cell_temp_min_c": {
+        "name": "Module 4 Min Cell Temperature"
+      },
+      "module4_cell_temp_max_c": {
+        "name": "Module 4 Max Cell Temperature"
+      },
+      "module4_mos_temp_c": {
+        "name": "Module 4 Power Electronics Temperature"
+      },
+      "module4_voltage_v": {
+        "name": "Module 4 Voltage"
+      },
+      "module4_current_a": {
+        "name": "Module 4 Current"
+      },
+      "module5_soc_pct": {
+        "name": "Module 5 SoC"
+      },
+      "module5_power_w": {
+        "name": "Module 5 Power"
+      },
+      "module5_remaining_wh": {
+        "name": "Module 5 Remaining Energy"
+      },
+      "module5_soh_pct": {
+        "name": "Module 5 State of Health"
+      },
+      "module5_cycles": {
+        "name": "Module 5 Charge Cycles"
+      },
+      "module5_cell_temp_c": {
+        "name": "Module 5 Cell Temperature"
+      },
+      "module5_cell_temp_min_c": {
+        "name": "Module 5 Min Cell Temperature"
+      },
+      "module5_cell_temp_max_c": {
+        "name": "Module 5 Max Cell Temperature"
+      },
+      "module5_mos_temp_c": {
+        "name": "Module 5 Power Electronics Temperature"
+      },
+      "module5_voltage_v": {
+        "name": "Module 5 Voltage"
+      },
+      "module5_current_a": {
+        "name": "Module 5 Current"
+      },
+      "module6_soc_pct": {
+        "name": "Module 6 SoC"
+      },
+      "module6_power_w": {
+        "name": "Module 6 Power"
+      },
+      "module6_remaining_wh": {
+        "name": "Module 6 Remaining Energy"
+      },
+      "module6_soh_pct": {
+        "name": "Module 6 State of Health"
+      },
+      "module6_cycles": {
+        "name": "Module 6 Charge Cycles"
+      },
+      "module6_cell_temp_c": {
+        "name": "Module 6 Cell Temperature"
+      },
+      "module6_cell_temp_min_c": {
+        "name": "Module 6 Min Cell Temperature"
+      },
+      "module6_cell_temp_max_c": {
+        "name": "Module 6 Max Cell Temperature"
+      },
+      "module6_mos_temp_c": {
+        "name": "Module 6 Power Electronics Temperature"
+      },
+      "module6_voltage_v": {
+        "name": "Module 6 Voltage"
+      },
+      "module6_current_a": {
+        "name": "Module 6 Current"
+      },
+      "module7_soc_pct": {
+        "name": "Module 7 SoC"
+      },
+      "module7_power_w": {
+        "name": "Module 7 Power"
+      },
+      "module7_remaining_wh": {
+        "name": "Module 7 Remaining Energy"
+      },
+      "module7_soh_pct": {
+        "name": "Module 7 State of Health"
+      },
+      "module7_cycles": {
+        "name": "Module 7 Charge Cycles"
+      },
+      "module7_cell_temp_c": {
+        "name": "Module 7 Cell Temperature"
+      },
+      "module7_cell_temp_min_c": {
+        "name": "Module 7 Min Cell Temperature"
+      },
+      "module7_cell_temp_max_c": {
+        "name": "Module 7 Max Cell Temperature"
+      },
+      "module7_mos_temp_c": {
+        "name": "Module 7 Power Electronics Temperature"
+      },
+      "module7_voltage_v": {
+        "name": "Module 7 Voltage"
+      },
+      "module7_current_a": {
+        "name": "Module 7 Current"
+      },
+      "module8_soc_pct": {
+        "name": "Module 8 SoC"
+      },
+      "module8_power_w": {
+        "name": "Module 8 Power"
+      },
+      "module8_remaining_wh": {
+        "name": "Module 8 Remaining Energy"
+      },
+      "module8_soh_pct": {
+        "name": "Module 8 State of Health"
+      },
+      "module8_cycles": {
+        "name": "Module 8 Charge Cycles"
+      },
+      "module8_cell_temp_c": {
+        "name": "Module 8 Cell Temperature"
+      },
+      "module8_cell_temp_min_c": {
+        "name": "Module 8 Min Cell Temperature"
+      },
+      "module8_cell_temp_max_c": {
+        "name": "Module 8 Max Cell Temperature"
+      },
+      "module8_mos_temp_c": {
+        "name": "Module 8 Power Electronics Temperature"
+      },
+      "module8_voltage_v": {
+        "name": "Module 8 Voltage"
+      },
+      "module8_current_a": {
+        "name": "Module 8 Current"
+      },
+      "module9_soc_pct": {
+        "name": "Module 9 SoC"
+      },
+      "module9_power_w": {
+        "name": "Module 9 Power"
+      },
+      "module9_remaining_wh": {
+        "name": "Module 9 Remaining Energy"
+      },
+      "module9_soh_pct": {
+        "name": "Module 9 State of Health"
+      },
+      "module9_cycles": {
+        "name": "Module 9 Charge Cycles"
+      },
+      "module9_cell_temp_c": {
+        "name": "Module 9 Cell Temperature"
+      },
+      "module9_cell_temp_min_c": {
+        "name": "Module 9 Min Cell Temperature"
+      },
+      "module9_cell_temp_max_c": {
+        "name": "Module 9 Max Cell Temperature"
+      },
+      "module9_mos_temp_c": {
+        "name": "Module 9 Power Electronics Temperature"
+      },
+      "module9_voltage_v": {
+        "name": "Module 9 Voltage"
+      },
+      "module9_current_a": {
+        "name": "Module 9 Current"
+      },
+      "module10_soc_pct": {
+        "name": "Module 10 SoC"
+      },
+      "module10_power_w": {
+        "name": "Module 10 Power"
+      },
+      "module10_remaining_wh": {
+        "name": "Module 10 Remaining Energy"
+      },
+      "module10_soh_pct": {
+        "name": "Module 10 State of Health"
+      },
+      "module10_cycles": {
+        "name": "Module 10 Charge Cycles"
+      },
+      "module10_cell_temp_c": {
+        "name": "Module 10 Cell Temperature"
+      },
+      "module10_cell_temp_min_c": {
+        "name": "Module 10 Min Cell Temperature"
+      },
+      "module10_cell_temp_max_c": {
+        "name": "Module 10 Max Cell Temperature"
+      },
+      "module10_mos_temp_c": {
+        "name": "Module 10 Power Electronics Temperature"
+      },
+      "module10_voltage_v": {
+        "name": "Module 10 Voltage"
+      },
+      "module10_current_a": {
+        "name": "Module 10 Current"
+      },
+      "module11_soc_pct": {
+        "name": "Module 11 SoC"
+      },
+      "module11_power_w": {
+        "name": "Module 11 Power"
+      },
+      "module11_remaining_wh": {
+        "name": "Module 11 Remaining Energy"
+      },
+      "module11_soh_pct": {
+        "name": "Module 11 State of Health"
+      },
+      "module11_cycles": {
+        "name": "Module 11 Charge Cycles"
+      },
+      "module11_cell_temp_c": {
+        "name": "Module 11 Cell Temperature"
+      },
+      "module11_cell_temp_min_c": {
+        "name": "Module 11 Min Cell Temperature"
+      },
+      "module11_cell_temp_max_c": {
+        "name": "Module 11 Max Cell Temperature"
+      },
+      "module11_mos_temp_c": {
+        "name": "Module 11 Power Electronics Temperature"
+      },
+      "module11_voltage_v": {
+        "name": "Module 11 Voltage"
+      },
+      "module11_current_a": {
+        "name": "Module 11 Current"
+      },
+      "module12_soc_pct": {
+        "name": "Module 12 SoC"
+      },
+      "module12_power_w": {
+        "name": "Module 12 Power"
+      },
+      "module12_remaining_wh": {
+        "name": "Module 12 Remaining Energy"
+      },
+      "module12_soh_pct": {
+        "name": "Module 12 State of Health"
+      },
+      "module12_cycles": {
+        "name": "Module 12 Charge Cycles"
+      },
+      "module12_cell_temp_c": {
+        "name": "Module 12 Cell Temperature"
+      },
+      "module12_cell_temp_min_c": {
+        "name": "Module 12 Min Cell Temperature"
+      },
+      "module12_cell_temp_max_c": {
+        "name": "Module 12 Max Cell Temperature"
+      },
+      "module12_mos_temp_c": {
+        "name": "Module 12 Power Electronics Temperature"
+      },
+      "module12_voltage_v": {
+        "name": "Module 12 Voltage"
+      },
+      "module12_current_a": {
+        "name": "Module 12 Current"
+      },
+      "module13_soc_pct": {
+        "name": "Module 13 SoC"
+      },
+      "module13_power_w": {
+        "name": "Module 13 Power"
+      },
+      "module13_remaining_wh": {
+        "name": "Module 13 Remaining Energy"
+      },
+      "module13_soh_pct": {
+        "name": "Module 13 State of Health"
+      },
+      "module13_cycles": {
+        "name": "Module 13 Charge Cycles"
+      },
+      "module13_cell_temp_c": {
+        "name": "Module 13 Cell Temperature"
+      },
+      "module13_cell_temp_min_c": {
+        "name": "Module 13 Min Cell Temperature"
+      },
+      "module13_cell_temp_max_c": {
+        "name": "Module 13 Max Cell Temperature"
+      },
+      "module13_mos_temp_c": {
+        "name": "Module 13 Power Electronics Temperature"
+      },
+      "module13_voltage_v": {
+        "name": "Module 13 Voltage"
+      },
+      "module13_current_a": {
+        "name": "Module 13 Current"
+      },
+      "module14_soc_pct": {
+        "name": "Module 14 SoC"
+      },
+      "module14_power_w": {
+        "name": "Module 14 Power"
+      },
+      "module14_remaining_wh": {
+        "name": "Module 14 Remaining Energy"
+      },
+      "module14_soh_pct": {
+        "name": "Module 14 State of Health"
+      },
+      "module14_cycles": {
+        "name": "Module 14 Charge Cycles"
+      },
+      "module14_cell_temp_c": {
+        "name": "Module 14 Cell Temperature"
+      },
+      "module14_cell_temp_min_c": {
+        "name": "Module 14 Min Cell Temperature"
+      },
+      "module14_cell_temp_max_c": {
+        "name": "Module 14 Max Cell Temperature"
+      },
+      "module14_mos_temp_c": {
+        "name": "Module 14 Power Electronics Temperature"
+      },
+      "module14_voltage_v": {
+        "name": "Module 14 Voltage"
+      },
+      "module14_current_a": {
+        "name": "Module 14 Current"
+      },
+      "module15_soc_pct": {
+        "name": "Module 15 SoC"
+      },
+      "module15_power_w": {
+        "name": "Module 15 Power"
+      },
+      "module15_remaining_wh": {
+        "name": "Module 15 Remaining Energy"
+      },
+      "module15_soh_pct": {
+        "name": "Module 15 State of Health"
+      },
+      "module15_cycles": {
+        "name": "Module 15 Charge Cycles"
+      },
+      "module15_cell_temp_c": {
+        "name": "Module 15 Cell Temperature"
+      },
+      "module15_cell_temp_min_c": {
+        "name": "Module 15 Min Cell Temperature"
+      },
+      "module15_cell_temp_max_c": {
+        "name": "Module 15 Max Cell Temperature"
+      },
+      "module15_mos_temp_c": {
+        "name": "Module 15 Power Electronics Temperature"
+      },
+      "module15_voltage_v": {
+        "name": "Module 15 Voltage"
+      },
+      "module15_current_a": {
+        "name": "Module 15 Current"
+      },
+      "module16_soc_pct": {
+        "name": "Module 16 SoC"
+      },
+      "module16_power_w": {
+        "name": "Module 16 Power"
+      },
+      "module16_remaining_wh": {
+        "name": "Module 16 Remaining Energy"
+      },
+      "module16_soh_pct": {
+        "name": "Module 16 State of Health"
+      },
+      "module16_cycles": {
+        "name": "Module 16 Charge Cycles"
+      },
+      "module16_cell_temp_c": {
+        "name": "Module 16 Cell Temperature"
+      },
+      "module16_cell_temp_min_c": {
+        "name": "Module 16 Min Cell Temperature"
+      },
+      "module16_cell_temp_max_c": {
+        "name": "Module 16 Max Cell Temperature"
+      },
+      "module16_mos_temp_c": {
+        "name": "Module 16 Power Electronics Temperature"
+      },
+      "module16_voltage_v": {
+        "name": "Module 16 Voltage"
+      },
+      "module16_current_a": {
+        "name": "Module 16 Current"
+      },
+      "module1_cell_voltage_mv": {
+        "name": "Module 1 Max Cell Voltage"
+      },
+      "module2_cell_voltage_mv": {
+        "name": "Module 2 Max Cell Voltage"
+      },
+      "module3_cell_voltage_mv": {
+        "name": "Module 3 Max Cell Voltage"
+      },
+      "module4_cell_voltage_mv": {
+        "name": "Module 4 Max Cell Voltage"
+      },
+      "module5_cell_voltage_mv": {
+        "name": "Module 5 Max Cell Voltage"
+      },
+      "module6_cell_voltage_mv": {
+        "name": "Module 6 Max Cell Voltage"
+      },
+      "module7_cell_voltage_mv": {
+        "name": "Module 7 Max Cell Voltage"
+      },
+      "module8_cell_voltage_mv": {
+        "name": "Module 8 Max Cell Voltage"
+      },
+      "module9_cell_voltage_mv": {
+        "name": "Module 9 Max Cell Voltage"
+      },
+      "module10_cell_voltage_mv": {
+        "name": "Module 10 Max Cell Voltage"
+      },
+      "module11_cell_voltage_mv": {
+        "name": "Module 11 Max Cell Voltage"
+      },
+      "module12_cell_voltage_mv": {
+        "name": "Module 12 Max Cell Voltage"
+      },
+      "module13_cell_voltage_mv": {
+        "name": "Module 13 Max Cell Voltage"
+      },
+      "module14_cell_voltage_mv": {
+        "name": "Module 14 Max Cell Voltage"
+      },
+      "module15_cell_voltage_mv": {
+        "name": "Module 15 Max Cell Voltage"
+      },
+      "module16_cell_voltage_mv": {
+        "name": "Module 16 Max Cell Voltage"
       }
     },
     "binary_sensor": {
