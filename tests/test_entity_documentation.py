@@ -1222,7 +1222,7 @@ def test_ocean2_sensor_count_matches_documentation():
         _OCEAN2_ENTITY_DOC_PATH.read_text(encoding="utf-8")
     )
     assert totals_match, (
-        "could not find \"**Totals:** N system sensors\" in "
+        'could not find "**Totals:** N system sensors" in '
         "documentation/entities/ocean-2.md"
     )
     assert int(totals_match.group(1)) == actual, (
@@ -1234,8 +1234,7 @@ def test_ocean2_sensor_count_matches_documentation():
         (REPO_ROOT / "README.md").read_text(encoding="utf-8")
     )
     assert readme_match, (
-        "could not find the Ocean 2 device table row ('N + 12 per module') "
-        "in README.md"
+        "could not find the Ocean 2 device table row ('N + 12 per module') in README.md"
     )
     assert int(readme_match.group(1)) == actual, (
         f"README.md's Ocean 2 table row states {readme_match.group(1)} + 12 "

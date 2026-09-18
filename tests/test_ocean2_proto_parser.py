@@ -342,9 +342,7 @@ class TestGridPhases:
         assert parsed["pcs_ac_freq_hz"] == pytest.approx(50.02)
         assert "grid_phase_a_current_a" not in parsed
         assert "grid_phase_a_power_w" not in parsed
-        assert not any(
-            "current" in key or "active_power" in key for key in parsed
-        )
+        assert not any("current" in key or "active_power" in key for key in parsed)
 
     def test_frequency_appears_once_across_multiple_phase_records(self) -> None:
         container = _msg(
