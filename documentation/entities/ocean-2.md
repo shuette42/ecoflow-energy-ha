@@ -2,11 +2,11 @@
 
 Full list of all entities created for the EcoFlow Ocean 2.
 
-**Totals:** 20 system sensors, plus 12 per battery module
+**Totals:** 48 system sensors, plus 12 per battery module
 
 The Ocean 2 reports through the account connection only, so it needs **Enhanced Mode**. The Developer API answers error 1006 for this device, the same position the `J32D`/`J32E` PowerOcean variants are in, so Standard Mode creates no usable entities.
 
-Three serial prefixes, one device: `RE11` for the 10 kW unit, `RE17` for the 12 kW one and `RE41` for the 8 kW single-phase Ocean 2 Plus. They differ in power rating and phase count, and in nothing this integration reads - the per-phase block is not among the entities below.
+Three serial prefixes, one device: `RE11` for the 10 kW unit, `RE17` for the 12 kW one and `RE41` for the 8 kW single-phase Ocean 2 Plus. They differ in power rating and phase count. The inverter and grid phase sensors below read whatever phases a unit actually reports, so a single-phase `RE41` simply leaves Phase B and C empty rather than needing a separate entity set.
 
 `RE11` is confirmed on two installations, `RE41` on one through an owner's diagnostics download on #145. `RE17` is routed on EcoFlow's own device list, which separates it from the `RE11` by power rating alone; no frame from an `RE17` exists yet, so if you own one, a note either way is welcome. `RE43`, the 12 kW Plus, is not routed here: it has been reported by an owner, but no frame from one exists on either side.
 
@@ -36,6 +36,34 @@ Battery modules are read as well: 12 readings each, created once a module actual
 | Grid Export Power | W | - | enabled | The negative half of Grid Power, as a positive number |
 | Battery Charge Power | W | - | enabled | The positive half of Battery Power |
 | Battery Discharge Power | W | - | enabled | The negative half of Battery Power, as a positive number |
+| AC Power | W | - | enabled | Inverter's total AC output |
+| Grid Frequency | Hz | - | enabled | AC frequency the inverter is synced to |
+| Inverter Phase A Voltage | V | diagnostic | disabled | Per-phase AC voltage at the inverter |
+| Inverter Phase B Voltage | V | diagnostic | disabled | Per-phase AC voltage at the inverter |
+| Inverter Phase C Voltage | V | diagnostic | disabled | Per-phase AC voltage at the inverter |
+| Inverter Phase A Current | A | diagnostic | disabled | Per-phase AC current at the inverter |
+| Inverter Phase B Current | A | diagnostic | disabled | Per-phase AC current at the inverter |
+| Inverter Phase C Current | A | diagnostic | disabled | Per-phase AC current at the inverter |
+| Inverter Phase A Active Power | W | diagnostic | disabled | Per-phase real power at the inverter |
+| Inverter Phase B Active Power | W | diagnostic | disabled | Per-phase real power at the inverter |
+| Inverter Phase C Active Power | W | diagnostic | disabled | Per-phase real power at the inverter |
+| Inverter Phase A Reactive Power | var | diagnostic | disabled | Per-phase reactive power at the inverter |
+| Inverter Phase B Reactive Power | var | diagnostic | disabled | Per-phase reactive power at the inverter |
+| Inverter Phase C Reactive Power | var | diagnostic | disabled | Per-phase reactive power at the inverter |
+| Inverter Phase A Apparent Power | VA | diagnostic | disabled | Per-phase apparent power at the inverter |
+| Inverter Phase B Apparent Power | VA | diagnostic | disabled | Per-phase apparent power at the inverter |
+| Inverter Phase C Apparent Power | VA | diagnostic | disabled | Per-phase apparent power at the inverter |
+| Grid Phase A Voltage | V | diagnostic | enabled | Per-phase grid voltage |
+| Grid Phase B Voltage | V | diagnostic | enabled | Per-phase grid voltage |
+| Grid Phase C Voltage | V | diagnostic | enabled | Per-phase grid voltage |
+| PV 1 Voltage | V | diagnostic | disabled | Per-string solar voltage, off by default alongside PV 1 Power |
+| PV 1 Current | A | diagnostic | disabled | Per-string solar current, off by default alongside PV 1 Power |
+| PV 2 Voltage | V | diagnostic | disabled | Per-string solar voltage, off by default alongside PV 2 Power |
+| PV 2 Current | A | diagnostic | disabled | Per-string solar current, off by default alongside PV 2 Power |
+| PV 3 Voltage | V | diagnostic | disabled | Only wired on some installations, see the note below |
+| PV 3 Current | A | diagnostic | disabled | Only wired on some installations, see the note below |
+| PV 4 Voltage | V | diagnostic | disabled | Only wired on some installations, see the note below |
+| PV 4 Current | A | diagnostic | disabled | Only wired on some installations, see the note below |
 | Solar Energy | kWh | - | enabled | Riemann sum over Solar Power |
 | Home Energy | kWh | - | enabled | Riemann sum over Home Power |
 | Grid Import Energy | kWh | - | enabled | For the Energy Dashboard's grid consumption slot |
@@ -115,6 +143,6 @@ That is low for a home battery, which is why the field was overlooked at first. 
 
 45 minutes of wallbox charging at up to 3.6 kW per module. What tells the readings apart is how they move. Three of them hold the order min ≤ average ≤ max in every frame and rise together and slowly - those are the cells. Four others follow the load within a minute, swinging 11 to 17 K at up to 7 K per minute, which is power electronics rather than cells. Those four sit on different parts of the same board; the integration publishes the hottest as one reading, because four near-identical entities per module would be noise at sixteen modules.
 
-### What is not mapped yet
+### Grid phase current and power are deliberately not read
 
-Per-phase measurements. Those need their own entity set and follow separately.
+The same block that carries the three grid phase voltages also carries a current and a power reading per phase. Neither is read here: in the verified capture they do not track the actual grid flow, so no sensor is built on them. Grid Power above comes from the inverter block instead.

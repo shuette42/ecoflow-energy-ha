@@ -85,20 +85,33 @@ _OCEAN2_FIELD_MAP: dict[str, tuple[str, str, float]] = {
     "87.2": ("_flow87_grid_w", _TYPE_FLOAT, 1),
     "87.3": ("_flow87_solar_w", _TYPE_FLOAT, 1),
     "87.4": ("_flow87_batt_w", _TYPE_FLOAT, 1),
-    # Block 4 - inverter. 4.13 is the grid meter at its own instant, positive
-    # = import. 4.14 (PV strings) is not declared here: it repeats per
-    # string, which one flat key cannot hold, so it is read separately below.
+    # Block 4 - inverter. 4.1 is the AC output power at the inverter's own
+    # instant. 4.13 is the grid meter at its own instant, positive = import.
+    # 4.3 (inverter phase breakdown), 4.4 (grid phase breakdown) and 4.14 (PV
+    # strings) are not declared here: each repeats per phase or per string,
+    # which one flat key cannot hold, so they are read separately below.
+    "4.1": ("pcs_ac_power_w", _TYPE_FLOAT, 1),
     "4.13": ("_inverter_grid_w", _TYPE_FLOAT, 1),
 }
 _OCEAN2_TREE: dict[int, Any] = _compile(_OCEAN2_FIELD_MAP)
 # `_walk` only consults `repeated` for a path whose tree node is a dict, so
-# 4.14 needs a (content-free) dict node here purely to make it eligible for
-# that check - an undeclared field is otherwise skipped silently, never
-# raised, so this is not a workaround for an error path. `_pv_strings` reads
-# the collected raw bytes below, not through this tree.
+# each repeated group below needs a (content-free) dict node here purely to
+# make it eligible for that check - an undeclared field is otherwise skipped
+# silently, never raised, so this is not a workaround for an error path.
+# `_inv_phases`/`_grid_phases`/`_pv_strings` read the collected raw bytes
+# below, not through this tree.
+_OCEAN2_TREE[4][3] = {}
+_OCEAN2_TREE[4][4] = {}
 _OCEAN2_TREE[4][14] = {}
+_INV_PHASES_GROUP = "4.3"
+_INV_PHASES_KEY = "_inv_phase_blocks"
+_GRID_PHASES_GROUP = "4.4"
+_GRID_PHASES_KEY = "_grid_phase_blocks"
 _PV_STRINGS_GROUP = "4.14"
 _PV_STRINGS_KEY = "_pv_string_blocks"
+
+#: Wire index -> phase label inside a `4.3`/`4.4` phase record.
+_PHASE_LABELS = {1: "a", 2: "b", 3: "c"}
 
 
 # Block 5 of the `254/46` frame - one battery module per header, with the
@@ -226,14 +239,95 @@ def _pick(values: dict[str, Any], *keys: str) -> float | None:
     return None
 
 
+def _inv_phases(blocks: list[Any]) -> dict[str, float]:
+    """Decode the raw `4.3` occurrences collected by the walker.
+
+    Each occurrence holds one repeated field 1 per inverter phase, the phase
+    index in field 6 (1/2/3 -> a/b/c) and voltage/current/active/reactive/
+    apparent power in fields 1-5. Disabled by default in the entities, but
+    decoded here regardless - same reasoning as `_pv_strings`: a repeated
+    group cannot live in the flat tree, so it is read directly with
+    `_iter_fields`.
+    """
+    out: dict[str, float] = {}
+    for block in blocks:
+        if not isinstance(block, bytes):
+            continue
+        for field_num, wire_type, raw in _iter_fields(block):
+            if field_num != 1 or wire_type != 2:
+                continue
+            values: dict[int, float] = {}
+            for sub_num, sub_wire, sub_raw in _iter_fields(raw):
+                if sub_num not in (1, 2, 3, 4, 5, 6):
+                    continue
+                decoded = _decode_scalar(sub_wire, sub_raw, _TYPE_FLOAT)
+                if decoded is not None and isfinite(decoded):
+                    values[sub_num] = decoded
+            index = values.get(6)
+            if index is None or int(index) not in _PHASE_LABELS:
+                continue
+            label = _PHASE_LABELS[int(index)]
+            for sub_num, suffix in (
+                (1, "voltage_v"),
+                (2, "current_a"),
+                (3, "active_power_w"),
+                (4, "reactive_power_var"),
+                (5, "apparent_power_va"),
+            ):
+                value = values.get(sub_num)
+                if value is not None:
+                    out[f"inv_phase_{label}_{suffix}"] = value
+    return out
+
+
+def _grid_phases(blocks: list[Any]) -> dict[str, float]:
+    """Decode the raw `4.4` occurrences collected by the walker.
+
+    Each occurrence holds one repeated field 1 per grid phase, the phase
+    index in field 5 (1/2/3 -> a/b/c) and the phase voltage in field 1.
+    Field 3 carries the AC frequency, the same value on every record rather
+    than one per phase, so it is published once as `pcs_ac_freq_hz` instead
+    of per phase.
+
+    Grid-port current (field 2) and power (field 4) in this block do not
+    track the grid meter in the verified capture - only voltage and the
+    shared frequency are read here.
+    """
+    out: dict[str, float] = {}
+    for block in blocks:
+        if not isinstance(block, bytes):
+            continue
+        for field_num, wire_type, raw in _iter_fields(block):
+            if field_num != 1 or wire_type != 2:
+                continue
+            values: dict[int, float] = {}
+            for sub_num, sub_wire, sub_raw in _iter_fields(raw):
+                if sub_num not in (1, 3, 5):
+                    continue
+                decoded = _decode_scalar(sub_wire, sub_raw, _TYPE_FLOAT)
+                if decoded is not None and isfinite(decoded):
+                    values[sub_num] = decoded
+            freq = values.get(3)
+            if freq is not None:
+                out["pcs_ac_freq_hz"] = freq
+            index = values.get(5)
+            if index is None or int(index) not in _PHASE_LABELS:
+                continue
+            voltage = values.get(1)
+            if voltage is not None:
+                out[f"grid_phase_{_PHASE_LABELS[int(index)]}_voltage_v"] = voltage
+    return out
+
+
 def _pv_strings(blocks: list[Any]) -> dict[str, float]:
     """Decode the raw `4.14` occurrences collected by the walker.
 
     Each occurrence holds one repeated field 1 per PV string, string number
-    in its own field 1 and power in field 4. One flat result can only hold
-    the last occurrence of a declared path, which is exactly what a repeated
-    group is for - see `_walk`'s docstring - so this reads the raw bytes
-    directly with `_iter_fields` rather than through the tree.
+    in its own field 1, voltage in field 2, current in field 3 and power in
+    field 4. One flat result can only hold the last occurrence of a declared
+    path, which is exactly what a repeated group is for - see `_walk`'s
+    docstring - so this reads the raw bytes directly with `_iter_fields`
+    rather than through the tree.
     """
     out: dict[str, float] = {}
     for block in blocks:
@@ -243,21 +337,27 @@ def _pv_strings(blocks: list[Any]) -> dict[str, float]:
             if field_num != 1 or wire_type != 2:
                 continue
             index: float | None = None
+            voltage: float | None = None
+            current: float | None = None
             power: float | None = None
             for sub_num, sub_wire, sub_raw in _iter_fields(raw):
                 if sub_num == 1:
                     index = _decode_scalar(sub_wire, sub_raw, _TYPE_FLOAT)
+                elif sub_num == 2:
+                    voltage = _decode_scalar(sub_wire, sub_raw, _TYPE_FLOAT)
+                elif sub_num == 3:
+                    current = _decode_scalar(sub_wire, sub_raw, _TYPE_FLOAT)
                 elif sub_num == 4:
                     power = _decode_scalar(sub_wire, sub_raw, _TYPE_FLOAT)
-            if (
-                index is None
-                or power is None
-                or not isfinite(index)
-                or not isfinite(power)
-                or not 1 <= index <= 4
-            ):
+            if index is None or not isfinite(index) or not 1 <= index <= 4:
                 continue
-            out[f"pv{int(index)}_w"] = power
+            n = int(index)
+            if power is not None and isfinite(power):
+                out[f"pv{n}_w"] = power
+            if voltage is not None and isfinite(voltage):
+                out[f"pv{n}_voltage_v"] = voltage
+            if current is not None and isfinite(current):
+                out[f"pv{n}_current_a"] = current
     return out
 
 
@@ -274,7 +374,11 @@ def _parse_telemetry(pdata: bytes) -> dict[str, Any]:
     """
     walked: dict[str, Any] = {}
     seen: set[str] = set()
-    repeated = {_PV_STRINGS_GROUP: _PV_STRINGS_KEY}
+    repeated = {
+        _INV_PHASES_GROUP: _INV_PHASES_KEY,
+        _GRID_PHASES_GROUP: _GRID_PHASES_KEY,
+        _PV_STRINGS_GROUP: _PV_STRINGS_KEY,
+    }
     _walk(pdata, _OCEAN2_TREE, walked, seen, repeated=repeated)
 
     # A NaN or an infinity reaching a sensor raises inside Home Assistant's
@@ -296,6 +400,9 @@ def _parse_telemetry(pdata: bytes) -> dict[str, Any]:
     remaining = walked.get("batt_remaining_wh")
     if remaining is not None:
         out["batt_remaining_wh"] = remaining
+    pcs_ac_power_w = walked.get("pcs_ac_power_w")
+    if pcs_ac_power_w is not None:
+        out["pcs_ac_power_w"] = pcs_ac_power_w
 
     # Home load: only the flow blocks carry it, 87 over 7 - block 7 trails
     # block 87 by roughly one measurement cycle and drops fields more often.
@@ -332,8 +439,11 @@ def _parse_telemetry(pdata: bytes) -> dict[str, Any]:
     elif "_summary_batt_w_signed" in walked:
         out["batt_w"] = -walked["_summary_batt_w_signed"]
 
-    # 4.14 holds one sub-message per PV string, reported only when a string
-    # changes, so a frame may carry any subset - including none.
+    # 4.3/4.4 hold one sub-message per phase, 4.14 one per PV string, all
+    # reported only when something in them changes, so a frame may carry any
+    # subset - including none.
+    out.update(_inv_phases(walked.get(_INV_PHASES_KEY, [])))
+    out.update(_grid_phases(walked.get(_GRID_PHASES_KEY, [])))
     out.update(_pv_strings(walked.get(_PV_STRINGS_KEY, [])))
 
     return out
