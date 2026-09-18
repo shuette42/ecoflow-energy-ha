@@ -36,7 +36,7 @@ Battery modules are read as well: 12 readings each, created once a module actual
 | Grid Export Power | W | - | enabled | The negative half of Grid Power, as a positive number |
 | Battery Charge Power | W | - | enabled | The positive half of Battery Power |
 | Battery Discharge Power | W | - | enabled | The negative half of Battery Power, as a positive number |
-| AC Power | W | - | enabled | Inverter's total AC output |
+| AC Power | W | - | enabled | Total AC output of the inverter |
 | Grid Frequency | Hz | - | enabled | AC frequency the inverter is synced to |
 | Inverter Phase A Voltage | V | diagnostic | disabled | Per-phase AC voltage at the inverter |
 | Inverter Phase B Voltage | V | diagnostic | disabled | Per-phase AC voltage at the inverter |
@@ -56,10 +56,10 @@ Battery modules are read as well: 12 readings each, created once a module actual
 | Grid Phase A Voltage | V | diagnostic | enabled | Per-phase grid voltage |
 | Grid Phase B Voltage | V | diagnostic | enabled | Per-phase grid voltage |
 | Grid Phase C Voltage | V | diagnostic | enabled | Per-phase grid voltage |
-| PV 1 Voltage | V | diagnostic | disabled | Per-string solar voltage, off by default alongside PV 1 Power |
-| PV 1 Current | A | diagnostic | disabled | Per-string solar current, off by default alongside PV 1 Power |
-| PV 2 Voltage | V | diagnostic | disabled | Per-string solar voltage, off by default alongside PV 2 Power |
-| PV 2 Current | A | diagnostic | disabled | Per-string solar current, off by default alongside PV 2 Power |
+| PV 1 Voltage | V | diagnostic | disabled | Per-string solar voltage, off by default unlike PV 1 Power |
+| PV 1 Current | A | diagnostic | disabled | Per-string solar current, off by default unlike PV 1 Power |
+| PV 2 Voltage | V | diagnostic | disabled | Per-string solar voltage, off by default unlike PV 2 Power |
+| PV 2 Current | A | diagnostic | disabled | Per-string solar current, off by default unlike PV 2 Power |
 | PV 3 Voltage | V | diagnostic | disabled | Only wired on some installations, see the note below |
 | PV 3 Current | A | diagnostic | disabled | Only wired on some installations, see the note below |
 | PV 4 Voltage | V | diagnostic | disabled | Only wired on some installations, see the note below |
@@ -145,4 +145,4 @@ That is low for a home battery, which is why the field was overlooked at first. 
 
 ### Grid phase current and power are deliberately not read
 
-The same block that carries the three grid phase voltages also carries a current and a power reading per phase. Neither is read here: in the verified capture they do not track the actual grid flow, so no sensor is built on them. Grid Power above comes from the inverter block instead.
+The same block that carries the three grid phase voltages also carries a current and a power reading per phase. Neither is read here. In the verified capture they do not track the actual grid flow, so no sensor is built on them. Grid Power above comes from the inverter block instead.
