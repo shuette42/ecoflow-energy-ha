@@ -1206,20 +1206,21 @@ class TestPvStrings:
         assert seen >= 5
 
     def test_the_push_capture_produces_a_stamped_pv_block(self) -> None:
-        """Positive control for `test_a_unit_without_pv_never_reports_a_string`.
+        """Sharpens the floor `test_a_unit_without_pv_never_reports_a_string` checks.
 
-        That test's `if UNIT_PV_BY_SN_KEY not in parsed: continue` never
-        asserts the key is produced at all - a field map that stopped
-        stamping `f50.1` entries entirely would still pass it, silently
-        skipping every frame. 12 of the 30 pushed frames carry the block,
-        each keyed by the unit's own masked serial: the diagnostics mask
-        turns a real serial into a run of 16 `X`, which is still
-        serial-shaped by `_serial_text`'s own format check (upper-case
-        alphanumeric ASCII), so it survives as a dict key rather than
-        collapsing to `None` and dropping the entry.
+        That test sums `entry[key] == 0.0` hits across the push capture and
+        the get-reply against a floor of `>= 5`, while the fixture actually
+        produces 65 (60 from the 12 stamping push frames, 5 from the
+        get-reply). A regression that collapsed 12 of those 13 stamping
+        frames down to 1 would still clear that floor and pass unnoticed -
+        `hits == 12` is the exact count instead of a floor that lets almost
+        all of the block disappear silently. 12 of the 30 pushed frames
+        carry the block, each keyed by the unit's own masked serial: the
+        diagnostics mask turns a real serial into a run of 16 `X`, which is
+        still serial-shaped by `_serial_text`'s own format check
+        (upper-case alphanumeric ASCII), so it survives as a dict key
+        rather than collapsing to `None` and dropping the entry.
         """
-        from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import _serial_text
-
         hits = 0
         for frame in _load(PUSHES):
             parsed = parse_stream_ac5000_message(bytes.fromhex(frame["hex"])) or {}
@@ -1229,7 +1230,10 @@ class TestPvStrings:
             assert entries, frame["ts_iso"]
             for serial in entries:
                 assert serial == "XXXXXXXXXXXXXXXX", (frame["ts_iso"], serial)
-                assert _serial_text(serial.encode("ascii")) == serial, serial
+                assert set(PV_KEYS) <= entries[serial].keys(), (
+                    frame["ts_iso"],
+                    serial,
+                )
             hits += 1
         assert hits == 12
 
@@ -1239,16 +1243,16 @@ class TestPvStrings:
         Same gap as above, on the other fixture: nothing today asserts that
         `es22_get_reply_masked.json` ever produces `UNIT_PV_BY_SN_KEY` at all.
         """
-        from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import _serial_text
-
-        frame = _load(GET_REPLY)[0]
+        frames = _load(GET_REPLY)
+        assert len(frames) == 1
+        frame = frames[0]
         parsed = parse_stream_ac5000_message(bytes.fromhex(frame["hex"])) or {}
         assert UNIT_PV_BY_SN_KEY in parsed
         entries = parsed[UNIT_PV_BY_SN_KEY]
         assert entries
         for serial in entries:
             assert serial == "XXXXXXXXXXXXXXXX", serial
-            assert _serial_text(serial.encode("ascii")) == serial, serial
+            assert set(PV_KEYS) <= entries[serial].keys(), serial
 
 
 def _pv_entry(serial: bytes, *strings: float) -> bytes:
