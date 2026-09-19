@@ -1200,6 +1200,57 @@ def test_readme_delta3_primary_and_footnote_counts_match_const_py():
     )
 
 
+_OCEAN2_ENTITY_DOC_PATH = DOCS_DIR / "ocean-2.md"
+_OCEAN2_TOTALS_RE = re.compile(r"\*\*Totals:\*\*\s*(\d+) system sensors")
+_OCEAN2_README_TABLE_RE = re.compile(
+    r"\|\s*\*\*Ocean 2\*\*\s*\|.*?\|\s*(\d+)\s*\+\s*12 per module\s*\|"
+)
+
+
+def test_ocean2_sensor_count_matches_documentation():
+    """Ocean 2's '48 system sensors' figure appears in three places -
+    documentation/entities/ocean-2.md's Totals line, README.md's device
+    table and documentation/README.md's Entity Reference bullet - and none
+    of them was gated against const.py. OCEAN2_SENSORS mixes 48 system
+    sensors with 12 readings for each of up to 16 battery modules (the
+    module ones all key-prefixed 'module'), so the system count is what is
+    left once the module sensors are excluded.
+    """
+    actual = len([s for s in const.OCEAN2_SENSORS if not s.key.startswith("module")])
+
+    totals_match = _OCEAN2_TOTALS_RE.search(
+        _OCEAN2_ENTITY_DOC_PATH.read_text(encoding="utf-8")
+    )
+    assert totals_match, (
+        'could not find "**Totals:** N system sensors" in '
+        "documentation/entities/ocean-2.md"
+    )
+    assert int(totals_match.group(1)) == actual, (
+        f"documentation/entities/ocean-2.md states {totals_match.group(1)} "
+        f"system sensors, but OCEAN2_SENSORS has {actual} non-module ones"
+    )
+
+    readme_match = _OCEAN2_README_TABLE_RE.search(
+        (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    )
+    assert readme_match, (
+        "could not find the Ocean 2 device table row ('N + 12 per module') in README.md"
+    )
+    assert int(readme_match.group(1)) == actual, (
+        f"README.md's Ocean 2 table row states {readme_match.group(1)} + 12 "
+        f"per module, but OCEAN2_SENSORS has {actual} non-module sensors"
+    )
+
+    bullet_segment, _footnote = _primary_and_footnote(
+        _bullet_segment(README_DOC_PATH.read_text(encoding="utf-8"), "Ocean 2")
+    )
+    stated = _parse_counts(bullet_segment)
+    assert stated.get("sensors") == actual, (
+        f"documentation/README.md's Ocean 2 bullet states {stated}, but "
+        f"OCEAN2_SENSORS has {actual} non-module sensors"
+    )
+
+
 def test_readme_wave3_counts_match_const_py():
     """WAVE 3's bullet states '1 climate' alongside the const.py-backed
     platforms; climate.py builds that one thermostat directly rather than

@@ -52,8 +52,53 @@ def _frame(pdata: bytes, cmd_func: int = 254, cmd_id: int = 39) -> bytes:
     return _msg(1, header)
 
 
-def _pv_string(index: int, watts: float) -> bytes:
-    return _msg(1, _f32(1, float(index)) + _f32(4, watts))
+def _pv_string(
+    index: int,
+    watts: float,
+    *,
+    volts: float | None = None,
+    amps: float | None = None,
+) -> bytes:
+    body = _f32(1, float(index))
+    if volts is not None:
+        body += _f32(2, volts)
+    if amps is not None:
+        body += _f32(3, amps)
+    body += _f32(4, watts)
+    return _msg(1, body)
+
+
+def _phase_record(
+    index: int,
+    *,
+    field_index: int,
+    voltage: float | None = None,
+    current: float | None = None,
+    active_w: float | None = None,
+    reactive_var: float | None = None,
+    apparent_va: float | None = None,
+    freq_hz: float | None = None,
+) -> bytes:
+    """One record inside a `4.3` or `4.4` container.
+
+    `field_index` is 6 for an inverter-phase record and 5 for a grid-phase
+    record - the two groups disagree on which field carries the phase index.
+    """
+    body = b""
+    if voltage is not None:
+        body += _f32(1, voltage)
+    if current is not None:
+        body += _f32(2, current)
+    if active_w is not None:
+        body += _f32(3, active_w)
+    if reactive_var is not None:
+        body += _f32(4, reactive_var)
+    if apparent_va is not None:
+        body += _f32(5, apparent_va)
+    if freq_hz is not None:
+        body += _f32(3, freq_hz)
+    body += _f32(field_index, float(index))
+    return _msg(1, body)
 
 
 def _telemetry(
@@ -83,8 +128,10 @@ class TestDeviceClassification:
 
     def test_the_plus_shares_the_read_path(self) -> None:
         # An `RE41` diagnostics download on #145 carries the `RE11`'s field
-        # numbers throughout. Single phase changes only the per-phase block,
-        # which no entity here reads.
+        # numbers throughout. Single phase changes only the per-phase block:
+        # eighteen entities read it (fifteen inverter phase readings, three
+        # grid phase voltages), and a single-phase unit simply leaves phases
+        # B and C absent rather than needing a separate entity set.
         assert get_device_type("", "RE41TEST00000001") == DEVICE_TYPE_OCEAN2
 
     def test_the_prefix_beats_a_powerocean_product_name(self) -> None:
@@ -185,6 +232,21 @@ class TestTelemetryFrame:
         assert parsed["pv1_w"] == pytest.approx(1780.0)
         assert parsed["pv2_w"] == pytest.approx(1430.0)
 
+    def test_reads_the_inverter_ac_power(self) -> None:
+        parsed = parse_ocean2_proto_message(_telemetry(inverter=_f32(1, 2450.0)))
+        assert parsed is not None
+        assert parsed["pcs_ac_power_w"] == pytest.approx(2450.0)
+
+    def test_drops_a_non_finite_inverter_ac_power(self) -> None:
+        # A NaN reaching a sensor raises inside Home Assistant's rounding;
+        # the grid fallback on the same inverter block must survive it.
+        parsed = parse_ocean2_proto_message(
+            _telemetry(inverter=_f32(1, float("nan")) + _f32(13, 1719.0))
+        )
+        assert parsed is not None
+        assert "pcs_ac_power_w" not in parsed
+        assert parsed["grid_w"] == pytest.approx(1719.0)
+
     def test_reports_a_resting_battery_as_zero(self) -> None:
         parsed = parse_ocean2_proto_message(_telemetry(summary=_f32(20, 0.0)))
         assert parsed is not None
@@ -211,6 +273,120 @@ class TestTelemetryFrame:
         )
         assert parsed is not None
         assert parsed["batt_w"] == pytest.approx(880.0)
+
+
+class TestInverterPhases:
+    def test_reads_two_reported_phases_and_leaves_the_third_absent(self) -> None:
+        container = _msg(
+            3,
+            _phase_record(
+                1,
+                field_index=6,
+                voltage=231.2,
+                current=4.1,
+                active_w=947.0,
+                reactive_var=12.0,
+                apparent_va=948.5,
+            )
+            + _phase_record(
+                2,
+                field_index=6,
+                voltage=230.8,
+                current=3.9,
+                active_w=900.0,
+                reactive_var=10.0,
+                apparent_va=901.2,
+            ),
+        )
+        parsed = parse_ocean2_proto_message(_telemetry(inverter=container))
+        assert parsed is not None
+        assert parsed["inv_phase_a_voltage_v"] == pytest.approx(231.2)
+        assert parsed["inv_phase_a_current_a"] == pytest.approx(4.1)
+        assert parsed["inv_phase_a_active_power_w"] == pytest.approx(947.0)
+        assert parsed["inv_phase_a_reactive_power_var"] == pytest.approx(12.0)
+        assert parsed["inv_phase_a_apparent_power_va"] == pytest.approx(948.5)
+        assert parsed["inv_phase_b_voltage_v"] == pytest.approx(230.8)
+        assert not any(key.startswith("inv_phase_c_") for key in parsed)
+
+    def test_drops_a_non_finite_inverter_phase_reading(self) -> None:
+        # A NaN reaching a sensor raises inside Home Assistant's rounding;
+        # the good readings on the same record must survive it.
+        container = _msg(
+            3,
+            _phase_record(
+                1, field_index=6, voltage=float("nan"), current=4.1, active_w=900.0
+            ),
+        )
+        parsed = parse_ocean2_proto_message(_telemetry(inverter=container))
+        assert parsed is not None
+        assert "inv_phase_a_voltage_v" not in parsed
+        assert parsed["inv_phase_a_current_a"] == pytest.approx(4.1)
+
+
+class TestGridPhases:
+    def test_reads_voltage_and_frequency_but_not_current_or_power(self) -> None:
+        # Field 2 (current) and field 4 (power) are present on the wire and
+        # must not reach the output - only voltage (field 1) and the shared
+        # frequency (field 3) are read here.
+        record = (
+            _f32(1, 231.0)
+            + _f32(2, 5.0)
+            + _f32(3, 50.02)
+            + _f32(4, 1150.0)
+            + _f32(5, 1.0)
+        )
+        container = _msg(4, _msg(1, record))
+        parsed = parse_ocean2_proto_message(_telemetry(inverter=container))
+        assert parsed is not None
+        assert parsed["grid_phase_a_voltage_v"] == pytest.approx(231.0)
+        assert parsed["pcs_ac_freq_hz"] == pytest.approx(50.02)
+        assert "grid_phase_a_current_a" not in parsed
+        assert "grid_phase_a_power_w" not in parsed
+        assert not any("current" in key or "active_power" in key for key in parsed)
+
+    def test_frequency_appears_once_across_multiple_phase_records(self) -> None:
+        container = _msg(
+            4,
+            _phase_record(1, field_index=5, voltage=231.0, freq_hz=50.0)
+            + _phase_record(2, field_index=5, voltage=230.5, freq_hz=50.0)
+            + _phase_record(3, field_index=5, voltage=229.9, freq_hz=50.0),
+        )
+        parsed = parse_ocean2_proto_message(_telemetry(inverter=container))
+        assert parsed is not None
+        assert parsed["pcs_ac_freq_hz"] == pytest.approx(50.0)
+        assert parsed["grid_phase_a_voltage_v"] == pytest.approx(231.0)
+        assert parsed["grid_phase_b_voltage_v"] == pytest.approx(230.5)
+        assert parsed["grid_phase_c_voltage_v"] == pytest.approx(229.9)
+        # One shared key, never split per phase.
+        assert "grid_phase_a_freq_hz" not in parsed
+
+    def test_drops_a_non_finite_grid_phase_voltage(self) -> None:
+        record = _f32(1, float("nan")) + _f32(3, 50.0) + _f32(5, 1.0)
+        container = _msg(4, _msg(1, record))
+        parsed = parse_ocean2_proto_message(_telemetry(inverter=container))
+        assert parsed is not None
+        assert "grid_phase_a_voltage_v" not in parsed
+        assert parsed["pcs_ac_freq_hz"] == pytest.approx(50.0)
+
+
+class TestPVStringElectricals:
+    def test_reads_voltage_and_current_alongside_power(self) -> None:
+        strings = _msg(14, _pv_string(1, 1780.0, volts=385.2, amps=4.62))
+        parsed = parse_ocean2_proto_message(_telemetry(inverter=strings))
+        assert parsed is not None
+        assert parsed["pv1_w"] == pytest.approx(1780.0)
+        assert parsed["pv1_voltage_v"] == pytest.approx(385.2)
+        assert parsed["pv1_current_a"] == pytest.approx(4.62)
+
+    def test_drops_a_non_finite_pv_string_voltage(self) -> None:
+        # The bad voltage must not blank out the power and current readings
+        # from the same string record.
+        strings = _msg(14, _pv_string(1, 1780.0, volts=float("nan"), amps=4.62))
+        parsed = parse_ocean2_proto_message(_telemetry(inverter=strings))
+        assert parsed is not None
+        assert "pv1_voltage_v" not in parsed
+        assert parsed["pv1_w"] == pytest.approx(1780.0)
+        assert parsed["pv1_current_a"] == pytest.approx(4.62)
 
 
 class TestDirectionalSplits:

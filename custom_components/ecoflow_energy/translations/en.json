@@ -1301,6 +1301,69 @@
       "pv_total_w": {
         "name": "PV Total Power"
       },
+      "pcs_ac_power_w": {
+        "name": "AC Power"
+      },
+      "inv_phase_a_voltage_v": {
+        "name": "Inverter Phase A Voltage"
+      },
+      "inv_phase_b_voltage_v": {
+        "name": "Inverter Phase B Voltage"
+      },
+      "inv_phase_c_voltage_v": {
+        "name": "Inverter Phase C Voltage"
+      },
+      "inv_phase_a_current_a": {
+        "name": "Inverter Phase A Current"
+      },
+      "inv_phase_b_current_a": {
+        "name": "Inverter Phase B Current"
+      },
+      "inv_phase_c_current_a": {
+        "name": "Inverter Phase C Current"
+      },
+      "inv_phase_a_active_power_w": {
+        "name": "Inverter Phase A Active Power"
+      },
+      "inv_phase_b_active_power_w": {
+        "name": "Inverter Phase B Active Power"
+      },
+      "inv_phase_c_active_power_w": {
+        "name": "Inverter Phase C Active Power"
+      },
+      "inv_phase_a_reactive_power_var": {
+        "name": "Inverter Phase A Reactive Power"
+      },
+      "inv_phase_b_reactive_power_var": {
+        "name": "Inverter Phase B Reactive Power"
+      },
+      "inv_phase_c_reactive_power_var": {
+        "name": "Inverter Phase C Reactive Power"
+      },
+      "inv_phase_a_apparent_power_va": {
+        "name": "Inverter Phase A Apparent Power"
+      },
+      "inv_phase_b_apparent_power_va": {
+        "name": "Inverter Phase B Apparent Power"
+      },
+      "inv_phase_c_apparent_power_va": {
+        "name": "Inverter Phase C Apparent Power"
+      },
+      "pv1_current_a": {
+        "name": "PV 1 Current"
+      },
+      "pv3_voltage_v": {
+        "name": "PV 3 Voltage"
+      },
+      "pv3_current_a": {
+        "name": "PV 3 Current"
+      },
+      "pv4_voltage_v": {
+        "name": "PV 4 Voltage"
+      },
+      "pv4_current_a": {
+        "name": "PV 4 Current"
+      },
       "pv1_w": {
         "name": "PV 1 Power"
       },
