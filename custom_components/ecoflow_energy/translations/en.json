@@ -2837,7 +2837,7 @@
       "message": "{entity} cannot be set to that value: {reason}"
     },
     "powerpulse_action_in_progress": {
-      "message": "A start or stop for this wallbox is still waiting for the device to confirm."
+      "message": "An earlier command is still waiting for the wallbox to confirm it. Try again once it has."
     },
     "powerpulse_action_not_confirmed": {
       "message": "The wallbox did not report the requested state within the time allowed. Its sensors show what it reports."
