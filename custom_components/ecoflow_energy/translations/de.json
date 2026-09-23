@@ -2837,7 +2837,7 @@
       "message": "{entity} kann nicht auf diesen Wert gesetzt werden: {reason}"
     },
     "powerpulse_action_in_progress": {
-      "message": "Ein Start oder Stopp für diese Wallbox wartet noch auf die Bestätigung durch das Gerät."
+      "message": "Ein vorheriger Befehl wartet noch auf die Bestätigung durch die Wallbox. Versuche es erneut, sobald sie ihn bestätigt hat."
     },
     "powerpulse_action_not_confirmed": {
       "message": "Die Wallbox hat den angeforderten Status nicht innerhalb der zulässigen Zeit gemeldet. Ihre Sensoren zeigen, was sie tatsächlich meldet."
