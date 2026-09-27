@@ -1787,9 +1787,9 @@ class TestReauthSuppression:
     ) -> None:
         """A poll the client's rate limit skipped never reached the API.
 
-        The client returns None for it without touching the error code, so
-        after a good poll the code is still None. That is no answer at all,
-        and it must not count toward the prompt.
+        It used to leave the previous request's error code standing, so a
+        skip right after a refusal read as a second refusal. It counts
+        toward neither the prompt nor availability.
         """
         standard_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
@@ -1798,10 +1798,80 @@ class TestReauthSuppression:
         await coordinator.async_setup()
         coordinator._last_mqtt_ts = 0.0
         mock_http_client.get_quota_all = AsyncMock(return_value=None)
-        mock_http_client.last_error_code = None
 
         with patch.object(standard_config_entry, "async_start_reauth") as mock_reauth:
-            for _ in range(8):
+            mock_http_client.last_error_code = "8519"
+            await coordinator._async_update_data()
+            mock_http_client.last_error_code = "rate_limited"
+            for _ in range(3):
+                await coordinator._async_update_data()
+            assert coordinator._consecutive_http_failures == 1
+            mock_http_client.last_error_code = "8519"
+            for _ in range(3):
+                await coordinator._async_update_data()
+            mock_reauth.assert_not_called()
+
+            await coordinator._async_update_data()
+            mock_reauth.assert_called_once()
+
+    async def test_a_timeout_neither_counts_nor_resets_the_refusals(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+        mock_iot_api,
+        mock_mqtt_client,
+        mock_http_client,
+    ) -> None:
+        """A transport failure carries no answer, so it leaves the streak be.
+
+        Four refusals, a timeout, and a fifth refusal are five refusals of
+        the key with nothing said in between.
+        """
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        await coordinator.async_setup()
+        coordinator._last_mqtt_ts = 0.0
+        mock_http_client.get_quota_all = AsyncMock(return_value=None)
+
+        with patch.object(standard_config_entry, "async_start_reauth") as mock_reauth:
+            mock_http_client.last_error_code = "8519"
+            for _ in range(4):
+                await coordinator._async_update_data()
+            mock_http_client.last_error_code = "network"
+            await coordinator._async_update_data()
+            mock_reauth.assert_not_called()
+            mock_http_client.last_error_code = "8519"
+            await coordinator._async_update_data()
+            mock_reauth.assert_called_once()
+
+    async def test_a_good_poll_resets_the_refusals(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+        mock_iot_api,
+        mock_mqtt_client,
+        mock_http_client,
+    ) -> None:
+        """Four refusals, a good poll, four refusals: never five in a row."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        await coordinator.async_setup()
+        coordinator._last_mqtt_ts = 0.0
+        refused = AsyncMock(return_value=None)
+        mock_http_client.last_error_code = "8519"
+
+        with patch.object(standard_config_entry, "async_start_reauth") as mock_reauth:
+            mock_http_client.get_quota_all = refused
+            for _ in range(4):
+                await coordinator._async_update_data()
+            mock_http_client.get_quota_all = AsyncMock(return_value={"pd.soc": 75})
+            await coordinator._async_update_data()
+            mock_http_client.get_quota_all = refused
+            for _ in range(4):
                 await coordinator._async_update_data()
 
             mock_reauth.assert_not_called()
@@ -3219,19 +3289,25 @@ class TestApplyData:
         hass: HomeAssistant,
         standard_config_entry: MockConfigEntry,
     ) -> None:
-        """MQTT data resets HTTP failure counter to prevent false reauth (#2)."""
+        """MQTT data resets both HTTP counters (#2, #437).
+
+        The failure count drives availability, the refusal count the
+        credentials prompt; data arriving over MQTT settles both.
+        """
         standard_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
             hass, standard_config_entry, MOCK_DELTA_DEVICE
         )
-        # Simulate 4 consecutive HTTP failures (one short of reauth trigger)
+        # Simulate 4 consecutive HTTP failures, all of them refusals
         coordinator._consecutive_http_failures = 4
+        coordinator._consecutive_http_refusals = 4
         coordinator._device_available = False
 
         # MQTT data arrives - proves credentials are valid
         coordinator._apply_data({"soc": 85})
 
         assert coordinator._consecutive_http_failures == 0
+        assert coordinator._consecutive_http_refusals == 0
         assert coordinator._device_available is True
 
     async def test_apply_data_merges(

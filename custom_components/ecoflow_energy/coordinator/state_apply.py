@@ -400,8 +400,11 @@ class StateApplyMixin(_Base):
         if own_connection:
             self._last_mqtt_ts = now
             self._device_available = True
-            # MQTT data proves credentials are valid - prevent false reauth (#2)
+            # MQTT data proves the device is reachable and the credentials
+            # valid: clear both the availability count and the refusal count
+            # (#2, #437). The prompt is also gated on `_last_mqtt_ts` itself.
             self._consecutive_http_failures = 0
+            self._consecutive_http_refusals = 0
             # Rate-limited event log: at most once per 60s to avoid flooding the deque
             if now - self._last_mqtt_event_ts > 60:
                 self._last_mqtt_event_ts = now

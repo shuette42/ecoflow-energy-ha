@@ -53,6 +53,11 @@ class HttpPollMixin(_Base):
         if not raw:
             error_code = self._http_client.last_error_code
 
+            # The client's rate limit skipped this poll. No request went out,
+            # so it says nothing about the device or the key (#437).
+            if error_code == "rate_limited":
+                return dict(self._device_data)
+
             # Error 1006 = device not linked to API key - config issue, not auth (#2)
             if error_code == "1006":
                 self._log_event("http_1006", "device not linked to API key")
@@ -95,13 +100,13 @@ class HttpPollMixin(_Base):
             # it is deliberately not treated as a success: that would mark
             # an offline device available and wipe its firmware revisions.
             #
-            # A None with no error code at all is a poll the client's rate
-            # limit skipped. No request went out; it proves nothing either
-            # way.
+            # A transport failure neither counts nor resets: it carries no
+            # answer at all. Neither does a None without any error code,
+            # which the client does not produce today.
             #
             # What still triggers a prompt: the API answering with an error
-            # of its own, five times running, with nothing arriving over
-            # MQTT either. That is what an invalidated key looks like.
+            # of its own, five times running, with no MQTT data received
+            # since startup. That is what an invalidated key looks like.
             if raw is not None:
                 self._consecutive_http_refusals = 0
             elif error_code not in (None, "network"):

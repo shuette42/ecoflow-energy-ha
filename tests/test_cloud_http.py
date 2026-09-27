@@ -230,6 +230,17 @@ class TestRateLimit:
         client._check_rate_limit()
         assert client._check_rate_limit() is False
 
+    @pytest.mark.asyncio
+    async def test_a_skipped_poll_says_so_in_the_error_code(self):
+        """#437: a skip must not leave the previous request's code standing."""
+        client = self._make_client()
+        client._check_rate_limit()
+        client.last_error_code = "8519"
+
+        assert await client.get_quota_all() is None
+        assert client.last_error_code == "rate_limited"
+        client._session.get.assert_not_called()
+
     def _make_client(self):
         from unittest.mock import MagicMock
 

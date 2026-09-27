@@ -74,6 +74,9 @@ class EcoFlowHTTPQuota:
         Response: {"code": "0", "data": {"pd.soc": 83, "inv.outputWatts": 0, ...}}
         """
         if not self._check_rate_limit():
+            # No request went out. Say so, instead of leaving the previous
+            # request's outcome standing as if it were this one's (#437).
+            self.last_error_code = "rate_limited"
             return None
 
         url = f"{self._base_url}{IOT_QUOTA_ALL_PATH}"
