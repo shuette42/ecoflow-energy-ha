@@ -249,6 +249,9 @@ class EcoFlowDeviceCoordinator(
         self._last_flush_ts: float = 0.0
         self._last_mqtt_event_ts: float = 0.0
         self._consecutive_http_failures: int = 0
+        # Polls the API answered with an error code of its own, in a row.
+        # Only these can mean an invalidated key (#437).
+        self._consecutive_http_refusals: int = 0
         self._device_available: bool = True
         self._last_stale_reconnect_ts: float = 0.0
         # Stale escalation: the cheap remedy (re-send post-connect requests)

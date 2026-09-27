@@ -91,6 +91,7 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
     _batt_w_samples: list[tuple[float, float]]
     _batt_state_changed_at: float
     _consecutive_http_failures: int
+    _consecutive_http_refusals: int
     _snapshot: DeviceSnapshot
     _device_available: bool
     _last_stale_reconnect_ts: float

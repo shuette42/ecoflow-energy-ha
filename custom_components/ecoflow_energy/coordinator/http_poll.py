@@ -87,26 +87,38 @@ class HttpPollMixin(_Base):
             # those the flag was false by construction, so the exemption
             # could never apply to the devices that needed it most.
             #
+            # Nor is an empty answer (#437). The API answers code 0 with no
+            # quota for a device that is offline - a Stream Micro after
+            # sunset, one that has been replaced - and the client returns
+            # `{}` for it. That is the key being accepted, so it clears the
+            # refusal count. It still counts toward availability above, and
+            # it is deliberately not treated as a success: that would mark
+            # an offline device available and wipe its firmware revisions.
+            #
+            # A None with no error code at all is a poll the client's rate
+            # limit skipped. No request went out; it proves nothing either
+            # way.
+            #
             # What still triggers a prompt: the API answering with an error
             # of its own, five times running, with nothing arriving over
             # MQTT either. That is what an invalidated key looks like.
-            transport_failure = error_code == "network"
+            if raw is not None:
+                self._consecutive_http_refusals = 0
+            elif error_code not in (None, "network"):
+                self._consecutive_http_refusals += 1
             mqtt_active = self._last_mqtt_ts > 0.0
-            if (
-                self._consecutive_http_failures == 5
-                and not mqtt_active
-                and not transport_failure
-            ):
+            if self._consecutive_http_refusals == 5 and not mqtt_active:
                 _LOGGER.warning(
-                    "HTTP quota failed %d consecutive times for %s - triggering "
+                    "HTTP quota refused %d consecutive times for %s - triggering "
                     "re-authentication",
-                    self._consecutive_http_failures,
+                    self._consecutive_http_refusals,
                     self.device_tag,
                 )
                 self._entry.async_start_reauth(self.hass)
             return dict(self._device_data)
 
         self._consecutive_http_failures = 0
+        self._consecutive_http_refusals = 0
         self._device_available = True
         self._log_event("http_ok", f"keys={len(raw)}")
 

@@ -1661,6 +1661,151 @@ class TestReauthSuppression:
 
             mock_reauth.assert_not_called()
 
+    async def test_an_empty_answer_never_asks_for_credentials(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+        mock_iot_api,
+        mock_mqtt_client,
+        mock_http_client,
+    ) -> None:
+        """#437: code 0 with no quota is the API accepting the key.
+
+        That is how the quota endpoint answers for a device that is offline,
+        a Stream Micro after sunset or one that has been replaced. The
+        client returns `{}` for it and clears the error code, and the poll
+        read the empty dict as a failure - five of them put a credentials
+        prompt in front of the owner, for keys that had just been accepted.
+        """
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        await coordinator.async_setup()
+
+        mock_http_client.get_quota_all = AsyncMock(return_value={})
+        mock_http_client.last_error_code = None
+        coordinator._last_mqtt_ts = 0.0
+
+        with patch.object(standard_config_entry, "async_start_reauth") as mock_reauth:
+            for _ in range(8):
+                await coordinator._async_update_data()
+
+            mock_reauth.assert_not_called()
+
+    async def test_an_empty_answer_keeps_data_and_still_marks_the_device_offline(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+        mock_iot_api,
+        mock_mqtt_client,
+        mock_http_client,
+    ) -> None:
+        """An empty answer is no data, not a reading of nothing.
+
+        Treating it as a success would mark an offline device available and
+        overwrite the firmware revisions with the empty set the empty quota
+        yields. It keeps what was last read and goes unavailable on the same
+        three-poll rule as any other poll that brings nothing.
+        """
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        await coordinator.async_setup()
+        mock_http_client.get_quota_all = AsyncMock(
+            return_value={"pd.soc": 75, "pd.sysVer": 16975450}
+        )
+        await coordinator._async_update_data()
+        assert coordinator.firmware["pd.sysVer"]["decoded"] == "v1.3.6.90"
+
+        mock_http_client.get_quota_all = AsyncMock(return_value={})
+        mock_http_client.last_error_code = None
+        for _ in range(3):
+            data = await coordinator._async_update_data()
+
+        assert data.get("soc") == 75.0
+        assert coordinator.firmware["pd.sysVer"]["decoded"] == "v1.3.6.90"
+        assert coordinator.device_available is False
+
+    async def test_only_five_api_refusals_in_a_row_ask_for_credentials(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+        mock_iot_api,
+        mock_mqtt_client,
+        mock_http_client,
+    ) -> None:
+        """The prompt counts refusals, not polls that brought nothing.
+
+        Four empty answers followed by one API error is one refusal after
+        four acceptances of the same key; it used to be the fifth failure
+        and prompted. Five refusals running still prompt, once.
+        """
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        await coordinator.async_setup()
+        coordinator._last_mqtt_ts = 0.0
+        empty = AsyncMock(return_value={})
+        refused = AsyncMock(return_value=None)
+
+        with patch.object(standard_config_entry, "async_start_reauth") as mock_reauth:
+            mock_http_client.get_quota_all = empty
+            mock_http_client.last_error_code = None
+            for _ in range(4):
+                await coordinator._async_update_data()
+            mock_http_client.get_quota_all = refused
+            mock_http_client.last_error_code = "8519"
+            await coordinator._async_update_data()
+            mock_reauth.assert_not_called()
+
+            # An empty answer in between starts the count again.
+            mock_http_client.get_quota_all = empty
+            mock_http_client.last_error_code = None
+            await coordinator._async_update_data()
+            mock_http_client.get_quota_all = refused
+            mock_http_client.last_error_code = "8519"
+            for _ in range(4):
+                await coordinator._async_update_data()
+            mock_reauth.assert_not_called()
+
+            await coordinator._async_update_data()
+            mock_reauth.assert_called_once()
+            for _ in range(3):
+                await coordinator._async_update_data()
+            mock_reauth.assert_called_once()
+
+    async def test_a_skipped_poll_is_not_a_refusal(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+        mock_iot_api,
+        mock_mqtt_client,
+        mock_http_client,
+    ) -> None:
+        """A poll the client's rate limit skipped never reached the API.
+
+        The client returns None for it without touching the error code, so
+        after a good poll the code is still None. That is no answer at all,
+        and it must not count toward the prompt.
+        """
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA_DEVICE
+        )
+        await coordinator.async_setup()
+        coordinator._last_mqtt_ts = 0.0
+        mock_http_client.get_quota_all = AsyncMock(return_value=None)
+        mock_http_client.last_error_code = None
+
+        with patch.object(standard_config_entry, "async_start_reauth") as mock_reauth:
+            for _ in range(8):
+                await coordinator._async_update_data()
+
+            mock_reauth.assert_not_called()
+
     async def test_app_auth_no_http_polling(
         self,
         hass: HomeAssistant,
