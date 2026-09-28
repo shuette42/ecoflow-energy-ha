@@ -55,7 +55,7 @@
 | **WAVE 3** | `AC71` | Enhanced only | 18 + 5 binary | 4 switches · 5 numbers · 5 selects · 1 climate | 1 | ~2 s / 120 s |
 | **PowerPulse 2** | `C376` `C374` | Enhanced only | 18 + 1 binary | 2 buttons · 1 number, plus 1 select with exactly one PowerOcean in the entry | 1 | on change, refreshed after 20 min |
 | **Ocean 2** | `RE11` `RE17` `RE41` | Enhanced only | 48 + 12 per module | none, read-only | 6 | ~3 s |
-| **OCEAN Smart Electrical Panel 40** | `HR61` | Enhanced only | 19 | none, read-only | - | ~3 s |
+| **OCEAN Smart Electrical Panel 40** | `HR61` | Enhanced only | 19 + 3 per circuit, 1 binary per circuit | none, read-only | - | ~3 s |
 
 > **Connection.** Standard Mode reads through the IoT Developer API with your access and secret key; Enhanced Mode signs in with the EcoFlow account and receives pushes at the faster rate. **Enhanced only** means the serial prefix cannot currently be linked to a Developer API key, so Standard Mode reports error 1006 and the entities stay unavailable; the three starred PowerOcean prefixes are in the same position. This is an EcoFlow API limitation, not a configuration problem. Controls marked Enhanced exist only with the account sign-in. The Energy Dashboard column counts the sensors made for it; optional ones are disabled by default and depend on the installation, see the device notes below and the [Energy Dashboard](#energy-dashboard) section.
 >

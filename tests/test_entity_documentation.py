@@ -188,6 +188,8 @@ SKIP_SECTIONS: frozenset[tuple[str, str]] = frozenset(
         ("powerocean.md", "Sensors - Battery Packs (up to 5x BP5000)"),
         ("delta-2-max.md", "Sensors - Expansion Battery Packs (disabled)"),
         ("ocean-2.md", "Sensors - Battery Modules (up to 16)"),
+        ("smart-panel-40.md", "Sensors - Circuits (up to 40)"),
+        ("smart-panel-40.md", "Binary Sensors - Circuits (up to 40)"),
     }
 )
 
@@ -459,6 +461,22 @@ TEMPLATE_FAMILIES: tuple[TemplateFamily, ...] = (
         "Module ",
         "Sensors - Battery Modules (up to 16)",
         re.compile(r"up to (\d+)"),
+    ),
+    TemplateFamily(
+        "smart-panel-40.md",
+        "SMARTPANEL40",
+        "sensors",
+        "Circuit ",
+        "Sensors - Circuits (up to 40)",
+        re.compile(r"Circuits \(up to (\d+)\)"),
+    ),
+    TemplateFamily(
+        "smart-panel-40.md",
+        "SMARTPANEL40",
+        "binary_sensors",
+        "Circuit ",
+        "Binary Sensors - Circuits (up to 40)",
+        re.compile(r"Circuits \(up to (\d+)\)"),
     ),
 )
 
@@ -794,6 +812,20 @@ EXCLUDE_FROM_UNDOCUMENTED: tuple[Exclusion, ...] = (
         re.compile(r"^Module \d+ "),
         "documented via the 'Module N ...' template rows in "
         "ocean-2.md, checked per instance by TEMPLATE_FAMILIES",
+    ),
+    Exclusion(
+        "SMARTPANEL40",
+        "sensors",
+        re.compile(r"^Circuit \d+ "),
+        "documented via the 'Circuit N ...' template rows in "
+        "smart-panel-40.md, checked per instance by TEMPLATE_FAMILIES",
+    ),
+    Exclusion(
+        "SMARTPANEL40",
+        "binary_sensors",
+        re.compile(r"^Circuit \d+ "),
+        "documented via the 'Circuit N On' template row in "
+        "smart-panel-40.md, checked per instance by TEMPLATE_FAMILIES",
     ),
 )
 

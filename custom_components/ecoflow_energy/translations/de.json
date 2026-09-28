@@ -2406,6 +2406,15 @@
       },
       "grid_code": {
         "name": "Netzcode"
+      },
+      "circuit_power_w": {
+        "name": "Stromkreis {label} Leistung"
+      },
+      "circuit_voltage_v": {
+        "name": "Stromkreis {label} Spannung"
+      },
+      "circuit_current_a": {
+        "name": "Stromkreis {label} Strom"
       }
     },
     "binary_sensor": {
@@ -2504,6 +2513,9 @@
       },
       "ev_cable_lock_enabled": {
         "name": "Wallbox-Kabelverriegelung"
+      },
+      "circuit_on": {
+        "name": "Stromkreis {label} Ein"
       }
     },
     "switch": {

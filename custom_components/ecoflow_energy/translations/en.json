@@ -2406,6 +2406,15 @@
       },
       "grid_code": {
         "name": "Grid Code"
+      },
+      "circuit_power_w": {
+        "name": "Circuit {label} Power"
+      },
+      "circuit_voltage_v": {
+        "name": "Circuit {label} Voltage"
+      },
+      "circuit_current_a": {
+        "name": "Circuit {label} Current"
       }
     },
     "binary_sensor": {
@@ -2504,6 +2513,9 @@
       },
       "ev_cable_lock_enabled": {
         "name": "Wallbox Cable Lock"
+      },
+      "circuit_on": {
+        "name": "Circuit {label} On"
       }
     },
     "switch": {

@@ -2,7 +2,7 @@
 
 Full list of all entities created for the EcoFlow OCEAN Smart Electrical Panel 40.
 
-**Totals:** 19 panel sensors
+**Totals:** 19 panel sensors, plus 3 sensors and 1 binary sensor per circuit (up to 40)
 
 The panel reports through the account connection, so it needs **Enhanced Mode**. The only data on record came over that connection; what the Developer API returns for this device has not been observed, so Standard Mode does not offer it.
 
@@ -39,3 +39,30 @@ Mapped from one owner's recording of a live installation on #434. Grid, solar an
 | Grid Nominal Voltage | V | diagnostic | disabled | The grid voltage the panel is configured for, not a measurement |
 | Grid Nominal Frequency | Hz | diagnostic | disabled | The grid frequency the panel is configured for, not a measurement |
 | Grid Code | - | diagnostic | disabled | Grid-code setting as the panel reports it |
+
+## Sensors - Circuits (up to 40)
+
+Each circuit creates 3 sensors (1 enabled by default, 2 disabled). They are created once the panel reports the circuit, so a panel with fewer circuits in use never shows empty ones.
+
+The circuit's name from the EcoFlow app follows its number in the entity name, for example "Circuit 12 Oven Power". The name is read when the entity is created; a name changed later in the app shows after the next reload of the integration. A two-pole breaker appears as two circuits, one per leg, each with its own readings.
+
+**Enabled by default:**
+
+| Entity | Unit | Description |
+|:---|:---:|:---|
+| Circuit N Power | W | Signed from the circuit's side: positive while it draws power, negative while it feeds power into the panel |
+
+**Disabled by default:**
+
+| Entity | Unit |
+|:---|:---:|
+| Circuit N Voltage | V |
+| Circuit N Current | A |
+
+Current is reported in whole amps only and reads 0 below 1 A.
+
+## Binary Sensors - Circuits (up to 40)
+
+| Entity | Category | Default | Description |
+|:---|:---:|:---:|:---|
+| Circuit N On | - | enabled | Whether the circuit's breaker is closed, as the panel reports it. State only, no switching |

@@ -132,3 +132,68 @@ async def test_an_incremental_push_keeps_what_it_does_not_carry(
         assert coordinator._device_data[key] == full[key], key
     for key, value in push.items():
         assert coordinator._device_data[key] == value, key
+
+
+async def test_circuits_are_created_as_reported_and_named_from_the_app(
+    hass: HomeAssistant,
+) -> None:
+    """Circuit entities exist for the circuits the panel reports, no others,
+    and carry the owner's own label from the app after the number."""
+    from custom_components.ecoflow_energy.binary_sensor import (
+        async_setup_entry as binary_setup,
+    )
+
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coordinator = EcoFlowDeviceCoordinator(hass, entry, PANEL_DEVICE)
+    parsed = _feed(coordinator, 5)
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {PANEL_DEVICE["sn"]: coordinator}
+
+    sensors: list[Any] = []
+    await sensor_setup(hass, entry, add_entities_collector(sensors))
+    binaries: list[Any] = []
+    await binary_setup(hass, entry, add_entities_collector(binaries))
+
+    power = {
+        e._definition.key: e
+        for e in sensors
+        if hasattr(e, "_definition")
+        and e._definition.key.startswith("circuit_")
+        and e._definition.key.endswith("_power_w")
+    }
+    reported = {
+        int(key.split("_")[1])
+        for key in parsed
+        if key.startswith("circuit_") and key.endswith("_power_w")
+    }
+    assert reported, "frame i=5 reports no circuit power"
+    assert {int(k.split("_")[1]) for k in power} == reported
+    assert not any(k.startswith("circuit_41_") for k in power)
+
+    # The owner labelled circuit 38 "OCEAN Pro" in the app (the source unit's
+    # breaker); the entity name keeps the number first.
+    assert parsed["circuit_38_name"] == "OCEAN Pro"
+    assert power["circuit_38_power_w"]._attr_translation_placeholders == {
+        "label": "38 OCEAN Pro"
+    }
+    on = {e._definition.key: e for e in binaries if hasattr(e, "_definition")}
+    assert on["circuit_38_on"]._attr_translation_placeholders == {
+        "label": "38 OCEAN Pro"
+    }
+    assert on["circuit_38_on"].is_on is True
+
+
+async def test_no_circuit_entity_before_the_panel_reports_circuits(
+    hass: HomeAssistant,
+) -> None:
+    """Frame i=5 happens to report all 40 circuits, so it cannot show the
+    gate; a panel that has sent only its totals must get no circuit entity."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coordinator = EcoFlowDeviceCoordinator(hass, entry, PANEL_DEVICE)
+    coordinator._apply_data({"grid_power_w": 120.0, "battery_soc_pct": 80.0})
+
+    values = await _rendered(hass, entry, coordinator)
+
+    assert "grid_power_w" in values
+    assert not [key for key in values if key.startswith("circuit_")]

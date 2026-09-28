@@ -86,6 +86,29 @@ def raise_set_rejected(entity_id: str, reason: str) -> NoReturn:
     )
 
 
+def label_placeholders(
+    coordinator: EcoFlowDeviceCoordinator, label: str | None, label_key: str | None
+) -> dict[str, str] | None:
+    """Return the `{label}` placeholder for a definition that carries one.
+
+    The fixed part (a slot number) always leads, so the entity keeps a
+    readable name on a device that has not reported the owner's text yet; the
+    owner's own text follows when the device has sent it. Read once, when the
+    entity is created: a name the owner changes later in the app shows after
+    the next reload, the same as any renamed device.
+    """
+    if label is None:
+        return None
+    text = ""
+    if label_key:
+        for store in (coordinator.device_data, coordinator.data or {}):
+            value = store.get(label_key)
+            if isinstance(value, str) and value.strip():
+                text = value.strip()
+                break
+    return {"label": f"{label} {text}" if text else label}
+
+
 @callback
 def reading_reported(
     coordinator: EcoFlowDeviceCoordinator, key: str, needs_nonzero: bool = False

@@ -51,7 +51,7 @@ from .const import (
     filter_defs_for_serial,
 )
 from .coordinator import EcoFlowDeviceCoordinator
-from .entity import EcoFlowWriteGateMixin, reading_reported
+from .entity import EcoFlowWriteGateMixin, label_placeholders, reading_reported
 
 # Map string → HA enum
 _STATE_CLASS_MAP = {
@@ -229,6 +229,11 @@ class EcoFlowSensor(
         # one reading needs a different name on a different device.
         self._attr_translation_key = definition.translation_key or definition.key
         self._attr_native_unit_of_measurement = definition.unit
+        placeholders = label_placeholders(
+            coordinator, definition.label, definition.label_key
+        )
+        if placeholders:
+            self._attr_translation_placeholders = placeholders
         self._attr_icon = definition.icon
         self._restored_value: datetime | float | int | str | None = None
         self._last_written_value: datetime | float | int | str | None = None

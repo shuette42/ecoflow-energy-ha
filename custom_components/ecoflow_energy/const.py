@@ -38,6 +38,9 @@ from .ecoflow.const import (  # noqa: E402
     get_device_name,  # noqa: F401
     get_device_type,  # noqa: F401
 )
+from .ecoflow.parsers.hr61_proto import (
+    CIRCUIT_COUNT as SMARTPANEL40_CIRCUIT_COUNT,  # noqa: E402
+)
 from .ecoflow.parsers.ocean2_proto import (
     MAX_MODULES as OCEAN2_MAX_MODULES,  # noqa: E402
 )
@@ -472,6 +475,14 @@ class EcoFlowSensorDef:
     # every device. Only set it where zero genuinely means "not fitted", never
     # where zero is a legitimate reading.
     accessory_needs_nonzero: bool = False
+    # Entity name built from a per-device label, for readings that repeat per
+    # slot and that the owner names in the app (the Smart Panel 40's
+    # circuits). The translation carries `{label}`; the entity fills it with
+    # `label`, followed by the text the device reports under `label_key` when
+    # it has one ("12 Oven"), or `label` alone ("12"). One translation serves
+    # every slot instead of one per slot.
+    label: str | None = None
+    label_key: str | None = None
 
 
 @dataclass(frozen=True)
@@ -490,6 +501,17 @@ class EcoFlowBinarySensorDef:
     # not have, so the entity is only created once the device has actually
     # reported the key. See _watch_for_accessory() in binary_sensor.py.
     accessory: bool = False
+    # Display name lookup where it must differ from the key, as on the
+    # sensor definition. Defaults to the key.
+    translation_key: str | None = None
+    # Entity name built from a per-device label, for readings that repeat per
+    # slot and that the owner names in the app (the Smart Panel 40's
+    # circuits). The translation carries `{label}`; the entity fills it with
+    # `label`, followed by the text the device reports under `label_key` when
+    # it has one ("12 Oven"), or `label` alone ("12"). One translation serves
+    # every slot instead of one per slot.
+    label: str | None = None
+    label_key: str | None = None
 
 
 @dataclass(frozen=True)
@@ -7964,6 +7986,90 @@ SMARTPANEL40_SENSORS: list[EcoFlowSensorDef] = [
         disabled_by_default=True,
         enhanced_only=True,
     ),
+]
+
+
+def _build_smartpanel40_circuit_sensors(circuit: int) -> list[EcoFlowSensorDef]:
+    """Build the sensor definitions for one Smart Panel 40 circuit.
+
+    Accessories: created once the panel reports the circuit, so a panel with
+    fewer circuits wired never shows empty ones. Power is signed from the
+    circuit's side: positive while it draws, negative while it feeds the
+    panel (a battery or generator breaker). Voltage sits near the leg voltage
+    and current is reported in whole amps only, so both start disabled.
+    """
+    c = f"circuit_{circuit}"
+    label = str(circuit)
+    label_key = f"{c}_name"
+    return [
+        EcoFlowSensorDef(
+            f"{c}_power_w",
+            f"Circuit {circuit} Power",
+            "W",
+            "power",
+            "measurement",
+            "mdi:flash",
+            suggested_display_precision=0,
+            translation_key="circuit_power_w",
+            label=label,
+            label_key=label_key,
+            accessory=True,
+            enhanced_only=True,
+        ),
+        EcoFlowSensorDef(
+            f"{c}_voltage_v",
+            f"Circuit {circuit} Voltage",
+            "V",
+            "voltage",
+            "measurement",
+            "mdi:sine-wave",
+            entity_category="diagnostic",
+            suggested_display_precision=0,
+            disabled_by_default=True,
+            translation_key="circuit_voltage_v",
+            label=label,
+            label_key=label_key,
+            accessory=True,
+            enhanced_only=True,
+        ),
+        EcoFlowSensorDef(
+            f"{c}_current_a",
+            f"Circuit {circuit} Current",
+            "A",
+            "current",
+            "measurement",
+            "mdi:current-ac",
+            entity_category="diagnostic",
+            suggested_display_precision=0,
+            disabled_by_default=True,
+            translation_key="circuit_current_a",
+            label=label,
+            label_key=label_key,
+            accessory=True,
+            enhanced_only=True,
+        ),
+    ]
+
+
+for _circuit in range(1, SMARTPANEL40_CIRCUIT_COUNT + 1):
+    SMARTPANEL40_SENSORS.extend(_build_smartpanel40_circuit_sensors(_circuit))
+
+# Whether each circuit's breaker is closed, as the panel reports it. State
+# only: switching a circuit needs a write path with read-back, which does not
+# exist yet.
+SMARTPANEL40_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
+    EcoFlowBinarySensorDef(
+        f"circuit_{_circuit}_on",
+        f"Circuit {_circuit} On",
+        "power",
+        "mdi:electric-switch",
+        enhanced_only=True,
+        accessory=True,
+        translation_key="circuit_on",
+        label=str(_circuit),
+        label_key=f"circuit_{_circuit}_name",
+    )
+    for _circuit in range(1, SMARTPANEL40_CIRCUIT_COUNT + 1)
 ]
 
 
