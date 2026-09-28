@@ -39,7 +39,7 @@ from .const import (
     filter_defs_for_serial,
 )
 from .coordinator import EcoFlowDeviceCoordinator
-from .entity import EcoFlowWriteGateMixin, label_placeholders, reading_reported
+from .entity import EcoFlowWriteGateMixin, accessory_ready, label_placeholders
 
 _ENTITY_CATEGORY_MAP = {
     "diagnostic": EntityCategory.DIAGNOSTIC,
@@ -66,7 +66,9 @@ async def async_setup_entry(
         for defn in defs:
             if defn.enhanced_only and not coordinator.enhanced_mode:
                 continue
-            if defn.accessory and not reading_reported(coordinator, defn.key):
+            if defn.accessory and not accessory_ready(
+                coordinator, defn.key, defn.label_key
+            ):
                 pending.append(defn)
                 continue
             entities.append(EcoFlowBinarySensor(coordinator, defn))
@@ -97,7 +99,7 @@ def _watch_for_accessory(
         ready = [
             definition
             for definition in pending
-            if reading_reported(coordinator, definition.key)
+            if accessory_ready(coordinator, definition.key, definition.label_key)
         ]
         for definition in ready:
             pending.remove(definition)

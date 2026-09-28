@@ -86,6 +86,25 @@ def raise_set_rejected(entity_id: str, reason: str) -> NoReturn:
     )
 
 
+@callback
+def accessory_ready(
+    coordinator: EcoFlowDeviceCoordinator,
+    key: str,
+    label_key: str | None,
+    needs_nonzero: bool = False,
+) -> bool:
+    """Return whether an accessory entity can be created now.
+
+    The reading has to be reported, and for an entity named from a device
+    label (`label_key`) the label as well: the name is read once at creation
+    and the entity_id is generated from it, so an entity created from a push
+    that carried the reading but not the label would keep a name without it.
+    """
+    if not reading_reported(coordinator, key, needs_nonzero):
+        return False
+    return label_key is None or reading_reported(coordinator, label_key)
+
+
 def label_placeholders(
     coordinator: EcoFlowDeviceCoordinator, label: str | None, label_key: str | None
 ) -> dict[str, str] | None:

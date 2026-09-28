@@ -42,7 +42,7 @@ Mapped from one owner's recording of a live installation on #434. Grid, solar an
 
 ## Sensors - Circuits (up to 40)
 
-Each circuit creates 3 sensors (1 enabled by default, 2 disabled). They are created once the panel reports the circuit, so a panel with fewer circuits in use never shows empty ones.
+Each circuit creates 3 sensors (1 enabled by default, 2 disabled). They are created once the panel reports the circuit and its name, which a full status report does for every circuit the panel has.
 
 The circuit's name from the EcoFlow app follows its number in the entity name, for example "Circuit 12 Oven Power". The name is read when the entity is created; a name changed later in the app shows after the next reload of the integration. A two-pole breaker appears as two circuits, one per leg, each with its own readings.
 

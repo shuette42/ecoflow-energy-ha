@@ -51,7 +51,11 @@ from .const import (
     filter_defs_for_serial,
 )
 from .coordinator import EcoFlowDeviceCoordinator
-from .entity import EcoFlowWriteGateMixin, label_placeholders, reading_reported
+from .entity import (
+    EcoFlowWriteGateMixin,
+    accessory_ready,
+    label_placeholders,
+)
 
 # Map string → HA enum
 _STATE_CLASS_MAP = {
@@ -86,8 +90,11 @@ async def async_setup_entry(
         for sensor_def in sensor_defs:
             if sensor_def.enhanced_only and not coordinator.enhanced_mode:
                 continue
-            if sensor_def.accessory and not reading_reported(
-                coordinator, sensor_def.key, sensor_def.accessory_needs_nonzero
+            if sensor_def.accessory and not accessory_ready(
+                coordinator,
+                sensor_def.key,
+                sensor_def.label_key,
+                sensor_def.accessory_needs_nonzero,
             ):
                 if sensor_def.accessory_needs_nonzero and _owner_already_has_accessory(
                     registry, coordinator, sensor_def
@@ -190,8 +197,11 @@ def _watch_for_accessory(
         ready = [
             definition
             for definition in pending
-            if reading_reported(
-                coordinator, definition.key, definition.accessory_needs_nonzero
+            if accessory_ready(
+                coordinator,
+                definition.key,
+                definition.label_key,
+                definition.accessory_needs_nonzero,
             )
         ]
         for definition in ready:
@@ -203,7 +213,12 @@ def _watch_for_accessory(
         if not cleaned and coordinator.device_data:
             cleaned = True
             for definition in pending:
-                _drop_stale_accessory_entity(registry, coordinator, definition)
+                # A labelled per-slot reading (a panel circuit) never had an
+                # unconditional entity to clean up, and the first frame of an
+                # incremental device is often a push that names only a few
+                # slots: dropping here would remove entries the owner set up.
+                if definition.label_key is None:
+                    _drop_stale_accessory_entity(registry, coordinator, definition)
 
     config_entry.async_on_unload(coordinator.async_add_listener(_check_for_accessory))
 

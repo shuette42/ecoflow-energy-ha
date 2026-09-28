@@ -504,12 +504,7 @@ class EcoFlowBinarySensorDef:
     # Display name lookup where it must differ from the key, as on the
     # sensor definition. Defaults to the key.
     translation_key: str | None = None
-    # Entity name built from a per-device label, for readings that repeat per
-    # slot and that the owner names in the app (the Smart Panel 40's
-    # circuits). The translation carries `{label}`; the entity fills it with
-    # `label`, followed by the text the device reports under `label_key` when
-    # it has one ("12 Oven"), or `label` alone ("12"). One translation serves
-    # every slot instead of one per slot.
+    # Same meaning as on the sensor definition.
     label: str | None = None
     label_key: str | None = None
 

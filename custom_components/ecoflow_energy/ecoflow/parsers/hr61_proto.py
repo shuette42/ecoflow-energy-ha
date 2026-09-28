@@ -10,11 +10,9 @@ Unlike the Ocean 2 parser (`ocean2_proto.py`), a `254/21` push from this
 device is **incremental**: a live push changes 52-75 of the roughly 550
 declared paths against the ~3 kB full state a `get_reply` bundle carries, and
 a field missing from a push is unchanged, not zero. `parse_hr61_proto_message`
-therefore takes the caller's per-device store as `state` and merges into it in
-place - a plain `dict.update()` per header, the same merge shape
-`coordinator/state_apply.py` already does for every other device, just run
-inside this module so it is exercised without the HA-layer coordinator this
-phase does not touch.
+returns only what a frame carries; the coordinator's own
+`_device_data.update()` is the one merge that keeps the rest, as for every
+other device.
 
 Decoding reuses the declared-path walker (`_compile`/`_walk`) that
 `stream_ac5000_proto` implements, the way `ocean2_proto` already does for the
@@ -218,10 +216,12 @@ def _decode_circuit_states(payload: bytes) -> dict[str, Any]:
                         decoded = _decode_scalar(0, ssub_raw, _TYPE_INT)
                         if isinstance(decoded, int):
                             link = decoded
-        if on_raw is not None:
-            out[f"circuit_{n}_on"] = on_raw == 1
-        if name:
-            out[f"circuit_{n}_name"] = name
+        # The panel omits zero values, so a present message without the
+        # state field is an open breaker (0), not "unchanged". The name is
+        # always published, empty when the owner left it blank, so an entity
+        # that waits for it is never held back by a circuit without one.
+        out[f"circuit_{n}_on"] = on_raw == 1
+        out[f"circuit_{n}_name"] = (name or "").strip()
         if link is not None:
             out[f"circuit_{n}_link"] = link
     return out
@@ -241,18 +241,21 @@ def _parse_property(pdata: bytes) -> dict[str, Any]:
     # A NaN or an infinity reaching a sensor raises inside Home Assistant's
     # rounding and aborts the rest of that update; `_walk` itself has no
     # notion of this, the same guard every sibling parser applies.
-    for key in [
+    not_finite = [
         key
         for key, value in walked.items()
         if isinstance(value, float) and not isfinite(value)
-    ]:
+    ]
+    for key in not_finite:
         del walked[key]
 
+    # A field the panel sent as NaN was sent, just unreadable: it keeps its
+    # last value rather than being taken for an omitted zero.
     for group, fills in _CIRCUIT_ZERO_FILL.items():
         if group not in seen:
             continue
         for key, zero in fills:
-            if key not in walked:
+            if key not in walked and key not in not_finite:
                 walked[key] = zero
 
     walked.update(_decode_circuit_states(pdata))
@@ -266,23 +269,19 @@ def _parse_safety(pdata: bytes) -> dict[str, Any]:
     return walked
 
 
-def parse_hr61_proto_message(
-    payload: bytes, state: dict[str, Any] | None = None
-) -> dict[str, Any] | None:
-    """Parse one HR61 frame and merge it into `state`.
+def parse_hr61_proto_message(payload: bytes) -> dict[str, Any] | None:
+    """Parse one HR61 frame into the keys it carries.
 
-    `state` is the caller's per-device store, mutated in place and returned -
-    a property push is incremental, so a key this frame does not carry has to
-    keep whatever `state` already held for it, exactly like the coordinator's
-    own `_device_data.update(parsed)` merge does for every other device. A
-    frame with nothing this parser recognises (only `240/x`, `254/22`,
-    `254/23`, ...) leaves `state` untouched and returns None, the same
-    "nothing to merge" signal `ocean2_proto` gives its caller.
+    A property push is incremental, so the result holds only what this frame
+    carries; the coordinator's `_device_data.update(parsed)` keeps the rest.
+    A frame with nothing this parser recognises (only `240/x`, `254/22`,
+    `254/23`, ...) returns None, the same "nothing to merge" signal
+    `ocean2_proto` gives its caller.
 
     A `get_reply` bundle carries several headers in one envelope - `254/21`
-    (the full state), `254/25` (the safety block) and others this parser does
-    not read - and both of the ones it does read are merged from the same
-    call, in header order.
+    (the full state), `254/25` (the grid-code block) and others this parser
+    does not read - and both of the ones it does read are combined into one
+    result, in header order.
     """
     try:
         headers, _ = decode_header_message(payload)
@@ -291,7 +290,7 @@ def parse_hr61_proto_message(
     if not headers:
         return None
 
-    result: dict[str, Any] = state if state is not None else {}
+    result: dict[str, Any] = {}
     updated = False
     for header in headers:
         if header.get("cmd_func") != _CMD_FUNC:

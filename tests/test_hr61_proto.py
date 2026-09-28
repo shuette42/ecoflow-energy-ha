@@ -4,7 +4,7 @@ Frames come from a 46-frame capture of a live installation (issue #434), with
 serial numbers already masked to `X` runs at the source. A subset needed by
 these tests is copied verbatim into `tests/fixtures/hr61/hr61_frames.json`,
 keyed by the original capture index (`i`) so a value quoted here can be
-checked back against the decode note that derived it.
+checked back against the owner's recording on issue #434.
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ from typing import Any
 import pytest
 from ecoflow_energy.ecoflow.parsers.hr61_proto import (
     CIRCUIT_COUNT,
+    _parse_property,
     parse_hr61_proto_message,
 )
 
@@ -31,7 +32,14 @@ _FRAMES = _load_frames()
 
 
 def _parse(i: int, state: dict[str, Any] | None = None) -> dict[str, Any]:
-    result = parse_hr61_proto_message(_FRAMES[i], state)
+    """Parse frame `i`; with `state`, merge into it the way the coordinator's
+    `_device_data.update()` does and return the merged store."""
+    frame = parse_hr61_proto_message(_FRAMES[i])
+    if state is None:
+        result = frame
+    else:
+        state.update(frame or {})
+        result = state
     assert result is not None, f"frame {i} produced no HR61 fields"
     return result
 
@@ -54,7 +62,7 @@ class TestLoadBalance:
         assert l1_l2_sum == pytest.approx(data["grid_power_w"], abs=15.0)
 
     def test_frame_16_matches_the_decode_note_numbers(self) -> None:
-        # From the field-map decode note for issue #434: 0 + 2 + 7644.78 = 7646.78
+        # From the owner's recording on issue #434: 0 + 2 + 7644.78 = 7646.78
         data = _parse(16)
         assert data["grid_power_w"] == pytest.approx(0.0, abs=0.01)
         assert data["pv_power_w"] == pytest.approx(2.0, abs=0.01)
@@ -171,3 +179,73 @@ class TestPowerZeroFill:
         # all rather than one holding 0.0.
         data = _parse(5)
         assert data["circuit_1_power_w"] == pytest.approx(0.0)
+
+
+# ---------------------------------------------------------------------------
+# Shapes the recording does not contain, built as raw protobuf. Circuit 5's
+# sample block is field 1019 (1014 + 5), its state block field 798 (793 + 5).
+# ---------------------------------------------------------------------------
+
+
+def _varint(value: int) -> bytes:
+    out = bytearray()
+    while True:
+        byte = value & 0x7F
+        value >>= 7
+        if value:
+            out.append(byte | 0x80)
+        else:
+            out.append(byte)
+            return bytes(out)
+
+
+def _tag(field: int, wire: int) -> bytes:
+    return _varint(field << 3 | wire)
+
+
+def _f32(field: int, value: float) -> bytes:
+    import struct
+
+    return _tag(field, 5) + struct.pack("<f", value)
+
+
+def _msg(field: int, body: bytes) -> bytes:
+    return _tag(field, 2) + _varint(len(body)) + body
+
+
+def _sample(voltage: float | None, power: float | None) -> bytes:
+    body = b""
+    if voltage is not None:
+        body += _f32(1, voltage)
+    if power is not None:
+        body += _f32(2, power)
+    return _msg(1019, body)
+
+
+class TestShapesNotInTheRecording:
+    def test_a_breaker_state_block_without_its_state_field_is_off(self) -> None:
+        on = _parse_property(_msg(798, _tag(1, 0) + _varint(1)))
+        off = _parse_property(_msg(798, _msg(5, b"Garage")))
+        assert on["circuit_5_on"] is True
+        assert off["circuit_5_on"] is False
+        assert off["circuit_5_name"] == "Garage"
+
+    def test_a_blank_circuit_name_is_published_empty(self) -> None:
+        parsed = _parse_property(_msg(798, _tag(1, 0) + _varint(1)))
+        assert parsed["circuit_5_name"] == ""
+
+    def test_a_nan_power_is_not_taken_for_an_omitted_zero(self) -> None:
+        parsed = _parse_property(_sample(121.0, float("nan")))
+        assert "circuit_5_power_w" not in parsed
+
+    def test_voltage_is_not_zero_filled(self) -> None:
+        parsed = _parse_property(_sample(None, -300.0))
+        assert "circuit_5_voltage_v" not in parsed
+        assert parsed["circuit_5_power_w"] == 300.0
+
+    def test_a_circuit_missing_from_a_push_keeps_its_values(self) -> None:
+        state: dict[str, Any] = {}
+        state.update(_parse_property(_sample(121.0, -300.0)))
+        state.update(_parse_property(_f32(515, 10.0)))
+        assert state["circuit_5_power_w"] == 300.0
+        assert state["circuit_5_voltage_v"] == 121.0

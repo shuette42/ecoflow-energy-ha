@@ -197,3 +197,39 @@ async def test_no_circuit_entity_before_the_panel_reports_circuits(
 
     assert "grid_power_w" in values
     assert not [key for key in values if key.startswith("circuit_")]
+
+
+async def test_a_circuit_first_seen_in_a_push_waits_for_its_name(
+    hass: HomeAssistant,
+) -> None:
+    """Push i=22 carries power for circuits 1-15 but names only for 35-40.
+
+    An entity created from that push would take its name without the owner's
+    label and keep it. It has to wait for the full state, which names every
+    circuit, and then be created by the listener - for the binary sensors as
+    well as the sensors.
+    """
+    from custom_components.ecoflow_energy.binary_sensor import (
+        async_setup_entry as binary_setup,
+    )
+
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coordinator = EcoFlowDeviceCoordinator(hass, entry, PANEL_DEVICE)
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {PANEL_DEVICE["sn"]: coordinator}
+    sensors: list[Any] = []
+    await sensor_setup(hass, entry, add_entities_collector(sensors))
+    binaries: list[Any] = []
+    await binary_setup(hass, entry, add_entities_collector(binaries))
+
+    def by_key(entities: list[Any]) -> dict[str, Any]:
+        return {e._definition.key: e for e in entities if hasattr(e, "_definition")}
+
+    _feed(coordinator, 22)
+    assert "circuit_3_power_w" not in by_key(sensors)
+
+    _feed(coordinator, 5)
+    power = by_key(sensors)["circuit_3_power_w"]
+    assert power._attr_translation_placeholders == {"label": "3 Bathroom Master"}
+    state = by_key(binaries)["circuit_3_on"]
+    assert state._attr_translation_placeholders == {"label": "3 Bathroom Master"}
