@@ -95,7 +95,7 @@ def test_powerpulse2_definition_counts():
 
     numbers = const.POWERPULSE2_NUMBERS
     assert len(numbers) == 2
-    routes = sorted(n.powerpulse_route for n in numbers)
+    routes = sorted(n.powerpulse_route or "" for n in numbers)
     assert routes == ["own", "sibling"], (
         f"POWERPULSE2_NUMBERS must be exactly one 'sibling'-route number "
         f"(needs a PowerOcean) and one 'own'-route number (needs none), "
