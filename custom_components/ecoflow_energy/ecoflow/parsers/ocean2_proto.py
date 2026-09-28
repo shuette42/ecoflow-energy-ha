@@ -1,4 +1,4 @@
-"""Protobuf telemetry parser for the EcoFlow Ocean 2 (`RE11`, `RE17`).
+"""Protobuf telemetry parser for the EcoFlow Ocean 2 (`RE11`, `RE17`, `RE41`).
 
 Two frames on cmd_func 254: the main telemetry on cmd_id 39, and the
 per-module battery frame on cmd_id 46. They are shaped differently and are

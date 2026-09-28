@@ -2367,6 +2367,45 @@
       },
       "module16_cell_voltage_mv": {
         "name": "Module 16 Max Cell Voltage"
+      },
+      "grid_leg_l1_voltage_v": {
+        "name": "Grid L1 Voltage"
+      },
+      "grid_leg_l2_voltage_v": {
+        "name": "Grid L2 Voltage"
+      },
+      "grid_leg_l1_current_a": {
+        "name": "Grid L1 Current"
+      },
+      "grid_leg_l2_current_a": {
+        "name": "Grid L2 Current"
+      },
+      "grid_l1_power_w": {
+        "name": "Grid L1 Power"
+      },
+      "grid_l2_power_w": {
+        "name": "Grid L2 Power"
+      },
+      "grid_l1_apparent_power_va": {
+        "name": "Grid L1 Apparent Power"
+      },
+      "grid_l2_apparent_power_va": {
+        "name": "Grid L2 Apparent Power"
+      },
+      "grid_l1_reactive_power_var": {
+        "name": "Grid L1 Reactive Power"
+      },
+      "grid_l2_reactive_power_var": {
+        "name": "Grid L2 Reactive Power"
+      },
+      "grid_nominal_voltage_v": {
+        "name": "Grid Nominal Voltage"
+      },
+      "grid_nominal_frequency_hz": {
+        "name": "Grid Nominal Frequency"
+      },
+      "grid_code": {
+        "name": "Grid Code"
       }
     },
     "binary_sensor": {

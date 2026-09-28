@@ -16,6 +16,7 @@ from ..const import (
     DEVICE_TYPE_POWERPULSE2,
     DEVICE_TYPE_POWERSTREAM,
     DEVICE_TYPE_SMART_METER,
+    DEVICE_TYPE_SMART_PANEL_40,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_SOLAR_TRACKER,
     DEVICE_TYPE_STREAM,
@@ -41,6 +42,7 @@ from ..ecoflow.parsers.delta3_proto import (
     parse_delta3_display_property,
 )
 from ..ecoflow.parsers.delta_http import parse_delta_http_quota
+from ..ecoflow.parsers.hr61_proto import parse_hr61_proto_message
 from ..ecoflow.parsers.ocean2_proto import parse_ocean2_proto_message
 from ..ecoflow.parsers.powerocean import parse_powerocean_http_quota
 from ..ecoflow.parsers.powerocean_proto import (
@@ -510,6 +512,11 @@ class MqttIngestMixin(_Base):
                 # the WAVE 3 and PowerPulse 2 above.
                 if self.device_type == DEVICE_TYPE_OCEAN2:
                     return parse_ocean2_proto_message(payload)
+                # Smart Panel 40 (#434): its own (254, 21) push, incremental
+                # - only changed fields travel, and the caller's
+                # `_device_data.update()` is the merge that keeps the rest.
+                if self.device_type == DEVICE_TYPE_SMART_PANEL_40:
+                    return parse_hr61_proto_message(payload)
                 if self.device_type == DEVICE_TYPE_POWERPULSE2:
                     return parse_powerpulse_message(payload)
                 return self._parse_proto_device_data(payload)
@@ -636,6 +643,11 @@ class MqttIngestMixin(_Base):
                 # the WAVE 3 and PowerPulse 2 above.
                 if self.device_type == DEVICE_TYPE_OCEAN2:
                     return parse_ocean2_proto_message(payload)
+                # Smart Panel 40 (#434): its own (254, 21) push, incremental
+                # - only changed fields travel, and the caller's
+                # `_device_data.update()` is the merge that keeps the rest.
+                if self.device_type == DEVICE_TYPE_SMART_PANEL_40:
+                    return parse_hr61_proto_message(payload)
                 if self.device_type == DEVICE_TYPE_POWERPULSE2:
                     return parse_powerpulse_message(payload)
                 if self.device_type == DEVICE_TYPE_POWEROCEAN:

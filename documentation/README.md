@@ -22,6 +22,7 @@ Complete list of all sensors, switches, numbers, and binary sensors per device:
 - [WAVE 3](entities/wave-3.md) - 18 sensors, 5 binary sensors, 4 switches, 5 numbers, 5 selects, 1 climate (`AC71`) - a portable air conditioner, Enhanced Mode only
 - [PowerPulse 2](entities/powerpulse-2.md) - 18 sensors, 1 binary sensor, 1 number, 1 select, 2 buttons (`C376`, `C374`) - a wallbox, no PowerOcean required for the readings. Start and stop with no PowerOcean or exactly one in the same integration entry, the maximum current and the charging mode with exactly one PowerOcean, the charging current with none. Enhanced Mode only
 - [Ocean 2](entities/ocean-2.md) - 48 sensors plus 12 per battery module (`RE11`, `RE17`, `RE41`) - a home battery, read-only, Enhanced Mode only
+- [OCEAN Smart Electrical Panel 40](entities/smart-panel-40.md) - 19 sensors (`HR61`) - a US split-phase load panel, read-only, Enhanced Mode only
 
 Counts are the device-specific entity definitions. Every device additionally exposes 2 universal diagnostic sensors (connection status and active mode) that are not included above.
 

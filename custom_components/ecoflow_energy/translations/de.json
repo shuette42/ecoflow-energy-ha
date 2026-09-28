@@ -2367,6 +2367,45 @@
       },
       "module16_cell_voltage_mv": {
         "name": "Modul 16 Höchste Zellspannung"
+      },
+      "grid_leg_l1_voltage_v": {
+        "name": "Netz L1 Spannung"
+      },
+      "grid_leg_l2_voltage_v": {
+        "name": "Netz L2 Spannung"
+      },
+      "grid_leg_l1_current_a": {
+        "name": "Netz L1 Strom"
+      },
+      "grid_leg_l2_current_a": {
+        "name": "Netz L2 Strom"
+      },
+      "grid_l1_power_w": {
+        "name": "Netz L1 Leistung"
+      },
+      "grid_l2_power_w": {
+        "name": "Netz L2 Leistung"
+      },
+      "grid_l1_apparent_power_va": {
+        "name": "Netz L1 Scheinleistung"
+      },
+      "grid_l2_apparent_power_va": {
+        "name": "Netz L2 Scheinleistung"
+      },
+      "grid_l1_reactive_power_var": {
+        "name": "Netz L1 Blindleistung"
+      },
+      "grid_l2_reactive_power_var": {
+        "name": "Netz L2 Blindleistung"
+      },
+      "grid_nominal_voltage_v": {
+        "name": "Netz-Nennspannung"
+      },
+      "grid_nominal_frequency_hz": {
+        "name": "Netz-Nennfrequenz"
+      },
+      "grid_code": {
+        "name": "Netzcode"
       }
     },
     "binary_sensor": {

@@ -24,6 +24,7 @@ from .ecoflow.const import (  # noqa: E402
     DEVICE_TYPE_POWERPULSE2,
     DEVICE_TYPE_POWERSTREAM,
     DEVICE_TYPE_SMART_METER,
+    DEVICE_TYPE_SMART_PANEL_40,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_SOLAR_TRACKER,
     DEVICE_TYPE_STREAM,
@@ -392,6 +393,7 @@ DEVICE_TYPE_DISPLAY_NAMES: dict[str, str] = {
     DEVICE_TYPE_WAVE3: "WAVE 3",
     DEVICE_TYPE_POWERPULSE2: "PowerPulse 2",
     DEVICE_TYPE_OCEAN2: "Ocean 2",
+    DEVICE_TYPE_SMART_PANEL_40: "OCEAN Smart Electrical Panel 40",
 }
 
 # Device types that only report over the account channel (app-auth WSS).
@@ -405,6 +407,7 @@ ENHANCED_ONLY_DEVICE_TYPES: frozenset[str] = frozenset(
         DEVICE_TYPE_WAVE3,
         DEVICE_TYPE_POWERPULSE2,
         DEVICE_TYPE_OCEAN2,
+        DEVICE_TYPE_SMART_PANEL_40,
     }
 )
 
@@ -6968,7 +6971,7 @@ WAVE3_SELECTS: list[EcoFlowSelectDef] = [
 #
 # All entries are `enhanced_only`: developer keys never carry this device's
 # telemetry, only the app/Enhanced Mode channel does.
-# Ocean 2 (`RE11`, `RE17`). Enhanced mode only - the Developer API answers
+# Ocean 2 (`RE11`, `RE17`, `RE41`). Enhanced mode only - the Developer API answers
 # error 1006 for this device, so every value here comes from the protobuf
 # stream.
 #
@@ -7733,6 +7736,235 @@ def _build_ocean2_module_sensors(module_num: int) -> list[EcoFlowSensorDef]:
 
 for _module_num in range(1, OCEAN2_MAX_MODULES + 1):
     OCEAN2_SENSORS.extend(_build_ocean2_module_sensors(_module_num))
+
+
+# OCEAN Smart Electrical Panel 40 (`HR61`). Enhanced mode only: the one
+# capture on record came over the app channel. Read-only, and no energy
+# counters: none appear in the panel's push, and integrating power locally
+# would invent a second source for a figure the panel may report elsewhere.
+# Per-circuit entities are created from the circuits the panel reports.
+SMARTPANEL40_SENSORS: list[EcoFlowSensorDef] = [
+    # Signed: positive = import from grid, negative = export.
+    EcoFlowSensorDef(
+        "grid_power_w",
+        "Grid Power",
+        "W",
+        "power",
+        "measurement",
+        "mdi:transmission-tower",
+        suggested_display_precision=0,
+        translation_key="grid_w",
+        enhanced_only=True,
+    ),
+    # Computed by the panel from grid, solar and battery power, not a
+    # second measurement.
+    EcoFlowSensorDef(
+        "load_power_w",
+        "Home Power",
+        "W",
+        "power",
+        "measurement",
+        "mdi:home-lightning-bolt",
+        suggested_display_precision=0,
+        translation_key="home_w",
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "pv_power_w",
+        "Solar Power",
+        "W",
+        "power",
+        "measurement",
+        "mdi:solar-power",
+        suggested_display_precision=0,
+        translation_key="solar_w",
+        enhanced_only=True,
+    ),
+    # Signed: positive = charging, negative = discharging.
+    EcoFlowSensorDef(
+        "battery_power_w",
+        "Battery Power",
+        "W",
+        "power",
+        "measurement",
+        "mdi:battery-charging",
+        suggested_display_precision=0,
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "battery_soc_pct",
+        "Battery SOC",
+        "%",
+        "battery",
+        "measurement",
+        "mdi:battery",
+        suggested_display_precision=0,
+        translation_key="soc_pct",
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "grid_l1_voltage_v",
+        "Grid L1 Voltage",
+        "V",
+        "voltage",
+        "measurement",
+        "mdi:sine-wave",
+        suggested_display_precision=0,
+        translation_key="grid_leg_l1_voltage_v",
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "grid_l2_voltage_v",
+        "Grid L2 Voltage",
+        "V",
+        "voltage",
+        "measurement",
+        "mdi:sine-wave",
+        suggested_display_precision=0,
+        translation_key="grid_leg_l2_voltage_v",
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "grid_l1_current_a",
+        "Grid L1 Current",
+        "A",
+        "current",
+        "measurement",
+        "mdi:current-ac",
+        suggested_display_precision=2,
+        translation_key="grid_leg_l1_current_a",
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "grid_l2_current_a",
+        "Grid L2 Current",
+        "A",
+        "current",
+        "measurement",
+        "mdi:current-ac",
+        suggested_display_precision=2,
+        translation_key="grid_leg_l2_current_a",
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "grid_l1_power_w",
+        "Grid L1 Power",
+        "W",
+        "power",
+        "measurement",
+        "mdi:transmission-tower",
+        suggested_display_precision=0,
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "grid_l2_power_w",
+        "Grid L2 Power",
+        "W",
+        "power",
+        "measurement",
+        "mdi:transmission-tower",
+        suggested_display_precision=0,
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "grid_l1_apparent_power_va",
+        "Grid L1 Apparent Power",
+        "VA",
+        "apparent_power",
+        "measurement",
+        "mdi:flash",
+        entity_category="diagnostic",
+        suggested_display_precision=0,
+        disabled_by_default=True,
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "grid_l2_apparent_power_va",
+        "Grid L2 Apparent Power",
+        "VA",
+        "apparent_power",
+        "measurement",
+        "mdi:flash",
+        entity_category="diagnostic",
+        suggested_display_precision=0,
+        disabled_by_default=True,
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "grid_l1_reactive_power_var",
+        "Grid L1 Reactive Power",
+        "var",
+        "reactive_power",
+        "measurement",
+        "mdi:flash-outline",
+        entity_category="diagnostic",
+        suggested_display_precision=0,
+        disabled_by_default=True,
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "grid_l2_reactive_power_var",
+        "Grid L2 Reactive Power",
+        "var",
+        "reactive_power",
+        "measurement",
+        "mdi:flash-outline",
+        entity_category="diagnostic",
+        suggested_display_precision=0,
+        disabled_by_default=True,
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "backup_reserve_pct",
+        "Backup Reserve",
+        "%",
+        None,
+        "measurement",
+        "mdi:battery-lock",
+        entity_category="diagnostic",
+        suggested_display_precision=0,
+        disabled_by_default=True,
+        enhanced_only=True,
+    ),
+    # Grid-code block, sent once per full state: the nominal values the
+    # panel is configured for, not live measurements.
+    EcoFlowSensorDef(
+        "grid_nominal_voltage_v",
+        "Grid Nominal Voltage",
+        "V",
+        "voltage",
+        None,
+        "mdi:sine-wave",
+        entity_category="diagnostic",
+        suggested_display_precision=0,
+        disabled_by_default=True,
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "grid_nominal_frequency_hz",
+        "Grid Nominal Frequency",
+        "Hz",
+        "frequency",
+        None,
+        "mdi:sine-wave",
+        entity_category="diagnostic",
+        suggested_display_precision=1,
+        disabled_by_default=True,
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "grid_code",
+        "Grid Code",
+        None,
+        None,
+        None,
+        "mdi:file-certificate-outline",
+        entity_category="diagnostic",
+        suggested_display_precision=0,
+        disabled_by_default=True,
+        enhanced_only=True,
+    ),
+]
 
 
 POWERPULSE2_SENSORS: list[EcoFlowSensorDef] = [
