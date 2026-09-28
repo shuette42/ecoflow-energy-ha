@@ -10,7 +10,7 @@ Complete list of all sensors, switches, numbers, and binary sensors per device:
 
 - [PowerOcean](entities/powerocean.md) - 235 sensors, 13 binary sensors, 10 numbers, 8 switches, 1 select (`HJ31`, `HJ32`, `HJ35`, `HJ36`, `HJ37`, `J32B`, `J327`, `J329`, `J32D`, `J32E`, and the Plus variants `R371`, `R372`, `R374`, `HJ3C`)
 - [Delta 2 Max](entities/delta-2-max.md) - 94 sensors, 4 binary sensors, 7 switches, 8 numbers (`R351`, `R331`)
-- [Delta 3 Max Plus](entities/delta-3-max-plus.md) - 47 sensors, 7 switches, 4 numbers, 5 selects (`D3M1`, `D3N1`, `P321`, `P231`), plus 3 switches, 3 numbers and 1 binary sensor for port priority on `D3M` serials
+- [Delta 3 Max Plus](entities/delta-3-max-plus.md) - 47 sensors, 7 switches, 4 numbers, 5 selects (`D3M1`, `D3N1`, `P321`, `P231`, `P351`), plus 3 switches, 3 numbers and 1 binary sensor for port priority on `D3M` serials
 - [Smart Plug](entities/smart-plug.md) - 11 sensors, 1 binary sensor, 1 switch, 2 numbers (`HW52`)
 - [Stream](entities/stream.md) - 55 sensors, 2 binary sensors, 1 number (`BK11`, `BK31`, `BK41`, `BK51`, `BK61`); `BK31` adds 3 numbers and 2 switches
 - [Stream AC Pro outlet notes](entities/stream-ac-pro.md) - Enhanced Mode outlet controls and telemetry (`BK31`)
@@ -20,8 +20,8 @@ Complete list of all sensors, switches, numbers, and binary sensors per device:
 - [Smart Meter](entities/smart-meter.md) - 18 sensors, 3 binary sensors (`BK21`) - a grid meter, read-only, Enhanced Mode only
 - [Solar Tracker](entities/solar-tracker.md) - 6 sensors (`HZ31` and `S02F`) - one product under two serial prefixes, read-only in this release, Enhanced Mode only
 - [WAVE 3](entities/wave-3.md) - 18 sensors, 5 binary sensors, 4 switches, 5 numbers, 5 selects, 1 climate (`AC71`) - a portable air conditioner, Enhanced Mode only
-- [PowerPulse 2](entities/powerpulse-2.md) - 18 sensors, 1 binary sensor, 1 number, 1 select, 2 buttons (`C376`, `C374`) - a wallbox, no PowerOcean required for the readings, start and stop with or without a PowerOcean, the maximum current and the charging mode only with exactly one PowerOcean in the same integration entry, Enhanced Mode only
-- [Ocean 2](entities/ocean-2.md) - 48 sensors (`RE11`, `RE17`, `RE41`) - a home battery, read-only, Enhanced Mode only
+- [PowerPulse 2](entities/powerpulse-2.md) - 18 sensors, 1 binary sensor, 1 number, 1 select, 2 buttons (`C376`, `C374`) - a wallbox, no PowerOcean required for the readings. Start and stop with no PowerOcean or exactly one in the same integration entry, the maximum current and the charging mode with exactly one PowerOcean, the charging current with none. Enhanced Mode only
+- [Ocean 2](entities/ocean-2.md) - 48 sensors plus 12 per battery module (`RE11`, `RE17`, `RE41`) - a home battery, read-only, Enhanced Mode only
 
 Counts are the device-specific entity definitions. Every device additionally exposes 2 universal diagnostic sensors (connection status and active mode) that are not included above.
 
