@@ -147,7 +147,7 @@ Force-reconnect triggers at stale threshold (unchanged) but is decoupled from en
 
 ## ADR-008: PowerPulse 2 (C376) is its own device; ADR-007 stands for everything else
 
-**Status:** Accepted (decided 2026-08-24; implementation pending, no code on `main` as of 2026-09-10, to ship as a 1.21.0 pre-release; condition 1 met by ADR-024 since PR #380, see the addendum of 2026-09-10)
+**Status:** Accepted (decided 2026-08-24; condition 1 met by ADR-024 since PR #380, see the addendum of 2026-09-10; implemented in PR #386 as 6fdfa2b, shipped in v1.21.0)
 **Date:** 2026-08-24
 **Supersedes:** ADR-007, for the serial prefix `C376` only. ADR-007 remains in force for `HF33` and for the PowerPulse 1 (`AC31`).
 
@@ -1322,7 +1322,7 @@ The raw pass runs over the whole frame first, and on the wire a masked region re
 
 ## ADR-024: The protobuf command registry gets one table per device type; the device type is the namespace and is passed in, not guessed
 
-**Status:** Accepted (decided 2026-09-08; implemented and merged the same day as a7af66d, PR #380; shipped in v1.21.0-beta.1, v1.21.0 not yet released)
+**Status:** Accepted (decided 2026-09-08; implemented and merged the same day as a7af66d, PR #380; shipped in v1.21.0, first in the v1.21.0-beta.1 pre-release)
 **Date:** 2026-09-08
 **Satisfies:** ADR-008, condition 1. That condition is binding before the PowerPulse 2 (`C376`) can become its own device type.
 
@@ -1376,7 +1376,7 @@ Watch for the thing this design cannot prevent: a family table that is simply wr
 
 ## ADR-025: A string beside a serial in the same protobuf message is masked by that neighbourhood; the serial is the anchor, the walk descends six levels over the whole payload, and the fixture gate walks with the product's own helper
 
-**Status:** Accepted (decided 2026-09-09; implemented the same day in PR #382 with the amendment below; shipped in v1.21.0-beta.1, v1.21.0 not yet released)
+**Status:** Accepted (decided 2026-09-09; implemented the same day in PR #382 with the amendment below; shipped in v1.21.0, first in the v1.21.0-beta.1 pre-release)
 **Date:** 2026-09-09
 **Depends on:** ADR-016 (the serial as the boundary, `_MASK_BYTE` inside `[A-Z0-9]`, a widening needs a frame that shows it); ADR-023 (`_plain_passes` as the one place every pass lives, `_read_varint` as the one owner of varint semantics, the fixture gate importing the product's own walker); the length-delimited pass (`_mask_delimited_identifiers` and its floor of 12)
 
@@ -1536,7 +1536,7 @@ This addendum records the answer, not a commitment: nothing is scheduled for it,
 
 ## ADR-028: The Ocean 2 under `RE11` and `RE17` is one device type; a field position inferred from a name is marked as such until a frame confirms it
 
-**Status:** Accepted (decided in public on #145 on 2026-09-07; not implemented: as of 2026-09-10 neither prefix is in the prefix map and no Ocean 2 parser or entity list exists on `main`; the read path is expected from a contributor's pull request)
+**Status:** Accepted (decided in public on #145 on 2026-09-07; implemented on @jensfr1's field mapping and shipped in v1.22.0, first in the v1.22.0-beta.10 pre-release; the Ocean 2 Plus `RE41` joined the same device type in v1.22.0-beta.11)
 **Date:** 2026-09-07
 **Depends on:** ADR-014 decision 1 (one type for two prefixes that send one message); ADR-011 decision 2
 
@@ -1570,7 +1570,7 @@ What is on file and what is not. A 16 h diagnostics download from an `RE11` has 
 
 ## ADR-009: The PowerPulse 2 start and stop command leaves on the PowerOcean's set topic and is confirmed on the wallbox's own topic; the device's addressing decides the route, the entity's source decides the confirmation
 
-**Status:** Accepted (decided 2026-09-11; implemented the same day, Docker-verified in Enhanced Mode; ships as v1.22.0-beta.1, the first hardware run on #7 decides the next pre-release or the stable release). Addendum 2026-09-12: decision 8 is reversed and decisions 3, 6 and 7 are narrowed to the route through a PowerOcean, on a recording of the app doing the same thing on a wallbox without one; ships as v1.22.0-beta.3.
+**Status:** Accepted (decided 2026-09-11; implemented the same day, Docker-verified in Enhanced Mode; first in the v1.22.0-beta.1 pre-release; the owner on #7 confirmed both routes on his own hardware on 2026-09-13; shipped in v1.22.0). Addendum 2026-09-12: decision 8 is reversed and decisions 3, 6 and 7 are narrowed to the route through a PowerOcean, on a recording of the app doing the same thing on a wallbox without one; first in v1.22.0-beta.3.
 **Date:** 2026-09-11
 **Depends on:** ADR-008 (the wallbox is its own device with its own coordinator and its own connection), ADR-024 (the wallbox owns its own message table). **Changes:** the paragraph of ADR-008 that kept writes out of scope; ADR-008 carries an addendum pointing here, and a second one for the addendum below.
 
@@ -1671,7 +1671,7 @@ Smart is shown and not written. The app never sends the Smart mode without a dep
 
 ## ADR-029: A linked STREAM unit's per-unit reading is applied by the coordinator whose serial it carries, on whichever connection it arrives; the own connection is preferred for 60 s after it last delivered the block
 
-**Status:** Accepted (implemented in v1.22.0-beta.7)
+**Status:** Accepted (shipped in v1.22.0, first in the v1.22.0-beta.7 pre-release)
 **Date:** 2026-09-13
 **Depends on:** ADR-014 decision 1 (no registration that names a fact the code already expresses)
 
