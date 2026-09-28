@@ -358,12 +358,15 @@ def remap_parallel_unit_keys(
     """Map the unit rows of a parallel energy stream (96/50) to per-inverter keys.
 
     Each row is numbered by its serial, never by its position, so a unit keeps
-    its number for as long as the integration runs. New serials are numbered
-    in sorted order, which makes the numbering of a list that brings both
-    units at once - every list on record does - the same after every restart.
-    A serial first seen after `PARALLEL_UNIT_MAX` slots are taken gets none,
-    so a slot can never move to another unit. The serial itself never
-    reaches a key or a value.
+    its number for as long as the integration runs. New serials are only
+    numbered from a list that brings `PARALLEL_UNIT_MAX` units at once - every
+    list on record does - and then in sorted order, so the numbering is the
+    same after every restart. A list naming one unit alone before that has
+    happened is not numbered at all: taken as it came, the unit whose serial
+    sorts second would become Inverter 1 whenever it happened to arrive
+    first, and the history under that name would switch units. A serial first
+    seen after every slot is taken gets none, so a slot can never move to
+    another unit. The serial itself never reaches a key or a value.
 
     Args:
         rows: The unit rows, each carrying `dev_sn`; rows without one are skipped.
@@ -373,10 +376,11 @@ def remap_parallel_unit_keys(
     stamped = [
         row for row in rows if isinstance(row.get("dev_sn"), str) and row["dev_sn"]
     ]
+    complete = len(stamped) >= PARALLEL_UNIT_MAX
     for row in sorted(stamped, key=lambda row: row["dev_sn"]):
         sn = row["dev_sn"]
         if sn not in unit_sn_to_index:
-            if len(unit_sn_to_index) >= PARALLEL_UNIT_MAX:
+            if not complete or len(unit_sn_to_index) >= PARALLEL_UNIT_MAX:
                 continue
             unit_sn_to_index[sn] = len(unit_sn_to_index) + 1
         prefix = f"inverter_{unit_sn_to_index[sn]}"

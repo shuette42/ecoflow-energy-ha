@@ -71,12 +71,6 @@ class CmdConfig:
     # empty payload is the list being empty and therefore the only signal
     # that a task is gone.
     decode_empty_payload: bool = False
-    # Whether the items `flatten_select` passed over travel on as well, under
-    # the private key `_unit_rows`. Only meaningful beside a selector. The
-    # rows stay out of `_available_keys` and out of every public key, because
-    # each of them carries a serial; the caller that asks for them maps the
-    # readings it wants and drops the rest.
-    keep_unit_rows: bool = False
 
 
 def _build_cmd_registry() -> dict[str, dict[tuple[int, int], CmdConfig]]:
@@ -159,7 +153,6 @@ def _build_powerocean_table(pb2: Any) -> dict[tuple[int, int], CmdConfig]:
             zero_fill=frozenset({"solar", "home_direct", "batt_pb", "grid_raw_f2"}),
             flatten_key="para_energy_stream",
             flatten_select=_parallel_system_row,
-            keep_unit_rows=True,
         ),
         (96, 39): CmdConfig(
             msg_class=pb2.JTS1EmsPVInvEnergyStreamReport,
@@ -545,7 +538,10 @@ def _typed_runtime_map(
 
     # 3. For repeated messages, pick the item that stands for the device:
     # the one the command's selector names, or else the first (keeping the
-    # whole list as `all_packs` for the multi-pack extraction).
+    # whole list as `all_packs` for the multi-pack extraction). The items a
+    # selector passes over travel on under the private key `_unit_rows`,
+    # outside `_available_keys` and every public key, because each carries a
+    # serial; the caller maps the readings it wants from them (#436).
     unit_rows: list[dict[str, Any]] | None = None
     if config.flatten_key and config.flatten_select is not None:
         items = [
@@ -556,8 +552,7 @@ def _typed_runtime_map(
         chosen = config.flatten_select(items)
         if chosen is None:
             return None
-        if config.keep_unit_rows:
-            unit_rows = [item for item in items if item is not chosen]
+        unit_rows = [item for item in items if item is not chosen]
         fields = chosen
     elif config.flatten_key:
         items = fields.get(config.flatten_key, [])

@@ -785,6 +785,26 @@ class TestDelta3Energy:
             )
 
 
+class TestPowerOceanPerInverterSensors:
+    """The six per-inverter readings of a parallel pair (#436)."""
+
+    def test_they_are_enhanced_only_accessories(self):
+        """The 96/50 list only arrives on the app channel and only from a
+        pair: with developer keys, or on a single unit, they would be created
+        and never fill."""
+        from ecoflow_energy.const import POWEROCEAN_SENSORS
+
+        defs = [s for s in POWEROCEAN_SENSORS if s.key.startswith("inverter_")]
+        assert {d.key for d in defs} == {
+            f"inverter_{n}_{suffix}"
+            for n in (1, 2)
+            for suffix in ("solar_w", "batt_w", "soc_pct")
+        }
+        for definition in defs:
+            assert definition.enhanced_only, definition.key
+            assert definition.accessory, definition.key
+
+
 class TestBatteryDeviceClassSingleton:
     """At most one battery device_class sensor per device type.
 

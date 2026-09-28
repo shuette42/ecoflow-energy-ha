@@ -389,13 +389,15 @@ def test_an_out_of_range_unit_charge_level_is_dropped() -> None:
     """The unsigned wire maximum is not a percentage, here as on the system."""
     parsed = _PowerOceanParser()._parse_powerocean_proto_frame(
         _unit_list(
-            JTS1ParallelEnergyStream(bp_pwr=10.0, bp_soc=4294967295, dev_sn=_SERIAL_A)
+            JTS1ParallelEnergyStream(bp_pwr=10.0, bp_soc=4294967295, dev_sn=_SERIAL_A),
+            JTS1ParallelEnergyStream(bp_pwr=20.0, bp_soc=60, dev_sn=_SERIAL_B),
         )
     )
 
     assert parsed is not None
     assert parsed["inverter_1_batt_w"] == 10.0
     assert "inverter_1_soc_pct" not in parsed
+    assert parsed["inverter_2_soc_pct"] == 60.0
 
 
 def test_a_single_unit_stream_creates_no_inverter_keys() -> None:
@@ -410,3 +412,84 @@ def test_a_single_unit_stream_creates_no_inverter_keys() -> None:
 
     assert parsed is not None
     assert not any(key.startswith("inverter_") for key in parsed)
+
+
+def test_a_lone_unit_before_numbering_is_not_numbered() -> None:
+    """After a restart the first list may name one unit only. Taken as it
+    came, the unit sorting second would become Inverter 1 and that entity's
+    history would switch units; so nothing is numbered until a list brings
+    both, and then the order is the serials'."""
+    parser = _PowerOceanParser()
+    lone = parser._parse_powerocean_proto_frame(
+        _unit_list(JTS1ParallelEnergyStream(bp_pwr=20.0, bp_soc=60, dev_sn=_SERIAL_B))
+    )
+
+    assert lone is not None
+    assert not any(key.startswith("inverter_") for key in lone)
+    assert parser._unit_sn_to_index == {}
+
+    both = parser._parse_powerocean_proto_frame(
+        _unit_list(
+            JTS1ParallelEnergyStream(bp_pwr=21.0, bp_soc=60, dev_sn=_SERIAL_B),
+            JTS1ParallelEnergyStream(bp_pwr=11.0, bp_soc=50, dev_sn=_SERIAL_A),
+        )
+    )
+
+    assert both is not None
+    assert both["inverter_1_batt_w"] == 11.0
+    assert both["inverter_2_batt_w"] == 21.0
+
+
+def test_a_unit_row_without_battery_power_reads_zero() -> None:
+    """proto3 leaves 0 W off the wire; the next row must not hold 500 W."""
+    parser = _PowerOceanParser()
+    parser._parse_powerocean_proto_frame(
+        _unit_list(
+            JTS1ParallelEnergyStream(bp_pwr=500.0, bp_soc=50, dev_sn=_SERIAL_A),
+            JTS1ParallelEnergyStream(bp_pwr=20.0, bp_soc=60, dev_sn=_SERIAL_B),
+        )
+    )
+
+    parsed = parser._parse_powerocean_proto_frame(
+        _unit_list(
+            JTS1ParallelEnergyStream(bp_soc=50, dev_sn=_SERIAL_A),
+            JTS1ParallelEnergyStream(bp_pwr=20.0, bp_soc=60, dev_sn=_SERIAL_B),
+        )
+    )
+
+    assert parsed is not None
+    assert parsed["inverter_1_batt_w"] == 0.0
+
+
+def test_a_second_row_without_a_serial_is_skipped_not_fatal() -> None:
+    """Only the first unstamped row is the system; a second one is no unit
+    and must not cost the frame its unit readings."""
+    report = JTS1ParallelEnergyStreamReport(
+        para_energy_stream=[
+            JTS1ParallelEnergyStream(sys_load_pwr=500.0, bp_pwr=30.0, bp_soc=90),
+            JTS1ParallelEnergyStream(bp_pwr=999.0, bp_soc=99),
+            JTS1ParallelEnergyStream(bp_pwr=10.0, bp_soc=50, dev_sn=_SERIAL_A),
+            JTS1ParallelEnergyStream(bp_pwr=20.0, bp_soc=60, dev_sn=_SERIAL_B),
+        ]
+    )
+
+    parsed = _PowerOceanParser()._parse_powerocean_proto_frame(
+        _build_header(96, 50, report.SerializeToString())
+    )
+
+    assert parsed is not None
+    assert parsed["inverter_1_batt_w"] == 10.0
+    assert parsed["inverter_2_batt_w"] == 20.0
+    assert parsed["batt_w"] == 30.0
+
+
+def test_per_inverter_readings_are_floats() -> None:
+    """The charge level arrives as an integer and is published as a float,
+    like the system's Battery SOC."""
+    parsed = _PowerOceanParser()._parse_powerocean_proto_frame(
+        _frame("andy-j32e-pair", 1)
+    )
+
+    assert parsed is not None
+    for key in _INVERTER_KEYS:
+        assert isinstance(parsed[key], float), key
