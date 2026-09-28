@@ -4,13 +4,13 @@ Full list of all entities created for the EcoFlow OCEAN Smart Electrical Panel 4
 
 **Totals:** 19 panel sensors, plus 3 sensors and 1 binary sensor per circuit (up to 40)
 
-The panel reports through the account connection, so it needs **Enhanced Mode**. The only data on record came over that connection; what the Developer API returns for this device has not been observed, so Standard Mode does not offer it.
+The panel reports through the account connection, so it needs **Enhanced Mode**. The only data on record came over that connection. What the Developer API returns for this device has not been observed, so Standard Mode does not offer it.
 
 Serial prefix `HR61`. The panel is a US split-phase unit (120/240 V): the grid side is read per leg, L1 and L2.
 
-Read-only. No write from the panel has been observed with a known effect, so there are no controls.
+Read-only. No command to the panel with a known effect has been recorded, so there are no controls.
 
-There are no energy counters. None appear in what the panel sends, and this integration does not integrate power into energy for it.
+There are no energy counters. None appear in what the panel sends, and the integration does not derive energy from power for it.
 
 Mapped from one owner's recording of a live installation on #434. Grid, solar and battery power close the panel's own power balance on every frame checked, and the grid legs add up to the grid total. The battery's charging direction has not been seen from the panel yet, only discharging and idle.
 
@@ -42,9 +42,9 @@ Mapped from one owner's recording of a live installation on #434. Grid, solar an
 
 ## Sensors - Circuits (up to 40)
 
-Each circuit creates 3 sensors (1 enabled by default, 2 disabled). They are created once the panel reports the circuit and its name, which a full status report does for every circuit the panel has.
+Each circuit creates 3 sensors (1 enabled by default, 2 disabled). They are created once the panel reports the circuit and its name. Every full status report in the recording on #434 carries all 40.
 
-The circuit's name from the EcoFlow app follows its number in the entity name, for example "Circuit 12 Oven Power". The name is read when the entity is created; a name changed later in the app shows after the next reload of the integration. A two-pole breaker appears as two circuits, one per leg, each with its own readings.
+The circuit's name from the EcoFlow app follows its number in the entity name, for example "Circuit 12 Oven Power". The name is read when the entity is created. A name changed later in the app shows after the next reload of the integration. A two-pole breaker appears as two circuits, one per leg, each with its own readings.
 
 **Enabled by default:**
 
