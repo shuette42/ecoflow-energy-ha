@@ -263,6 +263,24 @@
       "soc_pct": {
         "name": "Battery SOC"
       },
+      "inverter_1_solar_w": {
+        "name": "Inverter 1 Solar Power"
+      },
+      "inverter_1_batt_w": {
+        "name": "Inverter 1 Battery Power"
+      },
+      "inverter_1_soc_pct": {
+        "name": "Inverter 1 Battery SOC"
+      },
+      "inverter_2_solar_w": {
+        "name": "Inverter 2 Solar Power"
+      },
+      "inverter_2_batt_w": {
+        "name": "Inverter 2 Battery Power"
+      },
+      "inverter_2_soc_pct": {
+        "name": "Inverter 2 Battery SOC"
+      },
       "bp_soh_pct": {
         "name": "Battery SOH"
       },

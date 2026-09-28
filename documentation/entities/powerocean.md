@@ -60,7 +60,7 @@ Full list of all entities created for PowerOcean devices.
 
 > **PowerOcean Plus** units report more of the same entity set than a standard PowerOcean: per-phase reactive power (var) and apparent power (VA), plus MPPT strings 3 and 4. Those entities are disabled by default, so enable the ones you need after adding a Plus device.
 
-**Totals:** 235 sensors, 13 binary sensors, 10 numbers, 8 switches, 1 select
+**Totals:** 241 sensors, 13 binary sensors, 10 numbers, 8 switches, 1 select
 
 > Entities marked with *disabled* are available but hidden by default. Enable them in **Settings > Devices > EcoFlow PowerOcean > Entities** (click the filter icon and show disabled entities).
 
@@ -210,6 +210,25 @@ Further schedules follow the same pattern: Schedule 2 Enabled, Schedule 2 Charge
 Charge Power takes the same range the app offers for the same setting. It moves in steps of 100 W, its minimum is 100 W for every online battery pack your system reports (200 W with two packs), and its maximum comes from the model: 10000 W on the three-phase 10 kW unit, 8000 W on the 8 kW one, 12000 W on the 12 kW one, 6000 W on the 6 kW and single-phase units, and 29900 W on a PowerOcean Plus. A value outside that range, or one that is not a multiple of 100, is refused rather than quietly rounded.
 
 A schedule set in the app to run loads from the battery rather than to charge it keeps the same four entities, and its power is the discharge limit. Which direction a schedule has is set in the app and is not shown as an entity.
+
+---
+
+## Sensors - Parallel Pair, per Inverter (accessory, Enhanced Mode)
+
+Two PowerOcean inverters running as a parallel pair appear as one device, and Solar Power, Battery Power and Battery SOC above show the whole system. The pair also reports each inverter's own share, and these sensors carry it. They are created once the pair has reported them, so a single PowerOcean never gets them.
+
+| Entity | Unit | Description |
+|:---|:---:|:---|
+| Inverter 1 Solar Power | W | Solar input of the first inverter. Reads 0 on an inverter with no panels connected |
+| Inverter 1 Battery Power | W | Battery power of the first inverter (positive = charge, negative = discharge) |
+| Inverter 1 Battery SOC | % | Charge level of the batteries on the first inverter |
+| Inverter 2 Solar Power | W | Same for the second inverter |
+| Inverter 2 Battery Power | W | Same for the second inverter |
+| Inverter 2 Battery SOC | % | Same for the second inverter |
+
+The two inverters are numbered in the order of their serial numbers, so each keeps its number across restarts. Inverter 1 is the one whose serial sorts first; the serials are listed in the EcoFlow app.
+
+There is no grid sensor per inverter. The grid figure the pair reports per inverter is the power flowing between the two inverters, not the connection to the grid, and Grid Power stays the sensor for that.
 
 ---
 

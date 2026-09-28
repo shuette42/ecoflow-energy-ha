@@ -71,6 +71,12 @@ class CmdConfig:
     # empty payload is the list being empty and therefore the only signal
     # that a task is gone.
     decode_empty_payload: bool = False
+    # Whether the items `flatten_select` passed over travel on as well, under
+    # the private key `_unit_rows`. Only meaningful beside a selector. The
+    # rows stay out of `_available_keys` and out of every public key, because
+    # each of them carries a serial; the caller that asks for them maps the
+    # readings it wants and drops the rest.
+    keep_unit_rows: bool = False
 
 
 def _build_cmd_registry() -> dict[str, dict[tuple[int, int], CmdConfig]]:
@@ -135,9 +141,10 @@ def _build_powerocean_table(pb2: Any) -> dict[tuple[int, int], CmdConfig]:
         # row without a serial that carries the system totals. The total row
         # is the one a single device would have sent on cmd_id=33, so it
         # takes the same renames, the same zero-fill and the same flags and
-        # lands on the same sensor keys. The unit rows are not read here: a
-        # per-unit entity set is its own change, and a unit row's grid figure
-        # is the flow between the units, not the meter.
+        # lands on the same sensor keys. The unit rows travel on beside it
+        # for the per-inverter readings (#436), mapped by
+        # `remap_parallel_unit_keys`; a unit row's grid figure is the flow
+        # between the units, not the meter, and is not read from them.
         (96, 50): CmdConfig(
             msg_class=pb2.JTS1ParallelEnergyStreamReport,
             parse_path="typed_runtime:parallel_energy_stream_report",
@@ -152,6 +159,7 @@ def _build_powerocean_table(pb2: Any) -> dict[tuple[int, int], CmdConfig]:
             zero_fill=frozenset({"solar", "home_direct", "batt_pb", "grid_raw_f2"}),
             flatten_key="para_energy_stream",
             flatten_select=_parallel_system_row,
+            keep_unit_rows=True,
         ),
         (96, 39): CmdConfig(
             msg_class=pb2.JTS1EmsPVInvEnergyStreamReport,
@@ -538,13 +546,18 @@ def _typed_runtime_map(
     # 3. For repeated messages, pick the item that stands for the device:
     # the one the command's selector names, or else the first (keeping the
     # whole list as `all_packs` for the multi-pack extraction).
+    unit_rows: list[dict[str, Any]] | None = None
     if config.flatten_key and config.flatten_select is not None:
-        items = fields.get(config.flatten_key, [])
-        chosen = config.flatten_select(
-            [item for item in items if isinstance(item, dict)]
-        )
+        items = [
+            item
+            for item in fields.get(config.flatten_key, [])
+            if isinstance(item, dict)
+        ]
+        chosen = config.flatten_select(items)
         if chosen is None:
             return None
+        if config.keep_unit_rows:
+            unit_rows = [item for item in items if item is not chosen]
         fields = chosen
     elif config.flatten_key:
         items = fields.get(config.flatten_key, [])
@@ -588,6 +601,8 @@ def _typed_runtime_map(
             mapped["_available_keys"].add(key)
 
     mapped["_flat_count"] = len(fields)
+    if unit_rows is not None:
+        mapped["_unit_rows"] = unit_rows
 
     # 7. Undeclared field numbers, for diagnostics only. Recorded solely when
     # the message also produced declared fields: protobuf accepts arbitrary

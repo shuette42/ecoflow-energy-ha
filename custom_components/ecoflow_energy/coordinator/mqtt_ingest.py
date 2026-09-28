@@ -52,6 +52,7 @@ from ..ecoflow.parsers.powerocean_proto import (
     remap_ems_state_keys,
     remap_ev_charging_keys,
     remap_heating_rod_keys,
+    remap_parallel_unit_keys,
     remap_proto_keys,
     remap_timer_task_keys,
 )
@@ -776,6 +777,13 @@ class MqttIngestMixin(_Base):
 
                 if result.mapped.get("_is_energy_stream"):
                     merged.update(remap_proto_keys(raw))
+                    # A parallel pair's list (96/50) also carries one row per
+                    # inverter (#436); a single unit's 96/33 carries none.
+                    unit_rows = result.mapped.get("_unit_rows")
+                    if unit_rows:
+                        merged.update(
+                            remap_parallel_unit_keys(unit_rows, self._unit_sn_to_index)
+                        )
                     continue
                 if result.mapped.get("_is_pv_inv_energy_stream"):
                     merged.update(raw)

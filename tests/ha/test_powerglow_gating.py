@@ -30,6 +30,9 @@ from custom_components.ecoflow_energy.const import (
     POWEROCEAN_SENSORS,
 )
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
+from custom_components.ecoflow_energy.ecoflow.parsers.powerocean import (
+    PARALLEL_UNIT_MAX,
+)
 from custom_components.ecoflow_energy.ecoflow.parsers.powerocean_proto import (
     SCHEDULE_MAX_INDEX,
 )
@@ -80,7 +83,16 @@ WALLBOX_KEYS = {
     "ev_vehicle_id",
 }
 
-ACCESSORY_KEYS = HEATING_ROD_KEYS | SCHEDULE_KEYS | WALLBOX_KEYS
+# The inverters of a parallel pair are the fourth (#436). A pair sends one
+# row per inverter beside the system total on 96/50; a single unit never
+# sends the list, so these become entities only once a unit row is reported.
+INVERTER_KEYS = {
+    f"inverter_{index}_{suffix}"
+    for index in range(1, PARALLEL_UNIT_MAX + 1)
+    for suffix in ("solar_w", "batt_w", "soc_pct")
+}
+
+ACCESSORY_KEYS = HEATING_ROD_KEYS | SCHEDULE_KEYS | WALLBOX_KEYS | INVERTER_KEYS
 
 
 def _entry(devices: list[dict[str, Any]] | None = None) -> MockConfigEntry:

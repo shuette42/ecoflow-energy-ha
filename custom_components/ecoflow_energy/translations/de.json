@@ -263,6 +263,24 @@
       "soc_pct": {
         "name": "Batterieladezustand"
       },
+      "inverter_1_solar_w": {
+        "name": "Wechselrichter 1 Solarleistung"
+      },
+      "inverter_1_batt_w": {
+        "name": "Wechselrichter 1 Batterieleistung"
+      },
+      "inverter_1_soc_pct": {
+        "name": "Wechselrichter 1 Batterieladezustand"
+      },
+      "inverter_2_solar_w": {
+        "name": "Wechselrichter 2 Solarleistung"
+      },
+      "inverter_2_batt_w": {
+        "name": "Wechselrichter 2 Batterieleistung"
+      },
+      "inverter_2_soc_pct": {
+        "name": "Wechselrichter 2 Batterieladezustand"
+      },
       "bp_soh_pct": {
         "name": "Batteriezustand (SOH)"
       },

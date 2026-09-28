@@ -427,6 +427,9 @@ class EcoFlowDeviceCoordinator(
         # Each heartbeat contains only one pack; this map ensures the same
         # physical pack always maps to the same pack{n}_* sensor keys.
         self._bp_sn_to_index: dict[str, int] = {}
+        # Stable serial -> inverter slot mapping for a parallel pair's unit
+        # rows (96/50, #436), the same idea for the inverter{n}_* keys.
+        self._unit_sn_to_index: dict[str, int] = {}
         # Which schedule slots the device has reported. A task list carries
         # every task the device holds, so a slot that drops out of it has been
         # deleted and its keys have to be retracted - nothing else would ever

@@ -68,6 +68,7 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
     _last_mqtt_ts: float
     _energy_integrator: EnergyIntegrator
     _bp_sn_to_index: dict[str, int]
+    _unit_sn_to_index: dict[str, int]
     _raw_frames: TypedFrameBuffer
     _raw_frames_lock: threading.Lock
     _schedule_indices: set[int]

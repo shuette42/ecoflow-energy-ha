@@ -44,6 +44,7 @@ from .ecoflow.parsers.hr61_proto import (
 from .ecoflow.parsers.ocean2_proto import (
     MAX_MODULES as OCEAN2_MAX_MODULES,  # noqa: E402
 )
+from .ecoflow.parsers.powerocean import PARALLEL_UNIT_MAX  # noqa: E402
 from .ecoflow.parsers.powerocean_proto import SCHEDULE_MAX_INDEX  # noqa: E402
 
 DOMAIN = "ecoflow_energy"
@@ -2184,6 +2185,59 @@ for _schedule_index in range(1, SCHEDULE_MAX_INDEX + 1):
             enhanced_only=True,
             accessory=True,
         )
+    )
+
+# Per-inverter readings of a parallel system (#436). A PowerOcean pair sends
+# its energy stream as a list, one row per inverter plus the system total
+# (96/50, #347); the total feeds Solar Power, Battery Power and Battery SOC
+# above, and each inverter's own row feeds these. They are created once a
+# unit row has been reported, so a single unit, which never sends the list,
+# never gets them. The inverters are numbered in the order of their serials,
+# which keeps the number with the unit and the serial out of the name. There
+# is no per-inverter grid reading: on a unit row that figure is the flow
+# between the two inverters, not the property's grid connection.
+#
+# The list only arrives on the app channel, so with developer keys these
+# would be created and never fill.
+for _unit_index in range(1, PARALLEL_UNIT_MAX + 1):
+    POWEROCEAN_SENSORS.extend(
+        [
+            EcoFlowSensorDef(
+                f"inverter_{_unit_index}_solar_w",
+                f"Inverter {_unit_index} Solar Power",
+                "W",
+                "power",
+                "measurement",
+                "mdi:solar-power",
+                enhanced_only=True,
+                suggested_display_precision=0,
+                accessory=True,
+            ),
+            EcoFlowSensorDef(
+                f"inverter_{_unit_index}_batt_w",
+                f"Inverter {_unit_index} Battery Power",
+                "W",
+                "power",
+                "measurement",
+                "mdi:battery",
+                enhanced_only=True,
+                suggested_display_precision=0,
+                accessory=True,
+            ),
+            EcoFlowSensorDef(
+                f"inverter_{_unit_index}_soc_pct",
+                f"Inverter {_unit_index} Battery SOC",
+                "%",
+                # No battery device class: Battery SOC above is the one the
+                # device card shows, and HA picks at random between two.
+                None,
+                "measurement",
+                "mdi:battery",
+                enhanced_only=True,
+                suggested_display_precision=0,
+                accessory=True,
+            ),
+        ]
     )
 
 POWEROCEAN_NUMBERS: list[EcoFlowNumberDef] = [

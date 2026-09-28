@@ -102,6 +102,13 @@ _WORK_STATE_MAP: dict[int, str] = {
     9: "maintain",
 }
 
+# How many inverters of a parallel system get their own readings (96/50,
+# #436). Every list on record carries two unit rows beside the total row: the
+# #347 pair of two J32E and a J329 pair from #328. A third row gets no slot
+# rather than a guess. Lives here rather than beside the protobuf mapping so
+# the percent keys below can name the per-inverter charge level.
+PARALLEL_UNIT_MAX = 2
+
 # Sensor keys this parser and its protobuf counterpart publish with unit "%".
 # Kept in sync with the "%" entries of POWEROCEAN_SENSORS in const.py.
 PERCENT_SENSOR_KEYS: frozenset[str] = frozenset(
@@ -123,6 +130,7 @@ PERCENT_SENSOR_KEYS: frozenset[str] = frozenset(
         for index in range(1, 6)
         for suffix in ("soc", "soh", "calendar_soh", "cycle_soh")
     }
+    | {f"inverter_{index}_soc_pct" for index in range(1, PARALLEL_UNIT_MAX + 1)}
 )
 
 

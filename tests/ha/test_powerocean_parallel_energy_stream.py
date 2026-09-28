@@ -42,6 +42,17 @@ _FIXTURE = (
 
 _STREAM_KEYS = {"solar_w", "home_w", "grid_w", "batt_w", "soc_pct"}
 
+# The pseudonyms the fixture build puts in place of the masked unit serials,
+# first stamped row first.
+_SERIAL_A = "PAIR-TEST-UNIT-A"
+_SERIAL_B = "PAIR-TEST-UNIT-B"
+
+_INVERTER_KEYS = {
+    f"inverter_{index}_{suffix}"
+    for index in (1, 2)
+    for suffix in ("solar_w", "batt_w", "soc_pct")
+}
+
 
 class _PowerOceanParser(MqttIngestMixin):
     device_sn = "J32EMASKEDTEST00"
@@ -50,6 +61,7 @@ class _PowerOceanParser(MqttIngestMixin):
 
     def __init__(self) -> None:
         self._bp_sn_to_index: dict[str, int] = {}
+        self._unit_sn_to_index: dict[str, int] = {}
         self._schedule_indices: set[int] = set()
 
 
@@ -117,8 +129,8 @@ def test_pair_get_reply_bundle_carries_the_stream_beside_the_rest() -> None:
     assert "bp_real_soc_pct" in parsed
 
 
-def test_unit_rows_are_not_published_and_no_serial_reaches_a_key() -> None:
-    """Only the system row is read; the unit rows and their serials stay out."""
+def test_no_serial_reaches_a_key_or_a_value() -> None:
+    """The unit rows are read, but their serials stay out of the result."""
     parsed = _PowerOceanParser()._parse_powerocean_proto_frame(
         _frame("andy-j32e-pair", 90)
     )
@@ -128,7 +140,9 @@ def test_unit_rows_are_not_published_and_no_serial_reaches_a_key() -> None:
     assert "dev_sn" not in parsed
     assert "para_energy_stream" not in parsed
     assert "all_packs" not in parsed
-    assert not any("X" * 16 in str(value) for value in parsed.values())
+    assert "_unit_rows" not in parsed
+    assert not any(_SERIAL_A in str(value) for value in parsed.values())
+    assert not any(_SERIAL_A in key or _SERIAL_B in key for key in parsed)
 
 
 def test_j329_sends_the_same_list_and_its_total_row_is_taken() -> None:
@@ -252,3 +266,147 @@ def test_a_second_list_in_one_bundle_is_dropped_like_every_ems_copy() -> None:
     assert parsed["home_w"] == 500.0
     assert parsed["batt_w"] == 1000.0
     assert parsed["soc_pct"] == 90.0
+
+
+# --- Per-inverter readings from the unit rows (#436) ----------------------
+
+
+def _unit_list(*rows: JTS1ParallelEnergyStream) -> bytes:
+    """A 96/50 frame with a system row first, then the given unit rows."""
+    system = JTS1ParallelEnergyStream(sys_load_pwr=500.0, bp_pwr=0.0, bp_soc=90)
+    report = JTS1ParallelEnergyStreamReport(para_energy_stream=[system, *rows])
+    return _build_header(96, 50, report.SerializeToString())
+
+
+def test_pair_unit_rows_feed_the_per_inverter_keys() -> None:
+    """Frame 1 of the #347 pair: the unit with PV and the unit without.
+
+    The two unit rows' battery power adds up to the system's 1976.674 W, and
+    the unit without PV sends no `mppt_pwr` at all, which lands as 0 W.
+    """
+    parsed = _PowerOceanParser()._parse_powerocean_proto_frame(
+        _frame("andy-j32e-pair", 1)
+    )
+
+    assert parsed is not None
+    assert parsed.keys() >= _INVERTER_KEYS
+    assert parsed["inverter_1_solar_w"] == pytest.approx(2515.444, abs=0.01)
+    assert parsed["inverter_1_batt_w"] == pytest.approx(988.644, abs=0.01)
+    assert parsed["inverter_1_soc_pct"] == 97.0
+    assert parsed["inverter_2_solar_w"] == 0.0
+    assert parsed["inverter_2_batt_w"] == pytest.approx(988.03, abs=0.01)
+    assert parsed["inverter_2_soc_pct"] == 96.0
+    assert parsed["inverter_1_batt_w"] + parsed["inverter_2_batt_w"] == (
+        pytest.approx(parsed["batt_w"], abs=0.01)
+    )
+    # The system keys are the total row's, unchanged by the unit rows.
+    assert parsed["solar_w"] == pytest.approx(2515.444, abs=0.01)
+    assert parsed["soc_pct"] == 97.0
+
+
+def test_the_get_reply_bundle_carries_the_unit_rows_too() -> None:
+    """In the 35-header bundle the unit rows arrive beside everything else."""
+    parsed = _PowerOceanParser()._parse_powerocean_proto_frame(
+        _frame("andy-j32e-pair", 0)
+    )
+
+    assert parsed is not None
+    assert parsed["inverter_1_batt_w"] == pytest.approx(982.151, abs=0.01)
+    assert parsed["inverter_2_batt_w"] == pytest.approx(981.228, abs=0.01)
+    assert "pcs_ac_freq_hz" in parsed
+
+
+def test_j329_pair_after_sunset_reads_zero_solar_on_both_inverters() -> None:
+    """Both J329 units have PV; after sunset neither row carries `mppt_pwr`."""
+    parser = _PowerOceanParser()
+    daylight = parser._parse_powerocean_proto_frame(_frame("j329", 2))
+    night = parser._parse_powerocean_proto_frame(_frame("j329", 105))
+
+    assert daylight is not None and night is not None
+    assert daylight["inverter_1_solar_w"] == pytest.approx(313.688, abs=0.01)
+    assert daylight["inverter_2_solar_w"] == pytest.approx(308.537, abs=0.01)
+    assert night["inverter_1_solar_w"] == 0.0
+    assert night["inverter_2_solar_w"] == 0.0
+    assert night["inverter_1_batt_w"] == pytest.approx(-365.561, abs=0.01)
+    assert night["inverter_2_soc_pct"] == 88.0
+
+
+def test_inverters_are_numbered_by_serial_not_by_position() -> None:
+    """A list that names the later serial first still numbers by serial."""
+    parsed = _PowerOceanParser()._parse_powerocean_proto_frame(
+        _unit_list(
+            JTS1ParallelEnergyStream(bp_pwr=-200.0, bp_soc=40, dev_sn=_SERIAL_B),
+            JTS1ParallelEnergyStream(bp_pwr=-100.0, bp_soc=50, dev_sn=_SERIAL_A),
+        )
+    )
+
+    assert parsed is not None
+    assert parsed["inverter_1_batt_w"] == -100.0
+    assert parsed["inverter_1_soc_pct"] == 50.0
+    assert parsed["inverter_2_batt_w"] == -200.0
+    assert parsed["inverter_2_soc_pct"] == 40.0
+
+
+def test_a_unit_keeps_its_number_in_a_list_that_lacks_the_other() -> None:
+    """Once numbered, a unit stays on its slot even if it arrives alone."""
+    parser = _PowerOceanParser()
+    parser._parse_powerocean_proto_frame(
+        _unit_list(
+            JTS1ParallelEnergyStream(bp_pwr=10.0, bp_soc=50, dev_sn=_SERIAL_A),
+            JTS1ParallelEnergyStream(bp_pwr=20.0, bp_soc=60, dev_sn=_SERIAL_B),
+        )
+    )
+
+    parsed = parser._parse_powerocean_proto_frame(
+        _unit_list(JTS1ParallelEnergyStream(bp_pwr=30.0, bp_soc=61, dev_sn=_SERIAL_B))
+    )
+
+    assert parsed is not None
+    assert parsed["inverter_2_batt_w"] == 30.0
+    assert parsed["inverter_2_soc_pct"] == 61.0
+    assert "inverter_1_batt_w" not in parsed
+
+
+def test_a_third_serial_gets_no_slot() -> None:
+    """Two slots are defined; a third unit is not squeezed into either."""
+    parser = _PowerOceanParser()
+    parsed = parser._parse_powerocean_proto_frame(
+        _unit_list(
+            JTS1ParallelEnergyStream(bp_pwr=10.0, bp_soc=50, dev_sn=_SERIAL_A),
+            JTS1ParallelEnergyStream(bp_pwr=20.0, bp_soc=60, dev_sn=_SERIAL_B),
+            JTS1ParallelEnergyStream(bp_pwr=30.0, bp_soc=70, dev_sn="PAIR-TEST-UNIT-C"),
+        )
+    )
+
+    assert parsed is not None
+    assert parsed["inverter_1_batt_w"] == 10.0
+    assert parsed["inverter_2_batt_w"] == 20.0
+    assert not any(key.startswith("inverter_3") for key in parsed)
+    assert len(parser._unit_sn_to_index) == 2
+
+
+def test_an_out_of_range_unit_charge_level_is_dropped() -> None:
+    """The unsigned wire maximum is not a percentage, here as on the system."""
+    parsed = _PowerOceanParser()._parse_powerocean_proto_frame(
+        _unit_list(
+            JTS1ParallelEnergyStream(bp_pwr=10.0, bp_soc=4294967295, dev_sn=_SERIAL_A)
+        )
+    )
+
+    assert parsed is not None
+    assert parsed["inverter_1_batt_w"] == 10.0
+    assert "inverter_1_soc_pct" not in parsed
+
+
+def test_a_single_unit_stream_creates_no_inverter_keys() -> None:
+    """A single PowerOcean's 96/33 has no unit rows and no per-inverter keys."""
+    stream = JTS1EnergyStreamReport(
+        sys_load_pwr=450.0, mppt_pwr=6730.0, bp_pwr=-1200.0, bp_soc=55
+    )
+
+    parsed = _PowerOceanParser()._parse_powerocean_proto_frame(
+        _build_header(96, 33, stream.SerializeToString())
+    )
+
+    assert parsed is not None
+    assert not any(key.startswith("inverter_") for key in parsed)
