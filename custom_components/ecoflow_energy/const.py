@@ -5253,6 +5253,16 @@ STREAM_AC5000_CONTROL_PREFIXES: frozenset[str] = frozenset({"ES21", "ES22"})
 STREAM_CONTROL_PREFIXES: frozenset[str] = frozenset({"BK31"})
 
 
+# Only these PowerPulse variants retain the existing control paths. New
+# prefixes start read-only until their writes are explicitly supported.
+POWERPULSE_CONTROL_PREFIXES: frozenset[str] = frozenset({"C376", "C374"})
+
+
+def supports_powerpulse_controls(device_sn: str) -> bool:
+    """Return whether this PowerPulse variant may expose controls."""
+    return device_sn[:4].upper() in POWERPULSE_CONTROL_PREFIXES
+
+
 def supports_stream_ac5000_controls(device_sn: str) -> bool:
     """Return whether this STREAM AC 5000 variant may be written to."""
     if not device_sn:

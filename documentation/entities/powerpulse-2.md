@@ -1,6 +1,11 @@
 # PowerPulse 2 - Entity Reference
 
-Full list of all entities created for the EcoFlow PowerPulse 2 wallbox (`C376` and `C374` series).
+Full list of entities for the EcoFlow PowerPulse 2 wallbox (`C376` and `C374` series).
+
+**C371: not yet verified.** Recognition and the suspended-session heartbeat
+are implemented read-only. Continuous updates and charging power/energy scaling
+still need verification against the app. Controls and Standard Mode behaviour
+described below apply to C376/C374 only; C371 writes are not enabled.
 
 **Totals:** 18 sensors, 1 binary sensor, 2 buttons (with no PowerOcean or exactly one in the same integration entry, none with two or more), 1 select (with exactly one PowerOcean in the entry), and one number: Wallbox Maximum Current with exactly one PowerOcean in the entry, Wallbox Charging Current with none
 

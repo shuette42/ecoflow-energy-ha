@@ -281,6 +281,9 @@ _SN_PREFIX_MAP = {
     # the parser was built from (ADR-008, prefix scope). The app API gives
     # it no product name either.
     "C374": DEVICE_TYPE_POWERPULSE2,
+    # PowerPulse 2: a suspended 2/33 heartbeat uses the same map.
+    # Continuous updates and charging scaling are not yet verified; read-only.
+    "C371": DEVICE_TYPE_POWERPULSE2,
     # Ocean 2 (#145). Mapped from a 16 h capture on the reporter's own unit
     # and confirmed against a seven hour recording from a second, unrelated
     # installation: the field numbers line up frame for frame, the

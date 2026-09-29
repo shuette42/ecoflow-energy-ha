@@ -180,6 +180,8 @@ _PLUG_STATUS_NAMES: dict[int, str] = {
     # entry the sensor kept its previous state through such a frame.
     2: "preparing",
     3: "charging",
+    # Shared EV_CHG_STS_SUSPENDED_EV, observed on a C371 at zero power.
+    5: "suspended_vehicle",
     6: "finishing",
 }
 # Field 101 is a different number on the wire (0/2/3 where field 1 has

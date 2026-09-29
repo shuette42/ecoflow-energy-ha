@@ -8,6 +8,9 @@ For installation and quick-start, see the main [README](../README.md).
 
 Complete list of all sensors, switches, numbers, and binary sensors per device:
 
+PowerPulse C371 is not yet verified; its read-only heartbeat support still needs
+continuous-update and charging power/energy validation.
+
 - [PowerOcean](entities/powerocean.md) - 241 sensors, 13 binary sensors, 10 numbers, 8 switches, 1 select (`HJ31`, `HJ32`, `HJ35`, `HJ36`, `HJ37`, `J32B`, `J327`, `J329`, `J32D`, `J32E`, and the Plus variants `R371`, `R372`, `R374`, `HJ3C`)
 - [Delta 2 Max](entities/delta-2-max.md) - 94 sensors, 4 binary sensors, 7 switches, 8 numbers (`R351`, `R331`)
 - [Delta 3 Max Plus](entities/delta-3-max-plus.md) - 47 sensors, 7 switches, 4 numbers, 5 selects (`D3M1`, `D3N1`, `P321`, `P231`, `P351`), plus 3 switches, 3 numbers and 1 binary sensor for port priority on `D3M` serials
@@ -21,6 +24,7 @@ Complete list of all sensors, switches, numbers, and binary sensors per device:
 - [Solar Tracker](entities/solar-tracker.md) - 6 sensors (`HZ31` and `S02F`) - one product under two serial prefixes, read-only in this release, Enhanced Mode only
 - [WAVE 3](entities/wave-3.md) - 18 sensors, 5 binary sensors, 4 switches, 5 numbers, 5 selects, 1 climate (`AC71`) - a portable air conditioner, Enhanced Mode only
 - [PowerPulse 2](entities/powerpulse-2.md) - 18 sensors, 1 binary sensor, 1 number, 1 select, 2 buttons (`C376`, `C374`) - a wallbox, no PowerOcean required for the readings. Start and stop with no PowerOcean or exactly one in the same integration entry, the maximum current and the charging mode with exactly one PowerOcean, the charging current with none. Enhanced Mode only
+- [PowerPulse 2 C371 - not yet verified](entities/powerpulse-2.md) (`C371`) - read-only heartbeat support; continuous updates and charging power/energy need validation. Controls are unavailable and Standard Mode is unverified.
 - [Ocean 2](entities/ocean-2.md) - 48 sensors plus 12 per battery module (`RE11`, `RE17`, `RE41`) - a home battery, read-only, Enhanced Mode only
 - [OCEAN Smart Electrical Panel 40](entities/smart-panel-40.md) - 19 sensors plus 3 sensors and 1 binary sensor per circuit (`HR61`) - a US split-phase load panel, read-only, Enhanced Mode only
 
