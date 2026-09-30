@@ -78,7 +78,7 @@ class TestStreamProtoParser:
         assert string_sum == pytest.approx(result["solar_w"], rel=0.01)
 
     def test_frame_without_strings_3_and_4_creates_no_keys_for_them(self) -> None:
-        """A two-input unit never sends 996/997, so neither key may appear."""
+        """A frame without 996/997 must not gain keys for them."""
         inner = _encode_fixed32_field(70, 19.0) + _encode_fixed32_field(361, 20.0)
 
         result = parse_stream_proto_message(_build_frame(254, 21, inner))

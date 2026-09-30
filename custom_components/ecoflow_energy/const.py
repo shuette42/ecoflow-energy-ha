@@ -3669,14 +3669,13 @@ STREAM_SENSORS: list[EcoFlowSensorDef] = [
         suggested_display_precision=0,
         disabled_by_default=True,
     ),
-    # Per-string PV. Standard mode reports these individually (powGetPv..
-    # powGetPv4); the protobuf stream carries a field number for strings 1 and
-    # 2 and none for the two above them, so on account sign-in those two can
-    # never fill. Strings 3 and 4 are therefore gated on an actual report
-    # rather than created for every unit: a four-string owner on developer keys
-    # gets them, and nobody else is left with an entity that stays unknown for
-    # good (#139). The gate is not needs-nonzero, because zero watts is what a
-    # string reads at night.
+    # Per-string PV. Standard Mode reads these from powGetPv..powGetPv4 and
+    # Enhanced Mode from status fields 361/70/996/997. Only the larger units
+    # drive strings 3 and 4, so those two are created once a unit reports a
+    # reading above zero, not for every Stream (#139). Presence is not enough:
+    # a Stream AC Pro has no PV input and still sends 996/997 as explicit 0.0.
+    # The price is that a string dark at first setup appears with its first
+    # daylight reading; an entity the owner already enabled is kept.
     EcoFlowSensorDef(
         "pv1_w",
         "PV 1 Power",
@@ -3706,6 +3705,7 @@ STREAM_SENSORS: list[EcoFlowSensorDef] = [
         suggested_display_precision=0,
         disabled_by_default=True,
         accessory=True,
+        accessory_needs_nonzero=True,
     ),
     EcoFlowSensorDef(
         "pv4_w",
@@ -3718,6 +3718,7 @@ STREAM_SENSORS: list[EcoFlowSensorDef] = [
         suggested_display_precision=0,
         disabled_by_default=True,
         accessory=True,
+        accessory_needs_nonzero=True,
     ),
     # Per-string PV input voltage and current. The key naming follows the
     # vendor's own asymmetry (plugInInfoPvVol / plugInInfoPv2Vol): the first
@@ -3901,6 +3902,7 @@ STREAM_SENSORS: list[EcoFlowSensorDef] = [
         suggested_display_precision=2,
         disabled_by_default=True,
         accessory=True,
+        accessory_needs_nonzero=True,
     ),
     EcoFlowSensorDef(
         "pv4_energy_kwh",
@@ -3913,6 +3915,7 @@ STREAM_SENSORS: list[EcoFlowSensorDef] = [
         suggested_display_precision=2,
         disabled_by_default=True,
         accessory=True,
+        accessory_needs_nonzero=True,
     ),
     EcoFlowSensorDef(
         "batt_charge_energy_kwh",

@@ -1,9 +1,10 @@
 """Entity gating for the higher Stream PV strings (#139).
 
-A Stream reports strings 3 and 4 on the polled quota only. The protobuf push
-carries one field number for string 1 and one for string 2, and none for the
-two above them, so on account sign-in the four higher-string entities exist
-with nothing able to fill them and stay unknown for good.
+Only the larger Streams drive strings 3 and 4. Standard Mode reads them from
+the polled quota, Enhanced Mode from fields 996 and 997 of the status frame.
+A unit without those inputs, the Stream AC Pro for one, can still send both
+fields as an explicit 0.0, so a report that merely contains the key proves
+nothing: the four higher-string entities wait for a reading above zero.
 
 Same shape as the heating rod in test_powerglow_gating.py, and the same reason
 for testing it at platform setup level: Home Assistant keeps an entity in the
@@ -138,12 +139,16 @@ class TestDefinitions:
 
         assert gated == HIGHER_STRING_KEYS
 
-    def test_a_dark_string_still_counts_as_reported(self) -> None:
-        """Zero watts is what a string reads at night, not proof of an input
-        that is not fitted, so the stronger gate must stay off."""
-        gated = [sensor for sensor in STREAM_SENSORS if sensor.accessory]
+    def test_the_higher_strings_wait_for_a_nonzero_reading(self) -> None:
+        """A unit with no such input sends 0.0 for both fields (a Stream AC
+        Pro does), so presence alone would give it four dead entities. A real
+        string that is dark at setup appears with its first daylight reading,
+        and an owner who already has the entity keeps it across restarts."""
+        gated = {
+            sensor.key for sensor in STREAM_SENSORS if sensor.accessory_needs_nonzero
+        }
 
-        assert not [sensor.key for sensor in gated if sensor.accessory_needs_nonzero]
+        assert gated == HIGHER_STRING_KEYS
 
     def test_the_gate_does_not_change_the_default(self) -> None:
         """The gate decides whether the entity exists, the default whether it
@@ -156,6 +161,23 @@ class TestDefinitions:
 
 
 class TestGating:
+    async def test_explicit_zero_strings_create_no_higher_string_entities(
+        self, hass: HomeAssistant
+    ) -> None:
+        """What a Stream AC Pro sends: both fields present, both 0.0."""
+        _, created = await _setup(
+            hass,
+            dict(
+                TWO_STRING_REPORT,
+                pv3_w=0.0,
+                pv4_w=0.0,
+                pv3_energy_kwh=0.0,
+                pv4_energy_kwh=0.0,
+            ),
+        )
+
+        assert not _keys(created) & HIGHER_STRING_KEYS
+
     async def test_two_string_report_creates_no_higher_string_entities(
         self, hass: HomeAssistant
     ) -> None:
@@ -271,16 +293,12 @@ class TestStaleEntries:
 
         assert registry.async_get(enabled.entity_id) is not None
 
-    async def test_a_plain_accessory_entry_is_still_gated(
+    async def test_an_enabled_entry_survives_a_setup_at_night(
         self, hass: HomeAssistant
     ) -> None:
-        """PLAN-142 only bypasses the gate for `accessory_needs_nonzero`.
-
-        A plain accessory's key never arrives when the accessory itself is
-        absent, so an entity created from just the registry entry would be
-        stuck on its restored value forever. `pv3_w` has no such flag, so an
-        enabled leftover entry must not shortcut setup for it.
-        """
+        """`pv3_w` waits for a nonzero reading, and an owner who enabled it
+        must not lose it because Home Assistant restarted while the string was
+        dark (PLAN-142 shortcut)."""
         registry = er.async_get(hass)
         registry.async_get_or_create(
             "sensor",
@@ -290,7 +308,7 @@ class TestStaleEntries:
 
         _, created = await _setup(hass)
 
-        assert "pv3_w" not in _keys(created)
+        assert "pv3_w" in _keys(created)
 
     async def test_nothing_is_removed_before_data_arrives(
         self, hass: HomeAssistant
