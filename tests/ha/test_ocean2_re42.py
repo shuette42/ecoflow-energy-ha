@@ -127,8 +127,11 @@ class _Ocean2Host(MqttIngestMixin):
 
     def __init__(self, serial: str) -> None:
         self.device_sn = serial
-        self.device_tag = device_log_tag(serial)
         self._bp_sn_to_index: dict[str, int] = {}
+
+    @property
+    def device_tag(self) -> str:
+        return device_log_tag(self.device_sn)
 
 
 def _parsed(serial: str, topic: str) -> dict[str, Any]:
