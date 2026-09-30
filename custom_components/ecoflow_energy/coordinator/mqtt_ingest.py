@@ -26,6 +26,7 @@ from ..const import (
     RAW_FRAME_BUNDLE_MAX_BYTES,
     RAW_FRAME_MAX_BYTES,
 )
+from ..ecoflow.const import ocean2_ac_sign_inverted
 from ..ecoflow.frame_capture import (
     build_frame_entry,
     decode_cmd_headers,
@@ -512,7 +513,10 @@ class MqttIngestMixin(_Base):
                 # the parser decodes every header itself, the same shape as
                 # the WAVE 3 and PowerPulse 2 above.
                 if self.device_type == DEVICE_TYPE_OCEAN2:
-                    return parse_ocean2_proto_message(payload)
+                    return parse_ocean2_proto_message(
+                        payload,
+                        invert_ac_sign=ocean2_ac_sign_inverted(self.device_sn),
+                    )
                 # Smart Panel 40 (#434): its own (254, 21) push, incremental
                 # - only changed fields travel, and the caller's
                 # `_device_data.update()` is the merge that keeps the rest.
@@ -643,7 +647,10 @@ class MqttIngestMixin(_Base):
                 # the parser decodes every header itself, the same shape as
                 # the WAVE 3 and PowerPulse 2 above.
                 if self.device_type == DEVICE_TYPE_OCEAN2:
-                    return parse_ocean2_proto_message(payload)
+                    return parse_ocean2_proto_message(
+                        payload,
+                        invert_ac_sign=ocean2_ac_sign_inverted(self.device_sn),
+                    )
                 # Smart Panel 40 (#434): its own (254, 21) push, incremental
                 # - only changed fields travel, and the caller's
                 # `_device_data.update()` is the merge that keeps the rest.

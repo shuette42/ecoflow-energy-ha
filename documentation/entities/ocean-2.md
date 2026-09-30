@@ -6,9 +6,9 @@ Full list of all entities created for the EcoFlow Ocean 2.
 
 The Ocean 2 reports through the account connection only, so it needs **Enhanced Mode**. The Developer API answers error 1006 for this device, the same position the `J32D`/`J32E` PowerOcean variants are in, so Standard Mode creates no usable entities.
 
-Three serial prefixes, one device: `RE11` for the 10 kW unit, `RE17` for the 12 kW one and `RE41` for the 8 kW single-phase Ocean 2 Plus. They differ in power rating and phase count. The inverter and grid phase sensors below read whatever phases a unit actually reports, so a single-phase `RE41` simply leaves Phase B and C empty rather than needing a separate entity set.
+Four serial prefixes, one device: `RE11` for the 10 kW unit, `RE17` for the 12 kW one, `RE41` for the 8 kW single-phase Ocean 2 Plus and `RE42`, a single-phase unit listed as a plain Ocean 2. They differ in power rating and phase count. The inverter and grid phase sensors below read whatever phases a unit actually reports, so a single-phase `RE41` or `RE42` simply leaves Phase B and C empty rather than needing a separate entity set.
 
-`RE11` is confirmed on two installations, `RE41` on one through an owner's diagnostics download on #145. `RE17` is routed on EcoFlow's own device list, which separates it from the `RE11` by power rating alone; no frame from an `RE17` exists yet, so if you own one, a note either way is welcome. `RE43`, the 12 kW Plus, is not routed here: it has been reported by an owner, but no frame from one exists on either side.
+`RE11` is confirmed on two installations, `RE41` and `RE42` on one each through owners' diagnostics downloads on #145. `RE17` is routed on EcoFlow's own device list, which separates it from the `RE11` by power rating alone; no frame from an `RE17` exists yet, so if you own one, a note either way is welcome. `RE43`, the 12 kW Plus, is not routed here: it has been reported by an owner, but no frame from one exists on either side.
 
 Read-only. No write frame from an Ocean 2 has been observed, so there are no controls.
 
@@ -36,7 +36,7 @@ Battery modules are read as well: 12 readings each, created once a module actual
 | Grid Export Power | W | - | enabled | The negative half of Grid Power, as a positive number |
 | Battery Charge Power | W | - | enabled | The positive half of Battery Power |
 | Battery Discharge Power | W | - | enabled | The negative half of Battery Power, as a positive number |
-| AC Power | W | - | enabled | Total AC output of the inverter |
+| AC Power | W | - | enabled | Total AC output of the inverter. Positive while the unit supplies the house, see the `RE42` note below |
 | Grid Frequency | Hz | - | enabled | AC frequency the inverter is synced to |
 | Inverter Phase A Voltage | V | diagnostic | disabled | Per-phase AC voltage at the inverter |
 | Inverter Phase B Voltage | V | diagnostic | disabled | Per-phase AC voltage at the inverter |
@@ -120,6 +120,10 @@ A unit populates as many strings as its MPPT inputs are wired. An entity that ne
 ### The field that looks like a grid meter is not one
 
 The device carries a value that reads like grid power and is the configured feed-in limit: constant `10000` on a unit capped at 10 kW, constant `0` on a zero-export unit. On the latter it is indistinguishable from a real meter reading at rest, which is how it survives casual checking. In the app the same value is resolved per serial and used to bound a slider, so it is the owner's own setting rather than a measurement, and no sensor is built on it. Grid Power comes from the inverter block instead.
+
+### The RE42 reports AC power with the opposite sign
+
+On the one `RE42` measured, total AC power and the inverter phase active power read negative while the unit supplies the house (down to -4,267 W against a 4,570 W house load), where an `RE11` and an `RE41` read positive in the same state. Battery, grid, solar, home load and apparent power have the same sign on all three units. AC Power and Inverter Phase A/B/C Active Power are therefore corrected per serial prefix for the `RE42` and read positive there too. This rests on a single unit: if your `RE42` shows AC Power negative, please say so on #145.
 
 ### Home Power is reported, not calculated
 

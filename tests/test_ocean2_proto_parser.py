@@ -360,6 +360,75 @@ class TestGridPhases:
         # One shared key, never split per phase.
         assert "grid_phase_a_freq_hz" not in parsed
 
+    def test_three_phase_frequency_comes_from_the_first_indexed_record(self) -> None:
+        # Distinct values per phase, so that first-wins and last-wins differ:
+        # a real RE11 repeats one frequency, but the rule is what is pinned.
+        container = _msg(
+            4,
+            _phase_record(1, field_index=5, voltage=231.0, freq_hz=50.0)
+            + _phase_record(2, field_index=5, voltage=230.5, freq_hz=50.1)
+            + _phase_record(3, field_index=5, voltage=229.9, freq_hz=49.9),
+        )
+        parsed = parse_ocean2_proto_message(_telemetry(inverter=container))
+        assert parsed is not None
+        assert parsed["pcs_ac_freq_hz"] == pytest.approx(50.0)
+
+    def test_single_phase_frequency_survives_the_zero_records_around_it(self) -> None:
+        # Single-phase RE41 order: an unindexed record with 0.0 first, phase A
+        # with the real frequency, then B and C at 0.0. The last record used
+        # to win, which published 0.0 Hz for the whole device.
+        container = _msg(
+            4,
+            _msg(1, _f32(3, 0.0))
+            + _phase_record(1, field_index=5, voltage=231.0, freq_hz=49.94)
+            + _phase_record(2, field_index=5, freq_hz=0.0)
+            + _phase_record(3, field_index=5, freq_hz=0.0),
+        )
+        parsed = parse_ocean2_proto_message(_telemetry(inverter=container))
+        assert parsed is not None
+        assert parsed["pcs_ac_freq_hz"] == pytest.approx(49.94)
+        assert parsed["grid_phase_a_voltage_v"] == pytest.approx(231.0)
+
+    def test_frequency_falls_through_a_zero_phase_a_to_the_next_indexed_record(
+        self,
+    ) -> None:
+        container = _msg(
+            4,
+            _phase_record(1, field_index=5, freq_hz=0.0)
+            + _phase_record(2, field_index=5, freq_hz=50.1)
+            + _phase_record(3, field_index=5, freq_hz=49.9),
+        )
+        parsed = parse_ocean2_proto_message(_telemetry(inverter=container))
+        assert parsed is not None
+        assert parsed["pcs_ac_freq_hz"] == pytest.approx(50.1)
+
+    def test_an_unindexed_record_does_not_supply_the_frequency(self) -> None:
+        # Only records that name a phase count; a stray unindexed reading
+        # ahead of phase A must not stand in for the frequency.
+        container = _msg(
+            4,
+            _msg(1, _f32(3, 60.0))
+            + _phase_record(1, field_index=5, voltage=231.0, freq_hz=49.94),
+        )
+        parsed = parse_ocean2_proto_message(_telemetry(inverter=container))
+        assert parsed is not None
+        assert parsed["pcs_ac_freq_hz"] == pytest.approx(49.94)
+
+    def test_all_zero_frequencies_publish_no_frequency_key(self) -> None:
+        # Zero means "this record has no frequency", never "0 Hz". The key
+        # stays absent and the voltage reading is unaffected.
+        container = _msg(
+            4,
+            _msg(1, _f32(3, 0.0))
+            + _phase_record(1, field_index=5, voltage=231.0, freq_hz=0.0)
+            + _phase_record(2, field_index=5, freq_hz=0.0)
+            + _phase_record(3, field_index=5, freq_hz=0.0),
+        )
+        parsed = parse_ocean2_proto_message(_telemetry(inverter=container))
+        assert parsed is not None
+        assert "pcs_ac_freq_hz" not in parsed
+        assert parsed["grid_phase_a_voltage_v"] == pytest.approx(231.0)
+
     def test_drops_a_non_finite_grid_phase_voltage(self) -> None:
         record = _f32(1, float("nan")) + _f32(3, 50.0) + _f32(5, 1.0)
         container = _msg(4, _msg(1, record))

@@ -54,7 +54,7 @@
 | **Solar Tracker** | `HZ31` `S02F` | Enhanced only | 6 | none, read-only for now | none | ~3 s |
 | **WAVE 3** | `AC71` | Enhanced only | 18 + 5 binary | 4 switches · 5 numbers · 5 selects · 1 climate | 1 | ~2 s / 120 s |
 | **PowerPulse 2** | `C376` `C374` | Enhanced only | 18 + 1 binary | 2 buttons · 1 number, plus 1 select with exactly one PowerOcean in the entry | 1 | on change, refreshed after 20 min |
-| **Ocean 2** | `RE11` `RE17` `RE41` | Enhanced only | 48 + 12 per module | none, read-only | 6 | ~3 s |
+| **Ocean 2** | `RE11` `RE17` `RE41` `RE42` | Enhanced only | 48 + 12 per module | none, read-only | 6 | ~3 s |
 | **OCEAN Smart Electrical Panel 40** | `HR61` | Enhanced only | 19 + 3 per circuit, 1 binary per circuit | none, read-only | - | ~3 s |
 
 > **Connection.** Standard Mode reads through the IoT Developer API with your access and secret key; Enhanced Mode signs in with the EcoFlow account and receives pushes at the faster rate. **Enhanced only** means the serial prefix cannot currently be linked to a Developer API key, so Standard Mode reports error 1006 and the entities stay unavailable; the three starred PowerOcean prefixes are in the same position. This is an EcoFlow API limitation, not a configuration problem. Controls marked Enhanced exist only with the account sign-in. The Energy Dashboard column counts the sensors made for it; optional ones are disabled by default and depend on the installation, see the device notes below and the [Energy Dashboard](#energy-dashboard) section.
@@ -197,7 +197,7 @@ Already running a different EcoFlow integration? It can stay installed while you
 |:---|:---|:---|
 | **Connection** | EcoFlow cloud (HTTPS polling + MQTT) | EcoFlow cloud (WSS MQTT) |
 | **Credentials** | Access Key + Secret Key ([Developer Portal](https://developer.ecoflow.com)) | EcoFlow email + password (same as mobile app) |
-| **Devices** | All except the Enhanced-only serials (`J327`, `J32D`, `J32E`, `R371`, `R372`, `R374`, `HJ3C`, `BK01`, `BK21`, `ES21`, `ES22`, `HZ31`, `S02F`, `AC71`, `C374`, `C376`, `RE11`, `RE17`, `RE41`, `HR61`) | All supported devices |
+| **Devices** | All except the Enhanced-only serials (`J327`, `J32D`, `J32E`, `R371`, `R372`, `R374`, `HJ3C`, `BK01`, `BK21`, `ES21`, `ES22`, `HZ31`, `S02F`, `AC71`, `C374`, `C376`, `RE11`, `RE17`, `RE41`, `RE42`, `HR61`) | All supported devices |
 | **Update rate** | ~30 s HTTP polling (+ MQTT push for Delta/Smart Plug) | ~2-4 s real-time via WSS MQTT |
 | **Delta 2 Max / Smart Plug controls** | All switches and numbers | All switches and numbers |
 | **Delta 3 controls** | Switches and most numbers; the screen and idle shutdowns and the AC charge power need Enhanced Mode | All switches, numbers and selects |

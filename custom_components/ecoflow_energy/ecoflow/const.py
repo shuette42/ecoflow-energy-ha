@@ -299,6 +299,12 @@ _SN_PREFIX_MAP = {
     # phase leaves Phase B and C of the per-phase sensors empty.
     # `RE43`, the 12 kW Plus, stays out: reported by an owner, no frame yet.
     "RE41": DEVICE_TYPE_OCEAN2,
+    # Ocean 2, single-phase, three modules (#145). An owner's diagnostics
+    # download carries 89 frames over about fourteen hours, none truncated,
+    # with the `RE11`'s field numbers and wire types throughout. Nothing else
+    # is established about the model, so it is routed as a plain Ocean 2. Its
+    # AC power readings carry the opposite sign, see `OCEAN2_AC_SIGN_INVERTED`.
+    "RE42": DEVICE_TYPE_OCEAN2,
     # OCEAN Smart Electrical Panel 40 (#434). Mapped from a 46-frame capture
     # of a live installation: the property push (254/21) and safety block
     # (254/25) both decode, and grid/PV/battery close the panel's own power
@@ -324,6 +330,7 @@ _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
     "RE11": "Ocean 2",
     "RE17": "Ocean 2",
     "RE41": "Ocean 2 Plus",
+    "RE42": "Ocean 2",
     "HR61": "OCEAN Smart Electrical Panel 40",
     "HZ31": "Solar Tracker",
     "S02F": "Solar Tracker",
@@ -399,6 +406,21 @@ def schedule_power_min_w(online_battery_packs: int | None) -> int:
     if online_battery_packs is None or online_battery_packs < 1:
         return POWEROCEAN_SCHEDULE_POWER_MIN_W
     return online_battery_packs * POWEROCEAN_SCHEDULE_POWER_MIN_W
+
+
+#: Ocean 2 prefixes whose total AC power (protobuf path 4.1) and inverter phase
+#: active power (4.3.1[n].3) read with the opposite sign of the `RE11`/`RE41`.
+#: Measured 2026-09-30 from one `RE42` unit's diagnostics download (#145): it
+#: reads -182..-4,267 W while supplying the house, where an `RE41` reads
+#: +311..+415 W and an `RE11` up to +10,476 W in the same state. Battery, grid,
+#: solar, home load and apparent power agree in sign on all three. One unit is
+#: one measurement: an installation setting behind the sign is not ruled out.
+OCEAN2_AC_SIGN_INVERTED: frozenset[str] = frozenset({"RE42"})
+
+
+def ocean2_ac_sign_inverted(sn: str) -> bool:
+    """Return True when this Ocean 2 serial reports AC power inverted."""
+    return (sn or "")[:4].upper() in OCEAN2_AC_SIGN_INVERTED
 
 
 def get_device_name(product_name: str, sn: str = "") -> str:
