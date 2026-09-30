@@ -10,9 +10,9 @@ Full list of all entities created for Stream devices.
 
 > Entities marked with *disabled* are available but hidden by default. Enable them in **Settings > Devices > EcoFlow Stream > Entities** (click the filter icon and show disabled entities).
 
-> **Both modes are supported.** Standard Mode polls the official Developer API (~30 s), Enhanced Mode uses the real-time connection (~3 s). Writable numbers require Enhanced Mode. The difference is solar detail: Standard Mode reports all four strings, Enhanced Mode reports PV 1 and PV 2 plus their input voltage and current and carries no field for strings 3 and 4.
+> **Both modes are supported.** Standard Mode polls the official Developer API (~30 s), Enhanced Mode uses the real-time connection (~3 s). Writable numbers require Enhanced Mode. The difference is solar detail: Standard Mode reports all four strings, Enhanced Mode reports PV 1 and PV 2 plus their input voltage and current, and the power of strings 3 and 4. Which of those two is which has not been checked against the app yet.
 
-> **Entities marked *accessory* are created only once the device actually reports that reading**, and they appear on their own the moment it does, without a restart. Solar strings 3 and 4 carry that mark: only the larger units drive them, and the real-time connection has no field for them at all, so listing them for everyone would leave most owners with two entities that can never fill.
+> **Entities marked *accessory* are created only once the device actually reports that reading**, and they appear on their own the moment it does, without a restart. Solar strings 3 and 4 carry that mark: only the larger units drive them, so listing them for everyone would leave most owners with two entities that can never fill.
 
 ---
 
@@ -38,8 +38,8 @@ Full list of all entities created for Stream devices.
 |:---|:---:|:---:|:---:|:---|
 | PV 1 Power | W | - | enabled | Solar string 1 |
 | PV 2 Power | W | - | enabled | Solar string 2 |
-| PV 3 Power | W | diagnostic | *accessory*, disabled | Solar string 3, larger units only, and reported through the Developer API only |
-| PV 4 Power | W | diagnostic | *accessory*, disabled | Solar string 4, larger units only, and reported through the Developer API only |
+| PV 3 Power | W | diagnostic | *accessory*, disabled | Solar string 3, larger units only. In Enhanced Mode the assignment of strings 3 and 4 is unconfirmed |
+| PV 4 Power | W | diagnostic | *accessory*, disabled | Solar string 4, larger units only. In Enhanced Mode the assignment of strings 3 and 4 is unconfirmed |
 | Solar Power | W | diagnostic | disabled | Total solar input, meter-dependent |
 | PV Voltage | V | diagnostic | disabled | Input voltage of string 1 |
 | PV Current | A | diagnostic | disabled | Input current of string 1 |
@@ -145,7 +145,7 @@ The LED control reproduces the hardware-confirmed app ConfigWrite field `384` wi
 ## Notes
 
 - Every device additionally exposes 2 universal diagnostic sensors (connection status and active mode) that are not included in the totals above.
-- Solar strings 3 and 4 are reported by the Developer API in Standard Mode only. In Enhanced Mode those two entities exist but stay empty; PV 1 and PV 2 are reported in both modes.
+- Solar strings 3 and 4 are reported in both modes. In Enhanced Mode only their power arrives, and which field is string 3 and which is string 4 has not been compared with the app, so the two may read swapped. Their input voltage and current are not available there.
 - Home, grid and total solar values depend on an EcoFlow-compatible meter being paired in the app. Without one they may be absent or misleading, so they ship as disabled diagnostics.
 - The Standard Mode values are read as plain watts. If a power reading looks off by a constant factor compared to the EcoFlow app, please report it with a diagnostics download so the scaling can be corrected.
 - Switching a device between Standard and Enhanced Mode does not duplicate entities, since both paths produce the same entity keys.

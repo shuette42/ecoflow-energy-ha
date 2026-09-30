@@ -52,6 +52,40 @@ def _build_masked_frame(cmd_func: int, cmd_id: int, inner: bytes, seq: int) -> b
 
 
 class TestStreamProtoParser:
+    @pytest.mark.parametrize(
+        ("pv2", "pv3", "pv4", "solar"),
+        [
+            # Two telemetry frames from a four-input Stream with strings 2-4
+            # wired (#139): the three string powers add up to the solar total.
+            (111.9, 111.92, 113.53, 335.0),
+            (235.06, 259.86, 269.44, 763.0),
+        ],
+    )
+    def test_strings_3_and_4_sum_to_the_solar_total(
+        self, pv2: float, pv3: float, pv4: float, solar: float
+    ) -> None:
+        inner = bytearray()
+        inner.extend(_encode_fixed32_field(70, pv2))
+        inner.extend(_encode_fixed32_field(996, pv3))
+        inner.extend(_encode_fixed32_field(997, pv4))
+        inner.extend(_encode_fixed32_field(517, solar))
+
+        result = parse_stream_proto_message(_build_frame(254, 21, bytes(inner)))
+
+        assert result["pv3_w"] == pytest.approx(pv3, rel=1e-5)
+        assert result["pv4_w"] == pytest.approx(pv4, rel=1e-5)
+        string_sum = result["pv2_w"] + result["pv3_w"] + result["pv4_w"]
+        assert string_sum == pytest.approx(result["solar_w"], rel=0.01)
+
+    def test_frame_without_strings_3_and_4_creates_no_keys_for_them(self) -> None:
+        """A two-input unit never sends 996/997, so neither key may appear."""
+        inner = _encode_fixed32_field(70, 19.0) + _encode_fixed32_field(361, 20.0)
+
+        result = parse_stream_proto_message(_build_frame(254, 21, inner))
+
+        assert "pv3_w" not in result
+        assert "pv4_w" not in result
+
     def test_system_soc_feeds_battery_soc_and_unit_soc_stays_apart(self) -> None:
         """Field 262 is the linked system's SoC, field 242 this unit's own.
 

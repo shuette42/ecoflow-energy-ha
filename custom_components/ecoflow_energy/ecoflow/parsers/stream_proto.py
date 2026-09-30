@@ -85,6 +85,14 @@ _STREAM_FIELD_MAP: dict[tuple[int, int], dict[int, tuple[str, str]]] = {
         # power in field 616 on units that feed everything into the grid.
         361: ("pv1_w", _TYPE_FLOAT),
         70: ("pv2_w", _TYPE_FLOAT),
+        # Strings 3 and 4 on the four-input units. In two frames from a
+        # Stream Ultra X with strings 2-4 wired, `70 + 996 + 997` equals the
+        # solar total in field 517 (764.4 vs 763 W, 337.4 vs 335 W). Which of
+        # the two is string 3 and which is string 4 is UNVERIFIED: only their
+        # sum is pinned down, so a swap would show up as PV 3 and PV 4
+        # exchanging values against the app.
+        996: ("pv3_w", _TYPE_FLOAT),
+        997: ("pv4_w", _TYPE_FLOAT),
         461: ("backup_reserve_pct", _TYPE_INT),
         # Configured feed-in cap in watts (user-changeable in the app).
         521: ("feed_grid_power_limit_w", _TYPE_INT),
