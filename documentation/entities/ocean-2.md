@@ -6,7 +6,7 @@ Full list of all entities created for the EcoFlow Ocean 2.
 
 The Ocean 2 reports through the account connection only, so it needs **Enhanced Mode**. The Developer API answers error 1006 for this device, the same position the `J32D`/`J32E` PowerOcean variants are in, so Standard Mode creates no usable entities.
 
-Four serial prefixes, one device: `RE11` for the 10 kW unit, `RE17` for the 12 kW one, `RE41` for the 8 kW single-phase Ocean 2 Plus and `RE42`, a single-phase unit listed as a plain Ocean 2. They differ in power rating and phase count. The inverter and grid phase sensors below read whatever phases a unit actually reports, so a single-phase `RE41` or `RE42` simply leaves Phase B and C empty rather than needing a separate entity set.
+Four serial prefixes, one device: `RE11` for the 10 kW unit, `RE17` for the 12 kW one, `RE41` for the 8 kW single-phase Ocean 2 Plus and `RE42`, a single-phase unit whose power rating is not established here. They differ in power rating and phase count. The inverter and grid phase sensors below read whatever phases a unit actually reports, so a single-phase `RE41` or `RE42` simply leaves Phase B and C empty rather than needing a separate entity set.
 
 `RE11` is confirmed on two installations, `RE41` and `RE42` on one each through owners' diagnostics downloads on #145. `RE17` is routed on EcoFlow's own device list, which separates it from the `RE11` by power rating alone; no frame from an `RE17` exists yet, so if you own one, a note either way is welcome. `RE43`, the 12 kW Plus, is not routed here: it has been reported by an owner, but no frame from one exists on either side.
 
@@ -36,7 +36,7 @@ Battery modules are read as well: 12 readings each, created once a module actual
 | Grid Export Power | W | - | enabled | The negative half of Grid Power, as a positive number |
 | Battery Charge Power | W | - | enabled | The positive half of Battery Power |
 | Battery Discharge Power | W | - | enabled | The negative half of Battery Power, as a positive number |
-| AC Power | W | - | enabled | Total AC output of the inverter. Positive while the unit supplies the house, see the `RE42` note below |
+| AC Power | W | - | enabled | Total AC output of the inverter. Positive while the unit supplies the house on `RE11` and `RE41`; the `RE42` reads it the other way round, see the note below |
 | Grid Frequency | Hz | - | enabled | AC frequency the inverter is synced to |
 | Inverter Phase A Voltage | V | diagnostic | disabled | Per-phase AC voltage at the inverter |
 | Inverter Phase B Voltage | V | diagnostic | disabled | Per-phase AC voltage at the inverter |
@@ -45,8 +45,8 @@ Battery modules are read as well: 12 readings each, created once a module actual
 | Inverter Phase B Current | A | diagnostic | disabled | Per-phase AC current at the inverter |
 | Inverter Phase C Current | A | diagnostic | disabled | Per-phase AC current at the inverter |
 | Inverter Phase A Active Power | W | diagnostic | disabled | Per-phase real power at the inverter, see the `RE42` note below |
-| Inverter Phase B Active Power | W | diagnostic | disabled | Per-phase real power at the inverter, see the `RE42` note below |
-| Inverter Phase C Active Power | W | diagnostic | disabled | Per-phase real power at the inverter, see the `RE42` note below |
+| Inverter Phase B Active Power | W | diagnostic | disabled | Per-phase real power at the inverter |
+| Inverter Phase C Active Power | W | diagnostic | disabled | Per-phase real power at the inverter |
 | Inverter Phase A Reactive Power | var | diagnostic | disabled | Per-phase reactive power at the inverter |
 | Inverter Phase B Reactive Power | var | diagnostic | disabled | Per-phase reactive power at the inverter |
 | Inverter Phase C Reactive Power | var | diagnostic | disabled | Per-phase reactive power at the inverter |
