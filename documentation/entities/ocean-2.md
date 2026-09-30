@@ -44,9 +44,9 @@ Battery modules are read as well: 12 readings each, created once a module actual
 | Inverter Phase A Current | A | diagnostic | disabled | Per-phase AC current at the inverter |
 | Inverter Phase B Current | A | diagnostic | disabled | Per-phase AC current at the inverter |
 | Inverter Phase C Current | A | diagnostic | disabled | Per-phase AC current at the inverter |
-| Inverter Phase A Active Power | W | diagnostic | disabled | Per-phase real power at the inverter |
-| Inverter Phase B Active Power | W | diagnostic | disabled | Per-phase real power at the inverter |
-| Inverter Phase C Active Power | W | diagnostic | disabled | Per-phase real power at the inverter |
+| Inverter Phase A Active Power | W | diagnostic | disabled | Per-phase real power at the inverter, see the `RE42` note below |
+| Inverter Phase B Active Power | W | diagnostic | disabled | Per-phase real power at the inverter, see the `RE42` note below |
+| Inverter Phase C Active Power | W | diagnostic | disabled | Per-phase real power at the inverter, see the `RE42` note below |
 | Inverter Phase A Reactive Power | var | diagnostic | disabled | Per-phase reactive power at the inverter |
 | Inverter Phase B Reactive Power | var | diagnostic | disabled | Per-phase reactive power at the inverter |
 | Inverter Phase C Reactive Power | var | diagnostic | disabled | Per-phase reactive power at the inverter |

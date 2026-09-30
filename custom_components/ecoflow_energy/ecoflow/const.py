@@ -301,9 +301,10 @@ _SN_PREFIX_MAP = {
     "RE41": DEVICE_TYPE_OCEAN2,
     # Ocean 2, single-phase, three modules (#145). An owner's diagnostics
     # download carries 89 frames over about fourteen hours, none truncated,
-    # with the `RE11`'s field numbers and wire types throughout. Nothing else
-    # is established about the model, so it is routed as a plain Ocean 2. Its
-    # AC power readings carry the opposite sign, see `OCEAN2_AC_SIGN_INVERTED`.
+    # with the `RE11`'s field numbers and wire types on every field the
+    # integration reads. Nothing else is established about the model, so it is
+    # routed as a plain Ocean 2. Its AC power readings carry the opposite
+    # sign, see `OCEAN2_AC_SIGN_INVERTED`.
     "RE42": DEVICE_TYPE_OCEAN2,
     # OCEAN Smart Electrical Panel 40 (#434). Mapped from a 46-frame capture
     # of a live installation: the property push (254/21) and safety block

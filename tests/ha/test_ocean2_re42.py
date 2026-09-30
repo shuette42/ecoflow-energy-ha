@@ -156,6 +156,7 @@ def test_the_real_frame_reads_ac_power_positive_once_corrected() -> None:
     assert parsed["grid_w"] == 0.0
     assert parsed["solar_w"] == 0.0
     assert parsed["inv_phase_a_apparent_power_va"] == pytest.approx(4304.60, abs=0.01)
+    assert parsed["inv_phase_a_reactive_power_var"] == pytest.approx(265.2, abs=0.1)
     # A module discharging keeps its own negative power.
     assert parsed["module3_power_w"] == pytest.approx(-505.07, abs=0.01)
     # An unused phase stays a plain zero, not -0.0.

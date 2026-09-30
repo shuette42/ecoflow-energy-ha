@@ -288,15 +288,20 @@ def _grid_phases(blocks: list[Any]) -> dict[str, float]:
     Field 3 carries the AC frequency. A three-phase unit repeats it on every
     record, a single-phase unit fills it only on the phase A record and sends
     0.0 on the unindexed and the unused phase records. It is therefore
-    published once as `pcs_ac_freq_hz`, taken from the first record that has a
-    phase index and a frequency above zero. A zero never reaches the output:
-    with no such record the key is absent.
+    published once as `pcs_ac_freq_hz`, and it is the frequency of the phase
+    A record (index 1) as sent, 0.0 included: a grid outage reads 0.0 Hz next
+    to the 0 V of the same record instead of leaving the last frequency in
+    place. Only when phase A carries no frequency field does the first other
+    indexed record with a frequency above zero stand in. Unindexed records
+    never supply it, and with neither source the key is absent.
 
     Grid-port current (field 2) and power (field 4) in this block do not
     track the grid meter in the verified capture - only voltage and the
     shared frequency are read here.
     """
     out: dict[str, float] = {}
+    phase_a_freq: float | None = None
+    fallback_freq: float | None = None
     for block in blocks:
         if not isinstance(block, bytes):
             continue
@@ -314,11 +319,19 @@ def _grid_phases(blocks: list[Any]) -> dict[str, float]:
             if index is None or int(index) not in _PHASE_LABELS:
                 continue
             freq = values.get(3)
-            if freq is not None and freq > 0 and "pcs_ac_freq_hz" not in out:
-                out["pcs_ac_freq_hz"] = freq
+            if freq is not None:
+                if int(index) == 1:
+                    if phase_a_freq is None:
+                        phase_a_freq = freq
+                elif fallback_freq is None and freq > 0:
+                    fallback_freq = freq
             voltage = values.get(1)
             if voltage is not None:
                 out[f"grid_phase_{_PHASE_LABELS[int(index)]}_voltage_v"] = voltage
+    if phase_a_freq is not None:
+        out["pcs_ac_freq_hz"] = phase_a_freq
+    elif fallback_freq is not None:
+        out["pcs_ac_freq_hz"] = fallback_freq
     return out
 
 
