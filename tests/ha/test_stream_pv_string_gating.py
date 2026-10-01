@@ -181,7 +181,12 @@ class TestCategory:
     def test_the_energy_counters_stay_diagnostic_as_for_strings_1_and_2(self) -> None:
         by_key = {sensor.key: sensor for sensor in STREAM_SENSORS}
 
-        for key in ("pv1_energy_kwh", "pv2_energy_kwh", "pv3_energy_kwh", "pv4_energy_kwh"):
+        for key in (
+            "pv1_energy_kwh",
+            "pv2_energy_kwh",
+            "pv3_energy_kwh",
+            "pv4_energy_kwh",
+        ):
             assert by_key[key].entity_category == "diagnostic"
 
 
