@@ -7,7 +7,9 @@ from typing import TYPE_CHECKING, Any
 
 import aiohttp
 import voluptuous as vol
-from homeassistant.config_entries import ConfigFlowResult
+from homeassistant.config_entries import SOURCE_RECONFIGURE, ConfigFlowResult
+from homeassistant.const import CONF_HOST, CONF_PORT
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
     SelectOptionDict,
@@ -20,6 +22,7 @@ from homeassistant.helpers.selector import (
 
 from .const import (
     AUTH_METHOD_APP,
+    AUTH_METHOD_DEVELOPER,
     CONF_ACCESS_KEY,
     CONF_AUTH_METHOD,
     CONF_DEVICES,
@@ -27,18 +30,35 @@ from .const import (
     CONF_MODE,
     CONF_PASSWORD,
     CONF_SECRET_KEY,
+    CONF_UNIT_ID,
     CONF_USER_ID,
     DEVICE_TYPE_DISPLAY_NAMES,
+    DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_POWERSTREAM,
     DEVICE_TYPE_UNKNOWN,
+    DOMAIN,
     ENHANCED_ONLY_DEVICE_TYPES,
+    LOCAL_MODBUS_TIMEOUT_S,
     MODE_ENHANCED,
+    MODE_LOCAL,
     MODE_STANDARD,
     get_device_name,
     get_device_type,
 )
 from .ecoflow.enhanced_auth import enhanced_login, get_app_device_list
 from .ecoflow.iot_api import IoTApiClient
+from .ecoflow.modbus_local import (
+    MODBUS_DEFAULT_PORT,
+    ModbusConnectError,
+    ModbusLocalClient,
+    ModbusLocalError,
+    ModbusTimeoutError,
+)
+from .ecoflow.parsers.powerocean_modbus import (
+    SETUP_BLOCKS,
+    is_supported_device,
+    parse_device_info,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -103,6 +123,72 @@ def _device_label(device: dict[str, Any]) -> str:
     return f"{name} ({sn_short}){status}" if name else f"{sn_short}{status}"
 
 
+class LocalDeviceError(Exception):
+    """A local read the flow reports as a form error; ``reason`` is the key."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+async def read_local_device(host: str, port: int, unit_id: int) -> dict[str, Any]:
+    """Read the identity registers and return the device info.
+
+    Raises ``LocalDeviceError`` with the error key the form shows: an
+    unreachable or silent device is ``cannot_connect``, an exception or a
+    malformed answer is ``modbus_exception``, and a reachable device that is
+    not the supported PowerOcean is ``unsupported_device``. Nothing here
+    writes: the client only issues read requests.
+    """
+    client = ModbusLocalClient(host, port, unit_id, timeout=LOCAL_MODBUS_TIMEOUT_S)
+    try:
+        blocks = await client.read_blocks(SETUP_BLOCKS)
+    except (ModbusConnectError, ModbusTimeoutError) as err:
+        raise LocalDeviceError("cannot_connect") from err
+    except ModbusLocalError as err:
+        raise LocalDeviceError("modbus_exception") from err
+    info = parse_device_info(blocks)
+    if not info.get("serial"):
+        raise LocalDeviceError("modbus_exception")
+    if not is_supported_device(info):
+        raise LocalDeviceError("unsupported_device")
+    return info
+
+
+def serial_in_other_entries(
+    hass: HomeAssistant, serial: str, exclude_entry_id: str | None = None
+) -> bool:
+    """True when another entry of this domain already carries ``serial``.
+
+    Cloud and local entries both list their devices under ``CONF_DEVICES``,
+    so one scan covers both. No cloud entry sets a ``unique_id`` from the
+    serial, so the unique-id check alone would only catch local against
+    local; two entries emitting the same entity ``unique_id`` would have
+    Home Assistant silently refuse the second.
+    """
+    return any(
+        device.get("sn") == serial
+        for entry in hass.config_entries.async_entries(DOMAIN)
+        if entry.entry_id != exclude_entry_id
+        for device in entry.data.get(CONF_DEVICES, [])
+    )
+
+
+def local_schema(host: str, port: int, unit_id: int) -> vol.Schema:
+    """The host / port / unit id form, shared by setup and reconfigure."""
+    return vol.Schema(
+        {
+            vol.Required(CONF_HOST, default=host): str,
+            vol.Required(CONF_PORT, default=port): vol.All(
+                vol.Coerce(int), vol.Range(min=1, max=65535)
+            ),
+            vol.Required(CONF_UNIT_ID, default=unit_id): vol.All(
+                vol.Coerce(int), vol.Range(min=0, max=255)
+            ),
+        }
+    )
+
+
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigFlow as _Base
 else:
@@ -124,6 +210,8 @@ class SetupFlowMixin(_Base):
             mode = user_input[CONF_MODE]
             if mode == MODE_ENHANCED:
                 return await self.async_step_app_credentials()
+            if mode == MODE_LOCAL:
+                return await self.async_step_local()
             return await self.async_step_developer()
 
         return self.async_show_form(
@@ -134,6 +222,7 @@ class SetupFlowMixin(_Base):
                         {
                             MODE_STANDARD: "Standard - Official EcoFlow API",
                             MODE_ENHANCED: "Enhanced - Real-time (~3 s)",
+                            MODE_LOCAL: "Local - Modbus/TCP, no cloud (read-only)",
                         }
                     ),
                 }
@@ -167,7 +256,12 @@ class SetupFlowMixin(_Base):
                         errors["base"] = "no_devices"
                     else:
                         self._devices = self._normalize_devices(devices)
-                        return await self.async_step_devices()
+                        if self.source != SOURCE_RECONFIGURE:
+                            return await self.async_step_devices()
+                        reason = self._switch_target_error(MODE_STANDARD)
+                        if reason is None:
+                            return self._finish_switch(MODE_STANDARD)
+                        errors["base"] = reason
             except (aiohttp.ClientError, TimeoutError, OSError):
                 errors["base"] = "cannot_connect"
             except (KeyError, ValueError, TypeError, AttributeError):
@@ -225,8 +319,13 @@ class SetupFlowMixin(_Base):
                             self._devices = self._normalize_app_devices(raw_devices)
                             if not self._devices:
                                 errors["base"] = "no_devices"
-                            else:
+                            elif self.source != SOURCE_RECONFIGURE:
                                 return await self.async_step_devices()
+                            else:
+                                reason = self._switch_target_error(MODE_ENHANCED)
+                                if reason is None:
+                                    return self._finish_switch(MODE_ENHANCED)
+                                errors["base"] = reason
                 except (aiohttp.ClientError, TimeoutError, OSError):
                     errors["base"] = "cannot_connect"
                 except (KeyError, ValueError, TypeError, AttributeError):
@@ -242,6 +341,112 @@ class SetupFlowMixin(_Base):
                 }
             ),
             errors=errors,
+        )
+
+    # ------------------------------------------------------------------
+    # Step 2c: Local Modbus/TCP (host, port, unit id)
+    # ------------------------------------------------------------------
+
+    async def async_step_local(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Step 2c: Read the device identity over Modbus/TCP and create the entry."""
+        errors: dict[str, str] = {}
+        host, port, unit_id = "", MODBUS_DEFAULT_PORT, 1
+
+        if user_input is not None:
+            host = user_input[CONF_HOST].strip()
+            port = user_input[CONF_PORT]
+            unit_id = user_input[CONF_UNIT_ID]
+            try:
+                info = await read_local_device(host, port, unit_id)
+            except LocalDeviceError as err:
+                errors["base"] = err.reason
+            else:
+                serial = info["serial"]
+                # The unique id also stops two flows for one device running
+                # side by side; entries already holding it are caught below.
+                await self.async_set_unique_id(serial)
+                if serial_in_other_entries(self.hass, serial):
+                    return self.async_abort(reason="already_configured")
+                display_name = DEVICE_TYPE_DISPLAY_NAMES[DEVICE_TYPE_POWEROCEAN]
+                return self.async_create_entry(
+                    title=f"EcoFlow Energy Local ({serial[:4]})",
+                    data={
+                        CONF_MODE: MODE_LOCAL,
+                        CONF_HOST: host,
+                        CONF_PORT: port,
+                        CONF_UNIT_ID: unit_id,
+                        CONF_DEVICES: [
+                            {
+                                "sn": serial,
+                                "name": display_name,
+                                "product_name": display_name,
+                                "device_type": DEVICE_TYPE_POWEROCEAN,
+                                "online": 1,
+                                "sw_version": info.get("firmware", ""),
+                            }
+                        ],
+                    },
+                )
+
+        return self.async_show_form(
+            step_id="local",
+            data_schema=local_schema(host, port, unit_id),
+            errors=errors,
+        )
+
+    # ------------------------------------------------------------------
+    # Reconfigure: Local -> Standard / Enhanced
+    #
+    # These live next to the credential steps because they reuse them: the
+    # same `developer` / `app_credentials` forms run, and a flow whose source
+    # is reconfigure finishes by updating the entry instead of listing devices.
+    # ------------------------------------------------------------------
+
+    async def async_step_reconfigure_to_standard(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Switch a local entry to Standard Mode: ask for Developer keys."""
+        self._auth_type = AUTH_METHOD_DEVELOPER
+        return await self.async_step_developer()
+
+    async def async_step_reconfigure_to_enhanced(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Switch a local entry to Enhanced Mode: ask for the account sign-in."""
+        return await self.async_step_app_credentials()
+
+    def _switch_target_error(self, mode: str) -> str | None:
+        """Error key when the entry's device cannot move to ``mode``, else None."""
+        entry = self._get_reconfigure_entry()
+        serial = entry.data[CONF_DEVICES][0]["sn"]
+        device = next((d for d in self._devices if d["sn"] == serial), None)
+        if device is None:
+            return "device_not_on_account"
+        if mode == MODE_STANDARD and device.get("device_type") in (
+            ENHANCED_ONLY_DEVICE_TYPES
+        ):
+            return "device_requires_enhanced"
+        return None
+
+    def _finish_switch(self, mode: str) -> ConfigFlowResult:
+        """Rewrite the local entry as a cloud entry for its one device."""
+        entry = self._get_reconfigure_entry()
+        serial = entry.data[CONF_DEVICES][0]["sn"]
+        if serial_in_other_entries(self.hass, serial, entry.entry_id):
+            return self.async_abort(reason="already_configured")
+        self._selected_devices = [d for d in self._devices if d["sn"] == serial]
+        return self.async_update_reload_and_abort(
+            entry,
+            unique_id=None,
+            data=self._entry_data(
+                mode=mode,
+                email=self._email,
+                password=self._password,
+                user_id=self._user_id,
+            ),
+            reason="reconfigure_successful",
         )
 
     # ------------------------------------------------------------------
@@ -349,6 +554,20 @@ class SetupFlowMixin(_Base):
         else:
             self._async_abort_entries_match({CONF_ACCESS_KEY: self._access_key})
 
+        data = self._entry_data(
+            mode=mode, email=email, password=password, user_id=user_id
+        )
+        return self.async_create_entry(title="EcoFlow Energy", data=data)
+
+    def _entry_data(
+        self,
+        *,
+        mode: str,
+        email: str = "",
+        password: str = "",
+        user_id: str = "",
+    ) -> dict[str, Any]:
+        """Build the cloud entry data from what the steps collected."""
         data: dict[str, Any] = {
             CONF_AUTH_METHOD: self._auth_type,
             CONF_DEVICES: self._selected_devices,
@@ -366,8 +585,7 @@ class SetupFlowMixin(_Base):
                 data[CONF_EMAIL] = email
                 data[CONF_PASSWORD] = password
                 data[CONF_USER_ID] = user_id
-
-        return self.async_create_entry(title="EcoFlow Energy", data=data)
+        return data
 
     @staticmethod
     def _normalize_devices(

@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Verbindungsmodus",
-        "description": "Wie soll die Verbindung zu deinen EcoFlow-Geräten hergestellt werden?\n\n**Standard** - Offizielle EcoFlow IoT API. Von EcoFlow unterstützt. Updates alle 10-30 Sekunden. Erfordert Developer API Keys.\n\n**Enhanced** - Community-basierte Echtzeit-Verbindung. Updates alle ~3 Sekunden. Erfordert dein EcoFlow-App-Login. Inoffiziell - Nutzung auf eigene Verantwortung.",
+        "description": "Wie soll die Verbindung zu deinen EcoFlow-Geräten hergestellt werden?\n\n**Standard** - Offizielle EcoFlow IoT API. Von EcoFlow unterstützt. Updates alle 10-30 Sekunden. Erfordert Developer API Keys.\n\n**Enhanced** - Community-basierte Echtzeit-Verbindung. Updates alle ~3 Sekunden. Erfordert dein EcoFlow-App-Login. Inoffiziell - Nutzung auf eigene Verantwortung.\n\n**Local** - Direkte Modbus/TCP-Verbindung zu einem PowerOcean in deinem Netzwerk. Keine Cloud und kein Konto nötig. Updates alle ~10 Sekunden. Nur lesend. Modbus muss für dein Gerät vorher vom EcoFlow-Support freigeschaltet werden.",
         "data": {
           "mode": "Verbindungsmodus"
         }
@@ -22,6 +22,20 @@
         "data": {
           "email": "E-Mail",
           "password": "Passwort"
+        }
+      },
+      "local": {
+        "title": "Lokale Modbus/TCP-Verbindung",
+        "description": "Lies deinen PowerOcean direkt per Modbus/TCP aus, ohne die EcoFlow-Cloud. Die Verbindung ist nur lesend: Es wird nichts auf das Gerät geschrieben.\n\nModbus muss für dein Gerät vorher vom EcoFlow-Support freigeschaltet werden. Das Gerät bedient nur einen Modbus-Client gleichzeitig, schließe also jedes andere Modbus-Werkzeug, bevor du fortfährst.\n\nNutze als Host möglichst den DNS-Namen des Geräts.",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "unit_id": "Unit-ID"
+        },
+        "data_description": {
+          "host": "DNS-Name (oder Adresse) des PowerOcean in deinem Netzwerk.",
+          "port": "Modbus/TCP-Port des Geräts. 502, sofern dein Gerät keinen anderen nutzt.",
+          "unit_id": "Modbus-Unit-ID des Geräts. 1, sofern sie nicht geändert wurde."
         }
       },
       "devices": {
@@ -79,6 +93,25 @@
           "password": "Passwort"
         }
       },
+      "reconfigure_menu": {
+        "title": "Verbindung ändern",
+        "description": "Wähle, wie dieser Eintrag das Gerät erreicht. Der Eintrag bleibt bestehen, Entitäten, die beide Verbindungen liefern, behalten ihren Verlauf.",
+        "menu_options": {
+          "reconfigure_credentials": "Zugangsdaten aktualisieren",
+          "reconfigure_local": "Lokal (Modbus/TCP): Host, Port und Unit-ID",
+          "reconfigure_to_standard": "Standard: offizielle EcoFlow-API mit Developer-Schlüsseln",
+          "reconfigure_to_enhanced": "Enhanced: Echtzeit mit deinem EcoFlow-Konto"
+        }
+      },
+      "reconfigure_local": {
+        "title": "Lokale Modbus/TCP-Verbindung",
+        "description": "Gib an, wo der PowerOcean per Modbus/TCP antwortet. Es muss dasselbe Gerät wie in diesem Eintrag sein, ein Gerät mit anderer Seriennummer wird abgelehnt. Beim Wechsel aus der Cloud werden die gespeicherten Zugangsdaten aus diesem Eintrag entfernt.",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "unit_id": "Unit-ID"
+        }
+      },
       "devices_app": {
         "title": "Geräte auswählen",
         "description": "Wähle die EcoFlow-Geräte aus, die du zu Home Assistant hinzufügen möchtest.\n\nEin Gerät mit dem Hinweis \"not supported yet\" hat hier keinen Parser und liefert nur zwei Diagnose-Sensoren. Es trotzdem hinzuzufügen lohnt sich, denn aus einem Diagnose-Download davon an einem GitHub-Issue entsteht die Unterstützung für ein neues Modell. Schalte in den Integrations-Optionen zuerst die Aufzeichnung der Diagnosedaten ein und lade danach herunter, denn bei Anmeldung mit dem EcoFlow-Konto enthält der Download diese Rohdaten nicht von selbst.",
@@ -88,17 +121,21 @@
       }
     },
     "error": {
-      "cannot_connect": "Verbindung zur EcoFlow-API fehlgeschlagen. Überprüfe deine Zugangsdaten.",
+      "cannot_connect": "Verbindung fehlgeschlagen. Bei der EcoFlow-API prüfe deine Zugangsdaten. Bei einer lokalen Verbindung prüfe Host, Port und dass kein anderer Modbus-Client verbunden ist.",
       "invalid_auth": "Ungültiger Access Key oder Secret Key.",
       "no_devices": "Keine Geräte gefunden. Stelle sicher, dass Geräte in der EcoFlow-App gekoppelt sind.",
       "enhanced_login_failed": "Enhanced-Modus Login fehlgeschlagen. Überprüfe E-Mail und Passwort deines EcoFlow-App-Kontos.",
       "enhanced_decrypt_failed": "Enhanced-Modus Entschlüsselung der Zugangsdaten fehlgeschlagen.",
       "powerstream_requires_standard": "PowerStream benötigt den Standard-Modus mit Developer-API-Schlüsseln.",
       "device_requires_enhanced": "Dieses Gerät benötigt den Enhanced-Modus mit deinem EcoFlow-Konto.",
-      "unknown": "Ein unerwarteter Fehler ist aufgetreten."
+      "unknown": "Ein unerwarteter Fehler ist aufgetreten.",
+      "unsupported_device": "Dieses Gerät ist kein unterstützter dreiphasiger PowerOcean. Nur dieses Modell lässt sich hier per Modbus auslesen.",
+      "serial_mismatch": "Dieses Gerät hat eine andere Seriennummer als der Eintrag. Gib die Adresse desselben PowerOcean an.",
+      "modbus_exception": "Das Gerät hat mit einem Modbus-Fehler geantwortet. Prüfe die Unit-ID und ob Modbus für dein Gerät freigeschaltet ist.",
+      "device_not_on_account": "Dieses Gerät gehört nicht zu dem Konto, mit dem du dich angemeldet hast."
     },
     "abort": {
-      "already_configured": "Dieses EcoFlow-Konto ist bereits konfiguriert.",
+      "already_configured": "Dieses EcoFlow-Konto oder Gerät ist bereits konfiguriert.",
       "reauth_successful": "Erneute Authentifizierung erfolgreich.",
       "reconfigure_successful": "Zugangsdaten erfolgreich aktualisiert."
     }

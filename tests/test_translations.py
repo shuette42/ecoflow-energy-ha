@@ -89,10 +89,13 @@ def _find_async_show_form_calls(tree: ast.Module) -> list[dict]:
         for child in ast.walk(node):
             if not isinstance(child, ast.Call):
                 continue
-            # Match self.async_show_form(...)
+            # Match self.async_show_form(...) and self.async_show_menu(...):
+            # a menu is a step with its own translations (title, description,
+            # menu_options), and without it the gate would call that step an
+            # orphan. A menu has no data_schema, so it adds no schema fields.
             if not (
                 isinstance(child.func, ast.Attribute)
-                and child.func.attr == "async_show_form"
+                and child.func.attr in ("async_show_form", "async_show_menu")
             ):
                 continue
 

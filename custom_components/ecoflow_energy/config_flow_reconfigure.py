@@ -7,7 +7,8 @@ from typing import TYPE_CHECKING, Any
 
 import aiohttp
 import voluptuous as vol
-from homeassistant.config_entries import ConfigFlowResult
+from homeassistant.config_entries import ConfigEntry, ConfigFlowResult
+from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
     TextSelector,
@@ -15,23 +16,44 @@ from homeassistant.helpers.selector import (
     TextSelectorType,
 )
 
+from .config_flow_setup import (
+    LocalDeviceError,
+    local_schema,
+    read_local_device,
+    serial_in_other_entries,
+)
 from .const import (
     AUTH_METHOD_APP,
     CONF_ACCESS_KEY,
     CONF_AUTH_METHOD,
+    CONF_DEVICES,
     CONF_EMAIL,
     CONF_MODE,
     CONF_PASSWORD,
     CONF_SECRET_KEY,
+    CONF_UNIT_ID,
     CONF_USER_ID,
+    DEVICE_TYPE_POWEROCEAN,
     MODE_ENHANCED,
+    MODE_LOCAL,
 )
 from .ecoflow.enhanced_auth import enhanced_login
 from .ecoflow.iot_api import IoTApiClient
+from .ecoflow.modbus_local import MODBUS_DEFAULT_PORT
 
 _LOGGER = logging.getLogger(__name__)
 
 _PASSWORD_SELECTOR = TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD))
+
+
+def _single_powerocean(entry: ConfigEntry) -> bool:
+    """True for an entry that holds exactly one PowerOcean and nothing else.
+
+    A cloud entry is account-wide: switching a multi-device entry to Local
+    would drop its other devices, so only the one-device case may switch.
+    """
+    devices = entry.data.get(CONF_DEVICES, [])
+    return len(devices) == 1 and devices[0].get("device_type") == DEVICE_TYPE_POWEROCEAN
 
 
 if TYPE_CHECKING:
@@ -50,11 +72,94 @@ class ReconfigureFlowMixin(_Base):
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Handle user-initiated credential update."""
+        """Handle user-initiated reconfiguration.
+
+        A one-device PowerOcean entry first asks which way to connect; every
+        other cloud entry goes straight to its credentials as before.
+        """
+        reconfigure_entry = self._get_reconfigure_entry()
+        if reconfigure_entry.data.get(CONF_MODE) == MODE_LOCAL or _single_powerocean(
+            reconfigure_entry
+        ):
+            return await self.async_step_reconfigure_menu()
+        return await self.async_step_reconfigure_credentials()
+
+    async def async_step_reconfigure_menu(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Ask how the entry should connect: a local entry may go back to the cloud."""
+        if self._get_reconfigure_entry().data.get(CONF_MODE) == MODE_LOCAL:
+            options = [
+                "reconfigure_local",
+                "reconfigure_to_standard",
+                "reconfigure_to_enhanced",
+            ]
+        else:
+            options = ["reconfigure_credentials", "reconfigure_local"]
+        return self.async_show_menu(step_id="reconfigure_menu", menu_options=options)
+
+    async def async_step_reconfigure_credentials(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Update the credentials of a cloud entry (Developer keys or account)."""
         reconfigure_entry = self._get_reconfigure_entry()
         if reconfigure_entry.data.get(CONF_AUTH_METHOD) == AUTH_METHOD_APP:
             return await self.async_step_reconfigure_app()
         return await self.async_step_reconfigure_confirm()
+
+    async def async_step_reconfigure_local(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Point the entry at the device's Modbus/TCP port.
+
+        For a cloud entry this is the switch to Local, for a local entry it
+        changes host, port or unit id. Either way the serial read from the
+        device must equal the entry's, so the entities keep their identity.
+        The new data is built from scratch, not copied: a local entry holds
+        no credentials, and the two modes are never mixed in one entry.
+        """
+        errors: dict[str, str] = {}
+        reconfigure_entry = self._get_reconfigure_entry()
+        device = reconfigure_entry.data[CONF_DEVICES][0]
+        host = reconfigure_entry.data.get(CONF_HOST, "")
+        port = reconfigure_entry.data.get(CONF_PORT, MODBUS_DEFAULT_PORT)
+        unit_id = reconfigure_entry.data.get(CONF_UNIT_ID, 1)
+
+        if user_input is not None:
+            host = user_input[CONF_HOST].strip()
+            port = user_input[CONF_PORT]
+            unit_id = user_input[CONF_UNIT_ID]
+            try:
+                info = await read_local_device(host, port, unit_id)
+            except LocalDeviceError as err:
+                errors["base"] = err.reason
+            else:
+                serial = info["serial"]
+                if serial != device["sn"]:
+                    errors["base"] = "serial_mismatch"
+                elif serial_in_other_entries(
+                    self.hass, serial, reconfigure_entry.entry_id
+                ):
+                    return self.async_abort(reason="already_configured")
+                else:
+                    return self.async_update_reload_and_abort(
+                        reconfigure_entry,
+                        unique_id=serial,
+                        data={
+                            CONF_MODE: MODE_LOCAL,
+                            CONF_HOST: host,
+                            CONF_PORT: port,
+                            CONF_UNIT_ID: unit_id,
+                            CONF_DEVICES: [device],
+                        },
+                        reason="reconfigure_successful",
+                    )
+
+        return self.async_show_form(
+            step_id="reconfigure_local",
+            data_schema=local_schema(host, port, unit_id),
+            errors=errors,
+        )
 
     async def async_step_reconfigure_confirm(
         self, user_input: dict[str, Any] | None = None

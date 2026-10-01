@@ -73,6 +73,20 @@ async def _select_mode(hass: HomeAssistant, mode: str = MODE_STANDARD):
     )
 
 
+async def _past_reconfigure_menu(hass: HomeAssistant, result: ConfigFlowResult):
+    """Take the credentials branch of the reconfigure menu, if one is shown.
+
+    An entry holding exactly one PowerOcean first asks how to connect (cloud
+    credentials or the local Modbus connection); every other entry opens its
+    credentials form directly.
+    """
+    if result["type"] is FlowResultType.MENU:
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"next_step_id": "reconfigure_credentials"}
+        )
+    return result
+
+
 async def _advance_app_flow_with_powerstream(hass: HomeAssistant):
     result = await _select_mode(hass, MODE_ENHANCED)
     with (
@@ -2223,6 +2237,7 @@ class TestReconfigureFlow:
             DOMAIN,
             context={"source": SOURCE_RECONFIGURE, "entry_id": entry.entry_id},
         )
+        result = await _past_reconfigure_menu(hass, result)
         with patch(
             "custom_components.ecoflow_energy.config_flow_reconfigure.IoTApiClient",
         ) as mock_cls:
@@ -2258,6 +2273,7 @@ class TestReconfigureFlow:
             DOMAIN,
             context={"source": SOURCE_RECONFIGURE, "entry_id": entry.entry_id},
         )
+        result = await _past_reconfigure_menu(hass, result)
         with patch(
             "custom_components.ecoflow_energy.config_flow_reconfigure.IoTApiClient",
         ) as mock_cls:
@@ -2441,6 +2457,7 @@ class TestAppAuthReconfigureFlow:
             DOMAIN,
             context={"source": SOURCE_RECONFIGURE, "entry_id": entry.entry_id},
         )
+        result = await _past_reconfigure_menu(hass, result)
         assert result["type"] is FlowResultType.FORM
         assert result["step_id"] == "reconfigure_app"
 
@@ -2451,6 +2468,7 @@ class TestAppAuthReconfigureFlow:
             DOMAIN,
             context={"source": SOURCE_RECONFIGURE, "entry_id": entry.entry_id},
         )
+        result = await _past_reconfigure_menu(hass, result)
         with patch(
             "custom_components.ecoflow_energy.config_flow_reconfigure.enhanced_login",
             new_callable=AsyncMock,
@@ -2472,6 +2490,7 @@ class TestAppAuthReconfigureFlow:
             DOMAIN,
             context={"source": SOURCE_RECONFIGURE, "entry_id": entry.entry_id},
         )
+        result = await _past_reconfigure_menu(hass, result)
         with patch(
             "custom_components.ecoflow_energy.config_flow_reconfigure.enhanced_login",
             new_callable=AsyncMock,
@@ -2592,9 +2611,10 @@ class TestReauthReconfigureExceptions:
     async def _init_flow(self, hass: HomeAssistant, entry, source: str):
         context: ConfigFlowContext = {"source": source, "entry_id": entry.entry_id}
         data = entry.data if source == SOURCE_REAUTH else None
-        return await hass.config_entries.flow.async_init(
+        result = await hass.config_entries.flow.async_init(
             DOMAIN, context=context, data=data
         )
+        return await _past_reconfigure_menu(hass, result)
 
     async def _pass_confirm_step(self, hass: HomeAssistant, result, source: str):
         """Submit valid developer keys to advance past the confirm step."""
