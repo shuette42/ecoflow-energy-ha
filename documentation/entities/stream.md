@@ -38,8 +38,8 @@ Full list of all entities created for Stream devices.
 |:---|:---:|:---:|:---:|:---|
 | PV 1 Power | W | - | enabled | Solar string 1 |
 | PV 2 Power | W | - | enabled | Solar string 2 |
-| PV 3 Power | W | diagnostic | *accessory*, disabled | Solar string 3, larger units only. In Enhanced Mode the assignment of strings 3 and 4 is unconfirmed |
-| PV 4 Power | W | diagnostic | *accessory*, disabled | Solar string 4, larger units only. In Enhanced Mode the assignment of strings 3 and 4 is unconfirmed |
+| PV 3 Power | W | - | *accessory*, disabled | Solar string 3, larger units only. In Enhanced Mode one owner reports strings 3 and 4 match the app |
+| PV 4 Power | W | - | *accessory*, disabled | Solar string 4, larger units only. In Enhanced Mode one owner reports strings 3 and 4 match the app |
 | Solar Power | W | diagnostic | disabled | Total solar input, meter-dependent |
 | PV Voltage | V | diagnostic | disabled | Input voltage of string 1 |
 | PV Current | A | diagnostic | disabled | Input current of string 1 |

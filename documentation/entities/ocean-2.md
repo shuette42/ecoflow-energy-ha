@@ -30,8 +30,8 @@ Battery modules are read as well: 12 readings each, created once a module actual
 | Home Power | W | - | enabled | As the device reports it, not derived from the other three |
 | PV 1 Power | W | - | enabled | Per-string solar |
 | PV 2 Power | W | - | enabled | Per-string solar |
-| PV 3 Power | W | diagnostic | disabled | Only wired on some installations, see the note below |
-| PV 4 Power | W | diagnostic | disabled | Only wired on some installations, see the note below |
+| PV 3 Power | W | - | disabled | Only wired on some installations, see the note below |
+| PV 4 Power | W | - | disabled | Only wired on some installations, see the note below |
 | Grid Import Power | W | - | enabled | The positive half of Grid Power |
 | Grid Export Power | W | - | enabled | The negative half of Grid Power, as a positive number |
 | Battery Charge Power | W | - | enabled | The positive half of Battery Power |

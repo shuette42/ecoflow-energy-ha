@@ -31,6 +31,7 @@ from custom_components.ecoflow_energy.const import (
     DEVICE_TYPE_STREAM,
     DOMAIN,
     MODE_ENHANCED,
+    OCEAN2_SENSORS,
     STREAM_SENSORS,
 )
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
@@ -158,6 +159,30 @@ class TestDefinitions:
 
         for key in HIGHER_STRING_KEYS:
             assert by_key[key].disabled_by_default is True
+
+
+class TestCategory:
+    """Where the string readings are listed on the device page."""
+
+    def test_every_string_power_sits_with_the_sensors(self) -> None:
+        """A wired string is a primary reading, so strings 3 and 4 are listed
+        next to strings 1 and 2 and not under Diagnostic (#139)."""
+        by_key = {sensor.key: sensor for sensor in STREAM_SENSORS}
+
+        for key in ("pv1_w", "pv2_w", "pv3_w", "pv4_w"):
+            assert by_key[key].entity_category is None
+
+    def test_every_string_power_sits_with_the_sensors_on_the_ocean_2(self) -> None:
+        by_key = {sensor.key: sensor for sensor in OCEAN2_SENSORS}
+
+        for key in ("pv1_w", "pv2_w", "pv3_w", "pv4_w"):
+            assert by_key[key].entity_category is None
+
+    def test_the_energy_counters_stay_diagnostic_as_for_strings_1_and_2(self) -> None:
+        by_key = {sensor.key: sensor for sensor in STREAM_SENSORS}
+
+        for key in ("pv1_energy_kwh", "pv2_energy_kwh", "pv3_energy_kwh", "pv4_energy_kwh"):
+            assert by_key[key].entity_category == "diagnostic"
 
 
 class TestGating:
