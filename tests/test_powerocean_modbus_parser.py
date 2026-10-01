@@ -102,7 +102,7 @@ def _poll_blocks(frame):
 
 
 def _setup_blocks(device):
-    """Identity registers: u16 triple, serial as ASCII, firmware bytes in wire order."""
+    """Identity registers: u16 triple, serial as ASCII, firmware as a word-swapped UINT32."""
     return {
         0x0000: struct.pack(
             ">HHH",
@@ -193,7 +193,7 @@ def test_the_lifetime_counters_are_exactly_the_five_energy_registers():
     assert expected == LIFETIME_COUNTER_KEYS
 
 
-def test_device_info_reads_identity_with_firmware_in_wire_order():
+def test_device_info_reads_identity_with_firmware_as_a_word_swapped_uint32():
     info = parse_device_info(_setup_blocks(DEVICE))
 
     assert info == {
@@ -201,7 +201,7 @@ def test_device_info_reads_identity_with_firmware_in_wire_order():
         "product_category": 1,
         "product_number": 1,
         "serial": "HJ31DUMMY0000001",
-        "firmware": "37.10.5.1",
+        "firmware": "5.1.37.10",
     }
     assert is_supported_device(info)
     assert not is_supported_device({**info, "product_number": 3})

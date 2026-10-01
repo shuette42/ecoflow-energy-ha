@@ -212,7 +212,7 @@ async def test_setup_creates_a_credential_free_local_entry(
                 "product_name": "PowerOcean",
                 "device_type": DEVICE_TYPE_POWEROCEAN,
                 "online": 1,
-                "sw_version": "37.10.5.1",
+                "sw_version": "5.1.37.10",
             }
         ],
     }

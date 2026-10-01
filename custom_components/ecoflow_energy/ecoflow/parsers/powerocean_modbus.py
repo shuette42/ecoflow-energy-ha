@@ -134,11 +134,12 @@ def parse_device_info(blocks: Mapping[int, bytes]) -> dict[str, Any]:
     if raw is not None:
         info["serial"] = decode_ascii(raw)
 
-    # Firmware bytes are not word-swapped: 25 0a 05 01 is 37.10.5.1.
-    # unverified against the app
+    # A UINT32 arrives word-swapped like every other 32-bit register: the
+    # wire bytes 25 0a 05 01 are the value 0x0501250a, shown by the app as
+    # 5.1.37.10 (confirmed by the owner of the reference device).
     raw = _slice(blocks, 0x000B, 2)
     if raw is not None:
-        info["firmware"] = ".".join(str(byte) for byte in raw)
+        info["firmware"] = ".".join(str(byte) for byte in raw[2:4] + raw[0:2])
     return info
 
 

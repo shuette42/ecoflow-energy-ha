@@ -437,7 +437,7 @@ async def test_the_serial_is_read_on_the_first_poll_only_and_firmware_is_kept(
     await coordinator.async_refresh()
 
     assert stub.requested == [SETUP_BLOCKS + POLL_BLOCKS, POLL_BLOCKS]
-    assert coordinator.device_info["sw_version"] == "37.10.5.1"
+    assert coordinator.device_info["sw_version"] == "5.1.37.10"
 
 
 async def test_the_serial_is_read_again_after_the_device_was_unavailable(
