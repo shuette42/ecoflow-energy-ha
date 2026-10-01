@@ -5,6 +5,7 @@ import contextlib
 import socket
 import struct
 import time
+from typing import Any
 
 import pytest
 from ecoflow_energy.ecoflow.modbus_local import (
@@ -30,11 +31,13 @@ _REQUEST_LEN = 12  # MBAP (7) + function (1) + address (2) + count (2)
 async def _serve(handler):
     """Run a fake Modbus device on a free loopback port and yield the port."""
     writers = []
-    handlers = []
+    handlers: list[asyncio.Task[Any]] = []
 
     async def on_connect(reader, writer):
         writers.append(writer)
-        handlers.append(asyncio.current_task())
+        task = asyncio.current_task()
+        assert task is not None
+        handlers.append(task)
         with contextlib.suppress(asyncio.IncompleteReadError, ConnectionError):
             await handler(reader, writer)
 
