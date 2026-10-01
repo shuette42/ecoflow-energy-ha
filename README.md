@@ -3,7 +3,7 @@
 # EcoFlow Energy for Home Assistant
 
 **Real-time solar, battery, grid & home power monitoring.**
-**Energy Dashboard ready. Two modes: official API or real-time app connection.**
+**Energy Dashboard ready. Two cloud modes: official API or real-time app connection. Plus a local Modbus connection for the three-phase PowerOcean.**
 
 [![HACS Default](https://img.shields.io/badge/HACS-Default-30D158?style=for-the-badge&logo=home-assistant&logoColor=white)](https://github.com/hacs/integration)
 [![GitHub Release](https://img.shields.io/github/v/release/shuette42/ecoflow-energy-ha?style=for-the-badge&color=30D158)](https://github.com/shuette42/ecoflow-energy-ha/releases)
@@ -193,7 +193,7 @@ Already running a different EcoFlow integration? It can stay installed while you
 
 ### 2. Configure
 
-**Settings > Devices & Services > Add Integration** > search **EcoFlow Energy** > choose your mode:
+**Settings > Devices & Services > Add Integration** > search **EcoFlow Energy** > choose your mode. For a three-phase PowerOcean there is also Local (Modbus/TCP), described below the table. The two cloud modes compare like this:
 
 | | Standard | Enhanced |
 |:---|:---|:---|
@@ -209,11 +209,11 @@ Already running a different EcoFlow integration? It can stay installed while you
 | **Stability** | Official EcoFlow API - supported and stable | Community-driven - unofficial, use at your own risk |
 | **Best for** | Reliable long-term operation | Real-time monitoring, fast automations, PowerOcean control |
 
-**Both modes are cloud-based.** The data travels from your device to EcoFlow's servers and from there to Home Assistant, so an internet connection is required and outages on EcoFlow's side are visible here. These devices expose no local API to talk to instead. The difference between the two modes is which EcoFlow service is used and how fast it delivers, not whether the connection leaves your network.
+**Both modes are cloud-based.** The data travels from your device to EcoFlow's servers and from there to Home Assistant, so an internet connection is required and outages on EcoFlow's side are visible here. The difference between the two cloud modes is which EcoFlow service is used and how fast it delivers, not whether the connection leaves your network. These devices expose no local API to talk to instead, with one exception: the three-phase PowerOcean. Once EcoFlow support has enabled Modbus on the inverter, a third connection type reads it over your network, with no account and no cloud (see [Reading a PowerOcean locally over Modbus](documentation/guides/powerocean-local-modbus.md)). An entry uses exactly one connection type, so a PowerOcean runs either on the cloud or locally.
 
 **Standard Mode** uses the official EcoFlow IoT Developer API. Apply for free API keys at [developer.ecoflow.com](https://developer.ecoflow.com). Note: the European PowerOcean variants (`J327`, `J32D`, `J32E`), the PowerOcean Plus units (`R371`, `R372`, `R374`, `HJ3C`), the Stream Micro (`BK01`) and both STREAM 5000 models (`ES21`, `ES22`) are currently not exposed through the Developer API and cannot be linked to an API key (error 1006). These devices work in Enhanced Mode only. The same holds for every other device marked Enhanced only in the Supported Devices table, among them the Ocean 2 (`RE11`, `RE17`, `RE41`, `RE42`) and the PowerPulse 2 (`C376`, `C374`). Whether the 3.68 kW and 6 kW single-phase variants (`J32B`, `J329`) can be linked to a key has not been tested.
 
-> **PowerOcean owners: use Enhanced Mode.** On a PowerOcean the Developer API serves the copy EcoFlow's cloud holds, and that copy refreshes reliably only while the EcoFlow app or web portal is open. With the app closed the readings can stand still for hours and then jump, while the integration polls every 30 seconds throughout: the poll is healthy, the data behind it is not. Getting a PowerOcean to update without somebody looking at the app is what this integration's Enhanced Mode was built for, after months of trying to keep the official path fresh by other means. One owner has since reported the same pattern independently ([#267](https://github.com/shuette42/ecoflow-energy-ha/issues/267)): readings moving twice in a day, everything else looking normal.
+> **PowerOcean owners: use Enhanced Mode.** On a PowerOcean the Developer API serves the copy EcoFlow's cloud holds, and that copy refreshes reliably only while the EcoFlow app or web portal is open. With the app closed the readings can stand still for hours and then jump, while the integration polls every 30 seconds throughout: the poll is healthy, the data behind it is not. Getting a PowerOcean to update without somebody looking at the app is what this integration's Enhanced Mode was built for, after months of trying to keep the official path fresh by other means. One owner has since reported the same pattern independently ([#267](https://github.com/shuette42/ecoflow-energy-ha/issues/267)): readings moving twice in a day, everything else looking normal. If you own a three-phase PowerOcean and EcoFlow support has enabled Modbus, the local connection is a third option. It reads the inverter without the cloud, but it is read-only and shows the main readings, not everything the account connection does.
 >
 > If you are on Standard Mode and want to check your own system, a diagnostics download answers it directly. `last_value_change_age_s` says how long ago any value actually moved, and `unchanged_updates` counts how many polls in a row carried nothing new. A large pair of numbers next to a healthy 30 second interval is this behaviour.
 >

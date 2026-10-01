@@ -84,9 +84,11 @@ Assistant counts.
 
 ### 4. The device decides the mode, not you
 
-The integration has two modes, never mixed in one entry: Standard Mode uses
+The integration has two cloud modes, never mixed in one entry: Standard Mode uses
 Developer API keys and HTTP polling, Enhanced Mode the account sign-in and a
-push connection. Some devices exist only on the account connection: the
+push connection. A third connection type, Local (Modbus/TCP), reads the
+three-phase PowerOcean over the network. It is read-only and not a place to
+add a new device. Some devices exist only on the account connection: the
 Developer API lists them but rejects every quota request for their serial with
 error `1006`. To see it, add the device to a Standard Mode entry: the Home
 Assistant log for the integration then reports `1006` for that serial and the
