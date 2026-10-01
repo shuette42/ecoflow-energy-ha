@@ -21,7 +21,7 @@ from ecoflow_energy.ecoflow.modbus_local import (
 )
 
 # The HA test harness blocks sockets; these tests talk to a fake device on loopback.
-pytestmark = pytest.mark.enable_socket
+pytestmark = pytest.mark.usefixtures("socket_enabled")
 
 _REQUEST_LEN = 12  # MBAP (7) + function (1) + address (2) + count (2)
 
@@ -30,9 +30,11 @@ _REQUEST_LEN = 12  # MBAP (7) + function (1) + address (2) + count (2)
 async def _serve(handler):
     """Run a fake Modbus device on a free loopback port and yield the port."""
     writers = []
+    handlers = []
 
     async def on_connect(reader, writer):
         writers.append(writer)
+        handlers.append(asyncio.current_task())
         with contextlib.suppress(asyncio.IncompleteReadError, ConnectionError):
             await handler(reader, writer)
 
@@ -43,6 +45,11 @@ async def _serve(handler):
     finally:
         for writer in writers:
             writer.close()
+        # A handler may still sleep when the client gave up; end it here so
+        # no task outlives the test.
+        for task in handlers:
+            task.cancel()
+        await asyncio.gather(*handlers, return_exceptions=True)
         server.close()
         await asyncio.wait_for(server.wait_closed(), 2)
 

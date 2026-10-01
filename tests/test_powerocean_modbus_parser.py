@@ -102,7 +102,7 @@ def _poll_blocks(frame):
 
 
 def _setup_blocks(device):
-    """Identity registers: u16 triple, serial as ASCII, firmware as a word-swapped UINT32."""
+    """Identity registers: u16 triple, serial as ASCII, firmware as UINT32."""
     return {
         0x0000: struct.pack(
             ">HHH",
