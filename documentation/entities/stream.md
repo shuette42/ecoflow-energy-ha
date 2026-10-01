@@ -10,7 +10,7 @@ Full list of all entities created for Stream devices.
 
 > Entities marked with *disabled* are available but hidden by default. Enable them in **Settings > Devices > EcoFlow Stream > Entities** (click the filter icon and show disabled entities).
 
-> **Both modes are supported.** Standard Mode polls the official Developer API (~30 s), Enhanced Mode uses the real-time connection (~3 s). Writable numbers require Enhanced Mode. The difference is solar detail: Standard Mode reports all four strings, Enhanced Mode reports PV 1 and PV 2 with their input voltage and current, plus the power of strings 3 and 4. Which of those two readings is string 3 and which is string 4 has not been checked against the app yet.
+> **Both modes are supported.** Standard Mode polls the official Developer API (~30 s), Enhanced Mode uses the real-time connection (~3 s). Writable numbers require Enhanced Mode. The difference is solar detail: Standard Mode reports all four strings, Enhanced Mode reports PV 1 and PV 2 with their input voltage and current, plus the power of strings 3 and 4. One owner compared them with the app and reports that string 3 and string 4 are the right way round.
 
 > **Entities marked *accessory* are created only once the device actually reports that reading**, and they appear on their own the moment it does, without a restart. Solar strings 3 and 4 carry that mark: only the larger units drive them, so listing them for everyone would leave most owners with two entities that can never fill. They wait for a reading above zero, because a Stream AC Pro has no such inputs and still sends both as 0. A string that is dark when Home Assistant starts shows up with its first daylight reading.
 
