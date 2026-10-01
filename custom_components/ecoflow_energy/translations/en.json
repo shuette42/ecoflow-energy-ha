@@ -339,6 +339,18 @@
       "grid_export_energy_kwh": {
         "name": "Grid Export Energy"
       },
+      "solar_lifetime_energy_kwh": {
+        "name": "Solar Lifetime Energy"
+      },
+      "grid_import_lifetime_energy_kwh": {
+        "name": "Grid Import Lifetime Energy"
+      },
+      "grid_export_lifetime_energy_kwh": {
+        "name": "Grid Export Lifetime Energy"
+      },
+      "fault_count": {
+        "name": "Fault Count"
+      },
       "batt_charge_energy_kwh": {
         "name": "Battery Charge Energy"
       },

@@ -95,7 +95,7 @@ def test_u16_is_big_endian_and_ascii_drops_padding():
 
 @pytest.mark.asyncio
 async def test_read_blocks_sends_function_03_at_base_plus_offset_on_one_connection():
-    seen = []
+    seen: list[tuple[int, int, int, int]] = []
     connections = []
 
     async def handler(reader, writer):

@@ -339,6 +339,18 @@
       "grid_export_energy_kwh": {
         "name": "Netzeinspeiseenergie"
       },
+      "solar_lifetime_energy_kwh": {
+        "name": "Lebensdauer-Solarenergie"
+      },
+      "grid_import_lifetime_energy_kwh": {
+        "name": "Lebensdauer-Netzbezugsenergie"
+      },
+      "grid_export_lifetime_energy_kwh": {
+        "name": "Lebensdauer-Netzeinspeiseenergie"
+      },
+      "fault_count": {
+        "name": "Fehleranzahl"
+      },
       "batt_charge_energy_kwh": {
         "name": "Batterieladeenergie"
       },

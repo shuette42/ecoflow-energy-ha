@@ -19,11 +19,13 @@ give one failure two owners: the translation-key contract lives in
 ``tests/test_translations.py``.
 
 A block counts as dispatched when a dispatcher returned the block object
-itself, or returned a non-empty selection whose definitions are all members
-of that block. The comparison is by definition-object identity rather than
-by key, because several device families name the same reading with the same
-key: a new block copied from an existing one would otherwise inherit that
-key's reachability and read as covered while nothing dispatches it.
+itself, returned a non-empty selection whose definitions are all members of
+that block, or returned a list that contains every definition of the block
+(the Local entry's list is the shared PowerOcean definitions plus its own).
+The comparison is by definition-object identity rather than by key, because
+several device families name the same reading with the same key: a new block
+copied from an existing one would otherwise inherit that key's reachability
+and read as covered while nothing dispatches it.
 """
 
 from __future__ import annotations
@@ -45,6 +47,7 @@ from ecoflow_energy.switch import _get_switch_defs
 COMPONENT_DIR = Path(__file__).resolve().parent.parent / "custom_components"
 CONST_PY = COMPONENT_DIR / "ecoflow_energy" / "const.py"
 BUTTON_PY = COMPONENT_DIR / "ecoflow_energy" / "button.py"
+SENSOR_PY = COMPONENT_DIR / "ecoflow_energy" / "sensor.py"
 
 PLATFORM_SUFFIXES = (
     "SENSORS",
@@ -78,6 +81,19 @@ def _button_defs(device_type: str, device_sn: str) -> list[Any]:
     if device_type == EC.DEVICE_TYPE_POWERPULSE2:
         return C.POWERPULSE2_BUTTONS
     return []
+
+
+def _local_sensor_defs() -> list[Any]:
+    """Mirror the sensor platform's Local branch.
+
+    A Local (Modbus/TCP) entry does not go through `_get_sensor_defs`:
+    ``sensor.py`` selects its list inline in ``async_setup_entry``. The
+    four sensors that exist only there would read as unreachable without this
+    shim, and `test_sensor_platform_local_branch_is_the_only_one` below fails
+    if the platform ever names a different list, so the shim cannot drift
+    away from it unnoticed.
+    """
+    return C.POWEROCEAN_LOCAL_SENSOR_DEFS
 
 
 # Every dispatcher is called as (device_type, device_sn); the two that ignore
@@ -126,6 +142,7 @@ def _dispatcher_outputs() -> list[list[Any]]:
         for device_sn in SERIALS:
             for dispatch in DISPATCHERS.values():
                 outputs.append(dispatch(device_type, device_sn))
+    outputs.append(_local_sensor_defs())
     return outputs
 
 
@@ -144,6 +161,11 @@ def _is_dispatched(block: list[Any]) -> bool:
         # unknown device type is a subset of everything, and would otherwise
         # mark every block reachable.
         if output and member_ids.issuperset({id(item) for item in output}):
+            return True
+        # The other direction: a composed list that carries the whole block,
+        # as the Local entry's list does (shared definitions plus its own).
+        # `member_ids` first, so an empty block is not reached by everything.
+        if member_ids and member_ids.issubset({id(item) for item in output}):
             return True
     return False
 
@@ -208,6 +230,29 @@ def test_button_platform_branch_is_the_only_one() -> None:
         f"that branch in `_button_defs`. button.py now names {sorted(named)} - "
         "update the shim, or the new list is never checked for reachability."
     )
+
+
+def test_sensor_platform_local_branch_is_the_only_one() -> None:
+    """`_local_sensor_defs` mirrors sensor.py, so sensor.py may name only that list."""
+    named = set(re.findall(r"\b[A-Z0-9]+_LOCAL_SENSOR_DEFS\b", SENSOR_PY.read_text()))
+    assert named == {"POWEROCEAN_LOCAL_SENSOR_DEFS"}, (
+        "sensor.py selects the Local entry's sensor definitions inline and this "
+        f"test file mirrors that branch in `_local_sensor_defs`. sensor.py now "
+        f"names {sorted(named)} - update the shim, or the new list is never "
+        "checked for reachability."
+    )
+
+
+def test_reachability_check_tells_dispatched_from_undispatched() -> None:
+    """Control for the two tests below: the check can say no, and can say yes.
+
+    A block no dispatcher returns must read as orphaned, and the Local-only
+    block - reachable only through a composed list - must read as dispatched.
+    Without both, a green `test_no_orphaned_definition_block` proves nothing.
+    """
+    stranger = [C.EcoFlowSensorDef("never_dispatched_probe", "Never Dispatched")]
+    assert not _is_dispatched(stranger)
+    assert _is_dispatched(C.POWEROCEANLOCALONLY_SENSORS)
 
 
 def test_no_orphaned_definition_block() -> None:

@@ -232,6 +232,19 @@ There is no grid sensor per inverter. The grid figure the pair reports per inver
 
 ---
 
+## Sensors - Local Modbus Only
+
+These four sensors exist only in a Local (Modbus/TCP) entry. Standard Mode and Enhanced Mode never create them. The three energy counters are the device's own lifetime counters, read as the device reports them.
+
+| Entity | Unit | Category | Default |
+|:---|:---:|:---:|:---:|
+| Solar Lifetime Energy | kWh | - | enabled |
+| Grid Import Lifetime Energy | kWh | - | enabled |
+| Grid Export Lifetime Energy | kWh | - | enabled |
+| Fault Count | - | diagnostic | enabled |
+
+---
+
 ## Binary Sensors (diagnostic)
 
 These come from the Enhanced Mode telemetry only. All are disabled by default,

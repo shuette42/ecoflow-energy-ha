@@ -13,7 +13,9 @@ disappearing, not their capitalisation.
 Four checks, in order of importance:
 
 1. No orphaned documentation row: every entity name in a documentation table
-   exists as a `name` on some definition mapped to that file.
+   exists as a `name` on some definition mapped to that file. A file may be
+   the catalog of several families (powerocean.md carries POWEROCEAN and
+   POWEROCEANLOCALONLY); the names of all of them count for the file.
 2. No undocumented entity: every `name` on a mapped definition list appears
    in its file's tables.
 3. Every table that names entities is actually routed to a platform: a table
@@ -123,6 +125,10 @@ FAMILY_TO_FILE: dict[str, str] = {
     "POWERPULSE2": "powerpulse-2.md",
     "OCEAN2": "ocean-2.md",
     "SMARTPANEL40": "smart-panel-40.md",
+    # The sensors that exist only in a PowerOcean Local (Modbus/TCP) entry
+    # share the PowerOcean page: one device, one page. A file may therefore
+    # carry several families; see _known_keys.
+    "POWEROCEANLOCALONLY": "powerocean.md",
 }
 
 # Doc files that document a SUBSET of a family's entities under their own
@@ -960,6 +966,28 @@ _FAMILY_PLATFORM_PAIRS = [
 ]
 
 
+def _families_sharing_file(family: str) -> tuple[str, ...]:
+    """Every family whose catalog is the same file as `family`'s, itself included."""
+    filename = FAMILY_TO_FILE[family]
+    return tuple(f for f, mapped in FAMILY_TO_FILE.items() if mapped == filename)
+
+
+def _known_keys(family: str, platform: str) -> set[str]:
+    """The entity names a row in `family`'s file may legitimately carry.
+
+    A file can be the catalog of more than one family (powerocean.md carries
+    POWEROCEAN and POWEROCEANLOCALONLY). A row belongs to the file, not to one
+    family, so the orphan check accepts the union of the names of all of them.
+    Checked against one family alone, the rows of its sibling would read as
+    orphans in both directions.
+    """
+    return {
+        _key(d.name)
+        for sibling in _families_sharing_file(family)
+        for d in DEFINITION_LISTS[sibling].get(platform, ())
+    }
+
+
 def _format_missing_row(definition, platform: str) -> str:
     """Render a definition as a copy-paste-able row in the common
     'Entity | Unit | Description' shape most tables in this repo use."""
@@ -1010,18 +1038,22 @@ def test_no_orphaned_documentation_row(family: str, platform: str):
     documents a subset of it (FAMILY_TO_EXTRA_ORPHAN_FILES) - a row in
     either one is only accepted when _row_is_orphan_free confirms every
     entity it names (there can be more than one compressed into a single
-    row) is real.
+    row) is real. "Real" means a name on this family or on any family that
+    shares the file (see _known_keys).
     """
     filenames = (FAMILY_TO_FILE[family], *FAMILY_TO_EXTRA_ORPHAN_FILES.get(family, ()))
-    definitions = DEFINITION_LISTS[family][platform]
-    known_keys = {_key(d.name) for d in definitions}
+    known_keys = _known_keys(family, platform)
+    siblings = _families_sharing_file(family)
 
     orphans: list[tuple[str, str, int]] = []
     for filename in filenames:
         for raw_name, line in _doc_tables(filename)[platform]:
             if _row_is_orphan_free(raw_name, known_keys):
                 continue
-            if _matches_any(raw_name, family, platform, EXCLUDE_FROM_ORPHAN):
+            if any(
+                _matches_any(raw_name, sibling, platform, EXCLUDE_FROM_ORPHAN)
+                for sibling in siblings
+            ):
                 continue
             orphans.append((filename, raw_name, line))
 
@@ -1358,3 +1390,19 @@ def test_gate_catches_an_unclassified_entity_table(tmp_path: Path):
     assert parsed.unclassified_entity_tables == [
         (3, "Something With No Platform Keyword")
     ]
+
+
+def test_a_file_carrying_two_families_accepts_the_names_of_both():
+    """powerocean.md catalogs POWEROCEAN and POWEROCEANLOCALONLY, so a row of
+    either is a legitimate row of the file. A file with one family keeps
+    accepting only that family's names.
+    """
+    shared = _known_keys("POWEROCEAN", "sensors")
+    shared_name = _key(DEFINITION_LISTS["POWEROCEAN"]["sensors"][0].name)
+    local_only_name = _key(DEFINITION_LISTS["POWEROCEANLOCALONLY"]["sensors"][0].name)
+    assert shared == _known_keys("POWEROCEANLOCALONLY", "sensors")
+    assert shared_name in shared
+    assert local_only_name in shared
+
+    assert _families_sharing_file("DELTA2MAX") == ("DELTA2MAX",)
+    assert local_only_name not in _known_keys("DELTA2MAX", "sensors")

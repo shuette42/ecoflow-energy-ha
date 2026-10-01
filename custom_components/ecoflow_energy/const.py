@@ -2290,10 +2290,12 @@ POWEROCEAN_LOCAL_KEYS: frozenset[str] = frozenset(
 # into one hour of the Energy Dashboard. The integrated keys are not
 # published in Local mode, and nothing is integrated there.
 #
-# Not named `*_SENSORS` on purpose: the definition-list gates discover a block
-# by that suffix and would then demand translations and a documentation entry
-# for it, which land with the config flow and the entity documentation.
-POWEROCEAN_LOCAL_EXTRA_DEFS: list[EcoFlowSensorDef] = [
+# Named `*_SENSORS` so the definition-list gates discover it: every key here
+# needs a translation and a row in the PowerOcean entity documentation, and
+# the gates demand both. The family is one token (`POWEROCEANLOCALONLY`)
+# because block discovery matches exactly one family token before the suffix
+# (see `test_definition_block_names_follow_the_convention`).
+POWEROCEANLOCALONLY_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef(
         "solar_lifetime_energy_kwh",
         "Solar Lifetime Energy",
@@ -2338,7 +2340,7 @@ POWEROCEAN_LOCAL_SENSOR_DEFS: list[EcoFlowSensorDef] = [
     sensor_def
     for sensor_def in POWEROCEAN_SENSORS
     if sensor_def.key in POWEROCEAN_LOCAL_KEYS
-] + POWEROCEAN_LOCAL_EXTRA_DEFS
+] + POWEROCEANLOCALONLY_SENSORS
 
 # The device counters that may only grow. Derived from the definitions, so a
 # counter added to the list above is held without a second registration.
