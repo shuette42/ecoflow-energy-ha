@@ -9,6 +9,10 @@ applies to a device that reports its own lifetime counters.
 Availability follows the poll: failures 1 and 2 keep the last data, the third
 in a row marks the device unavailable, and one success restores it. An entry
 without credentials never starts a reauth.
+
+The device's serial number is read on the first poll and again on the first
+poll after the device was unavailable. A different serial (another device at
+the same address, or a changed unit id) is a failed poll, never data.
 """
 
 from __future__ import annotations
@@ -33,15 +37,16 @@ from ..const import (
     LOCAL_MODBUS_FAILURES_UNAVAILABLE,
     LOCAL_MODBUS_POLL_INTERVAL_S,
     LOCAL_MODBUS_TIMEOUT_S,
-    POWEROCEAN_LOCAL_COUNTER_KEYS,
 )
 from ..ecoflow.const import device_log_tag, get_device_name
 from ..ecoflow.modbus_local import (
     MODBUS_DEFAULT_PORT,
+    ModbusExceptionResponse,
     ModbusLocalClient,
     ModbusLocalError,
 )
 from ..ecoflow.parsers.powerocean_modbus import (
+    LIFETIME_COUNTER_KEYS,
     POLL_BLOCKS,
     SETUP_BLOCKS,
     parse_device_info,
@@ -49,6 +54,10 @@ from ..ecoflow.parsers.powerocean_modbus import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+
+class _SerialMismatchError(ModbusLocalError):
+    """The device at the configured address reports another serial number."""
 
 
 class _BlockReader(Protocol):
@@ -100,6 +109,12 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         # Accumulated readings; a poll only overwrites the keys it delivered.
         self._device_data: dict[str, Any] = {}
+        # Lower bound per lifetime counter, taken from the restored sensor state.
+        self._counter_floor: dict[str, float] = {}
+        # False until the serial was read and matched; reset when the device
+        # becomes unavailable, so the next answer is checked again.
+        self._identity_verified: bool = False
+        self._mismatch_warned: bool = False
         self._device_available: bool = True
         self._consecutive_failures: int = 0
         self.last_poll_ok: bool | None = None
@@ -162,7 +177,24 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return info
 
     def seed_energy_total(self, key: str, total_kwh: float) -> None:
-        """Accept a restored total and ignore it: nothing is integrated here."""
+        """Take a restored counter value as the lowest the device may publish.
+
+        Nothing is integrated here, but a restored value is the best memory of
+        where the device's lifetime counter stood. A reading below it (a bad
+        read after a restart, when no earlier reading exists to compare with)
+        is not published: the entity falls back to the restored value until the
+        device passes it. The first poll runs before the entities are added,
+        so a value it already published below the floor is withdrawn too.
+        """
+        if key not in LIFETIME_COUNTER_KEYS:
+            return
+        floor = max(total_kwh, self._counter_floor.get(key, 0.0))
+        self._counter_floor[key] = floor
+        published = self._device_data.get(key)
+        if published is not None and published < floor:
+            del self._device_data[key]
+            if self.data is not None:
+                self.data.pop(key, None)
 
     # ------------------------------------------------------------------
     # Polling
@@ -170,16 +202,27 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Read the register blocks and fold them into the accumulated data."""
-        # Identity blocks are read once, until the firmware version is known.
-        blocks = POLL_BLOCKS if self._sw_version else SETUP_BLOCKS + POLL_BLOCKS
+        # The identity blocks ride along until the serial was read and matched.
+        blocks = POLL_BLOCKS if self._identity_verified else SETUP_BLOCKS + POLL_BLOCKS
         try:
             raw = await self._client.read_blocks(blocks)
         except ModbusLocalError as err:
             return self._handle_failure(err)
 
+        if not self._identity_verified:
+            info = parse_device_info(raw)
+            serial = info.get("serial", "")
+            if serial != self.device_sn:
+                return self._handle_failure(
+                    _SerialMismatchError(
+                        "serial mismatch: the device at this address reports a "
+                        f"serial starting with {serial[:4] or '(none)'}"
+                    )
+                )
+            self._identity_verified = True
+            self._sw_version = info.get("firmware") or self._sw_version
+
         self._handle_success()
-        if not self._sw_version:
-            self._sw_version = parse_device_info(raw).get("firmware", "")
         parsed = parse_registers(raw)
         self._hold_counters(parsed)
         self._device_data.update(parsed)
@@ -199,6 +242,18 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 f"Local Modbus device {self.device_tag} not reachable: {err}"
             ) from err
 
+        if isinstance(err, _SerialMismatchError) and not self._mismatch_warned:
+            # A configuration problem the user must act on, so it is worth a
+            # WARNING, once. The first poll of an entry takes the UpdateFailed
+            # path above, which Home Assistant reports itself.
+            self._mismatch_warned = True
+            _LOGGER.warning(
+                "Local Modbus %s: %s. Check host, port and unit id, or remove "
+                "the entry and add it again for the right device",
+                self.device_tag,
+                err,
+            )
+
         if self._consecutive_failures < LOCAL_MODBUS_FAILURES_UNAVAILABLE:
             _LOGGER.debug(
                 "Local Modbus poll failed for %s (%d in a row): %s",
@@ -208,13 +263,25 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
         elif self._device_available:
             self._device_available = False
-            _LOGGER.warning(
-                "Local Modbus device %s is not answering (%s). Check that Modbus "
-                "is enabled on the device (EcoFlow support enables it) and that "
-                "no other Modbus client holds its single connection",
-                self.device_tag,
-                err,
-            )
+            # Whatever answers next is checked against the entry's serial again.
+            self._identity_verified = False
+            if isinstance(err, ModbusExceptionResponse):
+                _LOGGER.warning(
+                    "Local Modbus device %s rejected a read (%s). The register "
+                    "map may have changed with a firmware update. If this "
+                    "continues, report it with the diagnostics download",
+                    self.device_tag,
+                    err,
+                )
+            elif not isinstance(err, _SerialMismatchError):
+                _LOGGER.warning(
+                    "Local Modbus device %s is not answering (%s). Check that "
+                    "Modbus is enabled on the device (EcoFlow support enables "
+                    "it) and that no other Modbus client holds its single "
+                    "connection",
+                    self.device_tag,
+                    err,
+                )
         else:
             _LOGGER.debug(
                 "Local Modbus device %s still not answering (%d in a row): %s",
@@ -231,6 +298,7 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         recovered = not self._device_available
         self._consecutive_failures = 0
         self._device_available = True
+        self._mismatch_warned = False
         self.last_poll_ok = True
         self.last_poll_time = dt_util.utcnow()
         self.last_error = None
@@ -238,21 +306,30 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             _LOGGER.info("Local Modbus device %s is answering again", self.device_tag)
 
     def _hold_counters(self, parsed: dict[str, Any]) -> None:
-        """Drop a counter reading that is lower than the last published one.
+        """Drop a counter reading that is lower than the lowest it may be.
 
         A lifetime counter only grows. A lower value is a bad read, and
-        publishing it would register as a meter reset in the statistics.
+        publishing it would register as a meter reset in the statistics. The
+        bound is the last published value or, if that is higher, the restored
+        value from ``seed_energy_total``: right after a restart there is no
+        last published value, and the restored one is all there is to compare.
         """
-        for key in POWEROCEAN_LOCAL_COUNTER_KEYS:
+        for key in LIFETIME_COUNTER_KEYS:
             new = parsed.get(key)
+            if new is None:
+                continue
             last = self._device_data.get(key)
-            if new is None or last is None or new >= last:
+            lowest = max(
+                last if last is not None else 0.0,
+                self._counter_floor.get(key, 0.0),
+            )
+            if new >= lowest:
                 continue
             _LOGGER.debug(
-                "Local Modbus %s: ignoring %s reading %s below last value %s",
+                "Local Modbus %s: ignoring %s reading %s below %s",
                 self.device_tag,
                 key,
                 new,
-                last,
+                lowest,
             )
             del parsed[key]

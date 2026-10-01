@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 from ecoflow_energy.ecoflow.parsers.powerocean_modbus import (
+    LIFETIME_COUNTER_KEYS,
     POLL_BLOCKS,
     SETUP_BLOCKS,
     is_supported_device,
@@ -41,9 +42,6 @@ _REGISTERS = {
     "pv3_current": (0x025D, "f32"),
     "fault_count": (0x0800, "u16"),
     "batteries_online": (0x0820, "u16"),
-    "battery_1_soc": (0x0821, "u16"),
-    "battery_2_soc": (0x0822, "u16"),
-    "battery_3_soc": (0x0823, "u16"),
     "grid_draw_total_kwh": (0x0870, "f32"),
     "grid_feed_total_kwh": (0x0880, "f32"),
     "bat_charge_total_kwh": (0x08B0, "f32"),
@@ -67,8 +65,6 @@ KEY_TO_FIELD = {
     "mppt_pv2_current_a": "pv2_current",
     "fault_count": "fault_count",
     "bp_online_sum": "batteries_online",
-    "pack1_soc": "battery_1_soc",
-    "pack2_soc": "battery_2_soc",
     "batt_charge_energy_kwh": "bat_charge_total_kwh",
     "batt_discharge_energy_kwh": "bat_discharge_total_kwh",
     "solar_lifetime_energy_kwh": "solar_total_kwh",
@@ -123,7 +119,6 @@ def test_day_frame_maps_the_expected_keys_and_values():
     result = parse_registers(_poll_blocks(DAY))
 
     assert set(result) == EXPECTED_KEYS
-    assert "pack3_soc" not in result
     for key, field in KEY_TO_FIELD.items():
         assert result[key] == pytest.approx(DAY[field], abs=1e-3), key
     assert result["grid_export_power_w"] == pytest.approx(4309.337, abs=1e-3)
@@ -158,6 +153,46 @@ def test_a_non_finite_float_is_dropped_with_the_keys_derived_from_it():
     assert result["home_w"] == pytest.approx(DAY["load_w"], abs=1e-3)
 
 
+def test_the_per_pack_soc_registers_are_not_mapped():
+    # Modbus holds the user-facing SoC, the cloud stream's packN_soc is the BMS
+    # figure (up to five points apart), so the same key must not carry both.
+    blocks = {
+        **_poll_blocks(DAY),
+        # batteries online 2, pack 1-3 SoC 95 / 95 / 0
+        0x0820: struct.pack(">HHHH", 2, 95, 95, 0),
+    }
+
+    result = parse_registers(blocks)
+
+    assert result["bp_online_sum"] == 2
+    assert not [key for key in result if key.startswith("pack")]
+
+
+@pytest.mark.parametrize("key", sorted(LIFETIME_COUNTER_KEYS))
+@pytest.mark.parametrize("bad_reading", [0.0, -1.5])
+def test_a_lifetime_counter_at_or_below_zero_is_dropped(key, bad_reading):
+    # A counter that has run for years is never 0: it is a bad read, and as the
+    # first published value it would register as a meter reset.
+    field = KEY_TO_FIELD[key]
+
+    result = parse_registers(_poll_blocks(dict(DAY, **{field: bad_reading})))
+
+    assert key not in result
+    assert set(result) == EXPECTED_KEYS - {key}
+
+
+def test_the_lifetime_counters_are_exactly_the_five_energy_registers():
+    expected = {
+        "grid_import_lifetime_energy_kwh",
+        "grid_export_lifetime_energy_kwh",
+        "batt_charge_energy_kwh",
+        "batt_discharge_energy_kwh",
+        "solar_lifetime_energy_kwh",
+    }
+
+    assert expected == LIFETIME_COUNTER_KEYS
+
+
 def test_device_info_reads_identity_with_firmware_in_wire_order():
     info = parse_device_info(_setup_blocks(DEVICE))
 
@@ -174,6 +209,7 @@ def test_device_info_reads_identity_with_firmware_in_wire_order():
 
 
 def test_blocks_stay_within_the_device_register_limit():
-    # The device refuses a read of more than 125 registers (exception 03).
+    # The device refuses a read of more than 125 registers: measured 2026-10-01,
+    # 154 registers at offset 0x0840 answered Modbus exception 03.
     for start, count in SETUP_BLOCKS + POLL_BLOCKS:
         assert 1 <= count <= 125, hex(start)

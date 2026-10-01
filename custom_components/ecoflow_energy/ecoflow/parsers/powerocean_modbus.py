@@ -36,15 +36,13 @@ POLL_BLOCKS: tuple[tuple[int, int], ...] = (
     (0x0217, 18),  # backup ratio ... battery capacity (0x0227-0x0228)
     (0x0251, 12),  # frequency, PV1/PV2/PV3 voltage, PV1/PV2 current
     (0x0800, 1),  # fault count
-    (0x0820, 4),  # batteries online, pack 1-3 SoC
+    (0x0820, 1),  # batteries online
     (0x0870, 98),  # lifetime energy counters up to 0x08D1
 )
 
 # Stage 1 supports the three-phase PowerOcean only (category 1, number 1).
 SUPPORTED_PRODUCT_CATEGORY = 1
 SUPPORTED_PRODUCT_NUMBER = 1
-
-_MAX_PACKS = 3
 
 
 @dataclass(frozen=True)
@@ -53,6 +51,7 @@ class _Register:
     offset: int
     count: int
     decode: Callable[[bytes], int | float]
+    counter: bool = False
 
 
 _REGISTERS: tuple[_Register, ...] = (
@@ -70,14 +69,16 @@ _REGISTERS: tuple[_Register, ...] = (
     _Register("mppt_pv2_current_a", 0x025B, 2, decode_f32_ws),
     _Register("fault_count", 0x0800, 1, decode_u16),
     _Register("bp_online_sum", 0x0820, 1, decode_u16),
-    _Register("pack1_soc", 0x0821, 1, decode_u16),
-    _Register("pack2_soc", 0x0822, 1, decode_u16),
-    _Register("pack3_soc", 0x0823, 1, decode_u16),
-    _Register("grid_import_lifetime_energy_kwh", 0x0870, 2, decode_f32_ws),
-    _Register("grid_export_lifetime_energy_kwh", 0x0880, 2, decode_f32_ws),
-    _Register("batt_charge_energy_kwh", 0x08B0, 2, decode_f32_ws),
-    _Register("batt_discharge_energy_kwh", 0x08C0, 2, decode_f32_ws),
-    _Register("solar_lifetime_energy_kwh", 0x08D0, 2, decode_f32_ws),
+    _Register("grid_import_lifetime_energy_kwh", 0x0870, 2, decode_f32_ws, True),
+    _Register("grid_export_lifetime_energy_kwh", 0x0880, 2, decode_f32_ws, True),
+    _Register("batt_charge_energy_kwh", 0x08B0, 2, decode_f32_ws, True),
+    _Register("batt_discharge_energy_kwh", 0x08C0, 2, decode_f32_ws, True),
+    _Register("solar_lifetime_energy_kwh", 0x08D0, 2, decode_f32_ws, True),
+)
+
+# The device's lifetime counters: the one list the coordinator holds monotonic.
+LIFETIME_COUNTER_KEYS: frozenset[str] = frozenset(
+    register.key for register in _REGISTERS if register.counter
 )
 
 
@@ -94,9 +95,13 @@ def parse_registers(blocks: Mapping[int, bytes]) -> dict[str, Any]:
     """Map polled register blocks onto PowerOcean sensor keys.
 
     A register whose block is absent or too short is skipped, a non-finite
-    float is dropped. ``packN_soc`` is published only for ``N`` up to the
-    number of batteries online: an unused slot reads 0, which means "no pack"
-    and not 0 %.
+    float is dropped. A lifetime counter that reads 0 or less is dropped too:
+    a counter that has run for years is never 0, so that is a bad read, and
+    published as the first value it would register as a meter reset.
+
+    The per-pack SoC registers (0x0821-0x0823) are deliberately not mapped:
+    they hold the SoC the app shows the user, the cloud stream's ``packN_soc``
+    is the BMS figure, and the two differ by up to five points.
     """
     result: dict[str, Any] = {}
     for register in _REGISTERS:
@@ -106,13 +111,9 @@ def parse_registers(blocks: Mapping[int, bytes]) -> dict[str, Any]:
         value = register.decode(raw)
         if isinstance(value, float) and not math.isfinite(value):
             continue
+        if register.counter and value <= 0:
+            continue
         result[register.key] = value
-
-    online = result.get("bp_online_sum")
-    for number in range(1, _MAX_PACKS + 1):
-        key = f"pack{number}_soc"
-        if key in result and (online is None or number > online):
-            del result[key]
 
     return remap_proto_keys(result)
 
@@ -134,6 +135,7 @@ def parse_device_info(blocks: Mapping[int, bytes]) -> dict[str, Any]:
         info["serial"] = decode_ascii(raw)
 
     # Firmware bytes are not word-swapped: 25 0a 05 01 is 37.10.5.1.
+    # unverified against the app
     raw = _slice(blocks, 0x000B, 2)
     if raw is not None:
         info["firmware"] = ".".join(str(byte) for byte in raw)

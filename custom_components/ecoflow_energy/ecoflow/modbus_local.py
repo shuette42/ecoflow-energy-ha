@@ -2,9 +2,9 @@
 
 Function code 0x03 (read holding registers) is the only one in this module;
 nothing is ever written to the device. One connection carries all requests of
-a poll, every network step runs under a timeout, failures are typed, and there
-is no retry here (the caller owns the retry policy). No Home Assistant imports:
-this is core library code.
+a poll, every network step runs under a timeout and the whole poll under a
+shared budget, failures are typed, and there is no retry here (the caller owns
+the retry policy). No Home Assistant imports: this is core library code.
 
 Register offsets from the device's protocol table are added to
 ``MODBUS_BASE_ADDRESS`` on the wire (measured: without it the device answers
@@ -28,6 +28,12 @@ _EXCEPTION_FLAG = 0x80
 _MBAP_LEN = 7
 _MAX_PDU_LEN = 253
 
+# A poll is up to nine requests on one connection. Each has its own timeout, so
+# a device that answers every request just inside it could hold the poll for
+# nine times that. The whole request loop shares one budget of this many
+# single timeouts: room for a slow but working device, well short of the sum.
+_POLL_BUDGET_FACTOR = 4
+
 
 class ModbusLocalError(Exception):
     """Base class for every failure of the local Modbus client."""
@@ -44,9 +50,12 @@ class ModbusTimeoutError(ModbusLocalError):
 class ModbusExceptionResponse(ModbusLocalError):
     """The device answered with a Modbus exception (function 0x83)."""
 
-    def __init__(self, code: int) -> None:
-        super().__init__(f"Modbus exception response, code {code}")
+    def __init__(self, code: int, offset: int) -> None:
+        super().__init__(
+            f"Modbus exception response, code {code}, block at offset {offset:#06x}"
+        )
         self.code = code
+        self.offset = offset
 
 
 class ModbusProtocolError(ModbusLocalError):
@@ -108,9 +117,18 @@ class ModbusLocalClient:
 
         reader, writer = await self._connect()
         try:
+            budget = self._timeout * _POLL_BUDGET_FACTOR
             result: dict[int, bytes] = {}
-            for offset, count in blocks:
-                result[offset] = await self._read(reader, writer, offset, count)
+            try:
+                async with asyncio.timeout(budget):
+                    for offset, count in blocks:
+                        result[offset] = await self._read(reader, writer, offset, count)
+            except TimeoutError as err:
+                # Only the shared budget lands here: a single request's own
+                # timeout is already a ModbusTimeoutError inside ``_read``.
+                raise ModbusTimeoutError(
+                    f"poll exceeded its {budget:.1f}s budget"
+                ) from err
             return result
         finally:
             await self._close(writer)
@@ -173,7 +191,7 @@ class ModbusLocalClient:
 
         function = pdu[0]
         if function == READ_HOLDING_REGISTERS | _EXCEPTION_FLAG:
-            raise ModbusExceptionResponse(pdu[1])
+            raise ModbusExceptionResponse(pdu[1], offset)
         if function != READ_HOLDING_REGISTERS:
             raise ModbusProtocolError(f"unexpected function code {function:#04x}")
         if pdu[1] != 2 * count or len(pdu) != 2 + 2 * count:

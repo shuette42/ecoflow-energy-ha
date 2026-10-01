@@ -11,6 +11,7 @@ from ecoflow_energy.ecoflow.modbus_local import (
     ModbusConnectError,
     ModbusExceptionResponse,
     ModbusLocalClient,
+    ModbusProtocolError,
     ModbusTimeoutError,
     decode_ascii,
     decode_f32_ws,
@@ -133,6 +134,142 @@ async def test_exception_response_carries_the_code():
             await client.read_blocks([(0x0206, 9)])
 
     assert excinfo.value.code == 2
+    # The block the device rejected is named, for the log and last_error.
+    assert excinfo.value.offset == 0x0206
+    assert "0x0206" in str(excinfo.value)
+
+
+def _answer(tid, unit, address, count):
+    """The fields of a valid read answer, for a test to damage one of."""
+    data = _register_bytes(address, count)
+    return {
+        "tid": tid,
+        "protocol": 0,
+        "length": 3 + len(data),
+        "unit": unit,
+        "function": 0x03,
+        "byte_count": len(data),
+        "data": data,
+    }
+
+
+def _pack_answer(fields):
+    header = struct.pack(
+        ">HHHBBB",
+        fields["tid"],
+        fields["protocol"],
+        fields["length"],
+        fields["unit"],
+        fields["function"],
+        fields["byte_count"],
+    )
+    return header + fields["data"]
+
+
+@pytest.mark.parametrize(
+    ("field", "damage", "message"),
+    [
+        ("tid", lambda value: value + 1, "transaction id mismatch"),
+        ("protocol", lambda value: 1, "protocol id"),
+        ("unit", lambda value: value + 1, "unit id mismatch"),
+        # Below the smallest possible PDU: the frame cannot be read to its end.
+        ("length", lambda value: 1, "implausible length"),
+        # Frame length consistent, byte count short by one register.
+        ("byte_count", lambda value: value - 2, "byte count"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_an_answer_that_does_not_match_the_request_is_a_protocol_error(
+    field, damage, message
+):
+    async def handler(reader, writer):
+        request = await reader.readexactly(_REQUEST_LEN)
+        tid, _proto, _length, unit, _function, address, count = _unpack_request(request)
+        fields = _answer(tid, unit, address, count)
+        fields[field] = damage(fields[field])
+        writer.write(_pack_answer(fields))
+        await writer.drain()
+        await reader.read()
+
+    async with _serve(handler) as port:
+        client = ModbusLocalClient("127.0.0.1", port, unit_id=1, timeout=2.0)
+        with pytest.raises(ModbusProtocolError, match=message):
+            await client.read_blocks([(0x0206, 9)])
+
+
+@pytest.mark.parametrize("answer", ["registers", "exception"])
+@pytest.mark.asyncio
+async def test_the_connection_is_closed_after_success_and_after_an_exception(
+    answer, monkeypatch
+):
+    closed = asyncio.Event()
+    seen_by_server: list[bytes] = []
+    # Keep the client's writer alive: an unreferenced writer closes itself when
+    # it is garbage collected, which would hide a missing close.
+    held: list[asyncio.StreamWriter] = []
+    real_open_connection = asyncio.open_connection
+
+    async def open_and_hold(*args, **kwargs):
+        reader, writer = await real_open_connection(*args, **kwargs)
+        held.append(writer)
+        return reader, writer
+
+    monkeypatch.setattr(asyncio, "open_connection", open_and_hold)
+
+    async def handler(reader, writer):
+        request = await reader.readexactly(_REQUEST_LEN)
+        tid, _proto, _length, unit, _function, address, count = _unpack_request(request)
+        if answer == "registers":
+            writer.write(_pack_answer(_answer(tid, unit, address, count)))
+        else:
+            writer.write(struct.pack(">HHHBBB", tid, 0, 3, unit, 0x83, 0x02))
+        await writer.drain()
+        # Reads to the end of the stream: b"" means the client hung up.
+        seen_by_server.append(await reader.read())
+        closed.set()
+
+    async with _serve(handler) as port:
+        client = ModbusLocalClient("127.0.0.1", port, timeout=2.0)
+        if answer == "registers":
+            await client.read_blocks([(0x0206, 9)])
+        else:
+            with pytest.raises(ModbusExceptionResponse):
+                await client.read_blocks([(0x0206, 9)])
+        assert held[0].transport.is_closing()
+        # The server's own cleanup also closes the socket, so the wait has to
+        # finish before the context ends: it proves the client closed first.
+        await asyncio.wait_for(closed.wait(), 2)
+
+    assert seen_by_server == [b""]
+
+
+@pytest.mark.asyncio
+async def test_a_slow_device_cannot_hold_a_poll_past_the_shared_budget():
+    async def handler(reader, writer):
+        while True:
+            request = await reader.readexactly(_REQUEST_LEN)
+            tid, _proto, _length, unit, _function, address, count = _unpack_request(
+                request
+            )
+            # Every answer arrives inside the 0.3 s single timeout.
+            await asyncio.sleep(0.15)
+            writer.write(_pack_answer(_answer(tid, unit, address, count)))
+            await writer.drain()
+
+    blocks = [(0x0206 + number, 1) for number in range(12)]
+    async with _serve(handler) as port:
+        client = ModbusLocalClient("127.0.0.1", port, timeout=0.3)
+
+        # Control: four slow answers (0.6 s) fit the 1.2 s budget and succeed.
+        assert len(await client.read_blocks(blocks[:4])) == 4
+
+        # Twelve take 1.8 s: no single request is late, the poll as a whole is.
+        started = time.monotonic()
+        with pytest.raises(ModbusTimeoutError, match="budget"):
+            await asyncio.wait_for(client.read_blocks(blocks), 5)
+        elapsed = time.monotonic() - started
+
+    assert elapsed < 1.7
 
 
 @pytest.mark.asyncio

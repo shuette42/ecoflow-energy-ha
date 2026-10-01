@@ -216,7 +216,7 @@ async def test_setup_creates_a_credential_free_local_entry(
         (_registers(number=3), "unsupported_device"),
         (ModbusConnectError("refused"), "cannot_connect"),
         (ModbusTimeoutError("silent"), "cannot_connect"),
-        (ModbusExceptionResponse(2), "modbus_exception"),
+        (ModbusExceptionResponse(2, 0x0206), "modbus_exception"),
         (ModbusProtocolError("transaction"), "modbus_exception"),
     ],
     ids=["product-number-3", "refused", "silent", "exception", "protocol"],

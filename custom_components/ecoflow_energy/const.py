@@ -2256,7 +2256,9 @@ for _unit_index in range(1, PARALLEL_UNIT_MAX + 1):
 # --- Local Modbus (read-only) ---------------------------------------------
 # Keys the Modbus parser shares with the cloud stream: same quantity, same
 # unit, so the entity (unique_id `{serial}_{key}`), its history and its
-# statistics survive a switch of the same entry between modes.
+# statistics survive a switch of the same entry between modes. The per-pack SoC
+# keys are not shared: Modbus reports the user-facing SoC, the cloud stream the
+# BMS SoC, which differs by up to five points.
 POWEROCEAN_LOCAL_KEYS: frozenset[str] = frozenset(
     {
         "home_w",
@@ -2276,9 +2278,6 @@ POWEROCEAN_LOCAL_KEYS: frozenset[str] = frozenset(
         "mppt_pv1_current_a",
         "mppt_pv2_current_a",
         "bp_online_sum",
-        "pack1_soc",
-        "pack2_soc",
-        "pack3_soc",
         "ems_backup_ratio_pct",
         "ems_total_battery_capacity_wh",
     }
@@ -2341,14 +2340,6 @@ POWEROCEAN_LOCAL_SENSOR_DEFS: list[EcoFlowSensorDef] = [
     for sensor_def in POWEROCEAN_SENSORS
     if sensor_def.key in POWEROCEAN_LOCAL_KEYS
 ] + POWEROCEANLOCALONLY_SENSORS
-
-# The device counters that may only grow. Derived from the definitions, so a
-# counter added to the list above is held without a second registration.
-POWEROCEAN_LOCAL_COUNTER_KEYS: frozenset[str] = frozenset(
-    sensor_def.key
-    for sensor_def in POWEROCEAN_LOCAL_SENSOR_DEFS
-    if sensor_def.state_class == "total_increasing"
-)
 
 POWEROCEAN_NUMBERS: list[EcoFlowNumberDef] = [
     # Backup-Reserve (App-slider): minimum SoC kept in reserve. Wire field 2
