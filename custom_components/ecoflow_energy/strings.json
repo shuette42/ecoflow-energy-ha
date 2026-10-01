@@ -193,7 +193,10 @@
       "no_devices": "Please select at least one device.",
       "powerstream_requires_standard": "PowerStream requires Standard Mode with Developer API keys.",
       "device_requires_enhanced": "This device requires Enhanced Mode with your EcoFlow account.",
-      "unknown": "An unexpected error occurred."
+      "unknown": "An unexpected error occurred.",
+    "abort": {
+      "local_use_reconfigure": "This entry reads the PowerOcean locally over Modbus and has no connection mode to change. Use Reconfigure from the integration menu to change the host, port or unit ID, or to switch back to a cloud mode."
+    }
     }
   },
   "entity": {

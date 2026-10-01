@@ -445,6 +445,19 @@ async def test_local_entry_host_can_be_changed(hass: HomeAssistant) -> None:
     assert entry.data[CONF_DEVICES] == [CLOUD_DEVICE]
 
 
+async def test_options_flow_of_a_local_entry_points_to_reconfigure(
+    hass: HomeAssistant,
+) -> None:
+    """The options form would offer cloud modes a local entry has no keys for."""
+    entry = _local_entry(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "local_use_reconfigure"
+    assert entry.data[CONF_MODE] == MODE_LOCAL
+
+
 # ===========================================================================
 # Text: the schema gate cannot resolve the Home Assistant host/port constants
 # ===========================================================================

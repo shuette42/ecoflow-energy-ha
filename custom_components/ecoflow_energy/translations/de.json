@@ -193,7 +193,10 @@
       "no_devices": "Bitte mindestens ein Gerät auswählen.",
       "powerstream_requires_standard": "PowerStream benötigt den Standard-Modus mit Developer-API-Schlüsseln.",
       "device_requires_enhanced": "Dieses Gerät benötigt den Enhanced-Modus mit deinem EcoFlow-Konto.",
-      "unknown": "Ein unerwarteter Fehler ist aufgetreten."
+      "unknown": "Ein unerwarteter Fehler ist aufgetreten.",
+    "abort": {
+      "local_use_reconfigure": "Dieser Eintrag liest den PowerOcean lokal über Modbus und hat keinen Verbindungsmodus zum Ändern. Über „Neu konfigurieren“ im Integrationsmenü änderst du Host, Port oder Unit-ID oder wechselst zurück in einen Cloud-Modus."
+    }
     }
   },
   "entity": {

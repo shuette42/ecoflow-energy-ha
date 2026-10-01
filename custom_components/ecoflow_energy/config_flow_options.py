@@ -43,6 +43,7 @@ from .const import (
     DEVICE_TYPE_UNKNOWN,
     ENHANCED_ONLY_DEVICE_TYPES,
     MODE_ENHANCED,
+    MODE_LOCAL,
     MODE_STANDARD,
     RAW_CAPTURE_DURATION_S,
     get_device_name,
@@ -111,6 +112,12 @@ class OptionsFlowMixin(_Base):
     ) -> ConfigFlowResult:
         """Main options step - change mode and device selection."""
         errors: dict[str, str] = {}
+
+        # A Local entry holds no credentials and one device. Offering a cloud
+        # mode here would write a mode without the keys it needs, so the
+        # switch lives in Reconfigure only.
+        if self.config_entry.data.get(CONF_MODE) == MODE_LOCAL:
+            return self.async_abort(reason="local_use_reconfigure")
 
         current_mode = self.config_entry.data.get(CONF_MODE, MODE_STANDARD)
         current_device_sns = [
