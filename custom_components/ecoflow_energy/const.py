@@ -67,7 +67,11 @@ PLATFORMS: list[Platform] = [
     Platform.BUTTON,
 ]
 
+# A local Modbus entry is read-only by construction: sensors and nothing else.
+LOCAL_PLATFORMS: list[Platform] = [Platform.SENSOR]
+
 # Config entry keys
+CONF_UNIT_ID = "unit_id"
 CONF_ACCESS_KEY = "access_key"
 CONF_SECRET_KEY = "secret_key"
 CONF_DEVICES = "devices"
@@ -111,6 +115,15 @@ AUTH_METHOD_APP = "app"
 # Device modes
 MODE_STANDARD = "standard"
 MODE_ENHANCED = "enhanced"
+# Local Modbus/TCP read-only mode: no account, no keys, no cloud.
+MODE_LOCAL = "local"
+
+# Local Modbus: one poll every 10 s (the device refreshes its counters every
+# 5 s; one poll holds its single client slot for well under a second). Three
+# failed polls in a row mark the device unavailable.
+LOCAL_MODBUS_POLL_INTERVAL_S = 10
+LOCAL_MODBUS_TIMEOUT_S = 3.0
+LOCAL_MODBUS_FAILURES_UNAVAILABLE = 3
 
 # Coordinator - Stale detection
 STALE_THRESHOLD_S = (
@@ -2239,6 +2252,101 @@ for _unit_index in range(1, PARALLEL_UNIT_MAX + 1):
             ),
         ]
     )
+
+# --- Local Modbus (read-only) ---------------------------------------------
+# Keys the Modbus parser shares with the cloud stream: same quantity, same
+# unit, so the entity (unique_id `{serial}_{key}`), its history and its
+# statistics survive a switch of the same entry between modes.
+POWEROCEAN_LOCAL_KEYS: frozenset[str] = frozenset(
+    {
+        "home_w",
+        "grid_w",
+        "grid_import_power_w",
+        "grid_export_power_w",
+        "solar_w",
+        "batt_w",
+        "batt_charge_power_w",
+        "batt_discharge_power_w",
+        "soc_pct",
+        "pcs_ac_freq_hz",
+        "batt_charge_energy_kwh",
+        "batt_discharge_energy_kwh",
+        "mppt_pv1_voltage_v",
+        "mppt_pv2_voltage_v",
+        "mppt_pv1_current_a",
+        "mppt_pv2_current_a",
+        "bp_online_sum",
+        "pack1_soc",
+        "pack2_soc",
+        "pack3_soc",
+        "ems_backup_ratio_pct",
+        "ems_total_battery_capacity_wh",
+    }
+)
+
+# The device's own lifetime counters. They differ from the cloud entry's
+# integrated totals by thousands of kWh, so they get their own keys: sharing
+# `solar_energy_kwh` and its two grid siblings would put the whole difference
+# into one hour of the Energy Dashboard. The integrated keys are not
+# published in Local mode, and nothing is integrated there.
+#
+# Not named `*_SENSORS` on purpose: the definition-list gates discover a block
+# by that suffix and would then demand translations and a documentation entry
+# for it, which land with the config flow and the entity documentation.
+POWEROCEAN_LOCAL_EXTRA_DEFS: list[EcoFlowSensorDef] = [
+    EcoFlowSensorDef(
+        "solar_lifetime_energy_kwh",
+        "Solar Lifetime Energy",
+        "kWh",
+        "energy",
+        "total_increasing",
+        "mdi:solar-power",
+        suggested_display_precision=2,
+    ),
+    EcoFlowSensorDef(
+        "grid_import_lifetime_energy_kwh",
+        "Grid Import Lifetime Energy",
+        "kWh",
+        "energy",
+        "total_increasing",
+        "mdi:transmission-tower-import",
+        suggested_display_precision=2,
+    ),
+    EcoFlowSensorDef(
+        "grid_export_lifetime_energy_kwh",
+        "Grid Export Lifetime Energy",
+        "kWh",
+        "energy",
+        "total_increasing",
+        "mdi:transmission-tower-export",
+        suggested_display_precision=2,
+    ),
+    EcoFlowSensorDef(
+        "fault_count",
+        "Fault Count",
+        None,
+        None,
+        "measurement",
+        "mdi:alert-circle-outline",
+        "diagnostic",
+        suggested_display_precision=0,
+    ),
+]
+
+# What a local entry creates: the shared definitions plus the four above.
+POWEROCEAN_LOCAL_SENSOR_DEFS: list[EcoFlowSensorDef] = [
+    sensor_def
+    for sensor_def in POWEROCEAN_SENSORS
+    if sensor_def.key in POWEROCEAN_LOCAL_KEYS
+] + POWEROCEAN_LOCAL_EXTRA_DEFS
+
+# The device counters that may only grow. Derived from the definitions, so a
+# counter added to the list above is held without a second registration.
+POWEROCEAN_LOCAL_COUNTER_KEYS: frozenset[str] = frozenset(
+    sensor_def.key
+    for sensor_def in POWEROCEAN_LOCAL_SENSOR_DEFS
+    if sensor_def.state_class == "total_increasing"
+)
 
 POWEROCEAN_NUMBERS: list[EcoFlowNumberDef] = [
     # Backup-Reserve (App-slider): minimum SoC kept in reserve. Wire field 2

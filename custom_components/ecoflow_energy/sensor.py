@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import cast
 
 import homeassistant.util.dt as dt_util
 from homeassistant.components.sensor import (
@@ -37,6 +38,7 @@ from .const import (
     DEVICE_TYPE_WAVE3,
     DOMAIN,
     OCEAN2_SENSORS,
+    POWEROCEAN_LOCAL_SENSOR_DEFS,
     POWEROCEAN_SENSORS,
     POWERPULSE2_SENSORS,
     POWERSTREAM_SENSORS,
@@ -51,6 +53,7 @@ from .const import (
     filter_defs_for_serial,
 )
 from .coordinator import EcoFlowDeviceCoordinator
+from .coordinator.local_modbus import EcoFlowLocalModbusCoordinator
 from .entity import (
     EcoFlowWriteGateMixin,
     accessory_ready,
@@ -76,15 +79,23 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up EcoFlow sensors from a config entry."""
-    coordinators: dict[str, EcoFlowDeviceCoordinator] = hass.data[DOMAIN][
-        entry.entry_id
-    ]
+    coordinators: dict[
+        str, EcoFlowDeviceCoordinator | EcoFlowLocalModbusCoordinator
+    ] = hass.data[DOMAIN][entry.entry_id]
     registry = er.async_get(hass)
     entities: list[SensorEntity] = []
 
-    for coordinator in coordinators.values():
+    for source in coordinators.values():
+        is_local = isinstance(source, EcoFlowLocalModbusCoordinator)
+        # The local coordinator offers every attribute the sensors read from
+        # the cloud one (device_sn, data, device_available, device_info,
+        # seed_energy_total, connection_mode); mqtt_status is skipped below.
+        coordinator = cast(EcoFlowDeviceCoordinator, source)
         sensor_defs = filter_defs_for_serial(
-            _get_sensor_defs(coordinator.device_type), coordinator.device_sn
+            POWEROCEAN_LOCAL_SENSOR_DEFS
+            if is_local
+            else _get_sensor_defs(coordinator.device_type),
+            coordinator.device_sn,
         )
         pending: list[EcoFlowSensorDef] = []
         for sensor_def in sensor_defs:
@@ -106,7 +117,8 @@ async def async_setup_entry(
             entities.append(EcoFlowSensor(coordinator, sensor_def))
 
         # Diagnostic sensors (coordinator properties, not data-driven)
-        entities.append(EcoFlowDiagnosticSensor(coordinator, "mqtt_status"))
+        if not is_local:
+            entities.append(EcoFlowDiagnosticSensor(coordinator, "mqtt_status"))
         entities.append(EcoFlowDiagnosticSensor(coordinator, "connection_mode"))
 
         if pending:

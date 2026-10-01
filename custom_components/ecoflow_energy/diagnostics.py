@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
@@ -25,6 +26,7 @@ from .const import (
     CONF_DEVICES,
     CONF_MODE,
     CONF_SECRET_KEY,
+    CONF_UNIT_ID,
     DATA_DEVICE_PROBES,
     DATA_SKIPPED_DEVICES,
     DEVICE_TYPE_DELTA3,
@@ -32,11 +34,14 @@ from .const import (
     DEVICE_TYPE_POWERSTREAM,
     DEVICE_TYPE_STREAM,
     DOMAIN,
+    LOCAL_MODBUS_POLL_INTERVAL_S,
+    MODE_LOCAL,
     RAW_FRAME_BUNDLE_MAX_BYTES,
     RAW_FRAME_MAX_BYTES,
     raw_capture_window_open,
 )
 from .coordinator import EcoFlowDeviceCoordinator
+from .coordinator.local_modbus import EcoFlowLocalModbusCoordinator
 from .ecoflow.cloud_http import EcoFlowHTTPQuota
 
 _LOGGER = logging.getLogger(__name__)
@@ -325,6 +330,9 @@ async def async_get_config_entry_diagnostics(
     entry: ConfigEntry,
 ) -> dict[str, Any]:
     """Return diagnostics for a config entry."""
+    if entry.data.get(CONF_MODE) == MODE_LOCAL:
+        return _local_diagnostics(hass, entry)
+
     coordinators: dict[str, EcoFlowDeviceCoordinator] = hass.data.get(DOMAIN, {}).get(
         entry.entry_id, {}
     )
@@ -359,6 +367,49 @@ async def async_get_config_entry_diagnostics(
     # is covered here whether or not its author thought about it.
     serials = [coordinator.device_sn for coordinator in coordinators.values()]
     serials += [item.get("sn", "") for item in skipped_devices]
+    return _redact_serials(diagnostics, tails=_serial_tails(serials))
+
+
+def _local_diagnostics(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any]:
+    """Diagnostics for a local Modbus entry: link settings, poll health, data.
+
+    The entry holds no credentials, so there is nothing to withhold beyond
+    the serial, which goes through the same single redaction pass as the
+    cloud sections.
+    """
+    coordinators: dict[str, EcoFlowLocalModbusCoordinator] = hass.data.get(
+        DOMAIN, {}
+    ).get(entry.entry_id, {})
+
+    devices_diag: list[dict[str, Any]] = []
+    for coordinator in coordinators.values():
+        last_poll = coordinator.last_poll_time
+        devices_diag.append(
+            {
+                "device_sn": coordinator.device_sn[:4] + "...",
+                "device_tag": coordinator.device_tag,
+                "device_type": coordinator.device_type,
+                "device_available": coordinator.device_available,
+                "poll_interval_s": LOCAL_MODBUS_POLL_INTERVAL_S,
+                "last_poll_ok": coordinator.last_poll_ok,
+                "last_poll": last_poll.isoformat() if last_poll else None,
+                "last_error": coordinator.last_error,
+                "consecutive_failures": coordinator.consecutive_failures,
+                "device_data": dict(coordinator.device_data),
+            }
+        )
+
+    diagnostics = {
+        "config_entry": {
+            "mode": entry.data.get(CONF_MODE),
+            "host": entry.data.get(CONF_HOST),
+            "port": entry.data.get(CONF_PORT),
+            "unit_id": entry.data.get(CONF_UNIT_ID),
+            "device_count": len(entry.data.get(CONF_DEVICES, [])),
+        },
+        "devices": devices_diag,
+    }
+    serials = [coordinator.device_sn for coordinator in coordinators.values()]
     return _redact_serials(diagnostics, tails=_serial_tails(serials))
 
 

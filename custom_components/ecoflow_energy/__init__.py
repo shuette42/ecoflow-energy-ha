@@ -10,6 +10,7 @@ from datetime import datetime
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP
 from homeassistant.core import Event, HomeAssistant, callback
+from homeassistant.exceptions import ConfigEntryError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import async_call_later
 
@@ -32,12 +33,15 @@ from .const import (
     DEVICE_TYPE_UNKNOWN,
     DOMAIN,
     ENHANCED_ONLY_DEVICE_TYPES,
+    LOCAL_PLATFORMS,
     MODE_ENHANCED,
+    MODE_LOCAL,
     PLATFORMS,
     get_device_type,
     raw_capture_window_open,
 )
 from .coordinator import EcoFlowDeviceCoordinator
+from .coordinator.local_modbus import EcoFlowLocalModbusCoordinator
 from .device_probe import (
     UnroutedDeviceProbe,
     async_start_probe_watchdog,
@@ -406,8 +410,36 @@ def _async_remove_relayed_wallbox_entities(
         registry.async_remove(existing.entity_id)
 
 
+async def _async_setup_local_entry(
+    hass: HomeAssistant, entry: EcoFlowConfigEntry
+) -> bool:
+    """Set up a local Modbus entry: one device, no credentials, sensors only.
+
+    None of the cloud setup applies, so it runs before the registry cleanups
+    and the auth upgrade: a local entry has no account, no probes and nothing
+    that could start a reauth.
+    """
+    devices = entry.data.get(CONF_DEVICES, [])
+    if len(devices) != 1:
+        raise ConfigEntryError("A local Modbus entry needs exactly one device")
+
+    coordinator = EcoFlowLocalModbusCoordinator(hass, entry, devices[0])
+    # A device that does not answer raises ConfigEntryNotReady here, and Home
+    # Assistant retries with its own backoff.
+    await coordinator.async_config_entry_first_refresh()
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
+        coordinator.device_sn: coordinator
+    }
+    await hass.config_entries.async_forward_entry_setups(entry, LOCAL_PLATFORMS)
+    entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
+    return True
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> bool:
     """Set up EcoFlow Energy from a config entry."""
+    if entry.data.get(CONF_MODE) == MODE_LOCAL:
+        return await _async_setup_local_entry(hass, entry)
+
     _async_remove_withdrawn_entities(hass, entry)
     _async_remove_retired_platform_entities(hass, entry)
     _async_remove_relayed_wallbox_entities(hass, entry)
@@ -674,14 +706,17 @@ async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 async def async_unload_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> bool:
     """Unload an EcoFlow Energy config entry."""
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    is_local = entry.data.get(CONF_MODE) == MODE_LOCAL
+    unload_ok = await hass.config_entries.async_unload_platforms(
+        entry, LOCAL_PLATFORMS if is_local else PLATFORMS
+    )
     if not unload_ok:
         return False
 
     # Shut down coordinators
-    coordinators: dict[str, EcoFlowDeviceCoordinator] = hass.data[DOMAIN].pop(
-        entry.entry_id, {}
-    )
+    coordinators: dict[
+        str, EcoFlowDeviceCoordinator | EcoFlowLocalModbusCoordinator
+    ] = hass.data[DOMAIN].pop(entry.entry_id, {})
     hass.data.get(DATA_SKIPPED_DEVICES, {}).pop(entry.entry_id, None)
     probes: list[UnroutedDeviceProbe] = hass.data.get(DATA_DEVICE_PROBES, {}).pop(
         entry.entry_id, []
