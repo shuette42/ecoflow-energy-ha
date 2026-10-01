@@ -42,6 +42,7 @@ from custom_components.ecoflow_energy.coordinator.local_modbus import (
     EcoFlowLocalModbusCoordinator,
 )
 from custom_components.ecoflow_energy.diagnostics import (
+    REDACTED,
     async_get_config_entry_diagnostics,
 )
 from custom_components.ecoflow_energy.ecoflow.modbus_local import (
@@ -395,7 +396,7 @@ async def test_an_unreachable_device_at_setup_is_retried_not_failed(
 async def test_local_diagnostics_carry_the_link_and_the_data_without_the_serial(
     hass: HomeAssistant,
 ) -> None:
-    """The local branch reports host, port, unit id, poll health and readings."""
+    """The local branch reports the link (host redacted), poll health and readings."""
     entry = _local_entry()
     assert await _set_up_local_entry(hass, entry, [_frame(DAY)])
     # The readings hold no serial, so without help the final assertion could not
@@ -407,7 +408,7 @@ async def test_local_diagnostics_carry_the_link_and_the_data_without_the_serial(
 
     assert diagnostics["config_entry"] == {
         "mode": MODE_LOCAL,
-        "host": "modbus.example.test",
+        "host": REDACTED,
         "port": 502,
         "unit_id": 1,
         "device_count": 1,
@@ -420,6 +421,8 @@ async def test_local_diagnostics_carry_the_link_and_the_data_without_the_serial(
     assert "identity_probe" in device["device_data"]
     assert device["device_data"]["identity_probe"] != SERIAL
     assert SERIAL not in json.dumps(diagnostics)
+    # The host is the owner's own network address: nowhere in the download.
+    assert "modbus.example.test" not in json.dumps(diagnostics)
     assert await hass.config_entries.async_unload(entry.entry_id)
 
 

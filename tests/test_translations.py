@@ -611,6 +611,139 @@ class TestExceptionTranslations:
 
 
 # ---------------------------------------------------------------------------
+# Abort reasons and form errors: every literal one the flows raise has a text
+# ---------------------------------------------------------------------------
+
+ABORTING_CALLS = {"async_abort", "async_update_reload_and_abort"}
+
+
+def _call_name(node: ast.Call) -> str:
+    func = node.func
+    return func.id if isinstance(func, ast.Name) else getattr(func, "attr", "")
+
+
+def _strings_in(node: ast.expr) -> set[str]:
+    """Every string literal inside an expression (covers `a if c else b`)."""
+    return {
+        n.value
+        for n in ast.walk(node)
+        if isinstance(n, ast.Constant) and isinstance(n.value, str)
+    }
+
+
+def _flow_reasons_in(source: str) -> dict[str, set[str]]:
+    """Literal abort reasons and error keys one flow module can hand out.
+
+    Errors come from `errors[...] = "key"`, from `LocalDeviceError("key")`
+    (the local read raises its key) and from the strings a `*_error` helper
+    returns. A key held in a variable is out of reach, which is why the
+    positive control below names the ones that must be found.
+    """
+    aborts: set[str] = set()
+    errors: set[str] = set()
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Call):
+            name = _call_name(node)
+            if name in ABORTING_CALLS:
+                for kw in node.keywords:
+                    if kw.arg == "reason":
+                        aborts |= _strings_in(kw.value)
+            elif name == "LocalDeviceError" and node.args:
+                errors |= _strings_in(node.args[0])
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                if (
+                    isinstance(target, ast.Subscript)
+                    and isinstance(target.value, ast.Name)
+                    and target.value.id == "errors"
+                ):
+                    errors |= _strings_in(node.value)
+        elif isinstance(node, ast.FunctionDef) and node.name.endswith("_error"):
+            for sub in ast.walk(node):
+                if isinstance(sub, ast.Return) and sub.value is not None:
+                    errors |= _strings_in(sub.value)
+    return {"abort": aborts, "error": errors}
+
+
+def _flow_reasons() -> dict[tuple[str, str], set[str]]:
+    """`(scope, kind) -> reasons`; the options flow lives in one module."""
+    found: dict[tuple[str, str], set[str]] = {
+        (scope, kind): set()
+        for scope in ("config", "options")
+        for kind in ("abort", "error")
+    }
+    for path in CONFIG_FLOW_PATHS:
+        scope = "options" if path.name == "config_flow_options.py" else "config"
+        for kind, reasons in _flow_reasons_in(path.read_text()).items():
+            found[(scope, kind)] |= reasons
+    return found
+
+
+def _reasons_without_text(
+    reasons: dict[tuple[str, str], set[str]], translations: dict
+) -> list[str]:
+    """`scope.kind.reason` for every reason with no non-empty text."""
+    missing = []
+    for (scope, kind), names in sorted(reasons.items()):
+        texts = translations.get(scope, {}).get(kind, {})
+        missing += [
+            f"{scope}.{kind}.{name}"
+            for name in sorted(names)
+            if not isinstance(texts.get(name), str) or not texts[name]
+        ]
+    return missing
+
+
+class TestFlowReasonsHaveText:
+    """A reason the user cannot read is as silent as no reason at all.
+
+    The step gates above only look at forms; an abort reason is never a form
+    field, and one nested under `error` instead of `abort` rendered as an
+    empty dialog while every other gate stayed green.
+    """
+
+    def test_the_collector_finds_the_reasons_it_must(self):
+        """Positive control: an empty set would make the check vacuous."""
+        found = _flow_reasons()
+        assert "local_use_reconfigure" in found[("options", "abort")]
+        assert {"mode_switched", "local_updated", "already_configured"} <= found[
+            ("config", "abort")
+        ]
+        assert {
+            "device_in_other_entry",
+            "invalid_host",
+            "serial_mismatch",
+            "cannot_connect",
+            "device_not_on_account",
+        } <= found[("config", "error")]
+        assert "device_in_other_entry" in found[("options", "error")]
+
+    def test_a_reason_without_text_is_reported(self):
+        """Negative control: the check can fail, and names what is missing."""
+        tree = {
+            "config": {"abort": {"present": "text", "blank": ""}, "error": {}},
+            "options": {"error": {"present": "text"}, "abort": {}},
+        }
+        reasons = {
+            ("config", "abort"): {"present", "blank", "absent"},
+            ("options", "abort"): {"present"},  # sits under error, not abort
+            ("options", "error"): {"present"},
+        }
+        assert _reasons_without_text(reasons, tree) == [
+            "config.abort.absent",
+            "config.abort.blank",
+            "options.abort.present",
+        ]
+
+    @pytest.mark.parametrize(
+        "path", [STRINGS_PATH, EN_PATH, DE_PATH], ids=["strings", "en", "de"]
+    )
+    def test_every_reason_the_flows_raise_has_text(self, path: Path):
+        missing = _reasons_without_text(_flow_reasons(), _load_translations(path))
+        assert not missing, f"{path.name} has no text for: {missing}"
+
+
+# ---------------------------------------------------------------------------
 # Device picker: the marker and the text that explains it
 # ---------------------------------------------------------------------------
 

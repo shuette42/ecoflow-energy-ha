@@ -22,6 +22,7 @@ from homeassistant.helpers.selector import (
 from .config_flow_setup import (
     SetupFlowMixin,
     _device_label,
+    serial_in_other_entries,
     short_serial,
     unsupported_suffix,
 )
@@ -210,6 +211,15 @@ class OptionsFlowMixin(_Base):
 
             if not selected_sns:
                 errors["base"] = "no_devices"
+            elif any(
+                serial_in_other_entries(
+                    self.hass, sn, self.config_entry.entry_id, local_only=True
+                )
+                for sn in selected_sns
+            ):
+                # Another entry already lists one of these devices. The
+                # entry's own devices are excluded, so keeping them is fine.
+                errors["base"] = "device_in_other_entry"
             elif new_mode == MODE_ENHANCED and selected_powerstream:
                 # Validate before either credential branch and before
                 # changing any pending option. PowerStream has no app-auth

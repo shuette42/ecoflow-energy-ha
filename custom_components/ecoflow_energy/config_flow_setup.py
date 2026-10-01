@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import TYPE_CHECKING, Any
 
 import aiohttp
 import voluptuous as vol
-from homeassistant.config_entries import SOURCE_RECONFIGURE, ConfigFlowResult
+from homeassistant.config_entries import (
+    SOURCE_RECONFIGURE,
+    ConfigEntry,
+    ConfigFlowResult,
+)
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -63,6 +68,39 @@ from .ecoflow.parsers.powerocean_modbus import (
 _LOGGER = logging.getLogger(__name__)
 
 _PASSWORD_SELECTOR = TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD))
+
+# What a PowerOcean reports in its serial registers: sixteen upper-case
+# letters and digits. Anything else is a read that went wrong, not a device.
+_SERIAL_RE = re.compile(r"[A-Z0-9]{16}")
+# A host is a DNS name or an address. A scheme, a path or a space means the
+# field holds something else (a pasted URL), and is refused before connecting.
+_INVALID_HOST_RE = re.compile(r"[\s/]")
+
+CLOUD_ENTRY_TITLE = "EcoFlow Energy"
+
+_LOCAL_MODE_LABEL = "Local - three-phase PowerOcean via Modbus/TCP (read-only)"
+
+
+def local_entry_title(serial: str) -> str:
+    """Title of a Local entry: the serial prefix and nothing more of it."""
+    return f"EcoFlow Energy Local ({serial[:4]})"
+
+
+def retitle_for_mode(entry: ConfigEntry, serial: str, *, to_local: bool) -> str:
+    """The title ``entry`` should carry after a mode switch.
+
+    Only a title one of the setup steps would have given is replaced. A
+    name the owner typed stays, because overwriting it on a switch would
+    undo a choice they made on purpose.
+    """
+    if entry.title in (CLOUD_ENTRY_TITLE, local_entry_title(serial)):
+        return local_entry_title(serial) if to_local else CLOUD_ENTRY_TITLE
+    return entry.title
+
+
+def valid_local_host(host: str) -> bool:
+    """True for a non-empty host without a scheme, a path or a space."""
+    return bool(host) and _INVALID_HOST_RE.search(host) is None
 
 
 def short_serial(sn: str) -> str:
@@ -148,7 +186,8 @@ async def read_local_device(host: str, port: int, unit_id: int) -> dict[str, Any
     except ModbusLocalError as err:
         raise LocalDeviceError("modbus_exception") from err
     info = parse_device_info(blocks)
-    if not info.get("serial"):
+    serial = info.get("serial")
+    if not isinstance(serial, str) or _SERIAL_RE.fullmatch(serial) is None:
         raise LocalDeviceError("modbus_exception")
     if not is_supported_device(info):
         raise LocalDeviceError("unsupported_device")
@@ -156,9 +195,18 @@ async def read_local_device(host: str, port: int, unit_id: int) -> dict[str, Any
 
 
 def serial_in_other_entries(
-    hass: HomeAssistant, serial: str, exclude_entry_id: str | None = None
+    hass: HomeAssistant,
+    serial: str,
+    exclude_entry_id: str | None = None,
+    *,
+    local_only: bool = False,
 ) -> bool:
     """True when another entry of this domain already carries ``serial``.
+
+    ``local_only`` narrows the scan to Local entries. The cloud steps use it:
+    two cloud entries listing one device were possible before the Local mode
+    existed and must keep saving, while a cloud entry next to a Local one for
+    the same device is the new collision.
 
     Cloud and local entries both list their devices under ``CONF_DEVICES``,
     so one scan covers both. No cloud entry sets a ``unique_id`` from the
@@ -170,6 +218,7 @@ def serial_in_other_entries(
         device.get("sn") == serial
         for entry in hass.config_entries.async_entries(DOMAIN)
         if entry.entry_id != exclude_entry_id
+        and (not local_only or entry.data.get(CONF_MODE) == MODE_LOCAL)
         for device in entry.data.get(CONF_DEVICES, [])
     )
 
@@ -222,7 +271,7 @@ class SetupFlowMixin(_Base):
                         {
                             MODE_STANDARD: "Standard - Official EcoFlow API",
                             MODE_ENHANCED: "Enhanced - Real-time (~3 s)",
-                            MODE_LOCAL: "Local - Modbus/TCP, no cloud (read-only)",
+                            MODE_LOCAL: _LOCAL_MODE_LABEL,
                         }
                     ),
                 }
@@ -359,6 +408,8 @@ class SetupFlowMixin(_Base):
             port = user_input[CONF_PORT]
             unit_id = user_input[CONF_UNIT_ID]
             try:
+                if not valid_local_host(host):
+                    raise LocalDeviceError("invalid_host")
                 info = await read_local_device(host, port, unit_id)
             except LocalDeviceError as err:
                 errors["base"] = err.reason
@@ -371,7 +422,7 @@ class SetupFlowMixin(_Base):
                     return self.async_abort(reason="already_configured")
                 display_name = DEVICE_TYPE_DISPLAY_NAMES[DEVICE_TYPE_POWEROCEAN]
                 return self.async_create_entry(
-                    title=f"EcoFlow Energy Local ({serial[:4]})",
+                    title=local_entry_title(serial),
                     data={
                         CONF_MODE: MODE_LOCAL,
                         CONF_HOST: host,
@@ -434,19 +485,23 @@ class SetupFlowMixin(_Base):
         """Rewrite the local entry as a cloud entry for its one device."""
         entry = self._get_reconfigure_entry()
         serial = entry.data[CONF_DEVICES][0]["sn"]
+        # The same two guards a fresh setup applies: an account another entry
+        # already holds, and a device another entry already lists.
+        self._abort_if_account_known()
         if serial_in_other_entries(self.hass, serial, entry.entry_id):
             return self.async_abort(reason="already_configured")
         self._selected_devices = [d for d in self._devices if d["sn"] == serial]
         return self.async_update_reload_and_abort(
             entry,
             unique_id=None,
+            title=retitle_for_mode(entry, serial, to_local=False),
             data=self._entry_data(
                 mode=mode,
                 email=self._email,
                 password=self._password,
                 user_id=self._user_id,
             ),
-            reason="reconfigure_successful",
+            reason="mode_switched",
         )
 
     # ------------------------------------------------------------------
@@ -479,17 +534,28 @@ class SetupFlowMixin(_Base):
                 # set one up and then never receive a reading.
                 errors["base"] = "device_requires_enhanced"
             else:
-                self._selected_devices = [
-                    d for d in self._devices if d["sn"] in selected_sns
-                ]
-                if self._auth_type == AUTH_METHOD_APP:
-                    return self._create_entry(
-                        mode=MODE_ENHANCED,
-                        email=self._email,
-                        password=self._password,
-                        user_id=self._user_id,
-                    )
-                return self._create_entry(mode=MODE_STANDARD)
+                # The account guard first, so the same account added twice
+                # still ends in `already_configured` and not in a form error.
+                self._abort_if_account_known()
+                if any(
+                    serial_in_other_entries(self.hass, sn, local_only=True)
+                    for sn in selected_sns
+                ):
+                    # Two entries listing one device would emit the same
+                    # entity unique ids, and Home Assistant refuses the second.
+                    errors["base"] = "device_in_other_entry"
+                else:
+                    self._selected_devices = [
+                        d for d in self._devices if d["sn"] in selected_sns
+                    ]
+                    if self._auth_type == AUTH_METHOD_APP:
+                        return self._create_entry(
+                            mode=MODE_ENHANCED,
+                            email=self._email,
+                            password=self._password,
+                            user_id=self._user_id,
+                        )
+                    return self._create_entry(mode=MODE_STANDARD)
 
         device_options = {d["sn"]: _device_label(d) for d in self._devices}
 
@@ -549,15 +615,18 @@ class SetupFlowMixin(_Base):
         user_id: str = "",
     ) -> ConfigFlowResult:
         """Create the config entry with all collected data."""
+        self._abort_if_account_known()
+        data = self._entry_data(
+            mode=mode, email=email, password=password, user_id=user_id
+        )
+        return self.async_create_entry(title=CLOUD_ENTRY_TITLE, data=data)
+
+    def _abort_if_account_known(self) -> None:
+        """Abort with ``already_configured`` when another entry has this account."""
         if self._auth_type == AUTH_METHOD_APP:
             self._async_abort_entries_match({CONF_EMAIL: self._email})
         else:
             self._async_abort_entries_match({CONF_ACCESS_KEY: self._access_key})
-
-        data = self._entry_data(
-            mode=mode, email=email, password=password, user_id=user_id
-        )
-        return self.async_create_entry(title="EcoFlow Energy", data=data)
 
     def _entry_data(
         self,

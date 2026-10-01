@@ -402,7 +402,9 @@ def _local_diagnostics(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any
     diagnostics = {
         "config_entry": {
             "mode": entry.data.get(CONF_MODE),
-            "host": entry.data.get(CONF_HOST),
+            # A Local host is a name or address on the owner's network, so it
+            # is redacted like the credentials; port and unit id stay.
+            "host": REDACTED if entry.data.get(CONF_HOST) else None,
             "port": entry.data.get(CONF_PORT),
             "unit_id": entry.data.get(CONF_UNIT_ID),
             "device_count": len(entry.data.get(CONF_DEVICES, [])),

@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Verbindungsmodus",
-        "description": "Wie soll die Verbindung zu deinen EcoFlow-Geräten hergestellt werden?\n\n**Standard** - Offizielle EcoFlow IoT API. Von EcoFlow unterstützt. Updates alle 10-30 Sekunden. Erfordert Developer API Keys.\n\n**Enhanced** - Community-basierte Echtzeit-Verbindung. Updates alle ~3 Sekunden. Erfordert dein EcoFlow-App-Login. Inoffiziell - Nutzung auf eigene Verantwortung.\n\n**Local** - Direkte Modbus/TCP-Verbindung zu einem PowerOcean in deinem Netzwerk. Keine Cloud und kein Konto nötig. Updates alle ~10 Sekunden. Nur lesend. Modbus muss für dein Gerät vorher vom EcoFlow-Support freigeschaltet werden.",
+        "description": "Wie soll die Verbindung zu deinen EcoFlow-Geräten hergestellt werden?\n\n**Standard** - Offizielle EcoFlow IoT API. Von EcoFlow unterstützt. Updates alle 10-30 Sekunden. Erfordert Developer API Keys.\n\n**Enhanced** - Community-basierte Echtzeit-Verbindung. Updates alle ~3 Sekunden. Erfordert dein EcoFlow-App-Login. Inoffiziell - Nutzung auf eigene Verantwortung.\n\n**Local** - Direkte Modbus/TCP-Verbindung zu einem PowerOcean in deinem Netzwerk. Keine Cloud und kein Konto nötig. Updates alle ~10 Sekunden. Nur lesend. Unterstützt wird nur der dreiphasige PowerOcean. Modbus muss für dein Gerät vorher vom EcoFlow-Support freigeschaltet werden.",
         "data": {
           "mode": "Verbindungsmodus"
         }
@@ -121,7 +121,7 @@
       }
     },
     "error": {
-      "cannot_connect": "Verbindung fehlgeschlagen. Bei der EcoFlow-API prüfe deine Zugangsdaten. Bei einer lokalen Verbindung prüfe Host, Port und dass kein anderer Modbus-Client verbunden ist.",
+      "cannot_connect": "Verbindung fehlgeschlagen. Bei der EcoFlow-API prüfe deine Zugangsdaten. Bei einer lokalen Verbindung prüfe Host und Port, dass kein anderer Modbus-Client verbunden ist und dass der EcoFlow-Support Modbus für diesen Wechselrichter freigeschaltet hat.",
       "invalid_auth": "Ungültiger Access Key oder Secret Key.",
       "no_devices": "Keine Geräte gefunden. Stelle sicher, dass Geräte in der EcoFlow-App gekoppelt sind.",
       "enhanced_login_failed": "Enhanced-Modus Login fehlgeschlagen. Überprüfe E-Mail und Passwort deines EcoFlow-App-Kontos.",
@@ -132,12 +132,16 @@
       "unsupported_device": "Dieses Gerät ist kein unterstützter dreiphasiger PowerOcean. Nur dieses Modell lässt sich hier per Modbus auslesen.",
       "serial_mismatch": "Dieses Gerät hat eine andere Seriennummer als der Eintrag. Gib die Adresse desselben PowerOcean an.",
       "modbus_exception": "Das Gerät hat mit einem Modbus-Fehler geantwortet. Prüfe die Unit-ID und ob Modbus für dein Gerät freigeschaltet ist.",
-      "device_not_on_account": "Dieses Gerät gehört nicht zu dem Konto, mit dem du dich angemeldet hast."
+      "device_not_on_account": "Dieses Gerät gehört nicht zu dem Konto, mit dem du dich angemeldet hast.",
+      "device_in_other_entry": "Ein ausgewähltes Gerät ist bereits in einem anderen EcoFlow-Energy-Eintrag eingerichtet, zum Beispiel in einem Local-Eintrag. Wähle es ab, um fortzufahren.",
+      "invalid_host": "Gib nur einen Hostnamen oder eine IP-Adresse ein, ohne http://, Pfad oder Leerzeichen."
     },
     "abort": {
       "already_configured": "Dieses EcoFlow-Konto oder Gerät ist bereits konfiguriert.",
       "reauth_successful": "Erneute Authentifizierung erfolgreich.",
-      "reconfigure_successful": "Zugangsdaten erfolgreich aktualisiert."
+      "reconfigure_successful": "Zugangsdaten erfolgreich aktualisiert.",
+      "mode_switched": "Verbindungsmodus gewechselt. Die Einstellungen des bisherigen Modus wurden aus diesem Eintrag entfernt. Deine Geräte und Entitäten bleiben unverändert.",
+      "local_updated": "Lokale Verbindungseinstellungen aktualisiert."
     }
   },
   "options": {
@@ -194,9 +198,10 @@
       "powerstream_requires_standard": "PowerStream benötigt den Standard-Modus mit Developer-API-Schlüsseln.",
       "device_requires_enhanced": "Dieses Gerät benötigt den Enhanced-Modus mit deinem EcoFlow-Konto.",
       "unknown": "Ein unerwarteter Fehler ist aufgetreten.",
+      "device_in_other_entry": "Ein ausgewähltes Gerät ist bereits in einem anderen EcoFlow-Energy-Eintrag eingerichtet, zum Beispiel in einem Local-Eintrag. Wähle es ab, um fortzufahren."
+    },
     "abort": {
       "local_use_reconfigure": "Dieser Eintrag liest den PowerOcean lokal über Modbus und hat keinen Verbindungsmodus zum Ändern. Über „Neu konfigurieren“ im Integrationsmenü änderst du Host, Port oder Unit-ID oder wechselst zurück in einen Cloud-Modus."
-    }
     }
   },
   "entity": {

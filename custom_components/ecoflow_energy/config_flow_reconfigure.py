@@ -20,7 +20,9 @@ from .config_flow_setup import (
     LocalDeviceError,
     local_schema,
     read_local_device,
+    retitle_for_mode,
     serial_in_other_entries,
+    valid_local_host,
 )
 from .const import (
     AUTH_METHOD_APP,
@@ -130,6 +132,8 @@ class ReconfigureFlowMixin(_Base):
             port = user_input[CONF_PORT]
             unit_id = user_input[CONF_UNIT_ID]
             try:
+                if not valid_local_host(host):
+                    raise LocalDeviceError("invalid_host")
                 info = await read_local_device(host, port, unit_id)
             except LocalDeviceError as err:
                 errors["base"] = err.reason
@@ -142,9 +146,13 @@ class ReconfigureFlowMixin(_Base):
                 ):
                     return self.async_abort(reason="already_configured")
                 else:
+                    switching = reconfigure_entry.data.get(CONF_MODE) != MODE_LOCAL
                     return self.async_update_reload_and_abort(
                         reconfigure_entry,
                         unique_id=serial,
+                        title=retitle_for_mode(
+                            reconfigure_entry, serial, to_local=True
+                        ),
                         data={
                             CONF_MODE: MODE_LOCAL,
                             CONF_HOST: host,
@@ -152,7 +160,7 @@ class ReconfigureFlowMixin(_Base):
                             CONF_UNIT_ID: unit_id,
                             CONF_DEVICES: [device],
                         },
-                        reason="reconfigure_successful",
+                        reason="mode_switched" if switching else "local_updated",
                     )
 
         return self.async_show_form(

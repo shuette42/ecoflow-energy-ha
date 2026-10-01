@@ -20,7 +20,7 @@ from .config_flow_options import OptionsFlowMixin
 from .config_flow_reauth import ReauthFlowMixin
 from .config_flow_reconfigure import ReconfigureFlowMixin
 from .config_flow_setup import SetupFlowMixin
-from .const import AUTH_METHOD_DEVELOPER, DOMAIN, MODE_STANDARD
+from .const import AUTH_METHOD_DEVELOPER, CONF_MODE, DOMAIN, MODE_LOCAL, MODE_STANDARD
 
 # hassfest requires config_flow to be a literal file - do not convert this
 # module into a config_flow/ package.
@@ -32,6 +32,17 @@ class EcoFlowEnergyConfigFlow(
     """Handle a config flow for EcoFlow Energy."""
 
     VERSION = 3  # Must match CONFIG_VERSION in __init__.py
+
+    @classmethod
+    @callback
+    def async_supports_options_flow(cls, config_entry: ConfigEntry) -> bool:
+        """Offer the options button for cloud entries only.
+
+        A Local entry has no connection mode to change, so the form behind
+        the button would only abort; the abort in the options flow stays as
+        the second guard.
+        """
+        return config_entry.data.get(CONF_MODE) != MODE_LOCAL
 
     @staticmethod
     @callback

@@ -1715,12 +1715,13 @@ The same download shows a second thing: an entry can carry its total and three o
 **Context:** EcoFlow support can enable a local Modbus/TCP interface on a PowerOcean (EcoFlow Open Modbus Protocol V1.0, dated 2026-06-10, covering PowerOcean single-phase, three-phase and Plus, and Ocean 2). The maintainer's own three-phase PowerOcean (prefix `HJ31`) was enabled on 2026-09-30 and measured with a local read-only script over about 19 hours, side by side with the Enhanced stream of the same unit:
 
 - Registers sit at 40001 plus the documented offset and are read with function code 3; without the base the device answers with exception 2. 32-bit values arrive word-swapped. The full serial is readable as 16 ASCII bytes at offset 3.
-- 69 paired samples: state of charge within 1 point, mean power deviation at most 12 W for solar, load, battery and grid (single outliers up to 620 W, attributed to the two reads not being simultaneous, not yet shown), grid frequency equal, and the battery lifetime charge and discharge counters within 0.01 kWh. One read timed out; the cloud stream kept running throughout.
+- 69 paired samples: state of charge within 1 point, mean absolute power deviation 7 W for solar, 11 W for battery, 17 W for grid and 25 W for load (single outliers up to 620 W, attributed to the two reads not being simultaneous, not yet shown), grid frequency equal, and the battery lifetime charge and discharge counters within 0.01 kWh. One read timed out; the cloud stream kept running throughout.
 - Grid phase voltage and current and the working mode read 0 in every sample.
+- The per-pack charge levels differ: the device reports the level the app shows, the cloud the battery level, a difference of up to 5 points at a low charge (21 of 69 samples at -5). They are not published in Local mode.
 - The device serves one client at a time: a second TCP connection is accepted but gets no answer while the first is open. Ten short connections one after another each answered within 0.1 s.
 - The cloud entry's solar, grid import and grid export energy are totals integrated by the integration since it was set up; the device's own lifetime counters are different numbers. In the same minute: solar 7606.89 against 21961.641 kWh, grid import 782.19 against 8677.900 kWh, grid export 2849.79 against 10031.958 kWh. Battery charge and discharge agree (6417.02 against 6417.021 kWh).
 
-No issue asks for independence from the cloud; #419 asks for mode reading and control on the cloud path. The objection that this has no evidenced demand and is low priority is on record; the maintainer decided to build stage 1 for his own installation.
+No issue asks for independence from the cloud; #419 asks for mode reading and control on the cloud path. There is no evidenced demand and the priority is low; the maintainer decided to build stage 1 for his own installation regardless.
 
 **Decision:**
 
