@@ -1,0 +1,63 @@
+{
+  "device": {
+    "serial": "HJ31DUMMY0000001",
+    "product_category": 1,
+    "product_number": 1,
+    "protocol_version": 1,
+    "firmware": [37, 10, 5, 1]
+  },
+  "samples": {
+    "day": {
+      "load_w": 1181.410,
+      "grid_w": -4309.337,
+      "solar_w": 5490.747,
+      "battery_w": 0.0,
+      "soc": 100,
+      "inv_freq": 49.990,
+      "pv1_voltage": 338.963,
+      "pv1_current": 7.011,
+      "pv2_voltage": 500.404,
+      "pv2_current": 6.391,
+      "pv3_voltage": 0.0,
+      "pv3_current": 0.0,
+      "backup_ratio": 0,
+      "battery_capacity_wh": 10000,
+      "fault_count": 0,
+      "batteries_online": 2,
+      "battery_1_soc": 100,
+      "battery_2_soc": 100,
+      "battery_3_soc": 0,
+      "grid_draw_total_kwh": 8677.900,
+      "grid_feed_total_kwh": 10031.958,
+      "bat_charge_total_kwh": 6417.021,
+      "bat_discharge_total_kwh": 6155.543,
+      "solar_total_kwh": 21961.641
+    },
+    "night": {
+      "load_w": 815.929,
+      "grid_w": -7.650,
+      "solar_w": 0.0,
+      "battery_w": -823.579,
+      "soc": 2,
+      "inv_freq": 49.990,
+      "pv1_voltage": 24.262,
+      "pv1_current": 0.014,
+      "pv2_voltage": 25.526,
+      "pv2_current": 0.004,
+      "pv3_voltage": 0.0,
+      "pv3_current": 0.0,
+      "backup_ratio": 0,
+      "battery_capacity_wh": 10000,
+      "fault_count": 0,
+      "batteries_online": 2,
+      "battery_1_soc": 2,
+      "battery_2_soc": 2,
+      "battery_3_soc": 0,
+      "grid_draw_total_kwh": 8677.942,
+      "grid_feed_total_kwh": 10040.026,
+      "bat_charge_total_kwh": 6417.021,
+      "bat_discharge_total_kwh": 6165.245,
+      "solar_total_kwh": 21973.359
+    }
+  }
+}
