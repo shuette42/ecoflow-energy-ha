@@ -118,12 +118,13 @@ MODE_ENHANCED = "enhanced"
 # Local Modbus/TCP read-only mode: no account, no keys, no cloud.
 MODE_LOCAL = "local"
 
-# Local Modbus: one poll every 10 s (the device refreshes its counters every
-# 5 s; one poll holds its single client slot for well under a second). Three
-# failed polls in a row mark the device unavailable.
-LOCAL_MODBUS_POLL_INTERVAL_S = 10
+# Local Modbus: one poll every 2 s. The device moves its power readings about
+# once a second (median 1.1 s over 40 s, measured), and one poll holds its
+# single client slot for a few milliseconds. Five failed polls in a row (about
+# 10 s) mark the device unavailable, the tolerance three polls gave at 10 s.
+LOCAL_MODBUS_POLL_INTERVAL_S = 2
 LOCAL_MODBUS_TIMEOUT_S = 3.0
-LOCAL_MODBUS_FAILURES_UNAVAILABLE = 3
+LOCAL_MODBUS_FAILURES_UNAVAILABLE = 5
 
 # Coordinator - Stale detection
 STALE_THRESHOLD_S = (

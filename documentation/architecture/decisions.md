@@ -1719,6 +1719,7 @@ The same download shows a second thing: an entry can carry its total and three o
 - Grid phase voltage and current and the working mode read 0 in every sample.
 - The per-pack charge levels differ: the device reports the level the app shows, the cloud the battery level, a difference of up to 5 points at a low charge (21 of 69 samples at -5). They are not published in Local mode.
 - The device serves one client at a time: a second TCP connection is accepted but gets no answer while the first is open. Ten short connections one after another each answered within 0.1 s.
+- The power readings move about once a second: over 40 s of reads every 0.25 s, load, grid, solar and battery power changed at a median of 1.1 s (0.8 to 2.1 s).
 - The cloud entry's solar, grid import and grid export energy are totals integrated by the integration since it was set up; the device's own lifetime counters are different numbers. In the same minute: solar 7606.89 against 21961.641 kWh, grid import 782.19 against 8677.900 kWh, grid export 2849.79 against 10031.958 kWh. Battery charge and discharge agree (6417.02 against 6417.021 kWh).
 
 No issue asks for independence from the cloud; #419 asks for mode reading and control on the cloud path. There is no evidenced demand and the priority is low; the maintainer decided to build stage 1 for his own installation regardless.
@@ -1728,9 +1729,9 @@ No issue asks for independence from the cloud; #419 asks for mode reading and co
 1. **A third mode, "Local (Modbus/TCP)", is its own kind of config entry.** It carries a host, a port and a unit id, and no developer keys and no account. One PowerOcean per entry, three-phase only until another variant has been measured. No entry ever holds a cloud source and a local source at once, so the separation of the two existing modes is untouched.
 2. **Read-only.** Only function code 3 exists in the client. Writes and the keep-alive register are a later stage with their own hardware test.
 3. **Switched by hand, never automatically.** The owner switches an entry with Reconfigure, in either direction. The switch is offered only on an entry that holds exactly that one PowerOcean, because a cloud entry carries every device of the account and switching it would drop the others. Two entries can never carry the same serial: setup and Reconfigure refuse a serial that another entry already holds.
-4. **One short connection per poll, every 10 s.** The connection is opened, read and closed within a poll and never held, so the device's single client slot stays free for other tools almost all of the time. The limit is documented: another Modbus client holding the connection makes the Local entry unavailable.
+4. **One short connection per poll, every 2 s.** The connection is opened, read and closed within a poll and never held, so the device's single client slot stays free for other tools almost all of the time. The limit is documented: another Modbus client holding the connection makes the Local entry unavailable.
 5. **Identity follows the value, not the mode.** Entities keep `{serial}_{key}`. A value shown to agree with the cloud reading uses the cloud key, so its history continues across a switch. The device's lifetime counters for solar, grid import and grid export get keys of their own, and Local mode does not write the three integrated keys; writing a device counter into an integrated key would put the whole difference above into one hour of the energy dashboard. The battery energy keys are shared. Nothing is integrated in Local mode, and home energy, which has no device counter, is not created.
-6. **Unavailable, never zero.** After three failed polls in a row the entry's entities are unavailable; one success restores them. A value the interface cannot deliver is not created or not written, never set to 0. There is no reauthentication, because there are no credentials, and one warning on the transition names the two causes an owner can act on.
+6. **Unavailable, never zero.** After five failed polls in a row, about 10 s, the entry's entities are unavailable; one success restores them. A value the interface cannot deliver is not created or not written, never set to 0. There is no reauthentication, because there are no credentials, and one warning on the transition names the two causes an owner can act on.
 7. **An automatic fallback is not part of this decision.** If it is built, it is a mode of its own ("cloud with local reserve") with exactly one active source at any moment, a diagnostic sensor that names the active source, a switch to local only after the cloud has been degraded for 5 minutes, hysteresis on the way back, and, before anything else, an answer to item 5: the integrated totals and the device counters are different numbers, so energy cannot follow the active source.
 
 **Trade-offs:**
@@ -1740,7 +1741,8 @@ No issue asks for independence from the cloud; #419 asks for mode reading and co
 - (-) Three energy sensors start a new history in Local mode, and an energy dashboard set up on the cloud keys has to be pointed at them
 - (-) One device and one firmware measured; the register map may change with firmware, and other variants are not offered
 - (-) Support has to enable Modbus per device, and another Modbus client on the same unit locks this one out
-- (-) 10 s polling is slower than the Enhanced stream
+- (+) 2 s polling keeps close to the inverter, which moves its power readings about once a second, and is faster than the Enhanced stream
+- (-) About as many state writes as the Enhanced stream
 
 **Alternatives considered:**
 1. Fall back to local automatically inside the existing modes. Rejected: it switches sources at runtime, puts polling inside the push mode, and gives one entity two sources whose energy numbers differ by thousands of kWh.

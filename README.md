@@ -84,7 +84,7 @@
 
 > **Use Enhanced Mode on a PowerOcean.** In Standard Mode the readings refresh reliably only while the EcoFlow app or web portal is open, so entities can sit still for hours while the poll itself looks healthy. See [Configure](#2-configure) for how to check this on your own system.
 
-> **Local connection for a three-phase PowerOcean.** If EcoFlow support has enabled Modbus on your inverter, a third connection type reads it directly over your network with no account and no cloud. It is read-only, refreshes every 10 seconds and shows the main readings, not everything the account connection does. See [Reading a PowerOcean locally over Modbus](documentation/guides/powerocean-local-modbus.md).
+> **Local connection for a three-phase PowerOcean.** If EcoFlow support has enabled Modbus on your inverter, a third connection type reads it directly over your network with no account and no cloud. It is read-only, refreshes every 2 seconds and shows the main readings, not everything the account connection does. See [Reading a PowerOcean locally over Modbus](documentation/guides/powerocean-local-modbus.md).
 
 **PowerOcean Plus** (`R371`, `R372`, `R374`, `HJ3C`) are the higher-power 3-phase hybrid units. They use the same entity set as a standard PowerOcean and are supported in Enhanced Mode. Beyond a standard unit they report per-phase **reactive power** (var) and **apparent power** (VA), and drive **MPPT strings 3 and 4**. These entities ship disabled by default so that standard units are not left with permanently empty sensors, so enable the ones you need after adding a Plus device. Field coverage is based on diagnostics from live Plus hardware; if your unit reports a value that no entity picks up, the raw data is available via **Download Diagnostics**.
 

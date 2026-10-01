@@ -27,7 +27,7 @@ A Local entry holds no keys and no account. It has one device, the PowerOcean.
 
 The entry shows solar, home, grid and battery power, the battery charge level, grid frequency, the two solar strings (voltage and current), battery charge and discharge energy, battery capacity, backup reserve and the number of batteries online. It also shows the inverter's own lifetime counters for solar, grid import and grid export, and a fault count.
 
-The values refresh every 10 seconds. Each refresh opens a short connection and closes it again, so the inverter's single slot is free almost all of the time.
+The values refresh every 2 seconds. The inverter updates its power readings about once a second, so this stays close to its own pace. Each refresh opens a short connection and closes it again, so the inverter's single slot is free almost all of the time.
 
 I compared these values with the same inverter's account connection over about 19 hours. The charge level was within 1 percent. Power was on average within 7 W for solar, 11 W for battery, 17 W for grid and 25 W for home. Single readings differ more when the load changes fast, most likely because the two connections are not read in the same second. The battery energy counters matched within 0.01 kWh.
 

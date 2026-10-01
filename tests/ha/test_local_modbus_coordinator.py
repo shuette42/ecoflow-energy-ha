@@ -209,20 +209,24 @@ def _frame_of_another_device(sample: dict[str, Any]) -> dict[int, bytes]:
     return answer
 
 
-async def test_failures_keep_data_until_the_third_then_one_success_restores(
+async def test_failures_keep_data_until_the_threshold_then_one_success_restores(
     hass: HomeAssistant, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """B1: no flicker before the third failure, one WARNING, one INFO, no reauth."""
-    assert LOCAL_MODBUS_FAILURES_UNAVAILABLE == 3
+    """B1: no flicker before the threshold, one WARNING, one INFO, no reauth."""
+    # Below two there is no "before the threshold" left to check.
+    N = LOCAL_MODBUS_FAILURES_UNAVAILABLE
+    assert N >= 2
     caplog.set_level(
         logging.DEBUG, logger="custom_components.ecoflow_energy.coordinator"
     )
     timeout = ModbusTimeoutError("no answer")
     entry = _local_entry()
+    # One good poll, N failures to reach the threshold, one more past it, then
+    # the device answers again.
     coordinator = _coordinator(
         hass,
         entry,
-        [_frame(DAY), timeout, timeout, timeout, timeout, _frame(DAY)],
+        [_frame(DAY), *[timeout] * (N + 1), _frame(DAY)],
     )
 
     def _noisy() -> list[str]:
@@ -238,7 +242,7 @@ async def test_failures_keep_data_until_the_third_then_one_success_restores(
         assert coordinator.device_available is True
         assert _noisy() == []
 
-        for failures in (1, 2):
+        for failures in range(1, N):
             await coordinator.async_refresh()
             assert coordinator.consecutive_failures == failures
             assert coordinator.device_available is True
@@ -246,7 +250,7 @@ async def test_failures_keep_data_until_the_third_then_one_success_restores(
             assert _noisy() == []
 
         await coordinator.async_refresh()
-        assert coordinator.consecutive_failures == 3
+        assert coordinator.consecutive_failures == N
         assert coordinator.device_available is False
         assert coordinator.data["soc_pct"] == 100
         assert len(_noisy()) == 1
@@ -444,19 +448,20 @@ async def test_the_serial_is_read_again_after_the_device_was_unavailable(
     hass: HomeAssistant,
 ) -> None:
     """Whatever answers after an outage is checked, not trusted."""
+    N = LOCAL_MODBUS_FAILURES_UNAVAILABLE
     timeout = ModbusTimeoutError("no answer")
     coordinator, stub = _with_stub(
-        hass, _local_entry(), [_frame(DAY), timeout, timeout, timeout, _frame(DAY)]
+        hass, _local_entry(), [_frame(DAY), *[timeout] * N, _frame(DAY)]
     )
 
-    for _ in range(5):
+    # One good poll, N failures (the serial is not asked for while the device
+    # still counts as available), then the first answer after the outage.
+    for _ in range(N + 2):
         await coordinator.async_refresh()
 
     assert stub.requested == [
         SETUP_BLOCKS + POLL_BLOCKS,
-        POLL_BLOCKS,
-        POLL_BLOCKS,
-        POLL_BLOCKS,
+        *[POLL_BLOCKS] * N,
         SETUP_BLOCKS + POLL_BLOCKS,
     ]
 
@@ -485,15 +490,14 @@ async def test_another_device_after_an_outage_is_one_warning_and_never_data(
     caplog.set_level(
         logging.DEBUG, logger="custom_components.ecoflow_energy.coordinator"
     )
+    N = LOCAL_MODBUS_FAILURES_UNAVAILABLE
     timeout = ModbusTimeoutError("no answer")
     coordinator = _coordinator(
         hass,
         _local_entry(),
         [
             _frame(DAY),
-            timeout,
-            timeout,
-            timeout,
+            *[timeout] * N,
             _frame_of_another_device(NIGHT),
             _frame_of_another_device(NIGHT),
             _frame(NIGHT),
@@ -508,21 +512,22 @@ async def test_another_device_after_an_outage_is_one_warning_and_never_data(
             and "serial mismatch" in record.getMessage()
         ]
 
-    for _ in range(4):
+    # One good poll, then N failures: the device is unavailable.
+    for _ in range(N + 1):
         await coordinator.async_refresh()
     assert coordinator.device_available is False
     assert _mismatch_warnings() == []
 
     await coordinator.async_refresh()
     # The other device's readings (NIGHT: 2 %) never reach the data.
-    assert coordinator.consecutive_failures == 4
+    assert coordinator.consecutive_failures == N + 1
     assert coordinator.device_available is False
     assert coordinator.data["soc_pct"] == 100
     assert len(_mismatch_warnings()) == 1
     assert OTHER_SERIAL not in _mismatch_warnings()[0]
 
     await coordinator.async_refresh()
-    assert coordinator.consecutive_failures == 5
+    assert coordinator.consecutive_failures == N + 2
     assert coordinator.data["soc_pct"] == 100
     assert len(_mismatch_warnings()) == 1
 
@@ -542,11 +547,11 @@ async def test_a_rejected_read_names_its_block_and_warns_without_the_enable_hint
     caplog.set_level(
         logging.DEBUG, logger="custom_components.ecoflow_energy.coordinator"
     )
+    N = LOCAL_MODBUS_FAILURES_UNAVAILABLE
     rejected = ModbusExceptionResponse(2, 0x0870)
-    coordinator = _coordinator(
-        hass, _local_entry(), [_frame(DAY), rejected, rejected, rejected]
-    )
+    coordinator = _coordinator(hass, _local_entry(), [_frame(DAY), *[rejected] * N])
 
+    # One good poll and the first rejected read: still below the threshold.
     await coordinator.async_refresh()
     await coordinator.async_refresh()
     assert coordinator.last_error is not None
@@ -555,8 +560,9 @@ async def test_a_rejected_read_names_its_block_and_warns_without_the_enable_hint
     warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
     assert warnings == []
 
-    await coordinator.async_refresh()
-    await coordinator.async_refresh()
+    # The remaining N - 1 rejected reads reach the threshold.
+    for _ in range(N - 1):
+        await coordinator.async_refresh()
     (record,) = [r for r in caplog.records if r.levelno >= logging.WARNING]
     message = record.getMessage()
     assert "rejected a read" in message
