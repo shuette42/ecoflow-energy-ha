@@ -145,7 +145,7 @@ The LED control reproduces the hardware-confirmed app ConfigWrite field `384` wi
 ## Notes
 
 - Every device additionally exposes 2 universal diagnostic sensors (connection status and active mode) that are not included in the totals above.
-- Solar strings 3 and 4 are reported in both modes. Enhanced Mode delivers only their power, without input voltage or current. Which reading belongs to string 3 and which to string 4 has not been compared with the app yet, so the two may show up swapped.
+- Solar strings 3 and 4 are reported in both modes. Enhanced Mode delivers only their power, without input voltage or current. One owner compared them with the app and reports that string 3 and string 4 are the right way round.
 - Home, grid and total solar values depend on an EcoFlow-compatible meter being paired in the app. Without one they may be absent or misleading, so they ship as disabled diagnostics.
 - The Standard Mode values are read as plain watts. If a power reading looks off by a constant factor compared to the EcoFlow app, please report it with a diagnostics download so the scaling can be corrected.
 - Switching a device between Standard and Enhanced Mode does not duplicate entities, since both paths produce the same entity keys.
