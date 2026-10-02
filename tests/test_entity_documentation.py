@@ -126,6 +126,7 @@ FAMILY_TO_FILE: dict[str, str] = {
     "OCEAN2": "ocean-2.md",
     "SMARTPANEL40": "smart-panel-40.md",
     "DELTAPROULTRA": "delta-pro-ultra.md",
+    "SMARTHOMEPANEL2": "smart-home-panel-2.md",
     # The sensors that exist only in a PowerOcean Local (Modbus/TCP) entry
     # share the PowerOcean page: one device, one page. A file may therefore
     # carry several families; see _known_keys.
@@ -197,6 +198,8 @@ SKIP_SECTIONS: frozenset[tuple[str, str]] = frozenset(
         ("ocean-2.md", "Sensors - Battery Modules (up to 16)"),
         ("smart-panel-40.md", "Sensors - Circuits (up to 40)"),
         ("delta-pro-ultra.md", "Sensors - Battery Packs (up to 5)"),
+        ("smart-home-panel-2.md", "Sensors - Circuits (up to 12)"),
+        ("smart-home-panel-2.md", "Sensors - Storage Channels (up to 3)"),
         ("smart-panel-40.md", "Binary Sensors - Circuits (up to 40)"),
     }
 )
@@ -477,6 +480,22 @@ TEMPLATE_FAMILIES: tuple[TemplateFamily, ...] = (
         "Battery Pack ",
         "Sensors - Battery Packs (up to 5)",
         re.compile(r"up to (\d+)"),
+    ),
+    TemplateFamily(
+        "smart-home-panel-2.md",
+        "SMARTHOMEPANEL2",
+        "sensors",
+        "Circuit ",
+        "Sensors - Circuits (up to 12)",
+        re.compile(r"Circuits \(up to (\d+)\)"),
+    ),
+    TemplateFamily(
+        "smart-home-panel-2.md",
+        "SMARTHOMEPANEL2",
+        "sensors",
+        "Storage Channel ",
+        "Sensors - Storage Channels (up to 3)",
+        re.compile(r"Storage Channels \(up to (\d+)\)"),
     ),
     TemplateFamily(
         "smart-panel-40.md",
@@ -872,6 +891,14 @@ EXCLUDE_FROM_UNDOCUMENTED: tuple[Exclusion, ...] = (
         re.compile(r"^Battery Pack \d+ "),
         "documented via the 'Battery Pack N ...' template rows in "
         "delta-pro-ultra.md, checked per instance by TEMPLATE_FAMILIES",
+    ),
+    Exclusion(
+        "SMARTHOMEPANEL2",
+        "sensors",
+        re.compile(r"^(Circuit|Storage Channel) \d+ "),
+        "documented via the 'Circuit N ...' and 'Storage Channel N ...' "
+        "template rows in smart-home-panel-2.md, checked per instance by "
+        "TEMPLATE_FAMILIES",
     ),
     Exclusion(
         "SMARTPANEL40",

@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- The Smart Home Panel 2 (`HD31`) is supported, read-only and in Enhanced Mode only: grid and home power, grid current per leg and grid voltage, the level, remaining energy and capacity of the connected batteries, the backup runtime, power and current for each of the twelve circuits with the name set in the app, and the level of each storage channel. Mapped from @jrbeir's two diagnostics downloads, where the circuits add up to the home power within 1.5 W. The battery was idle while they were recorded, so the storage channels' charging and discharging power is not read yet.
+
 - The DELTA Pro Ultra (`Y711`) is supported, read-only and in Enhanced Mode only: battery level, remaining time, input and output power per port, battery voltage and power, two temperatures, the backup reserve, and level and temperature for each battery pack. Mapped from @jrbeir's two diagnostics downloads. The unit was idle while they were recorded, so the power readings still need a check under load.
 
 - The Local (Modbus/TCP) mode of a three-phase PowerOcean now has an Off-Grid binary sensor. It shows whether the inverter runs off-grid, reads the status straight from the inverter and works without the EcoFlow cloud, so it can trigger an automation during a power outage.
