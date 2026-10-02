@@ -127,6 +127,10 @@ MODE_LOCAL = "local"
 LOCAL_MODBUS_POLL_INTERVAL_S = 2
 LOCAL_MODBUS_TIMEOUT_S = 3.0
 LOCAL_MODBUS_FAILURES_UNAVAILABLE = 5
+# Control heartbeat: a beat every 15 s; the unit hands control back to the app
+# after 60 s without an acknowledged one, so the integration stops there too.
+LOCAL_MODBUS_HEARTBEAT_INTERVAL_S = 15
+LOCAL_MODBUS_HEARTBEAT_LAPSE_S = 60
 
 # Coordinator - Stale detection
 STALE_THRESHOLD_S = (

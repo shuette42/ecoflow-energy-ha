@@ -18,6 +18,7 @@ from ecoflow_energy.ecoflow.modbus_local import (
     ModbusLocalClient,
     ModbusProtocolError,
     ModbusTimeoutError,
+    ModbusTransport,
     decode_ascii,
     decode_f32_ws,
     decode_i32_ws,
@@ -600,3 +601,17 @@ async def test_a_poll_and_writes_started_together_never_hold_two_sockets(monkeyp
 
     assert most_open == 1
     assert most_inflight == 1
+
+
+def test_the_own_client_satisfies_the_transport_protocol() -> None:
+    """The coordinator takes either link through one contract: read and write."""
+    # Assigning is the static check; the isinstance pair is the runtime one.
+    transport: ModbusTransport = ModbusLocalClient("127.0.0.1")
+    assert isinstance(transport, ModbusTransport)
+
+    class ReadOnly:
+        async def read_blocks(self, blocks):
+            return {}
+
+    # The control: a link that cannot write is not a transport.
+    assert not isinstance(ReadOnly(), ModbusTransport)

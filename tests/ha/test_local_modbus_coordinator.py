@@ -1,28 +1,35 @@
-"""Local Modbus coordinator and the entities built on it (read-only PowerOcean).
+"""Local Modbus coordinator and the entities built on it (PowerOcean).
 
 The client is stubbed with decoded register frames, so these tests cover what
 the coordinator and the sensor platform do with a poll: availability after
 repeated failures, which entities a local entry creates, how a value the poll
 did not deliver renders, and that a lifetime counter never moves backwards.
+The second half covers control: the heartbeat (cadence, lapse, refusal, unload)
+and the confirmed write of the two settings.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import struct
 from collections.abc import Sequence
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
+import homeassistant.util.dt as dt_util
 import pytest
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant, State
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
+    async_fire_time_changed,
     mock_restore_cache_with_extra_data,
 )
 
@@ -33,11 +40,16 @@ from custom_components.ecoflow_energy.const import (
     DEVICE_TYPE_POWEROCEAN,
     DOMAIN,
     LOCAL_MODBUS_FAILURES_UNAVAILABLE,
+    LOCAL_MODBUS_HEARTBEAT_INTERVAL_S,
+    LOCAL_MODBUS_HEARTBEAT_LAPSE_S,
     MODE_LOCAL,
     POWEROCEAN_LOCAL_KEYS,
     POWEROCEAN_LOCAL_SENSOR_DEFS,
 )
-from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
+from custom_components.ecoflow_energy.coordinator import (
+    EcoFlowDeviceCoordinator,
+    local_modbus,
+)
 from custom_components.ecoflow_energy.coordinator.local_modbus import (
     EcoFlowLocalModbusCoordinator,
 )
@@ -46,6 +58,9 @@ from custom_components.ecoflow_energy.diagnostics import (
     async_get_config_entry_diagnostics,
 )
 from custom_components.ecoflow_energy.ecoflow.modbus_local import (
+    BACKUP_RATIO_OFFSET,
+    BRIGHTNESS_OFFSET,
+    HEARTBEAT_OFFSET,
     ModbusConnectError,
     ModbusExceptionResponse,
     ModbusTimeoutError,
@@ -151,21 +166,45 @@ def _frame(sample: dict[str, Any], **overrides: float) -> dict[int, bytes]:
 
 
 class StubClient:
-    """Answers each poll from a script: a frame, or an error to raise."""
+    """Answers each poll from a script: a frame, or an error to raise.
+
+    Writes are recorded in ``writes`` and accepted unless ``write_errors`` holds
+    an error for them (consumed in order, one per write). A written register is
+    remembered and answered by a one-register read, which is how the
+    coordinator confirms a write; ``read_back_override`` makes the device hold
+    another value than the one written.
+    """
 
     def __init__(self, script: list[dict[int, bytes] | Exception]) -> None:
         self._script = list(script)
         self.calls = 0
         # The blocks each poll asked for, in order.
         self.requested: list[tuple[tuple[int, int], ...]] = []
+        self.writes: list[tuple[int, int]] = []
+        self.write_errors: list[Exception | None] = []
+        self.registers: dict[int, int] = {}
+        self.read_back_override: int | None = None
 
     async def read_blocks(self, blocks: Sequence[tuple[int, int]]) -> dict[int, bytes]:
         self.calls += 1
         self.requested.append(tuple(blocks))
+        if len(blocks) == 1 and blocks[0][1] == 1 and blocks[0][0] in self.registers:
+            offset = blocks[0][0]
+            held = self.registers[offset]
+            if self.read_back_override is not None:
+                held = self.read_back_override
+            return {offset: struct.pack(">H", held)}
         step = self._script.pop(0)
         if isinstance(step, Exception):
             raise step
         return step
+
+    async def write_register(self, offset: int, value: int) -> None:
+        self.writes.append((offset, value))
+        error = self.write_errors.pop(0) if self.write_errors else None
+        if error is not None:
+            raise error
+        self.registers[offset] = value
 
 
 def _local_entry() -> MockConfigEntry:
@@ -281,7 +320,7 @@ async def test_local_entry_creates_the_local_entities_and_a_missing_value_is_unk
     entry.add_to_hass(hass)
 
     with patch(
-        "custom_components.ecoflow_energy.coordinator.local_modbus.ModbusLocalClient",
+        "custom_components.ecoflow_energy.coordinator.local_modbus.create_link",
         return_value=stub,
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)
@@ -373,7 +412,7 @@ async def _set_up_local_entry(
     """Set the entry up with the Modbus client replaced by a scripted stub."""
     entry.add_to_hass(hass)
     with patch(
-        "custom_components.ecoflow_energy.coordinator.local_modbus.ModbusLocalClient",
+        "custom_components.ecoflow_energy.coordinator.local_modbus.create_link",
         return_value=StubClient(script),
     ):
         result = await hass.config_entries.async_setup(entry.entry_id)
@@ -675,3 +714,324 @@ def test_the_counters_the_parser_knows_are_the_total_increasing_local_sensors() 
     }
 
     assert sensor_counters == LIFETIME_COUNTER_KEYS
+
+
+# ----------------------------------------------------------------------
+# Control: heartbeat and confirmed writes
+# ----------------------------------------------------------------------
+
+
+class Clock:
+    """The heartbeat's clock, moved by hand."""
+
+    def __init__(self) -> None:
+        self.now = 1000.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+@pytest.fixture
+def clock(monkeypatch: pytest.MonkeyPatch) -> Clock:
+    fake = Clock()
+    monkeypatch.setattr(local_modbus, "_monotonic", fake)
+    return fake
+
+
+async def _advance(hass: HomeAssistant, clock: Clock, seconds: float) -> None:
+    """Move the fake clock and fire the heartbeat's sleep timer if it is due."""
+    clock.now += seconds
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=seconds))
+    await hass.async_block_till_done()
+    await asyncio.sleep(0)
+
+
+def _control_warnings(caplog: pytest.LogCaptureFixture) -> list[str]:
+    return [
+        record.getMessage()
+        for record in caplog.records
+        if record.levelno >= logging.WARNING and "Local Modbus" in record.getMessage()
+    ]
+
+
+def _beats(stub: StubClient) -> int:
+    return sum(1 for write in stub.writes if write == (HEARTBEAT_OFFSET, 1))
+
+
+async def test_control_on_writes_the_first_beat_and_reports_on_after_the_ack(
+    hass: HomeAssistant, clock: Clock
+) -> None:
+    coordinator, stub = _with_stub(hass, _local_entry(), [])
+    assert coordinator.control_enabled is False
+    assert stub.writes == []
+
+    await coordinator.async_set_control(True)
+
+    assert stub.writes == [(HEARTBEAT_OFFSET, 1)]
+    assert coordinator.control_enabled is True
+    await coordinator.async_set_control(False)
+
+
+async def test_a_beat_follows_every_interval_and_not_before(
+    hass: HomeAssistant, clock: Clock
+) -> None:
+    assert LOCAL_MODBUS_HEARTBEAT_INTERVAL_S == 15
+    coordinator, stub = _with_stub(hass, _local_entry(), [])
+    await coordinator.async_set_control(True)
+    await hass.async_block_till_done()
+    assert _beats(stub) == 1
+
+    # Each advance is measured from the moment the timer was set, so one second
+    # short of the interval leaves the timer asleep and the full interval wakes it.
+    for beats in (2, 3):
+        await _advance(hass, clock, LOCAL_MODBUS_HEARTBEAT_INTERVAL_S - 1)
+        assert _beats(stub) == beats - 1
+        await _advance(hass, clock, LOCAL_MODBUS_HEARTBEAT_INTERVAL_S)
+        assert _beats(stub) == beats
+    assert coordinator.control_enabled is True
+    await coordinator.async_set_control(False)
+
+
+async def test_control_off_stops_the_beats_and_writes_nothing(
+    hass: HomeAssistant, clock: Clock
+) -> None:
+    coordinator, stub = _with_stub(hass, _local_entry(), [])
+    await coordinator.async_set_control(True)
+    await hass.async_block_till_done()
+    await _advance(hass, clock, 15)
+    assert _beats(stub) == 2
+
+    await coordinator.async_set_control(False)
+
+    assert coordinator.control_enabled is False
+    assert coordinator._heartbeat_task is None
+    for _ in range(5):
+        await _advance(hass, clock, 15)
+    assert stub.writes == [(HEARTBEAT_OFFSET, 1)] * 2
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        ModbusTimeoutError("no answer"),
+        ModbusConnectError("refused"),
+        ModbusExceptionResponse(2, HEARTBEAT_OFFSET),
+    ],
+)
+async def test_a_failed_first_beat_raises_and_leaves_control_off(
+    hass: HomeAssistant, clock: Clock, error: Exception
+) -> None:
+    coordinator, stub = _with_stub(hass, _local_entry(), [])
+    stub.write_errors = [error]
+
+    with pytest.raises(HomeAssistantError):
+        await coordinator.async_set_control(True)
+
+    assert coordinator.control_enabled is False
+    assert coordinator._heartbeat_task is None
+    await _advance(hass, clock, 60)
+    assert stub.writes == [(HEARTBEAT_OFFSET, 1)]
+
+
+async def test_a_failed_beat_is_retried_and_logged_at_debug_only(
+    hass: HomeAssistant, clock: Clock, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(
+        logging.DEBUG, logger="custom_components.ecoflow_energy.coordinator"
+    )
+    coordinator, stub = _with_stub(hass, _local_entry(), [])
+    stub.write_errors = [None, ModbusTimeoutError("no answer"), None]
+    await coordinator.async_set_control(True)
+    await hass.async_block_till_done()
+
+    await _advance(hass, clock, 15)
+    assert coordinator.control_enabled is True
+    assert _control_warnings(caplog) == []
+    assert any(
+        record.levelno == logging.DEBUG and "heartbeat" in record.getMessage()
+        for record in caplog.records
+    )
+
+    await _advance(hass, clock, 15)
+    assert _beats(stub) == 3
+    assert coordinator.control_enabled is True
+    assert coordinator._last_beat_ack == clock.now
+    await coordinator.async_set_control(False)
+
+
+async def test_sixty_seconds_without_an_ack_turn_control_off_with_one_warning(
+    hass: HomeAssistant, clock: Clock, caplog: pytest.LogCaptureFixture
+) -> None:
+    assert LOCAL_MODBUS_HEARTBEAT_LAPSE_S == 60
+    coordinator, stub = _with_stub(hass, _local_entry(), [])
+    stub.write_errors = [None] + [ModbusTimeoutError("no answer")] * 10
+    with patch.object(coordinator, "async_update_listeners") as notify:
+        await coordinator.async_set_control(True)
+        await hass.async_block_till_done()
+        notified_before_lapse = notify.call_count
+
+        for _ in range(3):
+            await _advance(hass, clock, 15)
+            assert coordinator.control_enabled is True
+        assert _control_warnings(caplog) == []
+        assert notify.call_count == notified_before_lapse
+
+        await _advance(hass, clock, 15)
+
+        assert coordinator.control_enabled is False
+        assert coordinator._heartbeat_task is None
+        assert notify.call_count == notified_before_lapse + 1
+    warnings = _control_warnings(caplog)
+    assert len(warnings) == 1
+    assert coordinator.device_tag in warnings[0]
+    assert SERIAL not in caplog.text
+
+    # The device answering again does not take control back by itself.
+    stub.write_errors = []
+    writes_at_lapse = len(stub.writes)
+    for _ in range(3):
+        await _advance(hass, clock, 15)
+    assert len(stub.writes) == writes_at_lapse
+    assert coordinator.control_enabled is False
+    assert len(_control_warnings(caplog)) == 1
+
+
+async def test_a_refused_beat_stops_the_heartbeat_at_once_with_one_warning(
+    hass: HomeAssistant, clock: Clock, caplog: pytest.LogCaptureFixture
+) -> None:
+    coordinator, stub = _with_stub(hass, _local_entry(), [])
+    stub.write_errors = [None, ModbusExceptionResponse(2, HEARTBEAT_OFFSET)]
+    await coordinator.async_set_control(True)
+    await hass.async_block_till_done()
+
+    await _advance(hass, clock, 15)
+
+    assert coordinator.control_enabled is False
+    assert coordinator._heartbeat_task is None
+    assert len(_control_warnings(caplog)) == 1
+    await _advance(hass, clock, 15)
+    assert _beats(stub) == 2
+
+
+async def test_control_is_off_whenever_an_entry_starts(
+    hass: HomeAssistant, clock: Clock
+) -> None:
+    entry = _local_entry()
+    first, first_stub = _with_stub(hass, entry, [])
+    await first.async_set_control(True)
+    assert first.control_enabled is True
+
+    second_stub = StubClient([])
+    second = EcoFlowLocalModbusCoordinator(hass, entry, DEVICE_DICT, client=second_stub)
+
+    assert second.control_enabled is False
+    await _advance(hass, clock, 15)
+    assert second_stub.writes == []
+    await first.async_set_control(False)
+
+
+async def test_unloading_the_entry_cancels_the_heartbeat_and_writes_nothing(
+    hass: HomeAssistant, clock: Clock
+) -> None:
+    entry = _local_entry()
+    assert await _set_up_local_entry(hass, entry, [_frame(DAY)])
+    coordinator = hass.data[DOMAIN][entry.entry_id][SERIAL]
+    stub = coordinator._link
+    await coordinator.async_set_control(True)
+    await hass.async_block_till_done()
+    assert _beats(stub) == 1
+    task = coordinator._heartbeat_task
+    assert task is not None
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert task.done()
+    assert coordinator.control_enabled is False
+    await _advance(hass, clock, 60)
+    assert _beats(stub) == 1
+
+
+@pytest.mark.parametrize(
+    ("key", "offset"),
+    [
+        ("ems_backup_ratio_pct", BACKUP_RATIO_OFFSET),
+        ("local_indicator_brightness_pct", BRIGHTNESS_OFFSET),
+    ],
+)
+async def test_a_setting_is_applied_only_after_the_register_reads_back(
+    hass: HomeAssistant, key: str, offset: int
+) -> None:
+    coordinator, stub = _with_stub(hass, _local_entry(), [_frame(DAY)])
+    await coordinator.async_refresh()
+    polls = stub.calls
+
+    await coordinator.async_write_register(key, 40)
+
+    assert stub.writes == [(offset, 40)]
+    assert stub.requested[polls:] == [((offset, 1),)]
+    assert coordinator.data[key] == 40
+    assert coordinator.device_data[key] == 40
+
+
+async def test_a_value_the_device_does_not_hold_fails_and_changes_nothing(
+    hass: HomeAssistant,
+) -> None:
+    coordinator, stub = _with_stub(hass, _local_entry(), [_frame(DAY)])
+    await coordinator.async_refresh()
+    before = coordinator.data["ems_backup_ratio_pct"]
+    stub.read_back_override = before
+
+    with pytest.raises(HomeAssistantError, match="holds"):
+        await coordinator.async_write_register("ems_backup_ratio_pct", before + 1)
+
+    assert stub.writes == [(BACKUP_RATIO_OFFSET, before + 1)]
+    assert coordinator.data["ems_backup_ratio_pct"] == before
+    assert coordinator.device_data["ems_backup_ratio_pct"] == before
+
+
+async def test_a_write_that_fails_on_the_wire_is_an_error_and_changes_nothing(
+    hass: HomeAssistant,
+) -> None:
+    coordinator, stub = _with_stub(hass, _local_entry(), [_frame(DAY)])
+    await coordinator.async_refresh()
+    before = coordinator.data["ems_backup_ratio_pct"]
+    stub.write_errors = [ModbusTimeoutError("no answer")]
+
+    with pytest.raises(HomeAssistantError, match="did not take"):
+        await coordinator.async_write_register("ems_backup_ratio_pct", before + 1)
+
+    assert coordinator.data["ems_backup_ratio_pct"] == before
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("soc_pct", 50),
+        ("ems_backup_ratio_pct", -1),
+        ("ems_backup_ratio_pct", 101),
+        ("local_indicator_brightness_pct", 101),
+    ],
+)
+async def test_a_foreign_key_or_an_out_of_range_value_is_refused_before_any_write(
+    hass: HomeAssistant, key: str, value: int
+) -> None:
+    coordinator, stub = _with_stub(hass, _local_entry(), [_frame(DAY)])
+    await coordinator.async_refresh()
+
+    with pytest.raises(ValueError):
+        await coordinator.async_write_register(key, value)
+
+    assert stub.writes == []
+
+
+@pytest.mark.parametrize("value", [0, 100])
+async def test_the_range_limits_themselves_are_accepted(
+    hass: HomeAssistant, value: int
+) -> None:
+    coordinator, stub = _with_stub(hass, _local_entry(), [_frame(DAY)])
+    await coordinator.async_refresh()
+
+    await coordinator.async_write_register("local_indicator_brightness_pct", value)
+
+    assert coordinator.data["local_indicator_brightness_pct"] == value

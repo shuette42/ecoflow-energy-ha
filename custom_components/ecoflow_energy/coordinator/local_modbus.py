@@ -1,14 +1,24 @@
-"""Coordinator for a three-phase PowerOcean read over local Modbus/TCP.
+"""Coordinator for a three-phase PowerOcean over local Modbus/TCP.
 
-Read-only and credential-free: one poll every ``LOCAL_MODBUS_POLL_INTERVAL_S``,
-no MQTT, no HTTP, no energy integration and no write path. The cloud
-coordinator's mixins are deliberately not used, because they carry an MQTT
-liveness head, cloud-only resolvers and an energy integrator, none of which
-applies to a device that reports its own lifetime counters.
+Credential-free: one poll every ``LOCAL_MODBUS_POLL_INTERVAL_S``, no MQTT, no
+HTTP and no energy integration. The cloud coordinator's mixins are deliberately
+not used, because they carry an MQTT liveness head, cloud-only resolvers and an
+energy integrator, none of which applies to a device that reports its own
+lifetime counters.
 
-Availability follows the poll: failures 1 and 2 keep the last data, the third
-in a row marks the device unavailable, and one success restores it. An entry
-without credentials never starts a reauth.
+Control is a separate, explicit step. ``async_set_control`` starts or stops the
+control heartbeat (register 0x025F, a beat every
+``LOCAL_MODBUS_HEARTBEAT_INTERVAL_S``); the unit hands control back to the app
+once ``LOCAL_MODBUS_HEARTBEAT_LAPSE_S`` pass without an acknowledged beat, and
+the coordinator then stops beating, reports control off and warns once.
+``control_enabled`` starts False on every entry start and is never restored.
+``async_write_register`` writes one of the two writable settings and confirms it
+only by reading the register back. The connection (shared or own) comes from
+``create_link``; only allowlisted registers are ever written.
+
+Availability follows the poll: failures 1 to 4 keep the last data, the fifth
+(``LOCAL_MODBUS_FAILURES_UNAVAILABLE``) in a row marks the device unavailable,
+and one success restores it. An entry without credentials never starts a reauth.
 
 The device's serial number is read on the first poll and again on the first
 poll after the device was unavailable. A different serial (another device at
@@ -17,15 +27,17 @@ the same address, or a changed unit id) is a failed poll, never data.
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from collections.abc import Sequence
+import time
 from datetime import datetime, timedelta
-from typing import Any, Protocol
+from typing import Any
 
 import homeassistant.util.dt as dt_util
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
@@ -35,15 +47,20 @@ from ..const import (
     DEVICE_TYPE_POWEROCEAN,
     DOMAIN,
     LOCAL_MODBUS_FAILURES_UNAVAILABLE,
+    LOCAL_MODBUS_HEARTBEAT_INTERVAL_S,
+    LOCAL_MODBUS_HEARTBEAT_LAPSE_S,
     LOCAL_MODBUS_POLL_INTERVAL_S,
-    LOCAL_MODBUS_TIMEOUT_S,
 )
 from ..ecoflow.const import device_log_tag, get_device_name
 from ..ecoflow.modbus_local import (
+    BACKUP_RATIO_OFFSET,
+    BRIGHTNESS_OFFSET,
+    HEARTBEAT_OFFSET,
     MODBUS_DEFAULT_PORT,
     ModbusExceptionResponse,
-    ModbusLocalClient,
     ModbusLocalError,
+    ModbusTransport,
+    decode_u16,
 )
 from ..ecoflow.parsers.powerocean_modbus import (
     LIFETIME_COUNTER_KEYS,
@@ -52,20 +69,23 @@ from ..ecoflow.parsers.powerocean_modbus import (
     parse_device_info,
     parse_registers,
 )
+from .modbus_link import create_link
 
 _LOGGER = logging.getLogger(__name__)
+
+# The two settings the integration may write, by the data key that shows them.
+_WRITABLE_KEYS: dict[str, int] = {
+    "ems_backup_ratio_pct": BACKUP_RATIO_OFFSET,
+    "local_indicator_brightness_pct": BRIGHTNESS_OFFSET,
+}
+
+# Seam for the heartbeat's clock. A module attribute rather than a call to
+# ``time.monotonic`` so a test can move it without touching the event loop.
+_monotonic = time.monotonic
 
 
 class _SerialMismatchError(ModbusLocalError):
     """The device at the configured address reports another serial number."""
-
-
-class _BlockReader(Protocol):
-    """The one call the coordinator needs from a Modbus client."""
-
-    async def read_blocks(
-        self, blocks: Sequence[tuple[int, int]]
-    ) -> dict[int, bytes]: ...
 
 
 class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -78,9 +98,15 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         hass: HomeAssistant,
         entry: ConfigEntry,
         device_info: dict[str, Any],
-        client: _BlockReader | None = None,
+        client: ModbusTransport | None = None,
     ) -> None:
-        """Initialize the coordinator for the device named in ``device_info``."""
+        """Initialize the coordinator for the device named in ``device_info``.
+
+        ``client`` is a test seam. Without it the link comes from
+        ``create_link``; a ``HomeAssistantError`` from there (the device is
+        already held on the shared connection with other link settings)
+        propagates and fails the setup with that reason.
+        """
         self.device_sn: str = device_info["sn"]
         self.device_type: str = DEVICE_TYPE_POWEROCEAN
         product_name = device_info.get("product_name") or ""
@@ -100,11 +126,10 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.host: str = entry.data[CONF_HOST]
         self.port: int = entry.data.get(CONF_PORT, MODBUS_DEFAULT_PORT)
         self.unit_id: int = entry.data.get(CONF_UNIT_ID, 1)
-        self._client: _BlockReader = client or ModbusLocalClient(
-            self.host,
-            self.port,
-            self.unit_id,
-            timeout=LOCAL_MODBUS_TIMEOUT_S,
+        self._link: ModbusTransport = (
+            client
+            if client is not None
+            else create_link(hass, entry, self.host, self.port, self.unit_id)
         )
 
         # Accumulated readings; a poll only overwrites the keys it delivered.
@@ -120,6 +145,11 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.last_poll_ok: bool | None = None
         self.last_poll_time: datetime | None = None
         self.last_error: str | None = None
+        # Control heartbeat. A plain attribute, never restored: after a restart,
+        # a reload or a reconfigure control is off until somebody turns it on.
+        self.control_enabled: bool = False
+        self._heartbeat_task: asyncio.Task[None] | None = None
+        self._last_beat_ack: float = 0.0
 
         super().__init__(
             hass,
@@ -128,6 +158,8 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             config_entry=entry,
             update_interval=timedelta(seconds=LOCAL_MODBUS_POLL_INTERVAL_S),
         )
+        # A beat that outlives the entry would keep a stopped entry in control.
+        entry.async_on_unload(self._cancel_heartbeat)
 
     # ------------------------------------------------------------------
     # Surface the sensor platform reads
@@ -197,6 +229,119 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self.data.pop(key, None)
 
     # ------------------------------------------------------------------
+    # Control: heartbeat and writes
+    # ------------------------------------------------------------------
+
+    async def async_set_control(self, on: bool) -> None:
+        """Start or stop sending the control heartbeat.
+
+        Turning on writes the first beat and reports on only when the device
+        acknowledged it; a failure raises ``HomeAssistantError`` and leaves
+        control off. Turning off stops the beats and writes nothing: the unit
+        returns control to the app by itself within the lapse time.
+        """
+        if not on:
+            self._cancel_heartbeat()
+            self.async_update_listeners()
+            return
+        if self.control_enabled:
+            return
+        try:
+            await self._link.write_register(HEARTBEAT_OFFSET, 1)
+        except ModbusLocalError as err:
+            raise HomeAssistantError(
+                f"The device did not acknowledge the control heartbeat: {err}"
+            ) from err
+        self._last_beat_ack = _monotonic()
+        self.control_enabled = True
+        self._heartbeat_task = self.config_entry.async_create_background_task(
+            self.hass,
+            self._heartbeat_loop(),
+            name=f"ecoflow_energy local heartbeat {self.device_tag}",
+        )
+        self.async_update_listeners()
+
+    def _cancel_heartbeat(self) -> None:
+        """Stop the beats and show control off. Writes nothing."""
+        task, self._heartbeat_task = self._heartbeat_task, None
+        self.control_enabled = False
+        if task is not None and not task.done():
+            task.cancel()
+
+    async def _heartbeat_loop(self) -> None:
+        """Write a beat every interval until one lapses or the task is cancelled."""
+        while True:
+            await asyncio.sleep(LOCAL_MODBUS_HEARTBEAT_INTERVAL_S)
+            if not await self._beat():
+                return
+
+    async def _beat(self) -> bool:
+        """Write one beat. Return False once the heartbeat has stopped."""
+        try:
+            await self._link.write_register(HEARTBEAT_OFFSET, 1)
+        except ModbusExceptionResponse as err:
+            self._heartbeat_lapsed(f"the device refused a beat ({err})")
+            return False
+        except ModbusLocalError as err:
+            # Retried on the next tick; only a full lapse window without an
+            # acknowledged beat ends it.
+            _LOGGER.debug(
+                "Local Modbus heartbeat beat failed for %s: %s", self.device_tag, err
+            )
+            if _monotonic() - self._last_beat_ack >= LOCAL_MODBUS_HEARTBEAT_LAPSE_S:
+                self._heartbeat_lapsed(
+                    f"no beat acknowledged for {LOCAL_MODBUS_HEARTBEAT_LAPSE_S} s"
+                )
+                return False
+            return True
+        self._last_beat_ack = _monotonic()
+        return True
+
+    def _heartbeat_lapsed(self, reason: str) -> None:
+        """Show control off after the heartbeat stopped by itself, with one WARNING.
+
+        Runs inside the heartbeat task, which returns right after, so the task
+        is not cancelled from here. The device has handed control back to the
+        app; it is not taken again until somebody turns control on.
+        """
+        self._heartbeat_task = None
+        self.control_enabled = False
+        _LOGGER.warning(
+            "Local Modbus %s: control stopped, %s. The device returns control "
+            "to the app; turn Modbus control on again to take it back",
+            self.device_tag,
+            reason,
+        )
+        self.async_update_listeners()
+
+    async def async_write_register(self, key: str, value: int) -> None:
+        """Write a setting and apply it only once the device confirms it.
+
+        The write is followed by a read of the same register. If the device
+        holds another value, the action fails and the entity keeps showing what
+        the device holds. There is no optimistic state.
+        """
+        offset = _WRITABLE_KEYS.get(key)
+        if offset is None:
+            raise ValueError(f"{key} is not a writable local setting")
+        if not 0 <= value <= 100:
+            raise ValueError(f"{key} must be between 0 and 100, got {value}")
+        try:
+            await self._link.write_register(offset, value)
+            raw = await self._link.read_blocks([(offset, 1)])
+        except ModbusLocalError as err:
+            raise HomeAssistantError(
+                f"The device did not take {key} = {value}: {err}"
+            ) from err
+        held = decode_u16(raw[offset])
+        if held != value:
+            raise HomeAssistantError(
+                f"The device holds {key} = {held} after writing {value}"
+            )
+        self._device_data[key] = held
+        self.async_set_updated_data(dict(self._device_data))
+
+    # ------------------------------------------------------------------
     # Polling
     # ------------------------------------------------------------------
 
@@ -205,7 +350,7 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # The identity blocks ride along until the serial was read and matched.
         blocks = POLL_BLOCKS if self._identity_verified else SETUP_BLOCKS + POLL_BLOCKS
         try:
-            raw = await self._client.read_blocks(blocks)
+            raw = await self._link.read_blocks(blocks)
         except ModbusLocalError as err:
             return self._handle_failure(err)
 
@@ -229,7 +374,7 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return dict(self._device_data)
 
     def _handle_failure(self, err: ModbusLocalError) -> dict[str, Any]:
-        """Count a failed poll; mark the device unavailable on the third."""
+        """Count a failed poll; mark the device unavailable on the fifth in a row."""
         self._consecutive_failures += 1
         self.last_poll_ok = False
         self.last_poll_time = dt_util.utcnow()
@@ -289,8 +434,8 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._consecutive_failures,
                 err,
             )
-        # Keep serving the last data: before the third failure so entities do
-        # not flicker, after it because availability alone carries the state.
+        # Keep serving the last data: before the threshold so entities do not
+        # flicker, after it because availability alone carries the state.
         return dict(self._device_data)
 
     def _handle_success(self) -> None:

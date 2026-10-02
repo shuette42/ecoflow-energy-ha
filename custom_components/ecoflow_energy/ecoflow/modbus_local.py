@@ -23,6 +23,7 @@ import asyncio
 import contextlib
 import struct
 from collections.abc import Sequence
+from typing import Protocol, runtime_checkable
 
 MODBUS_BASE_ADDRESS = 40001
 MODBUS_DEFAULT_PORT = 502
@@ -74,6 +75,22 @@ class ModbusExceptionResponse(ModbusLocalError):
 
 class ModbusProtocolError(ModbusLocalError):
     """The answer does not match the request (transaction, unit, length, echo)."""
+
+
+@runtime_checkable
+class ModbusTransport(Protocol):
+    """The two calls the coordinator needs from a Modbus link.
+
+    The own client implements it, and so does the adapter onto Home
+    Assistant's shared Modbus connection. Both raise ``ModbusLocalError``
+    subclasses and refuse offsets outside ``WRITABLE_OFFSETS`` for writes.
+    """
+
+    async def read_blocks(
+        self, blocks: Sequence[tuple[int, int]]
+    ) -> dict[int, bytes]: ...
+
+    async def write_register(self, offset: int, value: int) -> None: ...
 
 
 def decode_u16(raw: bytes) -> int:

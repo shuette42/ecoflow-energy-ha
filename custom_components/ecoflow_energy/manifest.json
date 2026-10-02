@@ -1,6 +1,7 @@
 {
   "domain": "ecoflow_energy",
   "name": "EcoFlow Energy",
+  "after_dependencies": ["modbus"],
   "codeowners": ["@shuette42"],
   "config_flow": true,
   "documentation": "https://github.com/shuette42/ecoflow-energy-ha",
