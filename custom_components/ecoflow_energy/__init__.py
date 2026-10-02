@@ -749,7 +749,16 @@ async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 async def async_unload_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> bool:
     """Unload an EcoFlow Energy config entry."""
-    is_local = entry.data.get(CONF_MODE) == MODE_LOCAL
+    # The platforms to unload are the ones this entry set up, read from the
+    # coordinators it runs, not from entry.data: a reconfigure that switches
+    # mode replaces the data before the reload unloads the entry, and the
+    # other mode's platform list names platforms this entry never loaded
+    # (Home Assistant then fails the unload and the reload stops there).
+    running = hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
+    is_local = any(
+        isinstance(coordinator, EcoFlowLocalModbusCoordinator)
+        for coordinator in running.values()
+    )
     unload_ok = await hass.config_entries.async_unload_platforms(
         entry, LOCAL_PLATFORMS if is_local else PLATFORMS
     )

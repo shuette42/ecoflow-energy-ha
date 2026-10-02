@@ -182,3 +182,55 @@ async def test_the_helper_on_an_entry_without_listener_uses_the_flow_reload(
 
     assert flow.flow_reloads == 1
     assert entry.data == {"a": 2}
+
+
+async def test_a_running_local_entry_switched_to_the_cloud_reloads_cleanly(
+    hass: HomeAssistant, links: list[StubClient], caplog: pytest.LogCaptureFixture
+) -> None:
+    """The switch replaces the data before the reload unloads the entry.
+
+    Unload must take the platforms the entry set up (the Local list), not the
+    cloud list the new data names: with select, climate and button loaded by
+    another integration, the cloud list made Home Assistant fail the unload,
+    the entry stuck in FAILED_UNLOAD and the Modbus connection stayed held.
+    """
+    from unittest.mock import AsyncMock
+
+    from homeassistant.setup import async_setup_component
+
+    from custom_components.ecoflow_energy.const import (
+        CONF_DEVICES,
+        CONF_MODE,
+        MODE_STANDARD,
+    )
+
+    with _counting_link(links):
+        entry = await _loaded_local_entry(hass)
+        for domain in ("button", "select", "climate"):
+            assert await async_setup_component(hass, domain, {})
+        await hass.async_block_till_done()
+        coordinator = next(iter(hass.data[DOMAIN][entry.entry_id].values()))
+        cloud_setup = AsyncMock(return_value=True)
+        with (
+            patch.object(
+                coordinator, "async_shutdown", wraps=coordinator.async_shutdown
+            ) as shutdown,
+            patch("custom_components.ecoflow_energy.async_setup_entry", cloud_setup),
+        ):
+            hass.config_entries.async_update_entry(
+                entry,
+                unique_id=None,
+                data={
+                    CONF_MODE: MODE_STANDARD,
+                    "auth_method": "developer",
+                    "access_key": "test_ak",
+                    "secret_key": "test_sk",
+                    CONF_DEVICES: entry.data[CONF_DEVICES],
+                },
+            )
+            await hass.async_block_till_done()
+
+    assert entry.state is ConfigEntryState.LOADED
+    assert cloud_setup.call_count == 1
+    assert shutdown.call_count == 1  # the Modbus coordinator was stopped
+    assert "never loaded" not in caplog.text

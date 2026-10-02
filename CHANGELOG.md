@@ -26,7 +26,9 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
-- Reconfiguring an entry that is running no longer logs a warning on Home Assistant 2026.9 that the integration reloads it in a way that stops working in Home Assistant 2026.12. The entry is now reloaded once through Home Assistant's own update mechanism. This affected changing the address of a Local (Modbus/TCP) entry without changing host and port, and switching a Local entry back to an account connection.
+- Reconfiguring an entry that is running no longer logs a warning on Home Assistant 2026.9 that the integration reloads it in a way that stops working in Home Assistant 2026.12. The entry is now reloaded once through Home Assistant's own update mechanism. This affected reconfiguring a running Local (Modbus/TCP) entry while keeping its host and port, for example to change the unit id, and switching a running entry between Local and an account connection in either direction.
+
+- Switching a running Local (Modbus/TCP) entry to an account connection no longer gets stuck. The switch replaced the entry's settings before the restart, and the restart then tried to unload the account connection's entity types instead of the Local ones. When another integration used select, climate or button entities, Home Assistant refused that, the entry stayed in a failed state and kept holding the Modbus connection. The entry now unloads what it actually loaded.
 
 - Reconfigure of a Local (Modbus/TCP) entry no longer fails with "cannot connect" when you change the address of an inverter the entry is using, for example from an IP address to a name. The inverter serves one Modbus client at a time and the running entry was that client, so the check of the new address went unanswered. The entry now releases its connection for the check and starts again afterwards, on the new address if the check passed and on the old one if it did not.
 
