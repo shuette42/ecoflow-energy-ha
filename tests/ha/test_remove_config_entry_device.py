@@ -13,6 +13,7 @@ import pytest
 from homeassistant.config_entries import support_remove_from_device
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -128,3 +129,45 @@ async def test_the_delete_button_removes_a_deselected_device(
     registry = dr.async_get(hass)
     assert registry.async_get(stale.id) is None
     assert registry.async_get(kept.id) is not None
+
+
+async def test_a_device_shared_with_a_local_entry_keeps_its_local_side(
+    hass: HomeAssistant, hass_ws_client: Any
+) -> None:
+    """Cloud and Local build the same identifier, so a moved PowerOcean can be
+    one device with both entries. Deleting it from the cloud entry drops only
+    that entry's link; the Local entry and its entities stay."""
+    assert await async_setup_component(hass, "config", {})
+    local, _stub, _coordinator = await _setup_local(hass, _poll_frame(status=0x1014))
+    local.supports_remove_device = await support_remove_from_device(hass, DOMAIN)
+    cloud = _entry([DELTA_DEVICE])
+    cloud.add_to_hass(hass)
+    cloud.supports_remove_device = await support_remove_from_device(hass, DOMAIN)
+    registry = dr.async_get(hass)
+    device = registry.async_get_or_create(
+        config_entry_id=cloud.entry_id, identifiers={(DOMAIN, SERIAL)}
+    )
+    assert device.config_entries == {local.entry_id, cloud.entry_id}
+    local_entities = er.async_entries_for_config_entry(
+        er.async_get(hass), local.entry_id
+    )
+    assert local_entities
+    client = await hass_ws_client(hass)
+
+    for entry, expect in ((cloud, True), (local, False)):
+        await client.send_json_auto_id(
+            {
+                "type": "config/device_registry/remove_config_entry",
+                "config_entry_id": entry.entry_id,
+                "device_id": device.id,
+            }
+        )
+        response = await client.receive_json()
+        assert response["success"] is expect, response
+
+    kept = registry.async_get(device.id)
+    assert kept is not None
+    assert kept.config_entries == {local.entry_id}
+    assert len(
+        er.async_entries_for_config_entry(er.async_get(hass), local.entry_id)
+    ) == len(local_entities)
