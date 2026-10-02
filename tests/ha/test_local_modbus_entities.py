@@ -1,7 +1,7 @@
 """Entities of the writable Local Modbus mode (PowerOcean).
 
-One switch (Modbus control), two numbers (Backup reserve, Indicator brightness)
-and one diagnostic binary sensor (Modbus control active), created only for a
+One switch (Modbus Control), two numbers (Backup Reserve, Indicator Brightness)
+and one diagnostic binary sensor (Modbus Control Active), created only for a
 Local entry. The register client is the stub of the coordinator tests, so what
 is covered is what the entities do with the coordinator: which entities exist,
 what they render, and what a service call reaches the device as.
@@ -16,6 +16,7 @@ from unittest.mock import patch
 
 import pytest
 from homeassistant.config_entries import ConfigEntryState
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, State
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
@@ -31,6 +32,7 @@ from custom_components.ecoflow_energy.const import (
     DOMAIN,
     LOCAL_MODBUS_FAILURES_UNAVAILABLE,
     POWEROCEAN_LOCAL_KEYS,
+    EcoFlowNumberDef,
 )
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
 from custom_components.ecoflow_energy.coordinator.local_modbus import (
@@ -42,6 +44,7 @@ from custom_components.ecoflow_energy.ecoflow.modbus_local import (
     HEARTBEAT_OFFSET,
     ModbusTimeoutError,
 )
+from custom_components.ecoflow_energy.number import EcoFlowNumber
 from custom_components.ecoflow_energy.number import async_setup_entry as number_setup
 from custom_components.ecoflow_energy.switch import async_setup_entry as switch_setup
 
@@ -179,6 +182,29 @@ async def test_a_cloud_entry_gets_none_of_the_four_and_a_local_entry_gets_them(
     await _unload(hass, entry)
 
 
+async def test_a_cloud_number_definition_with_a_category_gets_it(
+    hass: HomeAssistant,
+) -> None:
+    """The cloud number platform applies `entity_category` as the local one does."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coordinator = EcoFlowDeviceCoordinator(hass, entry, POWEROCEAN_DEVICE)
+
+    def category_of(category: str | None) -> EntityCategory | None:
+        definition = EcoFlowNumberDef(
+            key="category_probe",
+            name="Category Probe",
+            state_key="ems_backup_ratio_pct",
+            unit="%",
+            entity_category=category,
+        )
+        return EcoFlowNumber(coordinator, definition).entity_category
+
+    assert category_of("config") is EntityCategory.CONFIG
+    assert category_of("diagnostic") is EntityCategory.DIAGNOSTIC
+    assert category_of(None) is None
+
+
 async def test_a_local_entry_creates_the_four_plus_the_existing_sensors(
     hass: HomeAssistant,
 ) -> None:
@@ -206,6 +232,13 @@ async def test_a_local_entry_creates_the_four_plus_the_existing_sensors(
     assert by_key["modbus_control_active"].entity_category == "diagnostic"
     assert by_key["local_indicator_brightness"].entity_category == "config"
     assert by_key["local_backup_reserve"].entity_category is None
+    # The cloud number "Backup Reserve" slugs to `..._backup_reserve`; the two
+    # local numbers register apart from it, so a cloud entry reconfigured to
+    # Local does not get its new number as `..._backup_reserve_2`.
+    assert by_key["local_backup_reserve"].entity_id.endswith("_local_backup_reserve")
+    assert by_key["local_indicator_brightness"].entity_id.endswith(
+        "_local_indicator_brightness"
+    )
     # The sensor that shows the same register keeps its own entity.
     assert by_key["ems_backup_ratio_pct"].domain == "sensor"
     assert by_key["ems_backup_ratio_pct"].unique_id != (
@@ -388,7 +421,7 @@ async def test_the_binary_sensor_follows_bit_11_and_is_unknown_without_it(
 def test_the_documentation_lists_the_four_entities_under_the_local_controls() -> None:
     """Each of the four has its own row in the Local controls section.
 
-    "Backup reserve" shares its name with the Enhanced Mode number, so the
+    "Backup Reserve" shares its name with the Enhanced Mode number, so the
     generic documentation gate cannot tell a missing local row from the existing
     one; this reads the section itself.
     """
@@ -405,9 +438,13 @@ def test_the_documentation_lists_the_four_entities_under_the_local_controls() ->
         )
         if len(cells) > 1
     }
-    assert rows["Modbus control"] == "Switch"
-    assert rows["Backup reserve"] == "Number"
-    assert rows["Indicator brightness"] == "Number"
-    assert rows["Modbus control active"] == "Binary sensor"
+    assert rows["Modbus Control"] == "Switch"
+    assert rows["Backup Reserve"] == "Number"
+    assert rows["Indicator Brightness"] == "Number"
+    assert rows["Modbus Control Active"] == "Binary sensor"
     assert "locked" in section
     assert "60 seconds" in section
+    # The sensor and the number read one register; the text says so in the
+    # user's words, not with the register address.
+    assert "EMS Backup Ratio" in section
+    assert "same device value" in section

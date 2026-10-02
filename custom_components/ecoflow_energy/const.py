@@ -589,8 +589,7 @@ class EcoFlowNumberDef:
     # restriction. See _get_number_defs() / async_setup_entry() in number.py.
     powerpulse_route: Literal["sibling", "own"] | None = None
     # Same meaning as on the sensor and binary sensor definitions ("config" or
-    # "diagnostic"). Only the local Modbus numbers use it today; the cloud
-    # number platform ignores it.
+    # "diagnostic"). Both number platforms, cloud and local, apply it.
     entity_category: str | None = None
 
 
@@ -2406,7 +2405,7 @@ POWEROCEAN_LOCAL_SENSOR_DEFS: list[EcoFlowSensorDef] = [
 POWEROCEANLOCALONLY_SWITCHES: list[EcoFlowSwitchDef] = [
     EcoFlowSwitchDef(
         "modbus_control",
-        "Modbus control",
+        "Modbus Control",
         "modbus_control_active",
         "mdi:remote",
     ),
@@ -2418,7 +2417,7 @@ POWEROCEANLOCALONLY_SWITCHES: list[EcoFlowSwitchDef] = [
 POWEROCEANLOCALONLY_NUMBERS: list[EcoFlowNumberDef] = [
     EcoFlowNumberDef(
         "local_backup_reserve",
-        "Backup reserve",
+        "Backup Reserve",
         "ems_backup_ratio_pct",
         "%",
         "mdi:battery-lock",
@@ -2428,7 +2427,7 @@ POWEROCEANLOCALONLY_NUMBERS: list[EcoFlowNumberDef] = [
     ),
     EcoFlowNumberDef(
         "local_indicator_brightness",
-        "Indicator brightness",
+        "Indicator Brightness",
         "local_indicator_brightness_pct",
         "%",
         "mdi:brightness-percent",
@@ -2442,7 +2441,7 @@ POWEROCEANLOCALONLY_NUMBERS: list[EcoFlowNumberDef] = [
 POWEROCEANLOCALONLY_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
     EcoFlowBinarySensorDef(
         "modbus_control_active",
-        "Modbus control active",
+        "Modbus Control Active",
         icon="mdi:remote",
         entity_category="diagnostic",
     ),

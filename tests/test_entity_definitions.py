@@ -30,6 +30,7 @@ and read as covered while nothing dispatches it.
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Callable
 from pathlib import Path
@@ -349,3 +350,52 @@ def test_every_device_type_has_sensors(constant: str) -> None:
         "type with no sensor produces a device entry with nothing in it - "
         "either wire it into _get_sensor_defs or remove the type."
     )
+
+
+# The four Local controls: platform, the English name (title case, like every
+# other entity name here) and the German name (German capitalises its nouns, so
+# the German forms are not the English ones with other words).
+LOCAL_CONTROL_NAMES = {
+    "modbus_control": ("switch", "Modbus Control", "Modbus-Steuerung"),
+    "local_backup_reserve": ("number", "Backup Reserve", "Backup-Reserve"),
+    "local_indicator_brightness": (
+        "number",
+        "Indicator Brightness",
+        "Anzeigehelligkeit",
+    ),
+    "modbus_control_active": (
+        "binary_sensor",
+        "Modbus Control Active",
+        "Modbus-Steuerung aktiv",
+    ),
+}
+
+
+def test_the_local_control_names_are_title_case_in_every_file() -> None:
+    """Definition, strings.json, en.json and de.json agree on the four names."""
+    definitions = {
+        definition.key: definition.name
+        for block in (
+            C.POWEROCEANLOCALONLY_SWITCHES,
+            C.POWEROCEANLOCALONLY_NUMBERS,
+            C.POWEROCEANLOCALONLY_BINARY_SENSORS,
+        )
+        for definition in block
+    }
+    assert set(definitions) == set(LOCAL_CONTROL_NAMES)
+
+    component = COMPONENT_DIR / "ecoflow_energy"
+    files = {
+        "strings.json": json.loads((component / "strings.json").read_text("utf-8")),
+        "translations/en.json": json.loads(
+            (component / "translations" / "en.json").read_text("utf-8")
+        ),
+        "translations/de.json": json.loads(
+            (component / "translations" / "de.json").read_text("utf-8")
+        ),
+    }
+    for key, (platform, english, german) in LOCAL_CONTROL_NAMES.items():
+        assert definitions[key] == english, key
+        for name, data in files.items():
+            expected = german if name.endswith("de.json") else english
+            assert data["entity"][platform][key]["name"] == expected, (name, key)

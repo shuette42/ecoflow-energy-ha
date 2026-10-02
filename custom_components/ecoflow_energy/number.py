@@ -159,6 +159,12 @@ def _watch_for_accessory(
     config_entry.async_on_unload(coordinator.async_add_listener(_check_for_accessory))
 
 
+_NUMBER_CATEGORY_MAP = {
+    "diagnostic": EntityCategory.DIAGNOSTIC,
+    "config": EntityCategory.CONFIG,
+}
+
+
 class EcoFlowNumber(
     EcoFlowWriteGateMixin, CoordinatorEntity[EcoFlowDeviceCoordinator], RestoreNumber
 ):
@@ -182,6 +188,10 @@ class EcoFlowNumber(
         self._attr_native_min_value = definition.min_value
         self._attr_native_max_value = definition.max_value
         self._attr_native_step = definition.step
+        if definition.entity_category:
+            self._attr_entity_category = _NUMBER_CATEGORY_MAP.get(
+                definition.entity_category
+            )
 
         self._restored_value: float | None = None
         self._last_written_value: float | None = None
@@ -838,12 +848,6 @@ class EcoFlowNumber(
         raise_set_unsupported(self.entity_id)
 
 
-_NUMBER_CATEGORY_MAP = {
-    "diagnostic": EntityCategory.DIAGNOSTIC,
-    "config": EntityCategory.CONFIG,
-}
-
-
 class EcoFlowLocalNumber(
     EcoFlowWriteGateMixin,
     CoordinatorEntity[EcoFlowLocalModbusCoordinator],
@@ -880,6 +884,20 @@ class EcoFlowLocalNumber(
             self._attr_entity_category = _NUMBER_CATEGORY_MAP.get(
                 definition.entity_category
             )
+
+    @property
+    def suggested_object_id(self) -> str | None:
+        """Keep the entity id apart from the cloud number of the same name.
+
+        The cloud number "Backup Reserve" and the local one slug to the same
+        object id, so a cloud entry reconfigured to Local would otherwise get
+        its new number as `..._backup_reserve_2`. Both Home Assistant 2025.1
+        (the minimum) and 2026.4 build the entity id from this property, with
+        the device name in front, so a `Local` prefix gives a distinct id on
+        either. It only decides the id a new entity registers with; an entity
+        already in the registry keeps the one it has.
+        """
+        return f"Local {self._definition.name}"
 
     @property
     def available(self) -> bool:

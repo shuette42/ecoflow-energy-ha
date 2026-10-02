@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.24.0] - Unreleased
+
+### Added
+
+- The Local (Modbus/TCP) mode of a three-phase PowerOcean now has a Modbus Control switch. It is always off after a restart. While it is on, the EcoFlow app is locked, and after you switch it off the inverter hands control back after about a minute.
+
+- The Local mode now has two numbers, Backup Reserve and Indicator Brightness. Each change is confirmed by reading the value back from the inverter, and a change the inverter does not take shows as an error. Both work with Modbus Control off.
+
+- The Local mode now has a diagnostic binary sensor, Modbus Control Active, which shows whether the inverter itself reports that Modbus control is on.
+
+- On Home Assistant 2026.9 or newer, the Local connection uses the connection that Home Assistant shares between Modbus integrations. A second Modbus integration for the same inverter works beside it when both use the same host string. Older versions keep the integration's own connection.
+
+### Changed
+
+- The integration now declares the Home Assistant Modbus integration as an optional dependency, which makes Home Assistant install the Modbus packages for every installation.
+
 ## [1.23.0] - Unreleased
 
 ### Fixed
