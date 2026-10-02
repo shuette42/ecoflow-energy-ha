@@ -10,7 +10,7 @@ All notable changes to this project will be documented in this file.
 
 - The Local mode now has a System Abnormal diagnostic binary sensor, which turns on while the inverter reports its system status as abnormal.
 
-- The Local mode now shows Battery Voltage, Battery Current and Battery Temp for the whole battery system. Battery Current is positive while charging and negative while discharging.
+- The Local mode now shows System Battery Voltage, System Battery Current and System Battery Temp for the whole battery system. System Battery Current is positive while charging and negative while discharging. In the first pre-release they were called Battery Voltage, Battery Current and Battery Temp, which matched the names of the cloud's pack readings, so on an entry switched from the cloud the new sensors got an entity id ending in `_2`. Existing entity ids are not changed by the new names.
 
 - The Feed Power Limit sensor now also works in the Local mode. It shows the feed-in limit the inverter actually applies after its own safety rules, and it stays the same entity when an entry is switched between cloud and Local. Like in the cloud modes it is disabled by default, so enable it in the entity list if you want it.
 

@@ -2517,6 +2517,15 @@
       },
       "circuit_current_a": {
         "name": "Circuit {label} Current"
+      },
+      "local_system_batt_voltage_v": {
+        "name": "System Battery Voltage"
+      },
+      "local_system_batt_current_a": {
+        "name": "System Battery Current"
+      },
+      "local_system_batt_temp_c": {
+        "name": "System Battery Temp"
       }
     },
     "binary_sensor": {

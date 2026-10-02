@@ -2517,6 +2517,15 @@
       },
       "circuit_current_a": {
         "name": "Stromkreis {label} Strom"
+      },
+      "local_system_batt_voltage_v": {
+        "name": "System-Batteriespannung"
+      },
+      "local_system_batt_current_a": {
+        "name": "System-Batteriestrom"
+      },
+      "local_system_batt_temp_c": {
+        "name": "System-Batterietemperatur"
       }
     },
     "binary_sensor": {

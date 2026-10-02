@@ -235,7 +235,7 @@ There is no grid sensor per inverter. The grid figure the pair reports per inver
 
 ## Sensors - Local Modbus Only
 
-These eight sensors exist only in a Local (Modbus/TCP) entry. Standard Mode and Enhanced Mode never create them. The three energy counters are the device's own lifetime counters, read as the device reports them. Battery Voltage, Battery Current and Battery Temp describe the whole battery system, not a single pack. Battery Current is positive while the system charges and negative while it discharges, and Battery Temp is the average over the battery packs.
+These eight sensors exist only in a Local (Modbus/TCP) entry. Standard Mode and Enhanced Mode never create them. The three energy counters are the device's own lifetime counters, read as the device reports them. System Battery Voltage, System Battery Current and System Battery Temp describe the whole battery system, not a single pack. System Battery Current is positive while the system charges and negative while it discharges, and System Battery Temp is the average over the battery packs.
 
 | Entity | Unit | Category | Default |
 |:---|:---:|:---:|:---:|
@@ -243,9 +243,9 @@ These eight sensors exist only in a Local (Modbus/TCP) entry. Standard Mode and 
 | Grid Import Lifetime Energy | kWh | - | enabled |
 | Grid Export Lifetime Energy | kWh | - | enabled |
 | Fault Count | - | diagnostic | enabled |
-| Battery Voltage | V | - | enabled |
-| Battery Current | A | - | enabled |
-| Battery Temp | °C | - | enabled |
+| System Battery Voltage | V | - | enabled |
+| System Battery Current | A | - | enabled |
+| System Battery Temp | °C | - | enabled |
 | System Alerts | - | diagnostic | enabled |
 
 System Alerts lists the alerts the PowerOcean reports as codes separated by commas, in a fixed order and without spaces, for example `fan_failure,battery_overheating`. It shows `none` while no alert is active, and stays unknown until the PowerOcean has reported its alert state. The codes are system_shutdown, upgrade_shutdown, epo_triggered, low_power_mode, fan_failure, system_failure, battery_reverse_connection, battery_disconnected, auxiliary_power_failure, pcs_timeout, pcs_failure, igbt_self_test_failure, high_temperature_protection, battery_overheating, ntc_circuit_failure, system_reset, hardware_version_error, parallel_sync_error, low_temperature_protection, parallel_master_slave_conflict, parallel_slave_setting_error, parallel_inverter_error and parallel_meter_fault. An alert this integration does not know yet shows as `bit_` and its number. When so many alerts are active that the list would not fit in a Home Assistant state, the first ones are listed and the rest are counted at the end, for example `...,high_temperature_protection,+10`. Use it to send a notification when the state is not `none`.

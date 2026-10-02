@@ -447,3 +447,33 @@ def test_the_system_alerts_sensor_has_the_same_name_in_every_file() -> None:
         for name, data in files.items():
             expected = german if name.endswith("de.json") else english
             assert data["entity"][platform][key]["name"] == expected, (name, key)
+
+
+@pytest.mark.parametrize("language", ["en", "de"])
+def test_no_local_sensor_shares_a_name_with_a_cloud_powerocean_sensor(language):
+    """A local sensor named like a cloud one gets an entity id ending in _2.
+
+    Switching a PowerOcean from the cloud to Local keeps the cloud entities in
+    the registry, so a new local sensor whose label equals one of theirs is
+    registered beside it with a suffixed id. Shared keys are the same entity
+    and are exempt; every other local label must be free.
+    """
+    component = COMPONENT_DIR / "ecoflow_energy"
+    sensors = json.loads(
+        (component / "translations" / f"{language}.json").read_text("utf-8")
+    )["entity"]["sensor"]
+
+    def label(definition: Any) -> str:
+        return sensors[definition.translation_key or definition.key]["name"]
+
+    cloud = {
+        label(d): d.key
+        for d in C.POWEROCEAN_SENSORS
+        if d.key not in C.POWEROCEAN_LOCAL_KEYS
+    }
+    clashes = {
+        d.key: cloud[label(d)]
+        for d in C.POWEROCEANLOCALONLY_SENSORS
+        if label(d) in cloud
+    }
+    assert clashes == {}

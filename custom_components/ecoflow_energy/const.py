@@ -2397,33 +2397,39 @@ POWEROCEANLOCALONLY_SENSORS: list[EcoFlowSensorDef] = [
     ),
     # Whole-system battery readings from the Modbus table. The cloud stream
     # has no such figure: its `bp_current_a` is a single pack, so the current
-    # here keeps its own key instead of sharing one.
+    # here keeps its own key instead of sharing one. The labels say "System"
+    # because the cloud's pack readings are called Battery Voltage and Battery
+    # Current: an entry switched between modes keeps those entities, and two
+    # equal names gave the new ones an entity id ending in _2.
     EcoFlowSensorDef(
         "batt_voltage_v",
-        "Battery Voltage",
+        "System Battery Voltage",
         "V",
         "voltage",
         "measurement",
         "mdi:flash-triangle",
         suggested_display_precision=1,
+        translation_key="local_system_batt_voltage_v",
     ),
     EcoFlowSensorDef(
         "batt_current_a",
-        "Battery Current",
+        "System Battery Current",
         "A",
         "current",
         "measurement",
         "mdi:current-dc",
         suggested_display_precision=2,
+        translation_key="local_system_batt_current_a",
     ),
     EcoFlowSensorDef(
         "batt_temp_c",
-        "Battery Temp",
+        "System Battery Temp",
         "\u00b0C",
         "temperature",
         "measurement",
         "mdi:thermometer",
         suggested_display_precision=1,
+        translation_key="local_system_batt_temp_c",
     ),
 ]
 
