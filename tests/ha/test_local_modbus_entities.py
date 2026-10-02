@@ -44,7 +44,7 @@ from custom_components.ecoflow_energy.ecoflow.modbus_local import (
     HEARTBEAT_OFFSET,
     ModbusTimeoutError,
 )
-from custom_components.ecoflow_energy.number import EcoFlowNumber
+from custom_components.ecoflow_energy.number import EcoFlowLocalNumber, EcoFlowNumber
 from custom_components.ecoflow_energy.number import async_setup_entry as number_setup
 from custom_components.ecoflow_energy.switch import async_setup_entry as switch_setup
 
@@ -341,6 +341,40 @@ async def test_the_numbers_show_the_polled_value(hass: HomeAssistant) -> None:
     await _unload(hass, entry)
 
 
+async def test_the_numbers_are_unavailable_while_the_device_is_and_return_with_it(
+    hass: HomeAssistant,
+) -> None:
+    """The numbers follow the device flag, not the coordinator's last update.
+
+    The coordinator hands the last frame back at the failure threshold, so the
+    update itself still counts as a success. Only the device flag makes the two
+    numbers unavailable, as it does the sensors: a stale value must not look
+    live, and a write must not go to a device that does not answer.
+    """
+    entry, stub, coordinator = await _setup_local(hass)
+    keys = ("local_backup_reserve", "local_indicator_brightness")
+    # Control: they show the polled values while the device answers.
+    assert float(_state(hass, "number", keys[0])) == DAY["backup_ratio"]
+    assert float(_state(hass, "number", keys[1])) == POLLED_BRIGHTNESS
+
+    stub.queue(*[ModbusTimeoutError("no answer")] * LOCAL_MODBUS_FAILURES_UNAVAILABLE)
+    for _ in range(LOCAL_MODBUS_FAILURES_UNAVAILABLE):
+        await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert coordinator.device_available is False
+    for key in keys:
+        assert _state(hass, "number", key) == "unavailable"
+
+    # One good frame brings both back, with the values that frame carries.
+    stub.queue(_poll_frame(brightness=33))
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert coordinator.device_available is True
+    assert float(_state(hass, "number", "local_backup_reserve")) == DAY["backup_ratio"]
+    assert float(_state(hass, "number", "local_indicator_brightness")) == 33
+    await _unload(hass, entry)
+
+
 async def test_the_numbers_write_through_the_coordinator_without_the_switch(
     hass: HomeAssistant,
 ) -> None:
@@ -396,6 +430,44 @@ async def test_a_number_refuses_a_value_outside_zero_to_one_hundred_or_fractiona
     await _unload(hass, entry)
 
 
+async def test_a_range_error_from_the_coordinator_is_the_translated_rejection(
+    hass: HomeAssistant,
+) -> None:
+    """Called directly, past the service's own range check, 150 is a rejection.
+
+    Home Assistant checks min and max before the entity is called, so the
+    coordinator's `ValueError` is reachable only if the entity definition and
+    the coordinator's range drift apart. The user must still get the translated
+    error, not a raw `ValueError`, and nothing reaches the device.
+    """
+    entry, stub, _coordinator = await _setup_local(hass)
+    created: list[Any] = []
+    await number_setup(hass, entry, add_entities_collector(created))
+    [number] = [
+        entity
+        for entity in created
+        if entity.unique_id == f"{SERIAL}_local_backup_reserve"
+    ]
+    assert isinstance(number, EcoFlowLocalNumber)
+    # Not added to a platform here, so it has no entity id of its own yet.
+    number.entity_id = "number.local_backup_reserve"
+
+    with pytest.raises(HomeAssistantError) as rejected:
+        await number.async_set_native_value(150.0)
+
+    assert rejected.value.translation_key == "set_value_rejected"
+    placeholders = rejected.value.translation_placeholders
+    assert placeholders is not None
+    assert placeholders["entity"] == "number.local_backup_reserve"
+    assert "between 0 and 100" in placeholders["reason"]
+    assert stub.writes == []
+
+    # Control: the same direct call with a value in range reaches the device.
+    await number.async_set_native_value(100.0)
+    assert stub.writes == [(BACKUP_RATIO_OFFSET, 100)]
+    await _unload(hass, entry)
+
+
 @pytest.mark.parametrize(
     ("status", "expected"),
     [
@@ -443,7 +515,7 @@ def test_the_documentation_lists_the_four_entities_under_the_local_controls() ->
     assert rows["Indicator Brightness"] == "Number"
     assert rows["Modbus Control Active"] == "Binary sensor"
     assert "locked" in section
-    assert "60 seconds" in section
+    assert "about a minute" in section
     # The sensor and the number read one register; the text says so in the
     # user's words, not with the register address.
     assert "EMS Backup Ratio" in section

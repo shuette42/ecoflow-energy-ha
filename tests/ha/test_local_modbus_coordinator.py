@@ -14,7 +14,7 @@ import asyncio
 import json
 import logging
 import struct
-from collections.abc import Sequence
+from collections.abc import Awaitable, Sequence
 from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -855,6 +855,19 @@ def _beats(stub: StubClient) -> int:
     return sum(1 for write in stub.writes if write == (HEARTBEAT_OFFSET, 1))
 
 
+# A gated write is released by the test only after the call under test returned,
+# so a call that wrongly writes waits on the gate for good. Bounding the await
+# turns that hang into a failure that names the test. Never put the fake-clock
+# `_advance` inside it: firing the due timers would fire this timeout too.
+_GATE_TIMEOUT_S = 5
+
+
+async def _bounded[T](awaitable: Awaitable[T]) -> T:
+    """Await ``awaitable`` for at most ``_GATE_TIMEOUT_S`` of real time."""
+    async with asyncio.timeout(_GATE_TIMEOUT_S):
+        return await awaitable
+
+
 async def test_control_on_writes_the_first_beat_and_reports_on_after_the_ack(
     hass: HomeAssistant, clock: Clock
 ) -> None:
@@ -1202,12 +1215,12 @@ async def test_two_overlapping_turn_ons_start_one_heartbeat_that_turn_off_stops(
     for _ in range(3):
         await asyncio.sleep(0)
     stub.gate.set()
-    await asyncio.gather(first, second)
+    await _bounded(asyncio.gather(first, second))
     await hass.async_block_till_done()
     assert _beats(stub) == 1
     assert coordinator.control_enabled is True
 
-    await coordinator.async_set_control(False)
+    await _bounded(coordinator.async_set_control(False))
 
     for _ in range(3):
         await _advance(hass, clock, 15)
@@ -1224,9 +1237,9 @@ async def test_a_turn_off_that_arrives_during_the_first_beat_wins_over_the_turn_
     for _ in range(3):
         await asyncio.sleep(0)
 
-    await coordinator.async_set_control(False)
+    await _bounded(coordinator.async_set_control(False))
     stub.gate.set()
-    await turn_on
+    await _bounded(turn_on)
     await hass.async_block_till_done()
 
     assert coordinator.control_enabled is False
@@ -1234,6 +1247,38 @@ async def test_a_turn_off_that_arrives_during_the_first_beat_wins_over_the_turn_
     for _ in range(3):
         await _advance(hass, clock, 15)
     # Only the beat that was already in flight reached the device.
+    assert _beats(stub) == 1
+
+
+async def test_a_turn_off_after_two_queued_turn_ons_wins(
+    hass: HomeAssistant, clock: Clock
+) -> None:
+    """The last call to arrive holds, even with a turn-on still waiting for the lock.
+
+    The first turn-on is mid-beat, the second waits behind it for the lock, and
+    the turn-off arrives last. The second turn-on must not start a heartbeat
+    once it gets the lock: the user's last action was off.
+    """
+    coordinator, stub = await _polled(hass, _local_entry())
+    stub.gate = asyncio.Event()
+    first = asyncio.create_task(coordinator.async_set_control(True))
+    for _ in range(3):
+        await asyncio.sleep(0)
+    second = asyncio.create_task(coordinator.async_set_control(True))
+    for _ in range(3):
+        await asyncio.sleep(0)
+
+    await _bounded(coordinator.async_set_control(False))
+    stub.gate.set()
+    await _bounded(asyncio.gather(first, second))
+    await hass.async_block_till_done()
+
+    assert coordinator.control_enabled is False
+    assert coordinator._heartbeat_task is None
+    # Only the first turn-on's beat, already in flight, reached the device.
+    assert _beats(stub) == 1
+    for _ in range(3):
+        await _advance(hass, clock, 15)
     assert _beats(stub) == 1
 
 
@@ -1309,10 +1354,10 @@ async def test_an_unload_while_the_first_beat_is_in_flight_starts_no_heartbeat(
     for _ in range(3):
         await asyncio.sleep(0)
 
-    assert await hass.config_entries.async_unload(entry.entry_id)
+    assert await _bounded(hass.config_entries.async_unload(entry.entry_id))
     await hass.async_block_till_done()
     stub.gate.set()
-    await turn_on
+    await _bounded(turn_on)
 
     assert coordinator.control_enabled is False
     assert coordinator._heartbeat_task is None
