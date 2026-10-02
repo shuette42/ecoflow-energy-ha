@@ -13,6 +13,8 @@ I built it for my own PowerOcean, the only unit it has been measured on. Treat i
 | A fixed address for the inverter | Give it a reserved address in your router, or a name your network resolves. The entry stores that address |
 | No other Modbus tool on the inverter | The inverter serves one Modbus client at a time. A second tool holding the connection makes this entry unavailable. The exception is two integrations on Home Assistant's shared Modbus connection, see [Sharing the inverter with another Modbus integration](#sharing-the-inverter-with-another-modbus-integration) |
 
+Thanks to [@jensfr1](https://github.com/jensfr1), who already helped with the Ocean 2 support. For this local connection he showed how EcoFlow enables Modbus on the inverter and made the Modbus protocol description available.
+
 The integration writes only these: the keep-alive signal behind the Modbus Control switch, Backup Reserve and Indicator Brightness. See [Control from Home Assistant](#control-from-home-assistant). Reading and writing both worked on my unit once support had enabled Modbus.
 
 ## Setting it up
