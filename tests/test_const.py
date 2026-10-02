@@ -872,6 +872,10 @@ _PRECISION_WAIVED = {
         "a timestamp entity, rendered as a datetime rather than a number, so "
         "a display precision has nothing to act on"
     ),
+    "local_system_alerts": (
+        "text, the active alert codes separated by commas or 'none', so there "
+        "is no number to round"
+    ),
 }
 
 # One waiver per schedule slot the device can report. The window is a text

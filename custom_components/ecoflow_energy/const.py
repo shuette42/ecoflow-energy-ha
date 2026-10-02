@@ -2339,6 +2339,7 @@ POWEROCEAN_LOCAL_KEYS: frozenset[str] = frozenset(
         "bp_online_sum",
         "ems_backup_ratio_pct",
         "ems_total_battery_capacity_wh",
+        "ems_feed_power_limit_w",
     }
 )
 
@@ -2391,9 +2392,54 @@ POWEROCEANLOCALONLY_SENSORS: list[EcoFlowSensorDef] = [
         "diagnostic",
         suggested_display_precision=0,
     ),
+    # System State 2 (0x0213): the active alert codes as one text, `none` while
+    # no bit is set. Text on purpose: the register is a bit field of 23 alerts,
+    # and a plain state can carry any combination for a notification.
+    EcoFlowSensorDef(
+        "local_system_alerts",
+        "System Alerts",
+        icon="mdi:alert-circle-outline",
+        entity_category="diagnostic",
+    ),
+    # Whole-system battery readings from the Modbus table. The cloud stream
+    # has no such figure: its `bp_current_a` is a single pack, so the current
+    # here keeps its own key instead of sharing one. The labels say "System"
+    # because the cloud's pack readings are called Battery Voltage and Battery
+    # Current: an entry switched between modes keeps those entities, and two
+    # equal names gave the new ones an entity id ending in _2.
+    EcoFlowSensorDef(
+        "batt_voltage_v",
+        "System Battery Voltage",
+        "V",
+        "voltage",
+        "measurement",
+        "mdi:flash-triangle",
+        suggested_display_precision=1,
+        translation_key="local_system_batt_voltage_v",
+    ),
+    EcoFlowSensorDef(
+        "batt_current_a",
+        "System Battery Current",
+        "A",
+        "current",
+        "measurement",
+        "mdi:current-dc",
+        suggested_display_precision=2,
+        translation_key="local_system_batt_current_a",
+    ),
+    EcoFlowSensorDef(
+        "batt_temp_c",
+        "System Battery Temp",
+        "\u00b0C",
+        "temperature",
+        "measurement",
+        "mdi:thermometer",
+        suggested_display_precision=1,
+        translation_key="local_system_batt_temp_c",
+    ),
 ]
 
-# What a local entry creates: the shared definitions plus the four above.
+# What a local entry creates: the shared definitions plus the local-only ones.
 POWEROCEAN_LOCAL_SENSOR_DEFS: list[EcoFlowSensorDef] = [
     sensor_def
     for sensor_def in POWEROCEAN_SENSORS
@@ -2445,6 +2491,31 @@ POWEROCEANLOCALONLY_NUMBERS: list[EcoFlowNumberDef] = [
 ]
 
 POWEROCEANLOCALONLY_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
+    # Bit 0 of the system status word. Not a diagnostic: outage automations
+    # trigger on it, and it works without the cloud. No device class, since
+    # off-grid is a state of the site and not a fault. Its own key rather than
+    # the cloud's `grid_status`: that one is an enum sensor fed by a different
+    # field, and one entity must keep one source across a mode switch.
+    EcoFlowBinarySensorDef(
+        "local_off_grid",
+        "Off-Grid",
+        icon="mdi:transmission-tower",
+    ),
+    # Bit 1 of the system status word.
+    EcoFlowBinarySensorDef(
+        "local_system_abnormal",
+        "System Abnormal",
+        device_class="problem",
+        entity_category="diagnostic",
+    ),
+    # Bit 12 of the system status word: whether the battery management system
+    # is connected to the inverter.
+    EcoFlowBinarySensorDef(
+        "local_bms_connected",
+        "Battery Connection",
+        device_class="connectivity",
+        entity_category="diagnostic",
+    ),
     EcoFlowBinarySensorDef(
         "modbus_control_active",
         "Modbus Control Active",

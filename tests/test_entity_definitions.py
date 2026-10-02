@@ -44,6 +44,7 @@ from ecoflow_energy.number import _get_number_defs
 from ecoflow_energy.select import _get_select_defs
 from ecoflow_energy.sensor import _get_sensor_defs
 from ecoflow_energy.switch import _get_switch_defs
+from homeassistant.util import slugify
 
 COMPONENT_DIR = Path(__file__).resolve().parent.parent / "custom_components"
 CONST_PY = COMPONENT_DIR / "ecoflow_energy" / "const.py"
@@ -352,9 +353,9 @@ def test_every_device_type_has_sensors(constant: str) -> None:
     )
 
 
-# The four Local controls: platform, the English name (title case, like every
-# other entity name here) and the German name (German capitalises its nouns, so
-# the German forms are not the English ones with other words).
+# The Local controls and status sensors: platform, the English name (title case,
+# like every other entity name here) and the German name (German capitalises its
+# nouns, so the German forms are not the English ones with other words).
 LOCAL_CONTROL_NAMES = {
     "modbus_control": ("switch", "Modbus Control", "Modbus-Steuerung"),
     "local_backup_reserve": ("number", "Backup Reserve", "Backup-Reserve"),
@@ -368,11 +369,26 @@ LOCAL_CONTROL_NAMES = {
         "Modbus Control Active",
         "Modbus-Steuerung aktiv",
     ),
+    "local_off_grid": ("binary_sensor", "Off-Grid", "Inselbetrieb"),
+    "local_system_abnormal": (
+        "binary_sensor",
+        "System Abnormal",
+        "Systemstörung",
+    ),
+    "local_bms_connected": (
+        "binary_sensor",
+        "Battery Connection",
+        "Batterieverbindung",
+    ),
+}
+# The Local-only sensor with its own name gate: platform, English, German.
+LOCAL_ALERT_SENSOR_NAMES = {
+    "local_system_alerts": ("sensor", "System Alerts", "Systemmeldungen"),
 }
 
 
 def test_the_local_control_names_are_title_case_in_every_file() -> None:
-    """Definition, strings.json, en.json and de.json agree on the four names."""
+    """Definition, strings.json, en.json and de.json agree on every name."""
     definitions = {
         definition.key: definition.name
         for block in (
@@ -399,3 +415,68 @@ def test_the_local_control_names_are_title_case_in_every_file() -> None:
         for name, data in files.items():
             expected = german if name.endswith("de.json") else english
             assert data["entity"][platform][key]["name"] == expected, (name, key)
+
+
+def test_the_system_alerts_sensor_has_the_same_name_in_every_file() -> None:
+    """Definition, strings.json, en.json and de.json agree on the sensor name."""
+    definitions = {
+        definition.key: definition
+        for definition in C.POWEROCEANLOCALONLY_SENSORS
+        if definition.key in LOCAL_ALERT_SENSOR_NAMES
+    }
+    assert set(definitions) == set(LOCAL_ALERT_SENSOR_NAMES)
+    # The shared sensor list is where a Local entry reads it from.
+    assert {d.key for d in C.POWEROCEAN_LOCAL_SENSOR_DEFS} >= set(definitions)
+
+    component = COMPONENT_DIR / "ecoflow_energy"
+    files = {
+        "strings.json": json.loads((component / "strings.json").read_text("utf-8")),
+        "translations/en.json": json.loads(
+            (component / "translations" / "en.json").read_text("utf-8")
+        ),
+        "translations/de.json": json.loads(
+            (component / "translations" / "de.json").read_text("utf-8")
+        ),
+    }
+    for key, (platform, english, german) in LOCAL_ALERT_SENSOR_NAMES.items():
+        assert definitions[key].name == english, key
+        # A plain text state: no unit, no device class, no state class.
+        assert definitions[key].unit is None, key
+        assert definitions[key].device_class is None, key
+        assert definitions[key].state_class is None, key
+        assert definitions[key].entity_category == "diagnostic", key
+        for name, data in files.items():
+            expected = german if name.endswith("de.json") else english
+            assert data["entity"][platform][key]["name"] == expected, (name, key)
+
+
+@pytest.mark.parametrize("language", ["en", "de"])
+def test_no_local_sensor_shares_a_name_with_a_cloud_powerocean_sensor(language):
+    """A local sensor named like a cloud one gets an entity id ending in _2.
+
+    Switching a PowerOcean from the cloud to Local keeps the cloud entities in
+    the registry, so a new local sensor whose label equals one of theirs is
+    registered beside it with a suffixed id. Shared keys are the same entity
+    and are exempt; every other local label must be free.
+    """
+    component = COMPONENT_DIR / "ecoflow_energy"
+    sensors = json.loads(
+        (component / "translations" / f"{language}.json").read_text("utf-8")
+    )["entity"]["sensor"]
+
+    def label(definition: Any) -> str:
+        # Entity ids come from the slugified name, so "Off-Grid" and "Off Grid"
+        # would clash as well: compare what the id is built from.
+        return slugify(sensors[definition.translation_key or definition.key]["name"])
+
+    cloud = {
+        label(d): d.key
+        for d in C.POWEROCEAN_SENSORS
+        if d.key not in C.POWEROCEAN_LOCAL_KEYS
+    }
+    clashes = {
+        d.key: cloud[label(d)]
+        for d in C.POWEROCEANLOCALONLY_SENSORS
+        if label(d) in cloud
+    }
+    assert clashes == {}

@@ -66,6 +66,10 @@ CONTROL_KEYS = (
     "local_indicator_brightness",
     "modbus_control_active",
 )
+# The three binary sensors decoded from bits 0, 1 and 12 of the same status word.
+STATUS_KEYS = ("local_off_grid", "local_system_abnormal", "local_bms_connected")
+# Everything a local entry creates beyond the sensors, and a cloud entry never.
+LOCAL_ONLY_KEYS = CONTROL_KEYS + STATUS_KEYS
 # Bit 11 of the system status word.
 CONTROL_ACTIVE_STATUS = 1 << 11
 # Bits 4-6 set (the device shows 7 there while Backup Reserve is above 0). Not a
@@ -79,14 +83,21 @@ POWEROCEAN_DOC = (
 
 
 def _poll_frame(
-    *, brightness: int = POLLED_BRIGHTNESS, status: int | None = 0
+    *,
+    brightness: int = POLLED_BRIGHTNESS,
+    status: int | None = 0,
+    state2: int | None = 0,
+    **overrides: float,
 ) -> dict[int, bytes]:
-    """One full answer with the brightness and the system status word set.
+    """One full answer with the brightness and the system words set.
 
     ``status=None`` leaves the block that carries the status word out, so the
-    poll does not deliver the key at all.
+    poll does not deliver the key at all. ``state2=None`` cuts the same block
+    back to the thirteen registers it had before System State 2 (0x0213) was
+    polled: the status word stays, the alert word is gone. ``overrides`` are
+    fixture fields of the shared frame builder (``battery_voltage`` and so on).
     """
-    frame = _frame(DAY)
+    frame = _frame(DAY, **overrides)
     block = bytearray(frame[0x0217])
     low = (0x021C - 0x0217) * 2
     block[low : low + 2] = struct.pack(">H", brightness)
@@ -97,6 +108,11 @@ def _poll_frame(
         block = bytearray(frame[0x0206])
         low = (0x0211 - 0x0206) * 2
         block[low : low + 4] = _encode("u32", status)
+        if state2 is None:
+            block = block[: 2 * 13]
+        else:
+            low = (0x0213 - 0x0206) * 2
+            block[low : low + 4] = _encode("u32", state2)
         frame[0x0206] = bytes(block)
     return frame
 
@@ -151,10 +167,15 @@ async def _call(
     )
 
 
-async def test_a_cloud_entry_gets_none_of_the_four_and_a_local_entry_gets_them(
+async def test_a_cloud_entry_gets_none_of_the_seven_and_a_local_entry_gets_them(
     hass: HomeAssistant,
 ) -> None:
-    """The four entities exist for a Local coordinator and for no cloud one."""
+    """The seven entities exist for a Local coordinator and for no cloud one.
+
+    Three of the seven are the Off-Grid, System Abnormal and Battery Connection
+    binary sensors: the cloud PowerOcean builds its own binary sensors from the
+    same platform setup, and none of these three is among them.
+    """
     cloud_entry = _entry()
     cloud_entry.add_to_hass(hass)
     cloud = EcoFlowDeviceCoordinator(hass, cloud_entry, POWEROCEAN_DEVICE)
@@ -169,15 +190,15 @@ async def test_a_cloud_entry_gets_none_of_the_four_and_a_local_entry_gets_them(
     cloud_sn = POWEROCEAN_DEVICE["sn"]
     # The cloud platforms did run: their own controls are there.
     assert f"{cloud_sn}_backup_reserve" in cloud_ids
-    assert not {f"{cloud_sn}_{key}" for key in CONTROL_KEYS} & cloud_ids
+    assert not {f"{cloud_sn}_{key}" for key in LOCAL_ONLY_KEYS} & cloud_ids
 
-    # Control: the same three platform setups hand a Local coordinator the four.
+    # Control: the same three platform setups hand a Local coordinator all seven.
     entry, _stub, _coordinator = await _setup_local(hass)
     local: list[Any] = []
     for platform_setup in (switch_setup, number_setup, binary_sensor_setup):
         await platform_setup(hass, entry, add_entities_collector(local))
     assert {entity.unique_id for entity in local} == {
-        f"{SERIAL}_{key}" for key in CONTROL_KEYS
+        f"{SERIAL}_{key}" for key in LOCAL_ONLY_KEYS
     }
     await _unload(hass, entry)
 
@@ -205,7 +226,7 @@ async def test_a_cloud_number_definition_with_a_category_gets_it(
     assert category_of(None) is None
 
 
-async def test_a_local_entry_creates_the_four_plus_the_existing_sensors(
+async def test_a_local_entry_creates_its_own_plus_the_shared_sensors(
     hass: HomeAssistant,
 ) -> None:
     """Exactly the sensors of the read-only mode plus the four, in the right place."""
@@ -215,7 +236,7 @@ async def test_a_local_entry_creates_the_four_plus_the_existing_sensors(
 
     assert {item.unique_id for item in registered} == {
         f"{SERIAL}_{key}"
-        for key in POWEROCEAN_LOCAL_KEYS | NEW_KEYS | set(CONTROL_KEYS)
+        for key in POWEROCEAN_LOCAL_KEYS | NEW_KEYS | set(LOCAL_ONLY_KEYS)
     } | {f"{SERIAL}_connection_mode"}
     assert {item.domain for item in registered} == {
         "sensor",
@@ -230,6 +251,27 @@ async def test_a_local_entry_creates_the_four_plus_the_existing_sensors(
     assert by_key["local_indicator_brightness"].domain == "number"
     assert by_key["modbus_control_active"].domain == "binary_sensor"
     assert by_key["modbus_control_active"].entity_category == "diagnostic"
+    # Off-Grid is not a diagnostic and carries no device class (outage
+    # automations trigger on it); System Abnormal is a diagnostic problem.
+    assert by_key["local_off_grid"].domain == "binary_sensor"
+    assert by_key["local_off_grid"].entity_category is None
+    assert by_key["local_off_grid"].original_device_class is None
+    assert by_key["local_system_abnormal"].domain == "binary_sensor"
+    assert by_key["local_system_abnormal"].entity_category == "diagnostic"
+    assert by_key["local_system_abnormal"].original_device_class == "problem"
+    # Battery Connection is a diagnostic connectivity sensor (bit 12).
+    assert by_key["local_bms_connected"].domain == "binary_sensor"
+    assert by_key["local_bms_connected"].entity_category == "diagnostic"
+    assert by_key["local_bms_connected"].original_device_class == "connectivity"
+    # System Alerts is a plain text diagnostic: no unit, no device class.
+    assert by_key["local_system_alerts"].domain == "sensor"
+    assert by_key["local_system_alerts"].entity_category == "diagnostic"
+    assert by_key["local_system_alerts"].original_device_class is None
+    assert by_key["local_system_alerts"].unit_of_measurement is None
+    assert by_key["batt_voltage_v"].domain == "sensor"
+    assert by_key["batt_current_a"].domain == "sensor"
+    assert by_key["batt_temp_c"].domain == "sensor"
+    assert by_key["ems_feed_power_limit_w"].domain == "sensor"
     assert by_key["local_indicator_brightness"].entity_category == "config"
     assert by_key["local_backup_reserve"].entity_category is None
     # The cloud number "Backup Reserve" slugs to `..._backup_reserve`; the two
@@ -487,6 +529,101 @@ async def test_the_binary_sensor_follows_bit_11_and_is_unknown_without_it(
     entry, _stub, coordinator = await _setup_local(hass, _poll_frame(status=status))
     assert ("modbus_control_active" in coordinator.data) is (status is not None)
     assert _state(hass, "binary_sensor", "modbus_control_active") == expected
+    await _unload(hass, entry)
+
+
+@pytest.mark.parametrize(
+    ("status", "off_grid", "abnormal"),
+    [
+        (0x1014, "off", "off"),
+        (0x1015, "on", "off"),
+        (0x1016, "off", "on"),
+        (0x1017, "on", "on"),
+        (None, "unknown", "unknown"),
+    ],
+)
+async def test_off_grid_and_abnormal_follow_bits_0_and_1_and_are_unknown_without_them(
+    hass: HomeAssistant, status: int | None, off_grid: str, abnormal: str
+) -> None:
+    """Each binary sensor reads its own bit; no status word, no invented state."""
+    entry, _stub, coordinator = await _setup_local(hass, _poll_frame(status=status))
+    assert ("local_off_grid" in coordinator.data) is (status is not None)
+    assert _state(hass, "binary_sensor", "local_off_grid") == off_grid
+    assert _state(hass, "binary_sensor", "local_system_abnormal") == abnormal
+    await _unload(hass, entry)
+
+
+@pytest.mark.parametrize(
+    ("status", "connected"),
+    [(0x1014, "on"), (0x0014, "off"), (None, "unknown")],
+)
+async def test_battery_connection_follows_bit_12_and_is_unknown_without_it(
+    hass: HomeAssistant, status: int | None, connected: str
+) -> None:
+    """Bit 12 of the status word decides; no status word, no invented state."""
+    entry, _stub, coordinator = await _setup_local(hass, _poll_frame(status=status))
+    assert ("local_bms_connected" in coordinator.data) is (status is not None)
+    assert _state(hass, "binary_sensor", "local_bms_connected") == connected
+    await _unload(hass, entry)
+
+
+@pytest.mark.parametrize(
+    ("state2", "alerts"),
+    [
+        (0, "none"),
+        ((1 << 4) | (1 << 13), "fan_failure,battery_overheating"),
+        (1 << 25, "bit_25"),
+        (None, "unknown"),
+        # All 23 known alerts at once: shortened with a count, not unknown.
+        ((1 << 23) - 1, "+10"),
+    ],
+)
+async def test_system_alerts_list_the_active_codes_and_are_unknown_without_the_word(
+    hass: HomeAssistant, state2: int | None, alerts: str
+) -> None:
+    """The sensor shows the codes of System State 2; a frame without it shows none."""
+    frame = _poll_frame(status=0x1014, state2=state2)
+    entry, _stub, coordinator = await _setup_local(hass, frame)
+    assert ("local_system_alerts" in coordinator.data) is (state2 is not None)
+    if alerts.startswith("+"):
+        assert _state(hass, "sensor", "local_system_alerts").endswith("," + alerts)
+    else:
+        assert _state(hass, "sensor", "local_system_alerts") == alerts
+    # The old-size frame still carries the status word (negative control: the
+    # alert state is unknown for the right reason only).
+    assert _state(hass, "binary_sensor", "local_bms_connected") == "on"
+    await _unload(hass, entry)
+
+
+async def test_the_battery_readings_and_the_feed_limit_show_the_polled_values(
+    hass: HomeAssistant,
+) -> None:
+    """The device's values of 2026-10-02 reach the five new sensors."""
+    frame = _poll_frame(
+        status=0x1014,
+        battery_voltage=52.305,
+        battery_current=-16.247,
+        battery_temp=33.0,
+        max_feed_power=7000,
+    )
+    entry, _stub, coordinator = await _setup_local(hass, frame)
+    # Home Assistant rounds the state to the display precision of the
+    # definition (one decimal for the voltage, two for the current).
+    assert float(_state(hass, "sensor", "batt_voltage_v")) == pytest.approx(
+        52.305, abs=0.01
+    )
+    assert float(_state(hass, "sensor", "batt_current_a")) == pytest.approx(
+        -16.247, abs=0.01
+    )
+    assert float(_state(hass, "sensor", "batt_temp_c")) == pytest.approx(33.0)
+    # The feed limit is the shared cloud entity, disabled by default there and
+    # here: it is registered without a state, and the coordinator carries the value.
+    feed_limit = er.async_get(hass).async_get(
+        _entity_id(hass, "sensor", "ems_feed_power_limit_w")
+    )
+    assert feed_limit is not None
+    assert feed_limit.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+    assert coordinator.data["ems_feed_power_limit_w"] == 7000
     await _unload(hass, entry)
 
 

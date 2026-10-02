@@ -359,6 +359,9 @@
       "fault_count": {
         "name": "Fehleranzahl"
       },
+      "local_system_alerts": {
+        "name": "Systemmeldungen"
+      },
       "batt_charge_energy_kwh": {
         "name": "Batterieladeenergie"
       },
@@ -2580,6 +2583,15 @@
       },
       "bp5_temp_c": {
         "name": "Batteriepack 5 Temperatur"
+      },
+      "local_system_batt_voltage_v": {
+        "name": "System-Batteriespannung"
+      },
+      "local_system_batt_current_a": {
+        "name": "System-Batteriestrom"
+      },
+      "local_system_batt_temp_c": {
+        "name": "System-Batterietemperatur"
       }
     },
     "binary_sensor": {
@@ -2708,6 +2720,15 @@
       },
       "modbus_control_active": {
         "name": "Modbus-Steuerung aktiv"
+      },
+      "local_off_grid": {
+        "name": "Inselbetrieb"
+      },
+      "local_system_abnormal": {
+        "name": "Systemstörung"
+      },
+      "local_bms_connected": {
+        "name": "Batterieverbindung"
       }
     },
     "switch": {
