@@ -594,13 +594,19 @@ def _decode_scalar(wire_type: int, raw: bytes, scalar_type: str) -> float | int 
         if len(raw) != 4:
             return None
         fval = struct.unpack("<f", raw)[0]
-        return fval if scalar_type == _TYPE_FLOAT else int(round(fval))
+        if scalar_type == _TYPE_FLOAT:
+            return fval
+        # inf and NaN have no integer: skip the field instead of raising
+        # OverflowError/ValueError and losing the whole message with it.
+        return int(round(fval)) if isfinite(fval) else None
 
     if wire_type == 1:
         if len(raw) != 8:
             return None
         dval = struct.unpack("<d", raw)[0]
-        return dval if scalar_type == _TYPE_FLOAT else int(round(dval))
+        if scalar_type == _TYPE_FLOAT:
+            return dval
+        return int(round(dval)) if isfinite(dval) else None
 
     if wire_type == 2 and scalar_type == _TYPE_PACKED:
         if not raw:
@@ -621,13 +627,26 @@ def _read_field(mv: memoryview, pos: int, wire_type: int) -> tuple[bytes, int]:
         _, pos = _read_varint(mv, pos)
         return mv[start:pos].tobytes(), pos
     if wire_type == 1:
-        return mv[pos : pos + 8].tobytes(), pos + 8
+        return _take(mv, pos, 8)
     if wire_type == 2:
         length, pos = _read_varint(mv, pos)
-        return mv[pos : pos + length].tobytes(), pos + length
+        return _take(mv, pos, length)
     if wire_type == 5:
-        return mv[pos : pos + 4].tobytes(), pos + 4
+        return _take(mv, pos, 4)
     raise ValueError(f"unsupported wire type {wire_type}")
+
+
+def _take(mv: memoryview, pos: int, length: int) -> tuple[bytes, int]:
+    """Return ``length`` bytes at ``pos``, or raise IndexError if fewer remain.
+
+    A slice past the end would hand back a shorter value as if it were whole:
+    a name cut short, a float32 of two bytes. The outer parse guard treats the
+    IndexError as "this payload is not valid protobuf".
+    """
+    end = pos + length
+    if end > len(mv):
+        raise IndexError("truncated field")
+    return mv[pos:end].tobytes(), end
 
 
 def _walk(

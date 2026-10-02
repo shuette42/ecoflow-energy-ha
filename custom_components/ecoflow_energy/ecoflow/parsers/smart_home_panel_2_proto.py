@@ -35,10 +35,15 @@ of a length-delimited field misread the grid-leg pair in 4 of 22 frames.
 Merge rule: a frame returns only the keys it carries. Sub-messages come and
 go between frames and a delta push is a few bytes, so a key that is absent is
 unchanged, never zero; the coordinator's own `_device_data.update()` is the
-one merge that keeps the rest. A storage channel's SOC is only read from a
-channel that reports itself ready (`80.(59+n).1`) or connected (`80.(79+n).3`)
-in the same frame: an unused channel is sent as an all-zero block and would
-otherwise publish a 0 % battery that does not exist.
+one merge that keeps the rest. The exception is a retraction, sent as `None`.
+A storage channel's SOC is only read from a channel that reports itself ready
+(`80.(59+n).1`) or connected (`80.(79+n).3`) in the same frame: an unused
+channel is sent as an all-zero block and would otherwise publish a 0 % battery
+that does not exist. A channel that reports both flags as 0 retracts its SOC,
+so an unplugged battery does not keep its last level. The system battery block
+(80.2, 80.3, 80.4) follows the channels: published next to a ready or
+connected channel, retracted when the frame carries channel flags and none is
+set, and left out when it carries no channel flags at all.
 
 Never read, never published: 12.32 field 17 (`area`, the installation
 address), 12.1 1.4 (`timezone_id`) and every serial number. They are not in
@@ -148,6 +153,14 @@ del _n
 
 _PUSH_TREE: dict[int, Any] = _compile(_PUSH_FIELD_MAP)
 
+#: The system battery block, published only next to a ready or connected
+#: storage channel (see `_parse_push`).
+_SYSTEM_BATTERY_KEYS = (
+    "battery_soc_pct",
+    "battery_full_capacity_wh",
+    "battery_remaining_energy_wh",
+)
+
 #: `81.1.(29+n).4`: the owner's label of circuit n.
 _HALL_FIELD = 81
 _HALL_CIRCUITS_FIELD = 1
@@ -166,10 +179,12 @@ def _clean(value: float, decimals: int) -> float | None:
 def _unpack_floats(chunks: list[bytes]) -> list[float]:
     """Unpack the little-endian float32 elements of a packed array.
 
-    A trailing partial element is dropped; a short array yields the indices
-    it has.
+    A short array yields the indices it has. A chunk whose length is not a
+    multiple of 4 is not a run of float32 and is skipped whole: joined with
+    the chunks after it, it would shift every element behind it by the bytes
+    it carries and publish a value at the wrong circuit.
     """
-    raw = b"".join(chunks)
+    raw = b"".join(chunk for chunk in chunks if len(chunk) % 4 == 0)
     count = len(raw) // 4
     return list(struct.unpack(f"<{count}f", raw[: count * 4]))
 
@@ -203,7 +218,12 @@ def _parse_time(pdata: bytes) -> dict[str, Any]:
 
 
 def _circuit_names(pdata: bytes) -> dict[str, Any]:
-    """Read the circuit labels (81.1.30 ... 81.1.41, sub-field 4)."""
+    """Read the circuit labels (81.1.30 ... 81.1.41, sub-field 4).
+
+    Same convention as the Smart Panel 40: a circuit block with no name
+    publishes `""`, and an undecodable byte becomes U+FFFD instead of
+    dropping the label.
+    """
     out: dict[str, Any] = {}
     for field_num, wire_type, raw in _iter_fields(pdata):
         if field_num != _HALL_FIELD or wire_type != 2:
@@ -215,15 +235,14 @@ def _circuit_names(pdata: bytes) -> dict[str, Any]:
                 n = info_num - _CIRCUIT_INFO_BASE_FIELD
                 if info_wire != 2 or not 1 <= n <= CIRCUIT_COUNT:
                     continue
+                # Every circuit block that is present publishes a name, empty
+                # when the owner left it blank: the circuit's entities wait
+                # for this key, so one without a name would never appear.
+                name = ""
                 for sub_num, sub_wire, sub_raw in _iter_fields(info_raw):
-                    if sub_num != _CIRCUIT_NAME_FIELD or sub_wire != 2:
-                        continue
-                    try:
-                        name = sub_raw.decode("utf-8").strip()
-                    except UnicodeDecodeError:
-                        continue
-                    if name:
-                        out[f"circuit_{n}_name"] = name
+                    if sub_num == _CIRCUIT_NAME_FIELD and sub_wire == 2:
+                        name = sub_raw.decode("utf-8", errors="replace").strip()
+                out[f"circuit_{n}_name"] = name
     return out
 
 
@@ -236,6 +255,8 @@ def _parse_push(pdata: bytes) -> dict[str, Any]:
     for key, value in walked.items():
         if key.startswith("_") or key.startswith("storage_ch"):
             continue
+        if key in _SYSTEM_BATTERY_KEYS:
+            continue
         if isinstance(value, float):
             cleaned = _clean(value, _DECIMALS.get(key, 1))
             if cleaned is not None:
@@ -243,12 +264,40 @@ def _parse_push(pdata: bytes) -> dict[str, Any]:
         else:
             out[key] = value
 
+    # Channel by channel: a channel that says it is ready or connected
+    # publishes its SOC, a channel that reports both flags as 0 retracts it
+    # (an unplugged battery must not keep its last level), and a frame that
+    # carries neither verdict leaves the key alone.
+    any_active = False
+    any_gate_seen = False
     for n in range(1, STORAGE_CHANNEL_COUNT + 1):
+        ready = walked.get(_ready_key(n))
+        connected = walked.get(_connected_key(n))
+        any_gate_seen = any_gate_seen or ready is not None or connected is not None
         key = f"storage_ch{n}_soc_pct"
-        if key not in walked:
-            continue
-        if walked.get(_ready_key(n)) == 1 or walked.get(_connected_key(n)) == 1:
-            out[key] = walked[key]
+        if ready == 1 or connected == 1:
+            any_active = True
+            if key in walked:
+                out[key] = walked[key]
+        elif ready == 0 and connected == 0:
+            out[key] = None
+
+    # The system battery block (80.2, 80.3, 80.4) has the same trap one level
+    # up: on a panel with no storage it is sent as zeros. It is published only
+    # next to a channel that is ready or connected, retracted when the frame
+    # says no channel is, and left alone when the frame has no channel flags.
+    if any_active:
+        for key in _SYSTEM_BATTERY_KEYS:
+            if key in walked:
+                value = walked[key]
+                if isinstance(value, float):
+                    value = _clean(value, _DECIMALS.get(key, 1))
+                if value is not None:
+                    out[key] = value
+    elif any_gate_seen:
+        for key in _SYSTEM_BATTERY_KEYS:
+            if key in walked:
+                out[key] = None
 
     out.update(_circuit_names(pdata))
     return out
@@ -265,7 +314,7 @@ def parse_smart_home_panel_2_message(payload: bytes) -> dict[str, Any] | None:
     """
     try:
         headers, _ = decode_header_message(payload)
-    except (IndexError, ValueError, struct.error):
+    except (IndexError, OverflowError, ValueError, struct.error):
         return None
     if not headers:
         return None
@@ -282,7 +331,7 @@ def parse_smart_home_panel_2_message(payload: bytes) -> dict[str, Any] | None:
                 decoded = (
                     _parse_time(pdata) if cmd_id == _CMD_ID_TIME else _parse_push(pdata)
                 )
-            except (IndexError, ValueError, struct.error):
+            except (IndexError, OverflowError, ValueError, struct.error):
                 # Not valid protobuf: try the next candidate. A clean decode
                 # ends the attempt whether it produced fields or not.
                 continue

@@ -648,10 +648,16 @@ class TestModuleFrame:
     def test_ignores_an_out_of_range_module_number(self, index: int) -> None:
         assert parse_ocean2_proto_message(_module(index, _f32(1, 1.0))) is None
 
-    def test_drops_a_nan_module_number_instead_of_raising(self) -> None:
-        # `int()` on a NaN raises; the same guard the telemetry frame applies
-        # to its own readings must cover the module index too.
-        payload = _module(1, _f32(15, float("nan")) + _f32(1, 1122.0))
+    @pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+    def test_drops_a_non_finite_module_number_instead_of_raising(
+        self, bad: float
+    ) -> None:
+        # `int()` on a NaN or an infinity raises; the shared scalar decoder now
+        # skips such a field, so a module number that is not finite leaves the
+        # frame without one and the frame is dropped. The number is the only
+        # 5.15 here: a frame that also carries a valid one keeps it, because
+        # the invalid field is skipped rather than overriding it.
+        payload = _frame(_msg(5, _f32(15, bad) + _f32(1, 1122.0)), cmd_id=46)
         assert parse_ocean2_proto_message(payload) is None
 
     def test_drops_a_non_finite_module_reading(self) -> None:

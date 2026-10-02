@@ -8358,7 +8358,7 @@ SMARTPANEL40_SENSORS: list[EcoFlowSensorDef] = [
 ]
 
 
-def _build_smartpanel40_circuit_sensors(
+def _build_panel_circuit_sensors(
     circuit: int, *, with_voltage: bool = True, current_precision: int = 0
 ) -> list[EcoFlowSensorDef]:
     """Build the sensor definitions for one Smart Panel 40 circuit.
@@ -8432,7 +8432,7 @@ def _build_smartpanel40_circuit_sensors(
 
 
 for _circuit in range(1, SMARTPANEL40_CIRCUIT_COUNT + 1):
-    SMARTPANEL40_SENSORS.extend(_build_smartpanel40_circuit_sensors(_circuit))
+    SMARTPANEL40_SENSORS.extend(_build_panel_circuit_sensors(_circuit))
 
 # Whether each circuit's breaker is closed, as the panel reports it. State
 # only: switching a circuit needs a write path with read-back, which does not
@@ -8836,9 +8836,14 @@ def _build_smart_home_panel_2_storage_sensors(channel: int) -> list[EcoFlowSenso
 
     Accessory: the panel has three storage channels and an installation has
     however many are wired, so an entity exists only once its channel is ready
-    or connected (the parser leaves the key out otherwise). No battery device
-    class: Home Assistant shows one battery figure per device, and that is the
-    system state of charge in `battery_soc_pct`.
+    or connected. The parser sends `None` for a channel whose ready and
+    connected flags are both 0 (that is how an unplugged battery clears), so
+    the entity also waits for a nonzero reading: without it every
+    single-battery installation would get two "unknown" entities for the empty
+    channels. The price is that a battery first seen at exactly 0 % gets its
+    entity at its first nonzero reading. No battery device class: Home
+    Assistant shows one battery figure per device, and that is the system
+    state of charge in `battery_soc_pct`.
     """
     return [
         EcoFlowSensorDef(
@@ -8850,6 +8855,7 @@ def _build_smart_home_panel_2_storage_sensors(channel: int) -> list[EcoFlowSenso
             "mdi:battery",
             suggested_display_precision=0,
             accessory=True,
+            accessory_needs_nonzero=True,
             enhanced_only=True,
         ),
     ]
@@ -8857,9 +8863,7 @@ def _build_smart_home_panel_2_storage_sensors(channel: int) -> list[EcoFlowSenso
 
 for _circuit in range(1, SMARTHOMEPANEL2_CIRCUIT_COUNT + 1):
     SMARTHOMEPANEL2_SENSORS.extend(
-        _build_smartpanel40_circuit_sensors(
-            _circuit, with_voltage=False, current_precision=2
-        )
+        _build_panel_circuit_sensors(_circuit, with_voltage=False, current_precision=2)
     )
 for _channel in range(1, SMARTHOMEPANEL2_STORAGE_CHANNEL_COUNT + 1):
     SMARTHOMEPANEL2_SENSORS.extend(_build_smart_home_panel_2_storage_sensors(_channel))

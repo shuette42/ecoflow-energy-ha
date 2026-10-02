@@ -12,7 +12,7 @@ Read-only. There are no controls.
 
 There are no energy counters. None appear in what the panel sends, and the integration does not derive energy from power for it.
 
-Mapped from one owner's two diagnostics downloads on #464. The circuits add up to the home power within 1.5 W on every frame checked, and the grid leg currents match the circuit currents. The battery behind the panel was idle while they were recorded, so the storage channel's charging and discharging power is not read yet.
+Mapped from one owner's two diagnostics downloads on #464. The circuits add up to the home power within 1.5 W on every frame checked, and the grid leg currents match the circuit currents in 21 of 22 frames. The battery behind the panel was idle while they were recorded, so the storage channel's charging and discharging power is not read yet.
 
 ---
 
@@ -25,16 +25,18 @@ Mapped from one owner's two diagnostics downloads on #464. The circuits add up t
 | Grid L1 Current | A | - | enabled | Leg current |
 | Grid L2 Current | A | - | enabled | Leg current |
 | Grid Voltage | V | - | enabled | Grid voltage as the panel reports it |
-| Battery SOC | % | - | enabled | Charge of the batteries connected to the panel, taken together |
-| Battery Remaining Energy | Wh | - | enabled | Energy left in those batteries |
-| Battery Full Capacity | Wh | diagnostic | enabled | Capacity of those batteries when full |
-| Backup Runtime | min | - | enabled | How long the batteries would carry the current home load, as the panel estimates it |
+| Battery SOC | % | - | enabled | Charge of the battery storage behind the panel, as the panel reports it |
+| Battery Remaining Energy | Wh | - | enabled | Energy left in the battery storage, as the panel reports it |
+| Battery Full Capacity | Wh | diagnostic | enabled | Capacity of the battery storage when full, as the panel reports it |
+| Backup Runtime | min | - | enabled | How long the battery storage would carry the current home load, as the panel estimates it |
+
+The three battery sensors show unknown while none of the panel's storage channels reports itself as ready or connected, so a panel without a battery never shows a charge of 0 %.
 
 ## Sensors - Circuits (up to 12)
 
-Each circuit creates 2 sensors (1 enabled by default, 1 disabled). They are created once the panel reports the circuit and its name.
+Each circuit creates 2 sensors (1 enabled by default, 1 disabled). They are created once the panel reports the circuit, with or without a name set in the EcoFlow app.
 
-The circuit's name from the EcoFlow app follows its number in the entity name, for example "Circuit 5 Kitchen Power". A circuit that still has its default name shows only its number. The name is read when the entity is created. A name changed later in the app shows after the next reload of the integration.
+The circuit's name from the EcoFlow app follows its number in the entity name, for example "Circuit 5 Kitchen Power". A circuit that still has its default name, or none, shows only its number. The name is read when the entity is created. A name changed later in the app shows after the next reload of the integration.
 
 **Enabled by default:**
 
@@ -50,7 +52,7 @@ The circuit's name from the EcoFlow app follows its number in the entity name, f
 
 ## Sensors - Storage Channels (up to 3)
 
-Each storage channel with a battery attached creates 1 sensor, once the panel reports the channel as ready or connected.
+Each storage channel with a battery attached creates 1 sensor, once the panel reports the channel as ready or connected with a charge above 0 %. A channel that later reports itself as neither ready nor connected, for example when its battery is switched off, shows unknown instead of its last level.
 
 | Entity | Unit | Description |
 |:---|:---:|:---|

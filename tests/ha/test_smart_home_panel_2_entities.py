@@ -13,9 +13,12 @@ Frames are addressed by their position in the fixture's `frames` list.
 from __future__ import annotations
 
 import json
+import struct
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
+import pytest
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -35,6 +38,7 @@ from custom_components.ecoflow_energy.const import (
     get_device_type,
 )
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
+from custom_components.ecoflow_energy.entity import label_placeholders
 from custom_components.ecoflow_energy.sensor import async_setup_entry as sensor_setup
 
 from .conftest import add_entities_collector
@@ -156,6 +160,37 @@ def _feed(coordinator: EcoFlowDeviceCoordinator, index: int) -> dict[str, Any]:
     return parsed
 
 
+def _varint(value: int) -> bytes:
+    out = bytearray()
+    while True:
+        byte = value & 0x7F
+        value >>= 7
+        if value:
+            out.append(byte | 0x80)
+        else:
+            out.append(byte)
+            return bytes(out)
+
+
+def _ld(field: int, payload: bytes) -> bytes:
+    return _varint(field << 3 | 2) + _varint(len(payload)) + payload
+
+
+def _vint(field: int, value: int) -> bytes:
+    return _varint(field << 3) + _varint(value)
+
+
+def _feed_synthetic(
+    coordinator: EcoFlowDeviceCoordinator, cmd_id: int, pdata: bytes
+) -> dict[str, Any]:
+    """Feed one hand-built panel frame (cmd_func 12, src 11) as a property push."""
+    header = _ld(1, pdata) + _vint(2, 11) + _vint(8, 12) + _vint(9, cmd_id)
+    parsed = coordinator._parse_message(_topic({"topic": "property"}), _ld(1, header))
+    assert parsed is not None, "the synthetic frame did not reach the parser"
+    coordinator._apply_data(parsed)
+    return parsed
+
+
 async def _entities(
     hass: HomeAssistant, entry: MockConfigEntry, coordinator: EcoFlowDeviceCoordinator
 ) -> dict[str, Any]:
@@ -250,3 +285,105 @@ def test_the_prefix_maps_the_panel_and_the_smart_panel_40_circuits_are_unchanged
     assert set(panel) == CIRCUIT_KEYS
     assert panel["circuit_3_power_w"].translation_key == "circuit_power_w"
     assert panel["circuit_3_current_a"].suggested_display_precision == 2
+
+
+async def test_a_battery_switched_off_clears_its_channel_level(
+    hass: HomeAssistant,
+) -> None:
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coordinator = EcoFlowDeviceCoordinator(hass, entry, PANEL_DEVICE)
+    _feed(coordinator, FULL_STATE)
+    entities = await _entities(hass, entry, coordinator)
+    assert entities["storage_ch1_soc_pct"].native_value == 93
+
+    # Channel 1 reports ready (80.60.1) and connected (80.80.3) as 0: the
+    # entity it already has shows unknown instead of its last level.
+    off = _ld(80, _ld(60, _vint(1, 0)) + _ld(80, _vint(3, 0) + _vint(8, 0)))
+    _feed_synthetic(coordinator, 32, off)
+
+    assert entities["storage_ch1_soc_pct"].native_value is None
+
+
+async def test_a_panel_without_storage_shows_an_unknown_battery_and_no_channels(
+    hass: HomeAssistant,
+) -> None:
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coordinator = EcoFlowDeviceCoordinator(hass, entry, PANEL_DEVICE)
+    nothing_attached = _ld(
+        80,
+        _vint(2, 0)
+        + _vint(3, 0)
+        + _ld(60, _vint(1, 0))
+        + _ld(80, _vint(3, 0) + _vint(8, 0))
+        + _ld(61, _vint(1, 0))
+        + _ld(81, _vint(3, 0) + _vint(8, 0))
+        + _ld(62, _vint(1, 0))
+        + _ld(82, _vint(3, 0) + _vint(8, 0)),
+    )
+    _feed_synthetic(coordinator, 32, nothing_attached)
+
+    entities = await _entities(hass, entry, coordinator)
+
+    # The all-zero block is "no battery", not a battery at 0 %, and the
+    # retracted channel levels do not create "unknown" entities.
+    assert entities["battery_soc_pct"].native_value is None
+    assert entities["battery_full_capacity_wh"].native_value is None
+    assert not [key for key in entities if key.startswith("storage_ch")]
+
+
+async def test_a_circuit_without_a_name_still_gets_its_entities(
+    hass: HomeAssistant,
+) -> None:
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coordinator = EcoFlowDeviceCoordinator(hass, entry, PANEL_DEVICE)
+    # Circuit 3's info block carries no name at all. Its entities wait for the
+    # name key, so the parser has to publish it, empty.
+    info = (
+        _ld(30, _ld(4, b"Circuit 1"))
+        + _ld(31, _ld(4, b"Kitchen"))
+        + _ld(32, _vint(2, 7))
+    )
+    _feed_synthetic(coordinator, 32, _ld(81, _ld(1, info)))
+    _feed_synthetic(
+        coordinator, 1, _ld(2, _ld(1, struct.pack("<3f", 10.0, 20.0, 30.0)))
+    )
+
+    entities = await _entities(hass, entry, coordinator)
+
+    assert {f"circuit_{n}_power_w" for n in (1, 2, 3)} <= set(entities)
+    assert "circuit_4_power_w" not in entities
+    labels = {
+        n: entities[f"circuit_{n}_power_w"]._attr_translation_placeholders
+        for n in (1, 2, 3)
+    }
+    assert labels == {1: {"label": "1"}, 2: {"label": "2 Kitchen"}, 3: {"label": "3"}}
+
+
+@pytest.mark.parametrize(
+    ("text", "label", "expected"),
+    [
+        # The default name repeats the slot number, whatever its case.
+        ("Circuit 1", "1", "1"),
+        ("CIRCUIT 1", "1", "1"),
+        # A different slot's default name, or an owner text that only starts
+        # with the default, is the owner's text and stays.
+        ("Circuit 10", "1", "1 Circuit 10"),
+        ("Circuit 1 Garage", "1", "1 Circuit 1 Garage"),
+        ("Circuit 3", "5", "5 Circuit 3"),
+        ("Kitchen", "1", "1 Kitchen"),
+        # Nothing reported, or only blanks.
+        ("", "1", "1"),
+        ("   ", "1", "1"),
+    ],
+)
+def test_the_label_drops_only_the_default_name_of_its_own_slot(
+    text: str, label: str, expected: str
+) -> None:
+    coordinator = SimpleNamespace(device_data={"circuit_1_name": text}, data=None)
+
+    assert label_placeholders(coordinator, label, "circuit_1_name") == {
+        "label": expected
+    }

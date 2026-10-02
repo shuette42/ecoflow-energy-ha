@@ -2594,13 +2594,13 @@
         "name": "Backup-Laufzeit"
       },
       "storage_ch1_soc_pct": {
-        "name": "Speicherkanal 1 Ladestand"
+        "name": "Speicherkanal 1 Ladezustand"
       },
       "storage_ch2_soc_pct": {
-        "name": "Speicherkanal 2 Ladestand"
+        "name": "Speicherkanal 2 Ladezustand"
       },
       "storage_ch3_soc_pct": {
-        "name": "Speicherkanal 3 Ladestand"
+        "name": "Speicherkanal 3 Ladezustand"
       },
       "local_system_batt_voltage_v": {
         "name": "System-Batteriespannung"

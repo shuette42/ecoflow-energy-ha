@@ -4,13 +4,20 @@ from __future__ import annotations
 
 import json
 import struct
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (
+    _decode_scalar as _decode_scalar_ac5000,
+)
 from ecoflow_energy.ecoflow.parsers.stream_proto import (
     _STREAM_FIELD_MAP,
+    _TYPE_FLOAT,
+    _TYPE_INT,
     SOC_FALLBACK_KEY,
     _decode_mapped_fields,
+    _decode_scalar,
     parse_stream_proto_message,
 )
 from ecoflow_energy.ecoflow.proto_encoding import (
@@ -682,3 +689,21 @@ class TestStreamSignedVarint:
     def test_truncated_inner_returns_none(self) -> None:
         inner = encode_varint((9 << 3) | 0) + b"\x80"
         assert parse_stream_proto_message(_build_frame(32, 50, inner)) is None
+
+
+@pytest.mark.parametrize("decode_scalar", [_decode_scalar, _decode_scalar_ac5000])
+@pytest.mark.parametrize("wire_type, fmt", [(5, "<f"), (1, "<d")])
+@pytest.mark.parametrize("bad", [float("inf"), float("-inf"), float("nan")])
+def test_a_non_finite_float_has_no_integer_reading(
+    decode_scalar: Callable[[int, bytes, str], float | int | None],
+    wire_type: int,
+    fmt: str,
+    bad: float,
+) -> None:
+    """Both scalar decoders skip the field instead of raising on `int()`."""
+    raw = struct.pack(fmt, bad)
+    assert decode_scalar(wire_type, raw, _TYPE_INT) is None
+    # A float target keeps the value; the caller applies its own finite guard.
+    assert repr(decode_scalar(wire_type, raw, _TYPE_FLOAT)) == repr(bad)
+    # A finite float still rounds to its integer.
+    assert decode_scalar(wire_type, struct.pack(fmt, 41.6), _TYPE_INT) == 42

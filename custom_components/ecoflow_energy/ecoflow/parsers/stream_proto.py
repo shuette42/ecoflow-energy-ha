@@ -214,13 +214,19 @@ def _decode_scalar(wire_type: int, raw: bytes, scalar_type: str) -> float | int 
         if len(raw) != 4:
             return None
         fval = struct.unpack("<f", raw)[0]
-        return fval if scalar_type == _TYPE_FLOAT else int(round(fval))
+        if scalar_type == _TYPE_FLOAT:
+            return fval
+        # inf and NaN have no integer: skip the field instead of raising
+        # OverflowError/ValueError and losing the whole message with it.
+        return int(round(fval)) if isfinite(fval) else None
 
     if wire_type == 1:
         if len(raw) != 8:
             return None
         dval = struct.unpack("<d", raw)[0]
-        return dval if scalar_type == _TYPE_FLOAT else int(round(dval))
+        if scalar_type == _TYPE_FLOAT:
+            return dval
+        return int(round(dval)) if isfinite(dval) else None
 
     return None
 
