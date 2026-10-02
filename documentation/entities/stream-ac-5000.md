@@ -8,7 +8,7 @@ Full list of all entities created for the STREAM AC 5000.
 
 **This is not the Stream entity set.** Despite the shared product name, an `ES22` speaks a different protocol from the BK-series Stream devices: it sends none of their telemetry messages and describes power as a flow matrix rather than as individual readings. It therefore has its own device type, parser and entity list. See [Stream](stream.md) for the BK series.
 
-**Totals:** 56 sensors, 2 binary sensors, 2 switches, 7 numbers, 1 select
+**Totals:** 57 sensors, 2 binary sensors, 2 switches, 7 numbers, 1 select
 
 > Entities marked with *disabled* are available but hidden by default. Enable them in **Settings > Devices > EcoFlow STREAM AC 5000 > Entities** (click the filter icon and show disabled entities).
 
@@ -38,7 +38,8 @@ Full list of all entities created for the STREAM AC 5000.
 |:---|:---:|:---:|:---:|:---|
 | Home Power | W | - | enabled | Total house consumption |
 | Grid Power | W | - | enabled | Signed grid power from the linked smart meter (positive = drawing, negative = feeding in). Absent while no meter is linked in the EcoFlow app |
-| Grid Import Power | W | - | enabled | Power drawn from the grid, derived from the flow matrix |
+| Grid Import Power | W | - | enabled | Power drawn from the grid, derived from the flow matrix. It counts what the house, the battery and the AC socket draw, so a load on the socket is included |
+| AC Output Power | W | - | *accessory* | Power at the AC socket. Created once a load has drawn power from the socket, and it reads 0 W when the load is unplugged |
 | Grid Export Power | W | - | enabled | Power fed into the grid, derived from the flow matrix |
 | Home From Battery | W | diagnostic | disabled | House load covered by the battery |
 | Home From Grid | W | diagnostic | disabled | House load covered by the grid |

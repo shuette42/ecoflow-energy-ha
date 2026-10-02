@@ -4682,6 +4682,21 @@ STREAMAC5000_SENSORS: list[EcoFlowSensorDef] = [
         "mdi:transmission-tower-import",
         suggested_display_precision=0,
     ),
+    # The AC socket output node (#458). The parser publishes an explicit zero
+    # when the socket is idle so the reading cannot latch, which would create
+    # the entity on every unit; waiting for a non-zero reading keeps it to
+    # units that actually have a load on the socket.
+    EcoFlowSensorDef(
+        "ac_output_power_w",
+        "AC Output Power",
+        "W",
+        "power",
+        "measurement",
+        "mdi:power-socket-eu",
+        suggested_display_precision=0,
+        accessory=True,
+        accessory_needs_nonzero=True,
+    ),
     EcoFlowSensorDef(
         "grid_export_power_w",
         "Grid Export Power",
