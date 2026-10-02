@@ -27,7 +27,11 @@ A Local entry holds no keys and no account. It has one device, the PowerOcean.
 
 The entry shows solar, home, grid and battery power, the battery charge level, grid frequency, the two solar strings (voltage and current), battery charge and discharge energy, battery voltage, current and temperature, battery capacity, backup reserve, the feed power limit and the number of batteries online. It also shows the inverter's own lifetime counters for solar, grid import and grid export, and a fault count.
 
-Two binary sensors come from the inverter's status word. Off-Grid turns on when the inverter reports that it runs without the grid, so an outage automation can trigger on it with no cloud involved. System Abnormal turns on when the inverter reports a fault. After five failed reads in a row the entry goes unavailable, and both sensors with it. An automation should treat unavailable as "unknown", not as "grid is back". Feed Power Limit is disabled by default. Enable it in the entity settings if you use it. The four entities under [Control from Home Assistant](#control-from-home-assistant) come on top.
+Three binary sensors come from the inverter's status word. Off-Grid turns on when the inverter reports that it runs without the grid, so an outage automation can trigger on it with no cloud involved. System Abnormal turns on when the inverter reports a fault. Battery Connection shows whether the inverter sees its battery.
+
+The sensor System Alerts reads a second status word. It lists what the inverter currently reports, such as `fan_failure` or `battery_overheating`, or none when all is well. A notification can then name the actual problem.
+
+After five failed reads in a row the entry goes unavailable, and these entities with it. An automation should treat unavailable as "unknown", not as "grid is back". Feed Power Limit is disabled by default. Enable it in the entity settings if you use it. The four entities under [Control from Home Assistant](#control-from-home-assistant) come on top.
 
 The values refresh every 2 seconds. The inverter updates its power readings about once a second, so this stays close to its own pace. On Home Assistant 2026.9 or newer the connection stays open while the entry is loaded. On older versions each refresh opens a short connection and closes it again, so the inverter's single slot is free almost all of the time.
 

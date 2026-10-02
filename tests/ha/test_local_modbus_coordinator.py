@@ -104,6 +104,7 @@ NEW_KEYS = {
     "batt_voltage_v",
     "batt_current_a",
     "batt_temp_c",
+    "local_system_alerts",
 }
 # Integrated energy keys of the cloud entry. Local mode publishes none of them.
 INTEGRATED_KEYS = {
@@ -380,6 +381,7 @@ async def test_local_entry_creates_the_local_entities_and_a_missing_value_is_unk
             "modbus_control_active",
             "local_off_grid",
             "local_system_abnormal",
+            "local_bms_connected",
         )
     }
     assert f"{SERIAL}_mqtt_status" not in unique_ids

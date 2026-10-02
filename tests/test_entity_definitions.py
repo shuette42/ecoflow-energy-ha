@@ -374,6 +374,15 @@ LOCAL_CONTROL_NAMES = {
         "System Abnormal",
         "Systemstörung",
     ),
+    "local_bms_connected": (
+        "binary_sensor",
+        "Battery Connection",
+        "Batterieverbindung",
+    ),
+}
+# The Local-only sensor with its own name gate: platform, English, German.
+LOCAL_ALERT_SENSOR_NAMES = {
+    "local_system_alerts": ("sensor", "System Alerts", "Systemmeldungen"),
 }
 
 
@@ -402,6 +411,39 @@ def test_the_local_control_names_are_title_case_in_every_file() -> None:
     }
     for key, (platform, english, german) in LOCAL_CONTROL_NAMES.items():
         assert definitions[key] == english, key
+        for name, data in files.items():
+            expected = german if name.endswith("de.json") else english
+            assert data["entity"][platform][key]["name"] == expected, (name, key)
+
+
+def test_the_system_alerts_sensor_has_the_same_name_in_every_file() -> None:
+    """Definition, strings.json, en.json and de.json agree on the sensor name."""
+    definitions = {
+        definition.key: definition
+        for definition in C.POWEROCEANLOCALONLY_SENSORS
+        if definition.key in LOCAL_ALERT_SENSOR_NAMES
+    }
+    assert set(definitions) == set(LOCAL_ALERT_SENSOR_NAMES)
+    # The shared sensor list is where a Local entry reads it from.
+    assert {d.key for d in C.POWEROCEAN_LOCAL_SENSOR_DEFS} >= set(definitions)
+
+    component = COMPONENT_DIR / "ecoflow_energy"
+    files = {
+        "strings.json": json.loads((component / "strings.json").read_text("utf-8")),
+        "translations/en.json": json.loads(
+            (component / "translations" / "en.json").read_text("utf-8")
+        ),
+        "translations/de.json": json.loads(
+            (component / "translations" / "de.json").read_text("utf-8")
+        ),
+    }
+    for key, (platform, english, german) in LOCAL_ALERT_SENSOR_NAMES.items():
+        assert definitions[key].name == english, key
+        # A plain text state: no unit, no device class, no state class.
+        assert definitions[key].unit is None, key
+        assert definitions[key].device_class is None, key
+        assert definitions[key].state_class is None, key
+        assert definitions[key].entity_category == "diagnostic", key
         for name, data in files.items():
             expected = german if name.endswith("de.json") else english
             assert data["entity"][platform][key]["name"] == expected, (name, key)

@@ -359,6 +359,9 @@
       "fault_count": {
         "name": "Fault Count"
       },
+      "local_system_alerts": {
+        "name": "System Alerts"
+      },
       "batt_charge_energy_kwh": {
         "name": "Battery Charge Energy"
       },
@@ -2648,6 +2651,9 @@
       },
       "local_system_abnormal": {
         "name": "System Abnormal"
+      },
+      "local_bms_connected": {
+        "name": "Battery Connection"
       }
     },
     "switch": {

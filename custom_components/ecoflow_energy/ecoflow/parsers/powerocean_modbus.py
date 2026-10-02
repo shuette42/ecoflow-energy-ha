@@ -34,7 +34,9 @@ SETUP_BLOCKS: tuple[tuple[int, int], ...] = ((0x0000, 3), (0x0003, 8), (0x000B, 
 
 # (offset, register count), each block at most 125 registers.
 POLL_BLOCKS: tuple[tuple[int, int], ...] = (
-    (0x0206, 13),  # load, grid, solar, battery power, SoC, system status
+    # load, grid, solar, battery power, SoC, system status (0x0211-0x0212),
+    # system state 2 (0x0213-0x0214)
+    (0x0206, 15),
     (0x0217, 18),  # backup ratio ... battery capacity (0x0227-0x0228)
     (0x023D, 6),  # battery voltage, battery current, battery temperature
     # frequency, PV1-PV3 voltage, PV1/PV2 current, feed limit (0x0260). The
@@ -48,12 +50,57 @@ POLL_BLOCKS: tuple[tuple[int, int], ...] = (
 
 # Bits of the system status word (0x0211) that are decoded. Bit 0: 0 grid
 # connected, 1 off-grid. Bit 1: 0 normal, 1 abnormal. Bit 11: the device
-# reports that Modbus control is active. Bits 4-6 are not decoded as a mode:
-# the device shows an undocumented value 7 there while Backup Reserve is above
-# 0, and that is not an error.
+# reports that Modbus control is active. Bit 12: 0 battery management system
+# not connected, 1 connected. Bits 4-6 are not decoded as a mode: the device
+# shows an undocumented value 7 there while Backup Reserve is above 0, and that
+# is not an error.
 _OFF_GRID_BIT = 0
 _SYSTEM_ABNORMAL_BIT = 1
 _CONTROL_ACTIVE_BIT = 11
+_BMS_CONNECTED_BIT = 12
+
+# System State 2 (0x0213, UINT32): one alert per bit, bit 0 first. The codes are
+# the stable values of the System Alerts sensor, so a name here is never
+# reworded once released. A bit past the end of the table is reported as
+# ``bit_<n>`` instead of being dropped.
+_SYSTEM_ALERT_NAMES: tuple[str, ...] = (
+    "system_shutdown",  # BIT0
+    "upgrade_shutdown",  # BIT1
+    "epo_triggered",  # BIT2
+    "low_power_mode",  # BIT3
+    "fan_failure",  # BIT4
+    "system_failure",  # BIT5
+    "battery_reverse_connection",  # BIT6
+    "battery_disconnected",  # BIT7
+    "auxiliary_power_failure",  # BIT8
+    "pcs_timeout",  # BIT9
+    "pcs_failure",  # BIT10
+    "igbt_self_test_failure",  # BIT11
+    "high_temperature_protection",  # BIT12
+    "battery_overheating",  # BIT13
+    "ntc_circuit_failure",  # BIT14
+    "system_reset",  # BIT15
+    "hardware_version_error",  # BIT16
+    "parallel_sync_error",  # BIT17
+    "low_temperature_protection",  # BIT18
+    "parallel_master_slave_conflict",  # BIT19
+    "parallel_slave_setting_error",  # BIT20
+    "parallel_inverter_error",  # BIT21
+    "parallel_meter_fault",  # BIT22
+)
+# The state shown while no bit is set.
+SYSTEM_ALERTS_NONE = "none"
+
+
+def _system_alerts(state2: int) -> str:
+    """Active alert codes of System State 2 in bit order, ``none`` when clear."""
+    active = [
+        _SYSTEM_ALERT_NAMES[bit] if bit < len(_SYSTEM_ALERT_NAMES) else f"bit_{bit}"
+        for bit in range(state2.bit_length())
+        if (state2 >> bit) & 1
+    ]
+    return ",".join(active) if active else SYSTEM_ALERTS_NONE
+
 
 # Stage 1 supports the three-phase PowerOcean only (category 1, number 1).
 SUPPORTED_PRODUCT_CATEGORY = 1
@@ -76,6 +123,7 @@ _REGISTERS: tuple[_Register, ...] = (
     _Register("batt_w", 0x020C, 2, decode_f32_ws),
     _Register("soc_pct", 0x020E, 1, decode_u16),
     _Register("local_system_status", 0x0211, 2, decode_u32_ws),
+    _Register("local_system_state2", 0x0213, 2, decode_u32_ws),
     _Register("ems_backup_ratio_pct", BACKUP_RATIO_OFFSET, 1, decode_u16),
     _Register("local_indicator_brightness_pct", BRIGHTNESS_OFFSET, 1, decode_u16),
     _Register("ems_total_battery_capacity_wh", 0x0227, 2, decode_u32_ws),
@@ -148,6 +196,12 @@ def parse_registers(blocks: Mapping[int, bytes]) -> dict[str, Any]:
         result["local_off_grid"] = bool((status >> _OFF_GRID_BIT) & 1)
         result["local_system_abnormal"] = bool((status >> _SYSTEM_ABNORMAL_BIT) & 1)
         result["modbus_control_active"] = bool((status >> _CONTROL_ACTIVE_BIT) & 1)
+        result["local_bms_connected"] = bool((status >> _BMS_CONNECTED_BIT) & 1)
+
+    # Same rule for System State 2: no word read, no "none" invented.
+    state2 = result.get("local_system_state2")
+    if state2 is not None:
+        result["local_system_alerts"] = _system_alerts(state2)
 
     return remap_proto_keys(result)
 

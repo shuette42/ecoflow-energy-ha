@@ -42,6 +42,7 @@ DAY = {
     **_FIXTURE["samples"]["day"],
     **LIVE,
     "system_status": 0x1814,
+    "system_state2": 0,
     "indicator_brightness": 80,
 }
 NIGHT = {
@@ -51,6 +52,7 @@ NIGHT = {
     "battery_temp": 28.5,
     "max_feed_power": 5000,
     "system_status": 0x1014,
+    "system_state2": 0,
     "indicator_brightness": 20,
 }
 
@@ -63,6 +65,7 @@ _REGISTERS = {
     "battery_w": (0x020C, "f32"),
     "soc": (0x020E, "u16"),
     "system_status": (0x0211, "u32"),
+    "system_state2": (0x0213, "u32"),
     "backup_ratio": (0x0217, "u16"),
     "indicator_brightness": (0x021C, "u16"),
     "battery_capacity_wh": (0x0227, "u32"),
@@ -94,6 +97,7 @@ KEY_TO_FIELD = {
     "batt_w": "battery_w",
     "soc_pct": "soc",
     "local_system_status": "system_status",
+    "local_system_state2": "system_state2",
     "ems_backup_ratio_pct": "backup_ratio",
     "local_indicator_brightness_pct": "indicator_brightness",
     "ems_total_battery_capacity_wh": "battery_capacity_wh",
@@ -118,6 +122,8 @@ DERIVED_KEYS = {
     "modbus_control_active",
     "local_off_grid",
     "local_system_abnormal",
+    "local_bms_connected",
+    "local_system_alerts",
     "grid_import_power_w",
     "grid_export_power_w",
     "batt_charge_power_w",
@@ -173,6 +179,8 @@ def test_day_frame_maps_the_expected_keys_and_values():
     assert result["modbus_control_active"] is True
     assert result["local_off_grid"] is False
     assert result["local_system_abnormal"] is False
+    assert result["local_bms_connected"] is True
+    assert result["local_system_alerts"] == "none"
 
 
 def test_night_frame_discharges_and_exports_with_the_night_counters():
@@ -291,6 +299,7 @@ def test_a_frame_without_the_status_registers_invents_no_control_state(cut):
     assert "modbus_control_active" not in result
     assert "local_off_grid" not in result
     assert "local_system_abnormal" not in result
+    assert "local_bms_connected" not in result
     assert "local_system_status" not in result
     # The rest of the frame is unharmed (negative control: the keys are absent
     # for the right reason only).
@@ -305,6 +314,134 @@ def test_the_first_poll_block_reaches_the_second_register_of_the_status():
 
     assert start == 0x0206
     assert start + count - 1 >= 0x0212
+
+
+def test_the_first_poll_block_reaches_the_second_register_of_system_state_2():
+    # 0x0213 is a UINT32: its second register is 0x0214, the last one of the block.
+    start, count = POLL_BLOCKS[0]
+
+    assert start + count - 1 >= 0x0214
+
+
+@pytest.mark.parametrize(
+    ("status", "connected"),
+    [
+        # The live word of the reference device: bit 12 set.
+        (0x1014, True),
+        (0x0014, False),
+        # Every bit but 12 set: only bit 12 decides.
+        (0xFFFF_EFFF, False),
+        (0x0000_1000, True),
+    ],
+)
+def test_bms_connected_is_bit_12_of_the_status(status, connected):
+    result = parse_registers(_poll_blocks(dict(DAY, system_status=status)))
+
+    assert result["local_bms_connected"] is connected
+
+
+# The alert codes by bit, written out by hand from the protocol table (System
+# State 2, 0x0213), independent of the parser's own tuple.
+ALERT_BITS = [
+    (0, "system_shutdown"),
+    (1, "upgrade_shutdown"),
+    (2, "epo_triggered"),
+    (3, "low_power_mode"),
+    (4, "fan_failure"),
+    (5, "system_failure"),
+    (6, "battery_reverse_connection"),
+    (7, "battery_disconnected"),
+    (8, "auxiliary_power_failure"),
+    (9, "pcs_timeout"),
+    (10, "pcs_failure"),
+    (11, "igbt_self_test_failure"),
+    (12, "high_temperature_protection"),
+    (13, "battery_overheating"),
+    (14, "ntc_circuit_failure"),
+    (15, "system_reset"),
+    (16, "hardware_version_error"),
+    (17, "parallel_sync_error"),
+    (18, "low_temperature_protection"),
+    (19, "parallel_master_slave_conflict"),
+    (20, "parallel_slave_setting_error"),
+    (21, "parallel_inverter_error"),
+    (22, "parallel_meter_fault"),
+]
+
+
+def _alerts(state2):
+    return parse_registers(_poll_blocks(dict(DAY, system_state2=state2)))[
+        "local_system_alerts"
+    ]
+
+
+def test_no_bit_set_in_system_state_2_reads_none():
+    result = parse_registers(_poll_blocks(dict(DAY, system_state2=0)))
+
+    assert result["local_system_state2"] == 0
+    assert result["local_system_alerts"] == "none"
+
+
+@pytest.mark.parametrize(("bit", "code"), ALERT_BITS)
+def test_each_bit_of_system_state_2_has_its_own_code(bit, code):
+    assert _alerts(1 << bit) == code
+
+
+def test_the_alert_table_has_exactly_the_documented_23_bits():
+    # Bit 22 is the last documented one; bit 23 is the first unknown one.
+    assert [bit for bit, _ in ALERT_BITS] == list(range(23))
+    assert _alerts(1 << 22) == "parallel_meter_fault"
+    assert _alerts(1 << 23) == "bit_23"
+
+
+def test_several_alerts_are_listed_in_bit_order_without_spaces():
+    assert _alerts((1 << 13) | (1 << 4)) == "fan_failure,battery_overheating"
+    everything = ",".join(code for _, code in ALERT_BITS)
+    assert _alerts((1 << 23) - 1) == everything
+
+
+@pytest.mark.parametrize(
+    ("state2", "expected"),
+    [
+        (1 << 25, "bit_25"),
+        (1 << 31, "bit_31"),
+        # A known and an unknown alert together: both listed, in bit order.
+        ((1 << 22) | (1 << 25), "parallel_meter_fault,bit_25"),
+    ],
+)
+def test_a_bit_past_the_table_is_reported_by_its_number(state2, expected):
+    assert _alerts(state2) == expected
+
+
+def test_system_state_2_is_word_swapped_like_the_status():
+    # Bit 4 is 0x00000010: the wire bytes of a word-swapped UINT32 are 00 10 00 00.
+    # Read without the swap it would be bit 20 (parallel_slave_setting_error).
+    result = parse_registers(_poll_blocks(dict(DAY, system_state2=1 << 4)))
+
+    assert result["local_system_state2"] == 1 << 4
+    assert result["local_system_alerts"] == "fan_failure"
+
+
+@pytest.mark.parametrize("cut", ["block_absent", "block_old_size"])
+def test_a_frame_without_system_state_2_invents_no_alert_state(cut):
+    # Frame, not store: a frame that did not carry 0x0213 says nothing about
+    # alerts, so there is no "none" to publish.
+    blocks = _poll_blocks(DAY)
+    if cut == "block_absent":
+        del blocks[0x0206]
+    else:
+        # The first block as it was before 0x0213 was polled: thirteen registers.
+        blocks[0x0206] = blocks[0x0206][: 2 * 13]
+
+    result = parse_registers(blocks)
+
+    assert "local_system_alerts" not in result
+    assert "local_system_state2" not in result
+    if cut == "block_old_size":
+        # Negative control: the status word is inside the old block, so the
+        # alerts are absent for the right reason only.
+        assert result["local_bms_connected"] is True
+        assert result["local_system_status"] == DAY["system_status"]
 
 
 @pytest.mark.parametrize(

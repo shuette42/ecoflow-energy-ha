@@ -66,8 +66,8 @@ CONTROL_KEYS = (
     "local_indicator_brightness",
     "modbus_control_active",
 )
-# The two binary sensors decoded from bits 0 and 1 of the same status word.
-STATUS_KEYS = ("local_off_grid", "local_system_abnormal")
+# The three binary sensors decoded from bits 0, 1 and 12 of the same status word.
+STATUS_KEYS = ("local_off_grid", "local_system_abnormal", "local_bms_connected")
 # Everything a local entry creates beyond the sensors, and a cloud entry never.
 LOCAL_ONLY_KEYS = CONTROL_KEYS + STATUS_KEYS
 # Bit 11 of the system status word.
@@ -86,13 +86,16 @@ def _poll_frame(
     *,
     brightness: int = POLLED_BRIGHTNESS,
     status: int | None = 0,
+    state2: int | None = 0,
     **overrides: float,
 ) -> dict[int, bytes]:
-    """One full answer with the brightness and the system status word set.
+    """One full answer with the brightness and the system words set.
 
     ``status=None`` leaves the block that carries the status word out, so the
-    poll does not deliver the key at all. ``overrides`` are fixture fields of
-    the shared frame builder (``battery_voltage`` and so on).
+    poll does not deliver the key at all. ``state2=None`` cuts the same block
+    back to the thirteen registers it had before System State 2 (0x0213) was
+    polled: the status word stays, the alert word is gone. ``overrides`` are
+    fixture fields of the shared frame builder (``battery_voltage`` and so on).
     """
     frame = _frame(DAY, **overrides)
     block = bytearray(frame[0x0217])
@@ -105,6 +108,11 @@ def _poll_frame(
         block = bytearray(frame[0x0206])
         low = (0x0211 - 0x0206) * 2
         block[low : low + 4] = _encode("u32", status)
+        if state2 is None:
+            block = block[: 2 * 13]
+        else:
+            low = (0x0213 - 0x0206) * 2
+            block[low : low + 4] = _encode("u32", state2)
         frame[0x0206] = bytes(block)
     return frame
 
@@ -159,14 +167,14 @@ async def _call(
     )
 
 
-async def test_a_cloud_entry_gets_none_of_the_six_and_a_local_entry_gets_them(
+async def test_a_cloud_entry_gets_none_of_the_seven_and_a_local_entry_gets_them(
     hass: HomeAssistant,
 ) -> None:
-    """The six entities exist for a Local coordinator and for no cloud one.
+    """The seven entities exist for a Local coordinator and for no cloud one.
 
-    Two of the six are the Off-Grid and System Abnormal binary sensors: the
-    cloud PowerOcean builds its own binary sensors from the same platform
-    setup, and neither of these two is among them.
+    Three of the seven are the Off-Grid, System Abnormal and Battery Connection
+    binary sensors: the cloud PowerOcean builds its own binary sensors from the
+    same platform setup, and none of these three is among them.
     """
     cloud_entry = _entry()
     cloud_entry.add_to_hass(hass)
@@ -184,7 +192,7 @@ async def test_a_cloud_entry_gets_none_of_the_six_and_a_local_entry_gets_them(
     assert f"{cloud_sn}_backup_reserve" in cloud_ids
     assert not {f"{cloud_sn}_{key}" for key in LOCAL_ONLY_KEYS} & cloud_ids
 
-    # Control: the same three platform setups hand a Local coordinator all six.
+    # Control: the same three platform setups hand a Local coordinator all seven.
     entry, _stub, _coordinator = await _setup_local(hass)
     local: list[Any] = []
     for platform_setup in (switch_setup, number_setup, binary_sensor_setup):
@@ -251,6 +259,15 @@ async def test_a_local_entry_creates_its_own_plus_the_shared_sensors(
     assert by_key["local_system_abnormal"].domain == "binary_sensor"
     assert by_key["local_system_abnormal"].entity_category == "diagnostic"
     assert by_key["local_system_abnormal"].original_device_class == "problem"
+    # Battery Connection is a diagnostic connectivity sensor (bit 12).
+    assert by_key["local_bms_connected"].domain == "binary_sensor"
+    assert by_key["local_bms_connected"].entity_category == "diagnostic"
+    assert by_key["local_bms_connected"].original_device_class == "connectivity"
+    # System Alerts is a plain text diagnostic: no unit, no device class.
+    assert by_key["local_system_alerts"].domain == "sensor"
+    assert by_key["local_system_alerts"].entity_category == "diagnostic"
+    assert by_key["local_system_alerts"].original_device_class is None
+    assert by_key["local_system_alerts"].unit_of_measurement is None
     assert by_key["batt_voltage_v"].domain == "sensor"
     assert by_key["batt_current_a"].domain == "sensor"
     assert by_key["batt_temp_c"].domain == "sensor"
@@ -533,6 +550,43 @@ async def test_off_grid_and_abnormal_follow_bits_0_and_1_and_are_unknown_without
     assert ("local_off_grid" in coordinator.data) is (status is not None)
     assert _state(hass, "binary_sensor", "local_off_grid") == off_grid
     assert _state(hass, "binary_sensor", "local_system_abnormal") == abnormal
+    await _unload(hass, entry)
+
+
+@pytest.mark.parametrize(
+    ("status", "connected"),
+    [(0x1014, "on"), (0x0014, "off"), (None, "unknown")],
+)
+async def test_battery_connection_follows_bit_12_and_is_unknown_without_it(
+    hass: HomeAssistant, status: int | None, connected: str
+) -> None:
+    """Bit 12 of the status word decides; no status word, no invented state."""
+    entry, _stub, coordinator = await _setup_local(hass, _poll_frame(status=status))
+    assert ("local_bms_connected" in coordinator.data) is (status is not None)
+    assert _state(hass, "binary_sensor", "local_bms_connected") == connected
+    await _unload(hass, entry)
+
+
+@pytest.mark.parametrize(
+    ("state2", "alerts"),
+    [
+        (0, "none"),
+        ((1 << 4) | (1 << 13), "fan_failure,battery_overheating"),
+        (1 << 25, "bit_25"),
+        (None, "unknown"),
+    ],
+)
+async def test_system_alerts_list_the_active_codes_and_are_unknown_without_the_word(
+    hass: HomeAssistant, state2: int | None, alerts: str
+) -> None:
+    """The sensor shows the codes of System State 2; a frame without it shows none."""
+    frame = _poll_frame(status=0x1014, state2=state2)
+    entry, _stub, coordinator = await _setup_local(hass, frame)
+    assert ("local_system_alerts" in coordinator.data) is (state2 is not None)
+    assert _state(hass, "sensor", "local_system_alerts") == alerts
+    # The old-size frame still carries the status word (negative control: the
+    # alert state is unknown for the right reason only).
+    assert _state(hass, "binary_sensor", "local_bms_connected") == "on"
     await _unload(hass, entry)
 
 

@@ -14,6 +14,8 @@ All notable changes to this project will be documented in this file.
 
 - The Feed Power Limit sensor now also works in the Local mode. It shows the feed-in limit the inverter actually applies after its own safety rules, and it stays the same entity when an entry is switched between cloud and Local. Like in the cloud modes it is disabled by default, so enable it in the entity list if you want it.
 
+- The Local mode now has a Battery Connection diagnostic binary sensor, which shows whether the inverter reports its battery as connected, and a System Alerts diagnostic sensor that lists the alerts the inverter reports, for example fan failure or battery overheating, so an automation can send a notification. System Alerts shows `none` while no alert is active.
+
 ## [1.24.0] - 2026-10-02
 
 ### Added

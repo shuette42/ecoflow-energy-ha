@@ -2386,6 +2386,15 @@ POWEROCEANLOCALONLY_SENSORS: list[EcoFlowSensorDef] = [
         "diagnostic",
         suggested_display_precision=0,
     ),
+    # System State 2 (0x0213): the active alert codes as one text, `none` while
+    # no bit is set. Text on purpose: the register is a bit field of 23 alerts,
+    # and a plain state can carry any combination for a notification.
+    EcoFlowSensorDef(
+        "local_system_alerts",
+        "System Alerts",
+        icon="mdi:alert-circle-outline",
+        entity_category="diagnostic",
+    ),
     # Whole-system battery readings from the Modbus table. The cloud stream
     # has no such figure: its `bp_current_a` is a single pack, so the current
     # here keeps its own key instead of sharing one.
@@ -2485,6 +2494,14 @@ POWEROCEANLOCALONLY_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
         "local_system_abnormal",
         "System Abnormal",
         device_class="problem",
+        entity_category="diagnostic",
+    ),
+    # Bit 12 of the system status word: whether the battery management system
+    # is connected to the inverter.
+    EcoFlowBinarySensorDef(
+        "local_bms_connected",
+        "Battery Connection",
+        device_class="connectivity",
         entity_category="diagnostic",
     ),
     EcoFlowBinarySensorDef(
