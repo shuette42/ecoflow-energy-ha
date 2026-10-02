@@ -396,8 +396,28 @@ def test_the_alert_table_has_exactly_the_documented_23_bits():
 
 def test_several_alerts_are_listed_in_bit_order_without_spaces():
     assert _alerts((1 << 13) | (1 << 4)) == "fan_failure,battery_overheating"
-    everything = ",".join(code for _, code in ALERT_BITS)
-    assert _alerts((1 << 23) - 1) == everything
+
+
+@pytest.mark.parametrize("state2", [(1 << 23) - 1, 0xFFFFFFFF])
+def test_many_alerts_stay_within_a_state_and_count_the_rest(state2):
+    # Home Assistant shows a state over 255 characters as unknown. The codes
+    # run in bit order while they fit, and a closing +N counts the others.
+    active = [code for bit, code in ALERT_BITS if (state2 >> bit) & 1] + [
+        f"bit_{bit}" for bit in range(23, 32) if (state2 >> bit) & 1
+    ]
+    result = _alerts(state2)
+    assert len(result) <= 255
+    shown, _, hidden = result.rpartition(",+")
+    assert shown.split(",") == active[: len(shown.split(","))]
+    assert len(shown.split(",")) + int(hidden) == len(active)
+    # No room was wasted: one more code would not have fitted.
+    assert len(result) + len(active[len(shown.split(","))]) + 1 > 255
+
+
+def test_alerts_that_fit_carry_no_count():
+    ten = (1 << 10) - 1
+    assert "+" not in _alerts(ten)
+    assert _alerts(ten).split(",") == [code for _, code in ALERT_BITS[:10]]
 
 
 @pytest.mark.parametrize(

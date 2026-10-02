@@ -92,14 +92,34 @@ _SYSTEM_ALERT_NAMES: tuple[str, ...] = (
 SYSTEM_ALERTS_NONE = "none"
 
 
+# Home Assistant stores at most 255 characters as a state and shows anything
+# longer as unknown, with an error in the log. All 23 codes together run to 463.
+_STATE_MAX_LEN = 255
+
+
 def _system_alerts(state2: int) -> str:
-    """Active alert codes of System State 2 in bit order, ``none`` when clear."""
+    """Active alert codes of System State 2 in bit order, ``none`` when clear.
+
+    Codes are listed while they fit in a state; the rest is counted in a
+    closing ``+N`` token, so a site with many alerts still shows a value.
+    """
     active = [
         _SYSTEM_ALERT_NAMES[bit] if bit < len(_SYSTEM_ALERT_NAMES) else f"bit_{bit}"
         for bit in range(state2.bit_length())
         if (state2 >> bit) & 1
     ]
-    return ",".join(active) if active else SYSTEM_ALERTS_NONE
+    if not active:
+        return SYSTEM_ALERTS_NONE
+    shown: list[str] = []
+    for index, code in enumerate(active):
+        rest = len(active) - index - 1
+        tail = f",+{rest}" if rest else ""
+        candidate = ",".join([*shown, code]) + tail
+        if len(candidate) > _STATE_MAX_LEN:
+            break
+        shown.append(code)
+    hidden = len(active) - len(shown)
+    return ",".join(shown) + (f",+{hidden}" if hidden else "")
 
 
 # Stage 1 supports the three-phase PowerOcean only (category 1, number 1).

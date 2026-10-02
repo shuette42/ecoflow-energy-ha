@@ -574,6 +574,8 @@ async def test_battery_connection_follows_bit_12_and_is_unknown_without_it(
         ((1 << 4) | (1 << 13), "fan_failure,battery_overheating"),
         (1 << 25, "bit_25"),
         (None, "unknown"),
+        # All 23 known alerts at once: shortened with a count, not unknown.
+        ((1 << 23) - 1, "+10"),
     ],
 )
 async def test_system_alerts_list_the_active_codes_and_are_unknown_without_the_word(
@@ -583,7 +585,10 @@ async def test_system_alerts_list_the_active_codes_and_are_unknown_without_the_w
     frame = _poll_frame(status=0x1014, state2=state2)
     entry, _stub, coordinator = await _setup_local(hass, frame)
     assert ("local_system_alerts" in coordinator.data) is (state2 is not None)
-    assert _state(hass, "sensor", "local_system_alerts") == alerts
+    if alerts.startswith("+"):
+        assert _state(hass, "sensor", "local_system_alerts").endswith("," + alerts)
+    else:
+        assert _state(hass, "sensor", "local_system_alerts") == alerts
     # The old-size frame still carries the status word (negative control: the
     # alert state is unknown for the right reason only).
     assert _state(hass, "binary_sensor", "local_bms_connected") == "on"

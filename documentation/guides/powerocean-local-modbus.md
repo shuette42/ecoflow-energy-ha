@@ -29,7 +29,7 @@ The entry shows solar, home, grid and battery power, the battery charge level, g
 
 Three binary sensors come from the inverter's status word. Off-Grid turns on when the inverter reports that it runs without the grid, so an outage automation can trigger on it with no cloud involved. System Abnormal turns on when the inverter reports a fault. Battery Connection shows whether the inverter sees its battery.
 
-The sensor System Alerts reads a second status word. It lists what the inverter currently reports, such as `fan_failure` or `battery_overheating`, or none when all is well. A notification can then name the actual problem.
+The sensor System Alerts reads a second status word. It lists what the inverter currently reports, such as `fan_failure` or `battery_overheating`, or `none` when all is well. A notification can then name the actual problem.
 
 After five failed reads in a row the entry goes unavailable, and these entities with it. An automation should treat unavailable as "unknown", not as "grid is back". Feed Power Limit is disabled by default. Enable it in the entity settings if you use it. The four entities under [Control from Home Assistant](#control-from-home-assistant) come on top.
 
