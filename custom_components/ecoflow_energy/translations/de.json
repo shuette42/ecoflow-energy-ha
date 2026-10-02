@@ -302,6 +302,9 @@
       "grid_import_power_w": {
         "name": "Netzbezugsleistung"
       },
+      "ac_output_power_w": {
+        "name": "AC-Ausgangsleistung"
+      },
       "grid_export_power_w": {
         "name": "Netzeinspeiseleistung"
       },

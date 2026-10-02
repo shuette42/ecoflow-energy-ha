@@ -299,7 +299,7 @@ class TestStreamAC5000TaskReadback:
 class TestStreamAC5000Definitions:
     def test_documented_totals(self) -> None:
         """The counts the README and the entity reference publish."""
-        assert len(STREAMAC5000_SENSORS) == 56
+        assert len(STREAMAC5000_SENSORS) == 57
         assert len(STREAMAC5000_POWER_TO_ENERGY) == 5
 
     def test_the_pv_strings_wait_for_a_non_zero_reading(self) -> None:
@@ -316,6 +316,19 @@ class TestStreamAC5000Definitions:
             if definition.key in pv_keys:
                 assert definition.accessory, definition.key
                 assert definition.accessory_needs_nonzero, definition.key
+
+    def test_the_ac_output_waits_for_a_non_zero_reading(self) -> None:
+        """The parser fills `f11.7` to 0 W on every frame that carries `f11`.
+
+        That stops an unplugged load from latching, and it would create the
+        entity on every ES22 and ES21 if the key alone were enough (#458).
+        """
+        by_key = {s.key: s for s in STREAMAC5000_SENSORS}
+        definition = by_key["ac_output_power_w"]
+        assert definition.accessory
+        assert definition.accessory_needs_nonzero
+        assert (definition.unit, definition.device_class) == ("W", "power")
+        assert definition.state_class == "measurement"
 
     def test_exactly_one_battery_device_class(self) -> None:
         battery = [s for s in STREAMAC5000_SENSORS if s.device_class == "battery"]
@@ -373,11 +386,19 @@ class TestStreamAC5000Definitions:
     def test_only_the_zero_filled_readings_wait_for_a_non_zero_value(self) -> None:
         """A meter phase may legitimately sit at zero and must not wait.
 
-        The solar and PV keys are the ones the parser zero-fills, so their
-        presence says nothing about whether the hardware is there. Every
-        other accessory key is created as soon as it is reported.
+        The solar, PV and AC output keys are the ones the parser zero-fills,
+        so their presence says nothing about whether the hardware is there.
+        Every other accessory key is created as soon as it is reported.
         """
-        zero_filled = {"solar_w", "pv_total_w", "pv1_w", "pv2_w", "pv3_w", "pv4_w"}
+        zero_filled = {
+            "solar_w",
+            "pv_total_w",
+            "pv1_w",
+            "pv2_w",
+            "pv3_w",
+            "pv4_w",
+            "ac_output_power_w",
+        }
         for definition in STREAMAC5000_SENSORS:
             if definition.key in zero_filled:
                 continue

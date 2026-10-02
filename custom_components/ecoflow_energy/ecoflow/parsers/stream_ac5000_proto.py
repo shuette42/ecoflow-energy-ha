@@ -18,7 +18,10 @@ Data shape:
 
 - ``f11`` node totals in half-watt units, except `f11.9` (solar) which is
   already watts. `f11.2` and `f11.4`/`f11.6` are unsigned magnitudes and
-  are not mapped; the signed sources below are unambiguous.
+  are not mapped; the signed sources below are unambiguous. `f11.6` is
+  not a battery magnitude on every unit: on the #458 unit, with a load on
+  the AC socket, it tracks that load. `f11.7` is the socket output node
+  and is mapped.
 - ``f12`` flow matrix, one field per source-to-destination edge, watts.
   House consumption equals the sum of the edges into home within 2 W over
   651 frames.
@@ -110,6 +113,11 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
         # --- node totals (half-watt) ---
         "11.1": ("home_w", _TYPE_FLOAT, _HALF_WATT),
         "11.5": ("soc_pct", _TYPE_INT, 1),
+        # The AC socket output node, half-watts. Issue #458: on a unit with a
+        # load on the socket `f11.7` halved equals `f12.18` plus `f12.19` in
+        # 6 of 6 frames, and the 351 W it read matched the app's "AC output"
+        # of 352 W. A unit with nothing on the socket never sends it.
+        "11.7": ("ac_output_power_w", _TYPE_FLOAT, _HALF_WATT),
         # Watts, not half-watts. Absent on a unit with no PV wired to the
         # EcoFlow, apart from rare frames where it attributes part of a
         # house export to a solar node.
@@ -133,6 +141,13 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
         "12.5": ("_batt_to_grid_w", _TYPE_FLOAT, 1),
         "12.6": ("home_from_grid_w", _TYPE_FLOAT, 1),
         "12.7": ("_grid_to_batt_w", _TYPE_FLOAT, 1),
+        # The grid-to-AC-socket edge. Issue #458: it closes the grid node
+        # exactly, `f11.2` halved equals `.6` plus `.7` plus `.18` in 6 of 6
+        # frames on a unit with a load on the socket (549 W against 200 W
+        # without it). Left out, `grid_import_power_w` under-reads by the
+        # whole socket load. Internal: it feeds the import total in
+        # `_finalize` and is not published on its own.
+        "12.18": ("_grid_to_socket_w", _TYPE_FLOAT, 1),
         # Field 8 is deliberately absent from this map. It would be solar to
         # home by position, and it appears in none of the 1239 captured frames:
         # an inferred position reaching an accessory entity is a wrong reading
@@ -368,11 +383,22 @@ _ZERO_FILL_PATHS: dict[tuple[int, int], tuple[str, ...]] = {
     # still what "disabled" looks like on the wire.
     (254, 39): (
         "11.9",
+        # Issue #458: on the unit with a load on the socket all 6 frames that
+        # carry `f11` carry `.7`, and the idle unit sends it in none of its 5.
+        # Filled so the reading falls to 0 when the load is unplugged instead
+        # of holding its last value; `ac_output_power_w` carries
+        # `accessory_needs_nonzero` so the entity still waits for a load.
+        "11.7",
         "12.2",
         "12.4",
         "12.5",
         "12.6",
         "12.7",
+        # Issue #458: on the unit with a load on the socket every frame that
+        # carries `f12` carries `.18` (14 of 16 frames; the other two carry no
+        # `f12` at all). A unit with nothing on the socket omits it, and that
+        # absence is a real zero, not an unknown.
+        "12.18",
         # `50.1` is deliberately absent here for the reason `40.1.3` is: the
         # block is collected per entry, so its fill runs per entry, in
         # `_PV_ZERO_FILL_PATHS`.
@@ -949,20 +975,28 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
 
     # Import and export come from the flow edges, not the meter, so both are
     # structurally non-negative as the Energy Dashboard needs. Zero-fill puts
-    # all four grid edges in together, so one of them can stand in for "the
+    # the grid edges in together, so one of them can stand in for "the
     # group was seen".
     batt_to_grid = result.pop("_batt_to_grid_w", None)
     grid_to_batt = result.pop("_grid_to_batt_w", None)
+    grid_to_socket = result.pop("_grid_to_socket_w", None)
     mppt_to_batt = result.pop("_mppt_to_batt_w", None)
     solar_to_grid = result.pop("_solar_to_grid_w", None)
     solar_to_batt = result.pop("_solar_to_batt_w", None)
     home_from_grid = result.get("home_from_grid_w")
     home_from_batt = result.get("home_from_batt_w")
 
-    if isinstance(grid_to_batt, (int, float)) and isinstance(
-        home_from_grid, (int, float)
+    # The AC socket is the third consumer of grid power next to home and
+    # battery (#458). Zero-fill puts it in with the other edges whenever `f12`
+    # is present, so a number here means the group was seen.
+    if (
+        isinstance(grid_to_batt, (int, float))
+        and isinstance(grid_to_socket, (int, float))
+        and isinstance(home_from_grid, (int, float))
     ):
-        result["grid_import_power_w"] = float(home_from_grid) + float(grid_to_batt)
+        result["grid_import_power_w"] = (
+            float(home_from_grid) + float(grid_to_batt) + float(grid_to_socket)
+        )
     if isinstance(batt_to_grid, (int, float)):
         # A solar-to-grid edge only exists on a unit with PV attached; its
         # absence here means no such contribution, not an unknown one.
