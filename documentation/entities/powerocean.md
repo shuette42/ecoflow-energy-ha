@@ -162,7 +162,7 @@ These sensors are pre-configured for the HA Energy Dashboard (`total_increasing`
 | Battery Charge/Discharge State | Current battery direction | enabled |
 | PCS Running State | Inverter running state | disabled |
 | Power Factor | Grid power factor | disabled |
-| Feed Power Limit | Max feed-in power | disabled |
+| Feed Power Limit | Max feed-in power. The effective limit the system applies after its own safety rules, also read in Local (Modbus/TCP) mode | disabled |
 | Feed Ratio | Feed-in ratio | disabled |
 | EMS Charge Upper Limit | Configured max charge SOC | disabled |
 | EMS Discharge Lower Limit | Configured min discharge SOC | disabled |
@@ -235,7 +235,7 @@ There is no grid sensor per inverter. The grid figure the pair reports per inver
 
 ## Sensors - Local Modbus Only
 
-These four sensors exist only in a Local (Modbus/TCP) entry. Standard Mode and Enhanced Mode never create them. The three energy counters are the device's own lifetime counters, read as the device reports them.
+These seven sensors exist only in a Local (Modbus/TCP) entry. Standard Mode and Enhanced Mode never create them. The three energy counters are the device's own lifetime counters, read as the device reports them. Battery Voltage, Battery Current and Battery Temp describe the whole battery system, not a single pack. Battery Current is positive while the system charges and negative while it discharges, and Battery Temp is the average over the battery packs.
 
 | Entity | Unit | Category | Default |
 |:---|:---:|:---:|:---:|
@@ -243,6 +243,20 @@ These four sensors exist only in a Local (Modbus/TCP) entry. Standard Mode and E
 | Grid Import Lifetime Energy | kWh | - | enabled |
 | Grid Export Lifetime Energy | kWh | - | enabled |
 | Fault Count | - | diagnostic | enabled |
+| Battery Voltage | V | - | enabled |
+| Battery Current | A | - | enabled |
+| Battery Temp | °C | - | enabled |
+
+---
+
+## Binary Sensors - Local Modbus Only
+
+A Local (Modbus/TCP) entry also creates these two binary sensors. Standard Mode and Enhanced Mode never create them. Both come from the system status the PowerOcean reports over Modbus, so they work without the EcoFlow cloud and stay unknown until the PowerOcean has reported that status.
+
+| Entity | Description | Category | Default |
+|:---|:---|:---:|:---:|
+| Off-Grid | On while the PowerOcean runs off-grid, off while it is connected to the grid. Not a diagnostic entity, so it is available for outage automations | - | enabled |
+| System Abnormal | On while the PowerOcean reports its system status as abnormal, off while it reports normal | diagnostic | enabled |
 
 ---
 

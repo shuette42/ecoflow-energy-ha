@@ -2333,6 +2333,7 @@ POWEROCEAN_LOCAL_KEYS: frozenset[str] = frozenset(
         "bp_online_sum",
         "ems_backup_ratio_pct",
         "ems_total_battery_capacity_wh",
+        "ems_feed_power_limit_w",
     }
 )
 
@@ -2385,9 +2386,39 @@ POWEROCEANLOCALONLY_SENSORS: list[EcoFlowSensorDef] = [
         "diagnostic",
         suggested_display_precision=0,
     ),
+    # Whole-system battery readings from the Modbus table. The cloud stream
+    # has no such figure: its `bp_current_a` is a single pack, so the current
+    # here keeps its own key instead of sharing one.
+    EcoFlowSensorDef(
+        "batt_voltage_v",
+        "Battery Voltage",
+        "V",
+        "voltage",
+        "measurement",
+        "mdi:flash-triangle",
+        suggested_display_precision=1,
+    ),
+    EcoFlowSensorDef(
+        "batt_current_a",
+        "Battery Current",
+        "A",
+        "current",
+        "measurement",
+        "mdi:current-dc",
+        suggested_display_precision=2,
+    ),
+    EcoFlowSensorDef(
+        "batt_temp_c",
+        "Battery Temp",
+        "\u00b0C",
+        "temperature",
+        "measurement",
+        "mdi:thermometer",
+        suggested_display_precision=1,
+    ),
 ]
 
-# What a local entry creates: the shared definitions plus the four above.
+# What a local entry creates: the shared definitions plus the local-only ones.
 POWEROCEAN_LOCAL_SENSOR_DEFS: list[EcoFlowSensorDef] = [
     sensor_def
     for sensor_def in POWEROCEAN_SENSORS
@@ -2439,6 +2470,21 @@ POWEROCEANLOCALONLY_NUMBERS: list[EcoFlowNumberDef] = [
 ]
 
 POWEROCEANLOCALONLY_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
+    # Bit 0 of the system status word. Not a diagnostic: outage automations
+    # trigger on it, and it works without the cloud. No device class, since
+    # off-grid is a state of the site and not a fault.
+    EcoFlowBinarySensorDef(
+        "local_off_grid",
+        "Off-Grid",
+        icon="mdi:transmission-tower-off",
+    ),
+    # Bit 1 of the system status word.
+    EcoFlowBinarySensorDef(
+        "local_system_abnormal",
+        "System Abnormal",
+        device_class="problem",
+        entity_category="diagnostic",
+    ),
     EcoFlowBinarySensorDef(
         "modbus_control_active",
         "Modbus Control Active",

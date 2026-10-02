@@ -2642,6 +2642,12 @@
       },
       "modbus_control_active": {
         "name": "Modbus Control Active"
+      },
+      "local_off_grid": {
+        "name": "Off-Grid"
+      },
+      "local_system_abnormal": {
+        "name": "System Abnormal"
       }
     },
     "switch": {

@@ -36,15 +36,20 @@ SETUP_BLOCKS: tuple[tuple[int, int], ...] = ((0x0000, 3), (0x0003, 8), (0x000B, 
 POLL_BLOCKS: tuple[tuple[int, int], ...] = (
     (0x0206, 13),  # load, grid, solar, battery power, SoC, system status
     (0x0217, 18),  # backup ratio ... battery capacity (0x0227-0x0228)
-    (0x0251, 12),  # frequency, PV1/PV2/PV3 voltage, PV1/PV2 current
+    (0x023D, 6),  # battery voltage, battery current, battery temperature
+    (0x0251, 17),  # frequency, PV1-PV3 voltage, PV1/PV2 current, feed limit (0x0260)
     (0x0800, 1),  # fault count
     (0x0820, 1),  # batteries online
     (0x0870, 98),  # lifetime energy counters up to 0x08D1
 )
 
-# Bit 11 of the system status word: the device reports that Modbus control is
-# active. Bits 4-6 are not decoded as a mode: the device shows an undocumented
-# value 7 there while Backup Reserve is above 0, and that is not an error.
+# Bits of the system status word (0x0211) that are decoded. Bit 0: 0 grid
+# connected, 1 off-grid. Bit 1: 0 normal, 1 abnormal. Bit 11: the device
+# reports that Modbus control is active. Bits 4-6 are not decoded as a mode:
+# the device shows an undocumented value 7 there while Backup Reserve is above
+# 0, and that is not an error.
+_OFF_GRID_BIT = 0
+_SYSTEM_ABNORMAL_BIT = 1
 _CONTROL_ACTIVE_BIT = 11
 
 # Stage 1 supports the three-phase PowerOcean only (category 1, number 1).
@@ -71,11 +76,19 @@ _REGISTERS: tuple[_Register, ...] = (
     _Register("ems_backup_ratio_pct", BACKUP_RATIO_OFFSET, 1, decode_u16),
     _Register("local_indicator_brightness_pct", BRIGHTNESS_OFFSET, 1, decode_u16),
     _Register("ems_total_battery_capacity_wh", 0x0227, 2, decode_u32_ws),
+    # Whole-system battery figures. The current is positive while charging, and
+    # is not the cloud `bp_current_a`, which is a single pack.
+    _Register("batt_voltage_v", 0x023D, 2, decode_f32_ws),
+    _Register("batt_current_a", 0x023F, 2, decode_f32_ws),
+    _Register("batt_temp_c", 0x0241, 2, decode_f32_ws),
     _Register("pcs_ac_freq_hz", 0x0251, 2, decode_f32_ws),
     _Register("mppt_pv1_voltage_v", 0x0253, 2, decode_f32_ws),
     _Register("mppt_pv2_voltage_v", 0x0255, 2, decode_f32_ws),
     _Register("mppt_pv1_current_a", 0x0259, 2, decode_f32_ws),
     _Register("mppt_pv2_current_a", 0x025B, 2, decode_f32_ws),
+    # Maximum grid feed power, current value: the effective limit after the
+    # device's safety rules, the same quantity as the cloud `ems_feed_power_limit_w`.
+    _Register("ems_feed_power_limit_w", 0x0260, 2, decode_u32_ws),
     _Register("fault_count", 0x0800, 1, decode_u16),
     _Register("bp_online_sum", 0x0820, 1, decode_u16),
     _Register("grid_import_lifetime_energy_kwh", 0x0870, 2, decode_f32_ws, True),
@@ -125,9 +138,12 @@ def parse_registers(blocks: Mapping[int, bytes]) -> dict[str, Any]:
         result[register.key] = value
 
     # Derived from the status word, and only when the word was read: a frame
-    # without it says nothing about control, so no False is invented.
+    # without it says nothing about control, grid state or health, so no False
+    # is invented.
     status = result.get("local_system_status")
     if status is not None:
+        result["local_off_grid"] = bool((status >> _OFF_GRID_BIT) & 1)
+        result["local_system_abnormal"] = bool((status >> _SYSTEM_ABNORMAL_BIT) & 1)
         result["modbus_control_active"] = bool((status >> _CONTROL_ACTIVE_BIT) & 1)
 
     return remap_proto_keys(result)

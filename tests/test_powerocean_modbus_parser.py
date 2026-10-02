@@ -26,14 +26,30 @@ DEVICE = _FIXTURE["device"]
 # reads a top-level "frames" key as a list of recorded protobuf frames.
 # The system status word and the indicator brightness are set per frame here,
 # not in the JSON: the coordinator test reads the same fixture with its own map.
-# 0x1814 has bit 11 set (control active), 0x1014 has not.
+# 0x1814 has bit 11 set (control active), 0x1014 has not. Neither has bit 0
+# (off-grid) or bit 1 (abnormal).
+# The battery system readings and the feed limit are the values the real device
+# answered on 2026-10-02 21:24 (status 0x1014): the day frame carries them as
+# measured, the night frame carries other numbers so that a pair of swapped
+# offsets cannot hide behind equal values.
+LIVE = {
+    "battery_voltage": 52.305,
+    "battery_current": -16.247,
+    "battery_temp": 33.0,
+    "max_feed_power": 7000,
+}
 DAY = {
     **_FIXTURE["samples"]["day"],
+    **LIVE,
     "system_status": 0x1814,
     "indicator_brightness": 80,
 }
 NIGHT = {
     **_FIXTURE["samples"]["night"],
+    "battery_voltage": 49.875,
+    "battery_current": 3.5,
+    "battery_temp": 28.5,
+    "max_feed_power": 5000,
     "system_status": 0x1014,
     "indicator_brightness": 20,
 }
@@ -50,6 +66,9 @@ _REGISTERS = {
     "backup_ratio": (0x0217, "u16"),
     "indicator_brightness": (0x021C, "u16"),
     "battery_capacity_wh": (0x0227, "u32"),
+    "battery_voltage": (0x023D, "f32"),
+    "battery_current": (0x023F, "f32"),
+    "battery_temp": (0x0241, "f32"),
     "inv_freq": (0x0251, "f32"),
     "pv1_voltage": (0x0253, "f32"),
     "pv2_voltage": (0x0255, "f32"),
@@ -57,6 +76,7 @@ _REGISTERS = {
     "pv1_current": (0x0259, "f32"),
     "pv2_current": (0x025B, "f32"),
     "pv3_current": (0x025D, "f32"),
+    "max_feed_power": (0x0260, "u32"),
     "fault_count": (0x0800, "u16"),
     "batteries_online": (0x0820, "u16"),
     "grid_draw_total_kwh": (0x0870, "f32"),
@@ -77,6 +97,10 @@ KEY_TO_FIELD = {
     "ems_backup_ratio_pct": "backup_ratio",
     "local_indicator_brightness_pct": "indicator_brightness",
     "ems_total_battery_capacity_wh": "battery_capacity_wh",
+    "batt_voltage_v": "battery_voltage",
+    "batt_current_a": "battery_current",
+    "batt_temp_c": "battery_temp",
+    "ems_feed_power_limit_w": "max_feed_power",
     "pcs_ac_freq_hz": "inv_freq",
     "mppt_pv1_voltage_v": "pv1_voltage",
     "mppt_pv2_voltage_v": "pv2_voltage",
@@ -92,6 +116,8 @@ KEY_TO_FIELD = {
 }
 DERIVED_KEYS = {
     "modbus_control_active",
+    "local_off_grid",
+    "local_system_abnormal",
     "grid_import_power_w",
     "grid_export_power_w",
     "batt_charge_power_w",
@@ -145,6 +171,8 @@ def test_day_frame_maps_the_expected_keys_and_values():
     assert result["grid_import_power_w"] == 0.0
     assert result["local_indicator_brightness_pct"] == 80
     assert result["modbus_control_active"] is True
+    assert result["local_off_grid"] is False
+    assert result["local_system_abnormal"] is False
 
 
 def test_night_frame_discharges_and_exports_with_the_night_counters():
@@ -165,6 +193,10 @@ def test_night_frame_discharges_and_exports_with_the_night_counters():
     assert result["batt_discharge_energy_kwh"] == pytest.approx(6165.245, abs=1e-3)
     assert result["local_indicator_brightness_pct"] == 20
     assert result["modbus_control_active"] is False
+    assert result["batt_voltage_v"] == pytest.approx(49.875, abs=1e-3)
+    assert result["batt_current_a"] == pytest.approx(3.5, abs=1e-3)
+    assert result["batt_temp_c"] == pytest.approx(28.5, abs=1e-3)
+    assert result["ems_feed_power_limit_w"] == 5000
 
 
 def test_a_non_finite_float_is_dropped_with_the_keys_derived_from_it():
@@ -193,6 +225,39 @@ def test_control_active_is_bit_11_of_the_word_swapped_status(status, active):
 
     assert result["local_system_status"] == status
     assert result["modbus_control_active"] is active
+
+
+@pytest.mark.parametrize(
+    ("status", "off_grid", "abnormal"),
+    [
+        (0x1014, False, False),
+        (0x1015, True, False),
+        (0x1016, False, True),
+        (0x1017, True, True),
+        # Every bit but 0 and 1 set: neither flag moves.
+        (0xFFFF_FFFC, False, False),
+    ],
+)
+def test_off_grid_is_bit_0_and_system_abnormal_is_bit_1_of_the_status(
+    status, off_grid, abnormal
+):
+    result = parse_registers(_poll_blocks(dict(DAY, system_status=status)))
+
+    assert result["local_off_grid"] is off_grid
+    assert result["local_system_abnormal"] is abnormal
+
+
+def test_the_live_device_readings_decode_to_the_five_new_values():
+    # The status word as the device answered it with the other four readings.
+    result = parse_registers(_poll_blocks(dict(DAY, system_status=0x1014)))
+
+    assert result["local_off_grid"] is False
+    assert result["local_system_abnormal"] is False
+    assert result["batt_voltage_v"] == pytest.approx(52.305, abs=1e-3)
+    # Positive is charge: the device was discharging, and no sign is flipped.
+    assert result["batt_current_a"] == pytest.approx(-16.247, abs=1e-3)
+    assert result["batt_temp_c"] == pytest.approx(33.0, abs=1e-3)
+    assert result["ems_feed_power_limit_w"] == 7000
 
 
 def test_bits_4_to_6_of_the_status_are_not_decoded_as_a_mode():
@@ -224,6 +289,8 @@ def test_a_frame_without_the_status_registers_invents_no_control_state(cut):
     result = parse_registers(blocks)
 
     assert "modbus_control_active" not in result
+    assert "local_off_grid" not in result
+    assert "local_system_abnormal" not in result
     assert "local_system_status" not in result
     # The rest of the frame is unharmed (negative control: the keys are absent
     # for the right reason only).

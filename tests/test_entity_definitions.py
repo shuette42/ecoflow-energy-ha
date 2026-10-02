@@ -352,9 +352,9 @@ def test_every_device_type_has_sensors(constant: str) -> None:
     )
 
 
-# The four Local controls: platform, the English name (title case, like every
-# other entity name here) and the German name (German capitalises its nouns, so
-# the German forms are not the English ones with other words).
+# The Local controls and status sensors: platform, the English name (title case,
+# like every other entity name here) and the German name (German capitalises its
+# nouns, so the German forms are not the English ones with other words).
 LOCAL_CONTROL_NAMES = {
     "modbus_control": ("switch", "Modbus Control", "Modbus-Steuerung"),
     "local_backup_reserve": ("number", "Backup Reserve", "Backup-Reserve"),
@@ -368,11 +368,17 @@ LOCAL_CONTROL_NAMES = {
         "Modbus Control Active",
         "Modbus-Steuerung aktiv",
     ),
+    "local_off_grid": ("binary_sensor", "Off-Grid", "Inselbetrieb"),
+    "local_system_abnormal": (
+        "binary_sensor",
+        "System Abnormal",
+        "Systemstörung",
+    ),
 }
 
 
 def test_the_local_control_names_are_title_case_in_every_file() -> None:
-    """Definition, strings.json, en.json and de.json agree on the four names."""
+    """Definition, strings.json, en.json and de.json agree on every name."""
     definitions = {
         definition.key: definition.name
         for block in (

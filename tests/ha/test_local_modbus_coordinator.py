@@ -101,6 +101,9 @@ NEW_KEYS = {
     "grid_import_lifetime_energy_kwh",
     "grid_export_lifetime_energy_kwh",
     "fault_count",
+    "batt_voltage_v",
+    "batt_current_a",
+    "batt_temp_c",
 }
 # Integrated energy keys of the cloud entry. Local mode publishes none of them.
 INTEGRATED_KEYS = {
@@ -120,6 +123,9 @@ _REGISTERS: dict[str, tuple[int, str]] = {
     "soc": (0x020E, "u16"),
     "backup_ratio": (0x0217, "u16"),
     "battery_capacity_wh": (0x0227, "u32"),
+    "battery_voltage": (0x023D, "f32"),
+    "battery_current": (0x023F, "f32"),
+    "battery_temp": (0x0241, "f32"),
     "inv_freq": (0x0251, "f32"),
     "pv1_voltage": (0x0253, "f32"),
     "pv2_voltage": (0x0255, "f32"),
@@ -127,6 +133,7 @@ _REGISTERS: dict[str, tuple[int, str]] = {
     "pv1_current": (0x0259, "f32"),
     "pv2_current": (0x025B, "f32"),
     "pv3_current": (0x025D, "f32"),
+    "max_feed_power": (0x0260, "u32"),
     "fault_count": (0x0800, "u16"),
     "batteries_online": (0x0820, "u16"),
     "grid_draw_total_kwh": (0x0870, "f32"),
@@ -371,6 +378,8 @@ async def test_local_entry_creates_the_local_entities_and_a_missing_value_is_unk
             "local_backup_reserve",
             "local_indicator_brightness",
             "modbus_control_active",
+            "local_off_grid",
+            "local_system_abnormal",
         )
     }
     assert f"{SERIAL}_mqtt_status" not in unique_ids

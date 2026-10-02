@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [1.25.0] - Unreleased
 
+### Added
+
+- The Local (Modbus/TCP) mode of a three-phase PowerOcean now has an Off-Grid binary sensor. It shows whether the inverter runs off-grid, reads the status straight from the inverter and works without the EcoFlow cloud, so it can trigger an automation during a power outage.
+
+- The Local mode now has a System Abnormal diagnostic binary sensor, which turns on while the inverter reports its system status as abnormal.
+
+- The Local mode now shows Battery Voltage, Battery Current and Battery Temp for the whole battery system. Battery Current is positive while charging and negative while discharging.
+
+- The Feed Power Limit sensor now also works in the Local mode. It shows the feed-in limit the inverter actually applies after its own safety rules, and it stays the same entity when an entry is switched between cloud and Local. Like in the cloud modes it is disabled by default, so enable it in the entity list if you want it.
+
 ## [1.24.0] - 2026-10-02
 
 ### Added
