@@ -148,12 +148,21 @@ def _leaks(raw: bytes) -> list[str]:
         # A wire run over a masked serial can reach a byte past the mask on
         # either side (the length byte, the next field tag), which spells a
         # letter under the key too (#464: `q` and `A` around sixteen `9`
-        # under key 0x61). It is excused when its plaintext holds a whole
-        # masked serial; the plaintext itself is checked under the mask below.
+        # under key 0x61). It is excused only when its plaintext IS a masked
+        # serial: fifteen or more mask bytes with at most one other byte on
+        # each side, matched against the whole run. A search for the mask
+        # bytes anywhere inside the run would also excuse a run that carries
+        # a plaintext serial next to them (a header that declares a key and
+        # sends plain bytes), which is a leak this guard has to keep
+        # reporting. The plaintext itself is checked under the mask below.
         if any(
             region.start <= match.start()
             and match.end() <= region.end
-            and b"X" * 15 in _xor(raw[match.start() : match.end()], region.key)
+            and re.fullmatch(
+                rb"[^X]?X{15,}[^X]?",
+                _xor(raw[match.start() : match.end()], region.key),
+            )
+            is not None
             for region in keyed_regions
         ):
             continue
@@ -239,6 +248,57 @@ def test_no_identifier_survived_masking(path: Path) -> None:
         topic = frame.get("topic") or ""
         if "/" in topic:
             assert "{sn}" in topic or "XXXX" in topic, f"{where}: raw topic {topic}"
+
+
+def test_the_guard_reports_a_plain_serial_beside_a_long_run_of_mask_bytes() -> None:
+    """Positive control for the wire-run excuse in `_leaks`.
+
+    The excuse exists so a masked serial with one spilled byte is not reported.
+    It must not also silence a run that carries a plaintext serial. This frame
+    is what the sanitizer wrote on 2026-10-02 for a header that declares key
+    0x20 and sends plain bytes (a serial field and a name field): the serial
+    still stands on the wire, followed by eighteen `x` that read as `X` under
+    the key. It is built by hand rather than through `sanitize_frame`, so the
+    control keeps its meaning if that sanitizer leak is ever closed. The guard
+    has to say something about it; a `_leaks` that returns `[]` here is a guard
+    that went quiet on a leak it used to report.
+    """
+    serial = b"C376TESTPLAINAB1"
+    pdata = encode_field_bytes(1, serial) + b"x" * 18
+    header = bytearray()
+    header.extend(encode_field_varint(6, 1))  # enc_type = XOR, declared
+    header.extend(encode_field_varint(14, 0x20))  # seq, the key
+    header.extend(encode_field_bytes(1, pdata))
+    frame = encode_field_bytes(1, bytes(header))
+
+    # The excuse has to be in reach for the control to test it: the run does
+    # sit inside the keyed region and its plaintext does hold fifteen mask bytes.
+    region = next(r for r in _encrypted_regions(frame) if r.key == 0x20)
+    on_the_wire = frame[region.start : region.end]
+    assert b"X" * 15 in _xor(on_the_wire, region.key)
+
+    findings = _leaks(frame)
+    assert any(serial.decode() in finding for finding in findings), findings
+
+
+def test_the_guard_still_excuses_a_masked_serial_with_one_spilled_byte() -> None:
+    """Negative control for the anchored excuse: the #464 shape stays clean.
+
+    Sixteen `9` between a length byte and a field tag is a masked serial under
+    key 0x61, and the whole run reads as letters on the wire. Anchoring the
+    excuse must not turn that into a finding: one foreign byte on each side
+    stays allowed.
+    """
+    # A leading `a` reads as NUL on the wire, so the run starts at the length
+    # byte (`\x10` is `q`) and ends at the tag byte (` ` is `A`).
+    pdata = b"a\x10" + b"X" * 16 + b" "
+    header = bytearray()
+    header.extend(encode_field_varint(6, 1))
+    header.extend(encode_field_varint(14, 0x61))
+    header.extend(encode_field_bytes(1, bytes(b ^ 0x61 for b in pdata)))
+    frame = encode_field_bytes(1, bytes(header))
+    assert b"9" * 16 in frame
+    assert _leaks(frame) == []
 
 
 def test_the_encrypted_region_walk_still_finds_its_headers() -> None:

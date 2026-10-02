@@ -12,7 +12,7 @@ Read-only. There are no controls yet.
 
 There are no energy counters. None appear in what the unit sends, and the integration does not derive energy from power for it.
 
-Mapped from one owner's two diagnostics downloads on #464. The unit was idle while they were recorded, so every power reading was 0. Battery level, voltage and temperatures were cross-checked against the battery packs' own readings. The power readings are mapped by their names in the unit's messages and still need a check under load.
+Mapped from one owner's two diagnostics downloads on #464. The unit was idle while they were recorded, so every power reading was 0. Battery level, battery voltage and the pack temperatures were cross-checked against the battery packs' own readings. The inverter and system temperatures and the power readings are mapped by their names in the unit's messages and still need a check under load.
 
 ---
 
@@ -24,7 +24,7 @@ Mapped from one owner's two diagnostics downloads on #464. The unit was idle whi
 | Remaining Time | min | - | enabled | Remaining time as the unit reports it |
 | Input Total | W | - | enabled | Total input power |
 | Output Total | W | - | enabled | Total output power |
-| AC Input Power | W | - | enabled | AC charging input |
+| AC Input | W | - | enabled | AC charging input |
 | Power In/Out Port Input | W | - | enabled | Power flowing into the unit through the Power In/Out port |
 | Power In/Out Port Output | W | - | enabled | Power flowing out of the unit through the Power In/Out port |
 | Solar LV Input Power | W | - | enabled | Low-voltage solar input |
@@ -48,5 +48,5 @@ Each pack creates 2 sensors. They are created once a pack actually reports, so a
 
 | Entity | Unit | Description |
 |:---|:---:|:---|
-| Battery Pack N Level | % | Charge of this pack |
+| Battery Pack N SOC | % | Charge of this pack |
 | Battery Pack N Temperature | °C | Temperature of this pack |

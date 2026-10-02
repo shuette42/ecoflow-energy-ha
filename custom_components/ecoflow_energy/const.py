@@ -8363,10 +8363,12 @@ SMARTPANEL40_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
 
 
 # DELTA Pro Ultra (`Y711`). Enhanced mode only and read-only: the frames on
-# record came over the app channel. No energy counters: the unit sends none,
-# and integrating power locally would invent a second source for a figure
-# the app may show elsewhere. Every reading arrives incrementally, so the
-# coordinator's merge is what keeps the ones a push leaves out.
+# record came over the app channel. No energy counters yet: the unit sends
+# none, and its power fields are unverified (the capture is of an idle unit).
+# A wrong scale or sign feeding a total_increasing counter cannot be undone,
+# so a `DELTAPROULTRA_POWER_TO_ENERGY` waits for one capture under load.
+# Every reading arrives incrementally, so the coordinator's merge is what
+# keeps the ones a push leaves out.
 #
 # Readings whose meaning another device already names reuse that
 # translation (`translation_key`, or the key itself where it is the same).
@@ -8414,13 +8416,12 @@ DELTAPROULTRA_SENSORS: list[EcoFlowSensorDef] = [
     ),
     EcoFlowSensorDef(
         "ac_in_w",
-        "AC Input Power",
+        "AC Input",
         "W",
         "power",
         "measurement",
         "mdi:power-plug",
         suggested_display_precision=0,
-        translation_key="ac_input_power_w",
         enhanced_only=True,
     ),
     EcoFlowSensorDef(
@@ -8529,7 +8530,7 @@ DELTAPROULTRA_SENSORS: list[EcoFlowSensorDef] = [
         "V",
         "voltage",
         "measurement",
-        "mdi:sine-wave",
+        "mdi:flash-triangle",
         suggested_display_precision=2,
         enhanced_only=True,
     ),
@@ -8601,7 +8602,7 @@ def _build_delta_pro_ultra_pack_sensors(pack_num: int) -> list[EcoFlowSensorDef]
     return [
         EcoFlowSensorDef(
             f"bp{n}_soc_pct",
-            f"Battery Pack {n} Level",
+            f"Battery Pack {n} SOC",
             "%",
             None,
             "measurement",

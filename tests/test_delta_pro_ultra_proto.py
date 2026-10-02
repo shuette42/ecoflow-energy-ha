@@ -97,16 +97,26 @@ def _rebuild(payload: bytes, patch: Callable[[int, int, bytes], bytes]) -> bytes
     return bytes(out)
 
 
-def _readdress(frame: bytes, src: int) -> bytes:
-    """The same frame with every header's `src` (header field 2) replaced."""
+def _set_header_varint(frame: bytes, number: int, value: int) -> bytes:
+    """The same frame with header field `number` set to `value` in every header."""
 
-    def set_src(num: int, wire: int, raw: bytes) -> bytes:
-        return _varint(src) if (num == 2 and wire == 0) else raw
+    def set_field(num: int, wire: int, raw: bytes) -> bytes:
+        return _varint(value) if (num == number and wire == 0) else raw
 
     def into_header(num: int, wire: int, raw: bytes) -> bytes:
-        return _rebuild(raw, set_src) if (num == 1 and wire == 2) else raw
+        return _rebuild(raw, set_field) if (num == 1 and wire == 2) else raw
 
     return _rebuild(frame, into_header)
+
+
+def _readdress(frame: bytes, src: int) -> bytes:
+    """The same frame with every header's `src` (header field 2) replaced."""
+    return _set_header_varint(frame, 2, src)
+
+
+def _recommand(frame: bytes, cmd_func: int) -> bytes:
+    """The same frame with every header's `cmd_func` (header field 8) replaced."""
+    return _set_header_varint(frame, 8, cmd_func)
 
 
 def _bp_entry(bp_no: int, soc: int | None = None, temp: int | None = None) -> bytes:
@@ -131,6 +141,27 @@ def _show_frame_with(pdata: bytes) -> bytes:
 
     def into_header(num: int, wire: int, raw: bytes) -> bytes:
         return _rebuild(raw, patch) if (num == 1 and wire == 2) else raw
+
+    return _rebuild(_frame(2, 2, 1), into_header)
+
+
+def _masked_frame_with(cmd_id: int, plain: bytes, key: int) -> bytes:
+    """Frame 2 carrying cmd `2.<cmd_id>`, `plain` XOR-masked with `key` (enc_type 1)."""
+    wire = bytes(byte ^ key for byte in plain)
+
+    def patch(num: int, wire_type: int, raw: bytes) -> bytes:
+        if wire_type == 2 and num == 1:  # header pdata
+            return wire
+        if wire_type == 0 and num == 6:  # header enc_type
+            return _varint(1)
+        if wire_type == 0 and num == 9:  # header cmd_id
+            return _varint(cmd_id)
+        if wire_type == 0 and num == 14:  # header seq, whose low byte is the key
+            return _varint(key)
+        return raw
+
+    def into_header(num: int, wire_type: int, raw: bytes) -> bytes:
+        return _rebuild(raw, patch) if (num == 1 and wire_type == 2) else raw
 
     return _rebuild(_frame(2, 2, 1), into_header)
 
@@ -247,3 +278,56 @@ def test_other_messages_and_other_sources_are_ignored() -> None:
     assert _readdress(show, 2) == show
     # ... and from the battery management module (src 6) they are not.
     assert parse_delta_pro_ultra_message(_readdress(show, 6)) is None
+
+
+def test_a_frame_from_another_command_family_is_ignored() -> None:
+    """A `src` 2 frame with a 2.x cmd id but `cmd_func` 254 is not read.
+
+    Frame 2 is a 2.1 push. Rebuilt with `cmd_func` 254 it keeps the source and
+    the cmd id and changes only the family; the cross-family display message
+    shares its ids with nothing this parser maps, so it must give None. The
+    rebuild with `cmd_func` 2 is the control: it is the original frame.
+    """
+    show = _frame(2, 2, 1)
+    assert _recommand(show, 2) == show
+    assert parse_delta_pro_ultra_message(show) is not None
+
+    assert parse_delta_pro_ultra_message(_recommand(show, 254)) is None
+
+
+def test_a_non_finite_float_is_dropped_and_its_neighbours_are_kept() -> None:
+    """NaN and both infinities give no key; a finite value beside them stays."""
+    data = parse_delta_pro_ultra_message(
+        _show_frame_with(
+            _varint(21 << 3)
+            + _varint(50)
+            + _float_field(48, float("nan"))
+            + _float_field(49, float("inf"))
+            + _float_field(50, float("-inf"))
+            + _float_field(56, 12.34)
+        )
+    )
+
+    assert data == {"soc": 50, "ac_in_w": 12.3}
+
+
+def test_masked_bytes_are_only_a_fallback_for_an_unreadable_payload() -> None:
+    """A payload that reads cleanly under the key ends the attempt.
+
+    The plaintext is a backup reserve of 50 followed by an unmapped varint. The
+    wire bytes (plaintext XOR key 0x20) are valid protobuf too and hold a
+    backup reserve of 77. The first read must win and the second must not be
+    merged on top of it. The control sends the wire bytes as an unmasked
+    payload and shows they do read as 77 on their own, so the answer 50 can
+    only come from the attempt ending after the first candidate.
+    """
+    key = 0x20
+    plain = b"\x18\x32\x38" + bytes([77 ^ key])
+    wire = bytes(byte ^ key for byte in plain)
+
+    rival = _show_frame_with(wire)  # enc_type 0: the wire bytes are the payload
+    rival_para = _set_header_varint(rival, 9, 3)  # read as 2.3, backup reserve
+    assert parse_delta_pro_ultra_message(rival_para) == {"backup_reserve_pct": 77}
+
+    masked = _masked_frame_with(3, plain, key)
+    assert parse_delta_pro_ultra_message(masked) == {"backup_reserve_pct": 50}

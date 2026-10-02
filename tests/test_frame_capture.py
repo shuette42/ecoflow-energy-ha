@@ -1482,6 +1482,31 @@ class TestMaskingDoesNotCorruptRealFrames:
         assert serial not in sanitized
         assert b"F" not in sanitized[frame.index(serial) : frame.index(serial) + 16]
 
+    def test_a_plain_serial_beside_a_run_of_mask_bytes_stays_masked(self) -> None:
+        """Third negative control for the restore: the run is not the span.
+
+        A header that declares key 0x61 but sends plain bytes carries a serial
+        followed by sixteen `9`, which is `X ^ 0x61`. The wire is one
+        thirty-two byte run and the plain pass masks all of it. Under the key
+        the span reads as sixteen foreign bytes and then sixteen mask bytes, so
+        the restore must not treat it as a masked serial that merely spilled
+        a byte: a search for fifteen mask bytes anywhere in the span did, and
+        handed the whole plaintext serial back (review finding of 2026-10-02).
+        The #464 fixture next to it is the positive control: one foreign byte
+        on each side still restores.
+        """
+        key = 0x61
+        serial = b"C376TESTPLAINABC"  # no `9`, so no byte of it equals X ^ key
+        header = bytearray()
+        header.extend(encode_field_varint(6, 1))  # enc_type = XOR, declared
+        header.extend(encode_field_varint(14, key))  # seq
+        header.extend(encode_field_bytes(1, serial + b"9" * 16))  # pdata plain
+        frame = encode_field_bytes(1, bytes(header))
+        sanitized = sanitize_frame(frame, [])
+        assert serial not in sanitized
+        assert serial[:15] not in sanitized
+        assert b"X" * 32 in sanitized
+
     def test_no_identifier_survives_under_the_mask(self) -> None:
         """The guard for PLAN-128: an encrypted region must be clean too.
 

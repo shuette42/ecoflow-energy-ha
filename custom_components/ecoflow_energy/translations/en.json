@@ -2552,31 +2552,31 @@
         "name": "System Temperature"
       },
       "bp1_soc_pct": {
-        "name": "Battery Pack 1 Level"
+        "name": "Battery Pack 1 SOC"
       },
       "bp1_temp_c": {
         "name": "Battery Pack 1 Temperature"
       },
       "bp2_soc_pct": {
-        "name": "Battery Pack 2 Level"
+        "name": "Battery Pack 2 SOC"
       },
       "bp2_temp_c": {
         "name": "Battery Pack 2 Temperature"
       },
       "bp3_soc_pct": {
-        "name": "Battery Pack 3 Level"
+        "name": "Battery Pack 3 SOC"
       },
       "bp3_temp_c": {
         "name": "Battery Pack 3 Temperature"
       },
       "bp4_soc_pct": {
-        "name": "Battery Pack 4 Level"
+        "name": "Battery Pack 4 SOC"
       },
       "bp4_temp_c": {
         "name": "Battery Pack 4 Temperature"
       },
       "bp5_soc_pct": {
-        "name": "Battery Pack 5 Level"
+        "name": "Battery Pack 5 SOC"
       },
       "bp5_temp_c": {
         "name": "Battery Pack 5 Temperature"

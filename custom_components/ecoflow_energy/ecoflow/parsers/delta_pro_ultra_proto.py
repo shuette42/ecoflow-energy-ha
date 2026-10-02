@@ -33,7 +33,8 @@ carry no `enc_type` and arrive unmasked, so one decoder reads both shapes.
 
 Two integer fields are signed 32-bit values written as a varint
 (`pd_temp_c`, `bp{n}_temp_c`); a negative reading is the 64-bit two's
-complement of the value, not a zigzag encoding.
+complement of the value, not a zigzag encoding. `_decode_scalar` already
+returns that as a negative integer, so they need no kind of their own.
 
 Scaling: the SOC and temperature rows are cross-checked against the second
 module's own reading of the same pack (SOC 99/98/82-83, temperature 32/30/29),
@@ -67,14 +68,13 @@ _CMD_ID_PARA = 3
 _CMD_ID_BP_INFO = 4
 
 # Field kinds in the maps below.
-_UINT = "uint"  # plain varint, taken as is
-_INT32 = "int32"  # signed 32-bit written as a varint (two's complement)
+_INT = "int"  # varint; a negative value arrives as 64-bit two's complement
 _FLOAT = "float"  # little-endian float32, rounded to `decimals`
 
 # field number -> (key, kind, decimals)
 _SHOW_FIELDS: dict[int, tuple[str, str, int]] = {
-    21: ("soc", _UINT, 0),
-    26: ("remain_time_min", _UINT, 0),
+    21: ("soc", _INT, 0),
+    26: ("remain_time_min", _INT, 0),
     41: ("watts_in_sum", _FLOAT, 1),
     42: ("watts_out_sum", _FLOAT, 1),
     48: ("ac_out_l1_1_w", _FLOAT, 1),
@@ -95,11 +95,11 @@ _RECORD_FIELDS: dict[int, tuple[str, str, int]] = {
     63: ("batt_charge_power_w", _FLOAT, 1),
     64: ("batt_discharge_power_w", _FLOAT, 1),
     98: ("inv_ac_temp_c", _FLOAT, 1),
-    101: ("pd_temp_c", _INT32, 0),
+    101: ("pd_temp_c", _INT, 0),
 }
 
 _PARA_FIELDS: dict[int, tuple[str, str, int]] = {
-    3: ("backup_reserve_pct", _UINT, 0),
+    3: ("backup_reserve_pct", _INT, 0),
 }
 
 _FIELDS_BY_CMD_ID: dict[int, dict[int, tuple[str, str, int]]] = {
@@ -122,12 +122,6 @@ _WIRE_VARINT = 0
 _WIRE_FIXED32 = 5
 
 
-def _as_int32(value: int) -> int:
-    """Reinterpret the low 32 bits of a varint as a signed 32-bit integer."""
-    value &= 0xFFFFFFFF
-    return value - (1 << 32) if value >= 1 << 31 else value
-
-
 def _decode_field(wire_type: int, raw: bytes, kind: str, decimals: int) -> Any | None:
     """Decode one mapped field, or None when its wire type or value is wrong."""
     if kind == _FLOAT:
@@ -143,7 +137,7 @@ def _decode_field(wire_type: int, raw: bytes, kind: str, decimals: int) -> Any |
     decoded = _decode_scalar(wire_type, raw, _TYPE_INT)
     if not isinstance(decoded, int):
         return None
-    return _as_int32(decoded) if kind == _INT32 else decoded
+    return decoded
 
 
 def _parse_fields(
@@ -173,11 +167,11 @@ def _parse_bp_info(pdata: bytes) -> dict[str, Any]:
         temp: int | None = None
         for sub_num, sub_wire, sub_raw in _iter_fields(raw):
             if sub_num == _BP_NO_FIELD:
-                bp_no = _decode_field(sub_wire, sub_raw, _UINT, 0)
+                bp_no = _decode_field(sub_wire, sub_raw, _INT, 0)
             elif sub_num == _BP_SOC_FIELD:
-                soc = _decode_field(sub_wire, sub_raw, _UINT, 0)
+                soc = _decode_field(sub_wire, sub_raw, _INT, 0)
             elif sub_num == _BP_TEMP_FIELD:
-                temp = _decode_field(sub_wire, sub_raw, _INT32, 0)
+                temp = _decode_field(sub_wire, sub_raw, _INT, 0)
         if bp_no is None or not 1 <= bp_no <= MAX_PACKS:
             continue
         if soc is not None:

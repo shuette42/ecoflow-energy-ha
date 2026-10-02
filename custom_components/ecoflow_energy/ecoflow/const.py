@@ -319,9 +319,11 @@ _SN_PREFIX_MAP = {
     "HR61": DEVICE_TYPE_SMART_PANEL_40,
     # DELTA Pro Ultra (#464). Mapped from an owner's 66-frame recording whose
     # main-unit headers (2.1 to 2.4) decode on this model's own field
-    # numbers. The prefix is listed because the product name "DELTA Pro
-    # Ultra" would otherwise reach the "delta" keyword and be classified as
-    # a Delta 2 Max, whose entities this unit cannot fill.
+    # numbers. Without the prefix the unit is unknown on the account channel:
+    # the owner's diagnostics showed it skipped as an unknown type with an
+    # empty product name. Where a channel does report the name "DELTA Pro
+    # Ultra", it would reach the "delta" keyword and land on the Delta 2 Max
+    # set, whose entities this unit cannot fill.
     "Y711": DEVICE_TYPE_DELTA_PRO_ULTRA,
 }
 
@@ -492,9 +494,12 @@ def get_device_type(product_name: str, sn: str = "") -> str:
     API reports an empty product name for each, so a keyword would be an
     assumption about a string no capture has ever shown.
 
-    The DELTA Pro Ultra is the opposite case: its product name does match a
-    keyword ("delta"), which would classify it as a Delta 2 Max, so it is
-    reached by its prefix and the prefix check below runs first.
+    The DELTA Pro Ultra is reached by its prefix as well. The owner's
+    diagnostics (#464) showed it skipped as an unknown type with an empty
+    product name, so on the account channel no keyword is involved. Where a
+    channel does report the name "DELTA Pro Ultra", it would match the
+    "delta" keyword and land on the Delta 2 Max set, which is why the prefix
+    check below runs first.
     """
     # The prefix is exact evidence, the product name a substring guess, so
     # the prefix wins. Every prefix mapped before this ordering existed
