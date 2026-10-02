@@ -23,8 +23,10 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import (
     DELTA2MAX_SENSORS,
     DELTA3_SENSORS,
+    DELTAPROULTRA_SENSORS,
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_DELTA3,
+    DEVICE_TYPE_DELTA_PRO_ULTRA,
     DEVICE_TYPE_OCEAN2,
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_POWERPULSE2,
@@ -441,4 +443,6 @@ def _get_sensor_defs(device_type: str) -> list[EcoFlowSensorDef]:
         return OCEAN2_SENSORS
     if device_type == DEVICE_TYPE_SMART_PANEL_40:
         return SMARTPANEL40_SENSORS
+    if device_type == DEVICE_TYPE_DELTA_PRO_ULTRA:
+        return DELTAPROULTRA_SENSORS
     return []

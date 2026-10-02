@@ -2514,6 +2514,72 @@
       },
       "circuit_current_a": {
         "name": "Circuit {label} Current"
+      },
+      "power_io_in_w": {
+        "name": "Power In/Out Port Input"
+      },
+      "power_io_out_w": {
+        "name": "Power In/Out Port Output"
+      },
+      "solar_lv_in_w": {
+        "name": "Solar LV Input Power"
+      },
+      "solar_hv_in_w": {
+        "name": "Solar HV Input Power"
+      },
+      "ac_out_l1_1_w": {
+        "name": "AC Output L1-1 Power"
+      },
+      "ac_out_l1_2_w": {
+        "name": "AC Output L1-2 Power"
+      },
+      "ac_out_l2_1_w": {
+        "name": "AC Output L2-1 Power"
+      },
+      "ac_out_l2_2_w": {
+        "name": "AC Output L2-2 Power"
+      },
+      "ac_out_tt30_w": {
+        "name": "AC Output TT-30 Power"
+      },
+      "ac_out_l14_w": {
+        "name": "AC Output L14-30 Power"
+      },
+      "inv_ac_temp_c": {
+        "name": "Inverter Temperature"
+      },
+      "pd_temp_c": {
+        "name": "System Temperature"
+      },
+      "bp1_soc_pct": {
+        "name": "Battery Pack 1 Level"
+      },
+      "bp1_temp_c": {
+        "name": "Battery Pack 1 Temperature"
+      },
+      "bp2_soc_pct": {
+        "name": "Battery Pack 2 Level"
+      },
+      "bp2_temp_c": {
+        "name": "Battery Pack 2 Temperature"
+      },
+      "bp3_soc_pct": {
+        "name": "Battery Pack 3 Level"
+      },
+      "bp3_temp_c": {
+        "name": "Battery Pack 3 Temperature"
+      },
+      "bp4_soc_pct": {
+        "name": "Battery Pack 4 Level"
+      },
+      "bp4_temp_c": {
+        "name": "Battery Pack 4 Temperature"
+      },
+      "bp5_soc_pct": {
+        "name": "Battery Pack 5 Level"
+      },
+      "bp5_temp_c": {
+        "name": "Battery Pack 5 Temperature"
       }
     },
     "binary_sensor": {

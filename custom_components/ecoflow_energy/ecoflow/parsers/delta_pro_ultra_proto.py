@@ -114,8 +114,9 @@ _BP_ENTRY_FIELD = 1
 _BP_NO_FIELD = 1
 _BP_SOC_FIELD = 3
 _BP_TEMP_FIELD = 11
-#: The unit takes at most five extra packs; anything else is not a pack.
-_BP_MAX = 5
+#: Highest pack number read. The capture shows packs 1-3; a number outside
+#: 1..MAX_PACKS is treated as not a pack. Also sizes the per-pack entities.
+MAX_PACKS = 5
 
 _WIRE_VARINT = 0
 _WIRE_FIXED32 = 5
@@ -177,7 +178,7 @@ def _parse_bp_info(pdata: bytes) -> dict[str, Any]:
                 soc = _decode_field(sub_wire, sub_raw, _UINT, 0)
             elif sub_num == _BP_TEMP_FIELD:
                 temp = _decode_field(sub_wire, sub_raw, _INT32, 0)
-        if bp_no is None or not 1 <= bp_no <= _BP_MAX:
+        if bp_no is None or not 1 <= bp_no <= MAX_PACKS:
             continue
         if soc is not None:
             out[f"bp{bp_no}_soc_pct"] = soc

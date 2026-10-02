@@ -2514,6 +2514,72 @@
       },
       "circuit_current_a": {
         "name": "Stromkreis {label} Strom"
+      },
+      "power_io_in_w": {
+        "name": "Power-In/Out-Anschluss Eingang"
+      },
+      "power_io_out_w": {
+        "name": "Power-In/Out-Anschluss Ausgang"
+      },
+      "solar_lv_in_w": {
+        "name": "Solareingang Niederspannung (LV)"
+      },
+      "solar_hv_in_w": {
+        "name": "Solareingang Hochspannung (HV)"
+      },
+      "ac_out_l1_1_w": {
+        "name": "AC-Ausgang L1-1 Leistung"
+      },
+      "ac_out_l1_2_w": {
+        "name": "AC-Ausgang L1-2 Leistung"
+      },
+      "ac_out_l2_1_w": {
+        "name": "AC-Ausgang L2-1 Leistung"
+      },
+      "ac_out_l2_2_w": {
+        "name": "AC-Ausgang L2-2 Leistung"
+      },
+      "ac_out_tt30_w": {
+        "name": "AC-Ausgang TT-30 Leistung"
+      },
+      "ac_out_l14_w": {
+        "name": "AC-Ausgang L14-30 Leistung"
+      },
+      "inv_ac_temp_c": {
+        "name": "Wechselrichtertemperatur"
+      },
+      "pd_temp_c": {
+        "name": "Systemtemperatur"
+      },
+      "bp1_soc_pct": {
+        "name": "Batteriepack 1 Ladestand"
+      },
+      "bp1_temp_c": {
+        "name": "Batteriepack 1 Temperatur"
+      },
+      "bp2_soc_pct": {
+        "name": "Batteriepack 2 Ladestand"
+      },
+      "bp2_temp_c": {
+        "name": "Batteriepack 2 Temperatur"
+      },
+      "bp3_soc_pct": {
+        "name": "Batteriepack 3 Ladestand"
+      },
+      "bp3_temp_c": {
+        "name": "Batteriepack 3 Temperatur"
+      },
+      "bp4_soc_pct": {
+        "name": "Batteriepack 4 Ladestand"
+      },
+      "bp4_temp_c": {
+        "name": "Batteriepack 4 Temperatur"
+      },
+      "bp5_soc_pct": {
+        "name": "Batteriepack 5 Ladestand"
+      },
+      "bp5_temp_c": {
+        "name": "Batteriepack 5 Temperatur"
       }
     },
     "binary_sensor": {

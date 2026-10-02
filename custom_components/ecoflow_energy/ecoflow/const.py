@@ -82,6 +82,12 @@ DEVICE_TYPE_OCEAN2 = "ocean2"
 # block - is decoded by its own parser (`hr61_proto.py`) rather than a
 # routing entry.
 DEVICE_TYPE_SMART_PANEL_40 = "smart_panel_40"
+# DELTA Pro Ultra (`Y711`, #464). Enhanced-only and read-only: the frames on
+# record came over the app broker, and whether the Developer API answers for
+# this model has not been observed. Its `cmd_func` 2 headers (cmd_id 1 to 4)
+# are decoded by its own parser (`delta_pro_ultra_proto.py`) rather than a
+# routing entry, and every frame is incremental.
+DEVICE_TYPE_DELTA_PRO_ULTRA = "delta_pro_ultra"
 DEVICE_TYPE_UNKNOWN = "unknown"
 
 # Keywords used to classify devices from productName strings.
@@ -311,6 +317,12 @@ _SN_PREFIX_MAP = {
     # (254/25) both decode, and grid/PV/battery close the panel's own power
     # balance exactly on multiple frames.
     "HR61": DEVICE_TYPE_SMART_PANEL_40,
+    # DELTA Pro Ultra (#464). Mapped from an owner's 66-frame recording whose
+    # main-unit headers (2.1 to 2.4) decode on this model's own field
+    # numbers. The prefix is listed because the product name "DELTA Pro
+    # Ultra" would otherwise reach the "delta" keyword and be classified as
+    # a Delta 2 Max, whose entities this unit cannot fill.
+    "Y711": DEVICE_TYPE_DELTA_PRO_ULTRA,
 }
 
 _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
@@ -333,6 +345,7 @@ _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
     "RE41": "Ocean 2 Plus",
     "RE42": "Ocean 2",
     "HR61": "OCEAN Smart Electrical Panel 40",
+    "Y711": "DELTA Pro Ultra",
     "HZ31": "Solar Tracker",
     "S02F": "Solar Tracker",
     # WAVE 3: the app names it "WAVE 3-<tail>", neither channel gives a
@@ -470,13 +483,18 @@ def get_device_type(product_name: str, sn: str = "") -> str:
     DEVICE_TYPE_SMARTPLUG, DEVICE_TYPE_STREAM, DEVICE_TYPE_STREAM_AC5000,
     DEVICE_TYPE_POWERSTREAM, DEVICE_TYPE_SMART_METER,
     DEVICE_TYPE_SOLAR_TRACKER, DEVICE_TYPE_WAVE3, DEVICE_TYPE_POWERPULSE2,
-    or DEVICE_TYPE_UNKNOWN.
+    DEVICE_TYPE_OCEAN2, DEVICE_TYPE_SMART_PANEL_40,
+    DEVICE_TYPE_DELTA_PRO_ULTRA, or DEVICE_TYPE_UNKNOWN.
 
     The Smart Meter, the Solar Tracker, the WAVE 3 and the PowerPulse 2 have
     no keyword of their own: all four are reached by their serial prefix
     only. None of their names matches any keyword list below, and the app
     API reports an empty product name for each, so a keyword would be an
     assumption about a string no capture has ever shown.
+
+    The DELTA Pro Ultra is the opposite case: its product name does match a
+    keyword ("delta"), which would classify it as a Delta 2 Max, so it is
+    reached by its prefix and the prefix check below runs first.
     """
     # The prefix is exact evidence, the product name a substring guess, so
     # the prefix wins. Every prefix mapped before this ordering existed

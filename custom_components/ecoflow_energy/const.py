@@ -19,6 +19,7 @@ from homeassistant.const import Platform
 from .ecoflow.const import (  # noqa: E402
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_DELTA3,
+    DEVICE_TYPE_DELTA_PRO_ULTRA,
     DEVICE_TYPE_OCEAN2,
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_POWERPULSE2,
@@ -39,6 +40,9 @@ from .ecoflow.const import (  # noqa: E402
     device_log_tag,  # noqa: F401
     get_device_name,  # noqa: F401
     get_device_type,  # noqa: F401
+)
+from .ecoflow.parsers.delta_pro_ultra_proto import (
+    MAX_PACKS as DELTAPROULTRA_MAX_PACKS,  # noqa: E402
 )
 from .ecoflow.parsers.hr61_proto import (
     CIRCUIT_COUNT as SMARTPANEL40_CIRCUIT_COUNT,  # noqa: E402
@@ -425,6 +429,7 @@ DEVICE_TYPE_DISPLAY_NAMES: dict[str, str] = {
     DEVICE_TYPE_POWERPULSE2: "PowerPulse 2",
     DEVICE_TYPE_OCEAN2: "Ocean 2",
     DEVICE_TYPE_SMART_PANEL_40: "OCEAN Smart Electrical Panel 40",
+    DEVICE_TYPE_DELTA_PRO_ULTRA: "DELTA Pro Ultra",
 }
 
 # Device types that only report over the account channel (app-auth WSS).
@@ -439,6 +444,7 @@ ENHANCED_ONLY_DEVICE_TYPES: frozenset[str] = frozenset(
         DEVICE_TYPE_POWERPULSE2,
         DEVICE_TYPE_OCEAN2,
         DEVICE_TYPE_SMART_PANEL_40,
+        DEVICE_TYPE_DELTA_PRO_ULTRA,
     }
 )
 
@@ -8354,6 +8360,272 @@ SMARTPANEL40_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
     )
     for _circuit in range(1, SMARTPANEL40_CIRCUIT_COUNT + 1)
 ]
+
+
+# DELTA Pro Ultra (`Y711`). Enhanced mode only and read-only: the frames on
+# record came over the app channel. No energy counters: the unit sends none,
+# and integrating power locally would invent a second source for a figure
+# the app may show elsewhere. Every reading arrives incrementally, so the
+# coordinator's merge is what keeps the ones a push leaves out.
+#
+# Readings whose meaning another device already names reuse that
+# translation (`translation_key`, or the key itself where it is the same).
+DELTAPROULTRA_SENSORS: list[EcoFlowSensorDef] = [
+    EcoFlowSensorDef(
+        "soc",
+        "Battery SOC",
+        "%",
+        "battery",
+        "measurement",
+        "mdi:battery",
+        suggested_display_precision=0,
+        translation_key="soc_pct",
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "remain_time_min",
+        "Remaining Time",
+        "min",
+        "duration",
+        "measurement",
+        "mdi:timer-outline",
+        suggested_display_precision=0,
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "watts_in_sum",
+        "Input Total",
+        "W",
+        "power",
+        "measurement",
+        "mdi:flash",
+        suggested_display_precision=0,
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "watts_out_sum",
+        "Output Total",
+        "W",
+        "power",
+        "measurement",
+        "mdi:flash",
+        suggested_display_precision=0,
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "ac_in_w",
+        "AC Input Power",
+        "W",
+        "power",
+        "measurement",
+        "mdi:power-plug",
+        suggested_display_precision=0,
+        translation_key="ac_input_power_w",
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "power_io_in_w",
+        "Power In/Out Port Input",
+        "W",
+        "power",
+        "measurement",
+        "mdi:import",
+        suggested_display_precision=0,
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "power_io_out_w",
+        "Power In/Out Port Output",
+        "W",
+        "power",
+        "measurement",
+        "mdi:export",
+        suggested_display_precision=0,
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "solar_lv_in_w",
+        "Solar LV Input Power",
+        "W",
+        "power",
+        "measurement",
+        "mdi:solar-power",
+        suggested_display_precision=0,
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "solar_hv_in_w",
+        "Solar HV Input Power",
+        "W",
+        "power",
+        "measurement",
+        "mdi:solar-power",
+        suggested_display_precision=0,
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "ac_out_l1_1_w",
+        "AC Output L1-1 Power",
+        "W",
+        "power",
+        "measurement",
+        "mdi:power-socket-us",
+        suggested_display_precision=0,
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "ac_out_l1_2_w",
+        "AC Output L1-2 Power",
+        "W",
+        "power",
+        "measurement",
+        "mdi:power-socket-us",
+        suggested_display_precision=0,
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "ac_out_l2_1_w",
+        "AC Output L2-1 Power",
+        "W",
+        "power",
+        "measurement",
+        "mdi:power-socket-us",
+        suggested_display_precision=0,
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "ac_out_l2_2_w",
+        "AC Output L2-2 Power",
+        "W",
+        "power",
+        "measurement",
+        "mdi:power-socket-us",
+        suggested_display_precision=0,
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "ac_out_tt30_w",
+        "AC Output TT-30 Power",
+        "W",
+        "power",
+        "measurement",
+        "mdi:rv-truck",
+        suggested_display_precision=0,
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "ac_out_l14_w",
+        "AC Output L14-30 Power",
+        "W",
+        "power",
+        "measurement",
+        "mdi:power-socket-us",
+        suggested_display_precision=0,
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "batt_voltage_v",
+        "Battery Voltage",
+        "V",
+        "voltage",
+        "measurement",
+        "mdi:sine-wave",
+        suggested_display_precision=2,
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "batt_charge_power_w",
+        "Battery Charge Power",
+        "W",
+        "power",
+        "measurement",
+        "mdi:battery-plus",
+        suggested_display_precision=0,
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "batt_discharge_power_w",
+        "Battery Discharge Power",
+        "W",
+        "power",
+        "measurement",
+        "mdi:battery-minus",
+        suggested_display_precision=0,
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "inv_ac_temp_c",
+        "Inverter Temperature",
+        "°C",
+        "temperature",
+        "measurement",
+        "mdi:thermometer",
+        suggested_display_precision=0,
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "pd_temp_c",
+        "System Temperature",
+        "°C",
+        "temperature",
+        "measurement",
+        "mdi:thermometer",
+        suggested_display_precision=0,
+        enhanced_only=True,
+    ),
+    # The backup reserve the owner set in the app, read-only here.
+    EcoFlowSensorDef(
+        "backup_reserve_pct",
+        "Backup Reserve",
+        "%",
+        None,
+        "measurement",
+        "mdi:battery-lock",
+        "diagnostic",
+        suggested_display_precision=0,
+        enhanced_only=True,
+    ),
+]
+
+
+def _build_delta_pro_ultra_pack_sensors(pack_num: int) -> list[EcoFlowSensorDef]:
+    """Build the entity definitions for one DELTA Pro Ultra extra battery pack.
+
+    Accessories: the unit takes up to five extra packs and an installation
+    has however many its owner bought, so an entity exists only once its
+    pack has reported (the same reason as the Ocean 2 modules). No battery
+    device class: Home Assistant shows one battery figure per device, and
+    that is the system state of charge in `soc`.
+    """
+    n = pack_num
+    return [
+        EcoFlowSensorDef(
+            f"bp{n}_soc_pct",
+            f"Battery Pack {n} Level",
+            "%",
+            None,
+            "measurement",
+            "mdi:battery",
+            suggested_display_precision=0,
+            accessory=True,
+            enhanced_only=True,
+        ),
+        EcoFlowSensorDef(
+            f"bp{n}_temp_c",
+            f"Battery Pack {n} Temperature",
+            "°C",
+            "temperature",
+            "measurement",
+            "mdi:thermometer",
+            suggested_display_precision=0,
+            accessory=True,
+            enhanced_only=True,
+        ),
+    ]
+
+
+for _pack in range(1, DELTAPROULTRA_MAX_PACKS + 1):
+    DELTAPROULTRA_SENSORS.extend(_build_delta_pro_ultra_pack_sensors(_pack))
 
 
 POWERPULSE2_SENSORS: list[EcoFlowSensorDef] = [

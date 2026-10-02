@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 from ..const import (
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_DELTA3,
+    DEVICE_TYPE_DELTA_PRO_ULTRA,
     DEVICE_TYPE_OCEAN2,
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_POWERPULSE2,
@@ -43,6 +44,7 @@ from ..ecoflow.parsers.delta3_proto import (
     parse_delta3_display_property,
 )
 from ..ecoflow.parsers.delta_http import parse_delta_http_quota
+from ..ecoflow.parsers.delta_pro_ultra_proto import parse_delta_pro_ultra_message
 from ..ecoflow.parsers.hr61_proto import parse_hr61_proto_message
 from ..ecoflow.parsers.ocean2_proto import parse_ocean2_proto_message
 from ..ecoflow.parsers.powerocean import parse_powerocean_http_quota
@@ -527,6 +529,11 @@ class MqttIngestMixin(_Base):
                 # `_device_data.update()` is the merge that keeps the rest.
                 if self.device_type == DEVICE_TYPE_SMART_PANEL_40:
                     return parse_hr61_proto_message(payload)
+                # DELTA Pro Ultra (#464): its own `cmd_func` 2 headers, and
+                # incremental as well. A frame with nothing the parser reads
+                # returns None, the caller's "nothing to merge" signal.
+                if self.device_type == DEVICE_TYPE_DELTA_PRO_ULTRA:
+                    return parse_delta_pro_ultra_message(payload)
                 if self.device_type == DEVICE_TYPE_POWERPULSE2:
                     return parse_powerpulse_message(payload)
                 return self._parse_proto_device_data(payload)
@@ -661,6 +668,11 @@ class MqttIngestMixin(_Base):
                 # `_device_data.update()` is the merge that keeps the rest.
                 if self.device_type == DEVICE_TYPE_SMART_PANEL_40:
                     return parse_hr61_proto_message(payload)
+                # DELTA Pro Ultra (#464): its own `cmd_func` 2 headers, and
+                # incremental as well. A frame with nothing the parser reads
+                # returns None, the caller's "nothing to merge" signal.
+                if self.device_type == DEVICE_TYPE_DELTA_PRO_ULTRA:
+                    return parse_delta_pro_ultra_message(payload)
                 if self.device_type == DEVICE_TYPE_POWERPULSE2:
                     return parse_powerpulse_message(payload)
                 if self.device_type == DEVICE_TYPE_POWEROCEAN:
