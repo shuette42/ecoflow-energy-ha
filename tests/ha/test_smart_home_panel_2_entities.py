@@ -16,7 +16,7 @@ import json
 import struct
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from homeassistant.core import HomeAssistant
@@ -382,7 +382,11 @@ async def test_a_circuit_without_a_name_still_gets_its_entities(
 def test_the_label_drops_only_the_default_name_of_its_own_slot(
     text: str, label: str, expected: str
 ) -> None:
-    coordinator = SimpleNamespace(device_data={"circuit_1_name": text}, data=None)
+    # Only the two stores the helper reads are stubbed.
+    coordinator = cast(
+        EcoFlowDeviceCoordinator,
+        SimpleNamespace(device_data={"circuit_1_name": text}, data=None),
+    )
 
     assert label_placeholders(coordinator, label, "circuit_1_name") == {
         "label": expected
