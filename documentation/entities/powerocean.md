@@ -252,7 +252,7 @@ A Local (Modbus/TCP) entry also creates these four entities. Standard Mode and E
 
 | Entity | Type | Description | Default |
 |:---|:---:|:---|:---:|
-| Modbus Control | Switch | Takes control of the PowerOcean over Modbus. While it is on, the EcoFlow app is locked and does not accept changes. After you switch it off, the app stays locked for up to 60 seconds before the PowerOcean hands control back. The switch is always off after Home Assistant or the integration restarts, and it turns itself off when the PowerOcean stops answering the keep-alive messages | enabled |
+| Modbus Control | Switch | Takes control of the PowerOcean over Modbus. While it is on, the EcoFlow app is locked and does not accept changes. After you switch it off, the app stays locked for about a minute before the PowerOcean hands control back. The switch is always off after Home Assistant or the integration restarts, and it turns itself off when the PowerOcean stops answering the keep-alive messages | enabled |
 | Backup Reserve | Number | The battery charge level kept in reserve, from 0 to 100 %. It works with Modbus Control off. Home Assistant shows the value the PowerOcean holds after the write, so a change the PowerOcean does not take leaves the old value in place and reports an error | enabled |
 | Indicator Brightness | Number | The brightness of the PowerOcean's indicator light, from 0 to 100 %. Listed as a configuration entity. It works with Modbus Control off and confirms a change the same way as Backup Reserve | enabled |
 | Modbus Control Active | Binary sensor | Whether the PowerOcean itself reports that Modbus Control is active. A diagnostic entity, unknown until the PowerOcean has reported it | enabled |

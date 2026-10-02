@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Connection Mode",
-        "description": "Choose how to connect to your EcoFlow devices.\n\n**Standard** - Official EcoFlow IoT API. Supported by EcoFlow. Updates every 10-30 seconds. Requires Developer API keys.\n\n**Enhanced** - Community-driven real-time connection. Updates every ~3 seconds. Requires your EcoFlow app login. Unofficial - use at your own risk.\n\n**Local** - Direct Modbus/TCP connection to a PowerOcean on your network. No cloud and no account needed. Updates every ~10 seconds. Read-only. Only the three-phase PowerOcean is supported. Modbus has to be enabled for your device by EcoFlow support first.",
+        "description": "Choose how to connect to your EcoFlow devices.\n\n**Standard** - Official EcoFlow IoT API. Supported by EcoFlow. Updates every 10-30 seconds. Requires Developer API keys.\n\n**Enhanced** - Community-driven real-time connection. Updates every ~3 seconds. Requires your EcoFlow app login. Unofficial - use at your own risk.\n\n**Local** - Direct Modbus/TCP connection to a PowerOcean on your network. No cloud and no account needed. Updates every ~2 seconds. Shows values and can change two settings (Backup Reserve and Indicator Brightness). Only the three-phase PowerOcean is supported. Modbus has to be enabled for your device by EcoFlow support first.",
         "data": {
           "mode": "Connection Mode"
         }
