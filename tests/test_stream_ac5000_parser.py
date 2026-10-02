@@ -14,6 +14,7 @@ from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (
     UNIT_PV_ENTRY_SOC_KEY,
     parse_stream_ac5000_message,
 )
+from ecoflow_energy.ecoflow.proto.decoder import _read_varint, decode_header_message
 from ecoflow_energy.ecoflow.proto_encoding import (
     encode_field_bytes,
     encode_field_varint,
@@ -26,6 +27,7 @@ PUSHES = FIXTURES / "es22_push_capture_masked.json"
 ES21_PV = FIXTURES / "es21_pv_masked.json"
 ES21_PAIR = FIXTURES / "es21_pair_pv_masked.json"
 ES21_PAIR_BOTH = FIXTURES / "es21_pair_pv_both_connections_masked.json"
+SOCKET_458 = FIXTURES / "es22_socket_458_masked.json"
 PV_KEYS = ("pv_total_w", "pv1_w", "pv2_w", "pv3_w", "pv4_w")
 
 
@@ -1618,3 +1620,230 @@ class TestTaskListShrink:
         assert result is not None
         assert result["scheduled_charge_power_w"] == 600
         assert not [key for key in result if key.startswith("scheduled_discharge_")]
+
+
+def _unit_frames(unit: str) -> list[dict]:
+    """The frames of one unit in the issue #458 fixture."""
+    return json.loads(SOCKET_458.read_text(encoding="utf-8"))[unit]["frames"]
+
+
+def _raw_group(frame: dict, group: int) -> dict[int, float]:
+    """One top-level group of a frame's `254/39` payload, read off the wire.
+
+    The parser's own field map is what is under test, so the node balances
+    below are computed here without it: a fixed32 is a float, a varint an
+    integer, and a field that is not on the wire is simply not in the result.
+    """
+    headers, _ = decode_header_message(bytes.fromhex(frame["hex"]))
+    out: dict[int, float] = {}
+    for header in headers:
+        if (int(header.get("cmd_func", -1)), int(header.get("cmd_id", -1))) != (
+            254,
+            39,
+        ):
+            continue
+        out.update(_wire_group(bytes.fromhex(header.get("pdata") or ""), group))
+    return out
+
+
+def _wire_group(buf: bytes, group: int) -> dict[int, float]:
+    out: dict[int, float] = {}
+    i = 0
+    while i < len(buf):
+        tag, i = _read_varint(buf, i)
+        assert tag is not None
+        field, wire = tag >> 3, tag & 7
+        if wire == 0:
+            value, i = _read_varint(buf, i)
+            assert value is not None
+            payload: bytes | float = value
+        elif wire == 1:
+            payload = struct.unpack("<d", buf[i : i + 8])[0]
+            i += 8
+        elif wire == 2:
+            length, i = _read_varint(buf, i)
+            assert length is not None
+            payload = bytes(buf[i : i + length])
+            i += length
+        elif wire == 5:
+            payload = struct.unpack("<f", buf[i : i + 4])[0]
+            i += 4
+        else:
+            raise AssertionError(f"unexpected wire type {wire}")
+        if field == group and isinstance(payload, bytes):
+            out.update(
+                {
+                    f: v
+                    for f, v in _wire_scalars(payload).items()
+                    if not isinstance(v, bytes)
+                }
+            )
+    return out
+
+
+def _wire_scalars(buf: bytes) -> dict[int, float | bytes]:
+    out: dict[int, float | bytes] = {}
+    i = 0
+    while i < len(buf):
+        tag, i = _read_varint(buf, i)
+        assert tag is not None
+        field, wire = tag >> 3, tag & 7
+        if wire == 0:
+            value, i = _read_varint(buf, i)
+            assert value is not None
+            out[field] = value
+        elif wire == 5:
+            out[field] = struct.unpack("<f", buf[i : i + 4])[0]
+            i += 4
+        elif wire == 2:
+            length, i = _read_varint(buf, i)
+            assert length is not None
+            out[field] = bytes(buf[i : i + length])
+            i += length
+        elif wire == 1:
+            out[field] = struct.unpack("<d", buf[i : i + 8])[0]
+            i += 8
+        else:
+            raise AssertionError(f"unexpected wire type {wire}")
+    return out
+
+
+class TestAcSocketLoad:
+    """Issue #458: a load on the AC socket is a third consumer of grid power.
+
+    `f12.18` is the grid-to-socket edge and `f11.7` the socket output node.
+    Both are checked against balances computed from the raw frame, not
+    against numbers typed in here.
+    """
+
+    ANCHOR_TS = "2026-10-02T21:04:22.509376+00:00"
+
+    @staticmethod
+    def _anchor() -> dict:
+        (frame,) = [
+            f
+            for f in _unit_frames("unit_socket")
+            if f["ts_iso"] == TestAcSocketLoad.ANCHOR_TS
+        ]
+        return frame
+
+    def test_grid_import_closes_the_grid_node_on_the_anchor_frame(self) -> None:
+        """Home plus battery alone read 200 W of a 549 W node.
+
+        The node is `f11.2` in half-watts; the socket edge is the rest.
+        """
+        frame = self._anchor()
+        node_w = _raw_group(frame, 11)[2] / 2
+        socket_w = _raw_group(frame, 12)[18]
+        assert socket_w > 0
+        result = parse_stream_ac5000_message(bytes.fromhex(frame["hex"]))
+        assert result is not None
+        assert result["grid_import_power_w"] == pytest.approx(node_w)
+        assert result["grid_import_power_w"] > result["home_from_grid_w"]
+
+    def test_grid_import_is_the_sum_of_the_three_edges_on_every_socket_frame(
+        self,
+    ) -> None:
+        checked = 0
+        for frame in _unit_frames("unit_socket"):
+            edges = _raw_group(frame, 12)
+            if not edges:
+                continue
+            result = parse_stream_ac5000_message(bytes.fromhex(frame["hex"]))
+            assert result is not None
+            expected = edges.get(6, 0) + edges.get(7, 0) + edges.get(18, 0)
+            assert result["grid_import_power_w"] == pytest.approx(expected)
+            checked += 1
+        # 14 of the unit's 16 frames carry `f12`; a loop over fewer would pass
+        # while comparing nothing.
+        assert checked == 14
+
+    def test_grid_import_equals_the_grid_node_wherever_the_frame_reports_it(
+        self,
+    ) -> None:
+        """The node `f11.2` is half-watts and is not part of the formula.
+
+        Comparing against it, rather than against the three edges again, is
+        what shows the edges account for the whole node: 6 of 6 frames that
+        carry both.
+        """
+        closed = 0
+        for frame in _unit_frames("unit_socket"):
+            node = _raw_group(frame, 11)
+            if 2 not in node:
+                continue
+            result = parse_stream_ac5000_message(bytes.fromhex(frame["hex"]))
+            assert result is not None
+            assert result["grid_import_power_w"] == pytest.approx(node[2] / 2)
+            closed += 1
+        assert closed == 6
+
+    def test_an_idle_socket_adds_nothing_to_grid_import(self) -> None:
+        """The unit with nothing on the socket never sends `f12.18`.
+
+        Its import stays at the home edge, and no frame is read as if the
+        missing edge were an unknown.
+        """
+        checked = 0
+        for frame in _unit_frames("unit_idle"):
+            edges = _raw_group(frame, 12)
+            if not edges:
+                continue
+            assert 18 not in edges
+            result = parse_stream_ac5000_message(bytes.fromhex(frame["hex"]))
+            assert result is not None
+            assert result["grid_import_power_w"] == pytest.approx(
+                edges[6] + edges.get(7, 0)
+            )
+            assert result["grid_import_power_w"] == pytest.approx(200.0)
+            checked += 1
+        assert checked == 5
+
+    def test_a_frame_without_f12_reports_no_grid_import(self) -> None:
+        """Absent means unchanged: only a frame that carries `f12` speaks for it."""
+        checked = 0
+        for unit in ("unit_socket", "unit_idle"):
+            for frame in _unit_frames(unit):
+                headers, _ = decode_header_message(bytes.fromhex(frame["hex"]))
+                if not headers or _raw_group(frame, 12):
+                    continue
+                result = parse_stream_ac5000_message(bytes.fromhex(frame["hex"]))
+                if result is None:
+                    continue
+                assert "grid_import_power_w" not in result
+                checked += 1
+        # The three idle-unit frames that decode but carry other groups only.
+        assert checked == 3
+
+    def test_ac_output_is_the_socket_node_in_half_watts(self) -> None:
+        """`f11.7` halved is the app's "AC output", 352 W against 351 W here."""
+        checked = 0
+        for frame in _unit_frames("unit_socket"):
+            node = _raw_group(frame, 11)
+            if not node:
+                continue
+            result = parse_stream_ac5000_message(bytes.fromhex(frame["hex"]))
+            assert result is not None
+            assert result["ac_output_power_w"] == pytest.approx(node[7] / 2)
+            checked += 1
+        assert checked == 6
+        anchor = parse_stream_ac5000_message(bytes.fromhex(self._anchor()["hex"]))
+        assert anchor is not None
+        assert 340 < anchor["ac_output_power_w"] < 360
+
+    def test_ac_output_falls_to_zero_on_a_unit_with_nothing_on_the_socket(
+        self,
+    ) -> None:
+        """The idle unit never sends `f11.7`, so a frame with `f11` reads 0.
+
+        Left unfilled, an unplugged load would hold its last reading for good.
+        """
+        checked = 0
+        for frame in _unit_frames("unit_idle"):
+            if not _raw_group(frame, 11):
+                continue
+            result = parse_stream_ac5000_message(bytes.fromhex(frame["hex"]))
+            assert result is not None
+            assert result["ac_output_power_w"] == 0.0
+            checked += 1
+        assert checked == 5

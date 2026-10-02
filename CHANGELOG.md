@@ -18,6 +18,12 @@ All notable changes to this project will be documented in this file.
 
 - The Local mode now has a Battery Connection diagnostic binary sensor, which shows whether the inverter reports its battery as connected, and a System Alerts diagnostic sensor that lists the alerts the inverter reports, for example fan failure or battery overheating, so an automation can send a notification. System Alerts shows `none` while no alert is active.
 
+- The STREAM AC 5000 has an AC Output Power sensor for the load on its AC socket. It appears once the socket has delivered power for the first time, so a unit whose socket is never used does not get it. Mapped from @napalmz's app screenshots and diagnostics download on #458.
+
+### Fixed
+
+- Grid Import Power on the STREAM AC 5000 left out the power drawn from the grid for the AC socket, so with a load on the socket it read only the house share (200 W where the app showed 549 W in @napalmz's report on #458). The socket load is now included, and the Grid Import Energy counter grows by it from now on, so the energy dashboard shows more grid import than before on a unit that uses its socket. Past values are not changed. Which reading carries the socket load while it runs from the battery or from solar is not confirmed yet.
+
 ## [1.24.0] - 2026-10-02
 
 ### Added

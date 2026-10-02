@@ -48,8 +48,8 @@
 | **Stream** | `BK31` `BK11` `BK41` `BK51` `BK61` | Standard, Enhanced | 55 + 2 binary | 1 number (`BK31`: 2 switches · 4 numbers) | 2 + 6 optional | ~30 s / ~3 s |
 | **Stream Micro** | `BK01` | Enhanced only | 21 | none | 2 optional | ~3 s |
 | **PowerStream** | `HW51` | Standard only | 25 | none, read-only | 2 + 2 optional | ~30 s |
-| **STREAM AC 5000** | `ES22` | Enhanced only | 56 + 2 binary | 2 switches · 7 numbers · 1 select | 4 + 1 optional | ~2 s |
-| **STREAM 5000** | `ES21` | Enhanced only | 56 + 2 binary | 2 switches · 7 numbers · 1 select | 4 + 1 optional | ~2 s |
+| **STREAM AC 5000** | `ES22` | Enhanced only | 57 + 2 binary | 2 switches · 7 numbers · 1 select | 4 + 1 optional | ~2 s |
+| **STREAM 5000** | `ES21` | Enhanced only | 57 + 2 binary | 2 switches · 7 numbers · 1 select | 4 + 1 optional | ~2 s |
 | **Smart Meter** | `BK21` | Enhanced only | 18 + 3 binary | none, read-only | 2 | ~3 s |
 | **Solar Tracker** | `HZ31` `S02F` | Enhanced only | 6 | none, read-only for now | none | ~3 s |
 | **WAVE 3** | `AC71` | Enhanced only | 18 + 5 binary | 4 switches · 5 numbers · 5 selects · 1 climate | 1 | ~2 s / 120 s |
@@ -161,9 +161,9 @@ Battery SoC and its precise reading · input and output power per port · solar 
 <details>
 <summary><b>STREAM AC 5000</b> (`ES22`) and <b>STREAM 5000</b> (`ES21`) - flow-matrix telemetry, scheduled power setpoints</summary>
 
-Despite the name these are not Stream devices. They send none of the BK-series messages and report power as a matrix of flows between grid, battery, house and solar rather than as separate readings, so they have their own parser and their own entity set: 56 sensors and 2 binary sensors.
+Despite the name these are not Stream devices. They send none of the BK-series messages and report power as a matrix of flows between grid, battery, house and solar rather than as separate readings, so they have their own parser and their own entity set: 57 sensors and 2 binary sensors.
 
-Battery state and per-unit readings on a linked installation · grid import and export, each counting in one direction so the Energy Dashboard can use them · house consumption · the unit's own PV strings (PV 1-4 and their total) where panels are wired to the EcoFlow · Third-Party Solar Power, which is the app's separate "Other" figure and not a measurement of your strings · per-phase smart meter readings where a meter is linked in the app.
+Battery state and per-unit readings on a linked installation · grid import and export, each counting in one direction so the Energy Dashboard can use them · house consumption · the power drawn by the AC socket, once a load has used it · the unit's own PV strings (PV 1-4 and their total) where panels are wired to the EcoFlow · Third-Party Solar Power, which is the app's separate "Other" figure and not a measurement of your strings · per-phase smart meter readings where a meter is linked in the app.
 
 **Controls, both models:** work mode, both SoC limits, backup reserve and its level, the app's backup socket, a scheduled charge and discharge power setpoint, and the grid-tied output power. A setpoint on this device writes a whole-day task rather than flipping a switch, and whether a smart meter is linked in the app decides whether the discharge setpoint acts as a ceiling or as an absolute power command. The charge setpoint has not held up in measurement and is described as unproven in the entity reference. Both are worth knowing before automating them.
 
