@@ -152,7 +152,8 @@
         "data": {
           "mode": "Verbindungsmodus",
           "devices": "Geräte",
-          "raw_capture": "24 Stunden lang zusätzliche Diagnosedaten aufzeichnen"
+          "raw_capture": "24 Stunden lang zusätzliche Diagnosedaten aufzeichnen",
+          "powerpulse_vehicle_energy": "Abgeschlossene PowerPulse-Ladungen pro Fahrzeug erfassen"
         },
         "data_description": {
           "devices": "Ein Gerät auszuwählen ist das, was diese Integration dazu bringt, es zu lesen. Ein Gerät mit dem Hinweis \"not supported yet\" hat hier keinen Parser und liefert nur zwei Diagnose-Sensoren, sonst nichts. Es trotzdem ausgewählt zu lassen lohnt sich, denn aus einem Diagnose-Download davon an einem GitHub-Issue entsteht die Unterstützung für ein neues Modell. Dein Diagnose-Download enthält die Rohdaten eines solchen Geräts bereits, es muss also nichts eingeschaltet werden.",
@@ -181,7 +182,8 @@
         "data": {
           "mode": "Verbindungsmodus",
           "devices": "Geräte",
-          "raw_capture": "24 Stunden lang zusätzliche Diagnosedaten aufzeichnen"
+          "raw_capture": "24 Stunden lang zusätzliche Diagnosedaten aufzeichnen",
+          "powerpulse_vehicle_energy": "Abgeschlossene PowerPulse-Ladungen pro Fahrzeug erfassen"
         },
         "data_description": {
           "devices": "Ein Gerät auszuwählen ist das, was diese Integration dazu bringt, es zu lesen. Ein Gerät mit dem Hinweis \"not supported yet\" hat hier keinen Parser und liefert nur zwei Diagnose-Sensoren, sonst nichts. Es trotzdem ausgewählt zu lassen lohnt sich, denn aus einem Diagnose-Download davon an einem GitHub-Issue entsteht die Unterstützung für ein neues Modell. Schalte unten zuerst die Aufzeichnung der Diagnosedaten ein und lade danach herunter, denn bei Anmeldung mit dem EcoFlow-Konto enthält der Download diese Rohdaten nicht von selbst.",
@@ -2514,6 +2516,15 @@
       },
       "circuit_current_a": {
         "name": "Stromkreis {label} Strom"
+      },
+      "vehicle_energy": {
+        "name": "{vehicle} abgeschlossene Ladeenergie"
+      },
+      "unnamed_vehicle_energy": {
+        "name": "Unbenanntes Fahrzeug abgeschlossene Ladeenergie"
+      },
+      "other_vehicle_energy": {
+        "name": "Nicht zugeordnete abgeschlossene Ladeenergie"
       }
     },
     "binary_sensor": {

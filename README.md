@@ -88,6 +88,12 @@
 
 **PowerOcean Plus** (`R371`, `R372`, `R374`, `HJ3C`) are the higher-power 3-phase hybrid units. They use the same entity set as a standard PowerOcean and are supported in Enhanced Mode. Beyond a standard unit they report per-phase **reactive power** (var) and **apparent power** (VA), and drive **MPPT strings 3 and 4**. These entities ship disabled by default so that standard units are not left with permanently empty sensors, so enable the ones you need after adding a Plus device. Field coverage is based on diagnostics from live Plus hardware; if your unit reports a value that no entity picks up, the raw data is available via **Download Diagnostics**.
 
+**Per-vehicle charging energy (opt-in).** PowerPulse 2 account sign-in entries
+can enable **Track completed PowerPulse charging energy by vehicle** in options.
+This adds one dynamic kWh sensor per profile found in completed charging records,
+plus a separate unassigned total when present, in addition to the fixed counts
+above. History uses the integration’s existing PowerPulse device registration. See [coverage and setup](documentation/entities/powerpulse-2.md#completed-energy-per-vehicle-profile).
+
 **Accessories.** Three add-ons work alongside a PowerOcean. The PowerPulse 2 is a device of its own. The other two report through the PowerOcean itself, so their entities sit on the PowerOcean device page and are created only once the accessory actually reports:
 
 - **PowerPulse 2 wallbox** (`C376`, `C374`) - its own device, no PowerOcean required: charging power, voltage and current per phase, the configured maximum current and charging current, the phase mode in effect, the start, duration, energy and start meter reading of the running session, the lifetime energy counter, the charging state, the charging mode and whether the cable lock is on. Two buttons start and stop the charging session, with no PowerOcean in the integration entry or with exactly one (none with two or more). With exactly one PowerOcean, a number sets the wallbox's maximum current (Wallbox Maximum Current, 6 to 16 A) through that PowerOcean, and a select sets the charging mode (Fast, Solar or Custom, while Smart is shown but set in the app). With none, a number sets the charging current directly on the wallbox's own channel (Wallbox Charging Current, 6 to 16 A). Each write is confirmed by the wallbox's own report. Enhanced Mode only: the wallbox reports on its own channel of the account connection, and the Developer API refuses it with error 1006. See [PowerPulse 2](documentation/entities/powerpulse-2.md).

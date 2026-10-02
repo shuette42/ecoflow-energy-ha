@@ -7,7 +7,9 @@ Uses aiohttp for async HTTP - HA provides the ClientSession.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 from typing import Any
 
 import aiohttp
@@ -18,6 +20,10 @@ from .enhanced_auth import enhanced_login, get_enhanced_credentials
 _LOGGER = logging.getLogger(__name__)
 
 _DEVICE_LIST_PATH = "/iot-service/user/device"
+
+
+class HistoryLoginError(ValueError):
+    """History sign-in failed; callers must back off instead of retrying per charger."""
 
 
 class AppApiClient:
@@ -39,6 +45,8 @@ class AppApiClient:
         self._token: str | None = None
         self._user_id: str | None = None
         self._base_url: str = IOT_API_BASE
+        self._history_lock = asyncio.Lock()
+        self._history_retry_after = 0.0
 
     @property
     def token(self) -> str | None:
@@ -117,6 +125,82 @@ class AppApiClient:
         except (aiohttp.ClientError, TimeoutError) as exc:
             _LOGGER.warning("App API device list failed: %s", exc)
             return []
+
+    async def get_powerpulse_orders(self, serial: str) -> list[dict[str, Any]]:
+        """Serialize entry-wide reads and back off failed sign-in for an hour."""
+        async with self._history_lock:
+            if time.monotonic() < self._history_retry_after:
+                raise HistoryLoginError("Charging history sign-in is backed off")
+            try:
+                return await self._get_powerpulse_orders(serial)
+            except HistoryLoginError:
+                self._history_retry_after = time.monotonic() + 3600
+                raise
+
+    async def _get_powerpulse_orders(self, serial: str) -> list[dict[str, Any]]:
+        """Read every completed-order page, or fail without partial accounting.
+
+        The portal uses this read-only endpoint. C371 live reads confirm one-
+        based ``page`` and ``size`` pagination, and that no product header is
+        required. A refusal gets one login retry; other failures are not empty
+        history. Never log a response, request URL, serial or vehicle name.
+        """
+        if not self._token and not await self.login():
+            raise HistoryLoginError("Charging history login failed")
+        rows: list[dict[str, Any]] = []
+        seen_pages: set[tuple[str, ...]] = set()
+        expected_total: int | None = None
+        for page in range(1, 101):
+            for attempt in range(2):
+                async with self._session.get(
+                    f"{self._base_url}/provider-admin/development/device/powerPulse/orders",
+                    params={"sn": serial, "page": page, "size": 100},
+                    headers={"Authorization": f"Bearer {self._token}"},
+                    timeout=aiohttp.ClientTimeout(total=15),
+                ) as response:
+                    body = await response.json()
+                    refused = response.status == 401 or (
+                        isinstance(body, dict) and str(body.get("code")) == "401"
+                    )
+                    if refused and attempt == 0:
+                        if not await self.login():
+                            raise HistoryLoginError("Charging history login failed")
+                        continue
+                    if refused:
+                        raise HistoryLoginError("Charging history session rejected")
+                    response.raise_for_status()
+                break
+            if not isinstance(body, dict) or str(body.get("code")) != "0":
+                raise ValueError("Charging history request rejected")
+            data = body.get("data")
+            if not isinstance(data, dict):
+                raise ValueError("Missing charging history")
+            content, has_next, total = (
+                data.get("content"),
+                data.get("hasNext"),
+                data.get("total"),
+            )
+            if (
+                not isinstance(content, list)
+                or not all(isinstance(row, dict) for row in content)
+                or type(has_next) is not bool
+                or type(total) is not int
+                or total < 0
+            ):
+                raise ValueError("Invalid charging history page")
+            if expected_total is not None and total != expected_total:
+                raise ValueError("Charging history changed during pagination")
+            expected_total = total
+            signature = tuple(str(row.get("orderId")) for row in content)
+            if has_next and (not content or signature in seen_pages):
+                raise ValueError("Charging history pagination did not advance")
+            seen_pages.add(signature)
+            rows.extend(content)
+            if not has_next:
+                if len({str(row.get("orderId")) for row in rows}) != total:
+                    raise ValueError("Incomplete charging history")
+                return rows
+        raise ValueError("Charging history exceeds pagination limit")
 
     async def get_mqtt_credentials(self) -> dict[str, Any] | None:
         """Fetch Enhanced Mode MQTT credentials using the stored token.

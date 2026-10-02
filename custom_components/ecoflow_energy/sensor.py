@@ -21,6 +21,9 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
+    AUTH_METHOD_APP,
+    CONF_AUTH_METHOD,
+    CONF_VEHICLE_ENERGY,
     DELTA2MAX_SENSORS,
     DELTA3_SENSORS,
     DEVICE_TYPE_DELTA,
@@ -127,6 +130,43 @@ async def async_setup_entry(
             )
 
     async_add_entities(entities)
+
+    if (
+        entry.data.get(CONF_VEHICLE_ENERGY)
+        and entry.data.get(CONF_AUTH_METHOD) == AUTH_METHOD_APP
+    ):
+        from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+        from .charging_history import (
+            async_register_history_stores,
+            async_setup_charging_history,
+        )
+        from .const import CONF_EMAIL, CONF_PASSWORD
+        from .ecoflow.app_api import AppApiClient
+
+        chargers = [
+            source
+            for source in coordinators.values()
+            if source.device_type == DEVICE_TYPE_POWERPULSE2
+        ]
+        if chargers:
+            api = AppApiClient(
+                async_get_clientsession(hass),
+                entry.data[CONF_EMAIL],
+                entry.data[CONF_PASSWORD],
+            )
+            await async_register_history_stores(
+                hass, entry, [source.device_sn for source in chargers]
+            )
+            for charger in chargers:
+                await async_setup_charging_history(
+                    hass,
+                    entry,
+                    charger.device_sn,
+                    charger.device_info,
+                    async_add_entities,
+                    api,
+                )
 
 
 @callback

@@ -152,7 +152,8 @@
         "data": {
           "mode": "Connection Mode",
           "devices": "Devices",
-          "raw_capture": "Record extra diagnostic data for 24 hours"
+          "raw_capture": "Record extra diagnostic data for 24 hours",
+          "powerpulse_vehicle_energy": "Track completed PowerPulse charging energy by vehicle"
         },
         "data_description": {
           "devices": "Selecting a device is what makes this integration read it. A device marked \"not supported yet\" has no parser here, so it produces two diagnostic sensors and nothing else. Leaving it selected is still worth doing, because a diagnostics download from it attached to a GitHub issue is what support for a new model is built from. Your diagnostics download already carries the raw data such a device reports, so nothing needs switching on first.",
@@ -181,7 +182,8 @@
         "data": {
           "mode": "Connection Mode",
           "devices": "Devices",
-          "raw_capture": "Record extra diagnostic data for 24 hours"
+          "raw_capture": "Record extra diagnostic data for 24 hours",
+          "powerpulse_vehicle_energy": "Track completed PowerPulse charging energy by vehicle"
         },
         "data_description": {
           "devices": "Selecting a device is what makes this integration read it. A device marked \"not supported yet\" has no parser here, so it produces two diagnostic sensors and nothing else. Leaving it selected is still worth doing, because a diagnostics download from it attached to a GitHub issue is what support for a new model is built from. Switch the diagnostic data recording below on first and download afterwards, because with account sign-in the download does not carry that raw data on its own.",
@@ -2514,6 +2516,15 @@
       },
       "circuit_current_a": {
         "name": "Circuit {label} Current"
+      },
+      "vehicle_energy": {
+        "name": "{vehicle} completed charging energy"
+      },
+      "unnamed_vehicle_energy": {
+        "name": "Unnamed vehicle completed charging energy"
+      },
+      "other_vehicle_energy": {
+        "name": "Unassigned completed charging energy"
       }
     },
     "binary_sensor": {

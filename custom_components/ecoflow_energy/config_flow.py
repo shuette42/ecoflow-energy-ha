@@ -74,3 +74,4 @@ class EcoFlowOptionsFlow(OptionsFlowMixin, OptionsFlow):
         # None means the raw capture checkbox was not part of this submission
         # (Standard mode does not show it), so the stored value stays as is.
         self._pending_raw_capture: bool | None = None
+        self._pending_vehicle_energy: bool | None = None
