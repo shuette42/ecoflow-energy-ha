@@ -24,6 +24,7 @@ from .ecoflow.const import (  # noqa: E402
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_POWERPULSE2,
     DEVICE_TYPE_POWERSTREAM,
+    DEVICE_TYPE_SMART_HOME_PANEL_2,
     DEVICE_TYPE_SMART_METER,
     DEVICE_TYPE_SMART_PANEL_40,
     DEVICE_TYPE_SMARTPLUG,
@@ -52,6 +53,12 @@ from .ecoflow.parsers.ocean2_proto import (
 )
 from .ecoflow.parsers.powerocean import PARALLEL_UNIT_MAX  # noqa: E402
 from .ecoflow.parsers.powerocean_proto import SCHEDULE_MAX_INDEX  # noqa: E402
+from .ecoflow.parsers.smart_home_panel_2_proto import (
+    CIRCUIT_COUNT as SMARTHOMEPANEL2_CIRCUIT_COUNT,  # noqa: E402
+)
+from .ecoflow.parsers.smart_home_panel_2_proto import (
+    STORAGE_CHANNEL_COUNT as SMARTHOMEPANEL2_STORAGE_CHANNEL_COUNT,  # noqa: E402
+)
 
 DOMAIN = "ecoflow_energy"
 
@@ -430,6 +437,7 @@ DEVICE_TYPE_DISPLAY_NAMES: dict[str, str] = {
     DEVICE_TYPE_OCEAN2: "Ocean 2",
     DEVICE_TYPE_SMART_PANEL_40: "OCEAN Smart Electrical Panel 40",
     DEVICE_TYPE_DELTA_PRO_ULTRA: "DELTA Pro Ultra",
+    DEVICE_TYPE_SMART_HOME_PANEL_2: "Smart Home Panel 2",
 }
 
 # Device types that only report over the account channel (app-auth WSS).
@@ -445,6 +453,7 @@ ENHANCED_ONLY_DEVICE_TYPES: frozenset[str] = frozenset(
         DEVICE_TYPE_OCEAN2,
         DEVICE_TYPE_SMART_PANEL_40,
         DEVICE_TYPE_DELTA_PRO_ULTRA,
+        DEVICE_TYPE_SMART_HOME_PANEL_2,
     }
 )
 
@@ -8349,7 +8358,9 @@ SMARTPANEL40_SENSORS: list[EcoFlowSensorDef] = [
 ]
 
 
-def _build_smartpanel40_circuit_sensors(circuit: int) -> list[EcoFlowSensorDef]:
+def _build_smartpanel40_circuit_sensors(
+    circuit: int, *, with_voltage: bool = True, current_precision: int = 0
+) -> list[EcoFlowSensorDef]:
     """Build the sensor definitions for one Smart Panel 40 circuit.
 
     Accessories: created once the panel reports the circuit, so a panel with
@@ -8357,11 +8368,17 @@ def _build_smartpanel40_circuit_sensors(circuit: int) -> list[EcoFlowSensorDef]:
     circuit's side: positive while it draws, negative while it feeds the
     panel (a battery or generator breaker). Voltage sits near the leg voltage
     and current is reported in whole amps only, so both start disabled.
+
+    The Smart Home Panel 2 shares this builder: it sends the same keys,
+    the same label and the same translations per circuit, so a second
+    builder would only restate them. It reports no per-circuit voltage
+    (`with_voltage=False`) and its currents carry two decimals
+    (`current_precision=2`). The defaults are the Smart Panel 40's own.
     """
     c = f"circuit_{circuit}"
     label = str(circuit)
     label_key = f"{c}_name"
-    return [
+    sensors = [
         EcoFlowSensorDef(
             f"{c}_power_w",
             f"Circuit {circuit} Power",
@@ -8400,7 +8417,7 @@ def _build_smartpanel40_circuit_sensors(circuit: int) -> list[EcoFlowSensorDef]:
             "measurement",
             "mdi:current-ac",
             entity_category="diagnostic",
-            suggested_display_precision=0,
+            suggested_display_precision=current_precision,
             disabled_by_default=True,
             translation_key="circuit_current_a",
             label=label,
@@ -8409,6 +8426,9 @@ def _build_smartpanel40_circuit_sensors(circuit: int) -> list[EcoFlowSensorDef]:
             enhanced_only=True,
         ),
     ]
+    if not with_voltage:
+        sensors = [s for s in sensors if s.key != f"{c}_voltage_v"]
+    return sensors
 
 
 for _circuit in range(1, SMARTPANEL40_CIRCUIT_COUNT + 1):
@@ -8698,6 +8718,151 @@ def _build_delta_pro_ultra_pack_sensors(pack_num: int) -> list[EcoFlowSensorDef]
 
 for _pack in range(1, DELTAPROULTRA_MAX_PACKS + 1):
     DELTAPROULTRA_SENSORS.extend(_build_delta_pro_ultra_pack_sensors(_pack))
+
+
+# Smart Home Panel 2 (`HD31`). Enhanced mode only and read-only. The panel
+# pushes incrementally, so the coordinator's merge keeps the readings a push
+# leaves out. Its twelve circuits come from the Smart Panel 40's builder (same
+# keys, label and translations), and its storage channels are accessories
+# that exist once a channel is ready or connected.
+#
+# Readings whose meaning another device already names reuse that
+# translation (`translation_key`, or the key itself where it is the same).
+SMARTHOMEPANEL2_SENSORS: list[EcoFlowSensorDef] = [
+    # Only imports are on record (grid power equals home power in the
+    # frames); which sign an export carries has not been observed.
+    EcoFlowSensorDef(
+        "grid_power_w",
+        "Grid Power",
+        "W",
+        "power",
+        "measurement",
+        "mdi:transmission-tower",
+        suggested_display_precision=0,
+        translation_key="grid_w",
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "load_power_w",
+        "Home Power",
+        "W",
+        "power",
+        "measurement",
+        "mdi:home-lightning-bolt",
+        suggested_display_precision=0,
+        translation_key="home_w",
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "grid_l1_current_a",
+        "Grid L1 Current",
+        "A",
+        "current",
+        "measurement",
+        "mdi:current-ac",
+        suggested_display_precision=2,
+        translation_key="grid_leg_l1_current_a",
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "grid_l2_current_a",
+        "Grid L2 Current",
+        "A",
+        "current",
+        "measurement",
+        "mdi:current-ac",
+        suggested_display_precision=2,
+        translation_key="grid_leg_l2_current_a",
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "grid_voltage_v",
+        "Grid Voltage",
+        "V",
+        "voltage",
+        "measurement",
+        "mdi:sine-wave",
+        suggested_display_precision=0,
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "battery_soc_pct",
+        "Battery SOC",
+        "%",
+        "battery",
+        "measurement",
+        "mdi:battery",
+        suggested_display_precision=0,
+        translation_key="soc_pct",
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "battery_remaining_energy_wh",
+        "Battery Remaining Energy",
+        "Wh",
+        "energy_storage",
+        "measurement",
+        "mdi:battery-charging-high",
+        suggested_display_precision=0,
+        translation_key="batt_remaining_wh",
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "battery_full_capacity_wh",
+        "Battery Full Capacity",
+        "Wh",
+        "energy_storage",
+        None,
+        "mdi:battery-outline",
+        entity_category="diagnostic",
+        suggested_display_precision=0,
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "backup_runtime_min",
+        "Backup Runtime",
+        "min",
+        "duration",
+        "measurement",
+        "mdi:timer-outline",
+        suggested_display_precision=0,
+        enhanced_only=True,
+    ),
+]
+
+
+def _build_smart_home_panel_2_storage_sensors(channel: int) -> list[EcoFlowSensorDef]:
+    """Build the entity definition for one Smart Home Panel 2 storage channel.
+
+    Accessory: the panel has three storage channels and an installation has
+    however many are wired, so an entity exists only once its channel is ready
+    or connected (the parser leaves the key out otherwise). No battery device
+    class: Home Assistant shows one battery figure per device, and that is the
+    system state of charge in `battery_soc_pct`.
+    """
+    return [
+        EcoFlowSensorDef(
+            f"storage_ch{channel}_soc_pct",
+            f"Storage Channel {channel} SOC",
+            "%",
+            None,
+            "measurement",
+            "mdi:battery",
+            suggested_display_precision=0,
+            accessory=True,
+            enhanced_only=True,
+        ),
+    ]
+
+
+for _circuit in range(1, SMARTHOMEPANEL2_CIRCUIT_COUNT + 1):
+    SMARTHOMEPANEL2_SENSORS.extend(
+        _build_smartpanel40_circuit_sensors(
+            _circuit, with_voltage=False, current_precision=2
+        )
+    )
+for _channel in range(1, SMARTHOMEPANEL2_STORAGE_CHANNEL_COUNT + 1):
+    SMARTHOMEPANEL2_SENSORS.extend(_build_smart_home_panel_2_storage_sensors(_channel))
 
 
 POWERPULSE2_SENSORS: list[EcoFlowSensorDef] = [

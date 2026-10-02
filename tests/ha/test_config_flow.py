@@ -288,6 +288,14 @@ DELTA_PRO_ULTRA_DEVICE = {
     "online": 1,
 }
 
+SMART_HOME_PANEL_2_DEVICE = {
+    "sn": "HD31TEST00000001",
+    "name": "Smart Home Panel 2",
+    "product_name": "",
+    "device_type": "smart_home_panel_2",
+    "online": 1,
+}
+
 # One case per member of ENHANCED_ONLY_DEVICE_TYPES. A type dropped from
 # that set silently loses its guard coverage along with its parametrize
 # case, so this list is the thing to extend when another type joins it.
@@ -326,6 +334,11 @@ ENHANCED_ONLY_DEVICE_CASES = [
         DELTA_PRO_ULTRA_DEVICE,
         "DELTA Pro Ultra (0001) (Y711...0001) - requires Enhanced Mode",
         id="delta_pro_ultra",
+    ),
+    pytest.param(
+        SMART_HOME_PANEL_2_DEVICE,
+        "Smart Home Panel 2 (0001) (HD31...0001) - requires Enhanced Mode",
+        id="smart_home_panel_2",
     ),
 ]
 

@@ -49,7 +49,9 @@ _RUN = re.compile(r"[0-9A-Za-z]{12,}")
 # an identifier: a masked serial with at most one foreign byte on either side,
 # or zero padding with fewer than twelve on either side - the same twelve
 # `_RUN` needs before anything counts as identifier-shaped (see `_leaks`).
-_EXCUSED_PLAINTEXT = re.compile(rb"[^X]?X{15,}[^X]?|[^\x00]{0,11}\x00{12,}[^\x00]{0,11}")
+_EXCUSED_PLAINTEXT = re.compile(
+    rb"[^X]?X{15,}[^X]?|[^\x00]{0,11}\x00{12,}[^\x00]{0,11}"
+)
 
 # Deliberate placeholders that are not identifiers and must not be masked
 # further, since masking them would hide what the field is. The four unit

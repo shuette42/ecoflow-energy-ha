@@ -16,6 +16,7 @@ from ..const import (
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_POWERPULSE2,
     DEVICE_TYPE_POWERSTREAM,
+    DEVICE_TYPE_SMART_HOME_PANEL_2,
     DEVICE_TYPE_SMART_METER,
     DEVICE_TYPE_SMART_PANEL_40,
     DEVICE_TYPE_SMARTPLUG,
@@ -62,6 +63,9 @@ from ..ecoflow.parsers.powerocean_proto import (
 )
 from ..ecoflow.parsers.powerpulse_proto import parse_powerpulse_message
 from ..ecoflow.parsers.powerstream_http import parse_powerstream_quota
+from ..ecoflow.parsers.smart_home_panel_2_proto import (
+    parse_smart_home_panel_2_message,
+)
 from ..ecoflow.parsers.smart_meter_proto import parse_smart_meter_message
 from ..ecoflow.parsers.smartplug import (
     parse_smartplug_http_quota,
@@ -534,6 +538,11 @@ class MqttIngestMixin(_Base):
                 # returns None, the caller's "nothing to merge" signal.
                 if self.device_type == DEVICE_TYPE_DELTA_PRO_ULTRA:
                     return parse_delta_pro_ultra_message(payload)
+                # Smart Home Panel 2 (#464): its own `cmd_func` 12 headers,
+                # incremental too. A frame with nothing the parser reads
+                # returns None, the caller's "nothing to merge" signal.
+                if self.device_type == DEVICE_TYPE_SMART_HOME_PANEL_2:
+                    return parse_smart_home_panel_2_message(payload)
                 if self.device_type == DEVICE_TYPE_POWERPULSE2:
                     return parse_powerpulse_message(payload)
                 return self._parse_proto_device_data(payload)
@@ -673,6 +682,11 @@ class MqttIngestMixin(_Base):
                 # returns None, the caller's "nothing to merge" signal.
                 if self.device_type == DEVICE_TYPE_DELTA_PRO_ULTRA:
                     return parse_delta_pro_ultra_message(payload)
+                # Smart Home Panel 2 (#464): its own `cmd_func` 12 headers,
+                # incremental too. A frame with nothing the parser reads
+                # returns None, the caller's "nothing to merge" signal.
+                if self.device_type == DEVICE_TYPE_SMART_HOME_PANEL_2:
+                    return parse_smart_home_panel_2_message(payload)
                 if self.device_type == DEVICE_TYPE_POWERPULSE2:
                     return parse_powerpulse_message(payload)
                 if self.device_type == DEVICE_TYPE_POWEROCEAN:

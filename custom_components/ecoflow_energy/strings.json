@@ -2584,6 +2584,24 @@
       "bp5_temp_c": {
         "name": "Battery Pack 5 Temperature"
       },
+      "grid_voltage_v": {
+        "name": "Grid Voltage"
+      },
+      "battery_full_capacity_wh": {
+        "name": "Battery Full Capacity"
+      },
+      "backup_runtime_min": {
+        "name": "Backup Runtime"
+      },
+      "storage_ch1_soc_pct": {
+        "name": "Storage Channel 1 SOC"
+      },
+      "storage_ch2_soc_pct": {
+        "name": "Storage Channel 2 SOC"
+      },
+      "storage_ch3_soc_pct": {
+        "name": "Storage Channel 3 SOC"
+      },
       "local_system_batt_voltage_v": {
         "name": "System Battery Voltage"
       },

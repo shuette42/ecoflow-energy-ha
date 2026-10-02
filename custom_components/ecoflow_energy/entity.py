@@ -115,6 +115,11 @@ def label_placeholders(
     owner's own text follows when the device has sent it. Read once, when the
     entity is created: a name the owner changes later in the app shows after
     the next reload, the same as any renamed device.
+
+    A panel reports an unnamed circuit under its default name, "Circuit 1"
+    for slot 1 on the Smart Home Panel 2 (#464). That text repeats what the
+    slot number already says, so it is left out rather than rendered as
+    "Circuit 1 Circuit 1 Power".
     """
     if label is None:
         return None
@@ -125,6 +130,8 @@ def label_placeholders(
             if isinstance(value, str) and value.strip():
                 text = value.strip()
                 break
+    if text.casefold() == f"circuit {label}".casefold():
+        text = ""
     return {"label": f"{label} {text}" if text else label}
 
 

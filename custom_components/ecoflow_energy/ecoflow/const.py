@@ -88,6 +88,12 @@ DEVICE_TYPE_SMART_PANEL_40 = "smart_panel_40"
 # are decoded by its own parser (`delta_pro_ultra_proto.py`) rather than a
 # routing entry, and every frame is incremental.
 DEVICE_TYPE_DELTA_PRO_ULTRA = "delta_pro_ultra"
+# Smart Home Panel 2 (`HD31`, #464). Enhanced-only and read-only: the frames
+# on record came over the app broker. Its `cmd_func` 12 headers (cmd_id 1
+# for the time-series block, 32 for the push) are decoded by its own parser
+# (`smart_home_panel_2_proto.py`) rather than a routing entry, and a frame
+# carries only the readings that changed.
+DEVICE_TYPE_SMART_HOME_PANEL_2 = "smart_home_panel_2"
 DEVICE_TYPE_UNKNOWN = "unknown"
 
 # Keywords used to classify devices from productName strings.
@@ -325,6 +331,11 @@ _SN_PREFIX_MAP = {
     # Ultra", it would reach the "delta" keyword and land on the Delta 2 Max
     # set, whose entities this unit cannot fill.
     "Y711": DEVICE_TYPE_DELTA_PRO_ULTRA,
+    # Smart Home Panel 2 (#464). Mapped from an owner's recording of its app
+    # channel whose headers decode on this panel's own field numbers. The
+    # app API reports an empty product name for it, so only the prefix
+    # reaches it.
+    "HD31": DEVICE_TYPE_SMART_HOME_PANEL_2,
 }
 
 _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
@@ -348,6 +359,7 @@ _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
     "RE42": "Ocean 2",
     "HR61": "OCEAN Smart Electrical Panel 40",
     "Y711": "DELTA Pro Ultra",
+    "HD31": "Smart Home Panel 2",
     "HZ31": "Solar Tracker",
     "S02F": "Solar Tracker",
     # WAVE 3: the app names it "WAVE 3-<tail>", neither channel gives a
@@ -486,7 +498,8 @@ def get_device_type(product_name: str, sn: str = "") -> str:
     DEVICE_TYPE_POWERSTREAM, DEVICE_TYPE_SMART_METER,
     DEVICE_TYPE_SOLAR_TRACKER, DEVICE_TYPE_WAVE3, DEVICE_TYPE_POWERPULSE2,
     DEVICE_TYPE_OCEAN2, DEVICE_TYPE_SMART_PANEL_40,
-    DEVICE_TYPE_DELTA_PRO_ULTRA, or DEVICE_TYPE_UNKNOWN.
+    DEVICE_TYPE_DELTA_PRO_ULTRA, DEVICE_TYPE_SMART_HOME_PANEL_2, or
+    DEVICE_TYPE_UNKNOWN.
 
     The Smart Meter, the Solar Tracker, the WAVE 3 and the PowerPulse 2 have
     no keyword of their own: all four are reached by their serial prefix
@@ -500,6 +513,9 @@ def get_device_type(product_name: str, sn: str = "") -> str:
     channel does report the name "DELTA Pro Ultra", it would match the
     "delta" keyword and land on the Delta 2 Max set, which is why the prefix
     check below runs first.
+
+    The Smart Home Panel 2 is reached by its prefix only: the app API
+    reports an empty product name for it, so no keyword is involved.
     """
     # The prefix is exact evidence, the product name a substring guess, so
     # the prefix wins. Every prefix mapped before this ordering existed

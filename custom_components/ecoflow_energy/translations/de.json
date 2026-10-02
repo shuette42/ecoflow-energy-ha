@@ -2584,6 +2584,24 @@
       "bp5_temp_c": {
         "name": "Batteriepack 5 Temperatur"
       },
+      "grid_voltage_v": {
+        "name": "Netzspannung"
+      },
+      "battery_full_capacity_wh": {
+        "name": "Batterie Vollkapazität"
+      },
+      "backup_runtime_min": {
+        "name": "Backup-Laufzeit"
+      },
+      "storage_ch1_soc_pct": {
+        "name": "Speicherkanal 1 Ladestand"
+      },
+      "storage_ch2_soc_pct": {
+        "name": "Speicherkanal 2 Ladestand"
+      },
+      "storage_ch3_soc_pct": {
+        "name": "Speicherkanal 3 Ladestand"
+      },
       "local_system_batt_voltage_v": {
         "name": "System-Batteriespannung"
       },
