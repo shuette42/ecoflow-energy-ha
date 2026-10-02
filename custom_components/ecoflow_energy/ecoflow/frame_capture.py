@@ -520,7 +520,9 @@ def _coordinate_fields(payload: bytes) -> list[tuple[int, int]]:
     """
     found: list[tuple[int, int]] = []
     try:
-        pending = [(_delimited_fields(payload, 0, len(payload), strict=False), 0, None)]
+        pending: list[
+            tuple[list[tuple[int, int]] | None, int, tuple[int, int] | None]
+        ] = [(_delimited_fields(payload, 0, len(payload), strict=False), 0, None)]
         while pending:
             fields, depth, text_root = pending.pop()
             for start, end in fields or ():
