@@ -125,6 +125,7 @@ FAMILY_TO_FILE: dict[str, str] = {
     "POWERPULSE2": "powerpulse-2.md",
     "OCEAN2": "ocean-2.md",
     "SMARTPANEL40": "smart-panel-40.md",
+    "DELTAPROULTRA": "delta-pro-ultra.md",
     # The sensors that exist only in a PowerOcean Local (Modbus/TCP) entry
     # share the PowerOcean page: one device, one page. A file may therefore
     # carry several families; see _known_keys.
@@ -195,6 +196,7 @@ SKIP_SECTIONS: frozenset[tuple[str, str]] = frozenset(
         ("delta-2-max.md", "Sensors - Expansion Battery Packs (disabled)"),
         ("ocean-2.md", "Sensors - Battery Modules (up to 16)"),
         ("smart-panel-40.md", "Sensors - Circuits (up to 40)"),
+        ("delta-pro-ultra.md", "Sensors - Battery Packs (up to 5)"),
         ("smart-panel-40.md", "Binary Sensors - Circuits (up to 40)"),
     }
 )
@@ -466,6 +468,14 @@ TEMPLATE_FAMILIES: tuple[TemplateFamily, ...] = (
         "sensors",
         "Module ",
         "Sensors - Battery Modules (up to 16)",
+        re.compile(r"up to (\d+)"),
+    ),
+    TemplateFamily(
+        "delta-pro-ultra.md",
+        "DELTAPROULTRA",
+        "sensors",
+        "Battery Pack ",
+        "Sensors - Battery Packs (up to 5)",
         re.compile(r"up to (\d+)"),
     ),
     TemplateFamily(
@@ -855,6 +865,13 @@ EXCLUDE_FROM_UNDOCUMENTED: tuple[Exclusion, ...] = (
         re.compile(r"^Module \d+ "),
         "documented via the 'Module N ...' template rows in "
         "ocean-2.md, checked per instance by TEMPLATE_FAMILIES",
+    ),
+    Exclusion(
+        "DELTAPROULTRA",
+        "sensors",
+        re.compile(r"^Battery Pack \d+ "),
+        "documented via the 'Battery Pack N ...' template rows in "
+        "delta-pro-ultra.md, checked per instance by TEMPLATE_FAMILIES",
     ),
     Exclusion(
         "SMARTPANEL40",

@@ -23,6 +23,7 @@ Complete list of all sensors, switches, numbers, and binary sensors per device:
 - [PowerPulse 2](entities/powerpulse-2.md) - 18 sensors, 1 binary sensor, 1 number, 1 select, 2 buttons (`C376`, `C374`) - a wallbox, no PowerOcean required for the readings. Start and stop with no PowerOcean or exactly one in the same integration entry, the maximum current and the charging mode with exactly one PowerOcean, the charging current with none. Enhanced Mode only
 - [Ocean 2](entities/ocean-2.md) - 48 sensors plus 12 per battery module (`RE11`, `RE17`, `RE41`, `RE42`) - a home battery, read-only, Enhanced Mode only
 - [OCEAN Smart Electrical Panel 40](entities/smart-panel-40.md) - 19 sensors plus 3 sensors and 1 binary sensor per circuit (`HR61`) - a US split-phase load panel, read-only, Enhanced Mode only
+- [DELTA Pro Ultra](entities/delta-pro-ultra.md) - 21 sensors plus 2 per battery pack (`Y711`) - a home backup power station, read-only, Enhanced Mode only
 
 Counts are the device-specific entity definitions. Every device additionally exposes 2 universal diagnostic sensors (connection status and active mode) that are not included above.
 

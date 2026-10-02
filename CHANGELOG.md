@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.25.0] - Unreleased
+
+### Added
+
+- The DELTA Pro Ultra (`Y711`) is supported, read-only and in Enhanced Mode only: battery level, remaining time, input and output power per port, battery voltage and power, two temperatures, the backup reserve, and level and temperature for each battery pack. Mapped from @jrbeir's two diagnostics downloads. The unit was idle while they were recorded, so the power readings still need a check under load.
+
 ## [1.24.0] - 2026-10-02
 
 ### Added
