@@ -660,6 +660,17 @@ class TestModuleFrame:
         payload = _frame(_msg(5, _f32(15, bad) + _f32(1, 1122.0)), cmd_id=46)
         assert parse_ocean2_proto_message(payload) is None
 
+    @pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+    def test_keeps_a_valid_module_number_beside_a_non_finite_one(
+        self, bad: float
+    ) -> None:
+        # The other half of the comment above: the invalid 5.15 is skipped,
+        # so the valid one that follows still files the reading.
+        body = _f32(15, bad) + _f32(15, 2.0) + _f32(1, 1122.0)
+        parsed = parse_ocean2_proto_message(_frame(_msg(5, body), cmd_id=46))
+        assert parsed is not None
+        assert parsed["module2_power_w"] == pytest.approx(1122.0)
+
     def test_drops_a_non_finite_module_reading(self) -> None:
         # A NaN or an infinity reaching a sensor raises inside Home
         # Assistant's rounding, the same reason the telemetry frame drops
