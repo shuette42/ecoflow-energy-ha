@@ -18,6 +18,10 @@ All notable changes to this project will be documented in this file.
 
 - The Local mode now has a Battery Connection diagnostic binary sensor, which shows whether the inverter reports its battery as connected, and a System Alerts diagnostic sensor that lists the alerts the inverter reports, for example fan failure or battery overheating, so an automation can send a notification. System Alerts shows `none` while no alert is active.
 
+### Fixed
+
+- A diagnostics download now hides the installation address that a Smart Home Panel 2 reports together with its coordinates. Before, the town and the coordinates stayed readable in the download. A diagnostics download also no longer alters recorded frames whose padding happens to read as digits.
+
 ## [1.24.0] - 2026-10-02
 
 ### Added

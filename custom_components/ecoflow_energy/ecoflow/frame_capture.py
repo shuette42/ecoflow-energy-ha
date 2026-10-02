@@ -50,6 +50,28 @@ _MASKED_SERIAL_SPAN = re.compile(
     )
 )
 
+# The shape of zero padding under the device's payload mask: the null byte at
+# least `_PAD_MIN_LEN` times, fewer than that many other bytes on each side.
+# A bytes field of nulls sent under key `K` is `K` repeated on the wire, and
+# for an alphanumeric `K` a run of them reads as a serial (`0x38` is `8`, and
+# twenty of them is a serial-shaped run). Matched against a whole span like
+# `_MASKED_SERIAL_SPAN`, for the same reason. The twelve is the floor the
+# fixture identifier guard puts on a null run.
+_PAD_BYTE = b"\x00"
+_PAD_MIN_LEN = 12
+_PAD_MARGIN = _PAD_MIN_LEN - 1
+_NULL_PADDING_SPAN = re.compile(
+    rb"[^%b]{0,%d}%b{%d,}[^%b]{0,%d}"
+    % (
+        re.escape(_PAD_BYTE),
+        _PAD_MARGIN,
+        re.escape(_PAD_BYTE),
+        _PAD_MIN_LEN,
+        re.escape(_PAD_BYTE),
+        _PAD_MARGIN,
+    )
+)
+
 # Identifiers shorter than a serial cannot be caught by shape alone. A run of
 # 12 upper-case alphanumerics appears in ordinary binary often enough that a
 # free-running pattern of that length would corrupt frames rather than clean
@@ -350,6 +372,140 @@ def _mask_anchored_strings(payload: bytes) -> bytes:
     return bytes(out)
 
 
+# A Smart Home Panel 2 (`HD31`) reports where it is installed as one text
+# field of its plain settings frame: a country, a town, an empty part, then
+# longitude and latitude with fourteen decimals, e.g.
+# `United States Springfield,,-71.12345678901234,42.12345678901234` (a
+# made-up place; the real one reached a public diagnostics download on
+# 2026-10-02, #464). None of the passes above can see it: it has spaces and
+# lower case, so it is no identifier, and a coordinate pair is no shape any
+# of them knows.
+#
+# The pair is the anchor, because the address text around it varies. Two
+# decimals of at least four places each, joined by a comma and an optional
+# space: the same fixed-point shape the device uses, and a shape a version
+# string, an address on a network or a single reading does not have.
+_COORDINATE_PAIR = re.compile(rb"-?\d{1,3}\.\d{4,},[ ]?-?\d{1,3}\.\d{4,}")
+# What the fallback below stops at when it walks back from a pair: control
+# bytes and the characters that structure JSON, so a text frame holding a pair
+# in an array is not masked from its start. Bytes from 0x80 on do not stop it:
+# a town name is UTF-8.
+_ADDRESS_STOP = frozenset(range(0x20)) | frozenset(b'\x7f"{}[]:\\')
+_ADDRESS_START = re.compile(rb"[A-Za-z\x80-\xff]")
+
+
+def _delimited_fields(
+    payload: bytes, start: int, end: int, strict: bool
+) -> list[tuple[int, int]] | None:
+    """The `(start, end)` span of every length-delimited field in one message.
+
+    `strict` demands that the bytes read as a message exactly: every tag a
+    known wire type, every length inside the span, the last field ending on
+    `end`. A span that does not returns `None`. Without `strict` the fields
+    read before the first one that cannot be read are returned, which is how
+    a frame that did not parse is still walked as far as it goes.
+    """
+    from .proto.decoder import _read_varint
+
+    spans: list[tuple[int, int]] = []
+
+    def give_up() -> list[tuple[int, int]] | None:
+        return None if strict else spans
+
+    mv = memoryview(payload)
+    i = start
+    while i < end:
+        key, i = _read_varint(mv, i)
+        if key is None or key >> 3 == 0 or i > end:
+            return give_up()
+        wire_type = key & 0x07
+        if wire_type == 0:
+            value, i = _read_varint(mv, i)
+            if value is None or i > end:
+                return give_up()
+        elif wire_type == _WIRE_TYPE_LENGTH_DELIMITED:
+            length, i = _read_varint(mv, i)
+            if length is None or i + length > end:
+                return give_up()
+            spans.append((i, i + length))
+            i += length
+        elif wire_type in (1, 5):
+            i += 8 if wire_type == 1 else 4
+            if i > end:
+                return give_up()
+        else:
+            return give_up()
+    return spans
+
+
+def _coordinate_fields(payload: bytes) -> list[tuple[int, int]]:
+    """Spans of every string field that holds a coordinate pair.
+
+    The frame is read as a message, and so is every field that holds a pair,
+    for as long as it reads as a message exactly (`_delimited_fields` with
+    `strict`) and one of its own fields holds the pair. The field where that
+    stops is the string. A message that wraps the string is therefore never
+    returned, and its tag and length bytes stay intact even when they are
+    printable (`:` and `<` are field 7 and a length of 60). The one thing this
+    misreads is a string that happens to parse as a message: that takes every
+    byte of it landing on a valid tag and length, and the fallback in
+    `_mask_coordinate_strings` still catches what the walk does not return.
+    The depth is capped like `_delimited_spans_by_message`, and nothing raises:
+    a capture path never affects ingest.
+    """
+    found: list[tuple[int, int]] = []
+    try:
+        pending = [(_delimited_fields(payload, 0, len(payload), strict=False), 0)]
+        while pending:
+            fields, depth = pending.pop()
+            for start, end in fields or ():
+                if _COORDINATE_PAIR.search(payload, start, end) is None:
+                    continue
+                inner = (
+                    _delimited_fields(payload, start, end, strict=True)
+                    if depth < _ANCHOR_DEPTH
+                    else None
+                )
+                if inner and any(
+                    _COORDINATE_PAIR.search(payload, s, e) for s, e in inner
+                ):
+                    pending.append((inner, depth + 1))
+                else:
+                    found.append((start, end))
+    except Exception:  # noqa: BLE001
+        pass
+    return found
+
+
+def _mask_coordinate_strings(payload: bytes) -> bytes:
+    """Mask every string field that holds a coordinate pair, length preserved.
+
+    The whole field goes, not only the pair: the town and country in front of
+    it are the address. A pair the walk of `_coordinate_fields` does not place
+    in a field - a frame cut off inside the string, or one that was never
+    protobuf - is masked from the first letter of the text run in front of it
+    through the end of the pair. That cannot leave the town behind, but it may
+    overwrite a printable tag, which is why it is the fallback and not the rule.
+    """
+    pairs = [m.span() for m in _COORDINATE_PAIR.finditer(payload)]
+    if not pairs:
+        return payload
+    out = bytearray(payload)
+    fields = _coordinate_fields(payload)
+    for start, end in fields:
+        out[start:end] = _MASK_BYTE * (end - start)
+    for pair_start, pair_end in pairs:
+        if any(start <= pair_start and pair_end <= end for start, end in fields):
+            continue
+        run_start = pair_start
+        while run_start > 0 and payload[run_start - 1] not in _ADDRESS_STOP:
+            run_start -= 1
+        letter = _ADDRESS_START.search(payload, run_start, pair_start)
+        start = letter.start() if letter else pair_start
+        out[start:pair_end] = _MASK_BYTE * (pair_end - start)
+    return bytes(out)
+
+
 def _plain_passes(payload: bytes, secrets: list[str]) -> bytes:
     """Every mask this module applies, over bytes that are already plain.
 
@@ -357,7 +513,8 @@ def _plain_passes(payload: bytes, secrets: list[str]) -> bytes:
     protobuf message with a serial, then anything else shaped like a
     serial, then anything written as a UUID, then a lower-case hex run a
     hyphen joins to a serial-shaped run, then the city half of any time zone
-    the device reports, and last anything a device presents as a whole
+    the device reports, then a string field that holds a coordinate pair,
+    and last anything a device presents as a whole
     length-delimited field of identifier-shaped characters. The second pass
     catches what no shape can: a neighbour's name and short id, by their
     position beside its serial - and it runs before the free-running passes
@@ -392,6 +549,7 @@ def _plain_passes(payload: bytes, secrets: list[str]) -> bytes:
     sanitized = _TIME_ZONE.sub(
         lambda m: m.group(1) + _MASK_BYTE * len(m.group(2)), sanitized
     )
+    sanitized = _mask_coordinate_strings(sanitized)
     return _mask_delimited_identifiers(sanitized)
 
 
@@ -633,6 +791,19 @@ def sanitize_frame(payload: bytes, secrets: list[str]) -> bytes:
             # plain serial lying beside a run of `X ^ key` bytes is a span
             # with a long foreign stretch around its mask bytes. A search for
             # the run anywhere inside the span would hand that serial back.
+            #
+            # A span whose plaintext is zero padding goes back as well
+            # (`_NULL_PADDING_SPAN`): twelve or more nulls with fewer than
+            # twelve other bytes on each side. Nulls under key `K` are `K` on
+            # the wire, and `0x38` is `8`, so twenty bytes of padding read as
+            # a serial, were overwritten, and came back as `0x60` on the next
+            # decode (header 254.32 of the Smart Home Panel 2 fixture, #464).
+            # A null run cannot hide a serial. A plain byte only becomes a
+            # null where it equals the key, so a serial that carries no key
+            # byte is all foreign under the key, and fifteen or more of them
+            # is more than the eleven the pattern allows on a side. One that
+            # does carry the key byte reaches the pattern only by repeating
+            # it around a run of twelve, which no serial does.
             restored = bytearray(on_the_wire)
             offset = 0
             length = len(ciphertext)
@@ -647,6 +818,7 @@ def sanitize_frame(payload: bytes, secrets: list[str]) -> bytes:
                 if (
                     all(byte == _MASK_BYTE[0] for byte in span_plain)
                     or _MASKED_SERIAL_SPAN.fullmatch(span_plain) is not None
+                    or _NULL_PADDING_SPAN.fullmatch(span_plain) is not None
                 ):
                     restored[span_start:offset] = ciphertext[span_start:offset]
             sanitized = (

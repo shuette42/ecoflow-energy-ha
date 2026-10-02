@@ -2557,3 +2557,221 @@ class TestWriteSlotReserve:
             TypedFrameBuffer(keys_max=4, per_key_max=4).stats()["write_slots_reserved"]
             == WRITE_CLASS_RESERVE
         )
+
+
+class TestCoordinateStringMasking:
+    """A string field that carries an installation address with coordinates.
+
+    A Smart Home Panel 2 reports one in its plain settings frame: country,
+    town, an empty part, then longitude and latitude with fourteen decimals
+    (#464). The place below is made up. Every expectation here is the whole
+    pdata, not a substring, so a mask that reaches a tag or a length byte
+    shows as a difference and not as a pass.
+    """
+
+    PAIR = b"-71.12345678901234,42.12345678901234"
+    ADDRESS = b"United States Springfield,," + PAIR
+    # Shaped like what the device sends: a county between the town and the
+    # empty part makes the length 78, which is the letter `N`.
+    LONG_ADDRESS = b"United States Springfield Hampden County,," + PAIR
+
+    @staticmethod
+    def _pdata(field: int, address: bytes) -> bytes:
+        return (
+            encode_field_varint(1, 5)
+            + encode_field_bytes(field, address)
+            + encode_field_varint(2, 9)
+        )
+
+    @staticmethod
+    def _masked(field: int, address: bytes) -> bytes:
+        return (
+            encode_field_varint(1, 5)
+            + encode_field_bytes(field, b"X" * len(address))
+            + encode_field_varint(2, 9)
+        )
+
+    @pytest.mark.parametrize(
+        ("field", "tag_kind"),
+        [(3, "control byte"), (7, "printable non-letter"), (8, "letter")],
+    )
+    def test_the_address_goes_and_the_frame_still_parses(
+        self, field: int, tag_kind: str
+    ) -> None:
+        # The length is 63, `?`: printable in all three, with a tag of
+        # 0x1a, `:` and `B`. A mask that starts at the first printable byte
+        # or the first letter would take the tag of the last one.
+        assert len(self.ADDRESS) == 63
+        pdata = self._pdata(field, self.ADDRESS)
+        frame = _header(12, 1, pdata)
+
+        out = sanitize_frame(frame, [])
+
+        assert len(out) == len(frame), tag_kind
+        for leaked in (b"Springfield", b"United", b"12345678901234"):
+            assert leaked not in out, tag_kind
+        header = _decode_first_header(out)
+        assert header["pdata"] == self._masked(field, self.ADDRESS).hex(), tag_kind
+        assert (header["cmd_func"], header["cmd_id"]) == (12, 1)
+
+    def test_a_length_byte_and_tag_that_are_letters_survive(self) -> None:
+        # Length 78 is `N` and field 8 is `B`: both letters, both in front of
+        # the string, neither part of the address.
+        assert len(self.LONG_ADDRESS) == ord("N")
+        pdata = self._pdata(8, self.LONG_ADDRESS)
+        frame = _header(12, 1, pdata)
+
+        out = sanitize_frame(frame, [])
+
+        assert _decode_first_header(out)["pdata"] == (
+            self._masked(8, self.LONG_ADDRESS).hex()
+        )
+
+    def test_the_address_under_the_device_mask_goes_too(self) -> None:
+        # enc_type 1 with seq 7: the string is XOR-ed on the wire, so no
+        # plain pass can see it; the region is un-XOR-ed, masked and put back.
+        pdata = self._pdata(8, self.ADDRESS)
+        frame = _enc_header(12, 1, pdata_plain=pdata, enc_type=1, seq=7)
+        assert self.ADDRESS not in frame
+
+        out = sanitize_frame(frame, [])
+
+        assert len(out) == len(frame)
+        header = _decode_first_header(out)
+        assert header["seq"] == 7
+        assert _unmask_pdata(header) == self._masked(8, self.ADDRESS)
+
+    def test_a_decimal_that_is_not_a_pair_is_left_alone(self) -> None:
+        # One long decimal, a pair with too few places, a pair the comma does
+        # not join, and a firmware string: none of them is a position.
+        pdata = (
+            encode_field_bytes(2, b"offset -70.65")
+            + encode_field_bytes(3, b"12.34,56.78")
+            + encode_field_bytes(4, b"lon -71.12345678901234 lat 42.12345678901234")
+            + encode_field_bytes(5, b"V1.2.3.4567")
+        )
+        frame = _header(12, 1, pdata)
+
+        assert sanitize_frame(frame, []) == frame
+
+    @pytest.mark.parametrize("key", [7, 0x1E])
+    def test_sanitizing_twice_changes_nothing(self, key: int) -> None:
+        # Key 0x1e is the one for which `X ^ key` is `F`, alphanumeric on the
+        # wire: the plain passes read the masked region as a serial there.
+        pdata = self._pdata(8, self.ADDRESS)
+        for frame in (
+            _header(12, 1, pdata),
+            _enc_header(12, 1, pdata_plain=pdata, enc_type=1, seq=key),
+        ):
+            once = sanitize_frame(frame, [])
+            assert once != frame
+            assert sanitize_frame(once, []) == once
+
+    def test_a_frame_cut_off_inside_the_string_is_masked_from_its_first_letter(
+        self,
+    ) -> None:
+        # The walk cannot place a field whose length runs past the frame. The
+        # fallback masks from the first letter of the text through the pair;
+        # the tag `:` and the length `@` in front of it are not letters.
+        whole = encode_field_bytes(7, self.ADDRESS + b"!")
+        frame = whole[: 2 + len(self.ADDRESS)]
+        assert frame[1] == len(self.ADDRESS) + 1  # claims one byte more
+
+        out = sanitize_frame(frame, [])
+
+        assert out == frame[:2] + b"X" * len(self.ADDRESS)
+
+    def test_a_pair_in_text_is_masked_without_its_surroundings(self) -> None:
+        # Not protobuf at all: the walk finds nothing, and the fallback must
+        # stop at the JSON structure instead of running back to the first
+        # letter of the frame.
+        text = b'{"name":"panel","gps":[' + self.PAIR + b"]}"
+
+        out = sanitize_frame(text, [])
+
+        assert out == b'{"name":"panel","gps":[' + b"X" * len(self.PAIR) + b"]}"
+
+
+class TestNullPaddingUnderTheMask:
+    """Zero padding whose wire bytes spell a serial (#464).
+
+    A bytes field of nulls under key 0x38 is `8` repeated on the wire, and
+    twenty of them match the serial shape. The Smart Home Panel 2 sends one
+    in header 254.32 (enc_type 1, seq low byte 0x38). The plaintext has
+    nothing to mask, so the only damage is the plain pass overwriting the
+    wire run, which decodes to 0x60 instead of the nulls.
+    """
+
+    KEY = 0x38
+
+    def _padded(self, tail: bytes) -> bytes:
+        pdata = encode_field_varint(2, 9) + encode_field_bytes(3, b"\x00" * 20) + tail
+        return _enc_header(254, 32, pdata_plain=pdata, enc_type=1, seq=self.KEY)
+
+    @pytest.mark.parametrize(
+        ("tail", "on_the_wire"),
+        [
+            # The next tag spells `(`: the run is exactly the padding.
+            (encode_field_varint(2, 9), b"8" * 20),
+            # The next tag is 0x08, which spells `0`: the wire run reaches
+            # one byte into the next field, as the length byte can on a
+            # device frame.
+            (encode_field_varint(1, 5), b"8" * 20 + b"0"),
+        ],
+    )
+    def test_twenty_nulls_that_spell_a_serial_come_back_unchanged(
+        self, tail: bytes, on_the_wire: bytes
+    ) -> None:
+        frame = self._padded(tail)
+        assert on_the_wire in frame  # premise: the serial shape is on the wire
+
+        assert sanitize_frame(frame, []) == frame
+
+    def test_padding_beside_a_masked_serial_survives_a_second_pass(self) -> None:
+        # The serial makes the first pass take the other branch (rewrite the
+        # plaintext, XOR it back); the second pass finds only masked bytes and
+        # padding, and that is the path that has to give the padding back.
+        pdata = (
+            encode_field_bytes(3, b"\x00" * 20)
+            + encode_field_bytes(4, b"HD31TESTPAD00001")
+            + encode_field_varint(2, 9)
+        )
+        frame = _enc_header(254, 32, pdata_plain=pdata, enc_type=1, seq=self.KEY)
+
+        once = sanitize_frame(frame, [])
+
+        assert once != frame
+        assert b"HD31TESTPAD00001" not in _unmask_pdata(_decode_first_header(once))
+        assert b"\x00" * 20 in _unmask_pdata(_decode_first_header(once))
+        assert sanitize_frame(once, []) == once
+
+    def test_a_plain_serial_beside_sixteen_key_bytes_stays_masked(self) -> None:
+        # A header that declares key 0x38 but sends plain bytes. Sixteen `8`
+        # XOR to nulls, the serial in front XORs to sixteen foreign bytes,
+        # which is more than the eleven the padding shape allows on a side.
+        serial = b"HD31TESTPLAIN001"
+        header = bytearray()
+        header.extend(encode_field_varint(6, 1))  # enc_type = XOR, declared
+        header.extend(encode_field_varint(14, self.KEY))  # seq
+        header.extend(encode_field_bytes(1, serial + bytes([self.KEY]) * 16))
+        frame = encode_field_bytes(1, bytes(header))
+
+        sanitized = sanitize_frame(frame, [])
+
+        assert serial not in sanitized
+        assert b"X" * 32 in sanitized
+
+    def test_a_plain_serial_with_a_short_key_run_stays_masked(self) -> None:
+        # Fifteen wire bytes: ten foreign and five that XOR to nulls. Few
+        # enough foreign bytes for the margin, too few nulls for the floor.
+        wire = b"HD31TESTPL" + bytes([self.KEY]) * 5
+        header = bytearray()
+        header.extend(encode_field_varint(6, 1))
+        header.extend(encode_field_varint(14, self.KEY))
+        header.extend(encode_field_bytes(1, wire))
+        frame = encode_field_bytes(1, bytes(header))
+
+        sanitized = sanitize_frame(frame, [])
+
+        assert wire not in sanitized
+        assert b"X" * 15 in sanitized
