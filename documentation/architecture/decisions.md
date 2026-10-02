@@ -1815,6 +1815,12 @@ Home Assistant 2026.9 added a shared Modbus connection to its `modbus` integrati
 
 **Consequences:** `manifest.json` gains `after_dependencies: ["modbus"]`, so that Home Assistant installs the `modbus` requirements (among them `modbus-connection`) on installations that do not ship them, without setting the `modbus` integration up. The Local entry gains the switch, number and binary sensor platforms. The core client gains a single-register write with an echo check and a lock; the poll's first block grows from 9 to 13 registers. The diagnostics download names the connection type in use. The user guide for Local mode states the app lock, the 60 s hand-back, the single client slot, the matching host string and the Home Assistant version needed for the shared connection. Before release, the hardware run repeats with both connection types against the same unit.
 
+### Addendum 2026-10-02: the EcoFlow app shows the Backup Reserve written over Modbus
+
+**What was measured.** On the maintainer's own three-phase PowerOcean (`HJ31`), with no heartbeat running and the app not locked, `0x0217` was written from 0 to 5 and read back as 5. The EcoFlow app then showed a Backup Reserve of 5 %. The register was written back to 0 and read back as 0.
+
+**What changes.** Item 10 left open what the app shows. That is now settled: while Modbus control is off, the app shows the value written to `0x0217`, so the register is the app's Backup Reserve setting. While control is on, the app still hides it. Under item 9, the local number keeps its own key. The comparison item 9 asks for is with the cloud number, which reads the discharge lower limit, and that comparison has not been made. Renaming the key now would also move the entity id for owners who already run the beta.
+
 
 ---
 
