@@ -5,6 +5,10 @@ import struct
 from pathlib import Path
 
 import pytest
+from ecoflow_energy.ecoflow.modbus_local import (
+    BACKUP_RATIO_OFFSET,
+    BRIGHTNESS_OFFSET,
+)
 from ecoflow_energy.ecoflow.parsers.powerocean_modbus import (
     LIFETIME_COUNTER_KEYS,
     POLL_BLOCKS,
@@ -234,6 +238,21 @@ def test_the_first_poll_block_reaches_the_second_register_of_the_status():
 
     assert start == 0x0206
     assert start + count - 1 >= 0x0212
+
+
+@pytest.mark.parametrize(
+    ("offset", "key"),
+    [
+        (BACKUP_RATIO_OFFSET, "ems_backup_ratio_pct"),
+        (BRIGHTNESS_OFFSET, "local_indicator_brightness_pct"),
+    ],
+)
+def test_a_one_register_block_at_a_writable_offset_decodes_under_its_key(offset, key):
+    # The read-back of a write hands the parser exactly this: one register at
+    # the core's offset. The parser's own offsets must be those constants.
+    result = parse_registers({offset: struct.pack(">H", 37)})
+
+    assert result == {key: 37}
 
 
 def test_the_per_pack_soc_registers_are_not_mapped():

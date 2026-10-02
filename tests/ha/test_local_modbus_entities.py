@@ -29,6 +29,7 @@ from custom_components.ecoflow_energy.binary_sensor import (
 )
 from custom_components.ecoflow_energy.const import (
     DOMAIN,
+    LOCAL_MODBUS_FAILURES_UNAVAILABLE,
     POWEROCEAN_LOCAL_KEYS,
 )
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
@@ -241,6 +242,27 @@ async def test_the_switch_calls_the_coordinator_and_surfaces_its_error(
     await _unload(hass, entry)
 
 
+async def test_a_switch_that_is_on_stays_available_so_that_off_stays_reachable(
+    hass: HomeAssistant,
+) -> None:
+    """Home Assistant skips an unavailable entity in a service call: not this one."""
+    entry, stub, coordinator = await _setup_local(hass)
+    stub.queue(*[ModbusTimeoutError("no answer")] * LOCAL_MODBUS_FAILURES_UNAVAILABLE)
+    await _call(hass, "switch", "turn_on", "modbus_control")
+    for _ in range(LOCAL_MODBUS_FAILURES_UNAVAILABLE):
+        await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert coordinator.device_available is False
+    assert _state(hass, "switch", "modbus_control") == "on"
+
+    await _call(hass, "switch", "turn_off", "modbus_control")
+
+    assert coordinator.control_enabled is False
+    # With control off the switch follows the device again.
+    assert _state(hass, "switch", "modbus_control") == "unavailable"
+    await _unload(hass, entry)
+
+
 async def test_the_switch_is_off_after_a_restart_even_if_it_was_on(
     hass: HomeAssistant,
 ) -> None:
@@ -307,15 +329,16 @@ async def test_the_numbers_write_through_the_coordinator_without_the_switch(
     await _unload(hass, entry)
 
 
-async def test_a_write_the_device_does_not_hold_shows_an_error_and_the_old_value(
+async def test_a_write_the_device_does_not_hold_shows_an_error_and_what_it_holds(
     hass: HomeAssistant,
 ) -> None:
-    """A mismatching read-back raises and leaves the polled value on display."""
+    """A mismatching read-back raises and puts the value the device holds on display."""
     entry, stub, _coordinator = await _setup_local(hass)
+    assert DAY["backup_ratio"] != 99
     stub.read_back_override = 99
     with pytest.raises(HomeAssistantError):
         await _call(hass, "number", "set_value", "local_backup_reserve", value=40)
-    assert float(_state(hass, "number", "local_backup_reserve")) == DAY["backup_ratio"]
+    assert float(_state(hass, "number", "local_backup_reserve")) == 99
 
     # Control: once the device holds what was written, the same call shows it.
     stub.read_back_override = None

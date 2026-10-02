@@ -19,6 +19,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..modbus_local import (
+    BACKUP_RATIO_OFFSET,
+    BRIGHTNESS_OFFSET,
     decode_ascii,
     decode_f32_ws,
     decode_u16,
@@ -66,8 +68,8 @@ _REGISTERS: tuple[_Register, ...] = (
     _Register("batt_w", 0x020C, 2, decode_f32_ws),
     _Register("soc_pct", 0x020E, 1, decode_u16),
     _Register("local_system_status", 0x0211, 2, decode_u32_ws),
-    _Register("ems_backup_ratio_pct", 0x0217, 1, decode_u16),
-    _Register("local_indicator_brightness_pct", 0x021C, 1, decode_u16),
+    _Register("ems_backup_ratio_pct", BACKUP_RATIO_OFFSET, 1, decode_u16),
+    _Register("local_indicator_brightness_pct", BRIGHTNESS_OFFSET, 1, decode_u16),
     _Register("ems_total_battery_capacity_wh", 0x0227, 2, decode_u32_ws),
     _Register("pcs_ac_freq_hz", 0x0251, 2, decode_f32_ws),
     _Register("mppt_pv1_voltage_v", 0x0253, 2, decode_f32_ws),

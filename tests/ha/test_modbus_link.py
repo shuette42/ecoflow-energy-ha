@@ -233,6 +233,39 @@ async def test_each_library_error_maps_onto_the_local_family(
     assert caught.value.__cause__ is raised
 
 
+@pytest.mark.parametrize("operation", ["read", "write"])
+async def test_a_raw_socket_error_maps_onto_the_connect_error_without_its_text(
+    lib: SimpleNamespace, operation: str
+) -> None:
+    """An OSError the library let through is a failed call, not a dead caller."""
+    unit = FakeUnit()
+    raised = ConnectionResetError("reset by peer at 192.0.2.10")
+    unit.errors[0] = raised
+    link = SharedModbusLink(unit)
+
+    with pytest.raises(ModbusLocalError) as caught:
+        if operation == "read":
+            await link.read_blocks([(0x0206, 2)])
+        else:
+            await link.write_register(HEARTBEAT_OFFSET, 1)
+
+    assert type(caught.value) is ModbusConnectError
+    assert caught.value.__cause__ is raised
+    assert "192.0.2.10" not in str(caught.value)
+
+
+async def test_a_socket_error_while_opening_the_temporary_unit_maps_too(
+    lib: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    refused = ConnectionRefusedError("refused")
+    _fake_temporary_unit(monkeypatch, _TemporaryUnit(FakeUnit(), refused))
+
+    with pytest.raises(ModbusConnectError) as caught:
+        await read_setup_blocks(MagicMock(), "modbus.example.test", 502, 1, [(0, 3)])
+
+    assert caught.value.__cause__ is refused
+
+
 async def test_an_exception_response_keeps_its_code_and_names_the_failing_block(
     lib: SimpleNamespace,
 ) -> None:

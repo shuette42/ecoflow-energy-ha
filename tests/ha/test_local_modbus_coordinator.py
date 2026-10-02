@@ -17,6 +17,7 @@ import struct
 from collections.abc import Sequence
 from datetime import timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import patch
 
@@ -54,6 +55,7 @@ from custom_components.ecoflow_energy.coordinator import (
 from custom_components.ecoflow_energy.coordinator.local_modbus import (
     EcoFlowLocalModbusCoordinator,
 )
+from custom_components.ecoflow_energy.coordinator.modbus_link import SharedModbusLink
 from custom_components.ecoflow_energy.diagnostics import (
     REDACTED,
     async_get_config_entry_diagnostics,
@@ -173,11 +175,14 @@ class StubClient:
     an error for them (consumed in order, one per write). A written register is
     remembered and answered by a one-register read, which is how the
     coordinator confirms a write; ``read_back_override`` makes the device hold
-    another value than the one written.
+    another value than the one written. While ``gate`` is set and not yet
+    released, a write waits before it is recorded, so ``writes`` holds the
+    writes that completed.
     """
 
     def __init__(self, script: list[dict[int, bytes] | Exception]) -> None:
         self._script = list(script)
+        self.gate: asyncio.Event | None = None
         self.calls = 0
         # The blocks each poll asked for, in order.
         self.requested: list[tuple[tuple[int, int], ...]] = []
@@ -200,7 +205,13 @@ class StubClient:
             raise step
         return step
 
+    def queue(self, *steps: dict[int, bytes] | Exception) -> None:
+        """Append poll answers (or errors) to the script."""
+        self._script.extend(steps)
+
     async def write_register(self, offset: int, value: int) -> None:
+        if self.gate is not None:
+            await self.gate.wait()
         self.writes.append((offset, value))
         error = self.write_errors.pop(0) if self.write_errors else None
         if error is not None:
@@ -237,6 +248,17 @@ def _coordinator(
     hass: HomeAssistant, entry: MockConfigEntry, script: list[Any]
 ) -> EcoFlowLocalModbusCoordinator:
     return _with_stub(hass, entry, script)[0]
+
+
+async def _polled(
+    hass: HomeAssistant, entry: MockConfigEntry, *later: Any
+) -> tuple[EcoFlowLocalModbusCoordinator, StubClient]:
+    """A coordinator whose first poll passed the serial check, as it always is
+    by the time a control switch exists. ``later`` is the script after that poll."""
+    coordinator, stub = _with_stub(hass, entry, [_frame(DAY), *later])
+    await coordinator.async_refresh()
+    assert coordinator.last_poll_ok is True
+    return coordinator, stub
 
 
 # Same register values, but the identity block names another device.
@@ -851,7 +873,7 @@ async def test_a_beat_follows_every_interval_and_not_before(
     hass: HomeAssistant, clock: Clock
 ) -> None:
     assert LOCAL_MODBUS_HEARTBEAT_INTERVAL_S == 15
-    coordinator, stub = _with_stub(hass, _local_entry(), [])
+    coordinator, stub = await _polled(hass, _local_entry())
     await coordinator.async_set_control(True)
     await hass.async_block_till_done()
     assert _beats(stub) == 1
@@ -870,7 +892,7 @@ async def test_a_beat_follows_every_interval_and_not_before(
 async def test_control_off_stops_the_beats_and_writes_nothing(
     hass: HomeAssistant, clock: Clock
 ) -> None:
-    coordinator, stub = _with_stub(hass, _local_entry(), [])
+    coordinator, stub = await _polled(hass, _local_entry())
     await coordinator.async_set_control(True)
     await hass.async_block_till_done()
     await _advance(hass, clock, 15)
@@ -914,7 +936,7 @@ async def test_a_failed_beat_is_retried_and_logged_at_debug_only(
     caplog.set_level(
         logging.DEBUG, logger="custom_components.ecoflow_energy.coordinator"
     )
-    coordinator, stub = _with_stub(hass, _local_entry(), [])
+    coordinator, stub = await _polled(hass, _local_entry())
     stub.write_errors = [None, ModbusTimeoutError("no answer"), None]
     await coordinator.async_set_control(True)
     await hass.async_block_till_done()
@@ -938,7 +960,7 @@ async def test_sixty_seconds_without_an_ack_turn_control_off_with_one_warning(
     hass: HomeAssistant, clock: Clock, caplog: pytest.LogCaptureFixture
 ) -> None:
     assert LOCAL_MODBUS_HEARTBEAT_LAPSE_S == 60
-    coordinator, stub = _with_stub(hass, _local_entry(), [])
+    coordinator, stub = await _polled(hass, _local_entry())
     stub.write_errors = [None] + [ModbusTimeoutError("no answer")] * 10
     with patch.object(coordinator, "async_update_listeners") as notify:
         await coordinator.async_set_control(True)
@@ -974,7 +996,7 @@ async def test_sixty_seconds_without_an_ack_turn_control_off_with_one_warning(
 async def test_a_refused_beat_stops_the_heartbeat_at_once_with_one_warning(
     hass: HomeAssistant, clock: Clock, caplog: pytest.LogCaptureFixture
 ) -> None:
-    coordinator, stub = _with_stub(hass, _local_entry(), [])
+    coordinator, stub = await _polled(hass, _local_entry())
     stub.write_errors = [None, ModbusExceptionResponse(2, HEARTBEAT_OFFSET)]
     await coordinator.async_set_control(True)
     await hass.async_block_till_done()
@@ -1110,3 +1132,349 @@ async def test_the_range_limits_themselves_are_accepted(
     await coordinator.async_write_register("local_indicator_brightness_pct", value)
 
     assert coordinator.data["local_indicator_brightness_pct"] == value
+
+
+# ----------------------------------------------------------------------
+# Control: availability, concurrency, lapse window and error mapping
+# ----------------------------------------------------------------------
+
+
+def _stopped_warnings(caplog: pytest.LogCaptureFixture) -> list[str]:
+    """The control-stopped WARNINGs; the poll's own availability warning is not one."""
+    return [w for w in _control_warnings(caplog) if "control stopped" in w]
+
+
+@pytest.mark.parametrize(
+    "error",
+    [ModbusTimeoutError("no answer"), ModbusExceptionResponse(2, 0x0870)],
+)
+async def test_the_heartbeat_stops_when_polls_fail_while_writes_still_succeed(
+    hass: HomeAssistant,
+    clock: Clock,
+    caplog: pytest.LogCaptureFixture,
+    error: Exception,
+) -> None:
+    """Polls fail five times, beats are still acknowledged: nothing more is written."""
+    coordinator, stub = await _polled(
+        hass, _local_entry(), *[error] * LOCAL_MODBUS_FAILURES_UNAVAILABLE
+    )
+    await coordinator.async_set_control(True)
+    await hass.async_block_till_done()
+    for _ in range(LOCAL_MODBUS_FAILURES_UNAVAILABLE):
+        await coordinator.async_refresh()
+    assert coordinator.device_available is False
+    beats = _beats(stub)
+
+    await _advance(hass, clock, 15)
+
+    assert coordinator.control_enabled is False
+    assert coordinator._heartbeat_task is None
+    assert _beats(stub) == beats
+    assert len(_stopped_warnings(caplog)) == 1
+    for _ in range(3):
+        await _advance(hass, clock, 15)
+    assert _beats(stub) == beats
+    assert len(_stopped_warnings(caplog)) == 1
+
+
+async def test_a_beat_is_not_written_to_a_device_that_has_not_passed_the_serial_check(
+    hass: HomeAssistant, clock: Clock, caplog: pytest.LogCaptureFixture
+) -> None:
+    coordinator, stub = _with_stub(hass, _local_entry(), [])
+    assert coordinator._identity_verified is False
+    await coordinator.async_set_control(True)
+    await hass.async_block_till_done()
+
+    await _advance(hass, clock, 15)
+
+    assert coordinator.control_enabled is False
+    assert _beats(stub) == 1
+    assert len(_stopped_warnings(caplog)) == 1
+
+
+async def test_two_overlapping_turn_ons_start_one_heartbeat_that_turn_off_stops(
+    hass: HomeAssistant, clock: Clock
+) -> None:
+    coordinator, stub = await _polled(hass, _local_entry())
+    stub.gate = asyncio.Event()
+    first = asyncio.create_task(coordinator.async_set_control(True))
+    second = asyncio.create_task(coordinator.async_set_control(True))
+    for _ in range(3):
+        await asyncio.sleep(0)
+    stub.gate.set()
+    await asyncio.gather(first, second)
+    await hass.async_block_till_done()
+    assert _beats(stub) == 1
+    assert coordinator.control_enabled is True
+
+    await coordinator.async_set_control(False)
+
+    for _ in range(3):
+        await _advance(hass, clock, 15)
+    assert _beats(stub) == 1
+    assert coordinator.control_enabled is False
+
+
+async def test_a_turn_off_that_arrives_during_the_first_beat_wins_over_the_turn_on(
+    hass: HomeAssistant, clock: Clock
+) -> None:
+    coordinator, stub = await _polled(hass, _local_entry())
+    stub.gate = asyncio.Event()
+    turn_on = asyncio.create_task(coordinator.async_set_control(True))
+    for _ in range(3):
+        await asyncio.sleep(0)
+
+    await coordinator.async_set_control(False)
+    stub.gate.set()
+    await turn_on
+    await hass.async_block_till_done()
+
+    assert coordinator.control_enabled is False
+    assert coordinator._heartbeat_task is None
+    for _ in range(3):
+        await _advance(hass, clock, 15)
+    # Only the beat that was already in flight reached the device.
+    assert _beats(stub) == 1
+
+
+async def test_a_stale_loop_that_lapses_leaves_the_live_heartbeat_alone(
+    hass: HomeAssistant, clock: Clock, caplog: pytest.LogCaptureFixture
+) -> None:
+    coordinator, stub = await _polled(hass, _local_entry())
+    await coordinator.async_set_control(True)
+    await hass.async_block_till_done()
+    live = coordinator._heartbeat_task
+    assert live is not None
+
+    # This test task is not the registered heartbeat task: it stands in for a
+    # loop that was replaced and lapses late.
+    coordinator._heartbeat_lapsed("an orphaned loop")
+
+    assert coordinator._heartbeat_task is live
+    assert coordinator.control_enabled is True
+    assert _control_warnings(caplog) == []
+    await coordinator.async_set_control(False)
+
+
+async def test_a_beat_acknowledged_after_the_window_does_not_take_control_again(
+    hass: HomeAssistant, clock: Clock, caplog: pytest.LogCaptureFixture
+) -> None:
+    """ADR decision 3: a lapsed heartbeat is not revived by a device that answers."""
+    coordinator, stub = await _polled(hass, _local_entry())
+    stub.write_errors = [None] + [ModbusTimeoutError("no answer")] * 3
+    await coordinator.async_set_control(True)
+    await hass.async_block_till_done()
+    for _ in range(3):
+        await _advance(hass, clock, 15)
+    assert coordinator.control_enabled is True
+    written = len(stub.writes)
+
+    # The fourth tick is late (the link was busy). The device would answer it.
+    await _advance(hass, clock, 20)
+
+    assert coordinator.control_enabled is False
+    assert len(stub.writes) == written
+    assert len(_stopped_warnings(caplog)) == 1
+
+
+async def test_a_beat_stuck_waiting_for_the_link_fails_before_the_window_closes(
+    hass: HomeAssistant, clock: Clock, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A poll or a write holding the link must not delay a beat past the lapse."""
+    coordinator, stub = await _polled(hass, _local_entry())
+    await coordinator.async_set_control(True)
+    await hass.async_block_till_done()
+    stub.gate = asyncio.Event()
+
+    await _advance(hass, clock, 15)
+    assert coordinator.control_enabled is True
+
+    # The beat waits for what is left of the window (45 s) minus the margin.
+    await _advance(hass, clock, 44)
+
+    assert coordinator.control_enabled is False
+    assert _beats(stub) == 1
+    assert len(_stopped_warnings(caplog)) == 1
+
+
+async def test_an_unload_while_the_first_beat_is_in_flight_starts_no_heartbeat(
+    hass: HomeAssistant, clock: Clock
+) -> None:
+    entry = _local_entry()
+    assert await _set_up_local_entry(hass, entry, [_frame(DAY)])
+    coordinator = hass.data[DOMAIN][entry.entry_id][SERIAL]
+    stub = coordinator._link
+    stub.gate = asyncio.Event()
+    turn_on = asyncio.create_task(coordinator.async_set_control(True))
+    for _ in range(3):
+        await asyncio.sleep(0)
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    stub.gate.set()
+    await turn_on
+
+    assert coordinator.control_enabled is False
+    assert coordinator._heartbeat_task is None
+    for _ in range(3):
+        await _advance(hass, clock, 15)
+    assert _beats(stub) == 1
+
+
+async def test_a_turn_on_that_arrives_after_the_unload_writes_nothing(
+    hass: HomeAssistant, clock: Clock
+) -> None:
+    """A service call racing the unload must not start a beat on a stopped entry."""
+    entry = _local_entry()
+    assert await _set_up_local_entry(hass, entry, [_frame(DAY)])
+    coordinator = hass.data[DOMAIN][entry.entry_id][SERIAL]
+    stub = coordinator._link
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    await coordinator.async_set_control(True)
+
+    assert _beats(stub) == 0
+    assert coordinator.control_enabled is False
+    assert coordinator._heartbeat_task is None
+    for _ in range(3):
+        await _advance(hass, clock, 15)
+    assert _beats(stub) == 0
+
+
+async def test_an_unexpected_error_on_a_beat_ends_the_heartbeat_with_one_warning(
+    hass: HomeAssistant, clock: Clock, caplog: pytest.LogCaptureFixture
+) -> None:
+    coordinator, stub = await _polled(hass, _local_entry())
+    stub.write_errors = [None, RuntimeError("raw text naming modbus.example.test")]
+    await coordinator.async_set_control(True)
+    await hass.async_block_till_done()
+
+    await _advance(hass, clock, 15)
+
+    assert coordinator.control_enabled is False
+    assert coordinator._heartbeat_task is None
+    warnings = _stopped_warnings(caplog)
+    assert len(warnings) == 1
+    assert "RuntimeError" in warnings[0]
+    assert "modbus.example.test" not in warnings[0]
+    assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
+
+
+class _ResetUnit:
+    """A shared unit whose socket was reset: a raw OSError, not a library error."""
+
+    async def read_holding_registers(self, address: int, count: int) -> list[int]:
+        raise ConnectionResetError("reset by peer")
+
+    async def write_register(self, address: int, value: int) -> None:
+        raise ConnectionResetError("reset by peer")
+
+
+@pytest.fixture
+def shared_library(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Give the adapter a library error base, whether or not the real one imported."""
+    names = SimpleNamespace(ModbusError=type("LibError", (Exception,), {}))
+    monkeypatch.setattr(modbus_link, "mc", names, raising=False)
+
+
+async def test_a_socket_reset_on_a_beat_through_the_shared_link_is_a_failed_beat(
+    hass: HomeAssistant,
+    clock: Clock,
+    caplog: pytest.LogCaptureFixture,
+    shared_library: None,
+) -> None:
+    coordinator, _stub = await _polled(hass, _local_entry())
+    await coordinator.async_set_control(True)
+    await hass.async_block_till_done()
+    coordinator._link = SharedModbusLink(_ResetUnit())
+
+    await _advance(hass, clock, 15)
+
+    # A failed beat is retried; it is not the end of the heartbeat.
+    assert coordinator.control_enabled is True
+    assert _control_warnings(caplog) == []
+    for _ in range(3):
+        await _advance(hass, clock, 15)
+    assert coordinator.control_enabled is False
+    assert len(_stopped_warnings(caplog)) == 1
+
+
+async def test_a_socket_reset_on_a_poll_through_the_shared_link_is_a_failed_poll(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture, shared_library: None
+) -> None:
+    coordinator, _stub = await _polled(hass, _local_entry())
+    coordinator._link = SharedModbusLink(_ResetUnit())
+
+    await coordinator.async_refresh()
+
+    assert coordinator.consecutive_failures == 1
+    assert coordinator.last_error is not None
+    assert coordinator.last_error.startswith("ModbusConnectError")
+    assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
+
+
+async def test_a_mismatching_read_back_puts_the_held_value_on_display_and_raises(
+    hass: HomeAssistant,
+) -> None:
+    coordinator, stub = await _polled(hass, _local_entry())
+    before = coordinator.data["ems_backup_ratio_pct"]
+    assert before not in (1, 99)
+    stub.read_back_override = 99
+
+    with pytest.raises(HomeAssistantError, match="holds"):
+        await coordinator.async_write_register("ems_backup_ratio_pct", 1)
+
+    assert coordinator.data["ems_backup_ratio_pct"] == 99
+    assert coordinator.device_data["ems_backup_ratio_pct"] == 99
+
+
+async def test_the_read_back_is_decoded_by_the_polls_own_parser(
+    hass: HomeAssistant,
+) -> None:
+    coordinator, _stub = await _polled(hass, _local_entry())
+    seen: list[dict[int, bytes]] = []
+    real = local_modbus.parse_registers
+
+    def spy(blocks: Any) -> dict[str, Any]:
+        seen.append(dict(blocks))
+        return real(blocks)
+
+    with patch.object(local_modbus, "parse_registers", spy):
+        await coordinator.async_write_register("ems_backup_ratio_pct", 40)
+
+    assert seen == [{BACKUP_RATIO_OFFSET: struct.pack(">H", 40)}]
+    assert coordinator.data["ems_backup_ratio_pct"] == 40
+
+    # A register the parser has no value for is an error, not a guess.
+    with (
+        patch.object(local_modbus, "parse_registers", lambda blocks: {}),
+        pytest.raises(HomeAssistantError, match="no usable value"),
+    ):
+        await coordinator.async_write_register("ems_backup_ratio_pct", 41)
+    assert coordinator.data["ems_backup_ratio_pct"] == 40
+
+
+async def test_a_refused_shared_unit_fails_setup_without_the_host_in_the_reason(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+) -> None:
+    host = "modbus.example.test"
+    entry = _local_entry()
+    entry.add_to_hass(hass)
+    refused = HomeAssistantError(
+        f"Modbus device {host}:502 is already in use with different link settings"
+    )
+
+    with patch(
+        "custom_components.ecoflow_energy.coordinator.local_modbus.create_link",
+        side_effect=refused,
+    ):
+        assert not await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert entry.state is ConfigEntryState.SETUP_ERROR
+    assert entry.reason is not None
+    assert "other link settings" in entry.reason
+    assert host not in entry.reason
+    # The whole log text, traceback of the chained cause included.
+    assert host not in caplog.text

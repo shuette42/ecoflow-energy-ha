@@ -60,7 +60,6 @@ from ..ecoflow.modbus_local import (
     ModbusExceptionResponse,
     ModbusLocalError,
     ModbusTransport,
-    decode_u16,
 )
 from ..ecoflow.parsers.powerocean_modbus import (
     LIFETIME_COUNTER_KEYS,
@@ -82,6 +81,19 @@ _WRITABLE_KEYS: dict[str, int] = {
 # Seam for the heartbeat's clock. A module attribute rather than a call to
 # ``time.monotonic`` so a test can move it without touching the event loop.
 _monotonic = time.monotonic
+
+# Window arithmetic of the heartbeat. The unit hands control back after
+# LOCAL_MODBUS_HEARTBEAT_LAPSE_S (60 s) without an acknowledged beat and a beat
+# is due every LOCAL_MODBUS_HEARTBEAT_INTERVAL_S (15 s), so the last attempt of
+# a window starts 45 s after the last ack with 15 s left. A beat may wait for
+# the link (a poll on the own client holds it up to 18 s, a number write with
+# its read-back up to 27 s) and then needs its own write (up to 9 s own, 12 s
+# shared). Its whole wait is therefore capped at what is left of the window
+# minus this margin: the last attempt gets 13 s, which fits the shared link's
+# 12 s budget. A beat that cannot be acknowledged inside the window fails
+# instead of landing after the unit let go, and a window with no more than the
+# margin left is treated as lapsed.
+_BEAT_WINDOW_MARGIN_S = 2.0
 
 
 class _SerialMismatchError(ModbusLocalError):
@@ -150,6 +162,14 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.control_enabled: bool = False
         self._heartbeat_task: asyncio.Task[None] | None = None
         self._last_beat_ack: float = 0.0
+        # What the last ``async_set_control`` call asked for. Recorded before
+        # the call waits for the lock, so a turn-off that arrives while a
+        # turn-on is still writing its first beat wins over it.
+        self._control_wanted: bool = False
+        # Serialises turn-on calls: one first beat, one heartbeat task.
+        self._control_lock = asyncio.Lock()
+        # Set when the entry unloads; a turn-on still in flight starts nothing.
+        self._closed: bool = False
 
         super().__init__(
             hass,
@@ -159,7 +179,7 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             update_interval=timedelta(seconds=LOCAL_MODBUS_POLL_INTERVAL_S),
         )
         # A beat that outlives the entry would keep a stopped entry in control.
-        entry.async_on_unload(self._cancel_heartbeat)
+        entry.async_on_unload(self._close)
 
     # ------------------------------------------------------------------
     # Surface the sensor platform reads
@@ -240,55 +260,113 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         control off. Turning off stops the beats and writes nothing: the unit
         returns control to the app by itself within the lapse time.
         """
+        # The intent is recorded before anything is awaited, so the last call
+        # to arrive is the one that holds, whatever order the writes finish in.
+        self._control_wanted = on
         if not on:
             self._cancel_heartbeat()
             self.async_update_listeners()
             return
-        if self.control_enabled:
-            return
-        try:
-            await self._link.write_register(HEARTBEAT_OFFSET, 1)
-        except ModbusLocalError as err:
-            raise HomeAssistantError(
-                f"The device did not acknowledge the control heartbeat: {err}"
-            ) from err
-        self._last_beat_ack = _monotonic()
-        self.control_enabled = True
-        self._heartbeat_task = self.config_entry.async_create_background_task(
-            self.hass,
-            self._heartbeat_loop(),
-            name=f"ecoflow_energy local heartbeat {self.device_tag}",
-        )
-        self.async_update_listeners()
+        async with self._control_lock:
+            if self._closed or not self._control_wanted or self.control_enabled:
+                return
+            try:
+                await self._link.write_register(HEARTBEAT_OFFSET, 1)
+            except ModbusLocalError as err:
+                raise HomeAssistantError(
+                    f"The device did not acknowledge the control heartbeat: {err}"
+                ) from err
+            # The first beat was awaited: a turn-off or an unload may have
+            # arrived meanwhile. The unit then returns control by itself
+            # within the lapse time, and no heartbeat starts.
+            if self._closed or not self._control_wanted:
+                return
+            if self._heartbeat_task is not None and not self._heartbeat_task.done():
+                return
+            self._last_beat_ack = _monotonic()
+            self.control_enabled = True
+            self._heartbeat_task = self.config_entry.async_create_background_task(
+                self.hass,
+                self._heartbeat_loop(),
+                name=f"ecoflow_energy local heartbeat {self.device_tag}",
+            )
+            self.async_update_listeners()
+
+    def _close(self) -> None:
+        """Unload callback: stop the beats for good and refuse a late turn-on."""
+        self._closed = True
+        self._cancel_heartbeat()
 
     def _cancel_heartbeat(self) -> None:
-        """Stop the beats and show control off. Writes nothing."""
+        """Stop the beats and show control off. Writes nothing.
+
+        Cancels exactly the task that is registered and drops that reference
+        in the same step, so a later task is never mistaken for this one.
+        """
         task, self._heartbeat_task = self._heartbeat_task, None
+        self._control_wanted = False
         self.control_enabled = False
         if task is not None and not task.done():
             task.cancel()
 
     async def _heartbeat_loop(self) -> None:
         """Write a beat every interval until one lapses or the task is cancelled."""
-        while True:
-            await asyncio.sleep(LOCAL_MODBUS_HEARTBEAT_INTERVAL_S)
-            if not await self._beat():
-                return
+        try:
+            while True:
+                await asyncio.sleep(LOCAL_MODBUS_HEARTBEAT_INTERVAL_S)
+                if not await self._beat():
+                    return
+        except Exception as err:  # noqa: BLE001
+            # Anything outside the mapped error family must not end the task
+            # silently with the switch still showing on. Only the type is
+            # named: the text of a socket error may carry the device address.
+            _LOGGER.debug(
+                "Local Modbus heartbeat for %s ended on an unexpected error",
+                self.device_tag,
+                exc_info=True,
+            )
+            self._heartbeat_lapsed(
+                f"an unexpected {type(err).__name__} ended the heartbeat"
+            )
+
+    def _window_left(self) -> float:
+        """Return the seconds left until the unit lets go, counted from the last ack."""
+        return LOCAL_MODBUS_HEARTBEAT_LAPSE_S - (_monotonic() - self._last_beat_ack)
 
     async def _beat(self) -> bool:
         """Write one beat. Return False once the heartbeat has stopped."""
+        # Nothing is written to a device that stopped answering its polls or
+        # that has not passed the serial number check; the switch could not
+        # even be turned off through the service while it is unavailable.
+        if not self._device_available or not self._identity_verified:
+            self._heartbeat_lapsed(
+                "the device is not answering its polls or failed the serial "
+                "number check"
+            )
+            return False
+        # Checked before the write: a beat acknowledged after the unit let go
+        # would take control again without anybody asking for it.
+        if self._window_left() <= _BEAT_WINDOW_MARGIN_S:
+            self._heartbeat_lapsed(
+                f"no beat acknowledged for {LOCAL_MODBUS_HEARTBEAT_LAPSE_S} s"
+            )
+            return False
         try:
-            await self._link.write_register(HEARTBEAT_OFFSET, 1)
+            # The wait for the link counts: see _BEAT_WINDOW_MARGIN_S.
+            async with asyncio.timeout(self._window_left() - _BEAT_WINDOW_MARGIN_S):
+                await self._link.write_register(HEARTBEAT_OFFSET, 1)
         except ModbusExceptionResponse as err:
             self._heartbeat_lapsed(f"the device refused a beat ({err})")
             return False
-        except ModbusLocalError as err:
-            # Retried on the next tick; only a full lapse window without an
+        except (ModbusLocalError, TimeoutError) as err:
+            # Retried on the next tick; only a full window without an
             # acknowledged beat ends it.
             _LOGGER.debug(
-                "Local Modbus heartbeat beat failed for %s: %s", self.device_tag, err
+                "Local Modbus heartbeat beat failed for %s: %s",
+                self.device_tag,
+                type(err).__name__,
             )
-            if _monotonic() - self._last_beat_ack >= LOCAL_MODBUS_HEARTBEAT_LAPSE_S:
+            if self._window_left() <= _BEAT_WINDOW_MARGIN_S:
                 self._heartbeat_lapsed(
                     f"no beat acknowledged for {LOCAL_MODBUS_HEARTBEAT_LAPSE_S} s"
                 )
@@ -302,9 +380,14 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         Runs inside the heartbeat task, which returns right after, so the task
         is not cancelled from here. The device has handed control back to the
-        app; it is not taken again until somebody turns control on.
+        app; it is not taken again until somebody turns control on. A loop
+        that is no longer the registered task (replaced or cancelled) changes
+        nothing: it must not null the reference to, or switch off, the live one.
         """
+        if self._heartbeat_task is not asyncio.current_task():
+            return
         self._heartbeat_task = None
+        self._control_wanted = False
         self.control_enabled = False
         _LOGGER.warning(
             "Local Modbus %s: control stopped, %s. The device returns control "
@@ -333,13 +416,18 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             raise HomeAssistantError(
                 f"The device did not take {key} = {value}: {err}"
             ) from err
-        held = decode_u16(raw[offset])
+        # The register is decoded by the poll's own parser, so a read-back can
+        # never publish what a poll would not.
+        held = parse_registers({offset: raw[offset]}).get(key)
+        if held is None:
+            raise HomeAssistantError(f"The device returned no usable value for {key}")
+        # What the device holds is shown whether or not it is what was asked for.
+        self._device_data[key] = held
+        self.async_set_updated_data(dict(self._device_data))
         if held != value:
             raise HomeAssistantError(
                 f"The device holds {key} = {held} after writing {value}"
             )
-        self._device_data[key] = held
-        self.async_set_updated_data(dict(self._device_data))
 
     # ------------------------------------------------------------------
     # Polling

@@ -492,7 +492,13 @@ class EcoFlowLocalControlSwitch(
 
     @property
     def available(self) -> bool:
-        """Return True while the device answers its polls."""
+        """Return True while the device answers its polls, or while control is on.
+
+        An unavailable entity is skipped by Home Assistant's service calls, so
+        a switch that is on stays available: "off" must always be reachable.
+        """
+        if self.coordinator.control_enabled:
+            return True
         return self.coordinator.device_available and super().available
 
     @property

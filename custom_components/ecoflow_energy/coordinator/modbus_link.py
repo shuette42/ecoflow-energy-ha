@@ -77,6 +77,16 @@ def _translate(err: BaseException, offset: int) -> ModbusLocalError:
     return ModbusProtocolError(f"shared Modbus connection: {err}")
 
 
+def _os_error(err: OSError) -> ModbusLocalError:
+    """Map a raw socket error that escaped the library onto the local family.
+
+    Only the type is named: the text of a socket error may carry the device
+    address. Reached after the clause for the library's errors and for the
+    budget timeout, because ``TimeoutError`` is itself an ``OSError``.
+    """
+    return ModbusConnectError(f"shared Modbus connection failed: {type(err).__name__}")
+
+
 class SharedModbusLink:
     """``ModbusTransport`` on a unit of Home Assistant's shared connection."""
 
@@ -105,6 +115,8 @@ class SharedModbusLink:
                         result[offset] = struct.pack(f">{len(words)}H", *words)
             except (mc.ModbusError, TimeoutError) as err:
                 raise _translate(err, offset) from err
+            except OSError as err:
+                raise _os_error(err) from err
         return result
 
     async def write_register(self, offset: int, value: int) -> None:
@@ -119,6 +131,8 @@ class SharedModbusLink:
                     await self._unit.write_register(MODBUS_BASE_ADDRESS + offset, value)
             except (mc.ModbusError, TimeoutError) as err:
                 raise _translate(err, offset) from err
+            except OSError as err:
+                raise _os_error(err) from err
 
 
 def create_link(
@@ -170,3 +184,5 @@ async def read_setup_blocks(
         # Only what happens outside the reads reaches here (opening or closing
         # the temporary connection); the reads map their own errors.
         raise _translate(err, 0) from err
+    except OSError as err:
+        raise _os_error(err) from err
