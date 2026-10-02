@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 import aiohttp
 import voluptuous as vol
-from homeassistant.config_entries import ConfigEntry, ConfigFlowResult
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState, ConfigFlowResult
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
@@ -126,11 +126,24 @@ class ReconfigureFlowMixin(_Base):
         host = reconfigure_entry.data.get(CONF_HOST, "")
         port = reconfigure_entry.data.get(CONF_PORT, MODBUS_DEFAULT_PORT)
         unit_id = reconfigure_entry.data.get(CONF_UNIT_ID, 1)
+        released = False
 
         if user_input is not None:
             host = user_input[CONF_HOST].strip()
             port = user_input[CONF_PORT]
             unit_id = user_input[CONF_UNIT_ID]
+            # The inverter serves one Modbus client, and a loaded Local entry
+            # is that client: a probe on a new host string (an address
+            # replaced by a name, say) would be a second one and go
+            # unanswered. Release the entry's connection for the probe, and
+            # start the entry again on every path that does not reload it.
+            released = (
+                reconfigure_entry.data.get(CONF_MODE) == MODE_LOCAL
+                and reconfigure_entry.state is ConfigEntryState.LOADED
+                and valid_local_host(host)
+            )
+            if released:
+                await self.hass.config_entries.async_unload(reconfigure_entry.entry_id)
             try:
                 if not valid_local_host(host):
                     raise LocalDeviceError("invalid_host")
@@ -144,6 +157,10 @@ class ReconfigureFlowMixin(_Base):
                 elif serial_in_other_entries(
                     self.hass, serial, reconfigure_entry.entry_id
                 ):
+                    if released:
+                        await self.hass.config_entries.async_setup(
+                            reconfigure_entry.entry_id
+                        )
                     return self.async_abort(reason="already_configured")
                 else:
                     switching = reconfigure_entry.data.get(CONF_MODE) != MODE_LOCAL
@@ -163,6 +180,8 @@ class ReconfigureFlowMixin(_Base):
                         reason="mode_switched" if switching else "local_updated",
                     )
 
+        if released:
+            await self.hass.config_entries.async_setup(reconfigure_entry.entry_id)
         return self.async_show_form(
             step_id="reconfigure_local",
             data_schema=local_schema(host, port, unit_id),
