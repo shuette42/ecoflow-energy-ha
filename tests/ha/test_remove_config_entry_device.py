@@ -63,8 +63,9 @@ async def test_a_device_a_running_coordinator_serves_may_not_be_deleted(
 ) -> None:
     """A Local entry's own PowerOcean is served, even though it is its only device."""
     entry, _stub, _coordinator = await _setup_local(hass, _poll_frame(status=0x1014))
-    device = dr.async_get(hass).async_get_device(identifiers={(DOMAIN, SERIAL)})
-    assert device is not None
+    devices = dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)
+    assert len(devices) == 1
+    device = devices[0]
 
     assert await async_remove_config_entry_device(hass, entry, device) is False
 
@@ -131,12 +132,16 @@ async def test_the_delete_button_removes_a_deselected_device(
     assert registry.async_get(kept.id) is not None
 
 
-async def test_a_device_shared_with_a_local_entry_keeps_its_local_side(
+async def test_removing_the_old_side_of_a_moved_device_keeps_the_local_side(
     hass: HomeAssistant, hass_ws_client: Any
 ) -> None:
-    """Cloud and Local build the same identifier, so a moved PowerOcean can be
-    one device with both entries. Deleting it from the cloud entry drops only
-    that entry's link; the Local entry and its entities stay."""
+    """A PowerOcean moved from an account entry to a Local entry.
+
+    Both entries build the same identifier. Older Home Assistant versions keep
+    one device with both entries; since 2026.9 each entry gets its own device.
+    Either way, removing it through the account entry drops only that side,
+    and the Local entry keeps its device and every entity.
+    """
     assert await async_setup_component(hass, "config", {})
     local, _stub, _coordinator = await _setup_local(hass, _poll_frame(status=0x1014))
     local.supports_remove_device = await support_remove_from_device(hass, DOMAIN)
@@ -144,30 +149,33 @@ async def test_a_device_shared_with_a_local_entry_keeps_its_local_side(
     cloud.add_to_hass(hass)
     cloud.supports_remove_device = await support_remove_from_device(hass, DOMAIN)
     registry = dr.async_get(hass)
-    device = registry.async_get_or_create(
+    cloud_device = registry.async_get_or_create(
         config_entry_id=cloud.entry_id, identifiers={(DOMAIN, SERIAL)}
     )
-    assert device.config_entries == {local.entry_id, cloud.entry_id}
+    local_device = dr.async_entries_for_config_entry(registry, local.entry_id)[0]
     local_entities = er.async_entries_for_config_entry(
         er.async_get(hass), local.entry_id
     )
     assert local_entities
     client = await hass_ws_client(hass)
 
-    for entry, expect in ((cloud, True), (local, False)):
+    for entry, device_id, expect in (
+        (cloud, cloud_device.id, True),
+        (local, local_device.id, False),
+    ):
         await client.send_json_auto_id(
             {
                 "type": "config/device_registry/remove_config_entry",
                 "config_entry_id": entry.entry_id,
-                "device_id": device.id,
+                "device_id": device_id,
             }
         )
         response = await client.receive_json()
         assert response["success"] is expect, response
 
-    kept = registry.async_get(device.id)
-    assert kept is not None
-    assert kept.config_entries == {local.entry_id}
+    assert dr.async_entries_for_config_entry(registry, cloud.entry_id) == []
+    remaining = dr.async_entries_for_config_entry(registry, local.entry_id)
+    assert [device.id for device in remaining] == [local_device.id]
     assert len(
         er.async_entries_for_config_entry(er.async_get(hass), local.entry_id)
     ) == len(local_entities)
