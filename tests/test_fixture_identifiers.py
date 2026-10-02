@@ -45,6 +45,12 @@ _MAC = re.compile(r"(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}")
 # a 32 character UUID, which the pattern above catches on its own.
 _RUN = re.compile(r"[0-9A-Za-z]{12,}")
 
+# Plaintext under a keyed region that a wire run may stand for without being
+# an identifier: a masked serial with at most one foreign byte on either side,
+# or zero padding with fewer than twelve on either side - the same twelve
+# `_RUN` needs before anything counts as identifier-shaped (see `_leaks`).
+_EXCUSED_PLAINTEXT = re.compile(rb"[^X]?X{15,}[^X]?|[^\x00]{0,11}\x00{12,}[^\x00]{0,11}")
+
 # Deliberate placeholders that are not identifiers and must not be masked
 # further, since masking them would hide what the field is. The four unit
 # serials are the synthetic stand-ins of the linked-pair fixtures: the export
@@ -155,12 +161,19 @@ def _leaks(raw: bytes) -> list[str]:
         # a plaintext serial next to them (a header that declares a key and
         # sends plain bytes), which is a leak this guard has to keep
         # reporting. The plaintext itself is checked under the mask below.
+        #
+        # Zero padding is excused as well: a bytes field of null bytes spells
+        # the key itself on the wire (#464, Smart Home Panel 2: 24 nulls under
+        # key 0x63 read as 24 `c`), and the neighbouring fields' tag, length
+        # and value bytes can extend the run by several letters on either
+        # side. Fewer than twelve per side cannot hold an identifier on their
+        # own; a plain serial beside the run is twelve or more and is still
+        # reported.
         if any(
             region.start <= match.start()
             and match.end() <= region.end
-            and re.fullmatch(
-                rb"[^X]?X{15,}[^X]?",
-                _xor(raw[match.start() : match.end()], region.key),
+            and _EXCUSED_PLAINTEXT.fullmatch(
+                _xor(raw[match.start() : match.end()], region.key)
             )
             is not None
             for region in keyed_regions
@@ -299,6 +312,45 @@ def test_the_guard_still_excuses_a_masked_serial_with_one_spilled_byte() -> None
     frame = encode_field_bytes(1, bytes(header))
     assert b"9" * 16 in frame
     assert _leaks(frame) == []
+
+
+def _keyed_frame(plain: bytes, key: int) -> bytes:
+    header = bytearray()
+    header.extend(encode_field_varint(6, 1))
+    header.extend(encode_field_varint(14, key))
+    header.extend(encode_field_bytes(1, bytes(b ^ key for b in plain)))
+    return encode_field_bytes(1, bytes(header))
+
+
+def test_the_guard_excuses_zero_padding_under_the_key() -> None:
+    """Negative control: a bytes field of nulls is not an identifier.
+
+    The Smart Home Panel 2 (#464) sends a 24-byte field of nulls under key
+    0x63, which reads as 24 `c` on the wire, between its length byte and the
+    next field tag.
+    """
+    frame = _keyed_frame(b"\x1a\x18" + b"\x00" * 24 + b"\x10\x01", 0x63)
+    assert b"c" * 24 in frame
+    assert _leaks(frame) == []
+
+
+def test_the_guard_reports_a_plain_serial_beside_zero_padding() -> None:
+    """Positive control for the zero-padding excuse: it is anchored too.
+
+    A header that declares a key and sends plain bytes puts a serial on the
+    wire as it is. Next to a run of bytes equal to the key it still has to
+    be reported, the same way the masked-serial excuse keeps reporting it.
+    """
+    key = 0x63
+    serial = b"HD31TESTPLAIN001"
+    pdata = serial + bytes([key]) * 16  # the 16 bytes XOR to nulls
+    header = bytearray()
+    header.extend(encode_field_varint(6, 1))
+    header.extend(encode_field_varint(14, key))
+    header.extend(encode_field_bytes(1, pdata))  # sent plain
+    frame = encode_field_bytes(1, bytes(header))
+    assert serial in frame
+    assert _leaks(frame) != []
 
 
 def test_the_encrypted_region_walk_still_finds_its_headers() -> None:
