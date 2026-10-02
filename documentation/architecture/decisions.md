@@ -1814,3 +1814,39 @@ Home Assistant 2026.9 added a shared Modbus connection to its `modbus` integrati
 8. Show the switch from bit 11 alone. Rejected: the bit stays set for up to about a minute after the heartbeat stops, so the switch would read on after the owner turned it off.
 
 **Consequences:** `manifest.json` gains `after_dependencies: ["modbus"]`, so that Home Assistant installs the `modbus` requirements (among them `modbus-connection`) on installations that do not ship them, without setting the `modbus` integration up. The Local entry gains the switch, number and binary sensor platforms. The core client gains a single-register write with an echo check and a lock; the poll's first block grows from 9 to 13 registers. The diagnostics download names the connection type in use. The user guide for Local mode states the app lock, the 60 s hand-back, the single client slot, the matching host string and the Home Assistant version needed for the shared connection. Before release, the hardware run repeats with both connection types against the same unit.
+
+
+---
+
+## ADR-032: Account-side history may be read by a periodic HTTP request inside Enhanced Mode under five limits; no value that the device pushes is ever read this way
+
+**Status:** Accepted. Not shipped. Narrows the rule that Enhanced Mode is push for one kind of data.
+**Date:** 2026-10-02
+
+**Context:** Enhanced Mode receives every device value as a push over MQTT, and its only HTTP calls are the sign-in, the MQTT credentials and the device list in the setup and options flows. ADR-030 rejected polling inside the push mode for a source that would feed an entity the push already feeds. A contributor proposes cumulative energy per vehicle profile for PowerPulse 2, built from the completed orders the EcoFlow Portal lists for the charger (pull request #460). That history exists only on the account side: the charger does not push it, no existing entity carries it, and none of our parsers reads a vehicle field. The contributor compared the energy of the latest completed record with the meter delta and with the app (16004 Wh, 16.00 kWh), read the pagination on live records down to the last page, and replayed 13 real orders from a C371 without the ledger changing on a second import. The history was checked on that one device.
+
+**Decision:**
+
+1. **One kind of HTTP read is allowed inside Enhanced Mode: account-side history that the device does not push.** The first case is the completed charging orders of a PowerPulse 2.
+2. **Five limits apply, and a case that breaks one is not covered by this decision:**
+   1. It is opt-in and off by default.
+   2. At least 5 minutes pass between two reads.
+   3. It reads completed records only.
+   4. No live entity depends on it or is fed by it, and its setup never holds up the entity platform.
+   5. The reads of one config entry share one client and one sign-in, and a failed sign-in stops or backs off the reads instead of repeating them.
+3. **A value the device pushes is never read this way.** If a value arrives over MQTT, MQTT is its only source.
+4. **Totals come from a stored ledger that deduplicates by record identity,** so a repeated poll or a restart cannot count a charge twice. An incomplete or invalid fetch keeps the previous ledger and marks the readings unavailable, and a value that cannot be read is unavailable, never 0.
+
+**Trade-offs:**
+- (+) Cumulative energy per vehicle becomes available without a second source for any existing entity
+- (+) The two modes stay separate: the entry keeps its account sign-in and gains no developer keys
+- (-) A periodic request exists in a mode that is otherwise push only, and the next case that wants one has to be measured against these limits
+- (-) The total covers the history EcoFlow still lists and starts in Home Assistant statistics at import; it does not identify the physically connected car
+- (-) Verified on one device model; other PowerPulse 2 variants and a second vehicle are covered by synthetic fixtures only
+
+**Alternatives considered:**
+1. Refuse every periodic HTTP read in Enhanced Mode. Rejected: the value is not pushed by any path, so the choice is this read or no value, and the five limits keep the conflicts that ADR-030 named out of it.
+2. Allow polling in Enhanced Mode in general. Rejected: it would reopen every case where one entity gets two sources.
+3. Read the history in Standard Mode only. Rejected: the endpoint needs the account sign-in, and Standard Mode has no account.
+
+**Consequences:** The contribution in pull request #460 is held to the five limits before it merges, in particular the shared client with backoff and a setup that does not wait for the first read. It also waits for the PowerPulse C371 read-only support, so that C371 is registered once. The CHANGELOG entry names the contributor and what the work carried: the endpoint trace, the energy check against the meter and the app, the pagination measurement and the replay on real orders. A later case that wants a periodic read inside Enhanced Mode needs its own entry here.
