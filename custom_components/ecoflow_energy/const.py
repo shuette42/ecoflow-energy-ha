@@ -2472,11 +2472,13 @@ POWEROCEANLOCALONLY_NUMBERS: list[EcoFlowNumberDef] = [
 POWEROCEANLOCALONLY_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
     # Bit 0 of the system status word. Not a diagnostic: outage automations
     # trigger on it, and it works without the cloud. No device class, since
-    # off-grid is a state of the site and not a fault.
+    # off-grid is a state of the site and not a fault. Its own key rather than
+    # the cloud's `grid_status`: that one is an enum sensor fed by a different
+    # field, and one entity must keep one source across a mode switch.
     EcoFlowBinarySensorDef(
         "local_off_grid",
         "Off-Grid",
-        icon="mdi:transmission-tower-off",
+        icon="mdi:transmission-tower",
     ),
     # Bit 1 of the system status word.
     EcoFlowBinarySensorDef(

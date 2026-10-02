@@ -37,7 +37,10 @@ POLL_BLOCKS: tuple[tuple[int, int], ...] = (
     (0x0206, 13),  # load, grid, solar, battery power, SoC, system status
     (0x0217, 18),  # backup ratio ... battery capacity (0x0227-0x0228)
     (0x023D, 6),  # battery voltage, battery current, battery temperature
-    (0x0251, 17),  # frequency, PV1-PV3 voltage, PV1/PV2 current, feed limit (0x0260)
+    # frequency, PV1-PV3 voltage, PV1/PV2 current, feed limit (0x0260). The
+    # block spans 0x025F, which the protocol marks write-only; the reference
+    # device answers the whole block read anyway (checked 2026-10-02).
+    (0x0251, 17),
     (0x0800, 1),  # fault count
     (0x0820, 1),  # batteries online
     (0x0870, 98),  # lifetime energy counters up to 0x08D1

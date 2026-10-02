@@ -218,7 +218,7 @@ async def test_a_cloud_number_definition_with_a_category_gets_it(
     assert category_of(None) is None
 
 
-async def test_a_local_entry_creates_the_four_plus_the_existing_sensors(
+async def test_a_local_entry_creates_its_own_plus_the_shared_sensors(
     hass: HomeAssistant,
 ) -> None:
     """Exactly the sensors of the read-only mode plus the four, in the right place."""
