@@ -14,10 +14,12 @@ from ecoflow_energy.const import (
 )
 from ecoflow_energy.ecoflow.frame_capture import (
     _ANCHOR_DEPTH,
+    _COORDINATE_PAIR,
     _SERIAL_RUN,
     WRITE_CLASS_RESERVE,
     TypedFrameBuffer,
     _anchored_string_fields,
+    _delimited_fields,
     _delimited_spans_by_message,
     _encrypted_regions,
     _mask_anchored_strings,
@@ -2642,11 +2644,11 @@ class TestCoordinateStringMasking:
         assert _unmask_pdata(header) == self._masked(8, self.ADDRESS)
 
     def test_a_decimal_that_is_not_a_pair_is_left_alone(self) -> None:
-        # One long decimal, a pair with too few places, a pair the comma does
-        # not join, and a firmware string: none of them is a position.
+        # One long decimal, two readings of one place each, a pair the comma
+        # does not join, and a firmware string: none of them is a position.
         pdata = (
             encode_field_bytes(2, b"offset -70.65")
-            + encode_field_bytes(3, b"12.34,56.78")
+            + encode_field_bytes(3, b"V1.2,3.4")
             + encode_field_bytes(4, b"lon -71.12345678901234 lat 42.12345678901234")
             + encode_field_bytes(5, b"V1.2.3.4567")
         )
@@ -2655,10 +2657,14 @@ class TestCoordinateStringMasking:
         assert sanitize_frame(frame, []) == frame
 
     @pytest.mark.parametrize("key", [7, 0x1E])
-    def test_sanitizing_twice_changes_nothing(self, key: int) -> None:
+    @pytest.mark.parametrize("address", [ADDRESS, LONG_ADDRESS], ids=["63", "78"])
+    def test_sanitizing_twice_changes_nothing(self, key: int, address: bytes) -> None:
         # Key 0x1e is the one for which `X ^ key` is `F`, alphanumeric on the
-        # wire: the plain passes read the masked region as a serial there.
-        pdata = self._pdata(8, self.ADDRESS)
+        # wire: the plain passes read the masked region as a serial there. The
+        # 78 is `N` behind a field-8 tag `B`: a masked field with two
+        # alphanumeric bytes stuck to it, which the serial pass used to take
+        # into its run on the second go.
+        pdata = self._pdata(8, address)
         for frame in (
             _header(12, 1, pdata),
             _enc_header(12, 1, pdata_plain=pdata, enc_type=1, seq=key),
@@ -2690,6 +2696,176 @@ class TestCoordinateStringMasking:
         out = sanitize_frame(text, [])
 
         assert out == b'{"name":"panel","gps":[' + b"X" * len(self.PAIR) + b"]}"
+
+    # A tag that spells a digit or a capital, in the three shapes the serial
+    # pass reads as part of a run: field 6 varint is `0`, field 8 fixed64 is
+    # `A`, and field 9 fixed32 is `M` with four alphanumeric bytes behind it.
+    _TAILS = [
+        pytest.param(encode_field_varint(6, 5), id="tag-0"),
+        pytest.param(b"A" + b"\x01" * 8, id="tag-A"),
+        pytest.param(b"M" + b"AB12", id="tag-M"),
+    ]
+    LAT_FIRST = b"United States Springfield,,42.12345678901234, -71.12345678901234"
+
+    @pytest.mark.parametrize("key", [None, 7], ids=["plain", "xor"])
+    @pytest.mark.parametrize(
+        "address", [ADDRESS, LAT_FIRST], ids=["lon-lat", "lat-lon"]
+    )
+    @pytest.mark.parametrize("tail", _TAILS)
+    def test_an_address_followed_by_an_alphanumeric_tag_goes_whole(
+        self, tail: bytes, address: bytes, key: int | None
+    ) -> None:
+        # The fourteen decimals plus that tag byte are a serial-shaped run, and
+        # the serial pass used to mask it first and break the pair, leaving the
+        # country, the town and the first coordinate in clear.
+        pdata = encode_field_varint(1, 5) + encode_field_bytes(8, address) + tail
+        want = (
+            encode_field_varint(1, 5)
+            + encode_field_bytes(8, b"X" * len(address))
+            + tail
+        )
+        if key is None:
+            frame = _header(12, 1, pdata)
+        else:
+            frame = _enc_header(12, 1, pdata_plain=pdata, enc_type=1, seq=key)
+
+        out = sanitize_frame(frame, [])
+
+        header = _decode_first_header(out)
+        got = bytes.fromhex(header["pdata"]) if key is None else _unmask_pdata(header)
+        assert got == want
+        assert (header["cmd_func"], header["cmd_id"]) == (12, 1)
+        assert len(out) == len(frame)
+
+    def test_a_pair_that_runs_past_its_field_does_not_reach_the_tags(self) -> None:
+        # Ten decimals and a next tag of `8`: the pair match takes the tag for
+        # one more digit and ends a byte past the field. The pair is still in
+        # the field, and the tag `B`, the length `C` and that next tag are not
+        # part of it. The fallback used to mask all three.
+        address = b"United States Springfield Hampden Cty,,-71.1234567890,42.1234567890"
+        assert chr(len(address)) == "C"
+        tail = encode_field_varint(7, 5)
+        assert tail[:1] == b"8"
+        pdata = encode_field_varint(1, 5) + encode_field_bytes(8, address) + tail
+        want = (
+            encode_field_varint(1, 5)
+            + encode_field_bytes(8, b"X" * len(address))
+            + tail
+        )
+
+        out = sanitize_frame(_header(12, 1, pdata), [])
+
+        header = _decode_first_header(out)
+        assert header["pdata"] == want.hex()
+        assert (header["cmd_func"], header["cmd_id"]) == (12, 1)
+
+    @pytest.mark.parametrize(
+        "pair",
+        [
+            b"-71.12345678901234,42.12345678901234",
+            b"-71.1234567,  42.1234567",
+            b"-71.1234567,\t42.1234567",
+            b"-71.1234567;42.1234567",
+            b"-71.1234567; 42.1234567",
+            b"-71,1234567;42,1234567",
+            b"-71.123,42.123",
+            b"-71.12,42.12",
+        ],
+        ids=[
+            "fourteen",
+            "two-spaces",
+            "tab",
+            "semicolon",
+            "semicolon-space",
+            "decimal-commas",
+            "three-places",
+            "two-places",
+        ],
+    )
+    def test_the_address_goes_whatever_the_pair_looks_like(self, pair: bytes) -> None:
+        # Fewer places name a block or a neighbourhood, and any other
+        # separator is still a position: the field must not stay in clear
+        # because the pair is written another way.
+        address = b"United States Springfield,," + pair
+        pdata = self._pdata(8, address)
+        out = sanitize_frame(_header(12, 1, pdata), [])
+        assert _decode_first_header(out)["pdata"] == self._masked(8, address).hex()
+
+    @pytest.mark.parametrize("key", [None, 220], ids=["plain", "xor"])
+    def test_a_town_in_a_string_that_reads_as_a_message_goes_too(
+        self, key: int | None
+    ) -> None:
+        # Field 16, the text of a made-up address, happens to read as a
+        # message whose last field holds the pair. Masking only that field left
+        # the country and the town in front of it.
+        address = b"Espa\xc3\xb1a qnuJrWaR Bezirk,,-55.4781023, 64.19257583"
+        inner = _delimited_fields(address, 0, len(address), strict=True)
+        assert inner and any(_COORDINATE_PAIR.search(address, s, e) for s, e in inner)
+        pdata = self._pdata(16, address)
+        if key is None:
+            frame = _header(12, 1, pdata)
+        else:
+            frame = _enc_header(12, 1, pdata_plain=pdata, enc_type=1, seq=key)
+
+        out = sanitize_frame(frame, [])
+
+        header = _decode_first_header(out)
+        got = bytes.fromhex(header["pdata"]) if key is None else _unmask_pdata(header)
+        assert got == self._masked(16, address)
+
+    def test_a_message_of_one_printable_field_keeps_its_tag_and_length(self) -> None:
+        # Field 8 is `B` and a length of 63 is `?`: a pdata that is only that
+        # field is printable end to end and still no text. It has no varint
+        # or fixed-width field in it, which is what a text string that parses
+        # as a message always has.
+        pdata = encode_field_bytes(8, self.ADDRESS)
+        out = sanitize_frame(_header(12, 1, pdata), [])
+        header = _decode_first_header(out)
+        assert header["pdata"] == encode_field_bytes(8, b"X" * 63).hex()
+        assert (header["cmd_func"], header["cmd_id"]) == (12, 1)
+
+    def test_a_masked_field_is_not_read_as_an_identifier_with_its_length_byte(
+        self,
+    ) -> None:
+        # A varint whose value byte is 0x2a ends in the bits of a
+        # length-delimited tag, so the identifier walk reads the next byte, the
+        # tag 0x12 (18), as a length: eighteen bytes from the length byte `N`.
+        # With the field already masked those are `N` and seventeen `X`, all
+        # in the identifier alphabet, and `N` was masked too.
+        assert len(self.LONG_ADDRESS) == ord("N")
+        pdata = encode_field_varint(1, 0x2A) + encode_field_bytes(2, self.LONG_ADDRESS)
+        want = encode_field_varint(1, 0x2A) + encode_field_bytes(
+            2, b"X" * len(self.LONG_ADDRESS)
+        )
+
+        out = sanitize_frame(_header(12, 1, pdata), [])
+
+        assert _decode_first_header(out)["pdata"] == want.hex()
+
+    def test_an_escaped_character_does_not_cut_the_address_short(self) -> None:
+        # `json.dumps` writes a town's `ue` as `\u00fc`; the backslash must not
+        # end the text, or the country in front of it stays.
+        before = b'{"address":"'
+        text = b"Deutschland M\\u00fcnchen,,11.57,48.13"
+        out = sanitize_frame(before + text + b'"}', [])
+        assert out == before + b"X" * len(text) + b'"}'
+
+    def test_text_after_the_pair_in_the_same_string_goes_too(self) -> None:
+        before = b'{"address":"'
+        text = b"Springfield," + self.PAIR + b",12 Main Street"
+        out = sanitize_frame(before + text + b'"}', [])
+        assert out == before + b"X" * len(text) + b'"}'
+
+    def test_a_pdata_that_does_not_read_exactly_is_masked_whole(self) -> None:
+        # One stray byte after an otherwise valid pdata: the message cannot be
+        # read exactly, so every field of it goes, the other fields too. That
+        # leaks nothing; the alternative, reading the string's bytes as
+        # fields, is how a town gets left behind.
+        pdata = self._pdata(8, self.ADDRESS) + b"\x00"
+        out = sanitize_frame(_header(12, 1, pdata), [])
+        header = _decode_first_header(out)
+        assert header["pdata"] == (b"X" * len(pdata)).hex()
+        assert (header["cmd_func"], header["cmd_id"]) == (12, 1)
 
 
 class TestNullPaddingUnderTheMask:
@@ -2775,3 +2951,21 @@ class TestNullPaddingUnderTheMask:
 
         assert wire not in sanitized
         assert b"X" * 15 in sanitized
+
+    def test_a_serial_split_by_a_literal_mask_byte_stays_masked(self) -> None:
+        # A header that declares key 0x30 but sends plain bytes. The `X` in the
+        # serial is not rewritten by the mask, so the rewritten span after it
+        # is eleven serial characters and twelve key bytes: a margin of eleven
+        # took that for padding and handed the eleven back.
+        key = 0x30
+        wire = b"HJ31XABCDEFGHIJK" + bytes([key]) * 12
+        header = bytearray()
+        header.extend(encode_field_varint(6, 1))  # enc_type = XOR, declared
+        header.extend(encode_field_varint(14, key))  # seq
+        header.extend(encode_field_bytes(1, wire))
+        frame = encode_field_bytes(1, bytes(header))
+
+        sanitized = sanitize_frame(frame, [])
+
+        assert b"ABCDEFGHIJK" not in sanitized
+        assert b"HJ31" not in sanitized
