@@ -44,6 +44,7 @@ from ecoflow_energy.number import _get_number_defs
 from ecoflow_energy.select import _get_select_defs
 from ecoflow_energy.sensor import _get_sensor_defs
 from ecoflow_energy.switch import _get_switch_defs
+from homeassistant.util import slugify
 
 COMPONENT_DIR = Path(__file__).resolve().parent.parent / "custom_components"
 CONST_PY = COMPONENT_DIR / "ecoflow_energy" / "const.py"
@@ -464,7 +465,9 @@ def test_no_local_sensor_shares_a_name_with_a_cloud_powerocean_sensor(language):
     )["entity"]["sensor"]
 
     def label(definition: Any) -> str:
-        return sensors[definition.translation_key or definition.key]["name"]
+        # Entity ids come from the slugified name, so "Off-Grid" and "Off Grid"
+        # would clash as well: compare what the id is built from.
+        return slugify(sensors[definition.translation_key or definition.key]["name"])
 
     cloud = {
         label(d): d.key
