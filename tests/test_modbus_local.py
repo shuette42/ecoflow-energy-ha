@@ -1,4 +1,4 @@
-"""Tests for the read-only Modbus/TCP client and its register decoders."""
+"""Tests for the Modbus/TCP client (reads and the guarded write) and its decoders."""
 
 import asyncio
 import contextlib
@@ -9,6 +9,10 @@ from typing import Any
 
 import pytest
 from ecoflow_energy.ecoflow.modbus_local import (
+    BACKUP_RATIO_OFFSET,
+    BRIGHTNESS_OFFSET,
+    HEARTBEAT_OFFSET,
+    WRITABLE_OFFSETS,
     ModbusConnectError,
     ModbusExceptionResponse,
     ModbusLocalClient,
@@ -66,16 +70,24 @@ def _register_bytes(address, count):
     return b"".join(struct.pack(">H", address + i) for i in range(count))
 
 
+def _reply(request):
+    """The answer of a healthy device: registers for 0x03, an exact echo for 0x06."""
+    tid, _proto, _length, unit, function, address, count = _unpack_request(request)
+    if function == 0x06:
+        # For a write the last field is the value, not a count.
+        return struct.pack(">HHHBBHH", tid, 0, 6, unit, function, address, count)
+    data = _register_bytes(address, count)
+    header = struct.pack(">HHHBBB", tid, 0, 3 + len(data), unit, function, len(data))
+    return header + data
+
+
 async def _answer_reads(reader, writer, seen):
+    """Serve reads (0x03) and writes (0x06); ``seen`` gets (unit, fn, address, last)."""
     while True:
         request = await reader.readexactly(_REQUEST_LEN)
         tid, _proto, _length, unit, function, address, count = _unpack_request(request)
         seen.append((unit, function, address, count))
-        data = _register_bytes(address, count)
-        header = struct.pack(
-            ">HHHBBB", tid, 0, 3 + len(data), unit, function, len(data)
-        )
-        writer.write(header + data)
+        writer.write(_reply(request))
         await writer.drain()
 
 
@@ -306,3 +318,285 @@ async def test_a_closed_port_is_a_connect_error_not_a_timeout():
         await client.read_blocks([(0x0206, 9)])
 
     assert not isinstance(excinfo.value, ModbusTimeoutError)
+
+
+_ALLOWED_OFFSETS = [HEARTBEAT_OFFSET, BACKUP_RATIO_OFFSET, BRIGHTNESS_OFFSET]
+
+
+def _write_echo(request, *, value=None, address=None, function=None):
+    """The echo of a write request, with one field optionally damaged."""
+    tid, _proto, _length, unit, fn, addr, val = _unpack_request(request)
+    return struct.pack(
+        ">HHHBBHH",
+        tid,
+        0,
+        6,
+        unit,
+        fn if function is None else function,
+        addr if address is None else address,
+        val if value is None else value,
+    )
+
+
+def test_the_allowlist_is_exactly_heartbeat_backup_ratio_and_brightness():
+    assert {0x025F, 0x0217, 0x021C} == WRITABLE_OFFSETS
+    assert (HEARTBEAT_OFFSET, BACKUP_RATIO_OFFSET, BRIGHTNESS_OFFSET) == (
+        0x025F,
+        0x0217,
+        0x021C,
+    )
+
+
+@pytest.mark.parametrize("offset", _ALLOWED_OFFSETS)
+@pytest.mark.asyncio
+async def test_write_register_sends_function_06_at_base_plus_offset_and_takes_the_echo(
+    offset,
+):
+    requests: list[bytes] = []
+    connections = []
+
+    async def handler(reader, writer):
+        connections.append(writer)
+        request = await reader.readexactly(_REQUEST_LEN)
+        requests.append(request)
+        writer.write(_reply(request))
+        await writer.drain()
+        await reader.read()
+
+    async with _serve(handler) as port:
+        client = ModbusLocalClient("127.0.0.1", port, unit_id=1, timeout=2.0)
+        assert await client.write_register(offset, 0x1234) is None
+
+    assert len(connections) == 1
+    assert len(requests) == 1
+    # Everything after the transaction id: protocol 0, length 6, unit 1,
+    # function 0x06, address 40001 + offset, value.
+    assert requests[0][2:] == struct.pack(
+        ">HHBBHH", 0, 6, 1, 0x06, 40001 + offset, 0x1234
+    )
+
+
+@pytest.mark.parametrize("value", [0, 0xFFFF])
+@pytest.mark.asyncio
+async def test_write_register_accepts_the_whole_register_range(value):
+    seen: list[tuple[int, int, int, int]] = []
+
+    async def handler(reader, writer):
+        await _answer_reads(reader, writer, seen)
+
+    async with _serve(handler) as port:
+        client = ModbusLocalClient("127.0.0.1", port, timeout=2.0)
+        await client.write_register(BACKUP_RATIO_OFFSET, value)
+
+    assert seen == [(1, 0x06, 40001 + BACKUP_RATIO_OFFSET, value)]
+
+
+@pytest.mark.parametrize("offset", [0x0215, 0x021D, 0x021F, 0x022D, 0x023A, 0x0000])
+@pytest.mark.asyncio
+async def test_an_offset_outside_the_allowlist_is_refused_before_any_connection(offset):
+    connections = []
+
+    async def handler(reader, writer):
+        connections.append(writer)
+        await _answer_reads(reader, writer, [])
+
+    async with _serve(handler) as port:
+        client = ModbusLocalClient("127.0.0.1", port, timeout=2.0)
+        with pytest.raises(ValueError, match="not writable"):
+            await client.write_register(offset, 1)
+        # Control: the server does take a connection from an allowed write, so
+        # exactly one here means the refused write opened none.
+        await client.write_register(HEARTBEAT_OFFSET, 1)
+
+    assert len(connections) == 1
+
+
+@pytest.mark.parametrize("value", [-1, 0x10000])
+@pytest.mark.asyncio
+async def test_a_value_outside_the_register_is_refused_before_any_connection(value):
+    connections = []
+
+    async def handler(reader, writer):
+        connections.append(writer)
+        await _answer_reads(reader, writer, [])
+
+    async with _serve(handler) as port:
+        client = ModbusLocalClient("127.0.0.1", port, timeout=2.0)
+        with pytest.raises(ValueError, match="out of range"):
+            await client.write_register(BRIGHTNESS_OFFSET, value)
+        await client.write_register(BRIGHTNESS_OFFSET, 0xFFFF)
+
+    assert len(connections) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_write_exception_response_carries_the_code_and_the_offset():
+    async def handler(reader, writer):
+        request = await reader.readexactly(_REQUEST_LEN)
+        tid, _proto, _length, unit, _function, _address, _value = _unpack_request(
+            request
+        )
+        writer.write(struct.pack(">HHHBBB", tid, 0, 3, unit, 0x86, 0x03))
+        await writer.drain()
+        await reader.read()
+
+    async with _serve(handler) as port:
+        client = ModbusLocalClient("127.0.0.1", port, timeout=2.0)
+        with pytest.raises(ModbusExceptionResponse) as excinfo:
+            await client.write_register(BACKUP_RATIO_OFFSET, 50)
+
+    assert excinfo.value.code == 3
+    assert excinfo.value.offset == BACKUP_RATIO_OFFSET
+
+
+@pytest.mark.parametrize(
+    ("damage", "message"),
+    [
+        ({"value": 51}, "echo does not match"),
+        ({"address": 40001 + BRIGHTNESS_OFFSET}, "echo does not match"),
+        ({"function": 0x03}, "unexpected function code"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_an_echo_that_differs_from_the_write_is_a_protocol_error(damage, message):
+    async def handler(reader, writer):
+        request = await reader.readexactly(_REQUEST_LEN)
+        writer.write(_write_echo(request, **damage))
+        await writer.drain()
+        await reader.read()
+
+    async with _serve(handler) as port:
+        client = ModbusLocalClient("127.0.0.1", port, timeout=2.0)
+        with pytest.raises(ModbusProtocolError, match=message):
+            await client.write_register(BACKUP_RATIO_OFFSET, 50)
+
+
+@pytest.mark.asyncio
+async def test_a_write_to_a_closed_port_is_a_connect_error_not_a_timeout():
+    client = ModbusLocalClient("127.0.0.1", _closed_port(), timeout=2.0)
+
+    with pytest.raises(ModbusConnectError) as excinfo:
+        await client.write_register(HEARTBEAT_OFFSET, 1)
+
+    assert not isinstance(excinfo.value, ModbusTimeoutError)
+
+
+@pytest.mark.asyncio
+async def test_a_write_the_device_never_answers_times_out():
+    async def handler(reader, writer):
+        await reader.readexactly(_REQUEST_LEN)
+        await reader.read()  # holds the connection until the client hangs up
+
+    async with _serve(handler) as port:
+        client = ModbusLocalClient("127.0.0.1", port, timeout=0.3)
+        started = time.monotonic()
+        with pytest.raises(ModbusTimeoutError):
+            await asyncio.wait_for(client.write_register(HEARTBEAT_OFFSET, 1), 5)
+        elapsed = time.monotonic() - started
+
+    assert elapsed < 2.0
+
+
+@pytest.mark.parametrize("answer", ["echo", "exception", "wrong_echo"])
+@pytest.mark.asyncio
+async def test_the_connection_is_closed_after_a_write_whatever_the_answer(
+    answer, monkeypatch
+):
+    closed = asyncio.Event()
+    seen_by_server: list[bytes] = []
+    # Keep the client's writer alive: an unreferenced writer closes itself when
+    # it is garbage collected, which would hide a missing close.
+    held: list[asyncio.StreamWriter] = []
+    real_open_connection = asyncio.open_connection
+
+    async def open_and_hold(*args, **kwargs):
+        reader, writer = await real_open_connection(*args, **kwargs)
+        held.append(writer)
+        return reader, writer
+
+    monkeypatch.setattr(asyncio, "open_connection", open_and_hold)
+
+    async def handler(reader, writer):
+        request = await reader.readexactly(_REQUEST_LEN)
+        tid, _proto, _length, unit, _function, _address, _value = _unpack_request(
+            request
+        )
+        if answer == "echo":
+            writer.write(_write_echo(request))
+        elif answer == "wrong_echo":
+            writer.write(_write_echo(request, value=0))
+        else:
+            writer.write(struct.pack(">HHHBBB", tid, 0, 3, unit, 0x86, 0x02))
+        await writer.drain()
+        # Reads to the end of the stream: b"" means the client hung up.
+        seen_by_server.append(await reader.read())
+        closed.set()
+
+    async with _serve(handler) as port:
+        client = ModbusLocalClient("127.0.0.1", port, timeout=2.0)
+        if answer == "echo":
+            await client.write_register(BACKUP_RATIO_OFFSET, 50)
+        elif answer == "wrong_echo":
+            with pytest.raises(ModbusProtocolError):
+                await client.write_register(BACKUP_RATIO_OFFSET, 50)
+        else:
+            with pytest.raises(ModbusExceptionResponse):
+                await client.write_register(BACKUP_RATIO_OFFSET, 50)
+        assert held[0].transport.is_closing()
+        await asyncio.wait_for(closed.wait(), 2)
+
+    assert seen_by_server == [b""]
+
+
+@pytest.mark.asyncio
+async def test_a_poll_and_writes_started_together_never_hold_two_sockets(monkeypatch):
+    held: list[asyncio.StreamWriter] = []
+    most_open = 0
+    inflight = 0
+    most_inflight = 0
+    real_open_connection = asyncio.open_connection
+
+    async def open_and_count(*args, **kwargs):
+        nonlocal most_open
+        reader, writer = await real_open_connection(*args, **kwargs)
+        held.append(writer)
+        # Client side, so no race with the server noticing a hang-up: a socket
+        # counts as open until the client has closed it.
+        most_open = max(most_open, sum(not w.transport.is_closing() for w in held))
+        return reader, writer
+
+    monkeypatch.setattr(asyncio, "open_connection", open_and_count)
+
+    async def handler(reader, writer):
+        nonlocal inflight, most_inflight
+        while True:
+            request = await reader.readexactly(_REQUEST_LEN)
+            inflight += 1
+            most_inflight = max(most_inflight, inflight)
+            await asyncio.sleep(0.03)  # time for a second request to overlap
+            inflight -= 1
+            writer.write(_reply(request))
+            await writer.drain()
+
+    async with _serve(handler) as port:
+        # Control: two clients do not share a lock, so the same instrument must
+        # see two sockets. Without this a most_open of 1 proves nothing.
+        first = ModbusLocalClient("127.0.0.1", port, timeout=2.0)
+        second = ModbusLocalClient("127.0.0.1", port, timeout=2.0)
+        await asyncio.gather(
+            first.write_register(HEARTBEAT_OFFSET, 1),
+            second.write_register(HEARTBEAT_OFFSET, 1),
+        )
+        assert most_open == 2
+        assert most_inflight == 2
+
+        most_open = 0
+        most_inflight = 0
+        await asyncio.gather(
+            first.read_blocks([(0x0206, 2)]),
+            first.write_register(HEARTBEAT_OFFSET, 1),
+            first.write_register(BRIGHTNESS_OFFSET, 50),
+        )
+
+    assert most_open == 1
+    assert most_inflight == 1

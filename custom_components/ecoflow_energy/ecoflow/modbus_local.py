@@ -1,10 +1,15 @@
-"""Read-only Modbus/TCP client for the PowerOcean local interface.
+"""Modbus/TCP client for the PowerOcean local interface.
 
-Function code 0x03 (read holding registers) is the only one in this module;
-nothing is ever written to the device. One connection carries all requests of
-a poll, every network step runs under a timeout and the whole poll under a
-shared budget, failures are typed, and there is no retry here (the caller owns
-the retry policy). No Home Assistant imports: this is core library code.
+Function code 0x03 (read holding registers) carries every poll. The one write
+is function code 0x06 (write single register), and it is guarded:
+``write_register`` refuses any offset outside ``WRITABLE_OFFSETS`` before a
+socket is opened, and it accepts the device's answer only as an exact echo of
+the request. One connection carries all requests of a poll or one write, every
+network step runs under a timeout and the whole poll under a shared budget,
+failures are typed, and there is no retry here (the caller owns the retry
+policy). The device serves one client at a time, so a lock per client instance
+keeps a poll, a heartbeat beat and a write from holding two sockets at once.
+No Home Assistant imports: this is core library code.
 
 Register offsets from the device's protocol table are added to
 ``MODBUS_BASE_ADDRESS`` on the wire (measured: without it the device answers
@@ -22,7 +27,16 @@ from collections.abc import Sequence
 MODBUS_BASE_ADDRESS = 40001
 MODBUS_DEFAULT_PORT = 502
 READ_HOLDING_REGISTERS = 0x03
+WRITE_SINGLE_REGISTER = 0x06
 MAX_REGISTERS_PER_READ = 125
+
+# The only registers this client writes: the control heartbeat, the Backup
+# Reserve ratio and the indicator brightness. Anything else is refused before a
+# socket opens, whatever the entity layer asks for.
+HEARTBEAT_OFFSET = 0x025F
+BACKUP_RATIO_OFFSET = 0x0217
+BRIGHTNESS_OFFSET = 0x021C
+WRITABLE_OFFSETS = frozenset({HEARTBEAT_OFFSET, BACKUP_RATIO_OFFSET, BRIGHTNESS_OFFSET})
 
 _EXCEPTION_FLAG = 0x80
 _MBAP_LEN = 7
@@ -48,7 +62,7 @@ class ModbusTimeoutError(ModbusLocalError):
 
 
 class ModbusExceptionResponse(ModbusLocalError):
-    """The device answered with a Modbus exception (function 0x83)."""
+    """The device answered with a Modbus exception (function 0x83 or 0x86)."""
 
     def __init__(self, code: int, offset: int) -> None:
         super().__init__(
@@ -59,7 +73,7 @@ class ModbusExceptionResponse(ModbusLocalError):
 
 
 class ModbusProtocolError(ModbusLocalError):
-    """The answer does not match the request (transaction, unit, length)."""
+    """The answer does not match the request (transaction, unit, length, echo)."""
 
 
 def decode_u16(raw: bytes) -> int:
@@ -88,7 +102,7 @@ def decode_ascii(raw: bytes) -> str:
 
 
 class ModbusLocalClient:
-    """Asyncio Modbus/TCP client that reads holding registers, one poll at a time."""
+    """Asyncio Modbus/TCP client: polls holding registers, writes a guarded few."""
 
     def __init__(
         self,
@@ -102,6 +116,9 @@ class ModbusLocalClient:
         self._unit_id = unit_id
         self._timeout = timeout
         self._transaction_id = 0
+        # Shared state: one lock per client, held for a whole connection, so
+        # a poll, a heartbeat and a write never hold two sockets at once.
+        self._lock = asyncio.Lock()
 
     async def read_blocks(self, blocks: Sequence[tuple[int, int]]) -> dict[int, bytes]:
         """Read ``(offset, register_count)`` blocks over one connection.
@@ -115,23 +132,48 @@ class ModbusLocalClient:
             if not 1 <= count <= MAX_REGISTERS_PER_READ:
                 raise ValueError(f"register count out of range: {count}")
 
-        reader, writer = await self._connect()
-        try:
-            budget = self._timeout * _POLL_BUDGET_FACTOR
-            result: dict[int, bytes] = {}
+        async with self._lock:
+            reader, writer = await self._connect()
             try:
-                async with asyncio.timeout(budget):
-                    for offset, count in blocks:
-                        result[offset] = await self._read(reader, writer, offset, count)
-            except TimeoutError as err:
-                # Only the shared budget lands here: a single request's own
-                # timeout is already a ModbusTimeoutError inside ``_read``.
-                raise ModbusTimeoutError(
-                    f"poll exceeded its {budget:.1f}s budget"
-                ) from err
-            return result
-        finally:
-            await self._close(writer)
+                budget = self._timeout * _POLL_BUDGET_FACTOR
+                result: dict[int, bytes] = {}
+                try:
+                    async with asyncio.timeout(budget):
+                        for offset, count in blocks:
+                            result[offset] = await self._read(
+                                reader, writer, offset, count
+                            )
+                except TimeoutError as err:
+                    # Only the shared budget lands here: a single request's own
+                    # timeout is already a ModbusTimeoutError inside ``_read``.
+                    raise ModbusTimeoutError(
+                        f"poll exceeded its {budget:.1f}s budget"
+                    ) from err
+                return result
+            finally:
+                await self._close(writer)
+
+    async def write_register(self, offset: int, value: int) -> None:
+        """Write one holding register (function 0x06) and check the echo.
+
+        Only offsets in ``WRITABLE_OFFSETS`` are accepted, and a refusal
+        (``ValueError``) happens before any socket is opened. The device
+        acknowledges a write with an exact echo of the request; any other
+        answer is a ``ModbusProtocolError``. Range limits of the value beyond
+        the 16-bit register belong to the entity layer. Raises a
+        ``ModbusLocalError`` subclass on any failure.
+        """
+        if offset not in WRITABLE_OFFSETS:
+            raise ValueError(f"register offset {offset:#06x} is not writable")
+        if not 0 <= value <= 0xFFFF:
+            raise ValueError(f"register value out of range: {value}")
+
+        async with self._lock:
+            reader, writer = await self._connect()
+            try:
+                await self._write(reader, writer, offset, value)
+            finally:
+                await self._close(writer)
 
     async def _connect(self) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         try:
@@ -144,25 +186,18 @@ class ModbusLocalClient:
         except OSError as err:
             raise ModbusConnectError(f"connect failed: {err}") from err
 
-    async def _read(
+    def _next_transaction_id(self) -> int:
+        self._transaction_id = self._transaction_id % 0xFFFF + 1
+        return self._transaction_id
+
+    async def _exchange(
         self,
         reader: asyncio.StreamReader,
         writer: asyncio.StreamWriter,
-        offset: int,
-        count: int,
+        tid: int,
+        request: bytes,
     ) -> bytes:
-        self._transaction_id = self._transaction_id % 0xFFFF + 1
-        tid = self._transaction_id
-        request = struct.pack(
-            ">HHHBBHH",
-            tid,
-            0,
-            6,
-            self._unit_id,
-            READ_HOLDING_REGISTERS,
-            MODBUS_BASE_ADDRESS + offset,
-            count,
-        )
+        """Send one request frame and return the PDU of its answer."""
         try:
             async with asyncio.timeout(self._timeout):
                 writer.write(request)
@@ -181,13 +216,33 @@ class ModbusLocalClient:
                     )
                 if not 3 <= r_length <= _MAX_PDU_LEN + 1:
                     raise ModbusProtocolError(f"implausible length field {r_length}")
-                pdu = await reader.readexactly(r_length - 1)
+                return bytes(await reader.readexactly(r_length - 1))
         except TimeoutError as err:
             raise ModbusTimeoutError(f"no answer within {self._timeout:.1f}s") from err
         except asyncio.IncompleteReadError as err:
             raise ModbusProtocolError("connection closed mid-frame") from err
         except OSError as err:
             raise ModbusConnectError(f"connection lost: {err}") from err
+
+    async def _read(
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+        offset: int,
+        count: int,
+    ) -> bytes:
+        tid = self._next_transaction_id()
+        request = struct.pack(
+            ">HHHBBHH",
+            tid,
+            0,
+            6,
+            self._unit_id,
+            READ_HOLDING_REGISTERS,
+            MODBUS_BASE_ADDRESS + offset,
+            count,
+        )
+        pdu = await self._exchange(reader, writer, tid, request)
 
         function = pdu[0]
         if function == READ_HOLDING_REGISTERS | _EXCEPTION_FLAG:
@@ -199,6 +254,39 @@ class ModbusLocalClient:
                 f"byte count {pdu[1]} does not match {count} registers"
             )
         return bytes(pdu[2:])
+
+    async def _write(
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+        offset: int,
+        value: int,
+    ) -> None:
+        tid = self._next_transaction_id()
+        address = MODBUS_BASE_ADDRESS + offset
+        request = struct.pack(
+            ">HHHBBHH",
+            tid,
+            0,
+            6,
+            self._unit_id,
+            WRITE_SINGLE_REGISTER,
+            address,
+            value,
+        )
+        pdu = await self._exchange(reader, writer, tid, request)
+
+        function = pdu[0]
+        if function == WRITE_SINGLE_REGISTER | _EXCEPTION_FLAG:
+            raise ModbusExceptionResponse(pdu[1], offset)
+        if function != WRITE_SINGLE_REGISTER:
+            raise ModbusProtocolError(f"unexpected function code {function:#04x}")
+        # The device acknowledges a write by echoing function, address and
+        # value; a different echo means the write did not land as asked.
+        if pdu != struct.pack(">BHH", WRITE_SINGLE_REGISTER, address, value):
+            raise ModbusProtocolError(
+                f"write echo does not match the request at offset {offset:#06x}"
+            )
 
     async def _close(self, writer: asyncio.StreamWriter) -> None:
         writer.close()
