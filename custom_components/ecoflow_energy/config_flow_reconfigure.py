@@ -134,7 +134,7 @@ class ReconfigureFlowMixin(_Base):
             try:
                 if not valid_local_host(host):
                     raise LocalDeviceError("invalid_host")
-                info = await read_local_device(host, port, unit_id)
+                info = await read_local_device(self.hass, host, port, unit_id)
             except LocalDeviceError as err:
                 errors["base"] = err.reason
             else:

@@ -10,7 +10,7 @@ from datetime import datetime
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP
 from homeassistant.core import Event, HomeAssistant, callback
-from homeassistant.exceptions import ConfigEntryError
+from homeassistant.exceptions import ConfigEntryError, HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import async_call_later
 
@@ -423,7 +423,15 @@ async def _async_setup_local_entry(
     if len(devices) != 1:
         raise ConfigEntryError("A local Modbus entry needs exactly one device")
 
-    coordinator = EcoFlowLocalModbusCoordinator(hass, entry, devices[0])
+    try:
+        coordinator = EcoFlowLocalModbusCoordinator(hass, entry, devices[0])
+    except HomeAssistantError as err:
+        # The device is already held on the shared connection with other link
+        # settings. Retrying cannot change that: the owner has to, so this is
+        # a setup error with the reason, not a retry.
+        raise ConfigEntryError(
+            f"The shared Modbus connection refused this device: {err}"
+        ) from err
     # A device that does not answer raises ConfigEntryNotReady here, and Home
     # Assistant retries with its own backoff.
     await coordinator.async_config_entry_first_refresh()

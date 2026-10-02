@@ -44,6 +44,7 @@ from ..ecoflow.modbus_local import (
 try:
     import modbus_connection as mc
     from homeassistant.components.modbus import (  # type: ignore[attr-defined,unused-ignore]
+        async_get_temporary_unit,
         async_get_unit,
     )
     from modbus_connection import ModbusTcpParams
@@ -138,3 +139,34 @@ def create_link(
         )
         return SharedModbusLink(unit)
     return ModbusLocalClient(host, port, unit_id, timeout=LOCAL_MODBUS_TIMEOUT_S)
+
+
+async def read_setup_blocks(
+    hass: HomeAssistant,
+    host: str,
+    port: int,
+    unit_id: int,
+    blocks: Sequence[tuple[int, int]],
+) -> dict[int, bytes]:
+    """Read ``(offset, register_count)`` blocks for a flow with no config entry.
+
+    A device that serves one client refuses a socket of its own while another
+    integration holds it on the shared connection, so on that connection the
+    probe takes a temporary unit instead: a connection an entry already holds
+    is shared and stays up, one opened here is closed on exit. The reads go
+    through ``SharedModbusLink``, so the words are packed and the errors mapped
+    exactly as in a running entry. A ``HomeAssistantError`` (the device is held
+    with other link settings) propagates for the caller to report.
+    """
+    if not SHARED_CONNECTION:
+        client = ModbusLocalClient(host, port, unit_id, timeout=LOCAL_MODBUS_TIMEOUT_S)
+        return await client.read_blocks(blocks)
+    try:
+        async with async_get_temporary_unit(
+            hass, ModbusTcpParams(host=host, port=port), unit_id
+        ) as unit:
+            return await SharedModbusLink(unit).read_blocks(blocks)
+    except mc.ModbusError as err:
+        # Only what happens outside the reads reaches here (opening or closing
+        # the temporary connection); the reads map their own errors.
+        raise _translate(err, 0) from err

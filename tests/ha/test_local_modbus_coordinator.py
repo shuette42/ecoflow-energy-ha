@@ -49,6 +49,7 @@ from custom_components.ecoflow_energy.const import (
 from custom_components.ecoflow_energy.coordinator import (
     EcoFlowDeviceCoordinator,
     local_modbus,
+    modbus_link,
 )
 from custom_components.ecoflow_energy.coordinator.local_modbus import (
     EcoFlowLocalModbusCoordinator,
@@ -452,10 +453,34 @@ async def test_an_unreachable_device_at_setup_is_retried_not_failed(
     await hass.config_entries.async_unload(entry.entry_id)
 
 
-async def test_local_diagnostics_carry_the_link_and_the_data_without_the_serial(
+async def test_a_device_held_with_other_link_settings_is_a_setup_error_with_the_reason(
     hass: HomeAssistant,
 ) -> None:
+    """The refusal is final: the entry fails with the reason and is not retried."""
+    entry = _local_entry()
+    entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.ecoflow_energy.coordinator.local_modbus.create_link",
+        side_effect=HomeAssistantError("held with other link settings"),
+    ):
+        assert not await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert entry.state is ConfigEntryState.SETUP_ERROR
+    # A bare HomeAssistantError would also end in SETUP_ERROR, with the reason
+    # "Unknown error": the reason is what tells the two apart.
+    assert entry.reason is not None
+    assert "other link settings" in entry.reason
+    assert entry.entry_id not in hass.data.get(DOMAIN, {})
+
+
+async def test_local_diagnostics_carry_the_link_and_the_data_without_the_serial(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """The local branch reports the link (host redacted), poll health and readings."""
+    monkeypatch.setattr(modbus_link, "SHARED_CONNECTION", False)
+    monkeypatch.setattr(modbus_link, "SHARED_CONNECTION_REASON", "no shared module")
     entry = _local_entry()
     assert await _set_up_local_entry(hass, entry, [_frame(DAY)])
     # The readings hold no serial, so without help the final assertion could not
@@ -471,6 +496,8 @@ async def test_local_diagnostics_carry_the_link_and_the_data_without_the_serial(
         "port": 502,
         "unit_id": 1,
         "device_count": 1,
+        "connection_backend": "own",
+        "own_client_reason": "no shared module",
     }
     (device,) = diagnostics["devices"]
     assert device["last_poll_ok"] is True
@@ -482,6 +509,38 @@ async def test_local_diagnostics_carry_the_link_and_the_data_without_the_serial(
     assert SERIAL not in json.dumps(diagnostics)
     # The host is the owner's own network address: nowhere in the download.
     assert "modbus.example.test" not in json.dumps(diagnostics)
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+@pytest.mark.parametrize(
+    ("shared", "backend", "reason_keys"),
+    [(True, "shared", []), (False, "own", ["own_client_reason"])],
+    ids=["shared", "own"],
+)
+async def test_local_diagnostics_name_the_connection_the_entry_runs_on(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+    shared: bool,
+    backend: str,
+    reason_keys: list[str],
+) -> None:
+    """Both backends are reported; only the own client carries its reason."""
+    monkeypatch.setattr(modbus_link, "SHARED_CONNECTION", shared)
+    monkeypatch.setattr(
+        modbus_link,
+        "SHARED_CONNECTION_REASON",
+        "" if shared else "No module named 'modbus_connection'",
+    )
+    entry = _local_entry()
+    assert await _set_up_local_entry(hass, entry, [_frame(DAY)])
+
+    config = (await async_get_config_entry_diagnostics(hass, entry))["config_entry"]
+
+    assert config["connection_backend"] == backend
+    assert [key for key in config if key.startswith("own_client")] == reason_keys
+    if reason_keys:
+        assert config["own_client_reason"] == "No module named 'modbus_connection'"
+    assert "modbus.example.test" not in json.dumps(config)
     assert await hass.config_entries.async_unload(entry.entry_id)
 
 

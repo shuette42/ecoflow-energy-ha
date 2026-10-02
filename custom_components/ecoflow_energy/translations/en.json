@@ -26,7 +26,7 @@
       },
       "local": {
         "title": "Local Modbus/TCP Connection",
-        "description": "Read your PowerOcean directly over Modbus/TCP, without the EcoFlow cloud. This connection is read-only: nothing is written to the device.\n\nModbus has to be enabled for your device by EcoFlow support first. The device serves one Modbus client at a time, so close any other Modbus tool before you continue.\n\nUse the DNS name of the device as the host where you can.",
+        "description": "Connect your PowerOcean directly over Modbus/TCP, without the EcoFlow cloud. Backup Reserve and the indicator brightness can be changed from Home Assistant. The Modbus control switch is off by default, and while it is on, the EcoFlow app is locked.\n\nModbus has to be enabled for your device by EcoFlow support first. The device serves one Modbus client at a time, so close any other Modbus tool before you continue. Two integrations can share the device only when both use Home Assistant's shared Modbus connection with exactly the same host string.\n\nUse the DNS name of the device as the host where you can.",
         "data": {
           "host": "Host",
           "port": "Port",

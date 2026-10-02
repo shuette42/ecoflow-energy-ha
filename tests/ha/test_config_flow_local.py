@@ -1,4 +1,4 @@
-"""Config flow for the local Modbus/TCP connection (read-only PowerOcean).
+"""Config flow for the local Modbus/TCP connection (PowerOcean).
 
 The Modbus client is stubbed with the identity registers a device answers, so
 these tests cover what the flow does with an answer: which entry it writes,
@@ -11,8 +11,11 @@ a local entry must not have.
 from __future__ import annotations
 
 import json
+import logging
 import struct
+from contextlib import asynccontextmanager
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -22,6 +25,7 @@ from homeassistant.config_entries import SOURCE_RECONFIGURE
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.exceptions import HomeAssistantError
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.config_flow import EcoFlowEnergyConfigFlow
@@ -43,7 +47,9 @@ from custom_components.ecoflow_energy.const import (
     MODE_LOCAL,
     MODE_STANDARD,
 )
+from custom_components.ecoflow_energy.coordinator import modbus_link
 from custom_components.ecoflow_energy.ecoflow.modbus_local import (
+    MODBUS_BASE_ADDRESS,
     ModbusConnectError,
     ModbusExceptionResponse,
     ModbusLocalError,
@@ -54,7 +60,9 @@ from custom_components.ecoflow_energy.ecoflow.modbus_local import (
 SERIAL = "HJ31DUMMY0000001"
 OTHER_SERIAL = "HJ31DUMMY0000002"
 HOST = "modbus.example.test"
-SETUP_CLIENT = "custom_components.ecoflow_energy.config_flow_setup.ModbusLocalClient"
+SETUP_CLIENT = (
+    "custom_components.ecoflow_energy.coordinator.modbus_link.ModbusLocalClient"
+)
 SETUP_IOT = "custom_components.ecoflow_energy.config_flow_setup.IoTApiClient"
 SETUP_LOGIN = "custom_components.ecoflow_energy.config_flow_setup.enhanced_login"
 SETUP_APP_DEVICES = (
@@ -106,6 +114,12 @@ class _StubClient:
 def _patch_client(reply: dict[int, bytes] | ModbusLocalError) -> Any:
     stub = _StubClient(reply)
     return patch(SETUP_CLIENT, side_effect=stub.factory)
+
+
+@pytest.fixture(autouse=True)
+def _own_client(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Probe with the own client unless a test asks for the shared connection."""
+    monkeypatch.setattr(modbus_link, "SHARED_CONNECTION", False)
 
 
 @pytest.fixture(autouse=True)
@@ -267,6 +281,106 @@ async def test_setup_names_the_error_and_creates_nothing(
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], _address()
         )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+
+
+class _SharedUnit:
+    """A unit on the shared connection, answering from the identity blocks."""
+
+    def __init__(self, blocks: dict[int, bytes]) -> None:
+        self._blocks = blocks
+
+    async def read_holding_registers(self, address: int, count: int) -> list[int]:
+        raw = self._blocks[address - MODBUS_BASE_ADDRESS]
+        return list(struct.unpack(f">{count}H", raw))
+
+
+@pytest.fixture
+def shared(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
+    """Home Assistant's shared connection with a temporary unit that logs its use."""
+    state = SimpleNamespace(opened=[], closed=0, refusal=None, blocks=_registers())
+
+    @asynccontextmanager
+    async def temporary_unit(hass: Any, params: Any, unit_id: int) -> Any:
+        if state.refusal is not None:
+            raise state.refusal
+        state.opened.append((params.host, params.port, unit_id))
+        try:
+            yield _SharedUnit(state.blocks)
+        finally:
+            state.closed += 1
+
+    class LibError(Exception):
+        """Stands in for the library's ``ModbusError`` base."""
+
+    names = SimpleNamespace(ModbusError=LibError)
+    monkeypatch.setattr(modbus_link, "SHARED_CONNECTION", True)
+    monkeypatch.setattr(modbus_link, "mc", names, raising=False)
+    monkeypatch.setattr(
+        modbus_link, "async_get_temporary_unit", temporary_unit, raising=False
+    )
+    monkeypatch.setattr(modbus_link, "ModbusTcpParams", SimpleNamespace, raising=False)
+    return state
+
+
+async def test_setup_probes_through_a_temporary_unit_on_the_shared_connection(
+    hass: HomeAssistant, shared: SimpleNamespace
+) -> None:
+    """With the shared connection the flow opens no socket of its own."""
+    result = await _start_local_setup(hass)
+    with patch(SETUP_CLIENT, side_effect=AssertionError("own client built")):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], _address(port=1502, unit_id=7)
+        )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_DEVICES][0]["sn"] == SERIAL
+    assert shared.opened == [(HOST, 1502, 7)]
+    assert shared.closed == 1
+
+
+async def test_reconfigure_probes_through_a_temporary_unit_on_the_shared_connection(
+    hass: HomeAssistant, shared: SimpleNamespace
+) -> None:
+    """The reconfigure probe takes the same route as the setup probe."""
+    entry = _cloud_entry(hass)
+    result = await _start_reconfigure(hass, entry)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "reconfigure_local"}
+    )
+    with patch(SETUP_CLIENT, side_effect=AssertionError("own client built")):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], _address(port=1502, unit_id=7)
+        )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "mode_switched"
+    assert shared.opened == [(HOST, 1502, 7)]
+    assert shared.closed == 1
+
+
+async def test_a_device_held_with_other_link_settings_is_a_form_error_without_the_host(
+    hass: HomeAssistant, shared: SimpleNamespace, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Home Assistant's refusal reads as an unreachable device and logs no host."""
+    shared.refusal = HomeAssistantError(f"{HOST}:502 is held with other settings")
+    caplog.set_level(logging.DEBUG, logger="custom_components.ecoflow_energy")
+    result = await _start_local_setup(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], _address()
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "cannot_connect"}
+    assert hass.config_entries.async_entries(DOMAIN) == []
+    # Positive control: the refusal was logged, only not with the endpoint.
+    assert "refused by the shared connection" in caplog.text
+    assert HOST not in caplog.text
+
+    shared.refusal = None
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], _address()
+    )
     assert result["type"] is FlowResultType.CREATE_ENTRY
 
 

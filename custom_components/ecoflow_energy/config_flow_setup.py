@@ -15,6 +15,7 @@ from homeassistant.config_entries import (
 )
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
     SelectOptionDict,
@@ -43,19 +44,18 @@ from .const import (
     DEVICE_TYPE_UNKNOWN,
     DOMAIN,
     ENHANCED_ONLY_DEVICE_TYPES,
-    LOCAL_MODBUS_TIMEOUT_S,
     MODE_ENHANCED,
     MODE_LOCAL,
     MODE_STANDARD,
     get_device_name,
     get_device_type,
 )
+from .coordinator.modbus_link import read_setup_blocks
 from .ecoflow.enhanced_auth import enhanced_login, get_app_device_list
 from .ecoflow.iot_api import IoTApiClient
 from .ecoflow.modbus_local import (
     MODBUS_DEFAULT_PORT,
     ModbusConnectError,
-    ModbusLocalClient,
     ModbusLocalError,
     ModbusTimeoutError,
 )
@@ -78,7 +78,7 @@ _INVALID_HOST_RE = re.compile(r"[\s/]")
 
 CLOUD_ENTRY_TITLE = "EcoFlow Energy"
 
-_LOCAL_MODE_LABEL = "Local - three-phase PowerOcean via Modbus/TCP (read-only)"
+_LOCAL_MODE_LABEL = "Local - three-phase PowerOcean via Modbus/TCP"
 
 
 def local_entry_title(serial: str) -> str:
@@ -169,18 +169,29 @@ class LocalDeviceError(Exception):
         self.reason = reason
 
 
-async def read_local_device(host: str, port: int, unit_id: int) -> dict[str, Any]:
+async def read_local_device(
+    hass: HomeAssistant, host: str, port: int, unit_id: int
+) -> dict[str, Any]:
     """Read the identity registers and return the device info.
 
     Raises ``LocalDeviceError`` with the error key the form shows: an
     unreachable or silent device is ``cannot_connect``, an exception or a
     malformed answer is ``modbus_exception``, and a reachable device that is
     not the supported PowerOcean is ``unsupported_device``. Nothing here
-    writes: the client only issues read requests.
+    writes: the probe only issues read requests. It goes through the shared
+    connection when Home Assistant has one, so it does not compete with an
+    integration that already holds the device.
     """
-    client = ModbusLocalClient(host, port, unit_id, timeout=LOCAL_MODBUS_TIMEOUT_S)
     try:
-        blocks = await client.read_blocks(SETUP_BLOCKS)
+        blocks = await read_setup_blocks(hass, host, port, unit_id, SETUP_BLOCKS)
+    except HomeAssistantError as err:
+        # The device is held with other link settings. The text may name the
+        # endpoint, which stays out of the log.
+        _LOGGER.debug(
+            "Local Modbus probe refused by the shared connection (%s)",
+            type(err).__name__,
+        )
+        raise LocalDeviceError("cannot_connect") from err
     except (ModbusConnectError, ModbusTimeoutError) as err:
         raise LocalDeviceError("cannot_connect") from err
     except ModbusLocalError as err:
@@ -410,7 +421,7 @@ class SetupFlowMixin(_Base):
             try:
                 if not valid_local_host(host):
                     raise LocalDeviceError("invalid_host")
-                info = await read_local_device(host, port, unit_id)
+                info = await read_local_device(self.hass, host, port, unit_id)
             except LocalDeviceError as err:
                 errors["base"] = err.reason
             else:

@@ -40,7 +40,7 @@ from .const import (
     RAW_FRAME_MAX_BYTES,
     raw_capture_window_open,
 )
-from .coordinator import EcoFlowDeviceCoordinator
+from .coordinator import EcoFlowDeviceCoordinator, modbus_link
 from .coordinator.local_modbus import EcoFlowLocalModbusCoordinator
 from .ecoflow.cloud_http import EcoFlowHTTPQuota
 
@@ -399,18 +399,23 @@ def _local_diagnostics(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any
             }
         )
 
-    diagnostics = {
-        "config_entry": {
-            "mode": entry.data.get(CONF_MODE),
-            # A Local host is a name or address on the owner's network, so it
-            # is redacted like the credentials; port and unit id stay.
-            "host": REDACTED if entry.data.get(CONF_HOST) else None,
-            "port": entry.data.get(CONF_PORT),
-            "unit_id": entry.data.get(CONF_UNIT_ID),
-            "device_count": len(entry.data.get(CONF_DEVICES, [])),
-        },
-        "devices": devices_diag,
+    config_entry: dict[str, Any] = {
+        "mode": entry.data.get(CONF_MODE),
+        # A Local host is a name or address on the owner's network, so it
+        # is redacted like the credentials; port and unit id stay.
+        "host": REDACTED if entry.data.get(CONF_HOST) else None,
+        "port": entry.data.get(CONF_PORT),
+        "unit_id": entry.data.get(CONF_UNIT_ID),
+        "device_count": len(entry.data.get(CONF_DEVICES, [])),
+        # Which connection the entry runs on: Home Assistant's shared Modbus
+        # connection, or the integration's own client. A reporter whose device
+        # refuses a second client is told apart by this line.
+        "connection_backend": "shared" if modbus_link.SHARED_CONNECTION else "own",
     }
+    if not modbus_link.SHARED_CONNECTION:
+        # The import error text: names a module, holds no secret.
+        config_entry["own_client_reason"] = modbus_link.SHARED_CONNECTION_REASON
+    diagnostics = {"config_entry": config_entry, "devices": devices_diag}
     serials = [coordinator.device_sn for coordinator in coordinators.values()]
     return _redact_serials(diagnostics, tails=_serial_tails(serials))
 

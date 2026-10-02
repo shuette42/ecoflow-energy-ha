@@ -22,6 +22,7 @@ from custom_components.ecoflow_energy.coordinator import modbus_link
 from custom_components.ecoflow_energy.coordinator.modbus_link import (
     SharedModbusLink,
     create_link,
+    read_setup_blocks,
 )
 from custom_components.ecoflow_energy.ecoflow.modbus_local import (
     BACKUP_RATIO_OFFSET,
@@ -400,3 +401,103 @@ def test_a_refused_unit_fails_the_setup_and_never_falls_back_to_a_second_socket(
 
     with pytest.raises(HomeAssistantError, match="other link settings"):
         create_link(MagicMock(), MagicMock(), "modbus.example.test", 502, 1)
+
+
+class _TemporaryUnit:
+    """Stands in for ``async_get_temporary_unit``: logs the open and the close."""
+
+    def __init__(self, unit: FakeUnit, enter_error: Exception | None = None) -> None:
+        self.unit = unit
+        self.enter_error = enter_error
+        self.opened: list[tuple[str, int, int]] = []
+        self.closed = 0
+
+    def __call__(self, hass: Any, params: Any, unit_id: int) -> _TemporaryUnit:
+        self.opened.append((params.host, params.port, unit_id))
+        return self
+
+    async def __aenter__(self) -> FakeUnit:
+        if self.enter_error is not None:
+            raise self.enter_error
+        return self.unit
+
+    async def __aexit__(self, *exc: object) -> None:
+        self.closed += 1
+
+
+def _fake_temporary_unit(
+    monkeypatch: pytest.MonkeyPatch, temporary: _TemporaryUnit
+) -> None:
+    monkeypatch.setattr(
+        modbus_link, "async_get_temporary_unit", temporary, raising=False
+    )
+    monkeypatch.setattr(modbus_link, "ModbusTcpParams", SimpleNamespace, raising=False)
+    monkeypatch.setattr(modbus_link, "SHARED_CONNECTION", True)
+
+
+async def test_setup_blocks_are_read_on_a_temporary_unit_and_packed_like_a_poll(
+    lib: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    unit = FakeUnit({MODBUS_BASE_ADDRESS + 3: 0x4849, MODBUS_BASE_ADDRESS + 4: 0x3331})
+    temporary = _TemporaryUnit(unit)
+    _fake_temporary_unit(monkeypatch, temporary)
+
+    blocks = await read_setup_blocks(
+        MagicMock(), "modbus.example.test", 1502, 3, [(3, 2)]
+    )
+
+    assert blocks == {3: b"HI31"}
+    assert temporary.opened == [("modbus.example.test", 1502, 3)]
+    assert temporary.closed == 1
+    assert unit.calls == [("read", MODBUS_BASE_ADDRESS + 3, 2)]
+
+
+async def test_an_error_while_opening_the_temporary_unit_maps_onto_the_local_family(
+    lib: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    refused = LibConnection("connection refused")
+    _fake_temporary_unit(monkeypatch, _TemporaryUnit(FakeUnit(), refused))
+
+    with pytest.raises(ModbusConnectError) as caught:
+        await read_setup_blocks(MagicMock(), "modbus.example.test", 502, 1, [(0, 3)])
+
+    assert caught.value.__cause__ is refused
+
+
+async def test_a_refusal_by_home_assistant_is_not_mapped_and_not_retried(
+    lib: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    refused = HomeAssistantError("held with other link settings")
+    temporary = _TemporaryUnit(FakeUnit(), refused)
+    _fake_temporary_unit(monkeypatch, temporary)
+
+    with pytest.raises(HomeAssistantError, match="other link settings"):
+        await read_setup_blocks(MagicMock(), "modbus.example.test", 502, 1, [(0, 3)])
+
+    assert len(temporary.opened) == 1
+
+
+async def test_setup_blocks_use_the_own_client_without_the_shared_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    temporary = _TemporaryUnit(FakeUnit())
+    _fake_temporary_unit(monkeypatch, temporary)
+    monkeypatch.setattr(modbus_link, "SHARED_CONNECTION", False)
+    built: list[tuple[Any, ...]] = []
+
+    class OwnClient:
+        def __init__(self, host: str, port: int, unit_id: int, timeout: float) -> None:
+            built.append((host, port, unit_id))
+
+        async def read_blocks(self, blocks: Any) -> dict[int, bytes]:
+            return {0: b"\x00\x01"}
+
+    monkeypatch.setattr(modbus_link, "ModbusLocalClient", OwnClient)
+
+    blocks = await read_setup_blocks(
+        MagicMock(), "modbus.example.test", 502, 1, [(0, 1)]
+    )
+
+    assert blocks == {0: b"\x00\x01"}
+    assert built == [("modbus.example.test", 502, 1)]
+    assert temporary.opened == []
