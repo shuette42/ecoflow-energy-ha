@@ -6,8 +6,9 @@ import logging
 import time
 from typing import Any
 
-from homeassistant.components.number import NumberMode, RestoreNumber
+from homeassistant.components.number import NumberEntity, NumberMode, RestoreNumber
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -28,6 +29,7 @@ from .const import (
     NUMBER_COMMANDS,
     POWEROCEAN_NUMBERS,
     POWEROCEAN_SCHEDULE_PREFIXES,
+    POWEROCEANLOCALONLY_NUMBERS,
     POWERPULSE2_NUMBERS,
     SMARTPLUG_NUMBER_COMMANDS,
     SMARTPLUG_NUMBERS,
@@ -40,6 +42,7 @@ from .const import (
     supports_stream_controls,
 )
 from .coordinator import DeviceValueNotReported, EcoFlowDeviceCoordinator
+from .coordinator.local_modbus import EcoFlowLocalModbusCoordinator
 from .ecoflow.const import (
     POWEROCEAN_FEED_SCHEDULE_POWER_MIN_W,
     schedule_power_max_w,
@@ -79,12 +82,20 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up EcoFlow numbers from a config entry."""
-    coordinators: dict[str, EcoFlowDeviceCoordinator] = hass.data[DOMAIN][
-        entry.entry_id
-    ]
-    entities: list[EcoFlowNumber] = []
+    coordinators: dict[
+        str, EcoFlowDeviceCoordinator | EcoFlowLocalModbusCoordinator
+    ] = hass.data[DOMAIN][entry.entry_id]
+    entities: list[NumberEntity] = []
 
-    for coordinator in coordinators.values():
+    for source in coordinators.values():
+        if isinstance(source, EcoFlowLocalModbusCoordinator):
+            # A local entry gets its two settings and nothing from the cloud
+            # definition lists.
+            entities.extend(
+                EcoFlowLocalNumber(source, defn) for defn in POWEROCEANLOCALONLY_NUMBERS
+            )
+            continue
+        coordinator = source
         defs = filter_defs_for_serial(
             _get_number_defs(coordinator.device_type, coordinator.device_sn),
             coordinator.device_sn,
@@ -825,6 +836,90 @@ class EcoFlowNumber(
             raise_set_rejected(self.entity_id, str(err))
 
         raise_set_unsupported(self.entity_id)
+
+
+_NUMBER_CATEGORY_MAP = {
+    "diagnostic": EntityCategory.DIAGNOSTIC,
+    "config": EntityCategory.CONFIG,
+}
+
+
+class EcoFlowLocalNumber(
+    EcoFlowWriteGateMixin,
+    CoordinatorEntity[EcoFlowLocalModbusCoordinator],
+    NumberEntity,
+):
+    """A setting of a local Modbus entry, shown as the device holds it.
+
+    Not a RestoreNumber and not optimistic: the coordinator writes the register,
+    reads it back and publishes what the device holds, and the entity renders
+    that. A write the device does not confirm raises, and the entity keeps its
+    last confirmed value. It does not depend on the control switch: the device
+    takes these two writes without a heartbeat.
+    """
+
+    _attr_has_entity_name = True
+    _attr_mode = NumberMode.BOX
+
+    def __init__(
+        self,
+        coordinator: EcoFlowLocalModbusCoordinator,
+        definition: EcoFlowNumberDef,
+    ) -> None:
+        """Initialize the number entity."""
+        super().__init__(coordinator)
+        self._definition = definition
+        self._attr_unique_id = f"{coordinator.device_sn}_{definition.key}"
+        self._attr_translation_key = definition.key
+        self._attr_icon = definition.icon
+        self._attr_native_unit_of_measurement = definition.unit
+        self._attr_native_min_value = definition.min_value
+        self._attr_native_max_value = definition.max_value
+        self._attr_native_step = definition.step
+        if definition.entity_category:
+            self._attr_entity_category = _NUMBER_CATEGORY_MAP.get(
+                definition.entity_category
+            )
+
+    @property
+    def available(self) -> bool:
+        """Return True while the device answers its polls."""
+        return self.coordinator.device_available and super().available
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device info from coordinator."""
+        return self.coordinator.device_info
+
+    @property
+    def native_value(self) -> float | None:
+        """Return what the device holds, or None while the poll has not shown it."""
+        data = self.coordinator.data
+        if data is None:
+            return None
+        value = data.get(self._definition.state_key)
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Write the setting; the coordinator confirms it by reading it back."""
+        if not float(value).is_integer():
+            raise_set_rejected(self.entity_id, "whole numbers only")
+        try:
+            await self.coordinator.async_write_register(
+                self._definition.state_key, int(value)
+            )
+        except ValueError as err:
+            raise_set_rejected(self.entity_id, str(err))
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle a poll or a confirmed write."""
+        self._write_state_if_changed(self.native_value)
 
 
 def _get_number_defs(device_type: str, device_sn: str = "") -> list[EcoFlowNumberDef]:

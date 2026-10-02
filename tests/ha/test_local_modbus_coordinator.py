@@ -329,11 +329,27 @@ async def test_local_entry_creates_the_local_entities_and_a_missing_value_is_unk
     registry = er.async_get(hass)
     registered = er.async_entries_for_config_entry(registry, entry.entry_id)
     assert {item.platform for item in registered} == {DOMAIN}
-    assert {item.domain for item in registered} == {"sensor"}
-    unique_ids = {item.unique_id for item in registered}
+    # The sensors plus the control entities of the writable mode (their own
+    # tests are in test_local_modbus_entities.py); nothing from other platforms.
+    assert {item.domain for item in registered} == {
+        "sensor",
+        "switch",
+        "number",
+        "binary_sensor",
+    }
+    unique_ids = {item.unique_id for item in registered if item.domain == "sensor"}
     expected = {f"{SERIAL}_{key}" for key in POWEROCEAN_LOCAL_KEYS | NEW_KEYS}
     expected.add(f"{SERIAL}_connection_mode")
     assert unique_ids == expected
+    assert {item.unique_id for item in registered if item.domain != "sensor"} == {
+        f"{SERIAL}_{key}"
+        for key in (
+            "modbus_control",
+            "local_backup_reserve",
+            "local_indicator_brightness",
+            "modbus_control_active",
+        )
+    }
     assert f"{SERIAL}_mqtt_status" not in unique_ids
     assert not {f"{SERIAL}_{key}" for key in INTEGRATED_KEYS} & unique_ids
 

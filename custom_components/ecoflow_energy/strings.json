@@ -2639,6 +2639,9 @@
       },
       "circuit_on": {
         "name": "Circuit {label} On"
+      },
+      "modbus_control_active": {
+        "name": "Modbus control active"
       }
     },
     "switch": {
@@ -2758,6 +2761,9 @@
       },
       "pet_care_enabled": {
         "name": "Pet Care"
+      },
+      "modbus_control": {
+        "name": "Modbus control"
       }
     },
     "number": {
@@ -2901,6 +2907,12 @@
       },
       "ev_charge_current_a": {
         "name": "Wallbox Charging Current"
+      },
+      "local_backup_reserve": {
+        "name": "Backup reserve"
+      },
+      "local_indicator_brightness": {
+        "name": "Indicator brightness"
       }
     },
     "select": {

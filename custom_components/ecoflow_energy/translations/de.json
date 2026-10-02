@@ -2639,6 +2639,9 @@
       },
       "circuit_on": {
         "name": "Stromkreis {label} Ein"
+      },
+      "modbus_control_active": {
+        "name": "Modbus-Steuerung aktiv"
       }
     },
     "switch": {
@@ -2758,6 +2761,9 @@
       },
       "pet_care_enabled": {
         "name": "Haustier-Schutz"
+      },
+      "modbus_control": {
+        "name": "Modbus-Steuerung"
       }
     },
     "number": {
@@ -2901,6 +2907,12 @@
       },
       "ev_charge_current_a": {
         "name": "Wallbox-Ladestrom"
+      },
+      "local_backup_reserve": {
+        "name": "Backup-Reserve"
+      },
+      "local_indicator_brightness": {
+        "name": "Anzeigehelligkeit"
       }
     },
     "select": {

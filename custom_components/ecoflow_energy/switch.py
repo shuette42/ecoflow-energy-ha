@@ -33,6 +33,7 @@ from .const import (
     DOMAIN,
     POWEROCEAN_SCHEDULE_PREFIXES,
     POWEROCEAN_SWITCHES,
+    POWEROCEANLOCALONLY_SWITCHES,
     SMARTPLUG_SWITCH_COMMANDS,
     SMARTPLUG_SWITCHES,
     STREAM_SWITCHES,
@@ -48,6 +49,7 @@ from .const import (
     supports_stream_controls,
 )
 from .coordinator import DeviceValueNotReported, EcoFlowDeviceCoordinator
+from .coordinator.local_modbus import EcoFlowLocalModbusCoordinator
 from .ecoflow.delta3_commands import (
     build_port_priority_command,
 )
@@ -78,12 +80,21 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up EcoFlow switches from a config entry."""
-    coordinators: dict[str, EcoFlowDeviceCoordinator] = hass.data[DOMAIN][
-        entry.entry_id
-    ]
-    entities: list[EcoFlowSwitch] = []
+    coordinators: dict[
+        str, EcoFlowDeviceCoordinator | EcoFlowLocalModbusCoordinator
+    ] = hass.data[DOMAIN][entry.entry_id]
+    entities: list[SwitchEntity] = []
 
-    for coordinator in coordinators.values():
+    for source in coordinators.values():
+        if isinstance(source, EcoFlowLocalModbusCoordinator):
+            # A local entry gets its control switch and nothing from the cloud
+            # definition lists.
+            entities.extend(
+                EcoFlowLocalControlSwitch(source, defn)
+                for defn in POWEROCEANLOCALONLY_SWITCHES
+            )
+            continue
+        coordinator = source
         defs = filter_defs_for_serial(
             _get_switch_defs(coordinator.device_type, coordinator.device_sn),
             coordinator.device_sn,
@@ -448,6 +459,63 @@ class EcoFlowSwitch(
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
+        self._write_state_if_changed(self.is_on)
+
+
+class EcoFlowLocalControlSwitch(
+    EcoFlowWriteGateMixin,
+    CoordinatorEntity[EcoFlowLocalModbusCoordinator],
+    SwitchEntity,
+):
+    """Modbus control of a local entry: the heartbeat that takes control from the app.
+
+    Deliberately not a RestoreEntity and not optimistic. The state is the
+    coordinator's `control_enabled` flag, which is off after every restart,
+    reload or reconfigure and turns off by itself when the heartbeat lapses;
+    the coordinator announces that through its listeners, so the entity never
+    holds a state of its own.
+    """
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: EcoFlowLocalModbusCoordinator,
+        definition: EcoFlowSwitchDef,
+    ) -> None:
+        """Initialize the switch."""
+        super().__init__(coordinator)
+        self._definition = definition
+        self._attr_unique_id = f"{coordinator.device_sn}_{definition.key}"
+        self._attr_translation_key = definition.key
+        self._attr_icon = definition.icon
+
+    @property
+    def available(self) -> bool:
+        """Return True while the device answers its polls."""
+        return self.coordinator.device_available and super().available
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device info from coordinator."""
+        return self.coordinator.device_info
+
+    @property
+    def is_on(self) -> bool:
+        """Return True while this integration sends the control heartbeat."""
+        return self.coordinator.control_enabled
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Take control: write the first beat and start the heartbeat."""
+        await self.coordinator.async_set_control(True)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Stop the heartbeat; the unit hands control back to the app by itself."""
+        await self.coordinator.async_set_control(False)
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle a poll, a confirmed write or a lapsed heartbeat."""
         self._write_state_if_changed(self.is_on)
 
 

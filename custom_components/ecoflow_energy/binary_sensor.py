@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
@@ -28,6 +30,7 @@ from .const import (
     DEVICE_TYPE_WAVE3,
     DOMAIN,
     POWEROCEAN_BINARY_SENSORS,
+    POWEROCEANLOCALONLY_BINARY_SENSORS,
     POWERPULSE2_BINARY_SENSORS,
     SMARTMETER_BINARY_SENSORS,
     SMARTPANEL40_BINARY_SENSORS,
@@ -39,6 +42,7 @@ from .const import (
     filter_defs_for_serial,
 )
 from .coordinator import EcoFlowDeviceCoordinator
+from .coordinator.local_modbus import EcoFlowLocalModbusCoordinator
 from .entity import EcoFlowWriteGateMixin, accessory_ready, label_placeholders
 
 _ENTITY_CATEGORY_MAP = {
@@ -53,12 +57,22 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up EcoFlow binary sensors from a config entry."""
-    coordinators: dict[str, EcoFlowDeviceCoordinator] = hass.data[DOMAIN][
-        entry.entry_id
-    ]
+    coordinators: dict[
+        str, EcoFlowDeviceCoordinator | EcoFlowLocalModbusCoordinator
+    ] = hass.data[DOMAIN][entry.entry_id]
     entities: list[EcoFlowBinarySensor] = []
 
-    for coordinator in coordinators.values():
+    for source in coordinators.values():
+        if isinstance(source, EcoFlowLocalModbusCoordinator):
+            # The local coordinator offers what the entity reads from the cloud
+            # one (device_sn, data, device_available, device_info); a local
+            # entry gets only the control diagnostic.
+            entities.extend(
+                EcoFlowBinarySensor(cast(EcoFlowDeviceCoordinator, source), defn)
+                for defn in POWEROCEANLOCALONLY_BINARY_SENSORS
+            )
+            continue
+        coordinator = source
         defs = filter_defs_for_serial(
             _get_binary_sensor_defs(coordinator.device_type), coordinator.device_sn
         )

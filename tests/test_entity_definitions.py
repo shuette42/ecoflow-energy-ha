@@ -96,6 +96,30 @@ def _local_sensor_defs() -> list[Any]:
     return C.POWEROCEAN_LOCAL_SENSOR_DEFS
 
 
+def _local_control_defs() -> list[list[Any]]:
+    """Mirror the switch, number and binary sensor platforms' Local branch.
+
+    Each of those platforms hands a Local entry exactly one list, named inline
+    in ``async_setup_entry`` and returned by no device-type dispatcher. The
+    controls that exist only there would read as unreachable without this
+    shim, and `test_control_platform_local_branches_are_the_only_ones` below
+    fails if a platform ever names a different list.
+    """
+    return [
+        C.POWEROCEANLOCALONLY_SWITCHES,
+        C.POWEROCEANLOCALONLY_NUMBERS,
+        C.POWEROCEANLOCALONLY_BINARY_SENSORS,
+    ]
+
+
+# Platform file -> the one Local-only block it may name.
+LOCAL_CONTROL_LISTS: dict[str, str] = {
+    "switch.py": "POWEROCEANLOCALONLY_SWITCHES",
+    "number.py": "POWEROCEANLOCALONLY_NUMBERS",
+    "binary_sensor.py": "POWEROCEANLOCALONLY_BINARY_SENSORS",
+}
+
+
 # Every dispatcher is called as (device_type, device_sn); the two that ignore
 # the serial are wrapped so the call site stays uniform.
 DISPATCHERS: dict[str, Callable[[str, str], list[Any]]] = {
@@ -143,6 +167,7 @@ def _dispatcher_outputs() -> list[list[Any]]:
             for dispatch in DISPATCHERS.values():
                 outputs.append(dispatch(device_type, device_sn))
     outputs.append(_local_sensor_defs())
+    outputs.extend(_local_control_defs())
     return outputs
 
 
@@ -241,6 +266,23 @@ def test_sensor_platform_local_branch_is_the_only_one() -> None:
         f"names {sorted(named)} - update the shim, or the new list is never "
         "checked for reachability."
     )
+
+
+def test_control_platform_local_branches_are_the_only_ones() -> None:
+    """`_local_control_defs` mirrors three platforms, each naming one Local list.
+
+    switch.py, number.py and binary_sensor.py pick the Local entry's
+    definitions inline; this file mirrors those picks. A platform that starts
+    naming another `POWEROCEANLOCALONLY_*` list leaves it unchecked for
+    reachability until the shim is updated.
+    """
+    for filename, expected in LOCAL_CONTROL_LISTS.items():
+        text = (COMPONENT_DIR / "ecoflow_energy" / filename).read_text()
+        named = set(re.findall(r"\bPOWEROCEANLOCALONLY_[A-Z_]+\b", text))
+        assert named == {expected}, (
+            f"{filename} names {sorted(named)} for the Local entry; this test "
+            f"file mirrors only {expected} in `_local_control_defs`."
+        )
 
 
 def test_reachability_check_tells_dispatched_from_undispatched() -> None:
