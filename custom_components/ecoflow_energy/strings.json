@@ -302,6 +302,9 @@
       "grid_import_power_w": {
         "name": "Grid Import Power"
       },
+      "ac_output_power_w": {
+        "name": "AC Output Power"
+      },
       "grid_export_power_w": {
         "name": "Grid Export Power"
       },
