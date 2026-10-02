@@ -11,6 +11,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryError, HomeAssistantError
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import async_call_later
 
@@ -712,6 +713,32 @@ async def async_setup_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> b
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
 
     return True
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant, config_entry: ConfigEntry, device_entry: dr.DeviceEntry
+) -> bool:
+    """Allow deleting a device this entry no longer serves.
+
+    A device stays in the registry after it is deselected in the options, for
+    example when a PowerOcean moves from a cloud entry to a Local entry, and
+    Home Assistant offers to delete it only when the integration agrees. Agree
+    when none of its serials is selected in the entry and none is served by a
+    running coordinator of the entry; refuse everything else, including a
+    device that carries no identifier of this integration.
+    """
+    serials = {
+        identifier
+        for domain, identifier in device_entry.identifiers
+        if domain == DOMAIN
+    }
+    if not serials:
+        return False
+    selected = {
+        str(device.get("sn", "")) for device in config_entry.data.get(CONF_DEVICES, [])
+    }
+    running = set(hass.data.get(DOMAIN, {}).get(config_entry.entry_id, {}))
+    return not serials & (selected | running)
 
 
 async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:

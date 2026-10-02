@@ -18,6 +18,8 @@ All notable changes to this project will be documented in this file.
 
 - The Local mode now has a Battery Connection diagnostic binary sensor, which shows whether the inverter reports its battery as connected, and a System Alerts diagnostic sensor that lists the alerts the inverter reports, for example fan failure or battery overheating, so an automation can send a notification. System Alerts shows `none` while no alert is active.
 
+- A device that an entry no longer uses can now be deleted from its device page. This happens when you deselect a device in the integration's options, for example when you move a PowerOcean from an account entry to a Local entry: the old device used to stay behind with no entities and no delete button. Devices the entry still selects or still reads stay protected.
+
 ## [1.24.0] - 2026-10-02
 
 ### Added
