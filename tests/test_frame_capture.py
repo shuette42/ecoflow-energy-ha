@@ -1414,6 +1414,35 @@ class TestMaskingDoesNotCorruptRealFrames:
         # The control only means something if the shape is present.
         assert wire_runs_seen >= 2, wire_runs_seen
 
+    def test_a_wire_run_reaching_past_a_masked_serial_is_restored(self) -> None:
+        """A masked serial whose wire run spills into the next field survives.
+
+        On the DELTA Pro Ultra fixture (#464) the battery heartbeat carries the
+        masked serial under key 0x61, which spells `9` sixteen times, and the
+        field tag after it (`0x20`) spells `A`, so the plain passes rewrote a
+        seventeen-byte run whose plaintext was not all mask bytes. The second
+        pass turned the masked serial into nines and broke the field tag.
+        Every frame of that fixture is the control.
+        """
+        import json
+        from pathlib import Path
+
+        fixture = (
+            Path(__file__).parent
+            / "fixtures"
+            / "delta_pro_ultra"
+            / "y711_frames_issue464.json"
+        )
+        frames = json.loads(fixture.read_text())["frames"]
+        spill_seen = 0
+        for frame in frames:
+            raw = bytes.fromhex(frame["hex"])
+            if b"9" * 16 + b"A" in raw:
+                spill_seen += 1
+            assert sanitize_frame(raw, []) == raw
+        # The control only means something if the shape is present.
+        assert spill_seen >= 1, spill_seen
+
     def test_a_wire_run_over_unmasked_plaintext_is_still_rewritten(self) -> None:
         """Negative control for the restore above: it is limited to bytes whose
         plaintext already carries the mask byte. Plaintext `y` under key 0x3e

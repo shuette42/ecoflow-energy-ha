@@ -32,7 +32,8 @@ _MASK_BYTE = b"X"
 # which is the device serial and the account id - a frame also carries the
 # serial of every battery pack and of any attached accessory, and those are
 # nobody's to publish either. This catches them by shape.
-_SERIAL_RUN = re.compile(rb"[A-Z0-9]{15,}")
+_SERIAL_MIN_LEN = 15
+_SERIAL_RUN = re.compile(rb"[A-Z0-9]{%d,}" % _SERIAL_MIN_LEN)
 
 # Identifiers shorter than a serial cannot be caught by shape alone. A run of
 # 12 upper-case alphanumerics appears in ordinary binary often enough that a
@@ -603,6 +604,15 @@ def sanitize_frame(payload: bytes, secrets: list[str]) -> bytes:
             # here and one there; restoring those would hand back one letter
             # of it per frame. Any span whose plaintext is not all mask bytes
             # keeps the rewrite, as before.
+            #
+            # A span also goes back when its plaintext holds a whole masked
+            # serial: the wire run can reach past the mask into the next
+            # field, whose tag under the key is alphanumeric too (`" " ^ 0x61`
+            # is `A`, measured on the DELTA Pro Ultra fixture, #464), and that
+            # one byte must not decide for the sixteen beside it. A run of
+            # `_SERIAL_MIN_LEN` mask bytes is not a coincidence on a region
+            # that only declares a key, and `cleaned == inner` already says no
+            # plaintext identifier sits anywhere under the span.
             restored = bytearray(on_the_wire)
             offset = 0
             length = len(ciphertext)
@@ -613,7 +623,11 @@ def sanitize_frame(payload: bytes, secrets: list[str]) -> bytes:
                 span_start = offset
                 while offset < length and ciphertext[offset] != on_the_wire[offset]:
                     offset += 1
-                if all(byte == _MASK_BYTE[0] for byte in inner[span_start:offset]):
+                span_plain = inner[span_start:offset]
+                if (
+                    all(byte == _MASK_BYTE[0] for byte in span_plain)
+                    or _MASK_BYTE * _SERIAL_MIN_LEN in span_plain
+                ):
                     restored[span_start:offset] = ciphertext[span_start:offset]
             sanitized = (
                 sanitized[: region.start] + bytes(restored) + sanitized[region.end :]

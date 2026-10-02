@@ -145,10 +145,15 @@ def _leaks(raw: bytes) -> list[str]:
         run = match.group()
         if run in _PLACEHOLDERS:
             continue
+        # A wire run over a masked serial can reach a byte past the mask on
+        # either side (the length byte, the next field tag), which spells a
+        # letter under the key too (#464: `q` and `A` around sixteen `9`
+        # under key 0x61). It is excused when its plaintext holds a whole
+        # masked serial; the plaintext itself is checked under the mask below.
         if any(
             region.start <= match.start()
             and match.end() <= region.end
-            and set(_xor(raw[match.start() : match.end()], region.key)) == {ord("X")}
+            and b"X" * 15 in _xor(raw[match.start() : match.end()], region.key)
             for region in keyed_regions
         ):
             continue
