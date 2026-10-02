@@ -614,7 +614,7 @@ class TestExceptionTranslations:
 # Abort reasons and form errors: every literal one the flows raise has a text
 # ---------------------------------------------------------------------------
 
-ABORTING_CALLS = {"async_abort", "async_update_reload_and_abort"}
+ABORTING_CALLS = {"async_abort", "async_update_reload_and_abort", "update_and_reload"}
 
 
 def _call_name(node: ast.Call) -> str:

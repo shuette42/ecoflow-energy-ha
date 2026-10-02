@@ -22,6 +22,7 @@ from .config_flow_setup import (
     read_local_device,
     retitle_for_mode,
     serial_in_other_entries,
+    update_and_reload,
     valid_local_host,
 )
 from .const import (
@@ -191,7 +192,8 @@ class ReconfigureFlowMixin(_Base):
                     return self.async_abort(reason="already_configured")
                 else:
                     switching = reconfigure_entry.data.get(CONF_MODE) != MODE_LOCAL
-                    return self.async_update_reload_and_abort(
+                    return update_and_reload(
+                        self,
                         reconfigure_entry,
                         unique_id=serial,
                         title=retitle_for_mode(

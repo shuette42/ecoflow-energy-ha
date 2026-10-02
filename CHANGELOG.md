@@ -26,6 +26,8 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- Reconfiguring an entry that is running no longer logs a warning on Home Assistant 2026.9 that the integration reloads it in a way that stops working in Home Assistant 2026.12. The entry is now reloaded once through Home Assistant's own update mechanism. This affected changing the address of a Local (Modbus/TCP) entry without changing host and port, and switching a Local entry back to an account connection.
+
 - Reconfigure of a Local (Modbus/TCP) entry no longer fails with "cannot connect" when you change the address of an inverter the entry is using, for example from an IP address to a name. The inverter serves one Modbus client at a time and the running entry was that client, so the check of the new address went unanswered. The entry now releases its connection for the check and starts again afterwards, on the new address if the check passed and on the old one if it did not.
 
 - A diagnostics download now hides the installation address that a Smart Home Panel 2 reports together with its coordinates. Before, the town and the coordinates stayed readable in the download. A diagnostics download also no longer alters recorded frames whose padding happens to read as digits.

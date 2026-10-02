@@ -11,6 +11,7 @@ import voluptuous as vol
 from homeassistant.config_entries import (
     SOURCE_RECONFIGURE,
     ConfigEntry,
+    ConfigFlow,
     ConfigFlowResult,
 )
 from homeassistant.const import CONF_HOST, CONF_PORT
@@ -84,6 +85,30 @@ _LOCAL_MODE_LABEL = "Local - three-phase PowerOcean via Modbus/TCP"
 def local_entry_title(serial: str) -> str:
     """Title of a Local entry: the serial prefix and nothing more of it."""
     return f"EcoFlow Energy Local ({serial[:4]})"
+
+
+def update_and_reload(
+    flow: ConfigFlow,
+    entry: ConfigEntry,
+    *,
+    reason: str,
+    **changes: Any,
+) -> ConfigFlowResult:
+    """Apply ``changes`` to ``entry``, reload it exactly once, finish the flow.
+
+    A loaded entry carries the update listener ``_async_reload_entry``, which
+    reloads it whenever an update changes something. Home Assistant 2026.9
+    reports a flow that reloads such an entry on top of that and refuses it
+    from 2026.12, so for a listening entry the update triggers the reload. An
+    unchanged entry does not fire the listener and is reloaded here. An entry
+    without the listener (not loaded, or released for a Local probe) gets the
+    flow's own reload, as before.
+    """
+    if not entry.update_listeners:
+        return flow.async_update_reload_and_abort(entry, reason=reason, **changes)
+    if not flow.hass.config_entries.async_update_entry(entry, **changes):
+        flow.hass.config_entries.async_schedule_reload(entry.entry_id)
+    return flow.async_abort(reason=reason)
 
 
 def retitle_for_mode(entry: ConfigEntry, serial: str, *, to_local: bool) -> str:
@@ -502,7 +527,8 @@ class SetupFlowMixin(_Base):
         if serial_in_other_entries(self.hass, serial, entry.entry_id):
             return self.async_abort(reason="already_configured")
         self._selected_devices = [d for d in self._devices if d["sn"] == serial]
-        return self.async_update_reload_and_abort(
+        return update_and_reload(
+            self,
             entry,
             unique_id=None,
             title=retitle_for_mode(entry, serial, to_local=False),
