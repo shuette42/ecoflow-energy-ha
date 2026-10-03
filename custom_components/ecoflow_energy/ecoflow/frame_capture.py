@@ -827,6 +827,113 @@ def _xor(blob: bytes, key: int) -> bytes:
     return blob if not key else bytes(value ^ key for value in blob)
 
 
+def _wire_masked_region(
+    ciphertext: bytes,
+    on_the_wire: bytes,
+    inner: bytes,
+    cleaned: bytes,
+    key: int,
+) -> bytes:
+    """Return the bytes that replace one XOR-declared region in the output.
+
+    `ciphertext` is the region as the device sent it, `on_the_wire` the same
+    span after the plain passes ran over the whole frame, `inner` the
+    ciphertext under the region's key and `cleaned` that plaintext after the
+    plain passes ran over it. A header that declares a key does not always
+    carry one: `_pdata_candidates` keeps a fallback for exactly that, so the
+    bytes may be ciphertext or plain, and the output has to hide an
+    identifier under either reading.
+
+    One rule serves both outcomes of the plaintext pass. The region starts
+    from `_xor(cleaned, key)`: the plaintext masks put back under the key,
+    which is the ciphertext itself when the passes found nothing in it. Then
+    every span the plain passes rewrote on the wire (where `on_the_wire`
+    differs from `ciphertext`) keeps the wire-side mask, because the wire is
+    where a plain serial is found, and a rebuild from `cleaned` alone would
+    write it back: a header that declares a key but sends plain bytes, with a
+    plain serial beside bytes that are `A ^ key`, was handed its serial again
+    by that rebuild (PLAN-167; the corpus holds no such header, so this is
+    hardening). A byte the plaintext pass masked as well keeps that mask
+    instead: the ciphertext of a real serial can itself be serial-shaped
+    (`test_a_region_the_raw_pass_touched_is_read_from_the_original`), and
+    there the region has to unmask to the mask byte, not to `X ^ key`.
+
+    Applied to its own output, a frame that declares a key and sends plain
+    data is left alone under 221 of the 255 keys. Under the other 34, where
+    `X ^ key` is alphanumeric (0x1e is `F`, 0x61 is `9`), the wire's mask
+    reads as a serial-shaped run under the key, the plaintext pass masks it,
+    and the second pass is the last that changes the frame. Nothing of a
+    serial comes back at any pass.
+
+    The wire mask can reach one byte past an identifier into the next field,
+    and on such a frame that byte now stays masked where the rebuild used to
+    restore it (18 of 20,000 generated frames, none on file). That is kept on
+    purpose: one byte too many masked on a frame no device sends, against a
+    further rule whose only job would be to hand bytes back beside a serial.
+
+    Where the plaintext under a whole rewritten span is already the mask byte,
+    the region was masked before and the rewrite corrupts it: `X ^ key` is
+    itself alphanumeric for many keys (0x1e gives F, 0x0a gives R), so the
+    product's own output, sanitized a second time, came back with `F` where
+    `X` had been (measured 2026-09-11 on the PowerPulse 2 settings-report
+    fixture). Such a span keeps the region's own bytes. The decision is per
+    span, never per byte: a header can declare a mask it does not carry, and
+    there a real identifier sits on the wire whose bytes equal `X ^ key` only
+    by coincidence, one here and one there; restoring those would hand back
+    one letter of it per frame. Any span whose plaintext is not all mask
+    bytes keeps the wire-side mask.
+
+    A span also keeps the region's own bytes when its plaintext is a masked
+    serial and nothing more: the mask byte at least `_SERIAL_MIN_LEN` times
+    with at most one other byte on each side (`_MASKED_SERIAL_SPAN`). The wire
+    run can reach past the mask into the length byte or the next field's tag,
+    which under the key is alphanumeric too (`" " ^ 0x61` is `A`, measured on
+    the DELTA Pro Ultra fixture, #464), and that one byte must not decide for
+    the sixteen beside it. The match is anchored on the whole span. A header
+    that only declares a key can send plain bytes, and there `inner` is not
+    plaintext: `cleaned == inner` says nothing about the wire, and a plain
+    serial lying beside a run of `X ^ key` bytes is a span with a long foreign
+    stretch around its mask bytes. A search for the run anywhere inside the
+    span would hand that serial back.
+
+    A span whose plaintext is zero padding keeps the region's own bytes as
+    well (`_NULL_PADDING_SPAN`): twelve or more nulls with at most two other
+    bytes on each side. Nulls under key `K` are `K` on the wire, and `0x38` is
+    `8`, so twenty bytes of padding read as a serial, were overwritten, and
+    came back as `0x60` on the next decode (header 254.32 of the Smart Home
+    Panel 2 fixture, #464). A null run cannot hide a serial behind a margin
+    that small. A plain byte only becomes a null where it equals the key, so a
+    serial without the key byte is all foreign under the key, and a span holds
+    at most two of those beside the nulls. One that does carry the key byte
+    has to repeat it around a run of twelve. The span is not always the whole
+    serial, though: a literal `X` in a plain serial is not rewritten and
+    splits the span, which is why the margin is two and not the eleven a
+    serial would still fit under (`HJ31X` + eleven characters + twelve key
+    bytes).
+    """
+    region = bytearray(_xor(cleaned, key))
+    offset = 0
+    length = len(ciphertext)
+    while offset < length:
+        if ciphertext[offset] == on_the_wire[offset]:
+            offset += 1
+            continue
+        span_start = offset
+        while offset < length and ciphertext[offset] != on_the_wire[offset]:
+            offset += 1
+        span_plain = inner[span_start:offset]
+        if (
+            all(byte == _MASK_BYTE[0] for byte in span_plain)
+            or _MASKED_SERIAL_SPAN.fullmatch(span_plain) is not None
+            or _NULL_PADDING_SPAN.fullmatch(span_plain) is not None
+        ):
+            continue
+        for position in range(span_start, offset):
+            if cleaned[position] == inner[position]:
+                region[position] = on_the_wire[position]
+    return bytes(region)
+
+
 def sanitize_frame(payload: bytes, secrets: list[str]) -> bytes:
     """Mask identifying strings inside a raw frame.
 
@@ -846,8 +953,10 @@ def sanitize_frame(payload: bytes, secrets: list[str]) -> bytes:
     of the alphabets those passes look for. So every region a header
     declares masked this way is un-XOR-ed, run back through the same plain
     passes, and - only if that changed anything - XOR-ed again and spliced
-    back at the same offsets. A region nobody could derive a key for is
-    walked and then left untouched rather than guessed at.
+    back at the same offsets, except where the plain passes had already
+    masked the same bytes on the wire (`_wire_masked_region`). A region
+    nobody could derive a key for is walked and then left untouched rather
+    than guessed at.
 
     Measured across the capture corpus and the tracked fixtures: 40 regions
     in 40 frames carried a string this way with nothing to catch it - 36
@@ -872,79 +981,12 @@ def sanitize_frame(payload: bytes, secrets: list[str]) -> bytes:
         ciphertext = payload[region.start : region.end]
         inner = _xor(ciphertext, region.key)
         cleaned = _plain_passes(inner, secrets)
-        if cleaned == inner:
-            on_the_wire = sanitized[region.start : region.end]
-            if on_the_wire == ciphertext:
-                continue
-            # The plain passes rewrote ciphertext that happened to spell an
-            # identifier on the wire. Where the plaintext under a whole
-            # rewritten span is already the mask byte, the region was masked
-            # before and the rewrite corrupts it: `X ^ key` is itself
-            # alphanumeric for many keys (0x1e gives F, 0x0a gives R), so the
-            # product's own output, sanitized a second time, came back with
-            # `F` where `X` had been (measured 2026-09-11 on the PowerPulse 2
-            # settings-report fixture). Such a span goes back to the
-            # ciphertext. The decision is per span, never per byte: a header
-            # can declare a mask it does not carry (`_pdata_candidates` keeps
-            # a fallback for exactly that), and there a real identifier sits
-            # on the wire whose bytes equal `X ^ key` only by coincidence, one
-            # here and one there; restoring those would hand back one letter
-            # of it per frame. Any span whose plaintext is not all mask bytes
-            # keeps the rewrite, as before.
-            #
-            # A span also goes back when its plaintext is a masked serial and
-            # nothing more: the mask byte at least `_SERIAL_MIN_LEN` times with
-            # at most one other byte on each side (`_MASKED_SERIAL_SPAN`). The
-            # wire run can reach past the mask into the length byte or the
-            # next field's tag, which under the key is alphanumeric too
-            # (`" " ^ 0x61` is `A`, measured on the DELTA Pro Ultra fixture,
-            # #464), and that one byte must not decide for the sixteen beside
-            # it. The match is anchored on the whole span. A header that only
-            # declares a key can send plain bytes, and there `inner` is not
-            # plaintext: `cleaned == inner` says nothing about the wire, and a
-            # plain serial lying beside a run of `X ^ key` bytes is a span
-            # with a long foreign stretch around its mask bytes. A search for
-            # the run anywhere inside the span would hand that serial back.
-            #
-            # A span whose plaintext is zero padding goes back as well
-            # (`_NULL_PADDING_SPAN`): twelve or more nulls with at most two
-            # other bytes on each side. Nulls under key `K` are `K` on the
-            # wire, and `0x38` is `8`, so twenty bytes of padding read as a
-            # serial, were overwritten, and came back as `0x60` on the next
-            # decode (header 254.32 of the Smart Home Panel 2 fixture, #464).
-            # A null run cannot hide a serial behind a margin that small. A
-            # plain byte only becomes a null where it equals the key, so a
-            # serial without the key byte is all foreign under the key, and a
-            # span holds at most two of those beside the nulls. One that does
-            # carry the key byte has to repeat it around a run of twelve. The
-            # span is not always the whole serial, though: a literal `X` in a
-            # plain serial is not rewritten and splits the span, which is why
-            # the margin is two and not the eleven a serial would still fit
-            # under (`HJ31X` + eleven characters + twelve key bytes).
-            restored = bytearray(on_the_wire)
-            offset = 0
-            length = len(ciphertext)
-            while offset < length:
-                if ciphertext[offset] == on_the_wire[offset]:
-                    offset += 1
-                    continue
-                span_start = offset
-                while offset < length and ciphertext[offset] != on_the_wire[offset]:
-                    offset += 1
-                span_plain = inner[span_start:offset]
-                if (
-                    all(byte == _MASK_BYTE[0] for byte in span_plain)
-                    or _MASKED_SERIAL_SPAN.fullmatch(span_plain) is not None
-                    or _NULL_PADDING_SPAN.fullmatch(span_plain) is not None
-                ):
-                    restored[span_start:offset] = ciphertext[span_start:offset]
-            sanitized = (
-                sanitized[: region.start] + bytes(restored) + sanitized[region.end :]
-            )
+        on_the_wire = sanitized[region.start : region.end]
+        if cleaned == inner and on_the_wire == ciphertext:
             continue
         sanitized = (
             sanitized[: region.start]
-            + _xor(cleaned, region.key)
+            + _wire_masked_region(ciphertext, on_the_wire, inner, cleaned, region.key)
             + sanitized[region.end :]
         )
     return sanitized

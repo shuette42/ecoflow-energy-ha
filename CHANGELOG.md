@@ -36,6 +36,8 @@ All notable changes to this project will be documented in this file.
 
 - Grid Import Power on the STREAM AC 5000 left out the power drawn from the grid for the AC socket, so with a load on the socket it read only the house share (200 W where the app showed 549 W in @napalmz's report on #458). The socket load is now included, and the Grid Import Energy counter grows by it from now on, so the energy dashboard shows more grid import than before on a unit that uses its socket. Past values are not changed. Which reading carries the socket load while it runs from the battery or from solar is not confirmed yet.
 
+- A diagnostics download now also keeps a serial number masked in a frame that declares encryption but sends its data unencrypted, a case no device on record produces.
+
 ## [1.24.0] - 2026-10-02
 
 ### Added

@@ -159,6 +159,32 @@ def _unmask_pdata(header: dict[str, Any]) -> bytes:
     return bytes(b ^ key for b in bytes.fromhex(header["pdata"]))
 
 
+_CASE_E_SERIAL = b"C376TESTPLAIN001"
+
+
+def _case_e_frame(key: int) -> bytes:
+    """Build a frame whose header declares a key but sends its data plain.
+
+    `enc_type` is 1 and `seq` carries `key`, yet `pdata` is not masked: a
+    serial followed by sixteen bytes that spell `A` once the key is applied.
+    The plain passes mask the serial on the wire. Under the key the sixteen
+    bytes read as a serial-shaped run, so the plaintext pass finds something
+    of its own to change, and the region is rebuilt rather than left alone.
+    """
+    header = bytearray()
+    header.extend(encode_field_varint(6, 1))  # enc_type = XOR, declared
+    header.extend(encode_field_varint(14, key))  # seq
+    header.extend(
+        encode_field_bytes(1, _CASE_E_SERIAL + bytes([ord("A") ^ key]) * 16)
+    )  # pdata NOT masked
+    return encode_field_bytes(1, bytes(header))
+
+
+def _serial_pieces(serial: bytes) -> list[bytes]:
+    """Every 12-character piece of a serial, the shortest a reader could use."""
+    return [serial[start : start + 12] for start in range(len(serial) - 11)]
+
+
 class TestSanitizeFrame:
     def test_serial_is_replaced_by_equal_length_filler(self) -> None:
         """Byte offsets must survive masking, a field analysis depends on them."""
@@ -1483,6 +1509,77 @@ class TestMaskingDoesNotCorruptRealFrames:
         assert b"X" * 16 in sanitized
         assert serial not in sanitized
         assert b"F" not in sanitized[frame.index(serial) : frame.index(serial) + 16]
+
+    @pytest.mark.parametrize("key", [0x07, 0x1E, 0x30, 0x61])
+    def test_a_rebuilt_region_does_not_write_a_plain_serial_back(
+        self, key: int
+    ) -> None:
+        """The region rebuild must not undo what the plain passes masked.
+
+        The header declares a key and sends plain bytes, so the serial is on
+        the wire and the plain passes mask it there. The bytes behind it spell
+        `A` under the key, which makes the plaintext pass change something
+        too, and the rebuild from the plaintext used to write the serial back
+        (full serial for 0x1e and 0x30, a 12-character piece for 0x61;
+        PLAN-167).
+        """
+        frame = _case_e_frame(key)
+        assert _CASE_E_SERIAL in frame  # the serial is there to be found
+        sanitized = sanitize_frame(frame, [])
+        assert len(sanitized) == len(frame)
+        for piece in _serial_pieces(_CASE_E_SERIAL):
+            assert piece not in sanitized
+
+    def test_a_sanitized_declared_key_frame_is_a_fixed_point(self) -> None:
+        """Sanitizing the output again changes nothing.
+
+        The wire carries `X` where the serial was. Under key 0x07 `X ^ key` is
+        `_`, which no plain pass looks for, so the plaintext pass finds nothing
+        in it and the second pass leaves the frame alone. Measured over all 255
+        keys: 221 are fixed points, the other 34 are the next test.
+        """
+        frame = _case_e_frame(0x07)
+        once = sanitize_frame(frame, [])
+        assert once != frame  # the first pass does mask something
+        assert sanitize_frame(once, []) == once
+
+    @pytest.mark.parametrize("key", [0x1E, 0x61])
+    def test_a_declared_key_frame_under_an_alphanumeric_mask_settles_by_the_second_pass(
+        self, key: int
+    ) -> None:
+        """Where `X ^ key` is alphanumeric, the second pass is the last one.
+
+        0x1e turns the wire's `X` into `F` and 0x61 into `9`. Read under the
+        key, the run of them is serial-shaped, the plaintext pass masks it,
+        and the rebuild writes `X ^ key` onto the wire: the second pass
+        changes the frame, the third does not. Nothing of the serial is back
+        at either step. This is the boundary of the fixed-point test above
+        stated rather than hidden.
+        """
+        once = sanitize_frame(_case_e_frame(key), [])
+        second = sanitize_frame(once, [])
+        assert sanitize_frame(second, []) == second
+        for piece in _serial_pieces(_CASE_E_SERIAL):
+            assert piece not in once
+            assert piece not in second
+
+    @pytest.mark.parametrize("key", [0x1E, 0x30, 0x61, 0x80])
+    def test_a_real_masked_region_still_comes_out_masked_under_the_mask(
+        self, key: int
+    ) -> None:
+        """Positive control for the rebuild: an encrypted serial stays masked.
+
+        The serial is XOR-ed the way a device does it, so only the plaintext
+        pass can see it. It has to come out as `X` under the key, the bytes
+        around it have to be untouched, and the frame still has to decode.
+        """
+        serial = b"HJ31TESTMASK0001"
+        plain = b"\x12\x10" + serial + b"\x18\x01"
+        frame = _enc_header(254, 39, pdata_plain=plain, seq=key)
+        sanitized = sanitize_frame(frame, [])
+        assert len(sanitized) == len(frame)
+        header = _decode_first_header(sanitized)
+        assert _unmask_pdata(header) == b"\x12\x10" + b"X" * 16 + b"\x18\x01"
 
     def test_a_plain_serial_beside_a_run_of_mask_bytes_stays_masked(self) -> None:
         """Third negative control for the restore: the run is not the span.
