@@ -866,10 +866,14 @@ def _wire_masked_region(
     serial comes back at any pass.
 
     The wire mask can reach one byte past an identifier into the next field,
-    and on such a frame that byte now stays masked where the rebuild used to
-    restore it (18 of 20,000 generated frames, none on file). That is kept on
-    purpose: one byte too many masked on a frame no device sends, against a
-    further rule whose only job would be to hand bytes back beside a serial.
+    and that byte now stays masked where the rebuild used to restore it. It
+    happens on a header that declares a key and sends plain bytes (18 of
+    20,000 generated frames), and on a real encrypted frame whose serial and
+    the tag after it are both alphanumeric under the key (67 of 102,000
+    generated frames; none of the recorded frames, re-keyed under every key).
+    That is kept on purpose: excusing such a span would hand a serial
+    character back on the declared-key reading
+    (`test_the_accepted_spill_is_what_keeps_a_plain_serial_hidden`).
 
     Where the plaintext under a whole rewritten span is already the mask byte,
     the region was masked before and the rewrite corrupts it: `X ^ key` is

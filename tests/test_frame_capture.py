@@ -1581,6 +1581,51 @@ class TestMaskingDoesNotCorruptRealFrames:
         header = _decode_first_header(sanitized)
         assert _unmask_pdata(header) == b"\x12\x10" + b"X" * 16 + b"\x18\x01"
 
+    def test_an_encrypted_serial_with_an_alphanumeric_tag_still_unmasks_to_x(
+        self,
+    ) -> None:
+        """Positive control for the per-byte guard.
+
+        Under key 2 both the ciphertext of this serial and the tag after it
+        (0x3a) are alphanumeric, so the wire pass masks seventeen bytes. The
+        guard lets the plaintext mask win at the sixteen serial bytes, which
+        must unmask to `X`, not to `X ^ key`. The tag byte keeps the wire mask
+        (the accepted spill), so at most that one byte beside the serial
+        differs from the plaintext.
+        """
+        serial = b"HJ31TESTSPILL001"
+        plain = b"\x0a\x10" + serial + b"\x3a\x01\x61"
+        frame = _enc_header(254, 39, pdata_plain=plain, seq=2)
+        sanitized = sanitize_frame(frame, [])
+        assert len(sanitized) == len(frame)
+        unmasked = _unmask_pdata(_decode_first_header(sanitized))
+        assert unmasked[2:18] == b"X" * 16
+        outside = [
+            i for i in range(len(plain)) if not 2 <= i < 18 and unmasked[i] != plain[i]
+        ]
+        assert len(outside) <= 1
+
+    def test_the_accepted_spill_is_what_keeps_a_plain_serial_hidden(self) -> None:
+        """Guard against the obvious fix of the one-byte spill.
+
+        A header that declares key 2 but sends plain bytes: here the spill
+        rule is what keeps every serial character masked. Excusing a span
+        whose plaintext is a masked serial (the way to stop the spill) hands
+        a character of this serial back, which an earlier rebuild also did.
+        """
+        serial = b"HJ31TESTSPILL008"
+        pdata = b"\x0a\x10" + serial + b"\x10\x01"
+        header = bytearray()
+        header.extend(encode_field_varint(6, 1))  # enc_type = XOR, declared
+        header.extend(encode_field_varint(14, 2))  # seq
+        header.extend(encode_field_bytes(1, pdata))  # pdata NOT masked
+        frame = encode_field_bytes(1, bytes(header))
+        start = frame.index(serial)
+        sanitized = sanitize_frame(frame, [])
+        assert len(sanitized) == len(frame)
+        for offset, char in enumerate(serial):
+            assert sanitized[start + offset] != char, offset
+
     def test_a_plain_serial_beside_a_run_of_mask_bytes_stays_masked(self) -> None:
         """Third negative control for the restore: the run is not the span.
 
