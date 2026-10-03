@@ -606,6 +606,9 @@ class EcoFlowNumberDef:
     # Same meaning as on the sensor and binary sensor definitions ("config" or
     # "diagnostic"). Both number platforms, cloud and local, apply it.
     entity_category: str | None = None
+    # Show a slider instead of an input box. A slider only offers values inside
+    # the current range, so it cannot produce one the device would reject.
+    slider: bool = False
 
 
 @dataclass(frozen=True)
@@ -6237,8 +6240,10 @@ DELTA3_SWITCHES: list[EcoFlowSwitchDef] = [
     ),
 ]
 
-# Ranges are the vendor's own bounds, not our choice. Backup reserve tops out at
-# 50 and the charge limit cannot go below 50.
+# Ranges are the vendor's own bounds, not our choice. The charge limit cannot go
+# below 50. The backup reserve declares the full 0-100 range and the entity
+# narrows it at runtime to the span between the two battery limits (see
+# `backup_reserve_soc_bounds`). The three battery limits are sliders.
 DELTA3_NUMBERS: list[EcoFlowNumberDef] = [
     EcoFlowNumberDef(
         "backup_reserve_soc",
@@ -6247,8 +6252,9 @@ DELTA3_NUMBERS: list[EcoFlowNumberDef] = [
         "%",
         "mdi:battery-lock",
         0,
-        50,
+        100,
         1,
+        slider=True,
     ),
     EcoFlowNumberDef(
         "max_charge_soc",
@@ -6259,6 +6265,7 @@ DELTA3_NUMBERS: list[EcoFlowNumberDef] = [
         50,
         100,
         1,
+        slider=True,
     ),
     EcoFlowNumberDef(
         "min_discharge_soc",
@@ -6269,6 +6276,7 @@ DELTA3_NUMBERS: list[EcoFlowNumberDef] = [
         0,
         30,
         1,
+        slider=True,
     ),
     # AC charge power. Push path only: the polled quota never carries this
     # field, so it exists on account sign-in and nowhere else. Ships with the

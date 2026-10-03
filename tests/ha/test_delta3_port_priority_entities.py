@@ -20,6 +20,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from homeassistant.components.number import NumberMode
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -506,3 +507,88 @@ class TestDerivedBoundsArePublished:
 
         assert number._bounds_moved() is False
         assert (number.native_min_value, number.native_max_value) == (50, 100)
+
+
+class TestBatteryLimitsAreSliders:
+    """A slider cannot offer a value outside the range, an input box can."""
+
+    @pytest.mark.parametrize(
+        "key", ["backup_reserve_soc", "max_charge_soc", "min_discharge_soc"]
+    )
+    async def test_battery_limits_are_sliders(
+        self, hass: HomeAssistant, key: str
+    ) -> None:
+        coordinator, _ = _coordinator(hass, DELTA3_MAX_PLUS, REPORTED)
+
+        assert _number(coordinator, key).mode == NumberMode.SLIDER
+
+    async def test_other_numbers_stay_input_boxes(self, hass: HomeAssistant) -> None:
+        coordinator, _ = _coordinator(hass, DELTA3_MAX_PLUS, REPORTED)
+
+        assert _number(coordinator, "ac_charge_power_limit").mode == NumberMode.BOX
+
+
+class TestBackupReserveFollowsTheBatteryLimits:
+    """The reserve slider spans the discharge limit to the charge limit."""
+
+    def _sent_reserve(self, coordinator: EcoFlowDeviceCoordinator) -> int:
+        assert isinstance(coordinator.async_send_delta3_set, AsyncMock)
+        coordinator.async_send_delta3_set.assert_called_once()
+        command = coordinator.async_send_delta3_set.call_args[0][0]
+        return command["params"]["cfgBackupReverseSoc"]
+
+    async def test_bounds_are_the_battery_limits(self, hass: HomeAssistant) -> None:
+        coordinator, _ = _coordinator(
+            hass,
+            DELTA3_MAX_PLUS,
+            {"max_charge_soc_pct": 90, "min_discharge_soc_pct": 10},
+        )
+        number = _number(coordinator, "backup_reserve_soc")
+
+        assert (number.native_min_value, number.native_max_value) == (10, 90)
+
+    async def test_missing_limits_give_the_full_range(
+        self, hass: HomeAssistant
+    ) -> None:
+        coordinator, _ = _coordinator(hass, DELTA3_MAX_PLUS, {})
+        number = _number(coordinator, "backup_reserve_soc")
+
+        assert (number.native_min_value, number.native_max_value) == (0, 100)
+
+    async def test_a_value_above_fifty_is_sent(self, hass: HomeAssistant) -> None:
+        coordinator, _ = _coordinator(hass, DELTA3_MAX_PLUS, REPORTED)
+        number = _number(coordinator, "backup_reserve_soc")
+
+        await number.async_set_native_value(80.0)
+
+        assert self._sent_reserve(coordinator) == 80
+
+    async def test_a_value_outside_the_limits_is_clamped(
+        self, hass: HomeAssistant
+    ) -> None:
+        coordinator, _ = _coordinator(
+            hass,
+            DELTA3_MAX_PLUS,
+            {"max_charge_soc_pct": 85, "min_discharge_soc_pct": 15},
+        )
+        number = _number(coordinator, "backup_reserve_soc")
+
+        await number.async_set_native_value(95.0)
+
+        assert self._sent_reserve(coordinator) == 85
+
+    async def test_a_limit_change_publishes_the_new_bounds(
+        self, hass: HomeAssistant
+    ) -> None:
+        coordinator, _ = _coordinator(hass, DELTA3_MAX_PLUS, REPORTED)
+        number = _number(coordinator, "backup_reserve_soc")
+        number._handle_coordinator_update()
+        assert isinstance(number.async_write_ha_state, MagicMock)
+        number.async_write_ha_state.reset_mock()
+
+        coordinator._device_data.update({"max_charge_soc_pct": 70})
+        coordinator.async_set_updated_data(dict(coordinator._device_data))
+        number._handle_coordinator_update()
+
+        assert number.native_max_value == 70
+        assert number.async_write_ha_state.called

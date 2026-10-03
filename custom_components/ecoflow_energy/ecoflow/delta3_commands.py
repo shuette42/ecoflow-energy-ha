@@ -105,7 +105,9 @@ AC_CHARGE_MODE_CUSTOM = 0
 
 # Number controls: entity key -> wire mapping. Bounds are vendor-documented.
 DELTA3_NUMBER_PARAMS: dict[str, Delta3Number] = {
-    "backup_reserve_soc": Delta3Number("cfgBackupReverseSoc", 0, 50, 102),
+    # The widest range the battery limits can produce. The entity narrows it at
+    # runtime to sit between them, see `backup_reserve_soc_bounds`.
+    "backup_reserve_soc": Delta3Number("cfgBackupReverseSoc", 0, 100, 102),
     "max_charge_soc": Delta3Number("cfgMaxChgSoc", 50, 100, 33),
     "min_discharge_soc": Delta3Number("cfgMinDsgSoc", 0, 30, 34),
     # AC charge power. The bounds are the app slider's own, read off a D3M1
@@ -203,6 +205,28 @@ def port_priority_soc_bounds(
     lower = min(lower_source, PORT_PRIORITY_LOWER_ANCHOR) + PORT_PRIORITY_SOC_MARGIN
     upper = max(upper_source, PORT_PRIORITY_UPPER_ANCHOR) - PORT_PRIORITY_SOC_MARGIN
     return lower, upper
+
+
+# --- Backup reserve: between the two battery limits --------------------------
+#
+# A reserve below the discharge limit is never reached, and one above the charge
+# limit can never be filled, so the useful range is the span between them.
+BACKUP_RESERVE_SOC_KEY = "backup_reserve_soc"
+
+
+def backup_reserve_soc_bounds(
+    max_charge_soc: int | None, min_discharge_soc: int | None
+) -> tuple[int, int]:
+    """Return the (lower, upper) backup reserve bounds for the battery limits.
+
+    Falls back to the full 0-100 range for a limit that has not been reported
+    yet. The vendor ranges keep this from inverting: the discharge limit tops
+    out at 30 and the charge limit cannot go below 50.
+    """
+    entry = DELTA3_NUMBER_PARAMS[BACKUP_RESERVE_SOC_KEY]
+    lower = min_discharge_soc if isinstance(min_discharge_soc, int) else entry.minimum
+    upper = max_charge_soc if isinstance(max_charge_soc, int) else entry.maximum
+    return max(entry.minimum, lower), min(entry.maximum, upper)
 
 
 def encode_port_priority_item(port_type: int, limited: bool, cutoff_soc: int) -> bytes:

@@ -13,6 +13,7 @@ from custom_components.ecoflow_energy.ecoflow.delta3_commands import (
     AC_CHARGE_MODE_FIELD,
     DELTA3_NUMBER_PARAMS,
     DELTA3_SWITCH_PARAMS,
+    backup_reserve_soc_bounds,
     build_number_command,
     build_proto_command,
     build_switch_command,
@@ -154,7 +155,7 @@ class TestNumberCommands:
     @pytest.mark.parametrize(
         ("key", "params_key", "low", "high"),
         [
-            ("backup_reserve_soc", "cfgBackupReverseSoc", 0, 50),
+            ("backup_reserve_soc", "cfgBackupReverseSoc", 0, 100),
             ("max_charge_soc", "cfgMaxChgSoc", 50, 100),
             ("min_discharge_soc", "cfgMinDsgSoc", 0, 30),
         ],
@@ -175,11 +176,11 @@ class TestNumberCommands:
         assert at_low["params"][params_key] == low
         assert at_high["params"][params_key] == high
 
-    def test_backup_reserve_tops_out_at_fifty_not_hundred(self) -> None:
-        """Easy to get wrong: this is a ratio, not a SoC target."""
-        cmd = build_number_command("backup_reserve_soc", 100)
+    def test_backup_reserve_above_fifty_is_sent_as_is(self) -> None:
+        """The reserve used to stop at 50; the battery limits bound it now."""
+        cmd = build_number_command("backup_reserve_soc", 80)
         assert cmd is not None
-        assert cmd["params"]["cfgBackupReverseSoc"] == 50
+        assert cmd["params"]["cfgBackupReverseSoc"] == 80
 
     def test_float_input_is_rounded_to_int(self) -> None:
         cmd = build_number_command("max_charge_soc", 79.6)
@@ -190,6 +191,21 @@ class TestNumberCommands:
 
     def test_unknown_key_returns_none(self) -> None:
         assert build_number_command("no_such_number", 50) is None
+
+
+class TestBackupReserveBounds:
+    """The reserve sits between the discharge limit and the charge limit."""
+
+    def test_bounds_are_the_two_battery_limits(self) -> None:
+        assert backup_reserve_soc_bounds(80, 20) == (20, 80)
+
+    def test_missing_limits_give_the_full_range(self) -> None:
+        assert backup_reserve_soc_bounds(None, None) == (0, 100)
+        assert backup_reserve_soc_bounds(90, None) == (0, 90)
+        assert backup_reserve_soc_bounds(None, 10) == (10, 100)
+
+    def test_out_of_range_limits_stay_inside_zero_to_hundred(self) -> None:
+        assert backup_reserve_soc_bounds(120, -5) == (0, 100)
 
 
 class TestProtoCommands:
@@ -258,11 +274,11 @@ class TestProtoCommands:
         frame = build_proto_command(cmd, self.SN)
         assert frame is not None
         assert self._pdata(frame) == "880264"  # clamped to 100
-        cmd = build_number_command("backup_reserve_soc", 99)
+        cmd = build_number_command("backup_reserve_soc", 120)
         assert cmd is not None
         frame = build_proto_command(cmd, self.SN)
         assert frame is not None
-        assert self._pdata(frame) == "b00632"  # clamped to 50
+        assert self._pdata(frame) == "b00664"  # clamped to 100
 
     def test_frame_carries_the_hardware_verified_header(self) -> None:
         cmd = build_switch_command("beeper_switch", True)

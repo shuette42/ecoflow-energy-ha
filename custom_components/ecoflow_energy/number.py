@@ -49,11 +49,13 @@ from .ecoflow.const import (
     schedule_power_min_w,
 )
 from .ecoflow.delta3_commands import (
-    build_number_command as build_delta3_number_command,
-)
-from .ecoflow.delta3_commands import (
+    BACKUP_RESERVE_SOC_KEY,
+    backup_reserve_soc_bounds,
     build_port_priority_command,
     port_priority_soc_bounds,
+)
+from .ecoflow.delta3_commands import (
+    build_number_command as build_delta3_number_command,
 )
 from .ecoflow.energy_stream import stream_backup_reserve_floor
 from .ecoflow.parsers.delta3_proto import port_priority_keys
@@ -188,6 +190,8 @@ class EcoFlowNumber(
         self._attr_native_min_value = definition.min_value
         self._attr_native_max_value = definition.max_value
         self._attr_native_step = definition.step
+        if definition.slider:
+            self._attr_mode = NumberMode.SLIDER
         if definition.entity_category:
             self._attr_entity_category = _NUMBER_CATEGORY_MAP.get(
                 definition.entity_category
@@ -347,7 +351,8 @@ class EcoFlowNumber(
         follows the reported pack count, its ceiling the model. The
         feed-to-grid schedule's export power is a fifth: its floor is fixed
         and its ceiling follows the device's own feed limit once reported,
-        the declared range otherwise.
+        the declared range otherwise. The Delta 3 backup reserve is a sixth: it
+        sits between the discharge limit and the charge limit.
         Every other number keeps the range its definition declares.
         """
         schedule_slot = self._schedule_slot()
@@ -355,6 +360,9 @@ class EcoFlowNumber(
             return self._schedule_power_bounds(schedule_slot[0])
         if self._port_priority_stem() is not None:
             lower, upper = self._port_priority_bounds()
+            return float(lower), float(upper)
+        if self._is_delta3_backup_reserve():
+            lower, upper = self._delta3_backup_reserve_bounds()
             return float(lower), float(upper)
         if self._is_stream_ac5000_grid_output():
             ceiling = as_known_int(
@@ -492,6 +500,25 @@ class EcoFlowNumber(
             data.get("max_charge_soc_pct"), data.get("min_discharge_soc_pct")
         )
 
+    def _is_delta3_backup_reserve(self) -> bool:
+        """Return True for the Delta 3 backup reserve level."""
+        return (
+            self._definition.key == BACKUP_RESERVE_SOC_KEY
+            and self.coordinator.device_type == DEVICE_TYPE_DELTA3
+        )
+
+    def _delta3_backup_reserve_bounds(self) -> tuple[int, int]:
+        """Return the reserve bounds derived from the device's battery limits.
+
+        Read through `as_known_int`: HA hands `number.set_value` a float, so a
+        limit just written holds 80.0 until the device echoes it back.
+        """
+        data = self.coordinator.data or {}
+        return backup_reserve_soc_bounds(
+            as_known_int(data.get("max_charge_soc_pct")),
+            as_known_int(data.get("min_discharge_soc_pct")),
+        )
+
     def _bounds_moved(self) -> bool:
         """Return True after recording a change of the derived slider bounds.
 
@@ -552,6 +579,9 @@ class EcoFlowNumber(
             if stem is not None:
                 command = self._build_port_priority_command(stem, value)
             else:
+                if self._is_delta3_backup_reserve():
+                    lower, upper = self._delta3_backup_reserve_bounds()
+                    value = max(lower, min(upper, value))
                 command = build_delta3_number_command(self._definition.key, value)
             if command is None:
                 raise_set_unsupported(self.entity_id)
@@ -880,6 +910,8 @@ class EcoFlowLocalNumber(
         self._attr_native_min_value = definition.min_value
         self._attr_native_max_value = definition.max_value
         self._attr_native_step = definition.step
+        if definition.slider:
+            self._attr_mode = NumberMode.SLIDER
         if definition.entity_category:
             self._attr_entity_category = _NUMBER_CATEGORY_MAP.get(
                 definition.entity_category
