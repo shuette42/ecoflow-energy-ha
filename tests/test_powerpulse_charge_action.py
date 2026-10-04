@@ -612,6 +612,9 @@ def _settings_payload(fields: dict[int, int], seq: int = 149) -> bytes:
 # (fixture, timestamp prefix of the app write, the integer fields it carries)
 APP_SETTINGS_WRITES = [
     (PARAM_SET_WRITES_FIXTURE, "2026-08-24T13:51:09", {2: 3, 6: 60}),
+    # The next two rows (13:53:03, 13:55:10) prove the byte shape only: no
+    # read-back in the kept settings reports of that session ties to them
+    # (reports are sampled, a toggle pair went out within a minute).
     (PARAM_SET_WRITES_FIXTURE, "2026-08-24T13:53:03", {1: 18}),
     (PARAM_SET_WRITES_FIXTURE, "2026-08-24T13:55:10", {1: 0, 2: 2, 4: 60}),
     (PARAM_SET_WRITES_FIXTURE, "2026-08-24T13:58:09", {5: 2}),

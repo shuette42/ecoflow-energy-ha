@@ -2026,7 +2026,7 @@ class SetCommandsMixin(_Base):
             not_confirmed_key="powerpulse_phase_setting_not_confirmed",
             plan=lambda: _SettingsWrite({5: wire}, float(wire)),
             describe_reported=lambda value: (
-                wire_to_option.get(value, "no value yet")
+                wire_to_option.get(value, str(value))
                 if type(value) is int
                 else "no value yet"
             ),
@@ -2046,8 +2046,10 @@ class SetCommandsMixin(_Base):
         The report is read at dispatch time inside the lock (`plan`), as the
         frame snapshot `_record_settings_report` took, and refused when there
         is none, when it is older than `POWERPULSE2_SETTINGS_MAX_AGE_S`, when
-        it lacks the bits, the mode or the Solar minimum, or when its values
-        are not ones the builder can send. A reported Smart mode is refused
+        it lacks the bits, the mode or the Solar minimum (all `report_missing`
+        or `report_stale`, where waiting helps), or when its values are not
+        ones the builder can send (`report_unusable`, where waiting does not
+        help). A reported Smart mode is refused
         too: a bare mode write to Smart is unobserved (it needs a departure
         time and target this integration does not build). Confirmed on the
         Continuous bit of `ev_settings_switch_bits` alone (`bit_mask`); the
@@ -2086,16 +2088,24 @@ class SetCommandsMixin(_Base):
                     translation_domain=DOMAIN,
                     translation_key="powerpulse_continuous_smart_mode",
                 )
-            if (
-                not 0 <= bits <= 255
-                or mode not in (1, 2, 3)
-                or not (low <= solar_min <= high)
-            ):
-                # Values the wallbox would not have reported: the report is
-                # unusable, not a write the builder should be asked to reject.
+            # A report that exists but carries a value outside what the
+            # builder can send: waiting for the next report cannot help, so
+            # this is its own message and names the field and the value.
+            unusable: tuple[str, str] | None = None
+            if not 0 <= bits <= 255:
+                unusable = ("switch bits", str(bits))
+            elif mode not in (1, 2, 3):
+                unusable = ("charging mode", str(mode))
+            elif not (low <= solar_min <= high):
+                unusable = ("Solar minimum current", f"{solar_min} A")
+            if unusable is not None:
                 raise HomeAssistantError(
                     translation_domain=DOMAIN,
-                    translation_key="powerpulse_continuous_report_missing",
+                    translation_key="powerpulse_continuous_report_unusable",
+                    translation_placeholders={
+                        "field": unusable[0],
+                        "value": unusable[1],
+                    },
                 )
             new_bits = (
                 bits | POWERPULSE2_SWITCH_BIT_CONTINUOUS

@@ -18,11 +18,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from homeassistant.core import HomeAssistant
 
+from custom_components.ecoflow_energy.const import DOMAIN
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
 from custom_components.ecoflow_energy.switch import async_setup_entry as switch_setup
 from tests.ha.test_powerpulse2_charge_action import (
     POWEROCEAN_DEVICE,
     POWERPULSE2_SN,
+    _connected_mqtt,
+    _mqtt,
     _set_descriptor,
     _wire_entry,
 )
@@ -153,3 +156,87 @@ async def test_turning_the_switch_calls_the_coordinator_and_shows_no_optimistic_
     generic_set.assert_not_called()
     state_write.assert_not_called()
     assert switch.is_on is shown_before
+
+
+async def test_switch_follows_the_sibling_powerocean_connection(
+    hass: HomeAssistant,
+) -> None:
+    """The write goes through the sibling PowerOcean's MQTT connection, so a
+    disconnected sibling makes the switch unavailable and a reconnect brings
+    it back; the connected control keeps the assertion from reading a switch
+    that is simply never available.
+
+    Mutation probe: dropping the `is_connected()` condition from
+    `EcoFlowSwitch.available` leaves the switch available with the sibling
+    offline, where every toggle would be refused.
+    """
+    entry, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    _report_bits(wallbox, 2)
+
+    entities: list[Any] = []
+    await switch_setup(hass, entry, add_entities_collector(entities))
+    switch = _continuous_switch(entities)[0]
+    assert switch.available is True
+
+    _mqtt(oceans[0]).is_connected.return_value = False
+    assert switch.available is False
+
+    _mqtt(oceans[0]).is_connected.return_value = True
+    assert switch.available is True
+
+
+async def test_switch_is_unavailable_once_a_second_powerocean_joins_the_entry(
+    hass: HomeAssistant,
+) -> None:
+    """The setup gate runs once; a second PowerOcean that joins afterwards
+    leaves no single sibling to carry the write, so the switch goes
+    unavailable even though both PowerOceans are connected.
+
+    Mutation probe: resolving "the sibling" as the first PowerOcean of the
+    entry instead of `powerocean_sibling()` keeps the switch available.
+    """
+    entry, _oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    _report_bits(wallbox, 2)
+
+    entities: list[Any] = []
+    await switch_setup(hass, entry, add_entities_collector(entities))
+    switch = _continuous_switch(entities)[0]
+    assert switch.available is True
+
+    second_ocean = EcoFlowDeviceCoordinator(
+        hass, entry, {**POWEROCEAN_DEVICE, "sn": "HJ31TEST00000002"}
+    )
+    second_ocean._mqtt_client = _connected_mqtt()
+    coordinators: dict[str, EcoFlowDeviceCoordinator] = hass.data[DOMAIN][
+        entry.entry_id
+    ]
+    coordinators[second_ocean.device_sn] = second_ocean
+
+    assert switch.available is False
+
+
+async def test_switch_is_unavailable_while_the_wallbox_itself_is_unavailable(
+    hass: HomeAssistant,
+) -> None:
+    """The wallbox's own availability still gates the switch with a connected
+    sibling, as before the sibling rule was added.
+
+    Mutation probe: dropping `device_available` from `EcoFlowSwitch.available`
+    leaves the switch available with the wallbox unreachable.
+    """
+    entry, _oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    _report_bits(wallbox, 2)
+
+    entities: list[Any] = []
+    await switch_setup(hass, entry, add_entities_collector(entities))
+    switch = _continuous_switch(entities)[0]
+    assert switch.available is True
+
+    wallbox._device_available = False
+    assert switch.available is False
+
+    wallbox._device_available = True
+    assert switch.available is True

@@ -3243,17 +3243,20 @@
     "powerpulse_continuous_report_stale": {
       "message": "Der letzte Einstellungsbericht der Wallbox ist zu alt, um diese Änderung darauf aufzubauen. Warte auf ihren nächsten Einstellungsbericht."
     },
+    "powerpulse_continuous_report_unusable": {
+      "message": "Die Wallbox meldet für {field} den Wert {value}. Darauf kann diese Integration keine Änderung aufbauen. Ändere Dauerladen in der EcoFlow-App."
+    },
     "powerpulse_continuous_smart_mode": {
       "message": "Dauerladen lässt sich im Smart Modus nicht von hier ändern; nutze die EcoFlow-App."
     },
     "powerpulse_custom_current_needs_powerocean": {
-      "message": "Der Custom-Ladestrom lässt sich nur über eine PowerOcean im selben Konto setzen; dieser Eintrag hat keine."
+      "message": "Wallbox-Ladestrom Benutzerdefiniert lässt sich nur über eine PowerOcean im selben Konto setzen; dieser Eintrag hat keine."
     },
     "powerpulse_custom_current_not_confirmed": {
-      "message": "Die Wallbox hat den neuen Custom-Ladestrom nicht innerhalb der erlaubten Zeit gemeldet. Zuletzt gemeldet: {reported}."
+      "message": "Die Wallbox hat den neuen Wert für Wallbox-Ladestrom Benutzerdefiniert nicht innerhalb der erlaubten Zeit gemeldet. Zuletzt gemeldet: {reported}."
     },
     "powerpulse_custom_current_range": {
-      "message": "Die Wallbox nimmt einen Custom-Ladestrom zwischen {min} und {max} A an."
+      "message": "Für Wallbox-Ladestrom Benutzerdefiniert nimmt die Wallbox einen Wert zwischen {min} und {max} A an."
     },
     "powerpulse_descriptor_missing": {
       "message": "Die Wallbox hat ihre Adresse noch nicht gemeldet. Warte auf ihren nächsten Einstellungsbericht."
@@ -3286,13 +3289,13 @@
       "message": "Das PowerOcean, über das der Wallbox-Befehl läuft, ist nicht verbunden."
     },
     "powerpulse_solar_min_current_needs_powerocean": {
-      "message": "Der Solar-Mindeststrom lässt sich nur über eine PowerOcean im selben Konto setzen; dieser Eintrag hat keine."
+      "message": "Wallbox-Mindestladestrom Solar lässt sich nur über eine PowerOcean im selben Konto setzen; dieser Eintrag hat keine."
     },
     "powerpulse_solar_min_current_not_confirmed": {
-      "message": "Die Wallbox hat den neuen Solar-Mindeststrom nicht innerhalb der erlaubten Zeit gemeldet. Zuletzt gemeldet: {reported}."
+      "message": "Die Wallbox hat den neuen Wert für Wallbox-Mindestladestrom Solar nicht innerhalb der erlaubten Zeit gemeldet. Zuletzt gemeldet: {reported}."
     },
     "powerpulse_solar_min_current_range": {
-      "message": "Die Wallbox nimmt einen Solar-Mindeststrom zwischen {min} und {max} A an."
+      "message": "Für Wallbox-Mindestladestrom Solar nimmt die Wallbox einen Wert zwischen {min} und {max} A an."
     }
   }
 }

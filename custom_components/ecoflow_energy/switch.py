@@ -197,8 +197,29 @@ class EcoFlowSwitch(
 
     @property
     def available(self) -> bool:
-        """Return True if entity is available."""
-        return self.coordinator.device_available and super().available
+        """Return True if entity is available.
+
+        The PowerPulse 2 Continuous charging switch only ever exists on the
+        sibling route (see `async_setup_entry`) and its write goes through the
+        sibling PowerOcean's own MQTT connection, so availability also follows
+        that connection, the same rule the wallbox's numbers and charging-mode
+        select apply. The sibling is resolved fresh on every read: it is None
+        with no PowerOcean in the entry, with two or more (a second one can
+        join after setup, when the route is no longer unambiguous) and while
+        the entry's coordinator table is gone during teardown, which is
+        exactly `charge_action_route() == "sibling"`. Every other switch keeps
+        the plain device availability.
+        """
+        if not (self.coordinator.device_available and super().available):
+            return False
+        if self.coordinator.device_type != DEVICE_TYPE_POWERPULSE2:
+            return True
+        sibling = self.coordinator.powerocean_sibling()
+        return (
+            sibling is not None
+            and sibling.mqtt_client is not None
+            and sibling.mqtt_client.is_connected()
+        )
 
     async def async_added_to_hass(self) -> None:
         """Restore the last known on/off state when the entity is added.

@@ -3243,6 +3243,9 @@
     "powerpulse_continuous_report_stale": {
       "message": "The wallbox's last settings report is too old to build this change on. Wait for its next settings report."
     },
+    "powerpulse_continuous_report_unusable": {
+      "message": "The wallbox reports {value} for {field}, which this integration cannot build a change on. Change Continuous charging in the EcoFlow app."
+    },
     "powerpulse_continuous_smart_mode": {
       "message": "Continuous charging cannot be changed from here while the wallbox is in Smart mode; use the EcoFlow app."
     },

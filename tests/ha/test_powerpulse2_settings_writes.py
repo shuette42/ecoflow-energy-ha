@@ -185,10 +185,13 @@ async def test_a_bit_write_confirms_on_the_frame_and_only_on_its_bit(
     the bit cleared confirms even though its other bits (3 against the
     requested 2) differ: only the masked bit is the write's business.
 
-    Mutation probes: confirming from the store instead of the arriving frame
-    (dropping the `state_key not in parsed` return) makes the keyless frame
-    confirm; comparing the whole byte instead of the masked bit makes the
-    final frame (3) fail to confirm.
+    Mutation probes: reading the value from the store (`self._device_data.get(
+    record.state_key)` in place of `parsed[record.state_key]` in
+    `_resolve_wallbox_action`) makes the frame whose bit 0x10 is still set
+    confirm, because the store holds the requested 2 on purpose; comparing
+    the whole byte instead of the masked bit makes the final frame (3) fail
+    to confirm. Dropping the `state_key not in parsed` return fails it too,
+    but through a KeyError on the keyless frame, not through a confirmation.
     """
     _entry_obj, _oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
     _apply_frame(wallbox, _REPORT_CONTINUOUS_ON)
@@ -339,3 +342,161 @@ async def test_continuous_refuses_a_smart_mode_report_and_follows_other_modes(
     assert _published_fields(send.call_args) == {1: 18, 2: 3, 4: 60}
     _apply_report(wallbox, ev_settings_switch_bits=18)
     await task
+
+
+_REPORT_MISSING = "powerpulse_continuous_report_missing"
+_REPORT_UNUSABLE = "powerpulse_continuous_report_unusable"
+
+
+async def test_continuous_without_any_settings_report_refuses_as_missing(
+    hass: HomeAssistant,
+) -> None:
+    """A wallbox that has delivered no settings report leaves nothing to rebuild
+    the switch byte from: the write refuses with `report_missing`, publishes
+    nothing and leaves no pending record.
+
+    Mutation probe: letting the plan run on `_settings_report is None` (the
+    refusal dropped) raises a TypeError on the unpacking instead of the
+    refusal, so the `HomeAssistantError` expectation fails.
+    """
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    send = _mqtt(oceans[0]).send_proto_set
+    assert wallbox._settings_report is None
+
+    with pytest.raises(HomeAssistantError) as excinfo:
+        await wallbox.async_set_powerpulse_continuous_charging(True)
+
+    assert excinfo.value.translation_key == _REPORT_MISSING
+    assert send.call_count == 0
+    assert wallbox._wallbox_action_pending is None
+
+
+@pytest.mark.parametrize(
+    "report",
+    [
+        {"ev_settings_switch_bits": 2, "ev_solar_min_current_a": 6.0},
+        {"ev_settings_switch_bits": 2, "ev_settings_work_mode": 2},
+        {
+            "ev_settings_switch_bits": 2.0,
+            "ev_settings_work_mode": 2,
+            "ev_solar_min_current_a": 6.0,
+        },
+    ],
+    ids=["no_mode", "no_solar_min", "bits_not_an_int"],
+)
+async def test_continuous_refuses_a_report_missing_a_field_it_needs(
+    hass: HomeAssistant, report: dict[str, Any]
+) -> None:
+    """A report that carries the switch bits but not the mode, or not the Solar
+    minimum, or carries the bits as a float, refuses with `report_missing`. The
+    store holds a valid mode and Solar minimum on purpose: the write rebuilds
+    from the report snapshot, so the store cannot fill the gap.
+
+    Mutation probe: dropping the `type(mode) is not int` clause makes the
+    `no_mode` case reach the range check and refuse with `report_unusable`
+    instead, so the key assertion fails.
+    """
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    send = _mqtt(oceans[0]).send_proto_set
+    wallbox.set_device_value("ev_settings_work_mode", 2)
+    wallbox.set_device_value("ev_solar_min_current_a", 6.0)
+    _apply_report(wallbox, **report)
+
+    with pytest.raises(HomeAssistantError) as excinfo:
+        await wallbox.async_set_powerpulse_continuous_charging(True)
+
+    assert excinfo.value.translation_key == _REPORT_MISSING
+    assert send.call_count == 0
+    assert wallbox._wallbox_action_pending is None
+
+
+@pytest.mark.parametrize(
+    ("report", "field", "value"),
+    [
+        (
+            {
+                "ev_settings_switch_bits": 2,
+                "ev_settings_work_mode": 2,
+                "ev_solar_min_current_a": 17.0,
+            },
+            "Solar minimum current",
+            "17.0 A",
+        ),
+        (
+            {
+                "ev_settings_switch_bits": 2,
+                "ev_settings_work_mode": 0,
+                "ev_solar_min_current_a": 6.0,
+            },
+            "charging mode",
+            "0",
+        ),
+        (
+            {
+                "ev_settings_switch_bits": 256,
+                "ev_settings_work_mode": 2,
+                "ev_solar_min_current_a": 6.0,
+            },
+            "switch bits",
+            "256",
+        ),
+    ],
+    ids=["solar_min_17", "mode_0", "bits_256"],
+)
+async def test_continuous_refuses_an_out_of_range_report_as_unusable(
+    hass: HomeAssistant, report: dict[str, Any], field: str, value: str
+) -> None:
+    """A report that exists but carries a value the builder cannot send (a
+    Solar minimum above the 16 A range, mode 0, a switch byte above 255)
+    refuses with `report_unusable`, naming the field and the value: waiting for
+    the next report cannot help, so it must not read as `report_missing`.
+
+    Mutation probe: raising `report_missing` from the out-of-range branch
+    again (the pre-fix behaviour) fails every case on the key.
+    """
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    send = _mqtt(oceans[0]).send_proto_set
+    _apply_report(wallbox, **report)
+
+    with pytest.raises(HomeAssistantError) as excinfo:
+        await wallbox.async_set_powerpulse_continuous_charging(True)
+
+    assert excinfo.value.translation_key == _REPORT_UNUSABLE
+    assert excinfo.value.translation_placeholders == {"field": field, "value": value}
+    assert send.call_count == 0
+    assert wallbox._wallbox_action_pending is None
+
+
+async def test_a_handed_over_frame_is_not_a_settings_report(
+    hass: HomeAssistant,
+) -> None:
+    """A frame handed over from a sibling (`own_connection=False`) that carries
+    settings keys leaves the settings report untouched: it is no report this
+    wallbox received. The control, the same dict on the wallbox's own
+    connection, replaces the snapshot, so the assertion cannot hold merely
+    because nothing ever records a report.
+
+    Mutation probe: dropping the `if own_connection:` guard around
+    `_record_settings_report` in `_apply_data` makes the hand-over replace the
+    snapshot and the identity assertion fail.
+    """
+    _entry_obj, _oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _apply_frame(wallbox, _REPORT_CONTINUOUS_ON)
+    before = wallbox._settings_report
+    assert before is not None
+    handed = {
+        "ev_settings_switch_bits": 2,
+        "ev_settings_work_mode": 1,
+        "ev_solar_min_current_a": 9.0,
+    }
+
+    wallbox._apply_data(dict(handed), own_connection=False)
+    assert wallbox._settings_report is before
+
+    wallbox._apply_data(dict(handed), own_connection=True)
+    assert wallbox._settings_report is not before
+    assert wallbox._settings_report is not None
+    assert wallbox._settings_report[1] == handed
