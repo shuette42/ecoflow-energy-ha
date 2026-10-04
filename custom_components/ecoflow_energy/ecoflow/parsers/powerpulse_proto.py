@@ -23,10 +23,12 @@ Two message types carry readings, both under cmd_func 2:
   cable-lock toggle) are mapped; the rest of its message is unrelated
   configuration this integration does not read yet.
 - `241/44` EDevRunDataSync, on the wallbox's own property topic, about once
-  a second (PLAN-136). Only the accessory descriptor nested inside it -
-  the bus address and the wallbox's own serial - is read; the settings
-  block behind it is a later plan. No entity is built from these two
-  fields; they exist to build the start/stop command's addressing.
+  a second (PLAN-136). Two things nested inside it are read: the accessory
+  descriptor - the bus address and the wallbox's own serial, which exist to
+  build the start/stop command's addressing - and, from the settings block
+  behind it, the switch-bit field and the Solar minimum current (#480). No
+  entity is built from the descriptor fields; the two settings fields are
+  the read-back a later write is built on.
 
 HeartBeat's field `8` is a nested record carrying the live charge readings
 (power, the three phase voltages, the three phase currents); it is pulled
@@ -369,52 +371,96 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def _decode_settings_block(block: bytes) -> dict[str, Any]:
+    """Decode the wallbox settings block of EDevRunDataSync (`f1.f4.f8`).
+
+    Two varint fields are read: `1` (the switch-bit field, kept raw because
+    its bits are individually owned - the cable lock and the continuous
+    charging flag among them) and `6` (the Solar minimum current, in
+    deci-amps on the wire, published in amps). The block's other fields (the
+    work mode, the maximum current, the phase and the custom current) are not
+    read here.
+
+    A field that is not on the wire stays out of the result. proto3 omits
+    zeros and a missing field is not a measured 0, so nothing is guessed from
+    absence, and a write that needs a missing value is refused later instead
+    of being built on a made-up one.
+    """
+    result: dict[str, Any] = {}
+    for field_num, wire_type, raw in _iter_fields(block):
+        if wire_type != 0:
+            continue
+        value = _decode_scalar(wire_type, raw, _TYPE_INT)
+        if not isinstance(value, int):
+            continue
+        if field_num == 1:
+            result["ev_settings_switch_bits"] = value
+        elif field_num == 6:
+            result["ev_solar_min_current_a"] = value / 10
+    return result
+
+
+def _decode_dev_info(dev_info: bytes) -> dict[str, Any]:
+    """Decode the accessory descriptor (`dev_info`) of EDevRunDataSync."""
+    dev_addr: int | None = None
+    dev_sn: str | None = None
+    for leaf_num, leaf_wire, leaf_raw in _iter_fields(dev_info):
+        if leaf_num == 1 and leaf_wire == 0:
+            value = _decode_scalar(leaf_wire, leaf_raw, _TYPE_INT)
+            if isinstance(value, int):
+                dev_addr = value
+        elif leaf_num == 2 and leaf_wire == 2 and len(leaf_raw) == 16:
+            try:
+                decoded_sn = leaf_raw.decode("ascii")
+            except UnicodeDecodeError:
+                decoded_sn = None
+            dev_sn = (
+                decoded_sn if decoded_sn is not None and decoded_sn.isalnum() else None
+            )
+    if dev_addr is None or dev_sn is None:
+        return {}
+    return {"ev_charger_dev_addr": dev_addr, "ev_charger_sn": dev_sn}
+
+
 def _decode_run_data_sync_fields(pdata: bytes) -> dict[str, Any]:
-    """Decode EDevRunDataSync (241/44): the accessory descriptor only.
+    """Decode EDevRunDataSync (241/44): the accessory descriptor and settings.
 
     Walks `pdata` field 1 (the message body) -> field 1 (`dev_info`) ->
     fields 1 (`dev_addr`, varint) and 2 (`dev_sn`, 16-byte serial). Field 3
     of `dev_info` (present on every settings report, absent on every
     captured write) is ignored - the descriptor measurement note of
-    PLAN-136 records why. The settings block behind `dev_info` (`f4.f8`) is
-    a later plan; nothing else from this message is parsed here.
+    PLAN-136 records why. The settings block, a sibling of `dev_info` under
+    the same body (`f4.f8`), is decoded by `_decode_settings_block`; nothing
+    else from this message is parsed here.
 
-    Both keys are emitted only when `dev_addr` is present and `dev_sn` is
-    exactly 16 alphanumeric ASCII bytes (every EcoFlow serial on file is);
-    otherwise an empty dict is returned, which is a clean decode of a frame
-    this function does not (yet) read fully, not an error. The serial is
-    never logged. The first `dev_info` of the first body wins: no captured
-    frame carries two, and a bundle with two such headers would let the
-    later one overwrite the earlier in the caller's merge.
+    The descriptor keys are emitted only when `dev_addr` is present and
+    `dev_sn` is exactly 16 alphanumeric ASCII bytes (every EcoFlow serial on
+    file is); otherwise they are left out, which is a clean decode of a frame
+    this function does not read fully, not an error. The serial is never
+    logged. The settings keys are independent of the descriptor and appear
+    only when the frame carries the settings block. The first `dev_info` and
+    the first settings block of the first body win: no captured frame
+    carries two, and a bundle with two such headers would let the later one
+    overwrite the earlier in the caller's merge.
     """
     result: dict[str, Any] = {}
     for field_num, wire_type, body in _iter_fields(pdata):
         if field_num != 1 or wire_type != 2:
             continue
-        for sub_num, sub_wire, dev_info in _iter_fields(body):
-            if sub_num != 1 or sub_wire != 2:
+        seen_dev_info = False
+        seen_settings = False
+        for sub_num, sub_wire, sub_raw in _iter_fields(body):
+            if sub_wire != 2:
                 continue
-            dev_addr: int | None = None
-            dev_sn: str | None = None
-            for leaf_num, leaf_wire, leaf_raw in _iter_fields(dev_info):
-                if leaf_num == 1 and leaf_wire == 0:
-                    value = _decode_scalar(leaf_wire, leaf_raw, _TYPE_INT)
-                    if isinstance(value, int):
-                        dev_addr = value
-                elif leaf_num == 2 and leaf_wire == 2 and len(leaf_raw) == 16:
-                    try:
-                        decoded_sn = leaf_raw.decode("ascii")
-                    except UnicodeDecodeError:
-                        decoded_sn = None
-                    dev_sn = (
-                        decoded_sn
-                        if decoded_sn is not None and decoded_sn.isalnum()
-                        else None
-                    )
-            if dev_addr is not None and dev_sn is not None:
-                result["ev_charger_dev_addr"] = dev_addr
-                result["ev_charger_sn"] = dev_sn
-            break
+            if sub_num == 1 and not seen_dev_info:
+                seen_dev_info = True
+                result.update(_decode_dev_info(sub_raw))
+            elif sub_num == 4 and not seen_settings:
+                seen_settings = True
+                for block_num, block_wire, block in _iter_fields(sub_raw):
+                    if block_num == 8 and block_wire == 2:
+                        result.update(_decode_settings_block(block))
+                        break
         break
     return result
 

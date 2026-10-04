@@ -621,3 +621,99 @@ def test_charge_mode_field_does_not_disturb_existing_keys() -> None:
     assert result["ev_charge_current_a"] == 10.0
     assert result["ev_phase_mode"] == "three_phase"
     assert result["ev_charge_power_w"] == 6599.2
+
+
+# --- 241/44 settings block: switch bits and Solar minimum current (#480) ---
+#
+# Two recordings of the same wallbox taken on 2026-10-04, one per fixture. The
+# Solar minimum current moves between 6 A and 7 A in both, and the afternoon
+# one also shows the switch-bit field dropping from 18 to 2 and returning to
+# 18. Frames are addressed by timestamp, as everywhere in this file.
+
+SETTINGS_MORNING_FIXTURE = FIXTURE.with_name("c376_settings_480_morning_20261004.json")
+SETTINGS_AFTERNOON_FIXTURE = FIXTURE.with_name(
+    "c376_settings_480_afternoon_20261004.json"
+)
+RUN_DATA_SYNC_FIXTURE = FIXTURE.with_name("c376_run_data_sync_20260824.json")
+
+# The Continuous charging flag inside the switch-bit field: set in the real
+# value 18 (0b10010), clear in the real value 2 (0b00010).
+_CONTINUOUS_BIT = 0x10
+
+
+def _parse_in(fixture: Path, ts_iso: str) -> dict[str, Any]:
+    """Parse the one frame of `fixture` captured at this instant."""
+    frames = json.loads(fixture.read_text())["frames"]
+    matches = [f for f in frames if f["ts_iso"].startswith(ts_iso)]
+    assert len(matches) == 1, f"{len(matches)} frames captured at {ts_iso}"
+    result = parse_powerpulse_message(bytes.fromhex(matches[0]["hex"]))
+    assert result is not None
+    return result
+
+
+def test_settings_morning_frames_report_switch_bits_and_solar_minimum() -> None:
+    """Switch bits stay 18 across the morning; the Solar minimum reads 6 A,
+    then 7 A in one frame, then 6 A again."""
+    expected = [
+        ("2026-10-04T06:56:52", 18, 6.0),
+        ("2026-10-04T07:09:41", 18, 7.0),
+        ("2026-10-04T07:16:27", 18, 6.0),
+    ]
+    for ts_iso, switch_bits, solar_min_a in expected:
+        result = _parse_in(SETTINGS_MORNING_FIXTURE, ts_iso)
+        assert result["ev_settings_switch_bits"] == switch_bits, ts_iso
+        assert result["ev_solar_min_current_a"] == solar_min_a, ts_iso
+
+
+def test_settings_afternoon_frames_report_continuous_off_then_on() -> None:
+    """The 7 A frame carries switch bits 2 (Continuous off); a later frame
+    carries 18 again, with the minimum back at 6 A."""
+    off = _parse_in(SETTINGS_AFTERNOON_FIXTURE, "2026-10-04T09:38:36")
+    assert off["ev_settings_switch_bits"] == 2
+    assert off["ev_solar_min_current_a"] == 7.0
+
+    on = _parse_in(SETTINGS_AFTERNOON_FIXTURE, "2026-10-04T09:43:57")
+    assert on["ev_settings_switch_bits"] == 18
+    assert on["ev_solar_min_current_a"] == 6.0
+
+
+def test_settings_frames_still_report_the_descriptor() -> None:
+    """The settings walk sits beside the descriptor walk in one decoder; the
+    descriptor keys the start/stop command is addressed with must come out of
+    the same frames unchanged."""
+    for fixture, ts_iso in (
+        (SETTINGS_MORNING_FIXTURE, "2026-10-04T07:09:41"),
+        (SETTINGS_AFTERNOON_FIXTURE, "2026-10-04T09:38:36"),
+    ):
+        result = _parse_in(fixture, ts_iso)
+        assert result["ev_charger_dev_addr"] == 215, ts_iso
+        assert result["ev_charger_sn"] == "X" * 16, ts_iso
+
+
+def test_switch_bits_read_modify_write_keeps_unrelated_bits() -> None:
+    """Real values show why a Continuous toggle must start from the reported
+    field: clearing bit 0x10 of 18 gives exactly the 2 the wallbox reported
+    with Continuous off, so the other set bit (0x02) is not ours to drop."""
+    bits_on = _parse_in(SETTINGS_AFTERNOON_FIXTURE, "2026-10-04T09:43:57")[
+        "ev_settings_switch_bits"
+    ]
+    bits_off = _parse_in(SETTINGS_AFTERNOON_FIXTURE, "2026-10-04T09:38:36")[
+        "ev_settings_switch_bits"
+    ]
+    assert bits_on & _CONTINUOUS_BIT == _CONTINUOUS_BIT
+    assert bits_off & _CONTINUOUS_BIT == 0
+    assert bits_on & ~_CONTINUOUS_BIT == bits_off
+
+
+def test_frame_without_a_settings_block_reports_neither_settings_key() -> None:
+    """The 13:45:41 frame of the 2026-08-24 recording carries the descriptor
+    but no settings block: absence is not published as 0 or as a default.
+    The frame before it carries the block, so the fixture path is live."""
+    bare = _parse_in(RUN_DATA_SYNC_FIXTURE, "2026-08-24T13:45:41")
+    assert bare["ev_charger_dev_addr"] == 215
+    assert "ev_settings_switch_bits" not in bare
+    assert "ev_solar_min_current_a" not in bare
+
+    with_block = _parse_in(RUN_DATA_SYNC_FIXTURE, "2026-08-24T13:43:30")
+    assert with_block["ev_settings_switch_bits"] == 16
+    assert with_block["ev_solar_min_current_a"] == 6.0
