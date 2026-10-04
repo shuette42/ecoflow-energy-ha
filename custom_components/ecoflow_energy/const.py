@@ -651,6 +651,10 @@ class EcoFlowSelectDef:
     # outside the map leaves the entity unknown, which is the honest state for
     # a setting some other client put out of range.
     value_map: Mapping[int, str] | None = None
+    # Same meaning as on the number definition: created on the first report
+    # that carries the state key, so a setting the device never reports gets
+    # no select. See _watch_for_accessory() in select.py.
+    accessory: bool = False
 
 
 # =====================================================================
@@ -9316,6 +9320,43 @@ POWERPULSE2_NUMBERS: list[EcoFlowNumberDef] = [
         accessory=True,
         powerpulse_route="own",
     ),
+    # Two stored setpoints from the wallbox's settings report (PLAN-172). Both
+    # are sibling-only like the maximum current: the write goes through the
+    # PowerOcean and the coordinator refuses on the same condition. Both are
+    # accessory entities, created once the settings report has been decoded.
+    # Four current controls now sit on one wallbox, so the roles are kept
+    # apart on purpose:
+    #   Maximum Current          the upper limit of the wallbox itself
+    #   Charging Current         the target of the running session (dynamic)
+    #   Custom Charging Current  the stored setpoint of the Custom mode,
+    #                            writable in every mode
+    #   Solar Minimum Current    the stored minimum current of the Solar mode
+    EcoFlowNumberDef(
+        "ev_solar_min_current_a",
+        "Wallbox Solar Minimum Current",
+        "ev_solar_min_current_a",
+        "A",
+        "mdi:current-ac",
+        POWERPULSE2_MAX_CURRENT_RANGE_A[0],
+        POWERPULSE2_MAX_CURRENT_RANGE_A[1],
+        1,
+        enhanced_only=True,
+        accessory=True,
+        powerpulse_route="sibling",
+    ),
+    EcoFlowNumberDef(
+        "ev_custom_current_a",
+        "Wallbox Custom Charging Current",
+        "ev_custom_current_a",
+        "A",
+        "mdi:current-ac",
+        POWERPULSE2_MAX_CURRENT_RANGE_A[0],
+        POWERPULSE2_MAX_CURRENT_RANGE_A[1],
+        1,
+        enhanced_only=True,
+        accessory=True,
+        powerpulse_route="sibling",
+    ),
 ]
 
 # The wallbox's own charging-mode control (PLAN-147). Sibling route only,
@@ -9333,6 +9374,42 @@ POWERPULSE2_SELECTS: list[EcoFlowSelectDef] = [
         POWERPULSE2_CHARGE_MODE_OPTIONS,
         icon="mdi:ev-station",
         enhanced_only=True,
+    ),
+    # The configured phase setting (PLAN-172). A separate entity from the
+    # `Wallbox Phase Mode` sensor: that one shows the phase the wallbox is
+    # charging on right now, this one shows what the wallbox is set to use.
+    # The wallbox reports the setting as a number (0 Auto, 1 one phase,
+    # 2 three phases), so the definition carries a value map; an absent key
+    # reads as unknown rather than as Auto. An accessory entity, created once
+    # the first settings report has carried the key.
+    EcoFlowSelectDef(
+        "ev_phase_setting",
+        "Wallbox Phase Setting",
+        "ev_phase_setting",
+        POWERPULSE2_PHASE_SETTING_OPTIONS,
+        icon="mdi:sine-wave",
+        enhanced_only=True,
+        value_map={
+            wire: option for option, wire in POWERPULSE2_PHASE_SETTING_WIRE.items()
+        },
+        accessory=True,
+    ),
+]
+
+# The wallbox's Continuous charging switch (PLAN-172). Its state is one bit
+# (POWERPULSE2_SWITCH_BIT_CONTINUOUS) of the settings report's switch bits, so
+# the read-back key is the whole byte and the switch decodes the bit itself. A
+# sibling-route, accessory control like the settings numbers and the phase
+# select: created once the first settings report has carried the bits, and
+# only where exactly one PowerOcean can carry the write.
+POWERPULSE2_SWITCHES: list[EcoFlowSwitchDef] = [
+    EcoFlowSwitchDef(
+        "ev_continuous_charging",
+        "Wallbox Continuous Charging",
+        "ev_settings_switch_bits",
+        icon="mdi:ev-plug-type2",
+        enhanced_only=True,
+        accessory=True,
     ),
 ]
 

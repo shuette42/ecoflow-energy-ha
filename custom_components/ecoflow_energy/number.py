@@ -515,8 +515,15 @@ class EcoFlowNumber(
             # (PLAN-146, PLAN-140).
             if int(value) != value:
                 raise_set_rejected(self.entity_id, "whole amps only")
-            if self._definition.key == "ev_charge_current_a":
+            key = self._definition.key
+            if key == "ev_charge_current_a":
                 await self.coordinator.async_set_powerpulse_charge_current(int(value))
+            elif key == "ev_solar_min_current_a":
+                await self.coordinator.async_set_powerpulse_solar_min_current(
+                    int(value)
+                )
+            elif key == "ev_custom_current_a":
+                await self.coordinator.async_set_powerpulse_custom_current(int(value))
             else:
                 await self.coordinator.async_set_powerpulse_max_current(int(value))
             return

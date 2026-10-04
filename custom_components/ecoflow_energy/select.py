@@ -1,13 +1,13 @@
 """Select platform for EcoFlow Energy.
 
-Four settings so far: the PowerOcean work mode (self-use, AI schedule), the
+Five settings so far: the PowerOcean work mode (self-use, AI schedule), the
 STREAM AC 5000 work mode, the Delta 3 LCD screen timeout, and the PowerPulse 2
-charging mode. The first three use the same optimistic-lock pattern as
-switch.py and number.py - after a SET the local state is updated immediately
-and device updates for the same key are ignored for five seconds. The
-PowerPulse 2 one applies nothing on its own: the coordinator returns only once
-the wallbox has reported the new mode on its own heartbeat, and that report is
-what updates the store (PLAN-147, the same rule as its number in number.py).
+charging mode and phase setting. The first three use the same optimistic-lock
+pattern as switch.py and number.py - after a SET the local state is updated
+immediately and device updates for the same key are ignored for five seconds.
+The two PowerPulse 2 ones apply nothing on their own: the coordinator returns
+only once the wallbox has reported the new value, and that report is what
+updates the store (PLAN-147, the same rule as its number in number.py).
 
 The two work modes share the entity key and nothing else: their modes and
 their wire values are unrelated, so each has its own branch.
@@ -52,7 +52,12 @@ from .const import (
 from .coordinator import EcoFlowDeviceCoordinator
 from .ecoflow.delta3_commands import build_select_command as build_delta3_select_command
 from .ecoflow.wave3_commands import Wave3WriteRefused
-from .entity import raise_set_failed, raise_set_rejected, raise_set_unsupported
+from .entity import (
+    raise_set_failed,
+    raise_set_rejected,
+    raise_set_unsupported,
+    reading_reported,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -95,12 +100,50 @@ async def async_setup_entry(
             # PowerOceans in the entry gets no select, whatever the wallbox
             # itself has reported.
             continue
+        pending: list[EcoFlowSelectDef] = []
         for defn in defs:
             if defn.enhanced_only and not coordinator.enhanced_mode:
                 continue
+            if defn.accessory and not reading_reported(coordinator, defn.state_key):
+                pending.append(defn)
+                continue
             entities.append(EcoFlowSelect(coordinator, defn))
 
+        if pending:
+            _watch_for_accessory(entry, coordinator, pending, async_add_entities)
+
     async_add_entities(entities)
+
+
+@callback
+def _watch_for_accessory(
+    config_entry: ConfigEntry,
+    coordinator: EcoFlowDeviceCoordinator,
+    pending: list[EcoFlowSelectDef],
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Add accessory selects as soon as the device first reports their value.
+
+    The same rule as the accessory numbers in number.py: the gate is the
+    definition's read-back key, and the wait has no deadline because the
+    wallbox may only send its settings report after Home Assistant started.
+    """
+
+    @callback
+    def _check_for_accessory() -> None:
+        ready = [
+            definition
+            for definition in pending
+            if reading_reported(coordinator, definition.state_key)
+        ]
+        for definition in ready:
+            pending.remove(definition)
+        if ready:
+            async_add_entities(
+                [EcoFlowSelect(coordinator, definition) for definition in ready]
+            )
+
+    config_entry.async_on_unload(coordinator.async_add_listener(_check_for_accessory))
 
 
 class EcoFlowSelect(CoordinatorEntity[EcoFlowDeviceCoordinator], SelectEntity):
@@ -200,8 +243,13 @@ class EcoFlowSelect(CoordinatorEntity[EcoFlowDeviceCoordinator], SelectEntity):
             # wallbox has reported the new mode on its own heartbeat, and
             # that report is what updates the store. `smart` and an unknown
             # option are refused inside the coordinator before anything is
-            # published (PLAN-147 decision 3).
-            await self.coordinator.async_set_powerpulse_charge_mode(option)
+            # published (PLAN-147 decision 3). The phase setting is the same
+            # kind of write: nothing is applied here, the wallbox's own
+            # settings report is what moves the displayed option (PLAN-172).
+            if self._definition.key == "ev_phase_setting":
+                await self.coordinator.async_set_powerpulse_phase_setting(option)
+            else:
+                await self.coordinator.async_set_powerpulse_charge_mode(option)
             return
 
         if self._definition.key == "work_mode":

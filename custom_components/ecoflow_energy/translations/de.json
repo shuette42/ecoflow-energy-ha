@@ -2872,6 +2872,9 @@
       },
       "modbus_control": {
         "name": "Modbus-Steuerung"
+      },
+      "ev_continuous_charging": {
+        "name": "Wallbox-Dauerladen"
       }
     },
     "number": {
@@ -3016,6 +3019,12 @@
       "ev_charge_current_a": {
         "name": "Wallbox-Ladestrom"
       },
+      "ev_solar_min_current_a": {
+        "name": "Wallbox-Mindestladestrom Solar"
+      },
+      "ev_custom_current_a": {
+        "name": "Wallbox-Ladestrom Benutzerdefiniert"
+      },
       "local_backup_reserve": {
         "name": "Backup-Reserve"
       },
@@ -3151,6 +3160,14 @@
           "custom": "Benutzerdefiniert",
           "smart": "Smart Modus"
         }
+      },
+      "ev_phase_setting": {
+        "name": "Wallbox-Phaseneinstellung",
+        "state": {
+          "auto": "Automatisch",
+          "one_phase": "Eine Phase",
+          "three_phases": "Drei Phasen"
+        }
       }
     },
     "button": {
@@ -3215,10 +3232,10 @@
       "message": "{option} ist kein Lademodus, den diese Wallbox meldet."
     },
     "powerpulse_continuous_needs_powerocean": {
-      "message": "Continuous Charging lässt sich nur über eine PowerOcean im selben Konto schalten; dieser Eintrag hat keine."
+      "message": "Dauerladen lässt sich nur über eine PowerOcean im selben Konto schalten; dieser Eintrag hat keine."
     },
     "powerpulse_continuous_not_confirmed": {
-      "message": "Die Wallbox hat den neuen Zustand von Continuous Charging nicht innerhalb der erlaubten Zeit gemeldet. Zuletzt gemeldet: {reported}."
+      "message": "Die Wallbox hat den neuen Zustand von Dauerladen nicht innerhalb der erlaubten Zeit gemeldet. Zuletzt gemeldet: {reported}."
     },
     "powerpulse_continuous_report_missing": {
       "message": "Die Wallbox hat ihre aktuellen Einstellungen noch nicht gemeldet. Warte auf ihren nächsten Einstellungsbericht."
@@ -3227,7 +3244,7 @@
       "message": "Der letzte Einstellungsbericht der Wallbox ist zu alt, um diese Änderung darauf aufzubauen. Warte auf ihren nächsten Einstellungsbericht."
     },
     "powerpulse_continuous_smart_mode": {
-      "message": "Continuous Charging lässt sich im Smart Modus nicht von hier ändern; nutze die EcoFlow-App."
+      "message": "Dauerladen lässt sich im Smart Modus nicht von hier ändern; nutze die EcoFlow-App."
     },
     "powerpulse_custom_current_needs_powerocean": {
       "message": "Der Custom-Ladestrom lässt sich nur über eine PowerOcean im selben Konto setzen; dieser Eintrag hat keine."

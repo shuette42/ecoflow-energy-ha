@@ -81,23 +81,26 @@ def test_every_sn_prefix_is_in_the_documentation_readme_entity_reference():
 
 def test_powerpulse2_definition_counts():
     """PowerPulse 2's entity counts (18 sensors, 1 binary sensor, 1 select,
-    2 buttons), and its two Numbers as the entry-gated pair: one written
-    only through a sibling PowerOcean (`ev_max_current_a`) and one written
-    only on the wallbox's own channel with no PowerOcean (`ev_charge_current_a`),
-    never both from the same route. PowerPulse 2 has no test in
-    test_entity_documentation.py's `_ENTITY_REFERENCE_SIMPLE_DEVICES` because
-    its documentation/README.md bullet has two routes rather than a single
-    PowerOcean-gated footnote, so nothing gated it before this."""
+    2 buttons), and its four Numbers as the entry-gated set: three written
+    only through a sibling PowerOcean (`ev_max_current_a` plus the two stored
+    setpoints `ev_solar_min_current_a` and `ev_custom_current_a`) and one
+    written only on the wallbox's own channel with no PowerOcean
+    (`ev_charge_current_a`), never both from the same route. The two selects
+    are the charging mode and the phase setting, both sibling-only.
+    PowerPulse 2 has no test in test_entity_documentation.py's
+    `_ENTITY_REFERENCE_SIMPLE_DEVICES` because its documentation/README.md
+    bullet has two routes rather than a single PowerOcean-gated footnote, so
+    nothing gated it before this."""
     assert len(const.POWERPULSE2_SENSORS) == 18
     assert len(const.POWERPULSE2_BINARY_SENSORS) == 1
-    assert len(const.POWERPULSE2_SELECTS) == 1
+    assert len(const.POWERPULSE2_SELECTS) == 2
     assert len(const.POWERPULSE2_BUTTONS) == 2
 
     numbers = const.POWERPULSE2_NUMBERS
-    assert len(numbers) == 2
+    assert len(numbers) == 4
     routes = sorted(n.powerpulse_route or "" for n in numbers)
-    assert routes == ["own", "sibling"], (
-        f"POWERPULSE2_NUMBERS must be exactly one 'sibling'-route number "
-        f"(needs a PowerOcean) and one 'own'-route number (needs none), "
+    assert routes == ["own", "sibling", "sibling", "sibling"], (
+        f"POWERPULSE2_NUMBERS must be exactly one 'own'-route number (needs "
+        f"no PowerOcean) and three 'sibling'-route numbers (need one), "
         f"got routes {routes}"
     )

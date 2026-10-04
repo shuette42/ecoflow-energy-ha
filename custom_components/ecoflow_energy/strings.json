@@ -2872,6 +2872,9 @@
       },
       "modbus_control": {
         "name": "Modbus Control"
+      },
+      "ev_continuous_charging": {
+        "name": "Wallbox Continuous Charging"
       }
     },
     "number": {
@@ -3016,6 +3019,12 @@
       "ev_charge_current_a": {
         "name": "Wallbox Charging Current"
       },
+      "ev_solar_min_current_a": {
+        "name": "Wallbox Solar Minimum Current"
+      },
+      "ev_custom_current_a": {
+        "name": "Wallbox Custom Charging Current"
+      },
       "local_backup_reserve": {
         "name": "Backup Reserve"
       },
@@ -3150,6 +3159,14 @@
           "solar": "Solar Mode",
           "custom": "Custom",
           "smart": "Smart Mode"
+        }
+      },
+      "ev_phase_setting": {
+        "name": "Wallbox Phase Setting",
+        "state": {
+          "auto": "Auto",
+          "one_phase": "One phase",
+          "three_phases": "Three phases"
         }
       }
     },

@@ -3,6 +3,11 @@
 Implements optimistic lock: after a SET command the local state is
 updated immediately and MQTT updates for that key are ignored for 5 s.
 This prevents switch flicker while the device confirms the change.
+
+The PowerPulse 2 Continuous charging switch is the exception: it applies
+nothing on its own. The coordinator write returns once the wallbox has
+reported the new switch bits, and that report is what moves the displayed
+state (PLAN-172, the same rule as the wallbox numbers and selects).
 """
 
 from __future__ import annotations
@@ -26,6 +31,7 @@ from .const import (
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
+    DEVICE_TYPE_POWERPULSE2,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
     DEVICE_TYPE_STREAM_AC5000,
@@ -34,6 +40,8 @@ from .const import (
     POWEROCEAN_SCHEDULE_PREFIXES,
     POWEROCEAN_SWITCHES,
     POWEROCEANLOCALONLY_SWITCHES,
+    POWERPULSE2_SWITCH_BIT_CONTINUOUS,
+    POWERPULSE2_SWITCHES,
     SMARTPLUG_SWITCH_COMMANDS,
     SMARTPLUG_SWITCHES,
     STREAM_SWITCHES,
@@ -61,6 +69,7 @@ from .ecoflow.parsers.smartplug import build_plug_switch_payload
 from .ecoflow.wave3_commands import Wave3WriteRefused
 from .entity import (
     EcoFlowWriteGateMixin,
+    as_known_int,
     raise_set_failed,
     raise_set_gone,
     raise_set_not_ready,
@@ -99,6 +108,15 @@ async def async_setup_entry(
             _get_switch_defs(coordinator.device_type, coordinator.device_sn),
             coordinator.device_sn,
         )
+        if (
+            coordinator.device_type == DEVICE_TYPE_POWERPULSE2
+            and coordinator.charge_action_route() != "sibling"
+        ):
+            # The write goes through a PowerOcean on the wallbox's own
+            # channel and has no evidenced route without exactly one (the
+            # same rule as the wallbox numbers and selects): zero or
+            # two-or-more PowerOceans in the entry gets no switch.
+            continue
         pending: list[EcoFlowSwitchDef] = []
         for defn in defs:
             if defn.enhanced_only and not coordinator.enhanced_mode:
@@ -217,7 +235,19 @@ class EcoFlowSwitch(
         is missing from the coordinator data (e.g. right after a restart,
         before the first full status frame), falls back to the restored
         state. A live value always beats the restored one.
+
+        The PowerPulse 2 Continuous charging switch shows only what the
+        wallbox reported: one bit of the settings switch bits, unknown (never
+        off) while the bits are absent, and no lock window or restored state.
         """
+        if self.coordinator.device_type == DEVICE_TYPE_POWERPULSE2:
+            bits = as_known_int(
+                (self.coordinator.data or {}).get(self._definition.state_key)
+            )
+            if bits is None:
+                return None
+            return bool(bits & POWERPULSE2_SWITCH_BIT_CONTINUOUS)
+
         if time.monotonic() < self._optimistic_lock_until:
             return self._optimistic_value
 
@@ -246,6 +276,12 @@ class EcoFlowSwitch(
         received - the switch would show the wrong state for the whole
         lock window and then snap back.
         """
+        if self.coordinator.device_type == DEVICE_TYPE_POWERPULSE2:
+            # No optimistic state: the coordinator returns once the wallbox
+            # has reported the new bits, and that report moves the switch.
+            await self.coordinator.async_set_powerpulse_continuous_charging(turn_on)
+            return
+
         schedule_slot = self._schedule_slot()
         if schedule_slot is not None:
             prefix, slot = schedule_slot
@@ -550,6 +586,8 @@ def _get_switch_defs(device_type: str, device_sn: str = "") -> list[EcoFlowSwitc
         return STREAMAC5000_SWITCHES
     if device_type == DEVICE_TYPE_WAVE3:
         return WAVE3_SWITCHES
+    if device_type == DEVICE_TYPE_POWERPULSE2:
+        return POWERPULSE2_SWITCHES
     return []
 
 
