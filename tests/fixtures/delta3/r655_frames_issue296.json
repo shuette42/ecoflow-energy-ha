@@ -1,5 +1,5 @@
 {
-  "note": "EcoFlow RIVER 3 (R655) frames from issue #296, reporter nicolklup, 2026-10-04. Taken unchanged from skipped_devices[].raw_capture.frames of the reporter's diagnostics download (integration v1.22.0, account sign-in, Enhanced Mode), deduplicated by hex. Tag U0/U1/U2 names the unit, in download order. No USB load, units on AC input. App readings at 07:37 CEST: U0 AC in 23 W, output 25 W, 99 %; U1 0 W, 0 W, 99 %; U2 19 W, 19 W, 98 %.",
+  "note": "EcoFlow RIVER 3 (R655) frames from issue #296, reporter nicolklup, 2026-10-04. Taken unchanged from skipped_devices[].raw_capture.frames of the reporter's diagnostics download (integration v1.22.0, account sign-in, Enhanced Mode), deduplicated by hex. Tag U0/U1/U2 names the unit, in download order. No USB load, units on AC input. App readings at 07:37 CEST: U0 AC in 23 W, output 25 W (AC 23 + DC 2), 99 %, remaining 3 d 13 h; U1 0 W, 0 W, 99 %, remaining 3 d 12 h; U2 19 W, 19 W, 98 %, remaining 3 d 12 h.",
   "source_topics": [
     "/app/device/property/{sn}"
   ],

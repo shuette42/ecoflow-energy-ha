@@ -223,8 +223,8 @@ _SN_PREFIX_MAP = {
     # RIVER 3 (#296). Routed on its own recorded frames, not on a shared
     # product line: three units sent the 254/21, 32/50 and 32/2 frames, and
     # all three decode through the Delta 3 messages with values that match the
-    # app (state of charge, input and output power, AC input, remaining time,
-    # cell count, design capacity, health). Read-only, see
+    # app (state of charge, input and output power, AC input, remaining time)
+    # and the rated hardware (cell count, design capacity). Read-only, see
     # `_SN_PREFIX_EXCLUDED_KEYS`. The RIVER 3 Plus (R631) is a different
     # prefix and is not covered by this entry.
     "R655": DEVICE_TYPE_DELTA3,

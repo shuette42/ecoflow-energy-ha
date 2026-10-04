@@ -6,9 +6,9 @@ The frames come from the reporter's diagnostics download of three units
 U0, U1 and U2 in download order. The units sat on AC input without a USB load,
 and the EcoFlow app showed, at the time of the recording:
 
-    U0  AC in 23 W, output 25 W, 99 %
-    U1  AC in  0 W, output  0 W, 99 %
-    U2  AC in 19 W, output 19 W, 98 %
+    U0  AC in 23 W, output 25 W (AC 23 + DC 2), 99 %, remaining 3 d 13 h
+    U1  AC in  0 W, output  0 W, 99 %, remaining 3 d 12 h
+    U2  AC in 19 W, output 19 W, 98 %, remaining 3 d 12 h
 
 What the recording proves is telemetry only, so these tests pin two things:
 the three units decode through the Delta 3 messages to those readings, and the
@@ -63,13 +63,21 @@ _FRAMES: list[dict[str, Any]] = json.loads(_FIXTURE_PATH.read_text())["frames"]
 # any frame and cannot be checked against the recording.
 _DERIVED_ENERGY_KEYS = {"ac_in_energy_kwh", "out_energy_kwh"}
 
+# Allowed on the strength of the raw remaining-time fields, not of a value: all
+# three units reported themselves idle, and the parser keeps a remaining time
+# only for the direction that is active, so neither sensor ever carries a value
+# in the recording (see test_idle_state_leaves_remaining_times_unknown).
+_IDLE_GATED_KEYS = {"chg_remain_time_min", "dsg_remain_time_min"}
+_IDLE_GATED_RAW_FIELDS = {"cms_chg_rem_time", "cms_dsg_rem_time"}
+
 
 def _replay(unit: str) -> tuple[dict[str, Any], dict[str, Any], set[str]]:
     """Run every frame of one unit through decode and parse, in recorded order.
 
     Returns the last raw status-frame value per decoded key, the parsed sensor
     values with later frames winning (the way the coordinator merges pushes),
-    and every sensor key any frame of the unit produced.
+    and every sensor key a frame of the unit produced with a value. A key the
+    parser returns as None is not a value and does not count.
     """
     raw: dict[str, Any] = {}
     parsed: dict[str, Any] = {}
@@ -91,7 +99,7 @@ def _replay(unit: str) -> tuple[dict[str, Any], dict[str, Any], set[str]]:
             else:
                 continue
             parsed.update(values)
-            seen.update(values)
+            seen.update(k for k, v in values.items() if v is not None)
     return raw, parsed, seen
 
 
@@ -228,14 +236,27 @@ class TestReadOnlyEntitySet:
         assert set(RIVER3_SENSOR_KEYS) <= _keys(DELTA3_SENSORS)
 
     def test_every_allowed_sensor_is_in_the_recording(self) -> None:
-        """The allowed set is what the frames back, not what looks plausible."""
-        produced: set[str] = set()
-        for unit in ("U0", "U1", "U2"):
-            produced |= _replay(unit)[2]
+        """The allowed set is what the frames back, not what looks plausible.
 
-        missing = set(RIVER3_SENSOR_KEYS) - _DERIVED_ENERGY_KEYS - produced
+        Every key is either produced with a value by a recorded frame, or named
+        as an explicit allowance: the two derived energy counters, and the two
+        idle-gated remaining times, which the raw fields in the frames back.
+        """
+        produced: set[str] = set()
+        raw_fields: set[str] = set()
+        for unit in ("U0", "U1", "U2"):
+            raw, _, seen = _replay(unit)
+            produced |= seen
+            raw_fields |= set(raw)
+
+        allowances = _DERIVED_ENERGY_KEYS | _IDLE_GATED_KEYS
+        missing = set(RIVER3_SENSOR_KEYS) - allowances - produced
 
         assert not missing, f"allowed but never produced by a recorded frame: {missing}"
+        # The idle-gated allowance holds only while the recording is idle and
+        # carries the raw field behind each sensor.
+        assert not _IDLE_GATED_KEYS & produced
+        assert raw_fields >= _IDLE_GATED_RAW_FIELDS
 
     def test_documented_sensor_count_matches_the_set(self) -> None:
         """Both public documents state the count, so the set decides it."""

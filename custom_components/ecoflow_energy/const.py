@@ -6442,15 +6442,19 @@ AC_CHARGE_POWER_STATE_KEY = "ac_charge_power_limit_w"
 # one, so no Delta 3 SET parameter is verified on this model, and a control
 # without a verified write and read-back would be a button that lies.
 #
-# This set names the sensors the recording proves, and it is the only thing
+# This set names the sensors the recording backs, and it is the only thing
 # that does. Everything else the Delta 3 definitions offer, every switch,
 # number, select and binary sensor and every other sensor, is derived below as
 # the exclusion for the prefix instead of being listed a second time, so a
 # control added to the Delta 3 lists later stays off a RIVER 3 until someone
-# decides here. The sensors left out are the ones the recording does not prove:
-# the solar input, the 12 V output and the USB ports show up only as 0 W, since
-# no unit had a load on them (one USB reading is -2 W), which says nothing
-# about what they measure on this model. Per-outlet AC power and the two
+# decides here. Two of them, the remaining times, never carry a value in the
+# recording because every unit reported itself idle; they are allowed on the
+# strength of the raw remaining-time fields that are in the frames. The
+# sensors left out are the ones the recording does not back: the solar input,
+# the 12 V output and the USB ports read 0 W (one USB reading is -2 W), and on
+# one unit the app showed 2 W of DC output while the matching Delta 3 field read
+# 0 W, so this model reports those ports somewhere the Delta 3 message does not
+# cover, and no unit had a USB load. Per-outlet AC power and the two
 # lifetime energy counters do not appear at all and would sit unknown. The
 # charge limits, the AC charge power limit and the idle timers do appear, but
 # they are the read-back of the controls left out here.
