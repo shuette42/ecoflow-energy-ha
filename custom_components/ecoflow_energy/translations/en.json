@@ -3214,6 +3214,30 @@
     "powerpulse_charge_mode_unknown": {
       "message": "{option} is not a charging mode this wallbox reports."
     },
+    "powerpulse_continuous_needs_powerocean": {
+      "message": "Continuous charging can only be switched through a PowerOcean on the same account; this entry has none."
+    },
+    "powerpulse_continuous_not_confirmed": {
+      "message": "The wallbox did not report the new Continuous charging state within the time allowed. Its last reported state: {reported}."
+    },
+    "powerpulse_continuous_report_missing": {
+      "message": "The wallbox has not reported its current settings yet. Wait for its next settings report."
+    },
+    "powerpulse_continuous_report_stale": {
+      "message": "The wallbox's last settings report is too old to build this change on. Wait for its next settings report."
+    },
+    "powerpulse_continuous_smart_mode": {
+      "message": "Continuous charging cannot be changed from here while the wallbox is in Smart mode; use the EcoFlow app."
+    },
+    "powerpulse_custom_current_needs_powerocean": {
+      "message": "The Custom charging current can only be set through a PowerOcean on the same account; this entry has none."
+    },
+    "powerpulse_custom_current_not_confirmed": {
+      "message": "The wallbox did not report the new Custom charging current within the time allowed. Its last reported value: {reported}."
+    },
+    "powerpulse_custom_current_range": {
+      "message": "The wallbox accepts a Custom charging current between {min} and {max} A."
+    },
     "powerpulse_descriptor_missing": {
       "message": "The wallbox has not reported its address yet. Wait for its next settings report."
     },
@@ -3229,11 +3253,29 @@
     "powerpulse_own_channel_offline": {
       "message": "The wallbox's own connection is not up, so the command cannot be sent."
     },
+    "powerpulse_phase_setting_needs_powerocean": {
+      "message": "The phase setting can only be set through a PowerOcean on the same account; this entry has none."
+    },
+    "powerpulse_phase_setting_not_confirmed": {
+      "message": "The wallbox did not report the new phase setting within the time allowed. Its last reported setting: {reported}."
+    },
+    "powerpulse_phase_setting_unknown": {
+      "message": "{option} is not a phase setting this wallbox accepts."
+    },
     "powerpulse_sibling_missing": {
       "message": "This entry holds more than one PowerOcean, and the wallbox command cannot tell which one carries the wallbox."
     },
     "powerpulse_sibling_offline": {
       "message": "The PowerOcean that carries the wallbox command is not connected."
+    },
+    "powerpulse_solar_min_current_needs_powerocean": {
+      "message": "The Solar minimum current can only be set through a PowerOcean on the same account; this entry has none."
+    },
+    "powerpulse_solar_min_current_not_confirmed": {
+      "message": "The wallbox did not report the new Solar minimum current within the time allowed. Its last reported value: {reported}."
+    },
+    "powerpulse_solar_min_current_range": {
+      "message": "The wallbox accepts a Solar minimum current between {min} and {max} A."
     }
   }
 }

@@ -119,7 +119,10 @@ class WallboxActionPending:
     not apply to a numeric setting. `expected_value` is `float | str | None`
     since PLAN-147: a numeric setting (max current) compares by tolerance,
     a string setting (charging mode) compares by equality - see
-    `_resolve_wallbox_action` in state_apply.py.
+    `_resolve_wallbox_action` in state_apply.py. `bit_mask` (PLAN-172) narrows
+    an integer comparison to the masked bits: the settings switch bits carry
+    several toggles in one byte, and a write of one of them is confirmed by
+    that bit alone, not by the whole byte matching.
     """
 
     action: str
@@ -127,6 +130,7 @@ class WallboxActionPending:
     future: asyncio.Future[str | float]
     state_key: str = "ev_charge_status"
     expected_value: float | str | None = None
+    bit_mask: int | None = None
 
 
 class EcoFlowDeviceCoordinator(
@@ -373,6 +377,12 @@ class EcoFlowDeviceCoordinator(
         # in-progress check before the first one's record is set.
         self._wallbox_action_lock = asyncio.Lock()
         self._wallbox_action_pending: WallboxActionPending | None = None
+        # PLAN-172: the latest settings report this wallbox's own connection
+        # delivered, as (monotonic receive time, the settings keys that one
+        # frame carried). A frame snapshot, never merged from the store, so a
+        # switch-bits write is built from one report and not from bits of one
+        # report plus a mode of another.
+        self._settings_report: tuple[float, dict[str, Any]] | None = None
         self._credential_obtained_ts: float = 0.0
         self._credential_refresh_unsub: asyncio.TimerHandle | None = None
         self._event_log: deque[dict[str, Any]] = deque(maxlen=50)

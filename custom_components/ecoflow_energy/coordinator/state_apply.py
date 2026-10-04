@@ -351,6 +351,14 @@ class StateApplyMixin(_Base):
             if record.state_key not in parsed:
                 return
             value = parsed[record.state_key]
+            if record.bit_mask is not None:
+                # A bit write (PLAN-172): only the masked bits count, the
+                # other toggles in the same byte are not this write's business.
+                if type(value) is int and (value & record.bit_mask) == (
+                    int(record.expected_value) & record.bit_mask
+                ):
+                    record.future.set_result(value)
+                return
             if isinstance(record.expected_value, str):
                 if isinstance(value, str) and value == record.expected_value:
                     record.future.set_result(value)
@@ -368,6 +376,36 @@ class StateApplyMixin(_Base):
             record.action, frozenset()
         ):
             record.future.set_result(status)
+
+    def _record_settings_report(self, parsed: dict[str, Any], now: float) -> None:
+        """Keep the settings keys of the latest settings report (PLAN-172).
+
+        The wallbox's own 241/44 carries its settings block about once a
+        second; the switch bits are the marker that a frame holds one. The
+        record is a snapshot of what that one frame carried, taken from
+        `parsed` and not from `self._device_data`, so a write built on it
+        (Continuous charging rewrites the switch bits together with the mode
+        and the Solar minimum) never mixes bits of one report with a mode of
+        another. Only the wallbox's own connection reaches this (the caller
+        checks `own_connection`): a handed-over value is no report this
+        device received.
+        """
+        if "ev_settings_switch_bits" not in parsed:
+            return
+        self._settings_report = (
+            now,
+            {
+                key: parsed[key]
+                for key in (
+                    "ev_settings_switch_bits",
+                    "ev_settings_work_mode",
+                    "ev_solar_min_current_a",
+                    "ev_phase_setting",
+                    "ev_custom_current_a",
+                )
+                if key in parsed
+            },
+        )
 
     def latch_schedule_armed(self, state_key: str, armed: bool) -> None:
         """Start the hold for one arming flag this integration just sent."""
@@ -430,6 +468,8 @@ class StateApplyMixin(_Base):
         self._resolve_soc(parsed)
         self._resolve_schedule_armed(parsed)
         self._resolve_wallbox_action(parsed)
+        if own_connection:
+            self._record_settings_report(parsed, now)
 
         # WAVE 3 (#161): the RuntimePropertyUpload carries its own firmware
         # revision, the first device in this integration to report one over

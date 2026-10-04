@@ -52,6 +52,7 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
     _device_config_lock: asyncio.Lock
     _wallbox_action_lock: asyncio.Lock
     _wallbox_action_pending: WallboxActionPending | None
+    _settings_report: tuple[float, dict[str, Any]] | None
     _powerocean_soc_pending: tuple[int, int] | None
     _powerocean_soc_pending_revision: int
     _powerocean_soc_debounce_unsub: asyncio.TimerHandle | None

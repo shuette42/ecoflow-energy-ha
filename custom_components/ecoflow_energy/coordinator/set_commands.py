@@ -27,6 +27,11 @@ from ..const import (
     POWERPULSE2_CHARGE_MODE_WIRE,
     POWERPULSE2_MAX_CURRENT_RANGE_A,
     POWERPULSE2_MAX_CURRENT_WINDOW_S,
+    POWERPULSE2_PHASE_SETTING_OPTIONS,
+    POWERPULSE2_PHASE_SETTING_WIRE,
+    POWERPULSE2_SETTINGS_MAX_AGE_S,
+    POWERPULSE2_SETTINGS_WINDOW_S,
+    POWERPULSE2_SWITCH_BIT_CONTINUOUS,
 )
 from ..ecoflow.const import (
     POWEROCEAN_FEED_SCHEDULE_POWER_MIN_W,
@@ -43,6 +48,35 @@ _LOGGER = logging.getLogger(__name__)
 # The accessory platforms read a present key as a reading the device has sent,
 # so a rollback has to be able to put absence back.
 _UNSET = object()
+
+
+@dataclass(frozen=True)
+class _SettingsWrite:
+    """What one PowerPulse 2 settings write sends and waits for (PLAN-172).
+
+    `fields` is the `EDevPileParamSet` write field number -> value map the
+    payload builder takes, `expected_value` what the wallbox must report back
+    on the write's state key, and `bit_mask` (switch-bits writes only) which
+    bits of that reading count as the confirmation.
+    """
+
+    fields: dict[int, int]
+    expected_value: float
+    bit_mask: int | None = None
+
+
+def _describe_amps(value: Any) -> str:
+    """A reported current for an exception text, or that none arrived yet."""
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return f"{value:g} A"
+    return "no value yet"
+
+
+def _describe_continuous(bits: Any) -> str:
+    """The reported Continuous charging state as on/off, or no value yet."""
+    if type(bits) is not int:
+        return "no value yet"
+    return "on" if bits & POWERPULSE2_SWITCH_BIT_CONTINUOUS else "off"
 
 
 class DeviceValueNotReported(Exception):
@@ -1785,6 +1819,303 @@ class SetCommandsMixin(_Base):
             self._log_event("powerpulse_charge_mode", str(confirmed_value))
         finally:
             self._clear_wallbox_action(record)
+
+    async def _async_write_powerpulse_settings(
+        self,
+        *,
+        action: str,
+        state_key: str,
+        needs_powerocean_key: str,
+        not_confirmed_key: str,
+        plan: Callable[[], _SettingsWrite],
+        describe_reported: Callable[[Any], str],
+    ) -> None:
+        """Publish one PowerPulse 2 settings write and wait for its read-back.
+
+        The shared body of the four settings writes (PLAN-172): the sibling-only
+        routing, the pending-record lifecycle and the confirmation wait outside
+        the lock all follow `async_set_powerpulse_max_current`. The caller has
+        already range-checked its own value. `plan` runs inside the lock, after
+        every route check and immediately before the payload is built, so a
+        write that depends on the latest settings report (Continuous charging)
+        reads it at dispatch time and not before a lock wait. It may raise
+        `HomeAssistantError` itself.
+        """
+        from ..ecoflow.energy_stream import build_powerpulse_param_set_settings_payload
+        from .core import WallboxActionPending
+
+        async with self._wallbox_action_lock:
+            if self._shutdown:
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerpulse_action_not_delivered",
+                )
+            if self._wallbox_action_pending is not None:
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerpulse_action_in_progress",
+                )
+            route = self.charge_action_route()
+            if route is None:
+                if self._powerocean_coordinators() is None:
+                    raise HomeAssistantError(
+                        translation_domain=DOMAIN,
+                        translation_key="powerpulse_action_not_delivered",
+                    )
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerpulse_sibling_missing",
+                )
+            if route == "own":
+                # No recording shows the app writing these settings on the
+                # wallbox's own channel without a PowerOcean in the loop, the
+                # same reasoning `async_set_powerpulse_max_current` gives.
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key=needs_powerocean_key,
+                )
+            sibling = self.powerocean_sibling()
+            if sibling is None:
+                # Unreachable within one event-loop tick: same guard as
+                # `async_set_powerpulse_max_current`.
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerpulse_action_not_delivered",
+                )
+            sibling_mqtt = sibling._mqtt_client
+            if sibling_mqtt is None or not sibling_mqtt.is_connected():
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerpulse_sibling_offline",
+                )
+            dev_addr = self._device_data.get("ev_charger_dev_addr")
+            dev_sn = self._device_data.get("ev_charger_sn")
+            if (
+                not isinstance(dev_addr, int)
+                or not isinstance(dev_sn, str)
+                or len(dev_sn) != 16
+            ):
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerpulse_descriptor_missing",
+                )
+            write = plan()
+            try:
+                payload = build_powerpulse_param_set_settings_payload(
+                    write.fields, dev_addr, dev_sn, sibling.device_sn
+                )
+            except ValueError:
+                # The caller's value is already validated; a ValueError here
+                # can only be a malformed serial, the same failure mode as
+                # the descriptor check just above.
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerpulse_descriptor_missing",
+                ) from None
+            future: asyncio.Future[str | float] = self.hass.loop.create_future()
+            record = WallboxActionPending(
+                action=action,
+                issued_at=time.monotonic(),
+                future=future,
+                state_key=state_key,
+                expected_value=write.expected_value,
+                bit_mask=write.bit_mask,
+            )
+            # Same lifecycle as `async_set_powerpulse_max_current`: the record
+            # lives exactly as long as this call and is cleared on every exit.
+            self._wallbox_action_pending = record
+            try:
+                delivered = await sibling.async_send_proto_set_command(
+                    payload, f"powerpulse_{action}"
+                )
+                if not delivered:
+                    self._log_event(f"powerpulse_{action}_not_delivered", "")
+                    raise HomeAssistantError(
+                        translation_domain=DOMAIN,
+                        translation_key="powerpulse_action_not_delivered",
+                    )
+            except BaseException:
+                self._clear_wallbox_action(record)
+                raise
+
+        try:
+            confirmed_value = await asyncio.wait_for(
+                future, POWERPULSE2_SETTINGS_WINDOW_S
+            )
+        except TimeoutError:
+            last_reported = self._device_data.get(state_key)
+            self._log_event(f"powerpulse_{action}_unconfirmed", str(last_reported))
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key=not_confirmed_key,
+                translation_placeholders={"reported": describe_reported(last_reported)},
+            ) from None
+        else:
+            self._log_event(f"powerpulse_{action}", str(confirmed_value))
+        finally:
+            self._clear_wallbox_action(record)
+
+    async def async_set_powerpulse_solar_min_current(self, current_a: int) -> None:
+        """Set the Solar mode's minimum charge current (PLAN-172, issue #480).
+
+        Writes field 4 of `EDevPileParamSet` alone, no mode and no switch
+        bits: the 2026-10-04 field-4-only runs show the wallbox taking exactly
+        that. Same range as the maximum current. Confirmed on
+        `ev_solar_min_current_a` reaching the requested value on the frame
+        being applied. Routing, lock and wait: `_async_write_powerpulse_settings`.
+        """
+        low, high = POWERPULSE2_MAX_CURRENT_RANGE_A
+        if type(current_a) is not int or not (low <= current_a <= high):
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="powerpulse_solar_min_current_range",
+                translation_placeholders={"min": str(low), "max": str(high)},
+            )
+        await self._async_write_powerpulse_settings(
+            action="solar_min_current",
+            state_key="ev_solar_min_current_a",
+            needs_powerocean_key="powerpulse_solar_min_current_needs_powerocean",
+            not_confirmed_key="powerpulse_solar_min_current_not_confirmed",
+            plan=lambda: _SettingsWrite({4: current_a * 10}, float(current_a)),
+            describe_reported=_describe_amps,
+        )
+
+    async def async_set_powerpulse_custom_current(self, current_a: int) -> None:
+        """Set the Custom mode's charge current (PLAN-172, issue #480).
+
+        Writes field 6 of `EDevPileParamSet` alone and confirms on
+        `ev_custom_current_a`, the same shape as
+        `async_set_powerpulse_solar_min_current`.
+        """
+        low, high = POWERPULSE2_MAX_CURRENT_RANGE_A
+        if type(current_a) is not int or not (low <= current_a <= high):
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="powerpulse_custom_current_range",
+                translation_placeholders={"min": str(low), "max": str(high)},
+            )
+        await self._async_write_powerpulse_settings(
+            action="custom_current",
+            state_key="ev_custom_current_a",
+            needs_powerocean_key="powerpulse_custom_current_needs_powerocean",
+            not_confirmed_key="powerpulse_custom_current_not_confirmed",
+            plan=lambda: _SettingsWrite({6: current_a * 10}, float(current_a)),
+            describe_reported=_describe_amps,
+        )
+
+    async def async_set_powerpulse_phase_setting(self, option: str) -> None:
+        """Set the phase the wallbox charges on (PLAN-172, issue #482).
+
+        `option` is one of `POWERPULSE2_PHASE_SETTING_OPTIONS`. Writes field 5
+        of `EDevPileParamSet` alone; Auto is wire value 0 and is written to the
+        wire like any other (the builder tracks presence). Confirmed on
+        `ev_phase_setting` reaching the wire value.
+        """
+        if option not in POWERPULSE2_PHASE_SETTING_OPTIONS:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="powerpulse_phase_setting_unknown",
+                translation_placeholders={"option": str(option)},
+            )
+        wire = POWERPULSE2_PHASE_SETTING_WIRE[option]
+        wire_to_option = {v: k for k, v in POWERPULSE2_PHASE_SETTING_WIRE.items()}
+        await self._async_write_powerpulse_settings(
+            action="phase_setting",
+            state_key="ev_phase_setting",
+            needs_powerocean_key="powerpulse_phase_setting_needs_powerocean",
+            not_confirmed_key="powerpulse_phase_setting_not_confirmed",
+            plan=lambda: _SettingsWrite({5: wire}, float(wire)),
+            describe_reported=lambda value: (
+                wire_to_option.get(value, "no value yet")
+                if type(value) is int
+                else "no value yet"
+            ),
+        )
+
+    async def async_set_powerpulse_continuous_charging(self, enabled: bool) -> None:
+        """Switch the wallbox's Continuous charging on or off (PLAN-172, #481).
+
+        Continuous charging is bit 0x10 of the settings switch bits, and the
+        wallbox takes the whole byte, so the write rebuilds it from the latest
+        settings report: `{1: new_bits, 2: reported_mode, 4: reported_solar_min}`.
+        That is exactly the shape every Continuous write in the 2026-10-04
+        recordings carried. The Continuous toggle as field 1 alone is listed
+        as still open in the evidence of those recordings (no read-back of it
+        on file), so it is not sent.
+
+        The report is read at dispatch time inside the lock (`plan`), as the
+        frame snapshot `_record_settings_report` took, and refused when there
+        is none, when it is older than `POWERPULSE2_SETTINGS_MAX_AGE_S`, when
+        it lacks the bits, the mode or the Solar minimum, or when its values
+        are not ones the builder can send. A reported Smart mode is refused
+        too: a bare mode write to Smart is unobserved (it needs a departure
+        time and target this integration does not build). Confirmed on the
+        Continuous bit of `ev_settings_switch_bits` alone (`bit_mask`); the
+        other bits in the byte are not this write's business.
+        """
+        low, high = POWERPULSE2_MAX_CURRENT_RANGE_A
+
+        def plan() -> _SettingsWrite:
+            report = self._settings_report
+            if report is None:
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerpulse_continuous_report_missing",
+                )
+            received_at, values = report
+            if time.monotonic() - received_at > POWERPULSE2_SETTINGS_MAX_AGE_S:
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerpulse_continuous_report_stale",
+                )
+            bits = values.get("ev_settings_switch_bits")
+            mode = values.get("ev_settings_work_mode")
+            solar_min = values.get("ev_solar_min_current_a")
+            if (
+                type(bits) is not int
+                or type(mode) is not int
+                or isinstance(solar_min, bool)
+                or not isinstance(solar_min, (int, float))
+            ):
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerpulse_continuous_report_missing",
+                )
+            if mode == 4:
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerpulse_continuous_smart_mode",
+                )
+            if (
+                not 0 <= bits <= 255
+                or mode not in (1, 2, 3)
+                or not (low <= solar_min <= high)
+            ):
+                # Values the wallbox would not have reported: the report is
+                # unusable, not a write the builder should be asked to reject.
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerpulse_continuous_report_missing",
+                )
+            new_bits = (
+                bits | POWERPULSE2_SWITCH_BIT_CONTINUOUS
+                if enabled
+                else bits & ~POWERPULSE2_SWITCH_BIT_CONTINUOUS
+            )
+            return _SettingsWrite(
+                {1: new_bits, 2: mode, 4: round(solar_min * 10)},
+                float(new_bits),
+                POWERPULSE2_SWITCH_BIT_CONTINUOUS,
+            )
+
+        await self._async_write_powerpulse_settings(
+            action="continuous_charging",
+            state_key="ev_settings_switch_bits",
+            needs_powerocean_key="powerpulse_continuous_needs_powerocean",
+            not_confirmed_key="powerpulse_continuous_not_confirmed",
+            plan=plan,
+            describe_reported=_describe_continuous,
+        )
 
     def _require_wallbox_action_state(self, action: Literal["start", "stop"]) -> None:
         """Raise unless the wallbox's last reported state allows `action`.

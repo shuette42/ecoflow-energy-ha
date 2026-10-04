@@ -227,6 +227,33 @@ POWERPULSE2_CHARGE_MODE_WIRE: dict[str, int] = {
     "custom": 3,
     "smart": 4,
 }
+# PLAN-172: the confirmation window for the four settings writes the wallbox
+# reports in its own settings block (Solar minimum current, Custom current,
+# phase setting, Continuous charging). A generous service-call allowance, not
+# a measured worst case: the settings report arrives about once a second on
+# average (1756 reports in 1688 s on the 2026-10-04 afternoon recording), so a
+# wallbox that stops sending it fails loudly instead of silently.
+POWERPULSE2_SETTINGS_WINDOW_S: float = 20.0
+# PLAN-172: the oldest settings report a switch-bits write may be built on.
+# The cadence is about one report per second, so 10 s is ten missed reports;
+# a Continuous write is rebuilt from the latest report's other fields, and a
+# report older than this may already disagree with the wallbox.
+POWERPULSE2_SETTINGS_MAX_AGE_S: float = 10.0
+# PLAN-172: bit 4 (0x10) of the settings switch bits is the app's
+# "Continuous charging" toggle (2026-10-04 write recordings, issue #481).
+POWERPULSE2_SWITCH_BIT_CONTINUOUS: int = 0x10
+# PLAN-172: the phase-setting options and the wire values field 5 of
+# `EDevPileParamSet` carries for each (0 Auto, 1 one phase, 2 three phases).
+POWERPULSE2_PHASE_SETTING_OPTIONS: tuple[str, ...] = (
+    "auto",
+    "one_phase",
+    "three_phases",
+)
+POWERPULSE2_PHASE_SETTING_WIRE: dict[str, int] = {
+    "auto": 0,
+    "one_phase": 1,
+    "three_phases": 2,
+}
 MQTT_HEALTH_CHECK_INTERVAL_S = (
     5.0  # Run stale/reconnect health checks independently from stale threshold
 )
