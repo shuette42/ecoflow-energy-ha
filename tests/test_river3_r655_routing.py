@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -183,7 +183,7 @@ class TestRecordedFrames:
 class TestReadOnlyEntitySet:
     """A RIVER 3 gets no control and only the sensors the recording backs."""
 
-    CONTROL_LISTS = {
+    CONTROL_LISTS: ClassVar[dict[str, list[Any]]] = {
         "switch": DELTA3_SWITCHES,
         "number": DELTA3_NUMBERS,
         "select": DELTA3_SELECTS,
