@@ -20,10 +20,13 @@ from ecoflow_energy.ecoflow.energy_stream import (
     build_powerpulse_charge_action_payload,
     build_powerpulse_param_set_current_payload,
     build_powerpulse_param_set_mode_payload,
+    build_powerpulse_param_set_settings_payload,
     build_powerpulse_standalone_charge_ctrl_payload,
     build_powerpulse_standalone_current_ctrl_payload,
 )
 from ecoflow_energy.ecoflow.parsers.powerpulse_proto import parse_powerpulse_message
+from ecoflow_energy.ecoflow.parsers.stream_proto import _iter_fields, _read_varint
+from ecoflow_energy.ecoflow.proto import ecocharge_pb2
 from ecoflow_energy.ecoflow.proto.decoder import decode_header_message
 from ecoflow_energy.ecoflow.proto_encoding import encode_field_bytes
 
@@ -573,3 +576,218 @@ def test_mode_envelope_differs_from_charge_action_only_by_device_sn() -> None:
     assert h_action["data_len"] != h_mode["data_len"]
     assert "device_sn" not in h_action
     assert h_mode["device_sn"] == DEV_SN
+
+
+# --- Settings writes (PLAN-172, #480-#482) ------------------------------------
+#
+# One builder for every integer field of `EDevPileParamSet`. The write field
+# numbers are 1 switch bits, 2 work mode, 4 Solar minimum current, 5 phase
+# specified and 6 Custom current. Real app writes of two recordings (the
+# 2026-08-24 maximum-current recording and @Xygen's 2026-09-13 mode recording)
+# are rebuilt byte for byte from their own decoded field dicts.
+
+
+def _pile_param_set_fields(payload: bytes) -> dict[int, int]:
+    """Decode the integer fields of `EDevPileParamSet` (`pdata` field 4)."""
+    headers, _ = decode_header_message(payload)
+    pdata = bytes.fromhex(headers[0]["pdata"])
+    fields: dict[int, int] = {}
+    for field_num, wire_type, raw in _iter_fields(pdata):
+        if field_num != 4:
+            continue
+        assert wire_type == 2
+        for sub_num, sub_wire, sub_raw in _iter_fields(raw):
+            assert sub_wire == 0, f"field {sub_num} is not a varint"
+            assert sub_num not in fields
+            fields[sub_num] = _read_varint(memoryview(sub_raw), 0)[0]
+    return fields
+
+
+def _settings_payload(fields: dict[int, int], seq: int = 149) -> bytes:
+    return build_powerpulse_param_set_settings_payload(
+        fields, DEV_ADDR, DEV_SN, DEV_SN, seq=seq
+    )
+
+
+# (fixture, timestamp prefix of the app write, the integer fields it carries)
+APP_SETTINGS_WRITES = [
+    (PARAM_SET_WRITES_FIXTURE, "2026-08-24T13:51:09", {2: 3, 6: 60}),
+    (PARAM_SET_WRITES_FIXTURE, "2026-08-24T13:53:03", {1: 18}),
+    (PARAM_SET_WRITES_FIXTURE, "2026-08-24T13:55:10", {1: 0, 2: 2, 4: 60}),
+    (PARAM_SET_WRITES_FIXTURE, "2026-08-24T13:58:09", {5: 2}),
+    (PARAM_SET_WRITES_FIXTURE, "2026-08-24T13:59:08", {5: 0}),
+    (CHARGE_MODE_WRITES_FIXTURE, "2026-09-13T22:46:18", {2: 3, 6: 60}),
+    (CHARGE_MODE_WRITES_FIXTURE, "2026-09-13T22:48:03", {2: 1}),
+    (CHARGE_MODE_WRITES_FIXTURE, "2026-09-13T22:49:04", {1: 3, 2: 2, 4: 60}),
+]
+
+
+@pytest.mark.parametrize(
+    "fixture,ts_prefix,fields",
+    APP_SETTINGS_WRITES,
+    ids=[f"{ts}-{fields}" for _, ts, fields in APP_SETTINGS_WRITES],
+)
+def test_settings_builder_reproduces_real_app_writes_byte_for_byte(
+    fixture: Path, ts_prefix: str, fields: dict[int, int]
+) -> None:
+    """The fields of each recorded app write, read back from the recorded
+    bytes, rebuilt through the builder with the recorded seq and PowerOcean
+    serial: the output is the recorded frame exactly. Covers a value of 0
+    (`{1: 0, ...}`, `{5: 0}`), which must be on the wire."""
+    frames = json.loads(fixture.read_text())["frames"]
+    matches = [
+        f for f in frames if f["topic"] == "set" and f["ts_iso"].startswith(ts_prefix)
+    ]
+    assert len(matches) == 1, f"{len(matches)} set frames at {ts_prefix}"
+    recorded = bytes.fromhex(matches[0]["hex"])
+    header = decode_header_message(recorded)[0][0]
+
+    # The recorded bytes carry exactly the fields this test says they do.
+    assert _pile_param_set_fields(recorded) == fields
+
+    built = build_powerpulse_param_set_settings_payload(
+        fields, DEV_ADDR, DEV_SN, header["device_sn"], seq=header["seq"]
+    )
+    assert built == recorded
+
+
+def test_settings_builder_ignores_dict_insertion_order() -> None:
+    """The app writes ascending by field number; so does the builder, whatever
+    order the dict was filled in."""
+    assert _settings_payload({6: 60, 2: 3}) == _settings_payload({2: 3, 6: 60})
+    assert _pile_param_set_fields(_settings_payload({6: 60, 2: 3})) == {2: 3, 6: 60}
+    pdata = bytes.fromhex(
+        decode_header_message(_settings_payload({6: 60, 2: 3}))[0][0]["pdata"]
+    )
+    # EDevPileParamSet: tag, length 4, then `10 03` before `30 3c`.
+    assert pdata[23:] == bytes.fromhex("22041003303c")
+
+
+@pytest.mark.parametrize("work_mode", [1, 2, 3, 4])
+def test_settings_builder_work_mode_equals_the_mode_builder(work_mode: int) -> None:
+    mode_frame = build_powerpulse_param_set_mode_payload(
+        work_mode, DEV_ADDR, DEV_SN, DEV_SN, seq=149
+    )
+    assert _settings_payload({2: work_mode}) == mode_frame
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {4: 70},
+        {5: 2},
+        {5: 0},
+        {6: 100},
+        {1: 2, 2: 2, 4: 60},
+        {1: 18, 2: 2, 4: 60},
+    ],
+)
+def test_settings_builder_produces_the_2026_10_04_write_shapes(
+    fields: dict[int, int],
+) -> None:
+    """The six write shapes the settings controls of #480-#482 need (Solar
+    minimum, phase, Custom current and the continuous-charging pair). Decoded with
+    the protobuf bindings, not the helper that built them: exactly these
+    fields, each with presence."""
+    built = _settings_payload(fields)
+    assert _pile_param_set_fields(built) == fields
+
+    headers, _ = decode_header_message(built)
+    assert headers[0]["cmd_func"] == 241
+    assert headers[0]["cmd_id"] == 102
+    pdata = bytes.fromhex(headers[0]["pdata"])
+    wallbox = None
+    for field_num, _wire, raw in _iter_fields(pdata):
+        if field_num == 4:
+            wallbox = ecocharge_pb2.EDevPileParamSet()
+            wallbox.ParseFromString(raw)
+    assert wallbox is not None
+    names = {1: "switch_bits", 2: "work_mode", 4: "solar_current_min"}
+    names.update({5: "phase_specified", 6: "user_current_set"})
+    for field_num, name in names.items():
+        assert wallbox.HasField(name) == (field_num in fields), name
+        if field_num in fields:
+            assert getattr(wallbox, name) == fields[field_num]
+    assert not wallbox.HasField("current_ouput_max")
+
+
+def test_settings_builder_phase_auto_is_a_write_not_an_omission() -> None:
+    """`{5: 0}` (Auto) is a real app write, so a value of 0 is on the wire as
+    `28 00` inside the nested message, not dropped as a proto3 default."""
+    pdata = bytes.fromhex(
+        decode_header_message(_settings_payload({5: 0}))[0][0]["pdata"]
+    )
+    assert pdata[23:] == bytes.fromhex("22022800")
+
+
+def test_settings_builder_addresses_the_wallbox_like_the_other_builders() -> None:
+    """Same `dev_info` and same envelope as the mode builder, so the three
+    builders never drift apart in how they address the accessory."""
+    built = decode_header_message(_settings_payload({2: 2}))[0][0]
+    mode = decode_header_message(
+        build_powerpulse_param_set_mode_payload(2, DEV_ADDR, DEV_SN, DEV_SN, seq=149)
+    )[0][0]
+    assert built == mode
+    assert built["device_sn"] == DEV_SN
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {},
+        {3: 110},
+        {7: 1},
+        {0: 1},
+        {True: 2},
+        {"2": 2},
+        {2.0: 2},
+        {1: -1},
+        {1: 256},
+        {2: 0},
+        {2: 5},
+        {4: 59},
+        {4: 161},
+        {5: 3},
+        {5: -1},
+        {6: 59},
+        {6: 161},
+        {2: True},
+        {2: 2.0},
+        {6: 60.0},
+        {6: "60"},
+        {6: None},
+        {2: 2, 5: 3},
+    ],
+)
+def test_settings_builder_rejects_bad_fields(fields: dict) -> None:
+    with pytest.raises(ValueError):
+        _settings_payload(fields)
+
+
+@pytest.mark.parametrize("fields", [None, [(2, 2)], ((2, 2),), "2"])
+def test_settings_builder_rejects_a_non_dict(fields: object) -> None:
+    with pytest.raises(ValueError):
+        _settings_payload(fields)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    "dev_sn,powerocean_sn", [("short", DEV_SN), (DEV_SN, "short"), (DEV_SN, "X" * 15)]
+)
+def test_settings_builder_rejects_bad_serials(dev_sn: str, powerocean_sn: str) -> None:
+    with pytest.raises(ValueError):
+        build_powerpulse_param_set_settings_payload(
+            {2: 2}, DEV_ADDR, dev_sn, powerocean_sn
+        )
+
+
+@pytest.mark.parametrize(
+    "field_num,low,high",
+    [(1, 0, 255), (2, 1, 4), (4, 60, 160), (5, 0, 2), (6, 60, 160)],
+)
+def test_settings_builder_accepts_both_ends_of_every_range(
+    field_num: int, low: int, high: int
+) -> None:
+    for value in (low, high):
+        assert _pile_param_set_fields(_settings_payload({field_num: value})) == {
+            field_num: value
+        }

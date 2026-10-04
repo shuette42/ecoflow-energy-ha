@@ -443,6 +443,82 @@ def build_powerpulse_param_set_mode_payload(
     )
 
 
+# Write-side field numbers of `EDevPileParamSet` and the bounds the builder
+# accepts for each (inclusive). The field numbers are the write numbers, not
+# the read numbers of the settings report: 1 switch bits, 2 work mode, 4 Solar
+# minimum current (deci-amps), 5 phase specified (0 Auto, 1 one phase, 2 three
+# phases) and 6 Custom current (deci-amps). Field 3 (the maximum current) has
+# its own builder and is not accepted here. The current range is the app's
+# 6-16 A.
+_PILE_PARAM_SET_BOUNDS: dict[int, tuple[int, int]] = {
+    1: (0, 255),
+    2: (1, 4),
+    4: (60, 160),
+    5: (0, 2),
+    6: (60, 160),
+}
+
+
+def build_powerpulse_param_set_settings_payload(
+    fields: dict[int, int],
+    dev_addr: int,
+    dev_sn: str,
+    powerocean_sn: str,
+    seq: int = 0,
+) -> bytes:
+    """Build EDevParamSet (241/102) that writes only the given settings.
+
+    Same message and addressing as
+    `build_powerpulse_param_set_current_payload` and
+    `build_powerpulse_param_set_mode_payload`: `dev_info` (`pdata` field 1)
+    names the wallbox, `EDevPileParamSet` (`pdata` field 4) carries the
+    setting. Here field 4 holds exactly the integer fields in `fields` and
+    nothing else, ascending by field number. Every field of the message is
+    presence-tracked, so a value of 0 is written to the wire, not dropped: a
+    phase setting of 0 (Auto) is a real app write (13:59:08 of the
+    2026-08-24 recording in `c376_param_set_writes_20260824.json`), and a
+    bare `{5: 0}` is the byte string `28 00` inside field 4.
+
+    Args:
+        fields: Write field number -> value. Accepted keys and inclusive
+            ranges: 1 switch bits (0-255), 2 work mode (1-4), 4 Solar minimum
+            current in deci-amps (60-160), 5 phase specified (0-2) and 6
+            Custom current in deci-amps (60-160). Must not be empty; values
+            must be `int` (not `bool`, not `float`).
+        dev_addr: The wallbox's bus address as reported by its own settings
+            message (`EDevRunDataSync`, 241/44).
+        dev_sn: The wallbox's 16-character serial, from the same report.
+        powerocean_sn: The PowerOcean's own serial (the topic owner),
+            carried in the envelope's field 25.
+        seq: Sequence number. Default 0 generates from timestamp.
+    """
+    if not isinstance(fields, dict) or not fields:
+        raise ValueError("fields must be a non-empty dict of field number -> value")
+    for field_num, value in fields.items():
+        if type(field_num) is not int or field_num not in _PILE_PARAM_SET_BOUNDS:
+            raise ValueError(
+                f"field {field_num!r} is not writable here, "
+                f"expected one of {sorted(_PILE_PARAM_SET_BOUNDS)}"
+            )
+        low, high = _PILE_PARAM_SET_BOUNDS[field_num]
+        if type(value) is not int or not (low <= value <= high):
+            raise ValueError(
+                f"field {field_num} must be an int in {low}..{high}, got {value!r}"
+            )
+    _validate_powerpulse_serial("dev_sn", dev_sn)
+    _validate_powerpulse_serial("powerocean_sn", powerocean_sn)
+
+    dev_info = _build_powerpulse_dev_info(dev_addr, dev_sn)
+    pile_param_set = b"".join(
+        encode_field_varint(field_num, fields[field_num])
+        for field_num in sorted(fields)
+    )
+    pdata = encode_field_bytes(1, dev_info) + encode_field_bytes(4, pile_param_set)
+    return _build_powerocean_set_envelope(
+        pdata, cmd_id=102, seq=seq, cmd_func=241, device_sn=powerocean_sn
+    )
+
+
 def build_powerpulse_standalone_charge_ctrl_payload(
     action: Literal["start", "stop"],
     device_sn: str,

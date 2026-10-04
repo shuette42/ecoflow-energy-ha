@@ -374,17 +374,21 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
 def _decode_settings_block(block: bytes) -> dict[str, Any]:
     """Decode the wallbox settings block of EDevRunDataSync (`f1.f4.f8`).
 
-    Two varint fields are read: `1` (the switch-bit field, kept raw because
+    Five varint fields are read: `1` (the switch-bit field, kept raw because
     its bits are individually owned - the cable lock and the continuous
-    charging flag among them) and `6` (the Solar minimum current, in
-    deci-amps on the wire, published in amps). The block's other fields (the
-    work mode, the maximum current, the phase and the custom current) are not
-    read here.
+    charging flag among them), `2` (the work mode, raw wire value 1 Fast, 2
+    Solar, 3 Custom, 4 Smart), `6` (the Solar minimum current, in deci-amps
+    on the wire, published in amps), `7` (the phase setting, raw: 0 Auto, 1
+    one phase, 2 three phases) and `8` (the Custom charging current, deci-amps
+    on the wire, published in amps). The block's maximum current is not read
+    here.
 
-    A field that is not on the wire stays out of the result. proto3 omits
-    zeros and a missing field is not a measured 0, so nothing is guessed from
-    absence, and a write that needs a missing value is refused later instead
-    of being built on a made-up one.
+    A field that is not on the wire stays out of the result, the phase
+    setting included: a wallbox that omits its default `7: 0` yields no
+    `ev_phase_setting`, never a synthesized 0. proto3 omits zeros and a
+    missing field is not a measured 0, so nothing is guessed from absence,
+    and a write that needs a missing value is refused later instead of being
+    built on a made-up one.
     """
     result: dict[str, Any] = {}
     for field_num, wire_type, raw in _iter_fields(block):
@@ -395,8 +399,14 @@ def _decode_settings_block(block: bytes) -> dict[str, Any]:
             continue
         if field_num == 1:
             result["ev_settings_switch_bits"] = value
+        elif field_num == 2:
+            result["ev_settings_work_mode"] = value
         elif field_num == 6:
             result["ev_solar_min_current_a"] = value / 10
+        elif field_num == 7:
+            result["ev_phase_setting"] = value
+        elif field_num == 8:
+            result["ev_custom_current_a"] = value / 10
     return result
 
 

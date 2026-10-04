@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from ecoflow_energy.ecoflow.parsers.powerpulse_proto import (
+    _decode_settings_block,
     _finalize,
     parse_powerpulse_message,
 )
@@ -634,6 +635,7 @@ SETTINGS_MORNING_FIXTURE = FIXTURE.with_name("c376_settings_480_morning_20261004
 SETTINGS_AFTERNOON_FIXTURE = FIXTURE.with_name(
     "c376_settings_480_afternoon_20261004.json"
 )
+SETTINGS_481_482_FIXTURE = FIXTURE.with_name("c376_settings_481_482_20261004.json")
 RUN_DATA_SYNC_FIXTURE = FIXTURE.with_name("c376_run_data_sync_20260824.json")
 
 # The Continuous charging flag inside the switch-bit field: set in the real
@@ -713,7 +715,87 @@ def test_frame_without_a_settings_block_reports_neither_settings_key() -> None:
     assert bare["ev_charger_dev_addr"] == 215
     assert "ev_settings_switch_bits" not in bare
     assert "ev_solar_min_current_a" not in bare
+    assert "ev_settings_work_mode" not in bare
+    assert "ev_phase_setting" not in bare
+    assert "ev_custom_current_a" not in bare
 
     with_block = _parse_in(RUN_DATA_SYNC_FIXTURE, "2026-08-24T13:43:30")
     assert with_block["ev_settings_switch_bits"] == 16
     assert with_block["ev_solar_min_current_a"] == 6.0
+
+
+# --- 241/44 settings block: work mode, phase and Custom current (#480-#482) ---
+#
+# The same wallbox on 2026-10-04: the app changed the Custom current to 10 A
+# and switched to Custom mode (07:18:12), set one phase (07:22:29), set the
+# Custom current to 10 A in Solar mode (09:47:30) and set three phases
+# (09:54:37). Every report on file carries field 7 explicitly, 0 included.
+
+
+def test_settings_custom_mode_frame_reports_work_mode_and_custom_current() -> None:
+    """07:18:12 is the frame with work mode 3 (Custom) and a 10 A Custom current."""
+    result = _parse_in(SETTINGS_481_482_FIXTURE, "2026-10-04T07:18:12")
+    assert result["ev_settings_work_mode"] == 3
+    assert result["ev_custom_current_a"] == 10.0
+    assert isinstance(result["ev_custom_current_a"], float)
+    # The Solar minimum is a different field and keeps its own value.
+    assert result["ev_solar_min_current_a"] == 6.0
+
+
+def test_settings_custom_current_changes_independent_of_work_mode() -> None:
+    """09:47:30 carries Custom current 10 A while the mode is still Solar (2);
+    the frame before it (09:43:57 of the afternoon recording) reads 6 A."""
+    changed = _parse_in(SETTINGS_481_482_FIXTURE, "2026-10-04T09:47:30")
+    assert changed["ev_custom_current_a"] == 10.0
+    assert changed["ev_settings_work_mode"] == 2
+
+    before = _parse_in(SETTINGS_AFTERNOON_FIXTURE, "2026-10-04T09:43:57")
+    assert before["ev_custom_current_a"] == 6.0
+    assert before["ev_settings_work_mode"] == 2
+
+
+def test_settings_phase_setting_one_phase_frame() -> None:
+    """07:22:29 carries phase setting 1 (one phase)."""
+    result = _parse_in(SETTINGS_481_482_FIXTURE, "2026-10-04T07:22:29")
+    assert result["ev_phase_setting"] == 1
+
+
+def test_settings_phase_setting_three_phases_frame() -> None:
+    """09:54:37 carries phase setting 2 (three phases)."""
+    result = _parse_in(SETTINGS_481_482_FIXTURE, "2026-10-04T09:54:37")
+    assert result["ev_phase_setting"] == 2
+
+
+def test_settings_phase_auto_is_reported_when_the_wire_carries_it() -> None:
+    """Auto is 0, the proto3 default, but real reports carry `7: 0` explicitly
+    and it is published as 0, in every mode the afternoon recording passes
+    through (Solar 2 at 09:38:36, Fast 1 at 09:42:10)."""
+    for ts_iso, mode in (("2026-10-04T09:38:36", 2), ("2026-10-04T09:42:10", 1)):
+        result = _parse_in(SETTINGS_AFTERNOON_FIXTURE, ts_iso)
+        assert result["ev_settings_work_mode"] == mode, ts_iso
+        assert result["ev_phase_setting"] == 0, ts_iso
+        assert result["ev_custom_current_a"] == 6.0, ts_iso
+
+
+def test_settings_block_without_phase_field_publishes_no_phase_setting() -> None:
+    """A wallbox may omit its default `7: 0` (proto3): the key stays out
+    instead of being synthesized as 0. The block is built with the values of
+    the real 09:38:36 report minus field 7 - the decoder entry point is the
+    block itself, so no enclosing lengths need rewriting."""
+    block = (
+        encode_field_varint(1, 2)
+        + encode_field_varint(2, 2)
+        + encode_field_varint(6, 70)
+        + encode_field_varint(8, 60)
+    )
+    result = _decode_settings_block(block)
+    assert "ev_phase_setting" not in result
+    assert result == {
+        "ev_settings_switch_bits": 2,
+        "ev_settings_work_mode": 2,
+        "ev_solar_min_current_a": 7.0,
+        "ev_custom_current_a": 6.0,
+    }
+
+    with_phase = _decode_settings_block(block + encode_field_varint(7, 0))
+    assert with_phase["ev_phase_setting"] == 0
