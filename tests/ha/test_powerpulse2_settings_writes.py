@@ -109,36 +109,39 @@ async def _start(
     return task
 
 
-async def test_continuous_rebuilds_the_byte_from_the_latest_report(
+async def test_continuous_writes_field_one_alone_from_the_latest_report(
     hass: HomeAssistant,
 ) -> None:
-    """OFF from a report with switchBits 18 publishes {1:2, 2:2, 4:60}; ON from
-    the next report (switchBits 2, Solar minimum 7 A) publishes {1:18, 2:2,
-    4:70}. The bits, the mode and the Solar minimum all come from the report
-    frame: the store is made to disagree on purpose before the first write.
+    """OFF from a report with switchBits 18 publishes exactly {1:2}; ON from
+    the next report (switchBits 2) publishes exactly {1:18}. The published
+    message is read back through the protobuf bindings, which track presence
+    per field, so equality with a one-entry dict also means fields 2 (mode)
+    and 4 (Solar minimum) carry no presence at all. The bits come from the
+    report frame: the store is made to disagree on purpose before each write.
 
-    Mutation probes: sending `{1: 16, ...}` instead of `bits | 0x10` makes the
-    ON half fail (18 is not 16); reading the mode and Solar minimum from
-    `_device_data` instead of the report snapshot makes the OFF half fail (the
-    store says mode 3 and 9 A).
+    Mutation probes: adding field 2 back to the write fails the OFF half (the
+    published dict has two entries); sending `{1: 16}` instead of `bits | 0x10`
+    fails the ON half (18 is not 16); reading the bits from `_device_data`
+    instead of the report snapshot fails the OFF half (the store says 3, and a
+    write built on it publishes `{1: 3}`).
     """
     _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
     send = _mqtt(oceans[0]).send_proto_set
 
     _apply_frame(wallbox, _REPORT_CONTINUOUS_ON)
-    wallbox.set_device_value("ev_settings_work_mode", 3)
-    wallbox.set_device_value("ev_solar_min_current_a", 9.0)
+    wallbox.set_device_value("ev_settings_switch_bits", 3)  # store: bit 0x10 clear
 
     task = await _start(wallbox.async_set_powerpulse_continuous_charging(False))
     assert send.call_count == 1
-    assert _published_fields(send.call_args) == {1: 2, 2: 2, 4: 60}
+    assert _published_fields(send.call_args) == {1: 2}
     _apply_frame(wallbox, _REPORT_CONTINUOUS_OFF)  # switchBits 2 confirms
     await task
     assert wallbox._wallbox_action_pending is None
 
+    wallbox.set_device_value("ev_settings_switch_bits", 0)  # store: all bits clear
     task = await _start(wallbox.async_set_powerpulse_continuous_charging(True))
     assert send.call_count == 2
-    assert _published_fields(send.call_args) == {1: 18, 2: 2, 4: 70}
+    assert _published_fields(send.call_args) == {1: 18}
     _apply_frame(wallbox, _REPORT_CONTINUOUS_ON)  # switchBits 18 confirms
     await task
     assert wallbox._wallbox_action_pending is None
@@ -306,15 +309,17 @@ async def test_without_exactly_one_powerocean_every_write_refuses(
     assert wallbox._wallbox_action_pending is None
 
 
-async def test_continuous_refuses_a_smart_mode_report_and_follows_other_modes(
+async def test_continuous_in_smart_mode_writes_field_one_alone(
     hass: HomeAssistant,
 ) -> None:
-    """A report in Smart mode (4) refuses: a bare mode write to Smart is
-    unobserved. The control: a report in Custom mode (3) publishes with mode 3
-    in the write, so the mode is the reported one and not a constant.
+    """A report in Smart mode (4) no longer refuses: the write is {1:18} and
+    nothing else, so no mode (not 4, not any other) goes on the wire. The
+    control, a report in Custom mode (3), publishes the same {1:18}: the
+    reported mode plays no part in what is sent.
 
-    Mutation probe: removing the `mode == 4` refusal makes the Smart half fail
-    (the write goes out with `{2: 4}` instead of refusing).
+    Mutation probes: restoring a Smart-mode refusal fails the first half (it
+    raises instead of publishing); adding the reported mode back to the write
+    fails the test on the first half (`{1: 18, 2: 4}` against `{1: 18}`).
     """
     _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
     _set_descriptor(wallbox)
@@ -326,10 +331,11 @@ async def test_continuous_refuses_a_smart_mode_report_and_follows_other_modes(
         ev_settings_work_mode=4,
         ev_solar_min_current_a=6.0,
     )
-    with pytest.raises(HomeAssistantError) as excinfo:
-        await wallbox.async_set_powerpulse_continuous_charging(True)
-    assert excinfo.value.translation_key == "powerpulse_continuous_smart_mode"
-    assert send.call_count == 0
+    task = await _start(wallbox.async_set_powerpulse_continuous_charging(True))
+    assert send.call_count == 1
+    assert _published_fields(send.call_args) == {1: 18}
+    _apply_report(wallbox, ev_settings_switch_bits=18)
+    await task
     assert wallbox._wallbox_action_pending is None
 
     _apply_report(
@@ -339,9 +345,11 @@ async def test_continuous_refuses_a_smart_mode_report_and_follows_other_modes(
         ev_solar_min_current_a=6.0,
     )
     task = await _start(wallbox.async_set_powerpulse_continuous_charging(True))
-    assert _published_fields(send.call_args) == {1: 18, 2: 3, 4: 60}
+    assert send.call_count == 2
+    assert _published_fields(send.call_args) == {1: 18}
     _apply_report(wallbox, ev_settings_switch_bits=18)
     await task
+    assert wallbox._wallbox_action_pending is None
 
 
 _REPORT_MISSING = "powerpulse_continuous_report_missing"
@@ -375,33 +383,28 @@ async def test_continuous_without_any_settings_report_refuses_as_missing(
 @pytest.mark.parametrize(
     "report",
     [
-        {"ev_settings_switch_bits": 2, "ev_solar_min_current_a": 6.0},
-        {"ev_settings_switch_bits": 2, "ev_settings_work_mode": 2},
-        {
-            "ev_settings_switch_bits": 2.0,
-            "ev_settings_work_mode": 2,
-            "ev_solar_min_current_a": 6.0,
-        },
+        {"ev_settings_switch_bits": 2.0},
+        {"ev_settings_switch_bits": None},
     ],
-    ids=["no_mode", "no_solar_min", "bits_not_an_int"],
+    ids=["bits_a_float", "bits_none"],
 )
-async def test_continuous_refuses_a_report_missing_a_field_it_needs(
+async def test_continuous_refuses_a_report_whose_bits_are_not_an_int(
     hass: HomeAssistant, report: dict[str, Any]
 ) -> None:
-    """A report that carries the switch bits but not the mode, or not the Solar
-    minimum, or carries the bits as a float, refuses with `report_missing`. The
-    store holds a valid mode and Solar minimum on purpose: the write rebuilds
+    """A report that carries the switch bits key but not as an int (a float, or
+    None) refuses with `report_missing`, publishes nothing and leaves no
+    pending record. The store holds valid bits on purpose: the write is built
     from the report snapshot, so the store cannot fill the gap.
 
-    Mutation probe: dropping the `type(mode) is not int` clause makes the
-    `no_mode` case reach the range check and refuse with `report_unusable`
-    instead, so the key assertion fails.
+    Mutation probes: loosening `type(bits) is not int` to an `isinstance` check
+    that accepts the float makes `bits_a_float` publish instead of refusing;
+    dropping the clause altogether makes both cases fail on a TypeError from
+    the range comparison rather than the refusal.
     """
     _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
     _set_descriptor(wallbox)
     send = _mqtt(oceans[0]).send_proto_set
-    wallbox.set_device_value("ev_settings_work_mode", 2)
-    wallbox.set_device_value("ev_solar_min_current_a", 6.0)
+    wallbox.set_device_value("ev_settings_switch_bits", 2)
     _apply_report(wallbox, **report)
 
     with pytest.raises(HomeAssistantError) as excinfo:
@@ -413,59 +416,70 @@ async def test_continuous_refuses_a_report_missing_a_field_it_needs(
 
 
 @pytest.mark.parametrize(
-    ("report", "field", "value"),
+    "report",
     [
-        (
-            {
-                "ev_settings_switch_bits": 2,
-                "ev_settings_work_mode": 2,
-                "ev_solar_min_current_a": 17.0,
-            },
-            "Solar minimum current",
-            "17.0 A",
-        ),
-        (
-            {
-                "ev_settings_switch_bits": 2,
-                "ev_settings_work_mode": 0,
-                "ev_solar_min_current_a": 6.0,
-            },
-            "charging mode",
-            "0",
-        ),
-        (
-            {
-                "ev_settings_switch_bits": 256,
-                "ev_settings_work_mode": 2,
-                "ev_solar_min_current_a": 6.0,
-            },
-            "switch bits",
-            "256",
-        ),
+        {"ev_settings_switch_bits": 2},
+        {"ev_settings_switch_bits": 2, "ev_settings_work_mode": 2},
+        {"ev_settings_switch_bits": 2, "ev_solar_min_current_a": 6.0},
     ],
-    ids=["solar_min_17", "mode_0", "bits_256"],
+    ids=["bits_only", "no_solar_min", "no_mode"],
 )
-async def test_continuous_refuses_an_out_of_range_report_as_unusable(
-    hass: HomeAssistant, report: dict[str, Any], field: str, value: str
+async def test_continuous_writes_from_a_report_that_carries_only_the_bits(
+    hass: HomeAssistant, report: dict[str, Any]
 ) -> None:
-    """A report that exists but carries a value the builder cannot send (a
-    Solar minimum above the 16 A range, mode 0, a switch byte above 255)
-    refuses with `report_unusable`, naming the field and the value: waiting for
-    the next report cannot help, so it must not read as `report_missing`.
+    """A report with the switch bits but without the mode, without the Solar
+    minimum, or without both, now writes: the byte is all the write reads. The
+    store holds no mode and no Solar minimum either, so nothing else can have
+    stood in for the missing keys.
 
-    Mutation probe: raising `report_missing` from the out-of-range branch
-    again (the pre-fix behaviour) fails every case on the key.
+    Mutation probe: restoring the old requirement that the report carry the
+    mode and the Solar minimum (a `report_missing` refusal when either is
+    absent) makes every case raise instead of publishing.
     """
     _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
     _set_descriptor(wallbox)
     send = _mqtt(oceans[0]).send_proto_set
+    assert "ev_settings_work_mode" not in wallbox._device_data
+    assert "ev_solar_min_current_a" not in wallbox._device_data
     _apply_report(wallbox, **report)
+
+    task = await _start(wallbox.async_set_powerpulse_continuous_charging(True))
+    assert send.call_count == 1
+    assert _published_fields(send.call_args) == {1: 18}
+    _apply_report(wallbox, ev_settings_switch_bits=18)
+    await task
+    assert wallbox._wallbox_action_pending is None
+
+
+@pytest.mark.parametrize(
+    ("bits", "value"),
+    [(256, "256"), (-1, "-1")],
+    ids=["bits_256", "bits_negative"],
+)
+async def test_continuous_refuses_bits_outside_a_byte_as_unusable(
+    hass: HomeAssistant, bits: int, value: str
+) -> None:
+    """A report whose switch bits are not a byte (above 255, or negative)
+    refuses with `report_unusable`, naming the field and the value: waiting for
+    the next report cannot help, so it must not read as `report_missing`.
+
+    Mutation probes: raising `report_missing` from the range branch fails both
+    cases on the key; narrowing the range check to `bits <= 255` fails
+    `bits_negative` (the refusal no longer carries the `report_unusable` key).
+    """
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    send = _mqtt(oceans[0]).send_proto_set
+    _apply_report(wallbox, ev_settings_switch_bits=bits)
 
     with pytest.raises(HomeAssistantError) as excinfo:
         await wallbox.async_set_powerpulse_continuous_charging(True)
 
     assert excinfo.value.translation_key == _REPORT_UNUSABLE
-    assert excinfo.value.translation_placeholders == {"field": field, "value": value}
+    assert excinfo.value.translation_placeholders == {
+        "field": "switch bits",
+        "value": value,
+    }
     assert send.call_count == 0
     assert wallbox._wallbox_action_pending is None
 

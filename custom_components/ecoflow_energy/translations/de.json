@@ -3246,9 +3246,6 @@
     "powerpulse_continuous_report_unusable": {
       "message": "Die Wallbox meldet für {field} den Wert {value}. Darauf kann diese Integration keine Änderung aufbauen. Ändere Dauerladen in der EcoFlow-App."
     },
-    "powerpulse_continuous_smart_mode": {
-      "message": "Dauerladen lässt sich im Smart Modus nicht von hier ändern; nutze die EcoFlow-App."
-    },
     "powerpulse_custom_current_needs_powerocean": {
       "message": "Wallbox-Ladestrom Benutzerdefiniert lässt sich nur über eine PowerOcean im selben Konto setzen; dieser Eintrag hat keine."
     },

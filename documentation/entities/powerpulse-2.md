@@ -79,7 +79,7 @@ Created under the same condition as the number above: exactly one PowerOcean in 
 
 | Entity | Description |
 |:---|:---|
-| Wallbox Continuous Charging | The wallbox's Continuous Charging setting, shown under the same name in the EcoFlow app. It shows only what the wallbox reports. It stays unknown until the wallbox has reported it, and it changes only when the wallbox says so. A change returns once the wallbox reports the new state on its settings report, or fails if it does not. While the wallbox is in Smart mode, a change fails with a message and has to be made in the app |
+| Wallbox Continuous Charging | The wallbox's Continuous Charging setting, shown under the same name in the EcoFlow app. It shows only what the wallbox reports. It stays unknown until the wallbox has reported it, and it changes only when the wallbox says so. A change returns once the wallbox reports the new state on its settings report, or fails if it does not |
 
 Created only when the integration entry holds exactly one PowerOcean, and only after the wallbox has sent its settings report. A change is built from the wallbox's latest settings report. If no report has arrived yet, or the last one is too old, the change fails with a message and nothing is sent.
 

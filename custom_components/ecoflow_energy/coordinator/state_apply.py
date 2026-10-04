@@ -384,11 +384,10 @@ class StateApplyMixin(_Base):
         second; the switch bits are the marker that a frame holds one. The
         record is a snapshot of what that one frame carried, taken from
         `parsed` and not from `self._device_data`, so a write built on it
-        (Continuous charging rewrites the switch bits together with the mode
-        and the Solar minimum) never mixes bits of one report with a mode of
-        another. Only the wallbox's own connection reaches this (the caller
-        checks `own_connection`): a handed-over value is no report this
-        device received.
+        (Continuous charging rewrites the switch byte) never mixes bits of one
+        report with bits of another. Only the wallbox's own connection reaches
+        this (the caller checks `own_connection`): a handed-over value is no
+        report this device received.
         """
         if "ev_settings_switch_bits" not in parsed:
             return

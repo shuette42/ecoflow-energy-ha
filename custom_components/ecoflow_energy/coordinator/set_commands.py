@@ -2036,26 +2036,21 @@ class SetCommandsMixin(_Base):
         """Switch the wallbox's Continuous charging on or off (PLAN-172, #481).
 
         Continuous charging is bit 0x10 of the settings switch bits, and the
-        wallbox takes the whole byte, so the write rebuilds it from the latest
-        settings report: `{1: new_bits, 2: reported_mode, 4: reported_solar_min}`.
-        That is exactly the shape every Continuous write in the 2026-10-04
-        recordings carried. The Continuous toggle as field 1 alone is listed
-        as still open in the evidence of those recordings (no read-back of it
-        on file), so it is not sent.
+        wallbox takes the whole byte, so the write is `{1: new_bits}` with the
+        byte rebuilt from the latest settings report. Field 1 alone, no mode
+        and no Solar minimum: proven on the reporter's C376 in both directions
+        (2026-10-04), where the settings report that followed each write showed
+        the new bits with the mode and the Solar minimum unchanged.
 
         The report is read at dispatch time inside the lock (`plan`), as the
         frame snapshot `_record_settings_report` took, and refused when there
-        is none, when it is older than `POWERPULSE2_SETTINGS_MAX_AGE_S`, when
-        it lacks the bits, the mode or the Solar minimum (all `report_missing`
-        or `report_stale`, where waiting helps), or when its values are not
-        ones the builder can send (`report_unusable`, where waiting does not
-        help). A reported Smart mode is refused
-        too: a bare mode write to Smart is unobserved (it needs a departure
-        time and target this integration does not build). Confirmed on the
+        is none, when it is older than `POWERPULSE2_SETTINGS_MAX_AGE_S` or
+        when it lacks the bits (`report_missing` or `report_stale`, where
+        waiting helps), or when the bits are not a byte the builder can send
+        (`report_unusable`, where waiting does not help). Confirmed on the
         Continuous bit of `ev_settings_switch_bits` alone (`bit_mask`); the
         other bits in the byte are not this write's business.
         """
-        low, high = POWERPULSE2_MAX_CURRENT_RANGE_A
 
         def plan() -> _SettingsWrite:
             report = self._settings_report
@@ -2071,40 +2066,21 @@ class SetCommandsMixin(_Base):
                     translation_key="powerpulse_continuous_report_stale",
                 )
             bits = values.get("ev_settings_switch_bits")
-            mode = values.get("ev_settings_work_mode")
-            solar_min = values.get("ev_solar_min_current_a")
-            if (
-                type(bits) is not int
-                or type(mode) is not int
-                or isinstance(solar_min, bool)
-                or not isinstance(solar_min, (int, float))
-            ):
+            if type(bits) is not int:
                 raise HomeAssistantError(
                     translation_domain=DOMAIN,
                     translation_key="powerpulse_continuous_report_missing",
                 )
-            if mode == 4:
-                raise HomeAssistantError(
-                    translation_domain=DOMAIN,
-                    translation_key="powerpulse_continuous_smart_mode",
-                )
-            # A report that exists but carries a value outside what the
-            # builder can send: waiting for the next report cannot help, so
-            # this is its own message and names the field and the value.
-            unusable: tuple[str, str] | None = None
+            # A report that exists but carries a byte the builder cannot send:
+            # waiting for the next report cannot help, so this is its own
+            # message and names the field and the value.
             if not 0 <= bits <= 255:
-                unusable = ("switch bits", str(bits))
-            elif mode not in (1, 2, 3):
-                unusable = ("charging mode", str(mode))
-            elif not (low <= solar_min <= high):
-                unusable = ("Solar minimum current", f"{solar_min} A")
-            if unusable is not None:
                 raise HomeAssistantError(
                     translation_domain=DOMAIN,
                     translation_key="powerpulse_continuous_report_unusable",
                     translation_placeholders={
-                        "field": unusable[0],
-                        "value": unusable[1],
+                        "field": "switch bits",
+                        "value": str(bits),
                     },
                 )
             new_bits = (
@@ -2113,7 +2089,7 @@ class SetCommandsMixin(_Base):
                 else bits & ~POWERPULSE2_SWITCH_BIT_CONTINUOUS
             )
             return _SettingsWrite(
-                {1: new_bits, 2: mode, 4: round(solar_min * 10)},
+                {1: new_bits},
                 float(new_bits),
                 POWERPULSE2_SWITCH_BIT_CONTINUOUS,
             )

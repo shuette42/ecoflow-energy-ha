@@ -3246,9 +3246,6 @@
     "powerpulse_continuous_report_unusable": {
       "message": "The wallbox reports {value} for {field}, which this integration cannot build a change on. Change Continuous charging in the EcoFlow app."
     },
-    "powerpulse_continuous_smart_mode": {
-      "message": "Continuous charging cannot be changed from here while the wallbox is in Smart mode; use the EcoFlow app."
-    },
     "powerpulse_custom_current_needs_powerocean": {
       "message": "The Custom charging current can only be set through a PowerOcean on the same account; this entry has none."
     },

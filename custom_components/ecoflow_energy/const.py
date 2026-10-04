@@ -231,12 +231,12 @@ POWERPULSE2_CHARGE_MODE_WIRE: dict[str, int] = {
 # reports in its own settings block (Solar minimum current, Custom current,
 # phase setting, Continuous charging). A generous service-call allowance, not
 # a measured worst case: the settings report arrives about once a second on
-# average (1756 reports in 1688 s on the 2026-10-04 afternoon recording), so a
+# average (1756 reports in 1688 s on the 2026-10-04 morning recording), so a
 # wallbox that stops sending it fails loudly instead of silently.
 POWERPULSE2_SETTINGS_WINDOW_S: float = 20.0
 # PLAN-172: the oldest settings report a switch-bits write may be built on.
 # The cadence is about one report per second, so 10 s is ten missed reports;
-# a Continuous write is rebuilt from the latest report's other fields, and a
+# a Continuous write is rebuilt from the latest report's switch byte, and a
 # report older than this may already disagree with the wallbox.
 POWERPULSE2_SETTINGS_MAX_AGE_S: float = 10.0
 # PLAN-172: bit 4 (0x10) of the settings switch bits is the app's
