@@ -70,6 +70,15 @@ _PLACEHOLDERS = frozenset(
 )
 
 
+# Wire runs that spell letters only because a keyed region XORs ordinary
+# protobuf. Under the key 0x4a the zero varints of a RIVER 3 battery heartbeat
+# (`3e 08 00 10 02 18 01 20 00 28 00 30 00 38 00`) read as `tBJZHRKjJbJzJrJ`
+# (#296). The pass under the mask checks that plaintext and finds no
+# identifier in it. Listed by exact run on purpose: a rule loose enough to
+# cover these would also excuse a plain serial sent under a declared key.
+_KEYED_PROTOBUF_RUNS = frozenset({"tBJZHRKjJbJzJrJ"})
+
+
 def _is_masked(run: str) -> bool:
     """Whether an alphanumeric run is the mask, give or take the bytes beside it.
 
@@ -151,7 +160,7 @@ def _leaks(raw: bytes) -> list[str]:
     ]
     for match in _RUN.finditer(text):
         run = match.group()
-        if run in _PLACEHOLDERS:
+        if run in _PLACEHOLDERS or run in _KEYED_PROTOBUF_RUNS:
             continue
         # A wire run over a masked serial can reach a byte past the mask on
         # either side (the length byte, the next field tag), which spells a
