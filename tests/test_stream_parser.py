@@ -941,6 +941,37 @@ class TestStreamFollowerSystemBlock:
         assert result["home_w"] == 0.0
         assert result["sys_grid_connection_power_w"] == 0.0
 
+    def test_zeros_without_a_unit_figure_in_the_frame_stay(self) -> None:
+        """The parser sees one frame; `_resolve_soc` also sees earlier ones.
+
+        A frame with 262 = 0 but no 242 gives no unit figure to compare with,
+        so the zeros are published as 0 W. No captured frame has this shape.
+        """
+        fields = {k: v for k, v in _FOLLOWER_FIELDS.items() if k != 242}
+
+        result = parse_stream_proto_message(_status_frame(fields))
+
+        assert result is not None
+        assert result["home_w"] == 0.0
+        assert result["grid_w"] == 0.0
+        assert result["sys_grid_connection_power_w"] == 0.0
+
+    def test_follower_frame_whose_system_figure_mirrors_its_own_stays(self) -> None:
+        """The 12:26:50 frame of a follower in the #486 downloads: 262 = 242 = 97.
+
+        Both figures read 97 while 515-518, 992, 1003 and 1004 stay 0.0.
+        Nothing in one frame tells this from an idle leader (262 = 99 and
+        515 = 0.0 at 15:10:37 of the same download), so it is not cleared and
+        that follower reads 0 W for the one update.
+        """
+        fields = {**_FOLLOWER_FIELDS, 262: 97.0, 242: 97.0}
+
+        result = parse_stream_proto_message(_status_frame(fields))
+
+        assert result is not None
+        assert result["home_w"] == 0.0
+        assert result["grid_w"] == 0.0
+
 
 @pytest.mark.parametrize("decode_scalar", [_decode_scalar, _decode_scalar_ac5000])
 @pytest.mark.parametrize("wire_type, fmt", [(5, "<f"), (1, "<d")])

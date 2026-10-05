@@ -394,7 +394,10 @@ def _finalize_stream_state(parsed: dict[str, Any]) -> dict[str, Any]:
     # than as a false 0 W), and the grid connection falls back to the unit's
     # own 616. A single unit, or the unit that computes the block, reports a
     # system figure above zero and is untouched; so is an empty battery,
-    # where both figures read zero.
+    # where both figures read zero. The decision uses the one frame: unlike
+    # `_resolve_soc` it cannot see an earlier 242, and a follower frame whose
+    # 262 mirrors its own 242 (seen once, #486) is not told from an idle
+    # leader, so that update still reads 0 W.
     unit_soc = result.get("unit_soc_pct")
     if (
         result.get("soc_pct") == 0

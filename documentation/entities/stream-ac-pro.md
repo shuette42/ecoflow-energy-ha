@@ -19,7 +19,7 @@ The fields were observed in live iOS MQTT captures on `/app/{userId}/{sn}/thing/
 | Battery Power | This unit's own battery, positive charging, negative discharging. Measured at the battery (DC side) and updated about once a minute. On linked units each unit shows its own battery, not the group |
 | Battery Charge Power | Charging power of this unit's battery |
 | Battery Discharge Power | Discharging power of this unit's battery |
-| AC Grid Connection Power | Signed app "Netz-Anschluss" value. On linked units the unit that computes the system shows the system's, the others their own |
+| AC Grid Connection Power | Signed app "Netz-Anschluss" value. In Enhanced Mode on linked units, the unit that computes the system shows the system's figure and the others their own; an update that carries no system figure shows the unit's own |
 | Battery Charge Energy | Energy Dashboard ready |
 | Battery Discharge Energy | Energy Dashboard ready |
 | Battery SoH | Battery state of health |

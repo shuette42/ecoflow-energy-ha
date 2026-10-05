@@ -40,7 +40,7 @@ Full list of all entities created for Stream devices.
 | PV 2 Power | W | - | enabled | Solar string 2 |
 | PV 3 Power | W | - | *accessory*, disabled | Solar string 3, larger units only. In Enhanced Mode one owner reports strings 3 and 4 match the app |
 | PV 4 Power | W | - | *accessory*, disabled | Solar string 4, larger units only. In Enhanced Mode one owner reports strings 3 and 4 match the app |
-| Solar Power | W | diagnostic | disabled | Total solar input, meter-dependent. On linked units only the unit that computes the system reports it, the others show unknown |
+| Solar Power | W | diagnostic | disabled | Total solar input, meter-dependent. In Enhanced Mode on linked units, only the unit that computes the system reports it, the others show unknown |
 | PV Voltage | V | diagnostic | disabled | Input voltage of string 1 |
 | PV Current | A | diagnostic | disabled | Input current of string 1 |
 | PV 2 Voltage | V | diagnostic | disabled | Input voltage of string 2 |
@@ -50,14 +50,14 @@ Full list of all entities created for Stream devices.
 
 | Entity | Unit | Category | Default | Description |
 |:---|:---:|:---:|:---:|:---|
-| AC Grid Connection Power | W | - | enabled | Signed grid connection ("Netz-Anschluss": negative = input, positive = output/feed-in). On linked units the unit that computes the system shows the system's, the others their own |
-| Home Power | W | diagnostic | disabled | Total home consumption, meter-dependent. On linked units only the unit that computes the system reports it, the others show unknown |
-| Grid Power | W | diagnostic | disabled | Net grid power, meter-dependent. On linked units only the unit that computes the system reports it, the others show unknown |
+| AC Grid Connection Power | W | - | enabled | Signed grid connection ("Netz-Anschluss": negative = input, positive = output/feed-in). In Enhanced Mode on linked units, the unit that computes the system shows the system's figure and the others their own; an update that carries no system figure shows the unit's own |
+| Home Power | W | diagnostic | disabled | Total home consumption, meter-dependent. In Enhanced Mode on linked units, only the unit that computes the system reports it, the others show unknown |
+| Grid Power | W | diagnostic | disabled | Net grid power, meter-dependent. In Enhanced Mode on linked units, only the unit that computes the system reports it, the others show unknown |
 | Home From Solar | W | diagnostic | disabled | Home consumption covered by solar |
-| Home From Battery | W | diagnostic | disabled | Home consumption covered by the battery. On linked units only the unit that computes the system reports it, the others show unknown |
-| Home From Grid | W | diagnostic | disabled | Home consumption covered by the grid. On linked units only the unit that computes the system reports it, the others show unknown |
+| Home From Battery | W | diagnostic | disabled | Home consumption covered by the battery. In Enhanced Mode on linked units, only the unit that computes the system reports it, the others show unknown |
+| Home From Grid | W | diagnostic | disabled | Home consumption covered by the grid. In Enhanced Mode on linked units, only the unit that computes the system reports it, the others show unknown |
 | Grid Connection Power | W | diagnostic | disabled | Raw grid connection reading |
-| System Grid Connection Power | W | diagnostic | disabled | System-level grid connection reading. On linked units only the unit that computes the system reports it, the others show unknown |
+| System Grid Connection Power | W | diagnostic | disabled | System-level grid connection reading. In Enhanced Mode on linked units, only the unit that computes the system reports it, the others show unknown |
 
 ## Sensors - AC Output
 

@@ -8629,12 +8629,28 @@ class TestStreamSocLatch:
         assert parsed is not None
 
         coordinator = self._coordinator(hass, enhanced_config_entry)
-        coordinator._apply_data({"home_w": 0.0, "solar_w": 0.0, "grid_w": 0.0})
+        coordinator._apply_data(
+            {
+                "home_w": 0.0,
+                "solar_w": 0.0,
+                "grid_w": 0.0,
+                "sys_grid_connection_power_w": 0.0,
+                "home_from_batt_w": 0.0,
+                "home_from_grid_w": 0.0,
+            }
+        )
         coordinator._apply_data(parsed)
 
         data = coordinator.data
         assert data["soc_pct"] == 99
-        for key in ("home_w", "solar_w", "grid_w", "home_from_batt_w"):
+        for key in (
+            "home_w",
+            "solar_w",
+            "grid_w",
+            "sys_grid_connection_power_w",
+            "home_from_batt_w",
+            "home_from_grid_w",
+        ):
             assert data[key] is None, key
         assert data["ac_grid_connection_power_w"] == pytest.approx(791.0)
 
