@@ -28,7 +28,9 @@ Two message types carry readings, both under cmd_func 2:
   build the start/stop command's addressing - and, from the settings block
   behind it, the switch-bit field and the Solar minimum current (#480). No
   entity is built from the descriptor fields; the two settings fields are
-  the read-back a later write is built on.
+  the read-back a later write is built on. The block's work mode (field
+  `2`) is named like the heartbeat's mode (`63.4` below), as
+  `ev_settings_work_mode`, and never as `ev_charge_mode`.
 
 HeartBeat's field `8` is a nested record carrying the live charge readings
 (power, the three phase voltages, the three phase currents); it is pulled
@@ -328,6 +330,15 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
         if charge_mode_name is not None:  # same reasoning as above
             result["ev_charge_mode"] = charge_mode_name
 
+    # The settings report names its mode the same way the heartbeat does, but
+    # under its own key: this parser never publishes `ev_charge_mode` from the
+    # settings path, the coordinator decides which of the two readings shows.
+    settings_mode_raw = result.pop("_settings_work_mode_raw", None)
+    if isinstance(settings_mode_raw, int):
+        settings_mode_name = _CHARGE_MODE_NAMES.get(settings_mode_raw)
+        if settings_mode_name is not None:  # same reasoning as above
+            result["ev_settings_work_mode"] = settings_mode_name
+
     max_current_raw = result.pop("_max_current_da_raw", None)
     if isinstance(max_current_raw, int):
         result["ev_max_current_a"] = round(max_current_raw / 10.0, 1)
@@ -377,7 +388,8 @@ def _decode_settings_block(block: bytes) -> dict[str, Any]:
     Five varint fields are read: `1` (the switch-bit field, kept raw because
     its bits are individually owned - the cable lock and the continuous
     charging flag among them), `2` (the work mode, raw wire value 1 Fast, 2
-    Solar, 3 Custom, 4 Smart), `6` (the Solar minimum current, in deci-amps
+    Solar, 3 Custom, 4 Smart; `_finalize` names it like the heartbeat's mode,
+    as `ev_settings_work_mode`), `6` (the Solar minimum current, in deci-amps
     on the wire, published in amps), `7` (the phase setting, raw: 0 Auto, 1
     one phase, 2 three phases) and `8` (the Custom charging current, deci-amps
     on the wire, published in amps). The block's maximum current is not read
@@ -400,7 +412,7 @@ def _decode_settings_block(block: bytes) -> dict[str, Any]:
         if field_num == 1:
             result["ev_settings_switch_bits"] = value
         elif field_num == 2:
-            result["ev_settings_work_mode"] = value
+            result["_settings_work_mode_raw"] = value
         elif field_num == 6:
             result["ev_solar_min_current_a"] = value / 10
         elif field_num == 7:

@@ -735,7 +735,7 @@ def test_frame_without_a_settings_block_reports_neither_settings_key() -> None:
 def test_settings_custom_mode_frame_reports_work_mode_and_custom_current() -> None:
     """07:18:12 is the frame with work mode 3 (Custom) and a 10 A Custom current."""
     result = _parse_in(SETTINGS_481_482_FIXTURE, "2026-10-04T07:18:12")
-    assert result["ev_settings_work_mode"] == 3
+    assert result["ev_settings_work_mode"] == "custom"
     assert result["ev_custom_current_a"] == 10.0
     assert isinstance(result["ev_custom_current_a"], float)
     # The Solar minimum is a different field and keeps its own value.
@@ -747,11 +747,11 @@ def test_settings_custom_current_changes_independent_of_work_mode() -> None:
     the frame before it (09:43:57 of the afternoon recording) reads 6 A."""
     changed = _parse_in(SETTINGS_481_482_FIXTURE, "2026-10-04T09:47:30")
     assert changed["ev_custom_current_a"] == 10.0
-    assert changed["ev_settings_work_mode"] == 2
+    assert changed["ev_settings_work_mode"] == "solar"
 
     before = _parse_in(SETTINGS_AFTERNOON_FIXTURE, "2026-10-04T09:43:57")
     assert before["ev_custom_current_a"] == 6.0
-    assert before["ev_settings_work_mode"] == 2
+    assert before["ev_settings_work_mode"] == "solar"
 
 
 def test_settings_phase_setting_one_phase_frame() -> None:
@@ -770,7 +770,10 @@ def test_settings_phase_auto_is_reported_when_the_wire_carries_it() -> None:
     """Auto is 0, the proto3 default, but real reports carry `7: 0` explicitly
     and it is published as 0, in every mode the afternoon recording passes
     through (Solar 2 at 09:38:36, Fast 1 at 09:42:10)."""
-    for ts_iso, mode in (("2026-10-04T09:38:36", 2), ("2026-10-04T09:42:10", 1)):
+    for ts_iso, mode in (
+        ("2026-10-04T09:38:36", "solar"),
+        ("2026-10-04T09:42:10", "fast"),
+    ):
         result = _parse_in(SETTINGS_AFTERNOON_FIXTURE, ts_iso)
         assert result["ev_settings_work_mode"] == mode, ts_iso
         assert result["ev_phase_setting"] == 0, ts_iso
@@ -788,14 +791,83 @@ def test_settings_block_without_phase_field_publishes_no_phase_setting() -> None
         + encode_field_varint(6, 70)
         + encode_field_varint(8, 60)
     )
-    result = _decode_settings_block(block)
+    result = _finalize(_decode_settings_block(block))
     assert "ev_phase_setting" not in result
     assert result == {
         "ev_settings_switch_bits": 2,
-        "ev_settings_work_mode": 2,
+        "ev_settings_work_mode": "solar",
         "ev_solar_min_current_a": 7.0,
         "ev_custom_current_a": 6.0,
     }
 
     with_phase = _decode_settings_block(block + encode_field_varint(7, 0))
     assert with_phase["ev_phase_setting"] == 0
+
+
+# --- 241/44 work mode: named like the heartbeat's mode, under its own key ---
+#
+# The settings report and the heartbeat both carry the charging mode. The parser
+# names the settings reading `ev_settings_work_mode` with the same 1-4 table the
+# heartbeat uses and never writes `ev_charge_mode` from the settings path: the
+# coordinator decides which of the two readings is published. Frames below are
+# addressed by timestamp, as everywhere in this file.
+
+
+def test_settings_work_mode_is_named_like_the_heartbeat_mode() -> None:
+    """One real settings report per mode: Solar and Fast on the afternoon
+    recording, Custom on the Custom-current recording, Smart on the 2026-08-24
+    recording (the only report on file that carries mode 4)."""
+    expected = [
+        (SETTINGS_AFTERNOON_FIXTURE, "2026-10-04T09:33:16.603", "solar"),
+        (SETTINGS_AFTERNOON_FIXTURE, "2026-10-04T09:42:10", "fast"),
+        (SETTINGS_481_482_FIXTURE, "2026-10-04T07:18:12", "custom"),
+        (RUN_DATA_SYNC_FIXTURE, "2026-08-24T13:50:01", "smart"),
+    ]
+    for fixture, ts_iso, mode in expected:
+        result = _parse_in(fixture, ts_iso)
+        assert result["ev_settings_work_mode"] == mode, ts_iso
+
+
+def test_settings_only_frame_yields_no_published_mode_key() -> None:
+    """13:50:01 of the 2026-08-24 recording is a 241/44 frame alone, no
+    heartbeat: its mode is the settings reading and nothing is published
+    under the heartbeat's key from it."""
+    result = _parse_in(RUN_DATA_SYNC_FIXTURE, "2026-08-24T13:50:01")
+    assert result["ev_settings_work_mode"] == "smart"
+    assert "ev_charge_mode" not in result
+
+
+def test_bundle_frame_keeps_heartbeat_and_settings_modes_apart() -> None:
+    """09:33:16.219 is one frame carrying a heartbeat (2/33) and a settings
+    report (241/44): both name their mode, each under its own key."""
+    result = _parse_in(SETTINGS_AFTERNOON_FIXTURE, "2026-10-04T09:33:16.219")
+    assert result["ev_charge_mode"] == "solar"
+    assert result["ev_settings_work_mode"] == "solar"
+
+
+def _settings_frame_with_mode(switch_bits: int, work_mode: int) -> bytes:
+    """A synthetic, unmasked `241/44` frame carrying only the settings block
+    `f1 { f4 { f8 { 1: switch_bits, 2: work_mode } } }`, no `dev_info`."""
+    block = encode_field_varint(1, switch_bits) + encode_field_varint(2, work_mode)
+    body = encode_field_bytes(4, encode_field_bytes(8, block))
+    pdata = encode_field_bytes(1, body)
+    header = (
+        encode_field_bytes(1, pdata)
+        + encode_field_varint(8, 241)
+        + encode_field_varint(9, 44)
+    )
+    return encode_field_bytes(1, header)
+
+
+def test_settings_unmapped_work_mode_drops_the_key() -> None:
+    """A mode number outside 1-4 is dropped, not passed through, and the rest
+    of the block still decodes. The 7 here is deliberately off the table, and
+    a frame with a mapped mode on the same builder keeps its name."""
+    unmapped = parse_powerpulse_message(_settings_frame_with_mode(18, 7))
+    assert unmapped is not None
+    assert "ev_settings_work_mode" not in unmapped
+    assert unmapped["ev_settings_switch_bits"] == 18
+
+    mapped = parse_powerpulse_message(_settings_frame_with_mode(18, 2))
+    assert mapped is not None
+    assert mapped["ev_settings_work_mode"] == "solar"
