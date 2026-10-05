@@ -33,6 +33,10 @@ Current field notes from dump analysis:
   only one unit of a multi-unit group publishes, the others send 0.0
   (#486). The BMS frame arrives about once a minute. AC outlet activity
   is exposed separately via `ac_outlet_1_w` / `ac_outlet_2_w`.
+- `grid_w`, `home_w`, `solar_w`, `sys_grid_connection_power_w`,
+  `home_from_batt_w` and `home_from_grid_w` are system readings. In a group
+  of several units only one unit fills them; the others send 0.0, which is
+  published as None (unknown), see `_SYSTEM_BLOCK_KEYS` (#486).
 - `home_w` behaves like the overall active load path. In zero-export
   discharge captures, `home_w` stays aligned with the group discharge power while
   `ac_outlet_1_w` remains a diagnostic breakdown of that total rather
@@ -186,6 +190,18 @@ _STREAM_FIELD_MAP: dict[tuple[int, int], dict[int, tuple[str, str]]] = {
         102: ("backup_reserve_pct", _TYPE_INT),
     },
 }
+
+# The system block of cmd 254/21: readings only the unit that computes the
+# system fills. Field 518 is in the block as well but is not mapped, and the
+# system state of charge (262) is resolved in the coordinator (#336).
+_SYSTEM_BLOCK_KEYS: tuple[str, ...] = (
+    "grid_w",  # 515
+    "home_w",  # 516
+    "solar_w",  # 517
+    "sys_grid_connection_power_w",  # 992
+    "home_from_batt_w",  # 1003
+    "home_from_grid_w",  # 1004
+)
 
 # Grid connection state enum. Values outside this table decode to None so an
 # unknown state can never reach an enum sensor as a raw integer.
@@ -363,6 +379,31 @@ def _finalize_stream_state(parsed: dict[str, Any]) -> dict[str, Any]:
 
     if isinstance(discharge_capacity_mah, (int, float)) and discharge_capacity_mah > 0:
         result["batt_discharge_capacity_ah"] = float(discharge_capacity_mah) / 1000.0
+
+    # A unit that does not compute the system block sends it as zeros. In a
+    # group of several units only one of them fills fields 515-518, 262, 992,
+    # 1003 and 1004; every other unit sends 0.0 in all of them, in every
+    # frame, while its own PV strings and grid connection (616) carry real
+    # power (#486: 3 x BK11, two followers; #323: the BK31 beside a BK61).
+    # Published as they come, a follower showed 0 W house load, 0 W solar and
+    # 0 W grid, and its AC grid connection power flapped between the 0.0 of
+    # 992 and its own 616 from one frame to the next. The tell is the one
+    # `_resolve_soc` uses for the state of charge (#336): a system figure of
+    # zero next to a unit figure above zero cannot be this system's charge.
+    # Such a frame clears the system readings (None, shown as unknown rather
+    # than as a false 0 W), and the grid connection falls back to the unit's
+    # own 616. A single unit, or the unit that computes the block, reports a
+    # system figure above zero and is untouched; so is an empty battery,
+    # where both figures read zero.
+    unit_soc = result.get("unit_soc_pct")
+    if (
+        result.get("soc_pct") == 0
+        and isinstance(unit_soc, (int, float))
+        and unit_soc > 0
+    ):
+        for key in _SYSTEM_BLOCK_KEYS:
+            if key in result:
+                result[key] = None
 
     grid_connection = result.get("sys_grid_connection_power_w")
     if not isinstance(grid_connection, (int, float)):

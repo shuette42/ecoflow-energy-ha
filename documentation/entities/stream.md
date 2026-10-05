@@ -20,7 +20,7 @@ Full list of all entities created for Stream devices.
 
 | Entity | Unit | Category | Default | Description |
 |:---|:---:|:---:|:---:|:---|
-| Battery SOC | % | - | enabled | State of charge (shown in device header). On two units joined by a parallel cable this is the system figure the app shows for the pair |
+| Battery SOC | % | - | enabled | State of charge (shown in device header). On two units joined by a parallel cable this is the system figure the app shows for the pair. A linked unit that does not compute the system figure shows its own battery |
 | Unit Battery SOC | % | diagnostic | disabled | This unit's own battery state of charge. On a single unit it repeats Battery SOC, which is why it is off by default |
 | Battery SOC (Precise) | % | diagnostic | disabled | High-resolution SoC |
 | Battery SoH | % | - | enabled | State of health |
@@ -40,7 +40,7 @@ Full list of all entities created for Stream devices.
 | PV 2 Power | W | - | enabled | Solar string 2 |
 | PV 3 Power | W | - | *accessory*, disabled | Solar string 3, larger units only. In Enhanced Mode one owner reports strings 3 and 4 match the app |
 | PV 4 Power | W | - | *accessory*, disabled | Solar string 4, larger units only. In Enhanced Mode one owner reports strings 3 and 4 match the app |
-| Solar Power | W | diagnostic | disabled | Total solar input, meter-dependent |
+| Solar Power | W | diagnostic | disabled | Total solar input, meter-dependent. On linked units only the unit that computes the system reports it, the others show unknown |
 | PV Voltage | V | diagnostic | disabled | Input voltage of string 1 |
 | PV Current | A | diagnostic | disabled | Input current of string 1 |
 | PV 2 Voltage | V | diagnostic | disabled | Input voltage of string 2 |
@@ -50,14 +50,14 @@ Full list of all entities created for Stream devices.
 
 | Entity | Unit | Category | Default | Description |
 |:---|:---:|:---:|:---:|:---|
-| AC Grid Connection Power | W | - | enabled | Signed grid connection ("Netz-Anschluss": negative = input, positive = output/feed-in) |
-| Home Power | W | diagnostic | disabled | Total home consumption, meter-dependent |
-| Grid Power | W | diagnostic | disabled | Net grid power, meter-dependent |
+| AC Grid Connection Power | W | - | enabled | Signed grid connection ("Netz-Anschluss": negative = input, positive = output/feed-in). On linked units the unit that computes the system shows the system's, the others their own |
+| Home Power | W | diagnostic | disabled | Total home consumption, meter-dependent. On linked units only the unit that computes the system reports it, the others show unknown |
+| Grid Power | W | diagnostic | disabled | Net grid power, meter-dependent. On linked units only the unit that computes the system reports it, the others show unknown |
 | Home From Solar | W | diagnostic | disabled | Home consumption covered by solar |
-| Home From Battery | W | diagnostic | disabled | Home consumption covered by the battery |
-| Home From Grid | W | diagnostic | disabled | Home consumption covered by the grid |
+| Home From Battery | W | diagnostic | disabled | Home consumption covered by the battery. On linked units only the unit that computes the system reports it, the others show unknown |
+| Home From Grid | W | diagnostic | disabled | Home consumption covered by the grid. On linked units only the unit that computes the system reports it, the others show unknown |
 | Grid Connection Power | W | diagnostic | disabled | Raw grid connection reading |
-| System Grid Connection Power | W | diagnostic | disabled | System-level grid connection reading |
+| System Grid Connection Power | W | diagnostic | disabled | System-level grid connection reading. On linked units only the unit that computes the system reports it, the others show unknown |
 
 ## Sensors - AC Output
 

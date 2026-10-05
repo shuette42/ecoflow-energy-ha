@@ -8593,6 +8593,51 @@ class TestStreamSocLatch:
         coordinator._apply_data({"soc_pct": 0, "unit_soc_pct": 92})
         assert coordinator.data["soc_pct"] == 92
 
+    async def test_a_group_follower_frame_shows_its_own_charge_and_no_system_power(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """A follower of a three-unit group, end to end through the parser (#486).
+
+        Values of the 14:11:28 frame of the unit the reporter calls 1724 in
+        the first #486 diagnostics download. Before, its Home, Solar and
+        Grid Power read 0 W from the zeros of a system block it does not
+        compute. A 0 W left over from before the fix (restored or held) is
+        cleared to unknown, the battery level follows its own BMS, and the
+        AC grid connection power is its own 791 W.
+        """
+        from ecoflow_energy.ecoflow.parsers.stream_proto import (
+            parse_stream_proto_message,
+        )
+        from ecoflow_energy.ecoflow.proto_encoding import (
+            encode_field_bytes,
+            encode_field_varint,
+            encode_varint,
+        )
+
+        inner = bytearray()
+        for number, value in {
+            262: 0.0, 242: 99.0, 515: 0.0, 516: 0.0, 517: 0.0, 518: 0.0,
+            616: 791.0, 992: 0.0, 1003: 0.0, 1004: 0.0, 1210: 44.7,
+        }.items():  # fmt: skip
+            inner.extend(encode_varint((number << 3) | 5) + struct.pack("<f", value))
+        header = (
+            encode_field_bytes(1, bytes(inner))
+            + encode_field_varint(8, 254)
+            + encode_field_varint(9, 21)
+        )
+        parsed = parse_stream_proto_message(encode_field_bytes(1, header))
+        assert parsed is not None
+
+        coordinator = self._coordinator(hass, enhanced_config_entry)
+        coordinator._apply_data({"home_w": 0.0, "solar_w": 0.0, "grid_w": 0.0})
+        coordinator._apply_data(parsed)
+
+        data = coordinator.data
+        assert data["soc_pct"] == 99
+        for key in ("home_w", "solar_w", "grid_w", "home_from_batt_w"):
+            assert data[key] is None, key
+        assert data["ac_grid_connection_power_w"] == pytest.approx(791.0)
+
     async def test_a_lone_zero_yields_to_the_unit_figure_already_known(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
     ) -> None:

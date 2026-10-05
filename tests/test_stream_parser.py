@@ -842,6 +842,106 @@ class TestStreamUnitBatteryPower:
         assert result["ac_grid_connection_power_w"] == pytest.approx(600.0, rel=1e-5)
 
 
+_SYSTEM_KEYS = (
+    "grid_w",
+    "home_w",
+    "solar_w",
+    "sys_grid_connection_power_w",
+    "home_from_batt_w",
+    "home_from_grid_w",
+)
+
+
+def _status_frame(fields: dict[int, float]) -> bytes:
+    """Build a cmd 254/21 frame of float fields, in the given order."""
+    inner = bytearray()
+    for field_number, value in fields.items():
+        inner.extend(_encode_fixed32_field(field_number, value))
+    return _build_frame(254, 21, bytes(inner))
+
+
+# Values of the 14:11:28 frames in the first #486 diagnostics download, both
+# from the same second. FOLLOWER is the unit the reporter calls 1724 while it
+# discharged; LEADER is the unit that fills the system block.
+_FOLLOWER_FIELDS: dict[int, float] = {
+    262: 0.0, 242: 99.0, 515: 0.0, 516: 0.0, 517: 0.0, 518: 0.0,
+    616: 791.0, 992: 0.0, 361: 0.0, 70: 0.0, 1003: 0.0, 1004: 0.0,
+    1210: 44.7,
+}  # fmt: skip
+_LEADER_FIELDS: dict[int, float] = {
+    262: 99.0, 242: 99.0, 515: 172.0, 516: 1004.9, 517: 579.0, 518: -253.9,
+    616: -73.7, 992: 705.9, 1003: 253.9, 1004: 172.0, 1210: 51.4,
+}  # fmt: skip
+
+
+class TestStreamFollowerSystemBlock:
+    """Only one unit of a group fills the system block of 254/21 (#486).
+
+    The other units send 515-518, 262, 992, 1003 and 1004 as 0.0 in every
+    frame, in the #486 downloads (3 x BK11) as in the #323 pair (BK61 + BK31).
+    Those zeros are not readings: house load, solar and grid of the system
+    are not 0 W while the leader reports 1005 W, 579 W and 172 W.
+    """
+
+    def test_follower_frame_clears_the_system_readings(self) -> None:
+        result = parse_stream_proto_message(_status_frame(_FOLLOWER_FIELDS))
+
+        assert result is not None
+        for key in _SYSTEM_KEYS:
+            assert key in result
+            assert result[key] is None, key
+
+    def test_follower_grid_connection_is_its_own(self) -> None:
+        """992 = 0.0 used to win over 616 = 791 W on the full frame."""
+        result = parse_stream_proto_message(_status_frame(_FOLLOWER_FIELDS))
+
+        assert result is not None
+        assert result["ac_grid_connection_power_w"] == pytest.approx(791.0)
+        assert result["grid_connection_power_w"] == pytest.approx(791.0)
+
+    def test_follower_keeps_its_unit_readings(self) -> None:
+        result = parse_stream_proto_message(_status_frame(_FOLLOWER_FIELDS))
+
+        assert result is not None
+        assert result["unit_soc_pct"] == 99
+        assert result["ac_outlet_1_w"] == pytest.approx(44.7, rel=1e-5)
+        assert result["pv1_w"] == 0.0
+        # The system figure stays for the coordinator to resolve (#336).
+        assert result["soc_pct"] == 0
+
+    def test_leader_frame_keeps_the_system_readings(self) -> None:
+        result = parse_stream_proto_message(_status_frame(_LEADER_FIELDS))
+
+        assert result is not None
+        assert result["grid_w"] == pytest.approx(172.0)
+        assert result["home_w"] == pytest.approx(1004.9, rel=1e-5)
+        assert result["solar_w"] == pytest.approx(579.0)
+        assert result["home_from_batt_w"] == pytest.approx(253.9, rel=1e-5)
+        assert result["home_from_grid_w"] == pytest.approx(172.0)
+        assert result["ac_grid_connection_power_w"] == pytest.approx(705.9, rel=1e-5)
+
+    def test_empty_battery_keeps_its_zeros(self) -> None:
+        """Both figures at zero: nothing says the zeros are placeholders."""
+        fields = {**_FOLLOWER_FIELDS, 242: 0.0}
+
+        result = parse_stream_proto_message(_status_frame(fields))
+
+        assert result is not None
+        assert result["home_w"] == 0.0
+        assert result["grid_w"] == 0.0
+        assert result["ac_grid_connection_power_w"] == 0.0
+
+    def test_frame_without_a_system_figure_is_untouched(self) -> None:
+        """An incremental frame without 262 gives no basis to clear anything."""
+        fields = {k: v for k, v in _FOLLOWER_FIELDS.items() if k != 262}
+
+        result = parse_stream_proto_message(_status_frame(fields))
+
+        assert result is not None
+        assert result["home_w"] == 0.0
+        assert result["sys_grid_connection_power_w"] == 0.0
+
+
 @pytest.mark.parametrize("decode_scalar", [_decode_scalar, _decode_scalar_ac5000])
 @pytest.mark.parametrize("wire_type, fmt", [(5, "<f"), (1, "<d")])
 @pytest.mark.parametrize("bad", [float("inf"), float("-inf"), float("nan")])
