@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypedDict
 
 from homeassistant.helpers import device_registry as dr
 
@@ -59,6 +59,19 @@ def _registry_device(
 # and two reports that still hold the old value, the device has answered,
 # and a third write would just be the loop this bound exists to stop.
 _SURPLUS_SYNC_MAX_WRITES = 2
+
+
+class SurplusSyncRecord(TypedDict):
+    """The surplus auto-sync's bound for one app value (ADR-013, #436).
+
+    `writes_by_ems` counts the writes issued per EMS value seen while the
+    app value held, `stopped_for` the EMS values whose stop was reported.
+    """
+
+    app: int
+    writes_by_ems: dict[int, int]
+    stopped_for: set[int]
+
 
 if TYPE_CHECKING:
     from ._typing import CoordinatorState as _Base
@@ -620,13 +633,15 @@ class StateApplyMixin(_Base):
         ~90 by design even though dev_soc / socDev hold the user value, and
         reissuing a SET would never close that gap. The general bound
         covers it the same way it covers every other unreconciled pair -
-        two writes, then silence, until the app value or a user setting
-        changes, or the EMS reports a value it has not reported before.
+        two writes per EMS value, then silence at that value, until the app
+        value or a user setting changes. An EMS value not reported before
+        still gets its own two writes.
 
         The count is kept per EMS value, not for the latest one only (#436).
-        Both units of a PowerOcean pair push their own EMS report into the
-        same key, so on a pair parked at app=100 the value alternates
-        between the two units' readings (90 and 0 in the log on file).
+        On a PowerOcean pair both units most likely push their own EMS
+        report into the same key, so on a pair parked at app=100 the value
+        alternates between the two units' readings (90 and 0 in the log on
+        file; no log line names the unit, so the attribution is inferred).
         Treating every change as "the device moved" re-armed the bound on
         each flip and wrote around the clock. A value seen before is not
         new information, so returning to it does not reopen the sync.
@@ -662,14 +677,14 @@ class StateApplyMixin(_Base):
         # new information and starts at zero; a value already on record
         # continues where it stopped, however often the report flips away
         # from it and back (#436, the two units of a pair).
-        writes = record["writes_by_ems"].get(ems_int, 0) if record else 0
+        writes = record["writes_by_ems"].get(ems_int, 0) if record is not None else 0
         if record is not None and writes >= _SURPLUS_SYNC_MAX_WRITES:
             if ems_int not in record["stopped_for"]:
                 record["stopped_for"].add(ems_int)
                 _LOGGER.info(
                     "PowerOcean surplus auto-sync (%s): EMS still reports "
-                    "%d after %d writes of %d; no further writes until the "
-                    "app value or a user setting changes",
+                    "%d after %d writes of %d; no further writes at this value "
+                    "until the app value or a user setting changes",
                     self.device_tag,
                     ems_int,
                     writes,
@@ -721,7 +736,7 @@ class StateApplyMixin(_Base):
             return
         self._last_app_surplus_sync_ts = now
         if record is None:
-            record = {"app": app_int, "writes_by_ems": {}, "stopped_for": set()}
+            record = SurplusSyncRecord(app=app_int, writes_by_ems={}, stopped_for=set())
             self._surplus_sync_record = record
         record["writes_by_ems"][ems_int] = writes + 1
         _LOGGER.info(

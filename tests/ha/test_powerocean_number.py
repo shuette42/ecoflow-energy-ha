@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import threading
 from unittest.mock import AsyncMock, MagicMock, call, patch
@@ -916,11 +917,15 @@ class TestPowerOceanAppSurplusAutoSync:
         assert coordinator.async_set_powerocean_soc.call_count == 4
         stop_logs = [r for r in caplog.records if "no further writes" in r.message]
         assert len(stop_logs) == 2
-        assert coordinator.surplus_auto_sync_diagnostics == {
+        diagnostics = coordinator.surplus_auto_sync_diagnostics
+        assert diagnostics == {
             "app": 100,
             "writes_by_ems": {"0": 2, "90": 2},
             "stopped_for": [0, 90],
         }
+        # A diagnostics download is JSON: the accessor must not hand out the
+        # record's set or int keys.
+        assert json.loads(json.dumps(diagnostics)) == diagnostics
 
     async def test_returning_to_a_stopped_ems_value_does_not_reopen_the_sync(
         self,
@@ -1023,6 +1028,30 @@ class TestPowerOceanAppSurplusAutoSync:
         ):
             coordinator._maybe_schedule_surplus_sync()
         assert coordinator.surplus_auto_sync_diagnostics is None
+
+    async def test_a_refused_schedule_does_not_count_on_an_existing_record(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """A refused write must not advance a count already on record.
+
+        One write at (13, 20), one evaluation whose schedule is refused, then
+        one more evaluation: the second write still happens.
+        """
+        coordinator = self._make_divergent_coordinator(hass, enhanced_config_entry)
+        await self._run_evaluations(hass, coordinator, 1)
+        with (
+            patch.object(
+                coordinator, "_schedule_powerocean_soc_write", return_value=None
+            ),
+            patch(_SURPLUS_SYNC_CLOCK, return_value=2010.0 + 31.0),
+        ):
+            coordinator._maybe_schedule_surplus_sync()
+        assert coordinator.surplus_auto_sync_diagnostics["writes_by_ems"] == {"20": 1}
+        await self._run_evaluations(hass, coordinator, 1, start=2010.0 + 2 * 31.0)
+        assert coordinator.async_set_powerocean_soc.call_count == 2
+        assert coordinator.surplus_auto_sync_diagnostics["writes_by_ems"] == {"20": 2}
 
     async def test_apply_data_updates_param_change_ts(
         self,

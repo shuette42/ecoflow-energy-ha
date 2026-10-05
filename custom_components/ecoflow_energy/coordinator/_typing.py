@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from ..ecoflow.frame_capture import TypedFrameBuffer
     from ..ecoflow.iot_api import IoTApiClient
     from .core import DeviceSnapshot, EcoFlowDeviceCoordinator, WallboxActionPending
+    from .state_apply import SurplusSyncRecord
 
 
 class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
@@ -89,7 +90,7 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
     _last_smartplug_get_all_ts: float
     _last_mqtt_event_ts: float
     _last_flush_ts: float
-    _surplus_sync_record: dict[str, Any] | None
+    _surplus_sync_record: SurplusSyncRecord | None
     _last_app_surplus_sync_ts: float
     _batt_w_samples: list[tuple[float, float]]
     _batt_state_changed_at: float

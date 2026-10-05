@@ -81,7 +81,7 @@ from .keepalive import KeepaliveMixin
 from .mqtt_ingest import MqttIngestMixin
 from .set_commands import SetCommandsMixin
 from .setup import SetupMixin
-from .state_apply import StateApplyMixin
+from .state_apply import StateApplyMixin, SurplusSyncRecord
 
 if TYPE_CHECKING:
     from ..ecoflow.cloud_http import EcoFlowHTTPQuota
@@ -277,13 +277,13 @@ class EcoFlowDeviceCoordinator(
         # echo of a value the user has since superseded in HA) would
         # otherwise pull HA back to the obsolete app-side value.
         self._last_ems_param_change_ts: float = 0.0
-        # The divergent (app, ems) pair the auto-sync is currently bounded
-        # against (ADR-013): app value, ems value, writes issued for this
-        # pair, and whether the bound has been reached and reported.
-        # Cleared on a user SET, on a changed app value, or on a changed
-        # ems value while the app value stays put - each is new intent or
-        # new information, not a continuation of the suppressed pair.
-        self._surplus_sync_record: dict[str, Any] | None = None
+        # The bound the auto-sync keeps for the current app value (ADR-013,
+        # amended for #436): writes issued per EMS value, and the EMS values
+        # whose stop was reported. Cleared on a user SET or a changed app
+        # value - new intent. A changed EMS value does not clear it: a value
+        # seen before continues its count, so a pair whose two units report
+        # alternating values cannot re-arm the bound on every flip.
+        self._surplus_sync_record: SurplusSyncRecord | None = None
         # What the last STREAM per-unit block held: how many linked units it
         # listed, and whether one of them was this device. Diagnostics only.
         # A serial that never matches is the one failure this feature can have
