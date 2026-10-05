@@ -3,8 +3,9 @@
 The frames come from the reporter's diagnostics download of three units
 (2026-10-04), copied unchanged into
 `tests/fixtures/delta3/r655_frames_issue296.json`; the `unit` field tags them
-U0, U1 and U2 in download order. The units sat on AC input without a USB load,
-and the EcoFlow app showed, at the time of the recording:
+U0, U1 and U2 in download order. The units sat on AC input without a USB-C
+load; the DC 2 W on U0 is a USB-A port (`pow_get_qcusb1` -1.55 W). The EcoFlow
+app showed, at the time of the recording:
 
     U0  AC in 23 W, output 25 W (AC 23 + DC 2), 99 %, remaining 3 d 13 h
     U1  AC in  0 W, output  0 W, 99 %, remaining 3 d 12 h
@@ -153,6 +154,13 @@ class TestRecordedFrames:
         assert parsed["cms_batt_soc"] == soc
         assert raw["cms_dsg_rem_time"] == dsg_rem_raw
 
+    def test_usb_a_is_the_dc_2_w_the_app_showed(self) -> None:
+        """U0: output 25 W in the app as AC 23 + DC 2; the frame sends USB-A -1.55 W."""
+        raw, parsed, _ = _replay("U0")
+
+        assert raw["pow_get_qcusb1"] == pytest.approx(-1.547, abs=0.01)
+        assert parsed["usb_qc1_w"] == 2
+
     @pytest.mark.parametrize(("unit", "cycles"), [("U0", 18), ("U1", 13), ("U2", 12)])
     def test_bms_block(self, unit: str, cycles: int) -> None:
         _, parsed, _ = _replay(unit)
@@ -265,6 +273,24 @@ class TestReadOnlyEntitySet:
 
         assert [(d.key, d.name) for d in defs] == [("ac_out_flow", "AC Output")]
 
+    def test_readback_keeps_the_switch_flags(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An Enhanced-only switch read back stays Enhanced-only (fictional prefix)."""
+        from custom_components.ecoflow_energy import const
+
+        switch = next(s for s in DELTA3_SWITCHES if s.enhanced_only)
+        monkeypatch.setitem(
+            const._SN_PREFIX_EXCLUDED_KEYS, "ZZ99", frozenset({switch.key})
+        )
+
+        (definition,) = readback_binary_defs_for_serial(
+            DELTA3_SWITCHES, "ZZ99TEST00000000"
+        )
+        assert definition.key == switch.state_key
+        assert definition.enhanced_only is True
+        assert definition.accessory == switch.accessory
+
     @pytest.mark.parametrize("serial", [D3M1_SN, P231_SN])
     def test_readback_control_writable_models_get_none(self, serial: str) -> None:
         """A model that keeps its switches gets no read-only twin of them."""
@@ -283,7 +309,7 @@ class TestReadOnlyEntitySet:
             "solar2_energy_kwh",
             "dc_12v_out_w",
             "typec2_w",
-            "usb_qc1_w",
+            "usb_qc2_w",
             "ac1_out_w",
             "bms_accu_chg_energy_kwh",
             "max_charge_soc_pct",
@@ -317,16 +343,17 @@ class TestReadOnlyEntitySet:
     def test_documented_sensor_count_matches_the_set(self) -> None:
         """Both public documents state the count, so the set decides it."""
         count = len(filter_defs_for_serial(DELTA3_SENSORS, R655_SN))
+        binary = len(readback_binary_defs_for_serial(DELTA3_SWITCHES, R655_SN))
         root = Path(__file__).resolve().parents[1]
 
         readme = (root / "README.md").read_text(encoding="utf-8")
         row = next(
             line for line in readme.splitlines() if line.startswith("| **RIVER 3** |")
         )
-        assert f"| {count} + 1 binary |" in row
+        assert f"| {count} + {binary} binary |" in row
 
         reference = (root / "documentation" / "README.md").read_text(encoding="utf-8")
         bullet = next(
             line for line in reference.splitlines() if line.startswith("- [RIVER 3]")
         )
-        assert f"- {count} sensors and 1 binary sensor" in bullet
+        assert f"- {count} sensors and {binary} binary sensor" in bullet

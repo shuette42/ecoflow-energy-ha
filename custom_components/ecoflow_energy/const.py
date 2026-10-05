@@ -5697,7 +5697,13 @@ def readback_binary_defs_for_serial(
     """
     excluded = excluded_keys_for_serial(device_sn)
     return [
-        EcoFlowBinarySensorDef(switch.state_key, switch.name, icon=switch.icon)
+        EcoFlowBinarySensorDef(
+            switch.state_key,
+            switch.name,
+            icon=switch.icon,
+            enhanced_only=switch.enhanced_only,
+            accessory=switch.accessory,
+        )
         for switch in switches
         if switch.key in excluded and switch.state_key not in excluded
     ]
@@ -6535,6 +6541,7 @@ RIVER3_SENSOR_KEYS: frozenset[str] = frozenset(
         "ac_in_energy_kwh",
         "out_energy_kwh",
         "typec1_w",
+        "usb_qc1_w",
         "chg_remain_time_min",
         "dsg_remain_time_min",
         "chg_dsg_state",

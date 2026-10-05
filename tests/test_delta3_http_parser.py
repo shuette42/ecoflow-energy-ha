@@ -241,6 +241,7 @@ class TestDelta3OutputPorts:
     def test_input_totals_keep_their_sign(self) -> None:
         """Only the output ports are folded, not the summed in/out readings."""
         assert parse_delta3_http_quota({"powInSumW": -5.0})["pow_in_sum_w"] == -5
+        assert parse_delta3_http_quota({"powOutSumW": -5.0})["pow_out_sum_w"] == -5
 
 
 class TestDelta3AcOutArray:

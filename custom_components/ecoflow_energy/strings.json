@@ -2656,7 +2656,7 @@
         "name": "Port priority active"
       },
       "ac_out_flow": {
-        "name": "AC Output"
+        "name": "AC output"
       },
       "backup_reserve_enabled": {
         "name": "Backup Reserve"

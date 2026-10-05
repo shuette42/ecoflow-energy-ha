@@ -66,7 +66,7 @@ def _build_display_message() -> Delta3DisplayProperty:
     msg.pow_get_12v_list.pow_get_12v_item.extend([12.0, 6.0])
     msg.flow_info_ac_out = 14
     msg.flow_info_ac2_out = 4
-    msg.flow_info_12v = 12
+    msg.flow_info_12v = 14
     msg.cms_batt_soc = 85.6
     msg.cms_chg_dsg_state = 2  # charging
     msg.cms_chg_rem_time = 143
@@ -99,7 +99,7 @@ EQUIVALENT_HTTP_QUOTA: dict = {
     "powGet12vList": {"powGet12vItem": [12.0, 6.0]},
     "flowInfoAcOut": 14,
     "flowInfoAc2Out": 4,
-    "flowInfo12v": 12,
+    "flowInfo12v": 14,
     "cmsBattSoc": 85.6,
     "cmsChgDsgState": 2,
     "cmsChgRemTime": 143,

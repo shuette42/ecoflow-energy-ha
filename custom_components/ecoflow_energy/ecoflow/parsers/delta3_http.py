@@ -19,8 +19,9 @@ DELTA3_POWER_TO_ENERGY in const.py).
 
 Remaining-time quirk: the device keeps both `cmsChgRemTime` and
 `cmsDsgRemTime` populated at all times and parks the direction that is
-not currently active on a placeholder (12927 minutes = 215 h on a D3M1 and
-a DELTA 3, a copy of the other field on a RIVER 3). Reading them
+not currently active on a value that is not a runtime (12927 minutes =
+215 h on a D3M1 and a DELTA 3, a figure unrelated to the battery's state on
+a RIVER 3). Reading them
 unconditionally puts a nonsense runtime on the entity, so each value is
 gated on `cmsChgDsgState`. While idle the discharge time is still a real
 estimate: it moves with the state of charge on every recorded unit (D3M1
@@ -79,7 +80,9 @@ _DELTA3_REMAIN_TIME_FIELDS: dict[str, tuple[str, frozenset[int]]] = {
 # Output flow states are NOT booleans. The official docs give 4 = no flow,
 # and a D3M1 reports 14 while a port is on. A RIVER 3 reports 0 for an output
 # switched off in the app and 2 once it is back on (#296), so both 0 and 4
-# read as off and every other value as on. Emit a derived 0/1 per flow.
+# read as off and every other value as on. Values 1, 3, 8 and 12 have never
+# been recorded; a rule reading bit 1 as "on" would fit the recordings too and
+# differs only on those. Emit a derived 0/1 per flow.
 _DELTA3_FLOW_OFF_VALUES: frozenset[int] = frozenset({0, 4})
 _DELTA3_FLOW_FIELD_MAP: dict[str, str] = {
     "flowInfoAcOut": "ac_out_flow",

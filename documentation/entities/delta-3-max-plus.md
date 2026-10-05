@@ -1,7 +1,7 @@
 # Delta 3 Max Plus - Entity Reference
 
 Full list of all entities created for Delta 3 devices. The entity set is shared
-across the generation: Delta 3 Max Plus (`D3M1`, `P321`), DELTA 3 Max (`D3N1`), DELTA 3 Plus (`P351`) and base DELTA 3 (`P231`). The RIVER 3 (`R655`) sends the same frames but is read-only: 30 sensors, 1 binary sensor, no controls.
+across the generation: Delta 3 Max Plus (`D3M1`, `P321`), DELTA 3 Max (`D3N1`), DELTA 3 Plus (`P351`) and base DELTA 3 (`P231`). The RIVER 3 (`R655`) sends the same frames but is read-only: 31 sensors, 1 binary sensor, no controls.
 
 **Totals:** 47 sensors, 7 switches, 4 numbers, 5 selects. Units whose serial
 starts with `D3M` add the port priority set: 3 switches, 3 numbers and 1 binary
@@ -9,7 +9,7 @@ sensor.
 
 > Entities marked with *diagnostic* appear in the diagnostics section of the device page.
 
-> **Other Delta 3 models:** only the Delta 3 Max Plus has been checked against real hardware end to end. A base DELTA 3 (`P231`) was confirmed to push the same three frames and to decode through the same field map, but a smaller unit has fewer ports, so port entities it does not have stay empty. The DELTA 3 Plus (`P351`) was added from an owner's capture: it sends the same three frames and the readings check each other, with the pack voltage matching the cell voltages behind it and the charge left matching the reported percentage. The DELTA 3 Max (`D3N1`) is recognized on the strength of the product family it belongs to rather than a capture, so a confirmation from an owner is welcome. Neither gets the port priority controls, because the EcoFlow app offers that menu only on serials starting `D3M` or `D51`. Raw quota diagnostics are available to help extend the mapping. The RIVER 3 (`R655`) sends the same frames as well. It is read-only, with 30 sensors, an AC Output binary sensor in place of the AC Output switch, and no controls.
+> **Other Delta 3 models:** only the Delta 3 Max Plus has been checked against real hardware end to end. A base DELTA 3 (`P231`) was confirmed to push the same three frames and to decode through the same field map, but a smaller unit has fewer ports, so port entities it does not have stay empty. The DELTA 3 Plus (`P351`) was added from an owner's capture: it sends the same three frames and the readings check each other, with the pack voltage matching the cell voltages behind it and the charge left matching the reported percentage. The DELTA 3 Max (`D3N1`) is recognized on the strength of the product family it belongs to rather than a capture, so a confirmation from an owner is welcome. Neither gets the port priority controls, because the EcoFlow app offers that menu only on serials starting `D3M` or `D51`. Raw quota diagnostics are available to help extend the mapping. The RIVER 3 (`R655`) sends the same frames as well. It is read-only, with 31 sensors, an AC Output binary sensor in place of the AC Output switch, and no controls.
 
 ---
 
@@ -19,8 +19,8 @@ sensor.
 |:---|:---:|:---|
 | SoC | % | State of charge (shown in device header) |
 | Charge/Discharge State | - | `idle`, `charging` or `discharging` |
-| Charge Time Remaining | min | Only while charging, otherwise unavailable |
-| Discharge Time Remaining | min | While discharging or idle, otherwise unavailable |
+| Charge Time Remaining | min | Only while charging, otherwise unknown |
+| Discharge Time Remaining | min | While discharging or idle, otherwise unknown |
 | Max Charge SoC | % | Current charge limit (diagnostic, mirrors the number) |
 | Min Discharge SoC | % | Current discharge limit (diagnostic, mirrors the number) |
 | AC Charge Power Limit | W | The charge speed set in the EcoFlow app, 200 W to 2400 W (diagnostic, EcoFlow account sign-in only) |
@@ -199,4 +199,4 @@ setting made in the app.
 - **Setting a charge power switches the device to the app's custom charging mode**, exactly as moving the slider in the app does. The device treats the wattage and the charging mode as one setting and ignores a change to either on its own, so both always travel together. Switching back to Battery optimised or Silent is done in the app: those modes report themselves only when they change, which is too rarely for an entity to show the truth.
 - **Enhanced Mode (~2 s)** delivers the same sensors with the same entity IDs, so switching modes keeps history and dashboards intact. Switches and numbers work here as well: commands travel on the live device connection instead of the HTTP endpoint, and the device confirms each one.
 - Energy Dashboard sensors (solar, solar 2, AC input, total output) are integrated from the live power telemetry, since the device exposes no native energy counters. Values accumulate over time and start at 0 on a fresh install.
-- The remaining charge time is only reported while the battery is charging, and the remaining discharge time while it is discharging or idle. The device keeps both values populated at all times and parks the inactive one on a placeholder, which would otherwise show a runtime of several hundred hours. While idle, the discharge time is the runtime estimate the app also shows.
+- The remaining charge time is only reported while the battery is charging. The remaining discharge time is reported while it is discharging or idle. The device keeps both values populated at all times and parks the one not in use on a placeholder, which would otherwise show a runtime of several hundred hours. While idle, the discharge time is the same runtime estimate the app shows.
