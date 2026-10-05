@@ -89,7 +89,7 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
     _last_smartplug_get_all_ts: float
     _last_mqtt_event_ts: float
     _last_flush_ts: float
-    _surplus_sync_record: dict[str, int | bool] | None
+    _surplus_sync_record: dict[str, Any] | None
     _last_app_surplus_sync_ts: float
     _batt_w_samples: list[tuple[float, float]]
     _batt_state_changed_at: float

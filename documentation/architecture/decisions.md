@@ -598,7 +598,7 @@ The gap is structural, not a stale pin. CI runs Python 3.13 (`.github/workflows/
 
 ## ADR-013: The surplus auto-sync writes a divergent pair at most twice, and the boundary list and the backup guess go with it
 
-**Status:** Accepted and implemented (decided and shipped 2026-09-04 in PR #346; builds on 67daf3f, where ADR-010 and ADR-011 are merged)
+**Status:** Accepted and implemented, amended 2026-10-05 (#436, count per EMS value) (decided and shipped 2026-09-04 in PR #346; builds on 67daf3f, where ADR-010 and ADR-011 are merged)
 **Date:** 2026-09-04
 **Depends on:** ADR-011 (decision 4, the pair-write rule this ADR applies to its third consumer); ADR-012 (the harness the tests stand on)
 
@@ -655,6 +655,8 @@ The backup half. `:268-273` defaults a missing or non-numeric `ems_discharge_low
 **Consequences:** The maintainer's HJ31 reports `dev_soc` of 90 or 100 (ADR-011 context). If its app value sits at a boundary while the EMS holds 90, the Docker gate for this change should show exactly two `surplus auto-sync` INFO lines and one `stopped` line after a restart, and none at all if the two agree; that is the hardware verification the decision needs and it costs nothing extra. Not solved here: why the EMS holds 20 against 13, which stays an open question; the result code of `set_reply`; persistence across restarts. ADR-011's open item on the auto-sync's backup guess is closed by decision 5.
 
 ---
+
+**Amendment 2026-10-05 (#436): the count is kept per EMS value.** Decision 2(c) re-armed the bound on every EMS value change. On a PowerOcean pair both units push their own EMS report into the one `ems_backup_ratio_pct` key (`_device_data.update(parsed)` in `_apply_data`, no unit key for EMS fields), so at `app=100` the value alternated between the two units' readings. @AndyBowden's log of 03.10. to 04.10. on 1.25.0 shows 139 writes at `ems=90` and 139 at `ems=0`, about every 4 minutes, two at a time followed by the stop line, for 18.5 hours. The record is now `(app, writes_by_ems, stopped_for)`: each EMS value keeps its own count of at most two writes, a value never reported before still starts at zero (2(c) holds for it), and a value already on record continues its count however often the report flips away and back. (a), (b), (d) and (e) are unchanged. The stop line of decision 6 is logged once per EMS value and now ends "no further writes until the app value or a user setting changes", and the diagnostics section reads `{"app", "writes_by_ems", "stopped_for"}`. On the pair this is four writes per restart instead of one every 4 minutes on average. Tests: `test_a_pair_alternating_two_ems_values_stops_after_two_writes_each` (90 and 0 alternating twenty times under app 100: four writes, two stop lines) and `test_returning_to_a_stopped_ems_value_does_not_reopen_the_sync`; both fail on the code before the amendment. Not decided here: whether the two units should get separate EMS keys, and what a write to one serial does to the other unit of a pair. Neither can be answered without a pair capture.
 
 ## ADR-014: The Solar Tracker is one device type under two prefixes, its entity list is what frames and the vendor schema both carry, and a control-to-be keeps its key from the read path on
 

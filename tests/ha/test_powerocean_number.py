@@ -871,9 +871,8 @@ class TestPowerOceanAppSurplusAutoSync:
 
         assert coordinator.surplus_auto_sync_diagnostics == {
             "app": 13,
-            "ems": 20,
-            "writes": 2,
-            "stopped": True,
+            "writes_by_ems": {"20": 2},
+            "stopped_for": [20],
         }
 
     async def test_a_different_ems_value_reopens_the_sync(
@@ -889,6 +888,59 @@ class TestPowerOceanAppSurplusAutoSync:
             coordinator._maybe_schedule_surplus_sync()
         await hass.async_block_till_done()
         assert coordinator.async_set_powerocean_soc.call_count == 3
+
+    async def test_a_pair_alternating_two_ems_values_stops_after_two_writes_each(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """#436: the two units of a PowerOcean pair share one EMS key.
+
+        AndyBowden's log parked at app=100 with the report flipping between
+        90 and 0, and every flip reopened the sync: 278 writes in about 18
+        hours. Each value now keeps its own count, so the flips end after
+        two writes per value, with one stop line per value.
+        """
+        coordinator = self._make_divergent_coordinator(
+            hass, enhanced_config_entry, app=100, ems=90
+        )
+        coordinator._device_data["ems_discharge_lower_limit_pct"] = 0
+        with caplog.at_level(logging.INFO):
+            for i in range(20):
+                coordinator._device_data["ems_backup_ratio_pct"] = (90, 0)[i % 2]
+                with patch(_SURPLUS_SYNC_CLOCK, return_value=2010.0 + i * 31.0):
+                    coordinator._maybe_schedule_surplus_sync()
+                await hass.async_block_till_done()
+
+        assert coordinator.async_set_powerocean_soc.call_count == 4
+        stop_logs = [r for r in caplog.records if "no further writes" in r.message]
+        assert len(stop_logs) == 2
+        assert coordinator.surplus_auto_sync_diagnostics == {
+            "app": 100,
+            "writes_by_ems": {"0": 2, "90": 2},
+            "stopped_for": [0, 90],
+        }
+
+    async def test_returning_to_a_stopped_ems_value_does_not_reopen_the_sync(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """A value already on record is not new information (#436).
+
+        The new value 21 gets its own writes (2c still holds for a value
+        never seen), but going back to 20 continues the stopped count.
+        """
+        coordinator = self._make_divergent_coordinator(hass, enhanced_config_entry)
+        await self._run_evaluations(hass, coordinator, 6)
+        coordinator._device_data["ems_backup_ratio_pct"] = 21
+        await self._run_evaluations(hass, coordinator, 6, start=2010.0 + 6 * 31.0)
+        assert coordinator.async_set_powerocean_soc.call_count == 4
+
+        coordinator._device_data["ems_backup_ratio_pct"] = 20
+        await self._run_evaluations(hass, coordinator, 6, start=2010.0 + 12 * 31.0)
+        assert coordinator.async_set_powerocean_soc.call_count == 4
 
     async def test_a_changed_app_value_reopens_the_sync(
         self,

@@ -283,7 +283,7 @@ class EcoFlowDeviceCoordinator(
         # Cleared on a user SET, on a changed app value, or on a changed
         # ems value while the app value stays put - each is new intent or
         # new information, not a continuation of the suppressed pair.
-        self._surplus_sync_record: dict[str, int | bool] | None = None
+        self._surplus_sync_record: dict[str, Any] | None = None
         # What the last STREAM per-unit block held: how many linked units it
         # listed, and whether one of them was this device. Diagnostics only.
         # A serial that never matches is the one failure this feature can have
@@ -633,7 +633,7 @@ class EcoFlowDeviceCoordinator(
         return self._schedule_divergent_bundles
 
     @property
-    def surplus_auto_sync_diagnostics(self) -> dict[str, int | bool] | None:
+    def surplus_auto_sync_diagnostics(self) -> dict[str, Any] | None:
         """Return the surplus auto-sync record, or None (ADR-013).
 
         None on every device that never runs the auto-sync (it is only
@@ -643,7 +643,16 @@ class EcoFlowDeviceCoordinator(
         """
         if self._surplus_sync_record is None:
             return None
-        return dict(self._surplus_sync_record)
+        record = self._surplus_sync_record
+        # Sorted lists and string keys: a diagnostics download is JSON, and
+        # a set or an int-keyed dict would not survive the round trip as-is.
+        return {
+            "app": record["app"],
+            "writes_by_ems": {
+                str(ems): n for ems, n in sorted(record["writes_by_ems"].items())
+            },
+            "stopped_for": sorted(record["stopped_for"]),
+        }
 
     def _note_value_change(self, parsed: dict[str, Any]) -> None:
         """Record whether this update carried anything the device had not sent.
