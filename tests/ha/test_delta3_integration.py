@@ -224,14 +224,18 @@ class TestRiver3ReadOnlyEntities:
             "binary_sensor", DOMAIN, f"{sn}_ac_out_flow"
         )
         assert binary_id is not None
-        assert hass.states.get(binary_id).state == "off"
+        binary_state = hass.states.get(binary_id)
+        assert binary_state is not None
+        assert binary_state.state == "off"
         assert (
             registry.async_get_entity_id("switch", DOMAIN, f"{sn}_ac_out_switch")
             is None
         )
         typec_id = registry.async_get_entity_id("sensor", DOMAIN, f"{sn}_typec1_w")
         assert typec_id is not None
-        assert hass.states.get(typec_id).state == "20"
+        typec_state = hass.states.get(typec_id)
+        assert typec_state is not None
+        assert typec_state.state == "20"
 
 
 class TestDelta3EnhancedModeRouting:
