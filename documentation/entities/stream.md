@@ -24,9 +24,9 @@ Full list of all entities created for Stream devices.
 | Unit Battery SOC | % | diagnostic | disabled | This unit's own battery state of charge. On a single unit it repeats Battery SOC, which is why it is off by default |
 | Battery SOC (Precise) | % | diagnostic | disabled | High-resolution SoC |
 | Battery SoH | % | - | enabled | State of health |
-| Battery Power | W | - | enabled | Signed battery power (positive = charging, negative = discharging) |
-| Battery Charge Power | W | - | enabled | Charging power (always >= 0) |
-| Battery Discharge Power | W | - | enabled | Discharging power (always >= 0) |
+| Battery Power | W | - | enabled | This unit's own battery, positive = charging, negative = discharging. Measured at the battery (DC side) and updated about once a minute. On linked units each unit shows its own battery, not the group |
+| Battery Charge Power | W | - | enabled | Charging power of this unit's battery (always >= 0) |
+| Battery Discharge Power | W | - | enabled | Discharging power of this unit's battery (always >= 0) |
 | Battery Voltage | V | - | enabled | Pack voltage |
 | Battery Temp | C | - | enabled | Battery temperature |
 | Backup Reserve | % | diagnostic | enabled | Current reserve level (mirrors the number) |

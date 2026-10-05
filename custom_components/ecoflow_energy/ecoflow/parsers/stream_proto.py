@@ -18,17 +18,23 @@ and field numbers as BK31.
 
 Current field notes from dump analysis:
 - `grid_w` tracks the summed AC grid intake seen in the app "grid
-  connection" view and matches `batt_w + home_from_grid_w` during
-  charging cycles.
+  connection" view and matches the group AC-side battery power (field
+  518, not mapped, see below) plus `home_from_grid_w` during charging
+  cycles.
 - `ac_grid_connection_power_w` is derived from the signed system grid
   connection path and matches the app "grid connection" / "Netz-Anschluss"
   value. It includes battery charging plus AC outlet pass-through load:
   negative = input from grid, positive = output/feed-in.
-- `batt_w` is the signed battery power path. Most charging/discharging
-  frames line up with real battery behavior, while AC outlet activity is
-  exposed separately via `ac_outlet_1_w` / `ac_outlet_2_w`.
+- `batt_w` is the signed per-unit battery power (positive = charging),
+  taken from the BMS frame `32/50` as `field 26 - field 27` (charge minus
+  discharge, whole watts, DC pack side). Both fields must be present. The
+  same two fields feed `batt_charge_power_w` / `batt_discharge_power_w`.
+  `254/21 field 518` is NOT used: it is a group aggregate (AC side) that
+  only one unit of a multi-unit group publishes, the others send 0.0
+  (#486). The BMS frame arrives about once a minute. AC outlet activity
+  is exposed separately via `ac_outlet_1_w` / `ac_outlet_2_w`.
 - `home_w` behaves like the overall active load path. In zero-export
-  discharge captures, `home_w` stays aligned with `abs(batt_w)` while
+  discharge captures, `home_w` stays aligned with the group discharge power while
   `ac_outlet_1_w` remains a diagnostic breakdown of that total rather
   than an extra load to add on top.
 - `solar_w` appears to be Smart-Meter/App energy-flow data rather than
@@ -97,14 +103,17 @@ _STREAM_FIELD_MAP: dict[tuple[int, int], dict[int, tuple[str, str]]] = {
         # Configured feed-in cap in watts (user-changeable in the app).
         521: ("feed_grid_power_limit_w", _TYPE_INT),
         # Summed AC intake from grid. Charge-dump correlation:
-        # grid_w ~= batt_w + home_from_grid_w.
+        # grid_w ~= (group AC-side battery power, field 518) + home_from_grid_w.
         515: ("grid_w", _TYPE_FLOAT),
         # Overall active load path. Outlet power appears to be included in
         # this total and is published separately for diagnostics.
         516: ("home_w", _TYPE_FLOAT),
         517: ("solar_w", _TYPE_FLOAT),
-        # Signed battery power path: positive = charging, negative = discharging.
-        518: ("batt_w", _TYPE_FLOAT),
+        # Field 518 is deliberately NOT mapped to `batt_w`. It is a group
+        # aggregate (AC side) that only ONE unit of a multi-unit group
+        # publishes; every other unit sends 0.0, so a follower showed 0 W while
+        # charging or discharging (#486). Per-unit battery power comes from the
+        # BMS frame (32/50 fields 26 and 27) instead.
         # WiFi module signal strength in dBm (negative). This is a radio
         # reading, not a power path: it must never reach a battery key.
         602: ("wifi_rssi_dbm", _TYPE_FLOAT),
@@ -158,6 +167,13 @@ _STREAM_FIELD_MAP: dict[tuple[int, int], dict[int, tuple[str, str]]] = {
         19: ("batt_min_cell_temp_c", _TYPE_INT),
         20: ("batt_max_mos_temp_c", _TYPE_INT),
         25: ("soc_precise_pct", _TYPE_FLOAT),
+        # Per-pack power in whole watts, DC side. Both fields are sent
+        # explicitly (one of them 0) and equal V x I of fields 7 and 8 within
+        # 1 W. Field 8 (signed pack current) is not mapped: these two carry
+        # the same reading already split by direction. Combined into `batt_w`
+        # and the charge/discharge pair in _finalize_stream_state (#486).
+        26: ("_batt_charge_power_w", _TYPE_INT),
+        27: ("_batt_discharge_power_w", _TYPE_INT),
         32: ("_batt_charge_capacity_ah_rounded", _TYPE_INT),
         50: ("_batt_charge_capacity_mah_total", _TYPE_INT),
         51: ("_batt_discharge_capacity_mah_total", _TYPE_INT),
@@ -354,10 +370,18 @@ def _finalize_stream_state(parsed: dict[str, Any]) -> dict[str, Any]:
     if isinstance(grid_connection, (int, float)):
         result["ac_grid_connection_power_w"] = float(grid_connection)
 
-    batt_w = result.get("batt_w")
-    if isinstance(batt_w, (int, float)):
-        result["batt_charge_power_w"] = float(batt_w) if batt_w > 0 else 0.0
-        result["batt_discharge_power_w"] = abs(float(batt_w)) if batt_w < 0 else 0.0
+    # Per-unit battery power from the BMS frame. Only a frame that carries BOTH
+    # directions is a reading: each is sent explicitly with one of them 0, so
+    # one alone means a partial or foreign frame and publishing a half would
+    # fake a one-sided state.
+    charge_power = result.pop("_batt_charge_power_w", None)
+    discharge_power = result.pop("_batt_discharge_power_w", None)
+    if isinstance(charge_power, (int, float)) and isinstance(
+        discharge_power, (int, float)
+    ):
+        result["batt_charge_power_w"] = float(charge_power)
+        result["batt_discharge_power_w"] = float(discharge_power)
+        result["batt_w"] = float(charge_power) - float(discharge_power)
         # batt_charge_discharge_state is intentionally NOT set here. The
         # coordinator pops any parser-provided value and derives the state
         # from a hysteresis window over batt_w (see _derive_battery_state,

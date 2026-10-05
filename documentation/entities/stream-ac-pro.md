@@ -16,9 +16,9 @@ The fields were observed in live iOS MQTT captures on `/app/{userId}/{sn}/thing/
 | Entity | Notes |
 |:---|:---|
 | Battery SOC | Main battery percentage |
-| Battery Power | Signed battery path: positive charging, negative discharging |
-| Battery Charge Power | Derived from positive Battery Power |
-| Battery Discharge Power | Derived from negative Battery Power |
+| Battery Power | This unit's own battery, positive charging, negative discharging. Measured at the battery (DC side) and updated about once a minute. On linked units each unit shows its own battery, not the group |
+| Battery Charge Power | Charging power of this unit's battery |
+| Battery Discharge Power | Discharging power of this unit's battery |
 | AC Grid Connection Power | Signed app "Netz-Anschluss" value |
 | Battery Charge Energy | Energy Dashboard ready |
 | Battery Discharge Energy | Energy Dashboard ready |
