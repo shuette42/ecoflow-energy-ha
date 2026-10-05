@@ -1666,6 +1666,8 @@ Smart is shown and not written. The app never sends the Smart mode without a dep
 
 **Window.** Seventy-five seconds: the heartbeat interval with a quarter on top, because the confirmation has no faster source. The four echoes in the recording sit between under a second and fifty-six seconds after the write, and the one at fifty-six seconds is the reason the settings report's twenty seconds cannot serve here.
 
+**Superseded for the charging mode by ADR-033.** The confirmation reads the settings report first and waits twenty seconds. The heartbeat fills in only while no settings report has arrived in the last ten seconds. This addendum stays as the record of the decision at the time.
+
 **Consequences:** a fourth builder on the same envelope, differing from the third in the one nested field it fills; a select entity sharing the sensor's key, so the control shows what the sensor shows and applies nothing on its own; the pending record's expected value is a mode name rather than a number and is compared as one, so a current write and a mode write cannot confirm each other. Phase and target stay out of scope: no recording holds a deliberate change of either.
 
 
@@ -1856,3 +1858,26 @@ Home Assistant 2026.9 added a shared Modbus connection to its `modbus` integrati
 3. Read the history in Standard Mode only. Rejected: the endpoint needs the account sign-in, and Standard Mode has no account.
 
 **Consequences:** The contribution in pull request #460 is held to the five limits before it merges, in particular the shared client with backoff and a setup that does not wait for the first read. It also waits for the PowerPulse C371 read-only support, so that C371 is registered once. The CHANGELOG entry names the contributor and what the work carried: the endpoint trace, the energy check against the meter and the app, the pagination measurement and the replay on real orders. A later case that wants a periodic read inside Enhanced Mode needs its own entry here.
+
+## ADR-033: The PowerPulse 2 charging mode is published from the wallbox's settings report while one arrived in the last ten seconds, and from its heartbeat otherwise; the parser keeps the two readings apart and the coordinator chooses
+
+**Status:** Accepted
+**Date:** 2026-10-05
+
+**Context:** The wallbox reports its charging mode twice: in its heartbeat, about once a minute, and in its settings report, about once a second, which only an entry with a PowerOcean receives. The select confirmed on the heartbeat and could take up to 75 s to return a change the wallbox had applied within two seconds. In the recordings on file the two readings agree on 101 of 108 comparable samples, all four modes among them. The two exceptions sit in one 2026-08-24 recording that is missing six of thirteen app writes. One reading, one key, and a rule saying which message fills it at any moment were needed.
+
+**Decision:** The parser names both readings with the same four words but under two keys. It never writes the published key from the settings report. The coordinator fills the published key from the settings report whenever a frame carries one, for all four modes. A heartbeat's reading is dropped from the frame while a settings report with a mode has arrived in the last ten seconds. That is the same bound the Continuous Charging write already trusts for that report. Before the first report, more than ten seconds after the last, and on an entry without a PowerOcean, the heartbeat fills the key. The mode write waits 20 s like the other four settings writes. The 75 s window is removed.
+
+**Trade-offs:**
+- (+) A change from Home Assistant returns within seconds on an entry with a PowerOcean
+- (+) One published key, one producer at a time, chosen in one place. Sensor and select cannot differ
+- (+) An entry without a PowerOcean is untouched: no report, no rule
+- (-) A heartbeat that disagrees with a report inside ten seconds is not shown. If the wallbox ever reverts a mode by itself, the display follows one heartbeat period later
+- (-) A write issued just as the settings stream dies fails after 20 s, although the heartbeat may still apply it. The error names the last reported mode, and the display corrects itself
+
+**Alternatives considered:**
+1. The parser writes the published key from both messages. Rejected: a bundled frame carries both, and the coordinator could no longer tell which message produced the key, so no frame-level arbitration and no safe write confirmation.
+2. The settings report fills Fast, Solar and Custom only, the heartbeat keeps Smart. Rejected: either the display holds a stale value for the whole Smart period, or Smart becomes a third ownership state with a 60 s entry and a 2 s exit. The one clean Smart pair on file agrees.
+3. Switch the source once per entry (settings if ever seen). Rejected: a stream that stops would freeze the display for the session. The ten-second hold already exists and gives a self-healing fallback.
+
+**Consequences:** `ev_settings_work_mode` now holds a mode word (fast, solar, custom, smart) instead of a number. `POWERPULSE2_CHARGE_MODE_WINDOW_S` is removed. The entity page sentences on the heartbeat and the 75 s window are rewritten. A recording with every write retained through all four modes would settle the two 2026-08-24 cases. It is optional.

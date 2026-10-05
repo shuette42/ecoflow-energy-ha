@@ -46,6 +46,10 @@ All notable changes to this project will be documented in this file.
 
 - In Enhanced Mode, a Stream's Battery Power, Battery Charge Power, Battery Discharge Power and the energy counters built from them now come from each unit's own battery reading. On a group of several units, the units that showed 0 W while charging or discharging now show their real power, and the one unit that showed the whole group's battery power before now shows only its own battery. The reading comes from the battery management data, which updates about once a minute, and it is measured on the DC side of the battery, so it reads up to about 10 percent higher than the AC-side value did while discharging and lower while charging. The Home, Solar and Grid power readings and the Battery SOC of the other units in a group are not changed by this and still read 0 on them. Reported by @keltenbahner-maker. (#486)
 
+### Changed
+
+- The Wallbox Charging Mode select and sensor of a PowerPulse 2 now follow the wallbox's settings report on an entry with a PowerOcean. That report arrives about once a second. In the two recordings that kept the frame, it showed a new mode 1.3 s and 1.5 s after a change. A change made from Home Assistant therefore returns within seconds instead of waiting for the heartbeat, and the time allowed for it is 20 s, like the other wallbox settings. The heartbeat, about once a minute, is used while no settings report has arrived in the last 10 s. On an entry without a PowerOcean the heartbeat stays the only source, and nothing changes there.
+
 ## [1.24.0] - 2026-10-02
 
 ### Added

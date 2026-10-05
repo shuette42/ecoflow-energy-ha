@@ -48,6 +48,7 @@ from tests.ha.test_powerpulse2_charge_action import (
     _set_descriptor,
     _wire_entry,
 )
+from tests.test_powerpulse_proto import _settings_frame_with_mode
 
 from .conftest import add_entities_collector
 
@@ -278,6 +279,59 @@ async def test_a_disagreeing_heartbeat_cannot_move_the_mode_within_ten_seconds_a
         assert wallbox._device_data["ev_charge_mode"] == "solar"
 
 
+async def test_the_hold_is_exactly_the_settings_max_age(
+    hass: HomeAssistant,
+) -> None:
+    """The hold ends at `POWERPULSE2_SETTINGS_MAX_AGE_S` and not before or
+    after: a heartbeat exactly that old after the report is still held, one
+    0.2 s later applies. The constant is pinned to 10.0 here as well, so a
+    change of the bound shows up as a decision rather than as a side effect.
+
+    Mutation probes: a bound of 5.0 lets the heartbeat at +10 s through; `<`
+    in place of `<=` does the same, since the age equals the bound there.
+    """
+    max_age = ecoflow_const.POWERPULSE2_SETTINGS_MAX_AGE_S
+    assert max_age == 10.0
+    _entry_obj, _oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    clock = {"now": 5000.0}
+    fake_time = SimpleNamespace(monotonic=lambda: clock["now"])
+    with patch(f"{_STATE_APPLY}.time", fake_time):
+        _apply_frame(wallbox, _settings_frame(_SETTINGS_CUSTOM, _CUSTOM_REPORT_TS))
+        assert wallbox._device_data["ev_charge_mode"] == "custom"
+
+        clock["now"] += max_age
+        _apply_frame(wallbox, _heartbeat_frame_with_mode(1, 2))  # solar
+        assert wallbox._device_data["ev_charge_mode"] == "custom"
+
+        clock["now"] += 0.2
+        _apply_frame(wallbox, _heartbeat_frame_with_mode(1, 2))
+        assert wallbox._device_data["ev_charge_mode"] == "solar"
+
+
+async def test_a_report_without_a_mode_does_not_hold_the_heartbeat(
+    hass: HomeAssistant,
+) -> None:
+    """A settings report that carries the switch bits but no mapped mode is
+    recorded, and it releases the key: the last report has no mode, so the
+    next heartbeat applies at once, inside the ten seconds.
+
+    Mutation probe: deleting the `isinstance(..., str)` clause on the
+    recorded report's mode makes the mode-less report hold the key, and the
+    solar heartbeat is dropped.
+    """
+    _entry_obj, _oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+
+    _apply_frame(wallbox, _settings_frame(_SETTINGS_CUSTOM, _CUSTOM_REPORT_TS))
+    assert wallbox._device_data["ev_charge_mode"] == "custom"
+
+    _apply_frame(wallbox, _settings_frame_with_mode(18, 7))  # bits, unmapped mode
+    assert wallbox._settings_report is not None
+    assert "ev_settings_work_mode" not in wallbox._settings_report[1]
+
+    _apply_frame(wallbox, _heartbeat_frame_with_mode(1, 2))  # solar, at once
+    assert wallbox._device_data["ev_charge_mode"] == "solar"
+
+
 async def test_the_heartbeat_owns_the_mode_before_the_first_settings_report(
     hass: HomeAssistant,
 ) -> None:
@@ -306,9 +360,10 @@ async def test_without_a_powerocean_the_heartbeat_remains_the_only_source(
     hass: HomeAssistant,
 ) -> None:
     """An entry with no PowerOcean never receives a `241/44` settings report,
-    so every heartbeat of the 2026-09-14 standalone session sets the mode
-    (always Custom there) and no settings report is ever recorded; the next
-    heartbeat, with another mode, moves it at once.
+    so every heartbeat of the 2026-09-14 standalone session arrives while no
+    settings report is recorded (the mode reads Custom after each one, which
+    it does there throughout); the next heartbeat, with another mode, moves
+    it at once.
 
     The loop over a constant mode cannot tell a heartbeat that was applied
     from one that was dropped after the first, so the final heartbeat is the

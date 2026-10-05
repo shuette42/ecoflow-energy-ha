@@ -1690,7 +1690,7 @@ class SetCommandsMixin(_Base):
         wallbox's settings report, about a second after the write, which
         `_resolve_wallbox_charge_mode` turns into `ev_charge_mode`; the
         heartbeat can confirm it only while no settings report from the last
-        few seconds owns the key.
+        ten seconds (`POWERPULSE2_SETTINGS_MAX_AGE_S`) owns the key.
         """
         from ..ecoflow.energy_stream import build_powerpulse_param_set_mode_payload
         from .core import WallboxActionPending

@@ -177,6 +177,7 @@ class HttpPollMixin(_Base):
         # Same as the MQTT path: a wallbox status arriving here would confirm
         # a pending start or stop. No polled device reports one today (the
         # C376 has no quota branch), so this is parity, not a live path.
+        self._resolve_wallbox_charge_mode(parsed, time.monotonic())
         self._resolve_wallbox_action(parsed)
         self._enforce_monotonic(parsed)
         # Same pop as in _apply_data: prevent EMS raw battery state from

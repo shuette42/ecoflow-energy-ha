@@ -341,14 +341,17 @@ class StateApplyMixin(_Base):
         carried a mode and is at most `POWERPULSE2_SETTINGS_MAX_AGE_S` old, so
         a heartbeat that disagrees with a report seconds apart can neither
         move the displayed mode nor confirm a pending write. Otherwise the
-        heartbeat value stands: before the first report, ten seconds after
-        the last one, and on an entry that never records a report. Only the
-        key is dropped, everything else the frame carries is applied.
+        heartbeat value stands: before the first report, more than ten
+        seconds after the last one, and on an entry that never records a
+        report. Only the key is dropped, everything else the frame carries is
+        applied.
 
         Runs before `_record_settings_report`, so a frame is judged against
         the report that preceded it. A report that carries a mode without the
         switch bits is not recorded and does not claim the key for later
-        heartbeats; no such report is on file.
+        heartbeats; no such report is on file. A report that carries the
+        switch bits but no mapped mode is still recorded and releases the key
+        at once: the heartbeat after it stands.
         """
         settings_mode = parsed.get("ev_settings_work_mode")
         if isinstance(settings_mode, str):
