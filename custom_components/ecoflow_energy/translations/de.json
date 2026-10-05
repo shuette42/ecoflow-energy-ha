@@ -1668,7 +1668,7 @@
         "name": "Wallbox-Maximalstrom"
       },
       "ev_charge_current_a": {
-        "name": "Wallbox-Ladestrom"
+        "name": "Wallbox-Ladestrom-Sollwert"
       },
       "ev_phase_mode": {
         "name": "Wallbox-Phasenmodus",
@@ -3017,7 +3017,7 @@
         "name": "Wallbox-Maximalstrom"
       },
       "ev_charge_current_a": {
-        "name": "Wallbox-Ladestrom"
+        "name": "Wallbox-Ladestrom-Sollwert"
       },
       "ev_solar_min_current_a": {
         "name": "Wallbox-Mindestladestrom Solar"

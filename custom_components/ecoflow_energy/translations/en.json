@@ -1668,7 +1668,7 @@
         "name": "Wallbox Maximum Current"
       },
       "ev_charge_current_a": {
-        "name": "Wallbox Charging Current"
+        "name": "Wallbox Charging Current Setpoint"
       },
       "ev_phase_mode": {
         "name": "Wallbox Phase Mode",
@@ -3017,7 +3017,7 @@
         "name": "Wallbox Maximum Current"
       },
       "ev_charge_current_a": {
-        "name": "Wallbox Charging Current"
+        "name": "Wallbox Charging Current Setpoint"
       },
       "ev_solar_min_current_a": {
         "name": "Wallbox Solar Minimum Current"

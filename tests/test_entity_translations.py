@@ -137,3 +137,31 @@ class TestEntityTranslationCompleteness:
         assert not problems, (
             f"[{lang}] select options without state translation: {problems}"
         )
+
+
+def test_charging_current_setpoint_is_named_as_a_setpoint() -> None:
+    """The PowerPulse 2 session setpoint is not named like a measured current.
+
+    `ev_charge_current_a` is the heartbeat's charging current setpoint (it can
+    read 6 A on an idle wallbox), shown by a sensor and written by a number on
+    the wallbox's own channel. Both carry the same name in the definitions and
+    in each language, so a rename in one place cannot drift from the others.
+    """
+    names = {
+        "en": "Wallbox Charging Current Setpoint",
+        "de": "Wallbox-Ladestrom-Sollwert",
+    }
+    sensor_def = next(
+        d for d in C.POWERPULSE2_SENSORS if d.key == "ev_charge_current_a"
+    )
+    number_def = next(
+        d for d in C.POWERPULSE2_NUMBERS if d.key == "ev_charge_current_a"
+    )
+    assert sensor_def.name == names["en"]
+    assert number_def.name == names["en"]
+    for lang, expected in names.items():
+        entity = json.loads(
+            (TRANSLATIONS_DIR / f"{lang}.json").read_text(encoding="utf-8")
+        )["entity"]
+        assert entity["sensor"]["ev_charge_current_a"]["name"] == expected
+        assert entity["number"]["ev_charge_current_a"]["name"] == expected

@@ -49,6 +49,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 
 - The Wallbox Charging Mode select and sensor of a PowerPulse 2 now follow the wallbox's settings report on an entry with a PowerOcean. That report arrives about once a second. In the one recording that kept the frame, it showed a new mode 1.3 s and 1.5 s after two changes. A change made from Home Assistant therefore returns within seconds instead of waiting for the heartbeat, and the time allowed for it is 20 s, like the other wallbox settings. The heartbeat, about once a minute, is used while the latest settings report is missing, carries no mode or is more than 10 s old. On an entry without a PowerOcean the heartbeat stays the only source, and nothing changes there.
+- The PowerPulse 2 sensor and number called Wallbox Charging Current are now called Wallbox Charging Current Setpoint (German: Wallbox-Ladestrom-Sollwert). They show the charging current set for the session, which can read 6 A while the wallbox is idle. They are not the measured currents, which are Wallbox Current L1, L2 and L3. Only the name changes: the values, the unit and the entity IDs of existing entities stay as they are (#491, thanks to @Xygen for the report).
 
 ## [1.24.0] - 2026-10-02
 

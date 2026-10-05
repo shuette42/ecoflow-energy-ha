@@ -9100,7 +9100,7 @@ POWERPULSE2_SENSORS: list[EcoFlowSensorDef] = [
     ),
     EcoFlowSensorDef(
         "ev_charge_current_a",
-        "Wallbox Charging Current",
+        "Wallbox Charging Current Setpoint",
         "A",
         "current",
         "measurement",
@@ -9316,7 +9316,7 @@ POWERPULSE2_NUMBERS: list[EcoFlowNumberDef] = [
     ),
     EcoFlowNumberDef(
         "ev_charge_current_a",
-        "Wallbox Charging Current",
+        "Wallbox Charging Current Setpoint",
         "ev_charge_current_a",
         "A",
         "mdi:current-ac",
