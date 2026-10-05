@@ -1987,7 +1987,10 @@ class SetCommandsMixin(_Base):
 
         Writes field 6 of `EDevPileParamSet` alone and confirms on
         `ev_custom_current_a`, the same shape as
-        `async_set_powerpulse_solar_min_current`.
+        `async_set_powerpulse_solar_min_current`, with one difference: a value
+        above the reported Maximum Current is refused before anything is
+        published. The Solar minimum current has no such check, the wallbox
+        keeps it above the maximum (issue #480, 2026-10-05).
         """
         low, high = POWERPULSE2_MAX_CURRENT_RANGE_A
         if type(current_a) is not int or not (low <= current_a <= high):
@@ -1996,12 +1999,36 @@ class SetCommandsMixin(_Base):
                 translation_key="powerpulse_custom_current_range",
                 translation_placeholders={"min": str(low), "max": str(high)},
             )
+
+        def plan() -> _SettingsWrite:
+            # The wallbox does not store a Custom current above its configured
+            # Maximum Current (a write of 15 A over 14 A was never reported
+            # back on a C376, issue #481, 2026-10-05), so it is refused here
+            # with the maximum named instead of failing after the window. The
+            # maximum is read when the write is built. An unreported maximum
+            # lets the write through: the value is never guessed.
+            maximum = self._device_data.get("ev_max_current_a")
+            if (
+                isinstance(maximum, (int, float))
+                and not isinstance(maximum, bool)
+                and current_a > maximum
+            ):
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerpulse_custom_current_above_maximum",
+                    translation_placeholders={
+                        "requested": str(current_a),
+                        "maximum": f"{maximum:g}",
+                    },
+                )
+            return _SettingsWrite({6: current_a * 10}, float(current_a))
+
         await self._async_write_powerpulse_settings(
             action="custom_current",
             state_key="ev_custom_current_a",
             needs_powerocean_key="powerpulse_custom_current_needs_powerocean",
             not_confirmed_key="powerpulse_custom_current_not_confirmed",
-            plan=lambda: _SettingsWrite({6: current_a * 10}, float(current_a)),
+            plan=plan,
             describe_reported=_describe_amps,
         )
 

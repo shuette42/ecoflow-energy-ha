@@ -514,3 +514,88 @@ async def test_a_handed_over_frame_is_not_a_settings_report(
     assert wallbox._settings_report is not before
     assert wallbox._settings_report is not None
     assert wallbox._settings_report[1] == handed
+
+
+async def test_custom_current_above_the_reported_maximum_is_refused_at_once(
+    hass: HomeAssistant,
+) -> None:
+    """15 A over a reported 14 A refuses before anything is published, naming
+    both values; 14 A (equal) and 13 A (below) are written. This is the
+    2026-10-05 observation on a C376: the wallbox never stored 15 A over 14 A.
+
+    Mutation probes: dropping the comparison lets 15 A publish (first block
+    fails); `>` changed to `>=` refuses the equal case (second block fails).
+    """
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    send = _mqtt(oceans[0]).send_proto_set
+    wallbox._device_data["ev_max_current_a"] = 14.0
+
+    with pytest.raises(HomeAssistantError) as excinfo:
+        await wallbox.async_set_powerpulse_custom_current(15)
+    assert excinfo.value.translation_key == "powerpulse_custom_current_above_maximum"
+    assert excinfo.value.translation_placeholders == {
+        "requested": "15",
+        "maximum": "14",
+    }
+    assert send.call_count == 0
+    assert wallbox._wallbox_action_pending is None
+
+    for allowed in (14, 13):
+        task = await _start(wallbox.async_set_powerpulse_custom_current(allowed))
+        assert _published_fields(send.call_args) == {6: allowed * 10}
+        _apply_report(
+            wallbox, ev_settings_switch_bits=18, ev_custom_current_a=float(allowed)
+        )
+        await task
+    assert send.call_count == 2
+
+
+async def test_custom_current_is_not_refused_while_the_maximum_is_unreported(
+    hass: HomeAssistant,
+) -> None:
+    """No `ev_max_current_a` in the store: the write goes out as asked. The
+    maximum is never guessed, so a wallbox that has not reported it yet is not
+    blocked.
+
+    Mutation probe: treating a missing maximum as 0 refuses the write.
+    """
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    send = _mqtt(oceans[0]).send_proto_set
+    assert "ev_max_current_a" not in wallbox._device_data
+
+    task = await _start(wallbox.async_set_powerpulse_custom_current(16))
+    assert _published_fields(send.call_args) == {6: 160}
+    _apply_report(wallbox, ev_settings_switch_bits=18, ev_custom_current_a=16.0)
+    await task
+
+
+async def test_solar_minimum_has_no_maximum_check(hass: HomeAssistant) -> None:
+    """16 A Solar minimum over a reported 14 A maximum is written: the wallbox
+    kept exactly this on 2026-10-05 and on 2026-10-04 (16 A over 15 A).
+
+    Mutation probe: applying the Custom check to the Solar minimum write makes
+    this refuse.
+    """
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    send = _mqtt(oceans[0]).send_proto_set
+    wallbox._device_data["ev_max_current_a"] = 14.0
+
+    task = await _start(wallbox.async_set_powerpulse_solar_min_current(16))
+    assert _published_fields(send.call_args) == {4: 160}
+    _apply_report(wallbox, ev_settings_switch_bits=18, ev_solar_min_current_a=16.0)
+    await task
+
+
+def test_the_above_maximum_message_exists_in_both_languages() -> None:
+    """The refusal's translation key has an English and a German text carrying
+    both placeholders, so the message names the numbers in either language."""
+    base = Path("custom_components/ecoflow_energy")
+    for name in ("strings.json", "translations/en.json", "translations/de.json"):
+        message = json.loads((base / name).read_text(encoding="utf-8"))["exceptions"][
+            "powerpulse_custom_current_above_maximum"
+        ]["message"]
+        assert "{requested}" in message
+        assert "{maximum}" in message

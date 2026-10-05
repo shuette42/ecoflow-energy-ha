@@ -3246,6 +3246,9 @@
     "powerpulse_continuous_report_unusable": {
       "message": "Die Wallbox meldet für {field} den Wert {value}. Darauf kann diese Integration keine Änderung aufbauen. Ändere Dauerladen in der EcoFlow-App."
     },
+    "powerpulse_custom_current_above_maximum": {
+      "message": "Die Wallbox speichert keinen Wallbox-Ladestrom Benutzerdefiniert über dem Wallbox-Maximalstrom. Angefragt: {requested} A, Wallbox-Maximalstrom: {maximum} A."
+    },
     "powerpulse_custom_current_needs_powerocean": {
       "message": "Wallbox-Ladestrom Benutzerdefiniert lässt sich nur über eine PowerOcean im selben Konto setzen; dieser Eintrag hat keine."
     },
