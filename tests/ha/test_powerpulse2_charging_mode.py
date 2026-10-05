@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -25,6 +26,7 @@ import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 
+from custom_components.ecoflow_energy import const as ecoflow_const
 from custom_components.ecoflow_energy.const import POWERPULSE2_CHARGE_MODE_OPTIONS
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
 from custom_components.ecoflow_energy.coordinator.core import WallboxActionPending
@@ -36,6 +38,7 @@ from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
     encode_field_varint,
 )
 from custom_components.ecoflow_energy.select import async_setup_entry as select_setup
+from custom_components.ecoflow_energy.sensor import async_setup_entry as sensor_setup
 from tests.ha.test_powerpulse2_charge_action import (
     POWEROCEAN_DEVICE,
     POWERPULSE2_SN,
@@ -67,6 +70,15 @@ _SETTINGS_CUSTOM = _POWERPULSE_FIXTURES / "c376_settings_481_482_20261004.json"
 # production parser; the tests below do not re-derive them.
 _SOLAR_REPORT_TS = "2026-10-04T09:33:16.603"
 _CUSTOM_REPORT_TS = "2026-10-04T07:18:12"
+# The 2026-08-24 run-data recording: its frame at 13:50:01 is a settings-only
+# `241/44` report whose work mode is Smart.
+_RUN_DATA_SYNC = _POWERPULSE_FIXTURES / "c376_run_data_sync_20260824.json"
+_SMART_REPORT_TS = "2026-08-24T13:50:01"
+# The 2026-09-14 standalone session: every frame on file is a heartbeat
+# bundle, none carries a `241/44` settings report.
+_STANDALONE_SESSION = (
+    _POWERPULSE_FIXTURES / "c376_standalone_current_ctrl_20260914.json"
+)
 
 
 def _settings_frame(path: Path, ts_prefix: str) -> bytes:
@@ -162,7 +174,8 @@ async def test_set_mode_publishes_once_and_confirms_on_a_real_heartbeat_when_no_
     assert header["pdata"].endswith("22021002")
 
     _apply_frame(wallbox, _fixture_frame("2026-09-13T22:49:14"))
-    await task
+    # A guard, so a regression fails in seconds instead of waiting out the window.
+    await asyncio.wait_for(task, 2)
     assert wallbox._settings_report is None
     assert wallbox._wallbox_action_pending is None
     assert wallbox._device_data["ev_charge_mode"] == "solar"
@@ -289,6 +302,56 @@ async def test_the_heartbeat_owns_the_mode_before_the_first_settings_report(
     assert wallbox._device_data["ev_charge_mode"] == "custom"
 
 
+async def test_without_a_powerocean_the_heartbeat_remains_the_only_source(
+    hass: HomeAssistant,
+) -> None:
+    """An entry with no PowerOcean never receives a `241/44` settings report,
+    so every heartbeat of the 2026-09-14 standalone session sets the mode
+    (always Custom there) and no settings report is ever recorded; the next
+    heartbeat, with another mode, moves it at once.
+
+    The loop over a constant mode cannot tell a heartbeat that was applied
+    from one that was dropped after the first, so the final heartbeat is the
+    assertion that carries the weight: it is a different mode, and it must
+    show immediately.
+
+    Mutation probe: holding the mode once any value is stored (deleting the
+    heartbeat's key whenever `ev_charge_mode` is already in `_device_data`,
+    instead of whenever a settings report exists) passes the whole loop and
+    fails on the final `fast`.
+    """
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [])
+    assert oceans == []
+
+    # The heartbeat frames are found by running the production parser over
+    # every frame, in time order, not by position in the file.
+    frames = sorted(
+        json.loads(_STANDALONE_SESSION.read_text())["frames"],
+        key=lambda f: datetime.fromisoformat(f["ts_iso"]),
+    )
+    heartbeats: list[bytes] = []
+    for frame in frames:
+        raw = bytes.fromhex(frame["hex"])
+        parsed = wallbox._parse_message(TOPIC, raw)
+        if parsed is None:  # a frame that carries nothing the parser reads
+            continue
+        assert "ev_settings_work_mode" not in parsed
+        if "ev_charge_mode" in parsed:
+            heartbeats.append(raw)
+    # The session carries 18 heartbeats; a floor near that count keeps a
+    # silently emptied selection from passing the loop below with nothing in it.
+    assert len(heartbeats) == 18
+
+    for raw in heartbeats:
+        _apply_frame(wallbox, raw)
+        assert wallbox._device_data["ev_charge_mode"] == "custom"
+        assert wallbox._settings_report is None
+
+    _apply_frame(wallbox, _heartbeat_frame_with_mode(1, 1))  # fast, at once
+    assert wallbox._device_data["ev_charge_mode"] == "fast"
+    assert wallbox._settings_report is None
+
+
 async def test_a_heartbeat_with_the_old_mode_does_not_confirm(
     hass: HomeAssistant,
 ) -> None:
@@ -378,6 +441,50 @@ async def test_timeout_raises_and_names_the_last_reported_mode(
     assert _mqtt(oceans[0]).send_proto_set.call_count == 2
     _apply_frame(wallbox, _fixture_frame("2026-09-13T22:51:13.907"))
     await task
+
+
+async def test_mode_write_waits_the_settings_window(
+    hass: HomeAssistant,
+) -> None:
+    """The wait for a mode write is `POWERPULSE2_SETTINGS_WINDOW_S` and
+    nothing else: shrunk to 50 ms it fails after 50 ms, naming the mode the
+    settings report last carried, and the old 75 s heartbeat window no longer
+    exists in the constants.
+
+    The write runs under a one-second guard of its own, so a wait that
+    ignores the patched constant fails here with a `TimeoutError` instead of
+    stalling the suite for the length of the real window.
+
+    Mutation probe: hard-coding 75 in the `asyncio.wait_for` of
+    `async_set_powerpulse_charge_mode` makes the patch inert and the guard
+    fires.
+    """
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    _apply_frame(wallbox, _settings_frame(_SETTINGS_SOLAR, _SOLAR_REPORT_TS))
+    assert wallbox._device_data["ev_charge_mode"] == "solar"
+
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    with (
+        patch(
+            "custom_components.ecoflow_energy.coordinator.set_commands."
+            "POWERPULSE2_SETTINGS_WINDOW_S",
+            0.05,
+        ),
+        pytest.raises(HomeAssistantError) as excinfo,
+    ):
+        async with asyncio.timeout(1.0):
+            await wallbox.async_set_powerpulse_charge_mode("custom")
+    elapsed = loop.time() - started
+
+    assert excinfo.value.translation_key == "powerpulse_charge_mode_not_confirmed"
+    assert excinfo.value.translation_placeholders == {"reported": "solar"}
+    assert elapsed < 0.9
+    assert _mqtt(oceans[0]).send_proto_set.call_count == 1
+    assert wallbox._wallbox_action_pending is None
+    assert ecoflow_const.POWERPULSE2_SETTINGS_WINDOW_S == 20.0
+    assert not hasattr(ecoflow_const, "POWERPULSE2_CHARGE_MODE_WINDOW_S")
 
 
 @pytest.mark.parametrize(
@@ -545,3 +652,83 @@ class TestSelectPlatform:
 
         _mqtt(oceans[0]).is_connected.return_value = False
         assert not select_entity.available
+
+
+async def test_smart_from_the_settings_report_is_shown_and_still_refused(
+    hass: HomeAssistant,
+) -> None:
+    """The settings report of 2026-08-24 13:50:01 carries Smart: the store and
+    the select show it, while selecting Smart is still refused before anything
+    is published (the app never sends it without a smart-mode block).
+
+    Mutation probe: letting the settings branch of
+    `_resolve_wallbox_charge_mode` skip Smart (only Fast, Solar and Custom
+    fill `ev_charge_mode`) leaves the store without the key and the select at
+    `None`.
+    """
+    entry, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+
+    entities: list[Any] = []
+    await select_setup(hass, entry, add_entities_collector(entities))
+    matches = _mode_entities(entities)
+    assert len(matches) == 1
+    select_entity = matches[0]
+    assert select_entity.current_option is None
+
+    parsed = _apply_frame(wallbox, _settings_frame(_RUN_DATA_SYNC, _SMART_REPORT_TS))
+    assert parsed["ev_settings_work_mode"] == "smart"
+    assert wallbox._device_data.get("ev_charge_mode") == "smart"
+    assert select_entity.current_option == "smart"
+
+    with pytest.raises(HomeAssistantError) as excinfo:
+        await wallbox.async_set_powerpulse_charge_mode("smart")
+    assert excinfo.value.translation_key == "powerpulse_charge_mode_smart_in_app"
+    assert _mqtt(oceans[0]).send_proto_set.call_count == 0
+    assert _mqtt(wallbox).send_proto_set.call_count == 0
+    # The refusal changed nothing the select shows.
+    assert select_entity.current_option == "smart"
+
+
+async def test_select_and_sensor_show_the_same_mode_on_every_frame(
+    hass: HomeAssistant,
+) -> None:
+    """The select and the enum sensor read one key, so they agree on every
+    frame: Custom from the settings report, still Custom for a disagreeing
+    heartbeat two seconds later, Solar once the report is eleven seconds old.
+
+    The sensor is an accessory entity, created on the first reported mode, so
+    both platforms are set up right after the settings report has arrived.
+
+    Mutation probe: pointing the select at `ev_settings_work_mode` (in a
+    private copy of `select.py`) keeps it at Custom on the last frame, where
+    the sensor shows Solar.
+    """
+    entry, _oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    clock = {"now": 8000.0}
+    fake_time = SimpleNamespace(monotonic=lambda: clock["now"])
+    with patch(f"{_STATE_APPLY}.time", fake_time):
+        _apply_frame(wallbox, _settings_frame(_SETTINGS_CUSTOM, _CUSTOM_REPORT_TS))
+
+        select_entities: list[Any] = []
+        await select_setup(hass, entry, add_entities_collector(select_entities))
+        sensor_entities: list[Any] = []
+        await sensor_setup(hass, entry, add_entities_collector(sensor_entities))
+        selects = _mode_entities(select_entities)
+        sensors = _mode_entities(sensor_entities)
+        assert len(selects) == 1
+        assert len(sensors) == 1
+        select_entity, sensor_entity = selects[0], sensors[0]
+
+        assert select_entity.current_option == "custom"
+        assert sensor_entity.native_value == "custom"
+
+        clock["now"] += 2
+        _apply_frame(wallbox, _heartbeat_frame_with_mode(1, 2))  # solar
+        assert select_entity.current_option == "custom"
+        assert sensor_entity.native_value == "custom"
+
+        clock["now"] += 9  # 11 s after the report
+        _apply_frame(wallbox, _heartbeat_frame_with_mode(1, 2))
+        assert select_entity.current_option == "solar"
+        assert sensor_entity.native_value == "solar"
