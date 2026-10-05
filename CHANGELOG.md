@@ -48,7 +48,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
-- The Wallbox Charging Mode select and sensor of a PowerPulse 2 now follow the wallbox's settings report on an entry with a PowerOcean. That report arrives about once a second. In the one recording that kept the frame, it showed a new mode 1.3 s and 1.5 s after two changes. A change made from Home Assistant therefore returns within seconds instead of waiting for the heartbeat, and the time allowed for it is 20 s, like the other wallbox settings. The heartbeat, about once a minute, is used while no settings report has arrived in the last 10 s. On an entry without a PowerOcean the heartbeat stays the only source, and nothing changes there.
+- The Wallbox Charging Mode select and sensor of a PowerPulse 2 now follow the wallbox's settings report on an entry with a PowerOcean. That report arrives about once a second. In the one recording that kept the frame, it showed a new mode 1.3 s and 1.5 s after two changes. A change made from Home Assistant therefore returns within seconds instead of waiting for the heartbeat, and the time allowed for it is 20 s, like the other wallbox settings. The heartbeat, about once a minute, is used while the latest settings report is missing, carries no mode or is more than 10 s old. On an entry without a PowerOcean the heartbeat stays the only source, and nothing changes there.
 
 ## [1.24.0] - 2026-10-02
 
