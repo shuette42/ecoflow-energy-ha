@@ -23,7 +23,6 @@ from ..const import (
     POWERPULSE2_CHARGE_ACTION_WINDOW_S,
     POWERPULSE2_CHARGE_CURRENT_WINDOW_S,
     POWERPULSE2_CHARGE_MODE_OPTIONS,
-    POWERPULSE2_CHARGE_MODE_WINDOW_S,
     POWERPULSE2_CHARGE_MODE_WIRE,
     POWERPULSE2_MAX_CURRENT_RANGE_A,
     POWERPULSE2_MAX_CURRENT_WINDOW_S,
@@ -1687,8 +1686,11 @@ class SetCommandsMixin(_Base):
         on the frame being applied (`WallboxActionPending.expected_value`,
         `_resolve_wallbox_action`), the same "never on the accumulated
         store" reasoning `async_set_powerpulse_max_current` gives, within
-        `POWERPULSE2_CHARGE_MODE_WINDOW_S` (75 s - heartbeat cadence is 60 s
-        and the four echoes on file range from 0.7 to 56 s).
+        `POWERPULSE2_SETTINGS_WINDOW_S` (20 s). The confirming frame is the
+        wallbox's settings report, about a second after the write, which
+        `_resolve_wallbox_charge_mode` turns into `ev_charge_mode`; the
+        heartbeat can confirm it only while no settings report from the last
+        few seconds owns the key.
         """
         from ..ecoflow.energy_stream import build_powerpulse_param_set_mode_payload
         from .core import WallboxActionPending
@@ -1802,7 +1804,7 @@ class SetCommandsMixin(_Base):
 
         try:
             confirmed_value = await asyncio.wait_for(
-                future, POWERPULSE2_CHARGE_MODE_WINDOW_S
+                future, POWERPULSE2_SETTINGS_WINDOW_S
             )
         except TimeoutError:
             last_reported = self._device_data.get("ev_charge_mode")

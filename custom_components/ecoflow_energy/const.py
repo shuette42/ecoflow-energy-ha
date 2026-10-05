@@ -212,10 +212,6 @@ POWERPULSE2_CHARGE_CURRENT_WINDOW_S: float = 20.0
 # PLAN-146: the maximum current range, the owner's sweep on #7 covered end to
 # end (2026-09-10).
 POWERPULSE2_MAX_CURRENT_RANGE_A: tuple[int, int] = (6, 16)
-# PLAN-147: the confirmation window for a charging-mode write. Heartbeat
-# cadence is 60 s; the four echoes on @Xygen's capture (issue #7,
-# 2026-09-13) range from 0.7 to 56 s.
-POWERPULSE2_CHARGE_MODE_WINDOW_S: float = 75.0
 # PLAN-147: the charging-mode options and the wire values
 # `EDevPileParamSet.work_mode` uses for each - the app's own labels,
 # confirmed byte-for-byte against five mode writes and their heartbeat
@@ -9171,7 +9167,9 @@ POWERPULSE2_SENSORS: list[EcoFlowSensorDef] = [
     # file carries, with or without a PowerOcean on the account (every `2/33`
     # in the seven powerpulse fixtures, 46 of 46 on 2026-09-14, all four
     # modes among them; `test_charge_mode_on_every_heartbeat_in_the_corpus`
-    # holds that floor). `accessory=True`
+    # holds that floor). On an entry with a PowerOcean the settings report's
+    # work mode fills the same key while one arrived in the last 10 s
+    # (PLAN-173, `_resolve_wallbox_charge_mode`). `accessory=True`
     # like `ev_charge_status` above: created on the first report. Mirrors
     # `ev_max_current_a`'s sensor + number pair: the sensor exists on every
     # route, the select below is sibling-only (async_set_powerpulse_charge_mode()).

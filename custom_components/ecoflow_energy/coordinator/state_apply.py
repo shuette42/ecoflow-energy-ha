@@ -16,6 +16,7 @@ from ..const import (
     DOMAIN,
     POWEROCEAN_SCHEDULE_ARMED_LATCH_S,
     POWERPULSE2_CHARGE_ACTION_CONFIRMED,
+    POWERPULSE2_SETTINGS_MAX_AGE_S,
     STREAM_OWN_UNIT_ENTRY_HOLD_S,
 )
 from ..ecoflow.parsers.stream_ac5000_proto import (
@@ -324,6 +325,44 @@ class StateApplyMixin(_Base):
             if expired:
                 del self._schedule_armed_latch[key]
 
+    def _resolve_wallbox_charge_mode(self, parsed: dict[str, Any], now: float) -> None:
+        """Pick which PowerPulse 2 message fills `ev_charge_mode` for this frame.
+
+        The wallbox reports its charging mode twice: in its heartbeat (about
+        once a minute, `ev_charge_mode`) and in its settings report (about
+        once a second, `ev_settings_work_mode`, which only an entry with a
+        PowerOcean receives). The parser keeps the two readings under their
+        own keys, both as the same four names; this step chooses per frame
+        which one the published key carries.
+
+        A frame with a settings mode sets `ev_charge_mode` from it, also when
+        the same frame bundles a heartbeat. A heartbeat frame without one
+        loses its `ev_charge_mode` while the last recorded settings report
+        carried a mode and is at most `POWERPULSE2_SETTINGS_MAX_AGE_S` old, so
+        a heartbeat that disagrees with a report seconds apart can neither
+        move the displayed mode nor confirm a pending write. Otherwise the
+        heartbeat value stands: before the first report, ten seconds after
+        the last one, and on an entry that never records a report. Only the
+        key is dropped, everything else the frame carries is applied.
+
+        Runs before `_record_settings_report`, so a frame is judged against
+        the report that preceded it. A report that carries a mode without the
+        switch bits is not recorded and does not claim the key for later
+        heartbeats; no such report is on file.
+        """
+        settings_mode = parsed.get("ev_settings_work_mode")
+        if isinstance(settings_mode, str):
+            parsed["ev_charge_mode"] = settings_mode
+            return
+        if "ev_charge_mode" not in parsed or self._settings_report is None:
+            return
+        received_at, values = self._settings_report
+        if (
+            isinstance(values.get("ev_settings_work_mode"), str)
+            and now - received_at <= POWERPULSE2_SETTINGS_MAX_AGE_S
+        ):
+            del parsed["ev_charge_mode"]
+
     def _resolve_wallbox_action(self, parsed: dict[str, Any]) -> None:
         """Resolve a pending PowerPulse 2 write against the arriving frame.
 
@@ -343,6 +382,11 @@ class StateApplyMixin(_Base):
         than a number (charging mode, PLAN-147). A record without
         `expected_value` (a start/stop) keeps the original status-membership
         check.
+
+        The confirming frame for the charging-mode write is normally the
+        settings report, which `_resolve_wallbox_charge_mode` converts into
+        `ev_charge_mode` before this runs; the heartbeat confirms it only
+        while no recent settings report owns that key.
         """
         record = self._wallbox_action_pending
         if record is None or record.future.done():
@@ -466,6 +510,7 @@ class StateApplyMixin(_Base):
             return
         self._resolve_soc(parsed)
         self._resolve_schedule_armed(parsed)
+        self._resolve_wallbox_charge_mode(parsed, now)
         self._resolve_wallbox_action(parsed)
         if own_connection:
             self._record_settings_report(parsed, now)

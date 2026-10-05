@@ -412,9 +412,9 @@ def build_powerpulse_param_set_mode_payload(
     Solar/Custom writes confirm field 4's bare content is `10 02`/`10 03`
     (the same two bytes, tag then value) once the app's extra fields are
     stripped away. The wallbox echoes the new mode on its own `2/33`
-    HeartBeat field 63 sub-field 4 within 0.7-56 s
-    (`POWERPULSE2_CHARGE_MODE_WINDOW_S`), already mapped in
-    `powerpulse_proto.py` onto `ev_charge_mode`.
+    HeartBeat field 63 sub-field 4 within 0.7-56 s, already mapped in
+    `powerpulse_proto.py` onto `ev_charge_mode`; the settings report carries
+    the same mode within about two seconds.
 
     Args:
         work_mode: The wire value to set - 1 fast, 2 solar, 3 custom, 4

@@ -240,12 +240,13 @@ class EcoFlowSelect(CoordinatorEntity[EcoFlowDeviceCoordinator], SelectEntity):
 
         if self.coordinator.device_type == DEVICE_TYPE_POWERPULSE2:
             # No optimistic apply: the coordinator returns only once the
-            # wallbox has reported the new mode on its own heartbeat, and
-            # that report is what updates the store. `smart` and an unknown
-            # option are refused inside the coordinator before anything is
-            # published (PLAN-147 decision 3). The phase setting is the same
-            # kind of write: nothing is applied here, the wallbox's own
-            # settings report is what moves the displayed option (PLAN-172).
+            # wallbox has reported the new mode, on its settings report or
+            # its heartbeat, and that report is what updates the store.
+            # `smart` and an unknown option are refused inside the
+            # coordinator before anything is published (PLAN-147 decision 3).
+            # The phase setting is the same kind of write: nothing is applied
+            # here, the wallbox's own settings report is what moves the
+            # displayed option (PLAN-172).
             if self._definition.key == "ev_phase_setting":
                 await self.coordinator.async_set_powerpulse_phase_setting(option)
             else:

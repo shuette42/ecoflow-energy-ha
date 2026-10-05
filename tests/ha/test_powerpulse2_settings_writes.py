@@ -328,7 +328,7 @@ async def test_continuous_in_smart_mode_writes_field_one_alone(
     _apply_report(
         wallbox,
         ev_settings_switch_bits=2,
-        ev_settings_work_mode=4,
+        ev_settings_work_mode="smart",
         ev_solar_min_current_a=6.0,
     )
     task = await _start(wallbox.async_set_powerpulse_continuous_charging(True))
@@ -341,7 +341,7 @@ async def test_continuous_in_smart_mode_writes_field_one_alone(
     _apply_report(
         wallbox,
         ev_settings_switch_bits=2,
-        ev_settings_work_mode=3,
+        ev_settings_work_mode="custom",
         ev_solar_min_current_a=6.0,
     )
     task = await _start(wallbox.async_set_powerpulse_continuous_charging(True))
@@ -419,7 +419,7 @@ async def test_continuous_refuses_a_report_whose_bits_are_not_an_int(
     "report",
     [
         {"ev_settings_switch_bits": 2},
-        {"ev_settings_switch_bits": 2, "ev_settings_work_mode": 2},
+        {"ev_settings_switch_bits": 2, "ev_settings_work_mode": "solar"},
         {"ev_settings_switch_bits": 2, "ev_solar_min_current_a": 6.0},
     ],
     ids=["bits_only", "no_solar_min", "no_mode"],
@@ -503,7 +503,7 @@ async def test_a_handed_over_frame_is_not_a_settings_report(
     assert before is not None
     handed = {
         "ev_settings_switch_bits": 2,
-        "ev_settings_work_mode": 1,
+        "ev_settings_work_mode": "fast",
         "ev_solar_min_current_a": 9.0,
     }
 

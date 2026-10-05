@@ -381,7 +381,8 @@ class EcoFlowDeviceCoordinator(
         # delivered, as (monotonic receive time, the settings keys that one
         # frame carried). A frame snapshot, never merged from the store, so a
         # switch-bits write is built from one report and not from bits of one
-        # report plus a mode of another.
+        # report plus a mode of another. The work mode in it is a name
+        # (fast, solar, custom, smart), the same words the heartbeat uses.
         self._settings_report: tuple[float, dict[str, Any]] | None = None
         self._credential_obtained_ts: float = 0.0
         self._credential_refresh_unsub: asyncio.TimerHandle | None = None
