@@ -200,13 +200,14 @@ class TestDisplayPropertyFrame:
         msg = Delta3DisplayProperty()
         msg.cms_chg_dsg_state = 0
         msg.cms_chg_rem_time = 12927
-        msg.cms_dsg_rem_time = 12927
+        msg.cms_dsg_rem_time = 7487
         frame = _build_frame(254, 21, msg.SerializeToString())
         parsed = parse_delta3_display_property(_decode(frame))
         assert parsed["chg_dsg_state"] == "idle"
-        # Neither direction is running, so no runtime may be published.
+        # Idle parks the charge time; the discharge time is the runtime
+        # estimate (D3M1 recording: 7487 min against the 12927 placeholder).
         assert parsed["chg_remain_time_min"] is None
-        assert parsed["dsg_remain_time_min"] is None
+        assert parsed["dsg_remain_time_min"] == 7487
 
     def test_incremental_frame_emits_only_present_fields(self):
         """A 2 s delta frame carries a few fields and must not invent others."""

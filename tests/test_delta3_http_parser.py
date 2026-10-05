@@ -45,10 +45,10 @@ FULL_QUOTA: dict = {
     "bypassOutDisable": 0,
     # Enum
     "cmsChgDsgState": 2,
-    # Output flow states (4 = no flow)
+    # Output flow states (0 and 4 = no flow)
     "flowInfoAcOut": 2,
     "flowInfoAc2Out": 4,
-    "flowInfo12v": 0,
+    "flowInfo12v": 14,
     # Per-outlet AC power (signed, item[0]=AC1, item[2]=AC2)
     "powGetAcOutList": {"powGetAcOutItem": [-120.4, 0, -85.6]},
 }
@@ -124,11 +124,34 @@ class TestDelta3FieldMap:
         assert discharging["dsg_remain_time_min"] == 276
         assert discharging["chg_remain_time_min"] is None
 
-        idle = parse_delta3_http_quota(
-            {"cmsChgRemTime": 12927, "cmsDsgRemTime": 7939, "cmsChgDsgState": 0}
+    def test_idle_keeps_the_discharge_runtime(self) -> None:
+        """Idle parks only the charge time; the discharge time is the estimate.
+
+        D3M1 recording: 7487 min discharge against the 12927 placeholder. RIVER 3
+        recording (#296): both fields 5117 min, and the app showed 3 d 13 h.
+        """
+        d3m1 = parse_delta3_http_quota(
+            {"cmsChgRemTime": 12927, "cmsDsgRemTime": 7487, "cmsChgDsgState": 0}
         )
-        assert idle["chg_remain_time_min"] is None
+        assert d3m1["chg_remain_time_min"] is None
+        assert d3m1["dsg_remain_time_min"] == 7487
+
+        river3 = parse_delta3_http_quota(
+            {"cmsChgRemTime": 5117, "cmsDsgRemTime": 5117, "cmsChgDsgState": 0}
+        )
+        assert river3["chg_remain_time_min"] is None
+        assert river3["dsg_remain_time_min"] == 5117
+
+    def test_placeholder_is_never_a_runtime(self) -> None:
+        """12927 is the parked value, even in a state where the field is real."""
+        idle = parse_delta3_http_quota(
+            {"cmsChgRemTime": 12927, "cmsDsgRemTime": 12927, "cmsChgDsgState": 0}
+        )
         assert idle["dsg_remain_time_min"] is None
+        charging = parse_delta3_http_quota(
+            {"cmsChgRemTime": 12927, "cmsDsgRemTime": 400, "cmsChgDsgState": 2}
+        )
+        assert charging["chg_remain_time_min"] is None
 
     def test_remain_time_without_state_is_left_untouched(self) -> None:
         """A partial push carries no state, so the prior value must survive."""
@@ -171,8 +194,10 @@ class TestDelta3FlowStates:
             ("flowInfo12v", "dc_12v_out_flow"),
         ],
     )
-    def test_value_4_means_off(self, http_key: str, sensor_key: str) -> None:
-        result = parse_delta3_http_quota({http_key: 4})
+    @pytest.mark.parametrize("raw", [0, 4])
+    def test_off_values(self, http_key: str, sensor_key: str, raw: int) -> None:
+        """4 is the documented off value; a RIVER 3 sends 0 when off (#296)."""
+        result = parse_delta3_http_quota({http_key: raw})
         assert result[sensor_key] == 0
 
     @pytest.mark.parametrize(
@@ -183,12 +208,39 @@ class TestDelta3FlowStates:
             ("flowInfo12v", "dc_12v_out_flow"),
         ],
     )
-    @pytest.mark.parametrize("raw", [0, 2])
-    def test_non_4_values_mean_on(
+    @pytest.mark.parametrize("raw", [2, 14])
+    def test_other_values_mean_on(
         self, http_key: str, sensor_key: str, raw: int
     ) -> None:
         result = parse_delta3_http_quota({http_key: raw})
         assert result[sensor_key] == 1
+
+
+class TestDelta3OutputPorts:
+    @pytest.mark.parametrize(
+        "http_key,sensor_key",
+        [
+            ("powGet12v", "dc_12v_out_w"),
+            ("powGetTypec1", "typec1_w"),
+            ("powGetTypec2", "typec2_w"),
+            ("powGetTypec3", "typec3_w"),
+            ("powGetQcusb1", "usb_qc1_w"),
+            ("powGetQcusb2", "usb_qc2_w"),
+        ],
+    )
+    def test_negative_output_reads_as_its_magnitude(
+        self, http_key: str, sensor_key: str
+    ) -> None:
+        """A RIVER 3 sent -19.94 W on a loaded USB-C port, 20 W in the app (#296)."""
+        result = parse_delta3_http_quota({http_key: -19.94})
+        assert result[sensor_key] == 20
+
+    def test_positive_output_is_unchanged(self) -> None:
+        assert parse_delta3_http_quota({"powGetTypec1": 45.0})["typec1_w"] == 45
+
+    def test_input_totals_keep_their_sign(self) -> None:
+        """Only the output ports are folded, not the summed in/out readings."""
+        assert parse_delta3_http_quota({"powInSumW": -5.0})["pow_in_sum_w"] == -5
 
 
 class TestDelta3AcOutArray:

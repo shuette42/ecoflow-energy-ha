@@ -70,9 +70,26 @@ NUMBER_DEFS = _collect(r"[A-Z0-9]+_NUMBERS")
 SELECT_DEFS = _collect(r"[A-Z0-9]+_SELECTS")
 BUTTON_DEFS = _collect(r"[A-Z0-9]+_BUTTONS")
 
+
+def _readback_labels() -> set[str]:
+    """Binary sensors built from a read-only variant's switches, not from a list.
+
+    `readback_binary_defs_for_serial` derives them per serial prefix, so they
+    are collected the same way: every prefix with an exclusion entry, against
+    the Delta 3 switches the binary sensor platform hands it.
+    """
+    return {
+        definition.key
+        for prefix in C._SN_PREFIX_EXCLUDED_KEYS
+        for definition in C.readback_binary_defs_for_serial(
+            C.DELTA3_SWITCHES, f"{prefix}TEST00000000"
+        )
+    }
+
+
 PLATFORM_KEYS = {
     "sensor": _labels(r"[A-Z0-9]+_SENSORS") | DIAGNOSTIC_SENSOR_KEYS,
-    "binary_sensor": _labels(r"[A-Z0-9]+_BINARY_SENSORS"),
+    "binary_sensor": _labels(r"[A-Z0-9]+_BINARY_SENSORS") | _readback_labels(),
     "switch": _labels(r"[A-Z0-9]+_SWITCHES"),
     "number": _labels(r"[A-Z0-9]+_NUMBERS"),
     "select": _labels(r"[A-Z0-9]+_SELECTS"),

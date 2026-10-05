@@ -7387,7 +7387,7 @@ class TestDelta3ParseMessage:
         coordinator = self._coordinator(hass, standard_config_entry)
 
         topic = "/open/acct/D3M1TEST00000001/quota"
-        payload = self._encode({"cmsBattSoc": 73, "flowInfo12v": 0})
+        payload = self._encode({"cmsBattSoc": 73, "flowInfo12v": 14})
 
         parsed = coordinator._parse_message(topic, payload)
         assert parsed == {"cms_batt_soc": 73, "dc_12v_out_flow": 1}

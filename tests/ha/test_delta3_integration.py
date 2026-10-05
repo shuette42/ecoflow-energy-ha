@@ -57,12 +57,12 @@ DELTA3_QUOTA_FIXTURE: dict = {
     "cmsChgDsgState": 2,
     "flowInfoAcOut": 4,
     "flowInfoAc2Out": 4,
-    "flowInfo12v": 0,
+    "flowInfo12v": 14,
     "powGetAcOutList": {"powGetAcOutItem": [0, 0, 0]},
 }
 
 
-def _delta3_config_entry() -> MockConfigEntry:
+def _delta3_config_entry(device: dict | None = None) -> MockConfigEntry:
     """Standard-mode config entry carrying a single Delta 3 device."""
     return MockConfigEntry(
         domain=DOMAIN,
@@ -71,10 +71,19 @@ def _delta3_config_entry() -> MockConfigEntry:
             CONF_ACCESS_KEY: "test_ak",
             CONF_SECRET_KEY: "test_sk",
             CONF_MODE: MODE_STANDARD,
-            CONF_DEVICES: [MOCK_DELTA3_DEVICE],
+            CONF_DEVICES: [device or MOCK_DELTA3_DEVICE],
         },
         unique_id="test_ak",
     )
+
+
+# A RIVER 3 on the same Delta 3 path. Fictional serial.
+MOCK_RIVER3_DEVICE: dict = {
+    **MOCK_DELTA3_DEVICE,
+    "sn": "R655TEST0000ABCD",
+    "name": "RIVER 3",
+    "product_name": "RIVER 3",
+}
 
 
 class TestDelta3EndToEnd:
@@ -144,6 +153,11 @@ class TestDelta3EndToEnd:
         # AC output inactive (value 4) is "off".
         assert state_for("switch", "dc_12v_out_switch") == "on"
         assert state_for("switch", "ac_out_switch") == "off"
+        # A model that keeps the switch gets no read-only twin of it.
+        assert (
+            registry.async_get_entity_id("binary_sensor", DOMAIN, f"{sn}_ac_out_flow")
+            is None
+        )
 
         # Controls exist with the vendor-documented ranges.
         assert state_for("number", "max_charge_soc") is not None
@@ -168,6 +182,56 @@ class TestDelta3EndToEnd:
             f"unexpected WARNING/ERROR logs: "
             f"{[r.getMessage() for r in integration_problems]}"
         )
+
+
+class TestRiver3ReadOnlyEntities:
+    async def test_ac_output_is_a_binary_sensor_not_a_switch(
+        self,
+        hass: HomeAssistant,
+        mock_mqtt_client,
+    ) -> None:
+        """A RIVER 3 shows its AC output state without a switch to change it (#296).
+
+        A D3M1 under the same setup keeps the switch and gets no binary twin,
+        which test_delta3_entities_populated_from_quota covers from its side.
+        """
+        entry = _delta3_config_entry(MOCK_RIVER3_DEVICE)
+        entry.add_to_hass(hass)
+        quota = dict(DELTA3_QUOTA_FIXTURE, flowInfoAcOut=0, powGetTypec1=-19.94)
+
+        with (
+            patch(
+                "custom_components.ecoflow_energy.coordinator.setup.IoTApiClient",
+            ) as iot_cls,
+            patch(
+                "custom_components.ecoflow_energy.coordinator.setup.EcoFlowHTTPQuota",
+            ) as http_cls,
+        ):
+            iot = iot_cls.return_value
+            iot.get_mqtt_credentials = AsyncMock(return_value=MOCK_MQTT_CREDENTIALS)
+            iot.get_device_list = AsyncMock(return_value=[MOCK_RIVER3_DEVICE])
+            iot.refresh_credentials = AsyncMock(return_value=MOCK_MQTT_CREDENTIALS)
+            http = http_cls.return_value
+            http.get_quota_all = AsyncMock(return_value=quota)
+            http.last_error_code = None
+
+            assert await hass.config_entries.async_setup(entry.entry_id)
+            await hass.async_block_till_done()
+
+        sn = MOCK_RIVER3_DEVICE["sn"]
+        registry = er.async_get(hass)
+        binary_id = registry.async_get_entity_id(
+            "binary_sensor", DOMAIN, f"{sn}_ac_out_flow"
+        )
+        assert binary_id is not None
+        assert hass.states.get(binary_id).state == "off"
+        assert (
+            registry.async_get_entity_id("switch", DOMAIN, f"{sn}_ac_out_switch")
+            is None
+        )
+        typec_id = registry.async_get_entity_id("sensor", DOMAIN, f"{sn}_typec1_w")
+        assert typec_id is not None
+        assert hass.states.get(typec_id).state == "20"
 
 
 class TestDelta3EnhancedModeRouting:

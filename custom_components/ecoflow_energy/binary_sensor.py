@@ -18,6 +18,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import (
     DELTA2MAX_BINARY_SENSORS,
     DELTA3_BINARY_SENSORS,
+    DELTA3_SWITCHES,
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
@@ -40,6 +41,7 @@ from .const import (
     WAVE3_BINARY_SENSORS,
     EcoFlowBinarySensorDef,
     filter_defs_for_serial,
+    readback_binary_defs_for_serial,
 )
 from .coordinator import EcoFlowDeviceCoordinator
 from .coordinator.local_modbus import EcoFlowLocalModbusCoordinator
@@ -76,6 +78,10 @@ async def async_setup_entry(
         defs = filter_defs_for_serial(
             _get_binary_sensor_defs(coordinator.device_type), coordinator.device_sn
         )
+        if coordinator.device_type == DEVICE_TYPE_DELTA3:
+            defs += readback_binary_defs_for_serial(
+                DELTA3_SWITCHES, coordinator.device_sn
+            )
         pending: list[EcoFlowBinarySensorDef] = []
         for defn in defs:
             if defn.enhanced_only and not coordinator.enhanced_mode:

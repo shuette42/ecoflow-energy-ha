@@ -74,9 +74,11 @@ _PLACEHOLDERS = frozenset(
 # protobuf. Under the key 0x4a the zero varints of a RIVER 3 battery heartbeat
 # (`3e 08 00 10 02 18 01 20 00 28 00 30 00 38 00`) read as `tBJZHRKjJbJzJrJ`
 # (#296). The pass under the mask checks that plaintext and finds no
-# identifier in it. Listed by exact run on purpose: a rule loose enough to
-# cover these would also excuse a plain serial sent under a declared key.
-_KEYED_PROTOBUF_RUNS = frozenset({"tBJZHRKjJbJzJrJ"})
+# identifier in it. The second run is the same heartbeat from the reporter's
+# second recording, under the key 0x79 (`18 01 20 00 28 00 30 00 38 00 40 01
+# 48`). Listed by exact run on purpose: a rule loose enough to cover these
+# would also excuse a plain serial sent under a declared key.
+_KEYED_PROTOBUF_RUNS = frozenset({"tBJZHRKjJbJzJrJ", "axYyQyIyAy9x1"})
 
 
 def _is_masked(run: str) -> bool:

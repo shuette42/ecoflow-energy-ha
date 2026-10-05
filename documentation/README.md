@@ -26,7 +26,7 @@ Complete list of all sensors, switches, numbers, and binary sensors per device:
 - [OCEAN Smart Electrical Panel 40](entities/smart-panel-40.md) - 19 sensors plus 3 sensors and 1 binary sensor per circuit (`HR61`) - a US split-phase load panel, read-only, Enhanced Mode only
 - [DELTA Pro Ultra](entities/delta-pro-ultra.md) - 21 sensors plus 2 per battery pack (`Y711`) - a home backup power station, read-only, Enhanced Mode only
 - [Smart Home Panel 2](entities/smart-home-panel-2.md) - 9 sensors plus 2 per circuit and 1 per storage channel (`HD31`) - a US split-phase load panel with battery backup, read-only, Enhanced Mode only
-- [RIVER 3](entities/delta-3-max-plus.md) - 29 sensors (`R655`) - a portable power station that reports through the Delta 3 messages. It gets the Delta 3 sensors its recorded frames confirm: battery level, input, output and AC input power, AC input and output energy, charge state, remaining times and the battery readings. Read-only, Enhanced Mode only, with no switches, numbers or selects
+- [RIVER 3](entities/delta-3-max-plus.md) - 30 sensors and 1 binary sensor (`R655`) - a portable power station that reports through the Delta 3 messages. It gets the Delta 3 sensors its recorded frames confirm: battery level, input, output, AC input and USB-C power, AC input and output energy, charge state, remaining times and the battery readings, plus whether the AC output is on. Read-only, Enhanced Mode only, with no switches, numbers or selects
 
 Counts are the device-specific entity definitions. Every device additionally exposes 2 universal diagnostic sensors (connection status and active mode) that are not included above.
 

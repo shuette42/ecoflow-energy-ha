@@ -5684,6 +5684,25 @@ def filter_defs_for_serial[DefT: _HasKey](
     ]
 
 
+def readback_binary_defs_for_serial(
+    switches: list[EcoFlowSwitchDef], device_sn: str
+) -> list[EcoFlowBinarySensorDef]:
+    """Return a read-only binary sensor for each switch a variant may not write.
+
+    A variant that is read-only loses its switches through
+    ``filter_defs_for_serial``, and with them the only entity that shows the
+    state they read back. Where the state key is still allowed, the state is
+    exposed as a binary sensor instead, so read-only is decided once, by the
+    exclusion table, and never as a second list.
+    """
+    excluded = excluded_keys_for_serial(device_sn)
+    return [
+        EcoFlowBinarySensorDef(switch.state_key, switch.name, icon=switch.icon)
+        for switch in switches
+        if switch.key in excluded and switch.state_key not in excluded
+    ]
+
+
 # =====================================================================
 # Delta 3 Max Plus sensor definitions
 # =====================================================================
@@ -6515,6 +6534,7 @@ RIVER3_SENSOR_KEYS: frozenset[str] = frozenset(
         "ac_in_w",
         "ac_in_energy_kwh",
         "out_energy_kwh",
+        "typec1_w",
         "chg_remain_time_min",
         "dsg_remain_time_min",
         "chg_dsg_state",
@@ -6563,7 +6583,14 @@ def _delta3_names_outside(allowed: frozenset[str]) -> frozenset[str]:
 
 # The one table entry that cannot sit in the literal above, because it is
 # computed from the Delta 3 definition lists that come after it in the file.
-_SN_PREFIX_EXCLUDED_KEYS["R655"] = _delta3_names_outside(RIVER3_SENSOR_KEYS)
+# States a RIVER 3 reports for a Delta 3 switch it gets no write for. The
+# switch stays excluded; readback_binary_defs_for_serial() shows the state.
+# AC output: 0 off and 2 on, recorded switching off and on in the app (#296).
+RIVER3_READBACK_KEYS: frozenset[str] = frozenset({"ac_out_flow"})
+
+_SN_PREFIX_EXCLUDED_KEYS["R655"] = _delta3_names_outside(
+    RIVER3_SENSOR_KEYS | RIVER3_READBACK_KEYS
+)
 
 
 # =====================================================================
