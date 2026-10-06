@@ -1,5 +1,5 @@
 {
-  "note": "Real 254/39 property/get_reply frames from the two ES22 units on issue #458 (napalmz, HA diagnostics download 2026-10-02). unit_socket is ES22-50c0 (STREAM 1, AC socket loaded), unit_idle is ES22-19eb (STREAM 2, AC socket unused). The frames are unmodified and in the export's order; the diagnostics export had already masked every serial to a run of X.",
+  "note": "Real 254/39 property and get_reply frames from the two ES22 units on issue #458 (napalmz, HA diagnostics download 2026-10-06, beta.12). unit_socket is ES22-50c0 (STREAM 1, socket loaded from the grid), unit_idle is ES22-19eb (STREAM 2, small socket load, grid cut around 12:00Z so the socket runs from the battery). The frames are unmodified and in the export's order; the diagnostics export had already masked every serial to a run of X.",
   "unit_socket": {
     "device_tag": "ES22-50c0",
     "frames": [

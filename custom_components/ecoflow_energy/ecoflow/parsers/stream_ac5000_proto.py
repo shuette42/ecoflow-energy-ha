@@ -153,7 +153,9 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
         # battery reading in `f50.1.4` was -45.0; with the grid on, `.18` = 41
         # and `.19` = 4 against a socket of 45 and a battery reading of -4.0.
         # It is a battery outflow and belongs in `batt_w` next to `.4` and
-        # `.5`. Internal, not published on its own.
+        # `.5`. A unit with PV and a socket load is not on file; if `.19` also
+        # carried solar, discharge would read too high there. Internal, not
+        # published on its own.
         "12.19": ("_batt_to_socket_w", _TYPE_FLOAT, 1),
         # Field 8 is deliberately absent from this map. It would be solar to
         # home by position, and it appears in none of the 1239 captured frames:

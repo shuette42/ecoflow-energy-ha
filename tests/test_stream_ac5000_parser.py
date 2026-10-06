@@ -1907,6 +1907,7 @@ class TestAcSocketOnBattery:
 
     def test_a_socket_load_from_the_grid_leaves_battery_power_alone(self) -> None:
         """STREAM 1 runs its socket from the grid and its battery sits idle."""
+        checked = 0
         for frame in _battery_frames("unit_socket"):
             edges = _raw_group(frame, 12)
             if not edges or edges.get(19, 0) > 5:
@@ -1914,3 +1915,5 @@ class TestAcSocketOnBattery:
             result = parse_stream_ac5000_message(bytes.fromhex(frame["hex"]))
             assert result is not None
             assert abs(result["batt_w"]) < 10
+            checked += 1
+        assert checked == 21
