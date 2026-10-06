@@ -1847,3 +1847,70 @@ class TestAcSocketLoad:
             assert result["ac_output_power_w"] == 0.0
             checked += 1
         assert checked == 5
+
+
+SOCKET_BATTERY_458 = FIXTURES / "es22_socket_battery_458_masked.json"
+
+
+def _battery_frames(unit: str) -> list[dict]:
+    """The frames of one unit in the second issue #458 download."""
+    return json.loads(SOCKET_BATTERY_458.read_text(encoding="utf-8"))[unit]["frames"]
+
+
+class TestAcSocketOnBattery:
+    """Issue #458, second download: a socket fed from the battery.
+
+    `f12.19` is the battery-to-socket edge. Expected values are computed from
+    the raw frame, never typed in: the unit's own signed battery reading in
+    `f50.1.4` (negative is discharge) is the independent witness.
+    """
+
+    GRID_CUT_TS = "2026-10-06T12:00:23.897555+00:00"
+
+    @staticmethod
+    def _frame(ts: str) -> dict:
+        (frame,) = [f for f in _battery_frames("unit_idle") if f["ts_iso"] == ts]
+        return frame
+
+    def test_battery_power_is_the_discharge_when_the_grid_is_cut(self) -> None:
+        """45 W on the socket from the battery used to read as an idle battery."""
+        frame = self._frame(self.GRID_CUT_TS)
+        socket_from_battery = _raw_group(frame, 12)[19]
+        assert socket_from_battery > 0
+        result = parse_stream_ac5000_message(bytes.fromhex(frame["hex"]))
+        assert result is not None
+        assert result["batt_w"] == pytest.approx(-socket_from_battery)
+        assert result["batt_discharge_power_w"] == pytest.approx(socket_from_battery)
+        assert result["batt_charge_power_w"] == 0.0
+
+    def test_battery_power_is_inflow_minus_every_outflow_on_every_frame(self) -> None:
+        """`batt_w` is the battery inflow minus home, grid and socket outflow.
+
+        Computed from the raw edges of every frame that carries `f12`; frames
+        without it leave `batt_w` out and are not compared.
+        """
+        checked = 0
+        for unit in ("unit_socket", "unit_idle"):
+            for frame in _battery_frames(unit):
+                edges = _raw_group(frame, 12)
+                if not edges:
+                    continue
+                result = parse_stream_ac5000_message(bytes.fromhex(frame["hex"]))
+                assert result is not None
+                into = edges.get(2, 0) + edges.get(7, 0) + edges.get(9, 0)
+                out = edges.get(4, 0) + edges.get(5, 0) + edges.get(19, 0)
+                assert result["batt_w"] == pytest.approx(into - out)
+                checked += 1
+        # Both units carry `f12` in most frames; a loop over a handful would
+        # pass while comparing almost nothing.
+        assert checked >= 40
+
+    def test_a_socket_load_from_the_grid_leaves_battery_power_alone(self) -> None:
+        """STREAM 1 runs its socket from the grid and its battery sits idle."""
+        for frame in _battery_frames("unit_socket"):
+            edges = _raw_group(frame, 12)
+            if not edges or edges.get(19, 0) > 5:
+                continue
+            result = parse_stream_ac5000_message(bytes.fromhex(frame["hex"]))
+            assert result is not None
+            assert abs(result["batt_w"]) < 10

@@ -148,6 +148,13 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
         # whole socket load. Internal: it feeds the import total in
         # `_finalize` and is not published on its own.
         "12.18": ("_grid_to_socket_w", _TYPE_FLOAT, 1),
+        # The battery-to-AC-socket edge. Issue #458, second download: with the
+        # grid cut and 45 W on the socket, `.19` read 45 while the system
+        # battery reading in `f50.1.4` was -45.0; with the grid on, `.18` = 41
+        # and `.19` = 4 against a socket of 45 and a battery reading of -4.0.
+        # It is a battery outflow and belongs in `batt_w` next to `.4` and
+        # `.5`. Internal, not published on its own.
+        "12.19": ("_batt_to_socket_w", _TYPE_FLOAT, 1),
         # Field 8 is deliberately absent from this map. It would be solar to
         # home by position, and it appears in none of the 1239 captured frames:
         # an inferred position reaching an accessory entity is a wrong reading
@@ -399,6 +406,9 @@ _ZERO_FILL_PATHS: dict[tuple[int, int], tuple[str, ...]] = {
         # `f12` at all). A unit with nothing on the socket omits it, and that
         # absence is a real zero, not an unknown.
         "12.18",
+        # Issue #458: absent with nothing running from the battery on the
+        # socket, which is a real zero for the same reason as `.18`.
+        "12.19",
         # `50.1` is deliberately absent here for the reason `40.1.3` is: the
         # block is collected per entry, so its fill runs per entry, in
         # `_PV_ZERO_FILL_PATHS`.
@@ -980,6 +990,7 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
     batt_to_grid = result.pop("_batt_to_grid_w", None)
     grid_to_batt = result.pop("_grid_to_batt_w", None)
     grid_to_socket = result.pop("_grid_to_socket_w", None)
+    batt_to_socket = result.pop("_batt_to_socket_w", None)
     mppt_to_batt = result.pop("_mppt_to_batt_w", None)
     solar_to_grid = result.pop("_solar_to_grid_w", None)
     solar_to_batt = result.pop("_solar_to_batt_w", None)
@@ -1031,7 +1042,12 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
         # on a unit that has none, so adding it costs the ES22 nothing.
         if isinstance(mppt_to_batt, (int, float)):
             into += float(mppt_to_batt)
-        result["batt_w"] = into - (float(home_from_batt) + float(batt_to_grid))
+        out = float(home_from_batt) + float(batt_to_grid)
+        # The AC socket is a battery consumer too (#458): left out, a socket
+        # that runs from the battery reads as an idle battery.
+        if isinstance(batt_to_socket, (int, float)):
+            out += float(batt_to_socket)
+        result["batt_w"] = into - out
 
     _finalize_task(result)
 
