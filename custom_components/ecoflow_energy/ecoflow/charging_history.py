@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 _LOGGER = logging.getLogger(__name__)
@@ -83,10 +83,22 @@ def merge_orders(
     return result
 
 
+def _ended_at(record: dict[str, Any]) -> datetime:
+    """Return the end time as an aware instant; a value without offset is UTC.
+
+    The ledger keeps the string exactly as the API sent it, so two records can
+    carry different offsets or precision and text order is not time order.
+    """
+    ended = datetime.fromisoformat(record["ended"])
+    if ended.tzinfo is None:
+        ended = ended.replace(tzinfo=UTC)
+    return ended
+
+
 def vehicle_totals(orders: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
     """Group stable vehicle identities; the latest completed record names them."""
     totals: dict[str, dict[str, Any]] = {}
-    for record in sorted(orders.values(), key=lambda item: item["ended"]):
+    for record in sorted(orders.values(), key=_ended_at):
         key = record["vehicle"]
         total = totals.setdefault(
             key, {"energy_wh": 0, "sessions": 0, "name": "", "other": record["other"]}

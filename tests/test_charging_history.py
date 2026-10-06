@@ -59,6 +59,31 @@ def test_other_missing_name_same_name_and_rename():
     assert vehicle_totals(ledger)[identity("profile-a")]["name"] == "Renamed"
 
 
+def test_newest_record_names_the_vehicle_by_instant_not_by_text():
+    # Text order says the -02:00 record is older (05th < 06th); by instant it is
+    # 2026-10-06T01:30Z, one hour newer than the +00:00 record at 00:30Z.
+    rows = [
+        order("new", "profile-a", 100, "New", endTime="2026-10-05T23:30:00-02:00"),
+        order("old", "profile-a", 200, "Old", endTime="2026-10-06T00:30:00+00:00"),
+    ]
+    total = vehicle_totals(merge_orders({}, rows, SERIAL))[identity("profile-a")]
+    assert total["name"] == "New"
+    assert total["sessions"] == 2
+    assert total["energy_wh"] == 300
+
+
+def test_naive_and_aware_end_times_compare_with_naive_as_utc():
+    # Text order puts the naive record (space sorts before "T") first, so a text
+    # sort names the vehicle "Aware"; by instant the naive 02:00 UTC is newer.
+    rows = [
+        order("aware", "profile-a", 100, "Aware", endTime="2026-10-06T01:30:00+00:00"),
+        order("naive", "profile-a", 200, "Naive", endTime="2026-10-06 02:00:00"),
+    ]
+    total = vehicle_totals(merge_orders({}, rows, SERIAL))[identity("profile-a")]
+    assert total["name"] == "Naive"
+    assert total["sessions"] == 2
+
+
 def test_no_current_selection_or_private_fields_are_used():
     ledger = merge_orders(
         {}, [order(userId="secret-user", cardId="secret-card")], SERIAL
