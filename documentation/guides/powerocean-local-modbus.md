@@ -33,7 +33,7 @@ Three binary sensors come from the inverter's status word. Off-Grid turns on whe
 
 The sensor System Alerts reads a second status word. It lists what the inverter currently reports, such as `fan_failure` or `battery_overheating`, or `none` when all is well. A notification can then name the actual problem.
 
-After five failed reads in a row the entry goes unavailable, and these entities with it. An automation should treat unavailable as "unknown", not as "grid is back". Feed Power Limit is disabled by default. Enable it in the entity settings if you use it. The four entities under [Control from Home Assistant](#control-from-home-assistant) come on top.
+After five failed reads in a row the entry goes unavailable, and these entities with it. An automation should treat unavailable as "unknown", not as "grid is back". Four of the sensors are disabled by default: Total Battery Capacity, Battery Packs Online (EMS), EMS Backup Ratio and Feed Power Limit. Enable the ones you use in the entity settings. The Backup Reserve number shows the same value as EMS Backup Ratio and is enabled. The four entities under [Control from Home Assistant](#control-from-home-assistant) come on top.
 
 The values refresh every 2 seconds. The inverter updates its power readings about once a second, so this stays close to its own pace. On Home Assistant 2026.9 or newer the connection stays open while the entry is loaded. On older versions each refresh opens a short connection and closes it again, so the inverter's single slot is free almost all of the time.
 

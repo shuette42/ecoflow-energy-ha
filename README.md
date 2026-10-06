@@ -27,9 +27,10 @@
 - **Up to 249 sensors on one device** - power, energy, battery packs, temperature, diagnostics
 - **Energy Dashboard ready** - local Riemann-sum kWh with gap detection
 - **Real-time out of the box** - Enhanced Mode: ~2-4 s updates for most devices
+- **Local option for a three-phase PowerOcean** - Modbus/TCP on your own network, about every 2 s, no account and no cloud
 - **Full PowerOcean control** - Backup Reserve, Solar Surplus Threshold, Work Mode (Self-use / AI Schedule)
 - **Delta switches & numbers** - AC/DC output, charge speed, backup reserve, screen settings
-- **Auto-discovery** - all devices bound to your EcoFlow account
+- **Auto-discovery** - all devices bound to your EcoFlow account (cloud connections)
 - **4-tier reconnect** - never gives up on the connection
 - **Automatic fallback** - MQTT stale? Transparent switch to HTTP polling (Standard Mode)
 - **Offline tolerance** - mobile devices offline = expected, not an error
@@ -40,8 +41,8 @@
 
 | Device | Serial prefix | Connection | Sensors | Controls | Energy Dashboard | Update |
 |:---|:---|:---|:---:|:---|:---:|:---|
-| **PowerOcean** | `HJ31` `HJ32` `HJ35` `HJ36` `HJ37` `J32B` `J329` `J327`\* `J32D`\* `J32E`\* | Standard, Enhanced | 249 + 21 binary | 16 switches · 18 numbers · 1 select (Enhanced) | 6 | ~30 s / ~3 s |
-| **PowerOcean Plus** | `R371` `R372` `R374` `HJ3C` | Enhanced only | 249 + 21 binary | 16 switches · 18 numbers · 1 select | 6 | ~3 s |
+| **PowerOcean** | `HJ31` `HJ32` `HJ35` `HJ36` `HJ37` `J32B` `J329` `J327`\* `J32D`\* `J32E`\* | Standard, Enhanced, Local† | 249 + 21 binary | 16 switches · 18 numbers · 1 select (Enhanced) | 6 | ~30 s / ~3 s / ~2 s (Local) |
+| **PowerOcean Plus** | `R371` `R372` `R374` `HJ3C` | Enhanced only (no Local yet) | 249 + 21 binary | 16 switches · 18 numbers · 1 select | 6 | ~3 s |
 | **Delta 2 Max** | `R351` `R331` | Standard, MQTT push | 94 + 4 binary | 7 switches · 8 numbers | 4 | ~30 s |
 | **Delta 3** | `D3M1` `D3N1` `P321` `P231` `P351` | Standard, Enhanced | 47 (`D3M`: + 1 binary) | 7 switches · 4 numbers · 5 selects (`D3M`: 10 · 7 · 5) | 4 | ~30 s / ~2 s |
 | **Smart Plug** | `HW52` | Standard, Enhanced | 11 + 1 binary | 1 switch · 2 numbers | 1 | ~30 s / ~3 s |
@@ -63,6 +64,8 @@
 
 > **Connection.** Standard Mode reads through the IoT Developer API with your access and secret key; Enhanced Mode signs in with the EcoFlow account and receives pushes at the faster rate. **Enhanced only** means the serial prefix cannot currently be linked to a Developer API key, so Standard Mode reports error 1006 and the entities stay unavailable; the three starred PowerOcean prefixes are in the same position. This is an EcoFlow API limitation, not a configuration problem. Controls marked Enhanced exist only with the account sign-in. The Energy Dashboard column counts the sensors made for it; optional ones are disabled by default and depend on the installation, see the device notes below and the [Energy Dashboard](#energy-dashboard) section.
 >
+> **† Local.** Local reads a three-phase PowerOcean over Modbus/TCP on your network, with no account and no cloud, about every 2 seconds. EcoFlow support has to enable Modbus on the inverter first. A Local entry has a reduced set: 28 sensors, 4 binary sensors, 1 switch (Modbus Control) and 2 numbers (Backup Reserve, Indicator Brightness). The serial prefix does not decide whether Local works: the inverter reports its own model, and only the three-phase PowerOcean is accepted. Single-phase and Plus units have not been measured, so they are not offered yet. Local has been measured on one unit. See [Connecting a PowerOcean locally over Modbus](documentation/guides/powerocean-local-modbus.md).
+>
 > **PowerOcean and PowerOcean Plus share one entity set.** A Plus unit simply reports more of it: per-phase reactive power (var) and apparent power (VA), plus MPPT strings 3 and 4. Those entities exist for every PowerOcean but are disabled by default, because a standard unit never sends them and the entity would sit at "unknown" forever. Enable them under **Settings > Devices & services > Entities** on a Plus device.
 >
 > **The Smart Meter reports six lifetime counters: import, export, net, and net per phase.** Import and export are the two entries for the Energy Dashboard, on the grid consumption and return-to-grid slots. Net and the three phase figures are import minus export, so they fall whenever the house feeds power back into the grid; that is a real reading, not a fault, and it is why those four do not belong in the dashboard's grid slots. Its connection state does report when the house is feeding into the grid, so the direction is visible even where the energy is not. See [entity reference](documentation/entities/smart-meter.md).
@@ -79,7 +82,7 @@
 >
 > **The Stream Micro is the exception.** It is a grid-tie inverter with two solar strings and no battery, so it deliberately gets a reduced set: no battery, state of charge, backup reserve or AC outlet entities, because it has none of those and an entity Home Assistant once created stays in the registry forever.
 >
-> **Note:** Sensor counts are the device-specific entity definitions. Every device additionally exposes 2 universal diagnostic sensors (connection status and active mode) that are not included in the counts above. Many sensors are diagnostic and disabled by default.
+> **Note:** Sensor counts are the device-specific entity definitions. Every cloud device additionally exposes 2 universal diagnostic sensors (connection status and active mode) that are not included in the counts above. A Local entry exposes the active mode only. Many sensors are diagnostic and disabled by default.
 
 <details>
 <summary><b>PowerOcean</b> and <b>PowerOcean Plus</b> - 3-phase grid, MPPT tracking, multi-pack battery, EMS diagnostics, energy strategy controls</summary>
@@ -100,7 +103,7 @@
 
 - **PowerPulse 2 wallbox** (`C376`, `C374`) - its own device, no PowerOcean required: charging power, voltage and current per phase, the configured maximum current and charging current, the phase mode in effect, the start, duration, energy and start meter reading of the running session, the lifetime energy counter, the charging state, the charging mode and whether the cable lock is on. Two buttons start and stop the charging session, with no PowerOcean in the integration entry or with exactly one (none with two or more). With exactly one PowerOcean, a number sets the wallbox's maximum current (Wallbox Maximum Current, 6 to 16 A) through that PowerOcean, and a select sets the charging mode (Fast, Solar or Custom, while Smart is shown but set in the app). Also with exactly one PowerOcean, two more numbers set the Solar Minimum Current and the Custom Charging Current (6 to 16 A each), a second select sets the phase (Auto, One phase, Three phases), and a switch turns Continuous Charging on or off. With none, a number sets the charging current directly on the wallbox's own channel (Wallbox Charging Current, 6 to 16 A). Each write is confirmed by the wallbox's own report. Enhanced Mode only: the wallbox reports on its own channel of the account connection, and the Developer API refuses it with error 1006. See [PowerPulse 2](documentation/entities/powerpulse-2.md).
 - **PowerPulse wallbox (earlier model, `AC31`)** - charging power, the energy and the duration of the running session, the charging state and which vehicle the charger recognized, as five entities of the PowerOcean it is coupled to. Enhanced Mode only: the readings travel on the PowerOcean's real-time stream.
-- **PowerGlow heating rod** - water temperature, heating power and the two settings the rod is working towards. Available in both modes: Standard Mode reads them from the polled data, and in Enhanced Mode they travel on the PowerOcean's real-time stream.
+- **PowerGlow heating rod** - water temperature, heating power and the two settings the rod is working towards. Available in Standard and Enhanced Mode, not in Local: Standard Mode reads them from the polled data, and in Enhanced Mode they travel on the PowerOcean's real-time stream.
 
 **Enhanced Mode controls** (verified against the official EcoFlow app, byte-for-byte wire compatible):
 
@@ -201,23 +204,23 @@ Already running a different EcoFlow integration? It can stay installed while you
 
 ### 2. Configure
 
-**Settings > Devices & Services > Add Integration** > search **EcoFlow Energy** > choose your mode. For a three-phase PowerOcean there is also Local (Modbus/TCP), described below the table. The two cloud modes compare like this:
+**Settings > Devices & Services > Add Integration** > search **EcoFlow Energy** > choose your mode: Standard, Enhanced or, for a three-phase PowerOcean, Local (Modbus/TCP), described below the table. The three compare like this:
 
-| | Standard | Enhanced |
-|:---|:---|:---|
-| **Connection** | EcoFlow cloud (HTTPS polling + MQTT) | EcoFlow cloud (WSS MQTT) |
-| **Credentials** | Access Key + Secret Key ([Developer Portal](https://developer.ecoflow.com)) | EcoFlow email + password (same as mobile app) |
-| **Devices** | All except the Enhanced-only serials (`J327`, `J32D`, `J32E`, `R371`, `R372`, `R374`, `HJ3C`, `BK01`, `BK21`, `ES21`, `ES22`, `HZ31`, `S02F`, `AC71`, `C371`, `C374`, `C376`, `RE11`, `RE17`, `RE41`, `RE42`, `HR61`, `Y711`, `HD31`, `R655`) | All supported devices |
-| **Update rate** | ~30 s HTTP polling (+ MQTT push for Delta/Smart Plug) | ~2-4 s real-time via WSS MQTT |
-| **Delta 2 Max / Smart Plug controls** | All switches and numbers | All switches and numbers |
-| **Delta 3 controls** | Switches and most numbers; the screen and idle shutdowns and the AC charge power need Enhanced Mode | All switches, numbers and selects |
-| **PowerOcean data freshness** | Refreshes reliably only while the EcoFlow app or portal is open | Continuous, the device pushes on its own |
-| **PowerOcean controls** | Read-only sensors only | Full energy strategy controls (Backup Reserve, Solar Surplus Threshold, Work Mode) |
-| **Stream AC Pro controls** | Not available | Max Charge SoC, Min Discharge SoC, LED Brightness, Backup Reserve and AC outlet switches |
-| **Stability** | Official EcoFlow API - supported and stable | Community-driven - unofficial, use at your own risk |
-| **Best for** | Reliable long-term operation | Real-time monitoring, fast automations, PowerOcean control |
+| | Standard | Enhanced | Local (three-phase PowerOcean only) |
+|:---|:---|:---|:---|
+| **Connection** | EcoFlow cloud (HTTPS polling + MQTT) | EcoFlow cloud (WSS MQTT) | Your network, Modbus/TCP, no cloud |
+| **Credentials** | Access Key + Secret Key ([Developer Portal](https://developer.ecoflow.com)) | EcoFlow email + password (same as mobile app) | None. EcoFlow support must enable Modbus on the inverter first |
+| **Devices** | All except the Enhanced-only serials (`J327`, `J32D`, `J32E`, `R371`, `R372`, `R374`, `HJ3C`, `BK01`, `BK21`, `ES21`, `ES22`, `HZ31`, `S02F`, `AC71`, `C371`, `C374`, `C376`, `RE11`, `RE17`, `RE41`, `RE42`, `HR61`, `Y711`, `HD31`, `R655`) | All supported devices | Three-phase PowerOcean only |
+| **Update rate** | ~30 s HTTP polling (+ MQTT push for Delta/Smart Plug) | ~2-4 s real-time via WSS MQTT | ~2 s polling |
+| **Delta 2 Max / Smart Plug controls** | All switches and numbers | All switches and numbers | Not applicable |
+| **Delta 3 controls** | Switches and most numbers; the screen and idle shutdowns and the AC charge power need Enhanced Mode | All switches, numbers and selects | Not applicable |
+| **PowerOcean data freshness** | Refreshes reliably only while the EcoFlow app or portal is open | Continuous, the device pushes on its own | Continuous, read straight from the inverter |
+| **PowerOcean controls** | Read-only sensors only | Full energy strategy controls (Backup Reserve, Solar Surplus Threshold, Work Mode) | Backup Reserve and Indicator Brightness, plus a Modbus Control switch that locks the EcoFlow app while on |
+| **Stream AC Pro controls** | Not available | Max Charge SoC, Min Discharge SoC, LED Brightness, Backup Reserve and AC outlet switches | Not applicable |
+| **Stability** | Official EcoFlow API - supported and stable | Community-driven - unofficial, use at your own risk | Modbus on the inverter, enabled by EcoFlow support. Measured on one unit |
+| **Best for** | Reliable long-term operation | Real-time monitoring, fast automations, PowerOcean control | Owners who want no dependence on EcoFlow's servers |
 
-**Both modes are cloud-based.** The data travels from your device to EcoFlow's servers and from there to Home Assistant, so an internet connection is required and outages on EcoFlow's side are visible here. The difference between the two cloud modes is which EcoFlow service is used and how fast it delivers, not whether the connection leaves your network. These devices expose no local API to talk to instead, with one exception: the three-phase PowerOcean. Once EcoFlow support has enabled Modbus on the inverter, a third connection type reads it over your network, with no account and no cloud (see [Connecting a PowerOcean locally over Modbus](documentation/guides/powerocean-local-modbus.md)). An entry uses exactly one connection type, so a PowerOcean runs either on the cloud or locally.
+**Standard and Enhanced are cloud-based.** The data travels from your device to EcoFlow's servers and from there to Home Assistant, so an internet connection is required and outages on EcoFlow's side are visible here. The difference between the two cloud modes is which EcoFlow service is used and how fast it delivers, not whether the connection leaves your network. These devices expose no local API to talk to instead, with one exception: the three-phase PowerOcean. Once EcoFlow support has enabled Modbus on the inverter, a third connection type reads it over your network, with no account and no cloud (see [Connecting a PowerOcean locally over Modbus](documentation/guides/powerocean-local-modbus.md)). An entry uses exactly one connection type, so a PowerOcean runs either on the cloud or locally.
 
 **Standard Mode** uses the official EcoFlow IoT Developer API. Apply for free API keys at [developer.ecoflow.com](https://developer.ecoflow.com). Note: the European PowerOcean variants (`J327`, `J32D`, `J32E`), the PowerOcean Plus units (`R371`, `R372`, `R374`, `HJ3C`), the Stream Micro (`BK01`) and both STREAM 5000 models (`ES21`, `ES22`) are currently not exposed through the Developer API and cannot be linked to an API key (error 1006). These devices work in Enhanced Mode only. The same holds for every other device marked Enhanced only in the Supported Devices table, among them the Ocean 2 (`RE11`, `RE17`, `RE41`, `RE42`) and the PowerPulse 2 (`C376`, `C374`). Whether the 3.68 kW and 6 kW single-phase variants (`J32B`, `J329`) can be linked to a key has not been tested.
 
@@ -262,6 +265,8 @@ All energy sensors are pre-configured (`state_class: total_increasing`) - just s
 | Home consumption | **Home Energy** (kWh) |
 
 > Select **Two sensors** for battery power - charge and discharge separately for higher accuracy.
+
+On a Local entry the three solar and grid sensors are named **Solar Lifetime Energy**, **Grid Import Lifetime Energy** and **Grid Export Lifetime Energy**. Pick these instead. A Local entry has no Home Energy sensor. Battery Charge Energy and Battery Discharge Energy are the same in all three connection types.
 
 </details>
 
@@ -457,13 +462,13 @@ Two automations that let a Stream AC 5000 run next to a first-generation PowerOc
 
 | | |
 |:---|:---|
-| Data source | MQTT push, with HTTP polling as the fallback in Standard Mode |
-| Sign-in | Standard Mode uses the Developer Portal access and secret key; Enhanced Mode signs in with the EcoFlow account |
+| Data source | MQTT push, with HTTP polling as the fallback in Standard Mode; a 2 second Modbus poll in Local |
+| Sign-in | Standard Mode uses the Developer Portal access and secret key; Enhanced Mode signs in with the EcoFlow account; Local needs none |
 | Reconnect | Four-tier backoff that keeps retrying instead of giving up |
 | Fallback | Switches to HTTP polling when the MQTT stream goes stale (Standard Mode) |
 | Stream health | Three states, live, stale and offline, published as a diagnostic sensor |
 | Energy tracking | Local Riemann sum with gap detection, adopting the device's own lifetime counters where it reports them |
-| Devices | Every supported model in one integration, on one config entry per account |
+| Devices | Every supported model in one integration, on one config entry per account (a Local entry holds one PowerOcean) |
 | Controls | Each write is the frame the EcoFlow app sends for the same setting, and the entity shows what the device reports back |
 | Offline devices | An expected state that does not fill the log with errors |
 
@@ -500,12 +505,14 @@ A WAVE 3 that is running pushes every couple of seconds and uses the standard wi
 
 In Standard Mode the HTTP poll decides availability instead. Entities go unavailable when the polls themselves keep failing, not when a push pauses.
 
+In Local the poll decides availability too: after five failed reads in a row the entities go unavailable, and the next successful read clears it.
+
 **What clears it.** The next frame received from the device. The stage resets immediately, the entities pick up the new values, and nothing needs to be restarted or reloaded.
 
-**Where to look.** Every device has two diagnostic sensors:
+**Where to look.** Every cloud device has the two diagnostic sensors below. A Local entry has only Connection Mode.
 
 - **MQTT Status** reports the connection itself: `receiving` while frames arrive, `connected_stale` while the connection is open but the device is quiet, `disconnected` while a reconnect is pending.
-- **Connection Mode** reports which path is in use: `standard`, `enhanced`, or `enhanced_fallback` when the integration has fallen back to polling.
+- **Connection Mode** reports which path is in use: `standard`, `enhanced`, `enhanced_fallback` when the integration has fallen back to polling, or `local`.
 
 </details>
 
@@ -516,8 +523,8 @@ In Standard Mode the HTTP poll decides availability instead. Entities go unavail
 <details>
 <summary><b>No entities appearing</b></summary>
 
-- Devices must be online in the EcoFlow app
-- Verify Access Key and Secret Key from the Developer Portal
+- Devices must be online in the EcoFlow app (cloud connections)
+- Verify Access Key and Secret Key from the Developer Portal (Standard Mode)
 - Check **Settings > System > Logs** for `ecoflow_energy`
 
 </details>
@@ -527,6 +534,17 @@ In Standard Mode the HTTP poll decides availability instead. Entities go unavail
 
 - **Standard:** HTTP polls every ~30 s. Delta also gets MQTT push. Check credentials if no data.
 - **Enhanced:** WSS auto-reconnects with new ClientID. Check logs for reconnect messages.
+- **Local:** polls every 2 s. Check that no other Modbus client holds the inverter and that Modbus is still enabled.
+
+</details>
+
+<details>
+<summary><b>Local connection: no data or unavailable</b></summary>
+
+- Check the address, and that EcoFlow support has enabled Modbus on the inverter
+- The inverter serves one Modbus client at a time. Another Modbus tool, or a second Modbus integration set up with a different host string, can lock this entry out
+- After five failed reads in a row the entry goes unavailable
+- More in [Connecting a PowerOcean locally over Modbus](documentation/guides/powerocean-local-modbus.md#if-it-does-not-connect)
 
 </details>
 

@@ -20,7 +20,7 @@ For a PowerPulse 2 this integration adds two buttons, **Wallbox Start Charging**
 
 | Item | Why |
 |---|---|
-| A PowerOcean with account sign-in set up in this integration | The four readings below update every 3 seconds on that path. Developer keys update every 30 seconds. That still works for the start and stop decision, but the current regulation in the package will lag behind clouds |
+| A PowerOcean with account sign-in, or a three-phase one on the Local connection, set up in this integration | The four readings below update every 3 seconds with account sign-in and every 2 seconds on a Local (Modbus/TCP) entry. A Local entry has no Solar Surplus Threshold number. Developer keys update every 30 seconds. That still works for the start and stop decision, but the current regulation in the package will lag behind clouds |
 | A wallbox with a Home Assistant integration that offers a charging switch, a charging current number, or both | The package writes to a switch and a number. Which of the two your wallbox exposes decides which half of the package applies. See "Adapting to your wallbox" |
 | The four PowerOcean entities named below, with the entity ids your installation gave them | The ids in the package are placeholders |
 
@@ -252,7 +252,7 @@ The same structure carries a heat pump, a heating rod or a pool pump. Replace th
 - **The battery takes the surplus back.** Below the hand-over SoC the loop does not touch the battery's share. On a day when the battery is empty in the morning, the car starts late. That is the hand-over number doing its job, not a bug. If you want the car first, lower it.
 - **The delays are the protection.** Shortening `delay_on` below a minute turns a passing cloud into a relay cycle. To ride out clouds, lengthen the stop delay rather than lowering the stop threshold. A low stop threshold lets the car run on grid power for as long as the delay.
 - **Entity ids are guesses until checked.** The ids in the package follow this integration's naming (`sensor.ecoflow_powerocean_...`) for a device named "EcoFlow PowerOcean". A renamed device or a second PowerOcean gives different ids. Check every one in Developer Tools > States before enabling the boolean.
-- **Developer keys update every 30 seconds.** The start and stop decision is fine at that rate. The regulate automation fires every 30 seconds on a reading that is up to 30 seconds old, so the current follows clouds a step late. Account sign-in brings the readings to every 3 seconds.
+- **Developer keys update every 30 seconds.** The start and stop decision is fine at that rate. The regulate automation fires every 30 seconds on a reading that is up to 30 seconds old, so the current follows clouds a step late. Account sign-in brings the readings to every 3 seconds, and a Local connection to every 2 seconds.
 
 ## What is not in this guide
 

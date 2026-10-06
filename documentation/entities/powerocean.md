@@ -4,11 +4,14 @@ Full list of all entities created for PowerOcean devices.
 
 **Serial prefixes:** `HJ31`, `HJ32`, `HJ35`, `HJ36`, `HJ37` (standard) · `J32B`, `J327`, `J329`, `J32D`, `J32E` (European variants) · `R371`, `R372`, `R374`, `HJ3C` (PowerOcean Plus). All share the entity set below.
 
+A Local (Modbus/TCP) entry for a three-phase PowerOcean creates only these shared sensors: Solar Power, Home Power, Grid Power, Battery Power, Battery Charge Power, Battery Discharge Power, Grid Import Power, Grid Export Power, Battery SOC, Battery Charge Energy, Battery Discharge Energy, Grid Frequency, Battery Packs Online (EMS), MPPT String 1 and 2 Voltage and Current, Feed Power Limit, EMS Backup Ratio and Total Battery Capacity. It has no shared binary sensors, numbers or switches. The sections marked Local Modbus Only below come on top. The serial prefix does not decide whether Local works: the inverter reports its own model, and only the three-phase PowerOcean is accepted.
+
 > **Note:** The European variants (`J327`, `J32D`, `J32E`) and the PowerOcean Plus units (`R371`, `R372`, `R374`, `HJ3C`) are currently not exposed through the EcoFlow Developer API and therefore require Enhanced Mode. In Standard Mode these devices report error 1006 and all entities stay unavailable. Single-phase variants (`J327`, `J329`, `J32E`) report only the phases that are physically present; the remaining phase entities stay empty. Whether `J32B` and `J329` can be linked to an API key has not been tested, so Standard Mode is unproven for those prefixes.
 
-> **The heating rod readings are optional and work in both modes.** They belong
-> to the PowerGlow accessory, so they are only created once your system actually
-> reports a heating rod. A PowerOcean without one gets no heating rod entities.
+> **The heating rod readings are optional and work in Standard and Enhanced
+> Mode, not on a Local entry.** They belong to the PowerGlow accessory, so they
+> are only created once your system actually reports a heating rod. A
+> PowerOcean without one gets no heating rod entities.
 > In Standard Mode they come from the API quota. With EcoFlow
 > account sign-in they arrive on the PowerOcean's real-time stream instead, in
 > one report roughly every seventeen seconds, so a PowerGlow attached to a unit
@@ -61,7 +64,7 @@ Full list of all entities created for PowerOcean devices.
 
 > **PowerOcean Plus** units report more of the same entity set than a standard PowerOcean: per-phase reactive power (var) and apparent power (VA), plus MPPT strings 3 and 4. Those entities are disabled by default, so enable the ones you need after adding a Plus device.
 
-**Totals:** 241 sensors, 13 binary sensors, 10 numbers, 8 switches, 1 select
+**Totals:** an account entry (Standard or Enhanced Mode) has 249 sensors, 21 binary sensors, 18 numbers, 16 switches and 1 select. A Local (Modbus/TCP) entry has 28 sensors (20 of the sensors below plus the 8 in the Local-only section), 4 binary sensors, 2 numbers and 1 switch.
 
 > Entities marked with *disabled* are available but hidden by default. Enable them in **Settings > Devices > EcoFlow PowerOcean > Entities** (click the filter icon and show disabled entities).
 
@@ -376,5 +379,6 @@ Created only once a coupled wallbox reports a charging session. See the note at 
 
 - All power sensors show integers (no decimal places) for clean dashboard display
 - Energy sensors show 2 decimal places (0.01 kWh resolution)
-- Enhanced Mode (~3s updates) unlocks SoC limit control and faster data
-- Standard Mode (~30s polling) provides all sensors except number controls
+- Enhanced Mode (~3s updates) unlocks every control (18 numbers, 16 switches, 1 select) and faster data
+- Standard Mode (~30s polling) provides the sensors the Developer API reports. Some readings need Enhanced Mode, for example the schedules, the wallbox, the parallel pair and several diagnostics.
+- Local (Modbus/TCP, three-phase only) refreshes every 2 seconds, needs no account, and creates the shared sensors and Local-only entities listed above.

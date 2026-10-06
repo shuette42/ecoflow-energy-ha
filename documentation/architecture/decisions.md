@@ -1713,7 +1713,7 @@ The same download shows a second thing: an entry can carry its total and three o
 
 ## ADR-030: A PowerOcean can be read over the local network as a third mode of its own; read-only, chosen by hand, one short connection per poll; an automatic switch between cloud and local is a separate decision
 
-**Status:** Accepted for stage 1, built with item 5 as written (new keys for the three device counters). Not shipped.
+**Status:** Accepted for stage 1, built with item 5 as written (new keys for the three device counters). Shipped in v1.23.0 (read-only). Items 2 and 4 are amended by ADR-031, shipped in v1.24.0.
 **Date:** 2026-10-01
 
 **Context:** EcoFlow support can enable a local Modbus/TCP interface on a PowerOcean (EcoFlow Open Modbus Protocol V1.0, dated 2026-06-10, covering PowerOcean single-phase, three-phase and Plus, and Ocean 2). The maintainer's own three-phase PowerOcean (prefix `HJ31`) was enabled on 2026-09-30 and measured with a local read-only script over about 19 hours, side by side with the Enhanced stream of the same unit:
@@ -1766,7 +1766,7 @@ ADR-031 amends item 2 (read-only) and item 4 (one short connection per poll). It
 
 ## ADR-031: A Local (Modbus/TCP) PowerOcean entry may write Backup Reserve and Indicator Brightness and run the Modbus control heartbeat behind one switch that always starts off; on Home Assistant 2026.9 or newer it uses Home Assistant's shared Modbus connection, older versions keep the integration's own client; the connection type is detected once and never switched
 
-**Status:** Accepted. Not shipped. Amends ADR-030 items 2 (read-only) and 4 (one short connection per poll) for the cases named below.
+**Status:** Accepted. Shipped in v1.24.0. Amends ADR-030 items 2 (read-only) and 4 (one short connection per poll) for the cases named below.
 **Date:** 2026-10-02
 
 **Context:** ADR-030 made Local (Modbus/TCP) a third mode of its own, read-only, one short connection per poll every 2 s. The EcoFlow Open Modbus Protocol V1.0 (June 2026) also documents writable registers and a heartbeat: the heartbeat register `0x025F` must be written at least once per 60 s, otherwise the running function stops (page 1). A write test on the maintainer's own three-phase PowerOcean (`HJ31`, firmware package 5.1.37.10) on 2026-10-02 observed:
@@ -1849,7 +1849,7 @@ Home Assistant 2026.9 added a shared Modbus connection to its `modbus` integrati
 
 **Trade-offs:**
 - (+) Cumulative energy per vehicle becomes available without a second source for any existing entity
-- (+) The two modes stay separate: the entry keeps its account sign-in and gains no developer keys
+- (+) The two cloud modes stay separate: the entry keeps its account sign-in and gains no developer keys
 - (-) A periodic request exists in a mode that is otherwise push only, and the next case that wants one has to be measured against these limits
 - (-) The total covers the history EcoFlow still lists and starts in Home Assistant statistics at import; it does not identify the physically connected car
 - (-) Verified on one device model; other PowerPulse 2 variants and a second vehicle are covered by synthetic fixtures only

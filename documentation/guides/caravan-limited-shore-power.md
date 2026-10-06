@@ -131,7 +131,7 @@ On the road, the Shelly trip is not the rare exception it was in my home test, i
 
 There are two ways to run this. One is Home Assistant inside the caravan, on its own. The other is what I do: Home Assistant stays at home, the caravan network is joined to the home network over a permanent VPN, and the EcoFlow integration runs centrally like everything else I have.
 
-What does not change between the two is the Delta. It is reached through EcoFlow's cloud either way, this integration has no local connection to a Delta. What changes is the Shelly. With Home Assistant in the caravan the Shelly is on the local network and the protection layer needs no uplink at all. With Home Assistant at home, both the Delta and the Shelly depend on the caravan's uplink. In both cases the Shelly's own trip limits sit in the plug and work with no network whatsoever, which is the whole point of layer 1.
+What does not change between the two is the Delta. It is reached through EcoFlow's cloud either way. This integration has no local connection to a Delta, the Local connection type exists only for a three-phase PowerOcean. What changes is the Shelly. With Home Assistant in the caravan the Shelly is on the local network and the protection layer needs no uplink at all. With Home Assistant at home, both the Delta and the Shelly depend on the caravan's uplink. In both cases the Shelly's own trip limits sit in the plug and work with no network whatsoever, which is the whole point of layer 1.
 
 My uplink is Starlink, with a 5G router as the fallback so the VPN survives a Starlink outage. That uplink is where the latency in the previous section comes from, and the expectation stated there is the one to plan with.
 
