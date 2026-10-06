@@ -227,6 +227,12 @@ Already running a different EcoFlow integration? It can stay installed while you
 >
 > Other device families are not affected in the same way: they either push over MQTT in Standard Mode or have no Enhanced path at all.
 
+**Why there are three connection types.** This project started with a simple wish: live data from a PowerOcean, in seconds rather than minutes. My first idea was Modbus straight from the inverter, but EcoFlow did not enable it on my system. The official Developer API came next. For a PowerOcean it never worked reliably: fresh data arrived only while an EcoFlow app connection was open somewhere. Enhanced Mode grew out of that. It receives what the device pushes on its own, in the same way the app does. It covers the PowerOcean and several other devices, and it is why this integration exists in its present form. Standard Mode stays the official route for the devices it serves well.
+
+The local connection came last. [@jensfr1](https://github.com/jensfr1) showed how Modbus is enabled on the inverter and shared the protocol description. So the connection I wanted at the start now works for a three-phase PowerOcean. My own PowerOcean runs on it now, which takes the cloud out of the picture. All three connection types keep getting work, and improvements are welcome.
+
+Thank you to everyone who reports, tests, records data and contributes code. If you want to take part, open an issue or a pull request.
+
 **Enhanced Mode** connects with your EcoFlow email and password. No Developer API keys needed. Faster updates, but this is an unofficial, community-driven protocol based on observed behaviour that may change without notice. Stream-family devices report an empty product name, so they are identified by their serial prefix (`BK01`, `BK11`, `BK31`, `BK41`, `BK51`, `BK61`) and appear under the correct model name in Home Assistant in both modes. The Stream Micro (`BK01`) is not exposed through the Developer API at all and therefore needs Enhanced Mode.
 
 **Upgrading to v1.17.0?** The charge and discharge limits carry one name now, on every device that has them: **Max Charge SoC** and **Min Discharge SoC**. Depending on the device they used to read Charge Limit, Discharge Limit, Max. Ladezustand or Ladegrenze, which meant one value answered to four names across the integration. Only the displayed label changed. Entity ids, history, statistics and automations are untouched, so nothing needs migrating. The one place worth a look is a dashboard card whose title you typed by hand, or a template that matches on the friendly name.
