@@ -284,7 +284,7 @@ class SetupFlowMixin(_Base):
     """Initial setup steps, composed into EcoFlowEnergyConfigFlow."""
 
     # ------------------------------------------------------------------
-    # Step 1: Mode selection (Standard vs Enhanced)
+    # Step 1: Mode selection (Standard, Enhanced or Local)
     # ------------------------------------------------------------------
 
     async def async_step_user(

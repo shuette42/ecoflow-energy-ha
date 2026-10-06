@@ -1,12 +1,14 @@
 """Config flow for EcoFlow Energy integration.
 
-Step 1: User selects auth type (Developer API keys or App login)
-Step 2a (Developer): User enters access_key + secret_key
-Step 2b (App): User enters email + password
-Step 3: User selects devices from auto-discovered list
-Step 4: Mode selection - Standard (default) or Enhanced (WSS real-time)
-        Enhanced requires email + password and shows a disclaimer.
-Step 5: Config entry created
+Step 1: User selects the connection mode - Standard (default), Enhanced
+        (WSS real-time) or Local (Modbus/TCP, three-phase PowerOcean only)
+Step 2a (Standard): User enters access_key + secret_key
+Step 2b (Enhanced): User enters email + password; a disclaimer is shown
+Step 2c (Local): User enters host, port and unit ID; the device identity is
+        read over Modbus/TCP and the config entry is created
+Step 3: Standard and Enhanced only - user selects devices from the
+        auto-discovered list
+Step 4: Config entry created
 """
 
 from __future__ import annotations
