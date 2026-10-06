@@ -261,7 +261,9 @@ async def test_charging_history_option_only_shown_for_powerpulse2(
     ):
         form = await hass.config_entries.options.async_init(config.entry_id)
     assert form["type"] is FlowResultType.FORM
-    keys = {k.schema for k in form["data_schema"].schema}
+    schema = form["data_schema"]
+    assert schema is not None
+    keys = {k.schema for k in schema.schema}
     assert ("powerpulse_vehicle_energy" in keys) is shown
     # The other app-mode switch stays: only this option depends on the charger.
     assert "raw_capture" in keys
