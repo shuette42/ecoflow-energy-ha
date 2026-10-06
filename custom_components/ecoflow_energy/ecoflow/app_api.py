@@ -15,12 +15,17 @@ from typing import Any, Protocol
 
 import aiohttp
 
+from .charging_history import identity, is_identity
 from .const import IOT_API_BASE, get_device_type
 from .enhanced_auth import enhanced_login, get_enhanced_credentials
 
 _LOGGER = logging.getLogger(__name__)
 
 _DEVICE_LIST_PATH = "/iot-service/user/device"
+
+# One charger's whole history read (login and every page), not the wait for
+# the entry-wide lock: a slow charger must not spend the next one's budget.
+HISTORY_FETCH_TIMEOUT_S = 60
 
 
 class HistoryStateStore(Protocol):
@@ -151,8 +156,6 @@ class AppApiClient:
 
     async def get_powerpulse_orders(self, serial: str) -> list[dict[str, Any]]:
         """Serialize entry-wide reads and back off failed sign-in for an hour."""
-        from .charging_history import identity
-
         async with self._history_lock:
             now = time.time()
             state: dict[str, Any] = {"last_reads": {}, "retry_after": 0.0}
@@ -187,7 +190,8 @@ class AppApiClient:
                 state["last_reads"][key] = now
                 await self._save_history_limits(state)
             try:
-                return await self._get_powerpulse_orders(serial)
+                async with asyncio.timeout(HISTORY_FETCH_TIMEOUT_S):
+                    return await self._get_powerpulse_orders(serial)
             except HistoryLoginError:
                 self._history_retry_after = time.time() + 3600
                 if self._history_store is not None:
@@ -218,10 +222,7 @@ class AppApiClient:
             and isinstance(saved.get("last_reads"), dict)
             and timestamp(saved.get("retry_after"))
             and all(
-                isinstance(key, str)
-                and len(key) == 64
-                and all(c in "0123456789abcdef" for c in key)
-                and timestamp(value)
+                is_identity(key) and timestamp(value)
                 for key, value in saved["last_reads"].items()
             )
         )
@@ -247,19 +248,29 @@ class AppApiClient:
                     headers={"Authorization": f"Bearer {self._token}"},
                     timeout=aiohttp.ClientTimeout(total=15),
                 ) as response:
-                    body = await response.json()
-                    refused = response.status == 401 or (
-                        isinstance(body, dict) and str(body.get("code")) == "401"
-                    )
+                    # A 401/403 can carry a text/plain body: decide on the
+                    # status before parsing, and parse without a content-type
+                    # check, so a dead token is never hidden by a decode error.
+                    body: Any = None
+                    refused = response.status in (401, 403)
+                    if not refused:
+                        response.raise_for_status()
+                        body = await response.json(content_type=None)
+                        refused = (
+                            isinstance(body, dict) and str(body.get("code")) == "401"
+                        )
                     if refused and attempt == 0:
                         if not await self.login():
                             raise HistoryLoginError("Charging history login failed")
                         continue
                     if refused:
+                        self._token = None
                         raise HistoryLoginError("Charging history session rejected")
-                    response.raise_for_status()
                 break
             if not isinstance(body, dict) or str(body.get("code")) != "0":
+                # A rejection code on a 2xx answer may be a dead session: sign
+                # in again on the next read instead of reusing this token.
+                self._token = None
                 raise ValueError("Charging history request rejected")
             data = body.get("data")
             if not isinstance(data, dict):

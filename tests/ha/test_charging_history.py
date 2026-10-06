@@ -32,6 +32,7 @@ from custom_components.ecoflow_energy.ecoflow.app_api import (
     HistoryDeferred,
 )
 from custom_components.ecoflow_energy.ecoflow.charging_history import identity
+from custom_components.ecoflow_energy.ecoflow.const import device_log_tag
 
 from .conftest import add_entities_collector
 
@@ -141,7 +142,7 @@ async def test_discovery_units_corrections_and_failure(hass: HomeAssistant):
 
 
 @pytest.mark.parametrize(
-    "name, label", [("Example EV", "Example EV"), ("", "Unnamed vehicle")]
+    "name, label", [("Example EV", "Example EV"), ("", "Unnamed Vehicle")]
 )
 async def test_registered_c371_setup_and_unload(hass: HomeAssistant, name, label):
     """Use the existing PowerPulse coordinator registration supplied by #446."""
@@ -182,7 +183,7 @@ async def test_registered_c371_setup_and_unload(hass: HomeAssistant, name, label
         assert states[0].state == "16.004"
         assert states[0].attributes["unit_of_measurement"] == "kWh"
         assert (
-            label + " completed charging energy"
+            "Wallbox Completed Charging Energy " + label
             in states[0].attributes["friendly_name"]
         )
         assert await hass.config_entries.async_unload(config.entry_id)
@@ -224,6 +225,55 @@ async def test_option_is_opt_in_and_persists(hass: HomeAssistant):
         )
         assert saved["type"] is FlowResultType.CREATE_ENTRY
         assert config.data["powerpulse_vehicle_energy"] is True
+
+
+@pytest.mark.parametrize(
+    ("devices", "shown"),
+    [
+        ([(SERIAL, "powerpulse2")], True),
+        ([("R351TEST0001", "delta2max")], False),
+        ([], False),
+    ],
+)
+async def test_charging_history_option_only_shown_for_powerpulse2(
+    hass: HomeAssistant, devices, shown
+):
+    from homeassistant.data_entry_flow import FlowResultType
+
+    config = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "auth_method": "app",
+            "mode": "enhanced",
+            "email": "test@example.com",
+            "password": "test_password",
+            "devices": [
+                {"sn": sn, "product_name": "", "device_type": kind}
+                for sn, kind in devices
+            ],
+        },
+    )
+    config.add_to_hass(hass)
+    with patch(
+        "custom_components.ecoflow_energy.config_flow_options._async_fetch_app_devices",
+        new_callable=AsyncMock,
+        return_value=[],
+    ):
+        form = await hass.config_entries.options.async_init(config.entry_id)
+    assert form["type"] is FlowResultType.FORM
+    keys = {k.schema for k in form["data_schema"].schema}
+    assert ("powerpulse_vehicle_energy" in keys) is shown
+    # The other app-mode switch stays: only this option depends on the charger.
+    assert "raw_capture" in keys
+
+
+async def test_coordinator_name_includes_device_tag(hass: HomeAssistant):
+    """HA prints the coordinator name in its own error lines: tag, never serial."""
+    coord = ChargingHistoryCoordinator(hass, entry(hass), SERIAL, api(hass))
+    assert device_log_tag(SERIAL) in coord.name
+    assert SERIAL not in coord.name
+    assert SERIAL[:8] not in coord.name
+    await coord.async_shutdown()
 
 
 async def test_cloud_retention_keeps_published_totals_after_restart(hass):
@@ -387,6 +437,64 @@ async def test_sensor_platform_shares_history_client(hass):
         await source.async_shutdown()
 
 
+async def test_unconfirmed_index_skips_history_only_and_warns_with_tags(hass, caplog):
+    """A failed index write must not take the entry's live sensors down.
+
+    The real `async_register_history_stores` raises when the saved index
+    cannot be read back; the sensor platform turns that into one warning that
+    names the chargers by device tag and carries on without history sensors.
+    """
+    from custom_components.ecoflow_energy import sensor
+    from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
+    from custom_components.ecoflow_energy.ecoflow.const import device_log_tag
+
+    config = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "auth_method": "app",
+            "email": "test@example.com",
+            "password": "test_password",
+            "powerpulse_vehicle_energy": True,
+        },
+    )
+    config.add_to_hass(hass)
+    serials = [SERIAL, "C376TEST0002"]
+    sources = {
+        sn: EcoFlowDeviceCoordinator(
+            hass,
+            config,
+            {"sn": sn, "device_type": "powerpulse2", "product_name": "PowerPulse 2"},
+        )
+        for sn in serials
+    }
+    hass.data.setdefault(DOMAIN, {})[config.entry_id] = sources
+    added: list[Any] = []
+    with (
+        caplog.at_level(logging.WARNING),
+        patch.object(Store, "_async_write_data", side_effect=WriteError("disk full")),
+        patch(
+            "custom_components.ecoflow_energy.charging_history.async_setup_charging_history",
+            new_callable=AsyncMock,
+        ) as setup,
+    ):
+        await sensor.async_setup_entry(hass, config, add_entities_collector(added))
+    assert added, "the live sensors of the entry are still created"
+    setup.assert_not_awaited()
+    warnings = [
+        r
+        for r in caplog.records
+        if r.levelno >= logging.WARNING and r.name.endswith(".sensor")
+    ]
+    assert len(warnings) == 1
+    message = warnings[0].getMessage()
+    assert "index write could not be verified" in message
+    for sn in serials:
+        assert device_log_tag(sn) in message
+        assert sn not in caplog.text
+    for source in sources.values():
+        await source.async_shutdown()
+
+
 async def test_entry_unload_cancels_initial_history_fetch(hass):
     config = MockConfigEntry(
         domain=DOMAIN,
@@ -480,24 +588,20 @@ async def test_history_selection_uses_device_type_only(hass):
         sn: EcoFlowDeviceCoordinator(hass, config, {"sn": sn, "device_type": kind})
         for sn, kind in [
             ("C376TEST0002", "powerpulse2"),
-            ("C371TEST0003", "powerpulse2"),
+            ("C371TEST0001", "powerpulse2"),
             (SERIAL, "unknown"),
             ("R351TEST0001", "delta2max"),
         ]
     }
-    # C371 is registered since #446; explicitly simulate an unknown coordinator
-    # to keep the prefix-versus-device-type guard regression meaningful.
-    sources[SERIAL].device_type = "unknown"
     hass.data.setdefault(DOMAIN, {})[config.entry_id] = sources
     with patch(
         "custom_components.ecoflow_energy.charging_history.async_setup_charging_history",
         new_callable=AsyncMock,
     ) as setup:
         await sensor.async_setup_entry(hass, config, add_entities_collector([]))
-    assert [call.args[2] for call in setup.call_args_list] == [
-        "C376TEST0002",
-        "C371TEST0003",
-    ]
+    assert sorted([call.args[2] for call in setup.call_args_list]) == sorted(
+        ["C376TEST0002", "C371TEST0001"]
+    )
     for source in sources.values():
         await source.async_shutdown()
 
@@ -914,13 +1018,22 @@ async def test_read_failures_warn_once_and_recover_without_error_logs(
         coord, identity("profile-a"), DeviceInfo(identifiers={(DOMAIN, SERIAL)})
     )
     caplog.clear()
+    history_logger = "custom_components.ecoflow_energy.charging_history"
+    caplog.set_level(logging.INFO, logger=history_logger)
     coord.api.get_powerpulse_orders.side_effect = failure
     await coord.async_refresh()
     await coord.async_refresh()
     assert not sensor.available
     warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
-    from custom_components.ecoflow_energy.ecoflow.const import device_log_tag
 
+    def recoveries():
+        return [
+            r
+            for r in caplog.records
+            if r.levelno == logging.INFO and r.name == history_logger
+        ]
+
+    assert not recoveries()
     assert len(warnings) == 1
     assert device_log_tag(SERIAL) in warnings[0].getMessage()
     assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
@@ -931,6 +1044,12 @@ async def test_read_failures_warn_once_and_recover_without_error_logs(
     coord.api.get_powerpulse_orders.side_effect = None
     await coord.async_refresh()
     assert sensor.available
+    # The recovery is announced once, names the charger by tag, and a further
+    # successful read is silent.
+    await coord.async_refresh()
+    assert len(recoveries()) == 1
+    assert device_log_tag(SERIAL) in recoveries()[0].getMessage()
+    assert SERIAL not in recoveries()[0].getMessage()
     coord.api.get_powerpulse_orders.side_effect = failure
     await coord.async_refresh()
     assert not sensor.available

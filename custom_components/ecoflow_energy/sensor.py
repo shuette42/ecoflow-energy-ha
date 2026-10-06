@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import cast
 
@@ -15,6 +16,7 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -61,11 +63,14 @@ from .const import (
 )
 from .coordinator import EcoFlowDeviceCoordinator
 from .coordinator.local_modbus import EcoFlowLocalModbusCoordinator
+from .ecoflow.const import device_log_tag
 from .entity import (
     EcoFlowWriteGateMixin,
     accessory_ready,
     label_placeholders,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 # Map string → HA enum
 _STATE_CLASS_MAP = {
@@ -161,9 +166,22 @@ async def async_setup_entry(
                 entry.data[CONF_PASSWORD],
                 history_store=history_limits_store(hass, entry),
             )
-            await async_register_history_stores(
-                hass, entry, [source.device_sn for source in chargers]
-            )
+            try:
+                await async_register_history_stores(
+                    hass, entry, [source.device_sn for source in chargers]
+                )
+            except (OSError, ValueError, HomeAssistantError) as err:
+                # The history feature is optional: without a confirmed index
+                # its ledgers could outlive the entry, so skip only the
+                # history sensors and leave every live entity of the entry
+                # set up. The next reload retries.
+                _LOGGER.warning(
+                    "Charging history is off for %s: the saved index could "
+                    "not be confirmed (%s)",
+                    ", ".join(device_log_tag(source.device_sn) for source in chargers),
+                    err,
+                )
+                return
             for charger in chargers:
                 await async_setup_charging_history(
                     hass,

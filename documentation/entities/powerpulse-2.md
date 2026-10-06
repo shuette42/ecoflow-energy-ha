@@ -125,21 +125,20 @@ When the vehicle charges single-phase, only Wallbox Current L1 carries a real re
 ## Completed energy per vehicle profile
 
 With EcoFlow account sign-in, enable **Track completed PowerPulse charging energy
-by vehicle** in the integration options and select the charger. Each profile
-found in completed cloud orders gets a **Vehicle-name completed charging energy**
-sensor in kWh. An **Unassigned completed charging energy** sensor collects the
-vendor's Other/unassigned profile. These dynamic sensors are additional to the
+by vehicle** in the integration options and select the charger. The option is
+only shown while the entry has a PowerPulse 2 selected. Each profile
+found in completed cloud orders gets a **Wallbox Completed Charging Energy**
+sensor in kWh, followed by the profile name (for example **Wallbox Completed
+Charging Energy Example EV**). A **Wallbox Completed Charging Energy Unassigned**
+sensor collects the vendor's Other/unassigned profile. These dynamic sensors are additional to the
 fixed sensor count above. No sensor is created for a profile with no completed
 records. Once opted in, newly discovered profiles appear without reloading.
-Profiles with blank names display as **Unnamed vehicle completed charging energy**.
+Profiles with blank names display as **Wallbox Completed Charging Energy Unnamed Vehicle**.
 
-History attaches to existing PowerPulse device coordinators. C371 registration
-depends on the separate C371 telemetry support change (#446); this feature does
-not register unsupported devices itself. C376/C374 use the same PowerPulse
-endpoint, but live history validation to date is C371. This feature adds no controls or writes to
-the charger. Initial verification compared 16004 raw Wh with 16.00 kWh in the
-EcoFlow completed-session screen. Do not use `watthCharge` as delivered energy;
-it is a different field.
+The history is read for every PowerPulse 2 that Home Assistant has set up from
+this integration, the `C371` included. Live history has been checked on a
+`C371`. The `C376` and `C374` use the same endpoint but have not been checked
+yet. Do not use `watthCharge` as delivered energy; it is a different field.
 
 The sensor attributes include the completed-session count and the name on the
 latest completed record. Names come from charging records, not a live profile
@@ -156,7 +155,7 @@ readers in an entry share one API client and sign-in. Failed sign-in or a reject
 refreshed session pauses authentication attempts for one hour across those readers.
 The last read time for each charger and the shared authentication backoff deadline
 are saved per entry as wall-clock timestamps, so reloads and restarts do not reset
-either limit. Restored totals remain visible while waiting for the next allowed read.
+either limit. The sensors become unavailable during the sign-in backoff and recover when authentication is reattempted.
 Every page must succeed before any totals change. Requests use the verified
 one-based `page` and `size` parameters. Inconsistent pagination, malformed records,
 API failures, a 60-second overall timeout and the 100-page safety limit mark

@@ -41,6 +41,7 @@ from .const import (
     CONF_USER_ID,
     CONF_VEHICLE_ENERGY,
     DEVICE_TYPE_DISPLAY_NAMES,
+    DEVICE_TYPE_POWERPULSE2,
     DEVICE_TYPE_POWERSTREAM,
     DEVICE_TYPE_UNKNOWN,
     ENHANCED_ONLY_DEVICE_TYPES,
@@ -318,12 +319,21 @@ class OptionsFlowMixin(_Base):
         # with no parser. Deliberately the last field: it is a help-us-out
         # switch, not a setting anyone needs.
         if auth_method == AUTH_METHOD_APP:
-            schema[
-                vol.Optional(
-                    CONF_VEHICLE_ENERGY,
-                    default=self.config_entry.data.get(CONF_VEHICLE_ENERGY, False),
-                )
-            ] = bool
+            # Per-vehicle energy reads the PowerPulse 2 charging history, so
+            # the switch is only offered to an entry that has such a charger.
+            stored_devices = {
+                d["sn"]: d for d in self.config_entry.data.get(CONF_DEVICES, [])
+            }
+            if any(
+                self._stored_device_type(stored_devices, sn) == DEVICE_TYPE_POWERPULSE2
+                for sn in current_device_sns
+            ):
+                schema[
+                    vol.Optional(
+                        CONF_VEHICLE_ENERGY,
+                        default=self.config_entry.data.get(CONF_VEHICLE_ENERGY, False),
+                    )
+                ] = bool
             schema[
                 vol.Required(
                     CONF_RAW_CAPTURE,

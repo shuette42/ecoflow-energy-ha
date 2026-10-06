@@ -2619,13 +2619,13 @@
         "name": "System Battery Temp"
       },
       "vehicle_energy": {
-        "name": "{vehicle} completed charging energy"
+        "name": "Wallbox Completed Charging Energy {vehicle}"
       },
       "unnamed_vehicle_energy": {
-        "name": "Unnamed vehicle completed charging energy"
+        "name": "Wallbox Completed Charging Energy Unnamed Vehicle"
       },
       "other_vehicle_energy": {
-        "name": "Unassigned completed charging energy"
+        "name": "Wallbox Completed Charging Energy Unassigned"
       }
     },
     "binary_sensor": {

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import timedelta
 from typing import Any
@@ -30,6 +29,7 @@ from .const import CONF_DEVICES, DOMAIN
 from .ecoflow.app_api import AppApiClient, HistoryDeferred, HistoryLoginError
 from .ecoflow.charging_history import (
     identity,
+    is_identity,
     merge_orders,
     valid_saved_ledger,
     vehicle_totals,
@@ -49,7 +49,8 @@ class ChargingHistoryCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]
         super().__init__(
             hass,
             _LOGGER,
-            name="EcoFlow charging history",
+            # HA prints this name in "Error fetching ... data" lines: tag, not serial.
+            name=f"EcoFlow charging history ({device_log_tag(serial)})",
             config_entry=entry,
             update_interval=timedelta(minutes=5),
         )
@@ -76,7 +77,7 @@ class ChargingHistoryCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]
             )
             return
         self._restore_failed = False
-        self.history_available = True
+        self._mark_available()
         if saved is None:
             return
         if not valid_saved_ledger(saved):
@@ -97,8 +98,9 @@ class ChargingHistoryCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]
                     "Charging ledger could not be loaded; preserving store"
                 )
         try:
-            async with asyncio.timeout(60):
-                rows = await self.api.get_powerpulse_orders(self.serial)
+            # The per-fetch timeout lives in the client, around the network
+            # read: the entry-wide lock wait must not spend this charger's budget.
+            rows = await self.api.get_powerpulse_orders(self.serial)
             self.update_interval = timedelta(minutes=5)
             orders = merge_orders(self.orders, rows, self.serial)
             totals = {
@@ -112,7 +114,7 @@ class ChargingHistoryCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]
                 if await self.store.async_load() != saved:
                     raise OSError("Charging ledger write could not be verified")
             self.orders = orders
-            self.history_available = True
+            self._mark_available()
             return totals
         except HistoryDeferred as err:
             self.update_interval = timedelta(seconds=min(3600, max(1, err.delay)))
@@ -126,6 +128,15 @@ class ChargingHistoryCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]
             return self.data
         except (OSError, HomeAssistantError) as err:
             raise UpdateFailed("Could not persist completed charging history") from err
+
+    def _mark_available(self) -> None:
+        """Say once that a failed read recovered, so the earlier warning has an end."""
+        if not self.history_available:
+            _LOGGER.info(
+                "Completed charging history readable again (%s)",
+                device_log_tag(self.serial),
+            )
+        self.history_available = True
 
     def _mark_unavailable(self, message: str) -> None:
         """Warn once per failure transition without exposing cloud response data."""
@@ -182,7 +193,9 @@ class VehicleEnergySensor(CoordinatorEntity[ChargingHistoryCoordinator], SensorE
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Expose coverage without leaking order, user or vehicle IDs."""
-        value = self.coordinator.data[self.vehicle]
+        value = self.coordinator.data.get(self.vehicle)
+        if value is None:
+            return {}
         return {"completed_sessions": value["sessions"], "profile_name": value["name"]}
 
 
@@ -221,6 +234,13 @@ async def async_setup_charging_history(
     return coordinator
 
 
+def _known_hashes(saved: Any) -> set[str]:
+    """Charger identities from the stored index; anything malformed is dropped."""
+    if not isinstance(saved, list):
+        return set()
+    return {item for item in saved if is_identity(item)}
+
+
 def _history_index(hass: HomeAssistant, entry: ConfigEntry) -> Store[list[str]]:
     return Store(hass, 1, f"{DOMAIN}_charging_history_index_{entry.entry_id}")
 
@@ -235,17 +255,7 @@ async def async_register_history_stores(
     except (OSError, ValueError, HomeAssistantError):
         _LOGGER.warning("Could not load charging history index; preserving store")
         return
-    hashes = (
-        {
-            s
-            for s in (saved or [])
-            if isinstance(s, str)
-            and len(s) == 64
-            and all(c in "0123456789abcdef" for c in s)
-        }
-        if isinstance(saved, list)
-        else set()
-    )
+    hashes = _known_hashes(saved)
     hashes.update(identity(serial) for serial in serials)
     expected = sorted(hashes)
     await index.async_save(expected)
@@ -265,17 +275,7 @@ async def async_remove_history_stores(hass: HomeAssistant, entry: ConfigEntry) -
             "only selected ledgers can be removed"
         )
         saved = None
-    hashes = (
-        {
-            s
-            for s in (saved or [])
-            if isinstance(s, str)
-            and len(s) == 64
-            and all(c in "0123456789abcdef" for c in s)
-        }
-        if isinstance(saved, list)
-        else set()
-    )
+    hashes = _known_hashes(saved)
     hashes.update(
         identity(d["sn"])
         for d in entry.data.get(CONF_DEVICES, [])

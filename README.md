@@ -94,11 +94,7 @@
 
 **PowerPulse 2 `C371`** gets the same sensors as the `C376` and `C374`. Charging power and session energy were checked against the app over one overnight charge. It is read-only for now: the buttons, numbers, selects and switch described below work on the `C376` and `C374` only, until a write to a `C371` is confirmed.
 
-**Per-vehicle charging energy (opt-in).** PowerPulse 2 account sign-in entries
-can enable **Track completed PowerPulse charging energy by vehicle** in options.
-This adds one dynamic kWh sensor per profile found in completed charging records,
-plus a separate unassigned total when present, in addition to the fixed counts
-above. History uses the integration’s existing PowerPulse device registration. See [coverage and setup](documentation/entities/powerpulse-2.md#completed-energy-per-vehicle-profile).
+**Per-vehicle charging energy (opt-in).** PowerPulse 2 account sign-in entries can enable **Track completed PowerPulse charging energy by vehicle** in options. This adds one kWh sensor per vehicle profile found in completed charging records, plus a separate unassigned total when present, in addition to the fixed counts above. See [coverage and setup](documentation/entities/powerpulse-2.md#completed-energy-per-vehicle-profile).
 
 **Accessories.** Three add-ons work alongside a PowerOcean. The PowerPulse 2 is a device of its own. The other two report through the PowerOcean itself, so their entities sit on the PowerOcean device page and are created only once the accessory actually reports:
 

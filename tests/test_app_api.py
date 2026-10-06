@@ -1,9 +1,17 @@
 """Tests for AppApiClient - login, device discovery, MQTT credentials."""
 
+import asyncio
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import aiohttp
 import pytest
-from ecoflow_energy.ecoflow.app_api import AppApiClient, _parse_device_response
+from ecoflow_energy.ecoflow import app_api
+from ecoflow_energy.ecoflow.app_api import (
+    AppApiClient,
+    HistoryLoginError,
+    _parse_device_response,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -442,3 +450,158 @@ class TestProperties:
             client.token = "hack"
         with pytest.raises(AttributeError):
             client.user_id = "hack"
+
+
+# ===========================================================================
+# Charging history: a rejected token must not outlive the rejection
+# ===========================================================================
+
+_HISTORY_SERIAL = "C371TEST0001"
+_EMPTY_PAGE = '{"code": "0", "data": {"content": [], "hasNext": false, "total": 0}}'
+
+
+def _history_response(status, text, served_type="application/json"):
+    """An aiohttp-like response: json() enforces the content type unless told not to."""
+    request_info = MagicMock()
+    resp = MagicMock()
+    resp.status = status
+
+    def raise_for_status():
+        if status >= 400:
+            raise aiohttp.ClientResponseError(request_info, (), status=status)
+
+    async def read_json(*, content_type="application/json"):
+        if content_type is not None and served_type != content_type:
+            raise aiohttp.ContentTypeError(request_info, ())
+        return json.loads(text)
+
+    resp.raise_for_status = raise_for_status
+    resp.json = read_json
+    ctx = AsyncMock()
+    ctx.__aenter__ = AsyncMock(return_value=resp)
+    ctx.__aexit__ = AsyncMock(return_value=False)
+    return ctx
+
+
+def _sign_in_with(client, *tokens):
+    """Replace login() with one that hands out the given tokens in order."""
+    queue = iter(tokens)
+
+    async def login():
+        client._token = next(queue)
+        return True
+
+    client.login = AsyncMock(side_effect=login)
+
+
+class TestHistoryTokenRejection:
+    async def test_token_invalidated_on_401_json(self):
+        client, session = _make_client()
+        client._token = "dead"
+        _sign_in_with(client, "fresh", "second")
+        rejected = '{"code": "401", "message": "token expired"}'
+        session.get = MagicMock(
+            side_effect=[
+                _history_response(401, rejected),
+                _history_response(401, rejected),
+            ]
+        )
+        with pytest.raises(HistoryLoginError):
+            await client._get_powerpulse_orders(_HISTORY_SERIAL)
+        assert client.token is None
+        assert client.login.await_count == 1
+
+        session.get = MagicMock(return_value=_history_response(200, _EMPTY_PAGE))
+        assert await client._get_powerpulse_orders(_HISTORY_SERIAL) == []
+        assert client.login.await_count == 2
+        sent = session.get.call_args.kwargs["headers"]["Authorization"]
+        assert sent == "Bearer second"
+
+    @pytest.mark.parametrize(
+        ("status", "text"),
+        [
+            (401, "Unauthorized"),
+            (403, "Forbidden"),
+            (200, '{"code": "401"}'),
+        ],
+    )
+    async def test_token_invalidated_on_401_text_plain(self, status, text):
+        client, session = _make_client()
+        client._token = "dead"
+        _sign_in_with(client, "fresh")
+        session.get = MagicMock(
+            side_effect=[
+                _history_response(status, text, "text/plain"),
+                _history_response(status, text, "text/plain"),
+            ]
+        )
+        with pytest.raises(HistoryLoginError):
+            await client._get_powerpulse_orders(_HISTORY_SERIAL)
+        assert client.token is None
+        assert session.get.call_count == 2
+
+    async def test_token_invalidated_on_rejection_code(self):
+        client, session = _make_client()
+        client._token = "dead"
+        _sign_in_with(client, "fresh")
+        session.get = MagicMock(
+            return_value=_history_response(200, '{"code": "8513", "data": null}')
+        )
+        with pytest.raises(ValueError, match="rejected"):
+            await client._get_powerpulse_orders(_HISTORY_SERIAL)
+        assert client.token is None
+        client.login.assert_not_awaited()
+
+    async def test_server_error_keeps_a_working_token(self):
+        """A 5xx says nothing about the token; re-login would only spend the budget."""
+        client, session = _make_client()
+        client._token = "good"
+        session.get = MagicMock(return_value=_history_response(502, "Bad Gateway"))
+        with pytest.raises(aiohttp.ClientResponseError):
+            await client._get_powerpulse_orders(_HISTORY_SERIAL)
+        assert client.token == "good"
+
+
+class TestHistoryFetchTimeout:
+    async def test_timeout_is_per_fetch_not_per_entry(self, monkeypatch):
+        """Each charger gets its own budget once it holds the entry-wide lock.
+
+        A's fetch hangs and is cut off at the timeout. B queued behind A for
+        that whole time and then needs 0.25 s of its own, so A's wait plus B's
+        fetch exceeds the 0.3 s budget; B only succeeds when the budget starts
+        at the fetch, not at the queue.
+        """
+        monkeypatch.setattr(app_api, "HISTORY_FETCH_TIMEOUT_S", 0.3)
+        client, session = _make_client()
+        client._token = "tok"
+
+        def get(url, *, params, headers, timeout):
+            serial = params["sn"]
+            resp = MagicMock()
+            resp.status = 200
+            resp.raise_for_status = MagicMock()
+            resp.json = AsyncMock(return_value=json.loads(_EMPTY_PAGE))
+
+            async def enter():
+                if serial == "HANG":
+                    await asyncio.Event().wait()
+                await asyncio.sleep(0.25)
+                return resp
+
+            ctx = AsyncMock()
+            ctx.__aenter__ = AsyncMock(side_effect=enter)
+            ctx.__aexit__ = AsyncMock(return_value=False)
+            return ctx
+
+        session.get = MagicMock(side_effect=get)
+        hung, slow = await asyncio.wait_for(
+            asyncio.gather(
+                client.get_powerpulse_orders("HANG"),
+                client.get_powerpulse_orders("SLOW"),
+                return_exceptions=True,
+            ),
+            timeout=5,
+        )
+        assert isinstance(hung, TimeoutError)
+        assert slow == []
+        assert session.get.call_count == 2

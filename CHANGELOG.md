@@ -8,16 +8,7 @@ All notable changes to this project will be documented in this file.
 
 - The PowerPulse 2 `C371` is supported, read-only and in Enhanced Mode only, with the same 18 sensors and binary sensor as the `C376` and `C374`. Contributed by @jacobcorbett, from his recording of a session paused by the car and an overnight charge he compared against the app: 6,995 W against 6.98 kW while charging, and 33,821 Wh against 33.82 kWh for the session. It has no buttons, numbers, selects or switches, because no write to a `C371` has been confirmed yet. A PowerPulse 2 paused by the car now reads Paused by Vehicle instead of keeping its previous charging state. (Ref #7)
 
-- Opt-in completed charging energy per vehicle profile for PowerPulse 2 with
-  account sign-in. Enable **Track completed PowerPulse charging energy by
-  vehicle** in integration options. Each profile gets a kWh total from completed
-  cloud orders; unassigned orders have a separate total. A local order ledger
-  survives restarts, deduplicates polls, and accepts corrected records without
-  treating a reduction as a meter reset. New profiles appear after their first
-  completed charge. Saved totals restore before the initial background fetch;
-  history readers share a sign-in and back off after authentication failures.
-  This does not identify the physically connected car or show
-  in-progress charging energy.
+- Opt-in completed charging energy per vehicle profile for PowerPulse 2 with account sign-in. Enable **Track completed PowerPulse charging energy by vehicle** in integration options, where it is shown only while the entry has a PowerPulse 2. Each profile gets a kWh total from completed cloud orders; unassigned orders have a separate total. A local order ledger survives restarts, deduplicates polls, and accepts corrected records without treating a reduction as a meter reset. New profiles appear after their first completed charge. Saved totals restore before the initial background fetch; history readers share a sign-in and back off after authentication failures. This does not identify the physically connected car or show in-progress charging energy. Contributed by @jacobcorbett, who traced the endpoint in the public EcoFlow Portal client, checked the paging on live records down to the last page, compared the latest completed record with the app (16,004 Wh against 16.00 kWh), and imported 13 real completed orders from a `C371` twice without the totals changing. (#460)
 
 - The RIVER 3 (`R655`) is supported, read-only and in Enhanced Mode only: battery level, input, output and AC input power, the AC input and output energy counters, the charge state, remaining time, and the battery's health, cell and temperature readings. Mapped from @nicolklup's diagnostics download of three units and his own decoding, which showed the RIVER 3 sends the Delta 3 frames; the values match the app. It has no switches, numbers or selects, because nothing recorded so far shows that a setting written to it is accepted. The DC and USB outputs are not read yet: on one unit the app showed 2 W of DC output while the matching Delta 3 field read 0 W, so this model reports those ports somewhere the Delta 3 message does not cover, and no unit had a USB load. The RIVER 3 Plus is not included. The remaining-time sensors read unknown while the unit reports itself idle, which all three units did.
 

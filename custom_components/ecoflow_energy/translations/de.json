@@ -2619,13 +2619,13 @@
         "name": "System-Batterietemperatur"
       },
       "vehicle_energy": {
-        "name": "{vehicle} abgeschlossene Ladeenergie"
+        "name": "Wallbox-Energie abgeschlossener Ladevorgänge {vehicle}"
       },
       "unnamed_vehicle_energy": {
-        "name": "Unbenanntes Fahrzeug abgeschlossene Ladeenergie"
+        "name": "Wallbox-Energie abgeschlossener Ladevorgänge Unbenanntes Fahrzeug"
       },
       "other_vehicle_energy": {
-        "name": "Nicht zugeordnete abgeschlossene Ladeenergie"
+        "name": "Wallbox-Energie abgeschlossener Ladevorgänge nicht zugeordnet"
       }
     },
     "binary_sensor": {

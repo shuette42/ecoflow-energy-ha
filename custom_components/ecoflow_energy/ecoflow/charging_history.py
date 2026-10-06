@@ -21,6 +21,15 @@ def identity(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 
 
+def is_identity(value: Any) -> bool:
+    """True for a 64-character lowercase hex digest, the shape identity() returns."""
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(c in "0123456789abcdef" for c in value)
+    )
+
+
 def merge_orders(
     previous: dict[str, dict[str, Any]], rows: list[dict[str, Any]], serial: str
 ) -> dict[str, dict[str, Any]]:
@@ -98,18 +107,11 @@ def valid_saved_ledger(saved: Any) -> bool:
     ):
         return False
 
-    def valid_key(key: Any) -> bool:
-        return (
-            isinstance(key, str)
-            and len(key) == 64
-            and all(c in "0123456789abcdef" for c in key)
-        )
-
     for key, record in saved["orders"].items():
-        if not valid_key(key) or not isinstance(record, dict):
+        if not is_identity(key) or not isinstance(record, dict):
             return False
         if (
-            not valid_key(record.get("vehicle"))
+            not is_identity(record.get("vehicle"))
             or type(record.get("other")) is not bool
             or not isinstance(record.get("name"), str)
         ):
@@ -125,7 +127,7 @@ def valid_saved_ledger(saved: Any) -> bool:
         except ValueError:
             return False
     for key, total in saved["vehicles"].items():
-        if not valid_key(key) or not isinstance(total, dict):
+        if not is_identity(key) or not isinstance(total, dict):
             return False
         if (
             not isinstance(total.get("name"), str)
