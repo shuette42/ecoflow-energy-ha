@@ -1830,7 +1830,7 @@ Home Assistant 2026.9 added a shared Modbus connection to its `modbus` integrati
 
 ## ADR-032: Account-side history may be read by a periodic HTTP request inside Enhanced Mode under five limits; no value that the device pushes is ever read this way
 
-**Status:** Accepted. Not shipped. Narrows the rule that Enhanced Mode is push for one kind of data.
+**Status:** Accepted (built in #460, first in the v1.25.0-beta.14 pre-release). Narrows the rule that Enhanced Mode is push for one kind of data.
 **Date:** 2026-10-02
 
 **Context:** Enhanced Mode receives every device value as a push over MQTT, and its only HTTP calls are the sign-in, the MQTT credentials and the device list in the setup and options flows. ADR-030 rejected polling inside the push mode for a source that would feed an entity the push already feeds. A contributor proposes cumulative energy per vehicle profile for PowerPulse 2, built from the completed orders the EcoFlow Portal lists for the charger (pull request #460). That history exists only on the account side: the charger does not push it, no existing entity carries it, and none of our parsers reads a vehicle field. The contributor compared the energy of the latest completed record with the meter delta and with the app (16004 Wh, 16.00 kWh), read the pagination on live records down to the last page, and replayed 13 real orders from a C371 without the ledger changing on a second import. The history was checked on that one device.
