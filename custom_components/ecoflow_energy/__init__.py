@@ -779,3 +779,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> 
         await coordinator.async_shutdown()
 
     return True
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Remove opt-in charging ledgers when their integration entry is deleted."""
+    from .charging_history import async_remove_history_stores
+
+    await async_remove_history_stores(hass, entry)

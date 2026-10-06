@@ -152,11 +152,13 @@
         "data": {
           "mode": "Verbindungsmodus",
           "devices": "Geräte",
-          "raw_capture": "24 Stunden lang zusätzliche Diagnosedaten aufzeichnen"
+          "raw_capture": "24 Stunden lang zusätzliche Diagnosedaten aufzeichnen",
+          "powerpulse_vehicle_energy": "Abgeschlossene PowerPulse-Ladungen pro Fahrzeug erfassen"
         },
         "data_description": {
           "devices": "Ein Gerät auszuwählen ist das, was diese Integration dazu bringt, es zu lesen. Ein Gerät mit dem Hinweis \"not supported yet\" hat hier keinen Parser und liefert nur zwei Diagnose-Sensoren, sonst nichts. Es trotzdem ausgewählt zu lassen lohnt sich, denn aus einem Diagnose-Download davon an einem GitHub-Issue entsteht die Unterstützung für ein neues Modell. Dein Diagnose-Download enthält die Rohdaten eines solchen Geräts bereits, es muss also nichts eingeschaltet werden.",
-          "raw_capture": "Behält mehr der Rohdaten, die deine Geräte senden, zeichnet jedes Gerät auf, das diese Integration noch nicht unterstützt, und hält fest, welche Einstellungen die EcoFlow-App währenddessen an deine Geräte schreibt. Das Letzte ist der Weg zu einer Steuerung für ein Modell, das hier niemand besitzt: die Einstellung einmal in der App ändern, während das läuft, zeigt was das Gerät annimmt. Nur sinnvoll, wenn in einem GitHub-Issue danach gefragt wurde, denn die Daten helfen nur zusammen mit einem Diagnose-Download. An deine Geräte wird nie etwas gesendet, und die Aufzeichnung endet nach 24 Stunden von selbst."
+          "raw_capture": "Behält mehr der Rohdaten, die deine Geräte senden, zeichnet jedes Gerät auf, das diese Integration noch nicht unterstützt, und hält fest, welche Einstellungen die EcoFlow-App währenddessen an deine Geräte schreibt. Das Letzte ist der Weg zu einer Steuerung für ein Modell, das hier niemand besitzt: die Einstellung einmal in der App ändern, während das läuft, zeigt was das Gerät annimmt. Nur sinnvoll, wenn in einem GitHub-Issue danach gefragt wurde, denn die Daten helfen nur zusammen mit einem Diagnose-Download. An deine Geräte wird nie etwas gesendet, und die Aufzeichnung endet nach 24 Stunden von selbst.",
+          "powerpulse_vehicle_energy": "Liest abgeschlossene Ladevorgänge etwa alle 5 Minuten aus deinem EcoFlow-Konto und speichert sie lokal in Home Assistant. Die Aufzeichnung wird beim Löschen der Integration entfernt."
         }
       },
       "developer": {
@@ -181,11 +183,13 @@
         "data": {
           "mode": "Verbindungsmodus",
           "devices": "Geräte",
-          "raw_capture": "24 Stunden lang zusätzliche Diagnosedaten aufzeichnen"
+          "raw_capture": "24 Stunden lang zusätzliche Diagnosedaten aufzeichnen",
+          "powerpulse_vehicle_energy": "Abgeschlossene PowerPulse-Ladungen pro Fahrzeug erfassen"
         },
         "data_description": {
           "devices": "Ein Gerät auszuwählen ist das, was diese Integration dazu bringt, es zu lesen. Ein Gerät mit dem Hinweis \"not supported yet\" hat hier keinen Parser und liefert nur zwei Diagnose-Sensoren, sonst nichts. Es trotzdem ausgewählt zu lassen lohnt sich, denn aus einem Diagnose-Download davon an einem GitHub-Issue entsteht die Unterstützung für ein neues Modell. Schalte unten zuerst die Aufzeichnung der Diagnosedaten ein und lade danach herunter, denn bei Anmeldung mit dem EcoFlow-Konto enthält der Download diese Rohdaten nicht von selbst.",
-          "raw_capture": "Behält mehr der Rohdaten, die deine Geräte senden, zeichnet jedes Gerät auf, das diese Integration noch nicht unterstützt, und hält fest, welche Einstellungen die EcoFlow-App währenddessen an deine Geräte schreibt. Das Letzte ist der Weg zu einer Steuerung für ein Modell, das hier niemand besitzt: die Einstellung einmal in der App ändern, während das läuft, zeigt was das Gerät annimmt. Nur sinnvoll, wenn in einem GitHub-Issue danach gefragt wurde, denn die Daten helfen nur zusammen mit einem Diagnose-Download. An deine Geräte wird nie etwas gesendet, und die Aufzeichnung endet nach 24 Stunden von selbst."
+          "raw_capture": "Behält mehr der Rohdaten, die deine Geräte senden, zeichnet jedes Gerät auf, das diese Integration noch nicht unterstützt, und hält fest, welche Einstellungen die EcoFlow-App währenddessen an deine Geräte schreibt. Das Letzte ist der Weg zu einer Steuerung für ein Modell, das hier niemand besitzt: die Einstellung einmal in der App ändern, während das läuft, zeigt was das Gerät annimmt. Nur sinnvoll, wenn in einem GitHub-Issue danach gefragt wurde, denn die Daten helfen nur zusammen mit einem Diagnose-Download. An deine Geräte wird nie etwas gesendet, und die Aufzeichnung endet nach 24 Stunden von selbst.",
+          "powerpulse_vehicle_energy": "Liest abgeschlossene Ladevorgänge etwa alle 5 Minuten aus deinem EcoFlow-Konto und speichert sie lokal in Home Assistant. Die Aufzeichnung wird beim Löschen der Integration entfernt."
         }
       }
     },
@@ -2613,6 +2617,15 @@
       },
       "local_system_batt_temp_c": {
         "name": "System-Batterietemperatur"
+      },
+      "vehicle_energy": {
+        "name": "Wallbox-Energie abgeschlossener Ladevorgänge {vehicle}"
+      },
+      "unnamed_vehicle_energy": {
+        "name": "Wallbox-Energie abgeschlossener Ladevorgänge Unbenanntes Fahrzeug"
+      },
+      "other_vehicle_energy": {
+        "name": "Wallbox-Energie abgeschlossener Ladevorgänge nicht zugeordnet"
       }
     },
     "binary_sensor": {

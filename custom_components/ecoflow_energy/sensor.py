@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import cast
 
@@ -15,12 +16,16 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
+    AUTH_METHOD_APP,
+    CONF_AUTH_METHOD,
+    CONF_VEHICLE_ENERGY,
     DELTA2MAX_SENSORS,
     DELTA3_SENSORS,
     DELTAPROULTRA_SENSORS,
@@ -58,11 +63,14 @@ from .const import (
 )
 from .coordinator import EcoFlowDeviceCoordinator
 from .coordinator.local_modbus import EcoFlowLocalModbusCoordinator
+from .ecoflow.const import device_log_tag
 from .entity import (
     EcoFlowWriteGateMixin,
     accessory_ready,
     label_placeholders,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 # Map string → HA enum
 _STATE_CLASS_MAP = {
@@ -131,6 +139,58 @@ async def async_setup_entry(
             )
 
     async_add_entities(entities)
+
+    if (
+        entry.data.get(CONF_VEHICLE_ENERGY)
+        and entry.data.get(CONF_AUTH_METHOD) == AUTH_METHOD_APP
+    ):
+        from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+        from .charging_history import (
+            async_register_history_stores,
+            async_setup_charging_history,
+            history_limits_store,
+        )
+        from .const import CONF_EMAIL, CONF_PASSWORD
+        from .ecoflow.app_api import AppApiClient
+
+        chargers = [
+            source
+            for source in coordinators.values()
+            if source.device_type == DEVICE_TYPE_POWERPULSE2
+        ]
+        if chargers:
+            api = AppApiClient(
+                async_get_clientsession(hass),
+                entry.data[CONF_EMAIL],
+                entry.data[CONF_PASSWORD],
+                history_store=history_limits_store(hass, entry),
+            )
+            try:
+                await async_register_history_stores(
+                    hass, entry, [source.device_sn for source in chargers]
+                )
+            except (OSError, ValueError, HomeAssistantError) as err:
+                # The history feature is optional: without a confirmed index
+                # its ledgers could outlive the entry, so skip only the
+                # history sensors and leave every live entity of the entry
+                # set up. The next reload retries.
+                _LOGGER.warning(
+                    "Charging history is off for %s: the saved index could "
+                    "not be confirmed (%s)",
+                    ", ".join(device_log_tag(source.device_sn) for source in chargers),
+                    err,
+                )
+                return
+            for charger in chargers:
+                await async_setup_charging_history(
+                    hass,
+                    entry,
+                    charger.device_sn,
+                    charger.device_info,
+                    async_add_entities,
+                    api,
+                )
 
 
 @callback

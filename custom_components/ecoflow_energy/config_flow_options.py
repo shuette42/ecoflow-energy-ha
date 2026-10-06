@@ -39,7 +39,9 @@ from .const import (
     CONF_RAW_CAPTURE_UNTIL,
     CONF_SECRET_KEY,
     CONF_USER_ID,
+    CONF_VEHICLE_ENERGY,
     DEVICE_TYPE_DISPLAY_NAMES,
+    DEVICE_TYPE_POWERPULSE2,
     DEVICE_TYPE_POWERSTREAM,
     DEVICE_TYPE_UNKNOWN,
     ENHANCED_ONLY_DEVICE_TYPES,
@@ -190,6 +192,8 @@ class OptionsFlowMixin(_Base):
                             )
 
         if user_input is not None:
+            if auth_method == AUTH_METHOD_APP and CONF_VEHICLE_ENERGY in user_input:
+                self._pending_vehicle_energy = user_input[CONF_VEHICLE_ENERGY]
             new_mode = user_input.get(CONF_MODE, current_mode)
             selected_sns = user_input.get(CONF_DEVICES, current_device_sns)
 
@@ -315,6 +319,21 @@ class OptionsFlowMixin(_Base):
         # with no parser. Deliberately the last field: it is a help-us-out
         # switch, not a setting anyone needs.
         if auth_method == AUTH_METHOD_APP:
+            # Per-vehicle energy reads the PowerPulse 2 charging history, so
+            # the switch is only offered to an entry that has such a charger.
+            stored_devices = {
+                d["sn"]: d for d in self.config_entry.data.get(CONF_DEVICES, [])
+            }
+            if any(
+                self._stored_device_type(stored_devices, sn) == DEVICE_TYPE_POWERPULSE2
+                for sn in current_device_sns
+            ):
+                schema[
+                    vol.Optional(
+                        CONF_VEHICLE_ENERGY,
+                        default=self.config_entry.data.get(CONF_VEHICLE_ENERGY, False),
+                    )
+                ] = bool
             schema[
                 vol.Required(
                     CONF_RAW_CAPTURE,
@@ -467,6 +486,11 @@ class OptionsFlowMixin(_Base):
         new_data[CONF_MODE] = mode
         new_data[CONF_DEVICES] = selected_devices
         self._apply_raw_capture(new_data)
+        wanted = self._pending_vehicle_energy
+        new_data[CONF_VEHICLE_ENERGY] = bool(
+            mode == MODE_ENHANCED
+            and (new_data.get(CONF_VEHICLE_ENERGY, False) if wanted is None else wanted)
+        )
 
         if mode == MODE_ENHANCED:
             new_data[CONF_AUTH_METHOD] = AUTH_METHOD_APP

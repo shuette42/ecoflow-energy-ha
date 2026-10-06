@@ -152,11 +152,13 @@
         "data": {
           "mode": "Connection Mode",
           "devices": "Devices",
-          "raw_capture": "Record extra diagnostic data for 24 hours"
+          "raw_capture": "Record extra diagnostic data for 24 hours",
+          "powerpulse_vehicle_energy": "Track completed PowerPulse charging energy by vehicle"
         },
         "data_description": {
           "devices": "Selecting a device is what makes this integration read it. A device marked \"not supported yet\" has no parser here, so it produces two diagnostic sensors and nothing else. Leaving it selected is still worth doing, because a diagnostics download from it attached to a GitHub issue is what support for a new model is built from. Your diagnostics download already carries the raw data such a device reports, so nothing needs switching on first.",
-          "raw_capture": "Keeps more of the raw messages your devices send, records any device this integration does not support yet, and records the settings the EcoFlow app writes to your devices while it runs. That last one is how a control gets built for a model nobody here owns: changing the setting in the app once, with this on, shows what the device accepts. Only worth switching on if it was asked for in a GitHub issue, since the data is only useful attached to a diagnostics download. Nothing is ever sent to your devices, and the recording stops by itself after 24 hours."
+          "raw_capture": "Keeps more of the raw messages your devices send, records any device this integration does not support yet, and records the settings the EcoFlow app writes to your devices while it runs. That last one is how a control gets built for a model nobody here owns: changing the setting in the app once, with this on, shows what the device accepts. Only worth switching on if it was asked for in a GitHub issue, since the data is only useful attached to a diagnostics download. Nothing is ever sent to your devices, and the recording stops by itself after 24 hours.",
+          "powerpulse_vehicle_energy": "Reads completed charging sessions from your EcoFlow account about every 5 minutes and keeps a local record of them in Home Assistant. The record is removed when you delete the integration."
         }
       },
       "developer": {
@@ -181,11 +183,13 @@
         "data": {
           "mode": "Connection Mode",
           "devices": "Devices",
-          "raw_capture": "Record extra diagnostic data for 24 hours"
+          "raw_capture": "Record extra diagnostic data for 24 hours",
+          "powerpulse_vehicle_energy": "Track completed PowerPulse charging energy by vehicle"
         },
         "data_description": {
           "devices": "Selecting a device is what makes this integration read it. A device marked \"not supported yet\" has no parser here, so it produces two diagnostic sensors and nothing else. Leaving it selected is still worth doing, because a diagnostics download from it attached to a GitHub issue is what support for a new model is built from. Switch the diagnostic data recording below on first and download afterwards, because with account sign-in the download does not carry that raw data on its own.",
-          "raw_capture": "Keeps more of the raw messages your devices send, records any device this integration does not support yet, and records the settings the EcoFlow app writes to your devices while it runs. That last one is how a control gets built for a model nobody here owns: changing the setting in the app once, with this on, shows what the device accepts. Only worth switching on if it was asked for in a GitHub issue, since the data is only useful attached to a diagnostics download. Nothing is ever sent to your devices, and the recording stops by itself after 24 hours."
+          "raw_capture": "Keeps more of the raw messages your devices send, records any device this integration does not support yet, and records the settings the EcoFlow app writes to your devices while it runs. That last one is how a control gets built for a model nobody here owns: changing the setting in the app once, with this on, shows what the device accepts. Only worth switching on if it was asked for in a GitHub issue, since the data is only useful attached to a diagnostics download. Nothing is ever sent to your devices, and the recording stops by itself after 24 hours.",
+          "powerpulse_vehicle_energy": "Reads completed charging sessions from your EcoFlow account about every 5 minutes and keeps a local record of them in Home Assistant. The record is removed when you delete the integration."
         }
       }
     },
@@ -2613,6 +2617,15 @@
       },
       "local_system_batt_temp_c": {
         "name": "System Battery Temp"
+      },
+      "vehicle_energy": {
+        "name": "Wallbox Completed Charging Energy {vehicle}"
+      },
+      "unnamed_vehicle_energy": {
+        "name": "Wallbox Completed Charging Energy Unnamed Vehicle"
+      },
+      "other_vehicle_energy": {
+        "name": "Wallbox Completed Charging Energy Unassigned"
       }
     },
     "binary_sensor": {

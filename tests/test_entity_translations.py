@@ -17,6 +17,7 @@ types are covered automatically.
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 from pathlib import Path
@@ -30,6 +31,48 @@ LANGS = ("en", "de")
 
 # Diagnostic sensors created directly in sensor.py (not definition-driven)
 DIAGNOSTIC_SENSOR_KEYS = {"mqtt_status", "connection_mode"}
+
+
+# Runtime-discovered vehicle sensors in charging_history.py.
+def _vehicle_sensor_keys(source: str | None = None) -> set[str]:
+    tree = ast.parse(
+        source
+        if source is not None
+        else Path("custom_components/ecoflow_energy/charging_history.py").read_text()
+    )
+    keys: set[str] = set()
+
+    def values(node: ast.expr) -> set[str]:
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return {node.value}
+        if isinstance(node, ast.IfExp):
+            return values(node.body) | values(node.orelse)
+        raise AssertionError("Unsupported translation-key expression")
+
+    def is_key(target: ast.expr) -> bool:
+        return (
+            isinstance(target, ast.Attribute) and target.attr == "_attr_translation_key"
+        ) or (isinstance(target, ast.Name) and target.id == "_attr_translation_key")
+
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Assign)
+            and any(is_key(t) for t in node.targets)
+            or isinstance(node, ast.AnnAssign)
+            and is_key(node.target)
+            and node.value
+        ):
+            assert node.value is not None
+            keys.update(values(node.value))
+        elif isinstance(node, ast.Call):
+            for keyword in node.keywords:
+                if keyword.arg == "translation_key":
+                    keys.update(values(keyword.value))
+    assert keys, "No vehicle translation keys discovered"
+    return keys
+
+
+VEHICLE_SENSOR_KEYS = _vehicle_sensor_keys()
 
 
 def _collect(pattern: str) -> dict[str, Any]:
@@ -88,7 +131,9 @@ def _readback_labels() -> set[str]:
 
 
 PLATFORM_KEYS = {
-    "sensor": _labels(r"[A-Z0-9]+_SENSORS") | DIAGNOSTIC_SENSOR_KEYS,
+    "sensor": _labels(r"[A-Z0-9]+_SENSORS")
+    | DIAGNOSTIC_SENSOR_KEYS
+    | VEHICLE_SENSOR_KEYS,
     "binary_sensor": _labels(r"[A-Z0-9]+_BINARY_SENSORS") | _readback_labels(),
     "switch": _labels(r"[A-Z0-9]+_SWITCHES"),
     "number": _labels(r"[A-Z0-9]+_NUMBERS"),
@@ -182,3 +227,60 @@ def test_charging_current_setpoint_is_named_as_a_setpoint() -> None:
         )["entity"]
         assert entity["sensor"]["ev_charge_current_a"]["name"] == expected
         assert entity["number"]["ev_charge_current_a"]["name"] == expected
+
+
+STRINGS_PATH = Path("custom_components/ecoflow_energy/strings.json")
+
+# The wallbox energy sensors are created at runtime from three translation
+# keys. The names are pinned here as literals, not read back from the files
+# under test, so a rename in one file cannot pass by agreeing with itself.
+VEHICLE_ENERGY_NAMES = {
+    "en": {
+        "vehicle_energy": "Wallbox Completed Charging Energy {vehicle}",
+        "unnamed_vehicle_energy": "Wallbox Completed Charging Energy Unnamed Vehicle",
+        "other_vehicle_energy": "Wallbox Completed Charging Energy Unassigned",
+    },
+    "de": {
+        "vehicle_energy": "Wallbox-Energie abgeschlossener Ladevorgänge {vehicle}",
+        "unnamed_vehicle_energy": (
+            "Wallbox-Energie abgeschlossener Ladevorgänge Unbenanntes Fahrzeug"
+        ),
+        "other_vehicle_energy": (
+            "Wallbox-Energie abgeschlossener Ladevorgänge nicht zugeordnet"
+        ),
+    },
+}
+
+
+def test_vehicle_energy_names_match_across_files() -> None:
+    """The three runtime wallbox energy names agree in every shipped file.
+
+    `strings.json` is the English source and must read exactly like
+    `en.json`; `de.json` carries the German wording of the same three keys.
+    The key set is compared with what `charging_history.py` actually uses, so
+    a fourth dynamic key without a pinned name fails here instead of shipping
+    unnamed.
+    """
+    assert set(VEHICLE_ENERGY_NAMES["en"]) == VEHICLE_SENSOR_KEYS
+    assert set(VEHICLE_ENERGY_NAMES["de"]) == set(VEHICLE_ENERGY_NAMES["en"])
+    strings = json.loads(STRINGS_PATH.read_text(encoding="utf-8"))["entity"]["sensor"]
+    assert {k: strings[k]["name"] for k in VEHICLE_ENERGY_NAMES["en"]} == (
+        VEHICLE_ENERGY_NAMES["en"]
+    )
+    for lang, expected in VEHICLE_ENERGY_NAMES.items():
+        sensors = _load_entity_translations(lang)["sensor"]
+        assert {k: sensors[k]["name"] for k in expected} == expected, lang
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        'class Sensor: _attr_translation_key = "new_key"',
+        'class Sensor: _attr_translation_key: str = "new_key"',
+        'self._attr_translation_key: str = "new_key"',
+        'self._attr_translation_key = "new_key"',
+        'SensorEntityDescription(key="energy", translation_key="new_key")',
+    ],
+)
+def test_vehicle_translation_discovery_shapes(source):
+    assert _vehicle_sensor_keys(source) == {"new_key"}
