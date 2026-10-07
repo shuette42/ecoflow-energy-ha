@@ -460,5 +460,6 @@ class TestRiver3PlusRecording:
         )
         readback = readback_binary_defs_for_serial(DELTA3_SWITCHES, R631_SN)
         assert [d.key for d in readback] == ["ac_out_flow"]
-        for definitions in (DELTA3_SWITCHES, DELTA3_NUMBERS, DELTA3_SELECTS):
-            assert filter_defs_for_serial(definitions, R631_SN) == []
+        assert filter_defs_for_serial(DELTA3_SWITCHES, R631_SN) == []
+        assert filter_defs_for_serial(DELTA3_NUMBERS, R631_SN) == []
+        assert filter_defs_for_serial(DELTA3_SELECTS, R631_SN) == []
