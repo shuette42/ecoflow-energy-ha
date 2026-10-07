@@ -16,6 +16,12 @@ the three units decode through the Delta 3 messages to those readings, and the
 serial prefix gets no switch, number or select and only the sensors the frames
 back. The control for the entity filter is a D3M1 serial, which keeps all of
 them.
+
+The RIVER 3 Plus (`R631`) has its own recording, one unit on 2026-10-07, in
+`tests/fixtures/delta3/r631_frames_issue296.json`: on AC input, a refrigerator
+of about 70 W on the AC output, a phone on USB-C at about 27 W and falling,
+64 %. It shares the RIVER 3 entity set; `TestRiver3PlusRecording` checks what
+its own frames back of that set, and names the one key they do not.
 """
 
 from __future__ import annotations
@@ -345,7 +351,6 @@ class TestReadOnlyEntitySet:
         for unit in ("U0", "U1", "U2"):
             produced |= _replay(unit)[2]
         produced |= _replay("U1", _RUN2)[2]
-        produced |= _replay("U0", _R631)[2]
 
         missing = set(RIVER3_SENSOR_KEYS) - _DERIVED_ENERGY_KEYS - produced
 
@@ -433,6 +438,20 @@ class TestRiver3PlusRecording:
         assert parsed["bms_cell_count"] == 7
         assert parsed["bms_design_cap_mah"] == 12800
         assert parsed["bms_voltage_v"] == pytest.approx(23.22, abs=0.01)
+
+    def test_its_own_frames_back_the_shared_set(self) -> None:
+        """Every shared key but one has a value in the R631 frames alone.
+
+        The unit stayed idle, so Charge Time Remaining never carries a value;
+        the raw remaining-time field it is read from is in the frames, the same
+        basis the RIVER 3 entry used.
+        """
+        raw, _, produced = _replay("U0", _R631)
+
+        missing = set(RIVER3_SENSOR_KEYS) - _DERIVED_ENERGY_KEYS - produced
+
+        assert missing == {"chg_remain_time_min"}
+        assert raw["cms_chg_rem_time"] > 0
 
     def test_gets_the_river3_entity_set(self) -> None:
         """Same exclusion as the RIVER 3: same sensors, AC output, no control."""
