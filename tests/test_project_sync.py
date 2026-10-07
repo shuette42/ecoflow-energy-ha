@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import re
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -13,12 +14,14 @@ SCRIPT = ROOT / ".github" / "tools" / "project_sync.py"
 WORKFLOW = ROOT / ".github" / "workflows" / "project-sync.yml"
 
 spec = importlib.util.spec_from_file_location("project_sync", SCRIPT)
+assert spec is not None
+assert spec.loader is not None
 project_sync = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(project_sync)
 
 EVENT_OPTIONS = ["Neu", "Bearbeitet", "Geschlossen", "Wieder geöffnet", "Kommentiert"]
 
-FIELD_NODES = [
+FIELD_NODES: list[dict[str, Any]] = [
     {
         "id": "F_EVENT",
         "name": "Letztes Ereignis",
