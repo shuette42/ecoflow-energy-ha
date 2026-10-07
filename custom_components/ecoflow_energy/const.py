@@ -5530,7 +5530,7 @@ DELTA3_PORT_PRIORITY_KEYS: frozenset[str] = frozenset(
 
 # Serial prefix -> entity keys that variant never produces. A prefix absent
 # from this table gets the full entity list of its device type. The `R655`
-# entry is added further down, next to the Delta 3 definition lists it is
+# and `R631` entries are added further down, next to the Delta 3 definition lists it is
 # computed from.
 _SN_PREFIX_EXCLUDED_KEYS: dict[str, frozenset[str]] = {
     "BK01": STREAM_MICRO_EXCLUDED_KEYS,
@@ -6599,6 +6599,10 @@ RIVER3_READBACK_KEYS: frozenset[str] = frozenset({"ac_out_flow"})
 _SN_PREFIX_EXCLUDED_KEYS["R655"] = _delta3_names_outside(
     RIVER3_SENSOR_KEYS | RIVER3_READBACK_KEYS
 )
+# RIVER 3 Plus: the same entry, not a second set. Its recording (#296) backs
+# the same sensors and the same AC output state, and like the RIVER 3 it holds
+# no write, so whatever is decided for the family above applies to both.
+_SN_PREFIX_EXCLUDED_KEYS["R631"] = _SN_PREFIX_EXCLUDED_KEYS["R655"]
 
 
 # =====================================================================

@@ -61,6 +61,7 @@
 | **DELTA Pro Ultra** | `Y711` | Enhanced only | 21 + 2 per battery pack | none, read-only | - | ~60 s when idle |
 | **Smart Home Panel 2** | `HD31` | Enhanced only | 9 + 2 per circuit, 1 per storage channel | none, read-only | - | ~2 s |
 | **RIVER 3** | `R655` | Enhanced only | 31 + 1 binary | none, read-only | 2 | ~20-30 s when idle |
+| **RIVER 3 Plus** | `R631` | Enhanced only | 31 + 1 binary | none, read-only | 2 | ~5 s under load |
 
 > **Connection.** Standard Mode reads through the IoT Developer API with your access and secret key; Enhanced Mode signs in with the EcoFlow account and receives pushes at the faster rate. **Enhanced only** means the serial prefix cannot currently be linked to a Developer API key, so Standard Mode reports error 1006 and the entities stay unavailable; the three starred PowerOcean prefixes are in the same position. This is an EcoFlow API limitation, not a configuration problem. Controls marked Enhanced exist only with the account sign-in. The Energy Dashboard column counts the sensors made for it; optional ones are disabled by default and depend on the installation, see the device notes below and the [Energy Dashboard](#energy-dashboard) section.
 >
@@ -210,7 +211,7 @@ Already running a different EcoFlow integration? It can stay installed while you
 |:---|:---|:---|:---|
 | **Connection** | EcoFlow cloud (HTTPS polling + MQTT) | EcoFlow cloud (WSS MQTT) | Your network, Modbus/TCP, no cloud |
 | **Credentials** | Access Key + Secret Key ([Developer Portal](https://developer.ecoflow.com)) | EcoFlow email + password (same as mobile app) | None. EcoFlow support must enable Modbus on the inverter first |
-| **Devices** | All except the Enhanced-only serials (`J327`, `J32D`, `J32E`, `R371`, `R372`, `R374`, `HJ3C`, `BK01`, `BK21`, `ES21`, `ES22`, `HZ31`, `S02F`, `AC71`, `C371`, `C374`, `C376`, `RE11`, `RE17`, `RE41`, `RE42`, `HR61`, `Y711`, `HD31`, `R655`) | All supported devices | Three-phase PowerOcean only |
+| **Devices** | All except the Enhanced-only serials (`J327`, `J32D`, `J32E`, `R371`, `R372`, `R374`, `HJ3C`, `BK01`, `BK21`, `ES21`, `ES22`, `HZ31`, `S02F`, `AC71`, `C371`, `C374`, `C376`, `RE11`, `RE17`, `RE41`, `RE42`, `HR61`, `Y711`, `HD31`, `R655`, `R631`) | All supported devices | Three-phase PowerOcean only |
 | **Update rate** | ~30 s HTTP polling (+ MQTT push for Delta/Smart Plug) | ~2-4 s real-time via WSS MQTT | ~2 s polling |
 | **Delta 2 Max / Smart Plug controls** | All switches and numbers | All switches and numbers | Not applicable |
 | **Delta 3 controls** | Switches and most numbers; the screen and idle shutdowns and the AC charge power need Enhanced Mode | All switches, numbers and selects | Not applicable |

@@ -68,6 +68,11 @@ _FRAMES: list[dict[str, Any]] = json.loads(_FIXTURE_PATH.read_text())["frames"]
 _RUN2_PATH = _FIXTURE_PATH.with_name("r655_frames_issue296_ac_usb.json")
 _RUN2: list[dict[str, Any]] = json.loads(_RUN2_PATH.read_text())["frames"]
 
+# RIVER 3 Plus (R631), one unit, 2026-10-07 17:09-18:12 UTC: on AC input, a
+# refrigerator of about 70 W on the AC output, a phone on USB-C, 64 %.
+_R631_PATH = _FIXTURE_PATH.with_name("r631_frames_issue296.json")
+_R631: list[dict[str, Any]] = json.loads(_R631_PATH.read_text())["frames"]
+
 # Sensors the coordinator integrates from a live power key, so they are not in
 # any frame and cannot be checked against the recording.
 _DERIVED_ENERGY_KEYS = {"ac_in_energy_kwh", "out_energy_kwh"}
@@ -120,9 +125,14 @@ class TestRouting:
     def test_r655_display_name(self) -> None:
         assert get_device_name("", R655_SN) == "RIVER 3"
 
-    def test_river3_plus_is_not_covered(self) -> None:
-        """R631 has no recording behind it, so the R655 entry must not reach it."""
-        assert get_device_type("", R631_SN) == DEVICE_TYPE_UNKNOWN
+    def test_river3_plus_routes_to_delta3(self) -> None:
+        """R631 is routed on its own recording, see TestRiver3PlusRecording."""
+        assert get_device_type("", R631_SN) == DEVICE_TYPE_DELTA3
+        assert get_device_name("", R631_SN) == "RIVER 3 Plus"
+
+    def test_routing_control_unknown_prefix(self) -> None:
+        """The negative control: a neighbouring prefix nobody recorded stays unknown."""
+        assert get_device_type("", "R632TEST0000ABCD") == DEVICE_TYPE_UNKNOWN
 
 
 class TestRecordedFrames:
@@ -335,6 +345,7 @@ class TestReadOnlyEntitySet:
         for unit in ("U0", "U1", "U2"):
             produced |= _replay(unit)[2]
         produced |= _replay("U1", _RUN2)[2]
+        produced |= _replay("U0", _R631)[2]
 
         missing = set(RIVER3_SENSOR_KEYS) - _DERIVED_ENERGY_KEYS - produced
 
@@ -357,3 +368,78 @@ class TestReadOnlyEntitySet:
             line for line in reference.splitlines() if line.startswith("- [RIVER 3]")
         )
         assert f"- {count} sensors and {binary} binary sensor" in bullet
+
+    def test_river3_plus_documented_count_matches(self) -> None:
+        """The RIVER 3 Plus rows state the count of the set it shares."""
+        count = len(filter_defs_for_serial(DELTA3_SENSORS, R631_SN))
+        binary = len(readback_binary_defs_for_serial(DELTA3_SWITCHES, R631_SN))
+        root = Path(__file__).resolve().parents[1]
+
+        readme = (root / "README.md").read_text(encoding="utf-8")
+        row = next(
+            line
+            for line in readme.splitlines()
+            if line.startswith("| **RIVER 3 Plus** |")
+        )
+        assert f"| {count} + {binary} binary |" in row
+
+        reference = (root / "documentation" / "README.md").read_text(encoding="utf-8")
+        bullet = next(
+            line
+            for line in reference.splitlines()
+            if line.startswith("- [RIVER 3 Plus]")
+        )
+        assert f"- {count} sensors and {binary} binary sensor" in bullet
+
+
+class TestRiver3PlusRecording:
+    """RIVER 3 Plus (`R631`): its own frames, decoded through the same path (#296).
+
+    The reporter's conditions: AC input plugged in, a refrigerator of about
+    70 W on the AC output, a phone on USB-C at about 27 W and falling, 64 %.
+    """
+
+    @staticmethod
+    def _frame_at(ts_iso_prefix: str) -> dict[str, Any]:
+        return next(f for f in _R631 if f["ts_iso"].startswith(ts_iso_prefix))
+
+    def test_full_status_frame_matches_the_owner(self) -> None:
+        """17:23 UTC: AC input passed through to the load, phone on USB-C."""
+        raw, parsed, _ = _replay("U0", [self._frame_at("2026-10-07T17:23:22")])
+
+        assert raw["pow_get_ac_in"] == pytest.approx(83.04, abs=0.01)
+        assert parsed["ac_in_w"] == 83
+        assert parsed["pow_in_sum_w"] == parsed["pow_out_sum_w"] == 83
+        assert raw["pow_get_typec1"] == pytest.approx(-14.38, abs=0.01)
+        assert parsed["typec1_w"] == 14
+        assert parsed["cms_batt_soc"] == 64
+        assert parsed["ac_out_flow"] == 1
+
+    def test_output_follows_the_refrigerator(self) -> None:
+        """In equals out throughout; the load cycles between 0 W and ~83 W."""
+        totals = []
+        for frame in _R631:
+            _, parsed, _ = _replay("U0", [frame])
+            if "pow_out_sum_w" in parsed:
+                assert parsed["pow_in_sum_w"] == parsed["pow_out_sum_w"]
+                totals.append(parsed["pow_out_sum_w"])
+
+        assert 0 in totals
+        assert max(totals) == 83
+
+    def test_bms_block_is_a_seven_cell_pack(self) -> None:
+        _, parsed, _ = _replay("U0", _R631)
+
+        assert parsed["bms_cell_count"] == 7
+        assert parsed["bms_design_cap_mah"] == 12800
+        assert parsed["bms_voltage_v"] == pytest.approx(23.22, abs=0.01)
+
+    def test_gets_the_river3_entity_set(self) -> None:
+        """Same exclusion as the RIVER 3: same sensors, AC output, no control."""
+        assert _keys(filter_defs_for_serial(DELTA3_SENSORS, R631_SN)) == set(
+            RIVER3_SENSOR_KEYS
+        )
+        readback = readback_binary_defs_for_serial(DELTA3_SWITCHES, R631_SN)
+        assert [d.key for d in readback] == ["ac_out_flow"]
+        for definitions in (DELTA3_SWITCHES, DELTA3_NUMBERS, DELTA3_SELECTS):
+            assert filter_defs_for_serial(definitions, R631_SN) == []
