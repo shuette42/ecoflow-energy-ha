@@ -5531,7 +5531,7 @@ DELTA3_PORT_PRIORITY_KEYS: frozenset[str] = frozenset(
 # Serial prefix -> entity keys that variant never produces. A prefix absent
 # from this table gets the full entity list of its device type. The `R655`
 # entry is added further down, next to the Delta 3 definition lists it is
-# computed from.
+# computed from, and `R631` shares it.
 _SN_PREFIX_EXCLUDED_KEYS: dict[str, frozenset[str]] = {
     "BK01": STREAM_MICRO_EXCLUDED_KEYS,
     "P321": DELTA3_PORT_PRIORITY_KEYS,
@@ -6599,6 +6599,14 @@ RIVER3_READBACK_KEYS: frozenset[str] = frozenset({"ac_out_flow"})
 _SN_PREFIX_EXCLUDED_KEYS["R655"] = _delta3_names_outside(
     RIVER3_SENSOR_KEYS | RIVER3_READBACK_KEYS
 )
+# RIVER 3 Plus: the same entry, not a second set. Its recording (#296) backs
+# the same sensors with two exceptions taken from the RIVER 3: the unit stayed
+# idle, so Charge Time Remaining rests on the raw remaining-time field alone,
+# and the AC output only ever read on, so the off value comes from the RIVER 3
+# run. It also sends the two lifetime battery energy counters the RIVER 3 does
+# not; they stay off so the family keeps one set. Like the RIVER 3 it holds no
+# write, so whatever is decided for the family above applies to both.
+_SN_PREFIX_EXCLUDED_KEYS["R631"] = _SN_PREFIX_EXCLUDED_KEYS["R655"]
 
 
 # =====================================================================

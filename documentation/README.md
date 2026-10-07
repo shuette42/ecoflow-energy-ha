@@ -27,6 +27,7 @@ Complete list of all sensors, switches, numbers, and binary sensors per device:
 - [DELTA Pro Ultra](entities/delta-pro-ultra.md) - 21 sensors plus 2 per battery pack (`Y711`) - a home backup power station, read-only, Enhanced Mode only
 - [Smart Home Panel 2](entities/smart-home-panel-2.md) - 9 sensors plus 2 per circuit and 1 per storage channel (`HD31`) - a US split-phase load panel with battery backup, read-only, Enhanced Mode only
 - [RIVER 3](entities/delta-3-max-plus.md) - 31 sensors and 1 binary sensor (`R655`) - a portable power station that reports through the Delta 3 messages. It gets the Delta 3 sensors its recorded frames confirm: battery level, input, output, AC input, USB-C and USB-A power, AC input and output energy, charge state, remaining times and the battery readings, plus whether the AC output is on. Read-only, Enhanced Mode only, with no switches, numbers or selects
+- [RIVER 3 Plus](entities/delta-3-max-plus.md) - 31 sensors and 1 binary sensor (`R631`) - sends the same Delta 3 messages as the RIVER 3 and gets the same sensors, plus whether the AC output is on. Read-only, Enhanced Mode only, with no switches, numbers or selects
 
 Counts are the device-specific entity definitions. Every account entry additionally exposes 2 universal diagnostic sensors (connection status and active mode) that are not included above. A Local entry exposes only the active mode sensor.
 

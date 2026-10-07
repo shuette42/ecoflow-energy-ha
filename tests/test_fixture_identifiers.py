@@ -77,8 +77,19 @@ _PLACEHOLDERS = frozenset(
 # identifier in it. The second run is the same heartbeat from the reporter's
 # second recording, under the key 0x79 (`18 01 20 00 28 00 30 00 38 00 40 01
 # 48`). Listed by exact run on purpose: a rule loose enough to cover these
-# would also excuse a plain serial sent under a declared key.
-_KEYED_PROTOBUF_RUNS = frozenset({"tBJZHRKjJbJzJrJ", "axYyQyIyAy9x1"})
+# would also excuse a plain serial sent under a declared key. The last three
+# are a RIVER 3 Plus status frame under the key 0x63 (#296): a list of empty
+# submessages (`0a 00` repeated), and small varint pairs (`0a 04 08 04 10 0b
+# ...`); the serial in the same region is masked.
+_KEYED_PROTOBUF_RUNS = frozenset(
+    {
+        "tBJZHRKjJbJzJrJ",
+        "axYyQyIyAy9x1",
+        "icicicicicicic",
+        "igkgshigkfsdifkes",
+        "riakdicicicicicicicicicicicicicicicicicicicicicicicic",
+    }
+)
 
 
 def _is_masked(run: str) -> bool:

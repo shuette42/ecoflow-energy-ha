@@ -225,9 +225,14 @@ _SN_PREFIX_MAP = {
     # all three decode through the Delta 3 messages with values that match the
     # app (state of charge, input and output power, AC input, remaining time)
     # and the rated hardware (cell count, design capacity). Read-only, see
-    # `_SN_PREFIX_EXCLUDED_KEYS`. The RIVER 3 Plus (R631) is a different
-    # prefix and is not covered by this entry.
+    # `_SN_PREFIX_EXCLUDED_KEYS`.
     "R655": DEVICE_TYPE_DELTA3,
+    # RIVER 3 Plus (#296), routed on its own recording, not by analogy with
+    # the RIVER 3: one unit sent the same 254/21, 32/50 and 32/2 frames, and
+    # they decode through the Delta 3 messages to the owner's readings (64 %,
+    # AC input passed through to a ~70 W load, a phone on USB-C) and to a
+    # 7-cell pack. Read-only on the same terms as the RIVER 3.
+    "R631": DEVICE_TYPE_DELTA3,
     "HW52": DEVICE_TYPE_SMARTPLUG,
     # BK-series Stream devices:
     #  - BK01: Stream Micro
@@ -356,8 +361,9 @@ _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
     "P231": "DELTA 3",
     # Same empty product name from the app API as the base model above.
     "P351": "DELTA 3 Plus",
-    # RIVER 3 only; the RIVER 3 Plus (R631) has its own prefix (#296).
+    # RIVER 3 family, each on its own recording (#296).
     "R655": "RIVER 3",
+    "R631": "RIVER 3 Plus",
     "BK01": "Stream Micro",
     "BK11": "Stream Ultra",
     "BK31": "Stream AC Pro",
