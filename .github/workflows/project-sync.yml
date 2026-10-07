@@ -1,0 +1,38 @@
+name: Project Sync
+
+# Mirrors issue events onto the project board: what happened and when.
+# The built-in project workflows handle added, closed and reopened for the
+# Status field; this one adds edited issues and new comments.
+
+on:
+  issues:
+    types: [opened, edited, closed, reopened]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Sync issue to project
+    runs-on: ubuntu-latest
+    # Pull requests share the issue_comment trigger and are not tracked here.
+    if: github.repository == 'shuette42/ecoflow-energy-ha' && !github.event.issue.pull_request
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/tools
+      - name: Update project item
+        run: python3 .github/tools/project_sync.py
+        env:
+          # Classic token with the "project" scope: the board belongs to a user
+          # account, which GITHUB_TOKEN and fine-grained tokens cannot reach.
+          GH_TOKEN: ${{ secrets.PROJECT_SYNC_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_ACTION: ${{ github.event.action }}
+          ISSUE_NODE_ID: ${{ github.event.issue.node_id }}
