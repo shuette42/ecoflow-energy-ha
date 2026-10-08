@@ -2,11 +2,12 @@ name: Project Sync
 
 # Mirrors issue events onto the project board: what happened and when.
 # The built-in project workflows handle added, closed and reopened for the
-# Status field; this one adds edited issues and new comments.
+# Status field; this one adds edited issues, new comments and label changes,
+# and derives Status and "Wartet auf" from the labels.
 
 on:
   issues:
-    types: [opened, edited, closed, reopened]
+    types: [opened, edited, closed, reopened, labeled, unlabeled]
   issue_comment:
     types: [created]
 
@@ -36,3 +37,5 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           EVENT_ACTION: ${{ github.event.action }}
           ISSUE_NODE_ID: ${{ github.event.issue.node_id }}
+          # Set on labeled/unlabeled only; label names are defined by the maintainer.
+          LABEL_NAME: ${{ github.event.label.name }}

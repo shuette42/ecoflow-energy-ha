@@ -36,6 +36,22 @@ FIELD_NODES: list[dict[str, Any]] = [
         "name": "Steuerung",
         "options": [{"id": "O_WATCH", "name": "Nur beobachten"}],
     },
+    {
+        "id": "F_STATUS",
+        "name": "Status",
+        "options": [
+            {"id": f"S_{name}", "name": name}
+            for name in ("Eingang", "Bereit", "In Arbeit", "Review", "Wartet")
+        ],
+    },
+    {
+        "id": "F_WAIT",
+        "name": "Wartet auf",
+        "options": [
+            {"id": f"W_{name}", "name": name}
+            for name in ("Keine", "Hardwaredaten", "Reporter", "Freigabe")
+        ],
+    },
     {},
 ]
 
@@ -45,16 +61,42 @@ def project_with(nodes: list[dict]) -> dict:
 
 
 class FakeGraphQL:
-    """Records calls and answers the three queries the script makes."""
+    """Records calls and answers the four queries the script makes."""
 
-    def __init__(self, nodes: list[dict] | None = None) -> None:
+    def __init__(
+        self,
+        nodes: list[dict] | None = None,
+        labels: list[str] | None = None,
+        state: str = "OPEN",
+        waiting_on: str | None = None,
+    ) -> None:
         self.project = project_with(FIELD_NODES if nodes is None else nodes)
+        self.issue = {
+            "state": state,
+            "labels": {"nodes": [{"name": n} for n in labels or []]},
+            "projectItems": {
+                "nodes": [
+                    {
+                        "project": {"id": "OTHER"},
+                        "fieldValueByName": {"name": "Hardwaredaten"},
+                    },
+                    {
+                        "project": {"id": "PROJECT"},
+                        "fieldValueByName": (
+                            {"name": waiting_on} if waiting_on else None
+                        ),
+                    },
+                ]
+            },
+        }
         self.calls: list[tuple[str, dict]] = []
 
     def __call__(self, query: str, **variables: object) -> dict:
         self.calls.append((query, variables))
         if "projectV2(number" in query:
             return {"user": {"projectV2": self.project}}
+        if "node(id" in query:
+            return {"node": self.issue}
         if "addProjectV2ItemById" in query:
             return {"addProjectV2ItemById": {"item": {"id": "ITEM"}}}
         return {"updateProjectV2ItemFieldValue": {"projectV2Item": {"id": "ITEM"}}}
@@ -64,6 +106,8 @@ class FakeGraphQL:
         for query, _ in self.calls:
             if "projectV2(number" in query:
                 out.append("read")
+            elif "node(id" in query:
+                out.append("issue")
             elif "addProjectV2ItemById" in query:
                 out.append("add")
             else:
@@ -100,7 +144,14 @@ def test_each_tracked_event_stamps_its_label_and_date(event, action, label):
 
 
 def test_untracked_event_plans_nothing():
-    assert project_sync.plan_updates("issues", "labeled", "2026-10-07") == []
+    assert project_sync.plan_updates("issues", "assigned", "2026-10-07") == []
+
+
+@pytest.mark.parametrize("action", ["labeled", "unlabeled"])
+def test_label_change_stamps_the_date_only(action):
+    assert project_sync.plan_updates("issues", action, "2026-10-08") == [
+        ("Letzte Änderung", "2026-10-08")
+    ]
 
 
 def test_only_opened_sets_type_and_control_defaults():
@@ -125,9 +176,9 @@ def test_edited_issue_writes_option_and_date_to_the_board(fake):
 def test_issue_is_added_before_any_field_is_written(fake):
     project_sync.sync("issues", "opened", "ISSUE_NODE", "2026-10-07")
     kinds = fake.kinds()
-    assert kinds[:2] == ["read", "add"]
-    assert set(kinds[2:]) == {"set"}
-    assert fake.calls[1][1]["content"] == "ISSUE_NODE"
+    assert kinds[:3] == ["read", "issue", "add"]
+    assert set(kinds[3:]) == {"set"}
+    assert fake.calls[2][1]["content"] == "ISSUE_NODE"
 
 
 def test_opened_issue_gets_four_fields(fake):
@@ -135,7 +186,7 @@ def test_opened_issue_gets_four_fields(fake):
 
 
 def test_untracked_event_touches_nothing(fake):
-    assert project_sync.sync("issues", "labeled", "ISSUE_NODE", "2026-10-07") == 0
+    assert project_sync.sync("issues", "assigned", "ISSUE_NODE", "2026-10-07") == 0
     assert fake.calls == []
 
 
@@ -198,3 +249,81 @@ def test_workflow_skips_pull_requests_and_other_repositories():
 def test_workflow_requests_read_only_repository_permissions():
     text = WORKFLOW.read_text()
     assert re.search(r"^permissions:\n  contents: read$", text, flags=re.MULTILINE)
+
+
+# --- Status derived from labels -------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("labels", "expected"),
+    [
+        (["in-progress", "action:bugfix", "needs-info"], ("In Arbeit", "Keine")),
+        (["action:respond", "needs-info"], ("Bereit", "Keine")),
+        (["action:followup"], ("Bereit", "Keine")),
+        (["analysis-ready", "needs-info"], ("Review", "Freigabe")),
+        (["needs-info", "priority:p2"], ("Wartet", "Reporter")),
+    ],
+)
+def test_labels_decide_status_first_rule_wins(labels, expected):
+    planned = project_sync.plan_status(labels, None, "labeled", "x")
+    assert planned == [("Status", expected[0]), ("Wartet auf", expected[1])]
+
+
+def test_needs_info_keeps_a_wait_reason_set_by_hand():
+    planned = dict(project_sync.plan_status(["needs-info"], "Hardwaredaten", "labeled"))
+    assert planned["Wartet auf"] == "Hardwaredaten"
+    planned = dict(project_sync.plan_status(["needs-info"], "Keine", "labeled"))
+    assert planned["Wartet auf"] == "Reporter"
+
+
+def test_removing_the_last_claim_hands_the_issue_to_the_reporter():
+    planned = project_sync.plan_status(
+        ["bug", "priority:p2"], None, "unlabeled", "action:respond"
+    )
+    assert planned == [("Status", "Wartet"), ("Wartet auf", "Reporter")]
+
+
+@pytest.mark.parametrize(
+    ("action", "label"),
+    [("unlabeled", "priority:p2"), ("labeled", "enhancement"), ("created", "")],
+)
+def test_labels_without_a_claim_leave_the_board_alone(action, label):
+    assert project_sync.plan_status(["bug", "priority:p2"], None, action, label) == []
+
+
+def test_labeled_event_writes_derived_status_to_the_board(monkeypatch):
+    fake = FakeGraphQL(labels=["bug", "action:respond"], waiting_on="Reporter")
+    monkeypatch.setattr(project_sync, "run_graphql", fake)
+    assert (
+        project_sync.sync(
+            "issues", "labeled", "ISSUE_NODE", "2026-10-08", "action:respond"
+        )
+        == 3
+    )
+    values = {w["field"]: w["value"] for w in fake.writes()}
+    assert values == {
+        "F_DATE": {"date": "2026-10-08"},
+        "F_STATUS": {"singleSelectOptionId": "S_Bereit"},
+        "F_WAIT": {"singleSelectOptionId": "W_Keine"},
+    }
+
+
+def test_wait_reason_is_read_from_this_board_not_another(monkeypatch):
+    fake = FakeGraphQL(labels=["needs-info"])
+    monkeypatch.setattr(project_sync, "run_graphql", fake)
+    project_sync.sync("issue_comment", "created", "ISSUE_NODE", "2026-10-08")
+    values = {w["field"]: w["value"] for w in fake.writes()}
+    assert values["F_WAIT"] == {"singleSelectOptionId": "W_Reporter"}
+
+
+def test_closed_issue_keeps_the_status_the_builtin_workflow_set(monkeypatch):
+    fake = FakeGraphQL(labels=["action:respond"], state="CLOSED")
+    monkeypatch.setattr(project_sync, "run_graphql", fake)
+    project_sync.sync("issues", "closed", "ISSUE_NODE", "2026-10-08")
+    assert "F_STATUS" not in {w["field"] for w in fake.writes()}
+
+
+def test_workflow_listens_to_label_changes():
+    text = WORKFLOW.read_text()
+    assert "labeled, unlabeled" in text
+    assert "LABEL_NAME: ${{ github.event.label.name }}" in text
