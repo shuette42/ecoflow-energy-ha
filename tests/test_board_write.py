@@ -99,7 +99,7 @@ def test_text_is_flattened_and_capped():
 def test_evidence_field_takes_a_longer_text_than_the_default_cap():
     long_text = "word " * 600
     value = bw.check_value("Stand / Beleg", long_text)
-    assert len(value) == bw.TEXT_LIMITS["Stand / Beleg"] == 1900
+    assert len(value) == bw.TEXT_LIMITS["Stand / Beleg"] == 1024
     assert bw.check_value("Stand / Beleg", "a\nb") == "a\nb"  # paragraphs kept
     # the other free-text fields keep the short cap
     assert len(bw.check_value("Nächster Schritt", long_text)) == bw.TEXT_LIMIT == 400

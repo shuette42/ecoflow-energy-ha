@@ -43,7 +43,8 @@ GRAPHQL_URL = "https://api.github.com/graphql"
 TOKEN_ENV = "BOARD_TOKEN"
 TEXT_LIMIT = 400
 # Per-field cap for free text that needs more room than TEXT_LIMIT.
-TEXT_LIMITS: dict[str, int] = {"Stand / Beleg": 1900}
+# A Projects text field takes 1024 characters (measured: 1025 is rejected by the API).
+TEXT_LIMITS: dict[str, int] = {"Stand / Beleg": 1024}
 
 # Field -> allowed values. None means free text (one line, TEXT_LIMIT chars).
 WRITABLE: dict[str, set[str] | None] = {
