@@ -96,6 +96,15 @@ def test_text_is_flattened_and_capped():
     assert len(value) == bw.TEXT_LIMIT
 
 
+def test_evidence_field_takes_a_longer_text_than_the_default_cap():
+    long_text = "word " * 600
+    value = bw.check_value("Stand / Beleg", long_text)
+    assert len(value) == bw.TEXT_LIMITS["Stand / Beleg"] == 1900
+    assert bw.check_value("Stand / Beleg", "a\nb") == "a\nb"  # paragraphs kept
+    # the other free-text fields keep the short cap
+    assert len(bw.check_value("Nächster Schritt", long_text)) == bw.TEXT_LIMIT == 400
+
+
 def test_target_version_must_be_a_version():
     assert bw.check_value("Zielversion", "1.25.0-beta.17") == "1.25.0-beta.17"
     with pytest.raises(RuntimeError, match="Zielversion"):
@@ -166,3 +175,9 @@ def test_main_reports_errors_without_a_traceback(board, capsys):
 def test_main_rejects_unknown_usage(capsys):
     assert bw.main(["delete", "296"]) == 64
     assert "usage" in capsys.readouterr().err
+
+
+def test_notice_field_keeps_paragraphs_but_not_control_characters():
+    value = bw.check_value("Stand / Beleg", "Hi,\r\n\r\nline two\x07 here.\nend")
+    assert value == "Hi,\n\nline two here.\nend"
+    assert bw.check_value("Nächster Schritt", "a\nb") == "a b"

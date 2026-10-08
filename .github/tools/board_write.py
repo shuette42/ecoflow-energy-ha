@@ -42,10 +42,13 @@ REPO_OWNER, REPO_NAME = "shuette42", "ecoflow-energy-ha"
 GRAPHQL_URL = "https://api.github.com/graphql"
 TOKEN_ENV = "BOARD_TOKEN"
 TEXT_LIMIT = 400
+# Per-field cap for free text that needs more room than TEXT_LIMIT.
+TEXT_LIMITS: dict[str, int] = {"Stand / Beleg": 1900}
 
 # Field -> allowed values. None means free text (one line, TEXT_LIMIT chars).
 WRITABLE: dict[str, set[str] | None] = {
     "Nächster Schritt": None,
+    "Stand / Beleg": None,
     "Zielversion": None,
     "Lieferstand": {
         "Ungeprüft",
@@ -122,11 +125,22 @@ def http_graphql(query: str, **variables: object) -> dict:
     return payload["data"]
 
 
-def clean_text(value: str) -> str:
-    """One line, no control characters, at most TEXT_LIMIT characters."""
+# Fields shown to the maintainer as a whole text (the notice draft): line
+# breaks stay so the paragraphs read as written.
+MULTILINE = {"Stand / Beleg"}
+
+
+def clean_text(value: str, limit: int = TEXT_LIMIT, multiline: bool = False) -> str:
+    """No control characters, at most `limit` characters; one line unless multiline."""
+    if multiline:
+        lines = value.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+        kept = [
+            "".join(ch for ch in line if ch.isprintable()).rstrip() for line in lines
+        ]
+        return "\n".join(kept).strip()[:limit]
     flat = " ".join(value.split())
     flat = "".join(ch for ch in flat if ch.isprintable())
-    return flat[:TEXT_LIMIT]
+    return flat[:limit]
 
 
 def check_value(field: str, value: str) -> str:
@@ -142,7 +156,7 @@ def check_value(field: str, value: str) -> str:
                 f"'{value}' is not allowed for '{field}' (allowed: {sorted(allowed)})"
             )
         return value
-    value = clean_text(value)
+    value = clean_text(value, TEXT_LIMITS.get(field, TEXT_LIMIT), field in MULTILINE)
     if field == "Zielversion" and value and not VERSION_RE.match(value):
         raise RuntimeError(
             f"Zielversion must look like 1.25.0 or 1.25.0-beta.17, got '{value}'"
