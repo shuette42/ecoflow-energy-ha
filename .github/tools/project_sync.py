@@ -216,6 +216,8 @@ def to_field_value(field_name: str, field: dict, value: str) -> dict:
     """Build the ProjectV2FieldValue payload for one field."""
     if field["type"] == "DATE":
         return {"date": value}
+    if field["type"] == "TEXT":
+        return {"text": value}
     option_id = field["options"].get(value)
     if option_id is None:
         raise RuntimeError(
