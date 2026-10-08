@@ -52,10 +52,14 @@ STATUS_FIELD = "Status"
 WAITING_FIELD = "Wartet auf"
 NO_WAIT = "Keine"
 
-# Labels that say who holds the issue. "in-progress" and "analysis-ready" are
-# claims, every "action:" label means the maintainer owes the next step, and
-# "needs-info" means a person outside owes it.
+# Labels that say who holds the issue. "in-progress", "ship-ready" and
+# "analysis-ready" are claims, every "action:" label means the maintainer owes
+# the next step, and "needs-info" means a person outside owes it. The two
+# "-ready" labels both wait for the maintainer, but for different things:
+# "analysis-ready" for the decision on an analysis, "ship-ready" for the click
+# that delivers a finished, staged change.
 IN_PROGRESS = "in-progress"
+SHIP_READY = "ship-ready"
 ANALYSIS_READY = "analysis-ready"
 NEEDS_INFO = "needs-info"
 ACTION_PREFIX = "action:"
@@ -63,7 +67,11 @@ ACTION_PREFIX = "action:"
 
 def is_claim_label(name: str) -> bool:
     """True for a label whose removal hands the issue to somebody else."""
-    return name.startswith(ACTION_PREFIX) or name in (IN_PROGRESS, ANALYSIS_READY)
+    return name.startswith(ACTION_PREFIX) or name in (
+        IN_PROGRESS,
+        SHIP_READY,
+        ANALYSIS_READY,
+    )
 
 
 def plan_status(
@@ -77,12 +85,13 @@ def plan_status(
     The first matching rule wins:
 
     1. in-progress        -> In Arbeit, nothing to wait for
-    2. any action: label  -> Bereit, the maintainer owes the next step
-    3. analysis-ready     -> Review, waiting for the maintainer's decision
-    4. needs-info         -> Wartet, on what the board already names
+    2. ship-ready         -> Auslieferung, waiting for the maintainer's approval
+    3. any action: label  -> Bereit, the maintainer owes the next step
+    4. analysis-ready     -> Review, waiting for the maintainer's decision
+    5. needs-info         -> Wartet, on what the board already names
                              (Hardwaredaten, Release, ...) or else the reporter
-    5. a claim label was just removed and none of the above holds
-                          -> Wartet, as in rule 4: our step is done
+    6. a claim label was just removed and none of the above holds
+                          -> Wartet, as in rule 5: our step is done
 
     Anything else returns nothing, so a value set by hand on the board stays.
     """
@@ -90,6 +99,8 @@ def plan_status(
     named_wait = waiting_on if waiting_on and waiting_on != NO_WAIT else "Reporter"
     if IN_PROGRESS in names:
         return [(STATUS_FIELD, "In Arbeit"), (WAITING_FIELD, NO_WAIT)]
+    if SHIP_READY in names:
+        return [(STATUS_FIELD, "Auslieferung"), (WAITING_FIELD, "Freigabe")]
     if any(n.startswith(ACTION_PREFIX) for n in names):
         return [(STATUS_FIELD, "Bereit"), (WAITING_FIELD, NO_WAIT)]
     if ANALYSIS_READY in names:

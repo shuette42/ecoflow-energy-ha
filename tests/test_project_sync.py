@@ -41,7 +41,14 @@ FIELD_NODES: list[dict[str, Any]] = [
         "name": "Status",
         "options": [
             {"id": f"S_{name}", "name": name}
-            for name in ("Eingang", "Bereit", "In Arbeit", "Review", "Wartet")
+            for name in (
+                "Eingang",
+                "Bereit",
+                "In Arbeit",
+                "Review",
+                "Auslieferung",
+                "Wartet",
+            )
         ],
     },
     {
@@ -258,8 +265,12 @@ def test_workflow_requests_read_only_repository_permissions():
     ("labels", "expected"),
     [
         (["in-progress", "action:bugfix", "needs-info"], ("In Arbeit", "Keine")),
+        (["in-progress", "ship-ready"], ("In Arbeit", "Keine")),
+        (["ship-ready", "action:respond", "needs-info"], ("Auslieferung", "Freigabe")),
+        (["ship-ready", "analysis-ready"], ("Auslieferung", "Freigabe")),
         (["action:respond", "needs-info"], ("Bereit", "Keine")),
         (["action:followup"], ("Bereit", "Keine")),
+        (["action:respond", "analysis-ready"], ("Bereit", "Keine")),
         (["analysis-ready", "needs-info"], ("Review", "Freigabe")),
         (["needs-info", "priority:p2"], ("Wartet", "Reporter")),
     ],
@@ -267,6 +278,70 @@ def test_workflow_requests_read_only_repository_permissions():
 def test_labels_decide_status_first_rule_wins(labels, expected):
     planned = project_sync.plan_status(labels, None, "labeled", "x")
     assert planned == [("Status", expected[0]), ("Wartet auf", expected[1])]
+
+
+def test_a_staged_change_and_an_analysis_wait_on_different_statuses():
+    # Both wait for the maintainer, but the board must tell a delivery click
+    # apart from an analysis decision.
+    ship = dict(project_sync.plan_status(["ship-ready"], None, "labeled", "ship-ready"))
+    analysis = dict(
+        project_sync.plan_status(["analysis-ready"], None, "labeled", "analysis-ready")
+    )
+    assert ship == {"Status": "Auslieferung", "Wartet auf": "Freigabe"}
+    assert analysis == {"Status": "Review", "Wartet auf": "Freigabe"}
+
+
+@pytest.mark.parametrize(
+    ("label", "expected"),
+    [
+        ("ship-ready", True),
+        ("analysis-ready", True),
+        ("in-progress", True),
+        ("action:respond", True),
+        ("needs-info", False),
+        ("enhancement", False),
+    ],
+)
+def test_claim_labels_include_ship_ready(label, expected):
+    assert project_sync.is_claim_label(label) is expected
+
+
+def test_removing_ship_ready_hands_the_issue_to_the_reporter():
+    planned = project_sync.plan_status(["bug"], None, "unlabeled", "ship-ready")
+    assert planned == [("Status", "Wartet"), ("Wartet auf", "Reporter")]
+
+
+def test_ship_ready_label_writes_auslieferung_to_the_board(monkeypatch):
+    fake = FakeGraphQL(labels=["bug", "ship-ready"], waiting_on="Reporter")
+    monkeypatch.setattr(project_sync, "run_graphql", fake)
+    assert (
+        project_sync.sync("issues", "labeled", "ISSUE_NODE", "2026-10-08", "ship-ready")
+        == 3
+    )
+    values = {w["field"]: w["value"] for w in fake.writes()}
+    assert values == {
+        "F_DATE": {"date": "2026-10-08"},
+        "F_STATUS": {"singleSelectOptionId": "S_Auslieferung"},
+        "F_WAIT": {"singleSelectOptionId": "W_Freigabe"},
+    }
+
+
+def test_ship_ready_on_a_board_without_the_status_option_fails_loudly(monkeypatch):
+    # The option has to exist before the label is used; a missing one must stop
+    # the run with a named error instead of leaving the card on its old Status.
+    nodes = [
+        {
+            **n,
+            "options": [o for o in n["options"] if o["name"] != "Auslieferung"],
+        }
+        if n.get("name") == "Status"
+        else n
+        for n in FIELD_NODES
+    ]
+    fake = FakeGraphQL(nodes, labels=["ship-ready"])
+    monkeypatch.setattr(project_sync, "run_graphql", fake)
+    with pytest.raises(RuntimeError, match="no option 'Auslieferung'"):
+        project_sync.sync("issues", "labeled", "ISSUE_NODE", "2026-10-08", "ship-ready")
 
 
 def test_needs_info_keeps_a_wait_reason_set_by_hand():
