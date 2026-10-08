@@ -21,10 +21,12 @@ from ..const import (
 )
 from ..ecoflow.parsers.stream_ac5000_proto import (
     UNIT_POWER_BY_SN_KEY,
+    UNIT_POWER_UNSIGNED_BY_SN_KEY,
     UNIT_PV_BY_SN_KEY,
     UNIT_PV_ENTRY_SOC_KEY,
+    sign_by_unit_direction,
 )
-from ..ecoflow.parsers.stream_proto import SOC_FALLBACK_KEY
+from ..ecoflow.parsers.stream_proto import BMS_BATT_W_KEY, SOC_FALLBACK_KEY
 from ..ecoflow.parsers.wave3_proto import (
     WAVE3_ACTIVE_MODE_INPUTS,
     resolve_active_mode,
@@ -164,6 +166,13 @@ class StateApplyMixin(_Base):
             stats["own_soc_precise_pct"] = round(float(own), 2)
         return strings
 
+    def _unit_bms_direction(self, serial: str) -> float | None:
+        """The last BMS direction of the unit `serial`, this one or a sibling."""
+        if serial == self.device_sn:
+            return self._bms_batt_direction
+        sibling = self._linked_unit_coordinator(serial)
+        return None if sibling is None else sibling._bms_batt_direction
+
     def _resolve_unit_power(
         self, parsed: dict[str, Any], *, own_connection: bool, now: float
     ) -> None:
@@ -195,7 +204,18 @@ class StateApplyMixin(_Base):
         (`linked_unit_stats`) are running totals.
         """
         power = parsed.pop(UNIT_POWER_BY_SN_KEY, None)
+        unsigned = parsed.pop(UNIT_POWER_UNSIGNED_BY_SN_KEY, None)
+        bms_w = parsed.pop(BMS_BATT_W_KEY, None)
         strings = parsed.pop(UNIT_PV_BY_SN_KEY, None)
+        # Each unit's own BMS heartbeat is the one direction it reports for
+        # itself. A zero keeps the last sign: `f54` reaches 0 on its own.
+        if own_connection and isinstance(bms_w, (int, float)) and bms_w:
+            self._bms_batt_direction = 1.0 if bms_w > 0 else -1.0
+        if own_connection and isinstance(unsigned, dict) and unsigned:
+            power = {
+                **(power if isinstance(power, dict) else {}),
+                **sign_by_unit_direction(unsigned, self._unit_bms_direction),
+            }
         stats = dict(self._unit_power_stats or {})
         handoffs: dict[str, dict[str, Any]] = {}
 
@@ -221,6 +241,15 @@ class StateApplyMixin(_Base):
                     stats["units_received"] = stats.get("units_received", 0) + 1
                 else:
                     stats["units_held"] = stats.get("units_held", 0) + 1
+
+        # The parser signs the entry (positive is charge), so the split is the
+        # same one the system battery power gets.
+        unit_w = parsed.get("unit_batt_w")
+        if isinstance(unit_w, (int, float)):
+            parsed["unit_batt_charge_power_w"] = float(unit_w) if unit_w > 0 else 0.0
+            parsed["unit_batt_discharge_power_w"] = (
+                -float(unit_w) if unit_w < 0 else 0.0
+            )
 
         if isinstance(strings, dict) and strings:
             own_strings = strings.get(self.device_sn)

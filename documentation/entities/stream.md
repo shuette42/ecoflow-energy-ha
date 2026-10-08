@@ -6,7 +6,7 @@ Full list of all entities created for Stream devices.
 
 **The Stream Micro (`BK01`) does not.** It is a grid-tie inverter with two solar strings and no battery, and it gets a reduced set. See [Stream Micro (BK01)](#stream-micro-bk01) at the end of this page.
 
-**Totals:** 55 sensors, 2 binary sensors, 1 number. Stream AC Pro (`BK31`) adds 2 switches and 3 numbers. Four of the 55 are *accessory* entities (PV 3 and PV 4, power and energy) and exist only on a unit that reports those strings.
+**Totals:** 61 sensors, 2 binary sensors, 1 number. Stream AC Pro (`BK31`) adds 2 switches and 3 numbers. Nine of the 61 are *accessory* entities: PV 3 and PV 4, power and energy, which exist only on a unit that reports those strings, and the five Unit Battery readings, which exist only on a unit linked to a STREAM AC 5000.
 
 > Entities marked with *disabled* are available but hidden by default. Enable them in **Settings > Devices > EcoFlow Stream > Entities** (click the filter icon and show disabled entities).
 
@@ -24,9 +24,13 @@ Full list of all entities created for Stream devices.
 | Unit Battery SOC | % | diagnostic | disabled | This unit's own battery state of charge. On a single unit it repeats Battery SOC, which is why it is off by default |
 | Battery SOC (Precise) | % | diagnostic | disabled | High-resolution SoC |
 | Battery SoH | % | - | enabled | State of health |
+| Battery Cycles | - | - | enabled | Charge cycles the BMS has counted for this unit's pack. It tracks the lifetime energy through the pack divided by its capacity. **Enhanced Mode only.** |
 | Battery Power | W | - | enabled | This unit's own battery, positive = charging, negative = discharging. Measured at the battery (DC side) and updated about once a minute. On linked units each unit shows its own battery, not the group |
 | Battery Charge Power | W | - | enabled | Charging power of this unit's battery (always >= 0) |
 | Battery Discharge Power | W | - | enabled | Discharging power of this unit's battery (always >= 0) |
+| Unit Battery Power | W | - | *accessory* | This unit's battery power as the app shows it, positive = charging, negative = discharging. Only on a unit linked to a [STREAM AC 5000](stream-ac-5000.md), which reports it for every unit in the group. Unlike Battery Power it updates every few seconds and is measured on the AC side, so it matches the app where the BMS reading does not (one owner saw 63 W of discharge on Battery Power while the app showed 7 W) |
+| Unit Battery Charge Power | W | - | *accessory* | Charging power from Unit Battery Power (always >= 0) |
+| Unit Battery Discharge Power | W | - | *accessory* | Discharging power from Unit Battery Power (always >= 0) |
 | Battery Voltage | V | - | enabled | Pack voltage |
 | Battery Temp | C | - | enabled | Battery temperature |
 | Backup Reserve | % | diagnostic | enabled | Current reserve level (mirrors the number) |
@@ -95,6 +99,8 @@ Full list of all entities created for Stream devices.
 |:---|:---:|:---:|:---|
 | Battery Charge Energy | kWh | enabled | Battery charge |
 | Battery Discharge Energy | kWh | enabled | Battery discharge |
+| Unit Battery Charge Energy | kWh | *accessory* | Battery charge, integrated from Unit Battery Charge Power. Only on a unit linked to a STREAM AC 5000 |
+| Unit Battery Discharge Energy | kWh | *accessory* | Battery discharge, integrated from Unit Battery Discharge Power. Only on a unit linked to a STREAM AC 5000 |
 | Solar Energy | kWh | disabled | Solar production (needs a paired meter) |
 | Home Energy | kWh | disabled | Home consumption (needs a paired meter) |
 | PV 1 Energy to PV 4 Energy | kWh | disabled | Per-string solar production. The counters for strings 3 and 4 follow their power readings: *accessory*, so they exist only on a unit that reports those strings |

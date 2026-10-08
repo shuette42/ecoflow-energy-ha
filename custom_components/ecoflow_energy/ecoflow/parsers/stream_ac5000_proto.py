@@ -50,7 +50,8 @@ Data shape:
   (issue #401), so the block is decoded one entry at a time and handed to
   the coordinator keyed by serial: see `_decode_pv_entry`.
 
-Not mapped: ``f50.1.4`` latches at rest (see the field map); ``f38.1`` and
+Not mapped: ``f50.1.4`` latches at rest (see the field map) and only lends
+its sign to the unsigned per-unit ``f54.1.4``; ``f38.1`` and
 ``f44`` repeat pack readings `32/50` already carries, and mapping both
 makes the keys flap; ``f38.1.3``/``f44.2`` look like a cycle count but
 read 497, 499 and 1311 within minutes; ``f33.9`` sat at 600 throughout and
@@ -63,10 +64,12 @@ from __future__ import annotations
 
 import logging
 import struct
+from collections.abc import Callable
 from math import isfinite
 from typing import Any
 
 from ..proto.decoder import decode_header_message
+from .stream_proto import BMS_BATT_W_KEY
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -89,6 +92,16 @@ _UNIT_POWER_SCALE = 0.5
 # Key the coordinator consumes and removes: the serial decides which unit a
 # reading belongs to, and only the coordinator knows which serial it is.
 UNIT_POWER_BY_SN_KEY = "_unit_batt_w_by_sn"
+# `f54.1.4` is a magnitude: a unit discharging 7 W reads 14, the same as one
+# charging 7 W. The direction comes from the signed `f50.1.4` of the same
+# serial when the frame carries it; see `_sign_unit_entries`. Internal,
+# consumed in `_finalize`.
+_UNIT_DIRECTION_BY_SN_KEY = "_unit_batt_direction_by_sn"
+_PV_BATT_FIELD = 4
+# Entries `_sign_unit_entries` could not direct, serial -> unsigned watts. The
+# coordinator signs them with each unit's own BMS direction (`BMS_BATT_W_KEY`)
+# and removes the key.
+UNIT_POWER_UNSIGNED_BY_SN_KEY = "_unit_batt_w_unsigned_by_sn"
 # The same for the MPPT block: serial -> the five PV keys of that unit.
 UNIT_PV_BY_SN_KEY = "_unit_pv_by_sn"
 # Inside each `f50.1` entry: the state of charge the entry carries in `.2`,
@@ -134,9 +147,17 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
         # 308+130 = 438 = 876/2. Left out, a PV owner loses the whole
         # solar charge from the battery reading: two of those frames read
         # 34 W and 28 W into the pack and reported 0.
-        # `f12.1` also appears on that unit and stays unmapped: it does
-        # not close any node balance in the frames available.
+        # `.1` and `.3` are the other two edges out of the same MPPT node, to
+        # home and to grid. Together with `.2` they close it, `f11.3` halved:
+        # 314+103 = 417 = 834/2 and 449+2391+14 = 2854 = 5708/2 on the ES21
+        # pair captures, 133+34+20 = 187 = 374/2 on an ES22 linked to a Stream
+        # Ultra that carries the PV. The home node closes on `.1` (plus `.4`
+        # and `.6`) against `f11.1` halved in every frame of those captures,
+        # and `.3` (plus `.5`) closes the grid node against `f11.2` halved
+        # within the 0.5 W the half-watt rounding allows.
+        "12.1": ("home_from_solar_w", _TYPE_FLOAT, 1),
         "12.2": ("_mppt_to_batt_w", _TYPE_FLOAT, 1),
+        "12.3": ("_mppt_to_grid_w", _TYPE_FLOAT, 1),
         "12.4": ("home_from_batt_w", _TYPE_FLOAT, 1),
         "12.5": ("_batt_to_grid_w", _TYPE_FLOAT, 1),
         "12.6": ("home_from_grid_w", _TYPE_FLOAT, 1),
@@ -221,13 +242,25 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
         # (issue #401, two entries in every full frame, each with its own
         # `.1`), so the block is read per entry and the coordinator keeps the
         # entry stamped with its own serial, exactly as it does for `f54`.
-        # `.2`, `.4`, `.5`, `.6` and `.7` are unmapped. `.4` is worth a
+        # `.2`, `.4`, `.5`, `.6` and `.8` are unmapped. `.4` is worth a
         # note: it equals `.3` minus `.7` in all 6 frames that carry it,
         # including the 00:27 night frame where it reads 1999 against `.7`
         # = -1999 with `.3` absent. That is the arithmetic saying an absent
         # `.3` is zero rather than unknown, which is what
-        # `_PV_ZERO_FILL_PATHS` below acts on. The meaning of `.7` is still
-        # open.
+        # `_PV_ZERO_FILL_PATHS` below acts on.
+        #
+        # `.7` is the unit's AC power at its grid connection, positive out of
+        # the unit, negative into it. The same identity holds in every entry
+        # of the ten captures that carry it, ES21 and ES22: battery `.4` =
+        # solar `.3` - `.7` (- `.8`, the AC socket, where one is loaded).
+        # Discharging into the house it reads +535.2 against `.4` = -535.2;
+        # charging from the grid -599.6 against +599.6; a Stream Ultra feeding
+        # 153 W of its 187 W solar out with 34 W into its pack reads 153; with
+        # 352 W on the socket passed through from the grid it reads -352 and
+        # `.8` 353. `.6` tracks it within a few watts while the inverter runs
+        # but is absent in that pass-through, so `.7` is the one mapped. An
+        # entry without it is a unit at rest: see `_decode_pv_entry`.
+        "50.1.7": ("unit_ac_grid_power_w", _TYPE_FLOAT, 1),
         #
         # `f11.3` is the same MPPT total in half-watts (203 / 173 / 34 / 28 /
         # 308 against 195.91 / 174.48 / 34.24 / 28.52 / 310.96 in the same
@@ -351,6 +384,13 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
         "11": ("batt_design_cap_mah", _TYPE_INT, 1),
         "12": ("batt_remain_cap_mah", _TYPE_INT, 1),
         "13": ("batt_full_cap_mah", _TYPE_INT, 1),
+        # Charge cycles, the `cycles` field of the BMS heartbeat the Delta 3
+        # reads from the same message. It agrees with the lifetime charge
+        # counter `50` over the full capacity `13`: 1,472,930 / 314,000 mAh =
+        # 4.7 against 4 on an ES22, 14,166,121 / 100,000 = 141.7 against 141
+        # on the Stream Ultra beside it. Unlike `f38.1.3`/`f44.2` above it
+        # holds still within a capture.
+        "14": ("bms_cycles", _TYPE_INT, 1),
         "15": ("bms_soh_pct", _TYPE_INT, 1),
         "16": ("batt_max_cell_vol_mv", _TYPE_INT, 1),
         "17": ("batt_min_cell_vol_mv", _TYPE_INT, 1),
@@ -361,6 +401,11 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
         # points above the system SoC the app shows (20.93 vs 18.63 in the
         # same second).
         "25": ("bms_soc_precise_pct", _TYPE_FLOAT, 1),
+        # The unit's own battery power split by direction, as on the BK
+        # series. 14:41 on a linked pair: 426 W into this pack while the
+        # Ultra's own heartbeat read 419 W out, the system near zero.
+        "26": ("_bms_charge_power_w", _TYPE_INT, 1),
+        "27": ("_bms_discharge_power_w", _TYPE_INT, 1),
     },
 }
 
@@ -398,7 +443,12 @@ _ZERO_FILL_PATHS: dict[tuple[int, int], tuple[str, ...]] = {
         # of holding its last value; `ac_output_power_w` carries
         # `accessory_needs_nonzero` so the entity still waits for a load.
         "11.7",
+        # `.1` and `.3` are absent whenever no solar flows that way, which is
+        # a real zero like `.2`; unfilled, solar to home would hold its last
+        # daylight reading through the night.
+        "12.1",
         "12.2",
+        "12.3",
         "12.4",
         "12.5",
         "12.6",
@@ -807,6 +857,14 @@ def _decode_pv_entry(block: bytes) -> tuple[str | None, dict[str, Any]]:
             continue
         for key, zero in defaults:
             entry.setdefault(key, zero)
+    # The AC power is filled on its own rather than with the strings above,
+    # whose fill is checked against their total. An entry without `.7` is a
+    # unit moving nothing through its grid connection (the `{.5}`-only idle
+    # entries on file), so it reads 0 W. Split for the Energy Dashboard the
+    # same way the battery power is.
+    ac_power = float(entry.setdefault("unit_ac_grid_power_w", 0.0))
+    entry["unit_ac_grid_input_w"] = -ac_power if ac_power < 0 else 0.0
+    entry["unit_ac_grid_output_w"] = ac_power if ac_power > 0 else 0.0
     return serial, entry
 
 
@@ -994,6 +1052,7 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
     grid_to_socket = result.pop("_grid_to_socket_w", None)
     batt_to_socket = result.pop("_batt_to_socket_w", None)
     mppt_to_batt = result.pop("_mppt_to_batt_w", None)
+    mppt_to_grid = result.pop("_mppt_to_grid_w", None)
     solar_to_grid = result.pop("_solar_to_grid_w", None)
     solar_to_batt = result.pop("_solar_to_batt_w", None)
     home_from_grid = result.get("home_from_grid_w")
@@ -1013,7 +1072,11 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
     if isinstance(batt_to_grid, (int, float)):
         # A solar-to-grid edge only exists on a unit with PV attached; its
         # absence here means no such contribution, not an unknown one.
-        extra = float(solar_to_grid) if isinstance(solar_to_grid, (int, float)) else 0.0
+        extra = sum(
+            float(edge)
+            for edge in (solar_to_grid, mppt_to_grid)
+            if isinstance(edge, (int, float))
+        )
         result["grid_export_power_w"] = float(batt_to_grid) + extra
 
     # Signed battery power, positive is charge. All three zero-filled edges
@@ -1061,7 +1124,69 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
         # coordinator pops any parser-provided value and derives the state
         # from a hysteresis window over batt_w.
 
+    bms_charge = result.pop("_bms_charge_power_w", None)
+    bms_discharge = result.pop("_bms_discharge_power_w", None)
+    # Both or nothing, as in `stream_proto`: each is sent with the other 0.
+    if isinstance(bms_charge, (int, float)) and isinstance(bms_discharge, (int, float)):
+        result[BMS_BATT_W_KEY] = float(bms_charge) - float(bms_discharge)
+
+    _sign_unit_entries(result)
     return result
+
+
+def _sign_unit_entries(result: dict[str, Any]) -> None:
+    """Give each per-unit `f54` magnitude the direction it is flowing in.
+
+    `f54.1.4` carries no sign. The signed `f50.1.4` of the same serial is
+    the per-unit direction, but only a polled reply carries it; the pushes in
+    between carry `f54` alone. `f50.1.4` latches at rest, which is harmless
+    because `f54` itself reaches 0 and a 0 needs no sign. The only non-zero
+    entry is the whole system, so the system sign is its sign.
+
+    Anything else goes out unsigned for the coordinator to direct with the
+    unit's own BMS reading. Deriving it from the system was wrong both ways
+    it was tried: copying the system sign flipped a charging Ultra whenever
+    the AC 5000 beside it discharged more, and fitting the signs to the
+    system sum flipped both units while energy moved from one into the
+    other, when the two magnitudes sit a conversion loss apart.
+    """
+    magnitudes = result.pop(UNIT_POWER_BY_SN_KEY, None)
+    directions = result.pop(_UNIT_DIRECTION_BY_SN_KEY, None) or {}
+    if not magnitudes:
+        return
+    alone = sum(1 for watts in magnitudes.values() if watts) == 1
+    signed: dict[str, float] = {}
+    unsigned: dict[str, float] = {}
+    for serial, watts in magnitudes.items():
+        direction = directions.get(serial)
+        if not direction and alone:
+            direction = result.get("batt_w")
+        if watts == 0:
+            signed[serial] = 0.0
+        elif isinstance(direction, (int, float)) and direction:
+            signed[serial] = abs(watts) if direction > 0 else -abs(watts)
+        else:
+            unsigned[serial] = abs(watts)
+    if signed:
+        result[UNIT_POWER_BY_SN_KEY] = signed
+    if unsigned:
+        result[UNIT_POWER_UNSIGNED_BY_SN_KEY] = unsigned
+
+
+def sign_by_unit_direction(
+    unsigned: dict[str, float], direction_of: Callable[[str], float | None]
+) -> dict[str, float]:
+    """Sign each unsigned entry by its unit's own last BMS direction.
+
+    An entry whose unit has not reported a direction yet is left out, so the
+    coordinator keeps its last reading instead of guessing.
+    """
+    signed: dict[str, float] = {}
+    for serial, watts in unsigned.items():
+        direction = direction_of(serial)
+        if direction:
+            signed[serial] = watts if direction > 0 else -watts
+    return signed
 
 
 def _iter_fields(payload: bytes) -> list[tuple[int, int, bytes]]:
@@ -1134,6 +1259,31 @@ def _read_unit_entries(payload: bytes) -> dict[str, float]:
             if serial and power is not None:
                 entries[serial] = float(power) * _UNIT_POWER_SCALE
     return entries
+
+
+def _read_unit_directions(payload: bytes) -> dict[str, float]:
+    """Return the signed `f50.1.4` battery power per unit serial.
+
+    Used only for its sign: see `_sign_unit_entries`. An entry without the
+    field (zero, or a unit at rest) is left out.
+    """
+    directions: dict[str, float] = {}
+    for number, wire_type, raw in _iter_fields(payload):
+        if number != 50 or wire_type != 2:
+            continue
+        for entry_num, entry_wire, entry_raw in _iter_fields(raw):
+            if entry_num != 1 or entry_wire != 2:
+                continue
+            serial: str | None = None
+            power: float | int | None = None
+            for num, wire, value in _iter_fields(entry_raw):
+                if num == _PV_SERIAL_FIELD and wire == 2:
+                    serial = _serial_text(value)
+                elif num == _PV_BATT_FIELD and wire == 5:
+                    power = _decode_scalar(5, value, _TYPE_FLOAT)
+            if serial and isinstance(power, float) and isfinite(power):
+                directions[serial] = power
+    return directions
 
 
 def _pdata_candidates(header: dict[str, Any]) -> list[bytes]:
@@ -1213,12 +1363,15 @@ def parse_stream_ac5000_message(payload: bytes) -> dict[str, Any] | None:
                 if cmd_key == _CMD_TELEMETRY:
                     try:
                         unit_entries = _read_unit_entries(pdata)
+                        unit_directions = _read_unit_directions(pdata)
                     except (IndexError, ValueError):
                         # A malformed per-unit block costs its own reading,
                         # never the telemetry that already decoded cleanly.
-                        unit_entries = {}
+                        unit_entries, unit_directions = {}, {}
                     if unit_entries:
                         decoded[UNIT_POWER_BY_SN_KEY] = unit_entries
+                    if unit_directions:
+                        decoded[_UNIT_DIRECTION_BY_SN_KEY] = unit_directions
                 merged.update(decoded)
                 break
             # A decode error is contained to the message that caused it: the

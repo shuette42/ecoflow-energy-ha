@@ -300,6 +300,9 @@ class EcoFlowDeviceCoordinator(
         # connection is merely alive" - the two differed for seven hours in
         # the 13.09. capture.
         self._own_unit_entry_ts: dict[str, float] = {}
+        # Sign of this unit's own last non-zero BMS battery power (+1 charge,
+        # -1 discharge), which directs the unsigned per-unit `f54` entries.
+        self._bms_batt_direction: float | None = None
         # Whether a Stream ever reported the system state of charge; once it
         # has, a unit's own figure no longer stands in for it (#323).
         self._soc_from_system = False

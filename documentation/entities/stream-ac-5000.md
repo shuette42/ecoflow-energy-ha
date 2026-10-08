@@ -8,7 +8,7 @@ Full list of all entities created for the STREAM AC 5000.
 
 **This is not the Stream entity set.** Despite the shared product name, an `ES22` speaks a different protocol from the BK-series Stream devices: it sends none of their telemetry messages and describes power as a flow matrix rather than as individual readings. It therefore has its own device type, parser and entity list. See [Stream](stream.md) for the BK series.
 
-**Totals:** 57 sensors, 2 binary sensors, 2 switches, 7 numbers, 1 select
+**Totals:** 66 sensors, 2 binary sensors, 2 switches, 7 numbers, 1 select
 
 > Entities marked with *disabled* are available but hidden by default. Enable them in **Settings > Devices > EcoFlow STREAM AC 5000 > Entities** (click the filter icon and show disabled entities).
 
@@ -26,8 +26,11 @@ Full list of all entities created for the STREAM AC 5000.
 | Battery SOC (Precise) | % | diagnostic | disabled | This unit's own state of charge, at higher resolution. On a single unit it tracks Battery SOC above; with units linked the two differ, and the app shows this one under the unit's name |
 | BMS SoC | % | diagnostic | disabled | Pack-level SoC, straight from the BMS, and also this unit's own rather than the system figure. It runs slightly above Battery SOC (Precise) directly above it. The two names are easy to confuse |
 | Battery SoH | % | - | enabled | State of health |
+| Battery Cycles | - | - | enabled | Charge cycles the BMS has counted for this unit's pack. It tracks the lifetime energy through the pack divided by its capacity |
 | Battery Power | W | - | enabled | Signed battery power (positive = charging, negative = discharging), derived from the flows the device reports, including the charge from its own PV strings where it has them. With units linked this is the system figure, the sum across them |
-| Unit Battery Power | W | diagnostic | disabled | This unit's own share of the battery power above. On a single unit it repeats that reading, which is why it is off by default |
+| Unit Battery Power | W | diagnostic | disabled | This unit's own share of the battery power above, positive = charging, negative = discharging. On a single unit it repeats that reading, which is why it is off by default. This is the figure the app shows under the unit's name |
+| Unit Battery Charge Power | W | diagnostic | disabled | This unit's own charging power (always >= 0), split from Unit Battery Power |
+| Unit Battery Discharge Power | W | diagnostic | disabled | This unit's own discharging power (always >= 0), split from Unit Battery Power |
 | Battery Charge Power | W | - | enabled | Charging power (always >= 0) |
 | Battery Discharge Power | W | - | enabled | Discharging power (always >= 0) |
 | Battery Charge/Discharge State | - | diagnostic | disabled | `standby`, `charging` or `discharging` |
@@ -40,7 +43,11 @@ Full list of all entities created for the STREAM AC 5000.
 | Grid Power | W | - | enabled | Signed grid power from the linked smart meter (positive = drawing, negative = feeding in). Absent while no meter is linked in the EcoFlow app |
 | Grid Import Power | W | - | enabled | Power drawn from the grid, derived from the flow matrix. It counts what the house, the battery and the AC socket draw, so a load on the socket is included |
 | AC Output Power | W | - | *accessory* | Power at the AC socket. Created once a load has drawn power from the socket, and it reads 0 W when the load is unplugged |
-| Grid Export Power | W | - | enabled | Power fed into the grid, derived from the flow matrix |
+| Grid Export Power | W | - | enabled | Power fed into the grid, derived from the flow matrix. It counts what the battery, the unit's own strings and third-party solar feed in |
+| Unit AC Grid Connection Power | W | - | enabled | This unit's own power at its AC grid connection, positive = out of the unit (discharging or solar feeding the house), negative = into it (charging from the grid, or the AC socket passing grid power through). Not the AC socket, which is AC Output Power. On linked units each shows its own |
+| Unit AC Grid Connection Input | W | - | enabled | Power into this unit at its AC grid connection (always >= 0) |
+| Unit AC Grid Connection Output | W | - | enabled | Power out of this unit at its AC grid connection (always >= 0) |
+| Home From Solar | W | - | *accessory* | House load covered by solar from the PV strings of this unit or of a linked Stream. Created once solar has fed the house. It reads 0 W while the device sends all solar into the battery and runs the house from the grid, which it may do |
 | Home From Battery | W | diagnostic | disabled | House load covered by the battery |
 | Home From Grid | W | diagnostic | disabled | House load covered by the grid |
 | Third-Party Solar Power | W | - | *accessory* | Solar the app attributes to panels that are not wired to this unit. It shows this as "Other" beside the unit's own strings and adds the two for its solar total. The app notes that third-party solar is not detected accurately: the figure is what is left of the house's solar after home consumption, so it is inferred rather than measured. On a unit with no PV wired to the EcoFlow it is the whole solar reading. See the note below |
@@ -104,7 +111,7 @@ The settings that also have a control read back here, so an automation can see w
 
 ## Sensors - Energy Dashboard
 
-All five are integrated from the matching power reading, so they only ever count up.
+All seven are integrated from the matching power reading, so they only ever count up.
 
 | Entity | Unit | Category | Default | Description |
 |:---|:---:|:---:|:---:|:---|
@@ -113,6 +120,8 @@ All five are integrated from the matching power reading, so they only ever count
 | Grid Import Energy | kWh | - | enabled | Lifetime energy drawn from the grid |
 | Grid Export Energy | kWh | - | enabled | Lifetime energy fed into the grid |
 | Home Energy | kWh | diagnostic | disabled | Lifetime house consumption |
+| Unit Battery Charge Energy | kWh | diagnostic | disabled | Lifetime energy into this unit's own battery. With units linked, Battery Charge Energy above counts the whole group |
+| Unit Battery Discharge Energy | kWh | diagnostic | disabled | Lifetime energy out of this unit's own battery |
 
 There is deliberately no Solar Energy counter, see the note below.
 
@@ -200,5 +209,5 @@ Max Charge SoC and Min Discharge SoC are one setting on the wire, so changing ei
 - **A task set to zero watts reports zero, not nothing.** Zero is a real setpoint on this device rather than an absence, and the wire format leaves a zero out altogether, so a task parked at 0 W arrives with its settings block and no power inside it. It is read back as the zero it is. That matters more than it sounds: the power reading is what says a task of that kind exists at all, so a task whose power went missing would never be replaced and a later setpoint would land on top of it.
 - **Only one task per kind is tracked.** The device can hold more than one charge or more than one discharge task; these readings hold the last of each, and writing a setpoint replaces one task of that kind, so a second task of the same kind survives the write. One charge and one discharge task, which is what the app's own screen offers, is unaffected.
 - **A task deleted from Home Assistant clears immediately**, because the integration knows what it deleted and does not wait for a readback that will never come. Writing one power setpoint removes the other kind's task first, since two whole-day tasks overlap and the device then acts on neither, and the removed kind's power, window and enabled readings go to unknown at that point. The charge task's SoC target survives, so a task set to stop at 80% does not quietly become one that charges to 100%. Both the removal and the replacement name the task by the number the device itself reported for it rather than one worked out from whether it charges or discharges, because the app numbers tasks its own way and a frame naming the wrong one would silently miss.
-- **Linked units are reported as one system.** EcoFlow allows several of these on one account, and the device then describes them as a single battery: Battery SOC is the mean across the units and Battery Power their sum, which is what the app calls System SOC. Each unit still gets its own device page with the full entity set, and the readings that come from its own battery hardware are already its own there: Battery Voltage, Battery Temp, Battery Current, the cell values, Remaining Capacity, and the state of charge under Battery SOC (Precise). Unit Battery Power adds the one figure that was missing, and both it and the precise state of charge are off by default because on a single unit they repeat the system reading. If a unit's own entry never arrives its Unit Battery Power stays empty rather than showing a neighbour's value, and a diagnostics download says which of the two cases it is under `linked_units`. The PV String sensors follow the same rule, and the same section counts them separately.
+- **Linked units are reported as one system.** EcoFlow allows several of these on one account, and the device then describes them as a single battery: Battery SOC is the mean across the units and Battery Power their sum, which is what the app calls System SOC. Each unit still gets its own device page with the full entity set, and the readings that come from its own battery hardware are already its own there: Battery Voltage, Battery Temp, Battery Current, the cell values, Remaining Capacity, and the state of charge under Battery SOC (Precise). Unit Battery Power adds the one figure that was missing, with its charge and discharge split and the two energy counters, and all of them and the precise state of charge are off by default because on a single unit they repeat the system reading. The device reports the unit's power without a sign, so the direction is taken from the unit's own signed reading where the same message carries it, and otherwise from the system battery power; a reading neither can direct is skipped rather than shown the wrong way round. A Stream (BK series) linked to this unit receives its own entry too, see [Stream](stream.md). If a unit's own entry never arrives its Unit Battery Power stays empty rather than showing a neighbour's value, and a diagnostics download says which of the two cases it is under `linked_units`. The PV String sensors and the three Unit AC Grid Connection sensors follow the same rule, and the same section counts them separately. These come from a block the device does not send while a unit is idle, so after a unit goes idle they can keep their last reading until the next report.
 - **Battery Power is derived from the flow matrix**, not taken from the device's own live battery field. That field stops being sent the moment the unit goes idle and holds its last active value, so it reports a charge or discharge that has already stopped. The flow edges do not have that problem.

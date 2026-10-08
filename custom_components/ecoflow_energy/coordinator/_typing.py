@@ -103,6 +103,7 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
     _unit_power_stats: dict[str, Any] | None
     _unit_pv_unmatched_logged: bool
     _own_unit_entry_ts: dict[str, float]
+    _bms_batt_direction: float | None
 
     # -- group (C): implemented by core.py or by a sibling mixin --
     @property

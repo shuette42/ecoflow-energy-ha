@@ -172,7 +172,7 @@ Battery SoC and its precise reading · input and output power per port · solar 
 <details>
 <summary><b>STREAM AC 5000</b> (`ES22`) and <b>STREAM 5000</b> (`ES21`) - flow-matrix telemetry, scheduled power setpoints</summary>
 
-Despite the name these are not Stream devices. They send none of the BK-series messages and report power as a matrix of flows between grid, battery, house and solar rather than as separate readings, so they have their own parser and their own entity set: 57 sensors and 2 binary sensors.
+Despite the name these are not Stream devices. They send none of the BK-series messages and report power as a matrix of flows between grid, battery, house and solar rather than as separate readings, so they have their own parser and their own entity set: 66 sensors and 2 binary sensors.
 
 Battery state and per-unit readings on a linked installation · grid import and export, each counting in one direction so the Energy Dashboard can use them · house consumption · the power drawn by the AC socket, once a load has used it · the unit's own PV strings (PV 1-4 and their total) where panels are wired to the EcoFlow · Third-Party Solar Power, which is the app's separate "Other" figure and not a measurement of your strings · per-phase smart meter readings where a meter is linked in the app.
 

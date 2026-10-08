@@ -528,6 +528,32 @@ class TestStreamGroupCaptureReplay:
         assert result["batt_charge_power_w"] == charge
         assert result["batt_discharge_power_w"] == discharge
         assert result["batt_w"] == charge - discharge
+        # The unit's own direction for the per-unit `f54` entries.
+        assert result["_bms_batt_w"] == charge - discharge
+
+    @pytest.mark.parametrize(
+        ("label", "cycles"),
+        [
+            ("follower_bms_discharge", 59),
+            ("follower_bms_charge", 158),
+            ("leader_bms_idle", 67),
+        ],
+    )
+    def test_cycles_follow_the_lifetime_counters(self, label: str, cycles: int) -> None:
+        """Field 14 is the BMS cycle count, not a field read by position.
+
+        It sits within one cycle of the lifetime throughput over the pack
+        capacity, which is what a cycle count is: 5,877 Ah out of a 100 Ah
+        pack against 59.
+        """
+        result = self._parsed(label)
+
+        assert result["bms_cycles"] == cycles
+        throughput_ah = min(
+            result["batt_charge_capacity_ah"], result["batt_discharge_capacity_ah"]
+        )
+        full_ah = result["batt_full_cap_mah"] / 1000
+        assert abs(throughput_ah / full_ah - cycles) < 1
 
 
 BK01_CAPTURE = (

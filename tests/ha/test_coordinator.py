@@ -8797,6 +8797,27 @@ class TestLinkedUnitPower:
         coordinator._apply_data({"soc_pct": 76})
         assert coordinator.data["unit_batt_w"] == 689.0
 
+    async def test_an_unsigned_entry_takes_the_units_own_bms_direction(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """A push without `f50`: the sign comes from this unit's BMS heartbeat."""
+        coordinator = self._coordinator(hass, enhanced_config_entry)
+        unsigned = {"_unit_batt_w_unsigned_by_sn": {"ES22TESTUNITAAAA": 300.0}}
+        coordinator._apply_data(dict(unsigned))
+        assert "unit_batt_w" not in coordinator.data
+        coordinator._apply_data({"_bms_batt_w": -296.0})
+        coordinator._apply_data(dict(unsigned))
+        assert coordinator.data["unit_batt_w"] == -300.0
+        assert coordinator.data["unit_batt_discharge_power_w"] == 300.0
+        # A resting heartbeat keeps the last direction.
+        coordinator._apply_data({"_bms_batt_w": 0.0})
+        coordinator._apply_data(
+            {"_unit_batt_w_unsigned_by_sn": {"ES22TESTUNITAAAA": 5.0}}
+        )
+        assert coordinator.data["unit_batt_w"] == -5.0
+        assert "_bms_batt_w" not in coordinator.data
+        assert "_unit_batt_w_unsigned_by_sn" not in coordinator.data
+
     # --- the PV block, the same rule (#401) ---
 
     OWN_STRINGS = {

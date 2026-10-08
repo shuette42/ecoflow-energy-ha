@@ -70,6 +70,11 @@ _FLOAT_ZERO_EPS = 1e-6
 # message carries no system figure. Private: the coordinator promotes it on
 # a single unit and drops it once a system figure has been seen (#323).
 SOC_FALLBACK_KEY = "_soc_pct_fallback"
+# The unit's own signed battery power from its BMS heartbeat (32/50 fields
+# 26/27), the one per-unit direction every STREAM unit reports itself. On a
+# BK unit it equals `batt_w`; on an ES22 `batt_w` is the system. Private: the
+# coordinator keeps its sign to direct the unsigned per-unit `f54` entries.
+BMS_BATT_W_KEY = "_bms_batt_w"
 
 # cmd_func/cmd_id -> field_number -> (sensor_key, scalar_type)
 _STREAM_FIELD_MAP: dict[tuple[int, int], dict[int, tuple[str, str]]] = {
@@ -163,6 +168,10 @@ _STREAM_FIELD_MAP: dict[tuple[int, int], dict[int, tuple[str, str]]] = {
         11: ("batt_design_cap_mah", _TYPE_INT),
         12: ("batt_remain_cap_mah", _TYPE_INT),
         13: ("batt_full_cap_mah", _TYPE_INT),
+        # Charge cycles (`cycles` in the BMS heartbeat, as on the Delta 3). A
+        # Stream Ultra reading 141 had charged 14,166,121 mAh into a
+        # 100,000 mAh pack (field 50 over field 13), 141.7 full cycles.
+        14: ("bms_cycles", _TYPE_INT),
         # Stable 100 even during a dedicated LED brightness sweep.
         15: ("bms_soh_pct", _TYPE_INT),
         16: ("batt_max_cell_vol_mv", _TYPE_INT),
@@ -426,6 +435,7 @@ def _finalize_stream_state(parsed: dict[str, Any]) -> dict[str, Any]:
         result["batt_charge_power_w"] = float(charge_power)
         result["batt_discharge_power_w"] = float(discharge_power)
         result["batt_w"] = float(charge_power) - float(discharge_power)
+        result[BMS_BATT_W_KEY] = result["batt_w"]
         # batt_charge_discharge_state is intentionally NOT set here. The
         # coordinator pops any parser-provided value and derives the state
         # from a hysteresis window over batt_w (see _derive_battery_state,
