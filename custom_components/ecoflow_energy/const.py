@@ -4134,6 +4134,7 @@ STREAM_SENSORS: list[EcoFlowSensorDef] = [
         disabled_by_default=True,
         accessory=True,
         accessory_needs_nonzero=True,
+        enhanced_only=True,
     ),
     EcoFlowSensorDef(
         "pv3_current_a",
@@ -4147,6 +4148,7 @@ STREAM_SENSORS: list[EcoFlowSensorDef] = [
         disabled_by_default=True,
         accessory=True,
         accessory_needs_nonzero=True,
+        enhanced_only=True,
     ),
     EcoFlowSensorDef(
         "pv4_voltage_v",
@@ -4160,6 +4162,7 @@ STREAM_SENSORS: list[EcoFlowSensorDef] = [
         disabled_by_default=True,
         accessory=True,
         accessory_needs_nonzero=True,
+        enhanced_only=True,
     ),
     EcoFlowSensorDef(
         "pv4_current_a",
@@ -4173,6 +4176,7 @@ STREAM_SENSORS: list[EcoFlowSensorDef] = [
         disabled_by_default=True,
         accessory=True,
         accessory_needs_nonzero=True,
+        enhanced_only=True,
     ),
     EcoFlowSensorDef(
         "home_from_solar_w",
