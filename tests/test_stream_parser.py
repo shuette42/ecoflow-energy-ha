@@ -530,6 +530,96 @@ class TestStreamGroupCaptureReplay:
         assert result["batt_w"] == charge - discharge
 
 
+BK_PV34_CAPTURE = (
+    Path(__file__).parent / "fixtures" / "stream" / "bk_pv34_voltage_current.json"
+)
+
+# (frame index, frame label, pv3_voltage_v, pv3_current_a, pv4_voltage_v,
+# pv4_current_a); None means the frame does not carry the field and the key
+# must not appear in the result. Frames 0 and 3 are get_reply snapshots, 1 and
+# 4 partial property pushes, 2 an idle BK12 (open input, explicit zero
+# current), 5 a full property push.
+_PV34_EXPECTED = [
+    (0, "bk11_get_reply_all_six", 42.8376, 1.27711, 39.6463, 2.79091),
+    (1, "bk11_property_pv3_only", 43.8433, None, None, None),
+    (2, "bk12_get_reply_idle_strings", 2.69289, 0.0, 2.63342, 0.0),
+    (3, "bk61_get_reply_all_six", 33.9576, 2.00669, 31.6793, 3.13801),
+    (4, "bk61_property_partial", 35.502, None, None, 4.77872),
+    (5, "bk61_property_all_six", 32.5643, 0.651898, 30.3957, 1.29393),
+]
+_PV34_KEYS = ("pv3_voltage_v", "pv3_current_a", "pv4_voltage_v", "pv4_current_a")
+
+
+class TestStreamPv34VoltageCurrentReplay:
+    """Strings 3 and 4 report voltage and current beside their power (#522).
+
+    Fields 998-1001 of the main status frame, from a BK11, a BK12 and a BK61
+    in one Enhanced Mode diagnostics download. The frames go through the
+    production entry point, so header decode, payload handling and the field
+    map are covered together.
+    """
+
+    @staticmethod
+    def _parsed(index: int, label: str) -> dict:
+        frame = json.loads(BK_PV34_CAPTURE.read_text())["frames"][index]
+        assert frame["label"] == label
+        result = parse_stream_proto_message(bytes.fromhex(frame["hex"]))
+        assert result is not None
+        return result
+
+    @pytest.mark.parametrize(
+        ("index", "label", "pv3_v", "pv3_a", "pv4_v", "pv4_a"),
+        _PV34_EXPECTED,
+        ids=[row[1] for row in _PV34_EXPECTED],
+    )
+    def test_voltage_and_current_follow_what_the_frame_carries(
+        self,
+        index: int,
+        label: str,
+        pv3_v: float | None,
+        pv3_a: float | None,
+        pv4_v: float | None,
+        pv4_a: float | None,
+    ) -> None:
+        result = self._parsed(index, label)
+
+        for key, expected in zip(_PV34_KEYS, (pv3_v, pv3_a, pv4_v, pv4_a), strict=True):
+            if expected is None:
+                assert key not in result, key
+            else:
+                assert result[key] == pytest.approx(expected, rel=1e-5), key
+
+    def test_voltage_times_current_matches_the_string_power(self) -> None:
+        """Frame 5 is one instant: 998*999 is string 3 and 1000*1001 string 4.
+
+        The get_reply snapshots (frames 0 and 3) mix readings from different
+        moments and deviate 7-75 % from V*I, so only this frame can pin which
+        voltage and current belong to which power field.
+        """
+        result = self._parsed(5, "bk61_property_all_six")
+
+        assert result["pv3_voltage_v"] * result["pv3_current_a"] == pytest.approx(
+            result["pv3_w"], rel=0.01
+        )
+        assert result["pv4_voltage_v"] * result["pv4_current_a"] == pytest.approx(
+            result["pv4_w"], rel=0.01
+        )
+
+    @pytest.mark.parametrize(
+        ("field", "key"),
+        [
+            (998, "pv3_voltage_v"),
+            (999, "pv3_current_a"),
+            (1000, "pv4_voltage_v"),
+            (1001, "pv4_current_a"),
+        ],
+    )
+    def test_fields_998_to_1001_are_mapped_as_floats(
+        self, field: int, key: str
+    ) -> None:
+        assert _STREAM_FIELD_MAP[(254, 21)][field] == (key, _TYPE_FLOAT)
+
+
 BK01_CAPTURE = (
     Path(__file__).parent / "fixtures" / "stream" / "bk01_capture_masked.json"
 )

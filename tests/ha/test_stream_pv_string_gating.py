@@ -48,9 +48,20 @@ STREAM_DEVICE: dict[str, Any] = {
     "online": 1,
 }
 
-# The strings the protobuf push has no field number for, power and the energy
-# counter integrated from it.
-HIGHER_STRING_KEYS = {"pv3_w", "pv4_w", "pv3_energy_kwh", "pv4_energy_kwh"}
+# The higher strings: power, the energy counter integrated from it, and the
+# input voltage and current of each. An unused input can read a couple of volts
+# with no current, so voltage and current wait for a reading above zero like
+# the power does (#522).
+HIGHER_STRING_KEYS = {
+    "pv3_w",
+    "pv4_w",
+    "pv3_energy_kwh",
+    "pv4_energy_kwh",
+    "pv3_voltage_v",
+    "pv3_current_a",
+    "pv4_voltage_v",
+    "pv4_current_a",
+}
 
 # The two the push does carry. They are listed so the assertions stay a
 # statement about which strings are optional rather than a count.
@@ -235,6 +246,10 @@ class TestGating:
                 pv4_w=377.0,
                 pv3_energy_kwh=9.8,
                 pv4_energy_kwh=9.2,
+                pv3_voltage_v=32.6,
+                pv3_current_a=0.65,
+                pv4_voltage_v=31.9,
+                pv4_current_a=0.61,
             ),
         )
 
@@ -264,6 +279,44 @@ class TestLateReport:
         await hass.async_block_till_done()
 
         assert _keys(created) & HIGHER_STRING_KEYS == {"pv3_w"}
+
+    async def test_an_idle_input_adds_its_voltage_but_not_its_current(
+        self, hass: HomeAssistant
+    ) -> None:
+        """A Stream Pro with nothing on strings 3 and 4 reads about 2.6 V on
+        them and no current or power. The voltage is a real reading above
+        zero, so its entity appears; the current and the power stay out until
+        a string carries load (#522)."""
+        coordinator, created = await _setup(hass, TWO_STRING_REPORT)
+        assert not _keys(created) & HIGHER_STRING_KEYS
+
+        idle = dict(
+            TWO_STRING_REPORT,
+            pv3_w=0.0,
+            pv4_w=0.0,
+            pv3_voltage_v=2.69,
+            pv3_current_a=0.0,
+            pv4_voltage_v=2.63,
+            pv4_current_a=0.0,
+        )
+        coordinator.async_set_updated_data(idle)
+        await hass.async_block_till_done()
+
+        assert _keys(created) & HIGHER_STRING_KEYS == {
+            "pv3_voltage_v",
+            "pv4_voltage_v",
+        }
+
+        loaded = dict(idle, pv3_w=21.2, pv3_voltage_v=32.6, pv3_current_a=0.65)
+        coordinator.async_set_updated_data(loaded)
+        await hass.async_block_till_done()
+
+        assert _keys(created) & HIGHER_STRING_KEYS == {
+            "pv3_voltage_v",
+            "pv4_voltage_v",
+            "pv3_current_a",
+            "pv3_w",
+        }
 
     async def test_no_duplicate_on_further_updates(self, hass: HomeAssistant) -> None:
         coordinator, created = await _setup(hass, TWO_STRING_REPORT)

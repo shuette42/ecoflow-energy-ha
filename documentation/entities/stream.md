@@ -6,13 +6,13 @@ Full list of all entities created for Stream devices.
 
 **The Stream Micro (`BK01`) does not.** It is a grid-tie inverter with two solar strings and no battery, and it gets a reduced set. See [Stream Micro (BK01)](#stream-micro-bk01) at the end of this page.
 
-**Totals:** 55 sensors, 2 binary sensors, 1 number. Stream AC Pro (`BK31`) adds 2 switches and 3 numbers. Four of the 55 are *accessory* entities (PV 3 and PV 4, power and energy) and exist only on a unit that reports those strings.
+**Totals:** 59 sensors, 2 binary sensors, 1 number. Stream AC Pro (`BK31`) adds 2 switches and 3 numbers. Eight of the 59 are *accessory* entities (PV 3 and PV 4, power, voltage, current and energy) and exist only on a unit that reports those strings.
 
 > Entities marked with *disabled* are available but hidden by default. Enable them in **Settings > Devices > EcoFlow Stream > Entities** (click the filter icon and show disabled entities).
 
-> **Both modes are supported.** Standard Mode polls the official Developer API (~30 s), Enhanced Mode uses the real-time connection (~3 s). Writable numbers require Enhanced Mode. The difference is solar detail: Standard Mode reports all four strings, Enhanced Mode reports PV 1 and PV 2 with their input voltage and current, plus the power of strings 3 and 4. One owner compared them with the app and reports that string 3 and string 4 are the right way round.
+> **Both modes are supported.** Standard Mode polls the official Developer API (~30 s), Enhanced Mode uses the real-time connection (~3 s). Writable numbers require Enhanced Mode. The difference is solar detail: Standard Mode reports all four strings, Enhanced Mode reports PV 1 and PV 2 with their input voltage and current, plus the power, voltage and current of strings 3 and 4. One owner compared them with the app and reports that string 3 and string 4 are the right way round.
 
-> **Entities marked *accessory* are created only once the device actually reports that reading**, and they appear on their own the moment it does, without a restart. Solar strings 3 and 4 carry that mark: only the larger units drive them, so listing them for everyone would leave most owners with two entities that can never fill. They wait for a reading above zero, because a Stream AC Pro has no such inputs and still sends both as 0. A string that is dark when Home Assistant starts shows up with its first daylight reading.
+> **Entities marked *accessory* are created only once the device actually reports that reading**, and they appear on their own the moment it does, without a restart. Solar strings 3 and 4 carry that mark: only the larger units drive them, so listing them for everyone would leave most owners with entities that can never fill. They wait for a reading above zero, because a Stream AC Pro has no such inputs and still sends both as 0. The voltage and the current wait for a non-zero reading of their own as well. A unit with an idle string input can read about 2.6 V on it, so it can show a disabled PV 3 or PV 4 Voltage entity, but no current or power for that string until it carries load. A string that is dark when Home Assistant starts shows up with its first daylight reading.
 
 ---
 
@@ -45,6 +45,10 @@ Full list of all entities created for Stream devices.
 | PV Current | A | diagnostic | disabled | Input current of string 1 |
 | PV 2 Voltage | V | diagnostic | disabled | Input voltage of string 2 |
 | PV 2 Current | A | diagnostic | disabled | Input current of string 2 |
+| PV 3 Voltage | V | diagnostic | *accessory*, disabled | Input voltage of string 3, larger units only. Enhanced Mode only; an unused string input can read about 2.6 V |
+| PV 3 Current | A | diagnostic | *accessory*, disabled | Input current of string 3, larger units only. Enhanced Mode only |
+| PV 4 Voltage | V | diagnostic | *accessory*, disabled | Input voltage of string 4, larger units only. Enhanced Mode only; an unused string input can read about 2.6 V |
+| PV 4 Current | A | diagnostic | *accessory*, disabled | Input current of string 4, larger units only. Enhanced Mode only |
 
 ## Sensors - Power Flow
 
@@ -145,7 +149,7 @@ The LED control reproduces the hardware-confirmed app ConfigWrite field `384` wi
 ## Notes
 
 - Every device additionally exposes 2 universal diagnostic sensors (connection status and active mode) that are not included in the totals above.
-- Solar strings 3 and 4 are reported in both modes. Enhanced Mode delivers only their power, without input voltage or current. One owner compared them with the app and reports that string 3 and string 4 are the right way round.
+- Solar strings 3 and 4 are reported in both modes. In Enhanced Mode they also carry input voltage and current. One owner compared them with the app and reports that string 3 and string 4 are the right way round.
 - Home, grid and total solar values depend on an EcoFlow-compatible meter being paired in the app. Without one they may be absent or misleading, so they ship as disabled diagnostics.
 - The Standard Mode values are read as plain watts. If a power reading looks off by a constant factor compared to the EcoFlow app, please report it with a diagnostics download so the scaling can be corrected.
 - Switching a device between Standard and Enhanced Mode does not duplicate entities, since both paths produce the same entity keys.
@@ -156,7 +160,7 @@ The LED control reproduces the hardware-confirmed app ConfigWrite field `384` wi
 
 The Stream Micro is a grid-tie solar inverter: two solar strings, one single-phase grid connection, no battery and no AC outlets. It speaks the same protocol as the rest of the Stream family and shares this parser, but not the whole entity set.
 
-**Totals:** 21 sensor definitions, no binary sensors, no numbers. 17 are listed in the table below; the other 4 are the PV 3/4 power and energy sensors, which stay in the shared Stream definition list but never populate on a two-string unit - see the note after the table.
+**Totals:** 25 sensor definitions, no binary sensors, no numbers. 17 are listed in the table below; the other 8 are the PV 3/4 power, voltage, current and energy sensors, which stay in the shared Stream definition list and are created only for a string that reports a reading - see the note after the table.
 
 **Enhanced Mode only.** The Stream Micro is not exposed through the EcoFlow Developer API, so it needs the EcoFlow account sign-in.
 
@@ -182,7 +186,7 @@ The Stream Micro is a grid-tie solar inverter: two solar strings, one single-pha
 | PV 1 Energy | kWh | diagnostic | disabled | Per-string solar production, disabled by default (enable it for **Solar production**) |
 | PV 2 Energy | kWh | diagnostic | disabled | Per-string solar production, disabled by default (enable it for **Solar production**) |
 
-PV 3 and PV 4 are not created here, on either the power or the energy side. They are *accessory* entities across the whole Stream family, so a two-string unit never gains them.
+PV 3 and PV 4 are not listed here, whether power, voltage, current or energy. They are *accessory* entities across the whole Stream family, so they exist only for a string the unit reports a reading for.
 
 ### What it deliberately does not get
 
