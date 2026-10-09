@@ -101,8 +101,16 @@ _STREAM_FIELD_MAP: dict[tuple[int, int], dict[int, tuple[str, str]]] = {
         # the two is string 3 and which is string 4 is UNVERIFIED: only their
         # sum is pinned down, so a swap would show up as PV 3 and PV 4
         # exchanging values against the app.
+        # Fields 998-1001 are the voltage and current of those same two
+        # strings. In one frame from a Stream Ultra X, `998 * 999` = 21.23 W
+        # matches 996 and `1000 * 1001` = 39.33 W matches 997, so the pairing
+        # follows the power fields. The string 3/4 assignment is as above.
         996: ("pv3_w", _TYPE_FLOAT),
         997: ("pv4_w", _TYPE_FLOAT),
+        998: ("pv3_voltage_v", _TYPE_FLOAT),
+        999: ("pv3_current_a", _TYPE_FLOAT),
+        1000: ("pv4_voltage_v", _TYPE_FLOAT),
+        1001: ("pv4_current_a", _TYPE_FLOAT),
         461: ("backup_reserve_pct", _TYPE_INT),
         # Configured feed-in cap in watts (user-changeable in the app).
         521: ("feed_grid_power_limit_w", _TYPE_INT),

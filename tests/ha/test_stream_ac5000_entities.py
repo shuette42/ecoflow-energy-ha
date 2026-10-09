@@ -468,14 +468,16 @@ class TestBKSeriesSetIsUntouched:
 
     def test_the_stream_list_keeps_its_size(self) -> None:
         # 55 since Unit Battery SOC joined the BK list (#323): a key the
-        # BK series itself reports, not an ES22 one.
-        assert len(_get_sensor_defs(DEVICE_TYPE_STREAM)) == 55
+        # BK series itself reports, not an ES22 one. 59 since the voltage and
+        # current of strings 3 and 4 joined it (#522), keys of the same BK
+        # series.
+        assert len(_get_sensor_defs(DEVICE_TYPE_STREAM)) == 59
 
     def test_bk01_still_gets_the_micro_reduced_set(self) -> None:
         defs = _get_sensor_defs(DEVICE_TYPE_STREAM)
         micro = filter_defs_for_serial(defs, "BK01TEST00000001")
 
-        assert len(micro) == 21
+        assert len(micro) == 25
         assert not {d.key for d in micro} & STREAM_MICRO_EXCLUDED_KEYS
 
     def test_every_other_stream_prefix_gets_the_whole_set(self) -> None:
