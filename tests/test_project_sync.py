@@ -165,7 +165,7 @@ def test_only_opened_sets_type_and_control_defaults():
     opened = dict(project_sync.plan_updates("issues", "opened", "2026-10-07"))
     edited = dict(project_sync.plan_updates("issues", "edited", "2026-10-07"))
     assert opened["Typ"] == "Issue"
-    assert opened["Steuerung"] == "Nur beobachten"
+    assert "Steuerung" not in opened  # the first value is the maintainer's
     assert "Typ" not in edited
     assert "Steuerung" not in edited
 
@@ -188,8 +188,8 @@ def test_issue_is_added_before_any_field_is_written(fake):
     assert fake.calls[2][1]["content"] == "ISSUE_NODE"
 
 
-def test_opened_issue_gets_four_fields(fake):
-    assert project_sync.sync("issues", "opened", "ISSUE_NODE", "2026-10-07") == 4
+def test_opened_issue_gets_three_fields(fake):
+    assert project_sync.sync("issues", "opened", "ISSUE_NODE", "2026-10-07") == 3
 
 
 def test_untracked_event_touches_nothing(fake):
@@ -207,10 +207,10 @@ def test_missing_stamp_field_fails_instead_of_passing_quietly(monkeypatch):
 
 
 def test_missing_default_field_is_skipped_but_stamps_still_land(monkeypatch, capsys):
-    nodes = [n for n in FIELD_NODES if n.get("name") != "Steuerung"]
+    nodes = [n for n in FIELD_NODES if n.get("name") != "Typ"]
     monkeypatch.setattr(project_sync, "run_graphql", FakeGraphQL(nodes))
-    assert project_sync.sync("issues", "opened", "ISSUE_NODE", "2026-10-07") == 3
-    assert "Steuerung" in capsys.readouterr().out
+    assert project_sync.sync("issues", "opened", "ISSUE_NODE", "2026-10-07") == 2
+    assert "Typ" in capsys.readouterr().out
 
 
 def test_unknown_option_name_is_an_error():

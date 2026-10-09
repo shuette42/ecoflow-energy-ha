@@ -41,8 +41,10 @@ EVENT_OPTIONS = {
 }
 
 # Set once, when the issue is first opened. Later events leave them alone so a
-# hand-made change on the board is never overwritten.
-NEW_ISSUE_DEFAULTS = {"Typ": "Issue", "Steuerung": "Nur beobachten"}
+# hand-made change on the board is never overwritten. "Steuerung" is deliberately
+# not here: an empty field means "observe", and the first value has to come from
+# the maintainer so that the field value's creator names the maintainer.
+NEW_ISSUE_DEFAULTS = {"Typ": "Issue"}
 
 # A label change has no "last event" option of its own; it gets the date stamp
 # and the derived Status.
