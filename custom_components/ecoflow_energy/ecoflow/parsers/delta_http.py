@@ -99,7 +99,7 @@ DELTA2MAX_HTTP_FIELD_MAP: dict[str, str] = {
     # --- mppt (Solar) ---
     "mppt.inWatts": "solar_in_w",
     "mppt.outWatts": "mppt_out_w",
-    "mppt.inVol": "solar_in_vol_dv",
+    "mppt.inVol": "solar_in_vol_mv",
     "mppt.inAmp": "solar_in_amp_ma",
     "mppt.mpptTemp": "mppt_temp_c",
     "mppt.carOutWatts": "car_12v_out_w",
@@ -107,8 +107,8 @@ DELTA2MAX_HTTP_FIELD_MAP: dict[str, str] = {
     "mppt.dcdc12vWatts": "dcdc_12v_w",
     "mppt.dcdc12vVol": "dcdc_12v_vol_dv",
     "mppt.pv2InWatts": "solar2_in_w",
-    "mppt.pv2InVol": "solar2_in_vol_dv",
-    "mppt.pv2InAmp": "solar2_in_amp_ca",
+    "mppt.pv2InVol": "solar2_in_vol_mv",
+    "mppt.pv2InAmp": "solar2_in_amp_ma",
     "mppt.pv2MpptTemp": "solar2_mppt_temp_c",
     "mppt.carStandbyMin": "car_standby_min",
     "mppt.chgState": "mppt_chg_state",
@@ -233,16 +233,21 @@ def parse_delta_http_quota(quota_data: dict) -> dict[str, Any]:
         ("ac_in_vol_mv", "ac_in_vol_v"),
         ("ac_cfg_out_vol_mv", "ac_cfg_out_vol_v"),
         ("dc_in_vol_mv", "dc_in_vol_v"),
+        ("solar_in_vol_mv", "solar_in_vol_v"),
+        ("solar2_in_vol_mv", "solar2_in_vol_v"),
         ("slave1_voltage_mv", "slave1_voltage_v"),
         ("slave2_voltage_mv", "slave2_voltage_v"),
     ]:
         if mv_key in result:
             result[v_key] = result.pop(mv_key) / 1000.0
 
-    # --- Voltage conversions: dV -> V (deci-volt, amplified 10x) ---
+    # --- Voltage conversion: dV -> V (12 V output; factor unconfirmed) ---
+    # Observed device frames of a Delta 2 Max report mV, mA, W and degC for
+    # the solar input and Solar 2 fields (inVol, pv2InVol, pv2InAmp,
+    # pv2InWatts, outWatts, pv2MpptTemp), so those take no tenth/hundredth
+    # factor. The carOut/dcdc12v factors below are unconfirmed: the device
+    # reported 0 for them in every observed frame.
     for dv_key, v_key in [
-        ("solar_in_vol_dv", "solar_in_vol_v"),
-        ("solar2_in_vol_dv", "solar2_in_vol_v"),
         ("dcdc_12v_vol_dv", "dcdc_12v_vol_v"),
     ]:
         if dv_key in result:
@@ -255,31 +260,20 @@ def parse_delta_http_quota(quota_data: dict) -> dict[str, Any]:
         ("ac_in_amp_ma", "ac_in_amp_a"),
         ("dc_in_amp_ma", "dc_in_amp_a"),
         ("solar_in_amp_ma", "solar_in_amp_a"),
+        ("solar2_in_amp_ma", "solar2_in_amp_a"),
         ("slave1_current_ma", "slave1_current_a"),
         ("slave2_current_ma", "slave2_current_a"),
     ]:
         if ma_key in result:
             result[a_key] = result.pop(ma_key) / 1000.0
 
-    # --- Current conversions: cA -> A (centi-amp, amplified 100x) ---
-    for ca_key, a_key in [
-        ("solar2_in_amp_ca", "solar2_in_amp_a"),
-    ]:
-        if ca_key in result:
-            result[a_key] = result.pop(ca_key) / 100.0
+    # --- Power conversions: 12 V car output, amplified 10x -> W (unconfirmed) ---
+    if "car_12v_out_w" in result:
+        result["car_12v_out_w"] /= 10.0
 
-    # --- Power conversions: amplified 10x -> W ---
-    for key in ["mppt_out_w", "car_12v_out_w", "solar2_in_w"]:
-        if key in result:
-            result[key] /= 10.0
-
-    # --- Power conversions: amplified 100x -> W ---
+    # --- Power conversions: amplified 100x -> W (unconfirmed) ---
     if "dcdc_12v_w" in result:
         result["dcdc_12v_w"] /= 100.0
-
-    # --- Temperature conversions: amplified 10x -> °C ---
-    if "solar2_mppt_temp_c" in result:
-        result["solar2_mppt_temp_c"] /= 10.0
 
     # Enum state mappings (numeric -> string). Unknown values (e.g. new
     # firmware states) are dropped: HA enum sensors raise ValueError for
