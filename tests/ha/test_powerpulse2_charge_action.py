@@ -31,6 +31,7 @@ from custom_components.ecoflow_energy.const import (
     DEVICE_TYPE_POWERPULSE2,
     DOMAIN,
     MODE_ENHANCED,
+    POWERPULSE2_CHARGE_ACTION_WINDOW_S,
 )
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
 from custom_components.ecoflow_energy.ecoflow.energy_stream import (
@@ -221,9 +222,10 @@ async def test_start_while_finishing_confirms_on_a_suspended_charger_frame(
     """Start resolves on "suspended_charger" (heartbeat field 1 = 4, #515).
 
     A Start in Solar mode without surplus is accepted by the wallbox, which
-    then reports the paused state, after a short "preparing" in the reporter's
-    recording. ADR-009 decision 4 confirms the press on that frame. The frame is built from the enum value 4 and goes
-    through `_PLUG_STATUS_NAMES`, never a hand-set string. Mutations this
+    then reports the paused state while the charger holds the session back.
+    ADR-009 decision 4 confirms the press on that frame. The frame is built
+    from the enum value 4 and goes through `_PLUG_STATUS_NAMES`, never a
+    hand-set string. Mutations this
     catches: dropping key 4 from `_PLUG_STATUS_NAMES` (`_apply_status` then
     fails its parsed-key assert), and dropping "suspended_charger" from
     `POWERPULSE2_CHARGE_ACTION_CONFIRMED["start"]` (the press stays pending
@@ -337,8 +339,8 @@ async def test_stop_is_not_confirmed_by_a_suspended_charger_frame(
 async def test_start_in_solar_mode_without_surplus_then_charging_publishes_once(
     hass: HomeAssistant,
 ) -> None:
-    """The reporter's sequence of #515: finishing, press, preparing,
-    suspended_charger, and minutes later charging.
+    """The order of #515: finishing, press, preparing, suspended_charger, then
+    charging once the surplus is there. The test fixes the order, not delays.
 
     The 4 frame confirms the press (it returns without an error), and the 3
     frame that follows after the press returned is an ordinary status update:
@@ -445,6 +447,11 @@ async def test_shutdown_while_pending_cancels_the_wait(hass: HomeAssistant) -> N
     assert _mqtt(oceans[0]).send_proto_set.call_count == 1
 
 
+def test_charge_action_windows_are_15_s_for_stop_and_30_s_for_start() -> None:
+    """The CHANGELOG of #515 states "30 s" for a start; this pins the figure."""
+    assert POWERPULSE2_CHARGE_ACTION_WINDOW_S == {"stop": 15.0, "start": 30.0}
+
+
 async def test_no_confirming_frame_times_out(hass: HomeAssistant) -> None:
     _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
     _set_descriptor(wallbox)
@@ -503,6 +510,7 @@ async def test_action_state_precondition_refuses_while_paused_by_the_charger(
         await wallbox.async_set_powerpulse_charge_action(action)
 
     assert excinfo.value.translation_key == "powerpulse_action_state"
+    assert excinfo.value.translation_placeholders == {"status": "suspended_charger"}
     assert _mqtt(oceans[0]).send_proto_set.call_count == 0
     assert _mqtt(wallbox).send_proto_set.call_count == 0
 
