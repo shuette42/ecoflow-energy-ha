@@ -105,6 +105,13 @@ def test_evidence_field_takes_a_longer_text_than_the_default_cap():
     assert len(bw.check_value("Nächster Schritt", long_text)) == bw.TEXT_LIMIT == 400
 
 
+def test_the_evidence_field_is_cut_in_utf8_bytes_not_characters():
+    # 1024 characters with umlauts are more than 1024 bytes, and the API rejects them
+    value = bw.check_value("Stand / Beleg", "Ü" * 700)
+    assert len(value.encode("utf-8")) <= 1024 and value == "Ü" * 512
+    assert bw.clean_text("aÜb", 2) == "a"  # never half a character
+
+
 def test_target_version_must_be_a_version():
     assert bw.check_value("Zielversion", "1.25.0-beta.17") == "1.25.0-beta.17"
     with pytest.raises(RuntimeError, match="Zielversion"):
