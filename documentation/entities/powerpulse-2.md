@@ -2,9 +2,9 @@
 
 Full list of entities for the EcoFlow PowerPulse 2 wallbox (`C376`, `C374` and `C371` series).
 
-**`C371`: read-only.** It gets the same sensors and binary sensor. Charging power and session energy were checked against the app over one overnight charge. The buttons, numbers, selects and switch below work on the `C376` and `C374` only, until a write to a `C371` is confirmed.
+**`C371`: read-only.** It gets the same sensors and binary sensor. Charging power and session energy were checked against the app over one overnight charge. The buttons, numbers, selects and switches below work on the `C376` and `C374` only, until a write to a `C371` is confirmed.
 
-**Totals:** 18 sensors, 1 binary sensor, 2 buttons (with no PowerOcean or exactly one in the same integration entry, none with two or more), 2 selects and 1 switch (with exactly one PowerOcean in the entry), and four numbers: Wallbox Maximum Current, Wallbox Solar Minimum Current and Wallbox Custom Charging Current with exactly one PowerOcean in the entry, Wallbox Charging Current Setpoint with none
+**Totals:** 18 sensors, 1 binary sensor, 2 buttons (with no PowerOcean or exactly one in the same integration entry, none with two or more), 2 selects and 3 switches (with exactly one PowerOcean in the entry), and four numbers: Wallbox Maximum Current, Wallbox Solar Minimum Current and Wallbox Custom Charging Current with exactly one PowerOcean in the entry, Wallbox Charging Current Setpoint with none
 
 > **Enhanced Mode only.** The wallbox reports through the account connection, not through the EcoFlow Developer API. A Standard Mode setup gets error 1006 and no entities fill; set the integration up with an EcoFlow account e-mail and password instead.
 
@@ -12,7 +12,7 @@ The PowerPulse 2 is its own device type and does not need a paired PowerOcean. E
 
 Four of the sensors below - Wallbox Charging Power, Wallbox Session Energy, Wallbox Session Duration and Wallbox Charging Status - used to live on the PowerOcean device when a PowerPulse 2 was coupled to one. They now live here, under entity IDs built from the wallbox's own serial number, and the PowerOcean-side entries, those four and the Wallbox Vehicle entry the relay filled with a placeholder, are removed from the entity registry on the first start after the update. History and statistics recorded under the old IDs do not carry over, and an automation, a dashboard card or an Energy Dashboard slot that named one of them needs the new entity. The PowerPulse 2 has no vehicle reading; only the earlier PowerPulse reports one, on its PowerOcean. Nothing changes for the earlier PowerPulse (`AC31` series): it keeps reporting through its PowerOcean on the same five entities as before.
 
-Start and stop of a charging session are available as two buttons with no PowerOcean in the integration entry or with exactly one (see Buttons). With exactly one PowerOcean, Home Assistant can set the maximum current, the solar minimum current, the custom charging current, the charging mode, the phase setting and Continuous Charging. With none, it can set the charging current (see Numbers, Selects and Switches). The Smart mode's departure time and target cannot.
+Start and stop of a charging session are available as two buttons with no PowerOcean in the integration entry or with exactly one (see Buttons). With exactly one PowerOcean, Home Assistant can set the maximum current, the solar minimum current, the custom charging current, the charging mode, the phase setting, Continuous Charging, Block Battery Discharge and Plug-and-Play. With none, it can set the charging current (see Numbers, Selects and Switches). The Smart mode's departure time and target cannot.
 
 ---
 
@@ -82,6 +82,8 @@ Created under the same condition as the number above: exactly one PowerOcean in 
 | Entity | Description |
 |:---|:---|
 | Wallbox Continuous Charging | The wallbox's Continuous Charging setting, shown under the same name in the EcoFlow app. It shows only what the wallbox reports. It stays unknown until the wallbox has reported it, and it changes only when the wallbox says so. A change returns once the wallbox reports the new state on its settings report, or fails if it does not |
+| Wallbox Block Battery Discharge | The wallbox's "Disable battery discharge" setting in the EcoFlow app. On means the wallbox may not draw from the linked PowerOcean battery for charging. It shows only what the wallbox reports and changes only when the wallbox says so. A change returns once the wallbox reports the new state on its settings report, or fails if it does not |
+| Wallbox Plug-and-Play | The wallbox's plug-and-play setting. On means a car that is plugged in can start charging without authorization in the app or by RFID card. With a car plugged in and idle, turning it on can start a charging session. Turning it off does not stop a session that is already running. It shows only what the wallbox reports and changes only when the wallbox says so. A change returns once the wallbox reports the new state on its settings report, or fails if it does not |
 
 Created only when the integration entry holds exactly one PowerOcean, and only after the wallbox has sent its settings report. A change is built from the wallbox's latest settings report. If no report has arrived yet, or the last one is too old, the change fails with a message and nothing is sent.
 

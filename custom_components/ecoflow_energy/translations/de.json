@@ -2891,6 +2891,12 @@
       },
       "ev_continuous_charging": {
         "name": "Wallbox-Dauerladen"
+      },
+      "ev_battery_discharge_block": {
+        "name": "Wallbox Batterieentladung sperren"
+      },
+      "ev_plug_and_play": {
+        "name": "Wallbox Plug-and-Play"
       }
     },
     "number": {
@@ -3248,10 +3254,10 @@
       "message": "{option} ist kein Lademodus, den diese Wallbox meldet."
     },
     "powerpulse_continuous_needs_powerocean": {
-      "message": "Dauerladen lässt sich nur über eine PowerOcean im selben Konto schalten; dieser Eintrag hat keine."
+      "message": "Diese Wallbox-Einstellung lässt sich nur über eine PowerOcean im selben Konto schalten; dieser Eintrag hat keine."
     },
     "powerpulse_continuous_not_confirmed": {
-      "message": "Die Wallbox hat den neuen Zustand von Dauerladen nicht innerhalb der erlaubten Zeit gemeldet. Zuletzt gemeldet: {reported}."
+      "message": "Die Wallbox hat den neuen Zustand dieser Einstellung nicht innerhalb der erlaubten Zeit gemeldet. Zuletzt gemeldet: {reported}."
     },
     "powerpulse_continuous_report_missing": {
       "message": "Die Wallbox hat ihre aktuellen Einstellungen noch nicht gemeldet. Warte auf ihren nächsten Einstellungsbericht."
@@ -3260,7 +3266,7 @@
       "message": "Der letzte Einstellungsbericht der Wallbox ist zu alt, um diese Änderung darauf aufzubauen. Warte auf ihren nächsten Einstellungsbericht."
     },
     "powerpulse_continuous_report_unusable": {
-      "message": "Die Wallbox meldet für {field} den Wert {value}. Darauf kann diese Integration keine Änderung aufbauen. Ändere Dauerladen in der EcoFlow-App."
+      "message": "Die Wallbox meldet für {field} den Wert {value}. Darauf kann diese Integration keine Änderung aufbauen. Ändere diese Einstellung in der EcoFlow-App."
     },
     "powerpulse_custom_current_above_maximum": {
       "message": "Die Wallbox speichert keinen Wallbox-Ladestrom Benutzerdefiniert über dem Wallbox-Maximalstrom. Angefragt: {requested} A, Wallbox-Maximalstrom: {maximum} A."

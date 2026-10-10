@@ -24,6 +24,7 @@ import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 
+from custom_components.ecoflow_energy.const import POWERPULSE2_SWITCH_BIT_CONTINUOUS
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
 from custom_components.ecoflow_energy.ecoflow.parsers.stream_proto import _iter_fields
 from custom_components.ecoflow_energy.ecoflow.proto import ecocharge_pb2
@@ -109,6 +110,15 @@ async def _start(
     return task
 
 
+def _set_continuous(
+    wallbox: EcoFlowDeviceCoordinator, enabled: bool
+) -> Coroutine[Any, Any, None]:
+    """The Continuous charging write, called the way its switch calls it."""
+    return wallbox.async_set_powerpulse_switch_bit(
+        POWERPULSE2_SWITCH_BIT_CONTINUOUS, enabled, "ev_continuous_charging"
+    )
+
+
 async def test_continuous_writes_field_one_alone_from_the_latest_report(
     hass: HomeAssistant,
 ) -> None:
@@ -131,7 +141,7 @@ async def test_continuous_writes_field_one_alone_from_the_latest_report(
     _apply_frame(wallbox, _REPORT_CONTINUOUS_ON)
     wallbox.set_device_value("ev_settings_switch_bits", 3)  # store: bit 0x10 clear
 
-    task = await _start(wallbox.async_set_powerpulse_continuous_charging(False))
+    task = await _start(_set_continuous(wallbox, False))
     assert send.call_count == 1
     assert _published_fields(send.call_args) == {1: 2}
     _apply_frame(wallbox, _REPORT_CONTINUOUS_OFF)  # switchBits 2 confirms
@@ -139,7 +149,7 @@ async def test_continuous_writes_field_one_alone_from_the_latest_report(
     assert wallbox._wallbox_action_pending is None
 
     wallbox.set_device_value("ev_settings_switch_bits", 0)  # store: all bits clear
-    task = await _start(wallbox.async_set_powerpulse_continuous_charging(True))
+    task = await _start(_set_continuous(wallbox, True))
     assert send.call_count == 2
     assert _published_fields(send.call_args) == {1: 18}
     _apply_frame(wallbox, _REPORT_CONTINUOUS_ON)  # switchBits 18 confirms
@@ -168,13 +178,13 @@ async def test_continuous_refuses_a_report_older_than_the_max_age(
         patch(f"{_SET_COMMANDS}.time", SimpleNamespace(monotonic=lambda: stamped + 11)),
         pytest.raises(HomeAssistantError) as excinfo,
     ):
-        await wallbox.async_set_powerpulse_continuous_charging(False)
+        await _set_continuous(wallbox, False)
     assert excinfo.value.translation_key == "powerpulse_continuous_report_stale"
     assert send.call_count == 0
     assert wallbox._wallbox_action_pending is None
 
     with patch(f"{_SET_COMMANDS}.time", SimpleNamespace(monotonic=lambda: stamped + 9)):
-        task = await _start(wallbox.async_set_powerpulse_continuous_charging(False))
+        task = await _start(_set_continuous(wallbox, False))
         assert send.call_count == 1
     _apply_frame(wallbox, _REPORT_CONTINUOUS_OFF)
     await task
@@ -200,7 +210,7 @@ async def test_a_bit_write_confirms_on_the_frame_and_only_on_its_bit(
     _apply_frame(wallbox, _REPORT_CONTINUOUS_ON)
     wallbox.set_device_value("ev_settings_switch_bits", 2)
 
-    task = await _start(wallbox.async_set_powerpulse_continuous_charging(False))
+    task = await _start(_set_continuous(wallbox, False))
     pending = wallbox._wallbox_action_pending
     assert pending is not None and not pending.future.done()
 
@@ -265,7 +275,7 @@ _WRITES: list[tuple[str, Callable[[EcoFlowDeviceCoordinator], Any], str]] = [
     ),
     (
         "continuous",
-        lambda w: w.async_set_powerpulse_continuous_charging(True),
+        lambda w: _set_continuous(w, True),
         "powerpulse_continuous_needs_powerocean",
     ),
 ]
@@ -331,7 +341,7 @@ async def test_continuous_in_smart_mode_writes_field_one_alone(
         ev_settings_work_mode="smart",
         ev_solar_min_current_a=6.0,
     )
-    task = await _start(wallbox.async_set_powerpulse_continuous_charging(True))
+    task = await _start(_set_continuous(wallbox, True))
     assert send.call_count == 1
     assert _published_fields(send.call_args) == {1: 18}
     _apply_report(wallbox, ev_settings_switch_bits=18)
@@ -344,7 +354,7 @@ async def test_continuous_in_smart_mode_writes_field_one_alone(
         ev_settings_work_mode="custom",
         ev_solar_min_current_a=6.0,
     )
-    task = await _start(wallbox.async_set_powerpulse_continuous_charging(True))
+    task = await _start(_set_continuous(wallbox, True))
     assert send.call_count == 2
     assert _published_fields(send.call_args) == {1: 18}
     _apply_report(wallbox, ev_settings_switch_bits=18)
@@ -373,7 +383,7 @@ async def test_continuous_without_any_settings_report_refuses_as_missing(
     assert wallbox._settings_report is None
 
     with pytest.raises(HomeAssistantError) as excinfo:
-        await wallbox.async_set_powerpulse_continuous_charging(True)
+        await _set_continuous(wallbox, True)
 
     assert excinfo.value.translation_key == _REPORT_MISSING
     assert send.call_count == 0
@@ -408,7 +418,7 @@ async def test_continuous_refuses_a_report_whose_bits_are_not_an_int(
     _apply_report(wallbox, **report)
 
     with pytest.raises(HomeAssistantError) as excinfo:
-        await wallbox.async_set_powerpulse_continuous_charging(True)
+        await _set_continuous(wallbox, True)
 
     assert excinfo.value.translation_key == _REPORT_MISSING
     assert send.call_count == 0
@@ -443,7 +453,7 @@ async def test_continuous_writes_from_a_report_that_carries_only_the_bits(
     assert "ev_solar_min_current_a" not in wallbox._device_data
     _apply_report(wallbox, **report)
 
-    task = await _start(wallbox.async_set_powerpulse_continuous_charging(True))
+    task = await _start(_set_continuous(wallbox, True))
     assert send.call_count == 1
     assert _published_fields(send.call_args) == {1: 18}
     _apply_report(wallbox, ev_settings_switch_bits=18)
@@ -473,7 +483,7 @@ async def test_continuous_refuses_bits_outside_a_byte_as_unusable(
     _apply_report(wallbox, ev_settings_switch_bits=bits)
 
     with pytest.raises(HomeAssistantError) as excinfo:
-        await wallbox.async_set_powerpulse_continuous_charging(True)
+        await _set_continuous(wallbox, True)
 
     assert excinfo.value.translation_key == _REPORT_UNUSABLE
     assert excinfo.value.translation_placeholders == {

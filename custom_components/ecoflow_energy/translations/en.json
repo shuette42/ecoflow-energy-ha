@@ -2891,6 +2891,12 @@
       },
       "ev_continuous_charging": {
         "name": "Wallbox Continuous Charging"
+      },
+      "ev_battery_discharge_block": {
+        "name": "Wallbox Block Battery Discharge"
+      },
+      "ev_plug_and_play": {
+        "name": "Wallbox Plug-and-Play"
       }
     },
     "number": {
@@ -3248,10 +3254,10 @@
       "message": "{option} is not a charging mode this wallbox reports."
     },
     "powerpulse_continuous_needs_powerocean": {
-      "message": "Continuous charging can only be switched through a PowerOcean on the same account; this entry has none."
+      "message": "This wallbox setting can only be switched through a PowerOcean on the same account; this entry has none."
     },
     "powerpulse_continuous_not_confirmed": {
-      "message": "The wallbox did not report the new Continuous charging state within the time allowed. Its last reported state: {reported}."
+      "message": "The wallbox did not report the new state of this setting within the time allowed. Its last reported state: {reported}."
     },
     "powerpulse_continuous_report_missing": {
       "message": "The wallbox has not reported its current settings yet. Wait for its next settings report."
@@ -3260,7 +3266,7 @@
       "message": "The wallbox's last settings report is too old to build this change on. Wait for its next settings report."
     },
     "powerpulse_continuous_report_unusable": {
-      "message": "The wallbox reports {value} for {field}, which this integration cannot build a change on. Change Continuous charging in the EcoFlow app."
+      "message": "The wallbox reports {value} for {field}, which this integration cannot build a change on. Change this setting in the EcoFlow app."
     },
     "powerpulse_custom_current_above_maximum": {
       "message": "The wallbox does not store a Custom charging current above its Maximum Current. Requested: {requested} A, Maximum Current: {maximum} A."

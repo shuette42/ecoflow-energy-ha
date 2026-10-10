@@ -54,7 +54,7 @@
 | **Smart Meter** | `BK21` | Enhanced only | 18 + 3 binary | none, read-only | 2 | ~3 s |
 | **Solar Tracker** | `HZ31` `S02F` | Enhanced only | 6 | none, read-only for now | none | ~3 s |
 | **WAVE 3** | `AC71` | Enhanced only | 18 + 5 binary | 4 switches · 5 numbers · 5 selects · 1 climate | 1 | ~2 s / 120 s |
-| **PowerPulse 2** | `C376` `C374` | Enhanced only | 18 + 1 binary | 2 buttons · 1 number with no PowerOcean, plus 3 numbers · 2 selects · 1 switch with exactly one PowerOcean in the entry | 1 | on change, refreshed after 20 min |
+| **PowerPulse 2** | `C376` `C374` | Enhanced only | 18 + 1 binary | 2 buttons · 1 number with no PowerOcean, plus 3 numbers · 2 selects · 3 switches with exactly one PowerOcean in the entry | 1 | on change, refreshed after 20 min |
 | **PowerPulse 2** | `C371` | Enhanced only | 18 + 1 binary | none, read-only for now | 1 | ~1 min observed |
 | **Ocean 2** | `RE11` `RE17` `RE41` `RE42` | Enhanced only | 48 + 12 per module | none, read-only | 6 | ~3 s |
 | **OCEAN Smart Electrical Panel 40** | `HR61` | Enhanced only | 19 + 3 per circuit, 1 binary per circuit | none, read-only | - | ~3 s |

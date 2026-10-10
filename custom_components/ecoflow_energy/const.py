@@ -227,9 +227,10 @@ POWERPULSE2_CHARGE_MODE_WIRE: dict[str, int] = {
     "custom": 3,
     "smart": 4,
 }
-# PLAN-172: the confirmation window for the four settings writes the wallbox
+# PLAN-172: the confirmation window for the settings writes the wallbox
 # reports in its own settings block (Solar minimum current, Custom current,
-# phase setting, Continuous charging). A generous service-call allowance, not
+# phase setting, and the three settings switches Continuous Charging, Block
+# Battery Discharge and Plug-and-Play). A generous service-call allowance, not
 # a measured worst case: the settings report arrives about once a second on
 # average (1756 reports in 1688 s on the 2026-10-04 morning recording), so a
 # wallbox that stops sending it fails loudly instead of silently.
@@ -242,6 +243,12 @@ POWERPULSE2_SETTINGS_MAX_AGE_S: float = 10.0
 # PLAN-172: bit 4 (0x10) of the settings switch bits is the app's
 # "Continuous charging" toggle (2026-10-04 write recordings, issue #481).
 POWERPULSE2_SWITCH_BIT_CONTINUOUS: int = 0x10
+# PLAN-187: the other two app toggles that live in the same byte (write tests
+# of 2026-10-08, issues #490 and #493). Bit 0 is "Battery discharge block" and
+# reads ON when the wallbox is blocked from discharging the home battery, the
+# app's own polarity; bit 1 is "Plug and Play", ON when enabled.
+POWERPULSE2_SWITCH_BIT_BATTERY_DISCHARGE_BLOCK: int = 0x01
+POWERPULSE2_SWITCH_BIT_PLUG_AND_PLAY: int = 0x02
 # PLAN-172: the phase-setting options and the wire values field 5 of
 # `EDevPileParamSet` carries for each (0 Auto, 1 one phase, 2 three phases).
 POWERPULSE2_PHASE_SETTING_OPTIONS: tuple[str, ...] = (
@@ -593,6 +600,12 @@ class EcoFlowSwitchDef:
     # created on the first report that carries its state key rather than on
     # every device. See _watch_for_accessory() in switch.py.
     accessory: bool = False
+    # PowerPulse 2 settings switches (PLAN-172, PLAN-187): the one bit of the
+    # settings switch byte this switch stands for. The switch decodes it from
+    # `state_key` and writes it through the one coordinator write
+    # `async_set_powerpulse_switch_bit`, so a further toggle in the same byte
+    # is one definition.
+    bit_mask: int | None = None
 
 
 @dataclass(frozen=True)
@@ -9519,12 +9532,13 @@ POWERPULSE2_SELECTS: list[EcoFlowSelectDef] = [
     ),
 ]
 
-# The wallbox's Continuous charging switch (PLAN-172). Its state is one bit
-# (POWERPULSE2_SWITCH_BIT_CONTINUOUS) of the settings report's switch bits, so
-# the read-back key is the whole byte and the switch decodes the bit itself. A
-# sibling-route, accessory control like the settings numbers and the phase
-# select: created once the first settings report has carried the bits, and
-# only where exactly one PowerOcean can carry the write.
+# The wallbox's three settings switches: Continuous Charging (PLAN-172), Block
+# Battery Discharge and Plug-and-Play (PLAN-187). The state of each is one bit
+# (`bit_mask`) of the settings report's switch bits, so the read-back key is
+# the whole byte and the switch decodes its bit itself. Sibling-route,
+# accessory controls like the settings numbers and the phase select: created
+# once the first settings report has carried the bits, and only where exactly
+# one PowerOcean can carry the write.
 POWERPULSE2_SWITCHES: list[EcoFlowSwitchDef] = [
     EcoFlowSwitchDef(
         "ev_continuous_charging",
@@ -9533,6 +9547,26 @@ POWERPULSE2_SWITCHES: list[EcoFlowSwitchDef] = [
         icon="mdi:ev-plug-type2",
         enhanced_only=True,
         accessory=True,
+        bit_mask=POWERPULSE2_SWITCH_BIT_CONTINUOUS,
+    ),
+    # PLAN-187: two more bits of the same byte, same route and same write path.
+    EcoFlowSwitchDef(
+        "ev_battery_discharge_block",
+        "Wallbox Block Battery Discharge",
+        "ev_settings_switch_bits",
+        icon="mdi:battery-off",
+        enhanced_only=True,
+        accessory=True,
+        bit_mask=POWERPULSE2_SWITCH_BIT_BATTERY_DISCHARGE_BLOCK,
+    ),
+    EcoFlowSwitchDef(
+        "ev_plug_and_play",
+        "Wallbox Plug-and-Play",
+        "ev_settings_switch_bits",
+        icon="mdi:power-plug",
+        enhanced_only=True,
+        accessory=True,
+        bit_mask=POWERPULSE2_SWITCH_BIT_PLUG_AND_PLAY,
     ),
 ]
 
