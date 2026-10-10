@@ -195,9 +195,12 @@ POWERPULSE2_CHARGE_ACTION_PRECONDITION: dict[str, frozenset[str]] = {
     "stop": frozenset({"charging"}),
 }
 # ADR-009 decision 4: the `ev_charge_status` that confirms the action once it
-# arrives on the wallbox's own heartbeat.
+# arrives on the wallbox's own heartbeat. As amended for #515, a start also
+# confirms on "suspended_charger": a Solar-mode start without PV surplus is
+# accepted and the wallbox then reports the pause instead of charging. "preparing"
+# does not confirm a start.
 POWERPULSE2_CHARGE_ACTION_CONFIRMED: dict[str, frozenset[str]] = {
-    "start": frozenset({"charging"}),
+    "start": frozenset({"charging", "suspended_charger"}),
     "stop": frozenset({"finishing", "available"}),
 }
 # PLAN-146: the confirmation window for a maximum-current write. Measured 1-2 s
