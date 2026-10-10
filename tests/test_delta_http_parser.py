@@ -96,19 +96,22 @@ class TestVoltageConversion:
 
 
 # ===========================================================================
-# Voltage Conversions (dV -> V)
+# Solar Voltage Conversions (mV -> V)
 # ===========================================================================
 
 
-class TestDeciVoltConversion:
-    def test_solar_in_vol_dv_to_v(self):
-        result = parse_delta_http_quota({"mppt.inVol": 450})
-        assert result["solar_in_vol_v"] == 45.0
-        assert "solar_in_vol_dv" not in result
+class TestSolarMilliVoltConversion:
+    def test_solar_in_vol_mv_to_v(self):
+        """inVol is reported in millivolts."""
+        result = parse_delta_http_quota({"mppt.inVol": 33000})
+        assert result["solar_in_vol_v"] == pytest.approx(33.0)
+        assert "solar_in_vol_mv" not in result
 
-    def test_solar2_in_vol_dv_to_v(self):
-        result = parse_delta_http_quota({"mppt.pv2InVol": 380})
-        assert result["solar2_in_vol_v"] == 38.0
+    def test_solar2_in_vol_mv_to_v(self):
+        """pv2InVol is reported in millivolts."""
+        result = parse_delta_http_quota({"mppt.pv2InVol": 30600})
+        assert result["solar2_in_vol_v"] == pytest.approx(30.6)
+        assert "solar2_in_vol_mv" not in result
 
 
 # ===========================================================================
@@ -134,22 +137,22 @@ class TestCurrentConversion:
         result = parse_delta_http_quota({"inv.dcInAmp": 3200})
         assert result["dc_in_amp_a"] == 3.2
 
-    def test_solar2_in_amp_ca_to_a(self):
-        """pv2InAmp is amplified 100x (centi-amp), not mA."""
-        result = parse_delta_http_quota({"mppt.pv2InAmp": 850})
-        assert result["solar2_in_amp_a"] == pytest.approx(8.5)
-        assert "solar2_in_amp_ca" not in result
+    def test_solar2_in_amp_ma_to_a(self):
+        """pv2InAmp is reported in milliamps."""
+        result = parse_delta_http_quota({"mppt.pv2InAmp": 1880})
+        assert result["solar2_in_amp_a"] == pytest.approx(1.88)
+        assert "solar2_in_amp_ma" not in result
 
 
 # ===========================================================================
-# MPPT Power/Temp Scaling (amplified values)
+# MPPT Power/Temp Scaling (Solar 2 and MPPT output unscaled, 12 V output scaled)
 # ===========================================================================
 
 
 class TestMpptScaling:
-    def test_mppt_out_watts_amplified_10x(self):
-        """outWatts is amplified 10x."""
-        result = parse_delta_http_quota({"mppt.outWatts": 3500})
+    def test_mppt_out_watts_unscaled(self):
+        """outWatts is reported in watts, no divisor."""
+        result = parse_delta_http_quota({"mppt.outWatts": 350})
         assert result["mppt_out_w"] == pytest.approx(350.0)
 
     def test_car_out_watts_amplified_10x(self):
@@ -157,9 +160,9 @@ class TestMpptScaling:
         result = parse_delta_http_quota({"mppt.carOutWatts": 1200})
         assert result["car_12v_out_w"] == pytest.approx(120.0)
 
-    def test_solar2_in_watts_amplified_10x(self):
-        """pv2InWatts is amplified 10x."""
-        result = parse_delta_http_quota({"mppt.pv2InWatts": 2000})
+    def test_solar2_in_watts_unscaled(self):
+        """pv2InWatts is reported in watts, no divisor."""
+        result = parse_delta_http_quota({"mppt.pv2InWatts": 200})
         assert result["solar2_in_w"] == pytest.approx(200.0)
 
     def test_dcdc_12v_watts_amplified_100x(self):
@@ -167,9 +170,9 @@ class TestMpptScaling:
         result = parse_delta_http_quota({"mppt.dcdc12vWatts": 5000})
         assert result["dcdc_12v_w"] == pytest.approx(50.0)
 
-    def test_solar2_mppt_temp_amplified_10x(self):
-        """pv2MpptTemp is amplified 10x."""
-        result = parse_delta_http_quota({"mppt.pv2MpptTemp": 350})
+    def test_solar2_mppt_temp_unscaled(self):
+        """pv2MpptTemp is reported in degrees Celsius, no divisor."""
+        result = parse_delta_http_quota({"mppt.pv2MpptTemp": 35})
         assert result["solar2_mppt_temp_c"] == pytest.approx(35.0)
 
 

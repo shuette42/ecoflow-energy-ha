@@ -113,9 +113,9 @@ class TestDeltaParser:
         result = parse_delta_report(report)
         assert result["solar_in_w"] == 350.0
 
-    def test_mppt_out_watts_amplified_10x(self):
-        """outWatts is amplified 10x, must be divided."""
-        report = {"typeCode": "mpptStatus", "params": {"outWatts": 3500}}
+    def test_mppt_out_watts_unscaled(self):
+        """outWatts is reported in watts, no divisor."""
+        report = {"typeCode": "mpptStatus", "params": {"outWatts": 350}}
         result = parse_delta_report(report)
         assert result["mppt_out_w"] == 350.0
 
@@ -135,19 +135,21 @@ class TestDeltaParser:
         result = parse_delta_report(report)
         assert result["dcdc_12v_vol_v"] == 12.6
 
-    def test_solar2_in_watts_amplified_10x(self):
-        report = {"typeCode": "mpptStatus", "params": {"pv2InWatts": 2000}}
+    def test_solar2_in_watts_unscaled(self):
+        """pv2InWatts is reported in watts, no divisor."""
+        report = {"typeCode": "mpptStatus", "params": {"pv2InWatts": 200}}
         result = parse_delta_report(report)
         assert result["solar2_in_w"] == 200.0
 
-    def test_solar2_in_amp_amplified_100x(self):
-        """pv2InAmp is amplified 100x (centi-amp), not mA."""
-        report = {"typeCode": "mpptStatus", "params": {"pv2InAmp": 850}}
+    def test_solar2_in_amp_ma_to_a(self):
+        """pv2InAmp is reported in milliamps."""
+        report = {"typeCode": "mpptStatus", "params": {"pv2InAmp": 1880}}
         result = parse_delta_report(report)
-        assert result["solar2_in_amp_a"] == 8.5
+        assert result["solar2_in_amp_a"] == 1.88
 
-    def test_solar2_mppt_temp_amplified_10x(self):
-        report = {"typeCode": "mpptStatus", "params": {"pv2MpptTemp": 350}}
+    def test_solar2_mppt_temp_unscaled(self):
+        """pv2MpptTemp is reported in degrees Celsius, no divisor."""
+        report = {"typeCode": "mpptStatus", "params": {"pv2MpptTemp": 35}}
         result = parse_delta_report(report)
         assert result["solar2_mppt_temp_c"] == 35.0
 

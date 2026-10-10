@@ -136,7 +136,7 @@ DELTA2MAX_FIELD_MAP: dict[str, str] = {
     # --- mpptStatus (mppt.*) ---
     "mpptStatus.inWatts": "solar_in_w",
     "mpptStatus.outWatts": "mppt_out_w",
-    "mpptStatus.inVol": "solar_in_vol_dv",
+    "mpptStatus.inVol": "solar_in_vol_mv",
     "mpptStatus.inAmp": "solar_in_amp_ma",
     "mpptStatus.mpptTemp": "mppt_temp_c",
     "mpptStatus.carOutWatts": "car_12v_out_w",
@@ -144,8 +144,8 @@ DELTA2MAX_FIELD_MAP: dict[str, str] = {
     "mpptStatus.dcdc12vWatts": "dcdc_12v_w",
     "mpptStatus.dcdc12vVol": "dcdc_12v_vol_dv",
     "mpptStatus.pv2InWatts": "solar2_in_w",
-    "mpptStatus.pv2InVol": "solar2_in_vol_dv",
-    "mpptStatus.pv2InAmp": "solar2_in_amp_ca",
+    "mpptStatus.pv2InVol": "solar2_in_vol_mv",
+    "mpptStatus.pv2InAmp": "solar2_in_amp_ma",
     "mpptStatus.pv2MpptTemp": "solar2_mppt_temp_c",
     "mpptStatus.carStandbyMin": "car_standby_min",
     "mpptStatus.chgState": "mppt_chg_state",
@@ -265,6 +265,8 @@ def parse_delta_report(
         ("ac_in_vol_mv", "ac_in_vol_v"),
         ("ac_cfg_out_vol_mv", "ac_cfg_out_vol_v"),
         ("dc_in_vol_mv", "dc_in_vol_v"),
+        ("solar_in_vol_mv", "solar_in_vol_v"),
+        ("solar2_in_vol_mv", "solar2_in_vol_v"),
         ("batt_max_cell_vol_mv", "batt_max_cell_vol_mv"),  # stays mV (cell level)
         ("batt_min_cell_vol_mv", "batt_min_cell_vol_mv"),  # stays mV (cell level)
         ("slave1_voltage_mv", "slave1_voltage_v"),
@@ -273,10 +275,14 @@ def parse_delta_report(
         if mv_key in parsed and v_key != mv_key:
             parsed[v_key] = parsed.pop(mv_key) / 1000.0
 
-    # Voltages: dV -> V (deci-volt, amplified 10x)
+    # Voltage: dV -> V (12 V output; factor unconfirmed).
+    # No captured frame covers this push report. The same device units feed the
+    # same entities as the quota parser, so it agrees with it: observed device
+    # frames of a Delta 2 Max report mV, mA, W and degC for the solar input and
+    # Solar 2 fields (inVol, pv2InVol, pv2InAmp, pv2InWatts, outWatts,
+    # pv2MpptTemp), so those take no tenth/hundredth factor. The carOut/dcdc12v
+    # factors are unconfirmed.
     for dv_key, v_key in [
-        ("solar_in_vol_dv", "solar_in_vol_v"),
-        ("solar2_in_vol_dv", "solar2_in_vol_v"),
         ("dcdc_12v_vol_dv", "dcdc_12v_vol_v"),
     ]:
         if dv_key in parsed:
@@ -288,31 +294,20 @@ def parse_delta_report(
         ("ac_out_amp_ma", "ac_out_amp_a"),
         ("ac_in_amp_ma", "ac_in_amp_a"),
         ("solar_in_amp_ma", "solar_in_amp_a"),
+        ("solar2_in_amp_ma", "solar2_in_amp_a"),
         ("slave1_current_ma", "slave1_current_a"),
         ("slave2_current_ma", "slave2_current_a"),
     ]:
         if ma_key in parsed:
             parsed[a_key] = parsed.pop(ma_key) / 1000.0
 
-    # Currents: cA -> A (centi-amp, amplified 100x)
-    for ca_key, a_key in [
-        ("solar2_in_amp_ca", "solar2_in_amp_a"),
-    ]:
-        if ca_key in parsed:
-            parsed[a_key] = parsed.pop(ca_key) / 100.0
+    # Power: 12 V car output, amplified 10x -> W (unconfirmed)
+    if "car_12v_out_w" in parsed:
+        parsed["car_12v_out_w"] /= 10.0
 
-    # Power: amplified 10x -> W
-    for key in ["mppt_out_w", "car_12v_out_w", "solar2_in_w"]:
-        if key in parsed:
-            parsed[key] /= 10.0
-
-    # Power: amplified 100x -> W
+    # Power: amplified 100x -> W (unconfirmed)
     if "dcdc_12v_w" in parsed:
         parsed["dcdc_12v_w"] /= 100.0
-
-    # Temperature: amplified 10x -> °C
-    if "solar2_mppt_temp_c" in parsed:
-        parsed["solar2_mppt_temp_c"] /= 10.0
 
     # Enum state mappings (numeric -> string). Unknown values (e.g. new
     # firmware states) are dropped: HA enum sensors raise ValueError for
