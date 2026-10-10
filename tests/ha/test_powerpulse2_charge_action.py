@@ -221,8 +221,8 @@ async def test_start_while_finishing_confirms_on_a_suspended_charger_frame(
     """Start resolves on "suspended_charger" (heartbeat field 1 = 4, #515).
 
     A Start in Solar mode without surplus is accepted by the wallbox, which
-    then reports the paused state at once. ADR-009 decision 4 confirms the
-    press on that frame. The frame is built from the enum value 4 and goes
+    then reports the paused state, after a short "preparing" in the reporter's
+    recording. ADR-009 decision 4 confirms the press on that frame. The frame is built from the enum value 4 and goes
     through `_PLUG_STATUS_NAMES`, never a hand-set string. Mutations this
     catches: dropping key 4 from `_PLUG_STATUS_NAMES` (`_apply_status` then
     fails its parsed-key assert), and dropping "suspended_charger" from
@@ -482,6 +482,29 @@ async def test_action_state_precondition_refuses(
 
     assert excinfo.value.translation_key == "powerpulse_action_state"
     assert _mqtt(oceans[0]).send_proto_set.call_count == 0
+
+
+@pytest.mark.parametrize("action", ["start", "stop"])
+async def test_action_state_precondition_refuses_while_paused_by_the_charger(
+    hass: HomeAssistant, action: str
+) -> None:
+    """Neither action acts on "suspended_charger" (heartbeat field 1 = 4, #515).
+
+    Start acts on "finishing" and stop on "charging" only. Mutation this
+    catches: adding "suspended_charger" to
+    `POWERPULSE2_CHARGE_ACTION_PRECONDITION[action]` (the press would send and
+    this test would fail on the missing refusal).
+    """
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    _apply_status(wallbox, 4)  # suspended_charger
+
+    with pytest.raises(HomeAssistantError) as excinfo:
+        await wallbox.async_set_powerpulse_charge_action(action)
+
+    assert excinfo.value.translation_key == "powerpulse_action_state"
+    assert _mqtt(oceans[0]).send_proto_set.call_count == 0
+    assert _mqtt(wallbox).send_proto_set.call_count == 0
 
 
 async def test_descriptor_missing_refuses(hass: HomeAssistant) -> None:
