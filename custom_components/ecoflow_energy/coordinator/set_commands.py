@@ -30,7 +30,6 @@ from ..const import (
     POWERPULSE2_PHASE_SETTING_WIRE,
     POWERPULSE2_SETTINGS_MAX_AGE_S,
     POWERPULSE2_SETTINGS_WINDOW_S,
-    POWERPULSE2_SWITCH_BIT_CONTINUOUS,
 )
 from ..ecoflow.const import (
     POWEROCEAN_FEED_SCHEDULE_POWER_MIN_W,
@@ -71,11 +70,11 @@ def _describe_amps(value: Any) -> str:
     return "no value yet"
 
 
-def _describe_continuous(bits: Any) -> str:
-    """The reported Continuous charging state as on/off, or no value yet."""
+def _describe_switch_bit(bits: Any, mask: int) -> str:
+    """One reported settings switch bit as on/off, or no value yet."""
     if type(bits) is not int:
         return "no value yet"
-    return "on" if bits & POWERPULSE2_SWITCH_BIT_CONTINUOUS else "off"
+    return "on" if bits & mask else "off"
 
 
 class DeviceValueNotReported(Exception):
@@ -2061,13 +2060,21 @@ class SetCommandsMixin(_Base):
             ),
         )
 
-    async def async_set_powerpulse_continuous_charging(self, enabled: bool) -> None:
-        """Switch the wallbox's Continuous charging on or off (PLAN-172, #481).
+    async def async_set_powerpulse_switch_bit(
+        self, bit: int, enabled: bool, key: str
+    ) -> None:
+        """Set or clear one bit of the wallbox's settings switch byte.
 
-        Continuous charging is bit 0x10 of the settings switch bits, and the
+        The one write behind the three settings switches (Continuous charging,
+        Block Battery Discharge, Plug and Play; PLAN-172, PLAN-187). `bit` is
+        the switch definition's `bit_mask`, `enabled` the requested state (for
+        the discharge block, True blocks the discharge, the app's polarity) and
+        `key` the switch's entity key; the write's action name, which labels
+        the send and the event log, is the key without its `ev_` prefix. The
         wallbox takes the whole byte, so the write is `{1: new_bits}` with the
         byte rebuilt from the latest settings report. Field 1 alone, no mode
-        and no Solar minimum: proven on the reporter's C376 in both directions
+        and no Solar minimum:
+        proven on the reporter's C376 in both directions for Continuous
         (2026-10-04), where the settings report that followed each write showed
         the new bits with the mode and the Solar minimum unchanged.
 
@@ -2077,9 +2084,11 @@ class SetCommandsMixin(_Base):
         when it lacks the bits (`report_missing` or `report_stale`, where
         waiting helps), or when the bits are not a byte the builder can send
         (`report_unusable`, where waiting does not help). Confirmed on the
-        Continuous bit of `ev_settings_switch_bits` alone (`bit_mask`); the
-        other bits in the byte are not this write's business.
+        requested bit of `ev_settings_switch_bits` alone (`bit_mask`); the
+        other bits in the byte are not this write's business. The refusal and
+        confirmation texts are keyed `powerpulse_continuous_*` for all three.
         """
+        action = key.removeprefix("ev_")
 
         def plan() -> _SettingsWrite:
             report = self._settings_report
@@ -2112,24 +2121,16 @@ class SetCommandsMixin(_Base):
                         "value": str(bits),
                     },
                 )
-            new_bits = (
-                bits | POWERPULSE2_SWITCH_BIT_CONTINUOUS
-                if enabled
-                else bits & ~POWERPULSE2_SWITCH_BIT_CONTINUOUS
-            )
-            return _SettingsWrite(
-                {1: new_bits},
-                float(new_bits),
-                POWERPULSE2_SWITCH_BIT_CONTINUOUS,
-            )
+            new_bits = bits | bit if enabled else bits & ~bit
+            return _SettingsWrite({1: new_bits}, float(new_bits), bit)
 
         await self._async_write_powerpulse_settings(
-            action="continuous_charging",
+            action=action,
             state_key="ev_settings_switch_bits",
             needs_powerocean_key="powerpulse_continuous_needs_powerocean",
             not_confirmed_key="powerpulse_continuous_not_confirmed",
             plan=plan,
-            describe_reported=_describe_continuous,
+            describe_reported=lambda bits: _describe_switch_bit(bits, bit),
         )
 
     def _require_wallbox_action_state(self, action: Literal["start", "stop"]) -> None:

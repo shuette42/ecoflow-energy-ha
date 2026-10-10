@@ -44,7 +44,7 @@ async def test_control_creation_by_prefix(
         (button_setup, 2),
         (number_setup, 3 if sibling else 1),
         (select_setup, 2 * int(sibling)),
-        (switch_setup, int(sibling)),
+        (switch_setup, 3 * int(sibling)),
     ]:
         entities: list[Any] = []
         await setup(hass, entry, add_entities_collector(entities))

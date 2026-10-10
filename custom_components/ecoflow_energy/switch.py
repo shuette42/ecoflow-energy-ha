@@ -4,10 +4,11 @@ Implements optimistic lock: after a SET command the local state is
 updated immediately and MQTT updates for that key are ignored for 5 s.
 This prevents switch flicker while the device confirms the change.
 
-The PowerPulse 2 Continuous charging switch is the exception: it applies
-nothing on its own. The coordinator write returns once the wallbox has
-reported the new switch bits, and that report is what moves the displayed
-state (PLAN-172, the same rule as the wallbox numbers and selects).
+The PowerPulse 2 settings switches (Continuous Charging, Block Battery
+Discharge, Plug-and-Play) are the exception: they apply nothing on their own.
+The coordinator write returns once the wallbox has reported the new switch
+bits, and that report is what moves the displayed state (PLAN-172, the same
+rule as the wallbox numbers and selects).
 """
 
 from __future__ import annotations
@@ -40,7 +41,6 @@ from .const import (
     POWEROCEAN_SCHEDULE_PREFIXES,
     POWEROCEAN_SWITCHES,
     POWEROCEANLOCALONLY_SWITCHES,
-    POWERPULSE2_SWITCH_BIT_CONTINUOUS,
     POWERPULSE2_SWITCHES,
     SMARTPLUG_SWITCH_COMMANDS,
     SMARTPLUG_SWITCHES,
@@ -205,8 +205,8 @@ class EcoFlowSwitch(
     def available(self) -> bool:
         """Return True if entity is available.
 
-        The PowerPulse 2 Continuous charging switch only ever exists on the
-        sibling route (see `async_setup_entry`) and its write goes through the
+        The PowerPulse 2 settings switches only ever exist on the sibling
+        route (see `async_setup_entry`) and their write goes through the
         sibling PowerOcean's own MQTT connection, so availability also follows
         that connection, the same rule the wallbox's numbers and charging-mode
         select apply. The sibling is resolved fresh on every read: it is None
@@ -263,17 +263,18 @@ class EcoFlowSwitch(
         before the first full status frame), falls back to the restored
         state. A live value always beats the restored one.
 
-        The PowerPulse 2 Continuous charging switch shows only what the
-        wallbox reported: one bit of the settings switch bits, unknown (never
+        The PowerPulse 2 settings switches show only what the wallbox
+        reported: each one bit of the settings switch bits, unknown (never
         off) while the bits are absent, and no lock window or restored state.
         """
         if self.coordinator.device_type == DEVICE_TYPE_POWERPULSE2:
             bits = as_known_int(
                 (self.coordinator.data or {}).get(self._definition.state_key)
             )
-            if bits is None:
+            mask = self._definition.bit_mask
+            if bits is None or mask is None:
                 return None
-            return bool(bits & POWERPULSE2_SWITCH_BIT_CONTINUOUS)
+            return bool(bits & mask)
 
         if time.monotonic() < self._optimistic_lock_until:
             return self._optimistic_value
@@ -306,7 +307,12 @@ class EcoFlowSwitch(
         if self.coordinator.device_type == DEVICE_TYPE_POWERPULSE2:
             # No optimistic state: the coordinator returns once the wallbox
             # has reported the new bits, and that report moves the switch.
-            await self.coordinator.async_set_powerpulse_continuous_charging(turn_on)
+            mask = self._definition.bit_mask
+            if mask is None:
+                raise_set_failed(self.entity_id)
+            await self.coordinator.async_set_powerpulse_switch_bit(
+                mask, turn_on, self._definition.key
+            )
             return
 
         schedule_slot = self._schedule_slot()

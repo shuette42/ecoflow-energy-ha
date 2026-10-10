@@ -18,7 +18,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from homeassistant.core import HomeAssistant
 
-from custom_components.ecoflow_energy.const import DOMAIN
+from custom_components.ecoflow_energy.const import (
+    DOMAIN,
+    POWERPULSE2_SWITCH_BIT_CONTINUOUS,
+)
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
 from custom_components.ecoflow_energy.switch import async_setup_entry as switch_setup
 from tests.ha.test_powerpulse2_charge_action import (
@@ -146,13 +149,15 @@ async def test_turning_the_switch_calls_the_coordinator_and_shows_no_optimistic_
     generic_set = AsyncMock()
     state_write = MagicMock()
     with (
-        patch.object(wallbox, "async_set_powerpulse_continuous_charging", write),
+        patch.object(wallbox, "async_set_powerpulse_switch_bit", write),
         patch.object(wallbox, "async_send_set_command", generic_set),
         patch.object(switch, "async_write_ha_state", state_write),
     ):
         await getattr(switch, call)()
 
-    write.assert_awaited_once_with(expected_arg)
+    write.assert_awaited_once_with(
+        POWERPULSE2_SWITCH_BIT_CONTINUOUS, expected_arg, "ev_continuous_charging"
+    )
     generic_set.assert_not_called()
     state_write.assert_not_called()
     assert switch.is_on is shown_before
