@@ -43,10 +43,12 @@ GRAPHQL_URL = "https://api.github.com/graphql"
 TOKEN_ENV = "BOARD_TOKEN"
 TEXT_LIMIT = 400
 # Per-field cap for free text that needs more room than TEXT_LIMIT.
-# A Projects text field takes 1024 characters (measured: 1025 is rejected by the API).
+# A Projects text field takes 1024 UTF-8 bytes, not characters: 1024 characters
+# holding an umlaut and an ellipsis were rejected ("Column value must be a valid
+# value for text column"). Every limit here is therefore a byte count.
 TEXT_LIMITS: dict[str, int] = {"Stand / Beleg": 1024}
 
-# Field -> allowed values. None means free text (one line, TEXT_LIMIT chars).
+# Field -> allowed values. None means free text (one line, TEXT_LIMIT bytes).
 WRITABLE: dict[str, set[str] | None] = {
     "Nächster Schritt": None,
     "Stand / Beleg": None,
@@ -131,17 +133,22 @@ def http_graphql(query: str, **variables: object) -> dict:
 MULTILINE = {"Stand / Beleg"}
 
 
+def cut_to_bytes(text: str, limit: int) -> str:
+    """The longest prefix of `text` within `limit` UTF-8 bytes, whole characters."""
+    return text.encode("utf-8")[: max(limit, 0)].decode("utf-8", errors="ignore")
+
+
 def clean_text(value: str, limit: int = TEXT_LIMIT, multiline: bool = False) -> str:
-    """No control characters, at most `limit` characters; one line unless multiline."""
+    """No control characters, at most `limit` UTF-8 bytes; one line unless multiline."""
     if multiline:
         lines = value.replace("\r\n", "\n").replace("\r", "\n").split("\n")
         kept = [
             "".join(ch for ch in line if ch.isprintable()).rstrip() for line in lines
         ]
-        return "\n".join(kept).strip()[:limit]
+        return cut_to_bytes("\n".join(kept).strip(), limit)
     flat = " ".join(value.split())
     flat = "".join(ch for ch in flat if ch.isprintable())
-    return flat[:limit]
+    return cut_to_bytes(flat, limit)
 
 
 def check_value(field: str, value: str) -> str:
