@@ -159,7 +159,9 @@ def test_enhanced_ingest_path_carries_physical_mppt_values(frame_index: int) -> 
         topic = f"/app/device/property/{sn}"
         payload = json.dumps({"params": frame["mppt"]}).encode()
 
-    parsed = _DeltaIngest()._parse_message(topic, payload)
+    # The mixin's base is the coordinator only for the type checker. At runtime it
+    # is object, so the host needs no coordinator arguments.
+    parsed = object.__new__(_DeltaIngest)._parse_message(topic, payload)
 
     assert parsed is not None
     expected = _expected(frame)
