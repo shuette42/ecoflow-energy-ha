@@ -3,8 +3,8 @@
 The fixture holds the ``mppt.*`` keys of 14 observed device frames: 13 replies
 to the latestQuotas request and one /app/device/property push. The device
 reports millivolts, milliamperes, watts and degrees Celsius. Voltage times
-current matches the reported watts within integer truncation on every frame
-that carries all three values, so these are the units to assert.
+current stays within 5 W of the reported watts on every frame that carries
+all three values, so these are the units to assert.
 
 Expected values are computed in the test from the raw value and the physical
 unit, never copied from the parser output.
@@ -13,6 +13,7 @@ unit, never copied from the parser output.
 from __future__ import annotations
 
 import json
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -66,6 +67,52 @@ class _DeltaIngest(MqttIngestMixin):
     device_tag = device_log_tag(device_sn)
 
 
+def test_fixture_topic_split() -> None:
+    """The module docstring counts 13 replies and one push."""
+    assert Counter(f["topic"] for f in _FRAMES) == {"get_reply": 13, "property": 1}
+
+
+def test_car_and_12v_outputs_are_zero_in_every_observed_frame() -> None:
+    """The factors of these keys stay unconfirmed while the device reports 0."""
+    keys = ["carOutWatts", "dcdc12vWatts", "dcdc12vVol", "carOutVol"]
+    observed = [
+        frame["mppt"][f"mppt.{key}"]
+        for frame in _FRAMES
+        for key in keys
+        if f"mppt.{key}" in frame["mppt"]
+    ]
+    assert len(observed) == 52
+    assert set(observed) == {0}
+
+
+def test_voltage_times_current_matches_reported_watts() -> None:
+    """Parser output and the frame's own watts agree, whatever the divisors."""
+    triples = 0
+    mismatches: list[str] = []
+    for frame in _FRAMES:
+        mppt = frame["mppt"]
+        parsed = parse_delta_http_quota(dict(mppt))
+        products = {
+            "solar_in_w": parsed.get("solar_in_vol_v", 0)
+            * parsed.get("solar_in_amp_a", 0),
+            "solar2_in_w": parsed.get("solar2_in_vol_v", 0)
+            * parsed.get("solar2_in_amp_a", 0),
+        }
+        if "mppt.outVol" in mppt:
+            products["mppt_out_w"] = mppt["mppt.outVol"] * mppt["mppt.outAmp"] / 1e6
+        for out_key, product in products.items():
+            if out_key not in parsed or product == 0:
+                continue
+            triples += 1
+            if abs(product - parsed[out_key]) > 5:
+                mismatches.append(
+                    f"frame {frame['frame_index']} {out_key}: "
+                    f"{product:.2f} W from V*I, {parsed[out_key]!r} W reported"
+                )
+    assert triples == 40
+    assert not mismatches, "\n".join(mismatches)
+
+
 def test_replay_observed_frames_through_delta_http_parser() -> None:
     """Every observed frame yields the physical value for the six MPPT keys.
 
@@ -87,9 +134,8 @@ def test_replay_observed_frames_through_delta_http_parser() -> None:
                     f"frame {frame['frame_index']} {out_key}: "
                     f"got {actual!r}, expected {expected!r}"
                 )
-    # A replay that compared nothing proves nothing: floor at the fixture size.
-    assert compared_frames >= 14
-    assert compared_values >= 82
+    assert compared_frames == 14
+    assert compared_values == 82
     assert not mismatches, "\n".join(mismatches)
 
 
@@ -117,7 +163,7 @@ def test_enhanced_ingest_path_carries_physical_mppt_values(frame_index: int) -> 
 
     assert parsed is not None
     expected = _expected(frame)
-    assert len(expected) >= 4  # frame 39 carries four of the six keys
+    assert len(expected) == (6 if frame["topic"] == "get_reply" else 4)
     mismatches = [
         f"{out_key}: got {parsed.get(out_key)!r}, expected {value!r}"
         for out_key, value in expected.items()
