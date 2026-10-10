@@ -248,6 +248,32 @@ def test_unmapped_enum_numbers_drop_the_key_instead_of_writing_none() -> None:
     assert "ev_phase_mode" not in _finalize({"_phase_mode_raw": 99})
 
 
+def test_heartbeat_plug_status_4_is_suspended_charger() -> None:
+    """A heartbeat whose field 1 is 4 (`EV_CHG_STS_SUSPENDED_EVSE`) reports
+    `suspended_charger`, the paused state a Start in Solar mode without
+    surplus ends in (#515).
+
+    The frame is built on the wire and goes through the whole header decode,
+    so the test reaches `_PLUG_STATUS_NAMES` and not a hand-set string. The
+    operands 2 and 3 are the control that the builder itself works. Mutations
+    this catches: dropping key 4 from `_PLUG_STATUS_NAMES` (the parse returns
+    None and the status never reaches the coordinator), or naming 4 like its
+    neighbour 5 (`suspended_vehicle`).
+    """
+    for plug_status, expected in (
+        (2, "preparing"),
+        (3, "charging"),
+        (4, "suspended_charger"),
+    ):
+        header = (
+            encode_field_bytes(1, encode_field_varint(1, plug_status))
+            + encode_field_varint(8, 2)
+            + encode_field_varint(9, 33)
+        )
+        result = parse_powerpulse_message(encode_field_bytes(1, header))
+        assert result == {"ev_charge_status": expected}, plug_status
+
+
 def test_phase_mode_and_session_status_counts_over_the_fixture() -> None:
     """Exact counts over the fixture, not just "at least one".
 

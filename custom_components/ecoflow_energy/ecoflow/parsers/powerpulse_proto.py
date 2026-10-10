@@ -184,6 +184,10 @@ _PLUG_STATUS_NAMES: dict[int, str] = {
     # entry the sensor kept its previous state through such a frame.
     2: "preparing",
     3: "charging",
+    # EV_CHG_STS_SUSPENDED_EVSE: the charger holds the session back, for
+    # example a Solar-mode start without PV surplus (#515). Same enum value
+    # and name the PowerOcean relay map already uses (`powerocean_proto.py`).
+    4: "suspended_charger",
     # Shared EV_CHG_STS_SUSPENDED_EV, observed on a C371 at zero power.
     5: "suspended_vehicle",
     6: "finishing",

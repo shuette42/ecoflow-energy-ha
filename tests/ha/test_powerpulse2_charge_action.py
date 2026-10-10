@@ -215,6 +215,157 @@ async def test_start_while_finishing_confirms_only_on_charging(
     assert wallbox._wallbox_action_pending is None
 
 
+async def test_start_while_finishing_confirms_on_a_suspended_charger_frame(
+    hass: HomeAssistant,
+) -> None:
+    """Start resolves on "suspended_charger" (heartbeat field 1 = 4, #515).
+
+    A Start in Solar mode without surplus is accepted by the wallbox, which
+    then reports the paused state at once. ADR-009 decision 4 confirms the
+    press on that frame. The frame is built from the enum value 4 and goes
+    through `_PLUG_STATUS_NAMES`, never a hand-set string. Mutations this
+    catches: dropping key 4 from `_PLUG_STATUS_NAMES` (`_apply_status` then
+    fails its parsed-key assert), and dropping "suspended_charger" from
+    `POWERPULSE2_CHARGE_ACTION_CONFIRMED["start"]` (the press stays pending
+    and the bounded wait below times out).
+    """
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    _apply_status(wallbox, 6)  # finishing
+
+    task = asyncio.create_task(wallbox.async_set_powerpulse_charge_action("start"))
+    await asyncio.sleep(0.05)
+    assert _mqtt(oceans[0]).send_proto_set.call_count == 1
+
+    _apply_status(wallbox, 4)  # suspended_charger - confirms
+    # Bounded, so a mutation fails in seconds and not after the 30 s window.
+    await asyncio.wait_for(task, timeout=2)
+    assert wallbox._wallbox_action_pending is None
+    assert _mqtt(oceans[0]).send_proto_set.call_count == 1
+    assert _mqtt(wallbox).send_proto_set.call_count == 0
+
+
+async def test_start_is_not_confirmed_by_a_preparing_frame(
+    hass: HomeAssistant,
+) -> None:
+    """A "preparing" frame does not confirm a start; "suspended_charger" does.
+
+    ADR-009 decision 4 as amended for #515 keeps "preparing" out of the start
+    set: the cable is attached but nothing says the charger accepted the
+    session. Mutation this catches: adding "preparing" to
+    `POWERPULSE2_CHARGE_ACTION_CONFIRMED["start"]` (the future is done after
+    the 2 frame and the pending assert below fails).
+    """
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    _apply_status(wallbox, 6)  # finishing
+
+    task = asyncio.create_task(wallbox.async_set_powerpulse_charge_action("start"))
+    await asyncio.sleep(0.05)
+    assert _mqtt(oceans[0]).send_proto_set.call_count == 1
+
+    _apply_status(wallbox, 2)  # preparing - must not confirm
+    pending = wallbox._wallbox_action_pending
+    assert pending is not None and not pending.future.done()
+    assert not task.done()
+
+    _apply_status(wallbox, 4)  # suspended_charger - confirms
+    await asyncio.wait_for(task, timeout=2)
+    assert wallbox._wallbox_action_pending is None
+
+
+async def test_start_is_not_confirmed_by_a_stale_stored_status(
+    hass: HomeAssistant,
+) -> None:
+    """A confirming status already in the store does not confirm a start.
+
+    The check runs on the arriving frame (`_resolve_wallbox_action`), never on
+    `_device_data`. The store is set to "suspended_charger" and then to
+    "charging" after the press, and a frame without `ev_charge_status` arrives
+    each time: the press stays pending. Mutation this catches: resolving from
+    the store instead of the arriving frame (the keyless frame would then
+    confirm the start and the pending assert fails).
+    """
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    _apply_status(wallbox, 6)  # finishing
+
+    task = asyncio.create_task(wallbox.async_set_powerpulse_charge_action("start"))
+    await asyncio.sleep(0.05)
+    assert _mqtt(oceans[0]).send_proto_set.call_count == 1
+
+    for stale in ("suspended_charger", "charging"):
+        wallbox._device_data["ev_charge_status"] = stale
+        wallbox._apply_data({"ev_charge_power_w": 0.0})  # no status key
+        pending = wallbox._wallbox_action_pending
+        assert pending is not None and not pending.future.done(), stale
+        assert not task.done(), stale
+
+    _apply_status(wallbox, 4)  # an arriving suspended_charger frame confirms
+    await asyncio.wait_for(task, timeout=2)
+    assert wallbox._wallbox_action_pending is None
+
+
+async def test_stop_is_not_confirmed_by_a_suspended_charger_frame(
+    hass: HomeAssistant,
+) -> None:
+    """A "suspended_charger" frame does not confirm a stop; "finishing" does.
+
+    The start set grew by one status for #515, the stop set did not. Mutation
+    this catches: adding "suspended_charger" to
+    `POWERPULSE2_CHARGE_ACTION_CONFIRMED["stop"]` (the future is done after
+    the 4 frame and the pending assert below fails).
+    """
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    _apply_status(wallbox, 3)  # charging
+
+    task = asyncio.create_task(wallbox.async_set_powerpulse_charge_action("stop"))
+    await asyncio.sleep(0.05)
+    assert _mqtt(oceans[0]).send_proto_set.call_count == 1
+
+    _apply_status(wallbox, 4)  # suspended_charger - must not confirm a stop
+    pending = wallbox._wallbox_action_pending
+    assert pending is not None and not pending.future.done()
+    assert not task.done()
+
+    _apply_status(wallbox, 6)  # finishing - confirms
+    await asyncio.wait_for(task, timeout=2)
+    assert wallbox._wallbox_action_pending is None
+
+
+async def test_start_in_solar_mode_without_surplus_then_charging_publishes_once(
+    hass: HomeAssistant,
+) -> None:
+    """The reporter's sequence of #515: finishing, press, preparing,
+    suspended_charger, and minutes later charging.
+
+    The 4 frame confirms the press (it returns without an error), and the 3
+    frame that follows after the press returned is an ordinary status update:
+    one publish in total, no pending record, the sensor reads "charging".
+    Mutations this catches: leaving "suspended_charger" out of the start set
+    (the bounded wait times out), and a later frame re-publishing or
+    re-opening the press (call count or pending record).
+    """
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    _apply_status(wallbox, 6)  # finishing
+
+    task = asyncio.create_task(wallbox.async_set_powerpulse_charge_action("start"))
+    await asyncio.sleep(0.05)
+
+    _apply_status(wallbox, 2)  # preparing
+    _apply_status(wallbox, 4)  # suspended_charger - confirms
+    await asyncio.wait_for(task, timeout=2)
+    assert wallbox._device_data["ev_charge_status"] == "suspended_charger"
+
+    _apply_status(wallbox, 3)  # charging, later, after the press returned
+    assert _mqtt(oceans[0]).send_proto_set.call_count == 1
+    assert _mqtt(wallbox).send_proto_set.call_count == 0
+    assert wallbox._wallbox_action_pending is None
+    assert wallbox._device_data["ev_charge_status"] == "charging"
+
+
 async def test_stop_while_charging_is_not_confirmed_by_another_charging_frame(
     hass: HomeAssistant,
 ) -> None:
