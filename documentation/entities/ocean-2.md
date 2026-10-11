@@ -123,7 +123,7 @@ The device carries a value that reads like grid power and is the configured feed
 
 ### The RE42 and RE43 report AC power with the opposite sign
 
-On the one `RE42` and the one `RE43` measured, total AC power and the inverter phase active power read negative while the unit supplies the house (down to -4,267 W against a 4,570 W house load on the `RE42`, -7,340 W against 7,800 W on the `RE43`), where an `RE11` and an `RE41` read positive in the same state. Battery, grid, solar, home load and apparent power have the same sign on all three units. AC Power and Inverter Phase A/B/C Active Power are therefore corrected per serial prefix for the `RE42` and `RE43` and read positive there too. Each rests on a single unit: if your `RE42` or `RE43` shows AC Power negative, please say so on #145.
+On the one `RE42` and the one `RE43` measured, total AC power and the inverter phase active power read negative while the unit supplies the house (down to -4,267 W against a 4,570 W house load on the `RE42`, -7,340 W against 7,800 W on the `RE43`), where an `RE11` and an `RE41` read positive in the same state. Battery, grid, home load and apparent power have the same sign on all four units, and solar on the three that produced any (the `RE43` download was taken at night). AC Power and Inverter Phase A/B/C Active Power are therefore corrected per serial prefix for the `RE42` and `RE43` and read positive there too. Each rests on a single unit: if your `RE42` or `RE43` shows AC Power negative, please say so on #145.
 
 ### Home Power is reported, not calculated
 

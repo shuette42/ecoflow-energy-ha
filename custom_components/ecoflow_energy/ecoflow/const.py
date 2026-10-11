@@ -67,10 +67,10 @@ DEVICE_TYPE_WAVE3 = "wave3"
 # `proto/runtime.py`); that relay path is retired in the same change that
 # adds this type, so a `C376` is never read twice (#7, #247).
 DEVICE_TYPE_POWERPULSE2 = "powerpulse2"
-# Ocean 2 home battery (`RE11`, `RE17`, `RE41`). Enhanced-only and reached
-# through the serial prefix alone: the Developer API refuses every quota read
-# for it with error 1006, and neither channel carries a product name that any
-# keyword list here would match. Despite sharing five letters with the
+# Ocean 2 home battery (`RE11`, `RE17`, `RE41`, `RE42`, `RE43`). Enhanced-only
+# and reached through the serial prefix alone: the Developer API refuses every
+# quota read for it with error 1006, and neither channel carries a product name
+# that any keyword list here would match. Despite sharing five letters with the
 # PowerOcean line it is a different protocol - `cmd_func` 254 with nested
 # submessages, where the PowerOcean uses the 96 family - so it gets its own
 # parser rather than a routing entry (#145).
@@ -482,8 +482,9 @@ def schedule_power_min_w(online_battery_packs: int | None) -> int:
 #: +311..+415 W and an `RE11` up to +10,476 W in the same state. Battery, grid,
 #: solar, home load and apparent power agree in sign on all three. One unit is
 #: one measurement: an installation setting behind the sign is not ruled out.
-#: An `RE43` unit (#145) sends the same raw sign: -7,340 W while the battery
-#: supplied a 7,800 W house load, +54 W while the grid carried the house.
+#: An `RE43` unit (#145) reads the same way: -7,340 W raw while the battery
+#: supplied a 7,800 W house load. With the battery idle and the grid carrying
+#: the house it reads about +55 W raw, about -55 W once corrected.
 OCEAN2_AC_SIGN_INVERTED: frozenset[str] = frozenset({"RE42", "RE43"})
 
 

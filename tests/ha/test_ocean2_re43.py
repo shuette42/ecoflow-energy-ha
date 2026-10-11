@@ -9,7 +9,8 @@ survives in either payload.
 
 `4.1` (total AC power) and `4.3.1[a].3` (phase A active power) read negative on
 this unit in that state, where an RE11 and an RE41 read positive. Battery,
-grid, solar, home load and apparent power carry the same sign on all of them.
+grid, home load and apparent power carry the same sign on all of them; solar
+read 0 W throughout this download.
 """
 
 from __future__ import annotations
@@ -86,6 +87,20 @@ MODULE = bytes.fromhex(
     "0300803b469503008040449d0300005744a50300004844aa030c477fba41359bc9417c91"
     "fe41b2030c7580843d7fe29cbd4019823dba030c875264bea62dddbcc75a85bec503d130"
     "c848c80300d2030400020202d80301e00306e80306f00306f80300800401"
+)
+
+
+IDLE_FRAME = bytes.fromhex(
+    "0ad7020afc013a0a0d0000eb45150000eb458a044408001000180025000000002d000060"
+    "c23500005c423d00803b464001480155000000005d00000000600068027002788a588001"
+    "3988013890018a58980101a50100000000ba050a0d0000eb45150000eb4522250d220763"
+    "421a130a111d1faa5d42257a6170432d8eaf7643300122090a072560a0abbf2801920172"
+    "0a1a0d00704d451500604d45180120042d00008841350000704138010a1a0d00304d4515"
+    "00204d45180120042d00007041350000604138040a1a0d00604f451500204f4518012004"
+    "2d00008041350000604138030a1a0d00c04f451500b04f45180120042d00008841350000"
+    "7041380210011060182020012801380340fe01482750fc01580170c996cf0878fe018001"
+    "04c2011058585858585858585858585858585858ca011058585858585858585858585858"
+    "585858d2011058585858585858585858585858585858"
 )
 
 
@@ -192,3 +207,17 @@ def test_ingest_corrects_the_re43_and_leaves_the_re41(topic: str) -> None:
 
     re41 = _parsed("RE41TEST00000001", topic.replace(RE43_SERIAL, "RE41TEST00000001"))
     assert re41["pcs_ac_power_w"] == pytest.approx(-7340.11, abs=0.01)
+
+
+def test_the_idle_frame_reads_a_small_draw_once_corrected() -> None:
+    # Battery idle, the grid carries the house (7,520 W): the device sends
+    # about +56 W, which the correction turns into a small draw.
+    parsed = parse_ocean2_proto_message(
+        IDLE_FRAME, invert_ac_sign=ocean2_ac_sign_inverted(RE43_SERIAL)
+    )
+    assert parsed is not None
+    assert parsed["pcs_ac_power_w"] == pytest.approx(-56.76, abs=0.01)
+    assert parsed["inv_phase_a_active_power_w"] == pytest.approx(-55.42, abs=0.01)
+    assert parsed["home_w"] == 7520.0
+    assert parsed["grid_w"] == 7520.0
+    assert str(parsed["batt_w"]) in ("0.0", "-0.0")
