@@ -237,6 +237,7 @@ async def test_a_brightness_set_reaches_the_display_write_and_never_the_amps_gua
         await target.async_set_native_value(50.0)
 
     display.assert_awaited_once_with(key, 50)
+    assert display.await_args is not None
     assert type(display.await_args.args[1]) is int
     max_current.assert_not_awaited()
 
