@@ -7,6 +7,7 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any
 
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from ..const import (
@@ -79,6 +80,12 @@ class SetupMixin(_Base):
 
         app_api = AppApiClient(session, email, password)
         if not await app_api.login():
+            if app_api.unreachable:
+                # No answer from EcoFlow (offline router, DNS): the password
+                # was never judged. Home Assistant retries the setup (#531).
+                raise ConfigEntryNotReady(
+                    f"EcoFlow cloud not reachable for {self.device_tag}"
+                )
             _LOGGER.warning(
                 "App-auth: login failed for %s - triggering re-authentication",
                 self.device_tag,
@@ -95,6 +102,10 @@ class SetupMixin(_Base):
         # Fetch portal MQTT credentials (AES-decrypted app-* creds)
         creds = await app_api.get_mqtt_credentials()
         if creds is None:
+            if app_api.unreachable:
+                raise ConfigEntryNotReady(
+                    f"EcoFlow cloud not reachable for {self.device_tag}"
+                )
             _LOGGER.error(
                 "App-auth: failed to fetch MQTT credentials for %s", self.device_tag
             )

@@ -39,10 +39,25 @@ _AUTH_BASE_URLS = [
 ]
 
 
+class EnhancedAuthUnreachable(Exception):
+    """No EcoFlow endpoint answered at all (DNS, connection or timeout).
+
+    Distinct from a refusal: the credentials were never judged, so the caller
+    retries later instead of asking the user to sign in again (#531).
+    """
+
+
+def _describe(exc: Exception) -> str:
+    """Name the exception type too: a timeout has an empty message."""
+    return f"{type(exc).__name__}: {exc}".rstrip(": ")
+
+
 async def enhanced_login(
     session: aiohttp.ClientSession,
     email: str,
     password: str,
+    *,
+    raise_if_unreachable: bool = False,
 ) -> dict[str, Any] | None:
     """Login to EcoFlow and return JWT token + userId.
 
@@ -50,7 +65,11 @@ async def enhanced_login(
 
     Returns:
         dict with ``token``, ``user_id`` and ``base_url`` (the host that
-        accepted the login), or None on failure.
+        accepted the login), or None when the servers refused the login.
+
+    Raises:
+        EnhancedAuthUnreachable: only with ``raise_if_unreachable`` and only
+            when no endpoint answered at all.
     """
     payload = {
         "email": email,
@@ -60,12 +79,14 @@ async def enhanced_login(
     }
 
     last_error = ""
+    answered = False
     for base_url in _AUTH_BASE_URLS:
         url = f"{base_url.rstrip('/')}{_AUTH_LOGIN_PATH}"
         try:
             timeout = aiohttp.ClientTimeout(total=10)
             async with session.post(url, json=payload, timeout=timeout) as resp:
                 body = await resp.json()
+                answered = True
                 if str(body.get("code")) != "0":
                     last_error = f"code={body.get('code')} msg={body.get('message')}"
                     _LOGGER.debug("Login attempt %s: %s", base_url, last_error)
@@ -81,10 +102,12 @@ async def enhanced_login(
                 _LOGGER.debug("Enhanced login OK via %s", base_url)
                 return {"token": token, "user_id": user_id, "base_url": base_url}
         except (aiohttp.ClientError, TimeoutError) as exc:
-            last_error = str(exc)
-            _LOGGER.debug("Login attempt %s failed: %s", base_url, exc)
+            last_error = _describe(exc)
+            _LOGGER.debug("Login attempt %s failed: %s", base_url, last_error)
             continue
 
+    if raise_if_unreachable and not answered:
+        raise EnhancedAuthUnreachable(last_error)
     _LOGGER.warning("Enhanced login failed on all endpoints: %s", last_error)
     return None
 
@@ -93,6 +116,8 @@ async def get_enhanced_credentials(
     session: aiohttp.ClientSession,
     token: str,
     base_url: str = IOT_API_BASE,
+    *,
+    raise_if_unreachable: bool = False,
 ) -> dict[str, Any] | None:
     """Fetch and decrypt Enhanced Mode MQTT credentials (Portal path).
 
@@ -100,6 +125,10 @@ async def get_enhanced_credentials(
 
     Returns:
         dict with ``certificateAccount``, ``certificatePassword``, etc.
+
+    Raises:
+        EnhancedAuthUnreachable: only with ``raise_if_unreachable`` and only
+            when the endpoint did not answer at all.
     """
     url = f"{base_url.rstrip('/')}{_ENHANCED_CERT_PATH}"
     headers = {"Authorization": f"Bearer {token}"}
@@ -120,7 +149,9 @@ async def get_enhanced_credentials(
                 return None
             return _decrypt_certification(token, encrypted_data)
     except (aiohttp.ClientError, TimeoutError) as exc:
-        _LOGGER.warning("Enhanced certification request failed: %s", exc)
+        if raise_if_unreachable:
+            raise EnhancedAuthUnreachable(_describe(exc)) from exc
+        _LOGGER.warning("Enhanced certification request failed: %s", _describe(exc))
         return None
 
 
