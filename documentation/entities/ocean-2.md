@@ -6,7 +6,7 @@ Full list of all entities created for the EcoFlow Ocean 2.
 
 The Ocean 2 reports through the account connection only, so it needs **Enhanced Mode**. The Developer API answers error 1006 for this device, the same position the `J32D`/`J32E` PowerOcean variants are in, so Standard Mode creates no usable entities.
 
-Five serial prefixes, one device: `RE11` for the 10 kW unit, `RE17` for the 12 kW one, `RE41` for the 8 kW single-phase Ocean 2 Plus, `RE42`, a single-phase unit whose power rating is not established here, and `RE43` for the 12 kW single-phase Ocean 2 Plus. They differ in power rating and phase count. The inverter and grid phase sensors below read whatever phases a unit actually reports, so a single-phase `RE41`, `RE42` or `RE43` simply leaves Phase B and C empty rather than needing a separate entity set.
+Five serial prefixes, one device: `RE11` for the 10 kW unit, `RE17` for the 12 kW one, `RE41` for the 8 kW single-phase Ocean 2 Plus, `RE43` for the 12 kW single-phase Ocean 2 Plus and `RE42`, a single-phase unit whose power rating is not established here. They differ in power rating and phase count. The inverter and grid phase sensors below read whatever phases a unit actually reports, so a single-phase `RE41`, `RE42` or `RE43` simply leaves Phase B and C empty rather than needing a separate entity set.
 
 `RE11` is confirmed on two installations, `RE41`, `RE42` and `RE43` on one each through owners' diagnostics downloads on #145. `RE17` is routed on EcoFlow's own device list, which separates it from the `RE11` by power rating alone; no frame from an `RE17` exists yet, so if you own one, a note either way is welcome.
 
@@ -123,7 +123,7 @@ The device carries a value that reads like grid power and is the configured feed
 
 ### The RE42 and RE43 report AC power with the opposite sign
 
-On the one `RE42` and the one `RE43` measured, total AC power and the inverter phase active power read negative while the unit supplies the house (down to -4,267 W against a 4,570 W house load on the `RE42`, -7,340 W against 7,800 W on the `RE43`), where an `RE11` and an `RE41` read positive in the same state. Battery, grid, home load and apparent power have the same sign on all four units, and solar on the three that produced any (the `RE43` download was taken at night). AC Power and Inverter Phase A/B/C Active Power are therefore corrected per serial prefix for the `RE42` and `RE43` and read positive there too. Each rests on a single unit: if your `RE42` or `RE43` shows AC Power negative, please say so on #145.
+On the one `RE42` and the one `RE43` measured, total AC power and the inverter phase active power read negative while the unit supplies the house (down to -4,267 W against a 4,570 W house load on the `RE42`, -7,340 W against 7,800 W on the `RE43`), where an `RE11` and an `RE41` read positive in the same state. Battery, grid, home load and apparent power have the same sign on all four units. So does solar on the three that produced any (the `RE43` download was taken at night). AC Power and Inverter Phase A/B/C Active Power are therefore corrected per serial prefix for the `RE42` and `RE43` and read positive there too. Each rests on a single unit: if your `RE42` or `RE43` shows AC Power negative, please say so on #145.
 
 ### Home Power is reported, not calculated
 
