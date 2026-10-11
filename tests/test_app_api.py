@@ -315,7 +315,7 @@ class TestGetMqttCredentials:
 
         assert result == expected_creds
         mock_get.assert_called_once_with(
-            session, "valid_token", base_url=client._base_url
+            session, "valid_token", base_url=client._base_url, raise_if_unreachable=True
         )
 
     @pytest.mark.asyncio
@@ -410,7 +410,10 @@ class TestRegionRouting:
             await client.get_mqtt_credentials()
 
         mock_get.assert_called_once_with(
-            session, "test_jwt_token_123", base_url="https://api.ecoflow.com"
+            session,
+            "test_jwt_token_123",
+            base_url="https://api.ecoflow.com",
+            raise_if_unreachable=True,
         )
 
     @pytest.mark.asyncio
@@ -605,3 +608,41 @@ class TestHistoryFetchTimeout:
         assert isinstance(hung, TimeoutError)
         assert slow == []
         assert session.get.call_count == 2
+
+
+class TestUnreachableFlag:
+    """login() tells a missing network from a refused login (#531)."""
+
+    @pytest.mark.asyncio
+    async def test_unreachable_login_sets_flag(self):
+        from ecoflow_energy.ecoflow.enhanced_auth import EnhancedAuthUnreachable
+
+        client, _ = _make_client()
+        with patch(
+            "ecoflow_energy.ecoflow.app_api.enhanced_login",
+            new_callable=AsyncMock,
+            side_effect=EnhancedAuthUnreachable("TimeoutError"),
+        ):
+            assert await client.login() is False
+
+        assert client.unreachable is True
+
+    @pytest.mark.asyncio
+    async def test_refused_login_leaves_flag_off_and_resets_it(self):
+        from ecoflow_energy.ecoflow.enhanced_auth import EnhancedAuthUnreachable
+
+        client, _ = _make_client()
+        with patch(
+            "ecoflow_energy.ecoflow.app_api.enhanced_login",
+            new_callable=AsyncMock,
+            side_effect=EnhancedAuthUnreachable("TimeoutError"),
+        ):
+            await client.login()
+        with patch(
+            "ecoflow_energy.ecoflow.app_api.enhanced_login",
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            assert await client.login() is False
+
+        assert client.unreachable is False

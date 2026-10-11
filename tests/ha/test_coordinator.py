@@ -1916,6 +1916,7 @@ class TestReauthSuppression:
         ) as cls:
             instance = cls.return_value
             instance.login = AsyncMock(return_value=False)
+            instance.unreachable = False
 
             with patch.object(
                 enhanced_config_entry, "async_start_reauth"
@@ -3253,6 +3254,7 @@ class TestEnhancedSetup:
             instance.login = AsyncMock(return_value=True)
             instance.user_id = "user123"
             instance.get_mqtt_credentials = AsyncMock(return_value=None)
+            instance.unreachable = False
 
             await coordinator.async_setup()
 
@@ -6635,6 +6637,7 @@ class TestAppAuthMode:
 
         mock_app_api = MagicMock()
         mock_app_api.login = AsyncMock(return_value=False)
+        mock_app_api.unreachable = False
 
         with (
             patch(
@@ -6646,6 +6649,60 @@ class TestAppAuthMode:
             await coordinator.async_setup()
 
         mock_reauth.assert_called_once()
+
+    async def test_app_auth_unreachable_login_retries_without_reauth(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """No internet at startup is retried by HA, not turned into reauth (#531)."""
+        from homeassistant.exceptions import ConfigEntryNotReady
+
+        entry = self._create_app_auth_entry(hass)
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_POWEROCEAN_DEVICE)
+
+        mock_app_api = MagicMock()
+        mock_app_api.login = AsyncMock(return_value=False)
+        mock_app_api.unreachable = True
+
+        with (
+            patch(
+                "custom_components.ecoflow_energy.ecoflow.app_api.AppApiClient",
+                return_value=mock_app_api,
+            ),
+            patch.object(entry, "async_start_reauth") as mock_reauth,
+            pytest.raises(ConfigEntryNotReady),
+        ):
+            await coordinator.async_setup()
+
+        mock_reauth.assert_not_called()
+
+    async def test_app_auth_unreachable_credentials_retries_without_reauth(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """The credential fetch after a good login follows the same rule (#531)."""
+        from homeassistant.exceptions import ConfigEntryNotReady
+
+        entry = self._create_app_auth_entry(hass)
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_POWEROCEAN_DEVICE)
+
+        mock_app_api = MagicMock()
+        mock_app_api.login = AsyncMock(return_value=True)
+        mock_app_api.user_id = "uid"
+        mock_app_api.get_mqtt_credentials = AsyncMock(return_value=None)
+        mock_app_api.unreachable = True
+
+        with (
+            patch(
+                "custom_components.ecoflow_energy.ecoflow.app_api.AppApiClient",
+                return_value=mock_app_api,
+            ),
+            patch.object(entry, "async_start_reauth") as mock_reauth,
+            pytest.raises(ConfigEntryNotReady),
+        ):
+            await coordinator.async_setup()
+
+        mock_reauth.assert_not_called()
 
     async def test_app_auth_no_http_fallback_on_stale(
         self,

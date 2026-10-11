@@ -17,7 +17,11 @@ import aiohttp
 
 from .charging_history import identity, is_identity
 from .const import IOT_API_BASE, get_device_type
-from .enhanced_auth import enhanced_login, get_enhanced_credentials
+from .enhanced_auth import (
+    EnhancedAuthUnreachable,
+    enhanced_login,
+    get_enhanced_credentials,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -75,6 +79,12 @@ class AppApiClient:
         self._history_lock = asyncio.Lock()
         self._history_retry_after = 0.0
         self._history_store = history_store
+        self._unreachable = False
+
+    @property
+    def unreachable(self) -> bool:
+        """True when the last login or credential fetch got no answer at all."""
+        return self._unreachable
 
     @property
     def token(self) -> str | None:
@@ -92,9 +102,21 @@ class AppApiClient:
         Delegates to enhanced_auth.enhanced_login which handles
         multi-region fallback (EU + global).
 
-        Returns True on success, False on failure.
+        Returns True on success, False on failure. After a failure,
+        ``unreachable`` tells a network problem from a refused login.
         """
-        result = await enhanced_login(self._session, self._email, self._password)
+        self._unreachable = False
+        try:
+            result = await enhanced_login(
+                self._session,
+                self._email,
+                self._password,
+                raise_if_unreachable=True,
+            )
+        except EnhancedAuthUnreachable as exc:
+            _LOGGER.debug("App login got no answer: %s", exc)
+            self._unreachable = True
+            result = None
         if result is None:
             self._token = None
             self._user_id = None
@@ -314,9 +336,18 @@ class AppApiClient:
             _LOGGER.debug("App API: no token, cannot fetch MQTT credentials")
             return None
 
-        return await get_enhanced_credentials(
-            self._session, self._token, base_url=self._base_url
-        )
+        self._unreachable = False
+        try:
+            return await get_enhanced_credentials(
+                self._session,
+                self._token,
+                base_url=self._base_url,
+                raise_if_unreachable=True,
+            )
+        except EnhancedAuthUnreachable as exc:
+            _LOGGER.debug("MQTT credential fetch got no answer: %s", exc)
+            self._unreachable = True
+            return None
 
 
 def _parse_device_response(data: dict[str, Any]) -> list[dict[str, Any]]:

@@ -3,7 +3,10 @@
 import base64
 import hashlib
 import json
+from unittest.mock import AsyncMock, MagicMock
 
+import aiohttp
+import pytest
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms
 
 try:
@@ -11,7 +14,13 @@ try:
 except ImportError:  # cryptography < 43.0
     from cryptography.hazmat.primitives.ciphers.modes import CFB
 
-from ecoflow_energy.ecoflow.enhanced_auth import _AES_IV, _decrypt_certification
+from ecoflow_energy.ecoflow.enhanced_auth import (
+    _AES_IV,
+    EnhancedAuthUnreachable,
+    _decrypt_certification,
+    enhanced_login,
+    get_enhanced_credentials,
+)
 
 
 def _encrypt_test_data(token: str, data: dict) -> str:
@@ -31,7 +40,7 @@ class TestDecryptCertification:
 
     def test_roundtrip(self):
         """Encrypt → decrypt must return the original data."""
-        token = "eyJhbGciOiJIUzI1NiJ9.test_payload.sig"
+        token = "test_jwt_payload"
         data = {
             "certificateAccount": "open-abc123",
             "certificatePassword": "secret-xyz",
@@ -63,3 +72,55 @@ class TestDecryptCertification:
         """The IV constant must match the EcoFlow Portal JS bundle."""
         assert _AES_IV == b"ojsajkqjwk1w2dfg"
         assert len(_AES_IV) == 16
+
+
+class TestUnreachableVersusRefused:
+    """A server that never answers is not a refused password (#531)."""
+
+    @staticmethod
+    def _session(post):
+        session = MagicMock()
+        session.post = post
+        return session
+
+    @pytest.mark.asyncio
+    async def test_all_endpoints_timing_out_raises_with_type_in_reason(self):
+        session = self._session(MagicMock(side_effect=TimeoutError()))
+
+        with pytest.raises(EnhancedAuthUnreachable, match="TimeoutError"):
+            await enhanced_login(
+                session, "test@example.com", "test_password", raise_if_unreachable=True
+            )
+
+    @pytest.mark.asyncio
+    async def test_unreachable_without_flag_returns_none(self):
+        session = self._session(MagicMock(side_effect=aiohttp.ClientError("down")))
+
+        result = await enhanced_login(session, "test@example.com", "test_password")
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_refused_login_returns_none_even_with_flag(self):
+        resp = MagicMock()
+        resp.json = AsyncMock(return_value={"code": "2026", "message": "bad password"})
+        ctx = MagicMock()
+        ctx.__aenter__ = AsyncMock(return_value=resp)
+        ctx.__aexit__ = AsyncMock(return_value=False)
+        session = self._session(MagicMock(return_value=ctx))
+
+        result = await enhanced_login(
+            session, "test@example.com", "test_password", raise_if_unreachable=True
+        )
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_credential_fetch_timeout_raises_with_flag(self):
+        session = MagicMock()
+        session.get = MagicMock(side_effect=TimeoutError())
+
+        with pytest.raises(EnhancedAuthUnreachable):
+            await get_enhanced_credentials(
+                session, "test_token", raise_if_unreachable=True
+            )
