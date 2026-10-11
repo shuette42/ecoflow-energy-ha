@@ -80,7 +80,7 @@ def test_every_sn_prefix_is_in_the_documentation_readme_entity_reference():
 
 
 def test_powerpulse2_definition_counts():
-    """PowerPulse 2's entity counts (18 sensors, 1 binary sensor, 1 select,
+    """PowerPulse 2's entity counts (18 sensors, 1 binary sensor, 2 selects,
     2 buttons), and its six Numbers as the entry-gated set: five written
     only through a sibling PowerOcean (`ev_max_current_a`, the two stored
     setpoints `ev_solar_min_current_a` and `ev_custom_current_a`, and the two

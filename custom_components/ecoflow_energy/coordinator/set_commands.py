@@ -35,6 +35,9 @@ from ..ecoflow.const import (
     POWEROCEAN_FEED_SCHEDULE_POWER_MIN_W,
     POWEROCEAN_SCHEDULE_POWER_STEP_W,
     POWERPULSE2_DISPLAY_BRIGHTNESS_STEPS,
+    POWERPULSE2_DISPLAY_KEYS,
+    POWERPULSE2_DISPLAY_SWITCH_KEYS,
+    powerpulse2_display_value_valid,
     schedule_power_max_w,
     schedule_power_min_w,
 )
@@ -67,6 +70,12 @@ class _SettingsWrite:
     bit_mask: int | None = None
     display: tuple[int, int, int, int] | None = None
 
+    def __post_init__(self) -> None:
+        if self.display is not None and self.fields:
+            raise ValueError("a display write sends the display block alone")
+        if self.display is None and not self.fields:
+            raise ValueError("a settings write needs fields or a display block")
+
 
 def _describe_amps(value: Any) -> str:
     """A reported current for an exception text, or that none arrived yet."""
@@ -82,30 +91,23 @@ def _describe_switch_bit(bits: Any, mask: int) -> str:
     return "on" if bits & mask else "off"
 
 
-# PLAN-188: the four display values of the settings report, in the byte order
-# of the display block (`ev_led_enabled` is byte 0 ... `ev_screen_brightness_pct`
-# byte 3), with the name the refusal text gives each one.
-_POWERPULSE2_DISPLAY_BYTES: tuple[tuple[str, str], ...] = (
-    ("ev_led_enabled", "LED indicator"),
-    ("ev_screen_enabled", "screen"),
-    ("ev_led_brightness_pct", "LED brightness"),
-    ("ev_screen_brightness_pct", "screen brightness"),
+# PLAN-188: the name the refusal text gives each display value, in the byte
+# order of the display block (`POWERPULSE2_DISPLAY_KEYS`: `ev_led_enabled` is
+# byte 0 ... `ev_screen_brightness_pct` byte 3).
+_POWERPULSE2_DISPLAY_BYTES: tuple[tuple[str, str], ...] = tuple(
+    zip(
+        POWERPULSE2_DISPLAY_KEYS,
+        ("LED indicator", "screen", "LED brightness", "screen brightness"),
+        strict=True,
+    )
 )
-_POWERPULSE2_DISPLAY_SWITCH_KEYS = frozenset({"ev_led_enabled", "ev_screen_enabled"})
-
-
-def _display_value_valid(key: str, value: Any) -> bool:
-    """Whether one reported display value is one the wallbox can be written."""
-    if key in _POWERPULSE2_DISPLAY_SWITCH_KEYS:
-        return type(value) in (bool, int) and value in (0, 1)
-    return type(value) is int and value in POWERPULSE2_DISPLAY_BRIGHTNESS_STEPS
 
 
 def _describe_display(key: str, reported: Any) -> str:
     """One reported display value as the not-confirmed text shows it."""
-    if not _display_value_valid(key, reported):
+    if not powerpulse2_display_value_valid(key, reported):
         return "no value yet"
-    if key in _POWERPULSE2_DISPLAY_SWITCH_KEYS:
+    if key in POWERPULSE2_DISPLAY_SWITCH_KEYS:
         return "on" if reported else "off"
     return f"{reported} %"
 
@@ -2175,13 +2177,15 @@ class SetCommandsMixin(_Base):
             describe_reported=lambda bits: _describe_switch_bit(bits, bit),
         )
 
-    async def async_set_powerpulse_display(self, key: str, value: int) -> None:
+    async def async_set_powerpulse_display(self, key: str, value: float) -> None:
         """Set one value of the wallbox's display block (PLAN-188, issue #495).
 
         `key` is one of `ev_led_enabled`, `ev_screen_enabled` (`value` 0 or 1,
         a bool is accepted), `ev_led_brightness_pct` and
         `ev_screen_brightness_pct` (`value` one of
-        `POWERPULSE2_DISPLAY_BRIGHTNESS_STEPS`, an `int`). The wallbox takes
+        `POWERPULSE2_DISPLAY_BRIGHTNESS_STEPS`, an `int`; a non-integer
+        value is refused with `powerpulse_display_brightness_invalid`, like any
+        value that is not one of the steps). The wallbox takes
         the display as one six-byte value (field 21 of `EDevPileParamSet`),
         so the write rebuilds `[LED on, Screen on, LED brightness, Screen
         brightness, 0, 0]` from the latest settings report, changes the one
@@ -2191,32 +2195,24 @@ class SetCommandsMixin(_Base):
         off: the write does not look at the on/off state.
 
         The report is read at dispatch time inside the lock (`plan`), like the
-        switch-bit write: refused when there is none, when it lacks any of the
-        four display values (`report_missing`, waiting helps, and also the
-        shape of a byte the parser left out as invalid), when it is older than
-        `POWERPULSE2_SETTINGS_MAX_AGE_S` (`report_stale`), or when a value in
-        it is not one the builder can send (`report_unusable`). Confirmed when
+        switch-bit write: refused when there is none (`report_missing`, waiting
+        helps), when it is older than `POWERPULSE2_SETTINGS_MAX_AGE_S`
+        (`report_stale`), or when a value in it is not one the builder can send
+        or is absent from a settings report that was received
+        (`report_unusable`: the parser leaves out a byte that is not a value
+        the wallbox takes, and waiting does not help). Confirmed when
         a frame arriving after the write reports `key` at the requested value;
         nothing is published optimistically. The refusal and confirmation texts
         reuse the `powerpulse_continuous_*` keys, as the three settings
         switches do.
         """
-        index = next(
-            (
-                i
-                for i, (name, _) in enumerate(_POWERPULSE2_DISPLAY_BYTES)
-                if name == key
-            ),
-            None,
-        )
-        if index is None:
+        if key not in POWERPULSE2_DISPLAY_KEYS:
             raise ValueError(f"{key!r} is not a PowerPulse 2 display value")
-        if key in _POWERPULSE2_DISPLAY_SWITCH_KEYS:
-            if type(value) not in (bool, int) or value not in (0, 1):
+        index = POWERPULSE2_DISPLAY_KEYS.index(key)
+        if key in POWERPULSE2_DISPLAY_SWITCH_KEYS:
+            if not powerpulse2_display_value_valid(key, value):
                 raise ValueError(f"{key} takes 0 or 1, got {value!r}")
-        elif (
-            type(value) is not int or value not in POWERPULSE2_DISPLAY_BRIGHTNESS_STEPS
-        ):
+        elif not powerpulse2_display_value_valid(key, value):
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="powerpulse_display_brightness_invalid",
@@ -2246,11 +2242,23 @@ class SetCommandsMixin(_Base):
             for name, label in _POWERPULSE2_DISPLAY_BYTES:
                 reported = values.get(name)
                 if reported is None:
+                    if "ev_settings_switch_bits" in values:
+                        # A settings report was received and the parser left
+                        # this byte out as not a value the wallbox takes:
+                        # waiting for the next report does not help.
+                        raise HomeAssistantError(
+                            translation_domain=DOMAIN,
+                            translation_key="powerpulse_continuous_report_unusable",
+                            translation_placeholders={
+                                "field": label,
+                                "value": "no valid value",
+                            },
+                        )
                     raise HomeAssistantError(
                         translation_domain=DOMAIN,
                         translation_key="powerpulse_continuous_report_missing",
                     )
-                if not _display_value_valid(name, reported):
+                if not powerpulse2_display_value_valid(name, reported):
                     raise HomeAssistantError(
                         translation_domain=DOMAIN,
                         translation_key="powerpulse_continuous_report_unusable",

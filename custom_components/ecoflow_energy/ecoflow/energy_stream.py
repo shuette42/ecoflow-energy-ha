@@ -11,7 +11,7 @@ import time
 from collections.abc import Sequence
 from typing import Literal
 
-from .const import POWERPULSE2_DISPLAY_BRIGHTNESS_STEPS
+from .const import POWERPULSE2_DISPLAY_KEYS, powerpulse2_display_value_valid
 from .parsers.powerocean_proto import _MINUTES_PER_DAY, SCHEDULE_MAX_INDEX
 from .proto_encoding import (
     encode_field_bytes,
@@ -553,18 +553,14 @@ def build_powerpulse_param_set_display_payload(
             carried in the envelope's field 25.
         seq: Sequence number. Default 0 generates from timestamp.
     """
-    for name, value in (("led_on", led_on), ("screen_on", screen_on)):
-        if type(value) is not int or value not in (0, 1):
-            raise ValueError(f"{name} must be 0 or 1, got {value!r}")
-    for name, value in (
-        ("led_brightness_pct", led_brightness_pct),
-        ("screen_brightness_pct", screen_brightness_pct),
+    for key, value in zip(
+        POWERPULSE2_DISPLAY_KEYS,
+        (led_on, screen_on, led_brightness_pct, screen_brightness_pct),
+        strict=True,
     ):
-        if type(value) is not int or value not in POWERPULSE2_DISPLAY_BRIGHTNESS_STEPS:
-            raise ValueError(
-                f"{name} must be one of {POWERPULSE2_DISPLAY_BRIGHTNESS_STEPS}, "
-                f"got {value!r}"
-            )
+        # A plain int only: the coordinator converts a reported bool first.
+        if type(value) is not int or not powerpulse2_display_value_valid(key, value):
+            raise ValueError(f"{key} is not a value the wallbox takes: {value!r}")
     _validate_powerpulse_serial("dev_sn", dev_sn)
     _validate_powerpulse_serial("powerocean_sn", powerocean_sn)
 

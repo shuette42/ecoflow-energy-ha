@@ -551,7 +551,7 @@ class EcoFlowNumber(
                 # Display brightness (PLAN-188): percent, four steps. The
                 # setter refuses any other value with its own message, so the
                 # amps guard below must not speak for these two.
-                requested: Any = int(value) if int(value) == value else value
+                requested: float = int(value) if value.is_integer() else value
                 await self.coordinator.async_set_powerpulse_display(key, requested)
                 return
             if int(value) != value:

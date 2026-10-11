@@ -3057,7 +3057,7 @@
         "name": "Wallbox-Bildschirmhelligkeit"
       },
       "ev_led_brightness_pct": {
-        "name": "Wallbox-LED-Anzeige Helligkeit"
+        "name": "Wallbox-LED-Helligkeit"
       },
       "local_backup_reserve": {
         "name": "Backup-Reserve"

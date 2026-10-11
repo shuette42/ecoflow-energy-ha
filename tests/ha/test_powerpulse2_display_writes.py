@@ -25,7 +25,9 @@ import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 
+from custom_components.ecoflow_energy.const import POWERPULSE2_SWITCH_BIT_CONTINUOUS
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
+from custom_components.ecoflow_energy.coordinator.set_commands import _SettingsWrite
 from custom_components.ecoflow_energy.ecoflow.parsers.stream_proto import _iter_fields
 from custom_components.ecoflow_energy.ecoflow.proto.decoder import (
     decode_header_message,
@@ -40,6 +42,7 @@ from tests.ha.test_powerpulse2_charge_action import (
 from tests.ha.test_powerpulse2_settings_writes import (
     _SET_COMMANDS,
     _apply_report,
+    _set_continuous,
     _start,
 )
 
@@ -155,7 +158,12 @@ async def test_led_brightness_while_screen_off_keeps_the_other_three_bytes(
             "powerpulse_continuous_report_unusable",
             {"field": "LED brightness", "value": "30"},
         ),
-        ("three_keys", 0, "powerpulse_continuous_report_missing", None),
+        (
+            "three_keys",
+            0,
+            "powerpulse_continuous_report_unusable",
+            {"field": "screen brightness", "value": "no valid value"},
+        ),
     ],
     ids=["no_report", "stale_report", "invalid_byte_in_report", "a_key_left_out"],
 )
@@ -168,13 +176,16 @@ async def test_display_write_refuses_without_a_usable_fresh_report(
 ) -> None:
     """Nothing is published and no pending record is left when there is no
     report, when it is 11 s old (the limit is 10 s), when one of the four values
-    in it is not writable (an LED brightness of 30), or when the report lacks a
-    display value altogether (the parser leaves an invalid byte out, so this is
-    what a bad byte looks like to the coordinator).
+    in it is not writable (an LED brightness of 30), or when a settings report
+    lacks a display value (the parser leaves an invalid byte out, so this is
+    what a bad byte looks like to the coordinator). The last case is the
+    unusable text, not the "wait for the next report" one: waiting does not
+    bring the byte back.
 
     Mutation probes: dropping the age comparison in the plan fails the stale
     case; accepting the report with a key left out and filling the byte from a
-    default fails the last case.
+    default fails the last case; raising `report_missing` for the left-out key
+    again fails the last case on its translation key.
     """
     _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
     _set_descriptor(wallbox)
@@ -281,3 +292,117 @@ async def test_display_brightness_outside_the_four_steps_is_refused_up_front(
     }
     assert send.call_count == 0
     assert wallbox._wallbox_action_pending is None
+
+
+async def test_two_display_writes_chain_on_the_confirming_report(
+    hass: HomeAssistant,
+) -> None:
+    """From the report [1, 1, 25, 25], Screen brightness 50 and then LED
+    brightness 75 end at [1, 1, 75, 50] as two writes, the second built from
+    the report that confirmed the first. While the first waits, the second call
+    is refused with the in-progress text and publishes nothing.
+
+    Mutation probes: dropping the `_wallbox_action_pending is not None` guard in
+    `_async_write_powerpulse_settings` lets the second call through and fails
+    the in-progress assertion; keeping the first snapshot instead of replacing
+    it in `_record_settings_report` builds the second block from [1, 1, 25, 25]
+    and fails the `[1, 1, 75, 50, 0, 0]` comparison.
+    """
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    send = _mqtt(oceans[0]).send_proto_set
+    _report(wallbox, True, True, 25, 25)
+
+    first = await _start(
+        wallbox.async_set_powerpulse_display("ev_screen_brightness_pct", 50)
+    )
+    assert send.call_count == 1
+    assert _published_display(send.call_args) == [(21, 2, bytes([1, 1, 25, 50, 0, 0]))]
+
+    with pytest.raises(HomeAssistantError) as excinfo:
+        await wallbox.async_set_powerpulse_display("ev_led_brightness_pct", 75)
+    assert excinfo.value.translation_key == "powerpulse_action_in_progress"
+    assert send.call_count == 1
+    assert not first.done()
+
+    _report(wallbox, True, True, 25, 50)  # the report that confirms the first
+    await first
+    assert wallbox._wallbox_action_pending is None
+
+    second = await _start(
+        wallbox.async_set_powerpulse_display("ev_led_brightness_pct", 75)
+    )
+    assert send.call_count == 2
+    assert _published_display(send.call_args) == [(21, 2, bytes([1, 1, 75, 50, 0, 0]))]
+    _report(wallbox, True, True, 75, 50)
+    await second
+    assert wallbox._wallbox_action_pending is None
+
+
+async def test_a_display_write_and_a_switch_bit_write_refuse_each_other_while_one_waits(
+    hass: HomeAssistant,
+) -> None:
+    """One settings write at a time, across both kinds. While a Continuous
+    charging write waits for its report, a Screen write is refused with the
+    in-progress text; once that is confirmed, the same holds the other way
+    round: a waiting Screen write refuses a Continuous charging write. Neither
+    refusal publishes anything or disturbs the write that waits.
+
+    Mutation probe: dropping the `_wallbox_action_pending is not None` guard in
+    `_async_write_powerpulse_settings` lets both second calls through and fails
+    the first in-progress assertion.
+    """
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    send = _mqtt(oceans[0]).send_proto_set
+    _report(wallbox, True, True, 25, 25)
+    bits = 18 | POWERPULSE2_SWITCH_BIT_CONTINUOUS
+
+    switch_task = await _start(_set_continuous(wallbox, True))
+    assert send.call_count == 1
+    with pytest.raises(HomeAssistantError) as excinfo:
+        await wallbox.async_set_powerpulse_display("ev_screen_enabled", 0)
+    assert excinfo.value.translation_key == "powerpulse_action_in_progress"
+    assert send.call_count == 1
+    assert not switch_task.done()
+    _apply_report(
+        wallbox,
+        ev_settings_switch_bits=bits,
+        ev_led_enabled=True,
+        ev_screen_enabled=True,
+        ev_led_brightness_pct=25,
+        ev_screen_brightness_pct=25,
+    )
+    await switch_task
+    assert wallbox._wallbox_action_pending is None
+
+    display_task = await _start(
+        wallbox.async_set_powerpulse_display("ev_screen_enabled", 0)
+    )
+    assert send.call_count == 2
+    with pytest.raises(HomeAssistantError) as excinfo:
+        await _set_continuous(wallbox, False)
+    assert excinfo.value.translation_key == "powerpulse_action_in_progress"
+    assert send.call_count == 2
+    assert not display_task.done()
+    _report(wallbox, True, False, 25, 25)
+    await display_task
+    assert wallbox._wallbox_action_pending is None
+
+
+def test_a_settings_write_is_either_fields_or_a_display_block() -> None:
+    """A write that carries both would drop its fields without a word (the
+    dispatcher takes the display builder and ignores them), and one that carries
+    neither would send nothing. Both shapes are refused when the record is
+    built; each valid shape still builds.
+
+    Mutation probes: dropping the `display is not None and self.fields` check
+    fails the first raise; dropping the `display is None and not self.fields`
+    check fails the second.
+    """
+    with pytest.raises(ValueError):
+        _SettingsWrite({1: 3}, 3.0, display=(1, 1, 25, 25))
+    with pytest.raises(ValueError):
+        _SettingsWrite({}, 3.0)
+    assert _SettingsWrite({1: 3}, 3.0).display is None
+    assert _SettingsWrite({}, 25.0, display=(1, 1, 25, 25)).fields == {}

@@ -109,7 +109,11 @@ from __future__ import annotations
 from math import isfinite
 from typing import Any
 
-from ..const import POWERPULSE2_DISPLAY_BRIGHTNESS_STEPS
+from ..const import (
+    POWERPULSE2_DISPLAY_KEYS,
+    POWERPULSE2_DISPLAY_SWITCH_KEYS,
+    powerpulse2_display_value_valid,
+)
 from ..proto.decoder import decode_header_message
 from .stream_proto import (
     _FLOAT_ZERO_EPS,
@@ -406,14 +410,10 @@ def _decode_display_block(raw: bytes) -> dict[str, Any]:
     if len(raw) != 6:
         return {}
     result: dict[str, Any] = {}
-    if raw[0] in (0, 1):
-        result["ev_led_enabled"] = bool(raw[0])
-    if raw[1] in (0, 1):
-        result["ev_screen_enabled"] = bool(raw[1])
-    if raw[2] in POWERPULSE2_DISPLAY_BRIGHTNESS_STEPS:
-        result["ev_led_brightness_pct"] = raw[2]
-    if raw[3] in POWERPULSE2_DISPLAY_BRIGHTNESS_STEPS:
-        result["ev_screen_brightness_pct"] = raw[3]
+    for key, value in zip(POWERPULSE2_DISPLAY_KEYS, raw[:4], strict=True):
+        if not powerpulse2_display_value_valid(key, value):
+            continue
+        result[key] = bool(value) if key in POWERPULSE2_DISPLAY_SWITCH_KEYS else value
     return result
 
 

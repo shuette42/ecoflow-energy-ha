@@ -14,6 +14,7 @@ from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from homeassistant.components.number import NumberMode
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 
@@ -83,7 +84,8 @@ async def test_the_four_display_entities_need_exactly_one_powerocean_and_a_repor
 
     Mutation probes: dropping `powerpulse_route="sibling"` from the two
     brightness numbers creates them on the zero-ocean case; flipping a
-    definition's `accessory` flag creates it before the report.
+    definition's `accessory` flag creates it before the report; dropping
+    `slider=True` from a brightness number fails the mode assertion.
     """
     second = {**POWEROCEAN_DEVICE, "sn": "HJ31TEST00000002"}
     ocean_devices = [POWEROCEAN_DEVICE, second][:ocean_count]
@@ -102,6 +104,7 @@ async def test_the_four_display_entities_need_exactly_one_powerocean_and_a_repor
             (found[k].native_min_value, found[k].native_max_value, found[k].native_step)
             for k in NUMBER_KEYS
         ] == [(25, 100, 25)] * 2
+        assert [found[k].mode for k in NUMBER_KEYS] == [NumberMode.SLIDER] * 2
     else:
         assert found == {}
 
@@ -111,9 +114,13 @@ async def test_the_switches_show_the_reported_value_and_unknown_without_it(
 ) -> None:
     """Each switch follows its own bool and never invents an off.
 
+    A reading that is not a bool (the int 1) is no on state either: the parser
+    only ever publishes bools, so anything else is shown as unknown.
+
     Mutation probes: reading `ev_led_enabled` for the screen switch fails the
     two mixed cases; returning False for a missing key fails the final
-    assertion.
+    assertion; returning `bool(reported)` for any present value fails the int
+    case.
     """
     wallbox, found, _entities = await _display_entities(
         hass, [POWEROCEAN_DEVICE], report=True
@@ -125,10 +132,42 @@ async def test_the_switches_show_the_reported_value_and_unknown_without_it(
     _report(wallbox, led=False, screen=True)
     assert (screen.is_on, led.is_on) == (True, False)
 
+    wallbox.set_device_value("ev_screen_enabled", 1)
+    wallbox.set_device_value("ev_led_enabled", 1)
+    wallbox.async_set_updated_data(dict(wallbox._device_data))
+    assert (screen.is_on, led.is_on) == (None, None)
+
     wallbox._device_data.pop("ev_led_enabled")
     wallbox._device_data.pop("ev_screen_enabled")
     wallbox.async_set_updated_data(dict(wallbox._device_data))
     assert (screen.is_on, led.is_on) == (None, None)
+
+
+async def test_the_brightness_numbers_show_their_own_reported_value(
+    hass: HomeAssistant,
+) -> None:
+    """Each slider follows its own key: with distinct values (screen 25, LED 50),
+    then the two swapped (screen 50, LED 25), each shows the value reported for
+    it. With both keys gone they show unknown, not a remembered value.
+
+    Mutation probe: pointing the Screen number's `state_key` at
+    `ev_led_brightness_pct` shows 50 for the screen and fails the first
+    assertion.
+    """
+    wallbox, found, _entities = await _display_entities(
+        hass, [POWEROCEAN_DEVICE], report=True
+    )
+    screen, led = found["ev_screen_brightness_pct"], found["ev_led_brightness_pct"]
+
+    _report(wallbox, led_pct=50, screen_pct=25)
+    assert (screen.native_value, led.native_value) == (25, 50)
+    _report(wallbox, led_pct=25, screen_pct=50)
+    assert (screen.native_value, led.native_value) == (50, 25)
+
+    wallbox._device_data.pop("ev_led_brightness_pct")
+    wallbox._device_data.pop("ev_screen_brightness_pct")
+    wallbox.async_set_updated_data(dict(wallbox._device_data))
+    assert (screen.native_value, led.native_value) == (None, None)
 
 
 @pytest.mark.parametrize(
