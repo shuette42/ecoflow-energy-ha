@@ -7628,9 +7628,9 @@ WAVE3_SELECTS: list[EcoFlowSelectDef] = [
 #
 # All entries are `enhanced_only`: developer keys never carry this device's
 # telemetry, only the app/Enhanced Mode channel does.
-# Ocean 2 (`RE11`, `RE17`, `RE41`). Enhanced mode only - the Developer API answers
-# error 1006 for this device, so every value here comes from the protobuf
-# stream.
+# Ocean 2 (`RE11`, `RE17`, `RE41`, `RE42`, `RE43`). Enhanced mode only - the
+# Developer API answers error 1006 for this device, so every value here comes
+# from the protobuf stream.
 #
 # The readings the app shows on its home screen are confirmed against it and
 # enabled by default. AC power/frequency, the three inverter phases and the
