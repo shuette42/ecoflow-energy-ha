@@ -326,8 +326,12 @@ _SN_PREFIX_MAP = {
     # download carries 459 telemetry frames and 15 module frames over about
     # fifteen minutes with the `RE11`'s field numbers throughout. Single
     # phase leaves Phase B and C of the per-phase sensors empty.
-    # `RE43`, the 12 kW Plus, stays out: reported by an owner, no frame yet.
     "RE41": DEVICE_TYPE_OCEAN2,
+    # Ocean 2 Plus, 12 kW, single-phase, four modules (#145). An owner's
+    # diagnostics download carries 43 frames over about half an hour with the
+    # `RE11`'s field numbers on every field the integration reads. Its AC power
+    # readings carry the opposite sign, see `OCEAN2_AC_SIGN_INVERTED`.
+    "RE43": DEVICE_TYPE_OCEAN2,
     # Ocean 2, single-phase, three modules (#145). An owner's diagnostics
     # download carries 89 frames over about fourteen hours, none truncated,
     # with the `RE11`'s field numbers and wire types on every field the
@@ -377,6 +381,7 @@ _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
     "RE17": "Ocean 2",
     "RE41": "Ocean 2 Plus",
     "RE42": "Ocean 2",
+    "RE43": "Ocean 2 Plus",
     "HR61": "OCEAN Smart Electrical Panel 40",
     "Y711": "DELTA Pro Ultra",
     "HD31": "Smart Home Panel 2",
@@ -477,7 +482,9 @@ def schedule_power_min_w(online_battery_packs: int | None) -> int:
 #: +311..+415 W and an `RE11` up to +10,476 W in the same state. Battery, grid,
 #: solar, home load and apparent power agree in sign on all three. One unit is
 #: one measurement: an installation setting behind the sign is not ruled out.
-OCEAN2_AC_SIGN_INVERTED: frozenset[str] = frozenset({"RE42"})
+#: An `RE43` unit (#145) sends the same raw sign: -7,340 W while the battery
+#: supplied a 7,800 W house load, +54 W while the grid carried the house.
+OCEAN2_AC_SIGN_INVERTED: frozenset[str] = frozenset({"RE42", "RE43"})
 
 
 def ocean2_ac_sign_inverted(sn: str) -> bool:

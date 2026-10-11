@@ -1538,7 +1538,7 @@ This addendum records the answer, not a commitment: nothing is scheduled for it,
 
 ## ADR-028: The Ocean 2 under `RE11` and `RE17` is one device type; a field position inferred from a name is marked as such until a frame confirms it
 
-**Status:** Accepted (decided in public on #145 on 2026-09-07; implemented on @jensfr1's field mapping and shipped in v1.22.0, first in the v1.22.0-beta.10 pre-release; the Ocean 2 Plus `RE41` joined the same device type in v1.22.0-beta.11; the single-phase `RE42` joins it after v1.22.0 and is not in a release yet, read on the same path as the `RE11` and `RE41`, with total AC power and the inverter phase active power sign-corrected per serial prefix for it alone (`OCEAN2_AC_SIGN_INVERTED`), measured on one unit)
+**Status:** Accepted (decided in public on #145 on 2026-09-07; implemented on @jensfr1's field mapping and shipped in v1.22.0, first in the v1.22.0-beta.10 pre-release; the Ocean 2 Plus `RE41` joined the same device type in v1.22.0-beta.11; the single-phase `RE42` joins it after v1.22.0 and is not in a release yet, read on the same path as the `RE11` and `RE41`, with total AC power and the inverter phase active power sign-corrected per serial prefix for it alone (`OCEAN2_AC_SIGN_INVERTED`), measured on one unit; the 12 kW `RE43` joins it the same way, with the same correction, measured on one unit)
 **Date:** 2026-09-07
 **Depends on:** ADR-014 decision 1 (one type for two prefixes that send one message); ADR-011 decision 2
 
