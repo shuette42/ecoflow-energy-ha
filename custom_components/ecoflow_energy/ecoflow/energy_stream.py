@@ -11,6 +11,7 @@ import time
 from collections.abc import Sequence
 from typing import Literal
 
+from .const import POWERPULSE2_DISPLAY_BRIGHTNESS_STEPS
 from .parsers.powerocean_proto import _MINUTES_PER_DAY, SCHEDULE_MAX_INDEX
 from .proto_encoding import (
     encode_field_bytes,
@@ -513,6 +514,65 @@ def build_powerpulse_param_set_settings_payload(
         encode_field_varint(field_num, fields[field_num])
         for field_num in sorted(fields)
     )
+    pdata = encode_field_bytes(1, dev_info) + encode_field_bytes(4, pile_param_set)
+    return _build_powerocean_set_envelope(
+        pdata, cmd_id=102, seq=seq, cmd_func=241, device_sn=powerocean_sn
+    )
+
+
+def build_powerpulse_param_set_display_payload(
+    led_on: int,
+    screen_on: int,
+    led_brightness_pct: int,
+    screen_brightness_pct: int,
+    dev_addr: int,
+    dev_sn: str,
+    powerocean_sn: str,
+    seq: int = 0,
+) -> bytes:
+    """Build EDevParamSet (241/102) that writes only the display block.
+
+    Same message and addressing as `build_powerpulse_param_set_settings_payload`,
+    but the one field in `EDevPileParamSet` (`pdata` field 4) is field 21 (PLAN-188,
+    issue #495): a length-delimited, six-byte value `[LED on, Screen on, LED
+    brightness %, Screen brightness %, 0, 0]`. It is built by hand, as the
+    other settings writes are, and is not a protobuf-generated message: the
+    block is not in `ecocharge.proto`. The two trailing bytes are device-side
+    bytes this integration does not own; they are always written as 0 and are
+    never copied from a settings report.
+
+    Args:
+        led_on: 0 or 1.
+        screen_on: 0 or 1.
+        led_brightness_pct: One of `POWERPULSE2_DISPLAY_BRIGHTNESS_STEPS`.
+        screen_brightness_pct: One of `POWERPULSE2_DISPLAY_BRIGHTNESS_STEPS`.
+        dev_addr: The wallbox's bus address as reported by its own settings
+            message (`EDevRunDataSync`, 241/44).
+        dev_sn: The wallbox's 16-character serial, from the same report.
+        powerocean_sn: The PowerOcean's own serial (the topic owner),
+            carried in the envelope's field 25.
+        seq: Sequence number. Default 0 generates from timestamp.
+    """
+    for name, value in (("led_on", led_on), ("screen_on", screen_on)):
+        if type(value) is not int or value not in (0, 1):
+            raise ValueError(f"{name} must be 0 or 1, got {value!r}")
+    for name, value in (
+        ("led_brightness_pct", led_brightness_pct),
+        ("screen_brightness_pct", screen_brightness_pct),
+    ):
+        if type(value) is not int or value not in POWERPULSE2_DISPLAY_BRIGHTNESS_STEPS:
+            raise ValueError(
+                f"{name} must be one of {POWERPULSE2_DISPLAY_BRIGHTNESS_STEPS}, "
+                f"got {value!r}"
+            )
+    _validate_powerpulse_serial("dev_sn", dev_sn)
+    _validate_powerpulse_serial("powerocean_sn", powerocean_sn)
+
+    dev_info = _build_powerpulse_dev_info(dev_addr, dev_sn)
+    display_block = bytes(
+        [led_on, screen_on, led_brightness_pct, screen_brightness_pct, 0, 0]
+    )
+    pile_param_set = encode_field_bytes(21, display_block)
     pdata = encode_field_bytes(1, dev_info) + encode_field_bytes(4, pile_param_set)
     return _build_powerocean_set_envelope(
         pdata, cmd_id=102, seq=seq, cmd_func=241, device_sn=powerocean_sn

@@ -71,16 +71,25 @@ def _write(
 
 def test_every_definition_carries_its_own_bit_on_the_shared_state_key() -> None:
     """The switch decodes and writes the bit its definition names, so the three
-    definitions must stand for the three distinct bits of the one byte, in the
-    order the platform creates them.
+    bit definitions must stand for the three distinct bits of the one byte, in
+    the order the platform creates them. The two display switches (Screen, LED
+    Indicator; PLAN-188) come after them and have no bit: they read a plain
+    on/off value from their own state key.
 
     Mutation probe: giving two definitions the same mask fails the sorted
     comparison.
     """
-    assert [d.key for d in POWERPULSE2_SWITCHES] == list(SWITCH_KEYS)
-    assert sorted(d.bit_mask or 0 for d in POWERPULSE2_SWITCHES) == [0x01, 0x02, 0x10]
-    for definition in POWERPULSE2_SWITCHES:
+    bit_switches = [d for d in POWERPULSE2_SWITCHES if d.bit_mask is not None]
+    assert [d.key for d in bit_switches] == list(SWITCH_KEYS)
+    assert sorted(d.bit_mask or 0 for d in bit_switches) == [0x01, 0x02, 0x10]
+    for definition in bit_switches:
         assert definition.state_key == "ev_settings_switch_bits"
+    display_switches = [d for d in POWERPULSE2_SWITCHES if d.bit_mask is None]
+    assert [(d.key, d.state_key) for d in display_switches] == [
+        ("ev_screen_enabled", "ev_screen_enabled"),
+        ("ev_led_enabled", "ev_led_enabled"),
+    ]
+    assert POWERPULSE2_SWITCHES[-2:] == display_switches
 
 
 @pytest.mark.parametrize(

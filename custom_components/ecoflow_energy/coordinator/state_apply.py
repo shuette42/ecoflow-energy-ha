@@ -461,6 +461,10 @@ class StateApplyMixin(_Base):
                     "ev_solar_min_current_a",
                     "ev_phase_setting",
                     "ev_custom_current_a",
+                    "ev_led_enabled",
+                    "ev_screen_enabled",
+                    "ev_led_brightness_pct",
+                    "ev_screen_brightness_pct",
                 )
                 if key in parsed
             },

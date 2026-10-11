@@ -2897,6 +2897,12 @@
       },
       "ev_plug_and_play": {
         "name": "Wallbox Plug-and-Play"
+      },
+      "ev_screen_enabled": {
+        "name": "Wallbox-Bildschirm"
+      },
+      "ev_led_enabled": {
+        "name": "Wallbox-LED-Anzeige"
       }
     },
     "number": {
@@ -3046,6 +3052,12 @@
       },
       "ev_custom_current_a": {
         "name": "Wallbox-Ladestrom Benutzerdefiniert"
+      },
+      "ev_screen_brightness_pct": {
+        "name": "Wallbox-Bildschirmhelligkeit"
+      },
+      "ev_led_brightness_pct": {
+        "name": "Wallbox-LED-Anzeige Helligkeit"
       },
       "local_backup_reserve": {
         "name": "Backup-Reserve"
@@ -3282,6 +3294,9 @@
     },
     "powerpulse_descriptor_missing": {
       "message": "Die Wallbox hat ihre Adresse noch nicht gemeldet. Warte auf ihren nächsten Einstellungsbericht."
+    },
+    "powerpulse_display_brightness_invalid": {
+      "message": "Die Helligkeit muss einer der Werte {allowed} % sein. Angefragt: {value}."
     },
     "powerpulse_max_current_needs_powerocean": {
       "message": "Der Maximalstrom lässt sich nur über eine PowerOcean im selben Konto setzen; dieser Eintrag hat keine."

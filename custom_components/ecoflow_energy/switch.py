@@ -5,10 +5,10 @@ updated immediately and MQTT updates for that key are ignored for 5 s.
 This prevents switch flicker while the device confirms the change.
 
 The PowerPulse 2 settings switches (Continuous Charging, Block Battery
-Discharge, Plug-and-Play) are the exception: they apply nothing on their own.
-The coordinator write returns once the wallbox has reported the new switch
-bits, and that report is what moves the displayed state (PLAN-172, the same
-rule as the wallbox numbers and selects).
+Discharge, Plug-and-Play, Screen, LED Indicator) are the exception: they apply
+nothing on their own. The coordinator write returns once the wallbox has
+reported the new value, and that report is what moves the displayed state
+(PLAN-172, the same rule as the wallbox numbers and selects).
 """
 
 from __future__ import annotations
@@ -264,15 +264,18 @@ class EcoFlowSwitch(
         state. A live value always beats the restored one.
 
         The PowerPulse 2 settings switches show only what the wallbox
-        reported: each one bit of the settings switch bits, unknown (never
-        off) while the bits are absent, and no lock window or restored state.
+        reported: each one bit of the settings switch bits, or for Screen and
+        LED Indicator (no bit mask) the on/off value of their own state key.
+        Unknown (never off) while the report is absent, and no lock window or
+        restored state.
         """
         if self.coordinator.device_type == DEVICE_TYPE_POWERPULSE2:
-            bits = as_known_int(
-                (self.coordinator.data or {}).get(self._definition.state_key)
-            )
+            reported = (self.coordinator.data or {}).get(self._definition.state_key)
             mask = self._definition.bit_mask
-            if bits is None or mask is None:
+            if mask is None:
+                return reported if isinstance(reported, bool) else None
+            bits = as_known_int(reported)
+            if bits is None:
                 return None
             return bool(bits & mask)
 
@@ -309,7 +312,11 @@ class EcoFlowSwitch(
             # has reported the new bits, and that report moves the switch.
             mask = self._definition.bit_mask
             if mask is None:
-                raise_set_failed(self.entity_id)
+                # Screen and LED Indicator: a display value, not a bit.
+                await self.coordinator.async_set_powerpulse_display(
+                    self._definition.key, int(turn_on)
+                )
+                return
             await self.coordinator.async_set_powerpulse_switch_bit(
                 mask, turn_on, self._definition.key
             )

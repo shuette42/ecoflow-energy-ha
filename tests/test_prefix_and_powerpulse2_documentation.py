@@ -81,11 +81,13 @@ def test_every_sn_prefix_is_in_the_documentation_readme_entity_reference():
 
 def test_powerpulse2_definition_counts():
     """PowerPulse 2's entity counts (18 sensors, 1 binary sensor, 1 select,
-    2 buttons), and its four Numbers as the entry-gated set: three written
-    only through a sibling PowerOcean (`ev_max_current_a` plus the two stored
-    setpoints `ev_solar_min_current_a` and `ev_custom_current_a`) and one
-    written only on the wallbox's own channel with no PowerOcean
-    (`ev_charge_current_a`), never both from the same route. The two selects
+    2 buttons), and its six Numbers as the entry-gated set: five written
+    only through a sibling PowerOcean (`ev_max_current_a`, the two stored
+    setpoints `ev_solar_min_current_a` and `ev_custom_current_a`, and the two
+    display brightnesses `ev_screen_brightness_pct` and
+    `ev_led_brightness_pct`) and one written only on the wallbox's own channel
+    with no PowerOcean (`ev_charge_current_a`), never both from the same
+    route. The two selects
     are the charging mode and the phase setting, both sibling-only.
     PowerPulse 2 has no test in test_entity_documentation.py's
     `_ENTITY_REFERENCE_SIMPLE_DEVICES` because its documentation/README.md
@@ -97,10 +99,10 @@ def test_powerpulse2_definition_counts():
     assert len(const.POWERPULSE2_BUTTONS) == 2
 
     numbers = const.POWERPULSE2_NUMBERS
-    assert len(numbers) == 4
+    assert len(numbers) == 6
     routes = sorted(n.powerpulse_route or "" for n in numbers)
-    assert routes == ["own", "sibling", "sibling", "sibling"], (
+    assert routes == ["own"] + ["sibling"] * 5, (
         f"POWERPULSE2_NUMBERS must be exactly one 'own'-route number (needs "
-        f"no PowerOcean) and three 'sibling'-route numbers (need one), "
+        f"no PowerOcean) and five 'sibling'-route numbers (need one), "
         f"got routes {routes}"
     )

@@ -897,3 +897,84 @@ def test_settings_unmapped_work_mode_drops_the_key() -> None:
     mapped = parse_powerpulse_message(_settings_frame_with_mode(18, 2))
     assert mapped is not None
     assert mapped["ev_settings_work_mode"] == "solar"
+
+
+# --- 241/44 settings block: the display block, field 21 (PLAN-188, #495) ---
+#
+# Six bytes `[LED on, Screen on, LED brightness %, Screen brightness %, x, x]`.
+# Every captured settings report of the 2026-10-04 recordings carries
+# `aa01 06 01 01 19 19 02 00`: LED and screen on, both at 25 %.
+
+
+def _settings_frame_with_display(block: bytes) -> bytes:
+    """A synthetic, unmasked `241/44` frame whose settings block carries the
+    switch bits and the given display block (`f8 { 1: 18, 21: block }`)."""
+    inner = encode_field_varint(1, 18) + encode_field_bytes(21, block)
+    body = encode_field_bytes(4, encode_field_bytes(8, inner))
+    header = (
+        encode_field_bytes(1, encode_field_bytes(1, body))
+        + encode_field_varint(8, 241)
+        + encode_field_varint(9, 44)
+    )
+    return encode_field_bytes(1, header)
+
+
+def test_settings_display_block_reports_four_keys_and_validates_each_byte() -> None:
+    """The recorded frame 0 of the 481/482 recording reads LED on, screen on,
+    25 % and 25 %; its two trailing bytes (2 and 0) are published as nothing.
+    A synthetic block with an LED brightness of 30 (not a step) drops only that
+    key, a screen byte of 2 drops only that key, and a block of seven bytes is
+    a layout nobody has seen and yields none of the four.
+
+    Mutation probes: dropping the range check on the LED brightness byte fails
+    the 30 case (the key appears); decoding bytes 2 and 3 into each other's key
+    fails the 75 against 25 case (the recorded frame reads 25 twice and could
+    not tell them apart).
+    """
+    frames = json.loads(SETTINGS_481_482_FIXTURE.read_text())["frames"]
+    recorded = parse_powerpulse_message(bytes.fromhex(frames[0]["hex"]))
+    assert recorded is not None
+    assert recorded["ev_led_enabled"] is True
+    assert recorded["ev_screen_enabled"] is True
+    assert recorded["ev_led_brightness_pct"] == 25
+    assert recorded["ev_screen_brightness_pct"] == 25
+
+    distinct = parse_powerpulse_message(
+        _settings_frame_with_display(bytes([1, 0, 75, 25, 2, 0]))
+    )
+    assert distinct is not None
+    assert distinct["ev_led_enabled"] is True
+    assert distinct["ev_screen_enabled"] is False
+    assert distinct["ev_led_brightness_pct"] == 75
+    assert distinct["ev_screen_brightness_pct"] == 25
+
+    bad_brightness = parse_powerpulse_message(
+        _settings_frame_with_display(bytes([1, 0, 30, 75, 2, 0]))
+    )
+    assert bad_brightness is not None
+    assert "ev_led_brightness_pct" not in bad_brightness
+    assert bad_brightness["ev_screen_brightness_pct"] == 75
+    assert bad_brightness["ev_led_enabled"] is True
+    assert bad_brightness["ev_screen_enabled"] is False
+
+    bad_switch = parse_powerpulse_message(
+        _settings_frame_with_display(bytes([1, 2, 50, 75, 2, 0]))
+    )
+    assert bad_switch is not None
+    assert "ev_screen_enabled" not in bad_switch
+    assert bad_switch["ev_led_enabled"] is True
+    assert bad_switch["ev_led_brightness_pct"] == 50
+    assert bad_switch["ev_screen_brightness_pct"] == 75
+
+    odd_length = parse_powerpulse_message(
+        _settings_frame_with_display(bytes([1, 1, 25, 25, 2, 0, 0]))
+    )
+    assert odd_length is not None
+    assert odd_length["ev_settings_switch_bits"] == 18
+    for key in (
+        "ev_led_enabled",
+        "ev_screen_enabled",
+        "ev_led_brightness_pct",
+        "ev_screen_brightness_pct",
+    ):
+        assert key not in odd_length

@@ -109,6 +109,7 @@ from __future__ import annotations
 from math import isfinite
 from typing import Any
 
+from ..const import POWERPULSE2_DISPLAY_BRIGHTNESS_STEPS
 from ..proto.decoder import decode_header_message
 from .stream_proto import (
     _FLOAT_ZERO_EPS,
@@ -388,6 +389,34 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def _decode_display_block(raw: bytes) -> dict[str, Any]:
+    """Decode the display block of the settings block (field 21, PLAN-188).
+
+    Six bytes, one per setting: `[LED on, Screen on, LED brightness %,
+    Screen brightness %, unnamed, unnamed]`. The first four are published as
+    `ev_led_enabled`, `ev_screen_enabled` (bool), `ev_led_brightness_pct` and
+    `ev_screen_brightness_pct` (int); the last two are device-side bytes this
+    integration neither reads nor publishes. Each byte is validated on its
+    own: a switch byte must be 0 or 1, a brightness byte one of
+    `POWERPULSE2_DISPLAY_BRIGHTNESS_STEPS`, and a byte that is not leaves only
+    its own key out - the others from the same block still come through.
+    A block that is not exactly six bytes is a layout this decoder has not
+    seen and yields nothing: no byte position is guessed on it.
+    """
+    if len(raw) != 6:
+        return {}
+    result: dict[str, Any] = {}
+    if raw[0] in (0, 1):
+        result["ev_led_enabled"] = bool(raw[0])
+    if raw[1] in (0, 1):
+        result["ev_screen_enabled"] = bool(raw[1])
+    if raw[2] in POWERPULSE2_DISPLAY_BRIGHTNESS_STEPS:
+        result["ev_led_brightness_pct"] = raw[2]
+    if raw[3] in POWERPULSE2_DISPLAY_BRIGHTNESS_STEPS:
+        result["ev_screen_brightness_pct"] = raw[3]
+    return result
+
+
 def _decode_settings_block(block: bytes) -> dict[str, Any]:
     """Decode the wallbox settings block of EDevRunDataSync (`f1.f4.f8`).
 
@@ -399,7 +428,8 @@ def _decode_settings_block(block: bytes) -> dict[str, Any]:
     on the wire, published in amps), `7` (the phase setting, raw: 0 Auto, 1
     one phase, 2 three phases) and `8` (the Custom charging current, deci-amps
     on the wire, published in amps). The block's maximum current is not read
-    here.
+    here. The one length-delimited field, `21` (the display block: LED and
+    screen on/off and brightness), is read by `_decode_display_block`.
 
     A field that is not on the wire stays out of the result, the phase
     setting included: a wallbox that omits its default `7: 0` yields no
@@ -410,6 +440,10 @@ def _decode_settings_block(block: bytes) -> dict[str, Any]:
     """
     result: dict[str, Any] = {}
     for field_num, wire_type, raw in _iter_fields(block):
+        if field_num == 21 and wire_type == 2:
+            # The display block is the one length-delimited field read here.
+            result.update(_decode_display_block(raw))
+            continue
         if wire_type != 0:
             continue
         value = _decode_scalar(wire_type, raw, _TYPE_INT)

@@ -546,9 +546,16 @@ class EcoFlowNumber(
             # wallbox has reported the new value on its own settings report
             # or heartbeat, and that report is what updates the store
             # (PLAN-146, PLAN-140).
+            key = self._definition.key
+            if key in ("ev_screen_brightness_pct", "ev_led_brightness_pct"):
+                # Display brightness (PLAN-188): percent, four steps. The
+                # setter refuses any other value with its own message, so the
+                # amps guard below must not speak for these two.
+                requested: Any = int(value) if int(value) == value else value
+                await self.coordinator.async_set_powerpulse_display(key, requested)
+                return
             if int(value) != value:
                 raise_set_rejected(self.entity_id, "whole amps only")
-            key = self._definition.key
             if key == "ev_charge_current_a":
                 await self.coordinator.async_set_powerpulse_charge_current(int(value))
             elif key == "ev_solar_min_current_a":

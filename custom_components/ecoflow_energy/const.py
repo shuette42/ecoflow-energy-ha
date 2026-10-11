@@ -38,6 +38,7 @@ from .ecoflow.const import (  # noqa: E402
     POWEROCEAN_SCHEDULE_POWER_MAX_DEFAULT_W,
     POWEROCEAN_SCHEDULE_POWER_MIN_W,
     POWEROCEAN_SCHEDULE_POWER_STEP_W,
+    POWERPULSE2_DISPLAY_BRIGHTNESS_STEPS,
     device_log_tag,  # noqa: F401
     get_device_name,  # noqa: F401
     get_device_type,  # noqa: F401
@@ -216,6 +217,10 @@ POWERPULSE2_CHARGE_CURRENT_WINDOW_S: float = 20.0
 # PLAN-146: the maximum current range, the owner's sweep on #7 covered end to
 # end (2026-09-10).
 POWERPULSE2_MAX_CURRENT_RANGE_A: tuple[int, int] = (6, 16)
+# PLAN-188: the display brightness numbers step from one allowed value to the next.
+POWERPULSE2_DISPLAY_BRIGHTNESS_STEP_PCT: int = (
+    POWERPULSE2_DISPLAY_BRIGHTNESS_STEPS[1] - POWERPULSE2_DISPLAY_BRIGHTNESS_STEPS[0]
+)
 # PLAN-147: the charging-mode options and the wire values
 # `EDevPileParamSet.work_mode` uses for each - the app's own labels,
 # confirmed byte-for-byte against five mode writes and their heartbeat
@@ -604,7 +609,10 @@ class EcoFlowSwitchDef:
     # settings switch byte this switch stands for. The switch decodes it from
     # `state_key` and writes it through the one coordinator write
     # `async_set_powerpulse_switch_bit`, so a further toggle in the same byte
-    # is one definition.
+    # is one definition. A PowerPulse 2 switch without a bit mask (PLAN-188,
+    # the Screen and LED Indicator switches) reads a plain on/off value from
+    # `state_key` and writes it through `async_set_powerpulse_display`, keyed
+    # by `key`.
     bit_mask: int | None = None
 
 
@@ -9493,6 +9501,41 @@ POWERPULSE2_NUMBERS: list[EcoFlowNumberDef] = [
         accessory=True,
         powerpulse_route="sibling",
     ),
+    # PLAN-188 (#495): the brightness of the wallbox's screen and LED
+    # indicator, from the display block of the settings report. Four steps
+    # (25, 50, 75, 100 %), so a slider: it only offers values the wallbox
+    # accepts. Sibling route like the other settings, accessory entities
+    # created once the report has carried the block. The wallbox keeps the
+    # brightness while the screen or LED is off, and the write does not depend
+    # on the on/off switch.
+    EcoFlowNumberDef(
+        "ev_screen_brightness_pct",
+        "Wallbox Screen Brightness",
+        "ev_screen_brightness_pct",
+        "%",
+        "mdi:brightness-6",
+        POWERPULSE2_DISPLAY_BRIGHTNESS_STEPS[0],
+        POWERPULSE2_DISPLAY_BRIGHTNESS_STEPS[-1],
+        POWERPULSE2_DISPLAY_BRIGHTNESS_STEP_PCT,
+        enhanced_only=True,
+        accessory=True,
+        powerpulse_route="sibling",
+        slider=True,
+    ),
+    EcoFlowNumberDef(
+        "ev_led_brightness_pct",
+        "Wallbox LED Indicator Brightness",
+        "ev_led_brightness_pct",
+        "%",
+        "mdi:brightness-5",
+        POWERPULSE2_DISPLAY_BRIGHTNESS_STEPS[0],
+        POWERPULSE2_DISPLAY_BRIGHTNESS_STEPS[-1],
+        POWERPULSE2_DISPLAY_BRIGHTNESS_STEP_PCT,
+        enhanced_only=True,
+        accessory=True,
+        powerpulse_route="sibling",
+        slider=True,
+    ),
 ]
 
 # The wallbox's own charging-mode control (PLAN-147). Sibling route only,
@@ -9532,8 +9575,9 @@ POWERPULSE2_SELECTS: list[EcoFlowSelectDef] = [
     ),
 ]
 
-# The wallbox's three settings switches: Continuous Charging (PLAN-172), Block
-# Battery Discharge and Plug-and-Play (PLAN-187). The state of each is one bit
+# The wallbox's settings switches: Continuous Charging (PLAN-172), Block
+# Battery Discharge and Plug-and-Play (PLAN-187), then Screen and LED Indicator
+# (PLAN-188). The state of the first three is one bit
 # (`bit_mask`) of the settings report's switch bits, so the read-back key is
 # the whole byte and the switch decodes its bit itself. Sibling-route,
 # accessory controls like the settings numbers and the phase select: created
@@ -9567,6 +9611,26 @@ POWERPULSE2_SWITCHES: list[EcoFlowSwitchDef] = [
         enhanced_only=True,
         accessory=True,
         bit_mask=POWERPULSE2_SWITCH_BIT_PLUG_AND_PLAY,
+    ),
+    # PLAN-188 (#495): the screen and the LED indicator, from the display block
+    # of the settings report. Not bits of the switch byte: the state key holds a
+    # plain on/off value, so there is no bit mask and the write is the display
+    # setter. Same route and accessory rule as the three above.
+    EcoFlowSwitchDef(
+        "ev_screen_enabled",
+        "Wallbox Screen",
+        "ev_screen_enabled",
+        icon="mdi:monitor",
+        enhanced_only=True,
+        accessory=True,
+    ),
+    EcoFlowSwitchDef(
+        "ev_led_enabled",
+        "Wallbox LED Indicator",
+        "ev_led_enabled",
+        icon="mdi:led-on",
+        enhanced_only=True,
+        accessory=True,
     ),
 ]
 

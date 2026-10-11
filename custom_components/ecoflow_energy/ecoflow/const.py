@@ -67,6 +67,11 @@ DEVICE_TYPE_WAVE3 = "wave3"
 # `proto/runtime.py`); that relay path is retired in the same change that
 # adds this type, so a `C376` is never read twice (#7, #247).
 DEVICE_TYPE_POWERPULSE2 = "powerpulse2"
+# PowerPulse 2 display block (settings report `1.4.8.21`, PLAN-188, issue
+# #495): the brightness percentages the wallbox accepts and reports for its
+# LED indicator and its screen. Four steps; any other byte is not a value the
+# app sends and is neither published nor written.
+POWERPULSE2_DISPLAY_BRIGHTNESS_STEPS: tuple[int, ...] = (25, 50, 75, 100)
 # Ocean 2 home battery (`RE11`, `RE17`, `RE41`, `RE42`, `RE43`). Enhanced-only
 # and reached through the serial prefix alone: the Developer API refuses every
 # quota read for it with error 1006, and neither channel carries a product name

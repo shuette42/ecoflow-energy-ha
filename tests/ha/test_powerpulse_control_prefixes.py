@@ -40,11 +40,15 @@ async def test_control_creation_by_prefix(
     wallbox.set_device_value("ev_custom_current_a", 6.0)
     wallbox.set_device_value("ev_phase_setting", 0)
     wallbox.set_device_value("ev_settings_switch_bits", 0)
+    wallbox.set_device_value("ev_led_enabled", True)
+    wallbox.set_device_value("ev_screen_enabled", True)
+    wallbox.set_device_value("ev_led_brightness_pct", 50)
+    wallbox.set_device_value("ev_screen_brightness_pct", 25)
     for setup, expected in [
         (button_setup, 2),
-        (number_setup, 3 if sibling else 1),
+        (number_setup, 5 if sibling else 1),
         (select_setup, 2 * int(sibling)),
-        (switch_setup, 3 * int(sibling)),
+        (switch_setup, 5 * int(sibling)),
     ]:
         entities: list[Any] = []
         await setup(hass, entry, add_entities_collector(entities))
