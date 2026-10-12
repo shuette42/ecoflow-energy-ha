@@ -4,7 +4,7 @@ Builds the binary payload that activates / deactivates the energy_stream_report
 on EcoFlow devices.  Must be sent after every MQTT connect and periodically
 every 15-25 s to keep the stream alive.
 
-Reverse-engineered from EcoFlow Portal JavaScript bundle.
+Based on the public EcoFlow Portal JavaScript bundle.
 """
 
 import time

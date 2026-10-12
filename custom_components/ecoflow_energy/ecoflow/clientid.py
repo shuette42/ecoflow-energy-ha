@@ -4,7 +4,7 @@ Generates MQTT client IDs for the WSS connection to the EcoFlow broker (port 808
 Must be called on every connect/reconnect - old client IDs are rejected after
 disconnect.
 
-Reverse-engineered from: main.9d3dab6f.js (ef-device-user-jt_v2.7.9)
+Based on the public EcoFlow Portal JavaScript bundle (ef-device-user-jt_v2.7.9).
 """
 
 import hashlib
