@@ -876,10 +876,13 @@ async def test_silent_limits_write_failure_fails_closed(hass, phase):
     coord = ChargingHistoryCoordinator(hass, config, SERIAL, client)
     original = limits._async_write_data
 
-    async def write(data):
+    async def write(*args):
+        # `Store._async_write_data` took `(path, data)` before Home Assistant
+        # 2026 and takes `(data)` since, so the payload is the last argument.
+        data = args[-1]
         if phase == "before_request" or data["data"]["retry_after"]:
             raise WriteError("disk full")
-        await original(data)
+        await original(*args)
 
     with patch.object(limits, "_async_write_data", side_effect=write):
         await coord.async_refresh()
