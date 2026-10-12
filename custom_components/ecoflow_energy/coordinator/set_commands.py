@@ -1221,6 +1221,8 @@ class SetCommandsMixin(_Base):
             if write.rejected:
                 # The refusal beat this continuation and has already put `pre`
                 # back. Seeding now would overwrite that with the refused value.
+                # The record goes too, so later frames are not matched to it.
+                self._ocean2_reserve_write = None
                 raise ValueError(
                     f"Ocean 2 backup reserve {reserve_pct} was refused by the device"
                 )
