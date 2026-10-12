@@ -11,6 +11,7 @@ from homeassistant.helpers import device_registry as dr
 from ..const import (
     APP_SURPLUS_SYNC_MIN_INTERVAL_S,
     APP_SURPLUS_SYNC_USER_GRACE_S,
+    DEVICE_TYPE_OCEAN2,
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_WAVE3,
     DOMAIN,
@@ -565,6 +566,12 @@ class StateApplyMixin(_Base):
         self._note_value_change(parsed)
 
         self._device_data.update(parsed)
+
+        # Ocean 2 Backup Reserve (PLAN-151): a write waits for a frame carrying
+        # field 92 and confirms itself on one carrying field 10. Both are seen
+        # here, after the store holds them.
+        if self.device_type == DEVICE_TYPE_OCEAN2:
+            self._note_ocean2_snapshot(parsed)
 
         # WAVE 3 (#161): re-derive the four generic active-mode keys from
         # accumulated state, not from this message alone. A 2s incremental

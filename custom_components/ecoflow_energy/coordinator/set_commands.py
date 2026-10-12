@@ -7,7 +7,7 @@ import json
 import logging
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING, Any, Literal, cast
 
@@ -50,6 +50,47 @@ _LOGGER = logging.getLogger(__name__)
 # The accessory platforms read a present key as a reading the device has sent,
 # so a rollback has to be able to put absence back.
 _UNSET = object()
+
+# Ocean 2 Backup Reserve read-back (PLAN-151). The read before the write waits
+# at most 5 s for a get-all answer; the follow-up requests go out 8 s and 30 s
+# after the write and the pre-write value comes back at 35 s if no snapshot
+# carried field 10 since the 8 s request. The apply latency measured on the
+# device is up to about 5 s, which the 8 s request clears.
+_OCEAN2_SNAPSHOT_TIMEOUT_S = 5.0
+_OCEAN2_READBACK_REQUEST_S = 8.0
+_OCEAN2_READBACK_RETRY_S = 30.0
+_OCEAN2_READBACK_EXPIRE_S = 35.0
+# An acknowledgement within this long after our own write is attributed to it.
+# The set_reply topic is shared with the vendor app, same rule as the WAVE 3.
+_OCEAN2_OWN_WRITE_WINDOW_S = 30.0
+
+
+@dataclass
+class _Ocean2ReserveWrite:
+    """One Ocean 2 Backup Reserve write while its read-back is pending.
+
+    Created on the event loop right before the publish and read on the Paho
+    thread by the acknowledgement check (`pre`, `sent_at`): a plain reference
+    read, safe under CPython's GIL. `pre` is the device's own value from the
+    snapshot taken before the write (`_UNSET` when the store had none), the
+    value a missing read-back or a refusal puts back. `snapshot_seen` means a
+    snapshot carrying field 10 arrived since the 8 s request.
+    """
+
+    pre: Any
+    written: int
+    sent_at: float
+    handles: list[asyncio.TimerHandle] = field(default_factory=list)
+    snapshot_seen: bool = False
+
+    def is_recent(self, now: float) -> bool:
+        """Whether an acknowledgement arriving at `now` can be ours."""
+        return now - self.sent_at <= _OCEAN2_OWN_WRITE_WINDOW_S
+
+    def cancel_handles(self) -> None:
+        for handle in self.handles:
+            handle.cancel()
+        self.handles.clear()
 
 
 @dataclass(frozen=True)
@@ -1096,6 +1137,180 @@ class SetCommandsMixin(_Base):
                 backup_reserve_enabled=enabled, backup_reserve_pct=reserve_pct
             )
             return True
+
+    async def async_set_ocean2_backup_reserve(self, reserve_pct: int) -> bool:
+        """Write the Ocean 2 Backup Reserve (fields 10 and 92) with a read-back.
+
+        Raises `DeviceValueNotReported` (no fresh snapshot within 5 s, or
+        field 92 missing from it) and `ValueError` (outside 1..100, or above
+        the fresh field 92). False means the publish failed. Nothing is
+        published for the two raises other than the get-all that asks for the
+        snapshot.
+
+        The app always sends both fields, and field 92 is re-asserted at the
+        value the device reports now, so the snapshot is requested inside the
+        lock and the write waits for it. After the publish the written value
+        is seeded and a request sequence confirms it (see
+        `_arm_ocean2_readback`).
+        """
+        from ..ecoflow.ocean2_commands import build_ocean2_backup_reserve_payload
+
+        if not 1 <= reserve_pct <= 100:
+            raise ValueError(
+                f"Ocean 2 backup reserve must be 1..100, got {reserve_pct}"
+            )
+
+        async with self._device_config_lock:
+            client = self._mqtt_client
+            if client is None or not client.is_connected():
+                _LOGGER.debug(
+                    "Cannot write Ocean 2 backup reserve - MQTT not connected (%s)",
+                    self.device_tag,
+                )
+                return False
+
+            # Cleared before the request goes out: `_apply_data` (event loop)
+            # sets it when a frame carrying field 92 is in the store.
+            self._ocean2_snapshot_event.clear()
+            _LOGGER.debug("Ocean 2 get-all before write sent for %s", self.device_tag)
+            if not await self.hass.async_add_executor_job(client.send_get_all):
+                return False
+            try:
+                await asyncio.wait_for(
+                    self._ocean2_snapshot_event.wait(), _OCEAN2_SNAPSHOT_TIMEOUT_S
+                )
+            except TimeoutError:
+                _LOGGER.debug(
+                    "No Ocean 2 snapshot within %.0f s for %s",
+                    _OCEAN2_SNAPSHOT_TIMEOUT_S,
+                    self.device_tag,
+                )
+                raise DeviceValueNotReported("Ocean 2 backup reserve") from None
+
+            data = self.data or {}
+            ratio = as_known_int(data.get("edev_soc_ratio_pct"))
+            if ratio is None:
+                raise DeviceValueNotReported("Ocean 2 backup reserve")
+            if reserve_pct > ratio:
+                raise ValueError(
+                    f"Ocean 2 backup reserve {reserve_pct} is above the "
+                    f"device's own reading of {ratio}"
+                )
+            # The device's fresh value, taken before anything is seeded.
+            pre = data.get("backup_reserve_pct", _UNSET)
+
+            payload = build_ocean2_backup_reserve_payload(
+                reserve_pct, ratio, self.device_sn
+            )
+            previous = self._ocean2_reserve_write
+            write = _Ocean2ReserveWrite(
+                pre=pre, written=reserve_pct, sent_at=time.monotonic()
+            )
+            # Visible to the acknowledgement check before the publish returns.
+            self._ocean2_reserve_write = write
+            if not await self.async_send_proto_set_command(
+                payload, label="ocean2_backup_reserve"
+            ):
+                self._ocean2_reserve_write = previous
+                return False
+            if previous is not None:
+                previous.cancel_handles()
+            self._seed_device_values(backup_reserve_pct=reserve_pct)
+            self._arm_ocean2_readback(write)
+            return True
+
+    def _arm_ocean2_readback(self, write: _Ocean2ReserveWrite) -> None:
+        """Schedule the requests that confirm a written reserve (event loop).
+
+        Property pushes never carry field 10, so without a later snapshot a
+        refused or clamped write would show the requested value for good.
+        +8 s asks and resets the marker, +30 s asks again only when nothing
+        carrying field 10 came back, +35 s puts the pre-write value back if
+        that is still so.
+        """
+        loop = self.hass.loop
+        write.handles = [
+            loop.call_later(_OCEAN2_READBACK_REQUEST_S, self._ocean2_readback_request),
+            loop.call_later(_OCEAN2_READBACK_RETRY_S, self._ocean2_readback_retry),
+            loop.call_later(_OCEAN2_READBACK_EXPIRE_S, self._ocean2_readback_expire),
+        ]
+
+    def _cancel_ocean2_readback(self) -> None:
+        """Drop the pending read-back sequence (shutdown, event loop)."""
+        write = self._ocean2_reserve_write
+        if write is not None:
+            write.cancel_handles()
+        self._ocean2_reserve_write = None
+
+    def _ocean2_send_get_all(self, reason: str) -> None:
+        client = self._mqtt_client
+        if client is None or not client.is_connected():
+            _LOGGER.debug(
+                "Ocean 2 get-all (%s) skipped for %s (not connected)",
+                reason,
+                self.device_tag,
+            )
+            return
+        self.hass.async_add_executor_job(client.send_get_all)
+        _LOGGER.debug("Ocean 2 get-all (%s) sent for %s", reason, self.device_tag)
+
+    def _ocean2_readback_request(self) -> None:
+        write = self._ocean2_reserve_write
+        if write is None:
+            return
+        # Frames that arrived before this request (the app's own polls during
+        # the apply window) do not count as the answer to it.
+        write.snapshot_seen = False
+        self._ocean2_send_get_all("read-back")
+
+    def _ocean2_readback_retry(self) -> None:
+        write = self._ocean2_reserve_write
+        if write is None or write.snapshot_seen:
+            return
+        self._ocean2_send_get_all("read-back retry")
+
+    def _ocean2_readback_expire(self) -> None:
+        write = self._ocean2_reserve_write
+        if write is None:
+            return
+        self._ocean2_reserve_write = None
+        if write.snapshot_seen:
+            return
+        _LOGGER.debug(
+            "No Ocean 2 snapshot confirmed the backup reserve for %s, "
+            "restoring the value read before the write",
+            self.device_tag,
+        )
+        self._ocean2_restore_reserve(write.pre)
+        self._log_event("readback_missing", "field=10")
+
+    def _ocean2_restore_reserve(self, pre: Any) -> None:
+        """Put the pre-write reserve back and tell the entities (event loop)."""
+        self._restore_device_values(backup_reserve_pct=pre)
+        self.async_update_listeners()
+
+    def _note_ocean2_snapshot(self, parsed: dict[str, Any]) -> None:
+        """Observe a parsed Ocean 2 frame for the write in flight (event loop).
+
+        Called from `_apply_data` after the frame is in the store, so a waiter
+        woken by the event finds the fresh values already there.
+        """
+        if "edev_soc_ratio_pct" in parsed:
+            self._ocean2_snapshot_event.set()
+        if "backup_reserve_pct" not in parsed:
+            return
+        write = self._ocean2_reserve_write
+        if write is None:
+            return
+        write.snapshot_seen = True
+        if parsed["backup_reserve_pct"] != write.written:
+            # May be the user's own change in the app on the shared topic.
+            _LOGGER.debug(
+                "Ocean 2 %s reports backup reserve %s, this integration wrote %s",
+                self.device_tag,
+                parsed["backup_reserve_pct"],
+                write.written,
+            )
 
     async def async_set_stream_ac5000_task_power(
         self,

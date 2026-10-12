@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from ..ecoflow.frame_capture import TypedFrameBuffer
     from ..ecoflow.iot_api import IoTApiClient
     from .core import DeviceSnapshot, EcoFlowDeviceCoordinator, WallboxActionPending
+    from .set_commands import _Ocean2ReserveWrite
     from .state_apply import SurplusSyncRecord
 
 
@@ -58,6 +59,8 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
     _powerocean_soc_pending_revision: int
     _powerocean_soc_debounce_unsub: asyncio.TimerHandle | None
     _powerocean_soc_flush_tasks: set[asyncio.Task[None]]
+    _ocean2_snapshot_event: asyncio.Event
+    _ocean2_reserve_write: _Ocean2ReserveWrite | None
     _powerocean_soc_write_tasks: set[asyncio.Future[Any]]
     _powerocean_soc_before: dict[str, Any]
     _powerocean_soc_generation: int
@@ -129,6 +132,12 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
     def charge_action_route(self) -> Literal["sibling", "own"] | None: ...
 
     def _log_event(self, event_type: str, detail: str) -> None: ...
+
+    def _note_ocean2_snapshot(self, parsed: dict[str, Any]) -> None: ...
+
+    def _cancel_ocean2_readback(self) -> None: ...
+
+    def _ocean2_restore_reserve(self, pre: Any) -> None: ...
 
     def latch_schedule_armed(self, state_key: str, armed: bool) -> None: ...
 
