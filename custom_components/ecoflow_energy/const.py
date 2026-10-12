@@ -5731,6 +5731,22 @@ def supports_stream_controls(device_sn: str) -> bool:
     return device_sn[:4].upper() in STREAM_CONTROL_PREFIXES
 
 
+# Ocean 2 variants that may be written to. Only the RE11 has a write on record
+# (the Backup Reserve, with its acknowledgement), so only it gets the control.
+# RE17 is routed with the RE11 for reading, and RE41, RE42 and RE43 differ on
+# the read side already; a read-only routing does not carry over to a write.
+# This gate says the write is confirmed on the model, the accessory gate on the
+# number says this unit reports the value: two facts, not two names for one.
+OCEAN2_CONTROL_PREFIXES: frozenset[str] = frozenset({"RE11"})
+
+
+def supports_ocean2_controls(device_sn: str) -> bool:
+    """Return whether this Ocean 2 variant may be written to."""
+    if not device_sn:
+        return False
+    return device_sn[:4].upper() in OCEAN2_CONTROL_PREFIXES
+
+
 class _HasKey(Protocol):
     """Structural bound for `filter_defs_for_serial`.
 
@@ -8399,6 +8415,30 @@ def _build_ocean2_module_sensors(module_num: int) -> list[EcoFlowSensorDef]:
 
 for _module_num in range(1, OCEAN2_MAX_MODULES + 1):
     OCEAN2_SENSORS.extend(_build_ocean2_module_sensors(_module_num))
+
+
+# Ocean 2 controls (PLAN-151). One number: the Backup Reserve, the same setting
+# the app offers as a percentage slider. The floor of 1 is the lowest value the
+# device acknowledged; 0 was never sent. The ceiling follows the device's own
+# SoC ratio (`edev_soc_ratio_pct`) at runtime, see
+# `EcoFlowNumber._is_ocean2_backup_reserve`. Created per variant by
+# `supports_ocean2_controls` and, because it is an accessory, only once the unit
+# has reported the value.
+OCEAN2_NUMBERS: list[EcoFlowNumberDef] = [
+    EcoFlowNumberDef(
+        "backup_reserve",
+        "Backup Reserve",
+        "backup_reserve_pct",
+        "%",
+        "mdi:battery-lock",
+        1,
+        100,
+        1,
+        enhanced_only=True,
+        accessory=True,
+        slider=True,
+    ),
+]
 
 
 # OCEAN Smart Electrical Panel 40 (`HR61`). Enhanced mode only: the one

@@ -142,7 +142,11 @@ _FILLER = "0000000000000000"
 # no allowlist.
 SERIALS: tuple[str, ...] = ("", "ZZZZ" + _FILLER) + tuple(
     prefix + _FILLER
-    for prefix in sorted(C.STREAM_AC5000_CONTROL_PREFIXES | C.STREAM_CONTROL_PREFIXES)
+    for prefix in sorted(
+        C.STREAM_AC5000_CONTROL_PREFIXES
+        | C.STREAM_CONTROL_PREFIXES
+        | C.OCEAN2_CONTROL_PREFIXES
+    )
 )
 
 DEVICE_TYPES: dict[str, str] = {

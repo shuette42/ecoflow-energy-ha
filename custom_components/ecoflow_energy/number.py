@@ -19,6 +19,7 @@ from .const import (
     DELTA3_NUMBERS,
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_DELTA3,
+    DEVICE_TYPE_OCEAN2,
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_POWERPULSE2,
     DEVICE_TYPE_SMARTPLUG,
@@ -27,6 +28,7 @@ from .const import (
     DEVICE_TYPE_WAVE3,
     DOMAIN,
     NUMBER_COMMANDS,
+    OCEAN2_NUMBERS,
     POWEROCEAN_NUMBERS,
     POWEROCEAN_SCHEDULE_PREFIXES,
     POWEROCEANLOCALONLY_NUMBERS,
@@ -38,6 +40,7 @@ from .const import (
     WAVE3_NUMBERS,
     EcoFlowNumberDef,
     filter_defs_for_serial,
+    supports_ocean2_controls,
     supports_powerpulse_controls,
     supports_stream_ac5000_controls,
     supports_stream_controls,
@@ -401,6 +404,25 @@ class EcoFlowNumber(
                 int(self._attr_native_max_value),
             )
             return float(floor), self._attr_native_max_value
+        if self._is_ocean2_backup_reserve():
+            # The reserve can never exceed the device's own SoC ratio (field
+            # 92): both readings of that field give reserve <= 92, and every
+            # captured pair satisfies it. Unknown 92 keeps the declared range;
+            # the write is refused then anyway. Read through `as_known_int`
+            # for the same reason as the Stream branch above.
+            ratio = as_known_int(
+                (self.coordinator.data or {}).get("edev_soc_ratio_pct")
+            )
+            if ratio is None:
+                return None
+            # Named apart from `upper` in the Delta 3 branch above, for the
+            # reason given at `ceiling_upper`: one name, two inferred types.
+            ratio_upper = min(self._attr_native_max_value, float(ratio))
+            if ratio_upper < self._attr_native_min_value:
+                # Never invert the range: a ratio below the floor would leave
+                # a control whose slider ends cross.
+                return None
+            return self._attr_native_min_value, ratio_upper
         return None
 
     def _is_stream_ac5000_grid_output(self) -> bool:
@@ -431,6 +453,19 @@ class EcoFlowNumber(
             self._definition.key == "backup_reserve"
             and self.coordinator.device_type == DEVICE_TYPE_STREAM
             and supports_stream_controls(self.coordinator.device_sn)
+        )
+
+    def _is_ocean2_backup_reserve(self) -> bool:
+        """Return True for the Ocean 2 backup reserve.
+
+        The key alone does not identify it: Stream, STREAM AC 5000 and
+        PowerOcean carry a `backup_reserve` of their own, each with its own
+        bounds rule. The device type separates them; the entity only exists on
+        a serial `supports_ocean2_controls` lets through.
+        """
+        return (
+            self._definition.key == "backup_reserve"
+            and self.coordinator.device_type == DEVICE_TYPE_OCEAN2
         )
 
     def _schedule_power_bounds(self, prefix: str) -> tuple[float, float] | None:
@@ -579,6 +614,20 @@ class EcoFlowNumber(
             return
         if self.coordinator.device_type == DEVICE_TYPE_STREAM_AC5000:
             ok = await self._async_set_stream_ac5000_value(self._definition.key, value)
+            if not ok:
+                raise_set_failed(self.entity_id)
+            self._apply_optimistic_number(value)
+            return
+        if self.coordinator.device_type == DEVICE_TYPE_OCEAN2:
+            try:
+                ok = await self.coordinator.async_set_ocean2_backup_reserve(int(value))
+            except DeviceValueNotReported:
+                # No fresh snapshot to take the ceiling from. Temporary, so not
+                # "unsupported".
+                raise_set_not_ready(self.entity_id)
+            except ValueError as err:
+                # Above the device's own ratio, or outside 1..100.
+                raise_set_rejected(self.entity_id, str(err))
             if not ok:
                 raise_set_failed(self.entity_id)
             self._apply_optimistic_number(value)
@@ -995,12 +1044,12 @@ class EcoFlowLocalNumber(
 def _get_number_defs(device_type: str, device_sn: str = "") -> list[EcoFlowNumberDef]:
     """Return number definitions based on device type.
 
-    ``device_sn`` gates the STREAM AC 5000 and Stream controls, each confirmed
-    on the variants of its family that have produced a write frame of their
-    own: both for the STREAM AC 5000, one for the Stream. See
-    STREAM_AC5000_CONTROL_PREFIXES and STREAM_CONTROL_PREFIXES. Both gates are
-    closed on an empty serial: a write entity that cannot be tied to a
-    confirmed model is not created.
+    ``device_sn`` gates the STREAM AC 5000, Stream and Ocean 2 controls, each
+    confirmed on the variants of its family that have produced a write frame of
+    their own: both for the STREAM AC 5000, one for the Stream, one for the
+    Ocean 2. See STREAM_AC5000_CONTROL_PREFIXES, STREAM_CONTROL_PREFIXES and
+    OCEAN2_CONTROL_PREFIXES. All three gates are closed on an empty serial: a
+    write entity that cannot be tied to a confirmed model is not created.
     """
     if device_type == DEVICE_TYPE_DELTA:
         return DELTA2MAX_NUMBERS
@@ -1029,6 +1078,10 @@ def _get_number_defs(device_type: str, device_sn: str = "") -> list[EcoFlowNumbe
         if not supports_stream_ac5000_controls(device_sn):
             return []
         return STREAMAC5000_NUMBERS
+    if device_type == DEVICE_TYPE_OCEAN2:
+        if not supports_ocean2_controls(device_sn):
+            return []
+        return OCEAN2_NUMBERS
     if device_type == DEVICE_TYPE_WAVE3:
         return WAVE3_NUMBERS
     if device_type == DEVICE_TYPE_POWERPULSE2:
