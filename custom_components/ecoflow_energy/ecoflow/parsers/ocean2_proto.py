@@ -92,6 +92,12 @@ _OCEAN2_FIELD_MAP: dict[str, tuple[str, str, float]] = {
     # which one flat key cannot hold, so they are read separately below.
     "4.1": ("pcs_ac_power_w", _TYPE_FLOAT, 1),
     "4.13": ("_inverter_grid_w", _TYPE_FLOAT, 1),
+    # Top level of DisplayPropertyUpload (254/39). Only the get_reply snapshot
+    # carries these; the change-only property pushes never do, so an absent key
+    # means "no update", never zero. Both are proto3 optional in the app schema
+    # and arrive as an explicit 0 when zero.
+    "10": ("backup_reserve_pct", _TYPE_INT, 1),
+    "92": ("edev_soc_ratio_pct", _TYPE_INT, 1),
 }
 _OCEAN2_TREE: dict[int, Any] = _compile(_OCEAN2_FIELD_MAP)
 # `_walk` only consults `repeated` for a path whose tree node is a dict, so
@@ -413,6 +419,14 @@ def _parse_telemetry(pdata: bytes) -> dict[str, Any]:
     soc = walked.get("soc_pct")
     if soc is not None:
         out["soc_pct"] = soc
+    # A present zero must survive (`is not None`, never truthiness): a reserve
+    # of 0 % is a real setting, and an absent key means "no update".
+    backup_reserve = walked.get("backup_reserve_pct")
+    if backup_reserve is not None:
+        out["backup_reserve_pct"] = backup_reserve
+    edev_soc_ratio = walked.get("edev_soc_ratio_pct")
+    if edev_soc_ratio is not None:
+        out["edev_soc_ratio_pct"] = edev_soc_ratio
     remaining = walked.get("batt_remaining_wh")
     if remaining is not None:
         out["batt_remaining_wh"] = remaining

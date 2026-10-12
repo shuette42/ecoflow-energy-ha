@@ -815,3 +815,61 @@ class TestRealModuleFrames:
         # module) has to land on a negative power.
         assert current < 0
         assert power < 0
+
+
+class TestBackupReserveFields:
+    """Top-level 10 (backup reserve %) and 92 (edev SoC ratio %)."""
+
+    @pytest.mark.parametrize("invert_ac_sign", [False, True])
+    def test_snapshot_carries_reserve_and_ratio_untouched_by_the_sign_flip(
+        self, invert_ac_sign: bool
+    ) -> None:
+        # Field 8 (a discharge-down limit, 0 in every snapshot) is present
+        # and undeclared. The inverter block rides along so the flip has
+        # something real to act on: it must reach 4.1 and nothing else.
+        rest = (
+            _vint(10, 29)
+            + _vint(92, 80)
+            + _msg(65, _f32(17, 55.0))
+            + _msg(4, _f32(1, 1200.0))
+        )
+        parsed = parse_ocean2_proto_message(
+            _frame(_vint(8, 0) + rest), invert_ac_sign=invert_ac_sign
+        )
+        assert parsed is not None
+        assert parsed["backup_reserve_pct"] == 29
+        assert parsed["edev_soc_ratio_pct"] == 80
+        assert parsed["soc_pct"] == pytest.approx(55.0)
+        assert parsed["pcs_ac_power_w"] == pytest.approx(
+            -1200.0 if invert_ac_sign else 1200.0
+        )
+        # Field 8 contributes nothing: the same frame without it parses to
+        # the identical result, so no key was declared for it.
+        assert parsed == parse_ocean2_proto_message(
+            _frame(rest), invert_ac_sign=invert_ac_sign
+        )
+
+    def test_a_push_without_the_fields_leaves_both_keys_absent(self) -> None:
+        # The change-only pushes carry blocks 7 / 65 / 87 and never the
+        # settings. An absent key means "no update", never zero: a default
+        # of 0 here would write a 0 % reserve over the real one on every push.
+        payload = _telemetry(
+            summary=_f32(17, 55.0),
+            flow={
+                7: _f32(1, 800.0) + _f32(3, 2000.0),
+                87: _f32(1, 810.0) + _f32(3, 2010.0),
+            },
+        )
+        parsed = parse_ocean2_proto_message(payload)
+        assert parsed is not None
+        assert parsed["soc_pct"] == pytest.approx(55.0)
+        assert "backup_reserve_pct" not in parsed
+        assert "edev_soc_ratio_pct" not in parsed
+
+    def test_a_present_zero_reserve_is_published(self) -> None:
+        # proto3 optional: an explicit 0 on the wire is a real 0 % reserve,
+        # and must not be mistaken for an absent field.
+        parsed = parse_ocean2_proto_message(_frame(_vint(10, 0)))
+        assert parsed is not None
+        assert parsed["backup_reserve_pct"] == 0
+        assert "edev_soc_ratio_pct" not in parsed
