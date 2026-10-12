@@ -39,7 +39,7 @@ CMD_ID_PROPERTY_CMD = 38
 SRC_APP = 32
 DEST_DEVICE = 96
 
-# Payload field numbers (the app schema's property command message).
+# Payload field numbers of the property command.
 PROPERTY_BACKUP_RESERVE = 10
 PROPERTY_EDEV_SOC_RATIO = 92
 
@@ -114,12 +114,13 @@ def parse_ocean2_property_ack(payload: bytes) -> bool | None:
 
     Returns ``None`` when the frame is not an acknowledgement of a property
     command (wrong command pair, or ``is_ack`` not set, or not a frame at
-    all). Otherwise ``True`` when the payload carries ``cmd_ok = 1`` and
+    all) and also when the header masks its payload (non-zero ``enc_type``):
+    nothing on this path unmasks it, so its payload cannot be told from a
+    refusal. Otherwise ``True`` when the payload carries ``cmd_ok = 1`` and
     ``False`` when it carries ``cmd_ok = 0`` or no ``cmd_ok`` at all: the
     device answered, and did not say it applied the write.
 
-    The payload is read as received. A header that masks its payload
-    (``enc_type``) is unmasked one layer up, before this is called.
+    The payload is read as received.
     """
     try:
         headers, _ = decode_header_message(payload)
@@ -132,6 +133,8 @@ def parse_ocean2_property_ack(payload: bytes) -> bool | None:
             or header.get("cmd_id") != CMD_ID_PROPERTY_CMD
             or header.get("is_ack") != 1
         ):
+            continue
+        if header.get("enc_type"):
             continue
         try:
             pdata = bytes.fromhex(header.get("pdata") or "")

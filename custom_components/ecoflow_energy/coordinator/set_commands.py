@@ -74,7 +74,9 @@ class _Ocean2ReserveWrite:
     read, safe under CPython's GIL. `pre` is the device's own value from the
     snapshot taken before the write (`_UNSET` when the store had none), the
     value a missing read-back or a refusal puts back. `snapshot_seen` means a
-    snapshot carrying field 10 arrived since the 8 s request.
+    snapshot carrying field 10 arrived since the 8 s request. `rejected` means
+    the device refused this write, which can be known before the write's own
+    coroutine has resumed from the publish (event loop only).
     """
 
     pre: Any
@@ -82,6 +84,7 @@ class _Ocean2ReserveWrite:
     sent_at: float
     handles: list[asyncio.TimerHandle] = field(default_factory=list)
     snapshot_seen: bool = False
+    rejected: bool = False
 
     def is_recent(self, now: float) -> bool:
         """Whether an acknowledgement arriving at `now` can be ours."""
@@ -551,7 +554,7 @@ class SetCommandsMixin(_Base):
                     self.data.pop(key, None)
         # The entities hold a 5 s optimistic lock and would ignore the update
         # below without advancing the rollback generation.
-        self._powerocean_soc_rollback_generation += 1
+        self._write_rollback_generation += 1
         self.async_update_listeners()
 
     async def _flush_powerocean_soc(
@@ -1142,10 +1145,10 @@ class SetCommandsMixin(_Base):
         """Write the Ocean 2 Backup Reserve (fields 10 and 92) with a read-back.
 
         Raises `DeviceValueNotReported` (no fresh snapshot within 5 s, or
-        field 92 missing from it) and `ValueError` (outside 1..100, or above
-        the fresh field 92). False means the publish failed. Nothing is
-        published for the two raises other than the get-all that asks for the
-        snapshot.
+        field 92 missing from it) and `ValueError` (outside 1..100, above the
+        fresh field 92, or refused by the device before this call returned).
+        False means the publish failed. Nothing is published for the first
+        two raises other than the get-all that asks for the snapshot.
 
         The app always sends both fields, and field 92 is re-asserted at the
         value the device reports now, so the snapshot is requested inside the
@@ -1215,6 +1218,12 @@ class SetCommandsMixin(_Base):
                 return False
             if previous is not None:
                 previous.cancel_handles()
+            if write.rejected:
+                # The refusal beat this continuation and has already put `pre`
+                # back. Seeding now would overwrite that with the refused value.
+                raise ValueError(
+                    f"Ocean 2 backup reserve {reserve_pct} was refused by the device"
+                )
             self._seed_device_values(backup_reserve_pct=reserve_pct)
             self._arm_ocean2_readback(write)
             return True
@@ -1226,13 +1235,25 @@ class SetCommandsMixin(_Base):
         refused or clamped write would show the requested value for good.
         +8 s asks and resets the marker, +30 s asks again only when nothing
         carrying field 10 came back, +35 s puts the pre-write value back if
-        that is still so.
+        that is still so. Each timer carries its own write: a newer write
+        swaps the record before its publish returns, and a timer of the older
+        one must not act on the newer one.
         """
+        if self._shutdown:
+            # Shutdown landed during the publish, after the cancel had already
+            # run: nothing may be left armed on a stopped coordinator.
+            return
         loop = self.hass.loop
         write.handles = [
-            loop.call_later(_OCEAN2_READBACK_REQUEST_S, self._ocean2_readback_request),
-            loop.call_later(_OCEAN2_READBACK_RETRY_S, self._ocean2_readback_retry),
-            loop.call_later(_OCEAN2_READBACK_EXPIRE_S, self._ocean2_readback_expire),
+            loop.call_later(
+                _OCEAN2_READBACK_REQUEST_S, self._ocean2_readback_request, write
+            ),
+            loop.call_later(
+                _OCEAN2_READBACK_RETRY_S, self._ocean2_readback_retry, write
+            ),
+            loop.call_later(
+                _OCEAN2_READBACK_EXPIRE_S, self._ocean2_readback_expire, write
+            ),
         ]
 
     def _cancel_ocean2_readback(self) -> None:
@@ -1254,24 +1275,21 @@ class SetCommandsMixin(_Base):
         self.hass.async_add_executor_job(client.send_get_all)
         _LOGGER.debug("Ocean 2 get-all (%s) sent for %s", reason, self.device_tag)
 
-    def _ocean2_readback_request(self) -> None:
-        write = self._ocean2_reserve_write
-        if write is None:
+    def _ocean2_readback_request(self, write: _Ocean2ReserveWrite) -> None:
+        if self._ocean2_reserve_write is not write:
             return
         # Frames that arrived before this request (the app's own polls during
         # the apply window) do not count as the answer to it.
         write.snapshot_seen = False
         self._ocean2_send_get_all("read-back")
 
-    def _ocean2_readback_retry(self) -> None:
-        write = self._ocean2_reserve_write
-        if write is None or write.snapshot_seen:
+    def _ocean2_readback_retry(self, write: _Ocean2ReserveWrite) -> None:
+        if self._ocean2_reserve_write is not write or write.snapshot_seen:
             return
         self._ocean2_send_get_all("read-back retry")
 
-    def _ocean2_readback_expire(self) -> None:
-        write = self._ocean2_reserve_write
-        if write is None:
+    def _ocean2_readback_expire(self, write: _Ocean2ReserveWrite) -> None:
+        if self._ocean2_reserve_write is not write:
             return
         self._ocean2_reserve_write = None
         if write.snapshot_seen:
@@ -1287,7 +1305,22 @@ class SetCommandsMixin(_Base):
     def _ocean2_restore_reserve(self, pre: Any) -> None:
         """Put the pre-write reserve back and tell the entities (event loop)."""
         self._restore_device_values(backup_reserve_pct=pre)
+        # The number holds a 5 s optimistic lock after a write and would ignore
+        # the update below; a new generation lifts it.
+        self._write_rollback_generation += 1
         self.async_update_listeners()
+
+    def _ocean2_reject_reserve(self, write: _Ocean2ReserveWrite) -> None:
+        """Take back `write` after the device refused it (event loop).
+
+        Ignored when `write` is no longer the current record: a newer write
+        replaced it, or its read-back ran out, and the store then holds
+        another value than the one this refusal is about.
+        """
+        if self._ocean2_reserve_write is not write:
+            return
+        write.rejected = True
+        self._ocean2_restore_reserve(write.pre)
 
     def _note_ocean2_snapshot(self, parsed: dict[str, Any]) -> None:
         """Observe a parsed Ocean 2 frame for the write in flight (event loop).

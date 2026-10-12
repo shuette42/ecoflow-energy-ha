@@ -50,8 +50,13 @@ def _reply(
     cmd_func: int = 254,
     cmd_id: int = 38,
     is_ack: int = 1,
+    enc_type: int = 0,
 ) -> bytes:
-    """A device reply frame, assembled field by field like the captured one."""
+    """A device reply frame, assembled field by field like the captured one.
+
+    `enc_type` (header field 6) is left out when zero, as the captured reply
+    has it.
+    """
     serial = SERIAL.encode("ascii")
     header = (
         encode_field_bytes(1, pdata)
@@ -59,6 +64,7 @@ def _reply(
         + encode_field_varint(3, 32)
         + encode_field_varint(4, 1)
         + encode_field_varint(5, 1)
+        + (encode_field_varint(6, enc_type) if enc_type else b"")
         + encode_field_varint(7, 3)
         + encode_field_varint(8, cmd_func)
         + encode_field_varint(9, cmd_id)
@@ -144,3 +150,12 @@ class TestAck:
         assert parse_ocean2_property_ack(sent) is None
         # A reply on the right pair that is not flagged as an acknowledgement.
         assert parse_ocean2_property_ack(_reply(REPLY_PDATA, is_ack=0)) is None
+
+    def test_a_masked_payload_is_not_read_as_a_refusal(self) -> None:
+        # Nothing on this path unmasks a payload. The bytes below are the
+        # refusal shape (no cmd_ok); behind a mask they say nothing, so the
+        # reply is not an answer rather than a false "the device refused".
+        refusal_shape = bytes.fromhex("501de00550")
+        assert parse_ocean2_property_ack(_reply(refusal_shape, enc_type=1)) is None
+        # Control: the same payload unmasked is the refusal it looks like.
+        assert parse_ocean2_property_ack(_reply(refusal_shape)) is False

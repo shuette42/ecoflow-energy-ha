@@ -89,6 +89,26 @@ def _push(
     coordinator._on_mqtt_message(topic, _frame(reserve, ratio))
 
 
+def _ack(cmd_ok: bool) -> bytes:
+    """A 254/38 acknowledgement; a refusal is a payload without `cmd_ok`."""
+    pdata = encode_field_varint(10, 23) + encode_field_varint(92, 80)
+    if cmd_ok:
+        pdata += encode_field_varint(2, 1)
+    header = (
+        encode_field_bytes(1, pdata)
+        + encode_field_varint(8, 254)
+        + encode_field_varint(9, 38)
+        + encode_field_varint(12, 1)
+    )
+    return encode_field_bytes(1, header)
+
+
+def _refuse(coordinator: EcoFlowDeviceCoordinator) -> None:
+    """Deliver the device's refusal on the shared set_reply topic."""
+    topic = f"/app/user123/{coordinator.device_sn}/thing/property/set_reply"
+    coordinator._on_mqtt_message(topic, _ack(False))
+
+
 def _setup_coordinator(
     hass: HomeAssistant, serial: str = SERIAL
 ) -> tuple[EcoFlowDeviceCoordinator, MockConfigEntry, MagicMock]:
@@ -241,6 +261,76 @@ class TestShownValue:
         _push(coordinator, reserve=5, ratio=80)
         await hass.async_block_till_done()
         assert shown == [23, 5]
+
+
+class TestRefusalShown:
+    async def test_a_refusal_inside_the_lock_shows_the_previous_value(
+        self,
+        hass: HomeAssistant,
+        no_readback_timers: Any,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The refused value must not stay on screen for the rest of the lock."""
+        coordinator, entry, mqtt = _setup_coordinator(hass)
+        _push(coordinator, reserve=5, ratio=80)
+        await hass.async_block_till_done()
+        created = await _create_numbers(hass, coordinator, entry)
+        entity: EcoFlowNumber = created[0]
+        shown = _wire(entity, coordinator)
+        _push(coordinator, reserve=5, ratio=80)
+        await hass.async_block_till_done()
+        shown.clear()
+        clock = _Clock()
+        monkeypatch.setattr(number_module, "time", clock)
+        _answer_get_all_with(coordinator, mqtt, reserve=5, ratio=80)
+
+        await entity.async_set_native_value(23.0)
+        await hass.async_block_till_done()
+        assert shown == [23]
+
+        clock.now += 1.0  # well inside the 5 s lock
+        _refuse(coordinator)
+        await hass.async_block_till_done()
+
+        assert coordinator.data["backup_reserve_pct"] == 5
+        assert shown == [23, 5]
+
+    async def test_a_refusal_that_arrives_before_the_write_returns_is_never_shown(
+        self, hass: HomeAssistant, no_readback_timers: Any
+    ) -> None:
+        """The reply can beat the coroutine that published the write.
+
+        It lands while the publish is still awaited, so the restore has run
+        before the value is seeded. The write then raises instead of seeding
+        and showing what the device just refused.
+        """
+        coordinator, entry, mqtt = _setup_coordinator(hass)
+        _push(coordinator, reserve=5, ratio=80)
+        await hass.async_block_till_done()
+        created = await _create_numbers(hass, coordinator, entry)
+        entity: EcoFlowNumber = created[0]
+        shown = _wire(entity, coordinator)
+        _push(coordinator, reserve=5, ratio=80)
+        await hass.async_block_till_done()
+        shown.clear()
+        _answer_get_all_with(coordinator, mqtt, reserve=5, ratio=80)
+
+        def _publish_and_refuse(*args: Any, **kwargs: Any) -> bool:
+            _refuse(coordinator)
+            return True
+
+        # A plain function, not a Mock: the harness runs a Mock target inline
+        # on the loop thread, where the refusal could not overtake the
+        # coroutine that is awaiting the publish.
+        mqtt.send_proto_set = _publish_and_refuse
+
+        with pytest.raises(HomeAssistantError) as refused:
+            await entity.async_set_native_value(23.0)
+        await hass.async_block_till_done()
+
+        assert refused.value.translation_key == "set_value_rejected"
+        assert coordinator.data["backup_reserve_pct"] == 5
+        assert shown == []
 
 
 class TestBounds:

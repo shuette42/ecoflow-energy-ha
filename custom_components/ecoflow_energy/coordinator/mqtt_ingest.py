@@ -484,7 +484,8 @@ class MqttIngestMixin(_Base):
         only counts as ours when this integration wrote the reserve within
         the last 30 s (`_ocean2_reserve_write` is assigned on the event loop
         right before the publish and read here: one reference read, safe
-        under CPython's GIL). The pre-write value goes back on the event loop.
+        under CPython's GIL). The write is handed to the event loop, which puts
+        its pre-write value back.
         """
         from ..ecoflow.ocean2_commands import parse_ocean2_property_ack
 
@@ -509,7 +510,7 @@ class MqttIngestMixin(_Base):
             self.device_tag,
         )
         self._log_event("set_rejected", "field=10")
-        self.hass.loop.call_soon_threadsafe(self._ocean2_restore_reserve, write.pre)
+        self.hass.loop.call_soon_threadsafe(self._ocean2_reject_reserve, write)
 
     def _parse_message(self, topic: str, payload: bytes) -> dict[str, Any] | None:
         """Parse an MQTT message payload."""

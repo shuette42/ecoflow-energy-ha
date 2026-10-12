@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 from collections.abc import Callable, Iterator
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -196,6 +197,64 @@ async def _write(
     return await task
 
 
+async def _write_held_in_publish(
+    hass: HomeAssistant,
+    coordinator: EcoFlowDeviceCoordinator,
+    mqtt: MagicMock,
+    reserve: int,
+    answer: dict[str, Any],
+) -> tuple[asyncio.Future[bool], threading.Event]:
+    """Start a write and hold it inside its publish.
+
+    The publish runs in an executor thread, so a test can act on the loop
+    while the write coroutine is still awaiting it. Returns the write task and
+    the event that lets the publish return. Progress is signalled to the loop
+    with `call_soon_threadsafe`: `asyncio.sleep` would sit on the patched
+    `call_later` and never wake. `mqtt.send_proto_set` is replaced, so its
+    mock call history is gone for the rest of the test.
+    """
+    asked = asyncio.Event()
+    started = asyncio.Event()
+    release = threading.Event()
+
+    def _answer_get_all() -> bool:
+        hass.loop.call_soon_threadsafe(asked.set)
+        return True
+
+    def _held_publish(*args: Any, **kwargs: Any) -> bool:
+        hass.loop.call_soon_threadsafe(started.set)
+        release.wait(5)
+        return True
+
+    mqtt.send_get_all.side_effect = _answer_get_all
+    # A plain function, not a Mock: the harness runs a Mock target inline on
+    # the loop thread, which would leave nothing to act on during the publish.
+    mqtt.send_proto_set = _held_publish
+    task = hass.async_create_task(coordinator.async_set_ocean2_backup_reserve(reserve))
+    try:
+        await asyncio.wait_for(asked.wait(), 5)
+        coordinator._apply_data(dict(answer))
+        await asyncio.wait_for(started.wait(), 5)
+    except BaseException:
+        release.set()
+        raise
+    return task, release
+
+
+def _integration_warnings(caplog: pytest.LogCaptureFixture) -> list[logging.LogRecord]:
+    """WARNING and above from this integration only.
+
+    asyncio logs its own slow-callback WARNING on a loaded machine, which is
+    not the integration's noise and made these tests fail under `-n 8`.
+    """
+    return [
+        r
+        for r in caplog.records
+        if r.levelno >= logging.WARNING
+        and r.name.startswith("custom_components.ecoflow_energy")
+    ]
+
+
 async def _settle(hass: HomeAssistant) -> None:
     """Let executor jobs started by timer callbacks finish."""
     await hass.async_block_till_done()
@@ -344,6 +403,72 @@ class TestReadbackSequence:
         assert coordinator._device_data["backup_reserve_pct"] == 23
         assert not any(e["type"] == "readback_missing" for e in coordinator.event_log)
 
+    async def test_the_timers_of_a_replaced_write_leave_the_new_one_alone(
+        self, hass: HomeAssistant, timers: _Timers
+    ) -> None:
+        """A newer write swaps the record before its publish returns.
+
+        The older write's timers can fire inside that window. They act on
+        their own write, which is no longer the record, so they do nothing:
+        no get-all, no restore, no `readback_missing` for a write that is
+        still being confirmed.
+        """
+        coordinator, mqtt = _coordinator(hass)
+        coordinator._apply_data(dict(SNAPSHOT_5_80))
+        await _write(hass, coordinator, mqtt, 23, SNAPSHOT_5_80)
+        first = coordinator._ocean2_reserve_write
+        old = [h for h in timers.handles if h.live]
+        assert first is not None and len(old) == 3
+
+        task, release = await _write_held_in_publish(
+            hass, coordinator, mqtt, 30, SNAPSHOT_5_80
+        )
+        try:
+            second = coordinator._ocean2_reserve_write
+            assert second is not None and second is not first
+            # The second write's own get-all answer counted for the first
+            # record; undo that so the first write looks like one nothing
+            # ever confirmed, which is what its +35 s timer acts on.
+            first.snapshot_seen = False
+            asks = mqtt.send_get_all.call_count
+            for handle in old:
+                handle.fired = True
+                handle.callback(*handle.args)
+        finally:
+            release.set()
+        assert await task is True
+        await _settle(hass)
+
+        assert mqtt.send_get_all.call_count == asks
+        assert not any(e["type"] == "readback_missing" for e in coordinator.event_log)
+        assert coordinator.data["backup_reserve_pct"] == 30
+        assert coordinator._ocean2_reserve_write is second
+        assert timers.pending() == [8.0, 30.0, 35.0]
+
+    async def test_a_shutdown_during_the_publish_arms_no_readback(
+        self, hass: HomeAssistant, timers: _Timers
+    ) -> None:
+        coordinator, mqtt = _coordinator(hass)
+        coordinator._apply_data(dict(SNAPSHOT_5_80))
+
+        task, release = await _write_held_in_publish(
+            hass, coordinator, mqtt, 23, SNAPSHOT_5_80
+        )
+        try:
+            await coordinator.async_shutdown()
+        finally:
+            release.set()
+        await task
+
+        # Looked at before any timer is advanced: a handle that has fired is
+        # no longer live, so afterwards "nothing pending" proves nothing.
+        assert timers.pending() == []
+        timers.advance(35)
+        await _settle(hass)
+
+        assert mqtt.send_get_all.call_count == 1  # only the read before the write
+        assert not any(e["type"] == "readback_missing" for e in coordinator.event_log)
+
     async def test_no_snapshot_after_the_request_retries_then_restores(
         self, hass: HomeAssistant, timers: _Timers
     ) -> None:
@@ -425,13 +550,38 @@ class TestAcknowledgement:
         await asyncio.sleep(0)  # the restore is queued with call_soon_threadsafe
         await _settle(hass)
 
-        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        warnings = _integration_warnings(caplog)
         assert len(warnings) == 1
         assert coordinator.device_tag in warnings[0].getMessage()
         assert SERIAL not in caplog.text
         rejected = [e for e in coordinator.event_log if e["type"] == "set_rejected"]
         assert [e["detail"] for e in rejected] == ["field=10"]
         assert coordinator.data["backup_reserve_pct"] == 5
+
+    async def test_a_refusal_of_a_replaced_write_changes_nothing(
+        self, hass: HomeAssistant, timers: _Timers
+    ) -> None:
+        """The refusal is handed over as a write; by the time it runs, a newer
+        write may own the reserve in the store."""
+        coordinator, mqtt = _coordinator(hass)
+        coordinator._apply_data(dict(SNAPSHOT_5_80))
+        await _write(hass, coordinator, mqtt, 23, SNAPSHOT_5_80)
+        first = coordinator._ocean2_reserve_write
+        assert first is not None
+        await _write(hass, coordinator, mqtt, 30, SNAPSHOT_5_80)
+        assert coordinator.data["backup_reserve_pct"] == 30
+
+        coordinator._ocean2_reject_reserve(first)
+
+        assert coordinator.data["backup_reserve_pct"] == 30
+        assert first.rejected is False
+
+        # Control: the same call for the write that is current does restore.
+        current = coordinator._ocean2_reserve_write
+        assert current is not None
+        coordinator._ocean2_reject_reserve(current)
+        assert coordinator.data["backup_reserve_pct"] == 5
+        assert current.rejected is True
 
     async def test_a_refusal_we_did_not_send_is_debug_only(
         self,
@@ -447,7 +597,7 @@ class TestAcknowledgement:
         await asyncio.sleep(0)
         await _settle(hass)
 
-        assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+        assert not _integration_warnings(caplog)
         assert not any(e["type"] == "set_rejected" for e in coordinator.event_log)
         assert "did not send" in caplog.text
         assert coordinator.data["backup_reserve_pct"] == 5
@@ -472,7 +622,7 @@ class TestAcknowledgement:
         await asyncio.sleep(0)
         await _settle(hass)
 
-        assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+        assert not _integration_warnings(caplog)
         assert coordinator.data["backup_reserve_pct"] == 23
 
         # Control: inside the window the same reply is ours.
@@ -497,7 +647,7 @@ class TestAcknowledgement:
         await asyncio.sleep(0)
         await _settle(hass)
 
-        assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+        assert not _integration_warnings(caplog)
         assert not any(e["type"] == "set_rejected" for e in coordinator.event_log)
         assert "Setting applied on" in caplog.text
         assert coordinator.data["backup_reserve_pct"] == 23

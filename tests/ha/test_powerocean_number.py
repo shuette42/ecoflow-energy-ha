@@ -1323,7 +1323,7 @@ class TestPowerOceanSocFlushLifecycle:
                 coordinator._powerocean_soc_generation,
                 coordinator._powerocean_soc_cycle_open,
                 dict(coordinator._powerocean_soc_before),
-                coordinator._powerocean_soc_rollback_generation,
+                coordinator._write_rollback_generation,
                 dict(coordinator._device_data),
                 list(coordinator.event_log),
             )
@@ -1353,7 +1353,7 @@ class TestPowerOceanSocFlushLifecycle:
             coordinator._powerocean_soc_generation,
             coordinator._powerocean_soc_cycle_open,
             dict(coordinator._powerocean_soc_before),
-            coordinator._powerocean_soc_rollback_generation,
+            coordinator._write_rollback_generation,
             dict(coordinator._device_data),
             list(coordinator.event_log),
         ) == shutdown_state
@@ -1424,7 +1424,7 @@ class TestPowerOceanSocFlushLifecycle:
                 dict(coordinator._device_data),
                 dict(coordinator.data),
                 list(coordinator.event_log),
-                coordinator._powerocean_soc_rollback_generation,
+                coordinator._write_rollback_generation,
             )
             assert not shutdown.done()
             mqtt.disconnect.assert_not_called()
@@ -1437,7 +1437,7 @@ class TestPowerOceanSocFlushLifecycle:
             dict(coordinator._device_data),
             dict(coordinator.data),
             list(coordinator.event_log),
-            coordinator._powerocean_soc_rollback_generation,
+            coordinator._write_rollback_generation,
         ) == after_shutdown
         assert not coordinator._powerocean_soc_write_tasks
         coordinator.async_update_listeners.assert_not_called()
@@ -1791,12 +1791,12 @@ class TestPowerOceanSocRollback:
     ) -> None:
         """Without this the slider shows the refused value for a further 5 s."""
         coordinator = self._make_coordinator(hass, enhanced_config_entry, set_ok=False)
-        before = coordinator._powerocean_soc_rollback_generation
+        before = coordinator._write_rollback_generation
 
         await self._drag(coordinator, 50, 90)
         await coordinator._flush_powerocean_soc()
 
-        assert coordinator._powerocean_soc_rollback_generation > before
+        assert coordinator._write_rollback_generation > before
 
 
 class TestPowerOceanSocRollbackUnderOverlap:

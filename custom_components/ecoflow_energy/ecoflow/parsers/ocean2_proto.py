@@ -94,8 +94,7 @@ _OCEAN2_FIELD_MAP: dict[str, tuple[str, str, float]] = {
     "4.13": ("_inverter_grid_w", _TYPE_FLOAT, 1),
     # Top level of DisplayPropertyUpload (254/39). Only the get_reply snapshot
     # carries these; the change-only property pushes never do, so an absent key
-    # means "no update", never zero. Both are proto3 optional in the app schema
-    # and arrive as an explicit 0 when zero.
+    # means "no update", never zero. Both arrive as an explicit 0 when zero.
     "10": ("backup_reserve_pct", _TYPE_INT, 1),
     "92": ("edev_soc_ratio_pct", _TYPE_INT, 1),
 }

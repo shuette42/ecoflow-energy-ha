@@ -214,7 +214,7 @@ class EcoFlowNumber(
         # after a rollback already happened must not read that rollback as
         # one of its own.
         self._seen_rollback_generation: int = getattr(
-            coordinator, "_powerocean_soc_rollback_generation", 0
+            coordinator, "_write_rollback_generation", 0
         )
 
     @property
@@ -287,7 +287,7 @@ class EcoFlowNumber(
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        rollback = getattr(self.coordinator, "_powerocean_soc_rollback_generation", 0)
+        rollback = getattr(self.coordinator, "_write_rollback_generation", 0)
         if rollback != self._seen_rollback_generation:
             # A write of ours was rejected and the coordinator restored the
             # device value. Holding the optimistic lock now would keep showing
@@ -618,7 +618,7 @@ class EcoFlowNumber(
                 raise_set_failed(self.entity_id)
             self._apply_optimistic_number(value)
             return
-        if self.coordinator.device_type == DEVICE_TYPE_OCEAN2:
+        if self._is_ocean2_backup_reserve():
             try:
                 ok = await self.coordinator.async_set_ocean2_backup_reserve(int(value))
             except DeviceValueNotReported:

@@ -113,7 +113,7 @@ Each module creates 12 sensors (5 enabled by default, 7 disabled). They are crea
 
 The upper end of the slider is not a fixed 100. It follows a charge reading the unit sends itself: on a unit that reports 80 the slider stops at 80, and a request above that is refused before anything is sent. Until the unit has sent that reading the slider shows 1 to 100, and a write is refused as not ready. The lowest value is 1: it is the lowest the unit was seen acknowledging, and 0 was never sent.
 
-Each write first asks the unit for its current state, waiting up to 5 seconds, and sends the new reserve together with the unit's own current reading of that charge value. If the unit does not answer in time, the write is refused with a "not ready" message and nothing is sent. After a write the integration asks the unit again to confirm the value. A value the unit does not confirm is replaced by the one it reports.
+Each write first asks the unit for its current state, waiting up to 5 seconds, and sends the new reserve together with the unit's own current reading of that charge value. If the unit does not answer in time, the write is refused with a "not ready" message and nothing is sent. After a write the integration asks the unit again to confirm the value. If the unit refuses the write, or nothing confirms it within about 35 seconds, the control goes back to the value it had before. If the unit reports a different value, that value is shown.
 
 ---
 

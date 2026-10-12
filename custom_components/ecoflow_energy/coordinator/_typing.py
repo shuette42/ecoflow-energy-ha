@@ -69,7 +69,7 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
     _powerocean_soc_active_revisions: set[int]
     _powerocean_soc_latest_outcome: bool | None
     _powerocean_soc_cycle_open: bool
-    _powerocean_soc_rollback_generation: int
+    _write_rollback_generation: int
     _last_mqtt_ts: float
     _energy_integrator: EnergyIntegrator
     _bp_sn_to_index: dict[str, int]
@@ -138,6 +138,8 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
     def _cancel_ocean2_readback(self) -> None: ...
 
     def _ocean2_restore_reserve(self, pre: Any) -> None: ...
+
+    def _ocean2_reject_reserve(self, write: _Ocean2ReserveWrite) -> None: ...
 
     def latch_schedule_armed(self, state_key: str, armed: bool) -> None: ...
 

@@ -355,9 +355,10 @@ class EcoFlowDeviceCoordinator(
         # five second publish timeout would otherwise snapshot the optimistic
         # values of the write that is still failing.
         self._powerocean_soc_cycle_open: bool = False
-        # Set when a rollback lands, so the two sliders drop their optimistic
-        # lock instead of sitting on a value the device refused for 5 s.
-        self._powerocean_soc_rollback_generation: int = 0
+        # Advanced when a write is rolled back (the PowerOcean SoC sliders, the
+        # Ocean 2 reserve), so a number drops its optimistic lock instead of
+        # sitting on a value the device refused for 5 s.
+        self._write_rollback_generation: int = 0
         # Serializes every config write that has to read the device's current
         # state before it can build its frame. One coordinator drives one
         # device, so the ES22 and BK-series sequences can never both be in
