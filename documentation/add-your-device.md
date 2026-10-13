@@ -114,7 +114,7 @@ All paths are under `custom_components/ecoflow_energy/` unless they start with
 | 5 | `coordinator/state_apply.py` | Only if a value must be derived from accumulated state rather than one frame (around 251 and 279). Most devices need nothing here | Firmware to the device registry, active-mode keys re-derived after a mode switch |
 | 6 | `const.py` | The display name by device type (around 356), membership in `ENHANCED_ONLY_DEVICE_TYPES` if the device answers `1006` (around 364), and one definition block per platform the device has (see naming below) | `WAVE3_SENSORS` around 6554, `WAVE3_BINARY_SENSORS` around 6753 |
 | 7 | `sensor.py`, `binary_sensor.py` | One branch each in the dispatcher returning your block, for the platforms the device has | `sensor.py` around 366, `binary_sensor.py` around 191 |
-| 8 | `strings.json` and every file under `translations/` (en, de, fr, it, nl, pl) | An entry per entity key in each, and state translations for every enum option. Copy the English text into the languages you do not speak and say so in the PR | 104 lines in each |
+| 8 | `strings.json` and every file under `translations/` (en, de, fr, it, nl, pl) | An entry per entity key in each, and state translations for every enum option. Copy the English text into the languages you do not speak and say so in the PR | 104 lines in each of `strings.json`, `en.json` and `de.json` (#358, before the other four languages existed) |
 | 9 | `tests/` | Fixture, parser test, entity test, prefix test, device picker test (table in the test section) | `tests/test_wave3_parser.py`, `tests/ha/test_wave3_entities.py` |
 | 10 | `documentation/entities/<device>.md`, `documentation/README.md`, `README.md`, `CHANGELOG.md` | The entity page, one line in each index, one changelog entry | `documentation/entities/wave-3.md` |
 | 11 | `coordinator/availability.py` | Only if the device pushes less often than every 35 s: its own stale and unavailable thresholds, plus a row in the README availability table (see step 10) | `WAVE3_STALE_THRESHOLD_S`, `WAVE3_SOFT_UNAVAILABLE_S`, PR #361 |
@@ -162,13 +162,13 @@ optional accessory, a hardware variant). Copy a neighbouring block.
 with enum states under `entity.<platform>.<key>.state.<option>`, and the key is
 the parser key with no family prefix (`strings.json` around lines 162 and 1484).
 `en.json` is a copy of `strings.json`, and `tests/test_translations.py` (around
-line 780) fails when they drift. There is no generator, you edit both by hand
+line 942) fails when they drift. There is no generator. You edit both by hand,
 and the other five languages alongside. `tests/test_entity_translations.py`
-checks both directions (around 91 and 101) for each of the six languages: every
+checks both directions (around 153 and 163) for each of the six languages: every
 key a definition references has a translation, and every translation has a
 definition. Home Assistant renders English for a key a language file lacks, so
 copying the English text into a language you do not speak costs the user
-nothing; a missing key fails the test.
+nothing. A missing key fails the test.
 
 **Step 10, docs.** Copy the first fifteen lines of
 `documentation/entities/wave-3.md` as the template: title, one sentence on what
