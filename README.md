@@ -56,7 +56,7 @@
 | **WAVE 3** | `AC71` | Enhanced only | 18 + 5 binary | 4 switches · 5 numbers · 5 selects · 1 climate | 1 | ~2 s / 120 s |
 | **PowerPulse 2** | `C376` `C374` | Enhanced only | 18 + 1 binary | 2 buttons · 1 number with no PowerOcean, plus 5 numbers · 2 selects · 5 switches with exactly one PowerOcean in the entry | 1 | on change, refreshed after 20 min |
 | **PowerPulse 2** | `C371` | Enhanced only | 18 + 1 binary | none, read-only for now | 1 | ~1 min observed |
-| **Ocean 2** | `RE11` `RE17` `RE41` `RE42` `RE43` | Enhanced only | 48 + 12 per module | 1 number on `RE11` (Backup Reserve), others read-only | 6 | ~3 s |
+| **Ocean 2** | `RE11` `RE17` `RE41` `RE42` `RE43` | Enhanced only | 51 + 12 per module | 1 number on `RE11` (Backup Reserve), others read-only | 6 | ~3 s |
 | **OCEAN Smart Electrical Panel 40** | `HR61` | Enhanced only | 19 + 3 per circuit, 1 binary per circuit | none, read-only | - | ~3 s |
 | **DELTA Pro Ultra** | `Y711` | Enhanced only | 21 + 2 per battery pack | none, read-only | - | ~60 s when idle |
 | **Smart Home Panel 2** | `HD31` | Enhanced only | 9 + 2 per circuit, 1 per storage channel | none, read-only | - | ~2 s |

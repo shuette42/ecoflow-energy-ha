@@ -2,7 +2,7 @@
 
 Full list of all entities created for the EcoFlow Ocean 2.
 
-**Totals:** 48 system sensors, plus 12 per battery module; 1 number on the `RE11`
+**Totals:** 51 system sensors, plus 12 per battery module; 1 number on the `RE11`
 
 The Ocean 2 reports through the account connection only, so it needs **Enhanced Mode**. The Developer API answers error 1006 for this device, the same position the `J32D`/`J32E` PowerOcean variants are in, so Standard Mode creates no usable entities.
 
@@ -15,6 +15,8 @@ Read-only apart from one number on the `RE11`, the Backup Reserve, described und
 Battery modules are read as well: 12 readings each, created once a module actually reports. The count is an installation choice - two on the unit this was mapped on - so nothing is declared for modules you do not have. Captures from other systems show bundles of up to fourteen per-module headers in one frame, a heartbeat backlog rather than fourteen distinct modules.
 
 **Despite the name, this is not a PowerOcean.** It carries its own telemetry frame on `cmd_func` 254 and shares no field layout with the `HJ31`/`J32x` line, which is why it has its own parser and its own entity set.
+
+Work Mode, System State and Control Mode come with the unit's full status report, not with the frequent change reports, so they appear a little after the other readings. So far only Self-use, Running and None have been seen on a unit; the other states are named after the app's own definitions.
 
 ---
 
@@ -70,6 +72,9 @@ Battery modules are read as well: 12 readings each, created once a module actual
 | Grid Export Energy | kWh | - | enabled | For the Energy Dashboard's return-to-grid slot |
 | Battery Charge Energy | kWh | - | enabled | For the Energy Dashboard's battery slot |
 | Battery Discharge Energy | kWh | - | enabled | For the Energy Dashboard's battery slot |
+| Work Mode | - | diagnostic | enabled | Self-use or AI schedule, as set in the app. Appears with the first full status report |
+| System State | - | diagnostic | enabled | Running, Idle, Stopped, Maintenance, Init or one of four Starting states |
+| Control Mode | - | diagnostic | enabled | What currently overrides normal operation: None, Schedule, Task, Storm guard, AC backup, Eco and others. None means the work mode is in charge |
 
 ---
 
