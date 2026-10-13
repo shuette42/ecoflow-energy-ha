@@ -16,7 +16,7 @@ Battery modules are read as well: 12 readings each, created once a module actual
 
 **Despite the name, this is not a PowerOcean.** It carries its own telemetry frame on `cmd_func` 254 and shares no field layout with the `HJ31`/`J32x` line, which is why it has its own parser and its own entity set.
 
-Work Mode, System State and Control Mode come with the unit's full status report, not with the frequent change reports, so they appear a little after the other readings. So far only Self-use, Running and None have been seen on a unit; the other states are named after the app's own definitions.
+Work Mode, System State and Control Mode come mostly with the unit's full status report rather than the frequent change reports, so they appear a little after the other readings. So far only Self-use, Running and None have been seen on a unit; the other states are named after the app's own definitions.
 
 ---
 
@@ -72,8 +72,8 @@ Work Mode, System State and Control Mode come with the unit's full status report
 | Grid Export Energy | kWh | - | enabled | For the Energy Dashboard's return-to-grid slot |
 | Battery Charge Energy | kWh | - | enabled | For the Energy Dashboard's battery slot |
 | Battery Discharge Energy | kWh | - | enabled | For the Energy Dashboard's battery slot |
-| Work Mode | - | diagnostic | enabled | Self-use or AI schedule, as set in the app. Appears with the first full status report |
-| System State | - | diagnostic | enabled | Running, Idle, Stopped, Maintenance, Init or one of four Starting states |
+| Work Mode | - | diagnostic | enabled | Self-use or AI Schedule, as set in the app. Appears with the first full status report |
+| System State | - | diagnostic | enabled | Running, Idle, Stopped, Maintenance, Initializing or one of four Starting states, the same states the PowerOcean reports |
 | Control Mode | - | diagnostic | enabled | What currently overrides normal operation: None, Schedule, Task, Storm guard, AC backup, Eco and others. None means the work mode is in charge |
 
 ---
