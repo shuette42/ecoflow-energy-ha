@@ -91,7 +91,7 @@ Created under the same condition as the number above: exactly one PowerOcean in 
 | Wallbox Screen | The wallbox's screen, on or off. It shows only what the wallbox reports. It stays unknown until the wallbox has reported it, and it changes only when the wallbox says so. A change returns once the wallbox reports the new state on its next settings report, or fails if it does not. The screen's brightness is a separate number and is sent whether the screen is on or off |
 | Wallbox LED Indicator | The wallbox's LED indicator, on or off. It shows only what the wallbox reports. It stays unknown until the wallbox has reported it, and it changes only when the wallbox says so. A change returns once the wallbox reports the new state on its next settings report, or fails if it does not. Its brightness is a separate number |
 
-Created only when the integration entry holds exactly one PowerOcean, and only after the wallbox has sent its settings report (for Wallbox Screen and Wallbox LED Indicator, a report that carried the display values). A change is built from the wallbox's latest settings report. If no report has arrived yet, or the last one is too old, the change fails with a message and nothing is sent.
+Created only when the integration entry holds exactly one PowerOcean, and only after the wallbox has sent its settings report (for Wallbox Screen and Wallbox LED Indicator, a report that carried the display values). A change is built from the wallbox's latest settings report. If no report has arrived yet, or the last one is too old, the change waits up to 5 seconds for the next report; if none arrives, it fails with a message and nothing is sent.
 
 ---
 
