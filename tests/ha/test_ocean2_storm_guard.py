@@ -483,6 +483,36 @@ class TestPreWriteValueIsWhatTheUnitReported:
         assert coordinator.data["storm_guard_enabled"] is True
         assert _readback_missing(coordinator) == ["action=17"]
 
+    async def test_a_report_during_the_publish_does_not_count_as_reported(
+        self, hass: HomeAssistant, timers: _Timers
+    ) -> None:
+        """A snapshot that lands while the publish is in flight is overwritten
+        by the seed, so it must not mark the write as reported: a second toggle
+        still puts back the unit's "off", not the first write's "on".
+
+        Mutation probe: dropping the reset after the seed makes `pre` True.
+        """
+        coordinator, _, _ = _coordinator(hass)
+        coordinator._apply_data({"storm_guard_enabled": False})
+        real_send = coordinator.async_send_proto_set_command
+
+        async def send_with_report(*args: Any, **kwargs: Any) -> bool:
+            coordinator._apply_data({"storm_guard_enabled": False})
+            return await real_send(*args, **kwargs)
+
+        with patch.object(
+            coordinator, "async_send_proto_set_command", side_effect=send_with_report
+        ):
+            await coordinator.async_set_ocean2_storm_guard(True)
+        await coordinator.async_set_ocean2_storm_guard(False)
+        assert coordinator._ocean2_writes["storm_guard_enabled"].pre is False
+
+        timers.advance(36)
+        await _settle(hass)
+
+        assert coordinator.data["storm_guard_enabled"] is False
+        assert _readback_missing(coordinator) == ["action=17"]
+
     async def test_the_reserve_follows_the_same_rule(
         self, hass: HomeAssistant, timers: _Timers
     ) -> None:

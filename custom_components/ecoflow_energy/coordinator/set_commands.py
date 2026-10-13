@@ -83,11 +83,11 @@ class _Ocean2Write:
     reply that answers something else), `label` and `event_detail` name the
     write in the log and the event log. `snapshot_seen` means a snapshot
     carrying `state_key` arrived since the 8 s request. `reported` means a
-    snapshot carrying `state_key` arrived at any time since the publish, so the
-    store holds a value the unit reported and no longer this write's seed; it
-    is never reset. `rejected` means the device refused this write, which can
-    be known before the write's own coroutine has resumed from the publish
-    (event loop only).
+    snapshot carrying `state_key` arrived after this write's value was seeded,
+    so the store holds a value the unit reported and no longer this write's
+    seed; it is cleared once at seeding and never reset afterwards.
+    `rejected` means the device refused this write, which can be known before
+    the write's own coroutine has resumed from the publish (event loop only).
     """
 
     state_key: str
@@ -1332,6 +1332,9 @@ class SetCommandsMixin(_Base):
             self._ocean2_writes.pop(write.state_key, None)
             raise ValueError(refusal)
         self._seed_device_values(**{write.state_key: write.written})
+        # The seed replaces whatever a frame during the publish put in the
+        # store, so the store holds this write's value again, not the unit's.
+        write.reported = False
         self._arm_ocean2_readback(write)
         return True
 
