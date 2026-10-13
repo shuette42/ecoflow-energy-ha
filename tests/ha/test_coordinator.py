@@ -8929,6 +8929,8 @@ class TestLinkedUnitPower:
         assert "pv1_w" not in (stream.data or {})
         assert "units_handed_over" not in coordinator._unit_power_stats
         assert "pv_units_handed_over" not in coordinator._unit_power_stats
+        assert coordinator._unit_power_stats["units_kept_from_stream"] == 1
+        assert coordinator._unit_power_stats["pv_units_kept_from_stream"] == 1
 
     async def test_a_linked_stream_keeps_its_own_pv_strings_and_grid_connection(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry

@@ -1722,8 +1722,8 @@ The same download shows a second thing: an entry can carry its total and three o
 
 **Consequences:** `apply_linked_unit_entry` on the coordinator, a serial lookup beside the PowerOcean lookup that answers a different question, one constant for the hold, and a fixture from the reporter's third download with 21 real frames from both connections, serials rewritten by position, on which the whole day is replayed on the connections it arrived on; on beta.6 that replay ends with the quiet unit at five zeros. The reporter's pair is the first run of the hand-over on hardware.
 
-
 **Amended 2026-10-13 (#549).** The hand-over was built for two STREAM 5000 units, where the quiet unit has no other source for its strings. A Stream (for example a Stream Ultra) linked with a STREAM AC 5000 has one: its own frames carry PV 1 to 4 Power and its AC Grid Connection Power. The hold above cannot protect it, because it is anchored on the per-unit block arriving on the unit's own connection, and a Stream's own frames never carry that block. So both per-unit blocks, battery and PV, are handed only to another STREAM AC 5000; a linked Stream gets neither, and each of its readings keeps one writer. A STREAM AC 5000 group message with a Stream entry still lists it, and the entry is simply not handed on.
+
 ---
 
 ## ADR-030: A PowerOcean can be read over the local network as a third mode of its own; read-only, chosen by hand, one short connection per poll; an automatic switch between cloud and local is a separate decision

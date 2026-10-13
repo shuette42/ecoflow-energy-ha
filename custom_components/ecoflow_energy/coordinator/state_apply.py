@@ -209,7 +209,7 @@ class StateApplyMixin(_Base):
         between two coordinators handing each other the same entry back.
 
         `*_listed` / `own_*_matched` describe only the last own-connection
-        block, unchanged from before. The eight hand-over counters
+        block, unchanged from before. The hand-over counters
         (`linked_unit_stats`) are running totals.
 
         A battery entry of None is one the message could not sign (see
@@ -238,6 +238,9 @@ class StateApplyMixin(_Base):
                     if serial == self.device_sn or value is None:
                         continue
                     if self._linked_unit_is_stream(serial):
+                        stats["units_kept_from_stream"] = (
+                            stats.get("units_kept_from_stream", 0) + 1
+                        )
                         continue
                     stats["units_handed_over"] = stats.get("units_handed_over", 0) + 1
                     handoffs.setdefault(serial, {})[UNIT_POWER_BY_SN_KEY] = {
@@ -291,6 +294,9 @@ class StateApplyMixin(_Base):
                     if serial == self.device_sn:
                         continue
                     if self._linked_unit_is_stream(serial):
+                        stats["pv_units_kept_from_stream"] = (
+                            stats.get("pv_units_kept_from_stream", 0) + 1
+                        )
                         continue
                     stats["pv_units_handed_over"] = (
                         stats.get("pv_units_handed_over", 0) + 1
