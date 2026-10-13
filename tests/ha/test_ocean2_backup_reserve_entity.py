@@ -13,6 +13,7 @@ carried 23", not "the property happens to read 23 right now".
 
 from __future__ import annotations
 
+import threading
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -152,7 +153,7 @@ def _wire(entity: EcoFlowNumber, coordinator: EcoFlowDeviceCoordinator) -> list[
     Returns the list of values each state write carried.
     """
     shown: list[Any] = []
-    entity.async_write_ha_state = MagicMock(  # type: ignore[method-assign]
+    entity.async_write_ha_state = MagicMock(  # type: ignore[method-assign,misc]
         side_effect=lambda: shown.append(entity.native_value)
     )
     entity.entity_id = "number.ocean_2_backup_reserve"
@@ -317,6 +318,12 @@ class TestRefusalShown:
 
         def _publish_and_refuse(*args: Any, **kwargs: Any) -> bool:
             _refuse(coordinator)
+            # The refusal is queued on the loop. Return only after the loop
+            # has run it, so it beats the coroutine awaiting this publish on
+            # every runner, not just where the queue order happens to favour it.
+            handled = threading.Event()
+            hass.loop.call_soon_threadsafe(handled.set)
+            assert handled.wait(5)
             return True
 
         # A plain function, not a Mock: the harness runs a Mock target inline
