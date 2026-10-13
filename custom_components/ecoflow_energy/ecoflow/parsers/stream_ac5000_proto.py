@@ -245,7 +245,7 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
         # `.7` is the unit's AC power at its grid connection, positive out of
         # the unit, negative into it, the sign the Stream's AC Grid
         # Connection Power has. The same identity holds in every entry of the
-        # ten captures that carry it, ES21 and ES22: battery `.4` = solar
+        # recordings the tests replay, ES21 and ES22: battery `.4` = solar
         # `.3` - `.7` (- `.8`, the AC socket, where one is loaded).
         # Discharging into the house it reads +535.2 against `.4` = -535.2;
         # charging from the grid -599.6 against +599.6; a Stream Ultra feeding
