@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Verbindingsmodus",
-        "description": "Kies hoe je verbinding wilt maken met je EcoFlow-apparaten.\n\n**Standard** - Officiële EcoFlow IoT API. Ondersteund door EcoFlow. Updates elke 10-30 seconden. Vereist Developer API-sleutels.\n\n**Enhanced** - Door de community ontwikkelde realtime verbinding. Updates elke ~3 seconden. Vereist de inloggegevens van je EcoFlow-app. Onofficieel - gebruik op eigen risico.",
+        "description": "Kies hoe je verbinding wilt maken met je EcoFlow-apparaten.\n\n**Standard** - Officiële EcoFlow IoT API. Ondersteund door EcoFlow. Updates elke 10-30 seconden. Vereist Developer API-sleutels.\n\n**Enhanced** - Door de community ontwikkelde realtime verbinding. Updates elke ~3 seconden. Vereist de inloggegevens van je EcoFlow-app. Onofficieel - gebruik op eigen risico.\n\n**Local** - Directe Modbus/TCP-verbinding met een PowerOcean in je netwerk. Geen cloud en geen account nodig. Updates elke ~2 seconden. Toont waarden en kan twee instellingen wijzigen (back-upreserve en helderheid van de indicator). Alleen de driefasige PowerOcean wordt ondersteund. Modbus moet eerst door EcoFlow-support voor je apparaat worden ingeschakeld.",
         "data": {
           "mode": "Verbindingsmodus"
         }
@@ -22,6 +22,20 @@
         "data": {
           "email": "E-mail",
           "password": "Wachtwoord"
+        }
+      },
+      "local": {
+        "title": "Lokale Modbus/TCP-verbinding",
+        "description": "Verbind je PowerOcean rechtstreeks via Modbus/TCP, zonder de EcoFlow-cloud. De back-upreserve en de helderheid van de indicator kunnen vanuit Home Assistant worden gewijzigd. De schakelaar Modbus-besturing staat standaard uit en zolang die aan staat, is de EcoFlow-app vergrendeld.\n\nModbus moet eerst door EcoFlow-support voor je apparaat worden ingeschakeld. Het apparaat bedient slechts één Modbus-client tegelijk, dus sluit elk ander Modbus-programma voordat je verdergaat. Twee integraties kunnen het apparaat alleen delen als beide de gedeelde Modbus-verbinding van Home Assistant gebruiken met exact dezelfde host-tekenreeks.\n\nGebruik waar mogelijk de DNS-naam van het apparaat als host.",
+        "data": {
+          "host": "Host",
+          "port": "Poort",
+          "unit_id": "Unit-ID"
+        },
+        "data_description": {
+          "host": "DNS-naam (of adres) van de PowerOcean in je netwerk.",
+          "port": "Modbus/TCP-poort van het apparaat. 502, tenzij je apparaat een andere gebruikt.",
+          "unit_id": "Modbus-unit-ID van het apparaat. 1, tenzij die is gewijzigd."
         }
       },
       "devices": {
@@ -79,6 +93,25 @@
           "password": "Wachtwoord"
         }
       },
+      "reconfigure_menu": {
+        "title": "De verbinding wijzigen",
+        "description": "Kies hoe dit item verbinding maakt met het apparaat. Het item blijft bestaan, dus entiteiten die beide verbindingen leveren, behouden hun geschiedenis.",
+        "menu_options": {
+          "reconfigure_credentials": "Inloggegevens bijwerken",
+          "reconfigure_local": "Local (Modbus/TCP): host, poort en unit-ID",
+          "reconfigure_to_standard": "Standard: officiële EcoFlow API met Developer-sleutels",
+          "reconfigure_to_enhanced": "Enhanced: realtime met je EcoFlow-account"
+        }
+      },
+      "reconfigure_local": {
+        "title": "Lokale Modbus/TCP-verbinding",
+        "description": "Voer in waar de PowerOcean op Modbus/TCP antwoordt. Het moet hetzelfde apparaat zijn als in dit item: een apparaat met een ander serienummer wordt geweigerd. Bij overschakelen vanuit de cloud worden de opgeslagen inloggegevens uit dit item verwijderd.",
+        "data": {
+          "host": "Host",
+          "port": "Poort",
+          "unit_id": "Unit-ID"
+        }
+      },
       "devices_app": {
         "title": "Apparaten selecteren",
         "description": "Selecteer de EcoFlow-apparaten die je aan Home Assistant wilt toevoegen.\n\nEen apparaat met de markering \"not supported yet\" heeft hier geen parser en levert daarom alleen twee diagnostische sensoren. Het toch toevoegen is de moeite waard, want uit een download van diagnostische gegevens ervan, bijgevoegd bij een GitHub-issue, wordt de ondersteuning voor een nieuw model opgebouwd. Schakel eerst de opname van diagnostische gegevens in de integratie-opties in en download daarna, want bij aanmelding met je account bevat de download die ruwe data niet vanzelf.",
@@ -88,19 +121,27 @@
       }
     },
     "error": {
-      "cannot_connect": "Kan geen verbinding maken met de EcoFlow API. Controleer je inloggegevens.",
+      "cannot_connect": "Kan geen verbinding maken. Controleer bij de EcoFlow API je inloggegevens. Controleer bij een lokale verbinding de host en poort, of er geen andere Modbus-client is verbonden en of EcoFlow-support Modbus voor deze omvormer heeft ingeschakeld.",
       "invalid_auth": "Ongeldige toegangssleutel of geheime sleutel.",
       "no_devices": "Geen apparaten gevonden. Zorg dat de apparaten in de EcoFlow-app gekoppeld zijn.",
       "enhanced_login_failed": "Aanmelden in de Enhanced-modus is mislukt. Controleer het e-mailadres en wachtwoord van je EcoFlow-app.",
       "enhanced_decrypt_failed": "Ontsleutelen van de inloggegevens voor de Enhanced-modus is mislukt.",
       "powerstream_requires_standard": "PowerStream vereist de Standard-modus met Developer API-sleutels.",
       "device_requires_enhanced": "Dit apparaat vereist de Enhanced-modus met je EcoFlow-account.",
-      "unknown": "Er is een onverwachte fout opgetreden."
+      "unknown": "Er is een onverwachte fout opgetreden.",
+      "unsupported_device": "Dit apparaat is geen ondersteunde driefasige PowerOcean. Alleen dat model kan hier via Modbus worden uitgelezen.",
+      "serial_mismatch": "Dit apparaat heeft een ander serienummer dan het apparaat in dit item. Voer het adres van dezelfde PowerOcean in.",
+      "modbus_exception": "Het apparaat antwoordde met een Modbus-fout. Controleer de unit-ID en of Modbus voor je apparaat is ingeschakeld.",
+      "device_not_on_account": "Dit apparaat hoort niet bij het account waarmee je bent aangemeld.",
+      "device_in_other_entry": "Een geselecteerd apparaat is al ingesteld in een ander EcoFlow Energy-item, bijvoorbeeld een Local-item. Deselecteer het om door te gaan.",
+      "invalid_host": "Voer alleen een hostnaam of IP-adres in, zonder http://, pad of spaties."
     },
     "abort": {
-      "already_configured": "Dit EcoFlow-account is al geconfigureerd.",
+      "already_configured": "Dit EcoFlow-account of apparaat is al geconfigureerd.",
       "reauth_successful": "Herauthenticatie geslaagd.",
-      "reconfigure_successful": "Inloggegevens zijn bijgewerkt."
+      "reconfigure_successful": "Inloggegevens zijn bijgewerkt.",
+      "mode_switched": "Verbindingsmodus gewijzigd. De instellingen van de vorige modus zijn uit dit item verwijderd. Je apparaten en entiteiten blijven zoals ze zijn.",
+      "local_updated": "Instellingen voor de lokale verbinding bijgewerkt."
     }
   },
   "options": {
@@ -111,11 +152,13 @@
         "data": {
           "mode": "Verbindingsmodus",
           "devices": "Apparaten",
-          "raw_capture": "24 uur lang extra diagnostische gegevens opnemen"
+          "raw_capture": "24 uur lang extra diagnostische gegevens opnemen",
+          "powerpulse_vehicle_energy": "Voltooide PowerPulse-laadenergie per voertuig bijhouden"
         },
         "data_description": {
           "devices": "Een apparaat selecteren is wat deze integratie ertoe brengt het uit te lezen. Een apparaat met de markering \"not supported yet\" heeft hier geen parser en levert daarom twee diagnostische sensoren en verder niets. Het geselecteerd laten is toch de moeite waard, want uit een download van diagnostische gegevens ervan, bijgevoegd bij een GitHub-issue, wordt de ondersteuning voor een nieuw model opgebouwd. Je download van diagnostische gegevens bevat de ruwe data van zo'n apparaat al, dus er hoeft vooraf niets te worden ingeschakeld.",
-          "raw_capture": "Bewaart meer van de ruwe berichten die je apparaten sturen, neemt elk apparaat op dat deze integratie nog niet ondersteunt, en legt vast welke instellingen de EcoFlow-app naar je apparaten schrijft zolang dit loopt. Dat laatste is hoe een bedieningselement wordt gebouwd voor een model dat hier niemand bezit: de instelling één keer in de app wijzigen terwijl dit aanstaat, laat zien wat het apparaat accepteert. Alleen de moeite waard om in te schakelen als daar in een GitHub-issue om is gevraagd, want de gegevens zijn alleen nuttig als bijlage bij een download van diagnostische gegevens. Er wordt nooit iets naar je apparaten gestuurd, en de opname stopt vanzelf na 24 uur."
+          "raw_capture": "Bewaart meer van de ruwe berichten die je apparaten sturen, neemt elk apparaat op dat deze integratie nog niet ondersteunt, en legt vast welke instellingen de EcoFlow-app naar je apparaten schrijft zolang dit loopt. Dat laatste is hoe een bedieningselement wordt gebouwd voor een model dat hier niemand bezit: de instelling één keer in de app wijzigen terwijl dit aanstaat, laat zien wat het apparaat accepteert. Alleen de moeite waard om in te schakelen als daar in een GitHub-issue om is gevraagd, want de gegevens zijn alleen nuttig als bijlage bij een download van diagnostische gegevens. Er wordt nooit iets naar je apparaten gestuurd, en de opname stopt vanzelf na 24 uur.",
+          "powerpulse_vehicle_energy": "Leest voltooide laadsessies ongeveer elke 5 minuten uit je EcoFlow-account en bewaart er een lokaal overzicht van in Home Assistant. Dit overzicht wordt verwijderd wanneer je de integratie verwijdert."
         }
       },
       "developer": {
@@ -140,11 +183,13 @@
         "data": {
           "mode": "Verbindingsmodus",
           "devices": "Apparaten",
-          "raw_capture": "24 uur lang extra diagnostische gegevens opnemen"
+          "raw_capture": "24 uur lang extra diagnostische gegevens opnemen",
+          "powerpulse_vehicle_energy": "Voltooide PowerPulse-laadenergie per voertuig bijhouden"
         },
         "data_description": {
           "devices": "Een apparaat selecteren is wat deze integratie ertoe brengt het uit te lezen. Een apparaat met de markering \"not supported yet\" heeft hier geen parser en levert daarom twee diagnostische sensoren en verder niets. Het geselecteerd laten is toch de moeite waard, want uit een download van diagnostische gegevens ervan, bijgevoegd bij een GitHub-issue, wordt de ondersteuning voor een nieuw model opgebouwd. Schakel hieronder eerst de opname van diagnostische gegevens in en download daarna, want bij aanmelding met je account bevat de download die ruwe data niet vanzelf.",
-          "raw_capture": "Bewaart meer van de ruwe berichten die je apparaten sturen, neemt elk apparaat op dat deze integratie nog niet ondersteunt, en legt vast welke instellingen de EcoFlow-app naar je apparaten schrijft zolang dit loopt. Dat laatste is hoe een bedieningselement wordt gebouwd voor een model dat hier niemand bezit: de instelling één keer in de app wijzigen terwijl dit aanstaat, laat zien wat het apparaat accepteert. Alleen de moeite waard om in te schakelen als daar in een GitHub-issue om is gevraagd, want de gegevens zijn alleen nuttig als bijlage bij een download van diagnostische gegevens. Er wordt nooit iets naar je apparaten gestuurd, en de opname stopt vanzelf na 24 uur."
+          "raw_capture": "Bewaart meer van de ruwe berichten die je apparaten sturen, neemt elk apparaat op dat deze integratie nog niet ondersteunt, en legt vast welke instellingen de EcoFlow-app naar je apparaten schrijft zolang dit loopt. Dat laatste is hoe een bedieningselement wordt gebouwd voor een model dat hier niemand bezit: de instelling één keer in de app wijzigen terwijl dit aanstaat, laat zien wat het apparaat accepteert. Alleen de moeite waard om in te schakelen als daar in een GitHub-issue om is gevraagd, want de gegevens zijn alleen nuttig als bijlage bij een download van diagnostische gegevens. Er wordt nooit iets naar je apparaten gestuurd, en de opname stopt vanzelf na 24 uur.",
+          "powerpulse_vehicle_energy": "Leest voltooide laadsessies ongeveer elke 5 minuten uit je EcoFlow-account en bewaart er een lokaal overzicht van in Home Assistant. Dit overzicht wordt verwijderd wanneer je de integratie verwijdert."
         }
       }
     },
@@ -156,7 +201,11 @@
       "no_devices": "Selecteer minstens één apparaat.",
       "powerstream_requires_standard": "PowerStream vereist de Standard-modus met Developer API-sleutels.",
       "device_requires_enhanced": "Dit apparaat vereist de Enhanced-modus met je EcoFlow-account.",
-      "unknown": "Er is een onverwachte fout opgetreden."
+      "unknown": "Er is een onverwachte fout opgetreden.",
+      "device_in_other_entry": "Een geselecteerd apparaat is al ingesteld in een ander EcoFlow Energy-item, bijvoorbeeld een Local-item. Deselecteer het om door te gaan."
+    },
+    "abort": {
+      "local_use_reconfigure": "Dit item leest de PowerOcean lokaal uit via Modbus en heeft geen verbindingsmodus om te wijzigen. Gebruik Opnieuw configureren in het integratiemenu om de host, poort of unit-ID te wijzigen, of om terug te schakelen naar een cloudmodus."
     }
   },
   "entity": {
@@ -209,6 +258,9 @@
       "batt_discharge_power_w": {
         "name": "Ontlaadvermogen batterij"
       },
+      "batt_remaining_wh": {
+        "name": "Resterende batterij-energie"
+      },
       "heating_rod_water_temp_c": {
         "name": "Watertemperatuur verwarmingselement"
       },
@@ -254,11 +306,32 @@
       "grid_import_power_w": {
         "name": "Vermogen netafname"
       },
+      "ac_output_power_w": {
+        "name": "Vermogen AC-uitgang"
+      },
       "grid_export_power_w": {
         "name": "Vermogen netteruglevering"
       },
       "soc_pct": {
         "name": "Batterij-SOC"
+      },
+      "inverter_1_solar_w": {
+        "name": "Zonnevermogen omvormer 1"
+      },
+      "inverter_1_batt_w": {
+        "name": "Batterijvermogen omvormer 1"
+      },
+      "inverter_1_soc_pct": {
+        "name": "Batterij-SOC omvormer 1"
+      },
+      "inverter_2_solar_w": {
+        "name": "Zonnevermogen omvormer 2"
+      },
+      "inverter_2_batt_w": {
+        "name": "Batterijvermogen omvormer 2"
+      },
+      "inverter_2_soc_pct": {
+        "name": "Batterij-SOC omvormer 2"
       },
       "bp_soh_pct": {
         "name": "Batterij-SOH"
@@ -280,6 +353,21 @@
       },
       "grid_export_energy_kwh": {
         "name": "Energie netteruglevering"
+      },
+      "solar_lifetime_energy_kwh": {
+        "name": "Zonne-energie (levensduur)"
+      },
+      "grid_import_lifetime_energy_kwh": {
+        "name": "Energie netafname (levensduur)"
+      },
+      "grid_export_lifetime_energy_kwh": {
+        "name": "Energie netteruglevering (levensduur)"
+      },
+      "fault_count": {
+        "name": "Aantal storingen"
+      },
+      "local_system_alerts": {
+        "name": "Systeemmeldingen"
       },
       "batt_charge_energy_kwh": {
         "name": "Laadenergie batterij"
@@ -458,8 +546,8 @@
       "grid_status": {
         "name": "Netstatus",
         "state": {
-          "not_detected": "Niet gedetecteerd",
-          "ok": "OK"
+          "not_detected": "Off-grid",
+          "ok": "Netgekoppeld"
         }
       },
       "pcs_power_factor": {
@@ -496,6 +584,23 @@
       },
       "backup_reserve_pct": {
         "name": "Back-upreserve"
+      },
+      "ems_control_mode": {
+        "name": "Besturingsmodus",
+        "state": {
+          "none": "Geen",
+          "soc_calibration": "SoC-kalibratie",
+          "storm_guard": "Stormbeveiliging",
+          "eco": "Eco",
+          "task": "Taak",
+          "schedule": "Schema",
+          "ac_backup": "AC-back-up",
+          "grid_operator": "Netbeheerder",
+          "remote": "Extern",
+          "standby": "Stand-by",
+          "frequency_response": "Frequentieregeling",
+          "third_party": "Derde partij"
+        }
       },
       "max_charge_soc_pct": {
         "name": "Maximale laad-SoC"
@@ -1298,6 +1403,69 @@
       "pv_total_w": {
         "name": "Totaal PV-vermogen"
       },
+      "pcs_ac_power_w": {
+        "name": "AC-vermogen"
+      },
+      "inv_phase_a_voltage_v": {
+        "name": "Spanning omvormerfase A"
+      },
+      "inv_phase_b_voltage_v": {
+        "name": "Spanning omvormerfase B"
+      },
+      "inv_phase_c_voltage_v": {
+        "name": "Spanning omvormerfase C"
+      },
+      "inv_phase_a_current_a": {
+        "name": "Stroom omvormerfase A"
+      },
+      "inv_phase_b_current_a": {
+        "name": "Stroom omvormerfase B"
+      },
+      "inv_phase_c_current_a": {
+        "name": "Stroom omvormerfase C"
+      },
+      "inv_phase_a_active_power_w": {
+        "name": "Actief vermogen omvormerfase A"
+      },
+      "inv_phase_b_active_power_w": {
+        "name": "Actief vermogen omvormerfase B"
+      },
+      "inv_phase_c_active_power_w": {
+        "name": "Actief vermogen omvormerfase C"
+      },
+      "inv_phase_a_reactive_power_var": {
+        "name": "Blindvermogen omvormerfase A"
+      },
+      "inv_phase_b_reactive_power_var": {
+        "name": "Blindvermogen omvormerfase B"
+      },
+      "inv_phase_c_reactive_power_var": {
+        "name": "Blindvermogen omvormerfase C"
+      },
+      "inv_phase_a_apparent_power_va": {
+        "name": "Schijnbaar vermogen omvormerfase A"
+      },
+      "inv_phase_b_apparent_power_va": {
+        "name": "Schijnbaar vermogen omvormerfase B"
+      },
+      "inv_phase_c_apparent_power_va": {
+        "name": "Schijnbaar vermogen omvormerfase C"
+      },
+      "pv1_current_a": {
+        "name": "Stroom PV 1"
+      },
+      "pv3_voltage_v": {
+        "name": "Spanning PV 3"
+      },
+      "pv3_current_a": {
+        "name": "Stroom PV 3"
+      },
+      "pv4_voltage_v": {
+        "name": "Spanning PV 4"
+      },
+      "pv4_current_a": {
+        "name": "Stroom PV 4"
+      },
       "pv1_w": {
         "name": "PV 1 vermogen"
       },
@@ -1490,6 +1658,15 @@
           "faulted": "Storing"
         }
       },
+      "ev_charge_mode": {
+        "name": "Lademodus laadpaal",
+        "state": {
+          "fast": "Snelladen",
+          "solar": "Zonnemodus",
+          "custom": "Aangepast",
+          "smart": "Smart-modus"
+        }
+      },
       "ev_voltage_l1_v": {
         "name": "Spanning L1 laadpaal"
       },
@@ -1512,7 +1689,7 @@
         "name": "Maximale stroom laadpaal"
       },
       "ev_charge_current_a": {
-        "name": "Laadstroom laadpaal"
+        "name": "Streefwaarde laadstroom laadpaal"
       },
       "ev_phase_mode": {
         "name": "Fasemodus laadpaal",
@@ -1641,6 +1818,30 @@
       "schedule_8_window": {
         "name": "Tijdvenster schema 8"
       },
+      "feed_schedule_1_window": {
+        "name": "Tijdvenster terugleverschema 1"
+      },
+      "feed_schedule_2_window": {
+        "name": "Tijdvenster terugleverschema 2"
+      },
+      "feed_schedule_3_window": {
+        "name": "Tijdvenster terugleverschema 3"
+      },
+      "feed_schedule_4_window": {
+        "name": "Tijdvenster terugleverschema 4"
+      },
+      "feed_schedule_5_window": {
+        "name": "Tijdvenster terugleverschema 5"
+      },
+      "feed_schedule_6_window": {
+        "name": "Tijdvenster terugleverschema 6"
+      },
+      "feed_schedule_7_window": {
+        "name": "Tijdvenster terugleverschema 7"
+      },
+      "feed_schedule_8_window": {
+        "name": "Tijdvenster terugleverschema 8"
+      },
       "tilt_angle_deg": {
         "name": "Kantelhoek"
       },
@@ -1716,6 +1917,732 @@
       },
       "condensate_water_level": {
         "name": "Condenswaterniveau"
+      },
+      "module1_soc_pct": {
+        "name": "Module 1 SoC"
+      },
+      "module1_power_w": {
+        "name": "Module 1 vermogen"
+      },
+      "module1_remaining_wh": {
+        "name": "Module 1 resterende energie"
+      },
+      "module1_soh_pct": {
+        "name": "Module 1 SoH"
+      },
+      "module1_cycles": {
+        "name": "Module 1 laadcycli"
+      },
+      "module1_cell_temp_c": {
+        "name": "Module 1 celtemperatuur"
+      },
+      "module1_cell_temp_min_c": {
+        "name": "Module 1 celtemperatuur (min)"
+      },
+      "module1_cell_temp_max_c": {
+        "name": "Module 1 celtemperatuur (max)"
+      },
+      "module1_mos_temp_c": {
+        "name": "Module 1 temperatuur vermogenselektronica"
+      },
+      "module1_voltage_v": {
+        "name": "Module 1 spanning"
+      },
+      "module1_current_a": {
+        "name": "Module 1 stroom"
+      },
+      "module2_soc_pct": {
+        "name": "Module 2 SoC"
+      },
+      "module2_power_w": {
+        "name": "Module 2 vermogen"
+      },
+      "module2_remaining_wh": {
+        "name": "Module 2 resterende energie"
+      },
+      "module2_soh_pct": {
+        "name": "Module 2 SoH"
+      },
+      "module2_cycles": {
+        "name": "Module 2 laadcycli"
+      },
+      "module2_cell_temp_c": {
+        "name": "Module 2 celtemperatuur"
+      },
+      "module2_cell_temp_min_c": {
+        "name": "Module 2 celtemperatuur (min)"
+      },
+      "module2_cell_temp_max_c": {
+        "name": "Module 2 celtemperatuur (max)"
+      },
+      "module2_mos_temp_c": {
+        "name": "Module 2 temperatuur vermogenselektronica"
+      },
+      "module2_voltage_v": {
+        "name": "Module 2 spanning"
+      },
+      "module2_current_a": {
+        "name": "Module 2 stroom"
+      },
+      "module3_soc_pct": {
+        "name": "Module 3 SoC"
+      },
+      "module3_power_w": {
+        "name": "Module 3 vermogen"
+      },
+      "module3_remaining_wh": {
+        "name": "Module 3 resterende energie"
+      },
+      "module3_soh_pct": {
+        "name": "Module 3 SoH"
+      },
+      "module3_cycles": {
+        "name": "Module 3 laadcycli"
+      },
+      "module3_cell_temp_c": {
+        "name": "Module 3 celtemperatuur"
+      },
+      "module3_cell_temp_min_c": {
+        "name": "Module 3 celtemperatuur (min)"
+      },
+      "module3_cell_temp_max_c": {
+        "name": "Module 3 celtemperatuur (max)"
+      },
+      "module3_mos_temp_c": {
+        "name": "Module 3 temperatuur vermogenselektronica"
+      },
+      "module3_voltage_v": {
+        "name": "Module 3 spanning"
+      },
+      "module3_current_a": {
+        "name": "Module 3 stroom"
+      },
+      "module4_soc_pct": {
+        "name": "Module 4 SoC"
+      },
+      "module4_power_w": {
+        "name": "Module 4 vermogen"
+      },
+      "module4_remaining_wh": {
+        "name": "Module 4 resterende energie"
+      },
+      "module4_soh_pct": {
+        "name": "Module 4 SoH"
+      },
+      "module4_cycles": {
+        "name": "Module 4 laadcycli"
+      },
+      "module4_cell_temp_c": {
+        "name": "Module 4 celtemperatuur"
+      },
+      "module4_cell_temp_min_c": {
+        "name": "Module 4 celtemperatuur (min)"
+      },
+      "module4_cell_temp_max_c": {
+        "name": "Module 4 celtemperatuur (max)"
+      },
+      "module4_mos_temp_c": {
+        "name": "Module 4 temperatuur vermogenselektronica"
+      },
+      "module4_voltage_v": {
+        "name": "Module 4 spanning"
+      },
+      "module4_current_a": {
+        "name": "Module 4 stroom"
+      },
+      "module5_soc_pct": {
+        "name": "Module 5 SoC"
+      },
+      "module5_power_w": {
+        "name": "Module 5 vermogen"
+      },
+      "module5_remaining_wh": {
+        "name": "Module 5 resterende energie"
+      },
+      "module5_soh_pct": {
+        "name": "Module 5 SoH"
+      },
+      "module5_cycles": {
+        "name": "Module 5 laadcycli"
+      },
+      "module5_cell_temp_c": {
+        "name": "Module 5 celtemperatuur"
+      },
+      "module5_cell_temp_min_c": {
+        "name": "Module 5 celtemperatuur (min)"
+      },
+      "module5_cell_temp_max_c": {
+        "name": "Module 5 celtemperatuur (max)"
+      },
+      "module5_mos_temp_c": {
+        "name": "Module 5 temperatuur vermogenselektronica"
+      },
+      "module5_voltage_v": {
+        "name": "Module 5 spanning"
+      },
+      "module5_current_a": {
+        "name": "Module 5 stroom"
+      },
+      "module6_soc_pct": {
+        "name": "Module 6 SoC"
+      },
+      "module6_power_w": {
+        "name": "Module 6 vermogen"
+      },
+      "module6_remaining_wh": {
+        "name": "Module 6 resterende energie"
+      },
+      "module6_soh_pct": {
+        "name": "Module 6 SoH"
+      },
+      "module6_cycles": {
+        "name": "Module 6 laadcycli"
+      },
+      "module6_cell_temp_c": {
+        "name": "Module 6 celtemperatuur"
+      },
+      "module6_cell_temp_min_c": {
+        "name": "Module 6 celtemperatuur (min)"
+      },
+      "module6_cell_temp_max_c": {
+        "name": "Module 6 celtemperatuur (max)"
+      },
+      "module6_mos_temp_c": {
+        "name": "Module 6 temperatuur vermogenselektronica"
+      },
+      "module6_voltage_v": {
+        "name": "Module 6 spanning"
+      },
+      "module6_current_a": {
+        "name": "Module 6 stroom"
+      },
+      "module7_soc_pct": {
+        "name": "Module 7 SoC"
+      },
+      "module7_power_w": {
+        "name": "Module 7 vermogen"
+      },
+      "module7_remaining_wh": {
+        "name": "Module 7 resterende energie"
+      },
+      "module7_soh_pct": {
+        "name": "Module 7 SoH"
+      },
+      "module7_cycles": {
+        "name": "Module 7 laadcycli"
+      },
+      "module7_cell_temp_c": {
+        "name": "Module 7 celtemperatuur"
+      },
+      "module7_cell_temp_min_c": {
+        "name": "Module 7 celtemperatuur (min)"
+      },
+      "module7_cell_temp_max_c": {
+        "name": "Module 7 celtemperatuur (max)"
+      },
+      "module7_mos_temp_c": {
+        "name": "Module 7 temperatuur vermogenselektronica"
+      },
+      "module7_voltage_v": {
+        "name": "Module 7 spanning"
+      },
+      "module7_current_a": {
+        "name": "Module 7 stroom"
+      },
+      "module8_soc_pct": {
+        "name": "Module 8 SoC"
+      },
+      "module8_power_w": {
+        "name": "Module 8 vermogen"
+      },
+      "module8_remaining_wh": {
+        "name": "Module 8 resterende energie"
+      },
+      "module8_soh_pct": {
+        "name": "Module 8 SoH"
+      },
+      "module8_cycles": {
+        "name": "Module 8 laadcycli"
+      },
+      "module8_cell_temp_c": {
+        "name": "Module 8 celtemperatuur"
+      },
+      "module8_cell_temp_min_c": {
+        "name": "Module 8 celtemperatuur (min)"
+      },
+      "module8_cell_temp_max_c": {
+        "name": "Module 8 celtemperatuur (max)"
+      },
+      "module8_mos_temp_c": {
+        "name": "Module 8 temperatuur vermogenselektronica"
+      },
+      "module8_voltage_v": {
+        "name": "Module 8 spanning"
+      },
+      "module8_current_a": {
+        "name": "Module 8 stroom"
+      },
+      "module9_soc_pct": {
+        "name": "Module 9 SoC"
+      },
+      "module9_power_w": {
+        "name": "Module 9 vermogen"
+      },
+      "module9_remaining_wh": {
+        "name": "Module 9 resterende energie"
+      },
+      "module9_soh_pct": {
+        "name": "Module 9 SoH"
+      },
+      "module9_cycles": {
+        "name": "Module 9 laadcycli"
+      },
+      "module9_cell_temp_c": {
+        "name": "Module 9 celtemperatuur"
+      },
+      "module9_cell_temp_min_c": {
+        "name": "Module 9 celtemperatuur (min)"
+      },
+      "module9_cell_temp_max_c": {
+        "name": "Module 9 celtemperatuur (max)"
+      },
+      "module9_mos_temp_c": {
+        "name": "Module 9 temperatuur vermogenselektronica"
+      },
+      "module9_voltage_v": {
+        "name": "Module 9 spanning"
+      },
+      "module9_current_a": {
+        "name": "Module 9 stroom"
+      },
+      "module10_soc_pct": {
+        "name": "Module 10 SoC"
+      },
+      "module10_power_w": {
+        "name": "Module 10 vermogen"
+      },
+      "module10_remaining_wh": {
+        "name": "Module 10 resterende energie"
+      },
+      "module10_soh_pct": {
+        "name": "Module 10 SoH"
+      },
+      "module10_cycles": {
+        "name": "Module 10 laadcycli"
+      },
+      "module10_cell_temp_c": {
+        "name": "Module 10 celtemperatuur"
+      },
+      "module10_cell_temp_min_c": {
+        "name": "Module 10 celtemperatuur (min)"
+      },
+      "module10_cell_temp_max_c": {
+        "name": "Module 10 celtemperatuur (max)"
+      },
+      "module10_mos_temp_c": {
+        "name": "Module 10 temperatuur vermogenselektronica"
+      },
+      "module10_voltage_v": {
+        "name": "Module 10 spanning"
+      },
+      "module10_current_a": {
+        "name": "Module 10 stroom"
+      },
+      "module11_soc_pct": {
+        "name": "Module 11 SoC"
+      },
+      "module11_power_w": {
+        "name": "Module 11 vermogen"
+      },
+      "module11_remaining_wh": {
+        "name": "Module 11 resterende energie"
+      },
+      "module11_soh_pct": {
+        "name": "Module 11 SoH"
+      },
+      "module11_cycles": {
+        "name": "Module 11 laadcycli"
+      },
+      "module11_cell_temp_c": {
+        "name": "Module 11 celtemperatuur"
+      },
+      "module11_cell_temp_min_c": {
+        "name": "Module 11 celtemperatuur (min)"
+      },
+      "module11_cell_temp_max_c": {
+        "name": "Module 11 celtemperatuur (max)"
+      },
+      "module11_mos_temp_c": {
+        "name": "Module 11 temperatuur vermogenselektronica"
+      },
+      "module11_voltage_v": {
+        "name": "Module 11 spanning"
+      },
+      "module11_current_a": {
+        "name": "Module 11 stroom"
+      },
+      "module12_soc_pct": {
+        "name": "Module 12 SoC"
+      },
+      "module12_power_w": {
+        "name": "Module 12 vermogen"
+      },
+      "module12_remaining_wh": {
+        "name": "Module 12 resterende energie"
+      },
+      "module12_soh_pct": {
+        "name": "Module 12 SoH"
+      },
+      "module12_cycles": {
+        "name": "Module 12 laadcycli"
+      },
+      "module12_cell_temp_c": {
+        "name": "Module 12 celtemperatuur"
+      },
+      "module12_cell_temp_min_c": {
+        "name": "Module 12 celtemperatuur (min)"
+      },
+      "module12_cell_temp_max_c": {
+        "name": "Module 12 celtemperatuur (max)"
+      },
+      "module12_mos_temp_c": {
+        "name": "Module 12 temperatuur vermogenselektronica"
+      },
+      "module12_voltage_v": {
+        "name": "Module 12 spanning"
+      },
+      "module12_current_a": {
+        "name": "Module 12 stroom"
+      },
+      "module13_soc_pct": {
+        "name": "Module 13 SoC"
+      },
+      "module13_power_w": {
+        "name": "Module 13 vermogen"
+      },
+      "module13_remaining_wh": {
+        "name": "Module 13 resterende energie"
+      },
+      "module13_soh_pct": {
+        "name": "Module 13 SoH"
+      },
+      "module13_cycles": {
+        "name": "Module 13 laadcycli"
+      },
+      "module13_cell_temp_c": {
+        "name": "Module 13 celtemperatuur"
+      },
+      "module13_cell_temp_min_c": {
+        "name": "Module 13 celtemperatuur (min)"
+      },
+      "module13_cell_temp_max_c": {
+        "name": "Module 13 celtemperatuur (max)"
+      },
+      "module13_mos_temp_c": {
+        "name": "Module 13 temperatuur vermogenselektronica"
+      },
+      "module13_voltage_v": {
+        "name": "Module 13 spanning"
+      },
+      "module13_current_a": {
+        "name": "Module 13 stroom"
+      },
+      "module14_soc_pct": {
+        "name": "Module 14 SoC"
+      },
+      "module14_power_w": {
+        "name": "Module 14 vermogen"
+      },
+      "module14_remaining_wh": {
+        "name": "Module 14 resterende energie"
+      },
+      "module14_soh_pct": {
+        "name": "Module 14 SoH"
+      },
+      "module14_cycles": {
+        "name": "Module 14 laadcycli"
+      },
+      "module14_cell_temp_c": {
+        "name": "Module 14 celtemperatuur"
+      },
+      "module14_cell_temp_min_c": {
+        "name": "Module 14 celtemperatuur (min)"
+      },
+      "module14_cell_temp_max_c": {
+        "name": "Module 14 celtemperatuur (max)"
+      },
+      "module14_mos_temp_c": {
+        "name": "Module 14 temperatuur vermogenselektronica"
+      },
+      "module14_voltage_v": {
+        "name": "Module 14 spanning"
+      },
+      "module14_current_a": {
+        "name": "Module 14 stroom"
+      },
+      "module15_soc_pct": {
+        "name": "Module 15 SoC"
+      },
+      "module15_power_w": {
+        "name": "Module 15 vermogen"
+      },
+      "module15_remaining_wh": {
+        "name": "Module 15 resterende energie"
+      },
+      "module15_soh_pct": {
+        "name": "Module 15 SoH"
+      },
+      "module15_cycles": {
+        "name": "Module 15 laadcycli"
+      },
+      "module15_cell_temp_c": {
+        "name": "Module 15 celtemperatuur"
+      },
+      "module15_cell_temp_min_c": {
+        "name": "Module 15 celtemperatuur (min)"
+      },
+      "module15_cell_temp_max_c": {
+        "name": "Module 15 celtemperatuur (max)"
+      },
+      "module15_mos_temp_c": {
+        "name": "Module 15 temperatuur vermogenselektronica"
+      },
+      "module15_voltage_v": {
+        "name": "Module 15 spanning"
+      },
+      "module15_current_a": {
+        "name": "Module 15 stroom"
+      },
+      "module16_soc_pct": {
+        "name": "Module 16 SoC"
+      },
+      "module16_power_w": {
+        "name": "Module 16 vermogen"
+      },
+      "module16_remaining_wh": {
+        "name": "Module 16 resterende energie"
+      },
+      "module16_soh_pct": {
+        "name": "Module 16 SoH"
+      },
+      "module16_cycles": {
+        "name": "Module 16 laadcycli"
+      },
+      "module16_cell_temp_c": {
+        "name": "Module 16 celtemperatuur"
+      },
+      "module16_cell_temp_min_c": {
+        "name": "Module 16 celtemperatuur (min)"
+      },
+      "module16_cell_temp_max_c": {
+        "name": "Module 16 celtemperatuur (max)"
+      },
+      "module16_mos_temp_c": {
+        "name": "Module 16 temperatuur vermogenselektronica"
+      },
+      "module16_voltage_v": {
+        "name": "Module 16 spanning"
+      },
+      "module16_current_a": {
+        "name": "Module 16 stroom"
+      },
+      "module1_cell_voltage_mv": {
+        "name": "Module 1 celspanning (max)"
+      },
+      "module2_cell_voltage_mv": {
+        "name": "Module 2 celspanning (max)"
+      },
+      "module3_cell_voltage_mv": {
+        "name": "Module 3 celspanning (max)"
+      },
+      "module4_cell_voltage_mv": {
+        "name": "Module 4 celspanning (max)"
+      },
+      "module5_cell_voltage_mv": {
+        "name": "Module 5 celspanning (max)"
+      },
+      "module6_cell_voltage_mv": {
+        "name": "Module 6 celspanning (max)"
+      },
+      "module7_cell_voltage_mv": {
+        "name": "Module 7 celspanning (max)"
+      },
+      "module8_cell_voltage_mv": {
+        "name": "Module 8 celspanning (max)"
+      },
+      "module9_cell_voltage_mv": {
+        "name": "Module 9 celspanning (max)"
+      },
+      "module10_cell_voltage_mv": {
+        "name": "Module 10 celspanning (max)"
+      },
+      "module11_cell_voltage_mv": {
+        "name": "Module 11 celspanning (max)"
+      },
+      "module12_cell_voltage_mv": {
+        "name": "Module 12 celspanning (max)"
+      },
+      "module13_cell_voltage_mv": {
+        "name": "Module 13 celspanning (max)"
+      },
+      "module14_cell_voltage_mv": {
+        "name": "Module 14 celspanning (max)"
+      },
+      "module15_cell_voltage_mv": {
+        "name": "Module 15 celspanning (max)"
+      },
+      "module16_cell_voltage_mv": {
+        "name": "Module 16 celspanning (max)"
+      },
+      "grid_leg_l1_voltage_v": {
+        "name": "Spanning net L1"
+      },
+      "grid_leg_l2_voltage_v": {
+        "name": "Spanning net L2"
+      },
+      "grid_leg_l1_current_a": {
+        "name": "Stroom net L1"
+      },
+      "grid_leg_l2_current_a": {
+        "name": "Stroom net L2"
+      },
+      "grid_l1_power_w": {
+        "name": "Vermogen net L1"
+      },
+      "grid_l2_power_w": {
+        "name": "Vermogen net L2"
+      },
+      "grid_l1_apparent_power_va": {
+        "name": "Schijnbaar vermogen net L1"
+      },
+      "grid_l2_apparent_power_va": {
+        "name": "Schijnbaar vermogen net L2"
+      },
+      "grid_l1_reactive_power_var": {
+        "name": "Blindvermogen net L1"
+      },
+      "grid_l2_reactive_power_var": {
+        "name": "Blindvermogen net L2"
+      },
+      "grid_nominal_voltage_v": {
+        "name": "Nominale netspanning"
+      },
+      "grid_nominal_frequency_hz": {
+        "name": "Nominale netfrequentie"
+      },
+      "grid_code": {
+        "name": "Netcode"
+      },
+      "circuit_power_w": {
+        "name": "Vermogen stroomkring {label}"
+      },
+      "circuit_voltage_v": {
+        "name": "Spanning stroomkring {label}"
+      },
+      "circuit_current_a": {
+        "name": "Stroom stroomkring {label}"
+      },
+      "power_io_in_w": {
+        "name": "Ingang Power In/Out-poort"
+      },
+      "power_io_out_w": {
+        "name": "Uitgang Power In/Out-poort"
+      },
+      "solar_lv_in_w": {
+        "name": "Vermogen zonne-ingang LV"
+      },
+      "solar_hv_in_w": {
+        "name": "Vermogen zonne-ingang HV"
+      },
+      "ac_out_l1_1_w": {
+        "name": "Vermogen AC-uitgang L1-1"
+      },
+      "ac_out_l1_2_w": {
+        "name": "Vermogen AC-uitgang L1-2"
+      },
+      "ac_out_l2_1_w": {
+        "name": "Vermogen AC-uitgang L2-1"
+      },
+      "ac_out_l2_2_w": {
+        "name": "Vermogen AC-uitgang L2-2"
+      },
+      "ac_out_tt30_w": {
+        "name": "Vermogen AC-uitgang TT-30"
+      },
+      "ac_out_l14_w": {
+        "name": "Vermogen AC-uitgang L14-30"
+      },
+      "inv_ac_temp_c": {
+        "name": "Omvormertemperatuur"
+      },
+      "pd_temp_c": {
+        "name": "Systeemtemperatuur"
+      },
+      "bp1_soc_pct": {
+        "name": "Batterijpack 1 SOC"
+      },
+      "bp1_temp_c": {
+        "name": "Batterijpack 1 temperatuur"
+      },
+      "bp2_soc_pct": {
+        "name": "Batterijpack 2 SOC"
+      },
+      "bp2_temp_c": {
+        "name": "Batterijpack 2 temperatuur"
+      },
+      "bp3_soc_pct": {
+        "name": "Batterijpack 3 SOC"
+      },
+      "bp3_temp_c": {
+        "name": "Batterijpack 3 temperatuur"
+      },
+      "bp4_soc_pct": {
+        "name": "Batterijpack 4 SOC"
+      },
+      "bp4_temp_c": {
+        "name": "Batterijpack 4 temperatuur"
+      },
+      "bp5_soc_pct": {
+        "name": "Batterijpack 5 SOC"
+      },
+      "bp5_temp_c": {
+        "name": "Batterijpack 5 temperatuur"
+      },
+      "grid_voltage_v": {
+        "name": "Netspanning"
+      },
+      "battery_full_capacity_wh": {
+        "name": "Volledige batterijcapaciteit"
+      },
+      "backup_runtime_min": {
+        "name": "Back-upduur"
+      },
+      "storage_ch1_soc_pct": {
+        "name": "Opslagkanaal 1 SOC"
+      },
+      "storage_ch2_soc_pct": {
+        "name": "Opslagkanaal 2 SOC"
+      },
+      "storage_ch3_soc_pct": {
+        "name": "Opslagkanaal 3 SOC"
+      },
+      "local_system_batt_voltage_v": {
+        "name": "Batterijspanning systeem"
+      },
+      "local_system_batt_current_a": {
+        "name": "Batterijstroom systeem"
+      },
+      "local_system_batt_temp_c": {
+        "name": "Batterijtemperatuur systeem"
+      },
+      "vehicle_energy": {
+        "name": "Energie voltooide laadsessies laadpaal {vehicle}"
+      },
+      "unnamed_vehicle_energy": {
+        "name": "Energie voltooide laadsessies laadpaal voertuig zonder naam"
+      },
+      "other_vehicle_energy": {
+        "name": "Energie voltooide laadsessies laadpaal niet toegewezen"
       }
     },
     "binary_sensor": {
@@ -1758,6 +2685,9 @@
       "port_priority_active": {
         "name": "Poortprioriteit actief"
       },
+      "ac_out_flow": {
+        "name": "AC-uitgang"
+      },
       "backup_reserve_enabled": {
         "name": "Back-upreserve"
       },
@@ -1788,6 +2718,30 @@
       "schedule_8_running": {
         "name": "Schema 8 actief"
       },
+      "feed_schedule_1_running": {
+        "name": "Terugleverschema 1 actief"
+      },
+      "feed_schedule_2_running": {
+        "name": "Terugleverschema 2 actief"
+      },
+      "feed_schedule_3_running": {
+        "name": "Terugleverschema 3 actief"
+      },
+      "feed_schedule_4_running": {
+        "name": "Terugleverschema 4 actief"
+      },
+      "feed_schedule_5_running": {
+        "name": "Terugleverschema 5 actief"
+      },
+      "feed_schedule_6_running": {
+        "name": "Terugleverschema 6 actief"
+      },
+      "feed_schedule_7_running": {
+        "name": "Terugleverschema 7 actief"
+      },
+      "feed_schedule_8_running": {
+        "name": "Terugleverschema 8 actief"
+      },
       "grid_l1_connected": {
         "name": "Fase A verbonden"
       },
@@ -1814,6 +2768,21 @@
       },
       "ev_cable_lock_enabled": {
         "name": "Kabelvergrendeling laadpaal"
+      },
+      "circuit_on": {
+        "name": "Stroomkring {label} aan"
+      },
+      "modbus_control_active": {
+        "name": "Modbus-besturing actief"
+      },
+      "local_off_grid": {
+        "name": "Off-grid"
+      },
+      "local_system_abnormal": {
+        "name": "Systeemstoring"
+      },
+      "local_bms_connected": {
+        "name": "Batterijverbinding"
       }
     },
     "switch": {
@@ -1898,6 +2867,30 @@
       "schedule_8_enabled": {
         "name": "Schema 8 ingeschakeld"
       },
+      "feed_schedule_1_enabled": {
+        "name": "Terugleverschema 1 ingeschakeld"
+      },
+      "feed_schedule_2_enabled": {
+        "name": "Terugleverschema 2 ingeschakeld"
+      },
+      "feed_schedule_3_enabled": {
+        "name": "Terugleverschema 3 ingeschakeld"
+      },
+      "feed_schedule_4_enabled": {
+        "name": "Terugleverschema 4 ingeschakeld"
+      },
+      "feed_schedule_5_enabled": {
+        "name": "Terugleverschema 5 ingeschakeld"
+      },
+      "feed_schedule_6_enabled": {
+        "name": "Terugleverschema 6 ingeschakeld"
+      },
+      "feed_schedule_7_enabled": {
+        "name": "Terugleverschema 7 ingeschakeld"
+      },
+      "feed_schedule_8_enabled": {
+        "name": "Terugleverschema 8 ingeschakeld"
+      },
       "power": {
         "name": "Aan/uit"
       },
@@ -1909,6 +2902,27 @@
       },
       "pet_care_enabled": {
         "name": "Huisdiermodus"
+      },
+      "modbus_control": {
+        "name": "Modbus-besturing"
+      },
+      "ev_continuous_charging": {
+        "name": "Continu laden laadpaal"
+      },
+      "ev_battery_discharge_block": {
+        "name": "Batterijontlading blokkeren laadpaal"
+      },
+      "ev_plug_and_play": {
+        "name": "Plug-and-play laadpaal"
+      },
+      "ev_screen_enabled": {
+        "name": "Scherm laadpaal"
+      },
+      "ev_led_enabled": {
+        "name": "LED-indicator laadpaal"
+      },
+      "storm_guard": {
+        "name": "Stormbeveiliging"
       }
     },
     "number": {
@@ -1929,6 +2943,12 @@
       },
       "solar_surplus_threshold": {
         "name": "Drempel zonne-overschot"
+      },
+      "heating_rod_target_power_w": {
+        "name": "Doelvermogen verwarmingselement"
+      },
+      "heating_rod_target_temp_c": {
+        "name": "Doeltemperatuur verwarmingselement"
       },
       "standby_timeout": {
         "name": "Stand-by-time-out"
@@ -2008,6 +3028,30 @@
       "schedule_8_power_w": {
         "name": "Schema 8 laadvermogen"
       },
+      "feed_schedule_1_power_w": {
+        "name": "Terugleverschema 1 terugleververmogen"
+      },
+      "feed_schedule_2_power_w": {
+        "name": "Terugleverschema 2 terugleververmogen"
+      },
+      "feed_schedule_3_power_w": {
+        "name": "Terugleverschema 3 terugleververmogen"
+      },
+      "feed_schedule_4_power_w": {
+        "name": "Terugleverschema 4 terugleververmogen"
+      },
+      "feed_schedule_5_power_w": {
+        "name": "Terugleverschema 5 terugleververmogen"
+      },
+      "feed_schedule_6_power_w": {
+        "name": "Terugleverschema 6 terugleververmogen"
+      },
+      "feed_schedule_7_power_w": {
+        "name": "Terugleverschema 7 terugleververmogen"
+      },
+      "feed_schedule_8_power_w": {
+        "name": "Terugleverschema 8 terugleververmogen"
+      },
       "target_temp_c": {
         "name": "Doeltemperatuur"
       },
@@ -2022,6 +3066,30 @@
       },
       "pet_care_warning_temp_c": {
         "name": "Waarschuwingstemperatuur huisdiermodus"
+      },
+      "ev_max_current_a": {
+        "name": "Maximale stroom laadpaal"
+      },
+      "ev_charge_current_a": {
+        "name": "Streefwaarde laadstroom laadpaal"
+      },
+      "ev_solar_min_current_a": {
+        "name": "Minimale zonnestroom laadpaal"
+      },
+      "ev_custom_current_a": {
+        "name": "Aangepaste laadstroom laadpaal"
+      },
+      "ev_screen_brightness_pct": {
+        "name": "Schermhelderheid laadpaal"
+      },
+      "ev_led_brightness_pct": {
+        "name": "LED-helderheid laadpaal"
+      },
+      "local_backup_reserve": {
+        "name": "Back-upreserve"
+      },
+      "local_indicator_brightness": {
+        "name": "Helderheid indicator"
       }
     },
     "select": {
@@ -2033,6 +3101,14 @@
           "self_powered": "Zelfvoorzienend",
           "intelligent_plus": "Intelligente modus+",
           "custom": "Aangepast"
+        }
+      },
+      "heating_rod_operating_mode": {
+        "name": "Modus verwarmingselement",
+        "state": {
+          "off": "Uit",
+          "solar": "Zon",
+          "manual": "Handmatig"
         }
       },
       "screen_timeout": {
@@ -2143,6 +3219,23 @@
           "10min": "10 min",
           "never": "Nooit"
         }
+      },
+      "ev_charge_mode": {
+        "name": "Lademodus laadpaal",
+        "state": {
+          "fast": "Snelladen",
+          "solar": "Zonnemodus",
+          "custom": "Aangepast",
+          "smart": "Smart-modus"
+        }
+      },
+      "ev_phase_setting": {
+        "name": "Faseinstelling laadpaal",
+        "state": {
+          "auto": "Automatisch",
+          "one_phase": "Eenfasig",
+          "three_phases": "Driefasig"
+        }
       }
     },
     "button": {
@@ -2170,26 +3263,131 @@
     "set_value_rejected": {
       "message": "{entity} kan niet op die waarde worden ingesteld: {reason}"
     },
+    "powerglow_not_confirmed": {
+      "message": "Het verwarmingselement heeft de nieuwe instelling niet binnen de toegestane tijd gemeld. De sensoren ervan tonen wat het meldt."
+    },
+    "powerglow_not_delivered": {
+      "message": "De opdracht voor het verwarmingselement kon niet worden verzonden."
+    },
+    "powerglow_not_reported": {
+      "message": "De PowerOcean heeft het verwarmingselement nog niet gemeld. Wacht op de volgende melding."
+    },
+    "powerglow_offline": {
+      "message": "De verbinding van de PowerOcean is niet actief, dus de opdracht voor het verwarmingselement kan niet worden verzonden."
+    },
+    "powerglow_target_power_range": {
+      "message": "Het verwarmingselement accepteert een doelvermogen tussen {min} en {max} W."
+    },
+    "powerglow_target_temp_range": {
+      "message": "Het verwarmingselement accepteert een doeltemperatuur tussen {min} en {max} °C."
+    },
+    "powerglow_write_in_progress": {
+      "message": "Een eerdere opdracht wacht nog op bevestiging door het verwarmingselement. Probeer het opnieuw zodra die is bevestigd."
+    },
     "powerpulse_action_in_progress": {
-      "message": "Een start of stop voor deze laadpaal wacht nog op bevestiging van het apparaat."
+      "message": "Een eerdere opdracht wacht nog op bevestiging door de laadpaal. Probeer het opnieuw zodra die is bevestigd."
     },
     "powerpulse_action_not_confirmed": {
       "message": "De laadpaal heeft de gevraagde status niet binnen de toegestane tijd gerapporteerd. Zijn sensoren tonen wat hij wel rapporteert."
     },
     "powerpulse_action_not_delivered": {
-      "message": "De opdracht voor de laadpaal heeft de PowerOcean niet bereikt."
+      "message": "De opdracht voor de laadpaal kon niet worden verzonden."
     },
     "powerpulse_action_state": {
       "message": "De laadpaal rapporteert {status}, en dat laat deze actie niet toe."
     },
+    "powerpulse_charge_current_needs_own_channel": {
+      "message": "De laadstroom kan alleen worden ingesteld op een laadpaal zonder PowerOcean op hetzelfde account; dit item heeft er een."
+    },
+    "powerpulse_charge_current_not_confirmed": {
+      "message": "De laadpaal heeft de nieuwe laadstroom niet binnen de toegestane tijd gemeld. Laatst gemelde waarde: {reported}."
+    },
+    "powerpulse_charge_current_range": {
+      "message": "De laadpaal accepteert een laadstroom tussen {min} en {max} A."
+    },
+    "powerpulse_charge_current_route_ambiguous": {
+      "message": "Dit item bevat meer dan één PowerOcean; de laadstroom is alleen als schrijfbaar waargenomen op een laadpaal zonder PowerOcean, dus wordt hij hier ook geweigerd."
+    },
+    "powerpulse_charge_mode_needs_powerocean": {
+      "message": "De laadmodus kan alleen worden ingesteld via een PowerOcean op hetzelfde account; dit item heeft er geen."
+    },
+    "powerpulse_charge_mode_not_confirmed": {
+      "message": "De laadpaal heeft de nieuwe laadmodus niet binnen de toegestane tijd gemeld. Laatst gemelde modus: {reported}."
+    },
+    "powerpulse_charge_mode_smart_in_app": {
+      "message": "Smart-modus heeft een vertrektijd en een laaddoel nodig; stel dit in in de EcoFlow-app."
+    },
+    "powerpulse_charge_mode_unknown": {
+      "message": "{option} is geen laadmodus die deze laadpaal meldt."
+    },
+    "powerpulse_continuous_needs_powerocean": {
+      "message": "Deze instelling van de laadpaal kan alleen worden geschakeld via een PowerOcean op hetzelfde account; dit item heeft er geen."
+    },
+    "powerpulse_continuous_not_confirmed": {
+      "message": "De laadpaal heeft de nieuwe status van deze instelling niet binnen de toegestane tijd gemeld. Laatst gemelde status: {reported}."
+    },
+    "powerpulse_continuous_report_missing": {
+      "message": "De laadpaal heeft zijn huidige instellingen nog niet gemeld. Wacht op het volgende instellingenrapport."
+    },
+    "powerpulse_continuous_report_stale": {
+      "message": "Het laatste instellingenrapport van de laadpaal is te oud om deze wijziging op te baseren. Wacht op het volgende instellingenrapport."
+    },
+    "powerpulse_continuous_report_unusable": {
+      "message": "De laadpaal meldt {value} voor {field}, waarop deze integratie geen wijziging kan baseren. Wijzig deze instelling in de EcoFlow-app."
+    },
+    "powerpulse_custom_current_above_maximum": {
+      "message": "De laadpaal slaat geen aangepaste laadstroom op die hoger is dan de maximale stroom. Gevraagd: {requested} A, maximale stroom: {maximum} A."
+    },
+    "powerpulse_custom_current_needs_powerocean": {
+      "message": "De aangepaste laadstroom kan alleen worden ingesteld via een PowerOcean op hetzelfde account; dit item heeft er geen."
+    },
+    "powerpulse_custom_current_not_confirmed": {
+      "message": "De laadpaal heeft de nieuwe aangepaste laadstroom niet binnen de toegestane tijd gemeld. Laatst gemelde waarde: {reported}."
+    },
+    "powerpulse_custom_current_range": {
+      "message": "De laadpaal accepteert een aangepaste laadstroom tussen {min} en {max} A."
+    },
     "powerpulse_descriptor_missing": {
       "message": "De laadpaal heeft zijn adres nog niet gerapporteerd. Wacht op zijn volgende instellingenrapport."
     },
+    "powerpulse_display_brightness_invalid": {
+      "message": "De helderheid moet een van de waarden {allowed} % zijn. Gevraagd: {value}."
+    },
+    "powerpulse_max_current_needs_powerocean": {
+      "message": "De maximale stroom kan alleen worden ingesteld via een PowerOcean op hetzelfde account; dit item heeft er geen."
+    },
+    "powerpulse_max_current_not_confirmed": {
+      "message": "De laadpaal heeft de nieuwe maximale stroom niet binnen de toegestane tijd gemeld. Laatst gemelde waarde: {reported}."
+    },
+    "powerpulse_max_current_range": {
+      "message": "De laadpaal accepteert een maximale stroom tussen {min} en {max} A."
+    },
+    "powerpulse_own_channel_offline": {
+      "message": "De eigen verbinding van de laadpaal is niet actief, dus de opdracht kan niet worden verzonden."
+    },
+    "powerpulse_phase_setting_needs_powerocean": {
+      "message": "De faseinstelling kan alleen worden ingesteld via een PowerOcean op hetzelfde account; dit item heeft er geen."
+    },
+    "powerpulse_phase_setting_not_confirmed": {
+      "message": "De laadpaal heeft de nieuwe faseinstelling niet binnen de toegestane tijd gemeld. Laatst gemelde instelling: {reported}."
+    },
+    "powerpulse_phase_setting_unknown": {
+      "message": "{option} is geen faseinstelling die deze laadpaal accepteert."
+    },
     "powerpulse_sibling_missing": {
-      "message": "De opdracht voor de laadpaal loopt via de PowerOcean van hetzelfde account, en deze config-entry bevat er geen of meer dan één."
+      "message": "Dit item bevat meer dan één PowerOcean en de opdracht voor de laadpaal kan niet bepalen via welke de laadpaal loopt."
     },
     "powerpulse_sibling_offline": {
       "message": "De PowerOcean die de opdracht voor de laadpaal doorgeeft, is niet verbonden."
+    },
+    "powerpulse_solar_min_current_needs_powerocean": {
+      "message": "De minimale zonnestroom kan alleen worden ingesteld via een PowerOcean op hetzelfde account; dit item heeft er geen."
+    },
+    "powerpulse_solar_min_current_not_confirmed": {
+      "message": "De laadpaal heeft de nieuwe minimale zonnestroom niet binnen de toegestane tijd gemeld. Laatst gemelde waarde: {reported}."
+    },
+    "powerpulse_solar_min_current_range": {
+      "message": "De laadpaal accepteert een minimale zonnestroom tussen {min} en {max} A."
     }
   }
 }

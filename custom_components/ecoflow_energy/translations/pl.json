@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Tryb połączenia",
-        "description": "Wybierz, jak połączyć się ze swoimi urządzeniami EcoFlow.\n\n**Standard** - Oficjalne EcoFlow IoT API. Wspierane przez EcoFlow. Aktualizacje co 10-30 sekund. Wymaga kluczy Developer API.\n\n**Enhanced** - Połączenie w czasie rzeczywistym tworzone przez społeczność. Aktualizacje co ~3 sekundy. Wymaga danych logowania do aplikacji EcoFlow. Nieoficjalne - używasz na własne ryzyko.",
+        "description": "Wybierz, jak połączyć się ze swoimi urządzeniami EcoFlow.\n\n**Standard** - Oficjalne EcoFlow IoT API. Wspierane przez EcoFlow. Aktualizacje co 10-30 sekund. Wymaga kluczy Developer API.\n\n**Enhanced** - Połączenie w czasie rzeczywistym tworzone przez społeczność. Aktualizacje co ~3 sekundy. Wymaga danych logowania do aplikacji EcoFlow. Nieoficjalne - używasz na własne ryzyko.\n\n**Local** - Bezpośrednie połączenie Modbus/TCP z PowerOcean w Twojej sieci. Bez chmury i bez konta. Aktualizacje co ~2 sekundy. Pokazuje wartości i pozwala zmienić dwa ustawienia (Rezerwę awaryjną i Jasność wskaźnika). Obsługiwany jest tylko trójfazowy PowerOcean. Modbus musi najpierw zostać włączony dla Twojego urządzenia przez pomoc techniczną EcoFlow.",
         "data": {
           "mode": "Tryb połączenia"
         }
@@ -22,6 +22,20 @@
         "data": {
           "email": "E-mail",
           "password": "Hasło"
+        }
+      },
+      "local": {
+        "title": "Lokalne połączenie Modbus/TCP",
+        "description": "Połącz swój PowerOcean bezpośrednio przez Modbus/TCP, bez chmury EcoFlow. Rezerwę awaryjną i jasność wskaźnika można zmieniać z poziomu Home Assistant. Przełącznik Sterowanie Modbus jest domyślnie wyłączony, a gdy jest włączony, aplikacja EcoFlow jest zablokowana.\n\nModbus musi zostać wcześniej włączony dla Twojego urządzenia przez pomoc techniczną EcoFlow. Urządzenie obsługuje jednocześnie tylko jednego klienta Modbus, więc przed kontynuacją zamknij wszystkie inne narzędzia Modbus. Dwie integracje mogą współdzielić urządzenie tylko wtedy, gdy obie korzystają ze współdzielonego połączenia Modbus Home Assistant z dokładnie takim samym ciągiem hosta.\n\nJeśli to możliwe, jako host użyj nazwy DNS urządzenia.",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "unit_id": "Unit ID"
+        },
+        "data_description": {
+          "host": "Nazwa DNS (lub adres) PowerOcean w Twojej sieci.",
+          "port": "Port Modbus/TCP urządzenia. 502, chyba że Twoje urządzenie używa innego.",
+          "unit_id": "Unit ID Modbus urządzenia. 1, chyba że zostało zmienione."
         }
       },
       "devices": {
@@ -79,6 +93,25 @@
           "password": "Hasło"
         }
       },
+      "reconfigure_menu": {
+        "title": "Zmień połączenie",
+        "description": "Wybierz, jak ten wpis łączy się z urządzeniem. Wpis pozostaje, więc encje dostarczane przez oba połączenia zachowują swoją historię.",
+        "menu_options": {
+          "reconfigure_credentials": "Zaktualizuj dane dostępowe",
+          "reconfigure_local": "Lokalnie (Modbus/TCP): host, port i Unit ID",
+          "reconfigure_to_standard": "Standard: oficjalne API EcoFlow z kluczami Developer",
+          "reconfigure_to_enhanced": "Enhanced: czas rzeczywisty z kontem EcoFlow"
+        }
+      },
+      "reconfigure_local": {
+        "title": "Lokalne połączenie Modbus/TCP",
+        "description": "Podaj, gdzie PowerOcean odpowiada przez Modbus/TCP. Musi to być to samo urządzenie, co w tym wpisie: urządzenie z innym numerem seryjnym zostanie odrzucone. Przejście z chmury usuwa zapisane dane dostępowe z tego wpisu.",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "unit_id": "Unit ID"
+        }
+      },
       "devices_app": {
         "title": "Wybierz urządzenia",
         "description": "Wybierz urządzenia EcoFlow, które chcesz dodać do Home Assistant.\n\nUrządzenie oznaczone jako \"not supported yet\" nie ma tu parsera, więc utworzy tylko dwa czujniki diagnostyczne. Mimo to warto je dodać, bo pobrany z niego plik diagnostyki, dołączony do zgłoszenia na GitHub, jest tym, z czego powstaje obsługa nowego modelu. Najpierw włącz nagrywanie danych diagnostycznych w opcjach integracji, a pobierz dopiero potem, bo przy logowaniu kontem pobrany plik sam z siebie nie zawiera tych surowych danych.",
@@ -88,19 +121,27 @@
       }
     },
     "error": {
-      "cannot_connect": "Nie udało się połączyć z EcoFlow API. Sprawdź swoje dane dostępowe.",
+      "cannot_connect": "Nie udało się połączyć. W przypadku EcoFlow API sprawdź swoje dane dostępowe. W przypadku połączenia lokalnego sprawdź host i port, czy żaden inny klient Modbus nie jest połączony oraz czy pomoc techniczna EcoFlow włączyła Modbus dla tego falownika.",
       "invalid_auth": "Nieprawidłowy Access Key lub Secret Key.",
       "no_devices": "Nie znaleziono urządzeń. Upewnij się, że urządzenia są powiązane w aplikacji EcoFlow.",
       "enhanced_login_failed": "Logowanie w trybie Enhanced nie powiodło się. Sprawdź adres e-mail i hasło do aplikacji EcoFlow.",
       "enhanced_decrypt_failed": "Odszyfrowanie danych logowania trybu Enhanced nie powiodło się.",
       "powerstream_requires_standard": "PowerStream wymaga trybu Standard z kluczami Developer API.",
       "device_requires_enhanced": "To urządzenie wymaga trybu Enhanced z Twoim kontem EcoFlow.",
-      "unknown": "Wystąpił nieoczekiwany błąd."
+      "unknown": "Wystąpił nieoczekiwany błąd.",
+      "unsupported_device": "To urządzenie nie jest obsługiwanym trójfazowym PowerOcean. Tylko ten model można tu odczytywać przez Modbus.",
+      "serial_mismatch": "To urządzenie ma inny numer seryjny niż ten wpis. Podaj adres tego samego PowerOcean.",
+      "modbus_exception": "Urządzenie odpowiedziało błędem Modbus. Sprawdź Unit ID i czy Modbus jest włączony dla Twojego urządzenia.",
+      "device_not_on_account": "To urządzenie nie należy do konta, którego użyto do logowania.",
+      "device_in_other_entry": "Wybrane urządzenie jest już skonfigurowane w innym wpisie EcoFlow Energy, na przykład we wpisie Local. Odznacz je, aby kontynuować.",
+      "invalid_host": "Wpisz wyłącznie nazwę hosta lub adres IP, bez http://, ścieżki i spacji."
     },
     "abort": {
-      "already_configured": "To konto EcoFlow jest już skonfigurowane.",
+      "already_configured": "To konto lub urządzenie EcoFlow jest już skonfigurowane.",
       "reauth_successful": "Ponowne uwierzytelnienie powiodło się.",
-      "reconfigure_successful": "Dane dostępowe zostały zaktualizowane."
+      "reconfigure_successful": "Dane dostępowe zostały zaktualizowane.",
+      "mode_switched": "Tryb połączenia został zmieniony. Ustawienia poprzedniego trybu zostały usunięte z tego wpisu. Twoje urządzenia i encje pozostają bez zmian.",
+      "local_updated": "Ustawienia połączenia lokalnego zostały zaktualizowane."
     }
   },
   "options": {
@@ -111,11 +152,13 @@
         "data": {
           "mode": "Tryb połączenia",
           "devices": "Urządzenia",
-          "raw_capture": "Nagrywaj dodatkowe dane diagnostyczne przez 24 godziny"
+          "raw_capture": "Nagrywaj dodatkowe dane diagnostyczne przez 24 godziny",
+          "powerpulse_vehicle_energy": "Śledź energię zakończonych ładowań PowerPulse według pojazdu"
         },
         "data_description": {
           "devices": "Wybranie urządzenia sprawia, że ta integracja je odczytuje. Urządzenie oznaczone jako \"not supported yet\" nie ma tu parsera, więc tworzy dwa czujniki diagnostyczne i nic więcej. Mimo to warto zostawić je zaznaczone, bo pobrany z niego plik diagnostyki, dołączony do zgłoszenia na GitHub, jest tym, z czego powstaje obsługa nowego modelu. Pobrany plik diagnostyki już zawiera surowe dane, które takie urządzenie zgłasza, więc nie trzeba niczego wcześniej włączać.",
-          "raw_capture": "Zachowuje więcej surowych wiadomości wysyłanych przez Twoje urządzenia, nagrywa każde urządzenie, którego ta integracja jeszcze nie obsługuje, i zapisuje ustawienia, które aplikacja EcoFlow wysyła do Twoich urządzeń w czasie nagrywania. To ostatnie to sposób na zbudowanie sterowania dla modelu, którego nikt tu nie ma: jednorazowa zmiana ustawienia w aplikacji przy włączonym nagrywaniu pokazuje, co urządzenie przyjmuje. Warto włączać tylko wtedy, gdy poproszono o to w zgłoszeniu na GitHub, bo dane są przydatne jedynie dołączone do pobranego pliku diagnostyki. Nic nigdy nie jest wysyłane do Twoich urządzeń, a nagrywanie zatrzymuje się samo po 24 godzinach."
+          "raw_capture": "Zachowuje więcej surowych wiadomości wysyłanych przez Twoje urządzenia, nagrywa każde urządzenie, którego ta integracja jeszcze nie obsługuje, i zapisuje ustawienia, które aplikacja EcoFlow wysyła do Twoich urządzeń w czasie nagrywania. To ostatnie to sposób na zbudowanie sterowania dla modelu, którego nikt tu nie ma: jednorazowa zmiana ustawienia w aplikacji przy włączonym nagrywaniu pokazuje, co urządzenie przyjmuje. Warto włączać tylko wtedy, gdy poproszono o to w zgłoszeniu na GitHub, bo dane są przydatne jedynie dołączone do pobranego pliku diagnostyki. Nic nigdy nie jest wysyłane do Twoich urządzeń, a nagrywanie zatrzymuje się samo po 24 godzinach.",
+          "powerpulse_vehicle_energy": "Odczytuje zakończone sesje ładowania z Twojego konta EcoFlow mniej więcej co 5 minut i przechowuje ich lokalny zapis w Home Assistant. Zapis jest usuwany po usunięciu integracji."
         }
       },
       "developer": {
@@ -140,11 +183,13 @@
         "data": {
           "mode": "Tryb połączenia",
           "devices": "Urządzenia",
-          "raw_capture": "Nagrywaj dodatkowe dane diagnostyczne przez 24 godziny"
+          "raw_capture": "Nagrywaj dodatkowe dane diagnostyczne przez 24 godziny",
+          "powerpulse_vehicle_energy": "Śledź energię zakończonych ładowań PowerPulse według pojazdu"
         },
         "data_description": {
           "devices": "Wybranie urządzenia sprawia, że ta integracja je odczytuje. Urządzenie oznaczone jako \"not supported yet\" nie ma tu parsera, więc tworzy dwa czujniki diagnostyczne i nic więcej. Mimo to warto zostawić je zaznaczone, bo pobrany z niego plik diagnostyki, dołączony do zgłoszenia na GitHub, jest tym, z czego powstaje obsługa nowego modelu. Najpierw włącz poniżej nagrywanie danych diagnostycznych, a pobierz dopiero potem, bo przy logowaniu kontem pobrany plik sam z siebie nie zawiera tych surowych danych.",
-          "raw_capture": "Zachowuje więcej surowych wiadomości wysyłanych przez Twoje urządzenia, nagrywa każde urządzenie, którego ta integracja jeszcze nie obsługuje, i zapisuje ustawienia, które aplikacja EcoFlow wysyła do Twoich urządzeń w czasie nagrywania. To ostatnie to sposób na zbudowanie sterowania dla modelu, którego nikt tu nie ma: jednorazowa zmiana ustawienia w aplikacji przy włączonym nagrywaniu pokazuje, co urządzenie przyjmuje. Warto włączać tylko wtedy, gdy poproszono o to w zgłoszeniu na GitHub, bo dane są przydatne jedynie dołączone do pobranego pliku diagnostyki. Nic nigdy nie jest wysyłane do Twoich urządzeń, a nagrywanie zatrzymuje się samo po 24 godzinach."
+          "raw_capture": "Zachowuje więcej surowych wiadomości wysyłanych przez Twoje urządzenia, nagrywa każde urządzenie, którego ta integracja jeszcze nie obsługuje, i zapisuje ustawienia, które aplikacja EcoFlow wysyła do Twoich urządzeń w czasie nagrywania. To ostatnie to sposób na zbudowanie sterowania dla modelu, którego nikt tu nie ma: jednorazowa zmiana ustawienia w aplikacji przy włączonym nagrywaniu pokazuje, co urządzenie przyjmuje. Warto włączać tylko wtedy, gdy poproszono o to w zgłoszeniu na GitHub, bo dane są przydatne jedynie dołączone do pobranego pliku diagnostyki. Nic nigdy nie jest wysyłane do Twoich urządzeń, a nagrywanie zatrzymuje się samo po 24 godzinach.",
+          "powerpulse_vehicle_energy": "Odczytuje zakończone sesje ładowania z Twojego konta EcoFlow mniej więcej co 5 minut i przechowuje ich lokalny zapis w Home Assistant. Zapis jest usuwany po usunięciu integracji."
         }
       }
     },
@@ -156,7 +201,11 @@
       "no_devices": "Wybierz co najmniej jedno urządzenie.",
       "powerstream_requires_standard": "PowerStream wymaga trybu Standard z kluczami Developer API.",
       "device_requires_enhanced": "To urządzenie wymaga trybu Enhanced z Twoim kontem EcoFlow.",
-      "unknown": "Wystąpił nieoczekiwany błąd."
+      "unknown": "Wystąpił nieoczekiwany błąd.",
+      "device_in_other_entry": "Wybrane urządzenie jest już skonfigurowane w innym wpisie EcoFlow Energy, na przykład we wpisie Local. Odznacz je, aby kontynuować."
+    },
+    "abort": {
+      "local_use_reconfigure": "Ten wpis odczytuje PowerOcean lokalnie przez Modbus i nie ma trybu połączenia do zmiany. Użyj opcji Rekonfiguruj z menu integracji, aby zmienić host, port lub Unit ID albo wrócić do trybu chmurowego."
     }
   },
   "entity": {
@@ -209,6 +258,9 @@
       "batt_discharge_power_w": {
         "name": "Moc rozładowania baterii"
       },
+      "batt_remaining_wh": {
+        "name": "Pozostała energia baterii"
+      },
       "heating_rod_water_temp_c": {
         "name": "Temperatura wody grzałki"
       },
@@ -254,11 +306,32 @@
       "grid_import_power_w": {
         "name": "Moc poboru z sieci"
       },
+      "ac_output_power_w": {
+        "name": "Moc wyjścia AC"
+      },
       "grid_export_power_w": {
         "name": "Moc oddawania do sieci"
       },
       "soc_pct": {
         "name": "SOC baterii"
+      },
+      "inverter_1_solar_w": {
+        "name": "Moc solarna falownika 1"
+      },
+      "inverter_1_batt_w": {
+        "name": "Moc baterii falownika 1"
+      },
+      "inverter_1_soc_pct": {
+        "name": "SOC baterii falownika 1"
+      },
+      "inverter_2_solar_w": {
+        "name": "Moc solarna falownika 2"
+      },
+      "inverter_2_batt_w": {
+        "name": "Moc baterii falownika 2"
+      },
+      "inverter_2_soc_pct": {
+        "name": "SOC baterii falownika 2"
       },
       "bp_soh_pct": {
         "name": "SOH baterii"
@@ -280,6 +353,21 @@
       },
       "grid_export_energy_kwh": {
         "name": "Energia oddana do sieci"
+      },
+      "solar_lifetime_energy_kwh": {
+        "name": "Łączna energia solarna"
+      },
+      "grid_import_lifetime_energy_kwh": {
+        "name": "Łączna energia pobrana z sieci"
+      },
+      "grid_export_lifetime_energy_kwh": {
+        "name": "Łączna energia oddana do sieci"
+      },
+      "fault_count": {
+        "name": "Liczba usterek"
+      },
+      "local_system_alerts": {
+        "name": "Alerty systemowe"
       },
       "batt_charge_energy_kwh": {
         "name": "Energia ładowania baterii"
@@ -458,8 +546,8 @@
       "grid_status": {
         "name": "Stan sieci",
         "state": {
-          "not_detected": "Nie wykryto",
-          "ok": "OK"
+          "not_detected": "Praca wyspowa",
+          "ok": "Praca sieciowa"
         }
       },
       "pcs_power_factor": {
@@ -496,6 +584,23 @@
       },
       "backup_reserve_pct": {
         "name": "Rezerwa awaryjna"
+      },
+      "ems_control_mode": {
+        "name": "Tryb sterowania",
+        "state": {
+          "none": "Brak",
+          "soc_calibration": "Kalibracja SoC",
+          "storm_guard": "Ochrona przed burzą",
+          "eco": "Eco",
+          "task": "Zadanie",
+          "schedule": "Harmonogram",
+          "ac_backup": "Zasilanie awaryjne AC",
+          "grid_operator": "Operator sieci",
+          "remote": "Zdalny",
+          "standby": "Tryb czuwania",
+          "frequency_response": "Regulacja częstotliwości",
+          "third_party": "Podmiot zewnętrzny"
+        }
       },
       "max_charge_soc_pct": {
         "name": "Maks. SoC ładowania"
@@ -1298,6 +1403,69 @@
       "pv_total_w": {
         "name": "Łączna moc PV"
       },
+      "pcs_ac_power_w": {
+        "name": "Moc AC"
+      },
+      "inv_phase_a_voltage_v": {
+        "name": "Napięcie fazy A falownika"
+      },
+      "inv_phase_b_voltage_v": {
+        "name": "Napięcie fazy B falownika"
+      },
+      "inv_phase_c_voltage_v": {
+        "name": "Napięcie fazy C falownika"
+      },
+      "inv_phase_a_current_a": {
+        "name": "Prąd fazy A falownika"
+      },
+      "inv_phase_b_current_a": {
+        "name": "Prąd fazy B falownika"
+      },
+      "inv_phase_c_current_a": {
+        "name": "Prąd fazy C falownika"
+      },
+      "inv_phase_a_active_power_w": {
+        "name": "Moc czynna fazy A falownika"
+      },
+      "inv_phase_b_active_power_w": {
+        "name": "Moc czynna fazy B falownika"
+      },
+      "inv_phase_c_active_power_w": {
+        "name": "Moc czynna fazy C falownika"
+      },
+      "inv_phase_a_reactive_power_var": {
+        "name": "Moc bierna fazy A falownika"
+      },
+      "inv_phase_b_reactive_power_var": {
+        "name": "Moc bierna fazy B falownika"
+      },
+      "inv_phase_c_reactive_power_var": {
+        "name": "Moc bierna fazy C falownika"
+      },
+      "inv_phase_a_apparent_power_va": {
+        "name": "Moc pozorna fazy A falownika"
+      },
+      "inv_phase_b_apparent_power_va": {
+        "name": "Moc pozorna fazy B falownika"
+      },
+      "inv_phase_c_apparent_power_va": {
+        "name": "Moc pozorna fazy C falownika"
+      },
+      "pv1_current_a": {
+        "name": "Prąd PV 1"
+      },
+      "pv3_voltage_v": {
+        "name": "Napięcie PV 3"
+      },
+      "pv3_current_a": {
+        "name": "Prąd PV 3"
+      },
+      "pv4_voltage_v": {
+        "name": "Napięcie PV 4"
+      },
+      "pv4_current_a": {
+        "name": "Prąd PV 4"
+      },
       "pv1_w": {
         "name": "Moc PV 1"
       },
@@ -1490,6 +1658,15 @@
           "faulted": "Awaria"
         }
       },
+      "ev_charge_mode": {
+        "name": "Tryb ładowania wallboxa",
+        "state": {
+          "fast": "Szybkie ładowanie",
+          "solar": "Tryb solarny",
+          "custom": "Własny",
+          "smart": "Tryb inteligentny"
+        }
+      },
       "ev_voltage_l1_v": {
         "name": "Napięcie L1 wallboxa"
       },
@@ -1512,7 +1689,7 @@
         "name": "Maks. prąd wallboxa"
       },
       "ev_charge_current_a": {
-        "name": "Prąd ładowania wallboxa"
+        "name": "Zadany prąd ładowania wallboxa"
       },
       "ev_phase_mode": {
         "name": "Tryb fazowy wallboxa",
@@ -1641,6 +1818,30 @@
       "schedule_8_window": {
         "name": "Okno harmonogramu 8"
       },
+      "feed_schedule_1_window": {
+        "name": "Harmonogram oddawania 1 - okno czasowe"
+      },
+      "feed_schedule_2_window": {
+        "name": "Harmonogram oddawania 2 - okno czasowe"
+      },
+      "feed_schedule_3_window": {
+        "name": "Harmonogram oddawania 3 - okno czasowe"
+      },
+      "feed_schedule_4_window": {
+        "name": "Harmonogram oddawania 4 - okno czasowe"
+      },
+      "feed_schedule_5_window": {
+        "name": "Harmonogram oddawania 5 - okno czasowe"
+      },
+      "feed_schedule_6_window": {
+        "name": "Harmonogram oddawania 6 - okno czasowe"
+      },
+      "feed_schedule_7_window": {
+        "name": "Harmonogram oddawania 7 - okno czasowe"
+      },
+      "feed_schedule_8_window": {
+        "name": "Harmonogram oddawania 8 - okno czasowe"
+      },
       "tilt_angle_deg": {
         "name": "Kąt nachylenia"
       },
@@ -1716,6 +1917,732 @@
       },
       "condensate_water_level": {
         "name": "Poziom skroplin"
+      },
+      "module1_soc_pct": {
+        "name": "SoC modułu 1"
+      },
+      "module1_power_w": {
+        "name": "Moc modułu 1"
+      },
+      "module1_remaining_wh": {
+        "name": "Pozostała energia modułu 1"
+      },
+      "module1_soh_pct": {
+        "name": "SoH modułu 1"
+      },
+      "module1_cycles": {
+        "name": "Cykle ładowania modułu 1"
+      },
+      "module1_cell_temp_c": {
+        "name": "Temp. ogniw modułu 1"
+      },
+      "module1_cell_temp_min_c": {
+        "name": "Temp. ogniw modułu 1 (min.)"
+      },
+      "module1_cell_temp_max_c": {
+        "name": "Temp. ogniw modułu 1 (maks.)"
+      },
+      "module1_mos_temp_c": {
+        "name": "Temp. elektroniki mocy modułu 1"
+      },
+      "module1_voltage_v": {
+        "name": "Napięcie modułu 1"
+      },
+      "module1_current_a": {
+        "name": "Prąd modułu 1"
+      },
+      "module2_soc_pct": {
+        "name": "SoC modułu 2"
+      },
+      "module2_power_w": {
+        "name": "Moc modułu 2"
+      },
+      "module2_remaining_wh": {
+        "name": "Pozostała energia modułu 2"
+      },
+      "module2_soh_pct": {
+        "name": "SoH modułu 2"
+      },
+      "module2_cycles": {
+        "name": "Cykle ładowania modułu 2"
+      },
+      "module2_cell_temp_c": {
+        "name": "Temp. ogniw modułu 2"
+      },
+      "module2_cell_temp_min_c": {
+        "name": "Temp. ogniw modułu 2 (min.)"
+      },
+      "module2_cell_temp_max_c": {
+        "name": "Temp. ogniw modułu 2 (maks.)"
+      },
+      "module2_mos_temp_c": {
+        "name": "Temp. elektroniki mocy modułu 2"
+      },
+      "module2_voltage_v": {
+        "name": "Napięcie modułu 2"
+      },
+      "module2_current_a": {
+        "name": "Prąd modułu 2"
+      },
+      "module3_soc_pct": {
+        "name": "SoC modułu 3"
+      },
+      "module3_power_w": {
+        "name": "Moc modułu 3"
+      },
+      "module3_remaining_wh": {
+        "name": "Pozostała energia modułu 3"
+      },
+      "module3_soh_pct": {
+        "name": "SoH modułu 3"
+      },
+      "module3_cycles": {
+        "name": "Cykle ładowania modułu 3"
+      },
+      "module3_cell_temp_c": {
+        "name": "Temp. ogniw modułu 3"
+      },
+      "module3_cell_temp_min_c": {
+        "name": "Temp. ogniw modułu 3 (min.)"
+      },
+      "module3_cell_temp_max_c": {
+        "name": "Temp. ogniw modułu 3 (maks.)"
+      },
+      "module3_mos_temp_c": {
+        "name": "Temp. elektroniki mocy modułu 3"
+      },
+      "module3_voltage_v": {
+        "name": "Napięcie modułu 3"
+      },
+      "module3_current_a": {
+        "name": "Prąd modułu 3"
+      },
+      "module4_soc_pct": {
+        "name": "SoC modułu 4"
+      },
+      "module4_power_w": {
+        "name": "Moc modułu 4"
+      },
+      "module4_remaining_wh": {
+        "name": "Pozostała energia modułu 4"
+      },
+      "module4_soh_pct": {
+        "name": "SoH modułu 4"
+      },
+      "module4_cycles": {
+        "name": "Cykle ładowania modułu 4"
+      },
+      "module4_cell_temp_c": {
+        "name": "Temp. ogniw modułu 4"
+      },
+      "module4_cell_temp_min_c": {
+        "name": "Temp. ogniw modułu 4 (min.)"
+      },
+      "module4_cell_temp_max_c": {
+        "name": "Temp. ogniw modułu 4 (maks.)"
+      },
+      "module4_mos_temp_c": {
+        "name": "Temp. elektroniki mocy modułu 4"
+      },
+      "module4_voltage_v": {
+        "name": "Napięcie modułu 4"
+      },
+      "module4_current_a": {
+        "name": "Prąd modułu 4"
+      },
+      "module5_soc_pct": {
+        "name": "SoC modułu 5"
+      },
+      "module5_power_w": {
+        "name": "Moc modułu 5"
+      },
+      "module5_remaining_wh": {
+        "name": "Pozostała energia modułu 5"
+      },
+      "module5_soh_pct": {
+        "name": "SoH modułu 5"
+      },
+      "module5_cycles": {
+        "name": "Cykle ładowania modułu 5"
+      },
+      "module5_cell_temp_c": {
+        "name": "Temp. ogniw modułu 5"
+      },
+      "module5_cell_temp_min_c": {
+        "name": "Temp. ogniw modułu 5 (min.)"
+      },
+      "module5_cell_temp_max_c": {
+        "name": "Temp. ogniw modułu 5 (maks.)"
+      },
+      "module5_mos_temp_c": {
+        "name": "Temp. elektroniki mocy modułu 5"
+      },
+      "module5_voltage_v": {
+        "name": "Napięcie modułu 5"
+      },
+      "module5_current_a": {
+        "name": "Prąd modułu 5"
+      },
+      "module6_soc_pct": {
+        "name": "SoC modułu 6"
+      },
+      "module6_power_w": {
+        "name": "Moc modułu 6"
+      },
+      "module6_remaining_wh": {
+        "name": "Pozostała energia modułu 6"
+      },
+      "module6_soh_pct": {
+        "name": "SoH modułu 6"
+      },
+      "module6_cycles": {
+        "name": "Cykle ładowania modułu 6"
+      },
+      "module6_cell_temp_c": {
+        "name": "Temp. ogniw modułu 6"
+      },
+      "module6_cell_temp_min_c": {
+        "name": "Temp. ogniw modułu 6 (min.)"
+      },
+      "module6_cell_temp_max_c": {
+        "name": "Temp. ogniw modułu 6 (maks.)"
+      },
+      "module6_mos_temp_c": {
+        "name": "Temp. elektroniki mocy modułu 6"
+      },
+      "module6_voltage_v": {
+        "name": "Napięcie modułu 6"
+      },
+      "module6_current_a": {
+        "name": "Prąd modułu 6"
+      },
+      "module7_soc_pct": {
+        "name": "SoC modułu 7"
+      },
+      "module7_power_w": {
+        "name": "Moc modułu 7"
+      },
+      "module7_remaining_wh": {
+        "name": "Pozostała energia modułu 7"
+      },
+      "module7_soh_pct": {
+        "name": "SoH modułu 7"
+      },
+      "module7_cycles": {
+        "name": "Cykle ładowania modułu 7"
+      },
+      "module7_cell_temp_c": {
+        "name": "Temp. ogniw modułu 7"
+      },
+      "module7_cell_temp_min_c": {
+        "name": "Temp. ogniw modułu 7 (min.)"
+      },
+      "module7_cell_temp_max_c": {
+        "name": "Temp. ogniw modułu 7 (maks.)"
+      },
+      "module7_mos_temp_c": {
+        "name": "Temp. elektroniki mocy modułu 7"
+      },
+      "module7_voltage_v": {
+        "name": "Napięcie modułu 7"
+      },
+      "module7_current_a": {
+        "name": "Prąd modułu 7"
+      },
+      "module8_soc_pct": {
+        "name": "SoC modułu 8"
+      },
+      "module8_power_w": {
+        "name": "Moc modułu 8"
+      },
+      "module8_remaining_wh": {
+        "name": "Pozostała energia modułu 8"
+      },
+      "module8_soh_pct": {
+        "name": "SoH modułu 8"
+      },
+      "module8_cycles": {
+        "name": "Cykle ładowania modułu 8"
+      },
+      "module8_cell_temp_c": {
+        "name": "Temp. ogniw modułu 8"
+      },
+      "module8_cell_temp_min_c": {
+        "name": "Temp. ogniw modułu 8 (min.)"
+      },
+      "module8_cell_temp_max_c": {
+        "name": "Temp. ogniw modułu 8 (maks.)"
+      },
+      "module8_mos_temp_c": {
+        "name": "Temp. elektroniki mocy modułu 8"
+      },
+      "module8_voltage_v": {
+        "name": "Napięcie modułu 8"
+      },
+      "module8_current_a": {
+        "name": "Prąd modułu 8"
+      },
+      "module9_soc_pct": {
+        "name": "SoC modułu 9"
+      },
+      "module9_power_w": {
+        "name": "Moc modułu 9"
+      },
+      "module9_remaining_wh": {
+        "name": "Pozostała energia modułu 9"
+      },
+      "module9_soh_pct": {
+        "name": "SoH modułu 9"
+      },
+      "module9_cycles": {
+        "name": "Cykle ładowania modułu 9"
+      },
+      "module9_cell_temp_c": {
+        "name": "Temp. ogniw modułu 9"
+      },
+      "module9_cell_temp_min_c": {
+        "name": "Temp. ogniw modułu 9 (min.)"
+      },
+      "module9_cell_temp_max_c": {
+        "name": "Temp. ogniw modułu 9 (maks.)"
+      },
+      "module9_mos_temp_c": {
+        "name": "Temp. elektroniki mocy modułu 9"
+      },
+      "module9_voltage_v": {
+        "name": "Napięcie modułu 9"
+      },
+      "module9_current_a": {
+        "name": "Prąd modułu 9"
+      },
+      "module10_soc_pct": {
+        "name": "SoC modułu 10"
+      },
+      "module10_power_w": {
+        "name": "Moc modułu 10"
+      },
+      "module10_remaining_wh": {
+        "name": "Pozostała energia modułu 10"
+      },
+      "module10_soh_pct": {
+        "name": "SoH modułu 10"
+      },
+      "module10_cycles": {
+        "name": "Cykle ładowania modułu 10"
+      },
+      "module10_cell_temp_c": {
+        "name": "Temp. ogniw modułu 10"
+      },
+      "module10_cell_temp_min_c": {
+        "name": "Temp. ogniw modułu 10 (min.)"
+      },
+      "module10_cell_temp_max_c": {
+        "name": "Temp. ogniw modułu 10 (maks.)"
+      },
+      "module10_mos_temp_c": {
+        "name": "Temp. elektroniki mocy modułu 10"
+      },
+      "module10_voltage_v": {
+        "name": "Napięcie modułu 10"
+      },
+      "module10_current_a": {
+        "name": "Prąd modułu 10"
+      },
+      "module11_soc_pct": {
+        "name": "SoC modułu 11"
+      },
+      "module11_power_w": {
+        "name": "Moc modułu 11"
+      },
+      "module11_remaining_wh": {
+        "name": "Pozostała energia modułu 11"
+      },
+      "module11_soh_pct": {
+        "name": "SoH modułu 11"
+      },
+      "module11_cycles": {
+        "name": "Cykle ładowania modułu 11"
+      },
+      "module11_cell_temp_c": {
+        "name": "Temp. ogniw modułu 11"
+      },
+      "module11_cell_temp_min_c": {
+        "name": "Temp. ogniw modułu 11 (min.)"
+      },
+      "module11_cell_temp_max_c": {
+        "name": "Temp. ogniw modułu 11 (maks.)"
+      },
+      "module11_mos_temp_c": {
+        "name": "Temp. elektroniki mocy modułu 11"
+      },
+      "module11_voltage_v": {
+        "name": "Napięcie modułu 11"
+      },
+      "module11_current_a": {
+        "name": "Prąd modułu 11"
+      },
+      "module12_soc_pct": {
+        "name": "SoC modułu 12"
+      },
+      "module12_power_w": {
+        "name": "Moc modułu 12"
+      },
+      "module12_remaining_wh": {
+        "name": "Pozostała energia modułu 12"
+      },
+      "module12_soh_pct": {
+        "name": "SoH modułu 12"
+      },
+      "module12_cycles": {
+        "name": "Cykle ładowania modułu 12"
+      },
+      "module12_cell_temp_c": {
+        "name": "Temp. ogniw modułu 12"
+      },
+      "module12_cell_temp_min_c": {
+        "name": "Temp. ogniw modułu 12 (min.)"
+      },
+      "module12_cell_temp_max_c": {
+        "name": "Temp. ogniw modułu 12 (maks.)"
+      },
+      "module12_mos_temp_c": {
+        "name": "Temp. elektroniki mocy modułu 12"
+      },
+      "module12_voltage_v": {
+        "name": "Napięcie modułu 12"
+      },
+      "module12_current_a": {
+        "name": "Prąd modułu 12"
+      },
+      "module13_soc_pct": {
+        "name": "SoC modułu 13"
+      },
+      "module13_power_w": {
+        "name": "Moc modułu 13"
+      },
+      "module13_remaining_wh": {
+        "name": "Pozostała energia modułu 13"
+      },
+      "module13_soh_pct": {
+        "name": "SoH modułu 13"
+      },
+      "module13_cycles": {
+        "name": "Cykle ładowania modułu 13"
+      },
+      "module13_cell_temp_c": {
+        "name": "Temp. ogniw modułu 13"
+      },
+      "module13_cell_temp_min_c": {
+        "name": "Temp. ogniw modułu 13 (min.)"
+      },
+      "module13_cell_temp_max_c": {
+        "name": "Temp. ogniw modułu 13 (maks.)"
+      },
+      "module13_mos_temp_c": {
+        "name": "Temp. elektroniki mocy modułu 13"
+      },
+      "module13_voltage_v": {
+        "name": "Napięcie modułu 13"
+      },
+      "module13_current_a": {
+        "name": "Prąd modułu 13"
+      },
+      "module14_soc_pct": {
+        "name": "SoC modułu 14"
+      },
+      "module14_power_w": {
+        "name": "Moc modułu 14"
+      },
+      "module14_remaining_wh": {
+        "name": "Pozostała energia modułu 14"
+      },
+      "module14_soh_pct": {
+        "name": "SoH modułu 14"
+      },
+      "module14_cycles": {
+        "name": "Cykle ładowania modułu 14"
+      },
+      "module14_cell_temp_c": {
+        "name": "Temp. ogniw modułu 14"
+      },
+      "module14_cell_temp_min_c": {
+        "name": "Temp. ogniw modułu 14 (min.)"
+      },
+      "module14_cell_temp_max_c": {
+        "name": "Temp. ogniw modułu 14 (maks.)"
+      },
+      "module14_mos_temp_c": {
+        "name": "Temp. elektroniki mocy modułu 14"
+      },
+      "module14_voltage_v": {
+        "name": "Napięcie modułu 14"
+      },
+      "module14_current_a": {
+        "name": "Prąd modułu 14"
+      },
+      "module15_soc_pct": {
+        "name": "SoC modułu 15"
+      },
+      "module15_power_w": {
+        "name": "Moc modułu 15"
+      },
+      "module15_remaining_wh": {
+        "name": "Pozostała energia modułu 15"
+      },
+      "module15_soh_pct": {
+        "name": "SoH modułu 15"
+      },
+      "module15_cycles": {
+        "name": "Cykle ładowania modułu 15"
+      },
+      "module15_cell_temp_c": {
+        "name": "Temp. ogniw modułu 15"
+      },
+      "module15_cell_temp_min_c": {
+        "name": "Temp. ogniw modułu 15 (min.)"
+      },
+      "module15_cell_temp_max_c": {
+        "name": "Temp. ogniw modułu 15 (maks.)"
+      },
+      "module15_mos_temp_c": {
+        "name": "Temp. elektroniki mocy modułu 15"
+      },
+      "module15_voltage_v": {
+        "name": "Napięcie modułu 15"
+      },
+      "module15_current_a": {
+        "name": "Prąd modułu 15"
+      },
+      "module16_soc_pct": {
+        "name": "SoC modułu 16"
+      },
+      "module16_power_w": {
+        "name": "Moc modułu 16"
+      },
+      "module16_remaining_wh": {
+        "name": "Pozostała energia modułu 16"
+      },
+      "module16_soh_pct": {
+        "name": "SoH modułu 16"
+      },
+      "module16_cycles": {
+        "name": "Cykle ładowania modułu 16"
+      },
+      "module16_cell_temp_c": {
+        "name": "Temp. ogniw modułu 16"
+      },
+      "module16_cell_temp_min_c": {
+        "name": "Temp. ogniw modułu 16 (min.)"
+      },
+      "module16_cell_temp_max_c": {
+        "name": "Temp. ogniw modułu 16 (maks.)"
+      },
+      "module16_mos_temp_c": {
+        "name": "Temp. elektroniki mocy modułu 16"
+      },
+      "module16_voltage_v": {
+        "name": "Napięcie modułu 16"
+      },
+      "module16_current_a": {
+        "name": "Prąd modułu 16"
+      },
+      "module1_cell_voltage_mv": {
+        "name": "Napięcie ogniwa modułu 1 (maks.)"
+      },
+      "module2_cell_voltage_mv": {
+        "name": "Napięcie ogniwa modułu 2 (maks.)"
+      },
+      "module3_cell_voltage_mv": {
+        "name": "Napięcie ogniwa modułu 3 (maks.)"
+      },
+      "module4_cell_voltage_mv": {
+        "name": "Napięcie ogniwa modułu 4 (maks.)"
+      },
+      "module5_cell_voltage_mv": {
+        "name": "Napięcie ogniwa modułu 5 (maks.)"
+      },
+      "module6_cell_voltage_mv": {
+        "name": "Napięcie ogniwa modułu 6 (maks.)"
+      },
+      "module7_cell_voltage_mv": {
+        "name": "Napięcie ogniwa modułu 7 (maks.)"
+      },
+      "module8_cell_voltage_mv": {
+        "name": "Napięcie ogniwa modułu 8 (maks.)"
+      },
+      "module9_cell_voltage_mv": {
+        "name": "Napięcie ogniwa modułu 9 (maks.)"
+      },
+      "module10_cell_voltage_mv": {
+        "name": "Napięcie ogniwa modułu 10 (maks.)"
+      },
+      "module11_cell_voltage_mv": {
+        "name": "Napięcie ogniwa modułu 11 (maks.)"
+      },
+      "module12_cell_voltage_mv": {
+        "name": "Napięcie ogniwa modułu 12 (maks.)"
+      },
+      "module13_cell_voltage_mv": {
+        "name": "Napięcie ogniwa modułu 13 (maks.)"
+      },
+      "module14_cell_voltage_mv": {
+        "name": "Napięcie ogniwa modułu 14 (maks.)"
+      },
+      "module15_cell_voltage_mv": {
+        "name": "Napięcie ogniwa modułu 15 (maks.)"
+      },
+      "module16_cell_voltage_mv": {
+        "name": "Napięcie ogniwa modułu 16 (maks.)"
+      },
+      "grid_leg_l1_voltage_v": {
+        "name": "Napięcie sieci L1"
+      },
+      "grid_leg_l2_voltage_v": {
+        "name": "Napięcie sieci L2"
+      },
+      "grid_leg_l1_current_a": {
+        "name": "Prąd sieci L1"
+      },
+      "grid_leg_l2_current_a": {
+        "name": "Prąd sieci L2"
+      },
+      "grid_l1_power_w": {
+        "name": "Moc sieci L1"
+      },
+      "grid_l2_power_w": {
+        "name": "Moc sieci L2"
+      },
+      "grid_l1_apparent_power_va": {
+        "name": "Moc pozorna sieci L1"
+      },
+      "grid_l2_apparent_power_va": {
+        "name": "Moc pozorna sieci L2"
+      },
+      "grid_l1_reactive_power_var": {
+        "name": "Moc bierna sieci L1"
+      },
+      "grid_l2_reactive_power_var": {
+        "name": "Moc bierna sieci L2"
+      },
+      "grid_nominal_voltage_v": {
+        "name": "Napięcie znamionowe sieci"
+      },
+      "grid_nominal_frequency_hz": {
+        "name": "Częstotliwość znamionowa sieci"
+      },
+      "grid_code": {
+        "name": "Kod sieci"
+      },
+      "circuit_power_w": {
+        "name": "Moc obwodu {label}"
+      },
+      "circuit_voltage_v": {
+        "name": "Napięcie obwodu {label}"
+      },
+      "circuit_current_a": {
+        "name": "Prąd obwodu {label}"
+      },
+      "power_io_in_w": {
+        "name": "Wejście portu Power In/Out"
+      },
+      "power_io_out_w": {
+        "name": "Wyjście portu Power In/Out"
+      },
+      "solar_lv_in_w": {
+        "name": "Moc wejścia solarnego LV"
+      },
+      "solar_hv_in_w": {
+        "name": "Moc wejścia solarnego HV"
+      },
+      "ac_out_l1_1_w": {
+        "name": "Moc wyjścia AC L1-1"
+      },
+      "ac_out_l1_2_w": {
+        "name": "Moc wyjścia AC L1-2"
+      },
+      "ac_out_l2_1_w": {
+        "name": "Moc wyjścia AC L2-1"
+      },
+      "ac_out_l2_2_w": {
+        "name": "Moc wyjścia AC L2-2"
+      },
+      "ac_out_tt30_w": {
+        "name": "Moc wyjścia AC TT-30"
+      },
+      "ac_out_l14_w": {
+        "name": "Moc wyjścia AC L14-30"
+      },
+      "inv_ac_temp_c": {
+        "name": "Temp. falownika"
+      },
+      "pd_temp_c": {
+        "name": "Temp. systemu"
+      },
+      "bp1_soc_pct": {
+        "name": "SOC pakietu baterii 1"
+      },
+      "bp1_temp_c": {
+        "name": "Temp. pakietu baterii 1"
+      },
+      "bp2_soc_pct": {
+        "name": "SOC pakietu baterii 2"
+      },
+      "bp2_temp_c": {
+        "name": "Temp. pakietu baterii 2"
+      },
+      "bp3_soc_pct": {
+        "name": "SOC pakietu baterii 3"
+      },
+      "bp3_temp_c": {
+        "name": "Temp. pakietu baterii 3"
+      },
+      "bp4_soc_pct": {
+        "name": "SOC pakietu baterii 4"
+      },
+      "bp4_temp_c": {
+        "name": "Temp. pakietu baterii 4"
+      },
+      "bp5_soc_pct": {
+        "name": "SOC pakietu baterii 5"
+      },
+      "bp5_temp_c": {
+        "name": "Temp. pakietu baterii 5"
+      },
+      "grid_voltage_v": {
+        "name": "Napięcie sieci"
+      },
+      "battery_full_capacity_wh": {
+        "name": "Pełna pojemność baterii"
+      },
+      "backup_runtime_min": {
+        "name": "Czas pracy awaryjnej"
+      },
+      "storage_ch1_soc_pct": {
+        "name": "SOC kanału magazynu 1"
+      },
+      "storage_ch2_soc_pct": {
+        "name": "SOC kanału magazynu 2"
+      },
+      "storage_ch3_soc_pct": {
+        "name": "SOC kanału magazynu 3"
+      },
+      "local_system_batt_voltage_v": {
+        "name": "Napięcie baterii systemu"
+      },
+      "local_system_batt_current_a": {
+        "name": "Prąd baterii systemu"
+      },
+      "local_system_batt_temp_c": {
+        "name": "Temp. baterii systemu"
+      },
+      "vehicle_energy": {
+        "name": "Energia zakończonych ładowań wallboxa ({vehicle})"
+      },
+      "unnamed_vehicle_energy": {
+        "name": "Energia zakończonych ładowań wallboxa (pojazd bez nazwy)"
+      },
+      "other_vehicle_energy": {
+        "name": "Energia zakończonych ładowań wallboxa (nieprzypisana)"
       }
     },
     "binary_sensor": {
@@ -1758,6 +2685,9 @@
       "port_priority_active": {
         "name": "Priorytet portów aktywny"
       },
+      "ac_out_flow": {
+        "name": "Wyjście AC"
+      },
       "backup_reserve_enabled": {
         "name": "Rezerwa awaryjna"
       },
@@ -1788,6 +2718,30 @@
       "schedule_8_running": {
         "name": "Harmonogram 8 aktywny"
       },
+      "feed_schedule_1_running": {
+        "name": "Harmonogram oddawania 1 działa"
+      },
+      "feed_schedule_2_running": {
+        "name": "Harmonogram oddawania 2 działa"
+      },
+      "feed_schedule_3_running": {
+        "name": "Harmonogram oddawania 3 działa"
+      },
+      "feed_schedule_4_running": {
+        "name": "Harmonogram oddawania 4 działa"
+      },
+      "feed_schedule_5_running": {
+        "name": "Harmonogram oddawania 5 działa"
+      },
+      "feed_schedule_6_running": {
+        "name": "Harmonogram oddawania 6 działa"
+      },
+      "feed_schedule_7_running": {
+        "name": "Harmonogram oddawania 7 działa"
+      },
+      "feed_schedule_8_running": {
+        "name": "Harmonogram oddawania 8 działa"
+      },
       "grid_l1_connected": {
         "name": "Faza A połączona"
       },
@@ -1814,6 +2768,21 @@
       },
       "ev_cable_lock_enabled": {
         "name": "Blokada kabla wallboxa"
+      },
+      "circuit_on": {
+        "name": "Obwód {label} włączony"
+      },
+      "modbus_control_active": {
+        "name": "Sterowanie Modbus aktywne"
+      },
+      "local_off_grid": {
+        "name": "Praca wyspowa"
+      },
+      "local_system_abnormal": {
+        "name": "Nieprawidłowy stan systemu"
+      },
+      "local_bms_connected": {
+        "name": "Połączenie z baterią"
       }
     },
     "switch": {
@@ -1898,6 +2867,30 @@
       "schedule_8_enabled": {
         "name": "Harmonogram 8 włączony"
       },
+      "feed_schedule_1_enabled": {
+        "name": "Harmonogram oddawania 1 włączony"
+      },
+      "feed_schedule_2_enabled": {
+        "name": "Harmonogram oddawania 2 włączony"
+      },
+      "feed_schedule_3_enabled": {
+        "name": "Harmonogram oddawania 3 włączony"
+      },
+      "feed_schedule_4_enabled": {
+        "name": "Harmonogram oddawania 4 włączony"
+      },
+      "feed_schedule_5_enabled": {
+        "name": "Harmonogram oddawania 5 włączony"
+      },
+      "feed_schedule_6_enabled": {
+        "name": "Harmonogram oddawania 6 włączony"
+      },
+      "feed_schedule_7_enabled": {
+        "name": "Harmonogram oddawania 7 włączony"
+      },
+      "feed_schedule_8_enabled": {
+        "name": "Harmonogram oddawania 8 włączony"
+      },
       "power": {
         "name": "Zasilanie"
       },
@@ -1909,6 +2902,27 @@
       },
       "pet_care_enabled": {
         "name": "Opieka nad zwierzętami"
+      },
+      "modbus_control": {
+        "name": "Sterowanie Modbus"
+      },
+      "ev_continuous_charging": {
+        "name": "Ciągłe ładowanie wallboxa"
+      },
+      "ev_battery_discharge_block": {
+        "name": "Blokada rozładowania baterii wallboxa"
+      },
+      "ev_plug_and_play": {
+        "name": "Plug-and-Play wallboxa"
+      },
+      "ev_screen_enabled": {
+        "name": "Ekran wallboxa"
+      },
+      "ev_led_enabled": {
+        "name": "Wskaźnik LED wallboxa"
+      },
+      "storm_guard": {
+        "name": "Ochrona przed burzą"
       }
     },
     "number": {
@@ -1929,6 +2943,12 @@
       },
       "solar_surplus_threshold": {
         "name": "Próg nadwyżki solarnej"
+      },
+      "heating_rod_target_power_w": {
+        "name": "Moc docelowa grzałki"
+      },
+      "heating_rod_target_temp_c": {
+        "name": "Temperatura docelowa grzałki"
       },
       "standby_timeout": {
         "name": "Czas do czuwania"
@@ -2008,6 +3028,30 @@
       "schedule_8_power_w": {
         "name": "Moc ładowania harmonogramu 8"
       },
+      "feed_schedule_1_power_w": {
+        "name": "Harmonogram oddawania 1 - moc oddawania"
+      },
+      "feed_schedule_2_power_w": {
+        "name": "Harmonogram oddawania 2 - moc oddawania"
+      },
+      "feed_schedule_3_power_w": {
+        "name": "Harmonogram oddawania 3 - moc oddawania"
+      },
+      "feed_schedule_4_power_w": {
+        "name": "Harmonogram oddawania 4 - moc oddawania"
+      },
+      "feed_schedule_5_power_w": {
+        "name": "Harmonogram oddawania 5 - moc oddawania"
+      },
+      "feed_schedule_6_power_w": {
+        "name": "Harmonogram oddawania 6 - moc oddawania"
+      },
+      "feed_schedule_7_power_w": {
+        "name": "Harmonogram oddawania 7 - moc oddawania"
+      },
+      "feed_schedule_8_power_w": {
+        "name": "Harmonogram oddawania 8 - moc oddawania"
+      },
       "target_temp_c": {
         "name": "Temperatura docelowa"
       },
@@ -2022,6 +3066,30 @@
       },
       "pet_care_warning_temp_c": {
         "name": "Temperatura ostrzegawcza opieki nad zwierzętami"
+      },
+      "ev_max_current_a": {
+        "name": "Maks. prąd wallboxa"
+      },
+      "ev_charge_current_a": {
+        "name": "Zadany prąd ładowania wallboxa"
+      },
+      "ev_solar_min_current_a": {
+        "name": "Minimalny prąd ładowania solarnego wallboxa"
+      },
+      "ev_custom_current_a": {
+        "name": "Własny prąd ładowania wallboxa"
+      },
+      "ev_screen_brightness_pct": {
+        "name": "Jasność ekranu wallboxa"
+      },
+      "ev_led_brightness_pct": {
+        "name": "Jasność wskaźnika LED wallboxa"
+      },
+      "local_backup_reserve": {
+        "name": "Rezerwa awaryjna"
+      },
+      "local_indicator_brightness": {
+        "name": "Jasność wskaźnika"
       }
     },
     "select": {
@@ -2033,6 +3101,14 @@
           "self_powered": "Zasilanie własne",
           "intelligent_plus": "Tryb inteligentny+",
           "custom": "Niestandardowy"
+        }
+      },
+      "heating_rod_operating_mode": {
+        "name": "Tryb grzałki",
+        "state": {
+          "off": "Wyłączono",
+          "solar": "Solarny",
+          "manual": "Ręczny"
         }
       },
       "screen_timeout": {
@@ -2143,6 +3219,23 @@
           "10min": "10 min",
           "never": "Nigdy"
         }
+      },
+      "ev_charge_mode": {
+        "name": "Tryb ładowania wallboxa",
+        "state": {
+          "fast": "Szybkie ładowanie",
+          "solar": "Tryb solarny",
+          "custom": "Własny",
+          "smart": "Tryb inteligentny"
+        }
+      },
+      "ev_phase_setting": {
+        "name": "Ustawienie faz wallboxa",
+        "state": {
+          "auto": "Automatycznie",
+          "one_phase": "Jedna faza",
+          "three_phases": "Trzy fazy"
+        }
       }
     },
     "button": {
@@ -2170,26 +3263,131 @@
     "set_value_rejected": {
       "message": "Nie można ustawić {entity} na tę wartość: {reason}"
     },
+    "powerglow_not_confirmed": {
+      "message": "Grzałka nie zgłosiła nowego ustawienia w wyznaczonym czasie. Jej czujniki pokazują, co zgłasza."
+    },
+    "powerglow_not_delivered": {
+      "message": "Nie udało się wysłać polecenia do grzałki."
+    },
+    "powerglow_not_reported": {
+      "message": "PowerOcean nie zgłosił jeszcze grzałki. Poczekaj na jego następny raport."
+    },
+    "powerglow_offline": {
+      "message": "Połączenie z PowerOcean nie jest aktywne, więc polecenia dla grzałki nie można wysłać."
+    },
+    "powerglow_target_power_range": {
+      "message": "Grzałka przyjmuje moc docelową od {min} do {max} W."
+    },
+    "powerglow_target_temp_range": {
+      "message": "Grzałka przyjmuje temperaturę docelową od {min} do {max} °C."
+    },
+    "powerglow_write_in_progress": {
+      "message": "Wcześniejsze polecenie nadal czeka na potwierdzenie przez grzałkę. Spróbuj ponownie, gdy je potwierdzi."
+    },
     "powerpulse_action_in_progress": {
-      "message": "Uruchomienie lub zatrzymanie tego wallboxa wciąż czeka na potwierdzenie przez urządzenie."
+      "message": "Wcześniejsze polecenie nadal czeka na potwierdzenie przez wallbox. Spróbuj ponownie, gdy je potwierdzi."
     },
     "powerpulse_action_not_confirmed": {
       "message": "Wallbox nie zgłosił żądanego stanu w wyznaczonym czasie. Jego czujniki pokazują, co zgłasza."
     },
     "powerpulse_action_not_delivered": {
-      "message": "Polecenie dla wallboxa nie dotarło do PowerOcean."
+      "message": "Nie udało się wysłać polecenia do wallboxa."
     },
     "powerpulse_action_state": {
       "message": "Wallbox zgłasza stan {status}, który nie pozwala na to działanie."
     },
+    "powerpulse_charge_current_needs_own_channel": {
+      "message": "Prąd ładowania można ustawić tylko na wallboxie bez PowerOcean na tym samym koncie; ten wpis go ma."
+    },
+    "powerpulse_charge_current_not_confirmed": {
+      "message": "Wallbox nie zgłosił nowego prądu ładowania w wyznaczonym czasie. Ostatnia zgłoszona wartość: {reported}."
+    },
+    "powerpulse_charge_current_range": {
+      "message": "Wallbox przyjmuje prąd ładowania od {min} do {max} A."
+    },
+    "powerpulse_charge_current_route_ambiguous": {
+      "message": "Ten wpis zawiera więcej niż jeden PowerOcean; prąd ładowania zaobserwowano jako możliwy do zapisu tylko na wallboxie bez żadnego z nich, dlatego tutaj również jest odrzucany."
+    },
+    "powerpulse_charge_mode_needs_powerocean": {
+      "message": "Tryb ładowania można ustawić tylko przez PowerOcean na tym samym koncie; ten wpis go nie ma."
+    },
+    "powerpulse_charge_mode_not_confirmed": {
+      "message": "Wallbox nie zgłosił nowego trybu ładowania w wyznaczonym czasie. Ostatni zgłoszony tryb: {reported}."
+    },
+    "powerpulse_charge_mode_smart_in_app": {
+      "message": "Tryb inteligentny wymaga godziny odjazdu i celu ładowania; ustaw je w aplikacji EcoFlow."
+    },
+    "powerpulse_charge_mode_unknown": {
+      "message": "{option} nie jest trybem ładowania zgłaszanym przez ten wallbox."
+    },
+    "powerpulse_continuous_needs_powerocean": {
+      "message": "To ustawienie wallboxa można przełączyć tylko przez PowerOcean na tym samym koncie; ten wpis go nie ma."
+    },
+    "powerpulse_continuous_not_confirmed": {
+      "message": "Wallbox nie zgłosił nowego stanu tego ustawienia w wyznaczonym czasie. Ostatni zgłoszony stan: {reported}."
+    },
+    "powerpulse_continuous_report_missing": {
+      "message": "Wallbox nie zgłosił jeszcze swoich bieżących ustawień. Poczekaj na jego następny raport ustawień."
+    },
+    "powerpulse_continuous_report_stale": {
+      "message": "Ostatni raport ustawień wallboxa jest zbyt stary, aby oprzeć na nim tę zmianę. Poczekaj na jego następny raport ustawień."
+    },
+    "powerpulse_continuous_report_unusable": {
+      "message": "Wallbox zgłasza {value} dla {field}, a na tej podstawie integracja nie może wprowadzić zmiany. Zmień to ustawienie w aplikacji EcoFlow."
+    },
+    "powerpulse_custom_current_above_maximum": {
+      "message": "Wallbox nie zapisuje własnego prądu ładowania powyżej swojego maksymalnego prądu. Żądano: {requested} A, maksymalny prąd: {maximum} A."
+    },
+    "powerpulse_custom_current_needs_powerocean": {
+      "message": "Własny prąd ładowania można ustawić tylko przez PowerOcean na tym samym koncie; ten wpis go nie ma."
+    },
+    "powerpulse_custom_current_not_confirmed": {
+      "message": "Wallbox nie zgłosił nowego własnego prądu ładowania w wyznaczonym czasie. Ostatnia zgłoszona wartość: {reported}."
+    },
+    "powerpulse_custom_current_range": {
+      "message": "Wallbox przyjmuje własny prąd ładowania od {min} do {max} A."
+    },
     "powerpulse_descriptor_missing": {
       "message": "Wallbox nie zgłosił jeszcze swojego adresu. Poczekaj na jego następny raport ustawień."
     },
+    "powerpulse_display_brightness_invalid": {
+      "message": "Jasność musi być jedną z wartości {allowed} %. Żądano: {value}."
+    },
+    "powerpulse_max_current_needs_powerocean": {
+      "message": "Maksymalny prąd można ustawić tylko przez PowerOcean na tym samym koncie; ten wpis go nie ma."
+    },
+    "powerpulse_max_current_not_confirmed": {
+      "message": "Wallbox nie zgłosił nowego maksymalnego prądu w wyznaczonym czasie. Ostatnia zgłoszona wartość: {reported}."
+    },
+    "powerpulse_max_current_range": {
+      "message": "Wallbox przyjmuje maksymalny prąd od {min} do {max} A."
+    },
+    "powerpulse_own_channel_offline": {
+      "message": "Własne połączenie wallboxa nie jest aktywne, więc polecenia nie można wysłać."
+    },
+    "powerpulse_phase_setting_needs_powerocean": {
+      "message": "Ustawienie faz można zmienić tylko przez PowerOcean na tym samym koncie; ten wpis go nie ma."
+    },
+    "powerpulse_phase_setting_not_confirmed": {
+      "message": "Wallbox nie zgłosił nowego ustawienia faz w wyznaczonym czasie. Ostatnie zgłoszone ustawienie: {reported}."
+    },
+    "powerpulse_phase_setting_unknown": {
+      "message": "{option} nie jest ustawieniem faz, które przyjmuje ten wallbox."
+    },
     "powerpulse_sibling_missing": {
-      "message": "Polecenie dla wallboxa przechodzi przez PowerOcean z tego samego konta, a ten wpis nie ma żadnego lub ma więcej niż jeden."
+      "message": "Ten wpis zawiera więcej niż jeden PowerOcean, a polecenie dla wallboxa nie może ustalić, do którego z nich należy wallbox."
     },
     "powerpulse_sibling_offline": {
       "message": "PowerOcean, który przekazuje polecenie dla wallboxa, nie jest połączony."
+    },
+    "powerpulse_solar_min_current_needs_powerocean": {
+      "message": "Minimalny prąd solarny można ustawić tylko przez PowerOcean na tym samym koncie; ten wpis go nie ma."
+    },
+    "powerpulse_solar_min_current_not_confirmed": {
+      "message": "Wallbox nie zgłosił nowego minimalnego prądu solarnego w wyznaczonym czasie. Ostatnia zgłoszona wartość: {reported}."
+    },
+    "powerpulse_solar_min_current_range": {
+      "message": "Wallbox przyjmuje minimalny prąd solarny od {min} do {max} A."
     }
   }
 }
