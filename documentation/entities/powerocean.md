@@ -351,6 +351,18 @@ Each battery pack creates 24 sensors (7 core + 17 diagnostic). Pack 1 core senso
 
 ---
 
+## Heating Rod Controls (accessory, Enhanced Mode)
+
+Created once the PowerOcean reports a PowerGlow heating rod, and only with account sign-in. They are configuration entities on the PowerOcean device. Each change waits until the heating rod reports the new value back; if it does not within 20 seconds, Home Assistant shows an error and keeps the reported value.
+
+| Entity | Type | Description | Default |
+|:---|:---:|:---|:---:|
+| Heating Rod Target Power | Number | The heating power the rod is limited to, in watts. The upper end follows the rod: 9000 W on an `HF33`, 6000 W on an `HF32`, 3500 W on other models | enabled |
+| Heating Rod Target Temperature | Number | The water temperature the rod heats to, from 10 to 80 °C | enabled |
+| Heating Rod Mode | Select | Off, Solar or Manual. Switching from Off to Solar or Manual sets the mode first and then switches the rod on | enabled |
+
+---
+
 ## Sensors - PowerPulse Wallbox (accessory, Enhanced Mode)
 
 Created only once a coupled wallbox reports a charging session. See the note at the top. These are the PowerPulse 1; the PowerPulse 2 has [its own page](powerpulse-2.md).
@@ -372,6 +384,9 @@ Created only once a coupled wallbox reports a charging session. See the note at 
 | Backup Reserve | Number | 0 - 100 % | Enhanced only |
 | Solar Surplus Threshold | Number | 0 - 100 % | Enhanced only |
 | Work Mode | Select | Self-use / AI Schedule | Enhanced only |
+| Heating Rod Target Power | Number | 0 - 9000 W (by model) | Enhanced only |
+| Heating Rod Target Temperature | Number | 10 - 80 °C | Enhanced only |
+| Heating Rod Mode | Select | Off / Solar / Manual | Enhanced only |
 
 ---
 
