@@ -50,6 +50,7 @@ from tests.ha.test_powerpulse2_settings_writes import (
 from tests.ha.test_powerpulse2_switch_bits import (
     DISCHARGE_BLOCK,
     PLUG_AND_PLAY,
+    _until,
     _write,
 )
 
@@ -349,8 +350,7 @@ async def test_a_second_display_write_waits_for_the_first_to_confirm_or_time_out
 
     _report(wallbox, True, True, 25, 50)  # the report that confirms the first
     await first
-    await asyncio.sleep(0.05)
-    assert send.call_count == 2
+    await _until(lambda: send.call_count == 2)
     assert _published_display(send.call_args) == [(21, 2, bytes([1, 1, 75, 50, 0, 0]))]
     assert not second.done()
     _report(wallbox, True, True, 75, 50)
@@ -359,7 +359,10 @@ async def test_a_second_display_write_waits_for_the_first_to_confirm_or_time_out
 
     # A write behind one that is never confirmed goes ahead when that one times
     # out: its call ends with the not-confirmed text, the queued call publishes.
-    with patch(f"{_SET_COMMANDS}.POWERPULSE2_SETTINGS_WINDOW_S", 0.15):
+    with (
+        patch(f"{_SET_COMMANDS}.POWERPULSE2_SETTINGS_WINDOW_S", 0.15),
+        patch(f"{_SET_COMMANDS}.POWERPULSE2_SETTINGS_FRESH_WAIT_S", 1.0),
+    ):
         lost = await _start(
             wallbox.async_set_powerpulse_display("ev_led_brightness_pct", 50)
         )
@@ -370,8 +373,11 @@ async def test_a_second_display_write_waits_for_the_first_to_confirm_or_time_out
         with pytest.raises(HomeAssistantError) as excinfo:
             await lost
         assert excinfo.value.translation_key == "powerpulse_continuous_not_confirmed"
-        await asyncio.sleep(0.05)
-        assert send.call_count == 4
+        # The queued write builds only on a report recorded after the lost
+        # write left; the wallbox's next report (unchanged) is that report.
+        assert send.call_count == 3
+        _report(wallbox, True, True, 75, 50)
+        await _until(lambda: send.call_count == 4)
         assert _published_display(send.call_args) == [
             (21, 2, bytes([1, 1, 75, 75, 0, 0]))
         ]
@@ -408,8 +414,7 @@ async def test_a_display_write_and_a_switch_bit_write_queue_behind_each_other(
     assert not switch_task.done() and not display_task.done()
     _report(wallbox, True, True, 25, 25)  # bits 18: the Continuous write's target
     await switch_task
-    await asyncio.sleep(0.05)
-    assert send.call_count == 2
+    await _until(lambda: send.call_count == 2)
     assert _published_display(send.call_args) == [(21, 2, bytes([1, 0, 25, 25, 0, 0]))]
 
     back = await _start(_set_continuous(wallbox, False))
@@ -417,8 +422,7 @@ async def test_a_display_write_and_a_switch_bit_write_queue_behind_each_other(
     assert not back.done() and not display_task.done()
     _report(wallbox, True, False, 25, 25)
     await display_task
-    await asyncio.sleep(0.05)
-    assert send.call_count == 3
+    await _until(lambda: send.call_count == 3)
     assert _published_fields(send.call_args) == {1: 2}
     _apply_report(
         wallbox,
@@ -471,13 +475,11 @@ async def test_rapid_writes_for_one_value_publish_only_the_first_and_the_last(
 
     _report(wallbox, True, True, 50, 25)  # confirms the first
     await first
-    await asyncio.sleep(0.05)
-    assert send.call_count == 2
+    await _until(lambda: send.call_count == 2)
     assert _published_display(send.call_args) == [(21, 2, bytes([1, 1, 50, 50, 0, 0]))]
     _report(wallbox, True, True, 50, 50)
     await screen
-    await asyncio.sleep(0.05)
-    assert send.call_count == 3
+    await _until(lambda: send.call_count == 3)
     assert _published_display(send.call_args) == [(21, 2, bytes([1, 1, 100, 50, 0, 0]))]
     _report(wallbox, True, True, 100, 50)
     await third
@@ -511,12 +513,12 @@ async def test_writes_to_different_switch_bits_do_not_supersede_each_other(
 
     _apply_report(wallbox, ev_settings_switch_bits=17)
     await first
-    await asyncio.sleep(0.05)
+    await _until(lambda: send.call_count == 2)
     assert _published_fields(send.call_args) == {1: 19}
     assert not third.done()
     _apply_report(wallbox, ev_settings_switch_bits=19)
     await second
-    await asyncio.sleep(0.05)
+    await _until(lambda: send.call_count == 3)
     assert _published_fields(send.call_args) == {1: 3}
     _apply_report(wallbox, ev_settings_switch_bits=3)
     await third
@@ -602,8 +604,7 @@ async def test_a_stale_report_waits_for_a_fresh_one_and_then_publishes(
 
         _report(wallbox, True, True, 50, 25)
         clock["now"] = wallbox._settings_report[0] + 1
-        await asyncio.sleep(0.05)
-        assert send.call_count == 1
+        await _until(lambda: send.call_count == 1)
         assert _published_display(send.call_args) == [
             (21, 2, bytes([1, 0, 50, 25, 0, 0]))
         ]
@@ -630,7 +631,7 @@ async def test_a_stale_report_is_refused_only_after_the_bounded_wait(
     stale_now = wallbox._settings_report[0] + 11
 
     with (
-        patch(f"{_SET_COMMANDS}.POWERPULSE2_SETTINGS_FRESH_WAIT_S", 0.3),
+        patch(f"{_SET_COMMANDS}.POWERPULSE2_SETTINGS_FRESH_WAIT_S", 0.6),
         patch(f"{_SET_COMMANDS}.time", SimpleNamespace(monotonic=lambda: stale_now)),
     ):
         task = asyncio.create_task(
@@ -678,6 +679,116 @@ async def test_a_write_queued_past_the_bound_is_refused_as_in_progress(
     _report(wallbox, True, False, 25, 25)
     await first
     assert wallbox._pending_write is None
+
+
+async def test_a_write_after_a_cancelled_published_write_waits_for_a_newer_report(
+    hass: HomeAssistant,
+) -> None:
+    """Discharge Block on is published ({1: 17} from the report 16) and its caller
+    is cancelled; Plug and Play was already waiting behind it. The report still
+    says 16, so building on it would send {1: 18} and take the Discharge Block
+    bit back from the wallbox. Nothing is sent until a report newer than the
+    publish arrives; then the byte carries both bits ({1: 19}).
+
+    Mutation probe: dropping the `_settings_published_seq` comparison in
+    `_fresh_settings_report` publishes {1: 18} at once and fails the
+    `call_count == 1` assertion.
+    """
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    send = _mqtt(oceans[0]).send_proto_set
+    _apply_report(wallbox, ev_settings_switch_bits=16)
+
+    with patch(f"{_SET_COMMANDS}.POWERPULSE2_SETTINGS_FRESH_WAIT_S", 2.0):
+        first = await _start(_write(wallbox, DISCHARGE_BLOCK, True))
+        assert _published_fields(send.call_args) == {1: 17}
+        second = await _start(_write(wallbox, PLUG_AND_PLAY, True))
+        first.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await first
+        await asyncio.sleep(0.2)
+        assert send.call_count == 1 and not second.done()
+
+        _apply_report(wallbox, ev_settings_switch_bits=17)
+        await _until(lambda: send.call_count == 2)
+        assert _published_fields(send.call_args) == {1: 19}
+        _apply_report(wallbox, ev_settings_switch_bits=19)
+        await second
+    assert wallbox._pending_write is None
+
+
+async def test_shutdown_ends_a_write_that_waits_for_a_report(
+    hass: HomeAssistant,
+) -> None:
+    """A write that found the report stale sleeps on the wake event with no
+    pending record to cancel. Shutting the coordinator down wakes it, and it
+    ends with the not-delivered text well before its five-second wait is up.
+
+    Mutation probe: dropping the notification in `async_shutdown` leaves the
+    call asleep until the one-second guard ends the test with a TimeoutError.
+    """
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    send = _mqtt(oceans[0]).send_proto_set
+    _report(wallbox, True, True, 25, 25)
+    assert wallbox._settings_report is not None
+    stale_now = wallbox._settings_report[0] + 12
+
+    with (
+        patch(f"{_SET_COMMANDS}.POWERPULSE2_SETTINGS_FRESH_WAIT_S", 5.0),
+        patch(f"{_SET_COMMANDS}.time", SimpleNamespace(monotonic=lambda: stale_now)),
+    ):
+        task = await _start(
+            wallbox.async_set_powerpulse_display("ev_screen_enabled", 0)
+        )
+        assert not task.done()
+        await wallbox.async_shutdown()
+        with pytest.raises(HomeAssistantError) as excinfo:
+            async with asyncio.timeout(1):
+                await task
+    assert excinfo.value.translation_key == "powerpulse_action_not_delivered"
+    assert send.call_count == 0
+
+
+async def test_the_fresh_report_wait_never_outlasts_the_queue_bound(
+    hass: HomeAssistant,
+) -> None:
+    """A call that spent most of its bound queued behind another write and then
+    finds a stale report has only what is left of the bound (1.2 s here: window
+    0.2 s plus fresh wait 1.0 s), not a further full fresh wait (it would end at
+    about 1.6 s). The stale text comes at the bound.
+
+    Mutation probe: giving the fresh wait its own full length again (dropping the
+    `min` with the queue deadline) ends the call at about 1.6 s and fails the
+    1.45 s assertion.
+    """
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    _mqtt(oceans[0])
+    _report(wallbox, True, True, 25, 25)
+    assert wallbox._settings_report is not None
+    stale_now = wallbox._settings_report[0] + 12
+    loop = asyncio.get_running_loop()
+
+    first = await _start(wallbox.async_set_powerpulse_display("ev_screen_enabled", 0))
+    with (
+        patch(f"{_SET_COMMANDS}.POWERPULSE2_SETTINGS_WINDOW_S", 0.2),
+        patch(f"{_SET_COMMANDS}.POWERPULSE2_SETTINGS_FRESH_WAIT_S", 1.0),
+        patch(f"{_SET_COMMANDS}.time", SimpleNamespace(monotonic=lambda: stale_now)),
+    ):
+        started = loop.time()
+        second = asyncio.create_task(
+            wallbox.async_set_powerpulse_display("ev_led_brightness_pct", 75)
+        )
+        await asyncio.sleep(0.6)
+        _report(wallbox, True, False, 25, 25)  # confirms the first; stale on this clock
+        await first
+        with pytest.raises(HomeAssistantError) as excinfo:
+            async with asyncio.timeout(3):
+                await second
+        elapsed = loop.time() - started
+    assert excinfo.value.translation_key == "powerpulse_continuous_report_stale"
+    assert elapsed < 1.45
 
 
 def test_a_settings_write_is_either_fields_or_a_display_block() -> None:

@@ -17,7 +17,7 @@ write tests (18 -> 19 -> 18 for 0x01, 16 -> 18 -> 16 for 0x02).
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Coroutine
+from collections.abc import Callable, Coroutine
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -60,6 +60,17 @@ _BOTH = pytest.mark.parametrize(
     [DISCHARGE_BLOCK, PLUG_AND_PLAY],
     ids=["battery_discharge_block", "plug_and_play"],
 )
+
+
+async def _until(condition: Callable[[], bool], timeout: float = 2.0) -> None:
+    """Wait until `condition` holds, at most `timeout` seconds. A publish crosses
+    the executor, so a fixed sleep before reading the send count is a guess."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    while not condition():
+        if loop.time() > deadline:
+            raise AssertionError(f"condition not reached within {timeout} s")
+        await asyncio.sleep(0.01)
 
 
 def _write(
@@ -179,7 +190,7 @@ async def test_writes_across_the_three_bits_queue_and_each_builds_on_the_last(
 
     _apply_report(wallbox, ev_settings_switch_bits=17 | 0x04)
     await first
-    await asyncio.sleep(0.05)
+    await _until(lambda: send.call_count == 2)
     assert _published_fields(send.call_args) == {1: 23}
     _apply_report(wallbox, ev_settings_switch_bits=23)
     await second

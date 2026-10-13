@@ -58,6 +58,8 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
     _settings_wake: asyncio.Event
     _settings_write_seq: int
     _settings_calls: dict[int, str]
+    _settings_report_seq: int
+    _settings_published_seq: int
     _powerocean_soc_pending: tuple[int, int] | None
     _powerocean_soc_pending_revision: int
     _powerocean_soc_debounce_unsub: asyncio.TimerHandle | None

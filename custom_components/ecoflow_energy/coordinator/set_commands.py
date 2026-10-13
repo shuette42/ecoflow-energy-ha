@@ -2246,6 +2246,34 @@ class SetCommandsMixin(_Base):
         finally:
             self._clear_pending_write(record)
 
+    def _fresh_settings_report(self) -> dict[str, Any]:
+        """The latest settings report, if a write may be built on it (#495).
+
+        Raises `_SettingsReportNotFresh` (`report_missing`, or `report_stale`)
+        when there is none, when it is older than
+        `POWERPULSE2_SETTINGS_MAX_AGE_S`, or when no report was recorded since
+        the last settings write left: a write that was sent and then cancelled
+        by its caller has changed the wallbox in a way the older report does
+        not show, and rebuilding the byte from that report would send the old
+        bits back. Waiting for the next report fixes all three.
+        """
+        report = self._settings_report
+        if report is None:
+            raise _SettingsReportNotFresh(
+                translation_domain=DOMAIN,
+                translation_key="powerpulse_continuous_report_missing",
+            )
+        received_at, values = report
+        if (
+            time.monotonic() - received_at > POWERPULSE2_SETTINGS_MAX_AGE_S
+            or self._settings_report_seq <= self._settings_published_seq
+        ):
+            raise _SettingsReportNotFresh(
+                translation_domain=DOMAIN,
+                translation_key="powerpulse_continuous_report_stale",
+            )
+        return values
+
     async def _async_write_powerpulse_settings(
         self,
         *,
@@ -2278,7 +2306,12 @@ class SetCommandsMixin(_Base):
         target: a display value, one switch bit, a current) wins: a call still
         waiting for its turn when a newer call for the same target arrives
         ends without sending and without an error, because the newer call
-        carries the final choice. Calls for different targets run one after
+        carries the final choice. The older call is dropped when the newer one
+        is made, before the newer one passes any check: if the newer call is
+        then refused, the older caller has still returned without an error and
+        nothing was sent. No PowerPulse 2 setter shows an optimistic state, so
+        the entity stays on the value the wallbox reported. Calls for different
+        targets run one after
         the other, each built on the report that confirmed the one before
         (waiters wake first come, first served, and the order of two different
         targets does not change what the wallbox ends up with). The `action`,
@@ -2286,10 +2319,13 @@ class SetCommandsMixin(_Base):
         switches share one state key and one must not cancel another.
 
         When `plan` finds the settings report missing or older than
-        `POWERPULSE2_SETTINGS_MAX_AGE_S`, the call waits up to
-        `POWERPULSE2_SETTINGS_FRESH_WAIT_S` for the next report (about one a
-        second), then runs `plan` again. Nothing is sent while it waits, and a
-        report that still does not come is refused with the report's own text.
+        `POWERPULSE2_SETTINGS_MAX_AGE_S`, or no report was recorded since the
+        last settings write left (`_fresh_settings_report`), the call waits up
+        to `POWERPULSE2_SETTINGS_FRESH_WAIT_S`, never past its queue bound, for
+        the next report, then runs `plan` again. Nothing is sent while it
+        waits, and a report that still does not come is refused with the
+        report's own text. Only the display and switch-bit writes read the
+        report.
         """
         from ..ecoflow.energy_stream import (
             build_powerpulse_param_set_display_payload,
@@ -2427,6 +2463,11 @@ class SetCommandsMixin(_Base):
                             # the record lives exactly as long as this call and
                             # is cleared on every exit.
                             self._pending_write = record
+                            # Marked before the send, not after it: a call
+                            # cancelled during the send hop may still have
+                            # published, so the next write waits for a report
+                            # newer than this one either way (#495 review).
+                            self._settings_published_seq = self._settings_report_seq
                             try:
                                 delivered = await sibling.async_send_proto_set_command(
                                     payload, f"powerpulse_{action}"
@@ -2456,7 +2497,10 @@ class SetCommandsMixin(_Base):
                         )
                 else:
                     if fresh_deadline is None:
-                        fresh_deadline = loop.time() + POWERPULSE2_SETTINGS_FRESH_WAIT_S
+                        fresh_deadline = min(
+                            loop.time() + POWERPULSE2_SETTINGS_FRESH_WAIT_S,
+                            queue_deadline,
+                        )
                     remaining = fresh_deadline - loop.time()
                     if remaining <= 0:
                         raise not_fresh
@@ -2623,18 +2667,7 @@ class SetCommandsMixin(_Base):
         action = key.removeprefix("ev_")
 
         def plan() -> _SettingsWrite:
-            report = self._settings_report
-            if report is None:
-                raise _SettingsReportNotFresh(
-                    translation_domain=DOMAIN,
-                    translation_key="powerpulse_continuous_report_missing",
-                )
-            received_at, values = report
-            if time.monotonic() - received_at > POWERPULSE2_SETTINGS_MAX_AGE_S:
-                raise _SettingsReportNotFresh(
-                    translation_domain=DOMAIN,
-                    translation_key="powerpulse_continuous_report_stale",
-                )
+            values = self._fresh_settings_report()
             bits = values.get("ev_settings_switch_bits")
             if type(bits) is not int:
                 raise HomeAssistantError(
@@ -2714,18 +2747,7 @@ class SetCommandsMixin(_Base):
         target = int(value)
 
         def plan() -> _SettingsWrite:
-            report = self._settings_report
-            if report is None:
-                raise _SettingsReportNotFresh(
-                    translation_domain=DOMAIN,
-                    translation_key="powerpulse_continuous_report_missing",
-                )
-            received_at, values = report
-            if time.monotonic() - received_at > POWERPULSE2_SETTINGS_MAX_AGE_S:
-                raise _SettingsReportNotFresh(
-                    translation_domain=DOMAIN,
-                    translation_key="powerpulse_continuous_report_stale",
-                )
+            values = self._fresh_settings_report()
             block: list[int] = []
             for name, label in _POWERPULSE2_DISPLAY_BYTES:
                 reported = values.get(name)

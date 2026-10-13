@@ -417,6 +417,13 @@ class EcoFlowDeviceCoordinator(
         self._settings_wake: asyncio.Event = asyncio.Event()
         self._settings_write_seq: int = 0
         self._settings_calls: dict[int, str] = {}
+        # Reports recorded so far, and how many there were when the last
+        # settings write left. A write builds its byte only from a report
+        # recorded after that one, so a write whose caller was cancelled after
+        # it was sent cannot be undone by the next write rebuilding from the
+        # report that came before it.
+        self._settings_report_seq: int = 0
+        self._settings_published_seq: int = 0
         self._credential_obtained_ts: float = 0.0
         self._credential_refresh_unsub: asyncio.TimerHandle | None = None
         self._event_log: deque[dict[str, Any]] = deque(maxlen=50)

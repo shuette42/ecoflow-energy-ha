@@ -463,6 +463,7 @@ class StateApplyMixin(_Base):
         """
         if "ev_settings_switch_bits" not in parsed:
             return
+        self._settings_report_seq += 1
         self._settings_report = (
             now,
             {
