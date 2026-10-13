@@ -316,7 +316,8 @@ def _validate_powerpulse_serial(name: str, sn: str) -> None:
     """Validate a PowerPulse 2/PowerOcean serial: 16 alphanumeric ASCII chars.
 
     Shared by every `EDevParamSet` builder that addresses the wallbox
-    accessory (PLAN-146, PLAN-147).
+    accessory (PLAN-146, PLAN-147) and by the PowerGlow heating rod write,
+    whose rod serial has the same shape.
     """
     if len(sn) != 16 or not sn.isascii() or not sn.isalnum():
         raise ValueError(f"{name} must be 16 alphanumeric ASCII characters, got {sn!r}")
@@ -671,6 +672,128 @@ def build_powerpulse_standalone_current_ctrl_payload(
     pdata = encode_field_varint(5, current_a * 10) + encode_field_varint(7, 2)
     return _build_powerocean_set_envelope(
         pdata, cmd_id=81, seq=seq, device_sn=device_sn, cmd_func=2, dest=2
+    )
+
+
+# PowerGlow (HF33 and relatives) heating rod limits, as the vendor app enforces
+# them before it sends a write (PLAN-190). The target power ceiling follows the
+# rod's serial prefix: HF33 9000 W, HF32 6000 W, every other prefix 3500 W.
+# This table is the only copy; callers that need the ceiling ask
+# `powerglow_max_power_w`.
+_POWERGLOW_MAX_POWER_W_BY_PREFIX: dict[str, int] = {"HF33": 9000, "HF32": 6000}
+_POWERGLOW_MAX_POWER_W_DEFAULT = 3500
+_POWERGLOW_TARGET_TEMP_C_MIN = 10
+_POWERGLOW_TARGET_TEMP_C_MAX = 80
+
+
+def powerglow_max_power_w(hr_sn: str) -> int:
+    """Return the highest `target_power` (W) the app accepts for this rod.
+
+    Decided by the first four characters of the heating rod's own serial:
+    `HF33` 9000, `HF32` 6000, anything else 3500.
+    """
+    return _POWERGLOW_MAX_POWER_W_BY_PREFIX.get(
+        hr_sn[:4], _POWERGLOW_MAX_POWER_W_DEFAULT
+    )
+
+
+def _powerglow_int(name: str, value: object, minimum: int, maximum: int) -> int:
+    """Check one PowerGlow varint argument: a real int (not a bool) in range."""
+    if type(value) is not int or not minimum <= value <= maximum:
+        raise ValueError(
+            f"{name} must be an int in {minimum}..{maximum}, got {value!r}"
+        )
+    return value
+
+
+def build_powerglow_param_set_payload(
+    hr_sn: str,
+    device_sn: str,
+    *,
+    run_on: bool | None = None,
+    mode: int | None = None,
+    target_temp_c: int | None = None,
+    target_power_w: int | None = None,
+    seq: int = 0,
+) -> bytes:
+    """Build HeatingRodParamSet (212/99): write one PowerGlow heating rod setting.
+
+    Sent on the PowerOcean's own set topic. `pdata` is `HeatingRodParamSet`:
+    field 1 `hr_sn` (the heating rod's 16-character serial, always present),
+    then exactly one of field 2 `run_sta_ctrl` (1 on, 0 off), field 3 `mode`
+    (0 Solar, 1 Manual), field 4 `target_temp` (degrees Celsius) or field 5
+    `target_power` (watts). A zero is sent explicitly (`28 00` for a target
+    power of 0): the app writes one setting per frame and a zero is a value,
+    not an absence. Byte-for-byte from the 17 app writes of one recording
+    (issue #7, PLAN-190), which the envelope reproduces with every parameter
+    of `_build_powerocean_set_envelope` at its default except the command
+    (212/99) and the PowerOcean serial in field 25.
+
+    The device answers on `set_reply` with `HeatingRodParamSetAck` and
+    reports the new value on its next `212/8` report, which the PowerOcean
+    parser already reads (`remap_heating_rod_keys`).
+
+    Args:
+        hr_sn: The heating rod's own 16-character serial (not the
+            PowerOcean's), as reported in its `212/8` message.
+        device_sn: The PowerOcean's 16-character serial (the topic owner),
+            carried in the envelope's field 25.
+        run_on: True switches the rod on, False off. Must be a bool.
+        mode: 0 Solar or 1 Manual. Must be an int, not a bool.
+        target_temp_c: Target water temperature, 10-80 degrees Celsius.
+        target_power_w: Target power in whole watts, 0 up to
+            `powerglow_max_power_w(hr_sn)`.
+        seq: Sequence number. Default 0 generates from timestamp.
+
+    Raises:
+        ValueError: if not exactly one of the four settings is given, a value
+            is out of range or of the wrong type, or either serial is not 16
+            alphanumeric ASCII characters.
+    """
+    given = [
+        name
+        for name, value in (
+            ("run_on", run_on),
+            ("mode", mode),
+            ("target_temp_c", target_temp_c),
+            ("target_power_w", target_power_w),
+        )
+        if value is not None
+    ]
+    if len(given) != 1:
+        raise ValueError(
+            "exactly one of run_on, mode, target_temp_c and target_power_w "
+            f"must be given, got {len(given)}"
+        )
+    _validate_powerpulse_serial("hr_sn", hr_sn)
+    _validate_powerpulse_serial("device_sn", device_sn)
+
+    pdata = encode_field_bytes(1, hr_sn.encode("ascii"))
+    if run_on is not None:
+        if type(run_on) is not bool:
+            raise ValueError(f"run_on must be a bool, got {run_on!r}")
+        pdata += encode_field_varint(2, 1 if run_on else 0)
+    elif mode is not None:
+        pdata += encode_field_varint(3, _powerglow_int("mode", mode, 0, 1))
+    elif target_temp_c is not None:
+        pdata += encode_field_varint(
+            4,
+            _powerglow_int(
+                "target_temp_c",
+                target_temp_c,
+                _POWERGLOW_TARGET_TEMP_C_MIN,
+                _POWERGLOW_TARGET_TEMP_C_MAX,
+            ),
+        )
+    else:
+        pdata += encode_field_varint(
+            5,
+            _powerglow_int(
+                "target_power_w", target_power_w, 0, powerglow_max_power_w(hr_sn)
+            ),
+        )
+    return _build_powerocean_set_envelope(
+        pdata, cmd_id=99, seq=seq, cmd_func=212, device_sn=device_sn
     )
 
 

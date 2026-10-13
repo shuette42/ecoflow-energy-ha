@@ -113,6 +113,9 @@ def test_powerglow_report_maps_all_four_heating_rod_readings() -> None:
         "heating_rod_target_power_w": 2160.0,
         "heating_rod_water_temp_c": 69.0,
         "heating_rod_target_temp_c": 80.0,
+        "heating_rod_mode": 1,
+        "heating_rod_run_state": 1,
+        "heating_rod_sn": "X" * 16,
     }
 
 
@@ -128,6 +131,9 @@ def test_powerglow_idle_report_is_a_real_zero_watts() -> None:
         "heating_rod_target_power_w": 0.0,
         "heating_rod_water_temp_c": 56.0,
         "heating_rod_target_temp_c": 70.0,
+        "heating_rod_mode": 1,
+        "heating_rod_run_state": 1,
+        "heating_rod_sn": "X" * 16,
     }
 
 
@@ -148,6 +154,9 @@ def test_powerglow_target_power_is_not_an_echo_of_the_drawn_power() -> None:
         "heating_rod_target_power_w": 6510.0,
         "heating_rod_water_temp_c": 65.0,
         "heating_rod_target_temp_c": 80.0,
+        "heating_rod_mode": 1,
+        "heating_rod_run_state": 0,
+        "heating_rod_sn": "X" * 16,
     }
 
 
@@ -169,20 +178,30 @@ def test_powerglow_field_map_holds_at_a_lower_draw() -> None:
         "heating_rod_target_power_w": 790.0,
         "heating_rod_water_temp_c": 74.0,
         "heating_rod_target_temp_c": 80.0,
+        "heating_rod_mode": 1,
+        "heating_rod_run_state": 1,
+        "heating_rod_sn": "X" * 16,
     }
 
 
-def test_powerglow_serial_never_reaches_a_sensor_key() -> None:
-    """The rod's own serial identifies the report and is not published."""
+def test_powerglow_serial_is_carried_for_writes_and_is_the_only_string() -> None:
+    """The rod's own serial is kept for the controls, which must address it.
+
+    It is the one string in the result, under `heating_rod_sn`, which has no
+    sensor entity; no reading key carries it.
+    """
     results = decode_proto_runtime_headers(
         _build_header(212, 8, _PG_HEATING_PDATA), device_type=DEVICE_TYPE_POWEROCEAN
     )
     raw = {k: v for k, v in results[0].mapped.items() if not k.startswith("_")}
 
     assert raw["hr_sn"] == "X" * 16
-    assert not any(
-        isinstance(value, str) for value in remap_heating_rod_keys(raw).values()
-    )
+    strings = {
+        key: value
+        for key, value in remap_heating_rod_keys(raw).items()
+        if isinstance(value, str)
+    }
+    assert strings == {"heating_rod_sn": "X" * 16}
 
 
 def test_runtime_decodes_every_header_with_its_own_sequence() -> None:

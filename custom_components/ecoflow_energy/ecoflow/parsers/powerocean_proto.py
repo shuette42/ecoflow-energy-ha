@@ -686,17 +686,32 @@ def remap_ems_param_change_keys(raw: dict[str, Any]) -> dict[str, Any]:
 
 # --- PowerPulse wallbox (cmd_func 209) ---
 
+# PowerGlow heating rod report (`HRChargingParamReport`, cmd_func 212).
 # Only fields with both a name from the message definition and a check against
-# the reporter's own session are listed. `switch_bits`, `work_mode` and the
-# undeclared field numbers above 30 stay unread on purpose: they move, but
-# nothing observed says what they mean, and a sensor named after a guess is
-# worse than no sensor. See PLAN-079.
+# the reporter's own session are read. `hr_online_bits`, `hr_error_code`,
+# `hr_water_tank_volume`, `hr_selfcheck_percent` and `hr_run_flag` stay unread
+# on purpose: they move, but nothing observed says what they mean, and a
+# sensor named after a guess is worse than no sensor. See PLAN-079.
+#
+# The four readings below become floats and feed sensors. The mode, the run
+# state and the rod's own serial are read for the PowerGlow controls
+# (PLAN-190): a write must address the rod by its serial, and a switch or
+# select needs the device's state to confirm against. Those three stay as the
+# device sends them and have no sensor entity.
 HEATING_ROD_TO_SENSOR: dict[str, str] = {
     "hr_temp": "heating_rod_water_temp_c",
     "hr_heating_power": "heating_rod_power_w",
     "hr_target_temp": "heating_rod_target_temp_c",
     "hr_target_power": "heating_rod_target_power_w",
 }
+
+# Integer state values: `hr_mode` is 0 Solar or 1 Manual, `hr_run_stat` the
+# rod's run state as reported.
+HEATING_ROD_STATE_KEYS: dict[str, str] = {
+    "hr_mode": "heating_rod_mode",
+    "hr_run_stat": "heating_rod_run_state",
+}
+_HEATING_ROD_SN_LENGTH = 16
 
 
 def remap_heating_rod_keys(raw: dict[str, Any]) -> dict[str, Any]:
@@ -708,6 +723,12 @@ def remap_heating_rod_keys(raw: dict[str, Any]) -> dict[str, Any]:
     a reporter capture carries 2159 W drawn against a 2160 W target at 69 of a
     requested 80 degrees, and no scaling reconciles those with the app.
 
+    Three more values ride along for the controls: `heating_rod_mode` and
+    `heating_rod_run_state` as the integers the device sends, and
+    `heating_rod_sn`, the rod's own 16-character serial, which a write has to
+    address. A serial of any other length is dropped. None of the three
+    reaches a sensor.
+
     An idle rod reports its power as a real zero rather than omitting it, which
     the oneof wrapper on the message preserves. Nothing here is a meter, so no
     key reaches a total_increasing sensor.
@@ -716,9 +737,21 @@ def remap_heating_rod_keys(raw: dict[str, Any]) -> dict[str, Any]:
 
     for proto_key, value in raw.items():
         sensor_key = HEATING_ROD_TO_SENSOR.get(proto_key)
-        if sensor_key is None or not isinstance(value, (int, float)):
+        if sensor_key is not None:
+            if isinstance(value, (int, float)):
+                result[sensor_key] = float(value)
             continue
-        result[sensor_key] = float(value)
+        state_key = HEATING_ROD_STATE_KEYS.get(proto_key)
+        if state_key is not None:
+            if isinstance(value, int) and not isinstance(value, bool):
+                result[state_key] = value
+            continue
+        if (
+            proto_key == "hr_sn"
+            and isinstance(value, str)
+            and len(value) == _HEATING_ROD_SN_LENGTH
+        ):
+            result["heating_rod_sn"] = value
 
     return result
 
