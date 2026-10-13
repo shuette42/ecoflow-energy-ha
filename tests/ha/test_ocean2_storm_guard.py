@@ -14,14 +14,17 @@ Time is the hand-driven loop clock of the reserve tests, so "35 s later" is
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.const import (
@@ -62,12 +65,19 @@ from .test_ocean2_backup_reserve_coordinator import (
     _integration_warnings,
     _settle,
     _Timers,
+    _write,
     _write_held_in_publish,
 )
 
 _COMMANDS_TIME = "custom_components.ecoflow_energy.ecoflow.ocean2_commands.time"
 SERIAL = "RE11TEST00000001"
 SET_REPLY_TOPIC = f"/app/user123/{SERIAL}/thing/property/set_reply"
+GET_REPLY_TOPIC = f"/app/user123/{SERIAL}/thing/property/get_reply"
+_FIXTURE = json.loads(
+    (
+        Path(__file__).parent.parent / "fixtures/ocean2/storm_guard_frames.json"
+    ).read_text()
+)
 
 
 @pytest.fixture
@@ -325,4 +335,205 @@ class TestStormGuardSwitch:
         coordinator._write_rollback_generation += 1
         switch._handle_coordinator_update()
 
+        assert switch.is_on is False
+
+
+def _recorded_snapshot(tag: str) -> bytes:
+    """A full get_reply frame the unit sent in the 2026-09-19 recording."""
+    for frame in _FIXTURE["frames"]:
+        if frame["tag"] == tag:
+            return bytes.fromhex(frame["hex"])
+    raise AssertionError(tag)
+
+
+def _readback_missing(coordinator: Any) -> list[str]:
+    return [
+        e["detail"] for e in coordinator.event_log if e["type"] == "readback_missing"
+    ]
+
+
+class TestStormGuardOff:
+    async def test_off_publishes_the_off_frame_and_a_false_snapshot_confirms_it(
+        self, hass: HomeAssistant, timers: _Timers
+    ) -> None:
+        coordinator, mqtt, _ = _coordinator(hass)
+        coordinator._apply_data({"storm_guard_enabled": True})
+
+        with patch(_COMMANDS_TIME) as clock:
+            clock.time.return_value = 1_700_000_000.0
+            ok = await coordinator.async_set_ocean2_storm_guard(False)
+            expected = build_ocean2_storm_guard_payload(False, SERIAL)
+
+        assert ok is True
+        assert mqtt.send_proto_set.call_args[0][0] == expected
+        assert coordinator.data["storm_guard_enabled"] is False
+
+        timers.advance(8)
+        await _settle(hass)
+        coordinator._apply_data({"storm_guard_enabled": False})  # the snapshot
+        timers.advance(28)
+        await _settle(hass)
+
+        assert coordinator.data["storm_guard_enabled"] is False
+        assert _readback_missing(coordinator) == []
+        assert coordinator._ocean2_writes == {}
+
+    async def test_off_without_a_snapshot_puts_the_on_state_back(
+        self, hass: HomeAssistant, timers: _Timers
+    ) -> None:
+        coordinator, _, _ = _coordinator(hass)
+        coordinator._apply_data({"storm_guard_enabled": True})
+        await coordinator.async_set_ocean2_storm_guard(False)
+        assert coordinator.data["storm_guard_enabled"] is False
+
+        timers.advance(36)
+        await _settle(hass)
+
+        assert coordinator.data["storm_guard_enabled"] is True
+        assert _readback_missing(coordinator) == ["action=17"]
+
+    async def test_the_switch_turns_off_through_the_real_coordinator(
+        self, hass: HomeAssistant, timers: _Timers
+    ) -> None:
+        coordinator, mqtt, entry = _coordinator(hass)
+        coordinator._apply_data({"storm_guard_enabled": True})
+        created: list[Any] = []
+        await switch_setup(hass, entry, add_entities_collector(created))
+        switch = created[0]
+        switch.entity_id = "switch.ocean_2_storm_guard"
+        switch.async_write_ha_state = MagicMock()  # type: ignore[method-assign]
+        assert switch.is_on is True
+
+        with patch(_COMMANDS_TIME) as clock:
+            clock.time.return_value = 1_700_000_000.0
+            await switch.async_turn_off()
+            expected = build_ocean2_storm_guard_payload(False, SERIAL)
+
+        assert mqtt.send_proto_set.call_args[0][0] == expected
+        assert switch.is_on is False
+
+
+class TestStormGuardRealSnapshot:
+    async def test_a_recorded_snapshot_confirms_a_pending_write(
+        self, hass: HomeAssistant, timers: _Timers
+    ) -> None:
+        """The frame comes in through the MQTT ingest path, not as a dict."""
+        coordinator, mqtt, _ = _coordinator(hass)
+        coordinator._apply_data({"storm_guard_enabled": False})
+        await coordinator.async_set_ocean2_storm_guard(True)
+        timers.advance(8)  # the request that resets the marker
+        await _settle(hass)
+        pending = coordinator._ocean2_writes["storm_guard_enabled"]
+        assert pending.snapshot_seen is False
+
+        # 2026-09-19 11:25:25, the full report after the app's two "on" writes.
+        coordinator._on_mqtt_message(
+            GET_REPLY_TOPIC, _recorded_snapshot("2026-09-19_get_reply_snapshot_16")
+        )
+        await asyncio.sleep(0)
+        await _settle(hass)
+
+        assert pending.snapshot_seen is True
+        assert pending.reported is True
+        timers.advance(28)
+        await _settle(hass)
+
+        assert coordinator.data["storm_guard_enabled"] is True
+        assert _readback_missing(coordinator) == []
+        assert coordinator._ocean2_writes == {}
+        assert mqtt.send_get_all.call_count == 1  # no retry once confirmed
+
+
+class TestPreWriteValueIsWhatTheUnitReported:
+    async def test_two_quick_toggles_without_a_report_restore_the_original(
+        self, hass: HomeAssistant, timers: _Timers
+    ) -> None:
+        """The second write finds the first one's seed in the store.
+
+        The unit reported "off". On, then off again within the window, and no
+        report ever comes: what goes back is "off", not the first write's
+        unconfirmed "on".
+        """
+        coordinator, _, _ = _coordinator(hass)
+        coordinator._apply_data({"storm_guard_enabled": False})
+        await coordinator.async_set_ocean2_storm_guard(True)
+        await coordinator.async_set_ocean2_storm_guard(False)
+        assert coordinator._ocean2_writes["storm_guard_enabled"].pre is False
+
+        timers.advance(36)
+        await _settle(hass)
+
+        assert coordinator.data["storm_guard_enabled"] is False
+        assert _readback_missing(coordinator) == ["action=17"]
+
+    async def test_a_value_the_unit_reported_in_between_is_the_one_put_back(
+        self, hass: HomeAssistant, timers: _Timers
+    ) -> None:
+        """Control: after a report the store holds the unit's own value."""
+        coordinator, _, _ = _coordinator(hass)
+        coordinator._apply_data({"storm_guard_enabled": False})
+        await coordinator.async_set_ocean2_storm_guard(True)
+        coordinator._apply_data({"storm_guard_enabled": True})  # the unit's report
+        await coordinator.async_set_ocean2_storm_guard(False)
+        assert coordinator._ocean2_writes["storm_guard_enabled"].pre is True
+
+        timers.advance(36)
+        await _settle(hass)
+
+        assert coordinator.data["storm_guard_enabled"] is True
+        assert _readback_missing(coordinator) == ["action=17"]
+
+    async def test_the_reserve_follows_the_same_rule(
+        self, hass: HomeAssistant, timers: _Timers
+    ) -> None:
+        """A snapshot with field 92 but without field 10 reports no reserve."""
+        coordinator, mqtt, _ = _coordinator(hass)
+        coordinator._apply_data(dict(SNAPSHOT_5_80))
+        await _write(hass, coordinator, mqtt, 23, SNAPSHOT_5_80)
+        await _write(hass, coordinator, mqtt, 40, {"edev_soc_ratio_pct": 80})
+        assert coordinator._ocean2_writes["backup_reserve_pct"].pre == 5
+
+        timers.advance(36)
+        await _settle(hass)
+
+        assert coordinator.data["backup_reserve_pct"] == 5
+        assert _readback_missing(coordinator) == ["field=10"]
+
+
+class TestStormGuardSwitchErrors:
+    @pytest.mark.parametrize(
+        ("outcome", "translation_key"),
+        [
+            (DeviceValueNotReported("Ocean 2 storm guard"), "set_command_not_ready"),
+            (ValueError("not available on this unit"), "set_value_rejected"),
+            (False, "set_command_failed"),
+        ],
+    )
+    async def test_each_coordinator_outcome_maps_to_its_own_error(
+        self,
+        hass: HomeAssistant,
+        outcome: Exception | bool,
+        translation_key: str,
+    ) -> None:
+        coordinator, _, entry = _coordinator(hass)
+        coordinator._apply_data({"storm_guard_enabled": False})
+        created: list[Any] = []
+        await switch_setup(hass, entry, add_entities_collector(created))
+        switch = created[0]
+        switch.entity_id = "switch.ocean_2_storm_guard"
+        switch.async_write_ha_state = MagicMock()  # type: ignore[method-assign]
+        if isinstance(outcome, Exception):
+            write = AsyncMock(side_effect=outcome)
+        else:
+            write = AsyncMock(return_value=outcome)
+
+        with (
+            patch.object(coordinator, "async_set_ocean2_storm_guard", write),
+            pytest.raises(HomeAssistantError) as raised,
+        ):
+            await switch.async_turn_on()
+
+        assert raised.value.translation_key == translation_key
+        write.assert_awaited_once_with(True)
+        # A refused or failed write must not leave the requested value showing.
         assert switch.is_on is False

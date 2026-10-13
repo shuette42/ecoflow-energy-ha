@@ -577,9 +577,10 @@ class StateApplyMixin(_Base):
 
         self._device_data.update(parsed)
 
-        # Ocean 2 Backup Reserve (PLAN-151): a write waits for a frame carrying
-        # field 92 and confirms itself on one carrying field 10. Both are seen
-        # here, after the store holds them.
+        # Ocean 2 writes (PLAN-151, PLAN-192): a Backup Reserve write waits for a
+        # frame carrying field 92 and confirms itself on one carrying field 10;
+        # a Storm Guard write confirms itself on one carrying field 21. All are
+        # seen here, after the store holds them.
         if self.device_type == DEVICE_TYPE_OCEAN2:
             self._note_ocean2_snapshot(parsed)
 

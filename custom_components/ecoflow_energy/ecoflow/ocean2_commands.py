@@ -7,8 +7,11 @@ while the setting was changed in the app, and `tests/test_ocean2_commands.py`
 rebuilds it byte for byte (the serial masked to a run of `X`).
 
 The device answers on the same topic with `is_ack` set and `cmd_ok` in the
-payload. Five app writes of the reserve shape and five of the storm guard
-shape were acknowledged with `cmd_ok = 1` and applied.
+payload. Five app writes of the reserve shape were acknowledged with
+`cmd_ok = 1` and applied. Five of the storm guard shape were acknowledged
+with `cmd_ok = 1` too; a full snapshot reported the written state after
+four of them (the fifth, 2026-10-13 on, was followed by the off write
+before any snapshot).
 
 This family does not share `stream_ac5000_commands._build_envelope`. The
 STREAM AC 5000 envelope hardcodes destination 2, a product id and the app

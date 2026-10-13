@@ -82,9 +82,12 @@ class _Ocean2Write:
     write's own acknowledgement out of a `set_reply` payload (`None` for a
     reply that answers something else), `label` and `event_detail` name the
     write in the log and the event log. `snapshot_seen` means a snapshot
-    carrying `state_key` arrived since the 8 s request. `rejected` means the
-    device refused this write, which can be known before the write's own
-    coroutine has resumed from the publish (event loop only).
+    carrying `state_key` arrived since the 8 s request. `reported` means a
+    snapshot carrying `state_key` arrived at any time since the publish, so the
+    store holds a value the unit reported and no longer this write's seed; it
+    is never reset. `rejected` means the device refused this write, which can
+    be known before the write's own coroutine has resumed from the publish
+    (event loop only).
     """
 
     state_key: str
@@ -96,6 +99,7 @@ class _Ocean2Write:
     event_detail: str
     handles: list[asyncio.TimerHandle] = field(default_factory=list)
     snapshot_seen: bool = False
+    reported: bool = False
     rejected: bool = False
 
     def is_recent(self, now: float) -> bool:
@@ -1222,8 +1226,7 @@ class SetCommandsMixin(_Base):
                 payload,
                 _Ocean2Write(
                     state_key="backup_reserve_pct",
-                    # The device's fresh value, taken before anything is seeded.
-                    pre=data.get("backup_reserve_pct", _UNSET),
+                    pre=self._ocean2_last_reported("backup_reserve_pct"),
                     written=reserve_pct,
                     sent_at=time.monotonic(),
                     parse_ack=parse_ocean2_property_ack,
@@ -1273,7 +1276,7 @@ class SetCommandsMixin(_Base):
                 )
                 return False
 
-            pre = (self.data or {}).get("storm_guard_enabled", _UNSET)
+            pre = self._ocean2_last_reported("storm_guard_enabled")
             if not isinstance(pre, bool):
                 raise DeviceValueNotReported("Ocean 2 storm guard")
 
@@ -1332,10 +1335,19 @@ class SetCommandsMixin(_Base):
         self._arm_ocean2_readback(write)
         return True
 
-    @property
-    def _ocean2_reserve_write(self) -> _Ocean2Write | None:
-        """The Backup Reserve's pending write, if any (the refusal tests read it)."""
-        return self._ocean2_writes.get("backup_reserve_pct")
+    def _ocean2_last_reported(self, state_key: str) -> Any:
+        """The value the unit last reported for `state_key` (`_UNSET` if none).
+
+        What a missing read-back or a refusal puts back must be a value the
+        device reported, never a seed. While an earlier write of this key is
+        still unconfirmed the store holds that write's seed, so a second write
+        takes the first one's `pre` instead; once a snapshot carrying the key
+        has arrived the store holds the unit's own value again.
+        """
+        previous = self._ocean2_writes.get(state_key)
+        if previous is not None and not previous.reported:
+            return previous.pre
+        return (self.data or {}).get(state_key, _UNSET)
 
     def _ocean2_is_current(self, write: _Ocean2Write) -> bool:
         """Whether `write` is still the record for its state key (event loop)."""
@@ -1436,9 +1448,6 @@ class SetCommandsMixin(_Base):
         write.rejected = True
         self._ocean2_restore_write(write)
 
-    # The Backup Reserve tests name the reserve's refusal by its old name.
-    _ocean2_reject_reserve = _ocean2_reject_write
-
     def _note_ocean2_snapshot(self, parsed: dict[str, Any]) -> None:
         """Observe a parsed Ocean 2 frame for the writes in flight (event loop).
 
@@ -1451,6 +1460,7 @@ class SetCommandsMixin(_Base):
             if write.state_key not in parsed:
                 continue
             write.snapshot_seen = True
+            write.reported = True
             if parsed[write.state_key] != write.written:
                 # May be the user's own change in the app on the shared topic.
                 _LOGGER.debug(

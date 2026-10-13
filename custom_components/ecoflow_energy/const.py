@@ -5804,12 +5804,14 @@ def supports_stream_controls(device_sn: str) -> bool:
     return device_sn[:4].upper() in STREAM_CONTROL_PREFIXES
 
 
-# Ocean 2 variants that may be written to. Only the RE11 has a write on record
-# (the Backup Reserve, with its acknowledgement), so only it gets the control.
+# Ocean 2 variants that may be written to. Only the RE11 has writes on record
+# (the Backup Reserve and the Storm Guard switch, each with its
+# acknowledgement), so only it gets the controls.
 # RE17 is routed with the RE11 for reading, and RE41, RE42 and RE43 differ on
 # the read side already; a read-only routing does not carry over to a write.
 # This gate says the write is confirmed on the model, the accessory gate on the
-# number says this unit reports the value: two facts, not two names for one.
+# number and the switch says this unit reports the value: two facts, not two
+# names for one.
 OCEAN2_CONTROL_PREFIXES: frozenset[str] = frozenset({"RE11"})
 
 

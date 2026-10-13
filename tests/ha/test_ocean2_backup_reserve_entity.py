@@ -338,7 +338,7 @@ class TestRefusalShown:
         assert refused.value.translation_key == "set_value_rejected"
         assert coordinator.data["backup_reserve_pct"] == 5
         assert shown == []
-        assert coordinator._ocean2_reserve_write is None
+        assert coordinator._ocean2_writes.get("backup_reserve_pct") is None
 
 
 class TestBounds:

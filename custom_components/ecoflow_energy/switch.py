@@ -19,9 +19,9 @@ from typing import Any
 
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -176,6 +176,12 @@ def _watch_for_accessory(
     config_entry.async_on_unload(coordinator.async_add_listener(_check_for_accessory))
 
 
+_SWITCH_CATEGORY_MAP = {
+    "diagnostic": EntityCategory.DIAGNOSTIC,
+    "config": EntityCategory.CONFIG,
+}
+
+
 class EcoFlowSwitch(
     EcoFlowWriteGateMixin,
     CoordinatorEntity[EcoFlowDeviceCoordinator],
@@ -198,7 +204,9 @@ class EcoFlowSwitch(
         self._attr_translation_key = definition.key
         self._attr_icon = definition.icon
         if definition.entity_category:
-            self._attr_entity_category = EntityCategory(definition.entity_category)
+            self._attr_entity_category = _SWITCH_CATEGORY_MAP.get(
+                definition.entity_category
+            )
 
         # Optimistic lock state
         self._optimistic_value: bool | None = None
@@ -568,7 +576,10 @@ class EcoFlowSwitch(
                 # coordinator put the device value back. Holding the optimistic
                 # lock now would keep showing the value the device did not take.
                 # Scoped to the Ocean 2: other devices bump the generation for
-                # writes that are not this switch's.
+                # writes that are not this switch's. On the Ocean 2 a rollback
+                # of the Backup Reserve lifts the lock too, which is harmless:
+                # the store holds this switch's own value, so nothing visible
+                # changes.
                 self._optimistic_lock_until = 0.0
         self._write_state_if_changed(self.is_on)
 

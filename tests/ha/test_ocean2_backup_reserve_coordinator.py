@@ -416,7 +416,7 @@ class TestReadbackSequence:
         coordinator, mqtt = _coordinator(hass)
         coordinator._apply_data(dict(SNAPSHOT_5_80))
         await _write(hass, coordinator, mqtt, 23, SNAPSHOT_5_80)
-        first = coordinator._ocean2_reserve_write
+        first = coordinator._ocean2_writes.get("backup_reserve_pct")
         old = [h for h in timers.handles if h.live]
         assert first is not None and len(old) == 3
 
@@ -424,7 +424,7 @@ class TestReadbackSequence:
             hass, coordinator, mqtt, 30, SNAPSHOT_5_80
         )
         try:
-            second = coordinator._ocean2_reserve_write
+            second = coordinator._ocean2_writes.get("backup_reserve_pct")
             assert second is not None and second is not first
             # The second write's own get-all answer counted for the first
             # record; undo that so the first write looks like one nothing
@@ -442,7 +442,7 @@ class TestReadbackSequence:
         assert mqtt.send_get_all.call_count == asks
         assert not any(e["type"] == "readback_missing" for e in coordinator.event_log)
         assert coordinator.data["backup_reserve_pct"] == 30
-        assert coordinator._ocean2_reserve_write is second
+        assert coordinator._ocean2_writes.get("backup_reserve_pct") is second
         assert timers.pending() == [8.0, 30.0, 35.0]
 
     async def test_a_shutdown_during_the_publish_arms_no_readback(
@@ -566,20 +566,20 @@ class TestAcknowledgement:
         coordinator, mqtt = _coordinator(hass)
         coordinator._apply_data(dict(SNAPSHOT_5_80))
         await _write(hass, coordinator, mqtt, 23, SNAPSHOT_5_80)
-        first = coordinator._ocean2_reserve_write
+        first = coordinator._ocean2_writes.get("backup_reserve_pct")
         assert first is not None
         await _write(hass, coordinator, mqtt, 30, SNAPSHOT_5_80)
         assert coordinator.data["backup_reserve_pct"] == 30
 
-        coordinator._ocean2_reject_reserve(first)
+        coordinator._ocean2_reject_write(first)
 
         assert coordinator.data["backup_reserve_pct"] == 30
         assert first.rejected is False
 
         # Control: the same call for the write that is current does restore.
-        current = coordinator._ocean2_reserve_write
+        current = coordinator._ocean2_writes.get("backup_reserve_pct")
         assert current is not None
-        coordinator._ocean2_reject_reserve(current)
+        coordinator._ocean2_reject_write(current)
         assert coordinator.data["backup_reserve_pct"] == 5
         assert current.rejected is True
 
@@ -611,7 +611,7 @@ class TestAcknowledgement:
         coordinator, mqtt = _coordinator(hass)
         coordinator._apply_data(dict(SNAPSHOT_5_80))
         await _write(hass, coordinator, mqtt, 23, SNAPSHOT_5_80)
-        write = coordinator._ocean2_reserve_write
+        write = coordinator._ocean2_writes.get("backup_reserve_pct")
         assert write is not None
 
         with (
