@@ -200,11 +200,14 @@ POWERPULSE2_HARD_UNAVAILABLE_S = 3600.0
 # for like.
 POWERPULSE2_CHARGE_ACTION_WINDOW_S: dict[str, float] = {"stop": 15.0, "start": 30.0}
 # ADR-009 decision 5: the wallbox status an action may be sent from. Start
-# only from "finishing" (the only start transition observed on file); stop
-# only from "charging".
+# only from "finishing" (the only start transition observed on file). Stop
+# from "charging" and, as amended for #515, from "suspended_charger": a start
+# waiting for solar surplus can be cancelled. The app enables its stop in
+# that state and sends the same command; confirmation still needs a fresh
+# "finishing" or "available".
 POWERPULSE2_CHARGE_ACTION_PRECONDITION: dict[str, frozenset[str]] = {
     "start": frozenset({"finishing"}),
-    "stop": frozenset({"charging"}),
+    "stop": frozenset({"charging", "suspended_charger"}),
 }
 # ADR-009 decision 4: the `ev_charge_status` that confirms the action once it
 # arrives on the wallbox's own heartbeat. As amended for #515, a start also
