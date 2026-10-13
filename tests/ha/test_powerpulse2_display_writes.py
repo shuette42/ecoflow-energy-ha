@@ -118,7 +118,7 @@ async def test_screen_off_sends_field_21_alone_with_trailing_bytes_zero(
     assert _published_display(send.call_args) == [(21, 2, bytes([1, 0, 25, 25, 0, 0]))]
     _report(wallbox, True, False, 25, 25)
     await task
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
 
 async def test_led_brightness_while_screen_off_keeps_the_other_three_bytes(
@@ -214,7 +214,7 @@ async def test_display_write_refuses_without_a_usable_fresh_report(
     assert excinfo.value.translation_key == translation_key
     assert excinfo.value.translation_placeholders == placeholders
     assert send.call_count == 0
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
 
 async def test_display_write_confirms_on_a_newer_report_with_the_target_byte(
@@ -229,7 +229,7 @@ async def test_display_write_confirms_on_a_newer_report_with_the_target_byte(
 
     Mutation probes: reading the confirmation from `_device_data` instead of
     the arriving frame makes the still-on report confirm; dropping the
-    `state_key not in parsed` return in `_resolve_wallbox_action` fails the
+    `state_key not in parsed` return in `_resolve_pending_write` fails the
     keyless report with a KeyError; making the future never resolve leaves the
     first half hanging.
     """
@@ -240,7 +240,7 @@ async def test_display_write_confirms_on_a_newer_report_with_the_target_byte(
     wallbox.set_device_value("ev_screen_enabled", False)
 
     task = await _start(wallbox.async_set_powerpulse_display("ev_screen_enabled", 0))
-    pending = wallbox._wallbox_action_pending
+    pending = wallbox._pending_write
     assert pending is not None and not pending.future.done()
 
     _apply_report(wallbox, ev_settings_switch_bits=18)  # a report without the key
@@ -251,7 +251,7 @@ async def test_display_write_confirms_on_a_newer_report_with_the_target_byte(
 
     _report(wallbox, True, False, 25, 25)  # the target byte
     await task
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
     _report(wallbox, True, True, 25, 25)
     with patch(f"{_SET_COMMANDS}.POWERPULSE2_SETTINGS_WINDOW_S", 0.1):
@@ -263,7 +263,7 @@ async def test_display_write_confirms_on_a_newer_report_with_the_target_byte(
             await task
     assert excinfo.value.translation_key == "powerpulse_continuous_not_confirmed"
     assert excinfo.value.translation_placeholders == {"reported": "25 %"}
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
 
 @pytest.mark.parametrize("value", [30, 0, 24, 125, 50.0, True])
@@ -291,7 +291,7 @@ async def test_display_brightness_outside_the_four_steps_is_refused_up_front(
         "value": str(value),
     }
     assert send.call_count == 0
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
 
 async def test_two_display_writes_chain_on_the_confirming_report(
@@ -302,7 +302,7 @@ async def test_two_display_writes_chain_on_the_confirming_report(
     the report that confirmed the first. While the first waits, the second call
     is refused with the in-progress text and publishes nothing.
 
-    Mutation probes: dropping the `_wallbox_action_pending is not None` guard in
+    Mutation probes: dropping the `_pending_write is not None` guard in
     `_async_write_powerpulse_settings` lets the second call through and fails
     the in-progress assertion; keeping the first snapshot instead of replacing
     it in `_record_settings_report` builds the second block from [1, 1, 25, 25]
@@ -327,7 +327,7 @@ async def test_two_display_writes_chain_on_the_confirming_report(
 
     _report(wallbox, True, True, 25, 50)  # the report that confirms the first
     await first
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
     second = await _start(
         wallbox.async_set_powerpulse_display("ev_led_brightness_pct", 75)
@@ -336,7 +336,7 @@ async def test_two_display_writes_chain_on_the_confirming_report(
     assert _published_display(send.call_args) == [(21, 2, bytes([1, 1, 75, 50, 0, 0]))]
     _report(wallbox, True, True, 75, 50)
     await second
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
 
 async def test_a_display_write_and_a_switch_bit_write_refuse_each_other_while_one_waits(
@@ -348,7 +348,7 @@ async def test_a_display_write_and_a_switch_bit_write_refuse_each_other_while_on
     round: a waiting Screen write refuses a Continuous charging write. Neither
     refusal publishes anything or disturbs the write that waits.
 
-    Mutation probe: dropping the `_wallbox_action_pending is not None` guard in
+    Mutation probe: dropping the `_pending_write is not None` guard in
     `_async_write_powerpulse_settings` lets both second calls through and fails
     the first in-progress assertion.
     """
@@ -374,7 +374,7 @@ async def test_a_display_write_and_a_switch_bit_write_refuse_each_other_while_on
         ev_screen_brightness_pct=25,
     )
     await switch_task
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
     display_task = await _start(
         wallbox.async_set_powerpulse_display("ev_screen_enabled", 0)
@@ -387,7 +387,7 @@ async def test_a_display_write_and_a_switch_bit_write_refuse_each_other_while_on
     assert not display_task.done()
     _report(wallbox, True, False, 25, 25)
     await display_task
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
 
 def test_a_settings_write_is_either_fields_or_a_display_block() -> None:

@@ -103,10 +103,14 @@ class DeviceSnapshot:
 
 
 @dataclass(frozen=True)
-class WallboxActionPending:
-    """One PowerPulse 2 write awaiting device confirmation (ADR-009, PLAN-146).
+class PendingDeviceWrite:
+    """One device write awaiting confirmation (ADR-009, PLAN-146, PLAN-190).
 
-    `future` resolves with the confirming value when the wallbox reports it,
+    Written for the PowerPulse 2 and used the same way by the PowerGlow heating
+    rod writes on a PowerOcean (PLAN-190): nothing in the record or its
+    resolver is wallbox-specific except the start/stop status check below.
+
+    `future` resolves with the confirming value when the device reports it,
     or is cancelled on coordinator shutdown. `issued_at` is monotonic and is
     not currently compared against an ingest receive timestamp - the
     mqtt_ingest path does not stamp one (checked 2026-09-11), so the field is
@@ -120,7 +124,7 @@ class WallboxActionPending:
     not apply to a numeric setting. `expected_value` is `float | str | None`
     since PLAN-147: a numeric setting (max current) compares by tolerance,
     a string setting (charging mode) compares by equality - see
-    `_resolve_wallbox_action` in state_apply.py. `bit_mask` (PLAN-172) narrows
+    `_resolve_pending_write` in state_apply.py. `bit_mask` (PLAN-172) narrows
     an integer comparison to the masked bits: the settings switch bits carry
     several toggles in one byte, and a write of one of them is confirmed by
     that bit alone, not by the whole byte matching.
@@ -377,14 +381,14 @@ class EcoFlowDeviceCoordinator(
         # PowerPulse 2 start/stop (ADR-009): serializes the check-and-publish
         # of one wallbox action so a second press cannot slip past the
         # in-progress check before the first one's record is set.
-        self._wallbox_action_lock = asyncio.Lock()
+        self._pending_write_lock = asyncio.Lock()
         # Ocean 2 Backup Reserve (PLAN-151): `_apply_data` sets the event when a
         # frame carrying the device's own SoC ratio (field 92) is stored, which
         # is what a write waits for after its get-all; the write record holds
         # the pre-write value and the read-back timers of the write in flight.
         self._ocean2_snapshot_event = asyncio.Event()
         self._ocean2_reserve_write: _Ocean2ReserveWrite | None = None
-        self._wallbox_action_pending: WallboxActionPending | None = None
+        self._pending_write: PendingDeviceWrite | None = None
         # PLAN-172: the latest settings report this wallbox's own connection
         # delivered, as (monotonic receive time, the settings keys that one
         # frame carried). A frame snapshot, never merged from the store, so a

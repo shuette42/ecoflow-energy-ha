@@ -21,7 +21,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
-from custom_components.ecoflow_energy.coordinator.core import WallboxActionPending
+from custom_components.ecoflow_energy.coordinator.core import PendingDeviceWrite
 from custom_components.ecoflow_energy.ecoflow.proto.decoder import (
     decode_header_message,
 )
@@ -89,7 +89,7 @@ async def test_set_max_current_publishes_once_and_confirms_on_param_report(
     on the wallbox's own ParamReport (2/34) echoing the new value.
 
     Mutation probe: dropping the `record.expected_value is not None` branch
-    in `_resolve_wallbox_action` leaves this pending forever, since the
+    in `_resolve_pending_write` leaves this pending forever, since the
     ParamReport frame carries no `ev_charge_status` at all.
     """
     _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
@@ -111,7 +111,7 @@ async def test_set_max_current_publishes_once_and_confirms_on_param_report(
 
     _apply_frame(wallbox, _fixture_frame_hex(0))  # ev_max_current_a -> 11.0
     await task
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
     assert any(
         entry["type"] == "powerpulse_max_current" for entry in wallbox._event_log
     )
@@ -119,7 +119,7 @@ async def test_set_max_current_publishes_once_and_confirms_on_param_report(
 
 async def test_confirms_on_heartbeat_too(hass: HomeAssistant) -> None:
     """The heartbeat's own field 18 confirms a write just as well as the
-    ParamReport - `_resolve_wallbox_action` reads whatever `state_key` names,
+    ParamReport - `_resolve_pending_write` reads whatever `state_key` names,
     not a specific message type.
 
     Mutation probe: hardcoding `state_key` to `"ev_charge_status"` in the
@@ -138,7 +138,7 @@ async def test_confirms_on_heartbeat_too(hass: HomeAssistant) -> None:
 
     _apply_frame(wallbox, _heartbeat_frame_with_max_current(1, 110))  # 11.0 A
     await task
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
 
 async def test_a_frame_without_the_key_does_not_confirm(hass: HomeAssistant) -> None:
@@ -148,7 +148,7 @@ async def test_a_frame_without_the_key_does_not_confirm(hass: HomeAssistant) -> 
     here as the stand-in carries only `ev_charge_status`.
 
     Mutation probe: replacing the `record.state_key not in parsed: return`
-    guard in `_resolve_wallbox_action` with
+    guard in `_resolve_pending_write` with
     `parsed.get(state_key, expected_value)` makes this test fail, since any
     frame at all - including this one - would then confirm the pending
     write within about a second, before the wallbox has reported anything.
@@ -162,7 +162,7 @@ async def test_a_frame_without_the_key_does_not_confirm(hass: HomeAssistant) -> 
     assert _mqtt(oceans[0]).send_proto_set.call_count == 1
 
     _apply_status(wallbox, 1)  # a frame with no ev_max_current_a key at all
-    pending = wallbox._wallbox_action_pending
+    pending = wallbox._pending_write
     assert pending is not None and not pending.future.done()
     assert not task.done()
 
@@ -170,7 +170,7 @@ async def test_a_frame_without_the_key_does_not_confirm(hass: HomeAssistant) -> 
         wallbox, _heartbeat_frame_with_max_current(1, 110)
     )  # 11.0 A - confirms
     await task
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
 
 async def test_a_frame_with_the_old_value_does_not_confirm(
@@ -198,19 +198,19 @@ async def test_a_frame_with_the_old_value_does_not_confirm(
     assert _mqtt(oceans[0]).send_proto_set.call_count == 1
 
     _apply_frame(wallbox, _heartbeat_frame_with_max_current(1, 105))  # 10.5 A - stale
-    pending = wallbox._wallbox_action_pending
+    pending = wallbox._pending_write
     assert pending is not None and not pending.future.done()
     assert not task.done()
 
     _apply_frame(wallbox, _heartbeat_frame_with_max_current(1, 115))  # 11.5 A - stale
-    pending = wallbox._wallbox_action_pending
+    pending = wallbox._pending_write
     assert pending is not None and not pending.future.done()
     assert not task.done()
 
     # The store now holds the requested value, put there directly rather than
     # by a frame; a frame without the key must not confirm from it (the
     # frame-not-store rule, PLAN-147 review M1: a store-fallback mutation in
-    # `_resolve_wallbox_action` passes every other assertion in this file).
+    # `_resolve_pending_write` passes every other assertion in this file).
     wallbox.set_device_value("ev_max_current_a", 11.0)
     _apply_status(wallbox, 1)
     assert pending is not None and not pending.future.done()
@@ -220,7 +220,7 @@ async def test_a_frame_with_the_old_value_does_not_confirm(
         wallbox, _heartbeat_frame_with_max_current(1, 110)
     )  # 11.0 A - confirms
     await task
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
 
 async def test_publish_not_delivered_clears_the_record(hass: HomeAssistant) -> None:
@@ -246,7 +246,7 @@ async def test_publish_not_delivered_clears_the_record(hass: HomeAssistant) -> N
 
     assert excinfo.value.translation_key == "powerpulse_action_not_delivered"
     assert _mqtt(oceans[0]).send_proto_set.call_count == 1
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
     # A second call publishes again - not refused as "in progress".
     _mqtt(oceans[0]).send_proto_set.return_value = True
@@ -255,7 +255,7 @@ async def test_publish_not_delivered_clears_the_record(hass: HomeAssistant) -> N
     assert _mqtt(oceans[0]).send_proto_set.call_count == 2
     _apply_frame(wallbox, _fixture_frame_hex(0))  # ev_max_current_a -> 11.0
     await task
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
 
 async def test_timeout_raises_and_names_the_last_reported_value(
@@ -286,7 +286,7 @@ async def test_timeout_raises_and_names_the_last_reported_value(
 
     assert excinfo.value.translation_key == "powerpulse_max_current_not_confirmed"
     assert excinfo.value.translation_placeholders == {"reported": "16 A"}
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
     # Not refused as in progress - the record was cleared.
     task = asyncio.create_task(wallbox.async_set_powerpulse_max_current(11))
@@ -342,7 +342,7 @@ async def test_refusals(
     if scenario == "sibling_offline":
         _mqtt(oceans[0]).is_connected.return_value = False
     if scenario == "action_in_progress":
-        wallbox._wallbox_action_pending = WallboxActionPending(
+        wallbox._pending_write = PendingDeviceWrite(
             action="start", issued_at=0.0, future=hass.loop.create_future()
         )
 
@@ -360,7 +360,7 @@ async def test_a_pending_max_current_write_refuses_a_start_press(
 ) -> None:
     """The reverse direction of `test_refusals[action_in_progress]`: a
     pending max-current write refuses a start/stop press too, through the
-    same `_wallbox_action_pending is not None` check in
+    same `_pending_write is not None` check in
     `async_set_powerpulse_charge_action` (set_commands.py:1100).
 
     Mutation probe: removing that guard from
@@ -371,7 +371,7 @@ async def test_a_pending_max_current_write_refuses_a_start_press(
     _set_descriptor(wallbox)
     _apply_status(wallbox, 6)  # finishing - a valid state to start from
 
-    wallbox._wallbox_action_pending = WallboxActionPending(
+    wallbox._pending_write = PendingDeviceWrite(
         action="max_current",
         issued_at=0.0,
         future=hass.loop.create_future(),

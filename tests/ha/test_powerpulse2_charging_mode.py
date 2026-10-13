@@ -29,7 +29,7 @@ from homeassistant.exceptions import HomeAssistantError
 from custom_components.ecoflow_energy import const as ecoflow_const
 from custom_components.ecoflow_energy.const import POWERPULSE2_CHARGE_MODE_OPTIONS
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
-from custom_components.ecoflow_energy.coordinator.core import WallboxActionPending
+from custom_components.ecoflow_energy.coordinator.core import PendingDeviceWrite
 from custom_components.ecoflow_energy.ecoflow.proto.decoder import (
     decode_header_message,
 )
@@ -153,7 +153,7 @@ async def test_set_mode_publishes_once_and_confirms_on_a_real_heartbeat_when_no_
     the heartbeat owns `ev_charge_mode`: this is the fallback confirmation.
 
     Mutation probe: dropping the `isinstance(record.expected_value, str)`
-    branch in `_resolve_wallbox_action` leaves this pending forever, because
+    branch in `_resolve_pending_write` leaves this pending forever, because
     `abs("solar" - "solar")` never runs and nothing else resolves the future.
     """
     _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
@@ -178,7 +178,7 @@ async def test_set_mode_publishes_once_and_confirms_on_a_real_heartbeat_when_no_
     # A guard, so a regression fails in seconds instead of waiting out the window.
     await asyncio.wait_for(task, 2)
     assert wallbox._settings_report is None
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
     assert wallbox._device_data["ev_charge_mode"] == "solar"
     assert any(
         entry["type"] == "powerpulse_charge_mode" for entry in wallbox._event_log
@@ -187,7 +187,7 @@ async def test_set_mode_publishes_once_and_confirms_on_a_real_heartbeat_when_no_
 
 async def _write_custom_over_a_solar_report(
     hass: HomeAssistant,
-) -> tuple[EcoFlowDeviceCoordinator, WallboxActionPending, asyncio.Task[None], Any]:
+) -> tuple[EcoFlowDeviceCoordinator, PendingDeviceWrite, asyncio.Task[None], Any]:
     """One PowerOcean, the wallbox reporting Solar on its settings report, and
     a write of Custom published and pending. Returns the wallbox, the pending
     record, the write task and the PowerOcean the write left through."""
@@ -199,7 +199,7 @@ async def _write_custom_over_a_solar_report(
 
     task = asyncio.create_task(wallbox.async_set_powerpulse_charge_mode("custom"))
     await asyncio.sleep(0.05)
-    record = wallbox._wallbox_action_pending
+    record = wallbox._pending_write
     assert record is not None
     assert _mqtt(ocean).send_proto_set.call_count == 1
     return wallbox, record, task, ocean
@@ -221,7 +221,7 @@ async def test_set_mode_confirms_on_the_settings_report(
     await asyncio.sleep(0.05)
     assert task.done()
     await task
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
     assert wallbox._device_data["ev_charge_mode"] == "custom"
     assert any(
         entry["type"] == "powerpulse_charge_mode" and "custom" in entry["detail"]
@@ -249,7 +249,7 @@ async def test_a_heartbeat_does_not_confirm_a_write_while_the_settings_report_is
     await asyncio.sleep(0.05)
     assert task.done()
     await task
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
     assert wallbox._device_data["ev_charge_mode"] == "custom"
 
 
@@ -419,7 +419,7 @@ async def test_a_heartbeat_with_the_old_mode_does_not_confirm(
 
     task = asyncio.create_task(wallbox.async_set_powerpulse_charge_mode("custom"))
     await asyncio.sleep(0.05)
-    record = wallbox._wallbox_action_pending
+    record = wallbox._pending_write
     assert record is not None
 
     _apply_frame(wallbox, _heartbeat_frame_with_mode(1, 2))  # still solar
@@ -429,7 +429,7 @@ async def test_a_heartbeat_with_the_old_mode_does_not_confirm(
 
     _apply_frame(wallbox, _heartbeat_frame_with_mode(1, 3))
     await task
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
 
 async def test_a_stale_value_in_the_store_does_not_confirm(
@@ -444,7 +444,7 @@ async def test_a_stale_value_in_the_store_does_not_confirm(
     store-fallback implementation; a keyless frame while the store already
     holds the expected value is where the two differ. Mutation probe:
     `value = parsed.get(key, self._device_data.get(key))` in
-    `_resolve_wallbox_action` confirms on the keyless frame and fails here.
+    `_resolve_pending_write` confirms on the keyless frame and fails here.
     """
     _entry_obj, _oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
     _set_descriptor(wallbox)
@@ -452,7 +452,7 @@ async def test_a_stale_value_in_the_store_does_not_confirm(
 
     task = asyncio.create_task(wallbox.async_set_powerpulse_charge_mode("fast"))
     await asyncio.sleep(0.05)
-    record = wallbox._wallbox_action_pending
+    record = wallbox._pending_write
     assert record is not None
     assert not record.future.done()
 
@@ -489,7 +489,7 @@ async def test_timeout_raises_and_names_the_last_reported_mode(
 
     assert excinfo.value.translation_key == "powerpulse_charge_mode_not_confirmed"
     assert excinfo.value.translation_placeholders == {"reported": "smart"}
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
     task = asyncio.create_task(wallbox.async_set_powerpulse_charge_mode("solar"))
     await asyncio.sleep(0.05)
@@ -537,7 +537,7 @@ async def test_mode_write_waits_the_settings_window(
     assert excinfo.value.translation_placeholders == {"reported": "solar"}
     assert elapsed < 0.9
     assert _mqtt(oceans[0]).send_proto_set.call_count == 1
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
     assert ecoflow_const.POWERPULSE2_SETTINGS_WINDOW_S == 20.0
     assert not hasattr(ecoflow_const, "POWERPULSE2_CHARGE_MODE_WINDOW_S")
 
@@ -565,7 +565,7 @@ async def test_refusals(
     `powerpulse_action_in_progress` for them instead.
 
     Mutation probe: moving the `option == "smart"` check below the
-    `_wallbox_action_pending` check makes `smart_in_app` fail with the
+    `_pending_write` check makes `smart_in_app` fail with the
     in-progress key.
     """
     if scenario == "no_powerocean":
@@ -584,7 +584,7 @@ async def test_refusals(
     if scenario == "sibling_offline":
         _mqtt(oceans[0]).is_connected.return_value = False
     if scenario in ("action_in_progress", "smart_in_app", "unknown_option"):
-        wallbox._wallbox_action_pending = WallboxActionPending(
+        wallbox._pending_write = PendingDeviceWrite(
             action="start", issued_at=0.0, future=hass.loop.create_future()
         )
 
@@ -607,7 +607,7 @@ async def test_a_pending_mode_write_refuses_a_current_write_and_a_press(
     _set_descriptor(wallbox)
     _apply_status(wallbox, 6)  # finishing - a valid state to start from
 
-    wallbox._wallbox_action_pending = WallboxActionPending(
+    wallbox._pending_write = PendingDeviceWrite(
         action="charge_mode",
         issued_at=0.0,
         future=hass.loop.create_future(),
@@ -624,7 +624,7 @@ async def test_a_pending_mode_write_refuses_a_current_write_and_a_press(
     assert _mqtt(oceans[0]).send_proto_set.call_count == 0
 
     # And a mode frame does not resolve a pending current write.
-    wallbox._wallbox_action_pending = WallboxActionPending(
+    wallbox._pending_write = PendingDeviceWrite(
         action="max_current",
         issued_at=0.0,
         future=hass.loop.create_future(),
@@ -632,7 +632,7 @@ async def test_a_pending_mode_write_refuses_a_current_write_and_a_press(
         expected_value=11.0,
     )
     _apply_frame(wallbox, _heartbeat_frame_with_mode(1, 2))
-    assert not wallbox._wallbox_action_pending.future.done()
+    assert not wallbox._pending_write.future.done()
 
 
 class TestSelectPlatform:

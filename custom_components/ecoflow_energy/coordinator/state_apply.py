@@ -380,8 +380,8 @@ class StateApplyMixin(_Base):
         ):
             del parsed["ev_charge_mode"]
 
-    def _resolve_wallbox_action(self, parsed: dict[str, Any]) -> None:
-        """Resolve a pending PowerPulse 2 write against the arriving frame.
+    def _resolve_pending_write(self, parsed: dict[str, Any]) -> None:
+        """Resolve a pending device write against the arriving frame.
 
         ADR-009 decision 4, extended by PLAN-146: the check runs on the frame
         being applied, never on the accumulated store, so a stale reading
@@ -405,7 +405,7 @@ class StateApplyMixin(_Base):
         `ev_charge_mode` before this runs; the heartbeat confirms it only
         while no recent settings report owns that key.
         """
-        record = self._wallbox_action_pending
+        record = self._pending_write
         if record is None or record.future.done():
             return
         if record.expected_value is not None:
@@ -532,7 +532,7 @@ class StateApplyMixin(_Base):
         self._resolve_soc(parsed)
         self._resolve_schedule_armed(parsed)
         self._resolve_wallbox_charge_mode(parsed, now)
-        self._resolve_wallbox_action(parsed)
+        self._resolve_pending_write(parsed)
         if own_connection:
             self._record_settings_report(parsed, now)
 

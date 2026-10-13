@@ -146,7 +146,7 @@ async def test_continuous_writes_field_one_alone_from_the_latest_report(
     assert _published_fields(send.call_args) == {1: 2}
     _apply_frame(wallbox, _REPORT_CONTINUOUS_OFF)  # switchBits 2 confirms
     await task
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
     wallbox.set_device_value("ev_settings_switch_bits", 0)  # store: all bits clear
     task = await _start(_set_continuous(wallbox, True))
@@ -154,7 +154,7 @@ async def test_continuous_writes_field_one_alone_from_the_latest_report(
     assert _published_fields(send.call_args) == {1: 18}
     _apply_frame(wallbox, _REPORT_CONTINUOUS_ON)  # switchBits 18 confirms
     await task
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
 
 async def test_continuous_refuses_a_report_older_than_the_max_age(
@@ -181,7 +181,7 @@ async def test_continuous_refuses_a_report_older_than_the_max_age(
         await _set_continuous(wallbox, False)
     assert excinfo.value.translation_key == "powerpulse_continuous_report_stale"
     assert send.call_count == 0
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
     with patch(f"{_SET_COMMANDS}.time", SimpleNamespace(monotonic=lambda: stamped + 9)):
         task = await _start(_set_continuous(wallbox, False))
@@ -200,7 +200,7 @@ async def test_a_bit_write_confirms_on_the_frame_and_only_on_its_bit(
 
     Mutation probes: reading the value from the store (`self._device_data.get(
     record.state_key)` in place of `parsed[record.state_key]` in
-    `_resolve_wallbox_action`) makes the frame whose bit 0x10 is still set
+    `_resolve_pending_write`) makes the frame whose bit 0x10 is still set
     confirm, because the store holds the requested 2 on purpose; comparing
     the whole byte instead of the masked bit makes the final frame (3) fail
     to confirm. Dropping the `state_key not in parsed` return fails it too,
@@ -211,7 +211,7 @@ async def test_a_bit_write_confirms_on_the_frame_and_only_on_its_bit(
     wallbox.set_device_value("ev_settings_switch_bits", 2)
 
     task = await _start(_set_continuous(wallbox, False))
-    pending = wallbox._wallbox_action_pending
+    pending = wallbox._pending_write
     assert pending is not None and not pending.future.done()
 
     _apply_status(wallbox, 1)  # a frame with no settings key at all
@@ -222,7 +222,7 @@ async def test_a_bit_write_confirms_on_the_frame_and_only_on_its_bit(
 
     _apply_report(wallbox, ev_settings_switch_bits=3)  # bit 0x10 cleared, bit 0x01 set
     await task
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
 
 async def test_current_and_phase_writes_send_their_own_field_alone(
@@ -254,7 +254,7 @@ async def test_current_and_phase_writes_send_their_own_field_alone(
     _apply_frame(wallbox, _REPORT_PHASE_AUTO)  # reports phase 0
     await task
     assert send.call_count == 3
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
 
 _WRITES: list[tuple[str, Callable[[EcoFlowDeviceCoordinator], Any], str]] = [
@@ -316,7 +316,7 @@ async def test_without_exactly_one_powerocean_every_write_refuses(
     for ocean in oceans:
         assert _mqtt(ocean).send_proto_set.call_count == 0
     assert _mqtt(wallbox).send_proto_set.call_count == 0
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
 
 async def test_continuous_in_smart_mode_writes_field_one_alone(
@@ -346,7 +346,7 @@ async def test_continuous_in_smart_mode_writes_field_one_alone(
     assert _published_fields(send.call_args) == {1: 18}
     _apply_report(wallbox, ev_settings_switch_bits=18)
     await task
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
     _apply_report(
         wallbox,
@@ -359,7 +359,7 @@ async def test_continuous_in_smart_mode_writes_field_one_alone(
     assert _published_fields(send.call_args) == {1: 18}
     _apply_report(wallbox, ev_settings_switch_bits=18)
     await task
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
 
 _REPORT_MISSING = "powerpulse_continuous_report_missing"
@@ -387,7 +387,7 @@ async def test_continuous_without_any_settings_report_refuses_as_missing(
 
     assert excinfo.value.translation_key == _REPORT_MISSING
     assert send.call_count == 0
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
 
 @pytest.mark.parametrize(
@@ -422,7 +422,7 @@ async def test_continuous_refuses_a_report_whose_bits_are_not_an_int(
 
     assert excinfo.value.translation_key == _REPORT_MISSING
     assert send.call_count == 0
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
 
 @pytest.mark.parametrize(
@@ -458,7 +458,7 @@ async def test_continuous_writes_from_a_report_that_carries_only_the_bits(
     assert _published_fields(send.call_args) == {1: 18}
     _apply_report(wallbox, ev_settings_switch_bits=18)
     await task
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
 
 @pytest.mark.parametrize(
@@ -491,7 +491,7 @@ async def test_continuous_refuses_bits_outside_a_byte_as_unusable(
         "value": value,
     }
     assert send.call_count == 0
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
 
 async def test_a_handed_over_frame_is_not_a_settings_report(
@@ -549,7 +549,7 @@ async def test_custom_current_above_the_reported_maximum_is_refused_at_once(
         "maximum": "14",
     }
     assert send.call_count == 0
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
     for allowed in (14, 13):
         task = await _start(wallbox.async_set_powerpulse_custom_current(allowed))

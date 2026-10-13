@@ -130,7 +130,7 @@ async def test_each_new_switch_writes_field_one_with_only_its_bit_changed(
     assert _published_fields(send.call_args) == {1: written}
     _apply_report(wallbox, ev_settings_switch_bits=written)
     await task
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
 
 async def test_writes_across_the_three_bits_queue_and_each_builds_on_the_last(
@@ -159,14 +159,14 @@ async def test_writes_across_the_three_bits_queue_and_each_builds_on_the_last(
 
     first = await _start(_write(wallbox, DISCHARGE_BLOCK, True))
     assert _published_fields(send.call_args) == {1: 17}
-    pending = wallbox._wallbox_action_pending
+    pending = wallbox._pending_write
     assert pending is not None and pending.action == "battery_discharge_block"
 
     with pytest.raises(HomeAssistantError) as excinfo:
         await _write(wallbox, PLUG_AND_PLAY, True)
     assert excinfo.value.translation_key == "powerpulse_action_in_progress"
     assert send.call_count == 1
-    assert wallbox._wallbox_action_pending is pending
+    assert wallbox._pending_write is pending
 
     _apply_report(wallbox, ev_settings_switch_bits=17 | 0x04)
     await first
@@ -180,7 +180,7 @@ async def test_writes_across_the_three_bits_queue_and_each_builds_on_the_last(
     await third
 
     assert send.call_count == 3
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
 
 @_BOTH
@@ -202,7 +202,7 @@ async def test_new_switches_refuse_without_a_settings_report(
 
     assert excinfo.value.translation_key == "powerpulse_continuous_report_missing"
     assert _mqtt(oceans[0]).send_proto_set.call_count == 0
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
 
 @_BOTH
@@ -230,12 +230,12 @@ async def test_new_switches_refuse_a_stale_report_and_accept_a_fresh_one(
         await _write(wallbox, switch, True)
     assert excinfo.value.translation_key == "powerpulse_continuous_report_stale"
     assert send.call_count == 0
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
     with patch(f"{_SET_COMMANDS}.time", SimpleNamespace(monotonic=lambda: stamped + 9)):
         task = await _start(_write(wallbox, switch, True))
         assert send.call_count == 1
-    pending = wallbox._wallbox_action_pending
+    pending = wallbox._pending_write
     assert pending is not None
     _apply_report(wallbox, ev_settings_switch_bits=int(pending.expected_value))
     await task
@@ -265,7 +265,7 @@ async def test_new_switches_refuse_bits_outside_a_byte_as_unusable(
         "value": str(bits),
     }
     assert _mqtt(oceans[0]).send_proto_set.call_count == 0
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
 
 @pytest.mark.parametrize(
@@ -302,7 +302,7 @@ async def test_a_new_switch_that_is_not_confirmed_names_its_own_bit(
 
     assert excinfo.value.translation_key == "powerpulse_continuous_not_confirmed"
     assert excinfo.value.translation_placeholders == {"reported": "off"}
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
 
 async def _setup_switches(
@@ -440,4 +440,4 @@ async def test_a_new_switch_turned_on_runs_the_real_write_and_the_report_turns_i
     _report_bits(wallbox, published)
     await task
     assert target.is_on is True
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None

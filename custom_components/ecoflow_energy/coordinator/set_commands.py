@@ -299,7 +299,7 @@ def _powerocean_schedule_families() -> dict[str, _PowerOceanScheduleFamily]:
 
 if TYPE_CHECKING:
     from ._typing import CoordinatorState as _Base
-    from .core import EcoFlowDeviceCoordinator, WallboxActionPending
+    from .core import EcoFlowDeviceCoordinator, PendingDeviceWrite
 else:
     _Base = object
 
@@ -1550,7 +1550,7 @@ class SetCommandsMixin(_Base):
         PowerOcean). Either way the command is confirmed on this
         coordinator's own wallbox heartbeat (decision 4). The precondition
         and in-progress checks, the publish, and the pending record all
-        happen under `self._wallbox_action_lock` so a second press cannot
+        happen under `self._pending_write_lock` so a second press cannot
         slip past the in-progress check before the first press's record
         exists. The confirmation wait happens outside the lock, since it may
         run for up to `POWERPULSE2_CHARGE_ACTION_WINDOW_S[action]` seconds
@@ -1561,9 +1561,9 @@ class SetCommandsMixin(_Base):
             build_powerpulse_charge_action_payload,
             build_powerpulse_standalone_charge_ctrl_payload,
         )
-        from .core import WallboxActionPending
+        from .core import PendingDeviceWrite
 
-        async with self._wallbox_action_lock:
+        async with self._pending_write_lock:
             if self._shutdown:
                 # A press during teardown must not report success for a
                 # command that was never sent (issue #185 is the rule).
@@ -1574,7 +1574,7 @@ class SetCommandsMixin(_Base):
             if action not in POWERPULSE2_CHARGE_ACTION_WINDOW_S:
                 raise ValueError(f"action must be 'start' or 'stop', got {action!r}")
             typed_action = cast("Literal['start', 'stop']", action)
-            if self._wallbox_action_pending is not None:
+            if self._pending_write is not None:
                 raise HomeAssistantError(
                     translation_domain=DOMAIN,
                     translation_key="powerpulse_action_in_progress",
@@ -1639,7 +1639,7 @@ class SetCommandsMixin(_Base):
                     typed_action, self.device_sn
                 )
             future: asyncio.Future[str | float] = self.hass.loop.create_future()
-            record = WallboxActionPending(
+            record = PendingDeviceWrite(
                 action=typed_action, issued_at=time.monotonic(), future=future
             )
             # The record lives exactly as long as this call: every exit,
@@ -1648,7 +1648,7 @@ class SetCommandsMixin(_Base):
             # record that outlived a cancelled press would refuse every
             # later press as in progress until the entry reloaded (review
             # finding of 2026-09-11).
-            self._wallbox_action_pending = record
+            self._pending_write = record
             try:
                 delivered = await sender.async_send_proto_set_command(
                     payload, f"powerpulse_{typed_action}"
@@ -1693,8 +1693,8 @@ class SetCommandsMixin(_Base):
         No charging-state precondition applies: the app changes the maximum
         current both while idle and while charging. Confirmation runs on
         `ev_max_current_a` reaching the requested value on the frame being
-        applied (`WallboxActionPending.expected_value`,
-        `_resolve_wallbox_action`), never on the accumulated store, for the
+        applied (`PendingDeviceWrite.expected_value`,
+        `_resolve_pending_write`), never on the accumulated store, for the
         same reason ADR-009 decision 4 gives for start/stop: a stale reading
         already in `self._device_data` must not confirm a write that has not
         actually happened yet. The lock, the pending-record lifecycle and the
@@ -1702,11 +1702,11 @@ class SetCommandsMixin(_Base):
         `async_set_powerpulse_charge_action` above.
         """
         from ..ecoflow.energy_stream import build_powerpulse_param_set_current_payload
-        from .core import WallboxActionPending
+        from .core import PendingDeviceWrite
 
         low, high = POWERPULSE2_MAX_CURRENT_RANGE_A
 
-        async with self._wallbox_action_lock:
+        async with self._pending_write_lock:
             if self._shutdown:
                 raise HomeAssistantError(
                     translation_domain=DOMAIN,
@@ -1718,7 +1718,7 @@ class SetCommandsMixin(_Base):
                     translation_key="powerpulse_max_current_range",
                     translation_placeholders={"min": str(low), "max": str(high)},
                 )
-            if self._wallbox_action_pending is not None:
+            if self._pending_write is not None:
                 raise HomeAssistantError(
                     translation_domain=DOMAIN,
                     translation_key="powerpulse_action_in_progress",
@@ -1780,7 +1780,7 @@ class SetCommandsMixin(_Base):
                     translation_key="powerpulse_descriptor_missing",
                 ) from None
             future: asyncio.Future[str | float] = self.hass.loop.create_future()
-            record = WallboxActionPending(
+            record = PendingDeviceWrite(
                 action="max_current",
                 issued_at=time.monotonic(),
                 future=future,
@@ -1790,7 +1790,7 @@ class SetCommandsMixin(_Base):
             # Same lifecycle as `async_set_powerpulse_charge_action`: the
             # record lives exactly as long as this call and is cleared on
             # every exit in the `finally` below.
-            self._wallbox_action_pending = record
+            self._pending_write = record
             try:
                 delivered = await sibling.async_send_proto_set_command(
                     payload, "powerpulse_max_current"
@@ -1842,18 +1842,18 @@ class SetCommandsMixin(_Base):
         recorded evaluation that assumes a particular session state before
         this write, so none is enforced here either. Confirmation runs on
         `ev_charge_current_a` reaching the requested value on the frame being
-        applied (`WallboxActionPending.expected_value`,
-        `_resolve_wallbox_action`), the same rule every other setting write in
+        applied (`PendingDeviceWrite.expected_value`,
+        `_resolve_pending_write`), the same rule every other setting write in
         this file follows.
         """
         from ..ecoflow.energy_stream import (
             build_powerpulse_standalone_current_ctrl_payload,
         )
-        from .core import WallboxActionPending
+        from .core import PendingDeviceWrite
 
         low, high = POWERPULSE2_MAX_CURRENT_RANGE_A
 
-        async with self._wallbox_action_lock:
+        async with self._pending_write_lock:
             if self._shutdown:
                 raise HomeAssistantError(
                     translation_domain=DOMAIN,
@@ -1865,7 +1865,7 @@ class SetCommandsMixin(_Base):
                     translation_key="powerpulse_charge_current_range",
                     translation_placeholders={"min": str(low), "max": str(high)},
                 )
-            if self._wallbox_action_pending is not None:
+            if self._pending_write is not None:
                 raise HomeAssistantError(
                     translation_domain=DOMAIN,
                     translation_key="powerpulse_action_in_progress",
@@ -1903,14 +1903,14 @@ class SetCommandsMixin(_Base):
                 current_a, self.device_sn
             )
             future: asyncio.Future[str | float] = self.hass.loop.create_future()
-            record = WallboxActionPending(
+            record = PendingDeviceWrite(
                 action="charge_current",
                 issued_at=time.monotonic(),
                 future=future,
                 state_key="ev_charge_current_a",
                 expected_value=float(current_a),
             )
-            self._wallbox_action_pending = record
+            self._pending_write = record
             try:
                 delivered = await self.async_send_proto_set_command(
                     payload, "powerpulse_charge_current"
@@ -1967,8 +1967,8 @@ class SetCommandsMixin(_Base):
         smart-mode state.
 
         Confirmation runs on `ev_charge_mode` reaching the requested option
-        on the frame being applied (`WallboxActionPending.expected_value`,
-        `_resolve_wallbox_action`), the same "never on the accumulated
+        on the frame being applied (`PendingDeviceWrite.expected_value`,
+        `_resolve_pending_write`), the same "never on the accumulated
         store" reasoning `async_set_powerpulse_max_current` gives, within
         `POWERPULSE2_SETTINGS_WINDOW_S` (20 s). The confirming frame is the
         wallbox's settings report, about a second after the write, which
@@ -1977,9 +1977,9 @@ class SetCommandsMixin(_Base):
         ten seconds (`POWERPULSE2_SETTINGS_MAX_AGE_S`) owns the key.
         """
         from ..ecoflow.energy_stream import build_powerpulse_param_set_mode_payload
-        from .core import WallboxActionPending
+        from .core import PendingDeviceWrite
 
-        async with self._wallbox_action_lock:
+        async with self._pending_write_lock:
             if self._shutdown:
                 raise HomeAssistantError(
                     translation_domain=DOMAIN,
@@ -1996,7 +1996,7 @@ class SetCommandsMixin(_Base):
                     translation_domain=DOMAIN,
                     translation_key="powerpulse_charge_mode_smart_in_app",
                 )
-            if self._wallbox_action_pending is not None:
+            if self._pending_write is not None:
                 raise HomeAssistantError(
                     translation_domain=DOMAIN,
                     translation_key="powerpulse_action_in_progress",
@@ -2061,7 +2061,7 @@ class SetCommandsMixin(_Base):
                     translation_key="powerpulse_descriptor_missing",
                 ) from None
             future: asyncio.Future[str | float] = self.hass.loop.create_future()
-            record = WallboxActionPending(
+            record = PendingDeviceWrite(
                 action="charge_mode",
                 issued_at=time.monotonic(),
                 future=future,
@@ -2071,7 +2071,7 @@ class SetCommandsMixin(_Base):
             # Same lifecycle as `async_set_powerpulse_max_current`: the
             # record lives exactly as long as this call and is cleared on
             # every exit in the `finally` below.
-            self._wallbox_action_pending = record
+            self._pending_write = record
             try:
                 delivered = await sibling.async_send_proto_set_command(
                     payload, "powerpulse_charge_mode"
@@ -2132,15 +2132,15 @@ class SetCommandsMixin(_Base):
             build_powerpulse_param_set_display_payload,
             build_powerpulse_param_set_settings_payload,
         )
-        from .core import WallboxActionPending
+        from .core import PendingDeviceWrite
 
-        async with self._wallbox_action_lock:
+        async with self._pending_write_lock:
             if self._shutdown:
                 raise HomeAssistantError(
                     translation_domain=DOMAIN,
                     translation_key="powerpulse_action_not_delivered",
                 )
-            if self._wallbox_action_pending is not None:
+            if self._pending_write is not None:
                 raise HomeAssistantError(
                     translation_domain=DOMAIN,
                     translation_key="powerpulse_action_in_progress",
@@ -2208,7 +2208,7 @@ class SetCommandsMixin(_Base):
                     translation_key="powerpulse_descriptor_missing",
                 ) from None
             future: asyncio.Future[str | float] = self.hass.loop.create_future()
-            record = WallboxActionPending(
+            record = PendingDeviceWrite(
                 action=action,
                 issued_at=time.monotonic(),
                 future=future,
@@ -2218,7 +2218,7 @@ class SetCommandsMixin(_Base):
             )
             # Same lifecycle as `async_set_powerpulse_max_current`: the record
             # lives exactly as long as this call and is cleared on every exit.
-            self._wallbox_action_pending = record
+            self._pending_write = record
             try:
                 delivered = await sibling.async_send_proto_set_command(
                     payload, f"powerpulse_{action}"
@@ -2550,10 +2550,10 @@ class SetCommandsMixin(_Base):
                 translation_placeholders={"status": str(status)},
             )
 
-    def _clear_wallbox_action(self, record: WallboxActionPending) -> None:
+    def _clear_wallbox_action(self, record: PendingDeviceWrite) -> None:
         """Drop the pending record if it is still the one this call set."""
-        if self._wallbox_action_pending is record:
-            self._wallbox_action_pending = None
+        if self._pending_write is record:
+            self._pending_write = None
 
     async def async_send_delta3_set(self, command: dict[str, Any]) -> bool:
         """Apply a Delta 3 setting on whichever channel this entry is using.

@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from ..ecoflow.energy_integrator import EnergyIntegrator
     from ..ecoflow.frame_capture import TypedFrameBuffer
     from ..ecoflow.iot_api import IoTApiClient
-    from .core import DeviceSnapshot, EcoFlowDeviceCoordinator, WallboxActionPending
+    from .core import DeviceSnapshot, EcoFlowDeviceCoordinator, PendingDeviceWrite
     from .set_commands import _Ocean2ReserveWrite
     from .state_apply import SurplusSyncRecord
 
@@ -52,8 +52,8 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
     _iot_api: IoTApiClient | None
     _config_writes_sent: dict[int, float]
     _device_config_lock: asyncio.Lock
-    _wallbox_action_lock: asyncio.Lock
-    _wallbox_action_pending: WallboxActionPending | None
+    _pending_write_lock: asyncio.Lock
+    _pending_write: PendingDeviceWrite | None
     _settings_report: tuple[float, dict[str, Any]] | None
     _powerocean_soc_pending: tuple[int, int] | None
     _powerocean_soc_pending_revision: int
@@ -163,7 +163,7 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
         self, parsed: dict[str, Any], now: float
     ) -> None: ...
 
-    def _resolve_wallbox_action(self, parsed: dict[str, Any]) -> None: ...
+    def _resolve_pending_write(self, parsed: dict[str, Any]) -> None: ...
 
     def _integrate_energy(self, parsed: dict[str, Any]) -> None: ...
 

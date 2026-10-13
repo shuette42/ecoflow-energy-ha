@@ -20,7 +20,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
-from custom_components.ecoflow_energy.coordinator.core import WallboxActionPending
+from custom_components.ecoflow_energy.coordinator.core import PendingDeviceWrite
 from custom_components.ecoflow_energy.ecoflow.proto.decoder import (
     decode_header_message,
 )
@@ -72,7 +72,7 @@ async def test_set_charge_current_publishes_on_own_channel_confirms_on_heartbeat
     its own heartbeat's field 17.
 
     Mutation probe: dropping the `record.expected_value is not None` branch
-    in `_resolve_wallbox_action` leaves this pending forever, since a
+    in `_resolve_pending_write` leaves this pending forever, since a
     heartbeat with no charging session carries no `ev_charge_status` change
     that would otherwise resolve it.
     """
@@ -94,7 +94,7 @@ async def test_set_charge_current_publishes_on_own_channel_confirms_on_heartbeat
 
     _apply_frame(wallbox, _heartbeat_frame_with_charge_current(3, 60))  # 6.0 A
     await task
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
     assert any(
         entry["type"] == "powerpulse_charge_current" for entry in wallbox._event_log
     )
@@ -106,7 +106,7 @@ async def test_a_frame_without_the_key_does_not_confirm(hass: HomeAssistant) -> 
     carries only `ev_charge_status`.
 
     Mutation probe: replacing the `record.state_key not in parsed: return`
-    guard in `_resolve_wallbox_action` with
+    guard in `_resolve_pending_write` with
     `parsed.get(state_key, expected_value)` makes this test fail, since any
     frame at all - including this one - would then confirm the pending
     write before the wallbox reported anything.
@@ -119,13 +119,13 @@ async def test_a_frame_without_the_key_does_not_confirm(hass: HomeAssistant) -> 
     assert _mqtt(wallbox).send_proto_set.call_count == 1
 
     _apply_status(wallbox, 3)  # a frame with no ev_charge_current_a key at all
-    pending = wallbox._wallbox_action_pending
+    pending = wallbox._pending_write
     assert pending is not None and not pending.future.done()
     assert not task.done()
 
     _apply_frame(wallbox, _heartbeat_frame_with_charge_current(3, 60))  # confirms
     await task
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
 
 async def test_a_frame_with_the_old_value_does_not_confirm(
@@ -138,7 +138,7 @@ async def test_a_frame_with_the_old_value_does_not_confirm(
     is applied, and the wait must still be pending.
 
     Mutation probe: widening the tolerance from `< 0.05` to `< 1.0` in
-    `_resolve_wallbox_action` makes this test fail, since 5.5/6.5 A then
+    `_resolve_pending_write` makes this test fail, since 5.5/6.5 A then
     fall inside it and confirm the write to 6 A immediately.
     """
     _entry_obj, _oceans, wallbox = _wire_entry(hass, [])
@@ -149,12 +149,12 @@ async def test_a_frame_with_the_old_value_does_not_confirm(
     assert _mqtt(wallbox).send_proto_set.call_count == 1
 
     _apply_frame(wallbox, _heartbeat_frame_with_charge_current(3, 55))  # 5.5 A stale
-    pending = wallbox._wallbox_action_pending
+    pending = wallbox._pending_write
     assert pending is not None and not pending.future.done()
     assert not task.done()
 
     _apply_frame(wallbox, _heartbeat_frame_with_charge_current(3, 65))  # 6.5 A stale
-    pending = wallbox._wallbox_action_pending
+    pending = wallbox._pending_write
     assert pending is not None and not pending.future.done()
     assert not task.done()
 
@@ -167,7 +167,7 @@ async def test_a_frame_with_the_old_value_does_not_confirm(
 
     _apply_frame(wallbox, _heartbeat_frame_with_charge_current(3, 60))  # confirms
     await task
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
 
 async def test_sibling_route_refuses_without_publishing(hass: HomeAssistant) -> None:
@@ -210,7 +210,7 @@ async def test_publish_not_delivered_clears_the_record(hass: HomeAssistant) -> N
 
     assert excinfo.value.translation_key == "powerpulse_action_not_delivered"
     assert _mqtt(wallbox).send_proto_set.call_count == 1
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
     _mqtt(wallbox).send_proto_set.return_value = True
     task = asyncio.create_task(wallbox.async_set_powerpulse_charge_current(6))
@@ -218,7 +218,7 @@ async def test_publish_not_delivered_clears_the_record(hass: HomeAssistant) -> N
     assert _mqtt(wallbox).send_proto_set.call_count == 2
     _apply_frame(wallbox, _heartbeat_frame_with_charge_current(3, 60))
     await task
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
 
 async def test_timeout_raises_and_names_the_last_reported_value(
@@ -248,7 +248,7 @@ async def test_timeout_raises_and_names_the_last_reported_value(
 
     assert excinfo.value.translation_key == "powerpulse_charge_current_not_confirmed"
     assert excinfo.value.translation_placeholders == {"reported": "16 A"}
-    assert wallbox._wallbox_action_pending is None
+    assert wallbox._pending_write is None
 
     task = asyncio.create_task(wallbox.async_set_powerpulse_charge_current(6))
     await asyncio.sleep(0.05)
@@ -296,7 +296,7 @@ async def test_refusals(
     if scenario == "own_channel_offline":
         _mqtt(wallbox).is_connected.return_value = False
     if scenario == "action_in_progress":
-        wallbox._wallbox_action_pending = WallboxActionPending(
+        wallbox._pending_write = PendingDeviceWrite(
             action="start", issued_at=0.0, future=hass.loop.create_future()
         )
     if scenario == "shutdown":
