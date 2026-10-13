@@ -11,7 +11,8 @@ A Local (Modbus/TCP) entry for a three-phase PowerOcean creates only these share
 > **The heating rod readings are optional and work in Standard and Enhanced
 > Mode, not on a Local entry.** They belong to the PowerGlow accessory, so they
 > are only created once your system actually reports a heating rod. A
-> PowerOcean without one gets no heating rod entities.
+> PowerOcean without one gets no heating rod entities. They are enabled by
+> default since 1.25.0; one you had disabled before stays disabled.
 > In Standard Mode they come from the API quota. With EcoFlow
 > account sign-in they arrive on the PowerOcean's real-time stream instead, in
 > one report roughly every seventeen seconds, so a PowerGlow attached to a unit
@@ -182,10 +183,10 @@ These sensors are pre-configured for the HA Energy Dashboard (`total_increasing`
 | Battery Max Charge/Discharge Power | Battery power limits | disabled |
 | Battery Packs Online | Number of packs currently reporting | disabled |
 | Battery Packs Online (EMS) | Pack count as reported by the EMS | disabled |
-| Heating Rod Power | Power drawn by an attached PowerGlow heating rod, in watts. Reported through the PowerOcean itself, so no separate device is needed. Only created on systems that report a heating rod (see note above). | disabled |
-| Heating Rod Water Temperature | Current water temperature at the heating rod, in whole degrees. | disabled |
-| Heating Rod Target Power | The power limit configured for the heating rod, in watts. | disabled |
-| Heating Rod Target Temperature | The water temperature the heating rod is set to reach. | disabled |
+| Heating Rod Power | Power drawn by an attached PowerGlow heating rod, in watts. Reported through the PowerOcean itself, so no separate device is needed. Only created on systems that report a heating rod (see note above). | enabled |
+| Heating Rod Water Temperature | Current water temperature at the heating rod, in whole degrees. | enabled |
+| Heating Rod Target Power | The power limit configured for the heating rod, in watts. | enabled |
+| Heating Rod Target Temperature | The water temperature the heating rod is set to reach. | enabled |
 | EMS Max Internal Temp | Highest of the internal temperature probes | enabled |
 | MPPT 1/2 Warning Code | MPPT warnings, separate from the fault codes. Unlabelled in the same way, and only reported on the real-time connection. | disabled |
 | AFCI Self-Test Result | Result of the arc-fault detector self-test | disabled |

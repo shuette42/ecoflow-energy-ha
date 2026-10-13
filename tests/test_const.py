@@ -463,16 +463,29 @@ _PO_EMS_EXTENDED = {
 
 
 class TestPowerOceanSensors:
-    def test_heating_rod_power_is_optional_and_disabled(self):
+    def test_heating_rod_power_is_optional_and_enabled(self):
         sensors = {sensor.key: sensor for sensor in POWEROCEAN_SENSORS}
 
         heating_rod_power = sensors["heating_rod_power_w"]
         assert heating_rod_power.device_class == "power"
         assert heating_rod_power.state_class == "measurement"
-        assert heating_rod_power.disabled_by_default is True
+        assert heating_rod_power.disabled_by_default is False
         assert heating_rod_power.unit == "W"
         assert heating_rod_power.entity_category == "diagnostic"
         assert heating_rod_power.suggested_display_precision == 0
+
+    def test_all_four_heating_rod_sensors_are_enabled_accessories(self):
+        """Enabled by default (#7): they only exist on a PowerOcean that reports
+        a rod, so turning them on clutters nothing."""
+        sensors = {sensor.key: sensor for sensor in POWEROCEAN_SENSORS}
+        for key in (
+            "heating_rod_power_w",
+            "heating_rod_water_temp_c",
+            "heating_rod_target_power_w",
+            "heating_rod_target_temp_c",
+        ):
+            assert sensors[key].accessory is True, key
+            assert sensors[key].disabled_by_default is False, key
 
     def test_keys_unique(self):
         keys = _extract_sensor_keys("POWEROCEAN_SENSORS")

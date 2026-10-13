@@ -1039,7 +1039,10 @@ POWEROCEAN_SENSORS: list[EcoFlowSensorDef] = [
         disabled_by_default=True,
     ),
     # PowerGlow heating rod: an optional accessory, so these four are created
-    # only after the device has reported them at least once (#7).
+    # only after the device has reported them at least once (#7). Enabled by
+    # default since 1.25.0: only a PowerOcean that reports a rod gets them, so
+    # they never clutter a system without one. An entity already registered as
+    # disabled keeps that state.
     EcoFlowSensorDef(
         "heating_rod_power_w",
         "Heating Rod Power",
@@ -1049,7 +1052,6 @@ POWEROCEAN_SENSORS: list[EcoFlowSensorDef] = [
         "mdi:water-boiler",
         "diagnostic",
         suggested_display_precision=0,
-        disabled_by_default=True,
         accessory=True,
     ),
     EcoFlowSensorDef(
@@ -1061,7 +1063,6 @@ POWEROCEAN_SENSORS: list[EcoFlowSensorDef] = [
         "mdi:thermometer-water",
         "diagnostic",
         suggested_display_precision=0,
-        disabled_by_default=True,
         accessory=True,
     ),
     EcoFlowSensorDef(
@@ -1073,7 +1074,6 @@ POWEROCEAN_SENSORS: list[EcoFlowSensorDef] = [
         "mdi:water-boiler",
         "diagnostic",
         suggested_display_precision=0,
-        disabled_by_default=True,
         accessory=True,
     ),
     EcoFlowSensorDef(
@@ -1085,7 +1085,6 @@ POWEROCEAN_SENSORS: list[EcoFlowSensorDef] = [
         "mdi:thermometer-chevron-up",
         "diagnostic",
         suggested_display_precision=0,
-        disabled_by_default=True,
         accessory=True,
     ),
     EcoFlowSensorDef(
