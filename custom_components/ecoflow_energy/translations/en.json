@@ -589,17 +589,17 @@
         "name": "Control Mode",
         "state": {
           "none": "None",
-          "soc_calibration": "SoC calibration",
-          "storm_guard": "Storm guard",
+          "soc_calibration": "SoC Calibration",
+          "storm_guard": "Storm Guard",
           "eco": "Eco",
           "task": "Task",
           "schedule": "Schedule",
-          "ac_backup": "AC backup",
-          "grid_operator": "Grid operator",
+          "ac_backup": "AC Backup",
+          "grid_operator": "Grid Operator",
           "remote": "Remote",
           "standby": "Standby",
-          "frequency_response": "Frequency response",
-          "third_party": "Third party"
+          "frequency_response": "Frequency Response",
+          "third_party": "Third Party"
         }
       },
       "max_charge_soc_pct": {

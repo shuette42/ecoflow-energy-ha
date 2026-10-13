@@ -73,8 +73,8 @@ Work Mode, System State and Control Mode come mostly with the unit's full status
 | Battery Charge Energy | kWh | - | enabled | For the Energy Dashboard's battery slot |
 | Battery Discharge Energy | kWh | - | enabled | For the Energy Dashboard's battery slot |
 | Work Mode | - | diagnostic | enabled | Self-use or AI Schedule, as set in the app. Appears with the first full status report |
-| System State | - | diagnostic | enabled | Running, Idle, Stopped, Maintenance, Initializing or one of four Starting states, the same states the PowerOcean reports |
-| Control Mode | - | diagnostic | enabled | What currently overrides normal operation: None, Schedule, Task, Storm guard, AC backup, Eco and others. None means the work mode is in charge |
+| System State | - | diagnostic | enabled | Running, Idle, Stopped, Maintenance, Initializing, one of four Starting states or None, the same states the PowerOcean reports |
+| Control Mode | - | diagnostic | enabled | What currently overrides normal operation: None, Schedule, Task, Storm Guard, AC Backup, Eco and others. None means the work mode is in charge |
 
 ---
 
