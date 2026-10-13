@@ -98,6 +98,12 @@ _OCEAN2_FIELD_MAP: dict[str, tuple[str, str, float]] = {
     # means "no update", never zero. Both arrive as an explicit 0 when zero.
     "10": ("backup_reserve_pct", _TYPE_INT, 1),
     "92": ("edev_soc_ratio_pct", _TYPE_INT, 1),
+    # Field 21 is the storm guard record `{enable, open_flag, end_time}`. Only
+    # 21.1 is read: it is the switch the app shows and the read-back for the
+    # storm guard write. Like fields 10 and 92 it rides on the full get_reply
+    # snapshot only, so an absent key means "no update", never "off". 21.2 and
+    # 21.3 are not mapped, their meaning is not confirmed.
+    "21.1": ("_storm_guard_enabled", _TYPE_INT, 1),
     # Field 3 is the EMS status record. It rides mostly on the full get_reply
     # upload (one property frame in the 2026-09-19 RE11 recording carries it
     # too), so an absent key means "no update". Three of its varints are read,
@@ -475,6 +481,10 @@ def _parse_telemetry(pdata: bytes) -> dict[str, Any]:
     edev_soc_ratio = walked.get("edev_soc_ratio_pct")
     if edev_soc_ratio is not None:
         out["edev_soc_ratio_pct"] = edev_soc_ratio
+    # A bool, and a present 0 is a real "off" (same `is not None` rule).
+    storm_guard = walked.get("_storm_guard_enabled")
+    if storm_guard is not None:
+        out["storm_guard_enabled"] = bool(storm_guard)
     # The three EMS states: a wire value this device has not shown us is
     # dropped rather than guessed (the sensor would reject an unknown option
     # anyway), and 0 stays a candidate - for 3.10 and 3.3 it is the real "none".

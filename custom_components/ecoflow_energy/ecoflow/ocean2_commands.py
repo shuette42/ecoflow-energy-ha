@@ -1,13 +1,14 @@
 """SET command builder for the Ocean 2 family (`RE11` and its variants).
 
-One write so far: the Backup Reserve. The frame reproduces the app's own
-write, captured from the `/app/{uid}/{sn}/thing/property/set` topic while the
-setting was changed in the app, and `tests/test_ocean2_commands.py` rebuilds
-it byte for byte (the serial masked to a run of `X`).
+Two writes so far: the Backup Reserve (`254/38`, a property command) and the
+Storm Guard switch (`254/37`, an action command). Each frame reproduces the
+app's own write, captured from the `/app/{uid}/{sn}/thing/property/set` topic
+while the setting was changed in the app, and `tests/test_ocean2_commands.py`
+rebuilds it byte for byte (the serial masked to a run of `X`).
 
 The device answers on the same topic with `is_ack` set and `cmd_ok` in the
-payload. Five app writes of this shape were acknowledged with `cmd_ok = 1`
-and applied.
+payload. Five app writes of the reserve shape and five of the storm guard
+shape were acknowledged with `cmd_ok = 1` and applied.
 
 This family does not share `stream_ac5000_commands._build_envelope`. The
 STREAM AC 5000 envelope hardcodes destination 2, a product id and the app
@@ -33,6 +34,9 @@ from .proto_encoding import encode_field_bytes, encode_field_varint
 # its acknowledgement share the pair, the acknowledgement adds `is_ack`.
 CMD_FUNC_PROPERTY = 254
 CMD_ID_PROPERTY_CMD = 38
+# 254 / 37 is the generic action command: the payload names an `action_id` and
+# carries that action's own parameter message.
+CMD_ID_ACTION_CMD = 37
 
 # Header endpoints as observed on the app's writes to this device. The
 # STREAM AC 5000 sends dest 2 for the same command.
@@ -43,7 +47,18 @@ DEST_DEVICE = 96
 PROPERTY_BACKUP_RESERVE = 10
 PROPERTY_EDEV_SOC_RATIO = 92
 
-# Acknowledgement payload: `cmd_ok` is a plain bool on field 2.
+# Payload field numbers of the action command, and the one action built here.
+ACTION_ID_FIELD = 1
+ACTION_STORM = 17
+ACTION_STORM_PARAM = 25
+# StormParam: `storm_pattern_enable` is the switch, `storm_pattern_open_flag`
+# is sent as an explicit 0 next to it when the app switches the guard off.
+STORM_PATTERN_ENABLE = 1
+STORM_PATTERN_OPEN_FLAG = 2
+
+# Acknowledgement payload: `cmd_ok` is a plain bool on field 2. A property
+# reply (254/38) has no field 1 of its own; an action reply (254/37) echoes
+# the `action_id` there.
 ACK_CMD_OK_FIELD = 2
 
 
@@ -79,14 +94,48 @@ def build_ocean2_backup_reserve_payload(
     ):
         if not 0 <= value <= 100:
             raise ValueError(f"{name} must be 0..100, got {value}")
+    pdata = encode_field_varint(
+        PROPERTY_BACKUP_RESERVE, reserve_pct
+    ) + encode_field_varint(PROPERTY_EDEV_SOC_RATIO, edev_soc_ratio)
+    return _build_envelope(pdata, CMD_ID_PROPERTY_CMD, device_sn, seq)
+
+
+def build_ocean2_storm_guard_payload(
+    enable: bool, device_sn: str, seq: int = 0
+) -> bytes:
+    """Build a Storm Guard SET frame (action 17, StormParam on field 25).
+
+    The payload is ``{1: 17, 25: {1: 1}}`` to switch the guard on and
+    ``{1: 17, 25: {1: 0, 2: 0}}`` to switch it off. The zeros are sent
+    explicitly, as the app sends them, and the on form omits field 2. Both
+    shapes come from the app's own writes, were acknowledged with
+    ``cmd_ok = 1``, and the unit then reported the new state on field 21.1 of
+    its next full snapshot.
+
+    The envelope is the Backup Reserve one with ``cmd_id = 37``. The app's
+    own storm guard writes carry the same header field for field (source 32,
+    destination 96, ``from`` "ios", the serial in three fields); only the
+    sequence number and the serial differ between requests. The header fields
+    and their order are listed in :func:`build_ocean2_backup_reserve_payload`.
+    """
+    if not isinstance(enable, bool):
+        raise ValueError(f"enable must be a bool, got {type(enable).__name__}")
+
+    storm_param = encode_field_varint(STORM_PATTERN_ENABLE, 1 if enable else 0)
+    if not enable:
+        storm_param += encode_field_varint(STORM_PATTERN_OPEN_FLAG, 0)
+    pdata = encode_field_varint(ACTION_ID_FIELD, ACTION_STORM) + encode_field_bytes(
+        ACTION_STORM_PARAM, storm_param
+    )
+    return _build_envelope(pdata, CMD_ID_ACTION_CMD, device_sn, seq)
+
+
+def _build_envelope(pdata: bytes, cmd_id: int, device_sn: str, seq: int) -> bytes:
+    """Wrap ``pdata`` in the request header the app sends to this family."""
     if not device_sn:
         raise ValueError("device_sn is required for /app/ routing")
     if seq == 0:
         seq = int(time.time() * 1000) & 0x7FFFFFFF
-
-    pdata = encode_field_varint(
-        PROPERTY_BACKUP_RESERVE, reserve_pct
-    ) + encode_field_varint(PROPERTY_EDEV_SOC_RATIO, edev_soc_ratio)
 
     serial = device_sn.encode("ascii")
     header = bytearray()
@@ -97,7 +146,7 @@ def build_ocean2_backup_reserve_payload(
     header.extend(encode_field_varint(5, 1))
     header.extend(encode_field_varint(7, 3))
     header.extend(encode_field_varint(8, CMD_FUNC_PROPERTY))
-    header.extend(encode_field_varint(9, CMD_ID_PROPERTY_CMD))
+    header.extend(encode_field_varint(9, cmd_id))
     header.extend(encode_field_varint(10, len(pdata)))
     header.extend(encode_field_varint(11, 1))
     header.extend(encode_field_varint(14, seq))
@@ -107,6 +156,35 @@ def build_ocean2_backup_reserve_payload(
     header.extend(encode_field_bytes(26, serial))
     header.extend(encode_field_bytes(27, serial))
     return encode_field_bytes(1, bytes(header))
+
+
+def _ack_pdata(payload: bytes, cmd_id: int) -> bytes | None:
+    """Return the readable payload of the first acknowledgement of ``cmd_id``.
+
+    ``None`` when the frame is not one (wrong command pair, ``is_ack`` not
+    set, not a frame at all) or when the header masks its payload (non-zero
+    ``enc_type``): nothing on this path unmasks it, so its payload cannot be
+    told from a refusal.
+    """
+    try:
+        headers, _ = decode_header_message(payload)
+    except Exception:  # noqa: BLE001 - malformed frames must not break the MQTT thread
+        return None
+
+    for header in headers:
+        if (
+            header.get("cmd_func") != CMD_FUNC_PROPERTY
+            or header.get("cmd_id") != cmd_id
+            or header.get("is_ack") != 1
+        ):
+            continue
+        if header.get("enc_type"):
+            continue
+        try:
+            return bytes.fromhex(header.get("pdata") or "")
+        except (TypeError, ValueError):
+            continue
+    return None
 
 
 def parse_ocean2_property_ack(payload: bytes) -> bool | None:
@@ -122,23 +200,27 @@ def parse_ocean2_property_ack(payload: bytes) -> bool | None:
 
     The payload is read as received.
     """
-    try:
-        headers, _ = decode_header_message(payload)
-    except Exception:  # noqa: BLE001 - malformed frames must not break the MQTT thread
+    pdata = _ack_pdata(payload, CMD_ID_PROPERTY_CMD)
+    if pdata is None:
         return None
+    return _read_varint_field(pdata, ACK_CMD_OK_FIELD) == 1
 
-    for header in headers:
-        if (
-            header.get("cmd_func") != CMD_FUNC_PROPERTY
-            or header.get("cmd_id") != CMD_ID_PROPERTY_CMD
-            or header.get("is_ack") != 1
-        ):
-            continue
-        if header.get("enc_type"):
-            continue
-        try:
-            pdata = bytes.fromhex(header.get("pdata") or "")
-        except (TypeError, ValueError):
-            continue
-        return _read_varint_field(pdata, ACK_CMD_OK_FIELD) == 1
-    return None
+
+def parse_ocean2_action_ack(payload: bytes, action_id: int) -> bool | None:
+    """Read the device's answer to an action write (``254/37``).
+
+    A sibling of :func:`parse_ocean2_property_ack` rather than a command id
+    switch inside it: the action reply echoes the ``action_id`` on field 1, and
+    that echo is what tells this caller's answer from the answer to another
+    action sent in the same minute. A property reply has no such field, so one
+    function with one signature would have to guess which of the two it read.
+
+    Returns ``None`` when the frame is not an acknowledgement of an action
+    command, is masked (see ``_ack_pdata``), or answers a different
+    ``action_id`` than the one asked about; ``True`` for ``cmd_ok = 1``;
+    ``False`` for ``cmd_ok = 0`` or no ``cmd_ok`` at all.
+    """
+    pdata = _ack_pdata(payload, CMD_ID_ACTION_CMD)
+    if pdata is None or _read_varint_field(pdata, ACTION_ID_FIELD) != action_id:
+        return None
+    return _read_varint_field(pdata, ACK_CMD_OK_FIELD) == 1

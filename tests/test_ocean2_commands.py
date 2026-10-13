@@ -1,19 +1,30 @@
-"""Tests for the Ocean 2 Backup Reserve SET builder and its acknowledgement.
+"""Tests for the Ocean 2 SET builders (Backup Reserve, Storm Guard) and acks.
 
 The golden frames are the EcoFlow app's own write and the device's answer,
 captured from the `/app/{uid}/{sn}/thing/property/set` topic while the
 reserve was changed in the app. The serial is masked to sixteen `X`, same
 length, so no identity travels with the evidence. Rebuilding the write byte
 for byte is what makes the builder a reproduction of an observed format.
+
+The storm guard frames come from `fixtures/ocean2/storm_guard_frames.json`,
+two recordings of the app switching the guard (serial masked the same way).
 """
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+from typing import Any
+
 import pytest
 from ecoflow_energy.ecoflow.ocean2_commands import (
+    ACTION_STORM,
     build_ocean2_backup_reserve_payload,
+    build_ocean2_storm_guard_payload,
+    parse_ocean2_action_ack,
     parse_ocean2_property_ack,
 )
+from ecoflow_energy.ecoflow.proto.decoder import decode_header_message
 from ecoflow_energy.ecoflow.proto_encoding import (
     encode_field_bytes,
     encode_field_varint,
@@ -159,3 +170,94 @@ class TestAck:
         assert parse_ocean2_property_ack(_reply(refusal_shape, enc_type=1)) is None
         # Control: the same payload unmasked is the refusal it looks like.
         assert parse_ocean2_property_ack(_reply(refusal_shape)) is False
+
+
+_STORM_FIXTURE_PATH = (
+    Path(__file__).parent / "fixtures" / "ocean2" / "storm_guard_frames.json"
+)
+_STORM_FIXTURE = json.loads(_STORM_FIXTURE_PATH.read_text())
+STORM_SERIAL: str = _STORM_FIXTURE["serial_mask"]
+STORM_FRAMES: list[dict[str, Any]] = _STORM_FIXTURE["frames"]
+STORM_SETS = [f for f in STORM_FRAMES if f["role"] == "set"]
+STORM_REPLIES = [f for f in STORM_FRAMES if f["role"] == "set_reply"]
+
+
+def _header(frame: bytes) -> dict[str, Any]:
+    return decode_header_message(frame)[0][0]
+
+
+class TestStormGuardBuilder:
+    @pytest.mark.parametrize("captured", STORM_SETS, ids=lambda f: f["tag"])
+    def test_reproduces_every_captured_app_write_byte_for_byte(
+        self, captured: dict[str, Any]
+    ) -> None:
+        frame = bytes.fromhex(captured["hex"])
+        header = _header(frame)
+        built = build_ocean2_storm_guard_payload(
+            captured["kind"] == "on", STORM_SERIAL, seq=int(header["seq"])
+        )
+        # The payload is the part that carries the switch (off sends explicit
+        # zeros), so it is compared on its own before the whole frame.
+        assert _header(built)["pdata"] == header["pdata"]
+        assert built == frame
+
+    def test_the_envelope_is_the_backup_reserve_envelope(self) -> None:
+        storm = _header(build_ocean2_storm_guard_payload(True, STORM_SERIAL, seq=7))
+        reserve = _header(
+            build_ocean2_backup_reserve_payload(29, 80, STORM_SERIAL, seq=7)
+        )
+        assert (storm["cmd_func"], storm["cmd_id"]) == (254, 37)
+        assert (reserve["cmd_func"], reserve["cmd_id"]) == (254, 38)
+        # Everything that is not the payload, its length or the command id is
+        # the same field for field: source, destination, from, the serials.
+        differing = {"pdata", "data_len", "cmd_id"}
+        assert {k: v for k, v in storm.items() if k not in differing} == {
+            k: v for k, v in reserve.items() if k not in differing
+        }
+
+    @pytest.mark.parametrize("bad", [1, 0, None, "on"])
+    def test_a_non_bool_enable_is_refused(self, bad: Any) -> None:
+        with pytest.raises(ValueError):
+            build_ocean2_storm_guard_payload(bad, STORM_SERIAL, seq=1)
+
+    def test_a_missing_serial_is_refused(self) -> None:
+        with pytest.raises(ValueError):
+            build_ocean2_storm_guard_payload(True, "", seq=1)
+
+
+class TestStormGuardAck:
+    def test_every_captured_reply_is_a_success_for_its_own_set(self) -> None:
+        assert len(STORM_REPLIES) == len(STORM_SETS) == 5
+        for set_frame, reply in zip(STORM_SETS, STORM_REPLIES, strict=True):
+            sent = _header(bytes.fromhex(set_frame["hex"]))
+            answer = bytes.fromhex(reply["hex"])
+            # The pairing is by sequence number, not by position in the file.
+            assert _header(answer)["seq"] == sent["seq"], reply["tag"]
+            assert parse_ocean2_action_ack(answer, ACTION_STORM) is True, reply["tag"]
+
+    @pytest.mark.parametrize(
+        ("pdata_hex", "expected"),
+        [
+            ("08111001", True),
+            ("08111000", False),  # cmd_ok = 0: answered, did not apply
+            ("0811", False),  # no cmd_ok at all
+            ("08121001", None),  # another action's answer is not ours
+            ("1001", None),  # no action id echoed
+        ],
+    )
+    def test_synthetic_replies(self, pdata_hex: str, expected: bool | None) -> None:
+        reply = _reply(bytes.fromhex(pdata_hex), cmd_id=37)
+        assert parse_ocean2_action_ack(reply, ACTION_STORM) is expected
+
+    def test_other_frames_are_not_an_answer_to_a_storm_guard_write(self) -> None:
+        # A property reply carries cmd_ok too, under the other command id.
+        assert (
+            parse_ocean2_action_ack(bytes.fromhex(GOLDEN_REPLY_29), ACTION_STORM)
+            is None
+        )
+        # The write itself has no is_ack.
+        sent = build_ocean2_storm_guard_payload(True, SERIAL, seq=10)
+        assert parse_ocean2_action_ack(sent, ACTION_STORM) is None
+        # A masked payload cannot be told from a refusal, so it is no answer.
+        masked = _reply(bytes.fromhex("08111001"), cmd_id=37, enc_type=1)
+        assert parse_ocean2_action_ack(masked, ACTION_STORM) is None

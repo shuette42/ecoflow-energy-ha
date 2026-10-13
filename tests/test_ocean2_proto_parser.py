@@ -8,7 +8,9 @@ the wire format from those numbers keeps the evidence and drops the identity.
 
 from __future__ import annotations
 
+import json
 import struct
+from pathlib import Path
 
 import pytest
 from ecoflow_energy.ecoflow.const import (
@@ -1006,3 +1008,45 @@ class TestEmsStatusFields:
         assert parsed is not None
         assert parsed["backup_reserve_pct"] == 29
         assert parsed["ems_control_mode"] == "schedule"
+
+
+_STORM_FIXTURE_PATH = (
+    Path(__file__).parent / "fixtures" / "ocean2" / "storm_guard_frames.json"
+)
+_STORM_FIXTURE = json.loads(_STORM_FIXTURE_PATH.read_text())
+
+
+class TestStormGuardReadBack:
+    def test_the_three_recorded_snapshots_read_off_on_off(self) -> None:
+        # The app switched the guard on and then off between these three full
+        # snapshots (tags carry the order of the recording).
+        snapshots = [f for f in _STORM_FIXTURE["frames"] if f["role"] == "get_reply"]
+        assert [f["recording"] for f in snapshots] == ["2026-09-19"] * 3
+        states = []
+        for snapshot in snapshots:
+            parsed = parse_ocean2_proto_message(bytes.fromhex(snapshot["hex"]))
+            assert parsed is not None, snapshot["tag"]
+            states.append(parsed.get("storm_guard_enabled"))
+        assert states == [False, True, False]
+
+    def test_a_push_without_field_21_leaves_the_key_absent(self) -> None:
+        # The change-only pushes never carry the storm guard record. Absent
+        # means "no update", never "off": a default would switch the entity
+        # off on every push.
+        parsed = parse_ocean2_proto_message(_telemetry(summary=_f32(17, 55.0)))
+        assert parsed is not None
+        assert parsed["soc_pct"] == pytest.approx(55.0)
+        assert "storm_guard_enabled" not in parsed
+
+    def test_the_open_flag_and_end_time_do_not_stand_in_for_the_switch(self) -> None:
+        # 21.2 and 21.3 are not mapped. A record that carries them but not 21.1
+        # reports nothing, and one that carries all three reports only 21.1.
+        only_others = parse_ocean2_proto_message(
+            _frame(_vint(10, 29) + _msg(21, _vint(2, 1) + _vint(3, 1_760_000_000)))
+        )
+        assert only_others is not None
+        assert "storm_guard_enabled" not in only_others
+        full = parse_ocean2_proto_message(
+            _frame(_msg(21, _vint(1, 1) + _vint(2, 1) + _vint(3, 1_760_000_000)))
+        )
+        assert full == {"storm_guard_enabled": True}
