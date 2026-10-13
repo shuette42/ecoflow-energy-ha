@@ -2924,6 +2924,12 @@
       "solar_surplus_threshold": {
         "name": "Solarüberschuss-Schwelle"
       },
+      "heating_rod_target_power_w": {
+        "name": "Heizstab-Zielleistung"
+      },
+      "heating_rod_target_temp_c": {
+        "name": "Heizstab-Zieltemperatur"
+      },
       "standby_timeout": {
         "name": "Standby-Zeitlimit"
       },
@@ -3075,6 +3081,14 @@
           "self_powered": "Eigenverbrauch",
           "intelligent_plus": "Intelligenter Modus+",
           "custom": "Benutzerdefiniert"
+        }
+      },
+      "heating_rod_operating_mode": {
+        "name": "Heizstab-Modus",
+        "state": {
+          "off": "Aus",
+          "solar": "Solar",
+          "manual": "Manuell"
         }
       },
       "screen_timeout": {

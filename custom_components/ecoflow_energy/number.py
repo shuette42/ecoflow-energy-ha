@@ -61,7 +61,10 @@ from .ecoflow.delta3_commands import (
 from .ecoflow.delta3_commands import (
     build_number_command as build_delta3_number_command,
 )
-from .ecoflow.energy_stream import stream_backup_reserve_floor
+from .ecoflow.energy_stream import (
+    powerglow_max_power_w,
+    stream_backup_reserve_floor,
+)
 from .ecoflow.parsers.delta3_proto import port_priority_keys
 from .ecoflow.parsers.smartplug import (
     build_plug_brightness_payload,
@@ -362,6 +365,9 @@ class EcoFlowNumber(
         and its ceiling follows the device's own feed limit once reported,
         the declared range otherwise. The Delta 3 backup reserve is a sixth: it
         runs from five points above the discharge limit to the charge limit.
+        The PowerGlow heating rod's target power is a seventh: its ceiling
+        follows the prefix of the rod's own serial (`heating_rod_sn`), the
+        declared range until that serial is reported.
         Every other number keeps the range its definition declares.
         """
         schedule_slot = self._schedule_slot()
@@ -423,7 +429,27 @@ class EcoFlowNumber(
                 # a control whose slider ends cross.
                 return None
             return self._attr_native_min_value, ratio_upper
+        if self._is_powerglow_target_power():
+            # The app caps the prompt by the rod's serial prefix, and only the
+            # rod's own 212/8 report carries that serial. A missing or
+            # malformed one keeps the declared (highest) range; the
+            # coordinator re-checks the value against the same ceiling.
+            rod_sn = (self.coordinator.data or {}).get("heating_rod_sn")
+            if not isinstance(rod_sn, str) or len(rod_sn) != 16:
+                return None
+            return self._attr_native_min_value, float(powerglow_max_power_w(rod_sn))
         return None
+
+    def _is_powerglow_target_power(self) -> bool:
+        """Return True for the PowerGlow heating rod's target power setpoint.
+
+        The key is shared with the diagnostic sensor, which lives on another
+        platform; the device type keeps the rule off every other device.
+        """
+        return (
+            self._definition.key == "heating_rod_target_power_w"
+            and self.coordinator.device_type == DEVICE_TYPE_POWEROCEAN
+        )
 
     def _is_stream_ac5000_grid_output(self) -> bool:
         """Return True for the grid-tied output setpoint on this family.
@@ -748,6 +774,23 @@ class EcoFlowNumber(
         """
         key = self._definition.key
         int_value = int(value)
+
+        if key in ("heating_rod_target_power_w", "heating_rod_target_temp_c"):
+            # PowerGlow heating rod (#7). No optimistic apply: the coordinator
+            # returns only once the rod's own 212/8 report carries the value,
+            # and that report is what updates the store. Range and offline
+            # refusals are raised there as translated errors.
+            if int_value != value:
+                raise_set_rejected(self.entity_id, "whole numbers only")
+            if key == "heating_rod_target_power_w":
+                await self.coordinator.async_set_powerglow_value(
+                    "target_power", int_value
+                )
+            else:
+                await self.coordinator.async_set_powerglow_value(
+                    "target_temp", int_value
+                )
+            return
 
         schedule_slot = self._schedule_slot()
         if schedule_slot is not None:

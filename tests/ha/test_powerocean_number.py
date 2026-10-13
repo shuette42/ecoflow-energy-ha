@@ -42,21 +42,24 @@ class TestGetNumberDefs:
     def test_powerocean_number_keys(self):
         """Two sliders every PowerOcean has, plus one power per scheduled
         task slot on each of the two families: the charge schedule and the
-        feed-to-grid schedule. The schedule ones are accessory-gated, so a
-        device without a schedule never sees them."""
+        feed-to-grid schedule, plus the PowerGlow heating rod's two setpoints.
+        The schedule and heating rod ones are accessory-gated, so a device
+        without a schedule or a rod never sees them."""
         defs = _get_number_defs(DEVICE_TYPE_POWEROCEAN)
         keys = {d.key for d in defs}
+        heating_rod = {"heating_rod_target_power_w", "heating_rod_target_temp_c"}
 
-        assert keys == {"backup_reserve", "solar_surplus_threshold"} | {
+        assert keys == {"backup_reserve", "solar_surplus_threshold"} | heating_rod | {
             f"{prefix}_{index}_power_w"
             for prefix in POWEROCEAN_SCHEDULE_PREFIXES
             for index in range(1, SCHEDULE_MAX_INDEX + 1)
         }
         schedule_heads = tuple(f"{prefix}_" for prefix in POWEROCEAN_SCHEDULE_PREFIXES)
-        assert not any(
-            d.accessory for d in defs if not d.key.startswith(schedule_heads)
-        )
-        assert all(d.accessory for d in defs if d.key.startswith(schedule_heads))
+        gated = [
+            d for d in defs if d.key.startswith(schedule_heads) or d.key in heating_rod
+        ]
+        assert not any(d.accessory for d in defs if d not in gated)
+        assert all(d.accessory for d in gated)
 
     def test_feed_schedule_power_declares_the_recorded_app_range(self):
         """100 W floor, 5000 W placeholder ceiling, 100 W step (#381).

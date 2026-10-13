@@ -24,10 +24,11 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any
+from typing import Any, Literal, cast
 
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -152,6 +153,12 @@ def _watch_for_accessory(
     config_entry.async_on_unload(coordinator.async_add_listener(_check_for_accessory))
 
 
+_SELECT_CATEGORY_MAP = {
+    "diagnostic": EntityCategory.DIAGNOSTIC,
+    "config": EntityCategory.CONFIG,
+}
+
+
 class EcoFlowSelect(CoordinatorEntity[EcoFlowDeviceCoordinator], SelectEntity):
     """An EcoFlow select entity with optimistic lock."""
 
@@ -169,6 +176,10 @@ class EcoFlowSelect(CoordinatorEntity[EcoFlowDeviceCoordinator], SelectEntity):
         self._attr_translation_key = definition.key
         self._attr_icon = definition.icon
         self._attr_options = list(definition.options)
+        if definition.entity_category:
+            self._attr_entity_category = _SELECT_CATEGORY_MAP.get(
+                definition.entity_category
+            )
         self._optimistic_value: str | None = None
         self._optimistic_lock_until: float = 0.0
 
@@ -257,6 +268,17 @@ class EcoFlowSelect(CoordinatorEntity[EcoFlowDeviceCoordinator], SelectEntity):
                 await self.coordinator.async_set_powerpulse_phase_setting(option)
             else:
                 await self.coordinator.async_set_powerpulse_charge_mode(option)
+            return
+
+        if self._definition.key == "heating_rod_operating_mode":
+            # PowerGlow heating rod (#7). Nothing is applied here: the
+            # coordinator returns only once the rod's own 212/8 report carries
+            # the new state, and that report is what moves the option. A
+            # refusal or a missing confirmation is raised there as a
+            # translated error.
+            await self.coordinator.async_set_powerglow_operating_mode(
+                cast(Literal["off", "solar", "manual"], option)
+            )
             return
 
         if self._definition.key == "work_mode":

@@ -31,7 +31,7 @@ class TestSelectDefs:
     def test_powerocean_select_keys(self):
         defs = _get_select_defs(DEVICE_TYPE_POWEROCEAN)
         keys = {d.key for d in defs}
-        assert keys == {"work_mode"}
+        assert keys == {"work_mode", "heating_rod_operating_mode"}
 
     def test_work_mode_options(self):
         defs = _get_select_defs(DEVICE_TYPE_POWEROCEAN)

@@ -2924,6 +2924,12 @@
       "solar_surplus_threshold": {
         "name": "Solar Surplus Threshold"
       },
+      "heating_rod_target_power_w": {
+        "name": "Heating Rod Target Power"
+      },
+      "heating_rod_target_temp_c": {
+        "name": "Heating Rod Target Temperature"
+      },
       "standby_timeout": {
         "name": "Standby Timeout"
       },
@@ -3075,6 +3081,14 @@
           "self_powered": "Self-powered",
           "intelligent_plus": "Intelligent Mode+",
           "custom": "Custom"
+        }
+      },
+      "heating_rod_operating_mode": {
+        "name": "Heating Rod Mode",
+        "state": {
+          "off": "Off",
+          "solar": "Solar",
+          "manual": "Manual"
         }
       },
       "screen_timeout": {
