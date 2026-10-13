@@ -2920,6 +2920,9 @@
       },
       "ev_led_enabled": {
         "name": "Wallbox-LED-Anzeige"
+      },
+      "storm_guard": {
+        "name": "Sturmwächter"
       }
     },
     "number": {

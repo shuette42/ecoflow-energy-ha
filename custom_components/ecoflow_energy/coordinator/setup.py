@@ -284,7 +284,7 @@ class SetupMixin(_Base):
         self._credential_refresh_unsub = None
         self._powerocean_soc_debounce_unsub = None
         # A stopped coordinator has nothing left to ask or restore on the
-        # Ocean 2 reserve read-back.
+        # Ocean 2 read-backs (Backup Reserve, Storm Guard).
         self._cancel_ocean2_readback()
 
         # Invalidate every claimed cycle before waiting. A publish already
