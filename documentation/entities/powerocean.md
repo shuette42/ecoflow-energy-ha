@@ -64,7 +64,7 @@ A Local (Modbus/TCP) entry for a three-phase PowerOcean creates only these share
 
 > **PowerOcean Plus** units report more of the same entity set than a standard PowerOcean: per-phase reactive power (var) and apparent power (VA), plus MPPT strings 3 and 4. Those entities are disabled by default, so enable the ones you need after adding a Plus device.
 
-**Totals:** an account entry (Standard or Enhanced Mode) has 249 sensors, 21 binary sensors, 18 numbers, 16 switches and 1 select. A Local (Modbus/TCP) entry has 28 sensors (20 of the sensors below plus the 8 in the Local-only section), 4 binary sensors, 2 numbers and 1 switch.
+**Totals:** an account entry (Standard or Enhanced Mode) has 249 sensors, 21 binary sensors, 20 numbers, 16 switches and 2 selects. A Local (Modbus/TCP) entry has 28 sensors (20 of the sensors below plus the 8 in the Local-only section), 4 binary sensors, 2 numbers and 1 switch.
 
 > Entities marked with *disabled* are available but hidden by default. Enable them in **Settings > Devices > EcoFlow PowerOcean > Entities** (click the filter icon and show disabled entities).
 
@@ -353,7 +353,7 @@ Each battery pack creates 24 sensors (7 core + 17 diagnostic). Pack 1 core senso
 
 ## Heating Rod Controls (accessory, Enhanced Mode)
 
-Created once the PowerOcean reports a PowerGlow heating rod, and only with account sign-in. They are configuration entities on the PowerOcean device. Each change waits until the heating rod reports the new value back; if it does not within 20 seconds, Home Assistant shows an error and keeps the reported value.
+Created once the PowerOcean reports a PowerGlow heating rod, and only with account sign-in. They are configuration entities on the PowerOcean device. Each change waits until the heating rod reports the new value back. If that report does not arrive within 20 seconds, Home Assistant shows an error and keeps the reported value. Switching from Off to Solar or Manual is two steps with 20 seconds each.
 
 | Entity | Type | Description | Default |
 |:---|:---:|:---|:---:|
@@ -394,6 +394,6 @@ Created only once a coupled wallbox reports a charging session. See the note at 
 
 - All power sensors show integers (no decimal places) for clean dashboard display
 - Energy sensors show 2 decimal places (0.01 kWh resolution)
-- Enhanced Mode (~3s updates) unlocks every control (18 numbers, 16 switches, 1 select) and faster data
+- Enhanced Mode (~3s updates) unlocks every control (20 numbers, 16 switches, 2 selects) and faster data
 - Standard Mode (~30s polling) provides the sensors the Developer API reports. Some readings need Enhanced Mode, for example the schedules, the wallbox, the parallel pair and several diagnostics.
 - Local (Modbus/TCP, three-phase only) refreshes every 2 seconds, needs no account, and creates the shared sensors and Local-only entities listed above.
