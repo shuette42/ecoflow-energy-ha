@@ -404,6 +404,10 @@ class StateApplyMixin(_Base):
         settings report, which `_resolve_wallbox_charge_mode` converts into
         `ev_charge_mode` before this runs; the heartbeat confirms it only
         while no recent settings report owns that key.
+
+        A record with `require` set (PLAN-190, a PowerGlow write naming its
+        rod's serial) only accepts a frame whose value at that key matches,
+        so a report from another rod on the same PowerOcean cannot confirm it.
         """
         record = self._pending_write
         if record is None or record.future.done():

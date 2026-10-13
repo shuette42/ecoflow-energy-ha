@@ -328,6 +328,8 @@ async def test_refused_mode_change_ends_not_confirmed_and_never_switches_on(
     [
         ({"hr_run_stat": 0, "hr_mode": 0}, "off"),
         ({"hr_run_stat": 0, "hr_mode": 1}, "off"),
+        ({"hr_run_stat": 0}, "off"),
+        ({"hr_run_stat": 0, "hr_mode": 2}, "off"),
         ({"hr_run_stat": 1, "hr_mode": 0}, "solar"),
         ({"hr_run_stat": 1, "hr_mode": 1}, "manual"),
     ],
@@ -335,7 +337,8 @@ async def test_refused_mode_change_ends_not_confirmed_and_never_switches_on(
 def test_operating_mode_is_derived_from_run_state_and_mode(
     raw: dict[str, Any], expected: str
 ) -> None:
-    """The select reads one key: off while the run state is 0, else the mode.
+    """The select reads one key: off while the run state is 0, whatever the
+    mode (also missing or unknown), else the mode.
 
     Mutation probe: swapping the two names in `_HEATING_ROD_MODE_NAMES`, or
     testing the run state after the mode, turns a case red.
@@ -348,7 +351,6 @@ def test_operating_mode_is_derived_from_run_state_and_mode(
     [
         {"hr_mode": 1},
         {"hr_run_stat": 1},
-        {"hr_run_stat": 0},
         {"hr_run_stat": 1, "hr_mode": 2},
         {"hr_target_power": 2000},
     ],
@@ -356,8 +358,8 @@ def test_operating_mode_is_derived_from_run_state_and_mode(
 def test_operating_mode_is_absent_when_the_report_cannot_tell(
     raw: dict[str, Any],
 ) -> None:
-    """A report missing an input, or carrying a mode other than 0 and 1, leaves
-    the key out so a known state is never overwritten by a guess.
+    """A running rod's report missing an input, or carrying a mode other than
+    0 and 1, leaves the key out so a known state is never overwritten by a guess.
 
     Mutation probe: defaulting a missing mode to "solar" makes the
     `{"hr_run_stat": 1}` case yield a value.
@@ -591,3 +593,25 @@ async def test_a_frame_without_the_key_does_not_confirm_from_the_store(
     _report(ocean, heating_rod_target_power_w=1000.0)
     await task
     assert ocean._pending_write is None
+
+
+async def test_off_is_confirmed_by_a_raw_report_through_the_parser(
+    hass: HomeAssistant,
+) -> None:
+    """The confirmation path end to end: a raw `212/8` field set goes through
+    `remap_heating_rod_keys` and its output confirms Off, including a report
+    whose mode is missing (a rod that is off still counts as off).
+
+    Mutation probe: deriving "off" only when the mode is 0 or 1 leaves the
+    write pending, and the window below ends it with an error.
+    """
+    ocean = _ocean(hass, heating_rod_mode=1, heating_rod_run_state=1)
+
+    with patch(WINDOW, 1.0):
+        task = asyncio.create_task(ocean.async_set_powerglow_operating_mode("off"))
+        await asyncio.sleep(0.05)
+        ocean._apply_data(remap_heating_rod_keys({"hr_sn": ROD_SN, "hr_run_stat": 0}))
+        await task
+
+    assert ocean._pending_write is None
+    assert ocean.device_data["heating_rod_operating_mode"] == "off"

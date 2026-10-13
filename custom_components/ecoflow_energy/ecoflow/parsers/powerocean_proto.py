@@ -733,10 +733,10 @@ def remap_heating_rod_keys(raw: dict[str, Any]) -> dict[str, Any]:
     One derived value rides along for the operating-mode select:
     `heating_rod_operating_mode`, one of "off", "solar" or "manual". The app
     shows one control where the device has two settings, so it is "off" while
-    the run state is 0 and otherwise the mode's name (0 Solar, 1 Manual). It is
-    left out when either input is missing from the report or the mode is
-    neither 0 nor 1, so a frame that cannot tell never overwrites a known
-    state with a guess.
+    the run state is 0, whatever the mode, and otherwise the mode's name (0
+    Solar, 1 Manual). A running rod gets no value when the run state is missing
+    or the mode is neither 0 nor 1, so a frame that cannot tell never
+    overwrites a known state with a guess.
 
     An idle rod reports its power as a real zero rather than omitting it, which
     the oneof wrapper on the message preserves. Nothing here is a meter, so no
@@ -764,10 +764,10 @@ def remap_heating_rod_keys(raw: dict[str, Any]) -> dict[str, Any]:
 
     run_state = result.get("heating_rod_run_state")
     mode = result.get("heating_rod_mode")
-    if run_state is not None and mode in _HEATING_ROD_MODE_NAMES:
-        result["heating_rod_operating_mode"] = (
-            "off" if run_state == 0 else _HEATING_ROD_MODE_NAMES[mode]
-        )
+    if run_state == 0:
+        result["heating_rod_operating_mode"] = "off"
+    elif run_state is not None and mode in _HEATING_ROD_MODE_NAMES:
+        result["heating_rod_operating_mode"] = _HEATING_ROD_MODE_NAMES[mode]
 
     return result
 
