@@ -8854,6 +8854,150 @@ class TestLinkedUnitPower:
         coordinator._apply_data({"soc_pct": 76})
         assert coordinator.data["unit_batt_w"] == 689.0
 
+    async def test_the_split_follows_the_sign(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """Positive is charge: a swapped split would fail the first half."""
+        coordinator = self._coordinator(hass, enhanced_config_entry)
+        coordinator._apply_data({"_unit_batt_w_by_sn": {"ES22TESTUNITAAAA": 426.0}})
+        assert coordinator.data["unit_batt_charge_power_w"] == 426.0
+        assert coordinator.data["unit_batt_discharge_power_w"] == 0.0
+        coordinator._apply_data({"_unit_batt_w_by_sn": {"ES22TESTUNITAAAA": -7.0}})
+        assert coordinator.data["unit_batt_charge_power_w"] == 0.0
+        assert coordinator.data["unit_batt_discharge_power_w"] == 7.0
+
+    async def test_an_unproven_entry_keeps_the_last_reading(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """No sign in this message: hold, never guess, never zero."""
+        coordinator = self._coordinator(hass, enhanced_config_entry)
+        coordinator._apply_data({"_unit_batt_w_by_sn": {"ES22TESTUNITAAAA": -300.0}})
+        coordinator._apply_data({"_unit_batt_w_by_sn": {"ES22TESTUNITAAAA": None}})
+        assert coordinator.data["unit_batt_w"] == -300.0
+        assert coordinator.data["unit_batt_charge_power_w"] == 0.0
+        assert coordinator.data["unit_batt_discharge_power_w"] == 300.0
+        # The serial was listed, so this is not a serial mismatch.
+        assert coordinator._unit_power_stats["own_unit_matched"] is True
+
+    async def test_an_unproven_entry_is_not_handed_to_a_sibling(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """A second AC 5000 keeps its last reading, as its own frames would."""
+        coordinator = self._coordinator(hass, enhanced_config_entry)
+        sibling = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, {**self.ES22_DEVICE, "sn": "ES22TESTUNITBBBB"}
+        )
+        hass.data.setdefault(DOMAIN, {})[enhanced_config_entry.entry_id] = {
+            coordinator.device_sn: coordinator,
+            sibling.device_sn: sibling,
+        }
+        own, other = coordinator.device_sn, sibling.device_sn
+        coordinator._apply_data({"_unit_batt_w_by_sn": {own: 0.0, other: -300.0}})
+        coordinator._apply_data({"_unit_batt_w_by_sn": {own: 0.0, other: None}})
+        assert sibling.data["unit_batt_w"] == -300.0
+        assert coordinator._unit_power_stats["units_handed_over"] == 1
+
+    async def test_a_linked_stream_never_gets_a_battery_or_pv_entry(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """A linked Stream reads its battery power and its PV strings itself.
+
+        A second reading for the same pack would let the Energy Dashboard
+        count it twice, and a second writer for a PV string alternates it
+        (#549). Neither block is handed to a Stream.
+        """
+        coordinator = self._coordinator(hass, enhanced_config_entry)
+        stream = EcoFlowDeviceCoordinator(
+            hass,
+            enhanced_config_entry,
+            {**MOCK_STREAM_DEVICE, "sn": "BK11TESTUNITBBBB"},
+        )
+        hass.data.setdefault(DOMAIN, {})[enhanced_config_entry.entry_id] = {
+            coordinator.device_sn: coordinator,
+            stream.device_sn: stream,
+        }
+        coordinator._apply_data(
+            {
+                "_unit_batt_w_by_sn": {
+                    "ES22TESTUNITAAAA": 0.0,
+                    "BK11TESTUNITBBBB": -17.5,
+                },
+                "_unit_pv_by_sn": {"BK11TESTUNITBBBB": {"pv1_w": 120.0}},
+            }
+        )
+        assert "unit_batt_w" not in (stream.data or {})
+        assert "pv1_w" not in (stream.data or {})
+        assert "units_handed_over" not in coordinator._unit_power_stats
+        assert "pv_units_handed_over" not in coordinator._unit_power_stats
+        assert coordinator._unit_power_stats["units_kept_from_stream"] == 1
+        assert coordinator._unit_power_stats["pv_units_kept_from_stream"] == 1
+
+    async def test_a_linked_stream_keeps_its_own_pv_strings_and_grid_connection(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """The AC 5000's entry for a linked Stream never overwrites its own.
+
+        The Stream reports PV 1 Power and AC Grid Connection Power from its
+        own frames; the AC 5000's group message carries the same readings,
+        rounded and a push behind. Handing them over would make the two take
+        turns at the push cadence (#549). The AC 5000 keeps its own `.7`.
+        Mutation this catches: dropping the `_linked_unit_is_stream` check on
+        the PV hand-over (the Stream would read 187.0 and 153.0).
+        """
+        coordinator = self._coordinator(hass, enhanced_config_entry)
+        stream = EcoFlowDeviceCoordinator(
+            hass,
+            enhanced_config_entry,
+            {**MOCK_STREAM_DEVICE, "sn": "BK11TESTUNITBBBB"},
+        )
+        hass.data.setdefault(DOMAIN, {})[enhanced_config_entry.entry_id] = {
+            coordinator.device_sn: coordinator,
+            stream.device_sn: stream,
+        }
+        stream._apply_data({"pv1_w": 186.4, "ac_grid_connection_power_w": 152.6})
+        coordinator._apply_data(
+            {
+                "_unit_pv_by_sn": {
+                    "ES22TESTUNITAAAA": {"ac_grid_connection_power_w": -352.0},
+                    "BK11TESTUNITBBBB": {
+                        "pv1_w": 187.0,
+                        "ac_grid_connection_power_w": 153.0,
+                    },
+                },
+            }
+        )
+        assert coordinator.data["ac_grid_connection_power_w"] == -352.0
+        assert stream.data["pv1_w"] == 186.4
+        assert stream.data["ac_grid_connection_power_w"] == 152.6
+        assert "pv_units_handed_over" not in coordinator._unit_power_stats
+
+    async def test_a_second_ac5000_keeps_the_handed_ac_grid_connection_power(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """Its own entry may reach it only over its sibling's connection."""
+        coordinator = self._coordinator(hass, enhanced_config_entry)
+        sibling = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, {**self.ES22_DEVICE, "sn": "ES22TESTUNITBBBB"}
+        )
+        hass.data.setdefault(DOMAIN, {})[enhanced_config_entry.entry_id] = {
+            coordinator.device_sn: coordinator,
+            sibling.device_sn: sibling,
+        }
+        coordinator._apply_data(
+            {
+                "_unit_pv_by_sn": {
+                    "ES22TESTUNITAAAA": {"ac_grid_connection_power_w": -352.0},
+                    "ES22TESTUNITBBBB": {
+                        "pv1_w": 187.0,
+                        "ac_grid_connection_power_w": 153.0,
+                    },
+                },
+            }
+        )
+        assert coordinator.data["ac_grid_connection_power_w"] == -352.0
+        assert sibling.data["pv1_w"] == 187.0
+        assert sibling.data["ac_grid_connection_power_w"] == 153.0
+
     # --- the PV block, the same rule (#401) ---
 
     OWN_STRINGS = {
@@ -9267,11 +9411,14 @@ class TestLinkedUnitHandOver:
         assert stats_a is not None
         assert stats_a.pop("own_pv_entry_soc_pct") == 70.0
         assert stats_a.pop("own_soc_precise_pct") == 69.28
+        # Frames 5 and 6 carry unit_a's battery entry with neither its `f50`
+        # sign nor a system flow, so nothing in the message signs it: it is
+        # not handed over, and unit_a keeps its last reading.
         assert unit_a._unit_power_stats == {
             "units_listed": 2,
             "own_unit_matched": True,
             "units_handed_over": 2,
-            "units_received": 16,
+            "units_received": 14,
             "pv_units_listed": 2,
             "own_pv_matched": True,
             "pv_units_handed_over": 2,
@@ -9280,7 +9427,7 @@ class TestLinkedUnitHandOver:
         assert unit_b._unit_power_stats == {
             "units_listed": 2,
             "own_unit_matched": True,
-            "units_handed_over": 16,
+            "units_handed_over": 14,
             "units_received": 2,
             "pv_units_listed": 2,
             "own_pv_matched": True,

@@ -491,15 +491,14 @@ async def test_action_state_precondition_refuses(
     assert _mqtt(oceans[0]).send_proto_set.call_count == 0
 
 
-@pytest.mark.parametrize("action", ["start", "stop"])
-async def test_action_state_precondition_refuses_while_paused_by_the_charger(
-    hass: HomeAssistant, action: str
+async def test_start_is_refused_while_paused_by_the_charger(
+    hass: HomeAssistant,
 ) -> None:
-    """Neither action acts on "suspended_charger" (heartbeat field 1 = 4, #515).
+    """Start does not act on "suspended_charger" (heartbeat field 1 = 4, #515).
 
-    Start acts on "finishing" and stop on "charging" only. Mutation this
+    The wallbox already holds an accepted start in that state. Mutation this
     catches: adding "suspended_charger" to
-    `POWERPULSE2_CHARGE_ACTION_PRECONDITION[action]` (the press would send and
+    `POWERPULSE2_CHARGE_ACTION_PRECONDITION["start"]` (the press would send and
     this test would fail on the missing refusal).
     """
     _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
@@ -507,12 +506,89 @@ async def test_action_state_precondition_refuses_while_paused_by_the_charger(
     _apply_status(wallbox, 4)  # suspended_charger
 
     with pytest.raises(HomeAssistantError) as excinfo:
-        await wallbox.async_set_powerpulse_charge_action(action)
+        await wallbox.async_set_powerpulse_charge_action("start")
 
     assert excinfo.value.translation_key == "powerpulse_action_state"
     assert excinfo.value.translation_placeholders == {"status": "suspended_charger"}
     assert _mqtt(oceans[0]).send_proto_set.call_count == 0
     assert _mqtt(wallbox).send_proto_set.call_count == 0
+
+
+async def test_stop_while_paused_by_the_charger_sends_and_confirms_on_finishing(
+    hass: HomeAssistant,
+) -> None:
+    """Stop cancels a start that waits for solar surplus (#515 follow-up).
+
+    The app enables its charge slider in charging status 4 and sends the same
+    relayed stop (241/100, on_off_set 1) as in "charging". The press is
+    published once and still needs a fresh "finishing" to confirm; a repeated
+    "suspended_charger" frame does not. Mutation this catches: removing
+    "suspended_charger" from `POWERPULSE2_CHARGE_ACTION_PRECONDITION["stop"]`
+    (the press raises instead of publishing).
+    """
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    _apply_status(wallbox, 4)  # suspended_charger
+
+    with patch(
+        "custom_components.ecoflow_energy.ecoflow.energy_stream.time.time",
+        return_value=1_700_000_000.0,
+    ):
+        expected_seq = int(1_700_000_000.0 * 1000) & 0x7FFFFFFF
+        expected = build_powerpulse_charge_action_payload(
+            "stop", DEV_ADDR, DEV_SN, seq=expected_seq
+        )
+        task = asyncio.create_task(wallbox.async_set_powerpulse_charge_action("stop"))
+        await asyncio.sleep(0.05)
+
+    assert _mqtt(oceans[0]).send_proto_set.call_count == 1
+    assert _mqtt(wallbox).send_proto_set.call_count == 0
+    assert _mqtt(oceans[0]).send_proto_set.call_args.args[0] == expected
+
+    _apply_status(wallbox, 4)  # still paused - must not confirm a stop
+    pending = wallbox._pending_write
+    assert pending is not None and not pending.future.done()
+
+    _apply_status(wallbox, 6)  # finishing - confirms
+    await asyncio.wait_for(task, timeout=2)
+    assert wallbox._pending_write is None
+
+
+async def test_own_route_stop_while_paused_by_the_charger_sends_and_confirms(
+    hass: HomeAssistant,
+) -> None:
+    """The own route (no PowerOcean in the entry) shares the stop set (#515).
+
+    Both app screens for a wallbox on its own topic show the charge switch on
+    in status 4. The press publishes the standalone stop once on the
+    wallbox's own client; a repeated 4 does not confirm, a 6 does. Mutation
+    this catches: removing "suspended_charger" from
+    `POWERPULSE2_CHARGE_ACTION_PRECONDITION["stop"]` (the press raises).
+    """
+    _entry_obj, _oceans, wallbox = _wire_entry(hass, [])
+    _apply_status(wallbox, 4)  # suspended_charger
+
+    with patch(
+        "custom_components.ecoflow_energy.ecoflow.energy_stream.time.time",
+        return_value=1_700_000_000.0,
+    ):
+        expected_seq = int(1_700_000_000.0 * 1000) & 0x7FFFFFFF
+        expected = build_powerpulse_standalone_charge_ctrl_payload(
+            "stop", wallbox.device_sn, seq=expected_seq
+        )
+        task = asyncio.create_task(wallbox.async_set_powerpulse_charge_action("stop"))
+        await asyncio.sleep(0.05)
+
+    assert _mqtt(wallbox).send_proto_set.call_count == 1
+    assert _mqtt(wallbox).send_proto_set.call_args.args[0] == expected
+
+    _apply_status(wallbox, 4)  # still paused - must not confirm a stop
+    pending = wallbox._pending_write
+    assert pending is not None and not pending.future.done()
+
+    _apply_status(wallbox, 6)  # finishing - confirms
+    await asyncio.wait_for(task, timeout=2)
+    assert wallbox._pending_write is None
 
 
 async def test_descriptor_missing_refuses(hass: HomeAssistant) -> None:

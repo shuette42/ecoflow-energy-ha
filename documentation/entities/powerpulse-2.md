@@ -91,7 +91,7 @@ Created under the same condition as the number above: exactly one PowerOcean in 
 | Wallbox Screen | The wallbox's screen, on or off. It shows only what the wallbox reports. It stays unknown until the wallbox has reported it, and it changes only when the wallbox says so. A change returns once the wallbox reports the new state on its next settings report, or fails if it does not. The screen's brightness is a separate number and is sent whether the screen is on or off |
 | Wallbox LED Indicator | The wallbox's LED indicator, on or off. It shows only what the wallbox reports. It stays unknown until the wallbox has reported it, and it changes only when the wallbox says so. A change returns once the wallbox reports the new state on its next settings report, or fails if it does not. Its brightness is a separate number |
 
-Created only when the integration entry holds exactly one PowerOcean, and only after the wallbox has sent its settings report (for Wallbox Screen and Wallbox LED Indicator, a report that carried the display values). A change is built from the wallbox's latest settings report. If no report has arrived yet, or the last one is too old, the change fails with a message and nothing is sent.
+Created only when the integration entry holds exactly one PowerOcean, and only after the wallbox has sent its settings report (for Wallbox Screen and Wallbox LED Indicator, a report that carried the display values). A change is built from the wallbox's latest settings report. If no report has arrived yet, or the last one is too old, the change waits up to 5 seconds for the next report; if none arrives, it fails with a message and nothing is sent.
 
 ---
 
@@ -100,7 +100,7 @@ Created only when the integration entry holds exactly one PowerOcean, and only a
 | Entity | Default | Description |
 |:---|:---:|:---|
 | Wallbox Start Charging | enabled | Starts a charging session that the wallbox has stopped, that is, while Wallbox Charging Status reads `finishing`. The press returns once the wallbox itself reports `charging` or `suspended_charger` (Paused by Charger, a Solar-mode start that waits for surplus), or fails after 30 s if it does not |
-| Wallbox Stop Charging | enabled | Stops the running session, while Wallbox Charging Status reads `charging`. The press returns once the wallbox reports `finishing` or `available`, or fails after 15 s if it does not |
+| Wallbox Stop Charging | enabled | Stops the running session, while Wallbox Charging Status reads `charging`, or cancels a start that waits for solar surplus while it reads `suspended_charger` (Paused by Charger). The press returns once the wallbox reports `finishing` or `available`, or fails after 15 s if it does not |
 
 The command takes one of two routes, the way the EcoFlow app sends it in each setup, and the confirmation is always read from the wallbox's own reporting: nothing is shown as done until the wallbox says so, and a press in a state the action does not fit (a start while charging, a stop while idle) fails with a message naming the state instead of sending anything.
 
@@ -125,6 +125,10 @@ Wallbox Cable Lock is only carried in the wallbox's bundled status report, never
 ### The wallbox is quiet between changes
 
 The PowerPulse 2 reports when something changes and otherwise stays silent, charging or not. Over a complete seven-hour recording the longest silence was 50 minutes. The integration therefore waits 20 minutes before it asks the wallbox for a fresh report and keeps the entities available through an hour of silence; on every other device type that watch is much shorter. A wallbox that has gone offline is shown as unavailable after an hour, not after ten minutes.
+
+### Several changes in a row
+
+The wallbox takes one settings change at a time and confirms each on its next settings report. A change you make while an earlier one still waits for that confirmation is held and sent once the earlier one has finished, up to about 25 seconds, instead of failing. If you move the same control again while a change for it is held, only the last value is sent. The Screen and LED Indicator switches and brightness sliders and the three settings switches (Continuous Charging, Block Battery Discharge, Plug-and-Play) build on the wallbox's last settings report. When it is older than 10 seconds, or the wallbox has not reported since the previous change, such a change waits up to 5 seconds for the next report before it fails with the "settings report is too old" error; nothing is sent while it waits. The holding of changes covers those controls and also Wallbox Solar Minimum Current, Wallbox Custom Charging Current and Wallbox Phase Setting. Wallbox Start Charging, Wallbox Stop Charging, Wallbox Maximum Current, Wallbox Charging Current Setpoint and Wallbox Charging Mode are still refused with "An earlier command is still waiting for the wallbox to confirm it" while any write waits, and a settings change is refused the same way while one of those waits.
 
 ### Single-phase charging
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from typing import TYPE_CHECKING, Any, TypedDict
@@ -13,6 +14,7 @@ from ..const import (
     APP_SURPLUS_SYNC_USER_GRACE_S,
     DEVICE_TYPE_OCEAN2,
     DEVICE_TYPE_POWEROCEAN,
+    DEVICE_TYPE_STREAM_AC5000,
     DEVICE_TYPE_WAVE3,
     DOMAIN,
     POWEROCEAN_SCHEDULE_ARMED_LATCH_S,
@@ -156,6 +158,11 @@ class StateApplyMixin(_Base):
         with his serial on one connection and, at the restart, the other
         entry on the other (#401, 2026-09-13). Only a frame that carries both
         is recorded, so the pair is never stitched from two moments.
+
+        AC Grid Connection Power (`f50.1.7`) travels with the entry. Only a
+        STREAM AC 5000 claims a PV entry, its own or one handed from a second
+        AC 5000 that may reach it only over its sibling's connection; a linked
+        Stream is never handed one (`_linked_unit_is_stream`).
         """
         strings = dict(entry)
         soc = strings.pop(UNIT_PV_ENTRY_SOC_KEY, None)
@@ -164,6 +171,16 @@ class StateApplyMixin(_Base):
             stats["own_pv_entry_soc_pct"] = soc
             stats["own_soc_precise_pct"] = round(float(own), 2)
         return strings
+
+    def _linked_unit_is_stream(self, serial: str) -> bool:
+        """Whether the coordinator named by `serial` is a linked Stream.
+
+        The per-unit blocks of a STREAM AC 5000 group message are handed only
+        to another STREAM AC 5000. An unknown serial is not a Stream: its
+        hand-over is counted as unrouted later, as before.
+        """
+        sibling = self._linked_unit_coordinator(serial)
+        return sibling is not None and sibling.device_type != DEVICE_TYPE_STREAM_AC5000
 
     def _resolve_unit_power(
         self, parsed: dict[str, Any], *, own_connection: bool, now: float
@@ -192,8 +209,17 @@ class StateApplyMixin(_Base):
         between two coordinators handing each other the same entry back.
 
         `*_listed` / `own_*_matched` describe only the last own-connection
-        block, unchanged from before. The eight hand-over counters
+        block, unchanged from before. The hand-over counters
         (`linked_unit_stats`) are running totals.
+
+        A battery entry of None is one the message could not sign (see
+        `_sign_unit_entries`): the unit's last reading stands and nothing is
+        handed over. Both blocks go only to another STREAM AC 5000
+        (`_linked_unit_is_stream`): a linked Stream reads its battery power,
+        its PV strings and its AC grid connection from its own frames, so one
+        reading never has two writers (#549). The hold below cannot protect a
+        Stream, since its own frames never carry the per-unit blocks it
+        would be anchored on.
         """
         power = parsed.pop(UNIT_POWER_BY_SN_KEY, None)
         strings = parsed.pop(UNIT_PV_BY_SN_KEY, None)
@@ -204,12 +230,17 @@ class StateApplyMixin(_Base):
             own = power.get(self.device_sn)
             if own_connection:
                 stats["units_listed"] = len(power)
-                stats["own_unit_matched"] = own is not None
+                stats["own_unit_matched"] = self.device_sn in power
                 if own is not None:
                     parsed["unit_batt_w"] = own
                     self._own_unit_entry_ts[UNIT_POWER_BY_SN_KEY] = now
                 for serial, value in power.items():
-                    if serial == self.device_sn:
+                    if serial == self.device_sn or value is None:
+                        continue
+                    if self._linked_unit_is_stream(serial):
+                        stats["units_kept_from_stream"] = (
+                            stats.get("units_kept_from_stream", 0) + 1
+                        )
                         continue
                     stats["units_handed_over"] = stats.get("units_handed_over", 0) + 1
                     handoffs.setdefault(serial, {})[UNIT_POWER_BY_SN_KEY] = {
@@ -222,6 +253,15 @@ class StateApplyMixin(_Base):
                     stats["units_received"] = stats.get("units_received", 0) + 1
                 else:
                     stats["units_held"] = stats.get("units_held", 0) + 1
+
+        # The parser signs the entry (positive is charge), so the split is the
+        # same one the system battery power gets.
+        unit_w = parsed.get("unit_batt_w")
+        if isinstance(unit_w, (int, float)):
+            parsed["unit_batt_charge_power_w"] = float(unit_w) if unit_w > 0 else 0.0
+            parsed["unit_batt_discharge_power_w"] = (
+                -float(unit_w) if unit_w < 0 else 0.0
+            )
 
         if isinstance(strings, dict) and strings:
             own_strings = strings.get(self.device_sn)
@@ -252,6 +292,11 @@ class StateApplyMixin(_Base):
                     )
                 for serial, value in strings.items():
                     if serial == self.device_sn:
+                        continue
+                    if self._linked_unit_is_stream(serial):
+                        stats["pv_units_kept_from_stream"] = (
+                            stats.get("pv_units_kept_from_stream", 0) + 1
+                        )
                         continue
                     stats["pv_units_handed_over"] = (
                         stats.get("pv_units_handed_over", 0) + 1
@@ -462,6 +507,7 @@ class StateApplyMixin(_Base):
         """
         if "ev_settings_switch_bits" not in parsed:
             return
+        self._settings_report_seq += 1
         self._settings_report = (
             now,
             {
@@ -480,6 +526,18 @@ class StateApplyMixin(_Base):
                 if key in parsed
             },
         )
+        self._notify_settings_waiters()
+
+    def _notify_settings_waiters(self) -> None:
+        """Wake the settings writes that wait for a report or a free slot (#495).
+
+        The event is replaced before it is set, so a waiter that took the old
+        one under the write lock is woken and one that arrives after waits on
+        the new one: a change between the check and the wait is never lost.
+        Runs on the event loop only.
+        """
+        wake, self._settings_wake = self._settings_wake, asyncio.Event()
+        wake.set()
 
     def latch_schedule_armed(self, state_key: str, armed: bool) -> None:
         """Start the hold for one arming flag this integration just sent."""

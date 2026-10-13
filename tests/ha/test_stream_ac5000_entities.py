@@ -299,8 +299,12 @@ class TestStreamAC5000TaskReadback:
 class TestStreamAC5000Definitions:
     def test_documented_totals(self) -> None:
         """The counts the README and the entity reference publish."""
-        assert len(STREAMAC5000_SENSORS) == 57
-        assert len(STREAMAC5000_POWER_TO_ENERGY) == 5
+        # 58 since Battery Cycles (`32/50` field 14) joined the list, 59
+        # since Home From Solar (`f12.1`), 63 since Unit Battery Power got its
+        # charge/discharge split and the two kWh counters integrating it, 64
+        # since AC Grid Connection Power (`f50.1.7`).
+        assert len(STREAMAC5000_SENSORS) == 64
+        assert len(STREAMAC5000_POWER_TO_ENERGY) == 7
 
     def test_the_pv_strings_wait_for_a_non_zero_reading(self) -> None:
         """The `f50.1` group arrives on every unit of the family, PV or not.
@@ -398,9 +402,13 @@ class TestStreamAC5000Definitions:
             "pv3_w",
             "pv4_w",
             "ac_output_power_w",
+            "home_from_solar_w",
         }
         for definition in STREAMAC5000_SENSORS:
             if definition.key in zero_filled:
+                assert definition.accessory and definition.accessory_needs_nonzero, (
+                    definition.key
+                )
                 continue
             assert definition.accessory_needs_nonzero is False, definition.key
 
@@ -470,8 +478,8 @@ class TestBKSeriesSetIsUntouched:
         # 55 since Unit Battery SOC joined the BK list (#323): a key the
         # BK series itself reports, not an ES22 one. 59 since the voltage and
         # current of strings 3 and 4 joined it (#522), keys of the same BK
-        # series.
-        assert len(_get_sensor_defs(DEVICE_TYPE_STREAM)) == 59
+        # series. 60 since Battery Cycles, the BK series' own BMS heartbeat.
+        assert len(_get_sensor_defs(DEVICE_TYPE_STREAM)) == 60
 
     def test_bk01_still_gets_the_micro_reduced_set(self) -> None:
         defs = _get_sensor_defs(DEVICE_TYPE_STREAM)

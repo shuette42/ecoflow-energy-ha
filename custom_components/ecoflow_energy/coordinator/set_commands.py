@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import time
@@ -30,6 +31,7 @@ from ..const import (
     POWERPULSE2_MAX_CURRENT_WINDOW_S,
     POWERPULSE2_PHASE_SETTING_OPTIONS,
     POWERPULSE2_PHASE_SETTING_WIRE,
+    POWERPULSE2_SETTINGS_FRESH_WAIT_S,
     POWERPULSE2_SETTINGS_MAX_AGE_S,
     POWERPULSE2_SETTINGS_WINDOW_S,
     supports_ocean2_controls,
@@ -135,6 +137,17 @@ class _SettingsWrite:
             raise ValueError("a display write sends the display block alone")
         if self.display is None and not self.fields:
             raise ValueError("a settings write needs fields or a display block")
+
+
+class _SettingsReportNotFresh(HomeAssistantError):
+    """A settings write found no usable settings report yet (#495).
+
+    Raised by a write's `plan` when the latest settings report is missing or
+    older than `POWERPULSE2_SETTINGS_MAX_AGE_S`, the two cases where the next
+    report fixes it. `_async_write_powerpulse_settings` waits a bounded time
+    for that report and raises this same error, with its own translation
+    key, only when none arrives.
+    """
 
 
 def _describe_amps(value: Any) -> str:
@@ -2233,6 +2246,37 @@ class SetCommandsMixin(_Base):
         finally:
             self._clear_pending_write(record)
 
+    def _fresh_settings_report(self) -> dict[str, Any]:
+        """The latest settings report, if a write may be built on it (#495).
+
+        Raises `_SettingsReportNotFresh` (`report_missing`, or `report_stale`)
+        when there is none, when it is older than
+        `POWERPULSE2_SETTINGS_MAX_AGE_S`, or when no report was recorded since
+        the last settings write started sending (the mark is set before the
+        send, so a send that was cancelled midway or not delivered counts
+        too): such a write may have changed the wallbox in a way the older
+        report does not show, and rebuilding the byte from that report would
+        send the old bits back. Waiting for the next report fixes all three,
+        except for a report the wallbox sent before applying the write
+        (ADR-009 addendum, point 4).
+        """
+        report = self._settings_report
+        if report is None:
+            raise _SettingsReportNotFresh(
+                translation_domain=DOMAIN,
+                translation_key="powerpulse_continuous_report_missing",
+            )
+        received_at, values = report
+        if (
+            time.monotonic() - received_at > POWERPULSE2_SETTINGS_MAX_AGE_S
+            or self._settings_report_seq <= self._settings_published_seq
+        ):
+            raise _SettingsReportNotFresh(
+                translation_domain=DOMAIN,
+                translation_key="powerpulse_continuous_report_stale",
+            )
+        return values
+
     async def _async_write_powerpulse_settings(
         self,
         *,
@@ -2254,6 +2298,37 @@ class SetCommandsMixin(_Base):
         write that depends on the latest settings report (Continuous charging)
         reads it at dispatch time and not before a lock wait. It may raise
         `HomeAssistantError` itself.
+
+        Settings writes queue instead of refusing each other (#495). While
+        another settings write waits for its read-back, this call waits for it
+        to finish (confirmed, failed or timed out) and then publishes, up to
+        the confirmation window plus `POWERPULSE2_SETTINGS_FRESH_WAIT_S`; past
+        that it raises `powerpulse_action_in_progress`. A write of another
+        kind (start, stop, maximum current, charging mode) still refuses at
+        once, as it refuses a settings write. The newest call per `action` (one
+        target: a display value, one switch bit, a current) wins: a call still
+        waiting for its turn when a newer call for the same target arrives
+        ends without sending and without an error, because the newer call
+        carries the final choice. The older call is dropped when the newer one
+        is made, before the newer one passes any check: if the newer call is
+        then refused, the older caller has still returned without an error and
+        nothing was sent. No PowerPulse 2 setter shows an optimistic state, so
+        the entity stays on the value the wallbox reported. Calls for different
+        targets run one after
+        the other, each built on the report that confirmed the one before
+        (waiters wake first come, first served, and the order of two different
+        targets does not change what the wallbox ends up with). The `action`,
+        not the `state_key`, names the target, because the three switch-bit
+        switches share one state key and one must not cancel another.
+
+        When `plan` finds the settings report missing or older than
+        `POWERPULSE2_SETTINGS_MAX_AGE_S`, or no report was recorded since the
+        last settings write left (`_fresh_settings_report`), the call waits up
+        to `POWERPULSE2_SETTINGS_FRESH_WAIT_S`, never past its queue bound, for
+        the next report, then runs `plan` again. Nothing is sent while it
+        waits, and a report that still does not come is refused with the
+        report's own text. Only the display and switch-bit writes read the
+        report.
         """
         from ..ecoflow.energy_stream import (
             build_powerpulse_param_set_display_payload,
@@ -2261,121 +2336,204 @@ class SetCommandsMixin(_Base):
         )
         from .core import PendingDeviceWrite
 
-        async with self._pending_write_lock:
-            if self._shutdown:
-                raise HomeAssistantError(
-                    translation_domain=DOMAIN,
-                    translation_key="powerpulse_action_not_delivered",
-                )
-            if self._pending_write is not None:
-                raise HomeAssistantError(
-                    translation_domain=DOMAIN,
-                    translation_key="powerpulse_action_in_progress",
-                )
-            route = self.charge_action_route()
-            if route is None:
-                if self._powerocean_coordinators() is None:
-                    raise HomeAssistantError(
-                        translation_domain=DOMAIN,
-                        translation_key="powerpulse_action_not_delivered",
-                    )
-                raise HomeAssistantError(
-                    translation_domain=DOMAIN,
-                    translation_key="powerpulse_sibling_missing",
-                )
-            if route == "own":
-                # No recording shows the app writing these settings on the
-                # wallbox's own channel without a PowerOcean in the loop, the
-                # same reasoning `async_set_powerpulse_max_current` gives.
-                raise HomeAssistantError(
-                    translation_domain=DOMAIN,
-                    translation_key=needs_powerocean_key,
-                )
-            sibling = self.powerocean_sibling()
-            if sibling is None:
-                # Unreachable within one event-loop tick: same guard as
-                # `async_set_powerpulse_max_current`.
-                raise HomeAssistantError(
-                    translation_domain=DOMAIN,
-                    translation_key="powerpulse_action_not_delivered",
-                )
-            sibling_mqtt = sibling._mqtt_client
-            if sibling_mqtt is None or not sibling_mqtt.is_connected():
-                raise HomeAssistantError(
-                    translation_domain=DOMAIN,
-                    translation_key="powerpulse_sibling_offline",
-                )
-            dev_addr = self._device_data.get("ev_charger_dev_addr")
-            dev_sn = self._device_data.get("ev_charger_sn")
-            if (
-                not isinstance(dev_addr, int)
-                or not isinstance(dev_sn, str)
-                or len(dev_sn) != 16
-            ):
-                raise HomeAssistantError(
-                    translation_domain=DOMAIN,
-                    translation_key="powerpulse_descriptor_missing",
-                )
-            write = plan()
-            try:
-                if write.display is not None:
-                    payload = build_powerpulse_param_set_display_payload(
-                        *write.display, dev_addr, dev_sn, sibling.device_sn
-                    )
-                else:
-                    payload = build_powerpulse_param_set_settings_payload(
-                        write.fields, dev_addr, dev_sn, sibling.device_sn
-                    )
-            except ValueError:
-                # The caller's value is already validated; a ValueError here
-                # can only be a malformed serial, the same failure mode as
-                # the descriptor check just above.
-                raise HomeAssistantError(
-                    translation_domain=DOMAIN,
-                    translation_key="powerpulse_descriptor_missing",
-                ) from None
-            future: asyncio.Future[str | float] = self.hass.loop.create_future()
-            record = PendingDeviceWrite(
-                action=action,
-                issued_at=time.monotonic(),
-                future=future,
-                state_key=state_key,
-                expected_value=write.expected_value,
-                bit_mask=write.bit_mask,
-            )
-            # Same lifecycle as `async_set_powerpulse_max_current`: the record
-            # lives exactly as long as this call and is cleared on every exit.
-            self._pending_write = record
-            try:
-                delivered = await sibling.async_send_proto_set_command(
-                    payload, f"powerpulse_{action}"
-                )
-                if not delivered:
-                    self._log_event(f"powerpulse_{action}_not_delivered", "")
-                    raise HomeAssistantError(
-                        translation_domain=DOMAIN,
-                        translation_key="powerpulse_action_not_delivered",
-                    )
-            except BaseException:
-                self._clear_pending_write(record)
-                raise
-
+        loop = asyncio.get_running_loop()
+        self._settings_write_seq += 1
+        ticket = self._settings_write_seq
+        replaced = [t for t, a in self._settings_calls.items() if a == action]
+        for older in replaced:
+            del self._settings_calls[older]
+        self._settings_calls[ticket] = action
+        if replaced:
+            # An older call for this target that still waits ends now.
+            self._notify_settings_waiters()
+        queue_deadline = (
+            loop.time()
+            + POWERPULSE2_SETTINGS_WINDOW_S
+            + POWERPULSE2_SETTINGS_FRESH_WAIT_S
+        )
+        fresh_deadline: float | None = None
         try:
-            confirmed_value = await asyncio.wait_for(
-                future, POWERPULSE2_SETTINGS_WINDOW_S
-            )
-        except TimeoutError:
-            last_reported = self._device_data.get(state_key)
-            self._log_event(f"powerpulse_{action}_unconfirmed", str(last_reported))
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key=not_confirmed_key,
-                translation_placeholders={"reported": describe_reported(last_reported)},
-            ) from None
-        else:
-            self._log_event(f"powerpulse_{action}", str(confirmed_value))
+            record: PendingDeviceWrite | None = None
+            while record is None:
+                not_fresh: _SettingsReportNotFresh | None = None
+                async with self._pending_write_lock:
+                    # Taken with the checks below and before any await, so a
+                    # change after them wakes this very event.
+                    wake = self._settings_wake
+                    if self._shutdown:
+                        raise HomeAssistantError(
+                            translation_domain=DOMAIN,
+                            translation_key="powerpulse_action_not_delivered",
+                        )
+                    if ticket not in self._settings_calls:
+                        return
+                    pending = self._pending_write
+                    if pending is not None and not pending.settings_write:
+                        raise HomeAssistantError(
+                            translation_domain=DOMAIN,
+                            translation_key="powerpulse_action_in_progress",
+                        )
+                    if pending is None:
+                        route = self.charge_action_route()
+                        if route is None:
+                            if self._powerocean_coordinators() is None:
+                                raise HomeAssistantError(
+                                    translation_domain=DOMAIN,
+                                    translation_key="powerpulse_action_not_delivered",
+                                )
+                            raise HomeAssistantError(
+                                translation_domain=DOMAIN,
+                                translation_key="powerpulse_sibling_missing",
+                            )
+                        if route == "own":
+                            # No recording shows the app writing these settings
+                            # on the wallbox's own channel without a PowerOcean
+                            # in the loop, the same reasoning
+                            # `async_set_powerpulse_max_current` gives.
+                            raise HomeAssistantError(
+                                translation_domain=DOMAIN,
+                                translation_key=needs_powerocean_key,
+                            )
+                        sibling = self.powerocean_sibling()
+                        if sibling is None:
+                            # Unreachable within one event-loop tick: same
+                            # guard as `async_set_powerpulse_max_current`.
+                            raise HomeAssistantError(
+                                translation_domain=DOMAIN,
+                                translation_key="powerpulse_action_not_delivered",
+                            )
+                        sibling_mqtt = sibling._mqtt_client
+                        if sibling_mqtt is None or not sibling_mqtt.is_connected():
+                            raise HomeAssistantError(
+                                translation_domain=DOMAIN,
+                                translation_key="powerpulse_sibling_offline",
+                            )
+                        dev_addr = self._device_data.get("ev_charger_dev_addr")
+                        dev_sn = self._device_data.get("ev_charger_sn")
+                        if (
+                            not isinstance(dev_addr, int)
+                            or not isinstance(dev_sn, str)
+                            or len(dev_sn) != 16
+                        ):
+                            raise HomeAssistantError(
+                                translation_domain=DOMAIN,
+                                translation_key="powerpulse_descriptor_missing",
+                            )
+                        try:
+                            write = plan()
+                        except _SettingsReportNotFresh as err:
+                            not_fresh = err
+                        else:
+                            try:
+                                if write.display is not None:
+                                    payload = (
+                                        build_powerpulse_param_set_display_payload(
+                                            *write.display,
+                                            dev_addr,
+                                            dev_sn,
+                                            sibling.device_sn,
+                                        )
+                                    )
+                                else:
+                                    payload = (
+                                        build_powerpulse_param_set_settings_payload(
+                                            write.fields,
+                                            dev_addr,
+                                            dev_sn,
+                                            sibling.device_sn,
+                                        )
+                                    )
+                            except ValueError:
+                                # The caller's value is already validated; a
+                                # ValueError here can only be a malformed
+                                # serial, the same failure mode as the
+                                # descriptor check just above.
+                                raise HomeAssistantError(
+                                    translation_domain=DOMAIN,
+                                    translation_key="powerpulse_descriptor_missing",
+                                ) from None
+                            future: asyncio.Future[str | float] = loop.create_future()
+                            record = PendingDeviceWrite(
+                                action=action,
+                                issued_at=time.monotonic(),
+                                future=future,
+                                state_key=state_key,
+                                expected_value=write.expected_value,
+                                bit_mask=write.bit_mask,
+                                settings_write=True,
+                            )
+                            # Same lifecycle as `async_set_powerpulse_max_current`:
+                            # the record lives exactly as long as this call and
+                            # is cleared on every exit.
+                            self._pending_write = record
+                            # Marked before the send, not after it: a call
+                            # cancelled during the send hop may still have
+                            # published, so the next write waits for a report
+                            # newer than this one either way (#495 review).
+                            self._settings_published_seq = self._settings_report_seq
+                            try:
+                                delivered = await sibling.async_send_proto_set_command(
+                                    payload, f"powerpulse_{action}"
+                                )
+                                if not delivered:
+                                    self._log_event(
+                                        f"powerpulse_{action}_not_delivered", ""
+                                    )
+                                    raise HomeAssistantError(
+                                        translation_domain=DOMAIN,
+                                        translation_key="powerpulse_action_not_delivered",
+                                    )
+                            except BaseException:
+                                self._clear_pending_write(record)
+                                raise
+                if record is not None:
+                    break
+                # Nothing was sent. Wait outside the lock, so a start or stop
+                # is not held up, for the next change this call cares about.
+                if not_fresh is None:
+                    # Behind another settings write.
+                    remaining = queue_deadline - loop.time()
+                    if remaining <= 0:
+                        raise HomeAssistantError(
+                            translation_domain=DOMAIN,
+                            translation_key="powerpulse_action_in_progress",
+                        )
+                else:
+                    if fresh_deadline is None:
+                        fresh_deadline = min(
+                            loop.time() + POWERPULSE2_SETTINGS_FRESH_WAIT_S,
+                            queue_deadline,
+                        )
+                    remaining = fresh_deadline - loop.time()
+                    if remaining <= 0:
+                        raise not_fresh
+                # A timeout only ends this wait; the bound is checked above on
+                # the next pass, after one more look at the state.
+                with contextlib.suppress(TimeoutError):
+                    await asyncio.wait_for(wake.wait(), remaining)
+
+            try:
+                confirmed_value = await asyncio.wait_for(
+                    record.future, POWERPULSE2_SETTINGS_WINDOW_S
+                )
+            except TimeoutError:
+                last_reported = self._device_data.get(state_key)
+                self._log_event(f"powerpulse_{action}_unconfirmed", str(last_reported))
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key=not_confirmed_key,
+                    translation_placeholders={
+                        "reported": describe_reported(last_reported)
+                    },
+                ) from None
+            else:
+                self._log_event(f"powerpulse_{action}", str(confirmed_value))
+            finally:
+                self._clear_pending_write(record)
         finally:
-            self._clear_pending_write(record)
+            self._settings_calls.pop(ticket, None)
+            # The next call in line may be waiting for this one to end.
+            self._notify_settings_waiters()
 
     async def async_set_powerpulse_solar_min_current(self, current_a: int) -> None:
         """Set the Solar mode's minimum charge current (PLAN-172, issue #480).
@@ -2512,18 +2670,7 @@ class SetCommandsMixin(_Base):
         action = key.removeprefix("ev_")
 
         def plan() -> _SettingsWrite:
-            report = self._settings_report
-            if report is None:
-                raise HomeAssistantError(
-                    translation_domain=DOMAIN,
-                    translation_key="powerpulse_continuous_report_missing",
-                )
-            received_at, values = report
-            if time.monotonic() - received_at > POWERPULSE2_SETTINGS_MAX_AGE_S:
-                raise HomeAssistantError(
-                    translation_domain=DOMAIN,
-                    translation_key="powerpulse_continuous_report_stale",
-                )
+            values = self._fresh_settings_report()
             bits = values.get("ev_settings_switch_bits")
             if type(bits) is not int:
                 raise HomeAssistantError(
@@ -2603,18 +2750,7 @@ class SetCommandsMixin(_Base):
         target = int(value)
 
         def plan() -> _SettingsWrite:
-            report = self._settings_report
-            if report is None:
-                raise HomeAssistantError(
-                    translation_domain=DOMAIN,
-                    translation_key="powerpulse_continuous_report_missing",
-                )
-            received_at, values = report
-            if time.monotonic() - received_at > POWERPULSE2_SETTINGS_MAX_AGE_S:
-                raise HomeAssistantError(
-                    translation_domain=DOMAIN,
-                    translation_key="powerpulse_continuous_report_stale",
-                )
+            values = self._fresh_settings_report()
             block: list[int] = []
             for name, label in _POWERPULSE2_DISPLAY_BYTES:
                 reported = values.get(name)
@@ -2665,9 +2801,10 @@ class SetCommandsMixin(_Base):
     def _require_wallbox_action_state(self, action: Literal["start", "stop"]) -> None:
         """Raise unless the wallbox's last reported state allows `action`.
 
-        Start only from `finishing`, stop only from `charging` (ADR-009
-        decision 6), on both routes, checked after the route's own
-        preconditions so the message names the first thing that is wrong.
+        Start only from `finishing`, stop from `charging` or
+        `suspended_charger` (ADR-009 decision 5, amended for #515), on both
+        routes, checked after the route's own preconditions so the message
+        names the first thing that is wrong.
         """
         status = self._device_data.get("ev_charge_status")
         if status not in POWERPULSE2_CHARGE_ACTION_PRECONDITION[action]:

@@ -55,6 +55,11 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
     _pending_write_lock: asyncio.Lock
     _pending_write: PendingDeviceWrite | None
     _settings_report: tuple[float, dict[str, Any]] | None
+    _settings_wake: asyncio.Event
+    _settings_write_seq: int
+    _settings_calls: dict[int, str]
+    _settings_report_seq: int
+    _settings_published_seq: int
     _powerocean_soc_pending: tuple[int, int] | None
     _powerocean_soc_pending_revision: int
     _powerocean_soc_debounce_unsub: asyncio.TimerHandle | None
@@ -164,6 +169,8 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
     ) -> None: ...
 
     def _resolve_pending_write(self, parsed: dict[str, Any]) -> None: ...
+
+    def _notify_settings_waiters(self) -> None: ...
 
     def _integrate_energy(self, parsed: dict[str, Any]) -> None: ...
 

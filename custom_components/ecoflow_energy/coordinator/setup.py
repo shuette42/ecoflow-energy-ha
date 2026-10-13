@@ -251,6 +251,9 @@ class SetupMixin(_Base):
         """Await the one cancellation-safe coordinator cleanup task."""
         if self._shutdown_task is None:
             self._shutdown = True
+            # A settings write waiting for its turn or for a report sleeps on
+            # an event, not on the pending record cancelled below.
+            self._notify_settings_waiters()
             # A device write awaiting confirmation (PowerPulse 2, ADR-009;
             # PowerGlow, PLAN-190) belongs to a coordinator that is being torn
             # down, same as every other in-flight write this guard protects.

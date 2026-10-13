@@ -171,6 +171,10 @@ _STREAM_FIELD_MAP: dict[tuple[int, int], dict[int, tuple[str, str]]] = {
         11: ("batt_design_cap_mah", _TYPE_INT),
         12: ("batt_remain_cap_mah", _TYPE_INT),
         13: ("batt_full_cap_mah", _TYPE_INT),
+        # Charge cycles (`cycles` in the BMS heartbeat, as on the Delta 3). A
+        # Stream Ultra reading 141 had charged 14,166,121 mAh into a
+        # 100,000 mAh pack (field 50 over field 13), 141.7 full cycles.
+        14: ("bms_cycles", _TYPE_INT),
         # Stable 100 even during a dedicated LED brightness sweep.
         15: ("bms_soh_pct", _TYPE_INT),
         16: ("batt_max_cell_vol_mv", _TYPE_INT),

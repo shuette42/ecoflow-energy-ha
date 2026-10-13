@@ -29,6 +29,7 @@ ES21_PAIR = FIXTURES / "es21_pair_pv_masked.json"
 ES21_PAIR_BOTH = FIXTURES / "es21_pair_pv_both_connections_masked.json"
 SOCKET_458 = FIXTURES / "es22_socket_458_masked.json"
 PV_KEYS = ("pv_total_w", "pv1_w", "pv2_w", "pv3_w", "pv4_w")
+AC_KEY = "ac_grid_connection_power_w"
 
 
 def _own_strings(parsed: dict) -> dict:
@@ -183,7 +184,7 @@ class TestFlowEdges:
         assert "grid_import_power_w" not in result
         assert "grid_export_power_w" not in result
 
-    def test_the_solar_to_home_edge_is_not_mapped(self) -> None:
+    def test_field_8_does_not_reach_solar_to_home(self) -> None:
         """Field 8 appears in no captured frame, so its position is a guess.
 
         An inferred position reaching an accessory entity is a wrong reading
@@ -192,7 +193,8 @@ class TestFlowEdges:
         inner = _sub(12, encode_field_varint(4, 500) + encode_field_varint(8, 700))
         result = parse_stream_ac5000_message(_build_frame(254, 39, bytes(inner)))
         assert result is not None
-        assert "home_from_solar_w" not in result
+        # Solar to home is `.1`, zero-filled here; field 8 must not reach it.
+        assert result["home_from_solar_w"] == 0.0
 
     def test_solar_falls_to_zero_instead_of_latching(self) -> None:
         """The node total is filled, so sunset reports 0 rather than nothing.
@@ -964,7 +966,8 @@ class TestLinkedUnitBlock:
             _unit_entry(b"ES22TESTUNITAAAA", soc=87, half_watts=0)
             + _unit_entry(b"ES22TESTUNITBBBB", soc=65, half_watts=1378),
         )
-        result = parse_stream_ac5000_message(_build_frame(254, 39, bytes(block)))
+        payload = bytes(_edges(from_grid=689.0)) + bytes(block)
+        result = parse_stream_ac5000_message(_build_frame(254, 39, payload))
         assert result is not None
         assert result["_unit_batt_w_by_sn"] == {
             "ES22TESTUNITAAAA": 0.0,
@@ -972,10 +975,91 @@ class TestLinkedUnitBlock:
         }
 
     def test_single_unit_installation_reports_one_entry(self) -> None:
+        """Charging from the grid: the only moving unit takes the system sign."""
+        block = _sub(54, _unit_entry(b"ES22TESTUNITAAAA", soc=76, half_watts=1356))
+        payload = bytes(_edges(from_grid=678.0)) + bytes(block)
+        result = parse_stream_ac5000_message(_build_frame(254, 39, payload))
+        assert result is not None
+        assert result["_unit_batt_w_by_sn"] == {"ES22TESTUNITAAAA": 678.0}
+
+    def test_discharge_takes_the_sign_of_the_system_flow(self) -> None:
+        """`f54.1.4` is a magnitude; 14 half-watts out of the pack is -7 W."""
+        block = _sub(54, _unit_entry(b"ES22TESTUNITAAAA", soc=22, half_watts=14))
+        payload = bytes(_edges(to_home=7.0)) + bytes(block)
+        result = parse_stream_ac5000_message(_build_frame(254, 39, payload))
+        assert result is not None
+        assert result["_unit_batt_w_by_sn"] == {"ES22TESTUNITAAAA": -7.0}
+
+    def test_the_only_moving_unit_need_not_own_the_connection(self) -> None:
+        """The neighbour moves alone, so the system flow signs its entry.
+
+        The frame comes from AAAA's connection and AAAA sits at 0 W: the
+        system is then BBBB alone, discharging 15 W into the house.
+        """
+        block = _sub(
+            54,
+            _unit_entry(b"ES22TESTUNITAAAA", soc=87, half_watts=0)
+            + _unit_entry(b"ES22TESTUNITBBBB", soc=65, half_watts=30),
+        )
+        payload = bytes(_edges(to_home=15.0)) + bytes(block)
+        result = parse_stream_ac5000_message(_build_frame(254, 39, payload))
+        assert result is not None
+        assert result["_unit_batt_w_by_sn"] == {
+            "ES22TESTUNITAAAA": 0.0,
+            "ES22TESTUNITBBBB": -15.0,
+        }
+
+    def test_without_a_system_flow_in_the_message_the_entry_is_unproven(self) -> None:
+        """The sign comes from the same message or not at all."""
         block = _sub(54, _unit_entry(b"ES22TESTUNITAAAA", soc=76, half_watts=1356))
         result = parse_stream_ac5000_message(_build_frame(254, 39, bytes(block)))
         assert result is not None
-        assert result["_unit_batt_w_by_sn"] == {"ES22TESTUNITAAAA": 678.0}
+        assert result["_unit_batt_w_by_sn"] == {"ES22TESTUNITAAAA": None}
+
+    def test_the_units_own_f50_sign_wins_over_the_system(self) -> None:
+        """Two units can flow opposite ways; `f50.1.4` is the per-unit sign.
+
+        The unit without one is unproven by this message.
+        """
+        f50 = _sub(
+            50,
+            _sub(
+                1,
+                encode_field_bytes(1, b"ES22TESTUNITBBBB")
+                + _encode_fixed32_field(4, -12.0),
+            ),
+        )
+        block = _sub(
+            54,
+            _unit_entry(b"ES22TESTUNITAAAA", soc=50, half_watts=200)
+            + _unit_entry(b"ES22TESTUNITBBBB", soc=40, half_watts=24),
+        )
+        payload = bytes(_edges(from_grid=88.0)) + bytes(f50) + bytes(block)
+        result = parse_stream_ac5000_message(_build_frame(254, 39, payload))
+        assert result is not None
+        assert result["_unit_batt_w_by_sn"] == {
+            "ES22TESTUNITAAAA": None,
+            "ES22TESTUNITBBBB": -12.0,
+        }
+
+    def test_two_active_units_without_f50_are_unproven(self) -> None:
+        """A push while 300 W move from the AC 5000 into the Ultra.
+
+        The system reads -12 W; no sign of either unit follows from it. Both
+        the system sign and a fit to the system sum flipped them.
+        """
+        block = _sub(
+            54,
+            _unit_entry(b"ES22TESTUNITAAAA", soc=50, half_watts=600)
+            + _unit_entry(b"BK11TESTUNITBBBB", soc=40, half_watts=580),
+        )
+        payload = bytes(_edges(to_home=12.0)) + bytes(block)
+        result = parse_stream_ac5000_message(_build_frame(254, 39, payload))
+        assert result is not None
+        assert result["_unit_batt_w_by_sn"] == {
+            "ES22TESTUNITAAAA": None,
+            "BK11TESTUNITBBBB": None,
+        }
 
     def test_entry_without_a_power_value_is_not_reported(self) -> None:
         """An absent field means unchanged here, so it must not read as zero."""
@@ -1309,7 +1393,7 @@ class TestLinkedPairPvStrings:
         parsed = parse_stream_ac5000_message(bytes.fromhex(frames[0]["hex"]))
         assert parsed is not None
         strings = next(iter(parsed[UNIT_PV_BY_SN_KEY].values()))
-        assert set(strings) - {UNIT_PV_ENTRY_SOC_KEY} == set(PV_KEYS)
+        assert set(strings) - {UNIT_PV_ENTRY_SOC_KEY} == {*PV_KEYS, AC_KEY}
         assert strings["pv_total_w"] > 0
         present = [strings[f"pv{n}_w"] for n in (1, 2, 3, 4) if strings[f"pv{n}_w"] > 0]
         assert len(present) == 1
@@ -1399,7 +1483,7 @@ class TestLinkedPairPvStrings:
         result = parse_stream_ac5000_message(_build_frame(254, 39, bytes(block)))
         assert result is not None
         entries = result[UNIT_PV_BY_SN_KEY]
-        assert entries["ES21TESTUNITAAAA"] == dict.fromkeys(PV_KEYS, 0.0)
+        assert entries["ES21TESTUNITAAAA"] == dict.fromkeys((*PV_KEYS, AC_KEY), 0.0)
         assert entries["ES21TESTUNITBBBB"]["pv4_w"] == pytest.approx(40.0)
 
     def test_the_real_master_frames_carry_both_units(self) -> None:
@@ -1917,3 +2001,179 @@ class TestAcSocketOnBattery:
             assert abs(result["batt_w"]) < 10
             checked += 1
         assert checked == 21
+
+
+@pytest.mark.parametrize(
+    ("path", "frames"),
+    [(GET_REPLY, 1), (ES21_PV, 9), (ES21_PAIR_BOTH, 14), (SOCKET_BATTERY_458, 30)],
+)
+def test_cycles_follow_the_lifetime_counters(path: Path, frames: int) -> None:
+    """`32/50` field 14 is the BMS cycle count (`cycles`, as on the Delta 3).
+
+    Each reading sits within one cycle of the lifetime throughput (`50`
+    charged, `51` discharged, the smaller of the two) over the full capacity
+    `13`, which is what a cycle count is.
+    """
+    from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (
+        _decode_scalar,
+        _iter_fields,
+    )
+
+    hexes: list[str] = []
+
+    def find(node: object) -> None:
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key == "hex" and isinstance(value, str):
+                    hexes.append(value)
+                else:
+                    find(value)
+        elif isinstance(node, list):
+            for item in node:
+                find(item)
+
+    find(json.loads(path.read_text(encoding="utf-8")))
+    checked = 0
+    for frame_hex in hexes:
+        for header in decode_header_message(bytes.fromhex(frame_hex))[0]:
+            if (header.get("cmd_func"), header.get("cmd_id")) != (32, 50):
+                continue
+            raw = {
+                n: _decode_scalar(w, value, "int")
+                for n, w, value in _iter_fields(bytes.fromhex(header["pdata"]))
+                if w == 0
+            }
+            parsed = parse_stream_ac5000_message(
+                _build_frame(32, 50, bytes.fromhex(header["pdata"]))
+            )
+            assert parsed is not None
+            assert parsed["bms_cycles"] == raw[14]
+            throughput = min(raw[50], raw[51]) / raw[13]
+            assert abs(throughput - raw[14]) < 1, raw
+            checked += 1
+    # Pinned per recording, so a walker that stops early fails here.
+    assert checked == frames
+
+
+ULTRA_PAIR = FIXTURES / "es22_ultra_pv_pair_masked.json"
+
+
+def _ultra_pair_frames() -> dict[str, dict]:
+    """Parse every frame of the ES22 + Stream Ultra fixture, keyed by time."""
+    parsed = {}
+    for frame in _load(ULTRA_PAIR):
+        result = parse_stream_ac5000_message(bytes.fromhex(frame["hex"]))
+        parsed[frame["ts"]] = result or {}
+    return parsed
+
+
+class TestUltraPvPair:
+    """An ES22 that computes the system, linked with a Stream Ultra carrying PV.
+
+    The Ultra's strings reach the ES22 flow matrix as the MPPT edges `f12.1`
+    (to home), `.2` (to battery) and `.3` (to grid). App screenshot at 08:58:
+    system discharging 7 W, ES22 0 W, Ultra 7 W.
+    """
+
+    def test_solar_to_home_is_the_whole_house_load_in_daylight(self) -> None:
+        frames = _ultra_pair_frames()
+        for ts in ("08:42:58", "08:55:00", "08:55:05", "08:55:08"):
+            assert frames[ts]["home_from_solar_w"] == frames[ts]["home_w"], ts
+        assert frames["08:42:58"]["home_from_solar_w"] == 133.0
+
+    def test_solar_to_home_reads_zero_at_night(self) -> None:
+        """`.1` is absent with no sun; the fill must not hold a daylight value."""
+        assert _ultra_pair_frames()["21:55:13"]["home_from_solar_w"] == 0.0
+
+    def test_solar_export_counts_towards_grid_export(self) -> None:
+        """`.3` closes the grid node: `f11.2` = 39 half-watts at 08:42:58."""
+        frames = _ultra_pair_frames()
+        assert frames["08:42:58"]["grid_export_power_w"] == 20.0
+        # `.3` = 5 plus battery to grid `.5` = 2, against `f11.2` = 13.
+        assert frames["08:55:05"]["grid_export_power_w"] == 7.0
+
+    def test_each_unit_gets_its_own_signed_battery_power(self) -> None:
+        frames = _ultra_pair_frames()
+        es22, ultra = "ES22TESTUNITAAAA", "BK11TESTUNITBBBB"
+        assert frames["08:55:08"]["_unit_batt_w_by_sn"] == {es22: 0.0, ultra: 12.0}
+        assert frames["08:55:05"]["_unit_batt_w_by_sn"] == {es22: 0.0, ultra: -1.5}
+        # No `f50` in this push, but the ES22 reads 0: the Ultra is the whole
+        # system, where the battery feeds 15 W of the house.
+        assert frames["08:57:03"]["_unit_batt_w_by_sn"] == {es22: 0.0, ultra: -17.5}
+
+    def test_each_unit_gets_its_own_ac_grid_connection_power(self) -> None:
+        """The Ultra feeds 153 W of its 187 W solar out; the ES22 is at rest."""
+        entries = _ultra_pair_frames()["08:42:58"][UNIT_PV_BY_SN_KEY]
+        assert entries["BK11TESTUNITBBBB"][AC_KEY] == 153.0
+        assert entries["ES22TESTUNITAAAA"][AC_KEY] == 0.0
+
+
+def _f50_entries(path: Path) -> list[dict[int, float]]:
+    """Every `f50.1` entry of every `254/39` payload in a fixture, raw."""
+    from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (
+        _decode_scalar,
+        _iter_fields,
+    )
+
+    hexes: list[str] = []
+
+    def find(node: object) -> None:
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key == "hex" and isinstance(value, str):
+                    hexes.append(value)
+                else:
+                    find(value)
+        elif isinstance(node, list):
+            for item in node:
+                find(item)
+
+    find(json.loads(path.read_text(encoding="utf-8")))
+    entries = []
+    for frame_hex in hexes:
+        for header in decode_header_message(bytes.fromhex(frame_hex))[0]:
+            if (header.get("cmd_func"), header.get("cmd_id")) != (254, 39):
+                continue
+            for num, wire, raw in _iter_fields(bytes.fromhex(header["pdata"])):
+                if num != 50 or wire != 2:
+                    continue
+                for _n, _w, entry in _iter_fields(raw):
+                    entries.append(
+                        {
+                            n: _decode_scalar(w, value, "float")
+                            for n, w, value in _iter_fields(entry)
+                            if w == 5
+                        }
+                    )
+    return entries
+
+
+@pytest.mark.parametrize(
+    ("path", "entries"),
+    [
+        (GET_REPLY, 1),
+        (PUSHES, 12),
+        (ES21_PV, 6),
+        (ES21_PAIR, 6),
+        (ES21_PAIR_BOTH, 29),
+        (SOCKET_458, 5),
+        (ULTRA_PAIR, 4),
+        (SOCKET_BATTERY_458, 26),
+    ],
+)
+def test_ac_power_closes_the_unit_balance(path: Path, entries: int) -> None:
+    """`.4` (battery) = `.3` (solar) - `.7` (AC power) - `.8` (socket).
+
+    What makes `.7` this unit's AC power with output positive rather than a
+    guess: it closes the unit's own balance in every entry that carries it,
+    grid charging and discharging, with and without solar and socket load.
+    """
+    checked = 0
+    for entry in _f50_entries(path):
+        if 7 not in entry:
+            continue
+        expected = entry.get(3, 0.0) - entry[7] - entry.get(8, 0.0)
+        assert entry.get(4, 0.0) == pytest.approx(expected, abs=0.5), entry
+        checked += 1
+    # Pinned per recording, so a walker that stops early fails here.
+    assert checked == entries

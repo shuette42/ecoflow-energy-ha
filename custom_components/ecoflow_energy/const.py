@@ -200,11 +200,14 @@ POWERPULSE2_HARD_UNAVAILABLE_S = 3600.0
 # for like.
 POWERPULSE2_CHARGE_ACTION_WINDOW_S: dict[str, float] = {"stop": 15.0, "start": 30.0}
 # ADR-009 decision 5: the wallbox status an action may be sent from. Start
-# only from "finishing" (the only start transition observed on file); stop
-# only from "charging".
+# only from "finishing" (the only start transition observed on file). Stop
+# from "charging" and, as amended for #515, from "suspended_charger": a start
+# waiting for solar surplus can be cancelled. The app enables its stop in
+# that state and sends the same command; confirmation still needs a fresh
+# "finishing" or "available".
 POWERPULSE2_CHARGE_ACTION_PRECONDITION: dict[str, frozenset[str]] = {
     "start": frozenset({"finishing"}),
-    "stop": frozenset({"charging"}),
+    "stop": frozenset({"charging", "suspended_charger"}),
 }
 # ADR-009 decision 4: the `ev_charge_status` that confirms the action once it
 # arrives on the wallbox's own heartbeat. As amended for #515, a start also
@@ -261,6 +264,11 @@ POWERPULSE2_SETTINGS_WINDOW_S: float = 20.0
 # a Continuous write is rebuilt from the latest report's switch byte, and a
 # report older than this may already disagree with the wallbox.
 POWERPULSE2_SETTINGS_MAX_AGE_S: float = 10.0
+# #495: how long a settings write waits for the next settings report before it
+# refuses a missing or stale one. The report arrives about once a second, so five
+# seconds is several reports; a write that finds none in that time is refused as
+# before. Nothing is sent while it waits.
+POWERPULSE2_SETTINGS_FRESH_WAIT_S: float = 5.0
 # PLAN-172: bit 4 (0x10) of the settings switch bits is the app's
 # "Continuous charging" toggle (2026-10-04 write recordings, issue #481).
 POWERPULSE2_SWITCH_BIT_CONTINUOUS: int = 0x10
@@ -4528,6 +4536,18 @@ STREAM_SENSORS: list[EcoFlowSensorDef] = [
         "mdi:battery-heart-variant",
         suggested_display_precision=0,
     ),
+    # From the BMS heartbeat (`32/50` field 14), which only the real-time
+    # connection carries; the Developer API quota has no cycle count.
+    EcoFlowSensorDef(
+        "bms_cycles",
+        "Battery Cycles",
+        None,
+        None,
+        "total_increasing",
+        "mdi:counter",
+        enhanced_only=True,
+        suggested_display_precision=0,
+    ),
     EcoFlowSensorDef(
         "batt_voltage_v",
         "Battery Voltage",
@@ -4795,6 +4815,18 @@ STREAMAC5000_SENSORS: list[EcoFlowSensorDef] = [
         "mdi:battery-heart-variant",
         suggested_display_precision=0,
     ),
+    # From the BMS heartbeat (`32/50` field 14), as on the Stream. No
+    # `enhanced_only`: the AC 5000 is Enhanced-only anyway, like Battery SoH
+    # from the same heartbeat.
+    EcoFlowSensorDef(
+        "bms_cycles",
+        "Battery Cycles",
+        None,
+        None,
+        "total_increasing",
+        "mdi:counter",
+        suggested_display_precision=0,
+    ),
     # --- battery power ---
     EcoFlowSensorDef(
         "batt_w",
@@ -4849,6 +4881,30 @@ STREAMAC5000_SENSORS: list[EcoFlowSensorDef] = [
         suggested_display_precision=0,
         disabled_by_default=True,
     ),
+    # Unit Battery Power split by direction, for the Energy Dashboard. Off by
+    # default with it: on a single unit they repeat the system split.
+    EcoFlowSensorDef(
+        "unit_batt_charge_power_w",
+        "Unit Battery Charge Power",
+        "W",
+        "power",
+        "measurement",
+        "mdi:battery-charging-outline",
+        "diagnostic",
+        suggested_display_precision=0,
+        disabled_by_default=True,
+    ),
+    EcoFlowSensorDef(
+        "unit_batt_discharge_power_w",
+        "Unit Battery Discharge Power",
+        "W",
+        "power",
+        "measurement",
+        "mdi:battery-outline",
+        "diagnostic",
+        suggested_display_precision=0,
+        disabled_by_default=True,
+    ),
     # --- power flow ---
     EcoFlowSensorDef(
         "home_w",
@@ -4894,6 +4950,18 @@ STREAMAC5000_SENSORS: list[EcoFlowSensorDef] = [
         accessory=True,
         accessory_needs_nonzero=True,
     ),
+    # This unit's own power at its AC grid connection, from its `f50.1.7`
+    # entry: positive out of the unit, negative into it, as on the Stream.
+    # Not the AC socket, which is AC Output Power above.
+    EcoFlowSensorDef(
+        "ac_grid_connection_power_w",
+        "AC Grid Connection Power",
+        "W",
+        "power",
+        "measurement",
+        "mdi:transmission-tower",
+        suggested_display_precision=0,
+    ),
     EcoFlowSensorDef(
         "grid_export_power_w",
         "Grid Export Power",
@@ -4924,6 +4992,22 @@ STREAMAC5000_SENSORS: list[EcoFlowSensorDef] = [
         "diagnostic",
         suggested_display_precision=0,
         disabled_by_default=True,
+    ),
+    # Solar to home, from the MPPT edge `f12.1`. The parser zero-fills it on
+    # every unit, so the entity waits for a non-zero reading: a unit without
+    # PV in its group never gets it.
+    EcoFlowSensorDef(
+        "home_from_solar_w",
+        "Home From Solar",
+        "W",
+        "power",
+        "measurement",
+        "mdi:home-lightning-bolt-outline",
+        "diagnostic",
+        suggested_display_precision=0,
+        disabled_by_default=True,
+        accessory=True,
+        accessory_needs_nonzero=True,
     ),
     # Solar is accessory-gated rather than listed per prefix: whether a unit
     # has PV on the EcoFlow itself is a wiring choice, not a model difference.
@@ -5381,6 +5465,30 @@ STREAMAC5000_SENSORS: list[EcoFlowSensorDef] = [
         "mdi:battery",
         suggested_display_precision=2,
     ),
+    # This unit's share of the two counters above, which count the group when
+    # units are linked. Off by default like the power readings they integrate.
+    EcoFlowSensorDef(
+        "unit_batt_charge_energy_kwh",
+        "Unit Battery Charge Energy",
+        "kWh",
+        "energy",
+        "total_increasing",
+        "mdi:battery-charging-outline",
+        "diagnostic",
+        suggested_display_precision=2,
+        disabled_by_default=True,
+    ),
+    EcoFlowSensorDef(
+        "unit_batt_discharge_energy_kwh",
+        "Unit Battery Discharge Energy",
+        "kWh",
+        "energy",
+        "total_increasing",
+        "mdi:battery-outline",
+        "diagnostic",
+        suggested_display_precision=2,
+        disabled_by_default=True,
+    ),
     EcoFlowSensorDef(
         "grid_import_energy_kwh",
         "Grid Import Energy",
@@ -5627,6 +5735,7 @@ STREAM_MICRO_EXCLUDED_KEYS: frozenset[str] = frozenset(
         "batt_min_cell_temp_c",
         "batt_max_mos_temp_c",
         "batt_charge_discharge_state",
+        "bms_cycles",
         # The SoC limits (fields 270/271) are parsed but have no Stream entity of
         # their own, so there is nothing to exclude for them here.
         # Backup reserve is a battery control: the read-only sensor and the
@@ -9878,6 +9987,8 @@ STREAMAC5000_POWER_TO_ENERGY: dict[str, str] = {
     "home_w": "home_energy_kwh",
     "batt_charge_power_w": "batt_charge_energy_kwh",
     "batt_discharge_power_w": "batt_discharge_energy_kwh",
+    "unit_batt_charge_power_w": "unit_batt_charge_energy_kwh",
+    "unit_batt_discharge_power_w": "unit_batt_discharge_energy_kwh",
     # This device reports the grid split as separate flow edges, so import and
     # export each get an honest counter instead of one signed total.
     "grid_import_power_w": "grid_import_energy_kwh",
