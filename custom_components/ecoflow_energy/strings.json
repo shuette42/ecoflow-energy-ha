@@ -585,6 +585,44 @@
       "backup_reserve_pct": {
         "name": "Backup Reserve"
       },
+      "ocean2_ems_work_mode": {
+        "name": "Work Mode",
+        "state": {
+          "self_use": "Self-use",
+          "ai_schedule": "AI schedule"
+        }
+      },
+      "ocean2_ems_work_state": {
+        "name": "System State",
+        "state": {
+          "init": "Init",
+          "idle": "Idle",
+          "startup_external_battery": "Starting (external battery)",
+          "startup_battery": "Starting (battery)",
+          "startup_pv": "Starting (solar)",
+          "startup_grid": "Starting (grid)",
+          "running": "Running",
+          "stopped": "Stopped",
+          "maintenance": "Maintenance"
+        }
+      },
+      "ocean2_ems_control_mode": {
+        "name": "Control Mode",
+        "state": {
+          "none": "None",
+          "soc_calibration": "SoC calibration",
+          "storm_guard": "Storm guard",
+          "eco": "Eco",
+          "task": "Task",
+          "schedule": "Schedule",
+          "ac_backup": "AC backup",
+          "grid_operator": "Grid operator",
+          "remote": "Remote",
+          "standby": "Standby",
+          "frequency_response": "Frequency response",
+          "third_party": "Third party"
+        }
+      },
       "max_charge_soc_pct": {
         "name": "Max Charge SoC"
       },

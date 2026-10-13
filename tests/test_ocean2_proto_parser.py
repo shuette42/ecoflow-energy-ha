@@ -873,3 +873,120 @@ class TestBackupReserveFields:
         assert parsed is not None
         assert parsed["backup_reserve_pct"] == 0
         assert "edev_soc_ratio_pct" not in parsed
+
+
+# The field-3 record of a get_reply full upload from an RE11 (tag and length
+# included), as a user's recording carries it: work mode 1, state 7, and an
+# explicit 3.10 = 0 (`50 00`) among seventeen sub-fields.
+_EMS_RECORD = bytes.fromhex(
+    "1a250800100118072000286430023800400148005000583260016810700178008001810488010e"
+)
+
+_EMS_KEYS = (
+    "ocean2_ems_work_mode",
+    "ocean2_ems_work_state",
+    "ocean2_ems_control_mode",
+)
+
+
+class TestEmsStatusFields:
+    """Field 3 of the snapshot: work mode (3.2), state (3.3), control mode (3.10)."""
+
+    def test_the_real_snapshot_record_gives_all_three_states(self) -> None:
+        parsed = parse_ocean2_proto_message(
+            _frame(_EMS_RECORD + _msg(65, _f32(17, 55.0)))
+        )
+        assert parsed is not None
+        assert parsed["ocean2_ems_work_mode"] == "self_use"
+        assert parsed["ocean2_ems_work_state"] == "running"
+        assert parsed["ocean2_ems_control_mode"] == "none"
+        # The rest of the frame still parses around the nested record.
+        assert parsed["soc_pct"] == pytest.approx(55.0)
+
+    def test_a_push_without_field_3_leaves_the_keys_absent(self) -> None:
+        # The change-only pushes carry blocks 7 / 65 / 87 and never field 3.
+        # An absent key means "no update": the last state must stay in place.
+        payload = _telemetry(
+            summary=_f32(17, 55.0),
+            flow={7: _f32(1, 800.0), 87: _f32(1, 810.0)},
+        )
+        parsed = parse_ocean2_proto_message(payload)
+        assert parsed is not None
+        assert parsed["soc_pct"] == pytest.approx(55.0)
+        assert not set(_EMS_KEYS) & set(parsed)
+
+    def test_an_explicit_zero_control_mode_is_none_not_absent(self) -> None:
+        # 3.10 = 0 means no override is active. It is a value, so it must
+        # survive; 3.2 and 3.3 are not on the wire here and stay absent.
+        parsed = parse_ocean2_proto_message(_frame(_msg(3, _vint(10, 0))))
+        assert parsed is not None
+        assert parsed["ocean2_ems_control_mode"] == "none"
+        assert "ocean2_ems_work_mode" not in parsed
+        assert "ocean2_ems_work_state" not in parsed
+
+    def test_values_the_device_has_not_shown_are_omitted(self) -> None:
+        # 3.2 = 0 is not a mode, 3.3 = 12 and 3.10 = 99 are outside the tables.
+        # Present-but-unknown must not become a guessed state or the previous
+        # one rewritten; a frame with nothing else in it yields no result.
+        record = _msg(3, _vint(2, 0) + _vint(3, 12) + _vint(10, 99))
+        parsed = parse_ocean2_proto_message(_frame(record + _msg(65, _f32(17, 40.0))))
+        assert parsed is not None
+        assert parsed["soc_pct"] == pytest.approx(40.0)
+        assert not set(_EMS_KEYS) & set(parsed)
+
+    @pytest.mark.parametrize(
+        ("sub_field", "key", "names"),
+        [
+            (2, "ocean2_ems_work_mode", {1: "self_use", 2: "ai_schedule"}),
+            (
+                3,
+                "ocean2_ems_work_state",
+                {
+                    1: "init",
+                    2: "idle",
+                    3: "startup_external_battery",
+                    4: "startup_battery",
+                    5: "startup_pv",
+                    6: "startup_grid",
+                    7: "running",
+                    8: "stopped",
+                    9: "maintenance",
+                },
+            ),
+            (
+                10,
+                "ocean2_ems_control_mode",
+                {
+                    0: "none",
+                    1: "soc_calibration",
+                    2: "storm_guard",
+                    3: "eco",
+                    4: "task",
+                    5: "schedule",
+                    6: "ac_backup",
+                    7: "grid_operator",
+                    8: "remote",
+                    9: "standby",
+                    10: "frequency_response",
+                    11: "third_party",
+                },
+            ),
+        ],
+    )
+    def test_every_wire_value_has_its_name(
+        self, sub_field: int, key: str, names: dict[int, str]
+    ) -> None:
+        for wire, name in names.items():
+            parsed = parse_ocean2_proto_message(_frame(_msg(3, _vint(sub_field, wire))))
+            assert parsed is not None, (key, wire)
+            assert parsed[key] == name, (key, wire)
+
+    def test_field_3_ten_is_not_the_top_level_reserve(self) -> None:
+        # Top-level 10 is the backup reserve, 3.10 the control mode: the same
+        # number at two depths. Each reading comes from its own path.
+        parsed = parse_ocean2_proto_message(
+            _frame(_vint(10, 29) + _msg(3, _vint(10, 5)))
+        )
+        assert parsed is not None
+        assert parsed["backup_reserve_pct"] == 29
+        assert parsed["ocean2_ems_control_mode"] == "schedule"
