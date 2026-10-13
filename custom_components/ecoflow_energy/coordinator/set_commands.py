@@ -1661,7 +1661,7 @@ class SetCommandsMixin(_Base):
                         translation_key="powerpulse_action_not_delivered",
                     )
             except BaseException:
-                self._clear_wallbox_action(record)
+                self._clear_pending_write(record)
                 raise
 
         try:
@@ -1678,7 +1678,7 @@ class SetCommandsMixin(_Base):
         else:
             self._log_event(f"powerpulse_{typed_action}", str(confirmed_status))
         finally:
-            self._clear_wallbox_action(record)
+            self._clear_pending_write(record)
 
     async def async_set_powerpulse_max_current(self, max_current_a: int) -> None:
         """Set this PowerPulse 2's maximum charge current (PLAN-146).
@@ -1803,7 +1803,7 @@ class SetCommandsMixin(_Base):
                         translation_key="powerpulse_action_not_delivered",
                     )
             except BaseException:
-                self._clear_wallbox_action(record)
+                self._clear_pending_write(record)
                 raise
 
         try:
@@ -1826,7 +1826,7 @@ class SetCommandsMixin(_Base):
         else:
             self._log_event("powerpulse_max_current", str(confirmed_value))
         finally:
-            self._clear_wallbox_action(record)
+            self._clear_pending_write(record)
 
     async def async_set_powerpulse_charge_current(self, current_a: int) -> None:
         """Set this standalone PowerPulse 2's charge current (issue #7, 2026-09-14).
@@ -1923,7 +1923,7 @@ class SetCommandsMixin(_Base):
                         translation_key="powerpulse_action_not_delivered",
                     )
             except BaseException:
-                self._clear_wallbox_action(record)
+                self._clear_pending_write(record)
                 raise
 
         try:
@@ -1946,7 +1946,7 @@ class SetCommandsMixin(_Base):
         else:
             self._log_event("powerpulse_charge_current", str(confirmed_value))
         finally:
-            self._clear_wallbox_action(record)
+            self._clear_pending_write(record)
 
     async def async_set_powerpulse_charge_mode(self, option: str) -> None:
         """Set this PowerPulse 2's charging mode (PLAN-147).
@@ -2084,7 +2084,7 @@ class SetCommandsMixin(_Base):
                         translation_key="powerpulse_action_not_delivered",
                     )
             except BaseException:
-                self._clear_wallbox_action(record)
+                self._clear_pending_write(record)
                 raise
 
         try:
@@ -2105,7 +2105,7 @@ class SetCommandsMixin(_Base):
         else:
             self._log_event("powerpulse_charge_mode", str(confirmed_value))
         finally:
-            self._clear_wallbox_action(record)
+            self._clear_pending_write(record)
 
     async def _async_write_powerpulse_settings(
         self,
@@ -2231,7 +2231,7 @@ class SetCommandsMixin(_Base):
                         translation_key="powerpulse_action_not_delivered",
                     )
             except BaseException:
-                self._clear_wallbox_action(record)
+                self._clear_pending_write(record)
                 raise
 
         try:
@@ -2249,7 +2249,7 @@ class SetCommandsMixin(_Base):
         else:
             self._log_event(f"powerpulse_{action}", str(confirmed_value))
         finally:
-            self._clear_wallbox_action(record)
+            self._clear_pending_write(record)
 
     async def async_set_powerpulse_solar_min_current(self, current_a: int) -> None:
         """Set the Solar mode's minimum charge current (PLAN-172, issue #480).
@@ -2551,7 +2551,7 @@ class SetCommandsMixin(_Base):
                 translation_placeholders={"status": str(status)},
             )
 
-    def _clear_wallbox_action(self, record: PendingDeviceWrite) -> None:
+    def _clear_pending_write(self, record: PendingDeviceWrite) -> None:
         """Drop the pending record if it is still the one this call set."""
         if self._pending_write is record:
             self._pending_write = None
@@ -2560,7 +2560,7 @@ class SetCommandsMixin(_Base):
         self,
         action: str,
         state_key: str,
-        expected_value: float,
+        expected_value: float | str,
         setting: dict[str, Any],
         validate: Callable[[str], None] | None = None,
     ) -> None:
@@ -2572,7 +2572,9 @@ class SetCommandsMixin(_Base):
         own set topic and confirmed by `state_key` reaching `expected_value` on
         the next `212/8` report applied (`PendingDeviceWrite`,
         `_resolve_pending_write`) - never on the accumulated store, so a stale
-        reading cannot confirm a write that has not happened.
+        reading cannot confirm a write that has not happened. The record is
+        tied to the rod it was addressed to (`require`): a report carrying
+        another rod's serial does not confirm it.
 
         Preconditions run in this order, each with its own translated error:
         shutdown, Enhanced Mode with a live MQTT connection, the rod's serial
@@ -2633,6 +2635,7 @@ class SetCommandsMixin(_Base):
                 future=future,
                 state_key=state_key,
                 expected_value=expected_value,
+                require=("heating_rod_sn", rod_sn),
             )
             # The record lives exactly as long as this call and is cleared on
             # every exit in the `finally` below.
@@ -2648,7 +2651,7 @@ class SetCommandsMixin(_Base):
                         translation_key="powerglow_not_delivered",
                     )
             except BaseException:
-                self._clear_wallbox_action(record)
+                self._clear_pending_write(record)
                 raise
 
         try:
@@ -2663,7 +2666,7 @@ class SetCommandsMixin(_Base):
         else:
             self._log_event(f"powerglow_{action}", str(confirmed_value))
         finally:
-            self._clear_wallbox_action(record)
+            self._clear_pending_write(record)
 
     async def async_set_powerglow_value(
         self, setting: Literal["target_power", "target_temp"], value: int
@@ -2717,21 +2720,30 @@ class SetCommandsMixin(_Base):
         """Set the PowerGlow heating rod to off, Solar or Manual (PLAN-190).
 
         The device has two settings where the app shows one control: a run
-        switch (`heating_rod_run_state`, 0 off / 1 on) and a mode
-        (`heating_rod_mode`, 0 Solar / 1 Manual). Off is one write of the run
-        switch. Solar and Manual configure the mode first and switch the rod on
+        switch (`heating_rod_run_state`, 0 off / non-zero on) and a mode
+        (`heating_rod_mode`, 0 Solar / 1 Manual). Off is always sent, as one
+        write of the run switch, even when the rod already reports off.
+        Solar and Manual configure the mode first and switch the rod on
         afterwards - the order of the hardware-tested community client - and
         each step is its own confirmed write. A step that is already true
-        (mode already the target, rod already on) is not written again, and
-        when both are already true nothing is sent at all.
+        (mode already the target, rod already running) is not written again,
+        and when both are already true nothing is sent at all.
 
-        A mode change the rod refuses (the app blocks it in one device state)
-        never reaches its `212/8` report, so that step ends as
-        `powerglow_not_confirmed` and the run switch is not touched.
+        Both final steps are confirmed on the select's own derived key
+        (`heating_rod_operating_mode`, the string the entity shows), so the
+        write only succeeds once the rod reports the option that was asked
+        for; the mode step, which leaves the rod off, is confirmed on
+        `heating_rod_mode`. A mode change the rod refuses (the app blocks it
+        in one device state) never reaches its `212/8` report, so that step
+        ends as `powerglow_not_confirmed` and the run switch is not touched.
+        An option outside off/solar/manual raises `ValueError` before
+        anything is sent.
         """
+        if option not in ("off", "solar", "manual"):
+            raise ValueError(f"{option!r} is not a PowerGlow operating mode")
         if option == "off":
             await self._async_powerglow_write(
-                "run_state", "heating_rod_run_state", 0.0, {"run_on": False}
+                "run_state", "heating_rod_operating_mode", "off", {"run_on": False}
             )
             return
         target_mode = 0 if option == "solar" else 1
@@ -2739,9 +2751,11 @@ class SetCommandsMixin(_Base):
             await self._async_powerglow_write(
                 "mode", "heating_rod_mode", float(target_mode), {"mode": target_mode}
             )
-        if self._device_data.get("heating_rod_run_state") != 1:
+        # Same reading of "on" as the parser's derived key: any non-zero run
+        # state, not only 1.
+        if self._device_data.get("heating_rod_run_state") in (None, 0):
             await self._async_powerglow_write(
-                "run_state", "heating_rod_run_state", 1.0, {"run_on": True}
+                "run_state", "heating_rod_operating_mode", option, {"run_on": True}
             )
 
     async def async_send_delta3_set(self, command: dict[str, Any]) -> bool:

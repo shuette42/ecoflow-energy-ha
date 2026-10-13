@@ -470,7 +470,7 @@ async def test_timeout_raises_and_names_the_last_reported_mode(
     mode it last reported, and clears the record so the next write is not
     refused as still in progress.
 
-    Mutation probe: removing the `finally: self._clear_wallbox_action(record)`
+    Mutation probe: removing the `finally: self._clear_pending_write(record)`
     makes the second write below fail with `powerpulse_action_in_progress`.
     """
     _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])

@@ -196,7 +196,7 @@ async def test_publish_not_delivered_clears_the_record(hass: HomeAssistant) -> N
     """A publish that reports failure clears the pending record, so a second
     call is not refused as still in progress.
 
-    Mutation probe: removing `self._clear_wallbox_action(record)` from the
+    Mutation probe: removing `self._clear_pending_write(record)` from the
     `except BaseException` block in `async_set_powerpulse_charge_current`
     leaves the record behind, so the second call below would be refused as
     `powerpulse_action_in_progress` instead of publishing again.
@@ -228,7 +228,7 @@ async def test_timeout_raises_and_names_the_last_reported_value(
     reported, and the record is cleared so the next call is not refused as
     still in progress.
 
-    Mutation probe: removing the `finally: self._clear_wallbox_action(record)`
+    Mutation probe: removing the `finally: self._clear_pending_write(record)`
     call makes the second call below fail with `powerpulse_action_in_progress`
     instead of publishing again.
     """

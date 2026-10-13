@@ -408,6 +408,12 @@ class StateApplyMixin(_Base):
         record = self._pending_write
         if record is None or record.future.done():
             return
+        if record.require is not None:
+            # A write tied to one source (PLAN-190, a PowerGlow rod's serial):
+            # a frame from another source never confirms it.
+            required_key, required_value = record.require
+            if parsed.get(required_key) != required_value:
+                return
         if record.expected_value is not None:
             if record.state_key not in parsed:
                 return

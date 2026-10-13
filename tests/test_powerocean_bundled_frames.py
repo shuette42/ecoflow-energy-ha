@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from ecoflow_energy.const import POWEROCEAN_SENSORS
 from ecoflow_energy.ecoflow.const import DEVICE_TYPE_POWEROCEAN
 from ecoflow_energy.ecoflow.parsers.powerocean_proto import (
     flatten_heartbeat,
@@ -210,6 +211,17 @@ def test_powerglow_serial_is_carried_for_writes_beside_the_mode_name() -> None:
         "heating_rod_sn": "X" * 16,
         "heating_rod_operating_mode": "manual",
     }
+    # The serial and the three control keys feed the controls only: none of
+    # them has a sensor definition.
+    sensor_keys = {definition.key for definition in POWEROCEAN_SENSORS}
+    for key in (
+        "heating_rod_sn",
+        "heating_rod_mode",
+        "heating_rod_run_state",
+        "heating_rod_operating_mode",
+    ):
+        assert key not in sensor_keys
+    assert "heating_rod_power_w" in sensor_keys  # the control: the set is read
 
 
 def test_runtime_decodes_every_header_with_its_own_sequence() -> None:

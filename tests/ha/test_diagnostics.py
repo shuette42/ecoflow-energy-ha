@@ -157,6 +157,37 @@ class TestConfigEntryDiagnostics:
 # ===========================================================================
 
 
+class TestHeatingRodSerial:
+    async def test_the_download_does_not_carry_the_rod_serial(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """A PowerGlow rod's own serial sits in the device data (the controls
+        address the rod with it) and must stay out of a download users attach to
+        public issues. Asserted against the full download, where the single
+        redaction pass runs; the key is listed, the value is not.
+        """
+        rod_sn = "HF33TEST00000001"
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        coordinator._device_data = {
+            "heating_rod_sn": rod_sn,
+            "heating_rod_target_power_w": 3500.0,
+        }
+        hass.data.setdefault(DOMAIN, {})[standard_config_entry.entry_id] = {
+            coordinator.device_sn: coordinator
+        }
+
+        result = await async_get_config_entry_diagnostics(hass, standard_config_entry)
+
+        device = result["devices"][0]
+        assert "heating_rod_sn" in device["data_keys"]
+        assert rod_sn not in json.dumps(result)
+
+
 class TestDeviceDiagnostics:
     async def test_device_diagnostics_basic(
         self,

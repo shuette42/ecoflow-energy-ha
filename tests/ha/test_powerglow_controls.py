@@ -9,7 +9,7 @@ and which coordinator call each control makes.
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from homeassistant.const import EntityCategory
@@ -198,6 +198,34 @@ class TestPowerCeiling:
         assert power.native_max_value == ceiling
         assert (temp.native_min_value, temp.native_max_value) == (10, 80)
 
+    async def test_the_published_max_moves_when_the_serial_arrives_later(
+        self, hass: HomeAssistant
+    ) -> None:
+        """The number exists before the rod's serial is known (declared range
+        0..9000); when an HF32 serial arrives the `max` attribute Home
+        Assistant publishes moves to 6000 with it, and a state write is forced
+        even though the value did not change.
+
+        Mutation probe: dropping the `_bounds_moved()` branch of
+        `_handle_coordinator_update` writes nothing on the serial's arrival
+        (the value is unchanged), so the published `max` would stay 9000.
+        """
+        report = {k: v for k, v in REPORT.items() if k != "heating_rod_sn"}
+        coordinator, numbers, _ = await _setup(hass, report)
+        power = _by_key(numbers, POWER_KEY)
+        power.async_write_ha_state = MagicMock()  # type: ignore[method-assign]
+        power._handle_coordinator_update()
+        assert (power.capability_attributes or {})["max"] == 9000
+        power.async_write_ha_state.reset_mock()
+
+        coordinator.async_set_updated_data(
+            {**report, "heating_rod_sn": "HF32TEST00000001"}
+        )
+        power._handle_coordinator_update()
+
+        assert power.async_write_ha_state.called
+        assert (power.capability_attributes or {})["max"] == 6000
+
 
 class TestNumberWrites:
     async def _numbers(
@@ -224,9 +252,18 @@ class TestNumberWrites:
         write.assert_awaited_once_with("target_temp", 55)
 
         # The coordinator confirms on the rod's own report; nothing is applied
-        # on the way (no optimistic value in the store).
+        # on the way, neither in the store nor in what the entities show.
         assert coordinator.device_data[POWER_KEY] == 3500.0
         assert coordinator.device_data[TEMP_KEY] == 60.0
+        assert power.native_value == 3500.0
+        assert temp.native_value == 60.0
+
+        # The confirming report is what moves the displayed value.
+        coordinator.async_set_updated_data(
+            {**REPORT, POWER_KEY: 2000.0, TEMP_KEY: 55.0}
+        )
+        assert power.native_value == 2000.0
+        assert temp.native_value == 55.0
 
     async def test_a_fractional_value_is_refused_without_a_call(
         self, hass: HomeAssistant

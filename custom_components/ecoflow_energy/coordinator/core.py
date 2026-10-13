@@ -127,7 +127,10 @@ class PendingDeviceWrite:
     `_resolve_pending_write` in state_apply.py. `bit_mask` (PLAN-172) narrows
     an integer comparison to the masked bits: the settings switch bits carry
     several toggles in one byte, and a write of one of them is confirmed by
-    that bit alone, not by the whole byte matching.
+    that bit alone, not by the whole byte matching. `require` (PLAN-190) ties a
+    write to one source: a `(key, value)` pair that the arriving frame must
+    carry (the PowerGlow writes name their rod's serial), so a report from a
+    second rod on the same PowerOcean cannot confirm it.
     """
 
     action: str
@@ -136,6 +139,7 @@ class PendingDeviceWrite:
     state_key: str = "ev_charge_status"
     expected_value: float | str | None = None
     bit_mask: int | None = None
+    require: tuple[str, object] | None = None
 
 
 class EcoFlowDeviceCoordinator(
@@ -378,9 +382,10 @@ class EcoFlowDeviceCoordinator(
         # fields lose one of the two changes by restoring a stale companion
         # over it.
         self._device_config_lock = asyncio.Lock()
-        # PowerPulse 2 start/stop (ADR-009): serializes the check-and-publish
-        # of one wallbox action so a second press cannot slip past the
-        # in-progress check before the first one's record is set.
+        # One device write (PowerPulse 2 start/stop and settings, ADR-009;
+        # PowerGlow, PLAN-190): serializes the check-and-publish so a second
+        # press cannot slip past the in-progress check before the first one's
+        # record is set.
         self._pending_write_lock = asyncio.Lock()
         # Ocean 2 Backup Reserve (PLAN-151): `_apply_data` sets the event when a
         # frame carrying the device's own SoC ratio (field 92) is stored, which

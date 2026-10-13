@@ -1,11 +1,15 @@
 """Tests for the PowerGlow (HF33 heating rod) write builder and the extra
 fields the 212/8 report now carries (PLAN-190 phase 2, issue #7).
 
-The 17 `set` frames are the app's own writes from one recording of a real
-PowerGlow, stored in `tests/fixtures/powerglow/hf33_set_frames.json` with both
-serials masked as sixteen `X`. Every one of them is a target power write, so
-the other three settings (run state, mode, target temperature) are built from
-the message definition and the app's limits rather than from a frame.
+The fixture `tests/fixtures/powerglow/hf33_set_frames.json` holds three kinds
+of frame from two recordings of a real PowerGlow, with both serials masked as
+sixteen `X`: the 17 `set` frames (the app's own writes), their 17 `set_reply`
+answers (one per write, same sequence number) and 12 `212/8` `property`
+reports from around the writes. Every write is a target power write, so the
+other three settings (run state, mode, target temperature) are built from the
+message definition and the app's limits rather than from a frame. The two
+serials are the same mask in the fixture, so where they sit in the frame is
+pinned separately, with two different dummy serials.
 """
 
 from __future__ import annotations
@@ -54,9 +58,36 @@ def _pdata_fields(frame_bytes: bytes) -> dict[int, bytes]:
     return {num: raw for num, _, raw in _iter_fields(pdata)}
 
 
+def _seq(frame_bytes: bytes) -> int:
+    """The header's sequence number (field 14) of one frame."""
+    ((_, _, header),) = _iter_fields(frame_bytes)
+    return _varint(next(raw for num, _, raw in _iter_fields(header) if num == 14))
+
+
 def test_the_fixture_holds_all_17_captured_writes() -> None:
     """Guards the parametrized test below: an empty list would skip silently."""
     assert len(_SET_FRAMES) == 17
+
+
+def test_the_fixture_holds_only_writes_replies_and_reports() -> None:
+    """The whole-system `get_reply` bundles stay out; each kind has its count."""
+    topics = [f["topic"] for f in json.loads(FIXTURE.read_text())["frames"]]
+
+    assert sorted(set(topics)) == ["property", "set", "set_reply"]
+    assert topics.count("set") == 17
+    assert topics.count("set_reply") == 17
+    assert topics.count("property") == 12
+
+
+def test_every_captured_write_is_answered_with_its_own_sequence_number() -> None:
+    """The 17 replies are 17 distinct sequence numbers, the same 17 as the writes."""
+    replies = [f for f in _frames("set_reply") if _is_212(f, 99)]
+    write_seqs = [_seq(bytes.fromhex(f["hex"])) for f in _SET_FRAMES]
+    reply_seqs = [_seq(bytes.fromhex(f["hex"])) for f in replies]
+
+    assert len(replies) == 17
+    assert len(set(write_seqs)) == 17
+    assert sorted(reply_seqs) == sorted(write_seqs)
 
 
 @pytest.mark.parametrize("frame", _SET_FRAMES, ids=lambda f: f["ts_iso"][11:23])
@@ -77,6 +108,26 @@ def test_builder_reproduces_every_captured_app_write_byte_for_byte(
     )
 
     assert rebuilt == captured
+
+
+def test_the_envelope_is_addressed_to_the_powerocean_and_the_pdata_to_the_rod() -> None:
+    """The fixture masks both serials alike, so it cannot tell them apart: with
+    two different dummies, header field 25 is the PowerOcean's and pdata
+    field 1 is the rod's."""
+    rod_sn = "HF33TEST00000001"
+    ocean_sn = "HJ31TEST00000001"
+
+    frame = build_powerglow_param_set_payload(
+        rod_sn, ocean_sn, seq=1, target_power_w=100
+    )
+    ((_, _, header),) = _iter_fields(frame)
+    header_fields = {num: raw for num, _, raw in _iter_fields(header)}
+
+    assert header_fields[25] == ocean_sn.encode("ascii")
+    assert _pdata_fields(frame)[1] == rod_sn.encode("ascii")
+    assert rod_sn.encode("ascii") not in [
+        raw for num, raw in header_fields.items() if num != 1
+    ]
 
 
 @pytest.mark.parametrize(
@@ -189,6 +240,32 @@ def test_a_captured_report_carries_mode_run_state_and_serial() -> None:
     assert result["heating_rod_run_state"] == 1
     assert result["heating_rod_sn"] == ROD_SN
     assert type(result["heating_rod_mode"]) is int
+
+
+def test_every_captured_report_names_its_rod_and_both_states() -> None:
+    """All 12 frames around the writes carry the rod's serial, a mode and a run
+    state, so the controls can address the rod and read its state from the first
+    report on."""
+    reports = [f for f in _frames("property") if _is_212(f, 8)]
+    assert len(reports) == 12
+
+    for report in reports:
+        rod = [
+            d
+            for d in decode_proto_runtime_headers(
+                bytes.fromhex(report["hex"]), device_type=DEVICE_TYPE_POWEROCEAN
+            )
+            if d.mapped.get("_is_heating_rod_param")
+        ]
+        assert rod  # a frame can carry two reports; each one is checked
+        for decoded in rod:
+            raw = {k: v for k, v in decoded.mapped.items() if not k.startswith("_")}
+            result = remap_heating_rod_keys(raw)
+
+            assert result["heating_rod_sn"] == ROD_SN
+            assert result["heating_rod_mode"] in (0, 1)
+            assert result["heating_rod_run_state"] in (0, 1)
+            assert result["heating_rod_operating_mode"] in ("off", "solar", "manual")
 
 
 def test_mode_and_run_state_are_not_taken_from_each_other_or_a_wrong_serial() -> None:

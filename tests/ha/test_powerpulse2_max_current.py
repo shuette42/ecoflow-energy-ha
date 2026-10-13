@@ -230,7 +230,7 @@ async def test_publish_not_delivered_clears_the_record(hass: HomeAssistant) -> N
     max-current method has its own, separate `except BaseException` clause
     with the same obligation.
 
-    Mutation probe: removing `self._clear_wallbox_action(record)` from the
+    Mutation probe: removing `self._clear_pending_write(record)` from the
     `except BaseException` block in `async_set_powerpulse_max_current`
     (set_commands.py) leaves the record behind, so the second call below
     would be refused as `powerpulse_action_in_progress` instead of
@@ -265,7 +265,7 @@ async def test_timeout_raises_and_names_the_last_reported_value(
     reported, and the record is cleared so the next press is not refused as
     still in progress.
 
-    Mutation probe: removing the `finally: self._clear_wallbox_action(record)`
+    Mutation probe: removing the `finally: self._clear_pending_write(record)`
     call makes the second press below fail with `powerpulse_action_in_progress`
     instead of publishing again.
     """
