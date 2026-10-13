@@ -630,6 +630,10 @@ class EcoFlowSwitchDef:
     # `state_key` and writes it through `async_set_powerpulse_display`, keyed
     # by `key`.
     bit_mask: int | None = None
+    # Same meaning as on the number and select definitions: "config" or
+    # "diagnostic", set on a switch that is a device setting rather than a
+    # day-to-day control (the Ocean 2 Storm Guard, PLAN-192).
+    entity_category: str | None = None
 
 
 @dataclass(frozen=True)
@@ -8549,6 +8553,23 @@ OCEAN2_NUMBERS: list[EcoFlowNumberDef] = [
         enhanced_only=True,
         accessory=True,
         slider=True,
+    ),
+]
+
+# The Ocean 2 Storm Guard switch (PLAN-192): the setting the app offers as a
+# switch, written as an action command and confirmed by the next full snapshot
+# (`EcoFlowDeviceCoordinator.async_set_ocean2_storm_guard`). The read-back key
+# is only on that snapshot, so as an accessory the switch is created once the
+# unit has reported it, and the variant gate is `supports_ocean2_controls`.
+OCEAN2_SWITCHES: list[EcoFlowSwitchDef] = [
+    EcoFlowSwitchDef(
+        "storm_guard",
+        "Storm Guard",
+        "storm_guard_enabled",
+        "mdi:weather-lightning-rainy",
+        enhanced_only=True,
+        accessory=True,
+        entity_category="config",
     ),
 ]
 

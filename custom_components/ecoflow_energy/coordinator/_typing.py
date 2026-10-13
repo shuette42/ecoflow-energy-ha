@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from ..ecoflow.frame_capture import TypedFrameBuffer
     from ..ecoflow.iot_api import IoTApiClient
     from .core import DeviceSnapshot, EcoFlowDeviceCoordinator, PendingDeviceWrite
-    from .set_commands import _Ocean2ReserveWrite
+    from .set_commands import _Ocean2Write
     from .state_apply import SurplusSyncRecord
 
 
@@ -60,7 +60,7 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
     _powerocean_soc_debounce_unsub: asyncio.TimerHandle | None
     _powerocean_soc_flush_tasks: set[asyncio.Task[None]]
     _ocean2_snapshot_event: asyncio.Event
-    _ocean2_reserve_write: _Ocean2ReserveWrite | None
+    _ocean2_writes: dict[str, _Ocean2Write]
     _powerocean_soc_write_tasks: set[asyncio.Future[Any]]
     _powerocean_soc_before: dict[str, Any]
     _powerocean_soc_generation: int
@@ -137,9 +137,9 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
 
     def _cancel_ocean2_readback(self) -> None: ...
 
-    def _ocean2_restore_reserve(self, pre: Any) -> None: ...
+    def _ocean2_restore_write(self, write: _Ocean2Write) -> None: ...
 
-    def _ocean2_reject_reserve(self, write: _Ocean2ReserveWrite) -> None: ...
+    def _ocean2_reject_write(self, write: _Ocean2Write) -> None: ...
 
     def latch_schedule_armed(self, state_key: str, armed: bool) -> None: ...
 

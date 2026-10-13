@@ -87,7 +87,7 @@ if TYPE_CHECKING:
     from ..ecoflow.cloud_http import EcoFlowHTTPQuota
     from ..ecoflow.cloud_mqtt import EcoFlowMQTTClient
     from ..ecoflow.iot_api import IoTApiClient
-    from .set_commands import _Ocean2ReserveWrite
+    from .set_commands import _Ocean2Write
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -387,12 +387,13 @@ class EcoFlowDeviceCoordinator(
         # press cannot slip past the in-progress check before the first one's
         # record is set.
         self._pending_write_lock = asyncio.Lock()
-        # Ocean 2 Backup Reserve (PLAN-151): `_apply_data` sets the event when a
-        # frame carrying the device's own SoC ratio (field 92) is stored, which
-        # is what a write waits for after its get-all; the write record holds
-        # the pre-write value and the read-back timers of the write in flight.
+        # Ocean 2 writes (PLAN-151, PLAN-192): `_apply_data` sets the event when
+        # a frame carrying the device's own SoC ratio (field 92) is stored, which
+        # is what a reserve write waits for after its get-all; the write records,
+        # one per state key, hold the pre-write value and the read-back timers of
+        # the writes in flight.
         self._ocean2_snapshot_event = asyncio.Event()
-        self._ocean2_reserve_write: _Ocean2ReserveWrite | None = None
+        self._ocean2_writes: dict[str, _Ocean2Write] = {}
         self._pending_write: PendingDeviceWrite | None = None
         # PLAN-172: the latest settings report this wallbox's own connection
         # delivered, as (monotonic receive time, the settings keys that one

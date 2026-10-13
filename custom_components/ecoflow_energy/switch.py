@@ -21,6 +21,7 @@ from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -31,6 +32,7 @@ from .const import (
     DELTA_PROFILE_R331,
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_DELTA3,
+    DEVICE_TYPE_OCEAN2,
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_POWERPULSE2,
     DEVICE_TYPE_SMARTPLUG,
@@ -38,6 +40,7 @@ from .const import (
     DEVICE_TYPE_STREAM_AC5000,
     DEVICE_TYPE_WAVE3,
     DOMAIN,
+    OCEAN2_SWITCHES,
     POWEROCEAN_SCHEDULE_PREFIXES,
     POWEROCEAN_SWITCHES,
     POWEROCEANLOCALONLY_SWITCHES,
@@ -53,6 +56,7 @@ from .const import (
     WAVE3_SWITCHES,
     EcoFlowSwitchDef,
     filter_defs_for_serial,
+    supports_ocean2_controls,
     supports_powerpulse_controls,
     supports_stream_ac5000_controls,
     supports_stream_controls,
@@ -193,10 +197,17 @@ class EcoFlowSwitch(
         self._attr_unique_id = f"{coordinator.device_sn}_{definition.key}"
         self._attr_translation_key = definition.key
         self._attr_icon = definition.icon
+        if definition.entity_category:
+            self._attr_entity_category = EntityCategory(definition.entity_category)
 
         # Optimistic lock state
         self._optimistic_value: bool | None = None
         self._optimistic_lock_until: float = 0.0
+        # Seeded from the coordinator, not from zero: an entity added after a
+        # rollback already happened must not read that rollback as its own.
+        self._seen_rollback_generation: int = getattr(
+            coordinator, "_write_rollback_generation", 0
+        )
 
         self._restored_is_on: bool | None = None
         self._last_written_value: bool | None = None
@@ -351,6 +362,20 @@ class EcoFlowSwitch(
             ok = await self.coordinator.async_send_proto_set_command(
                 payload, "plug_switch"
             )
+            if not ok:
+                raise_set_failed(self.entity_id)
+            self._apply_optimistic(turn_on)
+            return
+
+        if self.coordinator.device_type == DEVICE_TYPE_OCEAN2:
+            try:
+                ok = await self.coordinator.async_set_ocean2_storm_guard(turn_on)
+            except DeviceValueNotReported:
+                # The unit has not reported the switch yet. Temporary, so not
+                # "unsupported".
+                raise_set_not_ready(self.entity_id)
+            except ValueError as err:
+                raise_set_rejected(self.entity_id, str(err))
             if not ok:
                 raise_set_failed(self.entity_id)
             self._apply_optimistic(turn_on)
@@ -535,6 +560,16 @@ class EcoFlowSwitch(
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
+        rollback = getattr(self.coordinator, "_write_rollback_generation", 0)
+        if rollback != self._seen_rollback_generation:
+            self._seen_rollback_generation = rollback
+            if self.coordinator.device_type == DEVICE_TYPE_OCEAN2:
+                # A write of ours was refused or never confirmed and the
+                # coordinator put the device value back. Holding the optimistic
+                # lock now would keep showing the value the device did not take.
+                # Scoped to the Ocean 2: other devices bump the generation for
+                # writes that are not this switch's.
+                self._optimistic_lock_until = 0.0
         self._write_state_if_changed(self.is_on)
 
 
@@ -604,9 +639,10 @@ class EcoFlowLocalControlSwitch(
 def _get_switch_defs(device_type: str, device_sn: str = "") -> list[EcoFlowSwitchDef]:
     """Return switch definitions based on device type.
 
-    ``device_sn`` gates the STREAM AC 5000 controls, which are confirmed on
-    the variants that have produced a write frame of their own. See
-    STREAM_AC5000_CONTROL_PREFIXES.
+    ``device_sn`` gates the STREAM AC 5000, Stream and Ocean 2 controls, which
+    are confirmed on the variants that have produced a write frame of their
+    own. See STREAM_AC5000_CONTROL_PREFIXES, STREAM_CONTROL_PREFIXES and
+    OCEAN2_CONTROL_PREFIXES.
     """
     if device_type == DEVICE_TYPE_DELTA:
         return DELTA2MAX_SWITCHES
@@ -624,6 +660,10 @@ def _get_switch_defs(device_type: str, device_sn: str = "") -> list[EcoFlowSwitc
         if not supports_stream_ac5000_controls(device_sn):
             return []
         return STREAMAC5000_SWITCHES
+    if device_type == DEVICE_TYPE_OCEAN2:
+        if not supports_ocean2_controls(device_sn):
+            return []
+        return OCEAN2_SWITCHES
     if device_type == DEVICE_TYPE_WAVE3:
         return WAVE3_SWITCHES
     if device_type == DEVICE_TYPE_POWERPULSE2:
