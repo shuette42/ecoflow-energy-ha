@@ -16,6 +16,7 @@ write tests (18 -> 19 -> 18 for 0x01, 16 -> 18 -> 16 for 0x02).
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Coroutine
 from types import SimpleNamespace
 from typing import Any
@@ -67,6 +68,15 @@ def _write(
     """The shared write, called the way the switch platform calls it."""
     key, mask = switch
     return wallbox.async_set_powerpulse_switch_bit(mask, enabled, key)
+
+
+@pytest.fixture(autouse=True)
+def _short_fresh_wait(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A write that finds the settings report missing or stale waits
+    `POWERPULSE2_SETTINGS_FRESH_WAIT_S` for the next report before it refuses
+    (#495). The refusal tests here only need the refusal, so the wait is short.
+    """
+    monkeypatch.setattr(f"{_SET_COMMANDS}.POWERPULSE2_SETTINGS_FRESH_WAIT_S", 0.05)
 
 
 def test_every_definition_carries_its_own_bit_on_the_shared_state_key() -> None:
@@ -137,20 +147,20 @@ async def test_writes_across_the_three_bits_queue_and_each_builds_on_the_last(
     hass: HomeAssistant,
 ) -> None:
     """While Battery discharge block waits for its read-back, a Plug and Play
-    write is refused with the earlier-command message and publishes nothing.
-    The report that confirms the first write also carries 0x04, a bit the
-    integration never wrote (17 | 0x04 = 21, as if it was changed in the app in
-    between). Plug and Play is then built from that newer report (21 -> 23) and
-    Continuous charging off from the one that shows both (23 -> 7): a write that
-    builds on the last byte it wrote, and not on the latest report, publishes
-    19 and 3 and loses the app's change.
+    write waits behind it and publishes nothing (#495; it used to be refused
+    with the earlier-command message). The report that confirms the first write
+    also carries 0x04, a bit the integration never wrote (17 | 0x04 = 21, as if
+    it was changed in the app in between). Plug and Play is then built from that
+    newer report (21 -> 23) and Continuous charging off from the one that shows
+    both (23 -> 7): a write that builds on the last byte it wrote, and not on the
+    latest report, publishes 19 and 3 and loses the app's change.
 
     Mutation probes: building every write after the first on a cached
     last-written byte (the reviewer's probe_last_written.py) publishes 19 for
     the second write and fails; rebuilding from a first report kept aside
-    publishes 18; dropping the pending check in
-    `_async_write_powerpulse_settings` lets the second call through while the
-    first waits.
+    publishes 18; building the second write before it waits publishes 19 as
+    well; publishing the second call while the first is pending fails the
+    `send.call_count == 1` assertion.
     """
     _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
     _set_descriptor(wallbox)
@@ -162,15 +172,14 @@ async def test_writes_across_the_three_bits_queue_and_each_builds_on_the_last(
     pending = wallbox._pending_write
     assert pending is not None and pending.action == "battery_discharge_block"
 
-    with pytest.raises(HomeAssistantError) as excinfo:
-        await _write(wallbox, PLUG_AND_PLAY, True)
-    assert excinfo.value.translation_key == "powerpulse_action_in_progress"
+    second = await _start(_write(wallbox, PLUG_AND_PLAY, True))
     assert send.call_count == 1
+    assert not second.done()
     assert wallbox._pending_write is pending
 
     _apply_report(wallbox, ev_settings_switch_bits=17 | 0x04)
     await first
-    second = await _start(_write(wallbox, PLUG_AND_PLAY, True))
+    await asyncio.sleep(0.05)
     assert _published_fields(send.call_args) == {1: 23}
     _apply_report(wallbox, ev_settings_switch_bits=23)
     await second

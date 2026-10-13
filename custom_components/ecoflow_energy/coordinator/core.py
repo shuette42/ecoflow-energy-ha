@@ -130,7 +130,10 @@ class PendingDeviceWrite:
     that bit alone, not by the whole byte matching. `require` (PLAN-190) ties a
     write to one source: a `(key, value)` pair that the arriving frame must
     carry (the PowerGlow writes name their rod's serial), so a report from a
-    second rod on the same PowerOcean cannot confirm it.
+    second rod on the same PowerOcean cannot confirm it. `settings_write`
+    (#495) marks a PowerPulse 2 settings write (display, switch bits, currents,
+    phase): a second settings write waits for it to finish instead of being
+    refused, while every other write still refuses at once.
     """
 
     action: str
@@ -140,6 +143,7 @@ class PendingDeviceWrite:
     expected_value: float | str | None = None
     bit_mask: int | None = None
     require: tuple[str, object] | None = None
+    settings_write: bool = False
 
 
 class EcoFlowDeviceCoordinator(
@@ -402,6 +406,17 @@ class EcoFlowDeviceCoordinator(
         # report plus a mode of another. The work mode in it is a name
         # (fast, solar, custom, smart), the same words the heartbeat uses.
         self._settings_report: tuple[float, dict[str, Any]] | None = None
+        # #495: the settings writes that wait behind each other. `_settings_calls`
+        # lists the calls in flight, ticket -> write target (the action): a call
+        # whose ticket is gone was replaced by a newer call for the same target
+        # and ends without sending. `_settings_wake` is replaced and set
+        # whenever something a waiting call cares about changes (a call ended, a
+        # pending write cleared, a settings report recorded, a call replaced); a
+        # waiter takes it under the write lock and re-checks after it fires, so
+        # no change is missed.
+        self._settings_wake: asyncio.Event = asyncio.Event()
+        self._settings_write_seq: int = 0
+        self._settings_calls: dict[int, str] = {}
         self._credential_obtained_ts: float = 0.0
         self._credential_refresh_unsub: asyncio.TimerHandle | None = None
         self._event_log: deque[dict[str, Any]] = deque(maxlen=50)

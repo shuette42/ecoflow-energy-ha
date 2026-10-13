@@ -126,6 +126,10 @@ Wallbox Cable Lock is only carried in the wallbox's bundled status report, never
 
 The PowerPulse 2 reports when something changes and otherwise stays silent, charging or not. Over a complete seven-hour recording the longest silence was 50 minutes. The integration therefore waits 20 minutes before it asks the wallbox for a fresh report and keeps the entities available through an hour of silence; on every other device type that watch is much shorter. A wallbox that has gone offline is shown as unavailable after an hour, not after ten minutes.
 
+### Several changes in a row
+
+The wallbox takes one settings change at a time and confirms each on its next settings report. A change you make while an earlier one still waits for that confirmation is held and sent once the earlier one has finished, up to about 25 seconds, instead of failing. If you move the same control again while a change for it is held, only the last value is sent. If the wallbox's last settings report is older than 10 seconds, a change waits up to 5 seconds for the next one before it fails with the "settings report is too old" error; nothing is sent while it waits. This covers the Screen and LED Indicator switches and brightness sliders, the three settings switches, Wallbox Solar Minimum Current, Wallbox Custom Charging Current and Wallbox Phase Setting. Wallbox Start Charging, Wallbox Stop Charging, Wallbox Maximum Current, Wallbox Charging Current Setpoint and Wallbox Charging Mode are still refused with "An earlier command is still waiting for the wallbox to confirm it" while any write waits, and a settings change is refused the same way while one of those waits.
+
 ### Single-phase charging
 
 When the vehicle charges single-phase, only Wallbox Current L1 carries a real reading; Wallbox Current L2 and Wallbox Current L3 read 0 A.

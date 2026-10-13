@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from typing import TYPE_CHECKING, Any, TypedDict
@@ -480,6 +481,18 @@ class StateApplyMixin(_Base):
                 if key in parsed
             },
         )
+        self._notify_settings_waiters()
+
+    def _notify_settings_waiters(self) -> None:
+        """Wake the settings writes that wait for a report or a free slot (#495).
+
+        The event is replaced before it is set, so a waiter that took the old
+        one under the write lock is woken and one that arrives after waits on
+        the new one: a change between the check and the wait is never lost.
+        Runs on the event loop only.
+        """
+        wake, self._settings_wake = self._settings_wake, asyncio.Event()
+        wake.set()
 
     def latch_schedule_armed(self, state_key: str, armed: bool) -> None:
         """Start the hold for one arming flag this integration just sent."""

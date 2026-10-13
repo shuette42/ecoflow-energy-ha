@@ -1673,6 +1673,19 @@ Smart is shown and not written. The app never sends the Smart mode without a dep
 **Consequences:** a fourth builder on the same envelope, differing from the third in the one nested field it fills; a select entity sharing the sensor's key, so the control shows what the sensor shows and applies nothing on its own; the pending record's expected value is a mode name rather than a number and is compared as one, so a current write and a mode write cannot confirm each other. Phase and target stay out of scope: no recording holds a deliberate change of either.
 
 
+### Addendum 2026-10-13: the settings writes queue behind each other and the newest value per control wins; start, stop, maximum current and mode keep refusing (#495)
+
+**What arrived.** The reporter's log on #495 (a `C376` on a PowerOcean, beta.23) counts 26 refusals in about fifteen minutes of ordinary use of the display controls: 24 of them "an earlier command is still waiting" and two "the settings report is too old". The wallbox behaved correctly every time; the refusals were the defect. He asked to keep one write at a time and the fresh-report check, with no blind retries and no permanent polling.
+
+**Decision.** Rejected alternative 7 above stands for start, stop, the maximum current, the charging current setpoint and the charging mode: a second press while one of those waits is still refused at once. For the settings writes (display, the three switch bits, Solar Minimum Current, Custom Charging Current, Phase Setting) it is reversed in a bounded form, with the lock not held for the wait:
+
+1. A settings write that finds another settings write pending waits for it to end (confirmed, failed or timed out) and then publishes, for at most the confirmation window plus the fresh-report wait. Past that it is refused as in progress, as before. A pending write of any other kind is still refused immediately, in both directions.
+2. The newest call per control wins. A call that is still waiting for its turn when a newer call for the same control arrives ends without sending and without an error. A call that has already published is not touched. A control is the write's action name, not its state key: the three settings switches share one state key and differ in their bit, so one switch must not cancel another.
+3. A write that finds the settings report missing or older than ten seconds waits up to `POWERPULSE2_SETTINGS_FRESH_WAIT_S` (5 s) for the next report and then builds from it. The wait is on an event set when a report is recorded, not a poll, and nothing is sent while it lasts. Without a report in that time the write is refused with the same text as before.
+4. Nothing is shown optimistically, and a write is still confirmed only by a frame that arrives after it (`_resolve_pending_write`). Each queued write is built from the report that confirmed the one before it, so two writes for different controls never overwrite each other's bytes.
+
+**Consequences:** a flag on the pending record marks a settings write; the coordinator keeps a record of the settings calls in flight and one event that every change a waiting call cares about replaces and sets, so a waiter never misses a change between its check and its wait. Each call's bound starts when it is made, so a write queued behind two others can be refused as in progress after 25 s where it would have gone ahead a little later. The order in which two different controls reach the wallbox follows who started waiting first and does not change what the wallbox ends up with, because each write changes only its own byte of a block rebuilt from the latest confirmed report.
+
 ## ADR-029: A linked STREAM unit's per-unit reading is applied by the coordinator whose serial it carries, on whichever connection it arrives; the own connection is preferred for 60 s after it last delivered the block
 
 **Status:** Accepted (shipped in v1.22.0, first in the v1.22.0-beta.7 pre-release)

@@ -65,6 +65,15 @@ _FIELD_NAMES = {
 }
 
 
+@pytest.fixture(autouse=True)
+def _short_fresh_wait(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A write that finds the settings report missing or stale waits
+    `POWERPULSE2_SETTINGS_FRESH_WAIT_S` for the next report before it refuses
+    (#495). The refusal tests here only need the refusal, so the wait is short.
+    """
+    monkeypatch.setattr(f"{_SET_COMMANDS}.POWERPULSE2_SETTINGS_FRESH_WAIT_S", 0.05)
+
+
 def _frame_hex(index: int) -> bytes:
     data = json.loads(_FIXTURE_PATH.read_text())
     return bytes.fromhex(data["frames"][index]["hex"])

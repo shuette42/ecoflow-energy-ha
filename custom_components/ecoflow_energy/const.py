@@ -264,6 +264,11 @@ POWERPULSE2_SETTINGS_WINDOW_S: float = 20.0
 # a Continuous write is rebuilt from the latest report's switch byte, and a
 # report older than this may already disagree with the wallbox.
 POWERPULSE2_SETTINGS_MAX_AGE_S: float = 10.0
+# #495: how long a settings write waits for the next settings report before it
+# refuses a missing or stale one. The report arrives about once a second, so five
+# seconds is several reports; a write that finds none in that time is refused as
+# before. Nothing is sent while it waits.
+POWERPULSE2_SETTINGS_FRESH_WAIT_S: float = 5.0
 # PLAN-172: bit 4 (0x10) of the settings switch bits is the app's
 # "Continuous charging" toggle (2026-10-04 write recordings, issue #481).
 POWERPULSE2_SWITCH_BIT_CONTINUOUS: int = 0x10

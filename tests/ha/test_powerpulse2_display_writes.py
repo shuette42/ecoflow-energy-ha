@@ -15,6 +15,7 @@ whose trailing byte reads 2.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -25,8 +26,8 @@ import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 
-from custom_components.ecoflow_energy.const import POWERPULSE2_SWITCH_BIT_CONTINUOUS
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
+from custom_components.ecoflow_energy.coordinator.core import PendingDeviceWrite
 from custom_components.ecoflow_energy.coordinator.set_commands import _SettingsWrite
 from custom_components.ecoflow_energy.ecoflow.parsers.stream_proto import _iter_fields
 from custom_components.ecoflow_energy.ecoflow.proto.decoder import (
@@ -42,8 +43,14 @@ from tests.ha.test_powerpulse2_charge_action import (
 from tests.ha.test_powerpulse2_settings_writes import (
     _SET_COMMANDS,
     _apply_report,
+    _published_fields,
     _set_continuous,
     _start,
+)
+from tests.ha.test_powerpulse2_switch_bits import (
+    DISCHARGE_BLOCK,
+    PLUG_AND_PLAY,
+    _write,
 )
 
 _FIXTURE_PATH = (
@@ -52,6 +59,16 @@ _FIXTURE_PATH = (
     / "powerpulse"
     / "c376_settings_481_482_20261004.json"
 )
+
+
+@pytest.fixture(autouse=True)
+def _short_fresh_wait(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A write that finds the settings report missing or stale waits
+    `POWERPULSE2_SETTINGS_FRESH_WAIT_S` for the next report before it refuses
+    (#495). The refusal tests here only need the refusal, so the wait is short;
+    the tests about the wait itself set their own.
+    """
+    monkeypatch.setattr(f"{_SET_COMMANDS}.POWERPULSE2_SETTINGS_FRESH_WAIT_S", 0.05)
 
 
 def _apply_recorded_display_frame(wallbox: EcoFlowDeviceCoordinator) -> None:
@@ -294,19 +311,24 @@ async def test_display_brightness_outside_the_four_steps_is_refused_up_front(
     assert wallbox._pending_write is None
 
 
-async def test_two_display_writes_chain_on_the_confirming_report(
+async def test_a_second_display_write_waits_for_the_first_to_confirm_or_time_out(
     hass: HomeAssistant,
 ) -> None:
     """From the report [1, 1, 25, 25], Screen brightness 50 and then LED
-    brightness 75 end at [1, 1, 75, 50] as two writes, the second built from
-    the report that confirmed the first. While the first waits, the second call
-    is refused with the in-progress text and publishes nothing.
+    brightness 75 end at [1, 1, 75, 50] as two writes. The second call arrives
+    while the first waits for its read-back: it publishes nothing and raises
+    nothing until the report that confirms the first arrives, is built from that
+    report, and then waits for its own (#495; it used to be refused as in
+    progress). A write queued behind one that is never confirmed goes ahead when
+    that one times out, and the timed-out call still raises its own error.
 
-    Mutation probes: dropping the `_pending_write is not None` guard in
-    `_async_write_powerpulse_settings` lets the second call through and fails
-    the in-progress assertion; keeping the first snapshot instead of replacing
-    it in `_record_settings_report` builds the second block from [1, 1, 25, 25]
-    and fails the `[1, 1, 75, 50, 0, 0]` comparison.
+    Mutation probes: restoring the immediate in-progress refusal for a pending
+    settings write fails the `not second.done()` assertion (the task has ended
+    with the error); building the second block from the report read before the
+    wait (`[1, 1, 75, 25, 0, 0]`) fails the second comparison; dropping the
+    notification in the call's `finally` leaves the call queued behind the
+    unconfirmed write waiting for its bound and fails the `call_count == 4`
+    assertion.
     """
     _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
     _set_descriptor(wallbox)
@@ -319,74 +341,342 @@ async def test_two_display_writes_chain_on_the_confirming_report(
     assert send.call_count == 1
     assert _published_display(send.call_args) == [(21, 2, bytes([1, 1, 25, 50, 0, 0]))]
 
-    with pytest.raises(HomeAssistantError) as excinfo:
-        await wallbox.async_set_powerpulse_display("ev_led_brightness_pct", 75)
-    assert excinfo.value.translation_key == "powerpulse_action_in_progress"
-    assert send.call_count == 1
-    assert not first.done()
-
-    _report(wallbox, True, True, 25, 50)  # the report that confirms the first
-    await first
-    assert wallbox._pending_write is None
-
     second = await _start(
         wallbox.async_set_powerpulse_display("ev_led_brightness_pct", 75)
     )
+    assert send.call_count == 1
+    assert not first.done() and not second.done()
+
+    _report(wallbox, True, True, 25, 50)  # the report that confirms the first
+    await first
+    await asyncio.sleep(0.05)
     assert send.call_count == 2
     assert _published_display(send.call_args) == [(21, 2, bytes([1, 1, 75, 50, 0, 0]))]
+    assert not second.done()
     _report(wallbox, True, True, 75, 50)
     await second
     assert wallbox._pending_write is None
 
+    # A write behind one that is never confirmed goes ahead when that one times
+    # out: its call ends with the not-confirmed text, the queued call publishes.
+    with patch(f"{_SET_COMMANDS}.POWERPULSE2_SETTINGS_WINDOW_S", 0.15):
+        lost = await _start(
+            wallbox.async_set_powerpulse_display("ev_led_brightness_pct", 50)
+        )
+        queued = await _start(
+            wallbox.async_set_powerpulse_display("ev_screen_brightness_pct", 75)
+        )
+        assert send.call_count == 3 and not queued.done()
+        with pytest.raises(HomeAssistantError) as excinfo:
+            await lost
+        assert excinfo.value.translation_key == "powerpulse_continuous_not_confirmed"
+        await asyncio.sleep(0.05)
+        assert send.call_count == 4
+        assert _published_display(send.call_args) == [
+            (21, 2, bytes([1, 1, 75, 75, 0, 0]))
+        ]
+        _report(wallbox, True, True, 75, 75)
+        await queued
+    assert wallbox._pending_write is None
 
-async def test_a_display_write_and_a_switch_bit_write_refuse_each_other_while_one_waits(
+
+async def test_a_display_write_and_a_switch_bit_write_queue_behind_each_other(
     hass: HomeAssistant,
 ) -> None:
-    """One settings write at a time, across both kinds. While a Continuous
-    charging write waits for its report, a Screen write is refused with the
-    in-progress text; once that is confirmed, the same holds the other way
-    round: a waiting Screen write refuses a Continuous charging write. Neither
-    refusal publishes anything or disturbs the write that waits.
+    """One settings write at a time on the wire, across both kinds. While a
+    Continuous charging write waits for its report, a Screen write waits behind
+    it and publishes only once that is confirmed; the same holds the other way
+    round, where a Continuous write waits behind a Screen write. The switch
+    byte of the second write comes from the report that confirmed the display
+    write (18 -> 2), not from the one before it.
 
-    Mutation probe: dropping the `_pending_write is not None` guard in
-    `_async_write_powerpulse_settings` lets both second calls through and fails
-    the first in-progress assertion.
+    Mutation probe: dropping the `settings_write` flag from the pending record
+    makes the second call refuse as in progress and fails the first `not
+    display_task.done()` assertion.
     """
     _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
     _set_descriptor(wallbox)
     send = _mqtt(oceans[0]).send_proto_set
     _report(wallbox, True, True, 25, 25)
-    bits = 18 | POWERPULSE2_SWITCH_BIT_CONTINUOUS
 
     switch_task = await _start(_set_continuous(wallbox, True))
     assert send.call_count == 1
-    with pytest.raises(HomeAssistantError) as excinfo:
-        await wallbox.async_set_powerpulse_display("ev_screen_enabled", 0)
-    assert excinfo.value.translation_key == "powerpulse_action_in_progress"
-    assert send.call_count == 1
-    assert not switch_task.done()
-    _apply_report(
-        wallbox,
-        ev_settings_switch_bits=bits,
-        ev_led_enabled=True,
-        ev_screen_enabled=True,
-        ev_led_brightness_pct=25,
-        ev_screen_brightness_pct=25,
-    )
-    await switch_task
-    assert wallbox._pending_write is None
-
     display_task = await _start(
         wallbox.async_set_powerpulse_display("ev_screen_enabled", 0)
     )
+    assert send.call_count == 1
+    assert not switch_task.done() and not display_task.done()
+    _report(wallbox, True, True, 25, 25)  # bits 18: the Continuous write's target
+    await switch_task
+    await asyncio.sleep(0.05)
     assert send.call_count == 2
-    with pytest.raises(HomeAssistantError) as excinfo:
-        await _set_continuous(wallbox, False)
-    assert excinfo.value.translation_key == "powerpulse_action_in_progress"
+    assert _published_display(send.call_args) == [(21, 2, bytes([1, 0, 25, 25, 0, 0]))]
+
+    back = await _start(_set_continuous(wallbox, False))
     assert send.call_count == 2
-    assert not display_task.done()
+    assert not back.done() and not display_task.done()
     _report(wallbox, True, False, 25, 25)
     await display_task
+    await asyncio.sleep(0.05)
+    assert send.call_count == 3
+    assert _published_fields(send.call_args) == {1: 2}
+    _apply_report(
+        wallbox,
+        ev_settings_switch_bits=2,
+        ev_led_enabled=True,
+        ev_screen_enabled=False,
+        ev_led_brightness_pct=25,
+        ev_screen_brightness_pct=25,
+    )
+    await back
+    assert wallbox._pending_write is None
+
+
+async def test_rapid_writes_for_one_value_publish_only_the_first_and_the_last(
+    hass: HomeAssistant,
+) -> None:
+    """The LED brightness slider is moved 50, 75, 100 while the first write waits
+    for its read-back, and the Screen brightness is set to 50 in between. The 75
+    is overtaken by the 100 before it was sent: its call ends at once, without an
+    error and without publishing. The Screen write, which arrived before the 100,
+    keeps its place in line: the wallbox gets the 50, the Screen 50 and the 100,
+    in that order, each built on the report that confirmed the one before.
+
+    Mutation probes: dropping the superseded check in
+    `_async_write_powerpulse_settings` publishes the 75 as well and leaves its
+    call waiting at the `second.done()` assertion; dropping the notification
+    when a call replaces another leaves the 75 waiting until the first write
+    ends and fails the same assertion.
+    """
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    send = _mqtt(oceans[0]).send_proto_set
+    _report(wallbox, True, True, 25, 25)
+
+    first = await _start(
+        wallbox.async_set_powerpulse_display("ev_led_brightness_pct", 50)
+    )
+    second = await _start(
+        wallbox.async_set_powerpulse_display("ev_led_brightness_pct", 75)
+    )
+    screen = await _start(
+        wallbox.async_set_powerpulse_display("ev_screen_brightness_pct", 50)
+    )
+    assert send.call_count == 1 and not second.done()
+    third = await _start(
+        wallbox.async_set_powerpulse_display("ev_led_brightness_pct", 100)
+    )
+    assert second.done() and second.exception() is None
+    assert send.call_count == 1 and not third.done() and not screen.done()
+
+    _report(wallbox, True, True, 50, 25)  # confirms the first
+    await first
+    await asyncio.sleep(0.05)
+    assert send.call_count == 2
+    assert _published_display(send.call_args) == [(21, 2, bytes([1, 1, 50, 50, 0, 0]))]
+    _report(wallbox, True, True, 50, 50)
+    await screen
+    await asyncio.sleep(0.05)
+    assert send.call_count == 3
+    assert _published_display(send.call_args) == [(21, 2, bytes([1, 1, 100, 50, 0, 0]))]
+    _report(wallbox, True, True, 100, 50)
+    await third
+    assert wallbox._pending_write is None
+
+
+async def test_writes_to_different_switch_bits_do_not_supersede_each_other(
+    hass: HomeAssistant,
+) -> None:
+    """The three settings switches share one state key, `ev_settings_switch_bits`,
+    and differ in their bit. While Block Battery Discharge waits for its
+    read-back, Plug and Play and then Continuous charging off wait behind it:
+    neither replaces the other, and all three reach the wallbox in order, each on
+    the byte the report before it showed (16 -> 17 -> 19 -> 3).
+
+    Mutation probe: keying the newest-call check on the state key instead of the
+    write's action ends the Plug and Play call without publishing and fails the
+    `second.done()` assertion.
+    """
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    send = _mqtt(oceans[0]).send_proto_set
+    _apply_report(wallbox, ev_settings_switch_bits=16)
+
+    first = await _start(_write(wallbox, DISCHARGE_BLOCK, True))
+    assert _published_fields(send.call_args) == {1: 17}
+    second = await _start(_write(wallbox, PLUG_AND_PLAY, True))
+    third = await _start(_set_continuous(wallbox, False))
+    assert not second.done() and not third.done()
+    assert send.call_count == 1
+
+    _apply_report(wallbox, ev_settings_switch_bits=17)
+    await first
+    await asyncio.sleep(0.05)
+    assert _published_fields(send.call_args) == {1: 19}
+    assert not third.done()
+    _apply_report(wallbox, ev_settings_switch_bits=19)
+    await second
+    await asyncio.sleep(0.05)
+    assert _published_fields(send.call_args) == {1: 3}
+    _apply_report(wallbox, ev_settings_switch_bits=3)
+    await third
+    assert send.call_count == 3
+    assert wallbox._pending_write is None
+
+
+@pytest.mark.parametrize(
+    "record",
+    [
+        PendingDeviceWrite(
+            action="max_current",
+            issued_at=0.0,
+            future=None,  # type: ignore[arg-type]
+            state_key="ev_max_current_a",
+            expected_value=11.0,
+        ),
+        PendingDeviceWrite(action="stop", issued_at=0.0, future=None),  # type: ignore[arg-type]
+    ],
+    ids=["max_current", "start_stop"],
+)
+async def test_a_settings_write_still_refuses_at_once_behind_another_kind_of_write(
+    hass: HomeAssistant, record: PendingDeviceWrite
+) -> None:
+    """Only a settings write is waited for. While a maximum-current or a
+    start/stop write is pending, a display write is refused as in progress
+    without waiting, publishes nothing and leaves that write in place.
+
+    Mutation probe: letting any pending write be waited for (dropping the
+    `settings_write` condition) makes the call wait, and the one-second guard
+    around it ends the test with a TimeoutError.
+    """
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    send = _mqtt(oceans[0]).send_proto_set
+    _report(wallbox, True, True, 25, 25)
+    pending = PendingDeviceWrite(
+        action=record.action,
+        issued_at=0.0,
+        future=hass.loop.create_future(),
+        state_key=record.state_key,
+        expected_value=record.expected_value,
+    )
+    wallbox._pending_write = pending
+
+    with pytest.raises(HomeAssistantError) as excinfo:
+        async with asyncio.timeout(1):
+            await wallbox.async_set_powerpulse_display("ev_screen_enabled", 0)
+    assert excinfo.value.translation_key == "powerpulse_action_in_progress"
+    assert send.call_count == 0
+    assert wallbox._pending_write is pending
+
+
+async def test_a_stale_report_waits_for_a_fresh_one_and_then_publishes(
+    hass: HomeAssistant,
+) -> None:
+    """A report 11 s old is not refused at once: the write waits for the next
+    report and sends nothing meanwhile. When one arrives (the wallbox sends
+    about one a second) the write is built from it and published, with the
+    block carrying the new report's values (LED brightness 50, which only the
+    second report has).
+
+    Mutation probes: refusing at once instead of waiting ends the task with the
+    stale error before the second report; dropping the notification in
+    `_record_settings_report` leaves the call asleep until its bound and fails
+    the `call_count == 1` assertion (the bound is one second here).
+    """
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    send = _mqtt(oceans[0]).send_proto_set
+    _report(wallbox, True, True, 25, 25)
+    assert wallbox._settings_report is not None
+    clock = {"now": wallbox._settings_report[0] + 11}
+
+    with (
+        patch(f"{_SET_COMMANDS}.POWERPULSE2_SETTINGS_FRESH_WAIT_S", 1.0),
+        patch(f"{_SET_COMMANDS}.time", SimpleNamespace(monotonic=lambda: clock["now"])),
+    ):
+        task = await _start(
+            wallbox.async_set_powerpulse_display("ev_screen_enabled", 0)
+        )
+        assert send.call_count == 0 and not task.done()
+
+        _report(wallbox, True, True, 50, 25)
+        clock["now"] = wallbox._settings_report[0] + 1
+        await asyncio.sleep(0.05)
+        assert send.call_count == 1
+        assert _published_display(send.call_args) == [
+            (21, 2, bytes([1, 0, 50, 25, 0, 0]))
+        ]
+        _report(wallbox, True, False, 50, 25)
+        await task
+    assert wallbox._pending_write is None
+
+
+async def test_a_stale_report_is_refused_only_after_the_bounded_wait(
+    hass: HomeAssistant,
+) -> None:
+    """With no newer report the call keeps waiting for the bound (0.3 s here, 5 s
+    in production) and only then raises the stale text. Nothing is sent and no
+    pending record is left.
+
+    Mutation probe: refusing at once ends the task before the 0.1 s check and
+    fails the `not task.done()` assertion.
+    """
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    send = _mqtt(oceans[0]).send_proto_set
+    _report(wallbox, True, True, 25, 25)
+    assert wallbox._settings_report is not None
+    stale_now = wallbox._settings_report[0] + 11
+
+    with (
+        patch(f"{_SET_COMMANDS}.POWERPULSE2_SETTINGS_FRESH_WAIT_S", 0.3),
+        patch(f"{_SET_COMMANDS}.time", SimpleNamespace(monotonic=lambda: stale_now)),
+    ):
+        task = asyncio.create_task(
+            wallbox.async_set_powerpulse_display("ev_screen_enabled", 0)
+        )
+        await asyncio.sleep(0.1)
+        assert not task.done()
+        with pytest.raises(HomeAssistantError) as excinfo:
+            async with asyncio.timeout(2):
+                await task
+    assert excinfo.value.translation_key == "powerpulse_continuous_report_stale"
+    assert send.call_count == 0
+    assert wallbox._pending_write is None
+
+
+async def test_a_write_queued_past_the_bound_is_refused_as_in_progress(
+    hass: HomeAssistant,
+) -> None:
+    """A second settings write waits at most the confirmation window plus the
+    fresh-report wait (0.1 s here, 25 s in production) for the first one to end.
+    The first is still waiting for its read-back after that, so the second is
+    refused as in progress, sends nothing, and the first keeps waiting.
+
+    Mutation probe: waiting without a bound makes the one-second guard around
+    the call end the test with a TimeoutError.
+    """
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    send = _mqtt(oceans[0]).send_proto_set
+    _report(wallbox, True, True, 25, 25)
+
+    first = await _start(wallbox.async_set_powerpulse_display("ev_screen_enabled", 0))
+    assert send.call_count == 1
+    with (
+        patch(f"{_SET_COMMANDS}.POWERPULSE2_SETTINGS_WINDOW_S", 0.05),
+        patch(f"{_SET_COMMANDS}.POWERPULSE2_SETTINGS_FRESH_WAIT_S", 0.05),
+        pytest.raises(HomeAssistantError) as excinfo,
+    ):
+        async with asyncio.timeout(1):
+            await wallbox.async_set_powerpulse_display("ev_led_brightness_pct", 75)
+    assert excinfo.value.translation_key == "powerpulse_action_in_progress"
+    assert send.call_count == 1
+    assert not first.done()
+
+    _report(wallbox, True, False, 25, 25)
+    await first
     assert wallbox._pending_write is None
 
 
