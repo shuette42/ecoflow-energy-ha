@@ -34,7 +34,9 @@ FIXTURE_ROOT = Path(__file__).parent / "fixtures"
 
 # One pattern per shape, because a single regex is what got this wrong before.
 _UUID = re.compile(r"[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")
-_MAC = re.compile(r"(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}")
+# One separator throughout, as a real MAC is written. A mixed form also matched
+# a recording window such as `18:41:43-18:48:40` in a fixture note.
+_MAC = re.compile(r"[0-9A-Fa-f]{2}([:-])(?:[0-9A-Fa-f]{2}\1){4}[0-9A-Fa-f]{2}")
 # A serial, an account id or a certificate name, whatever its case. Masked
 # bytes read as a run of X, which is what every fixture in the tree uses.
 #
@@ -287,6 +289,20 @@ def test_no_identifier_survived_masking(path: Path) -> None:
         topic = frame.get("topic") or ""
         if "/" in topic:
             assert "{sn}" in topic or "XXXX" in topic, f"{where}: raw topic {topic}"
+
+
+@pytest.mark.parametrize(
+    ("text", "is_mac"),
+    [
+        ("a4:cf:12:9e:3b:01", True),
+        ("A4-CF-12-9E-3B-01", True),
+        ("recorded 18:41:43-18:48:40 UTC", False),
+        ("a4:cf:12-9e:3b:01", False),
+    ],
+)
+def test_the_mac_pattern_needs_one_separator(text: str, is_mac: bool) -> None:
+    """A MAC in either notation is caught; a time range in a note is not."""
+    assert bool(_MAC.search(text)) is is_mac
 
 
 def test_the_guard_reports_a_plain_serial_beside_a_long_run_of_mask_bytes() -> None:
