@@ -8897,13 +8897,14 @@ class TestLinkedUnitPower:
         assert sibling.data["unit_batt_w"] == -300.0
         assert coordinator._unit_power_stats["units_handed_over"] == 1
 
-    async def test_a_linked_stream_never_gets_a_battery_entry(
+    async def test_a_linked_stream_never_gets_a_battery_or_pv_entry(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
     ) -> None:
-        """The Stream's battery power comes from its own battery management.
+        """A linked Stream reads its battery power and its PV strings itself.
 
         A second reading for the same pack would let the Energy Dashboard
-        count it twice. Its PV entry is still handed over.
+        count it twice, and a second writer for a PV string alternates it
+        (#549). Neither block is handed to a Stream.
         """
         coordinator = self._coordinator(hass, enhanced_config_entry)
         stream = EcoFlowDeviceCoordinator(
@@ -8925,16 +8926,21 @@ class TestLinkedUnitPower:
             }
         )
         assert "unit_batt_w" not in (stream.data or {})
-        assert stream.data["pv1_w"] == 120.0
+        assert "pv1_w" not in (stream.data or {})
         assert "units_handed_over" not in coordinator._unit_power_stats
+        assert "pv_units_handed_over" not in coordinator._unit_power_stats
 
-    async def test_a_linked_stream_drops_the_handed_ac_grid_connection_power(
+    async def test_a_linked_stream_keeps_its_own_pv_strings_and_grid_connection(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
     ) -> None:
-        """A Stream's AC Grid Connection Power is its own reading.
+        """The AC 5000's entry for a linked Stream never overwrites its own.
 
-        The AC 5000's `f50.1.7` for that Stream must not take turns with it,
-        so the Stream drops the handed key; the own entry keeps it.
+        The Stream reports PV 1 Power and AC Grid Connection Power from its
+        own frames; the AC 5000's group message carries the same readings,
+        rounded and a push behind. Handing them over would make the two take
+        turns at the push cadence (#549). The AC 5000 keeps its own `.7`.
+        Mutation this catches: dropping the `_linked_unit_is_stream` check on
+        the PV hand-over (the Stream would read 187.0 and 153.0).
         """
         coordinator = self._coordinator(hass, enhanced_config_entry)
         stream = EcoFlowDeviceCoordinator(
@@ -8946,6 +8952,7 @@ class TestLinkedUnitPower:
             coordinator.device_sn: coordinator,
             stream.device_sn: stream,
         }
+        stream._apply_data({"pv1_w": 186.4, "ac_grid_connection_power_w": 152.6})
         coordinator._apply_data(
             {
                 "_unit_pv_by_sn": {
@@ -8958,8 +8965,9 @@ class TestLinkedUnitPower:
             }
         )
         assert coordinator.data["ac_grid_connection_power_w"] == -352.0
-        assert stream.data["pv1_w"] == 187.0
-        assert "ac_grid_connection_power_w" not in stream.data
+        assert stream.data["pv1_w"] == 186.4
+        assert stream.data["ac_grid_connection_power_w"] == 152.6
+        assert "pv_units_handed_over" not in coordinator._unit_power_stats
 
     async def test_a_second_ac5000_keeps_the_handed_ac_grid_connection_power(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry

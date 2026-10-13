@@ -159,21 +159,28 @@ class StateApplyMixin(_Base):
         entry on the other (#401, 2026-09-13). Only a frame that carries both
         is recorded, so the pair is never stitched from two moments.
 
-        AC Grid Connection Power (`f50.1.7`) is dropped when the receiver is
-        not a STREAM AC 5000: on a linked Stream the key is that unit's own
-        grid connection reading, from its own connection, and the two must
-        not take turns. A second AC 5000 keeps it, since its own entry may
-        reach it only over its sibling's connection.
+        AC Grid Connection Power (`f50.1.7`) travels with the entry. Only a
+        STREAM AC 5000 claims a PV entry, its own or one handed from a second
+        AC 5000 that may reach it only over its sibling's connection; a linked
+        Stream is never handed one (`_linked_unit_is_stream`).
         """
         strings = dict(entry)
         soc = strings.pop(UNIT_PV_ENTRY_SOC_KEY, None)
-        if self.device_type != DEVICE_TYPE_STREAM_AC5000:
-            strings.pop("ac_grid_connection_power_w", None)
         own = parsed.get("soc_precise_pct")
         if own_connection and soc is not None and own is not None:
             stats["own_pv_entry_soc_pct"] = soc
             stats["own_soc_precise_pct"] = round(float(own), 2)
         return strings
+
+    def _linked_unit_is_stream(self, serial: str) -> bool:
+        """Whether the coordinator named by `serial` is a linked Stream.
+
+        The per-unit blocks of a STREAM AC 5000 group message are handed only
+        to another STREAM AC 5000. An unknown serial is not a Stream: its
+        hand-over is counted as unrouted later, as before.
+        """
+        sibling = self._linked_unit_coordinator(serial)
+        return sibling is not None and sibling.device_type != DEVICE_TYPE_STREAM_AC5000
 
     def _resolve_unit_power(
         self, parsed: dict[str, Any], *, own_connection: bool, now: float
@@ -207,9 +214,12 @@ class StateApplyMixin(_Base):
 
         A battery entry of None is one the message could not sign (see
         `_sign_unit_entries`): the unit's last reading stands and nothing is
-        handed over. The battery block goes only to another STREAM AC 5000.
-        A linked Stream keeps its battery power from its own battery
-        management, so one pack never has two readings.
+        handed over. Both blocks go only to another STREAM AC 5000
+        (`_linked_unit_is_stream`): a linked Stream reads its battery power,
+        its PV strings and its AC grid connection from its own frames, so one
+        reading never has two writers (#549). The hold below cannot protect a
+        Stream, since its own frames never carry the per-unit blocks it
+        would be anchored on.
         """
         power = parsed.pop(UNIT_POWER_BY_SN_KEY, None)
         strings = parsed.pop(UNIT_PV_BY_SN_KEY, None)
@@ -227,11 +237,7 @@ class StateApplyMixin(_Base):
                 for serial, value in power.items():
                     if serial == self.device_sn or value is None:
                         continue
-                    sibling = self._linked_unit_coordinator(serial)
-                    if (
-                        sibling is not None
-                        and sibling.device_type != DEVICE_TYPE_STREAM_AC5000
-                    ):
+                    if self._linked_unit_is_stream(serial):
                         continue
                     stats["units_handed_over"] = stats.get("units_handed_over", 0) + 1
                     handoffs.setdefault(serial, {})[UNIT_POWER_BY_SN_KEY] = {
@@ -283,6 +289,8 @@ class StateApplyMixin(_Base):
                     )
                 for serial, value in strings.items():
                     if serial == self.device_sn:
+                        continue
+                    if self._linked_unit_is_stream(serial):
                         continue
                     stats["pv_units_handed_over"] = (
                         stats.get("pv_units_handed_over", 0) + 1
