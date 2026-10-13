@@ -89,7 +89,10 @@ _FEED_MODE_MAP: dict[int, str] = {
     3: "limit",
 }
 
-_WORK_STATE_MAP: dict[int, str] = {
+# What the EMS is doing right now (`ems_work_state`). One table for every
+# device that reports it: the Ocean 2 sends the same wire values with the same
+# meaning (parsers/ocean2_proto.py imports this, it does not restate it).
+EMS_WORK_STATES: dict[int, str] = {
     0: "none",
     1: "init",
     2: "idle",
@@ -641,8 +644,8 @@ def _extract_ems_extended(quota_data: dict, result: dict) -> None:
         fv = _safe_float(quota_data[ems_ws_key])
         if fv is not None:
             iv = int(fv)
-            if iv in _WORK_STATE_MAP:
-                result["ems_work_state"] = _WORK_STATE_MAP[iv]
+            if iv in EMS_WORK_STATES:
+                result["ems_work_state"] = EMS_WORK_STATES[iv]
 
     # Nested poAiSchedule fields (system capabilities)
     _ai_schedule = {

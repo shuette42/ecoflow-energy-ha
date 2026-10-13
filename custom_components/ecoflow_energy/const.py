@@ -59,9 +59,11 @@ from .ecoflow.parsers.ocean2_proto import (
 from .ecoflow.parsers.ocean2_proto import (  # noqa: E402
     OCEAN2_CONTROL_MODES,
     OCEAN2_WORK_MODES,
-    OCEAN2_WORK_STATES,
 )
-from .ecoflow.parsers.powerocean import PARALLEL_UNIT_MAX  # noqa: E402
+from .ecoflow.parsers.powerocean import (  # noqa: E402
+    EMS_WORK_STATES,
+    PARALLEL_UNIT_MAX,
+)
 from .ecoflow.parsers.powerocean_proto import SCHEDULE_MAX_INDEX  # noqa: E402
 from .ecoflow.parsers.smart_home_panel_2_proto import (
     CIRCUIT_COUNT as SMARTHOMEPANEL2_CIRCUIT_COUNT,  # noqa: E402
@@ -7738,11 +7740,13 @@ WAVE3_SELECTS: list[EcoFlowSelectDef] = [
 OCEAN2_SENSORS: list[EcoFlowSensorDef] = [
     # The EMS status record (254/39 field 3): what the app shows as the work
     # mode, what the system is doing, and which program overrides the mode.
-    # Only the full snapshot carries it, so these are accessories and appear
-    # on the first report. The options come from the parser's tables, which
-    # are the only place the wire values are named.
+    # It rides mostly on the full snapshot, so these are accessories and
+    # appear on the first report. The options come from the parser's tables,
+    # which are the only place the wire values are named. Work mode and system
+    # state share their keys, state names and translations with the
+    # PowerOcean's sensors of the same name.
     EcoFlowSensorDef(
-        "ocean2_ems_work_mode",
+        "ems_work_mode",
         "Work Mode",
         None,
         "enum",
@@ -7754,7 +7758,7 @@ OCEAN2_SENSORS: list[EcoFlowSensorDef] = [
         accessory=True,
     ),
     EcoFlowSensorDef(
-        "ocean2_ems_work_state",
+        "ems_work_state",
         "System State",
         None,
         "enum",
@@ -7762,11 +7766,11 @@ OCEAN2_SENSORS: list[EcoFlowSensorDef] = [
         "mdi:state-machine",
         "diagnostic",
         enhanced_only=True,
-        options=list(OCEAN2_WORK_STATES.values()),
+        options=list(EMS_WORK_STATES.values()),
         accessory=True,
     ),
     EcoFlowSensorDef(
-        "ocean2_ems_control_mode",
+        "ems_control_mode",
         "Control Mode",
         None,
         "enum",

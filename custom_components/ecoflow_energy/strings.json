@@ -585,28 +585,7 @@
       "backup_reserve_pct": {
         "name": "Backup Reserve"
       },
-      "ocean2_ems_work_mode": {
-        "name": "Work Mode",
-        "state": {
-          "self_use": "Self-use",
-          "ai_schedule": "AI schedule"
-        }
-      },
-      "ocean2_ems_work_state": {
-        "name": "System State",
-        "state": {
-          "init": "Init",
-          "idle": "Idle",
-          "startup_external_battery": "Starting (external battery)",
-          "startup_battery": "Starting (battery)",
-          "startup_pv": "Starting (solar)",
-          "startup_grid": "Starting (grid)",
-          "running": "Running",
-          "stopped": "Stopped",
-          "maintenance": "Maintenance"
-        }
-      },
-      "ocean2_ems_control_mode": {
+      "ems_control_mode": {
         "name": "Control Mode",
         "state": {
           "none": "None",

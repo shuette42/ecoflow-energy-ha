@@ -22,7 +22,7 @@ from .powerocean import (
     _PCS_RUN_STATE_MAP,
     _WORK_MODE_INT_MAP,
     _WORK_MODE_MAP,
-    _WORK_STATE_MAP,
+    EMS_WORK_STATES,
     ENERGY_TOTAL_PLACEHOLDER_WH,
     PARALLEL_UNIT_MAX,
     drop_invalid_percentages,
@@ -48,7 +48,7 @@ _PROTO_ENUM_STR: dict[str, dict[str, str]] = {
 # Work state enum (separate from work mode). Present in HTTP
 # (ems_change_report.emsWorkState) and proto EMS Change Report (field 205).
 _WORK_STATE_ENUM_INT: dict[str, dict[int, str]] = {
-    "ems_work_state": _WORK_STATE_MAP,
+    "ems_work_state": EMS_WORK_STATES,
 }
 
 _CONNECTIVITY_KEYS: frozenset[str] = frozenset(

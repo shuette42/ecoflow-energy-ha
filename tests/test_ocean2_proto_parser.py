@@ -21,6 +21,7 @@ from ecoflow_energy.ecoflow.parsers.ocean2_proto import (
     MAX_MODULES,
     parse_ocean2_proto_message,
 )
+from ecoflow_energy.ecoflow.parsers.powerocean import EMS_WORK_STATES
 
 
 def _varint(value: int) -> bytes:
@@ -883,9 +884,9 @@ _EMS_RECORD = bytes.fromhex(
 )
 
 _EMS_KEYS = (
-    "ocean2_ems_work_mode",
-    "ocean2_ems_work_state",
-    "ocean2_ems_control_mode",
+    "ems_work_mode",
+    "ems_work_state",
+    "ems_control_mode",
 )
 
 
@@ -897,14 +898,15 @@ class TestEmsStatusFields:
             _frame(_EMS_RECORD + _msg(65, _f32(17, 55.0)))
         )
         assert parsed is not None
-        assert parsed["ocean2_ems_work_mode"] == "self_use"
-        assert parsed["ocean2_ems_work_state"] == "running"
-        assert parsed["ocean2_ems_control_mode"] == "none"
+        assert parsed["ems_work_mode"] == "self_use"
+        assert parsed["ems_work_state"] == "running"
+        assert parsed["ems_control_mode"] == "none"
         # The rest of the frame still parses around the nested record.
         assert parsed["soc_pct"] == pytest.approx(55.0)
 
     def test_a_push_without_field_3_leaves_the_keys_absent(self) -> None:
-        # The change-only pushes carry blocks 7 / 65 / 87 and never field 3.
+        # The change-only pushes carry blocks 7 / 65 / 87 and, as a rule, no
+        # field 3 (one property frame in the 2026-09-19 RE11 recording has it).
         # An absent key means "no update": the last state must stay in place.
         payload = _telemetry(
             summary=_f32(17, 55.0),
@@ -920,42 +922,46 @@ class TestEmsStatusFields:
         # survive; 3.2 and 3.3 are not on the wire here and stay absent.
         parsed = parse_ocean2_proto_message(_frame(_msg(3, _vint(10, 0))))
         assert parsed is not None
-        assert parsed["ocean2_ems_control_mode"] == "none"
-        assert "ocean2_ems_work_mode" not in parsed
-        assert "ocean2_ems_work_state" not in parsed
+        assert parsed["ems_control_mode"] == "none"
+        assert "ems_work_mode" not in parsed
+        assert "ems_work_state" not in parsed
 
     def test_values_the_device_has_not_shown_are_omitted(self) -> None:
         # 3.2 = 0 is not a mode, 3.3 = 12 and 3.10 = 99 are outside the tables.
         # Present-but-unknown must not become a guessed state or the previous
-        # one rewritten; a frame with nothing else in it yields no result.
+        # one rewritten.
         record = _msg(3, _vint(2, 0) + _vint(3, 12) + _vint(10, 99))
         parsed = parse_ocean2_proto_message(_frame(record + _msg(65, _f32(17, 40.0))))
         assert parsed is not None
         assert parsed["soc_pct"] == pytest.approx(40.0)
         assert not set(_EMS_KEYS) & set(parsed)
 
+        # A frame with nothing else in it yields no result at all.
+        assert parse_ocean2_proto_message(_frame(record)) is None
+
     @pytest.mark.parametrize(
         ("sub_field", "key", "names"),
         [
-            (2, "ocean2_ems_work_mode", {1: "self_use", 2: "ai_schedule"}),
+            (2, "ems_work_mode", {1: "self_use", 2: "ai_schedule"}),
             (
                 3,
-                "ocean2_ems_work_state",
+                "ems_work_state",
                 {
+                    0: "none",
                     1: "init",
                     2: "idle",
-                    3: "startup_external_battery",
-                    4: "startup_battery",
+                    3: "startup_ext_bp",
+                    4: "startup_inner_bp",
                     5: "startup_pv",
                     6: "startup_grid",
                     7: "running",
-                    8: "stopped",
-                    9: "maintenance",
+                    8: "stop",
+                    9: "maintain",
                 },
             ),
             (
                 10,
-                "ocean2_ems_control_mode",
+                "ems_control_mode",
                 {
                     0: "none",
                     1: "soc_calibration",
@@ -981,6 +987,16 @@ class TestEmsStatusFields:
             assert parsed is not None, (key, wire)
             assert parsed[key] == name, (key, wire)
 
+    def test_the_system_state_is_the_powerocean_table_not_a_copy(self) -> None:
+        # One distinction, one registration: the Ocean 2 sends the PowerOcean's
+        # EMS work states with the same meaning, so every wire value has to come
+        # out under the name the PowerOcean parser gives it.
+        assert len(EMS_WORK_STATES) == 10
+        for wire, name in EMS_WORK_STATES.items():
+            parsed = parse_ocean2_proto_message(_frame(_msg(3, _vint(3, wire))))
+            assert parsed is not None, wire
+            assert parsed["ems_work_state"] == name, wire
+
     def test_field_3_ten_is_not_the_top_level_reserve(self) -> None:
         # Top-level 10 is the backup reserve, 3.10 the control mode: the same
         # number at two depths. Each reading comes from its own path.
@@ -989,4 +1005,4 @@ class TestEmsStatusFields:
         )
         assert parsed is not None
         assert parsed["backup_reserve_pct"] == 29
-        assert parsed["ocean2_ems_control_mode"] == "schedule"
+        assert parsed["ems_control_mode"] == "schedule"
