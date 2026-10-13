@@ -94,7 +94,7 @@
         }
       },
       "reconfigure_menu": {
-        "title": "De verbinding wijzigen",
+        "title": "Verbinding wijzigen",
         "description": "Kies hoe dit item verbinding maakt met het apparaat. Het item blijft bestaan, dus entiteiten die beide verbindingen leveren, behouden hun geschiedenis.",
         "menu_options": {
           "reconfigure_credentials": "Inloggegevens bijwerken",
@@ -105,7 +105,7 @@
       },
       "reconfigure_local": {
         "title": "Lokale Modbus/TCP-verbinding",
-        "description": "Voer in waar de PowerOcean op Modbus/TCP antwoordt. Het moet hetzelfde apparaat zijn als in dit item: een apparaat met een ander serienummer wordt geweigerd. Bij overschakelen vanuit de cloud worden de opgeslagen inloggegevens uit dit item verwijderd.",
+        "description": "Geef aan op welk adres de PowerOcean via Modbus/TCP antwoordt. Het moet hetzelfde apparaat zijn als in dit item: een apparaat met een ander serienummer wordt geweigerd. Bij overschakelen vanuit de cloud worden de opgeslagen inloggegevens uit dit item verwijderd.",
         "data": {
           "host": "Host",
           "port": "Poort",
@@ -158,7 +158,7 @@
         "data_description": {
           "devices": "Een apparaat selecteren is wat deze integratie ertoe brengt het uit te lezen. Een apparaat met de markering \"not supported yet\" heeft hier geen parser en levert daarom twee diagnostische sensoren en verder niets. Het geselecteerd laten is toch de moeite waard, want uit een download van diagnostische gegevens ervan, bijgevoegd bij een GitHub-issue, wordt de ondersteuning voor een nieuw model opgebouwd. Je download van diagnostische gegevens bevat de ruwe data van zo'n apparaat al, dus er hoeft vooraf niets te worden ingeschakeld.",
           "raw_capture": "Bewaart meer van de ruwe berichten die je apparaten sturen, neemt elk apparaat op dat deze integratie nog niet ondersteunt, en legt vast welke instellingen de EcoFlow-app naar je apparaten schrijft zolang dit loopt. Dat laatste is hoe een bedieningselement wordt gebouwd voor een model dat hier niemand bezit: de instelling één keer in de app wijzigen terwijl dit aanstaat, laat zien wat het apparaat accepteert. Alleen de moeite waard om in te schakelen als daar in een GitHub-issue om is gevraagd, want de gegevens zijn alleen nuttig als bijlage bij een download van diagnostische gegevens. Er wordt nooit iets naar je apparaten gestuurd, en de opname stopt vanzelf na 24 uur.",
-          "powerpulse_vehicle_energy": "Leest voltooide laadsessies ongeveer elke 5 minuten uit je EcoFlow-account en bewaart er een lokaal overzicht van in Home Assistant. Dit overzicht wordt verwijderd wanneer je de integratie verwijdert."
+          "powerpulse_vehicle_energy": "Leest voltooide laadsessies ongeveer elke 5 minuten uit je EcoFlow-account en houdt ze lokaal bij in Home Assistant. Deze gegevens worden verwijderd wanneer je de integratie verwijdert."
         }
       },
       "developer": {
@@ -189,7 +189,7 @@
         "data_description": {
           "devices": "Een apparaat selecteren is wat deze integratie ertoe brengt het uit te lezen. Een apparaat met de markering \"not supported yet\" heeft hier geen parser en levert daarom twee diagnostische sensoren en verder niets. Het geselecteerd laten is toch de moeite waard, want uit een download van diagnostische gegevens ervan, bijgevoegd bij een GitHub-issue, wordt de ondersteuning voor een nieuw model opgebouwd. Schakel hieronder eerst de opname van diagnostische gegevens in en download daarna, want bij aanmelding met je account bevat de download die ruwe data niet vanzelf.",
           "raw_capture": "Bewaart meer van de ruwe berichten die je apparaten sturen, neemt elk apparaat op dat deze integratie nog niet ondersteunt, en legt vast welke instellingen de EcoFlow-app naar je apparaten schrijft zolang dit loopt. Dat laatste is hoe een bedieningselement wordt gebouwd voor een model dat hier niemand bezit: de instelling één keer in de app wijzigen terwijl dit aanstaat, laat zien wat het apparaat accepteert. Alleen de moeite waard om in te schakelen als daar in een GitHub-issue om is gevraagd, want de gegevens zijn alleen nuttig als bijlage bij een download van diagnostische gegevens. Er wordt nooit iets naar je apparaten gestuurd, en de opname stopt vanzelf na 24 uur.",
-          "powerpulse_vehicle_energy": "Leest voltooide laadsessies ongeveer elke 5 minuten uit je EcoFlow-account en bewaart er een lokaal overzicht van in Home Assistant. Dit overzicht wordt verwijderd wanneer je de integratie verwijdert."
+          "powerpulse_vehicle_energy": "Leest voltooide laadsessies ongeveer elke 5 minuten uit je EcoFlow-account en houdt ze lokaal bij in Home Assistant. Deze gegevens worden verwijderd wanneer je de integratie verwijdert."
         }
       }
     },
@@ -205,7 +205,7 @@
       "device_in_other_entry": "Een geselecteerd apparaat is al ingesteld in een ander EcoFlow Energy-item, bijvoorbeeld een Local-item. Deselecteer het om door te gaan."
     },
     "abort": {
-      "local_use_reconfigure": "Dit item leest de PowerOcean lokaal uit via Modbus en heeft geen verbindingsmodus om te wijzigen. Gebruik Opnieuw configureren in het integratiemenu om de host, poort of unit-ID te wijzigen, of om terug te schakelen naar een cloudmodus."
+      "local_use_reconfigure": "Dit item leest de PowerOcean lokaal uit via Modbus en heeft geen verbindingsmodus om te wijzigen. Gebruik ‘Herconfigureren’ in het integratiemenu om de host, poort of unit-ID te wijzigen, of om terug te schakelen naar een cloudmodus."
     }
   },
   "entity": {
@@ -355,13 +355,13 @@
         "name": "Energie netteruglevering"
       },
       "solar_lifetime_energy_kwh": {
-        "name": "Zonne-energie (levensduur)"
+        "name": "Cumulatieve zonne-energie"
       },
       "grid_import_lifetime_energy_kwh": {
-        "name": "Energie netafname (levensduur)"
+        "name": "Cumulatieve energie netafname"
       },
       "grid_export_lifetime_energy_kwh": {
-        "name": "Energie netteruglevering (levensduur)"
+        "name": "Cumulatieve energie netteruglevering"
       },
       "fault_count": {
         "name": "Aantal storingen"
@@ -487,13 +487,13 @@
         "name": "Stroom netfase C"
       },
       "grid_phase_a_reactive_power_var": {
-        "name": "Reactief vermogen netfase A"
+        "name": "Blindvermogen netfase A"
       },
       "grid_phase_b_reactive_power_var": {
-        "name": "Reactief vermogen netfase B"
+        "name": "Blindvermogen netfase B"
       },
       "grid_phase_c_reactive_power_var": {
-        "name": "Reactief vermogen netfase C"
+        "name": "Blindvermogen netfase C"
       },
       "grid_phase_a_apparent_power_va": {
         "name": "Schijnbaar vermogen netfase A"
@@ -590,7 +590,7 @@
         "state": {
           "none": "Geen",
           "soc_calibration": "SoC-kalibratie",
-          "storm_guard": "Stormbeveiliging",
+          "storm_guard": "Stormbescherming",
           "eco": "Eco",
           "task": "Taak",
           "schedule": "Schema",
@@ -1452,19 +1452,19 @@
         "name": "Schijnbaar vermogen omvormerfase C"
       },
       "pv1_current_a": {
-        "name": "Stroom PV 1"
+        "name": "PV 1 stroom"
       },
       "pv3_voltage_v": {
-        "name": "Spanning PV 3"
+        "name": "PV 3 spanning"
       },
       "pv3_current_a": {
-        "name": "Stroom PV 3"
+        "name": "PV 3 stroom"
       },
       "pv4_voltage_v": {
-        "name": "Spanning PV 4"
+        "name": "PV 4 spanning"
       },
       "pv4_current_a": {
-        "name": "Stroom PV 4"
+        "name": "PV 4 stroom"
       },
       "pv1_w": {
         "name": "PV 1 vermogen"
@@ -1659,7 +1659,7 @@
         }
       },
       "ev_charge_mode": {
-        "name": "Lademodus laadpaal",
+        "name": "Laadmodus laadpaal",
         "state": {
           "fast": "Snelladen",
           "solar": "Zonnemodus",
@@ -2615,7 +2615,7 @@
         "name": "Volledige batterijcapaciteit"
       },
       "backup_runtime_min": {
-        "name": "Back-upduur"
+        "name": "Back-uplooptijd"
       },
       "storage_ch1_soc_pct": {
         "name": "Opslagkanaal 1 SOC"
@@ -2639,10 +2639,10 @@
         "name": "Energie voltooide laadsessies laadpaal {vehicle}"
       },
       "unnamed_vehicle_energy": {
-        "name": "Energie voltooide laadsessies laadpaal voertuig zonder naam"
+        "name": "Energie voltooide laadsessies laadpaal (voertuig zonder naam)"
       },
       "other_vehicle_energy": {
-        "name": "Energie voltooide laadsessies laadpaal niet toegewezen"
+        "name": "Energie voltooide laadsessies laadpaal (niet toegewezen)"
       }
     },
     "binary_sensor": {
@@ -2922,7 +2922,7 @@
         "name": "LED-indicator laadpaal"
       },
       "storm_guard": {
-        "name": "Stormbeveiliging"
+        "name": "Stormbescherming"
       }
     },
     "number": {
@@ -3074,7 +3074,7 @@
         "name": "Streefwaarde laadstroom laadpaal"
       },
       "ev_solar_min_current_a": {
-        "name": "Minimale zonnestroom laadpaal"
+        "name": "Minimale laadstroom zonnemodus laadpaal"
       },
       "ev_custom_current_a": {
         "name": "Aangepaste laadstroom laadpaal"
@@ -3221,7 +3221,7 @@
         }
       },
       "ev_charge_mode": {
-        "name": "Lademodus laadpaal",
+        "name": "Laadmodus laadpaal",
         "state": {
           "fast": "Snelladen",
           "solar": "Zonnemodus",
@@ -3230,7 +3230,7 @@
         }
       },
       "ev_phase_setting": {
-        "name": "Faseinstelling laadpaal",
+        "name": "Fase-instelling laadpaal",
         "state": {
           "auto": "Automatisch",
           "one_phase": "Eenfasig",
@@ -3264,7 +3264,7 @@
       "message": "{entity} kan niet op die waarde worden ingesteld: {reason}"
     },
     "powerglow_not_confirmed": {
-      "message": "Het verwarmingselement heeft de nieuwe instelling niet binnen de toegestane tijd gemeld. De sensoren ervan tonen wat het meldt."
+      "message": "Het verwarmingselement heeft de nieuwe instelling niet binnen de toegestane tijd gemeld. Zijn sensoren tonen wat het wel meldt."
     },
     "powerglow_not_delivered": {
       "message": "De opdracht voor het verwarmingselement kon niet worden verzonden."
@@ -3288,13 +3288,13 @@
       "message": "Een eerdere opdracht wacht nog op bevestiging door de laadpaal. Probeer het opnieuw zodra die is bevestigd."
     },
     "powerpulse_action_not_confirmed": {
-      "message": "De laadpaal heeft de gevraagde status niet binnen de toegestane tijd gerapporteerd. Zijn sensoren tonen wat hij wel rapporteert."
+      "message": "De laadpaal heeft de gevraagde status niet binnen de toegestane tijd gemeld. Zijn sensoren tonen wat hij wel meldt."
     },
     "powerpulse_action_not_delivered": {
       "message": "De opdracht voor de laadpaal kon niet worden verzonden."
     },
     "powerpulse_action_state": {
-      "message": "De laadpaal rapporteert {status}, en dat laat deze actie niet toe."
+      "message": "De laadpaal meldt {status}, en dat laat deze actie niet toe."
     },
     "powerpulse_charge_current_needs_own_channel": {
       "message": "De laadstroom kan alleen worden ingesteld op een laadpaal zonder PowerOcean op hetzelfde account; dit item heeft er een."
@@ -3315,7 +3315,7 @@
       "message": "De laadpaal heeft de nieuwe laadmodus niet binnen de toegestane tijd gemeld. Laatst gemelde modus: {reported}."
     },
     "powerpulse_charge_mode_smart_in_app": {
-      "message": "Smart-modus heeft een vertrektijd en een laaddoel nodig; stel dit in in de EcoFlow-app."
+      "message": "Smart-modus heeft een vertrektijd en een laaddoel nodig; stel deze modus in via de EcoFlow-app."
     },
     "powerpulse_charge_mode_unknown": {
       "message": "{option} is geen laadmodus die deze laadpaal meldt."
@@ -3348,7 +3348,7 @@
       "message": "De laadpaal accepteert een aangepaste laadstroom tussen {min} en {max} A."
     },
     "powerpulse_descriptor_missing": {
-      "message": "De laadpaal heeft zijn adres nog niet gerapporteerd. Wacht op zijn volgende instellingenrapport."
+      "message": "De laadpaal heeft zijn adres nog niet gemeld. Wacht op het volgende instellingenrapport."
     },
     "powerpulse_display_brightness_invalid": {
       "message": "De helderheid moet een van de waarden {allowed} % zijn. Gevraagd: {value}."
@@ -3366,28 +3366,28 @@
       "message": "De eigen verbinding van de laadpaal is niet actief, dus de opdracht kan niet worden verzonden."
     },
     "powerpulse_phase_setting_needs_powerocean": {
-      "message": "De faseinstelling kan alleen worden ingesteld via een PowerOcean op hetzelfde account; dit item heeft er geen."
+      "message": "De fase-instelling kan alleen worden ingesteld via een PowerOcean op hetzelfde account; dit item heeft er geen."
     },
     "powerpulse_phase_setting_not_confirmed": {
-      "message": "De laadpaal heeft de nieuwe faseinstelling niet binnen de toegestane tijd gemeld. Laatst gemelde instelling: {reported}."
+      "message": "De laadpaal heeft de nieuwe fase-instelling niet binnen de toegestane tijd gemeld. Laatst gemelde instelling: {reported}."
     },
     "powerpulse_phase_setting_unknown": {
-      "message": "{option} is geen faseinstelling die deze laadpaal accepteert."
+      "message": "{option} is geen fase-instelling die deze laadpaal accepteert."
     },
     "powerpulse_sibling_missing": {
-      "message": "Dit item bevat meer dan één PowerOcean en de opdracht voor de laadpaal kan niet bepalen via welke de laadpaal loopt."
+      "message": "Dit item bevat meer dan één PowerOcean en de opdracht voor de laadpaal kan niet bepalen via welke PowerOcean de laadpaal loopt."
     },
     "powerpulse_sibling_offline": {
       "message": "De PowerOcean die de opdracht voor de laadpaal doorgeeft, is niet verbonden."
     },
     "powerpulse_solar_min_current_needs_powerocean": {
-      "message": "De minimale zonnestroom kan alleen worden ingesteld via een PowerOcean op hetzelfde account; dit item heeft er geen."
+      "message": "De minimale laadstroom voor de zonnemodus kan alleen worden ingesteld via een PowerOcean op hetzelfde account; dit item heeft er geen."
     },
     "powerpulse_solar_min_current_not_confirmed": {
-      "message": "De laadpaal heeft de nieuwe minimale zonnestroom niet binnen de toegestane tijd gemeld. Laatst gemelde waarde: {reported}."
+      "message": "De laadpaal heeft de nieuwe minimale laadstroom voor de zonnemodus niet binnen de toegestane tijd gemeld. Laatst gemelde waarde: {reported}."
     },
     "powerpulse_solar_min_current_range": {
-      "message": "De laadpaal accepteert een minimale zonnestroom tussen {min} en {max} A."
+      "message": "De laadpaal accepteert een minimale laadstroom voor de zonnemodus tussen {min} en {max} A."
     }
   }
 }

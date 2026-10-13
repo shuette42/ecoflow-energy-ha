@@ -26,7 +26,7 @@
       },
       "local": {
         "title": "Connexion locale Modbus/TCP",
-        "description": "Connectez votre PowerOcean directement via Modbus/TCP, sans le cloud EcoFlow. La réserve de secours et la luminosité du voyant peuvent être modifiées depuis Home Assistant. L'interrupteur Contrôle Modbus est désactivé par défaut, et tant qu'il est activé, l'application EcoFlow est verrouillée.\n\nModbus doit d'abord être activé pour votre appareil par le support EcoFlow. L'appareil ne gère qu'un seul client Modbus à la fois, fermez donc tout autre outil Modbus avant de continuer. Deux intégrations ne peuvent partager l'appareil que si toutes deux utilisent la connexion Modbus partagée de Home Assistant avec exactement la même chaîne d'hôte.\n\nUtilisez si possible le nom DNS de l'appareil comme hôte.",
+        "description": "Connectez votre PowerOcean directement via Modbus/TCP, sans le cloud EcoFlow. La réserve de secours et la luminosité du voyant peuvent être modifiées depuis Home Assistant. L'interrupteur Contrôle Modbus est désactivé par défaut, et tant qu'il est activé, l'application EcoFlow est verrouillée.\n\nModbus doit d'abord être activé pour votre appareil par le support EcoFlow. L'appareil ne gère qu'un seul client Modbus à la fois, fermez donc tout autre outil Modbus avant de continuer. Deux intégrations ne peuvent partager l'appareil que si toutes deux utilisent la connexion Modbus partagée de Home Assistant avec exactement la même valeur d'hôte.\n\nUtilisez si possible le nom DNS de l'appareil comme hôte.",
         "data": {
           "host": "Hôte",
           "port": "Port",
@@ -121,7 +121,7 @@
       }
     },
     "error": {
-      "cannot_connect": "Échec de la connexion. Pour l'API EcoFlow, vérifiez vos identifiants. Pour une connexion locale, vérifiez l'hôte et le port, qu'aucun autre client Modbus n'est connecté et que le support EcoFlow a activé Modbus pour cet onduleur.",
+      "cannot_connect": "Échec de la connexion. Pour l'API EcoFlow, vérifiez vos identifiants. Pour une connexion locale, vérifiez l'hôte et le port, et assurez-vous qu'aucun autre client Modbus n'est connecté et que le support EcoFlow a activé Modbus pour cet onduleur.",
       "invalid_auth": "Clé d'accès ou clé secrète non valide.",
       "no_devices": "Aucun appareil trouvé. Assurez-vous que des appareils sont liés dans l'application EcoFlow.",
       "enhanced_login_failed": "Échec de connexion en mode Enhanced. Vérifiez le courriel et le mot de passe de votre application EcoFlow.",
@@ -131,7 +131,7 @@
       "unknown": "Une erreur inattendue s'est produite.",
       "unsupported_device": "Cet appareil n'est pas un PowerOcean triphasé pris en charge. Seul ce modèle peut être lu ici via Modbus.",
       "serial_mismatch": "Cet appareil a un numéro de série différent de celui de cette entrée. Saisissez l'adresse du même PowerOcean.",
-      "modbus_exception": "L'appareil a répondu par une erreur Modbus. Vérifiez l'ID d'unité et que Modbus est activé pour votre appareil.",
+      "modbus_exception": "L'appareil a répondu par une erreur Modbus. Vérifiez l'ID d'unité et assurez-vous que Modbus est activé pour votre appareil.",
       "device_not_on_account": "Cet appareil ne figure pas dans le compte avec lequel vous vous êtes connecté.",
       "device_in_other_entry": "Un appareil sélectionné est déjà configuré dans une autre entrée EcoFlow Energy, par exemple une entrée Local. Désélectionnez-le pour continuer.",
       "invalid_host": "Saisissez uniquement un nom d'hôte ou une adresse IP, sans http://, sans chemin et sans espaces."
@@ -361,7 +361,7 @@
         "name": "Énergie cumulée importée du réseau"
       },
       "grid_export_lifetime_energy_kwh": {
-        "name": "Énergie cumulée injectée sur le réseau"
+        "name": "Énergie cumulée exportée vers le réseau"
       },
       "fault_count": {
         "name": "Nombre de défauts"
@@ -589,14 +589,14 @@
         "name": "Mode de pilotage",
         "state": {
           "none": "Aucun",
-          "soc_calibration": "Calibrage du SoC",
+          "soc_calibration": "Étalonnage SoC",
           "storm_guard": "Storm Guard",
           "eco": "Éco",
           "task": "Tâche",
           "schedule": "Planification",
           "ac_backup": "Secours AC",
           "grid_operator": "Gestionnaire de réseau",
-          "remote": "À distance",
+          "remote": "Commande à distance",
           "standby": "En veille",
           "frequency_response": "Régulation de fréquence",
           "third_party": "Tiers"
@@ -1943,7 +1943,7 @@
         "name": "Temp. cellule module 1 (max)"
       },
       "module1_mos_temp_c": {
-        "name": "Température électronique de puissance module 1"
+        "name": "Température de l'électronique de puissance module 1"
       },
       "module1_voltage_v": {
         "name": "Tension module 1"
@@ -1976,7 +1976,7 @@
         "name": "Temp. cellule module 2 (max)"
       },
       "module2_mos_temp_c": {
-        "name": "Température électronique de puissance module 2"
+        "name": "Température de l'électronique de puissance module 2"
       },
       "module2_voltage_v": {
         "name": "Tension module 2"
@@ -2009,7 +2009,7 @@
         "name": "Temp. cellule module 3 (max)"
       },
       "module3_mos_temp_c": {
-        "name": "Température électronique de puissance module 3"
+        "name": "Température de l'électronique de puissance module 3"
       },
       "module3_voltage_v": {
         "name": "Tension module 3"
@@ -2042,7 +2042,7 @@
         "name": "Temp. cellule module 4 (max)"
       },
       "module4_mos_temp_c": {
-        "name": "Température électronique de puissance module 4"
+        "name": "Température de l'électronique de puissance module 4"
       },
       "module4_voltage_v": {
         "name": "Tension module 4"
@@ -2075,7 +2075,7 @@
         "name": "Temp. cellule module 5 (max)"
       },
       "module5_mos_temp_c": {
-        "name": "Température électronique de puissance module 5"
+        "name": "Température de l'électronique de puissance module 5"
       },
       "module5_voltage_v": {
         "name": "Tension module 5"
@@ -2108,7 +2108,7 @@
         "name": "Temp. cellule module 6 (max)"
       },
       "module6_mos_temp_c": {
-        "name": "Température électronique de puissance module 6"
+        "name": "Température de l'électronique de puissance module 6"
       },
       "module6_voltage_v": {
         "name": "Tension module 6"
@@ -2141,7 +2141,7 @@
         "name": "Temp. cellule module 7 (max)"
       },
       "module7_mos_temp_c": {
-        "name": "Température électronique de puissance module 7"
+        "name": "Température de l'électronique de puissance module 7"
       },
       "module7_voltage_v": {
         "name": "Tension module 7"
@@ -2174,7 +2174,7 @@
         "name": "Temp. cellule module 8 (max)"
       },
       "module8_mos_temp_c": {
-        "name": "Température électronique de puissance module 8"
+        "name": "Température de l'électronique de puissance module 8"
       },
       "module8_voltage_v": {
         "name": "Tension module 8"
@@ -2207,7 +2207,7 @@
         "name": "Temp. cellule module 9 (max)"
       },
       "module9_mos_temp_c": {
-        "name": "Température électronique de puissance module 9"
+        "name": "Température de l'électronique de puissance module 9"
       },
       "module9_voltage_v": {
         "name": "Tension module 9"
@@ -2240,7 +2240,7 @@
         "name": "Temp. cellule module 10 (max)"
       },
       "module10_mos_temp_c": {
-        "name": "Température électronique de puissance module 10"
+        "name": "Température de l'électronique de puissance module 10"
       },
       "module10_voltage_v": {
         "name": "Tension module 10"
@@ -2273,7 +2273,7 @@
         "name": "Temp. cellule module 11 (max)"
       },
       "module11_mos_temp_c": {
-        "name": "Température électronique de puissance module 11"
+        "name": "Température de l'électronique de puissance module 11"
       },
       "module11_voltage_v": {
         "name": "Tension module 11"
@@ -2306,7 +2306,7 @@
         "name": "Temp. cellule module 12 (max)"
       },
       "module12_mos_temp_c": {
-        "name": "Température électronique de puissance module 12"
+        "name": "Température de l'électronique de puissance module 12"
       },
       "module12_voltage_v": {
         "name": "Tension module 12"
@@ -2339,7 +2339,7 @@
         "name": "Temp. cellule module 13 (max)"
       },
       "module13_mos_temp_c": {
-        "name": "Température électronique de puissance module 13"
+        "name": "Température de l'électronique de puissance module 13"
       },
       "module13_voltage_v": {
         "name": "Tension module 13"
@@ -2372,7 +2372,7 @@
         "name": "Temp. cellule module 14 (max)"
       },
       "module14_mos_temp_c": {
-        "name": "Température électronique de puissance module 14"
+        "name": "Température de l'électronique de puissance module 14"
       },
       "module14_voltage_v": {
         "name": "Tension module 14"
@@ -2405,7 +2405,7 @@
         "name": "Temp. cellule module 15 (max)"
       },
       "module15_mos_temp_c": {
-        "name": "Température électronique de puissance module 15"
+        "name": "Température de l'électronique de puissance module 15"
       },
       "module15_voltage_v": {
         "name": "Tension module 15"
@@ -2438,7 +2438,7 @@
         "name": "Temp. cellule module 16 (max)"
       },
       "module16_mos_temp_c": {
-        "name": "Température électronique de puissance module 16"
+        "name": "Température de l'électronique de puissance module 16"
       },
       "module16_voltage_v": {
         "name": "Tension module 16"
@@ -2612,7 +2612,7 @@
         "name": "Tension réseau"
       },
       "battery_full_capacity_wh": {
-        "name": "Capacité totale de la batterie"
+        "name": "Capacité pleine charge batterie"
       },
       "backup_runtime_min": {
         "name": "Autonomie de secours"
@@ -2636,13 +2636,13 @@
         "name": "Température batterie système"
       },
       "vehicle_energy": {
-        "name": "Énergie des charges terminées de la wallbox {vehicle}"
+        "name": "Énergie des charges terminées de la wallbox ({vehicle})"
       },
       "unnamed_vehicle_energy": {
-        "name": "Énergie des charges terminées de la wallbox véhicule sans nom"
+        "name": "Énergie des charges terminées de la wallbox (véhicule sans nom)"
       },
       "other_vehicle_energy": {
-        "name": "Énergie des charges terminées de la wallbox non attribuée"
+        "name": "Énergie des charges terminées de la wallbox (non attribuée)"
       }
     },
     "binary_sensor": {
@@ -2910,7 +2910,7 @@
         "name": "Charge continue de la wallbox"
       },
       "ev_battery_discharge_block": {
-        "name": "Blocage de la décharge batterie de la wallbox"
+        "name": "Blocage de la décharge batterie pour la wallbox"
       },
       "ev_plug_and_play": {
         "name": "Plug-and-Play de la wallbox"
@@ -3106,7 +3106,7 @@
       "heating_rod_operating_mode": {
         "name": "Mode du thermoplongeur",
         "state": {
-          "off": "Arrêt",
+          "off": "Désactivé",
           "solar": "Solaire",
           "manual": "Manuel"
         }
@@ -3232,9 +3232,9 @@
       "ev_phase_setting": {
         "name": "Réglage des phases de la wallbox",
         "state": {
-          "auto": "Auto",
-          "one_phase": "Une phase",
-          "three_phases": "Trois phases"
+          "auto": "Automatique",
+          "one_phase": "Monophasé",
+          "three_phases": "Triphasé"
         }
       }
     },
@@ -3363,7 +3363,7 @@
       "message": "La wallbox accepte un courant maximum compris entre {min} et {max} A."
     },
     "powerpulse_own_channel_offline": {
-      "message": "La connexion propre de la wallbox n'est pas active, la commande ne peut donc pas être envoyée."
+      "message": "La connexion directe de la wallbox n'est pas active, la commande ne peut donc pas être envoyée."
     },
     "powerpulse_phase_setting_needs_powerocean": {
       "message": "Le réglage des phases ne peut être modifié que via un PowerOcean du même compte ; cette entrée n'en contient aucun."
@@ -3375,7 +3375,7 @@
       "message": "{option} n'est pas un réglage des phases accepté par cette wallbox."
     },
     "powerpulse_sibling_missing": {
-      "message": "Cette entrée contient plusieurs PowerOcean, et la commande de la wallbox ne peut pas déterminer lequel porte la wallbox."
+      "message": "Cette entrée contient plusieurs PowerOcean, et la commande de la wallbox ne peut pas déterminer auquel la wallbox est rattachée."
     },
     "powerpulse_sibling_offline": {
       "message": "Le PowerOcean qui transporte la commande de la wallbox n'est pas connecté."

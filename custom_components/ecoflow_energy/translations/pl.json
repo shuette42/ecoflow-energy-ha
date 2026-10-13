@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Tryb połączenia",
-        "description": "Wybierz, jak połączyć się ze swoimi urządzeniami EcoFlow.\n\n**Standard** - Oficjalne EcoFlow IoT API. Wspierane przez EcoFlow. Aktualizacje co 10-30 sekund. Wymaga kluczy Developer API.\n\n**Enhanced** - Połączenie w czasie rzeczywistym tworzone przez społeczność. Aktualizacje co ~3 sekundy. Wymaga danych logowania do aplikacji EcoFlow. Nieoficjalne - używasz na własne ryzyko.\n\n**Local** - Bezpośrednie połączenie Modbus/TCP z PowerOcean w Twojej sieci. Bez chmury i bez konta. Aktualizacje co ~2 sekundy. Pokazuje wartości i pozwala zmienić dwa ustawienia (Rezerwę awaryjną i Jasność wskaźnika). Obsługiwany jest tylko trójfazowy PowerOcean. Modbus musi najpierw zostać włączony dla Twojego urządzenia przez pomoc techniczną EcoFlow.",
+        "description": "Wybierz, jak połączyć się ze swoimi urządzeniami EcoFlow.\n\n**Standard** - Oficjalne EcoFlow IoT API. Wspierane przez EcoFlow. Aktualizacje co 10-30 sekund. Wymaga kluczy Developer API.\n\n**Enhanced** - Połączenie w czasie rzeczywistym tworzone przez społeczność. Aktualizacje co ~3 sekundy. Wymaga danych logowania do aplikacji EcoFlow. Nieoficjalne - używasz na własne ryzyko.\n\n**Local** - Bezpośrednie połączenie Modbus/TCP z PowerOcean w Twojej sieci. Bez chmury i bez konta. Aktualizacje co ~2 sekundy. Pokazuje wartości i pozwala zmienić dwa ustawienia (rezerwę awaryjną i jasność wskaźnika). Obsługiwany jest tylko trójfazowy PowerOcean. Modbus musi najpierw zostać włączony dla Twojego urządzenia przez pomoc techniczną EcoFlow.",
         "data": {
           "mode": "Tryb połączenia"
         }
@@ -26,7 +26,7 @@
       },
       "local": {
         "title": "Lokalne połączenie Modbus/TCP",
-        "description": "Połącz swój PowerOcean bezpośrednio przez Modbus/TCP, bez chmury EcoFlow. Rezerwę awaryjną i jasność wskaźnika można zmieniać z poziomu Home Assistant. Przełącznik Sterowanie Modbus jest domyślnie wyłączony, a gdy jest włączony, aplikacja EcoFlow jest zablokowana.\n\nModbus musi zostać wcześniej włączony dla Twojego urządzenia przez pomoc techniczną EcoFlow. Urządzenie obsługuje jednocześnie tylko jednego klienta Modbus, więc przed kontynuacją zamknij wszystkie inne narzędzia Modbus. Dwie integracje mogą współdzielić urządzenie tylko wtedy, gdy obie korzystają ze współdzielonego połączenia Modbus Home Assistant z dokładnie takim samym ciągiem hosta.\n\nJeśli to możliwe, jako host użyj nazwy DNS urządzenia.",
+        "description": "Połącz swój PowerOcean bezpośrednio przez Modbus/TCP, bez chmury EcoFlow. Rezerwę awaryjną i jasność wskaźnika można zmieniać z poziomu Home Assistant. Przełącznik „Sterowanie Modbus” jest domyślnie wyłączony, a gdy jest włączony, aplikacja EcoFlow jest zablokowana.\n\nModbus musi zostać wcześniej włączony dla Twojego urządzenia przez pomoc techniczną EcoFlow. Urządzenie obsługuje jednocześnie tylko jednego klienta Modbus, więc przed kontynuacją zamknij wszystkie inne narzędzia Modbus. Dwie integracje mogą współdzielić urządzenie tylko wtedy, gdy obie korzystają ze współdzielonego połączenia Modbus Home Assistant z dokładnie tak samo wpisanym hostem.\n\nJeśli to możliwe, jako host użyj nazwy DNS urządzenia.",
         "data": {
           "host": "Host",
           "port": "Port",
@@ -98,7 +98,7 @@
         "description": "Wybierz, jak ten wpis łączy się z urządzeniem. Wpis pozostaje, więc encje dostarczane przez oba połączenia zachowują swoją historię.",
         "menu_options": {
           "reconfigure_credentials": "Zaktualizuj dane dostępowe",
-          "reconfigure_local": "Lokalnie (Modbus/TCP): host, port i Unit ID",
+          "reconfigure_local": "Local (Modbus/TCP): host, port i Unit ID",
           "reconfigure_to_standard": "Standard: oficjalne API EcoFlow z kluczami Developer",
           "reconfigure_to_enhanced": "Enhanced: czas rzeczywisty z kontem EcoFlow"
         }
@@ -130,8 +130,8 @@
       "device_requires_enhanced": "To urządzenie wymaga trybu Enhanced z Twoim kontem EcoFlow.",
       "unknown": "Wystąpił nieoczekiwany błąd.",
       "unsupported_device": "To urządzenie nie jest obsługiwanym trójfazowym PowerOcean. Tylko ten model można tu odczytywać przez Modbus.",
-      "serial_mismatch": "To urządzenie ma inny numer seryjny niż ten wpis. Podaj adres tego samego PowerOcean.",
-      "modbus_exception": "Urządzenie odpowiedziało błędem Modbus. Sprawdź Unit ID i czy Modbus jest włączony dla Twojego urządzenia.",
+      "serial_mismatch": "To urządzenie ma inny numer seryjny niż urządzenie w tym wpisie. Podaj adres tego samego PowerOcean.",
+      "modbus_exception": "Urządzenie odpowiedziało błędem Modbus. Sprawdź Unit ID oraz to, czy Modbus jest włączony dla Twojego urządzenia.",
       "device_not_on_account": "To urządzenie nie należy do konta, którego użyto do logowania.",
       "device_in_other_entry": "Wybrane urządzenie jest już skonfigurowane w innym wpisie EcoFlow Energy, na przykład we wpisie Local. Odznacz je, aby kontynuować.",
       "invalid_host": "Wpisz wyłącznie nazwę hosta lub adres IP, bez http://, ścieżki i spacji."
@@ -153,7 +153,7 @@
           "mode": "Tryb połączenia",
           "devices": "Urządzenia",
           "raw_capture": "Nagrywaj dodatkowe dane diagnostyczne przez 24 godziny",
-          "powerpulse_vehicle_energy": "Śledź energię zakończonych ładowań PowerPulse według pojazdu"
+          "powerpulse_vehicle_energy": "Śledź energię zakończonych ładowań PowerPulse z podziałem na pojazdy"
         },
         "data_description": {
           "devices": "Wybranie urządzenia sprawia, że ta integracja je odczytuje. Urządzenie oznaczone jako \"not supported yet\" nie ma tu parsera, więc tworzy dwa czujniki diagnostyczne i nic więcej. Mimo to warto zostawić je zaznaczone, bo pobrany z niego plik diagnostyki, dołączony do zgłoszenia na GitHub, jest tym, z czego powstaje obsługa nowego modelu. Pobrany plik diagnostyki już zawiera surowe dane, które takie urządzenie zgłasza, więc nie trzeba niczego wcześniej włączać.",
@@ -184,7 +184,7 @@
           "mode": "Tryb połączenia",
           "devices": "Urządzenia",
           "raw_capture": "Nagrywaj dodatkowe dane diagnostyczne przez 24 godziny",
-          "powerpulse_vehicle_energy": "Śledź energię zakończonych ładowań PowerPulse według pojazdu"
+          "powerpulse_vehicle_energy": "Śledź energię zakończonych ładowań PowerPulse z podziałem na pojazdy"
         },
         "data_description": {
           "devices": "Wybranie urządzenia sprawia, że ta integracja je odczytuje. Urządzenie oznaczone jako \"not supported yet\" nie ma tu parsera, więc tworzy dwa czujniki diagnostyczne i nic więcej. Mimo to warto zostawić je zaznaczone, bo pobrany z niego plik diagnostyki, dołączony do zgłoszenia na GitHub, jest tym, z czego powstaje obsługa nowego modelu. Najpierw włącz poniżej nagrywanie danych diagnostycznych, a pobierz dopiero potem, bo przy logowaniu kontem pobrany plik sam z siebie nie zawiera tych surowych danych.",
@@ -205,7 +205,7 @@
       "device_in_other_entry": "Wybrane urządzenie jest już skonfigurowane w innym wpisie EcoFlow Energy, na przykład we wpisie Local. Odznacz je, aby kontynuować."
     },
     "abort": {
-      "local_use_reconfigure": "Ten wpis odczytuje PowerOcean lokalnie przez Modbus i nie ma trybu połączenia do zmiany. Użyj opcji Rekonfiguruj z menu integracji, aby zmienić host, port lub Unit ID albo wrócić do trybu chmurowego."
+      "local_use_reconfigure": "Ten wpis odczytuje PowerOcean lokalnie przez Modbus i nie ma trybu połączenia do zmiany. Użyj opcji ponownej konfiguracji (Reconfigure) w menu integracji, aby zmienić host, port lub Unit ID albo wrócić do trybu chmurowego."
     }
   },
   "entity": {
@@ -547,7 +547,7 @@
         "name": "Stan sieci",
         "state": {
           "not_detected": "Praca wyspowa",
-          "ok": "Praca sieciowa"
+          "ok": "Praca z siecią"
         }
       },
       "pcs_power_factor": {
@@ -596,7 +596,7 @@
           "schedule": "Harmonogram",
           "ac_backup": "Zasilanie awaryjne AC",
           "grid_operator": "Operator sieci",
-          "remote": "Zdalny",
+          "remote": "Sterowanie zdalne",
           "standby": "Tryb czuwania",
           "frequency_response": "Regulacja częstotliwości",
           "third_party": "Podmiot zewnętrzny"
@@ -1663,7 +1663,7 @@
         "state": {
           "fast": "Szybkie ładowanie",
           "solar": "Tryb solarny",
-          "custom": "Własny",
+          "custom": "Niestandardowy",
           "smart": "Tryb inteligentny"
         }
       },
@@ -2910,7 +2910,7 @@
         "name": "Ciągłe ładowanie wallboxa"
       },
       "ev_battery_discharge_block": {
-        "name": "Blokada rozładowania baterii wallboxa"
+        "name": "Blokada rozładowania baterii przez wallbox"
       },
       "ev_plug_and_play": {
         "name": "Plug-and-Play wallboxa"
@@ -3077,7 +3077,7 @@
         "name": "Minimalny prąd ładowania solarnego wallboxa"
       },
       "ev_custom_current_a": {
-        "name": "Własny prąd ładowania wallboxa"
+        "name": "Niestandardowy prąd ładowania wallboxa"
       },
       "ev_screen_brightness_pct": {
         "name": "Jasność ekranu wallboxa"
@@ -3225,7 +3225,7 @@
         "state": {
           "fast": "Szybkie ładowanie",
           "solar": "Tryb solarny",
-          "custom": "Własny",
+          "custom": "Niestandardowy",
           "smart": "Tryb inteligentny"
         }
       },
@@ -3270,7 +3270,7 @@
       "message": "Nie udało się wysłać polecenia do grzałki."
     },
     "powerglow_not_reported": {
-      "message": "PowerOcean nie zgłosił jeszcze grzałki. Poczekaj na jego następny raport."
+      "message": "PowerOcean nie przesłał jeszcze danych grzałki. Poczekaj na jego następny raport."
     },
     "powerglow_offline": {
       "message": "Połączenie z PowerOcean nie jest aktywne, więc polecenia dla grzałki nie można wysłać."
@@ -3297,7 +3297,7 @@
       "message": "Wallbox zgłasza stan {status}, który nie pozwala na to działanie."
     },
     "powerpulse_charge_current_needs_own_channel": {
-      "message": "Prąd ładowania można ustawić tylko na wallboxie bez PowerOcean na tym samym koncie; ten wpis go ma."
+      "message": "Prąd ładowania można ustawić tylko na wallboxie bez PowerOcean na tym samym koncie; ten wpis go zawiera."
     },
     "powerpulse_charge_current_not_confirmed": {
       "message": "Wallbox nie zgłosił nowego prądu ładowania w wyznaczonym czasie. Ostatnia zgłoszona wartość: {reported}."
@@ -3306,10 +3306,10 @@
       "message": "Wallbox przyjmuje prąd ładowania od {min} do {max} A."
     },
     "powerpulse_charge_current_route_ambiguous": {
-      "message": "Ten wpis zawiera więcej niż jeden PowerOcean; prąd ładowania zaobserwowano jako możliwy do zapisu tylko na wallboxie bez żadnego z nich, dlatego tutaj również jest odrzucany."
+      "message": "Ten wpis zawiera więcej niż jeden PowerOcean; zapis prądu ładowania zaobserwowano tylko na wallboxie bez PowerOcean, dlatego i tutaj zostaje odrzucony."
     },
     "powerpulse_charge_mode_needs_powerocean": {
-      "message": "Tryb ładowania można ustawić tylko przez PowerOcean na tym samym koncie; ten wpis go nie ma."
+      "message": "Tryb ładowania można ustawić tylko przez PowerOcean na tym samym koncie; ten wpis go nie zawiera."
     },
     "powerpulse_charge_mode_not_confirmed": {
       "message": "Wallbox nie zgłosił nowego trybu ładowania w wyznaczonym czasie. Ostatni zgłoszony tryb: {reported}."
@@ -3321,7 +3321,7 @@
       "message": "{option} nie jest trybem ładowania zgłaszanym przez ten wallbox."
     },
     "powerpulse_continuous_needs_powerocean": {
-      "message": "To ustawienie wallboxa można przełączyć tylko przez PowerOcean na tym samym koncie; ten wpis go nie ma."
+      "message": "To ustawienie wallboxa można przełączyć tylko przez PowerOcean na tym samym koncie; ten wpis go nie zawiera."
     },
     "powerpulse_continuous_not_confirmed": {
       "message": "Wallbox nie zgłosił nowego stanu tego ustawienia w wyznaczonym czasie. Ostatni zgłoszony stan: {reported}."
@@ -3336,16 +3336,16 @@
       "message": "Wallbox zgłasza {value} dla {field}, a na tej podstawie integracja nie może wprowadzić zmiany. Zmień to ustawienie w aplikacji EcoFlow."
     },
     "powerpulse_custom_current_above_maximum": {
-      "message": "Wallbox nie zapisuje własnego prądu ładowania powyżej swojego maksymalnego prądu. Żądano: {requested} A, maksymalny prąd: {maximum} A."
+      "message": "Wallbox nie zapisuje niestandardowego prądu ładowania powyżej swojego maksymalnego prądu. Żądano: {requested} A, maksymalny prąd: {maximum} A."
     },
     "powerpulse_custom_current_needs_powerocean": {
-      "message": "Własny prąd ładowania można ustawić tylko przez PowerOcean na tym samym koncie; ten wpis go nie ma."
+      "message": "Niestandardowy prąd ładowania można ustawić tylko przez PowerOcean na tym samym koncie; ten wpis go nie zawiera."
     },
     "powerpulse_custom_current_not_confirmed": {
-      "message": "Wallbox nie zgłosił nowego własnego prądu ładowania w wyznaczonym czasie. Ostatnia zgłoszona wartość: {reported}."
+      "message": "Wallbox nie zgłosił nowego niestandardowego prądu ładowania w wyznaczonym czasie. Ostatnia zgłoszona wartość: {reported}."
     },
     "powerpulse_custom_current_range": {
-      "message": "Wallbox przyjmuje własny prąd ładowania od {min} do {max} A."
+      "message": "Wallbox przyjmuje niestandardowy prąd ładowania od {min} do {max} A."
     },
     "powerpulse_descriptor_missing": {
       "message": "Wallbox nie zgłosił jeszcze swojego adresu. Poczekaj na jego następny raport ustawień."
@@ -3354,7 +3354,7 @@
       "message": "Jasność musi być jedną z wartości {allowed} %. Żądano: {value}."
     },
     "powerpulse_max_current_needs_powerocean": {
-      "message": "Maksymalny prąd można ustawić tylko przez PowerOcean na tym samym koncie; ten wpis go nie ma."
+      "message": "Maksymalny prąd można ustawić tylko przez PowerOcean na tym samym koncie; ten wpis go nie zawiera."
     },
     "powerpulse_max_current_not_confirmed": {
       "message": "Wallbox nie zgłosił nowego maksymalnego prądu w wyznaczonym czasie. Ostatnia zgłoszona wartość: {reported}."
@@ -3366,7 +3366,7 @@
       "message": "Własne połączenie wallboxa nie jest aktywne, więc polecenia nie można wysłać."
     },
     "powerpulse_phase_setting_needs_powerocean": {
-      "message": "Ustawienie faz można zmienić tylko przez PowerOcean na tym samym koncie; ten wpis go nie ma."
+      "message": "Ustawienie faz można zmienić tylko przez PowerOcean na tym samym koncie; ten wpis go nie zawiera."
     },
     "powerpulse_phase_setting_not_confirmed": {
       "message": "Wallbox nie zgłosił nowego ustawienia faz w wyznaczonym czasie. Ostatnie zgłoszone ustawienie: {reported}."
@@ -3375,19 +3375,19 @@
       "message": "{option} nie jest ustawieniem faz, które przyjmuje ten wallbox."
     },
     "powerpulse_sibling_missing": {
-      "message": "Ten wpis zawiera więcej niż jeden PowerOcean, a polecenie dla wallboxa nie może ustalić, do którego z nich należy wallbox."
+      "message": "Ten wpis zawiera więcej niż jeden PowerOcean, a polecenie dla wallboxa nie może ustalić, przez który z nich działa wallbox."
     },
     "powerpulse_sibling_offline": {
       "message": "PowerOcean, który przekazuje polecenie dla wallboxa, nie jest połączony."
     },
     "powerpulse_solar_min_current_needs_powerocean": {
-      "message": "Minimalny prąd solarny można ustawić tylko przez PowerOcean na tym samym koncie; ten wpis go nie ma."
+      "message": "Minimalny prąd ładowania solarnego można ustawić tylko przez PowerOcean na tym samym koncie; ten wpis go nie zawiera."
     },
     "powerpulse_solar_min_current_not_confirmed": {
-      "message": "Wallbox nie zgłosił nowego minimalnego prądu solarnego w wyznaczonym czasie. Ostatnia zgłoszona wartość: {reported}."
+      "message": "Wallbox nie zgłosił nowego minimalnego prądu ładowania solarnego w wyznaczonym czasie. Ostatnia zgłoszona wartość: {reported}."
     },
     "powerpulse_solar_min_current_range": {
-      "message": "Wallbox przyjmuje minimalny prąd solarny od {min} do {max} A."
+      "message": "Wallbox przyjmuje minimalny prąd ładowania solarnego od {min} do {max} A."
     }
   }
 }

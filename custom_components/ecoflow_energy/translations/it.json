@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Modalità di connessione",
-        "description": "Scegli come connetterti ai tuoi dispositivi EcoFlow.\n\n**Standard** - EcoFlow IoT API ufficiale. Supportata da EcoFlow. Aggiornamenti ogni 10-30 secondi. Richiede le chiavi Developer API.\n\n**Enhanced** - Connessione in tempo reale sviluppata dalla community. Aggiornamenti ogni ~3 secondi. Richiede il login della tua app EcoFlow. Non ufficiale - da usare a tuo rischio.\n\n**Local** - Connessione diretta Modbus/TCP a un PowerOcean nella tua rete. Nessun cloud e nessun account necessario. Aggiornamenti ogni ~2 secondi. Mostra i valori e può cambiare due impostazioni (Riserva di backup e Luminosità indicatore). È supportato solo il PowerOcean trifase. Modbus deve prima essere abilitato per il tuo dispositivo dall'assistenza EcoFlow.",
+        "description": "Scegli come connetterti ai tuoi dispositivi EcoFlow.\n\n**Standard** - API IoT EcoFlow ufficiale. Supportata da EcoFlow. Aggiornamenti ogni 10-30 secondi. Richiede le chiavi API Developer.\n\n**Enhanced** - Connessione in tempo reale sviluppata dalla community. Aggiornamenti ogni ~3 secondi. Richiede l'accesso con il tuo account dell'app EcoFlow. Non ufficiale - da usare a tuo rischio.\n\n**Local** - Connessione diretta Modbus/TCP a un PowerOcean nella tua rete. Nessun cloud e nessun account necessario. Aggiornamenti ogni ~2 secondi. Mostra i valori e può cambiare due impostazioni (Riserva di backup e Luminosità indicatore). È supportato solo il PowerOcean trifase. Modbus deve prima essere abilitato per il tuo dispositivo dall'assistenza EcoFlow.",
         "data": {
           "mode": "Modalità di connessione"
         }
@@ -26,7 +26,7 @@
       },
       "local": {
         "title": "Connessione locale Modbus/TCP",
-        "description": "Collega il tuo PowerOcean direttamente via Modbus/TCP, senza il cloud EcoFlow. Riserva di backup e Luminosità indicatore possono essere modificate da Home Assistant. L'interruttore Controllo Modbus è spento per impostazione predefinita e, finché è acceso, l'app EcoFlow è bloccata.\n\nModbus deve prima essere abilitato per il tuo dispositivo dall'assistenza EcoFlow. Il dispositivo serve un solo client Modbus alla volta, quindi chiudi qualsiasi altro strumento Modbus prima di continuare. Due integrazioni possono condividere il dispositivo solo se entrambe usano la connessione Modbus condivisa di Home Assistant con esattamente la stessa stringa host.\n\nUsa il nome DNS del dispositivo come host, se possibile.",
+        "description": "Collega il tuo PowerOcean direttamente via Modbus/TCP, senza il cloud EcoFlow. Riserva di backup e Luminosità indicatore possono essere modificate da Home Assistant. L'interruttore Controllo Modbus è spento per impostazione predefinita e, finché è acceso, l'app EcoFlow è bloccata.\n\nModbus deve prima essere abilitato per il tuo dispositivo dall'assistenza EcoFlow. Il dispositivo accetta un solo client Modbus alla volta, quindi chiudi qualsiasi altro strumento Modbus prima di continuare. Due integrazioni possono condividere il dispositivo solo se entrambe usano la connessione Modbus condivisa di Home Assistant con esattamente la stessa stringa host.\n\nUsa il nome DNS del dispositivo come host, se possibile.",
         "data": {
           "host": "Host",
           "port": "Porta",
@@ -98,14 +98,14 @@
         "description": "Scegli come questa voce si collega al dispositivo. La voce resta, quindi le entità fornite da entrambe le connessioni mantengono la loro cronologia.",
         "menu_options": {
           "reconfigure_credentials": "Aggiorna le credenziali",
-          "reconfigure_local": "Locale (Modbus/TCP): host, porta e ID unità",
+          "reconfigure_local": "Local (Modbus/TCP): host, porta e ID unità",
           "reconfigure_to_standard": "Standard: API ufficiale EcoFlow con chiavi Developer",
           "reconfigure_to_enhanced": "Enhanced: tempo reale con il tuo account EcoFlow"
         }
       },
       "reconfigure_local": {
         "title": "Connessione locale Modbus/TCP",
-        "description": "Inserisci dove risponde il PowerOcean su Modbus/TCP. Deve essere lo stesso dispositivo di questa voce: un dispositivo con un altro numero di serie viene rifiutato. Il passaggio dal cloud rimuove da questa voce le credenziali memorizzate.",
+        "description": "Inserisci l'indirizzo a cui risponde il PowerOcean via Modbus/TCP. Deve essere lo stesso dispositivo di questa voce: un dispositivo con un altro numero di serie viene rifiutato. Il passaggio dal cloud rimuove da questa voce le credenziali memorizzate.",
         "data": {
           "host": "Host",
           "port": "Porta",
@@ -129,9 +129,9 @@
       "powerstream_requires_standard": "PowerStream richiede la modalità Standard con le chiavi Developer API.",
       "device_requires_enhanced": "Questo dispositivo richiede la modalità Enhanced con il tuo account EcoFlow.",
       "unknown": "Si è verificato un errore imprevisto.",
-      "unsupported_device": "Questo dispositivo non è un PowerOcean trifase supportato. Qui solo quel modello può essere letto via Modbus.",
+      "unsupported_device": "Questo dispositivo non è un PowerOcean trifase supportato. Qui via Modbus si può leggere solo questo modello.",
       "serial_mismatch": "Questo dispositivo ha un numero di serie diverso da quello di questa voce. Inserisci l'indirizzo dello stesso PowerOcean.",
-      "modbus_exception": "Il dispositivo ha risposto con un errore Modbus. Controlla l'ID unità e che Modbus sia abilitato per il tuo dispositivo.",
+      "modbus_exception": "Il dispositivo ha risposto con un errore Modbus. Controlla l'ID unità e verifica che Modbus sia abilitato per il tuo dispositivo.",
       "device_not_on_account": "Questo dispositivo non è presente nell'account con cui hai effettuato l'accesso.",
       "device_in_other_entry": "Un dispositivo selezionato è già configurato in un'altra voce EcoFlow Energy, ad esempio una voce Local. Deselezionalo per continuare.",
       "invalid_host": "Inserisci solo un nome host o un indirizzo IP, senza http://, percorso o spazi."
@@ -153,7 +153,7 @@
           "mode": "Modalità di connessione",
           "devices": "Dispositivi",
           "raw_capture": "Registra dati diagnostici aggiuntivi per 24 ore",
-          "powerpulse_vehicle_energy": "Traccia l'energia di ricarica PowerPulse completata per veicolo"
+          "powerpulse_vehicle_energy": "Registra l'energia delle ricariche PowerPulse completate per veicolo"
         },
         "data_description": {
           "devices": "Selezionare un dispositivo è ciò che fa sì che questa integrazione lo legga. Un dispositivo contrassegnato \"not supported yet\" non ha ancora un parser qui, quindi produce due sensori diagnostici e nient'altro. Vale comunque la pena lasciarlo selezionato, perché è da un download della diagnostica di quel dispositivo, allegato a una segnalazione su GitHub, che nasce il supporto per un nuovo modello. Il tuo download della diagnostica contiene già i dati grezzi che un dispositivo del genere invia, quindi non serve attivare nulla prima.",
@@ -184,7 +184,7 @@
           "mode": "Modalità di connessione",
           "devices": "Dispositivi",
           "raw_capture": "Registra dati diagnostici aggiuntivi per 24 ore",
-          "powerpulse_vehicle_energy": "Traccia l'energia di ricarica PowerPulse completata per veicolo"
+          "powerpulse_vehicle_energy": "Registra l'energia delle ricariche PowerPulse completate per veicolo"
         },
         "data_description": {
           "devices": "Selezionare un dispositivo è ciò che fa sì che questa integrazione lo legga. Un dispositivo contrassegnato \"not supported yet\" non ha ancora un parser qui, quindi produce due sensori diagnostici e nient'altro. Vale comunque la pena lasciarlo selezionato, perché è da un download della diagnostica di quel dispositivo, allegato a una segnalazione su GitHub, che nasce il supporto per un nuovo modello. Attiva prima la registrazione dei dati diagnostici qui sotto e scarica dopo, perché con l'accesso tramite account il download non contiene da solo quei dati grezzi.",
@@ -546,8 +546,8 @@
       "grid_status": {
         "name": "Stato rete",
         "state": {
-          "not_detected": "Off-grid",
-          "ok": "On-grid"
+          "not_detected": "Fuori rete",
+          "ok": "In rete"
         }
       },
       "pcs_power_factor": {
@@ -593,12 +593,12 @@
           "storm_guard": "Storm Guard",
           "eco": "Eco",
           "task": "Attività",
-          "schedule": "Programmata",
+          "schedule": "Programmazione",
           "ac_backup": "Backup AC",
           "grid_operator": "Gestore di rete",
-          "remote": "Remota",
+          "remote": "Controllo remoto",
           "standby": "In attesa",
-          "frequency_response": "Risposta in frequenza",
+          "frequency_response": "Regolazione di frequenza",
           "third_party": "Terze parti"
         }
       },
@@ -2612,7 +2612,7 @@
         "name": "Tensione rete"
       },
       "battery_full_capacity_wh": {
-        "name": "Capacità totale batteria"
+        "name": "Capacità a piena carica batteria"
       },
       "backup_runtime_min": {
         "name": "Autonomia di backup"
@@ -2776,7 +2776,7 @@
         "name": "Controllo Modbus attivo"
       },
       "local_off_grid": {
-        "name": "Off-grid"
+        "name": "Fuori rete"
       },
       "local_system_abnormal": {
         "name": "Anomalia di sistema"
@@ -3029,28 +3029,28 @@
         "name": "Potenza di carica programma 8"
       },
       "feed_schedule_1_power_w": {
-        "name": "Potenza di immissione programma 1"
+        "name": "Potenza programma di immissione 1"
       },
       "feed_schedule_2_power_w": {
-        "name": "Potenza di immissione programma 2"
+        "name": "Potenza programma di immissione 2"
       },
       "feed_schedule_3_power_w": {
-        "name": "Potenza di immissione programma 3"
+        "name": "Potenza programma di immissione 3"
       },
       "feed_schedule_4_power_w": {
-        "name": "Potenza di immissione programma 4"
+        "name": "Potenza programma di immissione 4"
       },
       "feed_schedule_5_power_w": {
-        "name": "Potenza di immissione programma 5"
+        "name": "Potenza programma di immissione 5"
       },
       "feed_schedule_6_power_w": {
-        "name": "Potenza di immissione programma 6"
+        "name": "Potenza programma di immissione 6"
       },
       "feed_schedule_7_power_w": {
-        "name": "Potenza di immissione programma 7"
+        "name": "Potenza programma di immissione 7"
       },
       "feed_schedule_8_power_w": {
-        "name": "Potenza di immissione programma 8"
+        "name": "Potenza programma di immissione 8"
       },
       "target_temp_c": {
         "name": "Temperatura obiettivo"
@@ -3270,7 +3270,7 @@
       "message": "Non è stato possibile inviare il comando alla resistenza di riscaldamento."
     },
     "powerglow_not_reported": {
-      "message": "Il PowerOcean non ha ancora riportato la resistenza di riscaldamento. Attendi la sua prossima comunicazione."
+      "message": "Il PowerOcean non ha ancora comunicato i dati della resistenza di riscaldamento. Attendi la sua prossima comunicazione."
     },
     "powerglow_offline": {
       "message": "La connessione del PowerOcean non è attiva, quindi il comando per la resistenza di riscaldamento non può essere inviato."
@@ -3330,7 +3330,7 @@
       "message": "La wallbox non ha ancora riportato le sue impostazioni attuali. Attendi il prossimo report delle impostazioni."
     },
     "powerpulse_continuous_report_stale": {
-      "message": "L'ultimo report delle impostazioni della wallbox è troppo vecchio per basarci questa modifica. Attendi il prossimo report delle impostazioni."
+      "message": "L'ultimo report delle impostazioni della wallbox è troppo vecchio per poterci basare questa modifica. Attendi il prossimo report delle impostazioni."
     },
     "powerpulse_continuous_report_unusable": {
       "message": "La wallbox riporta {value} per {field}, un valore su cui questa integrazione non può basare una modifica. Cambia questa impostazione nell'app EcoFlow."
@@ -3375,7 +3375,7 @@
       "message": "{option} non è un'impostazione delle fasi accettata da questa wallbox."
     },
     "powerpulse_sibling_missing": {
-      "message": "Questa voce contiene più di un PowerOcean e il comando per la wallbox non può stabilire quale dei due la gestisce."
+      "message": "Questa voce contiene più di un PowerOcean e il comando per la wallbox non può stabilire quale di essi la gestisce."
     },
     "powerpulse_sibling_offline": {
       "message": "Il PowerOcean che trasporta il comando della wallbox non è connesso."
