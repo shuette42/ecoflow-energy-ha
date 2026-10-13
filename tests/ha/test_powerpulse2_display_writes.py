@@ -717,6 +717,54 @@ async def test_a_write_after_a_cancelled_published_write_waits_for_a_newer_repor
     assert wallbox._pending_write is None
 
 
+async def test_a_write_cancelled_during_its_send_still_makes_the_next_wait(
+    hass: HomeAssistant,
+) -> None:
+    """The mark is set before the send: a caller cancelled while its publish is
+    still on its way may have changed the wallbox, so the next write must not
+    rebuild from the report that came before it. Discharge Block blocks inside
+    the send and is cancelled there; Plug and Play then waits for a newer
+    report instead of sending {1: 18} at once.
+
+    Mutation probe: setting `_settings_published_seq` only after a delivered
+    send lets Plug and Play publish {1: 18} straight away and fails the
+    `call_count == 0` assertion.
+    """
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    send = _mqtt(oceans[0]).send_proto_set
+    _apply_report(wallbox, ev_settings_switch_bits=16)
+    release = asyncio.Event()
+    calls: list[bytes] = []
+
+    async def blocking_send(payload: bytes, _label: str) -> bool:
+        calls.append(payload)
+        if len(calls) == 1:
+            await release.wait()
+        return True
+
+    with (
+        patch(f"{_SET_COMMANDS}.POWERPULSE2_SETTINGS_FRESH_WAIT_S", 2.0),
+        patch.object(oceans[0], "async_send_proto_set_command", blocking_send),
+    ):
+        first = await _start(_write(wallbox, DISCHARGE_BLOCK, True))
+        await _until(lambda: len(calls) == 1)
+        second = await _start(_write(wallbox, PLUG_AND_PLAY, True))
+        first.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await first
+        await asyncio.sleep(0.2)
+        assert len(calls) == 1 and send.call_count == 0
+        assert not second.done()
+
+        _apply_report(wallbox, ev_settings_switch_bits=17)
+        await _until(lambda: len(calls) == 2)
+        assert _published_fields(SimpleNamespace(args=(calls[1],))) == {1: 19}
+        _apply_report(wallbox, ev_settings_switch_bits=19)
+        await second
+    assert wallbox._pending_write is None
+
+
 async def test_shutdown_ends_a_write_that_waits_for_a_report(
     hass: HomeAssistant,
 ) -> None:

@@ -2252,10 +2252,13 @@ class SetCommandsMixin(_Base):
         Raises `_SettingsReportNotFresh` (`report_missing`, or `report_stale`)
         when there is none, when it is older than
         `POWERPULSE2_SETTINGS_MAX_AGE_S`, or when no report was recorded since
-        the last settings write left: a write that was sent and then cancelled
-        by its caller has changed the wallbox in a way the older report does
-        not show, and rebuilding the byte from that report would send the old
-        bits back. Waiting for the next report fixes all three.
+        the last settings write started sending (the mark is set before the
+        send, so a send that was cancelled midway or not delivered counts
+        too): such a write may have changed the wallbox in a way the older
+        report does not show, and rebuilding the byte from that report would
+        send the old bits back. Waiting for the next report fixes all three,
+        except for a report the wallbox sent before applying the write
+        (ADR-009 addendum, point 4).
         """
         report = self._settings_report
         if report is None:
