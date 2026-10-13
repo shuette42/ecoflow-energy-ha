@@ -712,6 +712,7 @@ HEATING_ROD_STATE_KEYS: dict[str, str] = {
     "hr_run_stat": "heating_rod_run_state",
 }
 _HEATING_ROD_SN_LENGTH = 16
+_HEATING_ROD_MODE_NAMES: dict[int, str] = {0: "solar", 1: "manual"}
 
 
 def remap_heating_rod_keys(raw: dict[str, Any]) -> dict[str, Any]:
@@ -728,6 +729,14 @@ def remap_heating_rod_keys(raw: dict[str, Any]) -> dict[str, Any]:
     `heating_rod_sn`, the rod's own 16-character serial, which a write has to
     address. A serial of any other length is dropped. None of the three
     reaches a sensor.
+
+    One derived value rides along for the operating-mode select:
+    `heating_rod_operating_mode`, one of "off", "solar" or "manual". The app
+    shows one control where the device has two settings, so it is "off" while
+    the run state is 0 and otherwise the mode's name (0 Solar, 1 Manual). It is
+    left out when either input is missing from the report or the mode is
+    neither 0 nor 1, so a frame that cannot tell never overwrites a known
+    state with a guess.
 
     An idle rod reports its power as a real zero rather than omitting it, which
     the oneof wrapper on the message preserves. Nothing here is a meter, so no
@@ -752,6 +761,13 @@ def remap_heating_rod_keys(raw: dict[str, Any]) -> dict[str, Any]:
             and len(value) == _HEATING_ROD_SN_LENGTH
         ):
             result["heating_rod_sn"] = value
+
+    run_state = result.get("heating_rod_run_state")
+    mode = result.get("heating_rod_mode")
+    if run_state is not None and mode in _HEATING_ROD_MODE_NAMES:
+        result["heating_rod_operating_mode"] = (
+            "off" if run_state == 0 else _HEATING_ROD_MODE_NAMES[mode]
+        )
 
     return result
 

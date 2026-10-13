@@ -682,8 +682,8 @@ def build_powerpulse_standalone_current_ctrl_payload(
 # `powerglow_max_power_w`.
 _POWERGLOW_MAX_POWER_W_BY_PREFIX: dict[str, int] = {"HF33": 9000, "HF32": 6000}
 _POWERGLOW_MAX_POWER_W_DEFAULT = 3500
-_POWERGLOW_TARGET_TEMP_C_MIN = 10
-_POWERGLOW_TARGET_TEMP_C_MAX = 80
+POWERGLOW_TARGET_TEMP_C_MIN = 10
+POWERGLOW_TARGET_TEMP_C_MAX = 80
 
 
 def powerglow_max_power_w(hr_sn: str) -> int:
@@ -781,8 +781,8 @@ def build_powerglow_param_set_payload(
             _powerglow_int(
                 "target_temp_c",
                 target_temp_c,
-                _POWERGLOW_TARGET_TEMP_C_MIN,
-                _POWERGLOW_TARGET_TEMP_C_MAX,
+                POWERGLOW_TARGET_TEMP_C_MIN,
+                POWERGLOW_TARGET_TEMP_C_MAX,
             ),
         )
     else:

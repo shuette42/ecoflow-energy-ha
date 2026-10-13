@@ -3229,6 +3229,27 @@
     "set_value_rejected": {
       "message": "{entity} cannot be set to that value: {reason}"
     },
+    "powerglow_not_confirmed": {
+      "message": "The heating rod did not report the new setting within the time allowed. Its sensors show what it reports."
+    },
+    "powerglow_not_delivered": {
+      "message": "The heating rod command could not be sent."
+    },
+    "powerglow_not_reported": {
+      "message": "The PowerOcean has not reported the heating rod yet. Wait for its next report."
+    },
+    "powerglow_offline": {
+      "message": "The PowerOcean's connection is not up, so the heating rod command cannot be sent."
+    },
+    "powerglow_target_power_range": {
+      "message": "The heating rod accepts a target power between {min} and {max} W."
+    },
+    "powerglow_target_temp_range": {
+      "message": "The heating rod accepts a target temperature between {min} and {max} °C."
+    },
+    "powerglow_write_in_progress": {
+      "message": "An earlier command is still waiting for the heating rod to confirm it. Try again once it has."
+    },
     "powerpulse_action_in_progress": {
       "message": "An earlier command is still waiting for the wallbox to confirm it. Try again once it has."
     },

@@ -214,6 +214,11 @@ POWERPULSE2_MAX_CURRENT_WINDOW_S: float = 20.0
 # same generous Home Assistant service-call allowance as the maximum-current
 # window above, for the same reason - not a measured worst case.
 POWERPULSE2_CHARGE_CURRENT_WINDOW_S: float = 20.0
+# PLAN-190: the confirmation window for a PowerGlow heating rod write. The rod
+# reports the new value on its next 212/8 report; the read-back measured 0.5 to
+# 5.1 s over the recorded writes, so 20 s leaves the same generous Home
+# Assistant service-call allowance as the PowerPulse windows above.
+POWERGLOW_WRITE_WINDOW_S: float = 20.0
 # PLAN-146: the maximum current range, the owner's sweep on #7 covered end to
 # end (2026-09-10).
 POWERPULSE2_MAX_CURRENT_RANGE_A: tuple[int, int] = (6, 16)

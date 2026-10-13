@@ -206,6 +206,7 @@ def test_mode_and_run_state_are_not_taken_from_each_other_or_a_wrong_serial() ->
         "heating_rod_sn": ROD_SN,
         "heating_rod_mode": 0,
         "heating_rod_run_state": 2,
+        "heating_rod_operating_mode": "solar",
     }
     assert "heating_rod_sn" not in remap_heating_rod_keys({"hr_sn": "X" * 15})
     assert "heating_rod_sn" not in remap_heating_rod_keys({"hr_sn": 1234567890123456})

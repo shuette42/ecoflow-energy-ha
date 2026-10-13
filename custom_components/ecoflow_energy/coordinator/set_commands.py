@@ -16,6 +16,7 @@ from homeassistant.exceptions import HomeAssistantError
 from ..const import (
     AUTH_METHOD_APP,
     DOMAIN,
+    POWERGLOW_WRITE_WINDOW_S,
     POWEROCEAN_SCHEDULE_PREFIXES,
     POWEROCEAN_SOC_DEBOUNCE_S,
     POWEROCEAN_SOC_STATE_KEYS,
@@ -2554,6 +2555,194 @@ class SetCommandsMixin(_Base):
         """Drop the pending record if it is still the one this call set."""
         if self._pending_write is record:
             self._pending_write = None
+
+    async def _async_powerglow_write(
+        self,
+        action: str,
+        state_key: str,
+        expected_value: float,
+        setting: dict[str, Any],
+        validate: Callable[[str], None] | None = None,
+    ) -> None:
+        """Send one PowerGlow setting and wait for the rod to report it (PLAN-190).
+
+        The shared body of every PowerGlow write: one `HeatingRodParamSet`
+        carrying exactly one setting (`setting` is the keyword for
+        `build_powerglow_param_set_payload`), published on this PowerOcean's
+        own set topic and confirmed by `state_key` reaching `expected_value` on
+        the next `212/8` report applied (`PendingDeviceWrite`,
+        `_resolve_pending_write`) - never on the accumulated store, so a stale
+        reading cannot confirm a write that has not happened.
+
+        Preconditions run in this order, each with its own translated error:
+        shutdown, Enhanced Mode with a live MQTT connection, the rod's serial
+        as reported, `validate(serial)` (the caller's range check, which needs
+        the serial for the power ceiling), no other write in flight. The check,
+        the publish and the pending record happen under
+        `self._pending_write_lock`; the confirmation wait happens outside it so
+        a second write is refused promptly instead of queueing behind it.
+        """
+        from ..ecoflow.energy_stream import build_powerglow_param_set_payload
+        from .core import PendingDeviceWrite
+
+        async with self._pending_write_lock:
+            if self._shutdown:
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerglow_not_delivered",
+                )
+            mqtt_client = self._mqtt_client
+            if (
+                not self._enhanced_mode
+                or mqtt_client is None
+                or not mqtt_client.is_connected()
+            ):
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerglow_offline",
+                )
+            rod_sn = self._device_data.get("heating_rod_sn")
+            if not isinstance(rod_sn, str) or len(rod_sn) != 16:
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerglow_not_reported",
+                )
+            if validate is not None:
+                validate(rod_sn)
+            if self._pending_write is not None:
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerglow_write_in_progress",
+                )
+            try:
+                payload = build_powerglow_param_set_payload(
+                    rod_sn, self.device_sn, **setting
+                )
+            except ValueError:
+                # The values are already checked; a ValueError here can only
+                # be a malformed serial, the same failure mode as a rod serial
+                # that has not been reported.
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="powerglow_not_reported",
+                ) from None
+            future: asyncio.Future[str | float] = self.hass.loop.create_future()
+            record = PendingDeviceWrite(
+                action=action,
+                issued_at=time.monotonic(),
+                future=future,
+                state_key=state_key,
+                expected_value=expected_value,
+            )
+            # The record lives exactly as long as this call and is cleared on
+            # every exit in the `finally` below.
+            self._pending_write = record
+            try:
+                delivered = await self.async_send_proto_set_command(
+                    payload, f"powerglow_{action}"
+                )
+                if not delivered:
+                    self._log_event(f"powerglow_{action}_not_delivered", "")
+                    raise HomeAssistantError(
+                        translation_domain=DOMAIN,
+                        translation_key="powerglow_not_delivered",
+                    )
+            except BaseException:
+                self._clear_wallbox_action(record)
+                raise
+
+        try:
+            confirmed_value = await asyncio.wait_for(future, POWERGLOW_WRITE_WINDOW_S)
+        except TimeoutError:
+            last_reported = self._device_data.get(state_key)
+            self._log_event(f"powerglow_{action}_unconfirmed", str(last_reported))
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="powerglow_not_confirmed",
+            ) from None
+        else:
+            self._log_event(f"powerglow_{action}", str(confirmed_value))
+        finally:
+            self._clear_wallbox_action(record)
+
+    async def async_set_powerglow_value(
+        self, setting: Literal["target_power", "target_temp"], value: int
+    ) -> None:
+        """Set the PowerGlow heating rod's target power (W) or target temperature (C).
+
+        Enhanced Mode only: the write leaves on this PowerOcean's set topic and
+        is confirmed on the rod's own `212/8` report
+        (`heating_rod_target_power_w` / `heating_rod_target_temp_c`). Range:
+        10 to 80 degrees; 0 up to the ceiling of the rod's serial prefix
+        (`powerglow_max_power_w`). A value out of range is refused before
+        anything is sent. Lock, record and wait: `_async_powerglow_write`.
+        """
+        from ..ecoflow.energy_stream import (
+            POWERGLOW_TARGET_TEMP_C_MAX,
+            POWERGLOW_TARGET_TEMP_C_MIN,
+            powerglow_max_power_w,
+        )
+
+        def validate(rod_sn: str) -> None:
+            if setting == "target_temp":
+                low, high = POWERGLOW_TARGET_TEMP_C_MIN, POWERGLOW_TARGET_TEMP_C_MAX
+                key = "powerglow_target_temp_range"
+            else:
+                low, high = 0, powerglow_max_power_w(rod_sn)
+                key = "powerglow_target_power_range"
+            if type(value) is not int or not low <= value <= high:
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key=key,
+                    translation_placeholders={"min": str(low), "max": str(high)},
+                )
+
+        if setting == "target_temp":
+            state_key = "heating_rod_target_temp_c"
+            builder_arg = "target_temp_c"
+        else:
+            state_key = "heating_rod_target_power_w"
+            builder_arg = "target_power_w"
+        await self._async_powerglow_write(
+            setting,
+            state_key,
+            float(value),
+            {builder_arg: value},
+            validate,
+        )
+
+    async def async_set_powerglow_operating_mode(
+        self, option: Literal["off", "solar", "manual"]
+    ) -> None:
+        """Set the PowerGlow heating rod to off, Solar or Manual (PLAN-190).
+
+        The device has two settings where the app shows one control: a run
+        switch (`heating_rod_run_state`, 0 off / 1 on) and a mode
+        (`heating_rod_mode`, 0 Solar / 1 Manual). Off is one write of the run
+        switch. Solar and Manual configure the mode first and switch the rod on
+        afterwards - the order of the hardware-tested community client - and
+        each step is its own confirmed write. A step that is already true
+        (mode already the target, rod already on) is not written again, and
+        when both are already true nothing is sent at all.
+
+        A mode change the rod refuses (the app blocks it in one device state)
+        never reaches its `212/8` report, so that step ends as
+        `powerglow_not_confirmed` and the run switch is not touched.
+        """
+        if option == "off":
+            await self._async_powerglow_write(
+                "run_state", "heating_rod_run_state", 0.0, {"run_on": False}
+            )
+            return
+        target_mode = 0 if option == "solar" else 1
+        if self._device_data.get("heating_rod_mode") != target_mode:
+            await self._async_powerglow_write(
+                "mode", "heating_rod_mode", float(target_mode), {"mode": target_mode}
+            )
+        if self._device_data.get("heating_rod_run_state") != 1:
+            await self._async_powerglow_write(
+                "run_state", "heating_rod_run_state", 1.0, {"run_on": True}
+            )
 
     async def async_send_delta3_set(self, command: dict[str, Any]) -> bool:
         """Apply a Delta 3 setting on whichever channel this entry is using.
