@@ -573,6 +573,18 @@
       "unit_batt_w": {
         "name": "Batterijvermogen eenheid"
       },
+      "unit_batt_charge_power_w": {
+        "name": "Laadvermogen batterij eenheid"
+      },
+      "unit_batt_discharge_power_w": {
+        "name": "Ontlaadvermogen batterij eenheid"
+      },
+      "unit_batt_charge_energy_kwh": {
+        "name": "Laadenergie batterij eenheid"
+      },
+      "unit_batt_discharge_energy_kwh": {
+        "name": "Ontlaadenergie batterij eenheid"
+      },
       "unit_soc_pct": {
         "name": "Batterij-SOC eenheid"
       },

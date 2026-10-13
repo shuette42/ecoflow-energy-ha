@@ -2,15 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.26.0] - Unreleased
-
-### Added
-
-- The integration speaks six languages: French, Italian, Dutch and Polish join English and German. Every entity name, every state, every setup and options screen and every error message is translated, 1259 texts per language, and the test suite holds all six files to the same key set so a text added in one language cannot go missing in another. Home Assistant picks the file matching its configured language; a language not on the list falls back to English as before.
-
 ## [1.25.0] - Unreleased
 
 ### Added
+
+- The integration speaks six languages: French, Italian, Dutch and Polish join English and German. Every entity name, every state, every setup and options screen and every error message is translated, 1263 texts per language, and the test suite holds all six files to the same key set so a text added in one language cannot go missing in another. Home Assistant picks the file matching its configured language; a language not on the list falls back to English as before.
 
 - The Ocean 2 (`RE11`) gets a Storm Guard switch in Enhanced Mode, the app's Sturmwächter. It sends the same command the app sends and keeps the new state only once the unit's next full status report confirms it; if that does not happen within about 35 seconds, the switch returns to its previous state. It appears once the unit has reported the setting. Built from two recordings of the app switching the storm guard on and off on an `RE11`, which carried the command and the unit's confirmation. Other Ocean 2 models stay read-only. (Ref #145)
 

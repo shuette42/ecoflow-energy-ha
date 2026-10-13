@@ -573,6 +573,18 @@
       "unit_batt_w": {
         "name": "Potenza batteria unità"
       },
+      "unit_batt_charge_power_w": {
+        "name": "Potenza di carica batteria unità"
+      },
+      "unit_batt_discharge_power_w": {
+        "name": "Potenza di scarica batteria unità"
+      },
+      "unit_batt_charge_energy_kwh": {
+        "name": "Energia di carica batteria unità"
+      },
+      "unit_batt_discharge_energy_kwh": {
+        "name": "Energia di scarica batteria unità"
+      },
       "unit_soc_pct": {
         "name": "SOC batteria unità"
       },
