@@ -129,7 +129,8 @@ class _SettingsWrite:
     alone through its own builder and leaves `fields` empty. `display_block_len`
     is the form of the snapshot the block was built on (6, or the 32-byte form
     a PowerOcean relays, #553) and is the form the write sends.
-    `confirm_window_s` is how long the write waits for its read-back.
+    `confirm_window_s` is how long the write waits for its read-back; None
+    means `POWERPULSE2_SETTINGS_WINDOW_S`, read when the write is sent.
     """
 
     fields: dict[int, int]
@@ -137,7 +138,7 @@ class _SettingsWrite:
     bit_mask: int | None = None
     display: tuple[int, int, int, int] | None = None
     display_block_len: int = 6
-    confirm_window_s: float = POWERPULSE2_SETTINGS_WINDOW_S
+    confirm_window_s: float | None = None
 
     def __post_init__(self) -> None:
         if self.display is not None and self.fields:
@@ -2464,7 +2465,11 @@ class SetCommandsMixin(_Base):
                                     translation_domain=DOMAIN,
                                     translation_key="powerpulse_descriptor_missing",
                                 ) from None
-                            confirm_window_s = write.confirm_window_s
+                            confirm_window_s = (
+                                POWERPULSE2_SETTINGS_WINDOW_S
+                                if write.confirm_window_s is None
+                                else write.confirm_window_s
+                            )
                             future: asyncio.Future[str | float] = loop.create_future()
                             record = PendingDeviceWrite(
                                 action=action,

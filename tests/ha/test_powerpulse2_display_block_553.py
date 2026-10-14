@@ -309,3 +309,14 @@ async def test_the_own_report_route_keeps_the_six_byte_form_and_its_window(
     with pytest.raises(HomeAssistantError) as excinfo:
         await task
     assert excinfo.value.translation_key == "powerpulse_continuous_not_confirmed"
+
+
+def test_only_a_relayed_display_write_carries_its_own_confirm_window() -> None:
+    """Every other settings write leaves the window unset, so it waits for the
+    unchanged `POWERPULSE2_SETTINGS_WINDOW_S` read when it is sent."""
+    from custom_components.ecoflow_energy.coordinator.set_commands import (
+        _SettingsWrite,
+    )
+
+    assert _SettingsWrite({4: 60}, 6.0).confirm_window_s is None
+    assert const.POWERPULSE2_SETTINGS_WINDOW_S == 20.0
