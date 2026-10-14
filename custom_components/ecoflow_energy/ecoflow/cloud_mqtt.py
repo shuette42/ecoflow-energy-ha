@@ -436,6 +436,11 @@ class EcoFlowMQTTClient:
             self.last_connect_time = time.monotonic()
             self.connected = True
             self.reconnect_attempts = 0
+            # Reset without `_client_lock`, like `reconnect_attempts` above:
+            # this runs on the paho thread, and a stale callback racing a
+            # failure can at worst shift the count in the info line by one.
+            # The listen-only check repeats `_log_retryable`'s early return
+            # on purpose, so a listen-only link can never log the recovery.
             if self._outage_warned and not self._listen_only:
                 _LOGGER.info(
                     "MQTT reconnected for %s after %d failed attempts",
