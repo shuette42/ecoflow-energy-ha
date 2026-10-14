@@ -372,7 +372,7 @@ async def test_every_settings_write_waits_the_window_of_its_route(
         assert task.done() is own_seen
         with pytest.raises(HomeAssistantError) as excinfo:
             await task
-        assert excinfo.value.translation_key.endswith("not_confirmed")
+        assert str(excinfo.value.translation_key).endswith("not_confirmed")
 
 
 async def test_a_switch_bit_write_builds_on_an_old_relayed_report(
