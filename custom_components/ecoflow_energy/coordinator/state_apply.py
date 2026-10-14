@@ -528,6 +528,7 @@ class StateApplyMixin(_Base):
                     "ev_screen_enabled",
                     "ev_led_brightness_pct",
                     "ev_screen_brightness_pct",
+                    "_display_block_len",
                 )
                 if key in parsed
             },
@@ -678,6 +679,10 @@ class StateApplyMixin(_Base):
             self._own_settings_report_seen = True
         if own_connection or relayed_settings:
             self._record_settings_report(parsed, now)
+        # The display block's form (6 or 32 bytes) is the parser's note for the
+        # write built on the snapshot, not a reading: it never reaches the
+        # store, an entity or diagnostics, whichever path recorded or not.
+        parsed.pop("_display_block_len", None)
 
         # WAVE 3 (#161): the RuntimePropertyUpload carries its own firmware
         # revision, the first device in this integration to report one over
