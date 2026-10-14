@@ -6,8 +6,7 @@ same frames. These tests replay the timed recording of the reporter's display
 changes (`c376_display_block_553_20261014.json`, 45 frames, 0-based index)
 through the PowerOcean's receive path into the wallbox coordinator, and check
 the write side: the block goes back in the form it was read in, and the
-relayed route gets the longer age limit and read-back window the measured gaps
-need.
+relayed route gets the longer age limit and read-back window.
 
 Wiring is the two-coordinator setup of `test_powerpulse2_relayed_settings.py`.
 """
@@ -125,6 +124,7 @@ async def test_the_recording_replays_to_the_real_reports_and_not_the_ack_copies(
     ocean = oceans[0]
 
     first_report = _REPORT_FRAMES[0]
+    assert len(_FRAMES) == 45 and len(_PO_FRAMES) == 31  # counts in the docstrings
     assert set(_REPORT_FRAMES) | set(_ACK_ONLY_FRAMES) <= set(_PO_FRAMES)
     compared_ack = compared_report = 0
     display_changes = 0
@@ -198,8 +198,8 @@ async def test_an_old_relayed_snapshot_is_written_on_and_a_late_readback_counts(
 ) -> None:
     """A relayed snapshot 30.9 s old (the oldest of the seven app writes) is
     still a basis, and a read-back that comes after the own route's window is
-    accepted inside the relayed one. The real constants cover the measured
-    gaps (30.9 s old, confirmed 26.342 s after the write). On the own-report
+    accepted inside the relayed one. The real constants cover the gaps in
+    the kept frames (30.9 s old, confirmed 26.342 s after the write). On the own-report
     route the same age is refused as stale and nothing is sent.
 
     Mutation probes: using `POWERPULSE2_SETTINGS_MAX_AGE_S` for a relayed
@@ -317,10 +317,13 @@ def _recorded_at(index: int) -> float:
 
 
 def test_the_relayed_limits_cover_the_gaps_in_the_recording() -> None:
-    """The comment at the constants and the CHANGELOG rest on these figures,
-    recomputed here from the fixture: the largest gap between the PowerOcean's
-    own reports, the age of the last report at each of the app's seven display
-    writes, and the delay of the read-back after the write in frame 25."""
+    """The 60 s limits cover the gaps in this fixture: the largest gap between
+    the PowerOcean's own reports among the kept frames, the age of the last
+    kept report at each of the app's seven display writes, and the delay of the
+    read-back after the write in frame 25. The diagnostics buffer thins the
+    frames it keeps, so these are gaps between kept frames, not the device's
+    cadence (the downloads counted 46 relayed messages in 429 s); the limits
+    are an allowance that covers even these."""
     reports = [_recorded_at(i) for i in _REPORT_FRAMES]
     largest_gap = max(b - a for a, b in zip(reports, reports[1:], strict=False))
     writes = [i for i, f in enumerate(_FRAMES) if f["topic"] == "set"]
