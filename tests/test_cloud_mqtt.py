@@ -6,6 +6,7 @@ import time
 from unittest.mock import MagicMock, patch
 
 from ecoflow_energy.ecoflow.cloud_mqtt import EcoFlowMQTTClient
+from ecoflow_energy.ecoflow.const import device_log_tag
 
 
 def _make_client(**kwargs) -> EcoFlowMQTTClient:
@@ -1116,3 +1117,154 @@ class TestOwnPublishEchoFilter:
 
         assert client.publish("/some/topic", b"\x0a\x02\x08\x09") is True
         assert client._is_own_echo(b"\x0a\x02\x08\x09") is True
+
+
+_MQTT_LOGGER = "ecoflow_energy.ecoflow.cloud_mqtt"
+
+
+def _mqtt_records(caplog, *, at_least=logging.DEBUG, exactly=None):
+    """Records of the MQTT client's own logger, nothing else."""
+    return [
+        r
+        for r in caplog.records
+        if r.name == _MQTT_LOGGER
+        and (r.levelno == exactly if exactly is not None else r.levelno >= at_least)
+    ]
+
+
+class TestOutageLogging:
+    """One WARNING per outage, one INFO when it ends (#562).
+
+    Every test drives the watchdog path ``try_reconnect()`` after a working
+    connection: that path raises ``reconnect_attempts`` to 1 before it calls
+    ``force_reconnect()``, so a test that sets the counter by hand never sees
+    what a real DNS outage does.
+    """
+
+    @staticmethod
+    def _connected_client(mock_mqtt_cls, **kwargs):
+        mock_paho = MagicMock()
+        mock_paho.connect.side_effect = OSError("[Errno -3] Try again")
+        mock_paho.is_connected.return_value = False
+        mock_mqtt_cls.return_value = mock_paho
+        client = _make_client(wss_mode=False, **kwargs)
+        client.client = mock_paho
+        client._on_connect(mock_paho, None, None, 0)
+        assert client.connected is True
+        return client
+
+    @staticmethod
+    def _fail_once(client) -> bool:
+        """One watchdog attempt whose backoff and cycle-reset gates are open."""
+        client.connected = False
+        client.last_reconnect_time = float("-inf")
+        client._last_counter_reset_time = float("-inf")
+        return client.try_reconnect()
+
+    @staticmethod
+    def _recover(client) -> None:
+        client._on_connect(client.client, None, None, 0)
+
+    @patch("ecoflow_energy.ecoflow.cloud_mqtt.mqtt.Client")
+    def test_outage_warns_once_and_names_the_device_by_tag(self, mock_mqtt_cls, caplog):
+        client = self._connected_client(mock_mqtt_cls)
+
+        with caplog.at_level(logging.DEBUG):
+            for _ in range(12):
+                assert self._fail_once(client) is False
+
+        failures = [r for r in _mqtt_records(caplog) if "Errno -3" in r.getMessage()]
+        assert failures[0].levelno == logging.DEBUG
+        warnings = _mqtt_records(caplog, at_least=logging.WARNING)
+        assert len(warnings) == 1, [r.getMessage() for r in warnings]
+        assert warnings[0].levelno == logging.WARNING
+        assert device_log_tag("TEST1234SN") in warnings[0].getMessage()
+        assert "Errno -3" in warnings[0].getMessage()
+        assert all("TEST1234SN" not in r.getMessage() for r in caplog.records)
+
+    @patch("ecoflow_energy.ecoflow.cloud_mqtt.mqtt.Client")
+    def test_counter_reset_mid_outage_does_not_warn_again(self, mock_mqtt_cls, caplog):
+        client = self._connected_client(mock_mqtt_cls, max_reconnect_attempts=3)
+
+        seen = []
+        with caplog.at_level(logging.DEBUG):
+            for _ in range(12):
+                self._fail_once(client)
+                seen.append(client.reconnect_attempts)
+
+        # The cycle reset really happened (3 -> 1), more than once.
+        resets = [b for a, b in zip(seen, seen[1:], strict=False) if b < a]
+        assert len(resets) >= 2, seen
+        warnings = _mqtt_records(caplog, at_least=logging.WARNING)
+        assert len(warnings) == 1, [r.getMessage() for r in warnings]
+
+    @patch("ecoflow_energy.ecoflow.cloud_mqtt.mqtt.Client")
+    def test_recovery_logs_one_info_and_rearms_the_warning(self, mock_mqtt_cls, caplog):
+        client = self._connected_client(mock_mqtt_cls)
+        tag = device_log_tag("TEST1234SN")
+
+        with caplog.at_level(logging.DEBUG):
+            for _ in range(4):
+                self._fail_once(client)
+            assert len(_mqtt_records(caplog, exactly=logging.INFO)) == 0
+            self._recover(client)
+
+            infos = _mqtt_records(caplog, exactly=logging.INFO)
+            assert len(infos) == 1, [r.getMessage() for r in infos]
+            assert infos[0].getMessage() == (
+                f"MQTT reconnected for {tag} after 4 failed attempts"
+            )
+
+            # Second outage: warns again once, recovers with its own count.
+            client.connected = False
+            for _ in range(3):
+                self._fail_once(client)
+            self._recover(client)
+
+        warnings = _mqtt_records(caplog, at_least=logging.WARNING)
+        assert len(warnings) == 2, [r.getMessage() for r in warnings]
+        infos = _mqtt_records(caplog, exactly=logging.INFO)
+        assert [r.getMessage() for r in infos][1] == (
+            f"MQTT reconnected for {tag} after 3 failed attempts"
+        )
+        assert len(infos) == 2
+        assert all("TEST1234SN" not in r.getMessage() for r in caplog.records)
+
+    @patch("ecoflow_energy.ecoflow.cloud_mqtt.mqtt.Client")
+    def test_one_failed_attempt_that_recovers_stays_silent(self, mock_mqtt_cls, caplog):
+        client = self._connected_client(mock_mqtt_cls)
+
+        with caplog.at_level(logging.DEBUG):
+            self._fail_once(client)
+            self._recover(client)
+
+        assert _mqtt_records(caplog, at_least=logging.INFO) == []
+
+    @patch("ecoflow_energy.ecoflow.cloud_mqtt.mqtt.Client")
+    def test_listen_only_outage_stays_at_debug(self, mock_mqtt_cls, caplog):
+        client = self._connected_client(mock_mqtt_cls, listen_only=True)
+
+        with caplog.at_level(logging.DEBUG):
+            for _ in range(12):
+                self._fail_once(client)
+            self._recover(client)
+
+        assert any("Errno -3" in r.getMessage() for r in _mqtt_records(caplog))
+        assert _mqtt_records(caplog, at_least=logging.INFO) == []
+
+    @patch("ecoflow_energy.ecoflow.cloud_mqtt.mqtt.Client")
+    def test_direct_force_reconnect_at_zero_attempts_stays_at_debug(
+        self, mock_mqtt_cls, caplog
+    ):
+        """Stale path and credential refresh call force_reconnect() directly."""
+        client = self._connected_client(mock_mqtt_cls)
+        client.connected = False
+        client.reconnect_attempts = 0
+
+        with caplog.at_level(logging.DEBUG):
+            for _ in range(3):
+                assert client.force_reconnect() is False
+
+        failures = [r for r in _mqtt_records(caplog) if "Errno -3" in r.getMessage()]
+        assert len(failures) == 3
+        assert _mqtt_records(caplog, at_least=logging.INFO) == []

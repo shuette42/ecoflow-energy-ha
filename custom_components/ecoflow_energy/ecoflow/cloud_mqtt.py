@@ -161,6 +161,13 @@ class EcoFlowMQTTClient:
         self._own_publishes: deque[tuple[float, bytes]] = deque(maxlen=OWN_ECHO_MAX)
         self._own_publish_lock = threading.Lock()
         self._notified_connected = False
+        # One warning per outage: set when a reconnect keeps failing, cleared
+        # only by a successful connect. It cannot ride on reconnect_attempts:
+        # try_reconnect() raises that to 1 before the call that fails, and the
+        # cycle reset in _should_attempt_reconnect() sets it back to 0 in the
+        # middle of an outage, which would re-arm the warning.
+        self._outage_warned = False
+        self._outage_failures = 0
         self._last_counter_reset_time: float = 0
         self._counter_reset_interval = DEFAULT_COUNTER_RESET_INTERVAL
         # Guards client swaps (create/connect/force_reconnect/disconnect).
@@ -186,15 +193,28 @@ class EcoFlowMQTTClient:
         """Report a failure that the watchdog is going to retry anyway.
 
         A single failed reconnect is not a broken integration - a transient
-        DNS hiccup produces one, and the next attempt succeeds. Logging it at
-        ERROR puts a red line in the user's log for something that fixed
-        itself. It only becomes worth reporting once attempts are already
-        piling up, which is the same escalation the disconnect path uses.
+        DNS hiccup produces one, and the next attempt succeeds. The first
+        failure of an outage stays at debug. When the retries keep failing,
+        one warning names the device, and every later failure of the same
+        outage goes to debug: a network outage retries every few seconds for
+        every device, and a warning per attempt buries the log. The warning
+        is armed again only after a successful connect, which also reports
+        the recovery (see _on_connect).
         """
-        if self._listen_only or self.reconnect_attempts == 0:
+        if self._listen_only:
             _LOGGER.debug(msg, *args)
-        else:
-            _LOGGER.warning(msg, *args)
+            return
+        self._outage_failures += 1
+        if self.reconnect_attempts <= 1 or self._outage_warned:
+            _LOGGER.debug(msg, *args)
+            return
+        self._outage_warned = True
+        _LOGGER.warning(
+            "MQTT reconnect failing for %s: %s - further attempts are logged "
+            "at debug until the connection is back",
+            device_log_tag(self._device_sn),
+            msg % args if args else msg,
+        )
 
     def mask_topic(self, topic: str) -> str:
         """Return a topic with the serial and the account identifiers removed.
@@ -416,6 +436,14 @@ class EcoFlowMQTTClient:
             self.last_connect_time = time.monotonic()
             self.connected = True
             self.reconnect_attempts = 0
+            if self._outage_warned and not self._listen_only:
+                _LOGGER.info(
+                    "MQTT reconnected for %s after %d failed attempts",
+                    device_log_tag(self._device_sn),
+                    self._outage_failures,
+                )
+            self._outage_warned = False
+            self._outage_failures = 0
 
             # WSS: send initial data requests on (re)connect.
             # These are publishes to the device. They must not fire on a
