@@ -111,6 +111,8 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
     _unit_power_stats: dict[str, Any] | None
     _unit_pv_unmatched_logged: bool
     _own_unit_entry_ts: dict[str, float]
+    _own_settings_report_seen: bool
+    _relayed_settings_stats: dict[str, int]
 
     # -- group (C): implemented by core.py or by a sibling mixin --
     @property
@@ -131,6 +133,8 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
     ) -> EcoFlowDeviceCoordinator | None: ...
 
     def apply_linked_unit_entry(self, parsed: dict[str, Any]) -> None: ...
+
+    def apply_relayed_wallbox_settings(self, parsed: dict[str, Any]) -> bool: ...
 
     def powerocean_sibling(self) -> EcoFlowDeviceCoordinator | None: ...
 

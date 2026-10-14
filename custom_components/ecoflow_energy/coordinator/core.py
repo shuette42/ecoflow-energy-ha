@@ -313,6 +313,15 @@ class EcoFlowDeviceCoordinator(
         # connection is merely alive" - the two differed for seven hours in
         # the 13.09. capture.
         self._own_unit_entry_ts: dict[str, float] = {}
+        # PowerPulse 2 (#553): whether this wallbox's own connection has ever
+        # delivered its settings block. Once it has, the copy its PowerOcean
+        # relays on `241/3` is no longer applied: each wallbox has one source
+        # for its settings, the one its own channel proves it has.
+        self._own_settings_report_seen = False
+        # Running totals of relayed wallbox settings (#553), both directions:
+        # on a PowerOcean the blocks it handed on or could not route, on a
+        # wallbox the blocks it applied or dropped. Counts only, no serial.
+        self._relayed_settings_stats: dict[str, int] = {}
         # Whether a Stream ever reported the system state of charge; once it
         # has, a unit's own figure no longer stands in for it (#323).
         self._soc_from_system = False
@@ -621,6 +630,35 @@ class EcoFlowDeviceCoordinator(
         liveness.
         """
         self._apply_data(parsed, own_connection=False)
+
+    def apply_relayed_wallbox_settings(self, parsed: dict[str, Any]) -> bool:
+        """Apply the settings block this wallbox's PowerOcean relayed (#553).
+
+        A PowerPulse 2 linked to the PowerOcean as a system component can
+        report its settings only to the PowerOcean, which publishes them on
+        `241/3`; its own `241/44` then never carries the block. The relayed
+        copy goes through the identical `_apply_data` path with
+        `own_connection=False`, so the PowerOcean's connection never stands
+        in for the wallbox's liveness, and it is recorded as the settings
+        report a write is built on. Dropped, and False returned, once this
+        wallbox's own connection has delivered the block: from then on that
+        is its one source.
+        """
+        if self._own_settings_report_seen:
+            self._relayed_settings_stats["dropped_own_seen"] = (
+                self._relayed_settings_stats.get("dropped_own_seen", 0) + 1
+            )
+            return False
+        self._relayed_settings_stats["applied"] = (
+            self._relayed_settings_stats.get("applied", 0) + 1
+        )
+        self._apply_data(parsed, own_connection=False, relayed_settings=True)
+        return True
+
+    @property
+    def relayed_settings_stats(self) -> dict[str, int] | None:
+        """Relayed wallbox settings counters (#553), or None if none seen."""
+        return dict(self._relayed_settings_stats) or None
 
     def powerocean_sibling(self) -> EcoFlowDeviceCoordinator | None:
         """Return the entry's one PowerOcean coordinator, or None (ADR-009).

@@ -61,7 +61,11 @@ from ..ecoflow.parsers.powerocean_proto import (
     remap_timer_task_keys,
     remap_tou_task_keys,
 )
-from ..ecoflow.parsers.powerpulse_proto import parse_powerpulse_message
+from ..ecoflow.parsers.powerpulse_proto import (
+    RELAYED_WALLBOX_SETTINGS_KEY,
+    parse_powerpulse_message,
+    parse_relayed_wallbox_settings,
+)
 from ..ecoflow.parsers.powerstream_http import parse_powerstream_quota
 from ..ecoflow.parsers.smart_home_panel_2_proto import (
     parse_smart_home_panel_2_message,
@@ -933,6 +937,13 @@ class MqttIngestMixin(_Base):
 
         if bundle_diverged:
             self._schedule_divergent_bundles += 1
+
+        # A coupled PowerPulse 2's settings, relayed on `241/3` (#553). They
+        # belong to the wallbox, not to this device: `_apply_data` pops the
+        # block and hands it to the wallbox's coordinator.
+        relayed = parse_relayed_wallbox_settings(payload)
+        if relayed:
+            merged[RELAYED_WALLBOX_SETTINGS_KEY] = relayed
 
         return merged or None
 

@@ -729,6 +729,14 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
     linked_units = coordinator.linked_unit_stats
     if linked_units is not None:
         diag["linked_units"] = linked_units
+    # A PowerPulse 2's settings relayed by its PowerOcean on `241/3` (#553):
+    # on the PowerOcean how many blocks it handed on or could not route, on
+    # the wallbox how many it applied or dropped because its own channel
+    # carries them. The one place a download shows which source a wallbox's
+    # settings controls read from.
+    relayed_settings = coordinator.relayed_settings_stats
+    if relayed_settings is not None:
+        diag["relayed_wallbox_settings"] = relayed_settings
 
     # Enhanced Mode: the raw push frames the device sent, with the serial
     # masked and each frame truncated. Device variants within a serial family

@@ -66,7 +66,10 @@ DEVICE_TYPE_WAVE3 = "wave3"
 # device had no channel of its own and was read as an accessory relayed by
 # the PowerOcean it happened to be coupled to (`(241, 3)` in
 # `proto/runtime.py`); that relay path is retired in the same change that
-# adds this type, so a `C376` is never read twice (#7, #247).
+# adds this type, so a `C376` is never read twice (#7, #247). One part of
+# `(241, 3)` is read again since #553: the settings block, for a wallbox
+# whose own channel never carries it, handed to the wallbox's own device
+# (`parse_relayed_wallbox_settings`); its readings stay retired.
 DEVICE_TYPE_POWERPULSE2 = "powerpulse2"
 # PowerPulse 2 display block (settings report `1.4.8.21`, PLAN-188, issue
 # #495): the brightness percentages the wallbox accepts and reports for its

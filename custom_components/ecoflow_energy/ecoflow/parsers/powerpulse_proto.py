@@ -527,6 +527,116 @@ def _decode_run_data_sync_fields(pdata: bytes) -> dict[str, Any]:
     return result
 
 
+# The key a PowerOcean frame carries the relayed wallbox settings under, from
+# the frame parse to `_resolve_relayed_wallbox_settings` in the coordinator,
+# which pops it before anything reaches the PowerOcean's own store (#553).
+RELAYED_WALLBOX_SETTINGS_KEY = "_relayed_wallbox_settings_by_sn"
+
+# The PowerOcean's copy of a coupled wallbox's settings (#553). A PowerPulse 2
+# linked to the PowerOcean as a system component reports its settings to the
+# PowerOcean, which publishes them on its own topic as `241/3`; on such a
+# wallbox its own `241/44` can arrive without the settings block at all. The
+# message is `EDevParamReport`-shaped: `pdata` field 1 is the accessory
+# descriptor (`EdevBaseInfo`), field 4 an `EDevPileChargingParamReport` whose
+# field 1 is the `EDevPileParamSet` the PowerOcean's `241/102` write carries.
+# That message numbers the same settings differently from the wallbox's own
+# `PileRemoteParamSet` (`f1.f4.f8` of `241/44`), so it gets its own table:
+# 1 switch bits, 2 work mode, 4 Solar minimum current (deci-amps), 5 phase
+# setting, 6 Custom current (deci-amps), 21 the display block. Field 3 (the
+# maximum current) and the report's outer status and power are not read: the
+# wallbox reports those on its own channel. Measured on two installations:
+# @travel-and-cache's (#553, 2026-10-14) moved 4 from 60 to 90 and back and
+# 1 through 2, 18, 19 with the app's writes; @Xygen's (2026-10-05) carries
+# both copies and they agree field for field in the same second, the Custom
+# current (6 here, 8 on the wallbox) included.
+_RELAYED_SETTINGS_FIELD_MAP: dict[int, tuple[str, float | None]] = {
+    1: ("ev_settings_switch_bits", None),
+    2: ("_settings_work_mode_raw", None),
+    4: ("ev_solar_min_current_a", 10.0),
+    5: ("ev_phase_setting", None),
+    6: ("ev_custom_current_a", 10.0),
+}
+
+
+def _decode_relayed_settings_block(block: bytes) -> dict[str, Any]:
+    """Decode the `EDevPileParamSet` of the PowerOcean's `241/3` (#553).
+
+    Same output keys as `_decode_settings_block`, from the field numbers in
+    `_RELAYED_SETTINGS_FIELD_MAP`; the display block (field 21) goes through
+    the same `_decode_display_block`. A field not on the wire stays out.
+    """
+    result: dict[str, Any] = {}
+    for field_num, wire_type, raw in _iter_fields(block):
+        if field_num == 21 and wire_type == 2:
+            result.update(_decode_display_block(raw))
+            continue
+        mapping = _RELAYED_SETTINGS_FIELD_MAP.get(field_num)
+        if mapping is None or wire_type != 0:
+            continue
+        value = _decode_scalar(wire_type, raw, _TYPE_INT)
+        if not isinstance(value, int):
+            continue
+        key, divisor = mapping
+        result[key] = value if divisor is None else value / divisor
+    return result
+
+
+def _decode_relayed_settings_fields(pdata: bytes) -> tuple[str, dict[str, Any]] | None:
+    """Return `(wallbox serial, settings)` from one `241/3` pdata, or None."""
+    serial: str | None = None
+    settings: dict[str, Any] | None = None
+    for field_num, wire_type, raw in _iter_fields(pdata):
+        if wire_type != 2:
+            continue
+        if field_num == 1 and serial is None:
+            serial = _decode_dev_info(raw).get("ev_charger_sn")
+        elif field_num == 4 and settings is None:
+            for sub_num, sub_wire, sub_raw in _iter_fields(raw):
+                if sub_num == 1 and sub_wire == 2:
+                    settings = _decode_relayed_settings_block(sub_raw)
+                    break
+    if serial is None or not settings:
+        return None
+    return serial, settings
+
+
+def parse_relayed_wallbox_settings(payload: bytes) -> dict[str, dict[str, Any]]:
+    """Read every coupled wallbox's settings out of a PowerOcean frame (#553).
+
+    Returns `{wallbox serial: settings keys}` for each `241/3` header the
+    envelope carries, named exactly as the wallbox's own settings report
+    names them (`_finalize` turns the work mode into
+    `ev_settings_work_mode`). The PowerOcean sends two identical headers per
+    frame; the first one per serial wins. Anything else in the envelope, and
+    an envelope that does not decode, yields an empty dict: this runs beside
+    the PowerOcean's own decode and must never cost it a key.
+    """
+    found: dict[str, dict[str, Any]] = {}
+    try:
+        headers, _ = decode_header_message(payload)
+    except Exception:
+        return found
+    for header in headers or ():
+        try:
+            if (
+                int(header.get("cmd_func", -1)),
+                int(header.get("cmd_id", -1)),
+            ) != (241, 3):
+                continue
+            for pdata in _pdata_candidates(header):
+                try:
+                    decoded = _decode_relayed_settings_fields(pdata)
+                except (IndexError, ValueError):
+                    continue
+                if decoded is not None:
+                    serial, settings = decoded
+                    found.setdefault(serial, _finalize(settings))
+                break
+        except Exception:
+            continue
+    return found
+
+
 def parse_powerpulse_message(payload: bytes) -> dict[str, Any] | None:
     """Parse a PowerPulse 2 (C376) protobuf frame into flat sensor keys."""
     try:

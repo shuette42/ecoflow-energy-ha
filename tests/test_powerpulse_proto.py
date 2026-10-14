@@ -19,6 +19,7 @@ from ecoflow_energy.ecoflow.parsers.powerpulse_proto import (
     _decode_settings_block,
     _finalize,
     parse_powerpulse_message,
+    parse_relayed_wallbox_settings,
 )
 from ecoflow_energy.ecoflow.proto_encoding import (
     encode_field_bytes,
@@ -978,3 +979,71 @@ def test_settings_display_block_reports_four_keys_and_validates_each_byte() -> N
         "ev_screen_brightness_pct",
     ):
         assert key not in odd_length
+
+
+RELAYED_FIXTURE = FIXTURE.with_name("c376_relayed_settings_553_20261014.json")
+
+
+def _relayed_frame(label: str) -> bytes:
+    data = json.loads(RELAYED_FIXTURE.read_text())
+    return next(
+        bytes.fromhex(frame["hex"])
+        for frame in data["frames"]
+        if frame["label"] == label
+    )
+
+
+def test_relayed_settings_read_the_powerocean_field_numbers() -> None:
+    """The PowerOcean's `241/3` (#553) numbers the settings as
+    `EDevPileParamSet` does (4 Solar minimum, 5 phase, 6 Custom current), not
+    as the wallbox's own block (6, 7, 8). The values are checked against the
+    protobuf bindings reading the same pdata, so the parser's field table is
+    not the only witness.
+
+    Mutation probe: decoding the block with `_decode_settings_block` instead
+    reads phase and Custom current from the wrong fields and fails here.
+    """
+    from ecoflow_energy.ecoflow.proto import ecocharge_pb2
+    from ecoflow_energy.ecoflow.proto.decoder import decode_header_message
+
+    frame = _relayed_frame("baseline")
+    found = parse_relayed_wallbox_settings(frame)
+    assert list(found) == ["C376TEST00000007"]
+    settings = found["C376TEST00000007"]
+
+    report = ecocharge_pb2.EDevParamReport()
+    report.ParseFromString(bytes.fromhex(decode_header_message(frame)[0][0]["pdata"]))
+    param_set = report.pile_charging_param_report.param_set
+    assert settings["ev_settings_switch_bits"] == param_set.switch_bits == 2
+    assert settings["ev_settings_work_mode"] == "solar"
+    assert param_set.work_mode == 2
+    assert settings["ev_solar_min_current_a"] == param_set.solar_current_min / 10
+    assert settings["ev_phase_setting"] == param_set.phase_specified == 2
+    assert settings["ev_custom_current_a"] == param_set.user_current_set / 10
+    assert settings["ev_led_brightness_pct"] == 75
+    assert settings["ev_screen_brightness_pct"] == 75
+    assert settings["ev_led_enabled"] is True
+    assert settings["ev_screen_enabled"] is True
+    # The maximum current and the report's status and power are the
+    # wallbox's own readings; the relay does not carry them over.
+    for key in ("ev_max_current_a", "ev_charge_status", "ev_charge_power_w"):
+        assert key not in settings
+
+
+def test_relayed_settings_ignore_frames_without_a_wallbox_block() -> None:
+    """A wallbox frame, a `241/3` without the pile report (a heating rod
+    reports on the same command) and garbage all yield nothing."""
+    rod_only = encode_field_bytes(
+        1,
+        encode_field_bytes(
+            1,
+            encode_field_bytes(1, encode_field_varint(1, 7))
+            + encode_field_bytes(3, encode_field_varint(1, 1)),
+        )
+        + encode_field_varint(8, 241)
+        + encode_field_varint(9, 3),
+    )
+    assert parse_relayed_wallbox_settings(rod_only) == {}
+    assert parse_relayed_wallbox_settings(b"\xff\xff\xff") == {}
+    own = bytes.fromhex(json.loads(FIXTURE.read_text())["frames"][0]["hex"])
+    assert parse_relayed_wallbox_settings(own) == {}
