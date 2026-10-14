@@ -62,7 +62,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
-- In Enhanced Mode a network or DNS outage no longer writes one warning per failed reconnect per device. Each device now logs one warning naming it, by its short device tag, when reconnecting keeps failing. The rest of that outage stays at debug level, and one info line says when the connection is back. (Ref #562)
+- A network or DNS outage no longer writes one warning per failed MQTT reconnect per device, in Enhanced Mode and for Standard Mode devices that use MQTT. Each device now logs one warning naming it, by its short device tag, when reconnecting keeps failing. The rest of that outage stays at debug level, and one info line says when the connection is back. The existing "became unavailable" and "device available again" lines are separate and stay. (Ref #562)
 
 - On a Stream (for example a Stream Ultra) linked with a STREAM AC 5000, PV 1 Power to PV 4 Power now come only from the Stream itself, so they can no longer alternate between two sources. The AC 5000's group message carries its own copy of those readings for the linked unit, and that copy was written over the Stream's own readings. The Stream now keeps only its own. Found while reviewing @dns13's work on the AC 5000 and Stream Ultra pair. (Ref #549)
 

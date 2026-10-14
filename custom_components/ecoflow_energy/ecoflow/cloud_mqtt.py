@@ -196,10 +196,10 @@ class EcoFlowMQTTClient:
         DNS hiccup produces one, and the next attempt succeeds. The first
         failure of an outage stays at debug. When the retries keep failing,
         one warning names the device, and every later failure of the same
-        outage goes to debug: a network outage retries every few seconds for
-        every device, and a warning per attempt buries the log. The warning
-        is armed again only after a successful connect, which also reports
-        the recovery (see _on_connect).
+        outage goes to debug: a network outage retries for every device, and a
+        warning per attempt buries the log. The warning is armed again only
+        after a successful connect, which also reports the recovery (see
+        _on_connect).
         """
         if self._listen_only:
             _LOGGER.debug(msg, *args)
