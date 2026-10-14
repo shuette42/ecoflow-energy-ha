@@ -1061,3 +1061,282 @@ def test_relayed_settings_ignore_frames_without_a_wallbox_block() -> None:
     assert parse_relayed_wallbox_settings(b"\xff\xff\xff") == {}
     own = bytes.fromhex(json.loads(FIXTURE.read_text())["frames"][0]["hex"])
     assert parse_relayed_wallbox_settings(own) == {}
+
+
+DISPLAY_553_FIXTURE = FIXTURE.with_name("c376_display_block_553_20261014.json")
+
+
+def _display_553_frames() -> list[bytes]:
+    data = json.loads(DISPLAY_553_FIXTURE.read_text())
+    return [bytes.fromhex(frame["hex"]) for frame in data["frames"]]
+
+
+def _raw_display_block(pdata_hex: str) -> bytes | None:
+    """Walk `pdata` f4 -> f1 -> f21 by hand: the witness is independent of the
+    parser's display decoder and of its ack filter."""
+    from ecoflow_energy.ecoflow.parsers.powerpulse_proto import _iter_fields
+
+    for num, wire, raw in _iter_fields(bytes.fromhex(pdata_hex)):
+        if num != 4 or wire != 2:
+            continue
+        for sub_num, sub_wire, sub_raw in _iter_fields(raw):
+            if sub_num != 1 or sub_wire != 2:
+                continue
+            for leaf_num, leaf_wire, leaf_raw in _iter_fields(sub_raw):
+                if leaf_num == 21 and leaf_wire == 2:
+                    return bytes(leaf_raw)
+    return None
+
+
+def _report_blocks(frame: bytes) -> list[tuple[bool, bytes | None]]:
+    """For each `241/3` header: (is the PowerOcean's own report, display block)."""
+    from ecoflow_energy.ecoflow.proto.decoder import decode_header_message
+
+    out: list[tuple[bool, bytes | None]] = []
+    for header in decode_header_message(frame)[0]:
+        if (header.get("cmd_func"), header.get("cmd_id")) != (241, 3):
+            continue
+        own = header.get("src") == 96 and header.get("is_ack") != 1
+        out.append((own, _raw_display_block(header["pdata"])))
+    return out
+
+
+def test_display_block_decodes_the_six_and_the_thirty_two_byte_form() -> None:
+    """T1 (#553). The app and the PowerOcean's `241/3` carry a 32-byte display
+    block: bytes 0-3 sit where the 6-byte block has them. The decoder says
+    which form it saw, so the write goes back in the same form. Any other
+    length is a layout nobody has seen and yields nothing.
+
+    Mutation probes: accepting only `len == 6` fails the 32 case; reading the
+    32-byte form from the wrong offsets (e.g. `raw[1:5]`) fails the values;
+    dropping the length key fails the `_display_block_len` asserts; accepting
+    every length >= 6 fails the 7 and 33 cases.
+    """
+    from ecoflow_energy.ecoflow.parsers.powerpulse_proto import _decode_display_block
+
+    frame_31 = _display_553_frames()[31]
+    (own, block), *_ = _report_blocks(frame_31)
+    assert own is True
+    assert block is not None
+    # Recorded: LED off, Screen on, LED 25 %, Screen 100 %, then 0x02 + 27 zeros.
+    assert block == bytes([0, 1, 25, 100, 2]) + bytes(27)
+    assert _decode_display_block(block) == {
+        "ev_led_enabled": False,
+        "ev_screen_enabled": True,
+        "ev_led_brightness_pct": 25,
+        "ev_screen_brightness_pct": 100,
+        "_display_block_len": 32,
+    }
+    assert _decode_display_block(bytes([1, 0, 75, 25, 2, 0])) == {
+        "ev_led_enabled": True,
+        "ev_screen_enabled": False,
+        "ev_led_brightness_pct": 75,
+        "ev_screen_brightness_pct": 25,
+        "_display_block_len": 6,
+    }
+
+
+def test_display_block_length_key_only_for_a_valid_length() -> None:
+    """A block of an unseen length yields no keys at all, the length key
+    included, even when its first four bytes would be valid."""
+    from ecoflow_energy.ecoflow.parsers.powerpulse_proto import _decode_display_block
+
+    for length in (5, 7, 31, 33):
+        block = bytes([1, 1, 50, 50]) + bytes(length - 4)
+        assert len(block) == length
+        assert _decode_display_block(block) == {}, length
+
+
+def test_an_ack_copy_of_the_settings_is_not_the_wallbox_state() -> None:
+    """T2 (#553). The PowerOcean forwards the app's ack copy of the settings
+    (header src 32, is_ack 1) next to its own report; the copy carries stale
+    bits and the 100/100 display of the last app write. Only the PowerOcean's
+    own `241/3` (src 96) is read, so the copy cannot win a serial.
+
+    Mutation probes: removing the ack filter fails frame 32 (bits 3, phase 0
+    read from the copy) and the all-frames loop; filtering on `src == 32` alone
+    or on `is_ack == 1` alone fails the synthetic cases below.
+    """
+    frames = _display_553_frames()
+    # Frame 32: an ack copy beside an unrelated 96/7 header, nothing of its own.
+    assert [own for own, _ in _report_blocks(frames[32])] == [False]
+    assert parse_relayed_wallbox_settings(frames[32]) == {}
+    # Frame 31: the PowerOcean's own report.
+    found_31 = parse_relayed_wallbox_settings(frames[31])
+    assert list(found_31) == ["XXXXXXXXXXXXXXXX"]
+    assert found_31["XXXXXXXXXXXXXXXX"]["ev_settings_switch_bits"] == 19
+    assert found_31["XXXXXXXXXXXXXXXX"]["ev_phase_setting"] == 2
+    assert found_31["XXXXXXXXXXXXXXXX"]["ev_led_enabled"] is False
+    assert found_31["XXXXXXXXXXXXXXXX"]["ev_screen_brightness_pct"] == 100
+    assert found_31["XXXXXXXXXXXXXXXX"]["_display_block_len"] == 32
+
+    display_keys = (
+        "ev_led_enabled",
+        "ev_screen_enabled",
+        "ev_led_brightness_pct",
+        "ev_screen_brightness_pct",
+    )
+    compared = 0
+    own_frames = 0
+    ack_only_frames = 0
+    for index, frame in enumerate(frames):
+        blocks = _report_blocks(frame)
+        found = parse_relayed_wallbox_settings(frame)
+        own_blocks = [block for own, block in blocks if own and block is not None]
+        if not own_blocks:
+            if blocks:
+                ack_only_frames += 1
+            assert found == {}, index
+            continue
+        own_frames += 1
+        settings = found["XXXXXXXXXXXXXXXX"]
+        expected = own_blocks[0]
+        assert bool(settings["ev_led_enabled"]) == bool(expected[0]), index
+        assert bool(settings["ev_screen_enabled"]) == bool(expected[1]), index
+        assert settings["ev_led_brightness_pct"] == expected[2], index
+        assert settings["ev_screen_brightness_pct"] == expected[3], index
+        assert settings["_display_block_len"] == len(expected), index
+        assert all(key in settings for key in display_keys)
+        compared += 1
+    assert compared > 0
+    # The fixture's own count of PowerOcean reports and of frames that hold
+    # only an ack copy (the brief's lists: 17 and 13).
+    assert own_frames == 17
+    assert ack_only_frames == 13
+
+
+def test_the_ack_filter_reads_src_and_is_ack_separately() -> None:
+    """T2/T4 (#553). A header with neither field (the synthetic frame, the
+    older fixture's src 96 without `is_ack`) decodes; `src == 32` alone and
+    `is_ack == 1` alone are each an ack copy.
+
+    Mutation probes: keeping only the `src == 32` clause fails the is_ack
+    case, keeping only `is_ack == 1` fails the src case, requiring `src == 96`
+    fails the header-less synthetic case.
+    """
+    descriptor = encode_field_bytes(
+        1,
+        encode_field_varint(1, 7) + encode_field_bytes(2, b"C376TEST00000007"),
+    )
+    pdata = descriptor + encode_field_bytes(
+        4, encode_field_bytes(1, encode_field_varint(1, 2))
+    )
+
+    def frame(*extra: bytes) -> bytes:
+        header = (
+            encode_field_bytes(1, pdata)
+            + b"".join(extra)
+            + encode_field_varint(8, 241)
+            + encode_field_varint(9, 3)
+        )
+        return encode_field_bytes(1, header)
+
+    expected = {"C376TEST00000007": {"ev_settings_switch_bits": 2}}
+    assert parse_relayed_wallbox_settings(frame()) == expected
+    assert parse_relayed_wallbox_settings(frame(encode_field_varint(2, 96))) == expected
+    assert parse_relayed_wallbox_settings(frame(encode_field_varint(2, 32))) == {}
+    assert parse_relayed_wallbox_settings(frame(encode_field_varint(12, 1))) == {}
+    # Order does not matter: an ack copy ahead of the report must not win.
+    ack_first = frame(encode_field_varint(2, 32), encode_field_varint(12, 1)) + frame(
+        encode_field_varint(2, 96)
+    )
+    assert parse_relayed_wallbox_settings(ack_first) == expected
+
+    # The older fixture's header: src 96, no is_ack, still decoded.
+    from ecoflow_energy.ecoflow.proto.decoder import decode_header_message
+
+    older = _relayed_frame("baseline")
+    header = decode_header_message(older)[0][0]
+    assert header["src"] == 96
+    assert "is_ack" not in header
+    assert list(parse_relayed_wallbox_settings(older)) == ["C376TEST00000007"]
+
+
+def test_display_builder_writes_either_form_and_matches_the_app_write() -> None:
+    """T3 (#553). The 32-byte form is `[led, screen, led %, screen %, 0x02]`
+    plus 27 zero bytes; with the addressing and sequence of the app's write
+    (fixture frame 35, 116 bytes) it reproduces that frame byte for byte. The
+    6-byte form stays what it was. Another length is refused.
+
+    Mutation probes: padding the 32-byte form with the wrong constant (0x00
+    instead of 0x02 at byte 4) or with 26 zeros fails the frame comparison;
+    building the 6-byte form with the 32-byte tail fails the 6-byte case.
+    """
+    import pytest
+    from ecoflow_energy.ecoflow.energy_stream import (
+        build_powerpulse_param_set_display_payload,
+    )
+    from ecoflow_energy.ecoflow.proto.decoder import decode_header_message
+
+    app_write = _display_553_frames()[35]
+    assert len(app_write) == 116
+    header = decode_header_message(app_write)[0][0]
+    assert (header["cmd_func"], header["cmd_id"], header["seq"]) == (241, 102, 106)
+
+    built = build_powerpulse_param_set_display_payload(
+        1,
+        1,
+        100,
+        100,
+        dev_addr=215,
+        dev_sn="XXXXXXXXXXXXXXXX",
+        powerocean_sn="XXXXXXXXXXXXXXXX",
+        seq=106,
+        block_len=32,
+    )
+    assert built == app_write
+
+    def block_of(payload: bytes) -> bytes | None:
+        # A write carries the block directly under pdata f4 (the param set).
+        from ecoflow_energy.ecoflow.parsers.powerpulse_proto import _iter_fields
+
+        pdata = bytes.fromhex(decode_header_message(payload)[0][0]["pdata"])
+        for num, wire, raw in _iter_fields(pdata):
+            if num == 4 and wire == 2:
+                return next(
+                    (
+                        bytes(leaf)
+                        for leaf_num, leaf_wire, leaf in _iter_fields(raw)
+                        if leaf_num == 21 and leaf_wire == 2
+                    ),
+                    None,
+                )
+        return None
+
+    assert block_of(built) == bytes([1, 1, 100, 100, 2]) + bytes(27)
+    default = build_powerpulse_param_set_display_payload(
+        1,
+        0,
+        50,
+        75,
+        dev_addr=215,
+        dev_sn="XXXXXXXXXXXXXXXX",
+        powerocean_sn="XXXXXXXXXXXXXXXX",
+        seq=106,
+    )
+    assert block_of(default) == bytes([1, 0, 50, 75, 0, 0])
+    explicit_six = build_powerpulse_param_set_display_payload(
+        1,
+        0,
+        50,
+        75,
+        dev_addr=215,
+        dev_sn="XXXXXXXXXXXXXXXX",
+        powerocean_sn="XXXXXXXXXXXXXXXX",
+        seq=106,
+        block_len=6,
+    )
+    assert explicit_six == default
+    for bad in (0, 5, 7, 31, 33, True, "32"):
+        with pytest.raises(ValueError):
+            build_powerpulse_param_set_display_payload(
+                1,
+                1,
+                100,
+                100,
+                dev_addr=215,
+                dev_sn="XXXXXXXXXXXXXXXX",
+                powerocean_sn="XXXXXXXXXXXXXXXX",
+                seq=106,
+                block_len=bad,  # type: ignore[arg-type]
+            )

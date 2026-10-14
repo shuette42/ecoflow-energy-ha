@@ -530,17 +530,21 @@ def build_powerpulse_param_set_display_payload(
     dev_sn: str,
     powerocean_sn: str,
     seq: int = 0,
+    *,
+    block_len: int = 6,
 ) -> bytes:
     """Build EDevParamSet (241/102) that writes only the display block.
 
     Same message and addressing as `build_powerpulse_param_set_settings_payload`,
     but the one field in `EDevPileParamSet` (`pdata` field 4) is field 21 (PLAN-188,
-    issue #495): a length-delimited, six-byte value `[LED on, Screen on, LED
-    brightness %, Screen brightness %, 0, 0]`. It is built by hand, as the
-    other settings writes are, and is not a protobuf-generated message: the
-    block is not in `ecocharge.proto`. The two trailing bytes are device-side
-    bytes this integration does not own; they are always written as 0 and are
-    never copied from a settings report.
+    issue #495): a length-delimited value in one of two forms (#553). Six bytes,
+    `[LED on, Screen on, LED brightness %, Screen brightness %, 0, 0]`, or
+    32 bytes, `[LED on, Screen on, LED brightness %, Screen brightness %,
+    0x02]` followed by 27 zero bytes, which is what the app writes. It is built
+    by hand, as the other settings writes are, and is not a protobuf-generated
+    message: the block is not in `ecocharge.proto`. Every byte after the first
+    four is a constant this integration writes (0, or 0x02 at byte 4 of the
+    32-byte form); none is ever copied from a settings report.
 
     Args:
         led_on: 0 or 1.
@@ -553,7 +557,12 @@ def build_powerpulse_param_set_display_payload(
         powerocean_sn: The PowerOcean's own serial (the topic owner),
             carried in the envelope's field 25.
         seq: Sequence number. Default 0 generates from timestamp.
+        block_len: 6 (default) or 32, the form the wallbox's last settings
+            report used (`_display_block_len` of the parser). Anything else
+            raises `ValueError`.
     """
+    if type(block_len) is not int or block_len not in (6, 32):
+        raise ValueError(f"block_len must be 6 or 32, got {block_len!r}")
     for key, value in zip(
         POWERPULSE2_DISPLAY_KEYS,
         (led_on, screen_on, led_brightness_pct, screen_brightness_pct),
@@ -566,9 +575,11 @@ def build_powerpulse_param_set_display_payload(
     _validate_powerpulse_serial("powerocean_sn", powerocean_sn)
 
     dev_info = _build_powerpulse_dev_info(dev_addr, dev_sn)
-    display_block = bytes(
-        [led_on, screen_on, led_brightness_pct, screen_brightness_pct, 0, 0]
-    )
+    head = [led_on, screen_on, led_brightness_pct, screen_brightness_pct]
+    if block_len == 32:
+        display_block = bytes(head + [0x02]) + bytes(27)
+    else:
+        display_block = bytes(head + [0, 0])
     pile_param_set = encode_field_bytes(21, display_block)
     pdata = encode_field_bytes(1, dev_info) + encode_field_bytes(4, pile_param_set)
     return _build_powerocean_set_envelope(

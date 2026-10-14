@@ -393,6 +393,12 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+# The two display block forms (bytes) and the internal key that reports which
+# one a report used (see `_decode_display_block`).
+_DISPLAY_BLOCK_LENGTHS = (6, 32)
+_DISPLAY_BLOCK_LEN_KEY = "_display_block_len"
+
+
 def _decode_display_block(raw: bytes) -> dict[str, Any]:
     """Decode the display block of the settings block (field 21, PLAN-188).
 
@@ -406,14 +412,28 @@ def _decode_display_block(raw: bytes) -> dict[str, Any]:
     its own key out - the others from the same block still come through.
     A block that is not exactly six bytes is a layout this decoder has not
     seen and yields nothing: no byte position is guessed on it.
+
+    The app and the PowerOcean's own `241/3` report (#553) use a second form,
+    32 bytes, with the same four settings at bytes 0-3 (byte 4 is a constant
+    `0x02` the app writes, the rest zeros). Both forms decode to the same
+    four keys. Besides them the result carries the internal key
+    `_display_block_len` (int, 6 or 32): the form the report used, so a write
+    can go back in the same form. It is present only when the block length is
+    valid and is not a sensor value: `_finalize` leaves it alone and the
+    coordinator drops it before anything is published. Any other length
+    yields `{}`.
     """
-    if len(raw) != 6:
+    if len(raw) not in _DISPLAY_BLOCK_LENGTHS:
         return {}
     result: dict[str, Any] = {}
     for key, value in zip(POWERPULSE2_DISPLAY_KEYS, raw[:4], strict=True):
         if not powerpulse2_display_value_valid(key, value):
             continue
         result[key] = bool(value) if key in POWERPULSE2_DISPLAY_SWITCH_KEYS else value
+    if result:
+        # No setting read, no form to report: a block whose four bytes are all
+        # unusable leaves nothing behind, as it did before the second form.
+        result[_DISPLAY_BLOCK_LEN_KEY] = len(raw)
     return result
 
 
@@ -534,6 +554,9 @@ RELAYED_WALLBOX_SETTINGS_KEY = "_relayed_wallbox_settings_by_sn"
 # `cmd_func = 241` and `cmd_id = 3` as they appear in a header (tag, varint).
 _RELAY_CMD_FUNC_BYTES = b"\x40\xf1\x01"
 _RELAY_CMD_ID_BYTES = b"\x48\x03"
+# The app is header source 32; the PowerOcean forwards the app's copy of the
+# settings with that source and `is_ack = 1`.
+_RELAY_ACK_COPY_SRC = 32
 
 # The PowerOcean's copy of a coupled wallbox's settings (#553). A PowerPulse 2
 # linked to the PowerOcean as a system component reports its settings to the
@@ -609,8 +632,13 @@ def parse_relayed_wallbox_settings(payload: bytes) -> dict[str, dict[str, Any]]:
     Returns `{wallbox serial: settings keys}` for each `241/3` header the
     envelope carries, named exactly as the wallbox's own settings report
     names them (`_finalize` turns the work mode into
-    `ev_settings_work_mode`). The PowerOcean sends two identical headers per
-    frame; the first one per serial wins. Anything else in the envelope, and
+    `ev_settings_work_mode`). Only the PowerOcean's own reports count: a
+    header that is the app's ack copy (`src == 32` or `is_ack == 1`) is
+    skipped before the first-per-serial rule applies. The PowerOcean sends two
+    identical headers per frame; the first one per serial wins. A display
+    block also reports `_display_block_len` (6 or 32, see
+    `_decode_display_block`); it is an internal key for the write-back, not a
+    sensor value. Anything else in the envelope, and
     an envelope that does not decode, yields an empty dict: this runs beside
     the PowerOcean's own decode and must never cost it a key.
     """
@@ -631,6 +659,16 @@ def parse_relayed_wallbox_settings(payload: bytes) -> dict[str, dict[str, Any]]:
                 int(header.get("cmd_func", -1)),
                 int(header.get("cmd_id", -1)),
             ) != (241, 3):
+                continue
+            # The app's ack copy of the settings rides in the same frame
+            # (src 32, is_ack 1) with whatever the app last wrote and stale
+            # bits; it is skipped per header, before a serial is claimed, so
+            # it can never win one. A header that carries neither field (the
+            # older frames) is read as before.
+            if (
+                int(header.get("src", -1)) == _RELAY_ACK_COPY_SRC
+                or int(header.get("is_ack", 0)) == 1
+            ):
                 continue
             for pdata in _pdata_candidates(header):
                 try:
