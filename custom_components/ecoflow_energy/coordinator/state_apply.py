@@ -391,9 +391,11 @@ class StateApplyMixin(_Base):
 
         The wallbox reports its charging mode twice: in its heartbeat (about
         once a minute, `ev_charge_mode`) and in its settings report (about
-        once a second, `ev_settings_work_mode`, which only an entry with a
-        PowerOcean receives). The parser keeps the two readings under their
-        own keys, both as the same four names; this step chooses per frame
+        once a second on the wallbox's own channel, `ev_settings_work_mode`,
+        which only an entry with a PowerOcean receives; a wallbox linked as a
+        system component may get it only through the PowerOcean, #553). The
+        parser keeps the two readings under their own keys, both as the same
+        four names; this step chooses per frame
         which one the published key carries.
 
         A frame with a settings mode sets `ev_charge_mode` from it, also when
@@ -505,7 +507,9 @@ class StateApplyMixin(_Base):
         (Continuous charging rewrites the switch byte) never mixes bits of one
         report with bits of another. Only the wallbox's own connection reaches
         this (the caller checks `own_connection`): a handed-over value is no
-        report this device received.
+        report this device received. The one exception is a settings block
+        the PowerOcean relayed for a wallbox whose own channel never carries
+        it (`relayed_settings`, #553): for that wallbox it is the report.
         """
         if "ev_settings_switch_bits" not in parsed:
             return
@@ -554,7 +558,7 @@ class StateApplyMixin(_Base):
 
     def _resolve_relayed_wallbox_settings(
         self, parsed: dict[str, Any], *, own_connection: bool
-    ) -> None:
+    ) -> bool:
         """Hand a coupled wallbox's relayed settings to its own device (#553).
 
         A PowerOcean frame may carry `241/3`, the settings of each PowerPulse
@@ -565,11 +569,14 @@ class StateApplyMixin(_Base):
         whose one PowerOcean sibling is this coordinator: the same pairing the
         wallbox's settings writes travel on (`charge_action_route()`), so the
         read-back and the write share one route. A serial nobody here carries,
-        or a wallbox with no unique sibling, is counted as unrouted.
+        or a wallbox with no unique sibling, is counted as unrouted. Returns
+        whether the frame carried such a block at all.
         """
-        relayed = parsed.pop(RELAYED_WALLBOX_SETTINGS_KEY, None)
+        if RELAYED_WALLBOX_SETTINGS_KEY not in parsed:
+            return False
+        relayed = parsed.pop(RELAYED_WALLBOX_SETTINGS_KEY)
         if not own_connection or not isinstance(relayed, dict):
-            return
+            return True
         stats = self._relayed_settings_stats
         for serial, settings in relayed.items():
             target = self._linked_unit_coordinator(serial)
@@ -593,6 +600,7 @@ class StateApplyMixin(_Base):
                 continue
             if handed:
                 stats["handed_over"] = stats.get("handed_over", 0) + 1
+        return True
 
     def _apply_data(
         self,
@@ -646,7 +654,15 @@ class StateApplyMixin(_Base):
         if "ems_app_surplus_pct" in parsed:
             self._last_ems_param_change_ts = now
         self._resolve_unit_power(parsed, own_connection=own_connection, now=now)
-        self._resolve_relayed_wallbox_settings(parsed, own_connection=own_connection)
+        if (
+            self._resolve_relayed_wallbox_settings(
+                parsed, own_connection=own_connection
+            )
+            and not parsed
+        ):
+            # A frame that carried only a coupled wallbox's settings has
+            # nothing left for this device: no listener call, no snapshot.
+            return
         if not own_connection and not parsed:
             # A fully held hand-over (every block it carried was dropped in
             # favour of a fresher own reading) has nothing left to apply -

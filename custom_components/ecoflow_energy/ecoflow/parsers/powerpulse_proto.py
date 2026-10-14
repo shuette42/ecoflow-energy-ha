@@ -531,6 +531,9 @@ def _decode_run_data_sync_fields(pdata: bytes) -> dict[str, Any]:
 # the frame parse to `_resolve_relayed_wallbox_settings` in the coordinator,
 # which pops it before anything reaches the PowerOcean's own store (#553).
 RELAYED_WALLBOX_SETTINGS_KEY = "_relayed_wallbox_settings_by_sn"
+# `cmd_func = 241` and `cmd_id = 3` as they appear in a header (tag, varint).
+_RELAY_CMD_FUNC_BYTES = b"\x40\xf1\x01"
+_RELAY_CMD_ID_BYTES = b"\x48\x03"
 
 # The PowerOcean's copy of a coupled wallbox's settings (#553). A PowerPulse 2
 # linked to the PowerOcean as a system component reports its settings to the
@@ -612,6 +615,12 @@ def parse_relayed_wallbox_settings(payload: bytes) -> dict[str, dict[str, Any]]:
     the PowerOcean's own decode and must never cost it a key.
     """
     found: dict[str, dict[str, Any]] = {}
+    # Header fields are never masked, so a frame without `cmd_func = 241`
+    # (field 8) and `cmd_id = 3` (field 9) on the wire cannot carry the block
+    # and is not decoded a second time. A frame that has both byte runs for
+    # another reason is decoded and simply yields nothing.
+    if _RELAY_CMD_FUNC_BYTES not in payload or _RELAY_CMD_ID_BYTES not in payload:
+        return found
     try:
         headers, _ = decode_header_message(payload)
     except Exception:

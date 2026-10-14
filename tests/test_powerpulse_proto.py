@@ -1033,17 +1033,31 @@ def test_relayed_settings_read_the_powerocean_field_numbers() -> None:
 def test_relayed_settings_ignore_frames_without_a_wallbox_block() -> None:
     """A wallbox frame, a `241/3` without the pile report (a heating rod
     reports on the same command) and garbage all yield nothing."""
-    rod_only = encode_field_bytes(
+    # A valid descriptor (address and a 16-character serial), so it is the
+    # missing pile report (field 4) that leaves the frame empty.
+    descriptor = encode_field_bytes(
         1,
-        encode_field_bytes(
-            1,
-            encode_field_bytes(1, encode_field_varint(1, 7))
-            + encode_field_bytes(3, encode_field_varint(1, 1)),
-        )
-        + encode_field_varint(8, 241)
-        + encode_field_varint(9, 3),
+        encode_field_varint(1, 7) + encode_field_bytes(2, b"C376TEST00000007"),
     )
+
+    def relay_frame(body: bytes) -> bytes:
+        header = (
+            encode_field_bytes(1, descriptor + body)
+            + encode_field_varint(8, 241)
+            + encode_field_varint(9, 3)
+        )
+        return encode_field_bytes(1, header)
+
+    rod_only = relay_frame(encode_field_bytes(3, encode_field_varint(1, 1)))
     assert parse_relayed_wallbox_settings(rod_only) == {}
+    # The same frame with a pile report decodes, so the empty result above
+    # is the missing field 4 and not the envelope.
+    with_pile = relay_frame(
+        encode_field_bytes(4, encode_field_bytes(1, encode_field_varint(1, 2)))
+    )
+    assert parse_relayed_wallbox_settings(with_pile) == {
+        "C376TEST00000007": {"ev_settings_switch_bits": 2}
+    }
     assert parse_relayed_wallbox_settings(b"\xff\xff\xff") == {}
     own = bytes.fromhex(json.loads(FIXTURE.read_text())["frames"][0]["hex"])
     assert parse_relayed_wallbox_settings(own) == {}

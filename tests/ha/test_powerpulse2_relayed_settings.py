@@ -15,9 +15,13 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
+from unittest.mock import patch
 
+import pytest
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
 from custom_components.ecoflow_energy.ecoflow.parsers.powerpulse_proto import (
@@ -31,7 +35,12 @@ from tests.ha.test_powerpulse2_charge_action import (
     _set_descriptor,
     _wire_entry,
 )
-from tests.ha.test_powerpulse2_settings_writes import _published_fields
+from tests.ha.test_powerpulse2_display_writes import _published_display
+from tests.ha.test_powerpulse2_settings_writes import (
+    _SET_COMMANDS,
+    _published_fields,
+    _set_continuous,
+)
 
 _FIXTURE = json.loads(
     (
@@ -54,6 +63,12 @@ _SETTINGS_KEYS = (
     "ev_led_brightness_pct",
     "ev_screen_brightness_pct",
 )
+
+
+@pytest.fixture(autouse=True)
+def _short_fresh_wait(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The stale-report refusal only needs the refusal, not the 5 s wait."""
+    monkeypatch.setattr(f"{_SET_COMMANDS}.POWERPULSE2_SETTINGS_FRESH_WAIT_S", 0.05)
 
 
 def _frame(label: str) -> bytes:
@@ -156,7 +171,9 @@ async def test_own_settings_report_makes_the_relay_drop_for_good(
     data = wallbox.device_data
     assert data["ev_settings_switch_bits"] == 18
     assert data["ev_custom_current_a"] == 7.0
-    assert wallbox.relayed_settings_stats == {"applied": 1, "dropped_own_seen": 1}
+    stats = wallbox.relayed_settings_stats
+    assert stats is not None
+    assert (stats["applied"], stats["dropped_own_seen"]) == (1, 1)
     assert ocean.relayed_settings_stats == {"handed_over": 1}
 
 
@@ -193,11 +210,9 @@ async def test_a_write_is_built_on_the_relayed_report_and_confirmed_by_it(
     hass: HomeAssistant,
 ) -> None:
     """Relay only, as on the reporter's installation: a Solar minimum write is
-    accepted, published through the PowerOcean as `{4: 70}`, and confirmed by
-    the next relayed block carrying 7 A.
-
-    Mutation probe: recording the settings report only for `own_connection`
-    makes the write refuse with `report_missing` before it publishes.
+    published through the PowerOcean as `{4: 70}` and confirmed by the next
+    relayed block carrying 7 A. This write does not read the settings report;
+    the two tests below cover the writes that do.
     """
     _entry, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
     _set_descriptor(wallbox)
@@ -217,3 +232,114 @@ async def test_a_write_is_built_on_the_relayed_report_and_confirmed_by_it(
     await task
     assert wallbox._pending_write is None
     assert wallbox.device_data["ev_solar_min_current_a"] == 7.0
+
+
+async def test_a_switch_bit_write_is_built_on_the_relayed_bits(
+    hass: HomeAssistant,
+) -> None:
+    """Continuous Charging ON from the relayed switch bits 2 publishes
+    `{1: 18}` and confirms on a relayed block with the bit set; the store is
+    made to disagree first, so the bits can only come from the report.
+
+    Mutation probe: recording the settings report only for `own_connection`
+    makes the write refuse with `report_missing` and publish nothing.
+    """
+    _entry, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    send = _mqtt(oceans[0]).send_proto_set
+
+    _relay(oceans[0], "baseline")
+    wallbox.set_device_value("ev_settings_switch_bits", 0)
+    task = asyncio.create_task(_set_continuous(wallbox, True))
+    await asyncio.sleep(0.05)
+    assert send.call_count == 1
+    assert _published_fields(send.call_args) == {1: 18}
+
+    assert wallbox.apply_relayed_wallbox_settings({"ev_settings_switch_bits": 18})
+    await task
+    assert wallbox._pending_write is None
+
+
+async def test_a_display_write_is_built_on_the_relayed_display_block(
+    hass: HomeAssistant,
+) -> None:
+    """LED brightness 50 from the relayed display block [1, 1, 75, 75] keeps
+    the other three bytes: [1, 1, 50, 75, 0, 0]."""
+    _entry, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    send = _mqtt(oceans[0]).send_proto_set
+
+    _relay(oceans[0], "baseline")
+    task = asyncio.create_task(
+        wallbox.async_set_powerpulse_display("ev_led_brightness_pct", 50)
+    )
+    await asyncio.sleep(0.05)
+    assert send.call_count == 1
+    assert _published_display(send.call_args) == [(21, 2, bytes([1, 1, 50, 75, 0, 0]))]
+    assert wallbox.apply_relayed_wallbox_settings(
+        {
+            "ev_settings_switch_bits": 2,
+            "ev_led_enabled": True,
+            "ev_screen_enabled": True,
+            "ev_led_brightness_pct": 50,
+            "ev_screen_brightness_pct": 75,
+        }
+    )
+    await task
+
+
+async def test_a_relayed_report_past_the_max_age_refuses_like_an_own_one(
+    hass: HomeAssistant,
+) -> None:
+    """A relayed report 11 s old is too old for a switch-bit write, the same
+    10 s limit an own report has: the write refuses and publishes nothing."""
+    _entry, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    send = _mqtt(oceans[0]).send_proto_set
+    _relay(oceans[0], "baseline")
+    assert wallbox._settings_report is not None
+    stamped = wallbox._settings_report[0]
+
+    with (
+        patch(f"{_SET_COMMANDS}.time", SimpleNamespace(monotonic=lambda: stamped + 11)),
+        pytest.raises(HomeAssistantError) as excinfo,
+    ):
+        await _set_continuous(wallbox, True)
+    assert excinfo.value.translation_key == "powerpulse_continuous_report_stale"
+    assert send.call_count == 0
+
+
+async def test_a_relay_only_frame_does_not_update_the_powerocean(
+    hass: HomeAssistant,
+) -> None:
+    """The reporter's frames carry nothing for the PowerOcean itself: they
+    must not wake its entities.
+
+    Mutation probe: removing the early return after the hand-over makes the
+    PowerOcean publish an update for each frame.
+    """
+    _entry, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    ocean = oceans[0]
+    with patch.object(ocean, "async_set_updated_data") as updated:
+        _relay(ocean)
+    assert updated.call_count == 0
+    assert wallbox.device_data["ev_settings_switch_bits"] == 2
+
+
+async def test_the_gap_between_relayed_blocks_is_counted(
+    hass: HomeAssistant,
+) -> None:
+    """The longest gap between two relayed blocks is what the 10 s write limit
+    depends on, so the diagnostics carry it."""
+    _entry, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    clock = "custom_components.ecoflow_energy.coordinator.core.time.monotonic"
+    with patch(clock, return_value=1000.0):
+        _relay(oceans[0])
+    with patch(clock, return_value=1007.3):
+        _relay(oceans[0], "after_test")
+    with patch(clock, return_value=1010.0):
+        _relay(oceans[0])
+    stats = wallbox.relayed_settings_stats
+    assert stats is not None
+    assert stats["max_gap_s"] == 7.3
+    assert stats["applied"] == 3
