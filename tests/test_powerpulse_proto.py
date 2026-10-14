@@ -1147,6 +1147,15 @@ def test_display_block_length_key_only_for_a_valid_length() -> None:
         assert _decode_display_block(block) == {}, length
 
 
+def test_display_block_with_four_unusable_bytes_leaves_nothing_behind() -> None:
+    """A six- or 32-byte block whose four bytes are all invalid yields `{}`,
+    not a lone length key."""
+    from ecoflow_energy.ecoflow.parsers.powerpulse_proto import _decode_display_block
+
+    for length in (6, 32):
+        assert _decode_display_block(bytes([2, 2, 0, 0]) + bytes(length - 4)) == {}
+
+
 def test_an_ack_copy_of_the_settings_is_not_the_wallbox_state() -> None:
     """T2 (#553). The PowerOcean forwards the app's ack copy of the settings
     (header src 32, is_ack 1) next to its own report; the copy carries stale
@@ -1200,7 +1209,7 @@ def test_an_ack_copy_of_the_settings_is_not_the_wallbox_state() -> None:
         compared += 1
     assert compared > 0
     # The fixture's own count of PowerOcean reports and of frames that hold
-    # only an ack copy (the brief's lists: 17 and 13).
+    # only an ack copy.
     assert own_frames == 17
     assert ack_only_frames == 13
 
@@ -1340,3 +1349,41 @@ def test_display_builder_writes_either_form_and_matches_the_app_write() -> None:
                 seq=106,
                 block_len=bad,  # type: ignore[arg-type]
             )
+
+
+def test_display_builder_addresses_the_wallbox_and_the_powerocean_apart() -> None:
+    """With two different serials the frame is the app's frame 35 with the
+    PowerOcean's serial in the header and the wallbox's in `dev_info`.
+
+    Mutation probe: swapping the two serials in the builder fails both the
+    header assertion and the frame comparison.
+    """
+    from ecoflow_energy.ecoflow.energy_stream import (
+        build_powerpulse_param_set_display_payload,
+    )
+    from ecoflow_energy.ecoflow.proto.decoder import decode_header_message
+
+    wallbox_sn, ocean_sn = "WALLBOXAAAAAAAAA", "OCEANBBBBBBBBBBB"
+    built = build_powerpulse_param_set_display_payload(
+        1,
+        1,
+        100,
+        100,
+        dev_addr=215,
+        dev_sn=wallbox_sn,
+        powerocean_sn=ocean_sn,
+        seq=106,
+        block_len=32,
+    )
+    header = decode_header_message(built)[0][0]
+    assert header["device_sn"] == ocean_sn
+    pdata = bytes.fromhex(header["pdata"])
+    assert wallbox_sn.encode() in pdata
+    assert ocean_sn.encode() not in pdata
+    app_write = _display_553_frames()[35]
+    masked = b"X" * 16
+    assert app_write.count(masked) == 2
+    assert built.index(wallbox_sn.encode()) < built.index(ocean_sn.encode())
+    assert built == app_write.replace(masked, wallbox_sn.encode(), 1).replace(
+        masked, ocean_sn.encode(), 1
+    )

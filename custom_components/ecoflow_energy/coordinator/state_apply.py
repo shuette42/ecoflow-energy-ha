@@ -23,6 +23,7 @@ from ..const import (
     POWERPULSE2_SETTINGS_MAX_AGE_S,
     STREAM_OWN_UNIT_ENTRY_HOLD_S,
 )
+from ..ecoflow.const import POWERPULSE2_DISPLAY_BLOCK_LEN_KEY
 from ..ecoflow.parsers.powerpulse_proto import RELAYED_WALLBOX_SETTINGS_KEY
 from ..ecoflow.parsers.stream_ac5000_proto import (
     UNIT_POWER_BY_SN_KEY,
@@ -528,7 +529,7 @@ class StateApplyMixin(_Base):
                     "ev_screen_enabled",
                     "ev_led_brightness_pct",
                     "ev_screen_brightness_pct",
-                    "_display_block_len",
+                    POWERPULSE2_DISPLAY_BLOCK_LEN_KEY,
                 )
                 if key in parsed
             },
@@ -682,7 +683,7 @@ class StateApplyMixin(_Base):
         # The display block's form (6 or 32 bytes) is the parser's note for the
         # write built on the snapshot, not a reading: it never reaches the
         # store, an entity or diagnostics, whichever path recorded or not.
-        parsed.pop("_display_block_len", None)
+        parsed.pop(POWERPULSE2_DISPLAY_BLOCK_LEN_KEY, None)
 
         # WAVE 3 (#161): the RuntimePropertyUpload carries its own firmware
         # revision, the first device in this integration to report one over

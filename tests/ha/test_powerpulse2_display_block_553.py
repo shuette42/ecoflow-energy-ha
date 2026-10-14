@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -111,10 +112,11 @@ def _scale_windows(monkeypatch: pytest.MonkeyPatch, relayed: float, own: float) 
 async def test_the_recording_replays_to_the_real_reports_and_not_the_ack_copies(
     hass: HomeAssistant,
 ) -> None:
-    """Over the 44 PowerOcean frames the wallbox follows the PowerOcean's own
-    reports: the switch bits and the phase never move after the first report
-    (the app's ack copies carry older ones), the display values change only on
-    a report frame, and the form of the block stays out of the store.
+    """Over the recording's 31 property and get_reply frames the wallbox
+    follows the PowerOcean's own reports: the switch bits and the phase never
+    move after the first report (the app's ack copies carry older ones), the
+    display values change only on a report frame, and the form of the block
+    stays out of the store.
 
     Mutation probes: dropping the `_display_block_len` pop in `_apply_data`
     fails the last assertion (the snapshot keeps it, the store must not).
@@ -149,8 +151,7 @@ async def test_the_recording_replays_to_the_real_reports_and_not_the_ack_copies(
 
     assert compared_ack == len(_ACK_ONLY_FRAMES) > 0
     assert compared_report == len(_REPORT_FRAMES) > 0
-    # Each change follows a report; the ack copies caused none of the 23
-    # changes the unfiltered stream produced.
+    # Each display change follows a report frame.
     assert 0 < display_changes <= compared_report
     assert wallbox._settings_report is not None
     assert wallbox._settings_report[1]["_display_block_len"] == 32
@@ -311,12 +312,99 @@ async def test_the_own_report_route_keeps_the_six_byte_form_and_its_window(
     assert excinfo.value.translation_key == "powerpulse_continuous_not_confirmed"
 
 
-def test_only_a_relayed_display_write_carries_its_own_confirm_window() -> None:
-    """Every other settings write leaves the window unset, so it waits for the
-    unchanged `POWERPULSE2_SETTINGS_WINDOW_S` read when it is sent."""
-    from custom_components.ecoflow_energy.coordinator.set_commands import (
-        _SettingsWrite,
-    )
+def _recorded_at(index: int) -> float:
+    return datetime.fromisoformat(_FRAMES[index]["ts_iso"]).timestamp()
 
-    assert _SettingsWrite({4: 60}, 6.0).confirm_window_s is None
-    assert const.POWERPULSE2_SETTINGS_WINDOW_S == 20.0
+
+def test_the_relayed_limits_cover_the_gaps_in_the_recording() -> None:
+    """The comment at the constants and the CHANGELOG rest on these figures,
+    recomputed here from the fixture: the largest gap between the PowerOcean's
+    own reports, the age of the last report at each of the app's seven display
+    writes, and the delay of the read-back after the write in frame 25."""
+    reports = [_recorded_at(i) for i in _REPORT_FRAMES]
+    largest_gap = max(b - a for a, b in zip(reports, reports[1:], strict=False))
+    writes = [i for i, f in enumerate(_FRAMES) if f["topic"] == "set"]
+    ages = [
+        _recorded_at(w) - _recorded_at(max(r for r in _REPORT_FRAMES if r < w))
+        for w in writes
+    ]
+    readback = _recorded_at(28) - _recorded_at(25)
+
+    assert 49 <= largest_gap < 50
+    assert len(writes) == 7
+    assert 6 <= min(ages) < 7
+    assert 30.8 < max(ages) < 31
+    assert 26.3 < readback < 26.4
+    assert largest_gap < const.POWERPULSE2_RELAYED_DISPLAY_MAX_AGE_S
+    assert largest_gap < const.POWERPULSE2_RELAYED_DISPLAY_WINDOW_S
+
+
+_WRITE_SITES = {
+    "solar_min": lambda w: w.async_set_powerpulse_solar_min_current(7),
+    "phase": lambda w: w.async_set_powerpulse_phase_setting("auto"),
+    "switch_bit": lambda w: w.async_set_powerpulse_switch_bit(
+        const.POWERPULSE2_SWITCH_BIT_CONTINUOUS, True, "ev_continuous_charging"
+    ),
+    "display": lambda w: w.async_set_powerpulse_display("ev_led_enabled", 1),
+}
+
+
+@pytest.mark.parametrize("site", _WRITE_SITES)
+async def test_every_settings_write_waits_the_window_of_its_route(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch, site: str
+) -> None:
+    """Solar minimum, phase, a switch bit and the display each wait the long
+    window for a read-back when the settings come from the PowerOcean's copy,
+    and the short one once the wallbox has sent its own report.
+
+    Mutation probe: a write site that falls back to the own window gives up
+    at 0.1 s on the relayed route and fails the first assertion.
+    """
+    _scale_windows(monkeypatch, relayed=0.6, own=0.1)
+    for own_seen in (False, True):
+        _entry, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+        _set_descriptor(wallbox)
+        _relay(oceans[0], 31)
+        wallbox._own_settings_report_seen = own_seen
+
+        task = asyncio.create_task(_WRITE_SITES[site](wallbox))
+        await asyncio.sleep(0.3)
+        assert task.done() is own_seen
+        with pytest.raises(HomeAssistantError) as excinfo:
+            await task
+        assert excinfo.value.translation_key.endswith("not_confirmed")
+
+
+async def test_a_switch_bit_write_builds_on_an_old_relayed_report(
+    hass: HomeAssistant,
+) -> None:
+    """A relayed report 30.9 s old is a basis for a switch-bit write; an own
+    report of that age is not.
+
+    Mutation probe: giving the switch-bit write the own age limit on a relayed
+    report refuses the first write.
+    """
+    _entry, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    send = _mqtt(oceans[0]).send_proto_set
+    _relay(oceans[0], 31)
+    assert wallbox._settings_report is not None
+    aged = SimpleNamespace(monotonic=lambda: wallbox._settings_report[0] + 30.9)
+
+    wallbox._own_settings_report_seen = True
+    with (
+        patch(f"{_SET_COMMANDS}.time", aged),
+        pytest.raises(HomeAssistantError) as excinfo,
+    ):
+        await _WRITE_SITES["switch_bit"](wallbox)
+    assert excinfo.value.translation_key == "powerpulse_continuous_report_stale"
+    assert send.call_count == 0
+
+    wallbox._own_settings_report_seen = False
+    with patch(f"{_SET_COMMANDS}.time", aged):
+        task = asyncio.create_task(_WRITE_SITES["switch_bit"](wallbox))
+        await asyncio.sleep(0.05)
+        assert send.call_count == 1
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task

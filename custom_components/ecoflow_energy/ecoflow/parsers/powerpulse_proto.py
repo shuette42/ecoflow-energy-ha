@@ -110,6 +110,8 @@ from math import isfinite
 from typing import Any
 
 from ..const import (
+    POWERPULSE2_DISPLAY_BLOCK_LEN_KEY,
+    POWERPULSE2_DISPLAY_BLOCK_LENGTHS,
     POWERPULSE2_DISPLAY_KEYS,
     POWERPULSE2_DISPLAY_SWITCH_KEYS,
     powerpulse2_display_value_valid,
@@ -393,12 +395,6 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-# The two display block forms (bytes) and the internal key that reports which
-# one a report used (see `_decode_display_block`).
-_DISPLAY_BLOCK_LENGTHS = (6, 32)
-_DISPLAY_BLOCK_LEN_KEY = "_display_block_len"
-
-
 def _decode_display_block(raw: bytes) -> dict[str, Any]:
     """Decode the display block of the settings block (field 21, PLAN-188).
 
@@ -423,7 +419,7 @@ def _decode_display_block(raw: bytes) -> dict[str, Any]:
     coordinator drops it before anything is published. Any other length
     yields `{}`.
     """
-    if len(raw) not in _DISPLAY_BLOCK_LENGTHS:
+    if len(raw) not in POWERPULSE2_DISPLAY_BLOCK_LENGTHS:
         return {}
     result: dict[str, Any] = {}
     for key, value in zip(POWERPULSE2_DISPLAY_KEYS, raw[:4], strict=True):
@@ -433,7 +429,7 @@ def _decode_display_block(raw: bytes) -> dict[str, Any]:
     if result:
         # No setting read, no form to report: a block whose four bytes are all
         # unusable leaves nothing behind, as it did before the second form.
-        result[_DISPLAY_BLOCK_LEN_KEY] = len(raw)
+        result[POWERPULSE2_DISPLAY_BLOCK_LEN_KEY] = len(raw)
     return result
 
 

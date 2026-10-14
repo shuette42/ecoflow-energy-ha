@@ -11,7 +11,11 @@ import time
 from collections.abc import Sequence
 from typing import Literal
 
-from .const import POWERPULSE2_DISPLAY_KEYS, powerpulse2_display_value_valid
+from .const import (
+    POWERPULSE2_DISPLAY_BLOCK_LENGTHS,
+    POWERPULSE2_DISPLAY_KEYS,
+    powerpulse2_display_value_valid,
+)
 from .parsers.powerocean_proto import _MINUTES_PER_DAY, SCHEDULE_MAX_INDEX
 from .proto_encoding import (
     encode_field_bytes,
@@ -561,7 +565,7 @@ def build_powerpulse_param_set_display_payload(
             report used (`_display_block_len` of the parser). Anything else
             raises `ValueError`.
     """
-    if type(block_len) is not int or block_len not in (6, 32):
+    if type(block_len) is not int or block_len not in POWERPULSE2_DISPLAY_BLOCK_LENGTHS:
         raise ValueError(f"block_len must be 6 or 32, got {block_len!r}")
     for key, value in zip(
         POWERPULSE2_DISPLAY_KEYS,

@@ -88,6 +88,10 @@ POWERPULSE2_DISPLAY_KEYS: tuple[str, ...] = (
 POWERPULSE2_DISPLAY_SWITCH_KEYS: frozenset[str] = frozenset(
     POWERPULSE2_DISPLAY_KEYS[:2]
 )
+# The display block's two forms in bytes, and the internal key the parser sets
+# to the form a report used.
+POWERPULSE2_DISPLAY_BLOCK_LENGTHS: tuple[int, ...] = (6, 32)
+POWERPULSE2_DISPLAY_BLOCK_LEN_KEY = "_display_block_len"
 
 
 def powerpulse2_display_value_valid(key: str, value: Any) -> bool:

@@ -260,12 +260,12 @@ POWERPULSE2_CHARGE_MODE_WIRE: dict[str, int] = {
 # wallbox that stops sending it fails loudly instead of silently.
 POWERPULSE2_SETTINGS_WINDOW_S: float = 20.0
 # #553: a settings block the PowerOcean relays arrives far less often than the
-# wallbox's own once-a-second report. The 2026-10-14 timed recording shows
-# reports up to 49.033 s apart, report ages of 19.9 to 30.9 s at the seven
-# moments the app wrote the display, and a write confirmed 26.342 s after it.
-# So a display write built on a relayed report accepts one up to 60 s old and
-# waits up to 60 s for the PowerOcean's next report. The own-report route keeps
-# the 10 s / 20 s values above.
+# wallbox's own once-a-second report. In the 2026-10-14 timed recording the
+# reports are up to 49 s apart, the report is up to 30.9 s old when the app
+# writes the display, and a write is confirmed 26.3 s after it. So a settings
+# write on a relayed report accepts one up to 60 s old and waits up to 60 s for
+# the PowerOcean's next report. The own-report route keeps the 10 s / 20 s
+# values above.
 POWERPULSE2_RELAYED_DISPLAY_MAX_AGE_S: float = 60.0
 POWERPULSE2_RELAYED_DISPLAY_WINDOW_S: float = 60.0
 # PLAN-172: the oldest settings report a switch-bits write may be built on.
