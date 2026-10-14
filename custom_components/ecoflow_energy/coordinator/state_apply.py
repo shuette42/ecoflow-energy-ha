@@ -14,6 +14,7 @@ from ..const import (
     APP_SURPLUS_SYNC_USER_GRACE_S,
     DEVICE_TYPE_OCEAN2,
     DEVICE_TYPE_POWEROCEAN,
+    DEVICE_TYPE_POWERPULSE2,
     DEVICE_TYPE_STREAM_AC5000,
     DEVICE_TYPE_WAVE3,
     DOMAIN,
@@ -22,6 +23,7 @@ from ..const import (
     POWERPULSE2_SETTINGS_MAX_AGE_S,
     STREAM_OWN_UNIT_ENTRY_HOLD_S,
 )
+from ..ecoflow.parsers.powerpulse_proto import RELAYED_WALLBOX_SETTINGS_KEY
 from ..ecoflow.parsers.stream_ac5000_proto import (
     UNIT_POWER_BY_SN_KEY,
     UNIT_PV_BY_SN_KEY,
@@ -389,9 +391,11 @@ class StateApplyMixin(_Base):
 
         The wallbox reports its charging mode twice: in its heartbeat (about
         once a minute, `ev_charge_mode`) and in its settings report (about
-        once a second, `ev_settings_work_mode`, which only an entry with a
-        PowerOcean receives). The parser keeps the two readings under their
-        own keys, both as the same four names; this step chooses per frame
+        once a second on the wallbox's own channel, `ev_settings_work_mode`,
+        which only an entry with a PowerOcean receives; a wallbox linked as a
+        system component may get it only through the PowerOcean, #553). The
+        parser keeps the two readings under their own keys, both as the same
+        four names; this step chooses per frame
         which one the published key carries.
 
         A frame with a settings mode sets `ev_charge_mode` from it, also when
@@ -503,7 +507,9 @@ class StateApplyMixin(_Base):
         (Continuous charging rewrites the switch byte) never mixes bits of one
         report with bits of another. Only the wallbox's own connection reaches
         this (the caller checks `own_connection`): a handed-over value is no
-        report this device received.
+        report this device received. The one exception is a settings block
+        the PowerOcean relayed for a wallbox whose own channel never carries
+        it (`relayed_settings`, #553): for that wallbox it is the report.
         """
         if "ev_settings_switch_bits" not in parsed:
             return
@@ -550,8 +556,58 @@ class StateApplyMixin(_Base):
         """Drop the hold for one arming flag, used when the send failed."""
         self._schedule_armed_latch.pop(state_key, None)
 
+    def _resolve_relayed_wallbox_settings(
+        self, parsed: dict[str, Any], *, own_connection: bool
+    ) -> bool:
+        """Hand a coupled wallbox's relayed settings to its own device (#553).
+
+        A PowerOcean frame may carry `241/3`, the settings of each PowerPulse
+        2 linked to it as a system component (`parse_relayed_wallbox_settings`).
+        The block is popped here whatever happens to it, so none of it lands
+        in the PowerOcean's own store. It is handed only from this device's
+        own connection, and only to a PowerPulse 2 coordinator of this entry
+        whose one PowerOcean sibling is this coordinator: the same pairing the
+        wallbox's settings writes travel on (`charge_action_route()`), so the
+        read-back and the write share one route. A serial nobody here carries,
+        or a wallbox with no unique sibling, is counted as unrouted. Returns
+        whether the frame carried such a block at all.
+        """
+        if RELAYED_WALLBOX_SETTINGS_KEY not in parsed:
+            return False
+        relayed = parsed.pop(RELAYED_WALLBOX_SETTINGS_KEY)
+        if not own_connection or not isinstance(relayed, dict):
+            return True
+        stats = self._relayed_settings_stats
+        for serial, settings in relayed.items():
+            target = self._linked_unit_coordinator(serial)
+            if (
+                target is None
+                or target is self
+                or target.device_type != DEVICE_TYPE_POWERPULSE2
+                or target.powerocean_sibling() is not self
+            ):
+                stats["unrouted"] = stats.get("unrouted", 0) + 1
+                continue
+            try:
+                handed = target.apply_relayed_wallbox_settings(dict(settings))
+            except Exception:
+                stats["handoff_failed"] = stats.get("handoff_failed", 0) + 1
+                _LOGGER.debug(
+                    "%s: relayed wallbox settings hand-over failed",
+                    self.device_tag,
+                    exc_info=True,
+                )
+                continue
+            if handed:
+                stats["handed_over"] = stats.get("handed_over", 0) + 1
+        return True
+
     def _apply_data(
-        self, parsed: dict[str, Any], *, own_connection: bool = True
+        self,
+        parsed: dict[str, Any],
+        *,
+        own_connection: bool = True,
+        relayed_settings: bool = False,
     ) -> None:
         """Apply parsed data and notify listeners (HA event loop).
 
@@ -563,6 +619,12 @@ class StateApplyMixin(_Base):
         because `_resolve_unit_power` needs it either way. Everything from
         `_resolve_unit_power` onward runs the same for both, since a handed
         value goes through the identical apply path an own frame uses.
+
+        `relayed_settings=True` (always with `own_connection=False`) is a
+        PowerPulse 2 settings block its PowerOcean relayed on `241/3`
+        (`apply_relayed_wallbox_settings`, #553): for a wallbox whose own
+        channel never carries the block, that copy is the settings report a
+        write is built on, so it is recorded as one.
         """
         from .core import DeviceSnapshot
 
@@ -592,6 +654,15 @@ class StateApplyMixin(_Base):
         if "ems_app_surplus_pct" in parsed:
             self._last_ems_param_change_ts = now
         self._resolve_unit_power(parsed, own_connection=own_connection, now=now)
+        if (
+            self._resolve_relayed_wallbox_settings(
+                parsed, own_connection=own_connection
+            )
+            and not parsed
+        ):
+            # A frame that carried only a coupled wallbox's settings has
+            # nothing left for this device: no listener call, no snapshot.
+            return
         if not own_connection and not parsed:
             # A fully held hand-over (every block it carried was dropped in
             # favour of a fresher own reading) has nothing left to apply -
@@ -601,7 +672,11 @@ class StateApplyMixin(_Base):
         self._resolve_schedule_armed(parsed)
         self._resolve_wallbox_charge_mode(parsed, now)
         self._resolve_pending_write(parsed)
-        if own_connection:
+        if own_connection and "ev_settings_switch_bits" in parsed:
+            # The wallbox's own channel carries its settings: from now on
+            # that is their one source, and a relayed copy is dropped (#553).
+            self._own_settings_report_seen = True
+        if own_connection or relayed_settings:
             self._record_settings_report(parsed, now)
 
         # WAVE 3 (#161): the RuntimePropertyUpload carries its own firmware

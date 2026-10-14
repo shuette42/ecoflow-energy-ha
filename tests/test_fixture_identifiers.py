@@ -70,6 +70,11 @@ _PLACEHOLDERS = frozenset(
         "ES22TESTUNITBBBB",
         # The Stream Ultra beside an ES22 in `es22_ultra_pv_pair_masked.json`.
         "BK11TESTUNITBBBB",
+        # The wallbox serial in the PowerOcean's relayed settings frames of
+        # `c376_relayed_settings_553_20261014.json` (#553): the block is
+        # routed by that serial, so a masked run of X would reach no wallbox.
+        # The same dummy the two-coordinator tests give the wallbox.
+        "C376TEST00000007",
     }
 )
 
