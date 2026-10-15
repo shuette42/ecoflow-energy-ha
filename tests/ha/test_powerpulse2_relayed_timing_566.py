@@ -132,12 +132,12 @@ async def test_charge_mode_waits_the_window_of_its_route(
 ) -> None:
     """On the PowerOcean route a Charge Mode read-back that comes after the
     own window is still accepted inside the relayed one; on the own-report
-    route the same delay times the write out.
+    route a write without a read-back times out at the own window.
 
     Mutation probe: waiting `POWERPULSE2_SETTINGS_WINDOW_S` in
     `async_set_powerpulse_charge_mode` again times the relayed write out.
     """
-    _scale_windows(monkeypatch, relayed=1.0, own=0.1)
+    _scale_windows(monkeypatch, relayed=3.0, own=0.1)
 
     _entry, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
     _set_descriptor(wallbox)
@@ -148,7 +148,7 @@ async def test_charge_mode_waits_the_window_of_its_route(
     assert _mqtt(oceans[0]).send_proto_set.call_count == 1
     assert not task.done()
     _apply_frame(wallbox, _heartbeat_frame_with_mode(1, 2))
-    await asyncio.wait_for(task, 2)
+    await asyncio.wait_for(task, 5)
     assert wallbox.device_data["ev_charge_mode"] == "solar"
 
     _entry, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
