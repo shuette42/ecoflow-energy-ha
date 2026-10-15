@@ -2236,9 +2236,7 @@ class SetCommandsMixin(_Base):
                 raise
 
         try:
-            confirmed_value = await asyncio.wait_for(
-                future, self._settings_limits()[1]
-            )
+            confirmed_value = await asyncio.wait_for(future, self._settings_limits()[1])
         except TimeoutError:
             last_reported = self._device_data.get("ev_charge_mode")
             self._log_event("powerpulse_charge_mode_unconfirmed", str(last_reported))

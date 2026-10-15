@@ -23,7 +23,9 @@ import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 
-from custom_components.ecoflow_energy.const import POWERPULSE2_RELAYED_SETTINGS_MAX_AGE_S
+from custom_components.ecoflow_energy.const import (
+    POWERPULSE2_RELAYED_SETTINGS_MAX_AGE_S,
+)
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
 from custom_components.ecoflow_energy.ecoflow.parsers.powerpulse_proto import (
     RELAYED_WALLBOX_SETTINGS_KEY,
