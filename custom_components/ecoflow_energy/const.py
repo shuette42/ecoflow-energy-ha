@@ -265,11 +265,22 @@ POWERPULSE2_SETTINGS_WINDOW_S: float = 20.0
 # and part of them are the app's acknowledgement copies, which the parser
 # ignores. The kept frames of that recording are thinned by the diagnostics
 # buffer, so gaps between them are not the device's cadence. A settings write
-# on a relayed report therefore accepts one up to 60 s old and waits up to
-# 60 s for the PowerOcean's next report, a generous allowance rather than a
-# measured worst case. The own-report route keeps the 10 s / 20 s values above.
-POWERPULSE2_RELAYED_DISPLAY_MAX_AGE_S: float = 60.0
-POWERPULSE2_RELAYED_DISPLAY_WINDOW_S: float = 60.0
+# on a relayed report waits up to 60 s for the PowerOcean's next report: the
+# read-back of a write arrived within 2 s in the 2026-10-15 retest, so this is
+# a generous allowance rather than a measured worst case.
+#
+# #566: the oldest relayed report a write may be built on. In a quiet stretch
+# the PowerOcean relays far less often than on average: the diagnostics
+# counter of the longest gap between relayed reports read 40.5 s on
+# 2026-10-14 and 214 s on 2026-10-15, so a 60 s limit refused writes made
+# after a quiet stretch as "too old" although nothing had changed. A change
+# is relayed promptly: in the #553 recording every app display write whose
+# result was kept is followed by a relayed report carrying it within 2 to
+# 27 s. A relayed report that is still the latest after that is therefore
+# not older than the wallbox's settings, and 300 s covers the measured gap
+# with margin. The own-report route keeps the 10 s / 20 s values above.
+POWERPULSE2_RELAYED_SETTINGS_MAX_AGE_S: float = 300.0
+POWERPULSE2_RELAYED_SETTINGS_WINDOW_S: float = 60.0
 # PLAN-172: the oldest settings report a switch-bits write may be built on.
 # The cadence is about one report per second, so 10 s is ten missed reports;
 # a Continuous write is rebuilt from the latest report's switch byte, and a

@@ -103,7 +103,7 @@ def _state(wallbox: EcoFlowDeviceCoordinator) -> tuple[Any, ...]:
 def _scale_windows(monkeypatch: pytest.MonkeyPatch, relayed: float, own: float) -> None:
     """Shrink the two read-back windows so a test can cross one and not the other."""
     monkeypatch.setattr(
-        f"{_SET_COMMANDS}.POWERPULSE2_RELAYED_DISPLAY_WINDOW_S", relayed
+        f"{_SET_COMMANDS}.POWERPULSE2_RELAYED_SETTINGS_WINDOW_S", relayed
     )
     monkeypatch.setattr(f"{_SET_COMMANDS}.POWERPULSE2_SETTINGS_WINDOW_S", own)
 
@@ -206,8 +206,8 @@ async def test_an_old_relayed_snapshot_is_written_on_and_a_late_readback_counts(
     snapshot refuses the write; using `POWERPULSE2_SETTINGS_WINDOW_S` for it
     times the late read-back out.
     """
-    assert const.POWERPULSE2_RELAYED_DISPLAY_MAX_AGE_S > 30.9
-    assert const.POWERPULSE2_RELAYED_DISPLAY_WINDOW_S > 26.342
+    assert const.POWERPULSE2_RELAYED_SETTINGS_MAX_AGE_S > 30.9
+    assert const.POWERPULSE2_RELAYED_SETTINGS_WINDOW_S > 26.342
     assert const.POWERPULSE2_SETTINGS_MAX_AGE_S == 10.0
     assert const.POWERPULSE2_SETTINGS_WINDOW_S == 20.0
     _scale_windows(monkeypatch, relayed=1.0, own=0.1)
@@ -338,8 +338,8 @@ def test_the_relayed_limits_cover_the_gaps_in_the_recording() -> None:
     assert 6 <= min(ages) < 7
     assert 30.8 < max(ages) < 31
     assert 26.3 < readback < 26.4
-    assert largest_gap < const.POWERPULSE2_RELAYED_DISPLAY_MAX_AGE_S
-    assert largest_gap < const.POWERPULSE2_RELAYED_DISPLAY_WINDOW_S
+    assert largest_gap < const.POWERPULSE2_RELAYED_SETTINGS_MAX_AGE_S
+    assert largest_gap < const.POWERPULSE2_RELAYED_SETTINGS_WINDOW_S
 
 
 _WRITE_SITES = {

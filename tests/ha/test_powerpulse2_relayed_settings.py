@@ -23,6 +23,7 @@ import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 
+from custom_components.ecoflow_energy.const import POWERPULSE2_RELAYED_SETTINGS_MAX_AGE_S
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
 from custom_components.ecoflow_energy.ecoflow.parsers.powerpulse_proto import (
     RELAYED_WALLBOX_SETTINGS_KEY,
@@ -314,8 +315,8 @@ async def test_a_display_write_is_built_on_the_relayed_display_block(
 async def test_a_relayed_report_past_the_max_age_refuses_like_an_own_one(
     hass: HomeAssistant,
 ) -> None:
-    """A relayed report 61 s old is too old for a switch-bit write: the write
-    refuses and publishes nothing."""
+    """A relayed report past the relayed age limit (300 s, #566) is too old
+    for a switch-bit write: the write refuses and publishes nothing."""
     _entry, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
     _set_descriptor(wallbox)
     send = _mqtt(oceans[0]).send_proto_set
@@ -324,7 +325,12 @@ async def test_a_relayed_report_past_the_max_age_refuses_like_an_own_one(
     stamped = wallbox._settings_report[0]
 
     with (
-        patch(f"{_SET_COMMANDS}.time", SimpleNamespace(monotonic=lambda: stamped + 61)),
+        patch(
+            f"{_SET_COMMANDS}.time",
+            SimpleNamespace(
+                monotonic=lambda: stamped + POWERPULSE2_RELAYED_SETTINGS_MAX_AGE_S + 1
+            ),
+        ),
         pytest.raises(HomeAssistantError) as excinfo,
     ):
         await _set_continuous(wallbox, True)

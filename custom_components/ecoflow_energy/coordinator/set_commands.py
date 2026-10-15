@@ -31,8 +31,8 @@ from ..const import (
     POWERPULSE2_MAX_CURRENT_WINDOW_S,
     POWERPULSE2_PHASE_SETTING_OPTIONS,
     POWERPULSE2_PHASE_SETTING_WIRE,
-    POWERPULSE2_RELAYED_DISPLAY_MAX_AGE_S,
-    POWERPULSE2_RELAYED_DISPLAY_WINDOW_S,
+    POWERPULSE2_RELAYED_SETTINGS_MAX_AGE_S,
+    POWERPULSE2_RELAYED_SETTINGS_WINDOW_S,
     POWERPULSE2_SETTINGS_FRESH_WAIT_S,
     POWERPULSE2_SETTINGS_MAX_AGE_S,
     POWERPULSE2_SETTINGS_WINDOW_S,
@@ -150,7 +150,7 @@ class _SettingsReportNotFresh(HomeAssistantError):
     """A settings write found no usable settings report yet (#495).
 
     Raised by a write's `plan` when the latest settings report is missing or
-    older than `POWERPULSE2_SETTINGS_MAX_AGE_S`, the two cases where the next
+    older than the age limit of `_settings_limits`, the two cases where the next
     report fixes it. `_async_write_powerpulse_settings` waits a bounded time
     for that report and raises this same error, with its own translation
     key, only when none arrives.
@@ -2117,7 +2117,9 @@ class SetCommandsMixin(_Base):
         on the frame being applied (`PendingDeviceWrite.expected_value`,
         `_resolve_pending_write`), the same "never on the accumulated
         store" reasoning `async_set_powerpulse_max_current` gives, within
-        `POWERPULSE2_SETTINGS_WINDOW_S` (20 s). The confirming frame is the
+        the read-back window of `_settings_limits`: 20 s on a wallbox that
+        sends its own settings report, 60 s on one whose settings come from
+        the PowerOcean's relayed copy (#566). The confirming frame is the
         wallbox's settings report, about a second after the write, which
         `_resolve_wallbox_charge_mode` turns into `ev_charge_mode`; the
         heartbeat can confirm it only while no settings report from the last
@@ -2235,7 +2237,7 @@ class SetCommandsMixin(_Base):
 
         try:
             confirmed_value = await asyncio.wait_for(
-                future, POWERPULSE2_SETTINGS_WINDOW_S
+                future, self._settings_limits()[1]
             )
         except TimeoutError:
             last_reported = self._device_data.get("ev_charge_mode")
@@ -2257,13 +2259,16 @@ class SetCommandsMixin(_Base):
         """`(oldest report age, read-back window)` of a settings write (#553).
 
         A wallbox that has never sent its own settings report is read from the
-        PowerOcean's sparser copy, which gets the longer limits.
+        PowerOcean's sparser copy, which gets the longer limits: a relayed
+        report may be up to 300 s old, since the PowerOcean relays a change
+        promptly but can stay quiet for minutes when nothing changes (#566).
+        Charge Mode uses the same read-back window.
         """
         if self._own_settings_report_seen:
             return POWERPULSE2_SETTINGS_MAX_AGE_S, POWERPULSE2_SETTINGS_WINDOW_S
         return (
-            POWERPULSE2_RELAYED_DISPLAY_MAX_AGE_S,
-            POWERPULSE2_RELAYED_DISPLAY_WINDOW_S,
+            POWERPULSE2_RELAYED_SETTINGS_MAX_AGE_S,
+            POWERPULSE2_RELAYED_SETTINGS_WINDOW_S,
         )
 
     def _fresh_settings_report(self) -> dict[str, Any]:
@@ -2340,8 +2345,8 @@ class SetCommandsMixin(_Base):
         not the `state_key`, names the target, because the three switch-bit
         switches share one state key and one must not cancel another.
 
-        When `plan` finds the settings report missing or older than
-        `POWERPULSE2_SETTINGS_MAX_AGE_S`, or no report was recorded since the
+        When `plan` finds the settings report missing or older than the age
+        limit of `_settings_limits`, or no report was recorded since the
         last settings write left (`_fresh_settings_report`), the call waits up
         to `POWERPULSE2_SETTINGS_FRESH_WAIT_S`, never past its queue bound, for
         the next report, then runs `plan` again. Nothing is sent while it
@@ -2677,7 +2682,7 @@ class SetCommandsMixin(_Base):
 
         The report is read at dispatch time inside the lock (`plan`), as the
         frame snapshot `_record_settings_report` took, and refused when there
-        is none, when it is older than `POWERPULSE2_SETTINGS_MAX_AGE_S` or
+        is none, when it is older than the age limit of `_settings_limits` or
         when it lacks the bits (`report_missing` or `report_stale`, where
         waiting helps), or when the bits are not a byte the builder can send
         (`report_unusable`, where waiting does not help). Confirmed on the

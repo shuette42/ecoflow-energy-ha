@@ -1686,6 +1686,16 @@ Smart is shown and not written. The app never sends the Smart mode without a dep
 
 **Consequences:** a flag on the pending record marks a settings write; the coordinator keeps a record of the settings calls in flight and one event that every change a waiting call cares about replaces and sets, so a waiter never misses a change between its check and its wait. Each call's bound starts when it is made, so a write queued behind two others can be refused as in progress after 25 s where it would have gone ahead a little later. The order in which two different controls reach the wallbox follows who started waiting first and does not change what the wallbox ends up with, because each write changes only its own byte of a block rebuilt from the latest confirmed report.
 
+### Addendum 2026-10-15: a wallbox whose settings come from the PowerOcean's relayed copy has its own limits (#553, #566)
+
+**What arrived.** A wallbox linked to its PowerOcean as a system component never sends its settings report on its own channel; the PowerOcean relays it (#553, v1.25.0-beta.34). That copy comes less often: the 2026-10-14 downloads counted 46 relayed messages in 429 s and 36 in 305 s, and the diagnostics counter of the longest gap between relayed reports read 40.5 s on 2026-10-14 and 214 s on 2026-10-15. A change is relayed promptly: in the #553 recording every app display write whose result was kept is followed by a relayed report carrying it within 2 to 27 s, and in the 2026-10-15 retest every write from Home Assistant was confirmed within 2 s.
+
+**Decision.** The limits follow the route the settings report comes from, decided per wallbox by whether its own channel has delivered the block (`_settings_limits`). On the own route they stay as above: a report at most 10 s old, a 20 s read-back window. On the relayed route a write may be built on a report up to 300 s old and waits up to 60 s for its read-back, Charge Mode included. The fresh-report wait (5 s) is the same on both routes.
+
+**Why the long age is safe here.** The age limit stops a write from rebuilding its byte from a report that predates a change made elsewhere. Since the PowerOcean relays a change within seconds, a relayed report that is still the latest after that is not older than the wallbox's settings; a long age only means nothing changed. A change made in the app in the seconds before a write from Home Assistant can still be overwritten, on either route and with any age limit, as before.
+
+**Consequences:** `POWERPULSE2_RELAYED_SETTINGS_MAX_AGE_S` (300 s) and `POWERPULSE2_RELAYED_SETTINGS_WINDOW_S` (60 s); ADR-033's ten-second hold of the settings report over the heartbeat is unchanged.
+
 ## ADR-029: A linked STREAM unit's per-unit reading is applied by the coordinator whose serial it carries, on whichever connection it arrives; the own connection is preferred for 60 s after it last delivered the block
 
 **Status:** Accepted (shipped in v1.22.0, first in the v1.22.0-beta.7 pre-release)
