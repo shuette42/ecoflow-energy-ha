@@ -234,6 +234,9 @@ _SN_PREFIX_MAP = {
     # `R374` in the app's device registry, on the same product type and the
     # same `product_smart_re_307` family stem as both. (#205)
     "R372": DEVICE_TYPE_POWEROCEAN,
+    # PowerOcean Plus, reported in #573 with an Enhanced Mode recording whose
+    # frames arrive on the same topics as the other Plus units.
+    "R373": DEVICE_TYPE_POWEROCEAN,
     "R374": DEVICE_TYPE_POWEROCEAN,
     "HJ3C": DEVICE_TYPE_POWEROCEAN,
     "R351": DEVICE_TYPE_DELTA,

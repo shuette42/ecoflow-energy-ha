@@ -213,8 +213,8 @@ def test_every_forbidden_pattern_catches_its_sample(label: str) -> None:
 
 def test_the_serial_pattern_covers_every_prefix_the_register_names() -> None:
     """Positive control for the prefix alternation, one sample per family
-    that the first version missed (HJ3C, R371, R374)."""
-    for prefix in ("HJ3C", "R371", "R374", "HJ31", "BK21", "J32E"):
+    that the first version missed (HJ3C, R371, R373, R374)."""
+    for prefix in ("HJ3C", "R371", "R373", "R374", "HJ31", "BK21", "J32E"):
         sample = "unit " + _term(prefix, "A1B2C3D4E5F6") + " reported"
         assert any(f.startswith("device serial") for f in _leaks(sample)), prefix
 

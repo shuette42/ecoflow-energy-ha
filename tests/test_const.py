@@ -269,6 +269,12 @@ class TestDeviceTypeRouting:
         """
         assert get_device_type("", "R372TEST00000001") == "powerocean"
 
+    def test_r373_is_powerocean_plus(self) -> None:
+        """R373 (#573) is routed like its Plus neighbours; a sibling that no
+        one has reported stays unrouted (negative control)."""
+        assert get_device_type("", "R373TEST00000001") == "powerocean"
+        assert get_device_type("", "R37ZTEST00000001") != "powerocean"
+
     def test_base_delta3_display_name(self) -> None:
         # A base DELTA 3 reports an empty product name, same as the BK series.
         assert get_device_name("", "P231TEST00000001") == "DELTA 3 (0001)"
@@ -1334,6 +1340,7 @@ class TestTheScheduleChargePowerCeiling:
         assert schedule_power_max_w("J329TEST00000001") == 6000
         assert schedule_power_max_w("J32DTEST00000001") == 6000
         assert schedule_power_max_w("R372TEST00000001") == 29900
+        assert schedule_power_max_w("R373TEST00000001") == 29900
 
     def test_an_unmapped_prefix_falls_back_to_its_family(self) -> None:
         """A new PowerOcean prefix lands on what its family carries rather

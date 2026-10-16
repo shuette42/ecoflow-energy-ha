@@ -442,6 +442,7 @@ class TestTheNumber:
             ("HJ31TEST00000001", 10000),
             ("J329TEST00000001", 6000),
             ("R372TEST00000001", 29900),
+            ("R373TEST00000001", 29900),
             # A three-phase prefix nobody has mapped falls back to what its
             # family carries, not to the builder's guard.
             ("HJ39TEST00000001", 10000),

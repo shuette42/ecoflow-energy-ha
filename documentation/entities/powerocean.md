@@ -2,11 +2,11 @@
 
 Full list of all entities created for PowerOcean devices.
 
-**Serial prefixes:** `HJ31`, `HJ32`, `HJ35`, `HJ36`, `HJ37` (standard) · `J32B`, `J327`, `J329`, `J32D`, `J32E` (European variants) · `R371`, `R372`, `R374`, `HJ3C` (PowerOcean Plus). All share the entity set below.
+**Serial prefixes:** `HJ31`, `HJ32`, `HJ35`, `HJ36`, `HJ37` (standard) · `J32B`, `J327`, `J329`, `J32D`, `J32E` (European variants) · `R371`, `R372`, `R373`, `R374`, `HJ3C` (PowerOcean Plus). All share the entity set below.
 
 A Local (Modbus/TCP) entry for a three-phase PowerOcean creates only these shared sensors: Solar Power, Home Power, Grid Power, Battery Power, Battery Charge Power, Battery Discharge Power, Grid Import Power, Grid Export Power, Battery SOC, Battery Charge Energy, Battery Discharge Energy, Grid Frequency, Battery Packs Online (EMS), MPPT String 1 and 2 Voltage and Current, Feed Power Limit, EMS Backup Ratio and Total Battery Capacity. It has no shared binary sensors, numbers or switches. The sections marked Local Modbus Only below come on top. The serial prefix does not decide whether Local works: the inverter reports its own model, and only the three-phase PowerOcean is accepted.
 
-> **Note:** The European variants (`J327`, `J32D`, `J32E`) and the PowerOcean Plus units (`R371`, `R372`, `R374`, `HJ3C`) are currently not exposed through the EcoFlow Developer API and therefore require Enhanced Mode. In Standard Mode these devices report error 1006 and all entities stay unavailable. Single-phase variants (`J327`, `J329`, `J32E`) report only the phases that are physically present; the remaining phase entities stay empty. Whether `J32B` and `J329` can be linked to an API key has not been tested, so Standard Mode is unproven for those prefixes.
+> **Note:** The European variants (`J327`, `J32D`, `J32E`) and the PowerOcean Plus units (`R371`, `R372`, `R373`, `R374`, `HJ3C`) are currently not exposed through the EcoFlow Developer API and therefore require Enhanced Mode. In Standard Mode these devices report error 1006 and all entities stay unavailable. Single-phase variants (`J327`, `J329`, `J32E`) report only the phases that are physically present; the remaining phase entities stay empty. Whether `J32B` and `J329` can be linked to an API key has not been tested, so Standard Mode is unproven for those prefixes.
 
 > **The heating rod readings are optional and work in Standard and Enhanced
 > Mode, not on a Local entry.** They belong to the PowerGlow accessory, so they
@@ -153,7 +153,7 @@ These sensors are pre-configured for the HA Energy Dashboard (`total_increasing`
 | MPPT String 4 Voltage | V | diagnostic (disabled) |
 | MPPT String 4 Current | A | diagnostic (disabled) |
 
-> **MPPT String 3 and 4** only carry data on PowerOcean Plus units (`R371`, `R372`, `R374`, `HJ3C`), which have more than two PV inputs. They are disabled by default because ordinary PowerOcean units report two strings and would leave these entities empty.
+> **MPPT String 3 and 4** only carry data on PowerOcean Plus units (`R371`, `R372`, `R373`, `R374`, `HJ3C`), which have more than two PV inputs. They are disabled by default because ordinary PowerOcean units report two strings and would leave these entities empty.
 | PV Inverter Power | W | diagnostic (disabled) |
 
 ## Sensors - EMS / System (diagnostic)
