@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- PowerOcean Plus units with serial prefix `R373` are recognized instead of being skipped as an unsupported device. Thanks to vtom81 for the Enhanced Mode recording, which shows the unit sending its state on the same topics as the other Plus models. Like them it needs the EcoFlow account sign-in, since the Developer API does not expose it. Whether every reading matches your EcoFlow app is not yet confirmed on this model, so a note from an owner would settle it. (Ref #573)
+- PowerOcean Plus units with serial prefix `R373` are recognized instead of being skipped as an unsupported device. Thanks to @vtom81 for the Enhanced Mode recording, which shows the unit sending the same PowerOcean state frames as the other Plus models. Like them it needs the EcoFlow account sign-in, since the Developer API does not expose it. Whether every reading matches your EcoFlow app is not yet confirmed on this model, so a note from an owner would settle it. (Ref #573)
 
 ## [1.25.0] - 2026-10-16
 

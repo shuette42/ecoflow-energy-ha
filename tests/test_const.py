@@ -1340,7 +1340,6 @@ class TestTheScheduleChargePowerCeiling:
         assert schedule_power_max_w("J329TEST00000001") == 6000
         assert schedule_power_max_w("J32DTEST00000001") == 6000
         assert schedule_power_max_w("R372TEST00000001") == 29900
-        assert schedule_power_max_w("R373TEST00000001") == 29900
 
     def test_an_unmapped_prefix_falls_back_to_its_family(self) -> None:
         """A new PowerOcean prefix lands on what its family carries rather
@@ -1350,6 +1349,7 @@ class TestTheScheduleChargePowerCeiling:
 
         assert schedule_power_max_w("HJ39TEST00000001") == 10000
         assert schedule_power_max_w("J32XTEST00000001") == 6000
+        assert schedule_power_max_w("R373TEST00000001") == 29900
         assert schedule_power_max_w("R379TEST00000001") == 29900
         assert schedule_power_max_w("ZZZZTEST00000001") == 10000
         assert schedule_power_max_w("") == 10000
