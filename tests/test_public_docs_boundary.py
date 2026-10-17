@@ -29,6 +29,8 @@ from pathlib import Path
 
 import pytest
 
+from custom_components.ecoflow_energy.ecoflow.const import _SN_PREFIX_MAP
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DOCUMENTATION = REPO_ROOT / "documentation"
 REGISTER = DOCUMENTATION / "architecture" / "decisions.md"
@@ -92,6 +94,29 @@ _TOOLING_NAMES = "|".join(
     ]
 )
 
+# A device serial is a registered prefix followed by twelve characters. The
+# prefixes come from the register itself, so a device added there is covered
+# here without a second edit. The family stems stay on purpose, as a superset
+# safety net: a serial of a sibling that is not routed yet (no register entry)
+# in a public file is still caught.
+_SERIAL_FAMILY_STEMS = (
+    "HJ3[0-9A-Z]",
+    "J32[0-9A-Z]",
+    "R3[357][0-9]",
+    "BK[0-9]{2}",
+    "HW5[0-9]",
+    "ES2[0-9]",
+    "RE[0-9]{2}",
+)
+_SERIAL_REGISTER_PART = "|".join(re.escape(key) for key in sorted(_SN_PREFIX_MAP))
+_SERIAL_PATTERN = re.compile(
+    r"\b(?:"
+    + _SERIAL_REGISTER_PART
+    + "|"
+    + "|".join(_SERIAL_FAMILY_STEMS)
+    + r")[A-Z0-9]{12}\b"
+)
+
 FORBIDDEN: dict[str, re.Pattern[str]] = {
     "protocol-source term": re.compile(_SOURCE_TERMS),
     "private path or plan number": re.compile(
@@ -104,10 +129,7 @@ FORBIDDEN: dict[str, re.Pattern[str]] = {
     ),
     "internal tooling name": re.compile(_TOOLING_NAMES),
     "em or en dash": re.compile("[\u2013\u2014]"),
-    "device serial": re.compile(
-        r"\b(?:HJ3[0-9A-Z]|HW5[0-9]|R3[357][0-9]|BK[0-9]{2}|C37[46]|D3M1|D3N1"
-        r"|P321|P231|AC71|ES2[12]|RE1[17]|J32[0-9A-Z]|HZ31|HC31|S02F)[A-Z0-9]{12}\b"
-    ),
+    "device serial": _SERIAL_PATTERN,
 }
 
 # A serial-shaped value is a dummy when it says so, is a masked run, or is one
@@ -211,12 +233,30 @@ def test_every_forbidden_pattern_catches_its_sample(label: str) -> None:
     assert any(f.startswith(label) for f in _leaks(KNOWN_BAD[label])), label
 
 
-def test_the_serial_pattern_covers_every_prefix_the_register_names() -> None:
-    """Positive control for the prefix alternation, one sample per family
-    that the first version missed (HJ3C, R371, R373, R374)."""
-    for prefix in ("HJ3C", "R371", "R373", "R374", "HC31", "HJ31", "BK21", "J32E"):
-        sample = "unit " + _term(prefix, "A1B2C3D4E5F6") + " reported"
-        assert any(f.startswith("device serial") for f in _leaks(sample)), prefix
+@pytest.mark.parametrize("prefix", sorted(_SN_PREFIX_MAP))
+def test_the_serial_pattern_covers_every_prefix_the_register_names(
+    prefix: str,
+) -> None:
+    """Positive control for the prefix alternation: one sample per key of the
+    register, so a prefix added there is covered or this test names it."""
+    sample = "unit " + _term(prefix, "A1B2C3D4E5F6") + " reported"
+    assert any(f.startswith("device serial") for f in _leaks(sample)), prefix
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "unit ZZ99A1B2C3D4E5F6 reported",
+        "unit " + _term("HJ31", "A1B2C3D4E5F6X7Y") + " reported",
+        "unit " + _term("XHJ31", "A1B2C3D4E5F6") + " reported",
+    ],
+    ids=["unregistered-prefix", "tail-too-long", "glued-to-a-leading-letter"],
+)
+def test_the_serial_pattern_ignores_what_is_not_a_serial(text: str) -> None:
+    """Negative control: the derived pattern must not fire on an unregistered
+    prefix, a tail longer than twelve characters, or a prefix that is only the
+    end of a longer word."""
+    assert [f for f in _leaks(text) if f.startswith("device serial")] == []
 
 
 def test_a_dummy_serial_is_not_a_finding() -> None:
