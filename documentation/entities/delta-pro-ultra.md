@@ -21,20 +21,20 @@ Mapped from one owner's two diagnostics downloads on #464. The unit was idle whi
 | Entity | Unit | Category | Default | Description |
 |:---|:---:|:---:|:---:|:---|
 | Battery SOC | % | - | enabled | Charge of the whole system |
-| Remaining Time | min | - | enabled | Remaining time as the unit reports it |
+| Remaining Time | min | - | enabled | The unit's own runtime estimate in minutes, not calculated by the integration (32,495 min is about 22.5 days). In the idle recordings it counted down by one minute per minute at a tiny load. Whether it means time until empty or time until full while charging is not confirmed; compare it with the app under a known load. For your own runtime estimate, build an average of Output Total in Home Assistant (Statistics or a template helper) and divide the stored energy by it |
 | Input Total | W | - | enabled | Total input power |
 | Output Total | W | - | enabled | Total output power |
 | AC Input | W | - | enabled | AC charging input |
-| Power In/Out Port Input | W | - | enabled | Power flowing into the unit through the Power In/Out port |
-| Power In/Out Port Output | W | - | enabled | Power flowing out of the unit through the Power In/Out port |
+| Power In/Out Port Input | W | - | enabled | Power flowing into the unit through the Power In/Out port (the unit's own "power in/out" connector, which it can both feed and draw from). Part of Input Total |
+| Power In/Out Port Output | W | - | enabled | Power flowing out of the unit through the same port. Part of Output Total |
 | Solar LV Input Power | W | - | enabled | Low-voltage solar input |
 | Solar HV Input Power | W | - | enabled | High-voltage solar input |
-| AC Output L1-1 Power | W | - | enabled | AC output L1-1, as the unit names it |
+| AC Output L1-1 Power | W | - | enabled | Power of one AC output group, named L1-1 by the unit. L1-1 to L2-2 are the unit's own labels for its four AC output groups. Which physical outlet each one is has not been checked against a load yet |
 | AC Output L1-2 Power | W | - | enabled | AC output L1-2, as the unit names it |
 | AC Output L2-1 Power | W | - | enabled | AC output L2-1, as the unit names it |
 | AC Output L2-2 Power | W | - | enabled | AC output L2-2, as the unit names it |
-| AC Output TT-30 Power | W | - | enabled | TT-30 output |
-| AC Output L14-30 Power | W | - | enabled | L14-30 output |
+| AC Output TT-30 Power | W | - | enabled | Power of the TT-30 output (30 A RV outlet) |
+| AC Output L14-30 Power | W | - | enabled | Power of the L14-30 output (30 A, 120/240 V locking outlet) |
 | Battery Voltage | V | - | enabled | Battery voltage |
 | Battery Charge Power | W | - | enabled | Power going into the batteries |
 | Battery Discharge Power | W | - | enabled | Power coming out of the batteries |

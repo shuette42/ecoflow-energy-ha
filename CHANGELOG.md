@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [1.26.0] - 2026-10-16
 
+### Changed
+
+- The DELTA Pro Ultra entity reference now explains the Remaining Time value (the unit's own estimate, not calculated here) and the Power In/Out port and the AC output groups, after questions on #464. (Ref #464)
+
 ### Added
 
 - PowerOcean Plus units with serial prefix `R373` are recognized instead of being skipped as an unsupported device. Thanks to @vtom81 for the Enhanced Mode recording, which shows the unit sending the same PowerOcean state frames as the other Plus models. Like them it needs the EcoFlow account sign-in, since the Developer API does not expose it. Whether every reading matches your EcoFlow app is not yet confirmed on this model, so a note from an owner would settle it. (Ref #573)
