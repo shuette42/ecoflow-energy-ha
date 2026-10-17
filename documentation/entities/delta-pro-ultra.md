@@ -21,7 +21,7 @@ Mapped from one owner's two diagnostics downloads on #464. The unit was idle whi
 | Entity | Unit | Category | Default | Description |
 |:---|:---:|:---:|:---:|:---|
 | Battery SOC | % | - | enabled | Charge of the whole system |
-| Remaining Time | min | - | enabled | The unit's own runtime estimate in minutes, not calculated by the integration (32,495 min is about 22.5 days). In the idle recordings it counted down by one minute per minute at a tiny load. Whether it means time until empty or time until full while charging is not confirmed; compare it with the app under a known load. For your own runtime estimate, build an average of Output Total in Home Assistant (Statistics or a template helper) and divide the stored energy by it |
+| Remaining Time | min | - | enabled | The unit's own runtime estimate in minutes, not calculated by the integration (32,495 min is about 22.5 days). In the idle recordings it went down, more slowly than the clock. Whether it means time until empty or time until full while charging is not confirmed; compare it with the app under a known load. For your own runtime estimate, average Output Total in Home Assistant (Statistics or a template helper) |
 | Input Total | W | - | enabled | Total input power |
 | Output Total | W | - | enabled | Total output power |
 | AC Input | W | - | enabled | AC charging input |
