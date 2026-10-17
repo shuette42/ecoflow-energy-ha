@@ -7,7 +7,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 
 - The DELTA Pro Ultra entity reference now explains the Remaining Time value (the unit's own estimate, not calculated here) and the Power In/Out port and the AC output groups, after questions on #464. (Ref #464)
-- The entity pages now name their serial prefixes: the Delta 2 Max (`R351`, `R331`), Smart Plug (`HW52`), PowerStream (`HW51`), Smart Meter (`BK21`) and WAVE 3 (`AC71`) pages state which serial numbers they cover.
+- The WAVE 3 entity page now names its serial prefix (`AC71`), and the Delta 2 Max (`R351`, `R331`), Smart Plug (`HW52`), PowerStream (`HW51`) and Smart Meter (`BK21`) pages mark theirs as code.
 
 ### Added
 
