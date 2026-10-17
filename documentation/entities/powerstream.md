@@ -1,6 +1,6 @@
 # PowerStream - Entity Reference
 
-Full list of all entities created for PowerStream microinverters (HW51 series).
+Full list of all entities created for PowerStream microinverters (`HW51` series).
 
 **Totals:** 25 sensors
 

@@ -1,6 +1,6 @@
 # Smart Plug - Entity Reference
 
-Full list of all entities created for Smart Plug devices (HW52 series).
+Full list of all entities created for Smart Plug devices (`HW52` series).
 
 **Totals:** 11 sensors, 1 binary sensor, 1 switch, 2 numbers
 

@@ -1,6 +1,6 @@
 # WAVE 3 - Entity Reference
 
-Full list of all entities created for the EcoFlow WAVE 3 portable air conditioner.
+Full list of all entities created for the EcoFlow WAVE 3 portable air conditioner (`AC71` series).
 
 **Totals:** 18 sensors, 5 binary sensors, 4 switches, 5 numbers, 5 selects, 1 climate
 

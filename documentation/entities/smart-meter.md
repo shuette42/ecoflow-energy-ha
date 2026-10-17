@@ -1,6 +1,6 @@
 # Smart Meter - Entity Reference
 
-Full list of all entities created for the EcoFlow Smart Meter (BK21 series).
+Full list of all entities created for the EcoFlow Smart Meter (`BK21` series).
 
 **Totals:** 18 sensors, 3 binary sensors
 

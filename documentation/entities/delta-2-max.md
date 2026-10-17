@@ -1,6 +1,6 @@
 # Delta 2 Max - Entity Reference
 
-Full list of all entities created for Delta 2 Max devices (R351/R331 series).
+Full list of all entities created for Delta 2 Max devices (`R351` and `R331` series).
 
 **Totals:** 94 sensors, 4 binary sensors, 7 switches, 8 numbers
 
