@@ -11,7 +11,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
-- The STREAM AC 5000 (`ES22`) and STREAM 5000 (`ES21`) are now treated as Enhanced Mode only in setup, like the other devices that report on the account channel alone. This integration has no parser for them on the Developer API route, so a Standard Mode entry could only create entities that never fill. The device picker now says "requires Enhanced Mode" for them, a Standard Mode entry skips them with a warning in the log, and switching such an entry to Standard Mode is refused.
+- The STREAM AC 5000 (`ES22`) and STREAM 5000 (`ES21`) are now treated as Enhanced Mode only in setup. This integration has no parser for them on the Standard Mode HTTP route, so a Standard Mode entry could only create entities that never fill. The device picker now says "requires Enhanced Mode" for them, a Standard Mode entry skips them with a warning in the log, and switching such an entry to Standard Mode is refused.
 
 ### Added
 
