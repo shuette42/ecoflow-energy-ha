@@ -23,6 +23,7 @@ from ecoflow_energy.const import (
     DELTA_PROFILE_R351,
     DEVICE_TYPE_DISPLAY_NAMES,
     ENHANCED_ONLY_DEVICE_TYPES,
+    OCEAN2_CONTROL_PREFIXES,
     POWEROCEAN_BINARY_SENSORS,
     POWEROCEAN_SENSORS,
     POWERPULSE_CONTROL_PREFIXES,
@@ -37,6 +38,7 @@ from ecoflow_energy.const import (
     SMARTPLUG_NUMBERS,
     SMARTPLUG_SENSORS,
     SMARTPLUG_SWITCHES,
+    STREAM_AC5000_CONTROL_PREFIXES,
     STREAM_BINARY_SENSORS,
     STREAM_CONTROL_PREFIXES,
     STREAM_NUMBERS,
@@ -56,6 +58,7 @@ from ecoflow_energy.ecoflow.const import (
     _SN_PREFIX_DISPLAY_NAMES,
     _SN_PREFIX_MAP,
     _STREAM_KEYWORDS,
+    OCEAN2_AC_SIGN_INVERTED,
     POWEROCEAN_SCHEDULE_POWER_MAX_W,
 )
 
@@ -1501,6 +1504,9 @@ class TestWave3Sensors:
         _SN_PREFIX_EXCLUDED_KEYS,
         STREAM_CONTROL_PREFIXES,
         POWERPULSE_CONTROL_PREFIXES,
+        STREAM_AC5000_CONTROL_PREFIXES,
+        OCEAN2_CONTROL_PREFIXES,
+        OCEAN2_AC_SIGN_INVERTED,
     ],
     ids=[
         "display-names",
@@ -1508,6 +1514,9 @@ class TestWave3Sensors:
         "excluded-keys",
         "stream-control",
         "powerpulse-control",
+        "stream-ac5000-control",
+        "ocean2-control",
+        "ocean2-ac-sign-inverted",
     ],
 )
 def test_every_table_keyed_by_prefix_names_a_registered_prefix(keys: Any) -> None:

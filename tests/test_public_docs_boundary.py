@@ -98,7 +98,9 @@ _TOOLING_NAMES = "|".join(
 # prefixes come from the register itself, so a device added there is covered
 # here without a second edit. The family stems stay on purpose, as a superset
 # safety net: a serial of a sibling that is not routed yet (no register entry)
-# in a public file is still caught.
+# in a public file is still caught. The net covers only those seven families;
+# prefixes outside them (C37x, D3M1, P321, AC71, S02F and similar) rely on the
+# map alone.
 _SERIAL_FAMILY_STEMS = (
     "HJ3[0-9A-Z]",
     "J32[0-9A-Z]",
@@ -243,19 +245,50 @@ def test_the_serial_pattern_covers_every_prefix_the_register_names(
     assert any(f.startswith("device serial") for f in _leaks(sample)), prefix
 
 
+# One sample per family stem, each built from a prefix the register does not
+# carry. Only the stem can catch these, so a stem that is removed or mistyped
+# turns exactly its own case red.
+_STEM_SIBLINGS = ("HJ39", "J32Z", "R339", "BK99", "HW59", "ES29", "RE99")
+
+
+@pytest.mark.parametrize("prefix", _STEM_SIBLINGS)
+def test_the_serial_pattern_covers_an_unregistered_sibling_of_each_family(
+    prefix: str,
+) -> None:
+    """Positive control for the family stems, which the register-driven test
+    above cannot reach: a sibling that is not routed yet is still a serial."""
+    assert prefix not in _SN_PREFIX_MAP, (
+        f"pick another sibling: {prefix} is registered now"
+    )
+    sample = "unit " + _term(prefix, "A1B2C3D4E5F6") + " reported"
+    assert any(f.startswith("device serial") for f in _leaks(sample)), prefix
+
+
 @pytest.mark.parametrize(
     "text",
     [
         "unit ZZ99A1B2C3D4E5F6 reported",
         "unit " + _term("HJ31", "A1B2C3D4E5F6X7Y") + " reported",
         "unit " + _term("XHJ31", "A1B2C3D4E5F6") + " reported",
+        "unit " + _term("HJ31", "A1B2C3D4E5F") + " reported",
+        "unit " + _term("HJ31", "A1B2C3D4E5F6X") + " reported",
+        # Real serials are uppercase, so the pattern stays case-sensitive on
+        # purpose; switching on IGNORECASE has to be a visible decision.
+        "unit " + _term("hj31", "a1b2c3d4e5f6") + " reported",
     ],
-    ids=["unregistered-prefix", "tail-too-long", "glued-to-a-leading-letter"],
+    ids=[
+        "unregistered-prefix",
+        "tail-too-long",
+        "glued-to-a-leading-letter",
+        "tail-one-short",
+        "tail-one-long",
+        "lowercase-is-not-flagged",
+    ],
 )
 def test_the_serial_pattern_ignores_what_is_not_a_serial(text: str) -> None:
     """Negative control: the derived pattern must not fire on an unregistered
-    prefix, a tail longer than twelve characters, or a prefix that is only the
-    end of a longer word."""
+    prefix, a tail shorter or longer than twelve characters, a prefix that is
+    only the end of a longer word, or a lowercase word."""
     assert [f for f in _leaks(text) if f.startswith("device serial")] == []
 
 
