@@ -275,6 +275,12 @@ class TestDeviceTypeRouting:
         assert get_device_type("", "R373TEST00000001") == "powerocean"
         assert get_device_type("", "R37ZTEST00000001") != "powerocean"
 
+    def test_hc31_is_powerocean_dc_fit(self) -> None:
+        """HC31 (#575) is routed to the PowerOcean parser; a neighbouring
+        prefix nobody reported stays unrouted (negative control)."""
+        assert get_device_type("", "HC31TEST00000001") == "powerocean"
+        assert get_device_type("", "HC3ZTEST00000001") != "powerocean"
+
     def test_base_delta3_display_name(self) -> None:
         # A base DELTA 3 reports an empty product name, same as the BK series.
         assert get_device_name("", "P231TEST00000001") == "DELTA 3 (0001)"
