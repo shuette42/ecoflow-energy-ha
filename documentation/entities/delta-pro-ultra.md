@@ -25,7 +25,7 @@ Mapped from one owner's two diagnostics downloads on #464. The unit was idle whi
 | Input Total | W | - | enabled | Total input power |
 | Output Total | W | - | enabled | Total output power |
 | AC Input | W | - | enabled | AC charging input |
-| Power In/Out Port Input | W | - | enabled | Power flowing into the unit through the Power In/Out port (the unit's own "power in/out" connector, which it can both feed and draw from). Part of Input Total |
+| Power In/Out Port Input | W | - | enabled | Power flowing into the unit through the Power In/Out port (the unit's own "power in/out" connector). Part of Input Total |
 | Power In/Out Port Output | W | - | enabled | Power flowing out of the unit through the same port. Part of Output Total |
 | Solar LV Input Power | W | - | enabled | Low-voltage solar input |
 | Solar HV Input Power | W | - | enabled | High-voltage solar input |
