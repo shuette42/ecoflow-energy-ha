@@ -173,6 +173,22 @@ def test_enhanced_only_prefixes_in_the_readme_agree_with_the_table_and_code():
         f"mark them Enhanced only"
     )
 
+    # The other direction: a device type all of whose prefixes the table marks
+    # Enhanced only must be in the code's set, or the config flow never says
+    # "requires Enhanced Mode" for it (the STREAM AC 5000 was missing once).
+    prefixes_by_type: dict[str, set[str]] = {}
+    for prefix, device_type in _SN_PREFIX_MAP.items():
+        prefixes_by_type.setdefault(device_type, set()).add(prefix)
+    missing_types = sorted(
+        device_type
+        for device_type, prefixes in prefixes_by_type.items()
+        if prefixes <= derived and device_type not in const.ENHANCED_ONLY_DEVICE_TYPES
+    )
+    assert not missing_types, (
+        f"device type(s) {missing_types} have only prefixes the README table "
+        f"marks Enhanced only, but are not in ENHANCED_ONLY_DEVICE_TYPES"
+    )
+
 
 def test_powerpulse2_definition_counts():
     """PowerPulse 2's entity counts (18 sensors, 1 binary sensor, 2 selects,

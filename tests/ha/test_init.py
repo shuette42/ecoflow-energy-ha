@@ -6,6 +6,7 @@ from datetime import timedelta
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
@@ -456,23 +457,37 @@ class TestUnsupportedDeviceSkip:
             }
         ]
 
-    async def test_developer_keys_smart_meter_is_skipped_without_probe(
+    @pytest.mark.parametrize(
+        ("sn", "device_type", "label"),
+        [
+            ("BK21TEST00000001", "smart_meter", "Smart Meter"),
+            ("ES22TEST00000001", "stream_ac5000", "STREAM AC 5000"),
+            ("HD31TEST00000001", "smart_home_panel_2", "Smart Home Panel 2"),
+        ],
+        ids=["smart_meter", "stream_ac5000", "smart_home_panel_2"],
+    )
+    async def test_developer_keys_enhanced_only_device_is_skipped_without_probe(
         self,
         hass: HomeAssistant,
         mock_mqtt_client,
         caplog,
+        sn: str,
+        device_type: str,
+        label: str,
     ) -> None:
         """The mirror of the PowerStream case, with the modes swapped.
 
-        The meter reports on the app channel and nowhere else, so a
-        developer-key entry would create seventeen entities that can never
-        fill. It is skipped with one warning and no probe.
+        The device reports on the app channel and nowhere else, so a
+        developer-key entry would create entities that can never fill. It is
+        skipped with one warning and no probe. One case per kind of member of
+        ENHANCED_ONLY_DEVICE_TYPES: the meter, the STREAM 5000 pair and a
+        later addition, so a type missing from the set fails its own case.
         """
         smart_meter = {
-            "sn": "BK21TEST00000001",
-            "name": "Smart Meter",
-            "product_name": "Smart Meter",
-            "device_type": "smart_meter",
+            "sn": sn,
+            "name": label,
+            "product_name": label,
+            "device_type": device_type,
             "online": 1,
         }
         entry = MockConfigEntry(
@@ -511,18 +526,18 @@ class TestUnsupportedDeviceSkip:
         start_probes.assert_not_awaited()
         assert hass.data[DATA_SKIPPED_DEVICES][entry.entry_id] == [
             {
-                "sn_prefix": "BK21",
-                "device_tag": device_log_tag("BK21TEST00000001"),
-                "sn": "BK21TEST00000001",
-                "product_name": "Smart Meter",
-                "reason": "Smart Meter requires Enhanced Mode",
+                "sn_prefix": sn[:4],
+                "device_tag": device_log_tag(sn),
+                "sn": sn,
+                "product_name": label,
+                "reason": f"{label} requires Enhanced Mode",
                 "probe_eligible": False,
             }
         ]
         warnings = [
             r.getMessage()
             for r in caplog.records
-            if r.levelno == logging.WARNING and "Smart Meter" in r.getMessage()
+            if r.levelno == logging.WARNING and label in r.getMessage()
         ]
         assert len(warnings) == 1
         assert "requires Enhanced Mode" in warnings[0]
