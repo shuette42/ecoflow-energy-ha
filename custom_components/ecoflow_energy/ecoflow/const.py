@@ -241,8 +241,9 @@ _SN_PREFIX_MAP = {
     "HJ3C": DEVICE_TYPE_POWEROCEAN,
     # PowerOcean DC Fit, reported in #575 with an Enhanced Mode recording
     # whose frames carry the same `96/x` and `254/32` headers as the other
-    # PowerOcean units. Enhanced Mode only; the field layout of a DC-coupled
-    # unit is not confirmed.
+    # PowerOcean units. The recording is from Enhanced Mode; whether a
+    # Developer API key accepts the serial is untested, and the field layout
+    # of a DC-coupled unit is not confirmed.
     "HC31": DEVICE_TYPE_POWEROCEAN,
     "R351": DEVICE_TYPE_DELTA,
     "R331": DEVICE_TYPE_DELTA,
