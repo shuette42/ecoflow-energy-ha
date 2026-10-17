@@ -9,6 +9,10 @@ All notable changes to this project will be documented in this file.
 - The DELTA Pro Ultra entity reference now explains the Remaining Time value (the unit's own estimate, not calculated here) and the Power In/Out port and the AC output groups, after questions on #464. (Ref #464)
 - The WAVE 3 entity page now names its serial prefix (`AC71`), and the Delta 2 Max (`R351`, `R331`), Smart Plug (`HW52`), PowerStream (`HW51`) and Smart Meter (`BK21`) pages mark theirs as code.
 
+### Fixed
+
+- The STREAM AC 5000 (`ES22`) and STREAM 5000 (`ES21`) are now treated as Enhanced Mode only in setup, like the other devices that report on the account channel alone. They have no Developer API path in this integration, so a Standard Mode entry could only create entities that never fill. The device picker now says "requires Enhanced Mode" for them, a Standard Mode entry skips them with a note in the log, and switching such an entry to Standard Mode is refused.
+
 ### Added
 
 - PowerOcean Plus units with serial prefix `R373` are recognized instead of being skipped as an unsupported device. Thanks to @vtom81 for the Enhanced Mode recording, which shows the unit sending the same PowerOcean state frames as the other Plus models. Like them it needs the EcoFlow account sign-in, since the Developer API does not expose it. Whether every reading matches your EcoFlow app is not yet confirmed on this model, so a note from an owner would settle it. (Ref #573)

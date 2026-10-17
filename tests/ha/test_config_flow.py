@@ -288,6 +288,14 @@ DELTA_PRO_ULTRA_DEVICE = {
     "online": 1,
 }
 
+STREAM_AC5000_DEVICE = {
+    "sn": "ES22TEST00000001",
+    "name": "STREAM AC 5000",
+    "product_name": "",
+    "device_type": "stream_ac5000",
+    "online": 1,
+}
+
 SMART_HOME_PANEL_2_DEVICE = {
     "sn": "HD31TEST00000001",
     "name": "Smart Home Panel 2",
@@ -339,6 +347,11 @@ ENHANCED_ONLY_DEVICE_CASES = [
         SMART_HOME_PANEL_2_DEVICE,
         "Smart Home Panel 2 (0001) (HD31...0001) - requires Enhanced Mode",
         id="smart_home_panel_2",
+    ),
+    pytest.param(
+        STREAM_AC5000_DEVICE,
+        "STREAM AC 5000 (0001) (ES22...0001) - requires Enhanced Mode",
+        id="stream_ac5000",
     ),
 ]
 

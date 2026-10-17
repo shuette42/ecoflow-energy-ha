@@ -546,6 +546,9 @@ ENHANCED_ONLY_DEVICE_TYPES: frozenset[str] = frozenset(
         DEVICE_TYPE_SMART_PANEL_40,
         DEVICE_TYPE_DELTA_PRO_ULTRA,
         DEVICE_TYPE_SMART_HOME_PANEL_2,
+        # ES22 and ES21 only. The type has a protobuf parser and no HTTP one,
+        # so a Developer Key entry could never fill it.
+        DEVICE_TYPE_STREAM_AC5000,
     }
 )
 
