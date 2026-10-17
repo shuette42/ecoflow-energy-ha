@@ -443,6 +443,8 @@ class TestTheNumber:
             ("J329TEST00000001", 6000),
             ("R372TEST00000001", 29900),
             ("R373TEST00000001", 29900),
+            # HC31 (#575): no ceiling measured, so it gets the family default.
+            ("HC31TEST00000001", 10000),
             # A three-phase prefix nobody has mapped falls back to what its
             # family carries, not to the builder's guard.
             ("HJ39TEST00000001", 10000),

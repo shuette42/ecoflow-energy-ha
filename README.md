@@ -42,7 +42,7 @@
 
 | Device | Serial prefix | Connection | Sensors | Controls | Energy Dashboard | Update |
 |:---|:---|:---|:---:|:---|:---:|:---|
-| **PowerOcean** | `HJ31` `HJ32` `HJ35` `HJ36` `HJ37` `J32B` `J329` `J327`\* `J32D`\* `J32E`\* `HC31`\* | Standard, Enhanced, Local† | 249 + 21 binary | 16 switches · 20 numbers · 2 selects (Enhanced) | 6 | ~30 s / ~3 s / ~2 s (Local) |
+| **PowerOcean** | `HJ31` `HJ32` `HJ35` `HJ36` `HJ37` `J32B` `J329` `J327`\* `J32D`\* `J32E`\* `HC31` | Standard, Enhanced, Local† | 249 + 21 binary | 16 switches · 20 numbers · 2 selects (Enhanced) | 6 | ~30 s / ~3 s / ~2 s (Local) |
 | **PowerOcean Plus** | `R371` `R372` `R373` `R374` `HJ3C` | Enhanced only (no Local yet) | 249 + 21 binary | 16 switches · 20 numbers · 2 selects | 6 | ~3 s |
 | **Delta 2 Max** | `R351` `R331` | Standard, MQTT push | 94 + 4 binary | 7 switches · 8 numbers | 4 | ~30 s |
 | **Delta 3** | `D3M1` `D3N1` `P321` `P231` `P351` | Standard, Enhanced | 47 (`D3M`: + 1 binary) | 7 switches · 4 numbers · 5 selects (`D3M`: 10 · 7 · 5) | 4 | ~30 s / ~2 s |
@@ -212,7 +212,7 @@ Already running a different EcoFlow integration? It can stay installed while you
 |:---|:---|:---|:---|
 | **Connection** | EcoFlow cloud (HTTPS polling + MQTT) | EcoFlow cloud (WSS MQTT) | Your network, Modbus/TCP, no cloud |
 | **Credentials** | Access Key + Secret Key ([Developer Portal](https://developer.ecoflow.com)) | EcoFlow email + password (same as mobile app) | None. EcoFlow support must enable Modbus on the inverter first |
-| **Devices** | All except the Enhanced-only serials (`J327`, `J32D`, `J32E`, `HC31`, `R371`, `R372`, `R373`, `R374`, `HJ3C`, `BK01`, `BK21`, `ES21`, `ES22`, `HZ31`, `S02F`, `AC71`, `C371`, `C374`, `C376`, `RE11`, `RE17`, `RE41`, `RE42`, `RE43`, `HR61`, `Y711`, `HD31`, `R655`, `R631`) | All supported devices | Three-phase PowerOcean only |
+| **Devices** | All except the Enhanced-only serials (`J327`, `J32D`, `J32E`, `R371`, `R372`, `R373`, `R374`, `HJ3C`, `BK01`, `BK21`, `ES21`, `ES22`, `HZ31`, `S02F`, `AC71`, `C371`, `C374`, `C376`, `RE11`, `RE17`, `RE41`, `RE42`, `RE43`, `HR61`, `Y711`, `HD31`, `R655`, `R631`) | All supported devices | Three-phase PowerOcean only |
 | **Update rate** | ~30 s HTTP polling (+ MQTT push for Delta/Smart Plug) | ~2-4 s real-time via WSS MQTT | ~2 s polling |
 | **Delta 2 Max / Smart Plug controls** | All switches and numbers | All switches and numbers | Not applicable |
 | **Delta 3 controls** | Switches and most numbers; the screen and idle shutdowns and the AC charge power need Enhanced Mode | All switches, numbers and selects | Not applicable |

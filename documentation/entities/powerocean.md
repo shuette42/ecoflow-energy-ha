@@ -2,7 +2,7 @@
 
 Full list of all entities created for PowerOcean devices.
 
-**Serial prefixes:** `HJ31`, `HJ32`, `HJ35`, `HJ36`, `HJ37` (standard) · `J32B`, `J327`, `J329`, `J32D`, `J32E` (European variants) · `R371`, `R372`, `R373`, `R374`, `HJ3C` (PowerOcean Plus) · `HC31` (PowerOcean DC Fit, Enhanced Mode only). All share the entity set below.
+**Serial prefixes:** `HJ31`, `HJ32`, `HJ35`, `HJ36`, `HJ37` (standard) · `J32B`, `J327`, `J329`, `J32D`, `J32E` (European variants) · `R371`, `R372`, `R373`, `R374`, `HJ3C` (PowerOcean Plus) · `HC31` (PowerOcean DC Fit, recorded in Enhanced Mode, Standard Mode untested). All share the entity set below, except that a DC-coupled unit may leave grid and phase entities empty until an owner confirms what it reports.
 
 A Local (Modbus/TCP) entry for a three-phase PowerOcean creates only these shared sensors: Solar Power, Home Power, Grid Power, Battery Power, Battery Charge Power, Battery Discharge Power, Grid Import Power, Grid Export Power, Battery SOC, Battery Charge Energy, Battery Discharge Energy, Grid Frequency, Battery Packs Online (EMS), MPPT String 1 and 2 Voltage and Current, Feed Power Limit, EMS Backup Ratio and Total Battery Capacity. It has no shared binary sensors, numbers or switches. The sections marked Local Modbus Only below come on top. The serial prefix does not decide whether Local works: the inverter reports its own model, and only the three-phase PowerOcean is accepted.
 

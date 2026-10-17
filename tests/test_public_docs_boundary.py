@@ -106,7 +106,7 @@ FORBIDDEN: dict[str, re.Pattern[str]] = {
     "em or en dash": re.compile("[\u2013\u2014]"),
     "device serial": re.compile(
         r"\b(?:HJ3[0-9A-Z]|HW5[0-9]|R3[357][0-9]|BK[0-9]{2}|C37[46]|D3M1|D3N1"
-        r"|P321|P231|AC71|ES2[12]|RE1[17]|J32[0-9A-Z]|HZ31|S02F)[A-Z0-9]{12}\b"
+        r"|P321|P231|AC71|ES2[12]|RE1[17]|J32[0-9A-Z]|HZ31|HC31|S02F)[A-Z0-9]{12}\b"
     ),
 }
 
@@ -214,7 +214,7 @@ def test_every_forbidden_pattern_catches_its_sample(label: str) -> None:
 def test_the_serial_pattern_covers_every_prefix_the_register_names() -> None:
     """Positive control for the prefix alternation, one sample per family
     that the first version missed (HJ3C, R371, R373, R374)."""
-    for prefix in ("HJ3C", "R371", "R373", "R374", "HJ31", "BK21", "J32E"):
+    for prefix in ("HJ3C", "R371", "R373", "R374", "HC31", "HJ31", "BK21", "J32E"):
         sample = "unit " + _term(prefix, "A1B2C3D4E5F6") + " reported"
         assert any(f.startswith("device serial") for f in _leaks(sample)), prefix
 
