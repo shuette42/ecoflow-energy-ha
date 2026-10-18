@@ -351,6 +351,9 @@ class TestBounds:
             # f92 unknown: the RE11 keeps the declared 1..100, the RE41 starts at 0.
             ("RE11TEST00000001", None, (1, 100)),
             ("RE41TEST00000001", None, (0, 100)),
+            # The RE43 floor is borrowed from the RE11, its own row says 1.
+            ("RE43TEST00000001", 80, (1, 80)),
+            ("RE43TEST00000001", None, (1, 100)),
         ],
     )
     async def test_the_floor_comes_from_the_models_row(

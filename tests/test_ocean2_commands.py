@@ -354,9 +354,11 @@ class TestRe43RecordedReserveWrite:
         """The app sends `{f1: 0, f10: 30, f92: 80}`; the builder has no f1.
 
         Not a claim that the RE43 accepts our shape: the first write from Home
-        Assistant on an RE43 settles that. The RE41 app
-        also sends f1 0 and acks our frame without it, which is the reason to
-        try.
+        Assistant on an RE43 settles that. The RE41 precedent covers f1 only:
+        the RE41 app also sends f1 0 and acks our frame without it. The RE41
+        app writes carry no payload_ver (its acks have 1), while the RE43 app
+        write has payload_ver 1, which the builder leaves out, so that
+        difference has no RE41 precedent.
         """
         app = _header(bytes.fromhex(RE43_APP_SET["hex"]))
         built = _header(

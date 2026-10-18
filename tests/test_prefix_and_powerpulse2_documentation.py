@@ -217,3 +217,43 @@ def test_powerpulse2_definition_counts():
         f"no PowerOcean) and five 'sibling'-route numbers (need one), "
         f"got routes {routes}"
     )
+
+
+def _ocean2_control_gaps(
+    page: str, controls: dict[str, const.Ocean2Controls]
+) -> list[str]:
+    """Each Ocean 2 prefix with a control, and the control its page never names.
+
+    A prefix counts when it is backticked on any line that also names the
+    control, so a rewording of one sentence cannot hide it as long as one line
+    keeps both.
+    """
+    lines = page.splitlines()
+    gaps: list[str] = []
+    for prefix, row in controls.items():
+        wanted = (
+            ("Backup Reserve", row.reserve_floor),
+            ("Storm Guard", row.storm_param_full),
+        )
+        for control, value in wanted:
+            if value is None:
+                continue
+            if not any(control in line and f"`{prefix}`" in line for line in lines):
+                gaps.append(f"{prefix}: {control}")
+    return gaps
+
+
+def test_every_ocean2_control_is_named_for_its_prefix_on_the_ocean2_page():
+    """OCEAN2_CONTROLS decides which model gets which control, the page says so."""
+    page = (DOCS_DIR / "ocean-2.md").read_text(encoding="utf-8")
+
+    # Control: the table has both controls, or the check would pass on nothing.
+    rows = const.OCEAN2_CONTROLS
+    assert any(row.reserve_floor is not None for row in rows.values())
+    assert any(row.storm_param_full is not None for row in rows.values())
+
+    gaps = _ocean2_control_gaps(page, rows)
+    assert not gaps, (
+        "documentation/entities/ocean-2.md names no line with the prefix and "
+        f"the control for: {gaps}"
+    )

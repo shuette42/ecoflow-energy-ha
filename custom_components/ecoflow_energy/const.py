@@ -5951,10 +5951,11 @@ class Ocean2Controls:
 
     ``reserve_floor`` is the lowest Backup Reserve the model is written with:
     the RE11 has only acknowledged 1 and up, the RE41 has held 0 on its own
-    unit. ``storm_param_full`` says whether the Storm Guard write sends all
-    three StormParam fields (the RE41 app's own bytes) or only the switch
-    field (the RE11 app's bytes); the fields are presence-tracked, so the two
-    are different messages.
+    unit, and the RE43 floor of 1 is borrowed from the RE11 (the lowest value
+    seen on that unit is 10). ``storm_param_full`` says whether the Storm
+    Guard write sends all three StormParam fields (the RE41 app's own bytes)
+    or only the switch field (the RE11 app's bytes); the fields are
+    presence-tracked, so the two are different messages.
     """
 
     reserve_floor: int | None
