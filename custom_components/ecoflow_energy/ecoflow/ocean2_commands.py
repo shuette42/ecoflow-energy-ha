@@ -58,6 +58,9 @@ ACTION_STORM_PARAM = 25
 # is sent as an explicit 0 next to it when the app switches the guard off.
 STORM_PATTERN_ENABLE = 1
 STORM_PATTERN_OPEN_FLAG = 2
+# Field 3 is sent as an explicit 0 only by the RE41's app (full_param form);
+# what it means is not established, so it is named by its number.
+STORM_PARAM_FIELD_3 = 3
 
 # Acknowledgement payload: `cmd_ok` is a plain bool on field 2. A property
 # reply (254/38) has no field 1 of its own; an action reply (254/37) echoes
@@ -104,16 +107,24 @@ def build_ocean2_backup_reserve_payload(
 
 
 def build_ocean2_storm_guard_payload(
-    enable: bool, device_sn: str, seq: int = 0
+    enable: bool, device_sn: str, seq: int = 0, full_param: bool = False
 ) -> bytes:
     """Build a Storm Guard SET frame (action 17, StormParam on field 25).
 
-    The payload is ``{1: 17, 25: {1: 1}}`` to switch the guard on and
-    ``{1: 17, 25: {1: 0, 2: 0}}`` to switch it off. The zeros are sent
-    explicitly, as the app sends them, and the on form omits field 2. Both
-    shapes come from the app's own writes, were acknowledged with
-    ``cmd_ok = 1``, and the unit then reported the new state on field 21.1 of
-    its next full snapshot.
+    Two shapes, each the one a model's own app sent. The StormParam fields
+    are presence-tracked, so the two are different messages to a reader that
+    checks presence, and each model gets the bytes it was seen to accept.
+
+    With ``full_param=False`` (the RE11): ``{1: 17, 25: {1: 1}}`` switches
+    the guard on and ``{1: 17, 25: {1: 0, 2: 0}}`` switches it off. The zeros
+    are sent explicitly, as that app sends them, and the on form omits
+    field 2. Both were acknowledged with ``cmd_ok = 1``, and the unit then
+    reported the new state on field 21.1 of its next full snapshot.
+
+    With ``full_param=True`` (the RE41): all three StormParam fields are
+    sent, ``{1: x, 2: 0, 3: 0}``, on and off alike, which is what the RE41's
+    own app sent for both switches. The unit acknowledged the off write with
+    ``cmd_ok = 1`` and reported the on state on field 21.1.
 
     The envelope is the Backup Reserve one with ``cmd_id = 37``. The app's
     own storm guard writes carry the same header field for field (source 32,
@@ -125,7 +136,10 @@ def build_ocean2_storm_guard_payload(
         raise ValueError(f"enable must be a bool, got {type(enable).__name__}")
 
     storm_param = encode_field_varint(STORM_PATTERN_ENABLE, 1 if enable else 0)
-    if not enable:
+    if full_param:
+        storm_param += encode_field_varint(STORM_PATTERN_OPEN_FLAG, 0)
+        storm_param += encode_field_varint(STORM_PARAM_FIELD_3, 0)
+    elif not enable:
         storm_param += encode_field_varint(STORM_PATTERN_OPEN_FLAG, 0)
     pdata = encode_field_varint(ACTION_ID_FIELD, ACTION_STORM) + encode_field_bytes(
         ACTION_STORM_PARAM, storm_param

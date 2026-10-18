@@ -8,6 +8,9 @@ for byte is what makes the builder a reproduction of an observed format.
 
 The storm guard frames come from `fixtures/ocean2/storm_guard_frames.json`,
 two recordings of the app switching the guard (serial masked the same way).
+The RE41 frames come from `fixtures/ocean2/re41_control_frames.json`, two
+recordings of that model's app doing the same, which sends the parameter in
+its full three-field shape.
 """
 
 from __future__ import annotations
@@ -261,3 +264,66 @@ class TestStormGuardAck:
         # A masked payload cannot be told from a refusal, so it is no answer.
         masked = _reply(bytes.fromhex("08111001"), cmd_id=37, enc_type=1)
         assert parse_ocean2_action_ack(masked, ACTION_STORM) is None
+
+
+_RE41_FIXTURE_PATH = (
+    Path(__file__).parent / "fixtures" / "ocean2" / "re41_control_frames.json"
+)
+_RE41_FIXTURE = json.loads(_RE41_FIXTURE_PATH.read_text())
+RE41_FRAMES: list[dict[str, Any]] = _RE41_FIXTURE["frames"]
+RE41_SETS = [f for f in RE41_FRAMES if f["role"] == "set"]
+RE41_OFF_REPLY = next(f for f in RE41_FRAMES if f["role"] == "set_reply")
+
+
+class TestStormGuardFullParam:
+    def test_the_re41_fixture_holds_both_switch_writes(self) -> None:
+        assert [f["kind"] for f in RE41_SETS] == ["on", "off"]
+
+    @pytest.mark.parametrize("captured", RE41_SETS, ids=lambda f: f["tag"])
+    def test_full_param_reproduces_the_re41_app_payload_byte_for_byte(
+        self, captured: dict[str, Any]
+    ) -> None:
+        frame = bytes.fromhex(captured["hex"])
+        header = _header(frame)
+        built = build_ocean2_storm_guard_payload(
+            captured["kind"] == "on",
+            _RE41_FIXTURE["serial_mask"],
+            seq=int(header["seq"]),
+            full_param=True,
+        )
+        expected_pdata = {
+            "on": "0811ca0106080110001800",
+            "off": "0811ca0106080010001800",
+        }[captured["kind"]]
+        # The payload is compared, not the whole frame: this app's envelope is
+        # the Android one (from "Android", no check_type, one serial field
+        # fewer), while the builder sends the envelope the unit has already
+        # acknowledged for its Backup Reserve writes.
+        assert header["pdata"] == expected_pdata
+        assert _header(built)["pdata"] == header["pdata"]
+
+    @pytest.mark.parametrize("captured", STORM_SETS, ids=lambda f: f["tag"])
+    def test_the_short_form_stays_the_re11_form(self, captured: dict[str, Any]) -> None:
+        frame = bytes.fromhex(captured["hex"])
+        enable = captured["kind"] == "on"
+        seq = int(_header(frame)["seq"])
+        # Explicit False is the default, and both are the RE11 app's bytes.
+        for built in (
+            build_ocean2_storm_guard_payload(enable, STORM_SERIAL, seq=seq),
+            build_ocean2_storm_guard_payload(
+                enable, STORM_SERIAL, seq=seq, full_param=False
+            ),
+        ):
+            assert built == frame
+        # And the full form is a different message for the same switch.
+        full = build_ocean2_storm_guard_payload(
+            enable, STORM_SERIAL, seq=seq, full_param=True
+        )
+        assert _header(full)["pdata"] != _header(frame)["pdata"]
+
+    def test_the_re41_off_reply_is_a_success_for_its_own_write(self) -> None:
+        off_set = next(f for f in RE41_SETS if f["kind"] == "off")
+        sent = _header(bytes.fromhex(off_set["hex"]))
+        answer = bytes.fromhex(RE41_OFF_REPLY["hex"])
+        assert _header(answer)["seq"] == sent["seq"]
+        assert parse_ocean2_action_ack(answer, ACTION_STORM) is True
