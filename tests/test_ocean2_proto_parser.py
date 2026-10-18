@@ -1086,3 +1086,39 @@ class TestRe41RecordedControlFrames:
         parsed = parse_ocean2_proto_message(_re41_frame("no_f21"))
         assert parsed is not None
         assert "storm_guard_enabled" not in parsed
+
+
+_RE43_FIXTURE = json.loads(
+    (
+        Path(__file__).parent / "fixtures" / "ocean2" / "re43_control_frames.json"
+    ).read_text()
+)
+
+
+def _re43_frame(kind: str) -> bytes:
+    """The recorded RE43 snapshot of one `kind` (looked up by name, not by index)."""
+    matches = [
+        f
+        for f in _RE43_FIXTURE["frames"]
+        if f["kind"] == kind and f["role"] == "get_reply"
+    ]
+    assert len(matches) == 1, kind
+    return bytes.fromhex(matches[0]["hex"])
+
+
+class TestRe43RecordedReserveReadBack:
+    def test_the_snapshot_before_the_app_write_reads_reserve_10_ceiling_80(
+        self,
+    ) -> None:
+        parsed = parse_ocean2_proto_message(_re43_frame("reserve_10_ceiling_80"))
+        assert parsed is not None
+        assert parsed["backup_reserve_pct"] == 10
+        assert parsed["edev_soc_ratio_pct"] == 80
+
+    def test_the_snapshot_after_the_app_write_reads_reserve_30_ceiling_80(
+        self,
+    ) -> None:
+        parsed = parse_ocean2_proto_message(_re43_frame("reserve_30_ceiling_80"))
+        assert parsed is not None
+        assert parsed["backup_reserve_pct"] == 30
+        assert parsed["edev_soc_ratio_pct"] == 80

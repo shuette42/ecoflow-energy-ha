@@ -327,3 +327,46 @@ class TestStormGuardFullParam:
         answer = bytes.fromhex(RE41_OFF_REPLY["hex"])
         assert _header(answer)["seq"] == sent["seq"]
         assert parse_ocean2_action_ack(answer, ACTION_STORM) is True
+
+
+_RE43_FIXTURE_PATH = (
+    Path(__file__).parent / "fixtures" / "ocean2" / "re43_control_frames.json"
+)
+_RE43_FIXTURE = json.loads(_RE43_FIXTURE_PATH.read_text())
+RE43_APP_SET = next(f for f in _RE43_FIXTURE["frames"] if f["role"] == "set")
+RE43_REPLY = next(f for f in _RE43_FIXTURE["frames"] if f["role"] == "set_reply")
+
+
+class TestRe43RecordedReserveWrite:
+    """The RE43 app's own Backup Reserve write and the device's answer."""
+
+    def test_the_re43_reply_is_a_success_for_the_apps_own_write(self) -> None:
+        sent = bytes.fromhex(RE43_APP_SET["hex"])
+        answer = bytes.fromhex(RE43_REPLY["hex"])
+        assert _header(answer)["seq"] == _header(sent)["seq"]
+        assert parse_ocean2_property_ack(answer) is True
+        # Control: the write itself carries no is_ack, so it is no answer.
+        assert parse_ocean2_property_ack(sent) is None
+
+    def test_our_builder_differs_from_the_re43_app_frame_by_the_explicit_f1(
+        self,
+    ) -> None:
+        """The app sends `{f1: 0, f10: 30, f92: 80}`; the builder has no f1.
+
+        Not a claim that the RE43 accepts our shape: the first write from Home
+        Assistant on an RE43 settles that. The RE41 app
+        also sends f1 0 and acks our frame without it, which is the reason to
+        try.
+        """
+        app = _header(bytes.fromhex(RE43_APP_SET["hex"]))
+        built = _header(
+            build_ocean2_backup_reserve_payload(
+                30, 80, _RE43_FIXTURE["serial_mask"], seq=int(app["seq"])
+            )
+        )
+        assert app["pdata"] == "0800501ee00550"
+        assert built["pdata"] == "501ee00550"
+        assert app["pdata"] == "0800" + built["pdata"]
+        # The app request names a payload version the builder leaves out.
+        assert app["payload_ver"] == 1
+        assert "payload_ver" not in built

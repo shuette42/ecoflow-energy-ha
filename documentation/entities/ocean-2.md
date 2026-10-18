@@ -2,7 +2,7 @@
 
 Full list of all entities created for the EcoFlow Ocean 2.
 
-**Totals:** 51 system sensors, plus 12 per battery module. 1 number and 1 switch on the `RE11` and `RE41`
+**Totals:** 51 system sensors, plus 12 per battery module. 1 number and 1 switch on the `RE11` and `RE41`, 1 number on the `RE43`
 
 The Ocean 2 reports through the account connection only, so it needs **Enhanced Mode**. The Developer API answers error 1006 for this device, the same position the `J32D`/`J32E` PowerOcean variants are in, so Standard Mode creates no usable entities.
 
@@ -10,7 +10,7 @@ Five serial prefixes, one device: `RE11` for the 10 kW unit, `RE17` for the 12 k
 
 `RE11` is confirmed on two installations, `RE41`, `RE42` and `RE43` on one each through owners' diagnostics downloads on #145. `RE17` is routed on EcoFlow's own device list, which separates it from the `RE11` by power rating alone; no frame from an `RE17` exists yet, so if you own one, a note either way is welcome.
 
-Read-only apart from two controls on the `RE11` and the `RE41`: the Backup Reserve number and the Storm Guard switch, described below. No write frame for any other Ocean 2 setting has been observed, so there are no other controls, and the other three prefixes have none at all.
+Read-only apart from the controls described below: the Backup Reserve number on the `RE11`, `RE41` and `RE43`, and the Storm Guard switch on the `RE11` and `RE41`. No write frame for any other Ocean 2 setting has been observed, so there are no other controls, and the `RE17` and `RE42` have none at all.
 
 Battery modules are read as well: 12 readings each, created once a module actually reports. The count is an installation choice - two on the unit this was mapped on - so nothing is declared for modules you do not have. Captures from other systems show bundles of up to fourteen per-module headers in one frame, a heartbeat backlog rather than fourteen distinct modules.
 
@@ -110,13 +110,13 @@ Each module creates 12 sensors (5 enabled by default, 7 disabled). They are crea
 
 ## Numbers
 
-`RE11` and `RE41` only. The number appears once the unit has reported its Backup Reserve, so a unit that never sends it gets no control.
+`RE11`, `RE41` and `RE43` only. The number appears once the unit has reported its Backup Reserve, so a unit that never sends it gets no control.
 
 | Entity | Unit | Range | Description |
 |:---|:---:|:---:|:---|
-| Backup Reserve | % | 1 (`RE11`) or 0 (`RE41`) up to the unit's own charge reading, at most 100 | The charge level the battery keeps back instead of discharging into the house. A slider, in steps of 1 |
+| Backup Reserve | % | 1 (`RE11`, `RE43`) or 0 (`RE41`) up to the unit's own charge reading, at most 100 | The charge level the battery keeps back instead of discharging into the house. A slider, in steps of 1 |
 
-The upper end of the slider is not a fixed 100. It follows a charge reading the unit sends itself: on a unit that reports 80 the slider stops at 80, and a request above that is refused before anything is sent. Until the unit has sent that reading the slider shows its full range, 1 to 100 on the `RE11` and 0 to 100 on the `RE41`, and a write is refused as not ready. The lowest value on the `RE11` is 1: it is the lowest that unit was seen acknowledging, and 0 was never sent. The `RE41` accepted 0 when its app wrote it and kept it on the next report, so its slider starts at 0.
+The upper end of the slider is not a fixed 100. It follows a charge reading the unit sends itself: on a unit that reports 80 the slider stops at 80, and a request above that is refused before anything is sent. Until the unit has sent that reading the slider shows its full range, 1 to 100 on the `RE11` and `RE43` and 0 to 100 on the `RE41`, and a write is refused as not ready. The lowest value on the `RE11` is 1: it is the lowest that unit was seen acknowledging, and 0 was never sent. The `RE41` accepted 0 when its app wrote it and kept it on the next report, so its slider starts at 0. The `RE43` starts at 1 like the `RE11`: nothing lower is on record for it. On the `RE43` only the app's own write was recorded (10 % to 30 %): the unit acknowledged it and reported 30 % on its next report. A write from Home Assistant has not been tried on an `RE43` yet, and the app's command carries one field more than the one sent from here, so if the number goes back to its previous value there, a note on #145 settles it.
 
 Each write first asks the unit for its current state, waiting up to 5 seconds, and sends the new reserve together with the unit's own current reading of that charge value. If the unit does not answer in time, the write is refused with a "not ready" message and nothing is sent. After a write the integration asks the unit again to confirm the value. If the unit refuses the write, or nothing confirms it within about 35 seconds, the control goes back to the value it had before. If the unit reports a different value, that value is shown.
 
@@ -124,7 +124,7 @@ Each write first asks the unit for its current state, waiting up to 5 seconds, a
 
 ## Switches
 
-`RE11` and `RE41` only. The switch appears once the unit has reported its storm guard setting, which it does in its full status report.
+`RE11` and `RE41` only. The switch appears once the unit has reported its storm guard setting, which it does in its full status report. The `RE43` has none: no recording of its Storm Guard exists.
 
 | Entity | Category | Description |
 |:---|:---:|:---|

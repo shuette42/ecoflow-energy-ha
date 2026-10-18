@@ -378,7 +378,27 @@ class TestWritePath:
         re11_mqtt.send_get_all.assert_not_called()
         re11_mqtt.send_proto_set.assert_not_called()
 
-    @pytest.mark.parametrize("serial", ["RE17TEST00000001", "RE43TEST00000001"])
+    async def test_the_re43_floor_is_one_and_its_write_is_the_reserve_frame(
+        self, hass: HomeAssistant, timers: _Timers
+    ) -> None:
+        """RE43 refuses 0 like the RE11 (no 0 on record) and sends 10 and 92.
+
+        The app's own RE43 write also carries an explicit field 1 = 0 that this
+        frame does not; whether the unit accepts our shape is what the first
+        write from Home Assistant on an RE43 settles.
+        """
+        re43, mqtt = _coordinator(hass, "RE43TEST00000001")
+        re43._apply_data(dict(SNAPSHOT_5_80))
+
+        with pytest.raises(ValueError, match="1..100"):
+            await re43.async_set_ocean2_backup_reserve(0)
+        mqtt.send_get_all.assert_not_called()
+        mqtt.send_proto_set.assert_not_called()
+
+        assert await _write(hass, re43, mqtt, 30, SNAPSHOT_5_80) is True
+        assert _sent_pdata(mqtt) == _pdata(30, 80)
+
+    @pytest.mark.parametrize("serial", ["RE17TEST00000001", "RE42TEST00000001"])
     async def test_a_model_without_a_row_is_refused_before_anything_is_asked(
         self, hass: HomeAssistant, timers: _Timers, serial: str
     ) -> None:

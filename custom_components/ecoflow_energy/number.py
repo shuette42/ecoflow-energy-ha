@@ -415,10 +415,11 @@ class EcoFlowNumber(
             # The reserve can never exceed the device's own SoC ratio (field
             # 92): both readings of that field give reserve <= 92, and every
             # captured pair satisfies it. The floor is the model's own row in
-            # OCEAN2_CONTROLS (RE11 1, RE41 0), not the declared minimum. An
-            # unknown 92 keeps the full range from that floor to the declared
-            # maximum; the write is refused then anyway. Read through
-            # `as_known_int` for the same reason as the Stream branch above.
+            # OCEAN2_CONTROLS (RE11 1, RE41 0, RE43 1), not the declared
+            # minimum. An unknown 92 keeps the full range from that floor to
+            # the declared maximum; the write is refused then anyway. Read
+            # through `as_known_int` for the same reason as the Stream branch
+            # above.
             row = ocean2_controls(self.coordinator.device_sn)
             if row is None or row.reserve_floor is None:
                 return None

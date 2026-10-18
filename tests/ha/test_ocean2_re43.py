@@ -19,6 +19,11 @@ from typing import Any
 
 import pytest
 
+from custom_components.ecoflow_energy.const import (
+    OCEAN2_NUMBERS,
+    ocean2_controls,
+    supports_ocean2_storm_guard,
+)
 from custom_components.ecoflow_energy.coordinator.mqtt_ingest import MqttIngestMixin
 from custom_components.ecoflow_energy.ecoflow.const import (
     DEVICE_TYPE_OCEAN2,
@@ -30,6 +35,8 @@ from custom_components.ecoflow_energy.ecoflow.const import (
 from custom_components.ecoflow_energy.ecoflow.parsers.ocean2_proto import (
     parse_ocean2_proto_message,
 )
+from custom_components.ecoflow_energy.number import _get_number_defs
+from custom_components.ecoflow_energy.switch import _get_switch_defs
 
 RE43_SERIAL = "RE43TEST00000001"
 
@@ -156,6 +163,24 @@ def _parsed(serial: str, topic: str) -> dict[str, Any]:
 def test_re43_routes_to_the_ocean_2_read_path_as_an_ocean_2_plus() -> None:
     assert get_device_type("", RE43_SERIAL) == DEVICE_TYPE_OCEAN2
     assert get_device_name("", "RE43TEST00001234") == "Ocean 2 Plus (1234)"
+
+
+def test_the_re43_gets_the_backup_reserve_number_and_no_storm_guard_switch() -> None:
+    """The one-sided row: a reserve write is on record, a storm write is not.
+
+    The Backup Reserve number rests on the app's own write alone (the
+    recording of 2026-10-11); no Storm Guard frame exists for this model, so
+    the switch stays out. Each gate is asserted on its own, so a row that sets
+    both columns, or neither, fails here.
+    """
+    assert _get_number_defs(DEVICE_TYPE_OCEAN2, RE43_SERIAL) == OCEAN2_NUMBERS
+    assert [d.key for d in OCEAN2_NUMBERS] == ["backup_reserve"]
+    assert _get_switch_defs(DEVICE_TYPE_OCEAN2, RE43_SERIAL) == []
+    assert supports_ocean2_storm_guard(RE43_SERIAL) is False
+    row = ocean2_controls(RE43_SERIAL)
+    assert row is not None
+    assert row.reserve_floor == 1
+    assert row.storm_param_full is None
 
 
 def test_the_real_frame_reads_ac_power_positive_once_corrected() -> None:

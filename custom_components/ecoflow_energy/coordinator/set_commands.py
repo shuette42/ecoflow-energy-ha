@@ -1188,7 +1188,7 @@ class SetCommandsMixin(_Base):
         two raises other than the get-all that asks for the snapshot.
 
         The lower bound is the model's own `reserve_floor` (RE11 1, RE41 0,
-        see `OCEAN2_CONTROLS`); the upper bound is field 92.
+        RE43 1, see `OCEAN2_CONTROLS`); the upper bound is field 92.
 
         The app always sends both fields, and field 92 is re-asserted at the
         value the device reports now, so the snapshot is requested inside the
