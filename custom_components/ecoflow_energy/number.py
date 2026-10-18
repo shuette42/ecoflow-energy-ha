@@ -422,20 +422,22 @@ class EcoFlowNumber(
             row = ocean2_controls(self.coordinator.device_sn)
             if row is None or row.reserve_floor is None:
                 return None
-            floor = float(row.reserve_floor)
+            # Named apart from `floor` in the Stream branch above, for the
+            # reason given at `ceiling_upper`: one name, two inferred types.
+            reserve_floor = float(row.reserve_floor)
             ratio = as_known_int(
                 (self.coordinator.data or {}).get("edev_soc_ratio_pct")
             )
             if ratio is None:
-                return floor, self._attr_native_max_value
+                return reserve_floor, self._attr_native_max_value
             # Named apart from `upper` in the Delta 3 branch above, for the
             # reason given at `ceiling_upper`: one name, two inferred types.
             ratio_upper = min(self._attr_native_max_value, float(ratio))
-            if ratio_upper < floor:
+            if ratio_upper < reserve_floor:
                 # Never invert the range: a ratio below the floor would leave
                 # a control whose slider ends cross.
                 return None
-            return floor, ratio_upper
+            return reserve_floor, ratio_upper
         if self._is_powerglow_target_power():
             # The app caps the prompt by the rod's serial prefix, and only the
             # rod's own 212/8 report carries that serial. A missing or

@@ -1181,8 +1181,9 @@ class SetCommandsMixin(_Base):
         """Write the Ocean 2 Backup Reserve (fields 10 and 92) with a read-back.
 
         Raises `DeviceValueNotReported` (no fresh snapshot within 5 s, or
-        field 92 missing from it) and `ValueError` (outside the model's floor..100, above the
-        fresh field 92, or refused by the device before this call returned).
+        field 92 missing from it) and `ValueError` (outside the model's
+        floor..100, above the fresh field 92, or refused by the device before
+        this call returned).
         False means the publish failed. Nothing is published for the first
         two raises other than the get-all that asks for the snapshot.
 

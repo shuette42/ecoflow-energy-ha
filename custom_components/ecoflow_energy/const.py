@@ -5968,8 +5968,9 @@ class Ocean2Controls:
 # Assistant with acknowledgement and read-back; for its Storm Guard only the
 # app's own switching is on record (the OFF acknowledgement and the ON
 # read-back), no write from Home Assistant yet, and the long form is the one
-# the RE41 app was recorded sending. RE17 is routed with the RE11 for reading, and RE42 and RE43 differ
-# on the read side already; a read-only routing does not carry over to a write.
+# the RE41 app was recorded sending. RE17 is routed with the RE11 for reading,
+# and RE42 and RE43 differ on the read side already; a read-only routing does
+# not carry over to a write.
 # This table says what is confirmed on the model, the accessory gate on the
 # number and the switch says this unit reports the value: two facts, not two
 # names for one. The two columns part where a model has one control confirmed
