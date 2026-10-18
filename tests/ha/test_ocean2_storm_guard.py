@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -27,6 +28,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.ecoflow_energy import const as const_module
 from custom_components.ecoflow_energy.const import (
     AUTH_METHOD_APP,
     CONF_AUTH_METHOD,
@@ -38,6 +40,7 @@ from custom_components.ecoflow_energy.const import (
     DEVICE_TYPE_OCEAN2,
     DOMAIN,
     MODE_ENHANCED,
+    OCEAN2_NUMBERS,
     OCEAN2_SWITCHES,
 )
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
@@ -52,6 +55,7 @@ from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
     encode_field_bytes,
     encode_field_varint,
 )
+from custom_components.ecoflow_energy.number import _get_number_defs
 from custom_components.ecoflow_energy.switch import (
     EcoFlowSwitch,
     _get_switch_defs,
@@ -595,3 +599,101 @@ class TestStormGuardSwitchErrors:
         write.assert_awaited_once_with(True)
         # A refused or failed write must not leave the requested value showing.
         assert switch.is_on is False
+
+
+class TestTheTwoColumnsOfTheRowAreIndependent:
+    """`reserve_floor` gates the number and the reserve write, `storm_param_full`
+    the switch and the storm write; neither stands in for the other.
+
+    The real table sets both columns on both rows, so only a table with a
+    one-sided row can tell them apart. RE43 (reserve confirmed, no storm) is
+    the shape the next model needs.
+    """
+
+    @staticmethod
+    def _rows(monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            const_module,
+            "OCEAN2_CONTROLS",
+            {
+                "RE43": const_module.Ocean2Controls(
+                    reserve_floor=1, storm_param_full=None
+                ),
+                "RE99": const_module.Ocean2Controls(
+                    reserve_floor=None, storm_param_full=False
+                ),
+            },
+        )
+
+    @staticmethod
+    async def _refused(task: asyncio.Task[bool], mqtt: MagicMock) -> BaseException:
+        """Run to the refusal; a write that is not refused is cancelled.
+
+        Not `_write`: its sleeps sit on the patched `call_later`. A refusal
+        ends the task before any await, so a task still pending after the loop,
+        or one that reached the device, is the failure.
+        """
+        started = time.perf_counter()
+        while (
+            not task.done()
+            and not mqtt.send_get_all.call_count
+            and not mqtt.send_proto_set.call_count
+            and time.perf_counter() - started < 3
+        ):
+            await asyncio.sleep(0)
+        done = task.done()
+        if not done:
+            task.cancel()
+        assert done, "the write was not refused before it reached the device"
+        error = task.exception()
+        assert error is not None, "the write was accepted"
+        return error
+
+    async def test_each_gate_follows_its_own_column(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._rows(monkeypatch)
+
+        assert _get_number_defs(DEVICE_TYPE_OCEAN2, "RE43TEST00000001") == (
+            OCEAN2_NUMBERS
+        )
+        assert _get_switch_defs(DEVICE_TYPE_OCEAN2, "RE43TEST00000001") == []
+        assert _get_number_defs(DEVICE_TYPE_OCEAN2, "RE99TEST00000001") == []
+        assert _get_switch_defs(DEVICE_TYPE_OCEAN2, "RE99TEST00000001") == (
+            OCEAN2_SWITCHES
+        )
+
+    async def test_a_storm_write_is_refused_where_the_storm_column_is_empty(
+        self,
+        hass: HomeAssistant,
+        timers: _Timers,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        self._rows(monkeypatch)
+        coordinator, mqtt, _ = _coordinator(hass, "RE43TEST00000001")
+        coordinator._apply_data({"storm_guard_enabled": False})
+
+        task = hass.async_create_task(coordinator.async_set_ocean2_storm_guard(True))
+        error = await self._refused(task, mqtt)
+
+        assert isinstance(error, ValueError)
+        assert "not available" in str(error)
+        mqtt.send_proto_set.assert_not_called()
+
+    async def test_a_reserve_write_is_refused_where_the_reserve_column_is_empty(
+        self,
+        hass: HomeAssistant,
+        timers: _Timers,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        self._rows(monkeypatch)
+        coordinator, mqtt, _ = _coordinator(hass, "RE99TEST00000001")
+        coordinator._apply_data({"storm_guard_enabled": False})
+
+        task = hass.async_create_task(coordinator.async_set_ocean2_backup_reserve(23))
+        error = await self._refused(task, mqtt)
+
+        assert isinstance(error, ValueError)
+        assert "not available" in str(error)
+        mqtt.send_get_all.assert_not_called()
+        mqtt.send_proto_set.assert_not_called()

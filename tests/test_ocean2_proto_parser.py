@@ -1050,3 +1050,39 @@ class TestStormGuardReadBack:
             _frame(_msg(21, _vint(1, 1) + _vint(2, 1) + _vint(3, 1_760_000_000)))
         )
         assert full == {"storm_guard_enabled": True}
+
+
+_RE41_FIXTURE = json.loads(
+    (
+        Path(__file__).parent / "fixtures" / "ocean2" / "re41_control_frames.json"
+    ).read_text()
+)
+
+
+def _re41_frame(kind: str) -> bytes:
+    """The recorded RE41 frame of one `kind` (looked up by name, not by index)."""
+    matches = [f for f in _RE41_FIXTURE["frames"] if f["kind"] == kind]
+    assert len(matches) == 1, kind
+    return bytes.fromhex(matches[0]["hex"])
+
+
+class TestRe41RecordedControlFrames:
+    def test_the_get_reply_before_the_switch_reads_zero_reserve_and_guard_off(
+        self,
+    ) -> None:
+        parsed = parse_ocean2_proto_message(_re41_frame("f21_080010001800"))
+        assert parsed is not None
+        assert parsed["backup_reserve_pct"] == 0
+        assert parsed["edev_soc_ratio_pct"] == 100
+        assert parsed["storm_guard_enabled"] is False
+
+    def test_the_read_back_after_the_app_switched_on_reads_true(self) -> None:
+        parsed = parse_ocean2_proto_message(_re41_frame("f21_0801"))
+        assert parsed is not None
+        assert parsed["storm_guard_enabled"] is True
+
+    def test_the_frame_after_the_off_write_carries_no_field_21(self) -> None:
+        # Absent means "no update", never "off" (see TestStormGuardReadBack).
+        parsed = parse_ocean2_proto_message(_re41_frame("no_f21"))
+        assert parsed is not None
+        assert "storm_guard_enabled" not in parsed

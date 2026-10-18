@@ -5962,9 +5962,13 @@ class Ocean2Controls:
 
 
 # Ocean 2 variants that may be written to, and the write facts of each. Only
-# the RE11 and the RE41 have writes on record (the Backup Reserve and the Storm
-# Guard switch, each with its acknowledgement and read-back), so only they get
-# controls. RE17 is routed with the RE11 for reading, and RE42 and RE43 differ
+# the RE11 and the RE41 have writes on record, so only they get controls. The
+# RE11 has both (the Backup Reserve and the Storm Guard switch, each with its
+# acknowledgement and read-back). The RE41 has Backup Reserve writes from Home
+# Assistant with acknowledgement and read-back; for its Storm Guard only the
+# app's own switching is on record (the OFF acknowledgement and the ON
+# read-back), no write from Home Assistant yet, and the long form is the one
+# the RE41 app was recorded sending. RE17 is routed with the RE11 for reading, and RE42 and RE43 differ
 # on the read side already; a read-only routing does not carry over to a write.
 # This table says what is confirmed on the model, the accessory gate on the
 # number and the switch says this unit reports the value: two facts, not two

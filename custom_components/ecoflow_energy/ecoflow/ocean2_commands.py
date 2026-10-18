@@ -59,7 +59,8 @@ ACTION_STORM_PARAM = 25
 STORM_PATTERN_ENABLE = 1
 STORM_PATTERN_OPEN_FLAG = 2
 # Field 3 is sent as an explicit 0 only by the RE41's app (full_param form);
-# what it means is not established, so it is named by its number.
+# what it means as a write is unconfirmed, so it is named by its number (the
+# parser calls the read side, 21.3, the end time).
 STORM_PARAM_FIELD_3 = 3
 
 # Acknowledgement payload: `cmd_ok` is a plain bool on field 2. A property
