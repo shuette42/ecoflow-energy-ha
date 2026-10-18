@@ -40,7 +40,8 @@ from .const import (
     WAVE3_NUMBERS,
     EcoFlowNumberDef,
     filter_defs_for_serial,
-    supports_ocean2_controls,
+    ocean2_controls,
+    supports_ocean2_reserve,
     supports_powerpulse_controls,
     supports_stream_ac5000_controls,
     supports_stream_controls,
@@ -413,22 +414,28 @@ class EcoFlowNumber(
         if self._is_ocean2_backup_reserve():
             # The reserve can never exceed the device's own SoC ratio (field
             # 92): both readings of that field give reserve <= 92, and every
-            # captured pair satisfies it. Unknown 92 keeps the declared range;
-            # the write is refused then anyway. Read through `as_known_int`
-            # for the same reason as the Stream branch above.
+            # captured pair satisfies it. The floor is the model's own row in
+            # OCEAN2_CONTROLS (RE11 1, RE41 0), not the declared minimum. An
+            # unknown 92 keeps the full range from that floor to the declared
+            # maximum; the write is refused then anyway. Read through
+            # `as_known_int` for the same reason as the Stream branch above.
+            row = ocean2_controls(self.coordinator.device_sn)
+            if row is None or row.reserve_floor is None:
+                return None
+            floor = float(row.reserve_floor)
             ratio = as_known_int(
                 (self.coordinator.data or {}).get("edev_soc_ratio_pct")
             )
             if ratio is None:
-                return None
+                return floor, self._attr_native_max_value
             # Named apart from `upper` in the Delta 3 branch above, for the
             # reason given at `ceiling_upper`: one name, two inferred types.
             ratio_upper = min(self._attr_native_max_value, float(ratio))
-            if ratio_upper < self._attr_native_min_value:
+            if ratio_upper < floor:
                 # Never invert the range: a ratio below the floor would leave
                 # a control whose slider ends cross.
                 return None
-            return self._attr_native_min_value, ratio_upper
+            return floor, ratio_upper
         if self._is_powerglow_target_power():
             # The app caps the prompt by the rod's serial prefix, and only the
             # rod's own 212/8 report carries that serial. A missing or
@@ -487,7 +494,7 @@ class EcoFlowNumber(
         The key alone does not identify it: Stream, STREAM AC 5000 and
         PowerOcean carry a `backup_reserve` of their own, each with its own
         bounds rule. The device type separates them; the entity only exists on
-        a serial `supports_ocean2_controls` lets through.
+        a serial `supports_ocean2_reserve` lets through.
         """
         return (
             self._definition.key == "backup_reserve"
@@ -652,7 +659,7 @@ class EcoFlowNumber(
                 # "unsupported".
                 raise_set_not_ready(self.entity_id)
             except ValueError as err:
-                # Above the device's own ratio, or outside 1..100.
+                # Above the device's own ratio, or outside the model's floor..100.
                 raise_set_rejected(self.entity_id, str(err))
             if not ok:
                 raise_set_failed(self.entity_id)
@@ -1091,7 +1098,8 @@ def _get_number_defs(device_type: str, device_sn: str = "") -> list[EcoFlowNumbe
     confirmed on the variants of its family that have produced a write frame of
     their own: both for the STREAM AC 5000, one for the Stream, one for the
     Ocean 2. See STREAM_AC5000_CONTROL_PREFIXES, STREAM_CONTROL_PREFIXES and
-    OCEAN2_CONTROL_PREFIXES. All three gates are closed on an empty serial: a
+    OCEAN2_CONTROLS (the Backup Reserve is gated on the row's
+    ``reserve_floor``). All three gates are closed on an empty serial: a
     write entity that cannot be tied to a confirmed model is not created.
     """
     if device_type == DEVICE_TYPE_DELTA:
@@ -1122,7 +1130,7 @@ def _get_number_defs(device_type: str, device_sn: str = "") -> list[EcoFlowNumbe
             return []
         return STREAMAC5000_NUMBERS
     if device_type == DEVICE_TYPE_OCEAN2:
-        if not supports_ocean2_controls(device_sn):
+        if not supports_ocean2_reserve(device_sn):
             return []
         return OCEAN2_NUMBERS
     if device_type == DEVICE_TYPE_WAVE3:

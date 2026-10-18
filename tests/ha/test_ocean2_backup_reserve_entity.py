@@ -343,6 +343,34 @@ class TestRefusalShown:
 
 class TestBounds:
     @pytest.mark.parametrize(
+        ("serial", "ratio", "expected"),
+        [
+            # f92 known: the floor is the model's own row.
+            ("RE11TEST00000001", 80, (1, 80)),
+            ("RE41TEST00000001", 80, (0, 80)),
+            # f92 unknown: the RE11 keeps the declared 1..100, the RE41 starts at 0.
+            ("RE11TEST00000001", None, (1, 100)),
+            ("RE41TEST00000001", None, (0, 100)),
+        ],
+    )
+    async def test_the_floor_comes_from_the_models_row(
+        self,
+        hass: HomeAssistant,
+        serial: str,
+        ratio: int | None,
+        expected: tuple[int, int],
+    ) -> None:
+        coordinator, entry, _ = _setup_coordinator(hass, serial)
+        _push(coordinator, reserve=5, ratio=ratio)
+        await hass.async_block_till_done()
+        created = await _create_numbers(hass, coordinator, entry)
+        entity: EcoFlowNumber = created[0]
+
+        assert (entity.native_min_value, entity.native_max_value) == expected
+        # The declared minimum is the RE11's and does not move.
+        assert OCEAN2_NUMBERS[0].min_value == 1
+
+    @pytest.mark.parametrize(
         ("ratio", "expected_max"),
         [
             (80, 80),
@@ -471,15 +499,13 @@ class TestDispatch:
 
 
 class TestGating:
-    def test_only_the_re11_gets_the_number(self) -> None:
-        """B2.5: the write is confirmed on one variant, not on the family."""
-        assert _get_number_defs(DEVICE_TYPE_OCEAN2, "RE11TEST00000001") == (
-            OCEAN2_NUMBERS
-        )
+    def test_only_the_re11_and_re41_get_the_number(self) -> None:
+        """B2.5: the write is confirmed on two variants, not on the family."""
+        for confirmed in ("RE11TEST00000001", "RE41TEST00000001"):
+            assert _get_number_defs(DEVICE_TYPE_OCEAN2, confirmed) == OCEAN2_NUMBERS
         assert [d.key for d in OCEAN2_NUMBERS] == ["backup_reserve"]
         for serial in (
             "RE17TEST00000001",
-            "RE41TEST00000001",
             "RE42TEST00000001",
             "RE43TEST00000001",
             "",
@@ -491,16 +517,16 @@ class TestGating:
     ) -> None:
         """The guard must not lean on the prefix set happening to exclude "".
 
-        With the real set, `""[:4]` is never a member, so the guard is only
-        visible when a prefix set that contains the empty string is put under
-        it.
+        With the real table, `""[:4]` is never a key, so the guard is only
+        visible when a table that contains the empty string is put under it.
         """
-        monkeypatch.setattr(
-            const_module, "OCEAN2_CONTROL_PREFIXES", frozenset({"RE11", ""})
-        )
+        row = const_module.Ocean2Controls(reserve_floor=1, storm_param_full=False)
+        monkeypatch.setattr(const_module, "OCEAN2_CONTROLS", {"RE11": row, "": row})
 
-        assert const_module.supports_ocean2_controls("RE11TEST00000001") is True
-        assert const_module.supports_ocean2_controls("") is False
+        assert const_module.supports_ocean2_reserve("RE11TEST00000001") is True
+        assert const_module.supports_ocean2_reserve("") is False
+        assert const_module.supports_ocean2_storm_guard("RE11TEST00000001") is True
+        assert const_module.supports_ocean2_storm_guard("") is False
 
     async def test_a_gated_variant_creates_no_number_even_when_it_reports_field_10(
         self, hass: HomeAssistant

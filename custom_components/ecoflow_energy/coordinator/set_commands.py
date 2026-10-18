@@ -36,7 +36,7 @@ from ..const import (
     POWERPULSE2_SETTINGS_FRESH_WAIT_S,
     POWERPULSE2_SETTINGS_MAX_AGE_S,
     POWERPULSE2_SETTINGS_WINDOW_S,
-    supports_ocean2_controls,
+    ocean2_controls,
 )
 from ..ecoflow.const import (
     POWEROCEAN_FEED_SCHEDULE_POWER_MIN_W,
@@ -1181,10 +1181,13 @@ class SetCommandsMixin(_Base):
         """Write the Ocean 2 Backup Reserve (fields 10 and 92) with a read-back.
 
         Raises `DeviceValueNotReported` (no fresh snapshot within 5 s, or
-        field 92 missing from it) and `ValueError` (outside 1..100, above the
+        field 92 missing from it) and `ValueError` (outside the model's floor..100, above the
         fresh field 92, or refused by the device before this call returned).
         False means the publish failed. Nothing is published for the first
         two raises other than the get-all that asks for the snapshot.
+
+        The lower bound is the model's own `reserve_floor` (RE11 1, RE41 0,
+        see `OCEAN2_CONTROLS`); the upper bound is field 92.
 
         The app always sends both fields, and field 92 is re-asserted at the
         value the device reports now, so the snapshot is requested inside the
@@ -1197,9 +1200,13 @@ class SetCommandsMixin(_Base):
             parse_ocean2_property_ack,
         )
 
-        if not 1 <= reserve_pct <= 100:
+        row = ocean2_controls(self.device_sn)
+        if row is None or row.reserve_floor is None:
+            raise ValueError("Ocean 2 backup reserve is not available on this unit")
+        if not row.reserve_floor <= reserve_pct <= 100:
             raise ValueError(
-                f"Ocean 2 backup reserve must be 1..100, got {reserve_pct}"
+                f"Ocean 2 backup reserve must be {row.reserve_floor}..100, "
+                f"got {reserve_pct}"
             )
 
         async with self._device_config_lock:
@@ -1280,10 +1287,12 @@ class SetCommandsMixin(_Base):
             parse_ocean2_action_ack,
         )
 
+        row = ocean2_controls(self.device_sn)
         if (
             not self._enhanced_mode
             or self.device_type != DEVICE_TYPE_OCEAN2
-            or not supports_ocean2_controls(self.device_sn)
+            or row is None
+            or row.storm_param_full is None
         ):
             raise ValueError("Ocean 2 storm guard is not available on this unit")
 
@@ -1300,7 +1309,9 @@ class SetCommandsMixin(_Base):
             if not isinstance(pre, bool):
                 raise DeviceValueNotReported("Ocean 2 storm guard")
 
-            payload = build_ocean2_storm_guard_payload(enable, self.device_sn)
+            payload = build_ocean2_storm_guard_payload(
+                enable, self.device_sn, full_param=row.storm_param_full
+            )
             return await self._ocean2_publish(
                 payload,
                 _Ocean2Write(

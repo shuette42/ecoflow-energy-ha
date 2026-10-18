@@ -56,7 +56,7 @@ from .const import (
     WAVE3_SWITCHES,
     EcoFlowSwitchDef,
     filter_defs_for_serial,
-    supports_ocean2_controls,
+    supports_ocean2_storm_guard,
     supports_powerpulse_controls,
     supports_stream_ac5000_controls,
     supports_stream_controls,
@@ -653,7 +653,8 @@ def _get_switch_defs(device_type: str, device_sn: str = "") -> list[EcoFlowSwitc
     ``device_sn`` gates the STREAM AC 5000, Stream and Ocean 2 controls, which
     are confirmed on the variants that have produced a write frame of their
     own. See STREAM_AC5000_CONTROL_PREFIXES, STREAM_CONTROL_PREFIXES and
-    OCEAN2_CONTROL_PREFIXES.
+    OCEAN2_CONTROLS (the Storm Guard switch is gated on the row's
+    ``storm_param_full``).
     """
     if device_type == DEVICE_TYPE_DELTA:
         return DELTA2MAX_SWITCHES
@@ -672,7 +673,7 @@ def _get_switch_defs(device_type: str, device_sn: str = "") -> list[EcoFlowSwitc
             return []
         return STREAMAC5000_SWITCHES
     if device_type == DEVICE_TYPE_OCEAN2:
-        if not supports_ocean2_controls(device_sn):
+        if not supports_ocean2_storm_guard(device_sn):
             return []
         return OCEAN2_SWITCHES
     if device_type == DEVICE_TYPE_WAVE3:

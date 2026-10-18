@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import threading
+import time
 from collections.abc import Callable, Iterator
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -131,7 +132,10 @@ def timers(hass: HomeAssistant) -> Iterator[_Timers]:
         yield clock
 
 
-def _coordinator(hass: HomeAssistant) -> tuple[EcoFlowDeviceCoordinator, MagicMock]:
+def _coordinator(
+    hass: HomeAssistant, serial: str = SERIAL
+) -> tuple[EcoFlowDeviceCoordinator, MagicMock]:
+    device = {**DEVICE, "sn": serial}
     entry = MockConfigEntry(
         domain=DOMAIN,
         title="EcoFlow Energy",
@@ -141,12 +145,12 @@ def _coordinator(hass: HomeAssistant) -> tuple[EcoFlowDeviceCoordinator, MagicMo
             CONF_EMAIL: "test@example.com",
             CONF_PASSWORD: "test_password",
             CONF_USER_ID: "user123",
-            CONF_DEVICES: [DEVICE],
+            CONF_DEVICES: [device],
         },
         unique_id="test@example.com",
     )
     entry.add_to_hass(hass)
-    coordinator = EcoFlowDeviceCoordinator(hass, entry, DEVICE)
+    coordinator = EcoFlowDeviceCoordinator(hass, entry, device)
     mqtt = MagicMock()
     mqtt.is_connected.return_value = True
     mqtt.send_proto_set.return_value = True
@@ -344,6 +348,47 @@ class TestWritePath:
         # the refusal above is not a lock that stayed held.
         assert await _write(hass, coordinator, mqtt, 80, SNAPSHOT_5_80) is True
         assert _sent_pdata(mqtt) == _pdata(80, 80)
+
+    async def test_the_floor_is_the_models_own_zero_only_on_the_re41(
+        self, hass: HomeAssistant, timers: _Timers
+    ) -> None:
+        """RE41 write 0 is accepted and sent; the RE11 refuses 0 and asks nothing."""
+        re41, re41_mqtt = _coordinator(hass, "RE41TEST00000001")
+        re41._apply_data(dict(SNAPSHOT_5_80))
+
+        # Not `_write`: a refusal ends the task at once, and that helper's
+        # sleeps sit on the patched `call_later` and would never wake.
+        task = hass.async_create_task(re41.async_set_ocean2_backup_reserve(0))
+        started = time.perf_counter()
+        while (
+            not re41_mqtt.send_get_all.call_count
+            and not task.done()
+            and time.perf_counter() - started < 3
+        ):
+            await asyncio.sleep(0)
+        assert re41_mqtt.send_get_all.call_count == 1, "0 was refused before asking"
+        re41._apply_data(dict(SNAPSHOT_5_80))
+        assert await task is True
+        assert _sent_pdata(re41_mqtt) == _pdata(0, 80)
+        assert re41.data["backup_reserve_pct"] == 0
+
+        re11, re11_mqtt = _coordinator(hass)
+        with pytest.raises(ValueError, match="1..100"):
+            await re11.async_set_ocean2_backup_reserve(0)
+        re11_mqtt.send_get_all.assert_not_called()
+        re11_mqtt.send_proto_set.assert_not_called()
+
+    @pytest.mark.parametrize("serial", ["RE17TEST00000001", "RE43TEST00000001"])
+    async def test_a_model_without_a_row_is_refused_before_anything_is_asked(
+        self, hass: HomeAssistant, timers: _Timers, serial: str
+    ) -> None:
+        coordinator, mqtt = _coordinator(hass, serial)
+
+        with pytest.raises(ValueError, match="not available"):
+            await coordinator.async_set_ocean2_backup_reserve(23)
+
+        mqtt.send_get_all.assert_not_called()
+        mqtt.send_proto_set.assert_not_called()
 
     @pytest.mark.parametrize("value", [0, 101, -5])
     async def test_a_value_outside_the_range_asks_nothing(

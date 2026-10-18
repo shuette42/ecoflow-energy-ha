@@ -38,6 +38,7 @@ from custom_components.ecoflow_energy.const import (
     DEVICE_TYPE_OCEAN2,
     DOMAIN,
     MODE_ENHANCED,
+    OCEAN2_SWITCHES,
 )
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
 from custom_components.ecoflow_energy.coordinator.set_commands import (
@@ -166,6 +167,33 @@ class TestStormGuardWrite:
         assert mqtt.send_get_all.call_count == 0  # no snapshot needed first
         assert coordinator.data["storm_guard_enabled"] is True
         assert timers.pending() == [8.0, 30.0, 35.0]
+
+    async def test_the_wire_form_follows_the_models_row(
+        self, hass: HomeAssistant, timers: _Timers
+    ) -> None:
+        """RE41 publishes all three StormParam fields, RE11 only its short form."""
+        for serial, full in (("RE11TEST00000001", False), ("RE41TEST00000001", True)):
+            coordinator, mqtt, _ = _coordinator(hass, serial=serial)
+            coordinator._apply_data({"storm_guard_enabled": False})
+
+            with patch(_COMMANDS_TIME) as clock:
+                clock.time.return_value = 1_700_000_000.0
+                assert await coordinator.async_set_ocean2_storm_guard(True) is True
+                expected = build_ocean2_storm_guard_payload(
+                    True, serial, full_param=full
+                )
+                other = build_ocean2_storm_guard_payload(
+                    True, serial, full_param=not full
+                )
+
+            assert expected != other
+            assert mqtt.send_proto_set.call_args[0][0] == expected, serial
+
+    async def test_the_switch_exists_on_the_re11_and_re41_only(self) -> None:
+        for serial in ("RE11TEST00000001", "RE41TEST00000001"):
+            assert _get_switch_defs(DEVICE_TYPE_OCEAN2, serial) == OCEAN2_SWITCHES
+        for serial in ("RE17TEST00000001", "RE42TEST00000001", "RE43TEST00000001"):
+            assert _get_switch_defs(DEVICE_TYPE_OCEAN2, serial) == [], serial
 
     async def test_an_ack_then_a_confirming_snapshot_keeps_the_value(
         self, hass: HomeAssistant, timers: _Timers

@@ -5945,22 +5945,54 @@ def supports_stream_controls(device_sn: str) -> bool:
     return device_sn[:4].upper() in STREAM_CONTROL_PREFIXES
 
 
-# Ocean 2 variants that may be written to. Only the RE11 has writes on record
-# (the Backup Reserve and the Storm Guard switch, each with its
-# acknowledgement), so only it gets the controls.
-# RE17 is routed with the RE11 for reading, and RE41, RE42 and RE43 differ on
-# the read side already; a read-only routing does not carry over to a write.
-# This gate says the write is confirmed on the model, the accessory gate on the
+@dataclass(frozen=True)
+class Ocean2Controls:
+    """What may be written to one Ocean 2 model, and how (None = no control).
+
+    ``reserve_floor`` is the lowest Backup Reserve the model is written with:
+    the RE11 has only acknowledged 1 and up, the RE41 has held 0 on its own
+    unit. ``storm_param_full`` says whether the Storm Guard write sends all
+    three StormParam fields (the RE41 app's own bytes) or only the switch
+    field (the RE11 app's bytes); the fields are presence-tracked, so the two
+    are different messages.
+    """
+
+    reserve_floor: int | None
+    storm_param_full: bool | None
+
+
+# Ocean 2 variants that may be written to, and the write facts of each. Only
+# the RE11 and the RE41 have writes on record (the Backup Reserve and the Storm
+# Guard switch, each with its acknowledgement and read-back), so only they get
+# controls. RE17 is routed with the RE11 for reading, and RE42 and RE43 differ
+# on the read side already; a read-only routing does not carry over to a write.
+# This table says what is confirmed on the model, the accessory gate on the
 # number and the switch says this unit reports the value: two facts, not two
-# names for one.
-OCEAN2_CONTROL_PREFIXES: frozenset[str] = frozenset({"RE11"})
+# names for one. The two columns part where a model has one control confirmed
+# and not the other.
+OCEAN2_CONTROLS: dict[str, Ocean2Controls] = {
+    "RE11": Ocean2Controls(reserve_floor=1, storm_param_full=False),
+    "RE41": Ocean2Controls(reserve_floor=0, storm_param_full=True),
+}
 
 
-def supports_ocean2_controls(device_sn: str) -> bool:
-    """Return whether this Ocean 2 variant may be written to."""
+def ocean2_controls(device_sn: str) -> Ocean2Controls | None:
+    """Return the write facts of this Ocean 2 variant, None when it has none."""
     if not device_sn:
-        return False
-    return device_sn[:4].upper() in OCEAN2_CONTROL_PREFIXES
+        return None
+    return OCEAN2_CONTROLS.get(device_sn[:4].upper())
+
+
+def supports_ocean2_reserve(device_sn: str) -> bool:
+    """Return whether this Ocean 2 variant has a Backup Reserve control."""
+    row = ocean2_controls(device_sn)
+    return row is not None and row.reserve_floor is not None
+
+
+def supports_ocean2_storm_guard(device_sn: str) -> bool:
+    """Return whether this Ocean 2 variant has a Storm Guard switch."""
+    row = ocean2_controls(device_sn)
+    return row is not None and row.storm_param_full is not None
 
 
 class _HasKey(Protocol):
@@ -8677,11 +8709,12 @@ for _module_num in range(1, OCEAN2_MAX_MODULES + 1):
 
 
 # Ocean 2 controls (PLAN-151). One number: the Backup Reserve, the same setting
-# the app offers as a percentage slider. The floor of 1 is the lowest value the
-# device acknowledged; 0 was never sent. The ceiling follows the device's own
-# SoC ratio (`edev_soc_ratio_pct`) at runtime, see
+# the app offers as a percentage slider. The declared floor of 1 is the RE11's:
+# the lowest value that unit acknowledged. The RE41 has held 0, so its floor
+# comes from its `OCEAN2_CONTROLS` row at runtime (`reserve_floor`), as does
+# the ceiling from the device's own SoC ratio (`edev_soc_ratio_pct`), see
 # `EcoFlowNumber._is_ocean2_backup_reserve`. Created per variant by
-# `supports_ocean2_controls` and, because it is an accessory, only once the unit
+# `supports_ocean2_reserve` and, because it is an accessory, only once the unit
 # has reported the value.
 OCEAN2_NUMBERS: list[EcoFlowNumberDef] = [
     EcoFlowNumberDef(
@@ -8703,7 +8736,7 @@ OCEAN2_NUMBERS: list[EcoFlowNumberDef] = [
 # switch, written as an action command and confirmed by the next full snapshot
 # (`EcoFlowDeviceCoordinator.async_set_ocean2_storm_guard`). The read-back key
 # is only on that snapshot, so as an accessory the switch is created once the
-# unit has reported it, and the variant gate is `supports_ocean2_controls`.
+# unit has reported it, and the variant gate is `supports_ocean2_storm_guard`.
 OCEAN2_SWITCHES: list[EcoFlowSwitchDef] = [
     EcoFlowSwitchDef(
         "storm_guard",
