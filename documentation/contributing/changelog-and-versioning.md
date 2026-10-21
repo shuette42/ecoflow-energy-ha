@@ -27,7 +27,7 @@ The one file every contributor touches, and the one file you must leave alone. R
 
 ## What you leave alone
 
-- Do not edit `custom_components/ecoflow_energy/manifest.json`. Reason: the maintainer sets the version when the change is scheduled, and a contributor bump collides with the version of the running release cycle. A device pull request that adds support leaves the version alone; the [device checklist](../add-your-device.md) says the same.
+- Do not edit `custom_components/ecoflow_energy/manifest.json`. Reason: the maintainer sets the version when the change is scheduled, and a contributor bump collides with the version of the running release cycle. A device pull request that adds support leaves the version alone. The [device checklist](../add-your-device.md) says the same.
 
 ## Why versions work the way they do
 
@@ -37,5 +37,5 @@ The one file every contributor touches, and the one file you must leave alone. R
 
 ## Changes that need no version
 
-- A change that touches only documentation, or only `tests/`, needs no version change. Reason: nothing the integration does changes for the user. History: a documentation change that corrected the README and one existing changelog entry left `manifest.json` alone, and a pull request that only added test fixtures touched neither the changelog nor the manifest.
+- A change that touches only documentation, or only `tests/`, needs no version change. Reason: nothing the integration does changes for the user. Two past examples: a documentation change that corrected the README and one existing changelog entry left `manifest.json` alone, and a pull request that only added test fixtures touched neither the changelog nor the manifest.
 - If you are unsure whether your change counts as one of these, ask in the issue before you push. Reason: the maintainer decides, and an answer in the thread saves a round of review.

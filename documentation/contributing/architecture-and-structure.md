@@ -2,7 +2,7 @@
 
 Where a new file goes, and which layer may import what. Read this before your first pull request that adds a module.
 
-These rules apply to new files and new code. Older files that break them are listed under [Known exceptions](#known-exceptions); do not copy those as a pattern.
+These rules apply to new files and new code. Older files that break them are listed under [Known exceptions](#known-exceptions). Do not copy them as a pattern.
 
 ## The two layers
 
@@ -16,7 +16,7 @@ custom_components/ecoflow_energy/
 ```
 
 - Keep `ecoflow/` free of Home Assistant. Do not import `homeassistant` there, not at module level and not inside a function. Reason: the core library is tested without Home Assistant, and a single import makes every parser test depend on it.
-- Keep Home Assistant code out of the core library, and keep protocol code out of the entity classes. Reason: a parser that needs no Home Assistant can be replayed against a recording in a plain test.
+- Keep protocol code out of the entity classes, the same way Home Assistant code stays out of the core library. Reason: a parser that needs no Home Assistant can be replayed against a recording in a plain test.
 - Put each platform file at the integration root (`sensor.py`, `switch.py`, and so on). Reason: Home Assistant loads a platform only from there.
 
 ## Data flow
@@ -48,7 +48,7 @@ flowchart LR
 - Add a setup screen step as `config_flow_<step>.py` next to the existing ones.
 - Add translations for every new entity key to `strings.json` and to all six files under `translations/`. Reason: the tests hold all six language files to the same key set, so a key missing in one of them fails the suite.
 - Keep entity classes thin: they map coordinator data to Home Assistant attributes and nothing more. Reason: logic in an entity cannot be tested without Home Assistant and runs once per entity instead of once per device.
-- Add a new device through [Adding Your Device](../add-your-device.md); it walks the files in order. Do not rebuild that list here.
+- Add a new device through [Adding Your Device](../add-your-device.md). It walks the files in order, so this page does not repeat that list.
 
 ## Decide the mode before you write code
 
@@ -67,7 +67,7 @@ These files exist as they are and stay as they are. Each has a reason, and renam
 |---|---|---|
 | `const.py` and `charging_history.py` exist in both `ecoflow/` and the integration root | One per layer, and intentional: the root `const.py` imports Home Assistant (`Platform`), the core one holds API constants. The root `charging_history.py` is the sensor entity, the core one has no Home Assistant import | Do not add a third pair. Name a new root module differently from any core module |
 | `energy_stream.py` holds the PowerOcean, PowerGlow and PowerPulse command builders, not an `_commands` file | The PowerOcean builders predate the `<family>_commands.py` pattern | Put new builders in `ecoflow/<family>_commands.py` |
-| Single-purpose modules sit directly in `ecoflow/` beside the subfolders (`energy_stream.py`, `energy_integrator.py`, `proto_encoding.py`, `frame_capture.py`, `modbus_local.py`) | One module each, a folder for each would be ceremony | Add a module there only when it is one cross-family helper. Parsers and commands have their homes above |
+| Single-purpose modules sit directly in `ecoflow/` beside the subfolders (`energy_stream.py`, `energy_integrator.py`, `proto_encoding.py`, `frame_capture.py`, `modbus_local.py`) | One module each, so a folder per module would add nothing | Add a module there only when it is one cross-family helper. Parsers and commands have their homes above |
 | `tests/test_entity_definitions.py` imports Home Assistant although it sits in the Home Assistant free test folder | It checks entity definitions, which live in the Home Assistant layer | Put new tests that need Home Assistant in `tests/ha/` (see [Testing](testing.md)) |
 
 Naming exceptions (older parser and builder names) are listed on the [Naming](naming.md) page.

@@ -1,8 +1,8 @@
 # Design Principles
 
-The fit test every pull request must pass. A change that works but crosses one of these lines is not merged and not adapted by the maintainer afterwards, so read this before you write code.
+The fit test every pull request must pass. A change that works but crosses one of these lines is not merged, and the maintainer does not adapt it afterwards. Read this before you write code.
 
-Each principle has a reason. If you think your change needs an exception, say so in the issue first; the decisions behind them are in the [decision register](../architecture/decisions.md).
+Each principle has a reason. If you think your change needs an exception, say so in the issue first. The decisions behind the principles are in the [decision register](../architecture/decisions.md).
 
 ## The principles
 
@@ -15,12 +15,12 @@ Each principle has a reason. If you think your change needs an exception, say so
 ### 2. Enhanced Mode is push
 
 - Do not add periodic HTTP polling to Enhanced Mode. Reason: the device already pushes every value over MQTT, and a second path for the same value is a second answer.
-- The one documented exception is account-side history that the device does not push, read under five limits (ADR-032). A value that arrives over MQTT is never read over HTTP.
+- The one documented exception is account-side history that the device does not push, read under the five limits that ADR-032 lists. A value that arrives over MQTT is never read over HTTP.
 
 ### 3. One value, one source
 
 - Feed an entity from one path. Do not add a second path to the same entity, a second update rate for one reading or a second parser for a field that is already parsed. Reason: two paths drift apart and the user sees the value flip between them.
-- When a value from another source looks equal to an existing one, prove they agree before you reuse the key; until then give it a key of its own (ADR-031).
+- When a value from another source looks equal to an existing one, prove they agree before you reuse the key. Until then, give it a key of its own (ADR-031).
 
 ### 4. No control without read-back
 

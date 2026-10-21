@@ -1,6 +1,6 @@
 # Contributing to EcoFlow Energy
 
-Thank you for your interest in contributing to this Home Assistant custom integration for EcoFlow devices. Contributions of all kinds are welcome: bug reports, feature requests, documentation improvements and code.
+Thanks for contributing to this Home Assistant custom integration for EcoFlow devices. Bug reports, feature requests, documentation improvements and code are all welcome.
 
 ## Development Setup
 
@@ -15,7 +15,7 @@ Thank you for your interest in contributing to this Home Assistant custom integr
    pip install -r requirements-dev.txt
    ```
 
-3. Optionally, set up a local Home Assistant development environment for end-to-end testing. The integration can be loaded by symlinking `custom_components/ecoflow_energy` into your HA config directory.
+3. For end-to-end testing, you can also run a local Home Assistant development environment. To load the integration, symlink `custom_components/ecoflow_energy` into your HA config directory.
 
 ## Running Tests
 
@@ -29,7 +29,7 @@ mypy custom_components/ecoflow_energy
 mypy tests/
 ```
 
-`pytest` covers parsers, protocol decoding, API client logic, energy integration and Home Assistant platform setup. `ruff check` and `ruff format --check` are the lint and formatting gates, and `mypy` runs twice, once over the integration and once over the tests. **All of them must pass before you submit a pull request.** CI installs Python 3.14; the integration itself supports the Python versions of Home Assistant 2025.1.0 and newer.
+`pytest` covers parsers, protocol decoding, API client logic, energy integration and Home Assistant platform setup. `ruff check` and `ruff format --check` are the lint and formatting gates, and `mypy` runs twice, once over the integration and once over the tests. **All of them must pass before you open a pull request.** CI installs Python 3.14. The integration itself supports the Python versions of Home Assistant 2025.1.0 and newer.
 
 ## Code and Pull Requests in Short
 
@@ -82,7 +82,7 @@ The file-by-file walk, with the WAVE 3 as the worked example, is in
   exists on some installations, for example when an optional accessory is
   attached, the sensor definition must set `disabled_by_default=True` (Home
   Assistant's `entity_registry_enabled_default=False`). Owners who have the
-  hardware enable it in one click; everyone else is not left with a permanently
+  hardware enable it in one click. Everyone else is spared a permanently
   unavailable entity.
 - **No placeholder zeros.** If a field or its container is missing from the
   payload, emit no key at all. Never substitute `0.0`. On a `total_increasing`
@@ -96,10 +96,10 @@ The file-by-file walk, with the WAVE 3 as the worked example, is in
   translation without a matching key fails as an orphan. Entities with enum
   states need their state translations too. Write the English and, if you can,
   the German. For the languages you do not speak, copy the English text into
-  the file so the key sets stay identical, and say so in the PR. Those texts
-  are translated by the maintainer before the merge. Home Assistant renders English for any key
-  a language file lacks, so a copied text is never worse than a missing one.
-  The tests still reject a missing one.
+  the file so the key sets stay identical, and say so in the PR. The maintainer
+  translates those texts before the merge. Home Assistant renders English for
+  any key a language file lacks, so a copied text is never worse than a missing
+  one. The tests still reject a missing one.
 - **Updated device counts.** The sensor counts in `README.md` and in
   `documentation/entities/` are per device type. If your PR adds sensors, adjust
   the numbers in the same PR.

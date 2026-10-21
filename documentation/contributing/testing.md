@@ -23,7 +23,7 @@ pip install -r requirements-dev.txt
 Run these five commands before you push. CI runs the same five, and a pull request needs all of them green:
 
 ```bash
-pytest tests/
+pytest tests/ -v
 ruff check custom_components/ tests/
 ruff format --check custom_components/ tests/
 mypy custom_components/ecoflow_energy
@@ -38,7 +38,7 @@ mypy tests/
 ## Where a test goes
 
 - Put a test that needs Home Assistant under `tests/ha/`. Reason: those tests start an in-memory Home Assistant through the `hass` fixture.
-- Keep every other test in `tests/` free of Home Assistant imports, and import core code there as `ecoflow_energy.ecoflow.*`. Reason: the core library is tested without Home Assistant. Note that CI installs Home Assistant for the whole suite, so a stray import passes in CI and is caught in review.
+- Keep every other test in `tests/` free of Home Assistant imports, and import core code there as `ecoflow_energy.ecoflow.*`. Reason: the core library is tested without Home Assistant. CI installs Home Assistant for the whole suite, so a stray import passes CI and only review catches it.
 - Import the integration under one name per test file. Tests under `tests/` import core code as `ecoflow_energy.ecoflow.*`, tests under `tests/ha/` as `custom_components.ecoflow_energy.*`. Never use both in one file. Reason: the two names load two module objects, and a patch on one misses the other.
 - Name the file as described in [Naming](naming.md).
 
@@ -59,7 +59,7 @@ mypy tests/
 
 ## Checks that already exist
 
-You do not need to write these again; run the full suite and read the failure.
+You do not need to write these again. Run the full suite and read the failure.
 
 - `tests/test_translations.py`: every language file has the same keys as the others.
 - `tests/test_fixture_identifiers.py`: no real identifier in any fixture.
