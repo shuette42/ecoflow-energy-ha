@@ -1188,7 +1188,10 @@ class SetCommandsMixin(_Base):
         two raises other than the get-all that asks for the snapshot.
 
         The lower bound is the model's own `reserve_floor` (RE11 1, RE41 0,
-        RE43 1, see `OCEAN2_CONTROLS`); the upper bound is field 92.
+        RE43 1, see `OCEAN2_CONTROLS`); the upper bound is field 92, except on
+        a model with `reserve_ceiling_follows` (RE41), where the write sends
+        `max(field 92, reserve)` as field 92 and the reserve may be 0..100
+        whatever field 92 reads.
 
         The app always sends both fields, and field 92 is re-asserted at the
         value the device reports now, so the snapshot is requested inside the
@@ -1241,14 +1244,20 @@ class SetCommandsMixin(_Base):
             ratio = as_known_int(data.get("edev_soc_ratio_pct"))
             if ratio is None:
                 raise DeviceValueNotReported("Ocean 2 backup reserve")
-            if reserve_pct > ratio:
+            if row.reserve_ceiling_follows:
+                # The RE41 app raises field 92 with the reserve and never
+                # lowers it, so the reserve is not capped by the reading.
+                ratio_to_send = max(ratio, reserve_pct)
+            elif reserve_pct > ratio:
                 raise ValueError(
                     f"Ocean 2 backup reserve {reserve_pct} is above the "
                     f"device's own reading of {ratio}"
                 )
+            else:
+                ratio_to_send = ratio
 
             payload = build_ocean2_backup_reserve_payload(
-                reserve_pct, ratio, self.device_sn
+                reserve_pct, ratio_to_send, self.device_sn
             )
             return await self._ocean2_publish(
                 payload,

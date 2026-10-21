@@ -417,7 +417,9 @@ class EcoFlowNumber(
             # captured pair satisfies it. The floor is the model's own row in
             # OCEAN2_CONTROLS (RE11 1, RE41 0, RE43 1), not the declared
             # minimum. An unknown 92 keeps the full range from that floor to
-            # the declared maximum; the write is refused then anyway. Read
+            # the declared maximum; the write is refused then anyway. A model
+            # with `reserve_ceiling_follows` (RE41) is not capped by 92 at
+            # all (see below). Read
             # through `as_known_int` for the same reason as the Stream branch
             # above.
             row = ocean2_controls(self.coordinator.device_sn)
@@ -426,6 +428,11 @@ class EcoFlowNumber(
             # Named apart from `floor` in the Stream branch above, for the
             # reason given at `ceiling_upper`: one name, two inferred types.
             reserve_floor = float(row.reserve_floor)
+            if row.reserve_ceiling_follows:
+                # RE41: the write raises field 92 with the reserve (as the
+                # app does), so the slider runs to the declared maximum
+                # whatever 92 reads, and also while 92 is unknown.
+                return reserve_floor, self._attr_native_max_value
             ratio = as_known_int(
                 (self.coordinator.data or {}).get("edev_soc_ratio_pct")
             )

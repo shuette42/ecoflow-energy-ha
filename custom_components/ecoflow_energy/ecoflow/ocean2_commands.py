@@ -22,7 +22,9 @@ in three fields.
 The payload is `{10: backup reserve %, 92: edev SoC ratio %}`. The app
 always sends both fields together, so the builder does too: field 92 is the
 ratio the device last reported and is re-asserted at its current value, which
-is idempotent. The caller reads a fresh snapshot first and passes it in.
+is idempotent. The caller reads a fresh snapshot first and passes it in. The
+RE41 app raises field 92 together with the reserve and never lowers it, so
+for that model the caller passes the larger of the two.
 """
 
 from __future__ import annotations

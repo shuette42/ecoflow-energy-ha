@@ -345,9 +345,10 @@ class TestBounds:
     @pytest.mark.parametrize(
         ("serial", "ratio", "expected"),
         [
-            # f92 known: the floor is the model's own row.
+            # f92 known: the floor is the model's own row. The RE41 ceiling
+            # follows its reserve, so f92 does not cap it.
             ("RE11TEST00000001", 80, (1, 80)),
-            ("RE41TEST00000001", 80, (0, 80)),
+            ("RE41TEST00000001", 80, (0, 100)),
             # f92 unknown: the RE11 keeps the declared 1..100, the RE41 starts at 0.
             ("RE11TEST00000001", None, (1, 100)),
             ("RE41TEST00000001", None, (0, 100)),
@@ -396,6 +397,30 @@ class TestBounds:
 
         assert entity.native_min_value == 1
         assert entity.native_max_value == expected_max
+
+    @pytest.mark.parametrize("ratio", [5, 0, None])
+    async def test_the_re41_slider_runs_to_100_whatever_field_92_reads(
+        self, hass: HomeAssistant, ratio: int | None
+    ) -> None:
+        """RE41: the write raises 92 with the reserve, so no reading of 92 caps it."""
+        coordinator, entry, _ = _setup_coordinator(hass, "RE41TEST00000001")
+        _push(coordinator, reserve=5, ratio=ratio)
+        await hass.async_block_till_done()
+        created = await _create_numbers(hass, coordinator, entry)
+        entity: EcoFlowNumber = created[0]
+
+        assert (entity.native_min_value, entity.native_max_value) == (0, 100)
+
+    async def test_the_re11_slider_is_still_capped_at_field_92(
+        self, hass: HomeAssistant
+    ) -> None:
+        coordinator, entry, _ = _setup_coordinator(hass, "RE11TEST00000001")
+        _push(coordinator, reserve=3, ratio=5)
+        await hass.async_block_till_done()
+        created = await _create_numbers(hass, coordinator, entry)
+        entity: EcoFlowNumber = created[0]
+
+        assert (entity.native_min_value, entity.native_max_value) == (1, 5)
 
     async def test_a_moved_ratio_moves_the_published_range(
         self, hass: HomeAssistant
@@ -517,6 +542,14 @@ class TestGating:
             "",
         ):
             assert _get_number_defs(DEVICE_TYPE_OCEAN2, serial) == [], serial
+
+    def test_only_the_re41_row_raises_field_92_with_the_reserve(self) -> None:
+        """One flag, one model: the RE11 and RE43 keep the reserve under f92."""
+        flags = {
+            prefix: row.reserve_ceiling_follows
+            for prefix, row in const_module.OCEAN2_CONTROLS.items()
+        }
+        assert flags == {"RE11": False, "RE41": True, "RE43": False}
 
     def test_the_empty_serial_guard_holds_on_its_own(
         self, monkeypatch: pytest.MonkeyPatch
