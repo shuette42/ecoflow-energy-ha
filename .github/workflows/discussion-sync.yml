@@ -1,0 +1,50 @@
+name: Discussion Sync
+
+# Mirrors GitHub Discussions onto the project board as draft cards: closed ones
+# move to Abgeschlossen, open ones show whether the next move is ours or the
+# reporter's, and a new discussion gets a card. Discussion events keep the board
+# current within moments, the daily run catches anything an event missed.
+#
+# The board's item listing lags a write by minutes and nothing is remembered
+# between runs. So a discussion or comment event touches only its own
+# discussion and creates a card only for a newly created discussion, while the
+# daily and manual runs reconcile everything but leave discussions younger than
+# 30 minutes to their own event. Event runs queue per discussion, so a comment
+# cannot push out the run that creates the card. A discussion that ends up with
+# two cards fails the run.
+
+on:
+  discussion:
+    types: [created, closed, reopened, edited, deleted]
+  discussion_comment:
+    types: [created, edited, deleted]
+  schedule:
+    - cron: "30 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: discussion-sync-${{ github.event.discussion.number || 'all' }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Sync discussions to project
+    runs-on: ubuntu-latest
+    if: github.repository == 'shuette42/ecoflow-energy-ha'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/tools
+      - name: Update discussion cards
+        run: python3 .github/tools/discussion_sync.py --apply
+        env:
+          # Classic token with the "project" scope: the board belongs to a user
+          # account, which GITHUB_TOKEN and fine-grained tokens cannot reach.
+          GH_TOKEN: ${{ secrets.PROJECT_SYNC_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_ACTION: ${{ github.event.action }}
+          # Set on discussion and discussion_comment events, empty otherwise.
+          DISCUSSION_NUMBER: ${{ github.event.discussion.number }}
