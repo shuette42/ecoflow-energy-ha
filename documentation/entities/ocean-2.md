@@ -130,7 +130,7 @@ Each write first asks the unit for its current state, waiting up to 5 seconds, a
 |:---|:---:|:---|
 | Storm Guard | config | The app's storm guard (Sturmwächter) on or off. The integration sends the app's storm guard setting and keeps the new state only once the unit's next full status report shows it; if none does within about 35 seconds, the switch goes back to its previous state |
 
-The two models take the command in slightly different forms. Each gets the form its own app sent: the `RE11` the short one, the `RE41` one that spells out all three fields of the storm guard setting. On the `RE41` the app's own switching was recorded. The unit acknowledged the off command and reported the on state. Storm Guard has not yet been switched from Home Assistant on an `RE41`. If the switch goes back to its previous state there, a note on #554 settles it. A command the unit silently ignores is undone within about 35 seconds.
+The two models take the command in slightly different forms. Each gets the form its own app sent: the `RE11` the short one, the `RE41` one that spells out all three fields of the storm guard setting. On the `RE41` the app's own switching was recorded. The unit acknowledged the off command and reported the on state. Switching Storm Guard on and off from Home Assistant was confirmed on one `RE41` on 2026-10-18, with the unit reporting each state. A command the unit silently ignores is undone within about 35 seconds.
 
 ---
 
