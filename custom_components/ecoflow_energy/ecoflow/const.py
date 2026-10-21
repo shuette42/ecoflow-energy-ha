@@ -284,7 +284,7 @@ _SN_PREFIX_MAP = {
     # RIVER 2 Max (#585), routed on its own recording: one unit in Enhanced
     # Mode pushes the Delta 2 JSON, dotted `pd.`, `inv.` and `bms_bmsStatus.`
     # keys on `/app/device/property/{sn}` and the same keys in a latestQuotas
-    # reply, and the values match the app. Read-only, see
+    # reply, and the values are close to the app's. Read-only, see
     # `_SN_PREFIX_EXCLUDED_KEYS`.
     "R611": DEVICE_TYPE_DELTA,
     "HW52": DEVICE_TYPE_SMARTPLUG,

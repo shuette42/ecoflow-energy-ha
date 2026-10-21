@@ -213,7 +213,7 @@ Already running a different EcoFlow integration? It can stay installed while you
 |:---|:---|:---|:---|
 | **Connection** | EcoFlow cloud (HTTPS polling + MQTT) | EcoFlow cloud (WSS MQTT) | Your network, Modbus/TCP, no cloud |
 | **Credentials** | Access Key + Secret Key ([Developer Portal](https://developer.ecoflow.com)) | EcoFlow email + password (same as mobile app) | None. EcoFlow support must enable Modbus on the inverter first |
-| **Devices** | All except the Enhanced-only serials (`J327`, `J32D`, `J32E`, `R371`, `R372`, `R373`, `R374`, `HJ3C`, `BK01`, `BK21`, `ES21`, `ES22`, `HZ31`, `S02F`, `AC71`, `C371`, `C374`, `C376`, `RE11`, `RE17`, `RE41`, `RE42`, `RE43`, `HR61`, `Y711`, `HD31`, `R655`, `R631`) | All supported devices | Three-phase PowerOcean only |
+| **Devices** | All except the Enhanced-only serials (`J327`, `J32D`, `J32E`, `R371`, `R372`, `R373`, `R374`, `HJ3C`, `BK01`, `BK21`, `ES21`, `ES22`, `HZ31`, `S02F`, `AC71`, `C371`, `C374`, `C376`, `RE11`, `RE17`, `RE41`, `RE42`, `RE43`, `HR61`, `Y711`, `HD31`, `R655`, `R631`). `R611` is untested in Standard Mode | All supported devices | Three-phase PowerOcean only |
 | **Update rate** | ~30 s HTTP polling (+ MQTT push for Delta/Smart Plug) | ~2-4 s real-time via WSS MQTT | ~2 s polling |
 | **Delta 2 Max / Smart Plug controls** | All switches and numbers | All switches and numbers | Not applicable |
 | **Delta 3 controls** | Switches and most numbers; the screen and idle shutdowns and the AC charge power need Enhanced Mode | All switches, numbers and selects | Not applicable |
