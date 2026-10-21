@@ -63,6 +63,7 @@
 | **Smart Home Panel 2** | `HD31` | Enhanced only | 9 + 2 per circuit, 1 per storage channel | none, read-only | - | ~2 s |
 | **RIVER 3** | `R655` | Enhanced only | 31 + 1 binary | none, read-only | 2 | ~20-30 s when idle |
 | **RIVER 3 Plus** | `R631` | Enhanced only | 31 + 1 binary | none, read-only | 2 | ~5 s under load |
+| **RIVER 2 Max** | `R611` | Enhanced (Standard untested) | 9 | none, read-only | 2 | ~4 min |
 
 > **Connection.** Standard Mode reads through the IoT Developer API with your access and secret key. Enhanced Mode signs in with the EcoFlow account and receives pushes at the faster rate. **Enhanced only** means the integration reads the device over the EcoFlow account sign-in alone. Standard Mode shows nothing for it. Where the serial prefix cannot be linked to a Developer API key, Standard Mode reports error 1006 and the entities stay unavailable. The starred PowerOcean prefixes are in that position. That is an EcoFlow API limitation, not a configuration problem. `HC31` has only been recorded in Enhanced Mode. Standard Mode is untested on it. Controls marked Enhanced exist only with the account sign-in. The Energy Dashboard column counts the sensors made for it. Optional ones are disabled by default and depend on the installation. See the device notes below and the [Energy Dashboard](#energy-dashboard) section.
 >

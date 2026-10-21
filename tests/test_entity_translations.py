@@ -25,6 +25,7 @@ from typing import Any
 
 import pytest
 from ecoflow_energy import const as C
+from ecoflow_energy.ecoflow.const import DEVICE_TYPE_DELTA3, get_device_type
 
 TRANSLATIONS_DIR = Path("custom_components/ecoflow_energy/translations")
 LANGS = ("en", "de", "fr", "it", "nl", "pl")
@@ -118,12 +119,15 @@ def _readback_labels() -> set[str]:
     """Binary sensors built from a read-only variant's switches, not from a list.
 
     `readback_binary_defs_for_serial` derives them per serial prefix, so they
-    are collected the same way: every prefix with an exclusion entry, against
-    the Delta 3 switches the binary sensor platform hands it.
+    are collected the same way: every Delta 3 prefix with an exclusion entry,
+    against the Delta 3 switches the binary sensor platform hands it. A prefix
+    routed to another device type, such as the Delta 2 based `R611`, never
+    reaches that path.
     """
     return {
         definition.key
         for prefix in C._SN_PREFIX_EXCLUDED_KEYS
+        if get_device_type("", f"{prefix}TEST00000000") == DEVICE_TYPE_DELTA3
         for definition in C.readback_binary_defs_for_serial(
             C.DELTA3_SWITCHES, f"{prefix}TEST00000000"
         )

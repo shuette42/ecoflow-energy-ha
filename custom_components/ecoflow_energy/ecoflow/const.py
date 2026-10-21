@@ -281,6 +281,12 @@ _SN_PREFIX_MAP = {
     # AC input passed through to a ~70 W load, a phone on USB-C) and to a
     # 7-cell pack. Read-only on the same terms as the RIVER 3.
     "R631": DEVICE_TYPE_DELTA3,
+    # RIVER 2 Max (#585), routed on its own recording: one unit in Enhanced
+    # Mode pushes the Delta 2 JSON, dotted `pd.`, `inv.` and `bms_bmsStatus.`
+    # keys on `/app/device/property/{sn}` and the same keys in a latestQuotas
+    # reply, and the values match the app. Read-only, see
+    # `_SN_PREFIX_EXCLUDED_KEYS`.
+    "R611": DEVICE_TYPE_DELTA,
     "HW52": DEVICE_TYPE_SMARTPLUG,
     # BK-series Stream devices:
     #  - BK01: Stream Micro
@@ -416,6 +422,8 @@ _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
     # RIVER 3 family, each on its own recording (#296).
     "R655": "RIVER 3",
     "R631": "RIVER 3 Plus",
+    # The app API reports an empty product name for it (#585).
+    "R611": "RIVER 2 Max",
     "BK01": "Stream Micro",
     "BK11": "Stream Ultra",
     "BK31": "Stream AC Pro",

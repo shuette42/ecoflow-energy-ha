@@ -180,6 +180,14 @@ SMARTPLUG_STALE_THRESHOLD_S = (
 # runs is repaired as fast as on any other device.
 WAVE3_STALE_THRESHOLD_S = 270.0
 WAVE3_SOFT_UNAVAILABLE_S = 540.0
+# The RIVER 2 Max (`R611`) pushes about every 4 min, also under a 710 W charge:
+# the 16 frames of #585 never sit further apart than 240 s. Under the 35 s
+# default the coordinator would re-request and reconnect through every quiet
+# spell. Same pair as the WAVE 3 in standby, one upload gap plus margin; the
+# hard limit stays at its default, above both.
+RIVER2MAX_SN_PREFIX = "R611"
+RIVER2MAX_STALE_THRESHOLD_S = 270.0
+RIVER2MAX_SOFT_UNAVAILABLE_S = 540.0
 # The PowerPulse 2 pushes when something changes and otherwise stays quiet,
 # charging or not. Measured over a complete 7 h capture (one session, no
 # disconnect, 83 pushes): the median gap is 50 s, 16 gaps exceed 10 min, 5
@@ -6966,6 +6974,79 @@ _SN_PREFIX_EXCLUDED_KEYS["R655"] = _delta3_names_outside(
 # not; they stay off so the family keeps one set. Like the RIVER 3 it holds no
 # write, so whatever is decided for the family above applies to both.
 _SN_PREFIX_EXCLUDED_KEYS["R631"] = _SN_PREFIX_EXCLUDED_KEYS["R655"]
+
+# RIVER 2 Max (`R611`) reads and never writes (#585). One unit recorded in
+# Enhanced Mode, 08:25-08:55 local time on 2026-10-18, with the owner's
+# readings from the app at known moments: 60 W from AC to the load, then on
+# battery at 99 to 97 % with about 4 h 40 min left, a USB-C power bank taking
+# 17 W, then AC back at about 700 W and full. No frame is a write or the
+# answer to one, so no Delta 2 Max SET command is verified on this model.
+#
+# The set names the sensors the recording backs. Everything else the Delta 2
+# Max lists offer is derived below as the exclusion for the prefix, so a
+# control or sensor added to those lists later stays off a RIVER 2 Max until
+# someone decides here. What the frames back, against the app:
+#   - `soc` 97, 95 and 100 %; `ac_in_w` and `ac_out_w` at 65 to 73 W on the
+#     passthrough, `ac_in_w` 710 W on the AC charge (the app: about 60 W and
+#     about 700 W); `typec1_w` 17 W (the app: 17 W).
+#   - The AC voltage and the output frequency read 117 to 121 V and 60 Hz, a
+#     North American mains. The owner did not note them from the app.
+# What the frames show and the set leaves out:
+#   - `watts_in_sum` and `watts_out_sum`: `pd.wattsInSum` and `pd.wattsOutSum`
+#     are in 2 of the 16 frames (238 s and 1427 s), while `inv.inputWatts` and
+#     `inv.outputWatts` are in 12. "Input Total" would sit at 0 W for about 20
+#     minutes and miss the whole 710 W charge, so the totals stay off and the
+#     AC power sensors carry the readings.
+#   - `batt_voltage_v`: `bms_bmsStatus.vol` is 25 and 26, a whole number
+#     where the Delta 2 Max sends millivolts, so the shared conversion would
+#     read 0.026 V. The unit differs and nothing says what it is.
+#   - `remain_time_min`: 286 min on battery matches the app, but the same
+#     field reads 4092 min on AC at 100 %, which is not a runtime the load
+#     implies, and the app reading for that moment was not noted. One sensor
+#     cannot show a right value on battery and a wrong one on AC, so it stays
+#     off until the app reading for the full-on-AC moment is known.
+#   - The charge state enums: `pd.chgDsgState` is 0 in every frame, also while
+#     the unit ran on battery, and `bms_emsStatus.chgState` is 2 on battery
+#     and 0 on AC, which the Delta 2 Max map would name charging while the
+#     unit discharged.
+#   - USB-A, QC USB and 12 V power read 0 W with nothing plugged in, solar
+#     reads nothing, and `mppt.inAmp` 18 with no panel connected is no solar
+#     current. The AC and DC output switches read 1 and 0 throughout, never
+#     changing, so no switch state is known to follow the app.
+RIVER2MAX_SENSOR_KEYS: frozenset[str] = frozenset(
+    {
+        "soc",
+        "ac_in_w",
+        "ac_out_w",
+        "typec1_w",
+        "ac_in_vol_v",
+        "ac_out_vol_v",
+        "ac_out_freq_hz",
+        "ac_in_energy_kwh",
+        "ac_out_energy_kwh",
+    }
+)
+
+
+def _delta2max_names_outside(allowed: frozenset[str]) -> frozenset[str]:
+    """Return every Delta 2 Max entity key and state key not named in ``allowed``."""
+    definition_lists: tuple[Sequence[_HasKey], ...] = (
+        DELTA2MAX_SENSORS,
+        DELTA2MAX_BINARY_SENSORS,
+        DELTA2MAX_SWITCHES,
+        DELTA2MAX_NUMBERS,
+    )
+    names: set[str] = set()
+    for definitions in definition_lists:
+        for definition in definitions:
+            names.add(definition.key)
+            state_key = getattr(definition, "state_key", None)
+            if state_key is not None:
+                names.add(state_key)
+    return frozenset(names - allowed)
+
+
+_SN_PREFIX_EXCLUDED_KEYS["R611"] = _delta2max_names_outside(RIVER2MAX_SENSOR_KEYS)
 
 
 # =====================================================================

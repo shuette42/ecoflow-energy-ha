@@ -178,3 +178,20 @@ Two expansion packs (Slave 1, Slave 2), each with 16 sensors. All disabled by de
 - App-authenticated (WSS) connections receive the same MQTT push; the ~2-3s protobuf Enhanced Mode is exclusive to PowerOcean
 - All sensors, switches, and numbers work regardless of connection type
 - Delta devices with R331 serial numbers use a slightly different command protocol (detected automatically)
+
+---
+
+## RIVER 2 Max
+
+The RIVER 2 Max (`R611`) sends the Delta 2 messages, so it is read through the same parser as the Delta 2 Max. It was added from one owner's Enhanced Mode recording and is read-only: 9 sensors, no binary sensors, switches or numbers. Standard Mode has not been tried on it.
+
+Sensors, with the reading each one was checked against in the recording:
+
+- SoC: 97, 95 and 100 %, as in the app
+- AC Input: 710 W on AC charge (the app: about 700 W), about 67 W through the unit (the app: about 60 W)
+- AC Output: about 67 W through the unit (the app: about 60 W)
+- Type-C 1: 17 W with a power bank plugged in, as in the app
+- AC Input Voltage, AC Output Voltage, AC Output Frequency: 117 to 121 V and 60 Hz, a North American mains. These were not compared with the app
+- AC Input Energy, AC Output Energy: integrated by the integration from the AC power, not sent by the unit
+
+Left out until a recording backs them: battery voltage (the unit sends a whole number of 25 or 26 where the Delta 2 Max sends millivolts), the charge state, the USB-A, QC USB and 12 V power, the solar input, and every switch and number. Input Total and Output Total are left out as well: the unit sends them in only 2 of the 16 recorded frames, so they would sit at 0 W for about 20 minutes while the AC charge ran. Remaining Time is left out too: it reads 286 min on battery (the app: 4 h 40 min) but 4092 min while the unit is full on AC, and the app reading for that moment is not known. The unit pushes about every 4 minutes, also while charging, so readings update at that pace. The energy counters integrate the last power reading over each gap, so they are approximate. If the USB-C reading drops out in the app once the unit reaches 100 %, the unit itself reports 0 W at that point.
