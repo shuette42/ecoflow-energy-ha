@@ -80,7 +80,7 @@ def _ingest(frame: dict[str, Any]) -> dict[str, Any]:
         assert frame["topic"] == "property"
         topic = f"/app/device/property/{R611_SN}"
         payload = json.dumps({"params": frame["params"]}).encode()
-    parsed = _DeltaIngest()._parse_message(topic, payload)
+    parsed = object.__new__(_DeltaIngest)._parse_message(topic, payload)
     assert parsed is not None
     return parsed
 
