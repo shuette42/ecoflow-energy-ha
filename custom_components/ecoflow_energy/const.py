@@ -8807,8 +8807,9 @@ for _module_num in range(1, OCEAN2_MAX_MODULES + 1):
 # the app offers as a percentage slider. The declared floor of 1 is the RE11's:
 # the lowest value that unit acknowledged. The RE41 has held 0, so its floor
 # comes from its `OCEAN2_CONTROLS` row at runtime (`reserve_floor`), as does
-# the ceiling from the device's own SoC ratio (`edev_soc_ratio_pct`), see
-# `EcoFlowNumber._is_ocean2_backup_reserve`. Created per variant by
+# the ceiling: on the RE11 and RE43 the device's own SoC ratio
+# (`edev_soc_ratio_pct`), on the RE41 a fixed 100 (`reserve_ceiling_follows`),
+# see `EcoFlowNumber._is_ocean2_backup_reserve`. Created per variant by
 # `supports_ocean2_reserve` and, because it is an accessory, only once the unit
 # has reported the value.
 OCEAN2_NUMBERS: list[EcoFlowNumberDef] = [

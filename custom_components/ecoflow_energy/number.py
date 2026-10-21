@@ -419,9 +419,8 @@ class EcoFlowNumber(
             # minimum. An unknown 92 keeps the full range from that floor to
             # the declared maximum; the write is refused then anyway. A model
             # with `reserve_ceiling_follows` (RE41) is not capped by 92 at
-            # all (see below). Read
-            # through `as_known_int` for the same reason as the Stream branch
-            # above.
+            # all (see below). Read through `as_known_int` for the same
+            # reason as the Stream branch above.
             row = ocean2_controls(self.coordinator.device_sn)
             if row is None or row.reserve_floor is None:
                 return None

@@ -1194,10 +1194,10 @@ class SetCommandsMixin(_Base):
         whatever field 92 reads.
 
         The app always sends both fields, and field 92 is re-asserted at the
-        value the device reports now, so the snapshot is requested inside the
-        lock and the write waits for it. After the publish the written value
-        is seeded and a request sequence confirms it (see
-        `_arm_ocean2_readback`).
+        value the device reports now (on the RE41 at least the new reserve),
+        so the snapshot is requested inside the lock and the write waits for
+        it. After the publish the written value is seeded and a request
+        sequence confirms it (see `_arm_ocean2_readback`).
         """
         from ..ecoflow.ocean2_commands import (
             build_ocean2_backup_reserve_payload,

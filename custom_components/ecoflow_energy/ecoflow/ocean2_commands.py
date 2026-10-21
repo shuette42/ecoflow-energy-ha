@@ -21,10 +21,10 @@ in three fields.
 
 The payload is `{10: backup reserve %, 92: edev SoC ratio %}`. The app
 always sends both fields together, so the builder does too: field 92 is the
-ratio the device last reported and is re-asserted at its current value, which
-is idempotent. The caller reads a fresh snapshot first and passes it in. The
-RE41 app raises field 92 together with the reserve and never lowers it, so
-for that model the caller passes the larger of the two.
+ratio the device last reported, re-asserted at its current value (idempotent).
+The caller reads a fresh snapshot first and passes it in. The RE41 app raises
+field 92 together with the reserve and never lowers it, so for that model the
+caller passes the larger of the reported ratio and the new reserve.
 """
 
 from __future__ import annotations
@@ -78,8 +78,9 @@ def build_ocean2_backup_reserve_payload(
 
     Both fields travel together because the app sends them together and the
     device acknowledged exactly that shape. ``edev_soc_ratio`` is the value
-    the device last reported on field 92; writing it back unchanged leaves it
-    as it was.
+    to send on field 92: the device's last report of it, or on a model whose
+    ceiling follows the reserve (RE41) the larger of that report and the
+    reserve.
 
     Header, in the order the app sends it:
 

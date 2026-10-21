@@ -384,8 +384,8 @@ class TestWritePath:
         """RE43 refuses 0 like the RE11 (no 0 on record) and sends 10 and 92.
 
         The app's own RE43 write also carries an explicit field 1 = 0 that this
-        frame does not; whether the unit accepts our shape is what the first
-        write from Home Assistant on an RE43 settles.
+        frame does not; a change from Home Assistant was confirmed on an RE43
+        in both directions on 2026-10-18 (#145), so the unit takes our shape.
         """
         re43, mqtt = _coordinator(hass, "RE43TEST00000001")
         re43._apply_data(dict(SNAPSHOT_5_80))
@@ -417,18 +417,42 @@ class TestWritePath:
         assert _sent_pdata(mqtt) == _pdata(60, 60)
         assert re41.data["backup_reserve_pct"] == 60
 
+    @pytest.mark.parametrize(
+        ("reserve", "reported", "sent"),
+        [
+            # The app's own recorded write: reserve 0 with 92 left at 100.
+            (0, 100, 100),
+            # Not in any recording: a reserve below the reported 92 must leave
+            # 92 where it is. "92 follows the reserve, except at 0" sends 23.
+            (23, 100, 100),
+            (40, 100, 100),
+            # Equal: the larger of the two is either of them.
+            (60, 60, 60),
+        ],
+    )
     async def test_the_re41_never_lowers_field_92(
-        self, hass: HomeAssistant, timers: _Timers
+        self,
+        hass: HomeAssistant,
+        timers: _Timers,
+        reserve: int,
+        reported: int,
+        sent: int,
     ) -> None:
-        """RE41 reporting 92 = 100 writes reserve 0 and sends {10: 0, 92: 100}."""
+        """RE41: field 92 is the larger of the reported value and the reserve.
+
+        These cases pin the `max` against a rule that makes 92 follow the
+        reserve. They do not tell the flag branch from the plain write, which
+        send the same frame whenever the reserve is not above 92; the raise
+        test above carries that.
+        """
         re41, mqtt = _coordinator(hass, "RE41TEST00000001")
-        snapshot = {"backup_reserve_pct": 40, "edev_soc_ratio_pct": 100}
+        snapshot = {"backup_reserve_pct": 40, "edev_soc_ratio_pct": reported}
         re41._apply_data(dict(snapshot))
 
-        assert await _write(hass, re41, mqtt, 0, snapshot) is True
+        assert await _write(hass, re41, mqtt, reserve, snapshot) is True
 
-        assert _sent_pdata(mqtt) == _pdata(0, 100)
-        assert re41.data["backup_reserve_pct"] == 0
+        assert _sent_pdata(mqtt) == _pdata(reserve, sent)
+        assert re41.data["backup_reserve_pct"] == reserve
 
     async def test_the_re41_still_needs_a_reported_field_92(
         self, hass: HomeAssistant, timers: _Timers
