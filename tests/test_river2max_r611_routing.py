@@ -180,6 +180,8 @@ class TestEntitySet:
         kept = _keys(filter_defs_for_serial(DELTA2MAX_SENSORS, R611_SN))
         assert kept == {
             "soc",
+            "watts_in_sum",
+            "watts_out_sum",
             "ac_in_w",
             "ac_out_w",
             "typec1_w",
@@ -191,19 +193,27 @@ class TestEntitySet:
         }
         assert kept == RIVER2MAX_SENSOR_KEYS
 
-    def test_the_totals_stay_off_because_the_unit_rarely_sends_them(self) -> None:
-        """`pd.wattsInSum` is in 2 of 16 frames, `inv.inputWatts` in 12.
+    def test_the_totals_are_backed_by_the_kept_frames(self) -> None:
+        """`pd.wattsInSum` and `pd.wattsOutSum` read like the AC power keys.
 
-        An Input Total would read 0 W for about 20 minutes and miss the whole
-        710 W charge, which only `inv.inputWatts` carries.
+        The 16 kept frames are a sample of 1266 messages (see the fixture's
+        `sampling`), so that only 2 of them carry the totals says nothing about
+        how often the unit sends them.
         """
         with_total = [f for f in _FRAMES if "pd.wattsInSum" in f["params"]]
-        with_ac = [f for f in _FRAMES if "inv.inputWatts" in f["params"]]
         assert len(with_total) == 2
-        assert len(with_ac) == 12
-        assert {"watts_in_sum", "watts_out_sum"}.isdisjoint(RIVER2MAX_SENSOR_KEYS)
-        assert max(f["params"]["inv.inputWatts"] for f in with_ac) == 710
-        assert all(f["params"]["pd.wattsInSum"] < 710 for f in with_total)
+        assert {"watts_in_sum", "watts_out_sum"} <= RIVER2MAX_SENSOR_KEYS
+        for frame in with_total:
+            parsed = _ingest(frame)
+            assert parsed["watts_in_sum"] in (0, 68)
+            assert parsed["watts_out_sum"] in (67, 68)
+
+    def test_the_recording_is_a_sample_of_a_fast_push(self) -> None:
+        """1259 pushes in 1837 s: the 238 s grid of the frames is the sampling."""
+        sampling = json.loads(_FIXTURE.read_text())["sampling"]
+        assert sampling["frames_seen"] == 1266
+        assert sampling["per_key"]["property:json/unparsed"]["seen"] == 1259
+        assert sampling["span_s"] == pytest.approx(1836.8)
 
     def test_allowed_keys_all_exist_in_the_delta2_definitions(self) -> None:
         """A renamed Delta 2 key must not silently empty the RIVER 2 Max set."""

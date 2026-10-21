@@ -1,5 +1,6 @@
 {
- "description": "RIVER 2 Max (R611), Enhanced mode, from the reporter's diagnostics download with raw capture (issue 585). Frame index is the position in raw_capture.frames; offset_s counts from the first frame, which was received at 12:25:21 UTC (08:25:21 America/Toronto, 2026-10-18). Property frames are the pushed JSON params. get_reply frames are latestQuotas replies cut at 1024 bytes by the capture, so the params are the keys that survived the cut.",
+ "description": "RIVER 2 Max (R611), Enhanced mode, from the reporter's diagnostics download with raw capture (issue 585). Frame index is the position in raw_capture.frames; offset_s counts from the first frame, which was received at 12:25:21 UTC (08:25:21 America/Toronto, 2026-10-18). Property frames are the pushed JSON params. get_reply frames are latestQuotas replies cut at 1024 bytes by the capture, so the params are the keys that survived the cut. The 16 frames are a sample: the capture saw 1266 messages in 1836.8 s (1259 property pushes, about one every 1.5 s) and kept one per time slot, so the spacing of the kept frames is the sampling and not the unit's push rate.",
+ "sampling": {"frames_seen": 1266, "frames_kept": 16, "span_s": 1836.8, "per_key": {"property:json/unparsed": {"seen": 1259, "kept": 9}, "get_reply:json/operateType=latestQuotas": {"seen": 7, "kept": 7}}},
  "app_readings": [
   {
    "local_time": "08:26",

@@ -17,9 +17,6 @@ from ..const import (
     POWERPULSE2_HARD_UNAVAILABLE_S,
     POWERPULSE2_SOFT_UNAVAILABLE_S,
     POWERPULSE2_STALE_THRESHOLD_S,
-    RIVER2MAX_SN_PREFIX,
-    RIVER2MAX_SOFT_UNAVAILABLE_S,
-    RIVER2MAX_STALE_THRESHOLD_S,
     SMARTPLUG_HARD_UNAVAILABLE_S,
     SMARTPLUG_SOFT_UNAVAILABLE_S,
     SMARTPLUG_STALE_THRESHOLD_S,
@@ -113,8 +110,6 @@ class AvailabilityMixin(_Base):
             return POWERPULSE2_SOFT_UNAVAILABLE_S
         if self._wave3_idle():
             return WAVE3_SOFT_UNAVAILABLE_S
-        if self._river2max():
-            return RIVER2MAX_SOFT_UNAVAILABLE_S
         return SOFT_UNAVAILABLE_S
 
     def _hard_unavailable_s(self) -> float:
@@ -154,13 +149,7 @@ class AvailabilityMixin(_Base):
             return POWERPULSE2_STALE_THRESHOLD_S
         if self._wave3_idle():
             return WAVE3_STALE_THRESHOLD_S
-        if self._river2max():
-            return RIVER2MAX_STALE_THRESHOLD_S
         return STALE_THRESHOLD_S
-
-    def _river2max(self) -> bool:
-        """A RIVER 2 Max, which pushes about every 4 min, so 35 s is never quiet."""
-        return self.device_sn.startswith(RIVER2MAX_SN_PREFIX)
 
     def _wave3_idle(self) -> bool:
         """A WAVE 3 that is not running, so it pushes every 120 s, not every 2 s.

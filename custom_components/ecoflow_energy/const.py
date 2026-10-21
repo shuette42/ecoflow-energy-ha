@@ -180,14 +180,6 @@ SMARTPLUG_STALE_THRESHOLD_S = (
 # runs is repaired as fast as on any other device.
 WAVE3_STALE_THRESHOLD_S = 270.0
 WAVE3_SOFT_UNAVAILABLE_S = 540.0
-# The RIVER 2 Max (`R611`) pushes about every 4 min, also under a 710 W charge:
-# the 16 frames of #585 never sit further apart than 240 s. Under the 35 s
-# default the coordinator would re-request and reconnect through every quiet
-# spell. Same pair as the WAVE 3 in standby, one upload gap plus margin; the
-# hard limit stays at its default, above both.
-RIVER2MAX_SN_PREFIX = "R611"
-RIVER2MAX_STALE_THRESHOLD_S = 270.0
-RIVER2MAX_SOFT_UNAVAILABLE_S = 540.0
 # The PowerPulse 2 pushes when something changes and otherwise stays quiet,
 # charging or not. Measured over a complete 7 h capture (one session, no
 # disconnect, 83 pushes): the median gap is 50 s, 16 gaps exceed 10 min, 5
@@ -6981,6 +6973,9 @@ _SN_PREFIX_EXCLUDED_KEYS["R631"] = _SN_PREFIX_EXCLUDED_KEYS["R655"]
 # battery at 99 to 97 % with about 4 h 40 min left, a USB-C power bank taking
 # 17 W, then AC back at about 700 W and full. No frame is a write or the
 # answer to one, so no Delta 2 Max SET command is verified on this model.
+# The 16 frames are a sample the capture kept out of 1266 messages in 1837 s
+# (about one every 1.5 s), so which keys the kept frames carry says nothing
+# about how often the unit sends them.
 #
 # The set names the sensors the recording backs. Everything else the Delta 2
 # Max lists offer is derived below as the exclusion for the prefix, so a
@@ -6989,14 +6984,11 @@ _SN_PREFIX_EXCLUDED_KEYS["R631"] = _SN_PREFIX_EXCLUDED_KEYS["R655"]
 #   - `soc` 97, 95 and 100 %; `ac_in_w` and `ac_out_w` at 65 to 73 W on the
 #     passthrough, `ac_in_w` 710 W on the AC charge (the app: about 60 W and
 #     about 700 W); `typec1_w` 17 W (the app: 17 W).
+#   - `watts_in_sum` and `watts_out_sum` read 0 and 67 W on battery and 68 and
+#     68 W on the passthrough, in line with `ac_in_w` and `ac_out_w`.
 #   - The AC voltage and the output frequency read 117 to 121 V and 60 Hz, a
 #     North American mains. The owner did not note them from the app.
 # What the frames show and the set leaves out:
-#   - `watts_in_sum` and `watts_out_sum`: `pd.wattsInSum` and `pd.wattsOutSum`
-#     are in 2 of the 16 frames (238 s and 1427 s), while `inv.inputWatts` and
-#     `inv.outputWatts` are in 12. "Input Total" would sit at 0 W for about 20
-#     minutes and miss the whole 710 W charge, so the totals stay off and the
-#     AC power sensors carry the readings.
 #   - `batt_voltage_v`: `bms_bmsStatus.vol` is 25 and 26, a whole number
 #     where the Delta 2 Max sends millivolts, so the shared conversion would
 #     read 0.026 V. The unit differs and nothing says what it is.
@@ -7016,6 +7008,8 @@ _SN_PREFIX_EXCLUDED_KEYS["R631"] = _SN_PREFIX_EXCLUDED_KEYS["R655"]
 RIVER2MAX_SENSOR_KEYS: frozenset[str] = frozenset(
     {
         "soc",
+        "watts_in_sum",
+        "watts_out_sum",
         "ac_in_w",
         "ac_out_w",
         "typec1_w",
