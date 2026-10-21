@@ -116,6 +116,9 @@ FAMILY_TO_FILE: dict[str, str] = {
     "DELTA2MAX": "delta-2-max.md",
     "SMARTPLUG": "smart-plug.md",
     "STREAM": "stream.md",
+    # The Stream Ultra X feed-in switch shares the Stream page: one family of
+    # devices, one page.
+    "STREAMFEEDIN": "stream.md",
     "STREAMAC5000": "stream-ac-5000.md",
     "DELTA3": "delta-3-max-plus.md",
     "POWERSTREAM": "powerstream.md",

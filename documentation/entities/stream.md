@@ -6,7 +6,7 @@ Full list of all entities created for Stream devices.
 
 **The Stream Micro (`BK01`) does not.** It is a grid-tie inverter with two solar strings and no battery, and it gets a reduced set. See [Stream Micro (BK01)](#stream-micro-bk01) at the end of this page.
 
-**Totals:** 60 sensors, 2 binary sensors, 1 number. Stream AC Pro (`BK31`) adds 2 switches and 3 numbers. Eight of the 60 are *accessory* entities (PV 3 and PV 4, power, voltage, current and energy) and exist only on a unit that reports those strings.
+**Totals:** 60 sensors, 2 binary sensors, 1 number. Stream AC Pro (`BK31`) adds 2 switches and 3 numbers. Stream Ultra X (`BK61`) adds 1 switch in Standard Mode. Eight of the 60 are *accessory* entities (PV 3 and PV 4, power, voltage, current and energy) and exist only on a unit that reports those strings.
 
 > Entities marked with *disabled* are available but hidden by default. Enable them in **Settings > Devices > EcoFlow Stream > Entities** (click the filter icon and show disabled entities).
 
@@ -121,12 +121,13 @@ Also available as disabled diagnostics: **Battery Charge Capacity** and **Batter
 
 ## Switches
 
-Stream AC Pro (`BK31`) only: two switches, `AC Outlet 1` and `AC Outlet 2`, confirmed writable on live hardware. The other four models keep the read-only binary sensors above, since nothing confirms their write path.
+Stream AC Pro (`BK31`): two switches, `AC Outlet 1` and `AC Outlet 2`, confirmed writable on live hardware. Stream Ultra X (`BK61`): one switch, `Feed-in Control`, in Standard Mode only. The other models keep the read-only binary sensors above, since nothing confirms their write path.
 
 | Entity | Default | Description |
 |:---|:---:|:---|
 | AC Outlet 1 | enabled | Outlet 1 on/off control (BK31 only) |
 | AC Outlet 2 | enabled | Outlet 2 on/off control (BK31 only) |
+| Feed-in Control | enabled | Feed-in control on/off (BK61 only, **Standard Mode only**). Reads the unit's feed-in mode (2 = on, 1 = off, any other value shows as unknown). The write follows the IoT Developer API description of the feed-in command and has not yet been confirmed on a unit, so a note from an owner would settle it. The state can take up to about 30 seconds to follow a change. |
 
 ---
 

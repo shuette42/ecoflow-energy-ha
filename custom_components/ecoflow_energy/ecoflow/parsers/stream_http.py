@@ -81,6 +81,27 @@ STREAM_HTTP_INT_FIELD_MAP: dict[str, str] = {
 }
 
 
+# `feedGridMode` is the Stream "Feed-in control" setting: 2 lets the system
+# feed into the grid, 1 stops it. Read as a switch state, so the parser
+# publishes a bool and nothing else: the generic switch read treats any
+# non-zero number as "on", which would show a raw 1 as on while feed-in is off.
+STREAM_FEED_IN_MODE_KEY = "feedGridMode"
+STREAM_FEED_IN_STATE_KEY = "feed_in_control_enabled"
+_FEED_IN_MODE_TO_ENABLED: dict[int, bool] = {2: True, 1: False}
+
+
+def _feed_in_enabled(value: Any) -> bool | None:
+    """Return the feed-in state for a `feedGridMode` value, None if unknown.
+
+    `bool` is a subclass of `int` and `True == 1`, so a flag must be rejected
+    before the table lookup or it would read as "feed-in off". Strings such as
+    "2" are not accepted either: only the integer the device reports counts.
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return _FEED_IN_MODE_TO_ENABLED.get(value)
+
+
 def _numeric(value: Any) -> float | None:
     """Return the value as a float, or None if it is not a real number.
 
@@ -121,6 +142,14 @@ def parse_stream_quota(raw: dict) -> dict[str, Any]:
         value = _numeric(raw[quota_key])
         if value is not None:
             result[sensor_key] = int(round(value))
+
+    # Absent key = no update. A present key with a value outside 1/2 is
+    # published as None (Unknown) so a unit reporting 3 after 2 cannot keep
+    # showing "on".
+    if STREAM_FEED_IN_MODE_KEY in raw:
+        result[STREAM_FEED_IN_STATE_KEY] = _feed_in_enabled(
+            raw[STREAM_FEED_IN_MODE_KEY]
+        )
 
     # A single unit is its own system: a quota that carries only `soc`
     # still feeds the battery sensor. Offered on the same private key as the

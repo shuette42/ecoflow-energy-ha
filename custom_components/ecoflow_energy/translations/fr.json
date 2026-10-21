@@ -2852,6 +2852,9 @@
       "ac_outlet_1_switch": {
         "name": "Prise AC 1"
       },
+      "feed_in_control_switch": {
+        "name": "Contrôle d'injection"
+      },
       "ac_outlet_2_switch": {
         "name": "Prise AC 2"
       },

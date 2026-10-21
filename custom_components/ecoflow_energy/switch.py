@@ -49,6 +49,7 @@ from .const import (
     SMARTPLUG_SWITCHES,
     STREAM_SWITCHES,
     STREAMAC5000_SWITCHES,
+    STREAMFEEDIN_SWITCHES,
     SWITCH_COMMANDS_R331,
     SWITCH_COMMANDS_R351,
     SWITCH_DECLARATIVE_R331,
@@ -60,6 +61,7 @@ from .const import (
     supports_powerpulse_controls,
     supports_stream_ac5000_controls,
     supports_stream_controls,
+    supports_stream_feed_in_control,
 )
 from .coordinator import DeviceValueNotReported, EcoFlowDeviceCoordinator
 from .coordinator.local_modbus import EcoFlowLocalModbusCoordinator
@@ -130,6 +132,8 @@ async def async_setup_entry(
         pending: list[EcoFlowSwitchDef] = []
         for defn in defs:
             if defn.enhanced_only and not coordinator.enhanced_mode:
+                continue
+            if defn.standard_only and coordinator.enhanced_mode:
                 continue
             if defn.accessory and not reading_reported(coordinator, defn.state_key):
                 pending.append(defn)
@@ -410,6 +414,16 @@ class EcoFlowSwitch(
 
         if (
             self.coordinator.device_type == DEVICE_TYPE_STREAM
+            and self._definition.key == "feed_in_control_switch"
+        ):
+            ok = await self.coordinator.async_set_stream_feed_in_control(turn_on)
+            if not ok:
+                raise_set_failed(self.entity_id)
+            self._apply_optimistic(turn_on)
+            return
+
+        if (
+            self.coordinator.device_type == DEVICE_TYPE_STREAM
             and self.coordinator.enhanced_mode
             and self._definition.key in ("ac_outlet_1_switch", "ac_outlet_2_switch")
         ):
@@ -652,7 +666,8 @@ def _get_switch_defs(device_type: str, device_sn: str = "") -> list[EcoFlowSwitc
 
     ``device_sn`` gates the STREAM AC 5000, Stream and Ocean 2 controls, which
     are confirmed on the variants that have produced a write frame of their
-    own. See STREAM_AC5000_CONTROL_PREFIXES, STREAM_CONTROL_PREFIXES and
+    own. See STREAM_AC5000_CONTROL_PREFIXES, STREAM_CONTROL_PREFIXES,
+    STREAM_FEED_IN_CONTROL_PREFIXES and
     OCEAN2_CONTROLS (the Storm Guard switch is gated on the row's
     ``storm_param_full``).
     """
@@ -663,9 +678,10 @@ def _get_switch_defs(device_type: str, device_sn: str = "") -> list[EcoFlowSwitc
     if device_type == DEVICE_TYPE_SMARTPLUG:
         return SMARTPLUG_SWITCHES
     if device_type == DEVICE_TYPE_STREAM:
-        if not supports_stream_controls(device_sn):
-            return []
-        return STREAM_SWITCHES
+        defs = STREAM_SWITCHES if supports_stream_controls(device_sn) else []
+        if supports_stream_feed_in_control(device_sn):
+            defs = defs + STREAMFEEDIN_SWITCHES
+        return defs
     if device_type == DEVICE_TYPE_DELTA3:
         return DELTA3_SWITCHES
     if device_type == DEVICE_TYPE_STREAM_AC5000:

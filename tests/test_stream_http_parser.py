@@ -1,5 +1,9 @@
 """Tests for the Stream (BK-series) JSON quota parser."""
 
+import json
+from pathlib import Path
+
+import pytest
 from ecoflow_energy.ecoflow.parsers.stream_http import parse_stream_quota
 from ecoflow_energy.ecoflow.parsers.stream_proto import SOC_FALLBACK_KEY
 
@@ -286,3 +290,56 @@ class TestSystemSocOfZero:
 
         assert result["unit_soc_pct"] == 0
         assert result[SOC_FALLBACK_KEY] == 0
+
+
+FEED_IN_FIXTURE = (
+    Path(__file__).parent / "fixtures" / "stream" / "bk61_feed_in_quota_509.json"
+)
+
+
+class TestFeedInControl:
+    """`feedGridMode` is published as a bool, never as the raw number.
+
+    The generic switch read treats any non-zero number as on, so a raw 1
+    (feed-in off) would show as on.
+    """
+
+    def test_mode_2_is_on(self) -> None:
+        result = parse_stream_quota({"feedGridMode": 2})
+
+        assert result["feed_in_control_enabled"] is True
+
+    def test_mode_1_is_off(self) -> None:
+        result = parse_stream_quota({"feedGridMode": 1})
+
+        assert result["feed_in_control_enabled"] is False
+
+    @pytest.mark.parametrize("value", [0, 3, True, False, "2", "1", 2.5, None])
+    def test_other_values_are_unknown_not_a_state(self, value: object) -> None:
+        """A present key outside 1/2 must overwrite the old state with None."""
+        result = parse_stream_quota({"feedGridMode": value})
+
+        assert "feed_in_control_enabled" in result
+        assert result["feed_in_control_enabled"] is None
+
+    def test_absent_key_leaves_the_state_alone(self) -> None:
+        """A push without the key is no update: the key must not appear."""
+        result = parse_stream_quota({"powGetSysGrid": 79.0})
+
+        assert "feed_in_control_enabled" not in result
+        assert "feedGridMode" not in result
+
+    def test_raw_key_does_not_leak(self) -> None:
+        assert "feedGridMode" not in parse_stream_quota({"feedGridMode": 2})
+
+    def test_diagnostics_snapshots_from_discussion_509(self) -> None:
+        """Both app positions from the BK61 diagnostics read back correctly."""
+        snapshots = json.loads(FEED_IN_FIXTURE.read_text())
+
+        on = parse_stream_quota(snapshots["on"])
+        off = parse_stream_quota(snapshots["off"])
+
+        assert on["feed_in_control_enabled"] is True
+        assert off["feed_in_control_enabled"] is False
+        assert on["grid_w"] == 198.0
+        assert off["grid_w"] == 0.0

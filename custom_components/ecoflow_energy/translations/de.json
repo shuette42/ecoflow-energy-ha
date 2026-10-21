@@ -2852,6 +2852,9 @@
       "ac_outlet_1_switch": {
         "name": "AC-Ausgang 1"
       },
+      "feed_in_control_switch": {
+        "name": "Einspeisekontrolle"
+      },
       "ac_outlet_2_switch": {
         "name": "AC-Ausgang 2"
       },

@@ -674,6 +674,10 @@ class EcoFlowSwitchDef:
     # "diagnostic", set on a switch that is a device setting rather than a
     # day-to-day control (the Ocean 2 Storm Guard, PLAN-192).
     entity_category: str | None = None
+    # Mirror of `enhanced_only`: the write and the read-back both ride the
+    # Developer API (HTTP quota), so with account sign-in the switch would be
+    # created and never move. Skipped by the switch setup in Enhanced Mode.
+    standard_only: bool = False
 
 
 @dataclass(frozen=True)
@@ -4036,6 +4040,20 @@ STREAM_SWITCHES: list[EcoFlowSwitchDef] = [
     ),
 ]
 
+# Feed-in control (Stream Ultra X, #509): the write goes through the Developer
+# API and the state comes back in the HTTP quota key `feedGridMode`, so the
+# switch exists in Standard Mode only. Gated by supports_stream_feed_in_control().
+STREAMFEEDIN_SWITCHES: list[EcoFlowSwitchDef] = [
+    EcoFlowSwitchDef(
+        "feed_in_control_switch",
+        "Feed-in Control",
+        "feed_in_control_enabled",
+        "mdi:transmission-tower-export",
+        standard_only=True,
+        entity_category="config",
+    ),
+]
+
 SMARTPLUG_NUMBERS: list[EcoFlowNumberDef] = [
     EcoFlowNumberDef(
         "led_brightness",
@@ -5943,6 +5961,21 @@ def supports_stream_controls(device_sn: str) -> bool:
     if not device_sn:
         return False
     return device_sn[:4].upper() in STREAM_CONTROL_PREFIXES
+
+
+# Stream variants whose Feed-in control switch is offered. It is its own set,
+# not a rider on STREAM_CONTROL_PREFIXES: that set claims writes reproduced from
+# frames on a Stream AC Pro, and the BK61 (Stream Ultra X) has only the
+# Developer API's documented SET body plus two read snapshots (#509), so the
+# BK31 write gate must not open for it.
+STREAM_FEED_IN_CONTROL_PREFIXES: frozenset[str] = frozenset({"BK61"})
+
+
+def supports_stream_feed_in_control(device_sn: str) -> bool:
+    """Return whether this Stream variant gets the Feed-in control switch."""
+    if not device_sn:
+        return False
+    return device_sn[:4].upper() in STREAM_FEED_IN_CONTROL_PREFIXES
 
 
 @dataclass(frozen=True)

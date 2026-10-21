@@ -2852,6 +2852,9 @@
       "ac_outlet_1_switch": {
         "name": "Gniazdo AC 1"
       },
+      "feed_in_control_switch": {
+        "name": "Kontrola oddawania do sieci"
+      },
       "ac_outlet_2_switch": {
         "name": "Gniazdo AC 2"
       },

@@ -1,0 +1,35 @@
+{
+  "_source": "Discussion #509 diagnostics, 2026-10-19, app switch on / off",
+  "on": {
+    "backupReverseSoc": 23,
+    "cmsBattSoc": 25.0,
+    "cmsMaxChgSoc": 95,
+    "cmsMinDsgSoc": 20,
+    "energyStrategyOperateMode.operateIntelligentScheduleModeOpen": false,
+    "energyStrategyOperateMode.operateSelfPoweredOpen": true,
+    "feedGridMode": 2,
+    "gridConnectionPower": 63.671654,
+    "powGetBpCms": 30.928192,
+    "powGetPvSum": 91.0,
+    "powGetSysGrid": 198.0,
+    "powGetSysLoad": 258.328,
+    "relay2Onoff": false,
+    "relay3Onoff": false
+  },
+  "off": {
+    "backupReverseSoc": 23,
+    "cmsBattSoc": 25.0,
+    "cmsMaxChgSoc": 95,
+    "cmsMinDsgSoc": 20,
+    "energyStrategyOperateMode.operateIntelligentScheduleModeOpen": false,
+    "energyStrategyOperateMode.operateSelfPoweredOpen": true,
+    "feedGridMode": 1,
+    "gridConnectionPower": 223.96564,
+    "powGetBpCms": 67.15373,
+    "powGetPvSum": 271.0,
+    "powGetSysGrid": 0.0,
+    "powGetSysLoad": 203.84627,
+    "relay2Onoff": false,
+    "relay3Onoff": false
+  }
+}

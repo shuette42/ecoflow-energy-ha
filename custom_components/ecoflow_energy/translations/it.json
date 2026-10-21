@@ -2852,6 +2852,9 @@
       "ac_outlet_1_switch": {
         "name": "Presa AC 1"
       },
+      "feed_in_control_switch": {
+        "name": "Controllo immissione"
+      },
       "ac_outlet_2_switch": {
         "name": "Presa AC 2"
       },
