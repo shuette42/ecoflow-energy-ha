@@ -2853,7 +2853,7 @@
         "name": "AC-stopcontact 1"
       },
       "feed_in_control_switch": {
-        "name": "Netteruglevering-regeling"
+        "name": "Terugleverregeling"
       },
       "ac_outlet_2_switch": {
         "name": "AC-stopcontact 2"

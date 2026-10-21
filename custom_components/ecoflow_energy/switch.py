@@ -419,6 +419,15 @@ class EcoFlowSwitch(
             ok = await self.coordinator.async_set_stream_feed_in_control(turn_on)
             if not ok:
                 raise_set_failed(self.entity_id)
+            # Seed the store with the value just written. The refresh the write
+            # triggers usually reads the quota before the unit has applied the
+            # change, and any push that arrives after the lock would otherwise
+            # bring the old value back. The next report that carries the
+            # feed-in mode overwrites the seed with device truth.
+            state_key = self._definition.state_key
+            self.coordinator.set_device_value(state_key, turn_on)
+            if self.coordinator.data is not None:
+                self.coordinator.data[state_key] = turn_on
             self._apply_optimistic(turn_on)
             return
 

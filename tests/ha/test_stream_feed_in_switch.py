@@ -10,7 +10,7 @@ setup gating, the write path and the read-back.
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
@@ -177,6 +177,8 @@ class TestWrite:
             "cfgFeedGridMode": 2
         }
         assert entity.is_on is True
+        # The refresh is what brings the unit's answer back before the next poll.
+        coordinator.async_request_refresh.assert_awaited_once()
 
     async def test_turn_off_sends_the_off_body(self, hass: HomeAssistant) -> None:
         coordinator, _ = _coordinator(hass, data={STATE_KEY: True})
@@ -205,6 +207,30 @@ class TestWrite:
         # No optimistic lock: the device never got the command.
         assert entity._optimistic_lock_until == 0.0
         assert entity.is_on is False
+        coordinator.async_request_refresh.assert_not_awaited()
+
+    @pytest.mark.parametrize(
+        ("error_code", "expected"), [("1006", "1006"), (None, "no response")]
+    )
+    async def test_failed_write_names_the_cause(
+        self,
+        hass: HomeAssistant,
+        caplog: pytest.LogCaptureFixture,
+        error_code: str | None,
+        expected: str,
+    ) -> None:
+        """A rejection shows its API code, a silent failure says no response."""
+        coordinator, _ = _coordinator(hass, data={STATE_KEY: False})
+        coordinator._http_client = MagicMock()
+        coordinator._http_client.set_quota = AsyncMock(return_value=None)
+        coordinator._http_client.last_error_code = error_code
+
+        with caplog.at_level("WARNING"):
+            assert await coordinator.async_set_stream_feed_in_control(True) is False
+
+        lines = [r.getMessage() for r in caplog.records if "SET failed" in r.message]
+        assert len(lines) == 1
+        assert lines[0].endswith(f": {expected}")
 
     async def test_app_login_is_refused_without_a_request(
         self, hass: HomeAssistant
@@ -216,6 +242,55 @@ class TestWrite:
 
         assert await coordinator.async_set_stream_feed_in_control(True) is False
         coordinator._http_client.set_quota.assert_not_called()
+
+    async def test_write_holds_the_device_config_lock(
+        self, hass: HomeAssistant
+    ) -> None:
+        """The write queues behind other config writes to this device."""
+        coordinator, _ = _coordinator(hass, data={STATE_KEY: False})
+        held_during_request: list[bool] = []
+
+        async def _set_quota(_command: dict[str, Any]) -> dict[str, str]:
+            held_during_request.append(coordinator._device_config_lock.locked())
+            return {"code": "0"}
+
+        coordinator._http_client = MagicMock()
+        coordinator._http_client.set_quota = AsyncMock(side_effect=_set_quota)
+
+        assert await coordinator.async_set_stream_feed_in_control(True) is True
+        assert held_during_request == [True]
+        assert not coordinator._device_config_lock.locked()
+
+    async def test_accepted_write_survives_a_push_after_the_lock(
+        self, hass: HomeAssistant
+    ) -> None:
+        """A push without the feed-in mode must not bring the old state back."""
+        coordinator, _ = _coordinator(hass, data={STATE_KEY: False})
+        coordinator._http_client = MagicMock()
+        coordinator._http_client.set_quota = AsyncMock(return_value={"code": "0"})
+        entity = _switch(coordinator)
+
+        with patch(
+            "custom_components.ecoflow_energy.switch.time.monotonic",
+            return_value=1000.0,
+        ):
+            await entity.async_turn_on()
+
+        # The write's refresh read the quota before the unit applied the change:
+        # the store was not touched by the device. Then the lock runs out and a
+        # push arrives that carries other keys only.
+        coordinator._device_data["unit_soc_pct"] = 55.0
+        coordinator.async_set_updated_data(dict(coordinator._device_data))
+        with patch(
+            "custom_components.ecoflow_energy.switch.time.monotonic",
+            return_value=1000.0 + 5.0 + 1.0,
+        ):
+            assert entity.is_on is True
+
+            # A report that does carry the feed-in mode is the device's word.
+            coordinator._device_data[STATE_KEY] = False
+            coordinator.async_set_updated_data(dict(coordinator._device_data))
+            assert entity.is_on is False
 
 
 class TestReadBack:

@@ -3115,7 +3115,10 @@ class SetCommandsMixin(_Base):
         result = await self._http_client.set_quota(command)
         params = command.get("params", {})
         if result is None:
-            _LOGGER.warning("SET failed for %s: no response", self.device_tag)
+            # `set_quota` returns None for a transport failure and for an API
+            # rejection alike; the client keeps the rejection code.
+            cause = self._http_client.last_error_code or "no response"
+            _LOGGER.warning("SET failed for %s: %s", self.device_tag, cause)
             self._log_event("set_cmd_fail", f"params={list(params)[:3]}")
             return False
 
