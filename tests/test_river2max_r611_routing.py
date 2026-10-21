@@ -35,6 +35,7 @@ from custom_components.ecoflow_energy.const import (
     RIVER2MAX_SENSOR_KEYS,
     filter_defs_for_serial,
     readback_binary_defs_for_serial,
+    remaining_time_is_battery_only,
 )
 from custom_components.ecoflow_energy.coordinator.mqtt_ingest import MqttIngestMixin
 from custom_components.ecoflow_energy.coordinator.state_apply import StateApplyMixin
@@ -327,8 +328,33 @@ class TestRemainingTime:
         host._resolve_battery_only_remaining_time(parsed)
         assert parsed["remain_time_min"] is None
 
-    def test_nothing_is_written_when_the_sensor_never_reported(self) -> None:
+    def test_input_without_a_stored_figure_still_clears_a_restored_one(self) -> None:
+        """After a restart the sensor shows its restored value until a key arrives."""
         host = _StateHost(R611_SN)
         parsed = {"ac_in_w": 710}
         host._resolve_battery_only_remaining_time(parsed)
+        assert parsed["remain_time_min"] is None
+
+    def test_nothing_is_written_while_nothing_comes_in_and_nothing_reported(
+        self,
+    ) -> None:
+        host = _StateHost(R611_SN, {"watts_in_sum": 0})
+        parsed = {"ac_out_w": 60}
+        host._resolve_battery_only_remaining_time(parsed)
         assert "remain_time_min" not in parsed
+
+
+@pytest.mark.parametrize(
+    ("serial", "expected"),
+    [
+        (R611_SN, True),
+        (R611_SN.lower(), True),
+        (R351_SN, False),
+        ("R612TEST0000ABCD", False),
+        ("", False),
+    ],
+)
+def test_battery_only_remaining_time_is_keyed_on_the_prefix(
+    serial: str, expected: bool
+) -> None:
+    assert remaining_time_is_battery_only(serial) is expected

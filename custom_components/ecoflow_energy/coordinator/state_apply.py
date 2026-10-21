@@ -622,11 +622,12 @@ class StateApplyMixin(_Base):
         rather than assumed to be a battery reading.
 
         The key is set to `None` and not removed: a present key with no value
-        shows as unknown, while a missing one would keep the last figure.
+        shows as unknown, while a missing one would keep the last figure. It is
+        written while input comes in even when the store holds no figure yet,
+        because after a restart the sensor shows the value it restored, and a
+        restored 286 would otherwise outlive the first frame on AC.
         """
         if not remaining_time_is_battery_only(self.device_sn):
-            return
-        if "remain_time_min" not in parsed and "remain_time_min" not in self._device_data:
             return
         total = parsed.get("watts_in_sum", self._device_data.get("watts_in_sum"))
         ac_in = parsed.get("ac_in_w")

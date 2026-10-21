@@ -194,6 +194,6 @@ Sensors, with the reading each one was checked against in the recording:
 - Type-C 1: 17 W with a power bank plugged in, as in the app
 - AC Input Voltage, AC Output Voltage, AC Output Frequency: 117 to 121 V and 60 Hz, a North American mains. These were not compared with the app
 - AC Input Energy, AC Output Energy: integrated by the integration from the AC power, not sent by the unit
-- Remaining Time: the unit's runtime estimate, shown only while the unit runs from its battery (286 min, the app: 4 h 40 min). Full on AC the unit sends 4092 min while the app and the unit's screen show 99 h 59 min, so the sensor stays empty whenever power comes in. It is empty while charging below 100 % too, because that was not recorded
+- Remaining Time: the unit's runtime estimate, shown only while the unit runs from its battery (286 min, the app: 4 h 40 min). Full on AC, the unit sends 4092 min while the app and the unit's screen show 99 h 59 min. So the sensor stays empty whenever power comes in. It also stays empty while charging below 100 %, because no recording covers that state
 
 Left out until a recording backs them: battery voltage (the unit sends a whole number of 25 or 26 where the Delta 2 Max sends millivolts), the charge state, the USB-A, QC USB and 12 V power, the solar input, and every switch and number. The unit pushes about every 1.5 seconds in the recording. The energy counters are integrated from the AC power, so they are approximate. If the USB-C reading drops out in the app once the unit reaches 100 %, the unit itself reports 0 W at that point.
