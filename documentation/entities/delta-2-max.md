@@ -183,7 +183,7 @@ Two expansion packs (Slave 1, Slave 2), each with 16 sensors. All disabled by de
 
 ## RIVER 2 Max
 
-The RIVER 2 Max (`R611`) sends the Delta 2 messages, so it is read through the same parser as the Delta 2 Max. It was added from one owner's Enhanced Mode recording and is read-only: 11 sensors, no binary sensors, switches or numbers. Standard Mode has not been tried on it.
+The RIVER 2 Max (`R611`) sends the Delta 2 messages, so it is read through the same parser as the Delta 2 Max. It was added from one owner's Enhanced Mode recording and is read-only: 12 sensors, no binary sensors, switches or numbers. Standard Mode has not been tried on it.
 
 Sensors, with the reading each one was checked against in the recording:
 
@@ -194,5 +194,6 @@ Sensors, with the reading each one was checked against in the recording:
 - Type-C 1: 17 W with a power bank plugged in, as in the app
 - AC Input Voltage, AC Output Voltage, AC Output Frequency: 117 to 121 V and 60 Hz, a North American mains. These were not compared with the app
 - AC Input Energy, AC Output Energy: integrated by the integration from the AC power, not sent by the unit
+- Remaining Time: the unit's runtime estimate, shown only while the unit runs from its battery (286 min, the app: 4 h 40 min). Full on AC the unit sends 4092 min while the app and the unit's screen show 99 h 59 min, so the sensor stays empty whenever power comes in. It is empty while charging below 100 % too, because that was not recorded
 
-Left out until a recording backs them: battery voltage (the unit sends a whole number of 25 or 26 where the Delta 2 Max sends millivolts), the charge state, the USB-A, QC USB and 12 V power, the solar input, and every switch and number. Remaining Time is left out too: it reads 286 min on battery (the app: 4 h 40 min) but 4092 min while the unit is full on AC, and the app reading for that moment is not known. The unit pushes about every 1.5 seconds in the recording. The energy counters are integrated from the AC power, so they are approximate. If the USB-C reading drops out in the app once the unit reaches 100 %, the unit itself reports 0 W at that point.
+Left out until a recording backs them: battery voltage (the unit sends a whole number of 25 or 26 where the Delta 2 Max sends millivolts), the charge state, the USB-A, QC USB and 12 V power, the solar input, and every switch and number. The unit pushes about every 1.5 seconds in the recording. The energy counters are integrated from the AC power, so they are approximate. If the USB-C reading drops out in the app once the unit reaches 100 %, the unit itself reports 0 W at that point.

@@ -174,6 +174,7 @@ class HttpPollMixin(_Base):
         # Resolve the Stream unit/system SoC sources before merging, just as
         # the MQTT path does. This also removes the parser-private fallback.
         self._resolve_soc(parsed)
+        self._resolve_battery_only_remaining_time(parsed)
         # Same as the MQTT path: a wallbox status arriving here would confirm
         # a pending start or stop. No polled device reports one today (the
         # C376 has no quota branch), so this is parity, not a live path.

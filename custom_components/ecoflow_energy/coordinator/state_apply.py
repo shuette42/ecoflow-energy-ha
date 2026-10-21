@@ -22,6 +22,7 @@ from ..const import (
     POWERPULSE2_CHARGE_ACTION_CONFIRMED,
     POWERPULSE2_SETTINGS_MAX_AGE_S,
     STREAM_OWN_UNIT_ENTRY_HOLD_S,
+    remaining_time_is_battery_only,
 )
 from ..ecoflow.const import POWERPULSE2_DISPLAY_BLOCK_LEN_KEY
 from ..ecoflow.parsers.powerpulse_proto import RELAYED_WALLBOX_SETTINGS_KEY
@@ -607,6 +608,35 @@ class StateApplyMixin(_Base):
                 stats["handed_over"] = stats.get("handed_over", 0) + 1
         return True
 
+    def _resolve_battery_only_remaining_time(self, parsed: dict[str, Any]) -> None:
+        """Keep Remaining Time empty while anything comes in (RIVER 2 Max, #585).
+
+        On battery the unit's `remain_time_min` matched the app (286 min
+        against about 4 h 40 min). Full on AC the same field read 4092 min
+        while the app and the unit's screen showed 99 h 59 min, so it is a
+        runtime only while the battery carries the load. The input total
+        decides, read from the accumulated state with the message at hand on
+        top (the field arrives in the same frame as `watts_in_sum`, and
+        `ac_in_w` follows the input faster than the totals do). Where no input
+        total is known, a Remaining Time arriving in the message is held back
+        rather than assumed to be a battery reading.
+
+        The key is set to `None` and not removed: a present key with no value
+        shows as unknown, while a missing one would keep the last figure.
+        """
+        if not remaining_time_is_battery_only(self.device_sn):
+            return
+        if "remain_time_min" not in parsed and "remain_time_min" not in self._device_data:
+            return
+        total = parsed.get("watts_in_sum", self._device_data.get("watts_in_sum"))
+        ac_in = parsed.get("ac_in_w")
+        coming_in = (isinstance(total, (int, float)) and total > 0) or (
+            isinstance(ac_in, (int, float)) and ac_in > 0
+        )
+        total_unknown = not isinstance(total, (int, float))
+        if coming_in or (total_unknown and "remain_time_min" in parsed):
+            parsed["remain_time_min"] = None
+
     def _apply_data(
         self,
         parsed: dict[str, Any],
@@ -674,6 +704,7 @@ class StateApplyMixin(_Base):
             # no listener call, no snapshot (PLAN-145).
             return
         self._resolve_soc(parsed)
+        self._resolve_battery_only_remaining_time(parsed)
         self._resolve_schedule_armed(parsed)
         self._resolve_wallbox_charge_mode(parsed, now)
         self._resolve_pending_write(parsed)

@@ -37,6 +37,7 @@ from custom_components.ecoflow_energy.const import (
     readback_binary_defs_for_serial,
 )
 from custom_components.ecoflow_energy.coordinator.mqtt_ingest import MqttIngestMixin
+from custom_components.ecoflow_energy.coordinator.state_apply import StateApplyMixin
 from custom_components.ecoflow_energy.ecoflow.const import (
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_UNKNOWN,
@@ -190,6 +191,7 @@ class TestEntitySet:
             "ac_out_freq_hz",
             "ac_in_energy_kwh",
             "ac_out_energy_kwh",
+            "remain_time_min",
         }
         assert kept == RIVER2MAX_SENSOR_KEYS
 
@@ -219,11 +221,11 @@ class TestEntitySet:
         """A renamed Delta 2 key must not silently empty the RIVER 2 Max set."""
         assert _keys(DELTA2MAX_SENSORS) >= RIVER2MAX_SENSOR_KEYS
 
-    def test_remaining_time_stays_off_until_the_ac_value_is_known(self) -> None:
-        """286 min on battery matches the app; 4092 min on AC has no app value."""
-        assert "remain_time_min" not in RIVER2MAX_SENSOR_KEYS
+    def test_remaining_time_is_allowed_for_the_prefix(self) -> None:
+        """The sensor exists; `TestRemainingTime` covers when it has a value."""
+        assert "remain_time_min" in RIVER2MAX_SENSOR_KEYS
         kept = _keys(filter_defs_for_serial(DELTA2MAX_SENSORS, R611_SN))
-        assert "remain_time_min" not in kept
+        assert "remain_time_min" in kept
 
     def test_no_controls_and_no_binary_sensors(self) -> None:
         assert filter_defs_for_serial(DELTA2MAX_SWITCHES, R611_SN) == []
@@ -269,3 +271,64 @@ class TestEntitySet:
         assert len(filter_defs_for_serial(DELTA2MAX_NUMBERS, R351_SN)) == len(
             DELTA2MAX_NUMBERS
         )
+
+
+class _StateHost(StateApplyMixin):
+    """Minimal host for the real state resolver."""
+
+    def __init__(self, device_sn: str, data: dict[str, Any] | None = None) -> None:
+        self.device_sn = device_sn
+        self._device_data: dict[str, Any] = dict(data or {})
+
+
+class TestRemainingTime:
+    """Remaining Time shows a runtime on battery and nothing while anything comes in.
+
+    On battery the unit read 286 min (app: 4 h 40 min). Full on AC it read
+    4092 min while the app and the unit's screen showed 99 h 59 min (#585).
+    """
+
+    def _apply(
+        self, frame_index: int, data: dict[str, Any] | None = None, sn: str = R611_SN
+    ) -> dict[str, Any]:
+        host = _StateHost(sn, data)
+        parsed = _ingest(_BY_INDEX[frame_index])
+        host._resolve_battery_only_remaining_time(parsed)
+        return parsed
+
+    def test_on_battery_the_unit_value_stands(self) -> None:
+        assert self._apply(3)["remain_time_min"] == 286
+
+    def test_full_on_ac_it_is_empty_not_4092(self) -> None:
+        parsed = self._apply(11)
+        assert "remain_time_min" in parsed
+        assert parsed["remain_time_min"] is None
+
+    def test_control_other_serial_keeps_the_raw_value(self) -> None:
+        """The Delta 2 Max shows what the unit sends; the gate is the prefix's."""
+        assert self._apply(11, sn=R351_SN)["remain_time_min"] == 4092
+
+    def test_ac_returning_clears_the_figure_before_the_next_report(self) -> None:
+        """Remaining Time lives in a slower frame than the AC input power."""
+        host = _StateHost(R611_SN, {"remain_time_min": 286, "watts_in_sum": 0})
+        parsed = _ingest(_BY_INDEX[6])
+        assert "remain_time_min" not in parsed
+        host._resolve_battery_only_remaining_time(parsed)
+        assert parsed["remain_time_min"] is None
+
+    def test_a_stale_total_does_not_clear_a_fresh_battery_frame(self) -> None:
+        """The frame carries its own total of 0, which wins over the stored 68."""
+        parsed = self._apply(3, {"watts_in_sum": 68, "ac_in_w": 66})
+        assert parsed["remain_time_min"] == 286
+
+    def test_unknown_input_holds_a_value_back(self) -> None:
+        host = _StateHost(R611_SN)
+        parsed = {"remain_time_min": 286}
+        host._resolve_battery_only_remaining_time(parsed)
+        assert parsed["remain_time_min"] is None
+
+    def test_nothing_is_written_when_the_sensor_never_reported(self) -> None:
+        host = _StateHost(R611_SN)
+        parsed = {"ac_in_w": 710}
+        host._resolve_battery_only_remaining_time(parsed)
+        assert "remain_time_min" not in parsed

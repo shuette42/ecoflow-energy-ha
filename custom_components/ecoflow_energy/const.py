@@ -7034,11 +7034,14 @@ _SN_PREFIX_EXCLUDED_KEYS["R631"] = _SN_PREFIX_EXCLUDED_KEYS["R655"]
 #   - `batt_voltage_v`: `bms_bmsStatus.vol` is 25 and 26, a whole number
 #     where the Delta 2 Max sends millivolts, so the shared conversion would
 #     read 0.026 V. The unit differs and nothing says what it is.
-#   - `remain_time_min`: 286 min on battery matches the app, but the same
-#     field reads 4092 min on AC at 100 %, which is not a runtime the load
-#     implies, and the app reading for that moment was not noted. One sensor
-#     cannot show a right value on battery and a wrong one on AC, so it stays
-#     off until the app reading for the full-on-AC moment is known.
+#   - `remain_time_min` is allowed, but only while nothing comes in: 286 min
+#     on battery matches the app (about 4 h 40 min), the same field reads
+#     4092 min on AC at 100 % while the app and the unit's screen show
+#     99 h 59 min (the reporter, 2026-10-21), so the unit's number is not a
+#     runtime the app agrees with. `remaining_time_is_battery_only` below keeps the
+#     sensor empty whenever the input total or the AC input power is above
+#     zero. What the unit and the app show while it charges below 100 % was
+#     not recorded, which is why that case is empty rather than guessed.
 #   - The charge state enums: `pd.chgDsgState` is 0 in every frame, also while
 #     the unit ran on battery, and `bms_emsStatus.chgState` is 2 on battery
 #     and 0 on AC, which the Delta 2 Max map would name charging while the
@@ -7060,8 +7063,19 @@ RIVER2MAX_SENSOR_KEYS: frozenset[str] = frozenset(
         "ac_out_freq_hz",
         "ac_in_energy_kwh",
         "ac_out_energy_kwh",
+        "remain_time_min",
     }
 )
+
+# Serial prefixes whose `remain_time_min` means a runtime on battery only (see
+# the RIVER 2 Max notes above): `StateApplyMixin._resolve_battery_only_remaining_time`
+# clears it while anything comes in.
+REMAINING_TIME_BATTERY_ONLY_PREFIXES: frozenset[str] = frozenset({"R611"})
+
+
+def remaining_time_is_battery_only(device_sn: str) -> bool:
+    """Return True when the serial's Remaining Time is shown on battery only."""
+    return device_sn[:4].upper() in REMAINING_TIME_BATTERY_ONLY_PREFIXES
 
 
 def _delta2max_names_outside(allowed: frozenset[str]) -> frozenset[str]:
