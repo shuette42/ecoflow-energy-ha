@@ -20,7 +20,7 @@ Each principle has a reason. If you think your change needs an exception, say so
 ### 3. One value, one source
 
 - Feed an entity from one path. Do not add a second path to the same entity, a second update rate for one reading or a second parser for a field that is already parsed. Reason: two paths drift apart and the user sees the value flip between them.
-- When a value from another source looks equal to an existing one, prove they agree before you reuse the key. Until then, give it a key of its own (ADR-031).
+- When a value from another source looks equal to an existing one, prove they agree before you reuse the key. Until then, give it a key of its own (ADR-030).
 
 ### 4. No control without read-back
 

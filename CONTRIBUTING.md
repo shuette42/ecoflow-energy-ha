@@ -4,7 +4,7 @@ Thanks for contributing to this Home Assistant custom integration for EcoFlow de
 
 ## Development Setup
 
-1. **Python 3.12+** is required.
+1. **Python 3.14** is required to run the test suite. The pinned Home Assistant test package needs it. Create the virtual environment with it (`python3.14 -m venv .venv`) before you install anything.
 
 2. Clone the repository and install dependencies:
    ```bash
@@ -29,7 +29,7 @@ mypy custom_components/ecoflow_energy
 mypy tests/
 ```
 
-`pytest` covers parsers, protocol decoding, API client logic, energy integration and Home Assistant platform setup. `ruff check` and `ruff format --check` are the lint and formatting gates, and `mypy` runs twice, once over the integration and once over the tests. **All of them must pass before you open a pull request.** CI installs Python 3.14. The integration itself supports the Python versions of Home Assistant 2025.1.0 and newer.
+`pytest` covers parsers, protocol decoding, API client logic, energy integration and Home Assistant platform setup. `ruff check` and `ruff format --check` are the lint and formatting gates, and `mypy` runs twice, once over the integration and once over the tests. **All of them must pass before you open a pull request.** CI runs Python 3.14. The integration itself supports the Python versions of Home Assistant 2025.1.0 and newer.
 
 ## Code and Pull Requests in Short
 
@@ -40,7 +40,7 @@ The detailed rules live in `documentation/contributing/`. In short:
 - Ship a test that fails without your change, and run the commands above. See [Testing](documentation/contributing/testing.md).
 - Add one line to `CHANGELOG.md` and leave the version in `manifest.json` alone. See [Changelog and Versioning](documentation/contributing/changelog-and-versioning.md).
 - Check your change against the [Design Principles](documentation/contributing/design-principles.md) before you write code.
-- Fork the repository, branch from `main`, keep each pull request to one feature or fix, name the issue with `Ref #N` and write clear commit messages (for example `feat: add battery temperature sensor for Delta 2 Max`).
+- Fork the repository, branch from `main`, keep each pull request to one feature or fix, name the issue with `Ref #N` and write clear commit messages in English (for example `feat: add battery temperature sensor for Delta 2 Max`).
 
 ## Adding Device Support
 
@@ -53,7 +53,7 @@ data through the main unit. PowerOcean add-ons such as PowerGlow and PowerPulse
 are the clearest example: they show up as separate entries in the account device
 list, but a quota request against their own serial number is rejected with error
 `1006`, and their telemetry appears as extra keys in the PowerOcean quota
-response. Those keys are added to `ecoflow/parsers/powerocean.py` and surfaced as
+response. Add those keys to the PowerOcean parsers (`ecoflow/parsers/powerocean.py` for the quota response, `ecoflow/parsers/powerocean_proto.py` for Enhanced Mode push data). They surface as
 additional PowerOcean sensors. A new device type with its own coordinator would
 have nothing to poll.
 
@@ -113,7 +113,7 @@ here and not a sign you did something wrong.
 Please use [GitHub Issues](https://github.com/shuette42/ecoflow-energy-ha/issues) and include:
 
 - **Home Assistant version** and **integration version**
-- **Device type** (PowerOcean, Delta 2 Max, Smart Plug) and firmware version if known
+- **Device model** (as listed under Supported Devices in the README) and firmware version if known
 - **Relevant log entries** from Home Assistant (Settings > System > Logs)
 - **Steps to reproduce** the issue
 - **Expected vs. actual behavior**

@@ -12,9 +12,11 @@ What your pull request must prove, and how to run exactly what CI runs.
 
 ## Run what CI runs
 
-Install what CI installs, in a clean virtual environment:
+Install what CI installs, in a clean virtual environment. Create it with Python 3.14, because the pinned Home Assistant test package requires it:
 
 ```bash
+python3.14 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements_test.txt
 pip install "paho-mqtt>=2.1.0" "protobuf>=4.21.0" "cryptography>=42.0.0"
 pip install -r requirements-dev.txt
@@ -38,7 +40,7 @@ mypy tests/
 ## Where a test goes
 
 - Put a test that needs Home Assistant under `tests/ha/`. Reason: those tests start an in-memory Home Assistant through the `hass` fixture.
-- Keep every other test in `tests/` free of Home Assistant imports, and import core code there as `ecoflow_energy.ecoflow.*`. Reason: the core library is tested without Home Assistant. CI installs Home Assistant for the whole suite, so a stray import passes CI and only review catches it.
+- Do not import `homeassistant` directly in a top-level test, and import core code there as `ecoflow_energy.ecoflow.*`. `tests/test_layer_boundary.py` enforces the direct-import rule. Some existing tests reach Home Assistant through the root `const.py` or the `custom_components.` name, so the suite needs Home Assistant installed. Reason: the core library is tested without Home Assistant, and a direct import ties a core test to it.
 - Import the integration under one name per test file. Tests under `tests/` import core code as `ecoflow_energy.ecoflow.*`, tests under `tests/ha/` as `custom_components.ecoflow_energy.*`. Never use both in one file. Reason: the two names load two module objects, and a patch on one misses the other.
 - Name the file as described in [Naming](naming.md).
 
@@ -64,5 +66,6 @@ You do not need to write these again. Run the full suite and read the failure.
 - `tests/test_translations.py`: every language file has the same keys as the others.
 - `tests/test_fixture_identifiers.py`: no real identifier in any fixture.
 - `tests/test_entity_documentation.py`: the entity pages under `documentation/entities/` agree with the code.
+- `tests/test_layer_boundary.py`: the core library imports no `homeassistant` and nothing from the layer above it, and no top-level test imports `homeassistant` directly.
 - `tests/test_public_docs_boundary.py`: the public documentation, including these pages, stays free of private paths, internal names, real serials, unresolved `ADR-NNN` references and en or em dashes.
 - `ruff` and `mypy`: style, imports and types.

@@ -22,7 +22,7 @@ The one file every contributor touches, and the one file you must leave alone. R
 
 - Write `Ref #N` in commit messages and in the pull request description. Do not write `Closes #N`, `Fixes #N` or `Resolves #N`. Reason: a closing keyword closes the issue when the pull request merges, before the reporter has confirmed anything.
 - Be careful with a sentence that denies a close, such as "this does not close #7". GitHub reads the keyword and ignores the "not". Write "#7 stays open" instead.
-- Use a commit subject that starts with the kind of change: `feat:`, `fix:`, `docs:`, `test:`, `chore:`, `ci:` or `refactor:`, then a short sentence and the pull request number in brackets. Example: `fix: raise the RE41 Backup Reserve ceiling together with the reserve (#604)`.
+- Use a commit subject that starts with the kind of change: `feat:`, `fix:`, `docs:`, `test:`, `chore:`, `ci:` or `refactor:`, then a short sentence. Do not add the pull request number: GitHub appends it when the pull request is squash merged. Example: `fix: raise the RE41 Backup Reserve ceiling together with the reserve`.
 - Write commit messages and pull request text in English.
 
 ## What you leave alone

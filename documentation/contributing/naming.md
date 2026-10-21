@@ -29,6 +29,7 @@ One naming scheme for new files, functions and entity keys. Follow it for new co
 ## Tests and fixtures
 
 - Name a test for code that runs without Home Assistant `tests/test_<module>.py`, or `tests/test_<behaviour>.py` when it covers one behaviour across modules. Examples: `test_ocean2_commands.py`, `test_translations.py`.
+- Name the test that replays a device family's recorded frames through its parser `tests/test_<family>_parser.py`. Example: `test_wave3_parser.py`. Reason: [Adding Your Device](../add-your-device.md) uses that name, and the existing tests already follow it.
 - Put a test that needs Home Assistant under `tests/ha/`, named `tests/ha/test_<...>.py`. Reason: see [Testing](testing.md).
 - Name a fixture `tests/fixtures/<family>/<what>_frames.json`, with a date suffix such as `_20261001` when you add a second recording of the same thing. Example: `tests/fixtures/ocean2/storm_guard_frames.json`. Reason: the folder is the device family, the file name is the situation that was recorded.
 - Use dummy serials such as `HJ31TEST0001` in hand-built fixtures and tests, and a run of `X` of the same length in frames taken from a recording. Never use a real serial. Reason: the repository is public.
