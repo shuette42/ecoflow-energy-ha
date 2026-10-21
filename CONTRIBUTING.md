@@ -1,6 +1,6 @@
 # Contributing to EcoFlow Energy
 
-Thank you for your interest in contributing to this Home Assistant custom integration for EcoFlow devices. Contributions of all kinds are welcome -- bug reports, feature requests, documentation improvements, and code.
+Thank you for your interest in contributing to this Home Assistant custom integration for EcoFlow devices. Contributions of all kinds are welcome: bug reports, feature requests, documentation improvements and code.
 
 ## Development Setup
 
@@ -10,50 +10,37 @@ Thank you for your interest in contributing to this Home Assistant custom integr
    ```bash
    git clone https://github.com/shuette42/ecoflow-energy-ha.git
    cd ecoflow-energy-ha
-   pip install paho-mqtt protobuf pytest pytest-homeassistant-custom-component
+   pip install -r requirements_test.txt
+   pip install "paho-mqtt>=2.1.0" "protobuf>=4.21.0" "cryptography>=42.0.0"
+   pip install -r requirements-dev.txt
    ```
 
 3. Optionally, set up a local Home Assistant development environment for end-to-end testing. The integration can be loaded by symlinking `custom_components/ecoflow_energy` into your HA config directory.
 
 ## Running Tests
 
+CI runs the five commands below on every pull request. Run them locally before you open one, all from the repository root:
+
 ```bash
-python3 -m pytest
+pytest tests/ -v
+ruff check custom_components/ tests/
+ruff format --check custom_components/ tests/
+mypy custom_components/ecoflow_energy
+mypy tests/
 ```
 
-The test suite contains 550+ tests covering parsers, protocol decoding, API client logic, energy integration, and Home Assistant platform setup. **All tests must pass before submitting a pull request.**
+`pytest` covers parsers, protocol decoding, API client logic, energy integration and Home Assistant platform setup. `ruff check` and `ruff format --check` are the lint and formatting gates, and `mypy` runs twice, once over the integration and once over the tests. **All of them must pass before you submit a pull request.** CI installs Python 3.14; the integration itself supports the Python versions of Home Assistant 2025.1.0 and newer.
 
-## Code Style
+## Code and Pull Requests in Short
 
-- Follow **PEP 8** conventions.
-- Use `from __future__ import annotations` at the top of every Python file.
-- Add **type hints** to all function signatures.
-- Use `_LOGGER = logging.getLogger(__name__)` for logging (Home Assistant convention).
-- Keep log messages actionable and include context (device SN, error reason). Transient errors should use `DEBUG` level, not `WARNING` or `ERROR`.
+The detailed rules live in `documentation/contributing/`. In short:
 
-## Architecture Overview
-
-All integration code lives under `custom_components/ecoflow_energy/`:
-
-```
-custom_components/ecoflow_energy/
-    __init__.py          # HA setup and teardown
-    coordinator/         # DataUpdateCoordinator (HTTP polling + MQTT push), split into focused modules
-    config_flow.py       # ConfigFlow and OptionsFlow
-    sensor.py            # Sensor entities
-    binary_sensor.py     # Binary sensor entities
-    switch.py            # Switch entities
-    number.py            # Number entities
-    const.py             # Entity definitions per device type
-    ecoflow/             # Core library (no HA dependencies)
-        iot_api.py       # IoT Developer API client
-        cloud_http.py    # HTTP quota polling
-        cloud_mqtt.py    # MQTT client (TCP + WSS)
-        parsers/         # Device-specific parsers
-        proto/           # Protobuf decoder and bindings
-```
-
-The `ecoflow/` subdirectory contains the core library with no Home Assistant dependencies, making it independently testable. Entity platforms use the `CoordinatorEntity` pattern.
+- Put each new file in the right layer: `ecoflow/` never imports Home Assistant. See [Architecture and Structure](documentation/contributing/architecture-and-structure.md).
+- Name new files, functions and entity keys the way [Naming](documentation/contributing/naming.md) describes.
+- Ship a test that fails without your change, and run the commands above. See [Testing](documentation/contributing/testing.md).
+- Add one line to `CHANGELOG.md` and leave the version in `manifest.json` alone. See [Changelog and Versioning](documentation/contributing/changelog-and-versioning.md).
+- Check your change against the [Design Principles](documentation/contributing/design-principles.md) before you write code.
+- Fork the repository, branch from `main`, keep each pull request to one feature or fix, name the issue with `Ref #N` and write clear commit messages (for example `feat: add battery temperature sensor for Delta 2 Max`).
 
 ## Adding Device Support
 
@@ -120,15 +107,6 @@ The file-by-file walk, with the WAVE 3 as the worked example, is in
 
 Adding one sensor therefore touches around eight files, not one. That is normal
 here and not a sign you did something wrong.
-
-## Pull Request Guidelines
-
-1. **Fork** the repository and create a feature branch from `main`.
-2. Keep each PR focused -- one feature or fix per PR.
-3. **Include tests** for new functionality or bug fixes.
-4. **Update `CHANGELOG.md`** with your changes under an appropriate category (Added, Changed, Fixed, Removed).
-5. Write clear, descriptive commit messages (e.g., `feat: add battery temperature sensor for Delta 2 Max`).
-6. Ensure all tests pass before requesting review.
 
 ## Reporting Issues
 

@@ -619,7 +619,7 @@ In Enhanced Mode the download also carries a sample of the raw messages your dev
 
 <div align="center">
 
-**MIT License** - [Contributing](https://github.com/shuette42/ecoflow-energy-ha/issues) welcome
+**MIT License** - [Contributing](CONTRIBUTING.md) welcome
 
 Made by [huette.ai](https://huette.ai) - When it has to work.
 

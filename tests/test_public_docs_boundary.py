@@ -39,7 +39,12 @@ REGISTER = DOCUMENTATION / "architecture" / "decisions.md"
 # entries are read as they stand; the dash check below is the only one it
 # could trip on, and it is scoped to the em dash the style rule forbids.
 PUBLIC_FILES = sorted(
-    [REPO_ROOT / "README.md", REPO_ROOT / "CHANGELOG.md"]
+    [
+        REPO_ROOT / "README.md",
+        REPO_ROOT / "CHANGELOG.md",
+        REPO_ROOT / "CONTRIBUTING.md",
+        REPO_ROOT / ".github" / "pull_request_template.md",
+    ]
     + list(DOCUMENTATION.rglob("*.md"))
 )
 
