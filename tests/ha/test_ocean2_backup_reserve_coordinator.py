@@ -384,8 +384,8 @@ class TestWritePath:
         """RE43 refuses 0 like the RE11 (no 0 on record) and sends 10 and 92.
 
         The app's own RE43 write also carries an explicit field 1 = 0 that this
-        frame does not; whether the unit accepts our shape is what the first
-        write from Home Assistant on an RE43 settles.
+        frame does not; a change from Home Assistant was confirmed on an RE43
+        in both directions on 2026-10-18 (#145), so the unit takes our shape.
         """
         re43, mqtt = _coordinator(hass, "RE43TEST00000001")
         re43._apply_data(dict(SNAPSHOT_5_80))
@@ -397,6 +397,89 @@ class TestWritePath:
 
         assert await _write(hass, re43, mqtt, 30, SNAPSHOT_5_80) is True
         assert _sent_pdata(mqtt) == _pdata(30, 80)
+
+    async def test_the_re41_raises_field_92_with_the_reserve(
+        self, hass: HomeAssistant, timers: _Timers
+    ) -> None:
+        """RE41 reporting 92 = 5 writes reserve 60 and sends {10: 60, 92: 60}.
+
+        The app's own RE41 writes raise 92 with the reserve ({10: 5, 92: 5},
+        {10: 100, 92: 100}); sending 5 back would leave the reserve stuck at the
+        unit's own limit.
+        """
+        re41, mqtt = _coordinator(hass, "RE41TEST00000001")
+        snapshot = {"backup_reserve_pct": 5, "edev_soc_ratio_pct": 5}
+        re41._apply_data(dict(snapshot))
+
+        assert await _write(hass, re41, mqtt, 60, snapshot) is True
+
+        mqtt.send_proto_set.assert_called_once()
+        assert _sent_pdata(mqtt) == _pdata(60, 60)
+        assert re41.data["backup_reserve_pct"] == 60
+
+    @pytest.mark.parametrize(
+        ("reserve", "reported", "sent"),
+        [
+            # The app's own recorded write: reserve 0 with 92 left at 100.
+            (0, 100, 100),
+            # Not in any recording: a reserve below the reported 92 must leave
+            # 92 where it is. "92 follows the reserve, except at 0" sends 23.
+            (23, 100, 100),
+            (40, 100, 100),
+            # Equal: the larger of the two is either of them.
+            (60, 60, 60),
+        ],
+    )
+    async def test_the_re41_never_lowers_field_92(
+        self,
+        hass: HomeAssistant,
+        timers: _Timers,
+        reserve: int,
+        reported: int,
+        sent: int,
+    ) -> None:
+        """RE41: field 92 is the larger of the reported value and the reserve.
+
+        These cases pin the `max` against a rule that makes 92 follow the
+        reserve. They do not tell the flag branch from the plain write, which
+        send the same frame whenever the reserve is not above 92; the raise
+        test above carries that.
+        """
+        re41, mqtt = _coordinator(hass, "RE41TEST00000001")
+        snapshot = {"backup_reserve_pct": 40, "edev_soc_ratio_pct": reported}
+        re41._apply_data(dict(snapshot))
+
+        assert await _write(hass, re41, mqtt, reserve, snapshot) is True
+
+        assert _sent_pdata(mqtt) == _pdata(reserve, sent)
+        assert re41.data["backup_reserve_pct"] == reserve
+
+    async def test_the_re41_still_needs_a_reported_field_92(
+        self, hass: HomeAssistant, timers: _Timers
+    ) -> None:
+        """No reading of 92 means no write: the unit's current value is unknown."""
+        re41, mqtt = _coordinator(hass, "RE41TEST00000001")
+        re41._apply_data({"backup_reserve_pct": 5, "edev_soc_ratio_pct": 70})
+
+        with patch(_SNAPSHOT_TIMEOUT, 0.05), pytest.raises(DeviceValueNotReported):
+            await _write(hass, re41, mqtt, 60, {"edev_soc_ratio_pct": None})
+
+        mqtt.send_proto_set.assert_not_called()
+
+    @pytest.mark.parametrize("serial", ["RE11TEST00000001", "RE43TEST00000001"])
+    async def test_other_models_keep_the_reserve_at_or_below_field_92(
+        self, hass: HomeAssistant, timers: _Timers, serial: str
+    ) -> None:
+        """RE11 and RE43 reporting 92 = 5 refuse reserve 60 and publish nothing."""
+        coordinator, mqtt = _coordinator(hass, serial)
+        snapshot = {"backup_reserve_pct": 3, "edev_soc_ratio_pct": 5}
+        coordinator._apply_data(dict(snapshot))
+
+        with pytest.raises(ValueError, match="above the device's own reading"):
+            await _write(hass, coordinator, mqtt, 60, snapshot)
+
+        mqtt.send_proto_set.assert_not_called()
+        assert coordinator.data["backup_reserve_pct"] == 3
 
     @pytest.mark.parametrize("serial", ["RE17TEST00000001", "RE42TEST00000001"])
     async def test_a_model_without_a_row_is_refused_before_anything_is_asked(

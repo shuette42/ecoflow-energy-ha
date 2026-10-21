@@ -5988,34 +5988,43 @@ class Ocean2Controls:
     seen on that unit is 10). ``storm_param_full`` says whether the Storm
     Guard write sends all three StormParam fields (the RE41 app's own bytes)
     or only the switch field (the RE11 app's bytes); the fields are
-    presence-tracked, so the two are different messages.
+    presence-tracked, so the two are different messages. ``reserve_ceiling_follows``
+    says the unit's own upper limit (field 92) is raised together with the
+    reserve, so the reserve is not capped by what field 92 reads now (RE41).
     """
 
     reserve_floor: int | None
     storm_param_full: bool | None
+    reserve_ceiling_follows: bool = False
 
 
 # Ocean 2 variants that may be written to, and the write facts of each. Only
 # the RE11, the RE41 and the RE43 have writes on record, so only they get
 # controls. The RE11 has both (the Backup Reserve and the Storm Guard switch,
 # each with its acknowledgement and read-back). The RE41 has Backup Reserve
-# writes from Home Assistant with acknowledgement and read-back; for its Storm
-# Guard only the app's own switching is on record (the OFF acknowledgement and
-# the ON read-back), no write from Home Assistant yet, and the long form is the
-# one the RE41 app was recorded sending. The RE43 has a Backup Reserve write
-# only on record from the app itself (one recording: the app's write, the
-# device's acknowledgement and the read-back on field 10); no write from Home
-# Assistant has been tried on it yet, and no Storm Guard recording exists, so
+# writes from Home Assistant with acknowledgement and read-back, and its Storm
+# Guard switched on and off from Home Assistant with the unit reporting each
+# state (2026-10-18); the long form is the one the RE41 app was recorded
+# sending. The RE43 has a Backup Reserve change from Home Assistant confirmed
+# against the app (one unit, 2026-10-18); no Storm Guard recording exists, so
 # its Storm Guard column stays empty. RE17 is routed with the RE11 for reading,
 # and RE42 differs on the read side already; a read-only routing does not
 # carry over to a write.
+# The RE41 also raises the unit's upper limit (field 92) together with the
+# reserve: the app's own writes on one RE41 were {10: 5, 92: 5},
+# {10: 100, 92: 100} and {10: 0, 92: 100}, and it never lowers 92. Three
+# writes on one unit are a strong indication, not proof, so only the RE41 row
+# sets `reserve_ceiling_follows`; the RE11 and the RE43 keep the reserve at or
+# below the reading of field 92.
 # This table says what is confirmed on the model, the accessory gate on the
 # number and the switch says this unit reports the value: two facts, not two
 # names for one. The two columns part where a model has one control confirmed
 # and not the other.
 OCEAN2_CONTROLS: dict[str, Ocean2Controls] = {
     "RE11": Ocean2Controls(reserve_floor=1, storm_param_full=False),
-    "RE41": Ocean2Controls(reserve_floor=0, storm_param_full=True),
+    "RE41": Ocean2Controls(
+        reserve_floor=0, storm_param_full=True, reserve_ceiling_follows=True
+    ),
     "RE43": Ocean2Controls(reserve_floor=1, storm_param_full=None),
 }
 
@@ -8831,8 +8840,9 @@ for _module_num in range(1, OCEAN2_MAX_MODULES + 1):
 # the app offers as a percentage slider. The declared floor of 1 is the RE11's:
 # the lowest value that unit acknowledged. The RE41 has held 0, so its floor
 # comes from its `OCEAN2_CONTROLS` row at runtime (`reserve_floor`), as does
-# the ceiling from the device's own SoC ratio (`edev_soc_ratio_pct`), see
-# `EcoFlowNumber._is_ocean2_backup_reserve`. Created per variant by
+# the ceiling: on the RE11 and RE43 the device's own SoC ratio
+# (`edev_soc_ratio_pct`), on the RE41 a fixed 100 (`reserve_ceiling_follows`),
+# see `EcoFlowNumber._is_ocean2_backup_reserve`. Created per variant by
 # `supports_ocean2_reserve` and, because it is an accessory, only once the unit
 # has reported the value.
 OCEAN2_NUMBERS: list[EcoFlowNumberDef] = [
