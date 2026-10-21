@@ -9,7 +9,7 @@ setup gating, the write path and the read-back.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -123,7 +123,7 @@ def _switch(coordinator: EcoFlowDeviceCoordinator) -> EcoFlowSwitch:
 
     defn = next(d for d in STREAMFEEDIN_SWITCHES if d.key == FEED_IN_KEY)
     entity = EcoFlowSwitch(coordinator, defn)
-    entity.async_write_ha_state = MagicMock()  # type: ignore[method-assign]
+    entity.async_write_ha_state = MagicMock()  # type: ignore[misc]
     entity.entity_id = f"switch.{FEED_IN_KEY}"
     return entity
 
@@ -178,7 +178,7 @@ class TestWrite:
         }
         assert entity.is_on is True
         # The refresh is what brings the unit's answer back before the next poll.
-        coordinator.async_request_refresh.assert_awaited_once()
+        cast(AsyncMock, coordinator.async_request_refresh).assert_awaited_once()
 
     async def test_turn_off_sends_the_off_body(self, hass: HomeAssistant) -> None:
         coordinator, _ = _coordinator(hass, data={STATE_KEY: True})
@@ -207,7 +207,7 @@ class TestWrite:
         # No optimistic lock: the device never got the command.
         assert entity._optimistic_lock_until == 0.0
         assert entity.is_on is False
-        coordinator.async_request_refresh.assert_not_awaited()
+        cast(AsyncMock, coordinator.async_request_refresh).assert_not_awaited()
 
     @pytest.mark.parametrize(
         ("error_code", "expected"), [("1006", "1006"), (None, "no response")]
