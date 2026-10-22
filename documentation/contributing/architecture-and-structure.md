@@ -45,7 +45,7 @@ flowchart LR
 - Add SET command builders to `ecoflow/<family>_commands.py`.
 - Add coordinator logic to the matching module in `coordinator/` (`http_poll.py`, `mqtt_ingest.py`, `set_commands.py`, `state_apply.py`, `availability.py`, and so on). A new concern gets a new module in that folder, not a new file at the integration root. Reason: the coordinator is built from small mixins, and each one has one job.
 - Add entity definitions to the root `const.py`, the registry of what each device exposes. Add API constants (hosts, ports, device types and prefixes) to `ecoflow/const.py`.
-- Keep the root `const.py` free of Home Assistant imports. Put anything that needs Home Assistant, such as the platform lists, in `__init__.py` or a platform module. Reason: tests and the core library import the constants without Home Assistant installed, and `tests/test_layer_boundary.py` fails on an import there.
+- Keep the root `const.py` free of Home Assistant imports. Put anything that needs Home Assistant, such as the platform lists, in `__init__.py` or a platform module. Reason: tests under `tests/` import these constants without Home Assistant installed, and `tests/test_layer_boundary.py` fails on an import there.
 - Add a setup screen step as `config_flow_<step>.py` next to the existing ones.
 - Add translations for every new entity key to `strings.json` and to all six files under `translations/`. Reason: the tests hold all six language files to the same key set, so a key missing in one of them fails the suite.
 - Keep entity classes thin: they map coordinator data to Home Assistant attributes and nothing more. Reason: logic in an entity cannot be tested without Home Assistant and runs once per entity instead of once per device.

@@ -51,22 +51,28 @@ def test_the_root_const_no_longer_carries_the_lists() -> None:
     assert not hasattr(const, "LOCAL_PLATFORMS")
 
 
-def _forward_calls(tree: ast.AST) -> list[ast.Call]:
-    return [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "async_forward_entry_setups"
-    ]
+def _forward_calls_by_function(tree: ast.AST) -> dict[str, str]:
+    """Map the function a forward call sits in to the list name it passes."""
+    found: dict[str, str] = {}
+    for func in ast.walk(tree):
+        if not isinstance(func, ast.AsyncFunctionDef | ast.FunctionDef):
+            continue
+        for node in ast.walk(func):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "async_forward_entry_setups"
+            ):
+                found[func.name] = ast.unparse(node.args[1])
+    return found
 
 
-def test_setup_hands_the_module_lists_to_home_assistant() -> None:
+def test_each_setup_path_hands_over_its_own_list() -> None:
     tree = ast.parse(inspect.getsource(ecoflow_energy))
-    calls = _forward_calls(tree)
-    assert len(calls) == 2, "one forward call per mode"
-    passed = sorted(ast.unparse(call.args[1]) for call in calls)
-    assert passed == ["LOCAL_PLATFORMS", "PLATFORMS"]
+    assert _forward_calls_by_function(tree) == {
+        "_async_setup_local_entry": "LOCAL_PLATFORMS",
+        "async_setup_entry": "PLATFORMS",
+    }
 
 
 def _hass_for(coordinators: dict[str, object]) -> SimpleNamespace:
