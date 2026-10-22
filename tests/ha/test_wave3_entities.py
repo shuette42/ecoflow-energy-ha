@@ -92,7 +92,7 @@ from custom_components.ecoflow_energy.switch import (
 )
 
 CAPTURE = (
-    Path(__file__).parent.parent / "fixtures" / "wave3" / "ac71_frames_plan046.json"
+    Path(__file__).parent.parent / "fixtures" / "wave3" / "ac71_frames.json"
 )
 
 # One index per shape from the 24h capture (PLAN-047):

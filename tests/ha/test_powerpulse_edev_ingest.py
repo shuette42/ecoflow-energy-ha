@@ -13,7 +13,7 @@ the two coordinator-level consequences of that:
 2. The PowerPulse 2's own channel carries. A coordinator for a device with
    `device_type` `DEVICE_TYPE_POWERPULSE2` reaches `parse_powerpulse_message`
    through `_parse_message` and lands the wallbox keys, on both topics, from
-   the real capture in `tests/fixtures/powerpulse/c376_frames_plan132.json`
+   the real capture in `tests/fixtures/powerpulse/c376_frames.json`
    (`tests/test_powerpulse_proto.py` tests that parser directly; this only
    proves the coordinator actually calls it for this device type).
 """
@@ -57,7 +57,7 @@ FIXTURE = (
     Path(__file__).parent.parent
     / "fixtures"
     / "powerpulse"
-    / "c376_frames_plan132.json"
+    / "c376_frames.json"
 )
 
 POWEROCEAN_DEVICE: dict[str, Any] = {

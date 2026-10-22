@@ -37,7 +37,7 @@ from ecoflow_energy.ecoflow.proto_encoding import (
     encode_varint,
 )
 
-FIXTURE = Path(__file__).parent / "fixtures" / "wave3" / "ac71_frames_plan046.json"
+FIXTURE = Path(__file__).parent / "fixtures" / "wave3" / "ac71_frames.json"
 
 # A different device's parser fixture, reused by one test only to prove the
 # WAVE 3 map does not accidentally match a Smart Meter frame's field numbers.

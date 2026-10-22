@@ -26,7 +26,7 @@ from ecoflow_energy.ecoflow.proto_encoding import (
     encode_field_varint,
 )
 
-FIXTURE = Path(__file__).parent / "fixtures" / "powerpulse" / "c376_frames_plan132.json"
+FIXTURE = Path(__file__).parent / "fixtures" / "powerpulse" / "c376_frames.json"
 IDLE_LIMIT_FIXTURE = FIXTURE.with_name("c376_idle_limit_steps_20260910.json")
 PARAM_SET_ECHO_FIXTURE = FIXTURE.with_name("c376_param_set_echo_20260824.json")
 PARAM_SET_ECHO_SWEEP_FIXTURE = FIXTURE.with_name("c376_param_set_echo_20260910.json")
@@ -562,7 +562,7 @@ def test_charge_mode_unmapped_number_drops_the_key() -> None:
     assert "ev_charge_mode" not in _finalize({"_charge_mode_raw": 9})
 
 
-def test_charge_mode_reported_on_every_plan132_frame() -> None:
+def test_charge_mode_reported_on_every_c376_frame() -> None:
     """Field 63 is a genuine HeartBeat field, not one this recording happens
     to omit: all ten PLAN-132 frames (a different session, issue #7,
     2026-09-07) carry it, every one reporting Custom - the mode that

@@ -32,7 +32,7 @@ from ecoflow_energy.ecoflow.proto_encoding import encode_field_bytes
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "powerpulse"
 RUN_DATA_SYNC_FIXTURE = FIXTURE_DIR / "c376_run_data_sync_20260824.json"
-HEARTBEAT_FIXTURE = FIXTURE_DIR / "c376_frames_plan132.json"
+HEARTBEAT_FIXTURE = FIXTURE_DIR / "c376_frames.json"
 STANDALONE_CTRL_FIXTURE = FIXTURE_DIR / "c376_standalone_charge_ctrl_20260912.json"
 STANDALONE_CURRENT_CTRL_FIXTURE = (
     FIXTURE_DIR / "c376_standalone_current_ctrl_20260914.json"

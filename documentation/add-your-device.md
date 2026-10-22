@@ -224,7 +224,7 @@ record a rejection is attributed against lives in the coordinator
 | `tests/ha/test_<family>_entities.py` | The entity count per platform, and that a full frame fills the sensors with the expected values | `tests/ha/test_wave3_entities.py`, which also holds the prefix and display-name assertions (around 222 and 225) |
 | `tests/test_const.py` | `class TestDeviceTypeRouting` (around line 101) holds the `get_device_type` cases, and a new prefix case goes there. The WAVE 3 put its prefix assertions in its entity test instead | `TestWave3Sensors`, 36 lines of list-length asserts |
 | `tests/ha/test_config_flow.py` | The device picker offers the device in the right mode | 15 lines changed |
-| `tests/fixtures/<family>/*.json` | The recorded frames, serials replaced by a placeholder | `tests/fixtures/wave3/ac71_frames_plan046.json` |
+| `tests/fixtures/<family>/*.json` | The recorded frames, serials replaced by a placeholder | `tests/fixtures/wave3/ac71_frames.json` |
 
 Fixtures never carry a real serial, a real key, or an unedited diagnostics
 download. The masked download is the source: its `raw_frames.frames` list
@@ -255,7 +255,7 @@ maintainer sets it when the change is scheduled for a release.
 - [ ] Issue opened with the diagnostics download attached, path confirmed
 - [ ] `ecoflow/const.py` - type, prefix, name, docstring (`DEVICE_TYPE_WAVE3`, `AC71`)
 - [ ] `ecoflow/parsers/<family>_proto.py` - parser (`wave3_proto.py`)
-- [ ] `tests/fixtures/<family>/*.json`, `tests/test_<family>_parser.py` - masked frames with placeholder serials, fixture replay (`ac71_frames_plan046.json`, `test_wave3_parser.py`)
+- [ ] `tests/fixtures/<family>/*.json`, `tests/test_<family>_parser.py` - masked frames with placeholder serials, fixture replay (`ac71_frames.json`, `test_wave3_parser.py`)
 - [ ] `coordinator/mqtt_ingest.py` - parser routing, both sites in `_parse_message`
 - [ ] `coordinator/core.py` - energy-from-power table selection
 - [ ] `coordinator/state_apply.py` - only if state-derived values exist
