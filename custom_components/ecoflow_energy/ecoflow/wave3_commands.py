@@ -20,7 +20,7 @@ to write.
 
 The table is split across two gates because they need different inputs:
 
-- `build_write` checks a value against its own control - range, step, or
+- `build_write_payload` checks a value against its own control - range, step, or
   allowed set - and needs nothing else. It raises `Wave3WriteRefused` for a
   value the control's own table would never accept, regardless of what the
   device is currently doing.
@@ -325,7 +325,7 @@ def _validate_and_encode(key: str, control: Wave3Control, value: Any) -> int | f
     return value
 
 
-def build_write(key: str, value: Any, device_sn: str, seq: int = 0) -> bytes:
+def build_write_payload(key: str, value: Any, device_sn: str, seq: int = 0) -> bytes:
     """Build a WAVE 3 ConfigWrite SET frame for one control.
 
     Raises `Wave3WriteRefused` when the key is unknown or the value falls
@@ -350,7 +350,7 @@ def build_write(key: str, value: Any, device_sn: str, seq: int = 0) -> bytes:
     )
 
 
-def build_power_write(turn_on: bool, device_sn: str, seq: int = 0) -> bytes:
+def build_power_write_payload(turn_on: bool, device_sn: str, seq: int = 0) -> bytes:
     """Build the WAVE 3 power frame: field 4 to turn on, field 172 for standby.
 
     Both are action triggers written as True; the read-back is
@@ -381,7 +381,9 @@ def _validate_band_value(label: str, value: float) -> None:
         )
 
 
-def build_band_write(lower: float, upper: float, device_sn: str, seq: int = 0) -> bytes:
+def build_band_write_payload(
+    lower: float, upper: float, device_sn: str, seq: int = 0
+) -> bytes:
     """Build the WAVE 3 constant-temperature band ConfigWrite frame.
 
     Both limits travel in one frame - field 158 (upper) and field 159
@@ -435,7 +437,7 @@ def write_refusal(
     Evaluated against accumulated device state, never a single MQTT message -
     `operating_mode` regularly arrives on a different frame than the write
     under consideration. A caller sends a write only once both this and
-    `build_write`'s own table check pass.
+    `build_write_payload`'s own table check pass.
 
     `mode` overrides the accumulated `operating_mode` for a gesture that
     switches mode and writes a mode-gated value in the same call

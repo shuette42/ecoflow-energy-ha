@@ -8,7 +8,7 @@ One naming scheme for new files, functions and entity keys. Follow it for new co
 - Name parsers `ecoflow/parsers/<family>_<transport>.py`, where the transport is `proto` (push over MQTT), `http` (IoT Developer API quota) or `modbus` (Local mode). Examples: `ocean2_proto.py`, `stream_http.py`, `powerocean_modbus.py`. Reason: one family can have several routes, and the suffix says which one the file reads.
 - Name command builders `ecoflow/<family>_commands.py`. Examples: `ocean2_commands.py`, `stream_commands.py`. Reason: a reader finds every write for a family in one predictable place.
 - Name config flow steps `config_flow_<step>.py` (`config_flow_setup.py`, `config_flow_options.py`). Reason: the existing steps already follow it.
-- Use the lowercase product family for `<family>`, as the existing parser names do (`ocean2`, `stream`, `delta3`, `wave3`, `stream_ac5000`). Use a serial prefix (`hr61`) only when the device has no family name. Reason: a prefix tells nothing to a reader who does not know the serial scheme.
+- Use the lowercase product family for `<family>`, as the existing parser names do (`ocean2`, `stream`, `delta3`, `wave3`, `stream_ac5000`). Use a serial prefix (for example `hc31`) only when the device has no family name. Reason: a prefix tells nothing to a reader who does not know the serial scheme.
 - Keep a name unique across layers. Do not give a new root module the name of a core module. Reason: see [Architecture and Structure](architecture-and-structure.md).
 
 ## Functions
@@ -42,12 +42,9 @@ One naming scheme for new files, functions and entity keys. Follow it for new co
 
 ## Known exceptions
 
-Older names that do not follow the scheme. They stay because renaming them changes patch paths in the tests, import paths and the line history for no gain to users. New code follows the scheme above.
+Older names that do not follow the scheme. They stay because no name in the scheme fits them or because renaming them would break more than it fixes. New code follows the scheme above. `tests/test_naming_rules.py` checks the parser suffix, the builder suffix and the duplicate module names.
 
 | Existing name | Why it stays | What new code does |
 |---|---|---|
-| Parsers without a transport suffix: `delta.py`, `powerocean.py`, `smartplug.py` | Tests and imports use these paths | Name new parsers `<family>_<transport>.py` |
-| `hr61_proto.py` is named by serial prefix, not by family | Same | Use the family name |
-| `wave3_commands.build_write`, `build_power_write`, `build_band_write` return bytes without `_payload` in the name | Callers and patch strings use them | Name new bytes builders `build_<what>_payload` |
-| `delta3_commands.build_proto_command` returns bytes or `None` under a `_command` name | Same | Use `_payload` for bytes, `_command` for a JSON dict |
+| `parsers/delta.py` and `parsers/smartplug.py` have no transport suffix | `delta.py` reads Standard Mode MQTT JSON. `smartplug.py` reads HTTP, MQTT JSON and protobuf and also builds the SET payloads, so no single transport word fits. Tests and imports use these paths | Name new parsers `<family>_<transport>.py` |
 | `energy_stream.py` holds the PowerOcean, PowerGlow and PowerPulse builders, not a `<family>_commands.py` file | It predates the pattern | Put new builders in `ecoflow/<family>_commands.py` |

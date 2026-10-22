@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from ecoflow_energy.ecoflow.parsers.powerocean import (
+from ecoflow_energy.ecoflow.parsers.powerocean_http import (
     _extract_all_battery_packs,
     _extract_battery_pack,
     _is_real_battery_pack,

@@ -25,7 +25,7 @@ from ecoflow_energy.ecoflow.const import _SN_PREFIX_MAP
 from ecoflow_energy.ecoflow.delta3_commands import (
     PORT_PRIORITY_FIELD,
     build_port_priority_command,
-    build_proto_command,
+    build_proto_payload,
     encode_port_priority_item,
     port_priority_soc_bounds,
 )
@@ -192,7 +192,7 @@ class TestWriter:
     def test_frame_carries_field_376_as_a_submessage(self) -> None:
         command = build_port_priority_command("ac2", True, 40)
         assert command is not None
-        frame = build_proto_command(command, "D3M1TESTSERIAL01", seq=1234)
+        frame = build_proto_payload(command, "D3M1TESTSERIAL01", seq=1234)
         assert frame is not None
         headers, _ = decode_header_message(frame)
         header = headers[0]
@@ -208,7 +208,7 @@ class TestWriter:
         """What we write must decode as what the device sends us."""
         command = build_port_priority_command("dc", False, 35)
         assert command is not None
-        frame = build_proto_command(command, "D3M1TESTSERIAL01", seq=7)
+        frame = build_proto_payload(command, "D3M1TESTSERIAL01", seq=7)
         assert frame is not None
         pdata = bytes.fromhex(decode_header_message(frame)[0][0]["pdata"])
 

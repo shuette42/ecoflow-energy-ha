@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from ecoflow_energy.ecoflow.parsers.hr61_proto import (
+from ecoflow_energy.ecoflow.parsers.smart_panel_40_proto import (
     CIRCUIT_COUNT,
     _parse_property,
     parse_hr61_proto_message,

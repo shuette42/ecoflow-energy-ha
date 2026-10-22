@@ -820,7 +820,7 @@ def build_work_mode_set_payload(work_mode: int, seq: int = 0) -> bytes:
     out of scope - the EcoFlow app sends field 1 alone for plain mode
     switches.
 
-    WorkMode enum (verified against `_WORK_MODE_MAP` in parsers/powerocean.py):
+    WorkMode enum (verified against `_WORK_MODE_MAP` in parsers/powerocean_http.py):
         0 = SELFUSE, 1 = TOU, 2 = BACKUP, 3 = DBG, 4 = AC_MAKEUP,
         5 = DRM, 6 = REMOTE_SCHED, 7 = STANDBY, 8 = SOC_CALIB,
         9 = TIMER, 10 = FCR, 11 = THIRD_PARTY, 12 = AI_SCHEDULE, 13 = KRAKEN
@@ -847,7 +847,7 @@ def build_feed_mode_set_payload(feed_mode: int, seq: int = 0) -> bytes:
     (`ems_max_feed_pwr` float) is in the same oneof and skipped here -
     field 2 is the canonical path the official app uses.
 
-    Feed mode enum (verified against `_FEED_MODE_MAP` in parsers/powerocean.py):
+    Feed mode enum (verified against `_FEED_MODE_MAP` in parsers/powerocean_http.py):
         0 = off (feed disabled)
         1 = no_limit (feed everything available)
         2 = zero (zero-feed, RegEnergie 0% compliance)

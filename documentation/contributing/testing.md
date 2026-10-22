@@ -70,6 +70,7 @@ You do not need to write these again. Run the full suite and read the failure.
 - `tests/test_layer_boundary.py`: the core library imports no `homeassistant` and nothing from the layer above it, and no top-level test imports `homeassistant` directly.
 - `tests/test_import_names.py`: each test file uses one import name, the right one for its folder.
 - `tests/test_ha_independence.py`: the top-level tests that do not need Home Assistant run without it.
+- `tests/test_naming_rules.py`: parsers carry a transport suffix, command builders end in `_payload` or `_command`, and no new module name exists in both layers.
 - `tests/test_public_paths.py`: no tracked path carries an internal plan number.
 - `tests/test_public_docs_boundary.py`: the public documentation, including these pages, stays free of private paths, internal names, real serials, unresolved `ADR-NNN` references and en or em dashes.
 - `ruff` and `mypy`: style, imports and types.

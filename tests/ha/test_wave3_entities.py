@@ -1082,10 +1082,10 @@ class TestTheClimateReachesTheWire:
     def test_build_band_write_accepts_the_apps_own_captured_pair(self) -> None:
         """Same E1 fix, exercised directly against the builder."""
         from custom_components.ecoflow_energy.ecoflow.wave3_commands import (
-            build_band_write,
+            build_band_write_payload,
         )
 
-        payload = build_band_write(17.7, 21.9, WAVE3_DEVICE["sn"], seq=1)
+        payload = build_band_write_payload(17.7, 21.9, WAVE3_DEVICE["sn"], seq=1)
         headers, _ = decode_header_message(payload)
         assert headers[0]["pdata"] == "f5093333af41fd099a998d41"
 

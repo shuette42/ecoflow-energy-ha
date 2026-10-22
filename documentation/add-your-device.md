@@ -190,7 +190,7 @@ hardware. The WAVE 3 controls PR touched these on top:
 
 | File | What changes | WAVE 3 |
 |:---|:---|:---|
-| `ecoflow/<family>_commands.py` | New file. A table of controls (key, wire field, allowed values) and a builder that returns the frame bytes the app sends, through the shared builder below | `wave3_commands.py`, `WAVE3_CONTROLS` around line 120, `build_write` around 328 |
+| `ecoflow/<family>_commands.py` | New file. A table of controls (key, wire field, allowed values) and a builder that returns the frame bytes the app sends, through the shared builder below | `wave3_commands.py`, `WAVE3_CONTROLS` around line 120, `build_write_payload` around 328 |
 | `ecoflow/energy_stream.py`, `ecoflow/proto_encoding.py` | Only if the shared builder `build_delta3_config_write_payload` lacks what your frames need | PR #360 gave it `dest` and a float32 path, and `proto_encoding.py` a fixed32 encoder |
 | `ecoflow/parsers/<family>_proto.py` | The parser often grows a field the controls read back | 16 lines in `wave3_proto.py` |
 | `coordinator/set_commands.py` | One `async_send_<family>_set` that builds the frame, publishes it, and records the write so a rejection can be attributed | `async_send_wave3_set` around 1243 |

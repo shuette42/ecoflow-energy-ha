@@ -2460,7 +2460,7 @@ class TestSETCommands:
 
         with patch(
             "custom_components.ecoflow_energy.ecoflow.delta3_commands."
-            "build_proto_command",
+            "build_proto_payload",
             return_value=b"\x0a\x01",
         ):
             ok = await coordinator.async_send_delta3_set(

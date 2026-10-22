@@ -15,7 +15,7 @@ from ecoflow_energy.ecoflow.delta3_commands import (
     DELTA3_SWITCH_PARAMS,
     backup_reserve_soc_bounds,
     build_number_command,
-    build_proto_command,
+    build_proto_payload,
     build_switch_command,
     parse_config_write_ack,
 )
@@ -261,14 +261,14 @@ class TestProtoCommands:
     def test_switch_payload_bytes(self, key: str, expected_pdata: str) -> None:
         cmd = build_switch_command(key, True)
         assert cmd is not None
-        frame = build_proto_command(cmd, self.SN)
+        frame = build_proto_payload(cmd, self.SN)
         assert frame is not None
         assert self._pdata(frame) == expected_pdata
 
     def test_switch_off_writes_zero(self) -> None:
         cmd = build_switch_command("beeper_switch", False)
         assert cmd is not None
-        frame = build_proto_command(cmd, self.SN)
+        frame = build_proto_payload(cmd, self.SN)
         assert frame is not None
         assert self._pdata(frame) == "4800"
 
@@ -285,7 +285,7 @@ class TestProtoCommands:
     ) -> None:
         cmd = build_number_command(key, value)
         assert cmd is not None
-        frame = build_proto_command(cmd, self.SN)
+        frame = build_proto_payload(cmd, self.SN)
         assert frame is not None
         assert self._pdata(frame) == expected_pdata
 
@@ -293,19 +293,19 @@ class TestProtoCommands:
         """The clamp is shared with the HTTP path, so it applies here too."""
         cmd = build_number_command("max_charge_soc", 200)
         assert cmd is not None
-        frame = build_proto_command(cmd, self.SN)
+        frame = build_proto_payload(cmd, self.SN)
         assert frame is not None
         assert self._pdata(frame) == "880264"  # clamped to 100
         cmd = build_number_command("backup_reserve_soc", 120)
         assert cmd is not None
-        frame = build_proto_command(cmd, self.SN)
+        frame = build_proto_payload(cmd, self.SN)
         assert frame is not None
         assert self._pdata(frame) == "b00664"  # clamped to 100
 
     def test_frame_carries_the_hardware_verified_header(self) -> None:
         cmd = build_switch_command("beeper_switch", True)
         assert cmd is not None
-        frame = build_proto_command(cmd, self.SN)
+        frame = build_proto_payload(cmd, self.SN)
         assert frame is not None
         headers, _ = decode_header_message(frame)
         header = headers[0]
@@ -331,20 +331,20 @@ class TestProtoCommands:
         for key in DELTA3_SWITCH_PARAMS:
             switch_cmd = build_switch_command(key, True)
             assert switch_cmd is not None
-            assert build_proto_command(switch_cmd, self.SN)
+            assert build_proto_payload(switch_cmd, self.SN)
         for key in DELTA3_NUMBER_PARAMS:
             number_cmd = build_number_command(key, 10)
             assert number_cmd is not None
-            assert build_proto_command(number_cmd, self.SN)
+            assert build_proto_payload(number_cmd, self.SN)
 
     def test_unknown_parameter_returns_none(self) -> None:
         command = {"cmdId": 17, "params": {"cfgSomethingElse": 1}}
-        assert build_proto_command(command, self.SN) is None
+        assert build_proto_payload(command, self.SN) is None
 
     def test_multi_parameter_command_returns_none(self) -> None:
         """One frame carries exactly one setting."""
         command = {"cmdId": 17, "params": {"cfgBeepEn": True, "cfgXboostEn": True}}
-        assert build_proto_command(command, self.SN) is None
+        assert build_proto_payload(command, self.SN) is None
 
 
 class TestAcCharging:
@@ -386,7 +386,7 @@ class TestAcCharging:
         """The pair must survive into the frame, not just into the params."""
         cmd = build_number_command("ac_charge_power_limit", 800)
         assert cmd is not None
-        frame = build_proto_command(cmd, self.SN)
+        frame = build_proto_payload(cmd, self.SN)
         assert frame is not None
         headers, _ = decode_header_message(frame)
         pdata = bytes.fromhex(headers[0]["pdata"])
@@ -397,7 +397,7 @@ class TestAcCharging:
         """Matching the app's own serialisation removes one variable."""
         cmd = build_number_command("ac_charge_power_limit", 1200)
         assert cmd is not None
-        frame = build_proto_command(cmd, self.SN)
+        frame = build_proto_payload(cmd, self.SN)
         assert frame is not None
         headers, _ = decode_header_message(frame)
         pdata = bytes.fromhex(headers[0]["pdata"])
@@ -406,7 +406,7 @@ class TestAcCharging:
     def test_an_unknown_pair_is_refused(self) -> None:
         """Only groups the device is known to accept may share a frame."""
         command = {"params": {"cfgBeepEn": True, "cfgXboostEn": True}}
-        assert build_proto_command(command, self.SN) is None
+        assert build_proto_payload(command, self.SN) is None
 
 
 class TestConfigWriteAck:

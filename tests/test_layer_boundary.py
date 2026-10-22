@@ -258,8 +258,8 @@ def test_the_core_checker_leaves_imports_inside_the_core_layer_alone() -> None:
         # parsers/powerpulse_proto.py and parsers/powerocean_proto.py
         "from ..const import DEVICE_TYPE_POWEROCEAN\n",
         "def late():\n    from ..const import DEVICE_TYPE_POWEROCEAN\n",
-        "from . import powerocean\n",
-        "from .powerocean import parse\n",
+        "from . import powerocean_http\n",
+        "from .powerocean_http import parse\n",
         "from ..proto.runtime import decode\n",
     ]
     for source in quiet_in_parsers:
@@ -269,10 +269,10 @@ def test_the_core_checker_leaves_imports_inside_the_core_layer_alone() -> None:
     quiet_in_core = [
         "from .const import API_HOST\n",
         "from . import cloud_http\n",
-        "from .parsers import powerocean\n",
+        "from .parsers import powerocean_http\n",
         "from custom_components.ecoflow_energy.ecoflow.const import API_HOST\n",
         "from ecoflow_energy.ecoflow import const\n",
-        "from ecoflow_energy.ecoflow.parsers import powerocean\n",
+        "from ecoflow_energy.ecoflow.parsers import powerocean_http\n",
         "import ecoflow_energy.ecoflow.const\n",
         "import json\nfrom pathlib import Path\n",
         'import importlib\nimportlib.import_module("json")\n',
@@ -285,7 +285,8 @@ def test_the_package_of_a_file_is_resolved_from_its_path() -> None:
     """The resolver feeds on this, so check it on the three depths in use."""
     assert _package_of(CORE_DIR / "const.py") == CORE_PACKAGE
     assert (
-        _package_of(CORE_DIR / "parsers" / "powerocean.py") == f"{CORE_PACKAGE}.parsers"
+        _package_of(CORE_DIR / "parsers" / "powerocean_http.py")
+        == f"{CORE_PACKAGE}.parsers"
     )
     assert (
         _package_of(CORE_DIR / "parsers" / "__init__.py") == f"{CORE_PACKAGE}.parsers"

@@ -14,7 +14,7 @@ from base64 import b64decode
 from typing import Any
 
 from ..const import device_log_tag
-from .powerocean import (
+from .powerocean_http import (
     _CHG_DSG_STATE_MAP,
     _FEED_MODE_MAP,
     _GRID_STATUS_MAP,

@@ -29,7 +29,7 @@ from ecoflow_energy.const import (
 from ecoflow_energy.ecoflow.const import DEVICE_TYPE_DELTA3
 from ecoflow_energy.ecoflow.delta3_commands import (
     DELTA3_SELECT_FIELDS,
-    build_proto_command,
+    build_proto_payload,
     build_select_command,
 )
 from ecoflow_energy.ecoflow.parsers.delta3_proto import parse_delta3_display_property
@@ -220,7 +220,7 @@ class TestCommand:
         _, _, config_field = SETTINGS[entity_key]
         command = build_select_command(entity_key, minutes)
         assert command is not None
-        payload = build_proto_command(command, DEVICE_SN)
+        payload = build_proto_payload(command, DEVICE_SN)
         assert payload is not None
         expected = encode_field_bytes(1, encode_field_varint(config_field, minutes))
         assert expected in payload

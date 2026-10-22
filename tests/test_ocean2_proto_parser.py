@@ -23,7 +23,7 @@ from ecoflow_energy.ecoflow.parsers.ocean2_proto import (
     MAX_MODULES,
     parse_ocean2_proto_message,
 )
-from ecoflow_energy.ecoflow.parsers.powerocean import EMS_WORK_STATES
+from ecoflow_energy.ecoflow.parsers.powerocean_http import EMS_WORK_STATES
 
 
 def _varint(value: int) -> bytes:

@@ -21,8 +21,8 @@ from ecoflow_energy.ecoflow.wave3_commands import (
     WAVE3_POWER_ON_FIELD,
     WAVE3_STANDBY_FIELD,
     Wave3WriteRefused,
-    build_power_write,
-    build_write,
+    build_power_write_payload,
+    build_write_payload,
     parse_config_write_ack,
     write_refusal,
 )
@@ -50,7 +50,7 @@ _WRITE_VECTORS: tuple[tuple[str, Any, str], ...] = (
     ("screen_brightness_pct", 54, "7036"),
 )
 
-# Power is not a WAVE3_CONTROLS entry - build_power_write gets its own pair.
+# Power is not a WAVE3_CONTROLS entry - build_power_write_payload gets its own pair.
 _POWER_VECTORS: tuple[tuple[bool, str], ...] = (
     (False, "e00a01"),  # standby
     (True, "2001"),  # power on
@@ -63,16 +63,16 @@ def _pdata_hex(payload: bytes) -> str:
 
 
 def test_every_captured_control_vector_round_trips() -> None:
-    """T1: build_write reproduces the app's own pdata bytes for every vector."""
+    """T1: build_write_payload reproduces the app's own pdata bytes for every vector."""
     for key, value, expected_hex in _WRITE_VECTORS:
-        payload = build_write(key, value, DEVICE_SN)
+        payload = build_write_payload(key, value, DEVICE_SN)
         assert _pdata_hex(payload) == expected_hex, key
 
 
 def test_every_captured_power_vector_round_trips() -> None:
-    """T1 (power half): build_power_write matches both action triggers."""
+    """T1 (power half): build_power_write_payload matches both action triggers."""
     for turn_on, expected_hex in _POWER_VECTORS:
-        payload = build_power_write(turn_on, DEVICE_SN)
+        payload = build_power_write_payload(turn_on, DEVICE_SN)
         assert _pdata_hex(payload) == expected_hex, turn_on
 
 
@@ -80,7 +80,7 @@ def test_the_header_matches_the_reference_frame() -> None:
     """T2: header shape (dest=66, src=32, seq, serial) matches the self-test
     frame in scripts/probe/probe_wave3_set.py, proven against hardware. The
     reference carries pdata `2001` - the power-on vector."""
-    payload = build_power_write(True, DEVICE_SN, seq=165)
+    payload = build_power_write_payload(True, DEVICE_SN, seq=165)
     expected = (
         "0a390a0220011020184220012801380340fe0148115002580170a501800103"
         "880101ba0103696f73ca011058585858585858585858585858585858"
@@ -91,7 +91,7 @@ def test_the_header_matches_the_reference_frame() -> None:
 def test_every_built_pdata_carries_exactly_one_field() -> None:
     """T3: one field per frame - no control accidentally carries a companion."""
     for key, value, _ in _WRITE_VECTORS:
-        payload = build_write(key, value, DEVICE_SN)
+        payload = build_write_payload(key, value, DEVICE_SN)
         headers, _ = decode_header_message(payload)
         pdata = bytes.fromhex(headers[0]["pdata"])
         assert len(_iter_fields(pdata)) == 1, key
@@ -102,7 +102,7 @@ def test_field_3_never_appears_and_standby_is_172() -> None:
     assert all(control.field != 3 for control in WAVE3_CONTROLS.values())
     assert WAVE3_STANDBY_FIELD == 172
     assert WAVE3_POWER_ON_FIELD == 4
-    assert _pdata_hex(build_power_write(False, DEVICE_SN)) == "e00a01"
+    assert _pdata_hex(build_power_write_payload(False, DEVICE_SN)) == "e00a01"
 
 
 def test_write_refusal_matrix() -> None:
@@ -130,20 +130,20 @@ def test_write_refusal_matrix() -> None:
         is not None
     )
     with pytest.raises(Wave3WriteRefused):
-        build_write("airflow_speed_pct", 50, DEVICE_SN)
-    build_write("airflow_speed_pct", 60, DEVICE_SN)  # does not raise
+        build_write_payload("airflow_speed_pct", 50, DEVICE_SN)
+    build_write_payload("airflow_speed_pct", 60, DEVICE_SN)  # does not raise
 
     # R3 - the setpoint only applies in cooling/heating, stays on the 0.5
     # step grid, and inside 15.5..30.
     assert write_refusal("target_temp_c", 22.0, {"operating_mode": "fan"}) is not None
     with pytest.raises(Wave3WriteRefused):
-        build_write("target_temp_c", 31, DEVICE_SN)
-    build_write("target_temp_c", 22.0, DEVICE_SN)  # does not raise
+        build_write_payload("target_temp_c", 31, DEVICE_SN)
+    build_write_payload("target_temp_c", 22.0, DEVICE_SN)  # does not raise
     with pytest.raises(Wave3WriteRefused):
         # 22.3 is refused rather than snapped to the grid: a silent snap
         # would let the caller believe the device took the value it asked
         # for, when it took a different one.
-        build_write("target_temp_c", 22.3, DEVICE_SN)
+        build_write_payload("target_temp_c", 22.3, DEVICE_SN)
 
     # R4 - humidity only applies in dehumidify, and 85 is outside 40..80.
     assert (
@@ -151,7 +151,7 @@ def test_write_refusal_matrix() -> None:
         is not None
     )
     with pytest.raises(Wave3WriteRefused):
-        build_write("target_humidity_pct", 85, DEVICE_SN)
+        build_write_payload("target_humidity_pct", 85, DEVICE_SN)
 
     # R5 - the four mode-gated keys refuse outright while operating_mode has
     # not been reported yet; a non-gated key like beep_enabled does not care.
@@ -197,11 +197,19 @@ def test_int_kind_controls_accept_the_float_home_assistant_sends() -> None:
     truncating it silently (HIGH-1, PLAN-047 review lens A). The
     allowed-set check alone does not catch this: 60.0 in (20, 40, 60, 80,
     100) is True."""
-    assert _pdata_hex(build_write("screen_brightness_pct", 54.0, DEVICE_SN)) == "7036"
-    assert _pdata_hex(build_write("airflow_speed_pct", 60.0, DEVICE_SN)) == "d8093c"
-    assert _pdata_hex(build_write("screen_off_time_s", 0.0, DEVICE_SN)) == "6000"
+    assert (
+        _pdata_hex(build_write_payload("screen_brightness_pct", 54.0, DEVICE_SN))
+        == "7036"
+    )
+    assert (
+        _pdata_hex(build_write_payload("airflow_speed_pct", 60.0, DEVICE_SN))
+        == "d8093c"
+    )
+    assert (
+        _pdata_hex(build_write_payload("screen_off_time_s", 0.0, DEVICE_SN)) == "6000"
+    )
     with pytest.raises(Wave3WriteRefused):
-        build_write("screen_brightness_pct", 54.5, DEVICE_SN)
+        build_write_payload("screen_brightness_pct", 54.5, DEVICE_SN)
 
 
 def test_float32_writes_refuse_nested_and_submessage() -> None:

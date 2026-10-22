@@ -3141,7 +3141,7 @@ class SetCommandsMixin(_Base):
 
     async def _async_send_delta3_set_proto(self, command: dict[str, Any]) -> bool:
         """Write a Delta 3 setting as a ConfigWrite frame on the app channel."""
-        from ..ecoflow.delta3_commands import build_proto_command
+        from ..ecoflow.delta3_commands import build_proto_payload
 
         params = command.get("params", {})
         if self._mqtt_client is None or not self._mqtt_client.is_connected():
@@ -3152,7 +3152,7 @@ class SetCommandsMixin(_Base):
             self._log_event("set_cmd_fail", f"params={list(params)[:3]}")
             return False
 
-        payload = build_proto_command(command, self.device_sn)
+        payload = build_proto_payload(command, self.device_sn)
         if payload is None:
             _LOGGER.warning(
                 "Cannot apply setting for %s - unsupported control %s",
@@ -3186,7 +3186,7 @@ class SetCommandsMixin(_Base):
         mode a control is gated to, or a label the app's client never
         writes) - it needs accumulated state because `operating_mode`
         regularly arrives on a different frame than the write under
-        consideration. `build_write` then checks `value` against the
+        consideration. `build_write_payload` then checks `value` against the
         control's own table (range, step, allowed set) while encoding it.
         Either can raise `Wave3WriteRefused`, which the platform layer turns
         into a user-facing error via `raise_set_rejected`.
@@ -3199,7 +3199,7 @@ class SetCommandsMixin(_Base):
 
         The power switch is not in `WAVE3_CONTROLS` - both gates would
         report it as an unknown control - so it skips `write_refusal`
-        entirely and is encoded by `build_power_write` instead. No optimistic
+        entirely and is encoded by `build_power_write_payload` instead. No optimistic
         write into `_device_data`: the entity holds its own requested value,
         and the device pushes the confirmed change on its own report stream
         within about 2 s (verified on the maintainer's unit, PLAN-047).
@@ -3209,8 +3209,8 @@ class SetCommandsMixin(_Base):
             WAVE3_POWER_ON_FIELD,
             WAVE3_STANDBY_FIELD,
             Wave3WriteRefused,
-            build_power_write,
-            build_write,
+            build_power_write_payload,
+            build_write_payload,
             write_refusal,
         )
 
@@ -3232,11 +3232,11 @@ class SetCommandsMixin(_Base):
             return False
 
         if key == "power":
-            payload = build_power_write(bool(value), self.device_sn)
+            payload = build_power_write_payload(bool(value), self.device_sn)
             field = WAVE3_POWER_ON_FIELD if value else WAVE3_STANDBY_FIELD
         else:
             try:
-                payload = build_write(key, value, self.device_sn)
+                payload = build_write_payload(key, value, self.device_sn)
             except Wave3WriteRefused:
                 self._log_event("set_refused", f"key={key}")
                 raise
@@ -3265,7 +3265,7 @@ class SetCommandsMixin(_Base):
         """Write the WAVE 3 constant-temperature band as one ConfigWrite frame.
 
         Mirrors `async_send_wave3_set`: `band_write_refusal` checks the mode
-        gate against accumulated state, `build_band_write` checks the values
+        gate against accumulated state, `build_band_write_payload` checks the values
         against their own table while encoding them. Either can raise
         `Wave3WriteRefused`, which the platform layer turns into a
         user-facing error via `raise_set_rejected`. The ack only echoes the
@@ -3276,7 +3276,7 @@ class SetCommandsMixin(_Base):
             WAVE3_BAND_UPPER_FIELD,
             Wave3WriteRefused,
             band_write_refusal,
-            build_band_write,
+            build_band_write_payload,
         )
 
         reason = band_write_refusal(self._device_data)
@@ -3296,7 +3296,7 @@ class SetCommandsMixin(_Base):
             return False
 
         try:
-            payload = build_band_write(lower, upper, self.device_sn)
+            payload = build_band_write_payload(lower, upper, self.device_sn)
         except Wave3WriteRefused:
             self._log_event("set_refused", "key=constant_temp_band")
             raise

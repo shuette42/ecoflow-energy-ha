@@ -48,9 +48,6 @@ from .ecoflow.energy_stream import (  # noqa: E402
 from .ecoflow.parsers.delta_pro_ultra_proto import (
     MAX_PACKS as DELTAPROULTRA_MAX_PACKS,  # noqa: E402
 )
-from .ecoflow.parsers.hr61_proto import (
-    CIRCUIT_COUNT as SMARTPANEL40_CIRCUIT_COUNT,  # noqa: E402
-)
 from .ecoflow.parsers.ocean2_proto import (
     MAX_MODULES as OCEAN2_MAX_MODULES,  # noqa: E402
 )
@@ -58,7 +55,7 @@ from .ecoflow.parsers.ocean2_proto import (  # noqa: E402
     OCEAN2_CONTROL_MODES,
     OCEAN2_WORK_MODES,
 )
-from .ecoflow.parsers.powerocean import (  # noqa: E402
+from .ecoflow.parsers.powerocean_http import (  # noqa: E402
     EMS_WORK_STATES,
     PARALLEL_UNIT_MAX,
 )
@@ -68,6 +65,9 @@ from .ecoflow.parsers.smart_home_panel_2_proto import (
 )
 from .ecoflow.parsers.smart_home_panel_2_proto import (
     STORAGE_CHANNEL_COUNT as SMARTHOMEPANEL2_STORAGE_CHANNEL_COUNT,  # noqa: E402
+)
+from .ecoflow.parsers.smart_panel_40_proto import (
+    CIRCUIT_COUNT as SMARTPANEL40_CIRCUIT_COUNT,  # noqa: E402
 )
 
 DOMAIN = "ecoflow_energy"

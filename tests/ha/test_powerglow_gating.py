@@ -30,7 +30,7 @@ from custom_components.ecoflow_energy.const import (
     POWEROCEAN_SENSORS,
 )
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
-from custom_components.ecoflow_energy.ecoflow.parsers.powerocean import (
+from custom_components.ecoflow_energy.ecoflow.parsers.powerocean_http import (
     PARALLEL_UNIT_MAX,
 )
 from custom_components.ecoflow_energy.ecoflow.parsers.powerocean_proto import (

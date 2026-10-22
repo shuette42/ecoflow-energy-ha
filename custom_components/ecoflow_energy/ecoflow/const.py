@@ -118,7 +118,7 @@ DEVICE_TYPE_OCEAN2 = "ocean2"
 # capture on record came over the app broker, and what the Developer API
 # returns for this device has not been observed. Its own protocol -
 # `cmd_func` 254, cmd_id 21 for the property push and 25 for the grid-code
-# block - is decoded by its own parser (`hr61_proto.py`) rather than a
+# block - is decoded by its own parser (`smart_panel_40_proto.py`) rather than a
 # routing entry.
 DEVICE_TYPE_SMART_PANEL_40 = "smart_panel_40"
 # DELTA Pro Ultra (`Y711`, #464). Enhanced-only and read-only: the frames on

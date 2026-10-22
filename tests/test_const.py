@@ -1092,7 +1092,7 @@ class TestBinarySensors:
 # ---------------------------------------------------------------------------
 
 # Key families the Standard-Mode parsers build with an f-string, so a literal
-# search of the source cannot find them. Verified against powerocean.py:
+# search of the source cannot find them. Verified against powerocean_http.py:
 # pack{n}_ (line 122, 504), mppt_pv{n}_ (230), grid_phase_{a,b,c}_ (246, 253).
 _DYNAMIC_KEY_FAMILIES = ("pack", "mppt_pv", "grid_phase_")
 
@@ -1103,8 +1103,8 @@ _STANDARD_MODE_SOURCES = (
     # Controls belong here too. A select that Standard Mode cannot read is the
     # same failure as a sensor it cannot fill, with a write on top.
     ("DELTA3_SELECTS", DELTA3_SELECTS, "delta3_http.py"),
-    ("POWEROCEAN_SENSORS", POWEROCEAN_SENSORS, "powerocean.py"),
-    ("POWEROCEAN_BINARY_SENSORS", POWEROCEAN_BINARY_SENSORS, "powerocean.py"),
+    ("POWEROCEAN_SENSORS", POWEROCEAN_SENSORS, "powerocean_http.py"),
+    ("POWEROCEAN_BINARY_SENSORS", POWEROCEAN_BINARY_SENSORS, "powerocean_http.py"),
 )
 
 _PARSER_DIR = (

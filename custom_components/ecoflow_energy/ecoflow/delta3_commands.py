@@ -402,7 +402,7 @@ def _build_multi_field_frame(
     )
 
 
-def build_proto_command(
+def build_proto_payload(
     command: dict[str, Any], device_sn: str, seq: int = 0
 ) -> bytes | None:
     """Translate a Delta 3 command body into a binary ConfigWrite frame.

@@ -2,7 +2,7 @@
 method, the config-write ack gate, and the registry retirement of the six
 sensors and the running flag that became controls (ADR-020, PLAN-047).
 
-The control table itself (`WAVE3_CONTROLS`, `build_write`, `write_refusal`)
+The control table itself (`WAVE3_CONTROLS`, `build_write_payload`, `write_refusal`)
 is unit-tested in `tests/test_wave3_commands.py`. These tests prove the
 coordinator wiring: that a write actually reaches `send_proto_set` with the
 right pdata, that the two refusal gates run before anything is sent, and
@@ -237,10 +237,10 @@ class TestWave3SendSet:
     async def test_table_refusal_from_build_write_logs_set_refused(
         self, hass: HomeAssistant
     ) -> None:
-        """A refusal from `build_write` itself (out-of-range, not mode-gated)
+        """A refusal from `build_write_payload` itself (out-of-range, not mode-gated)
         left no trace in the event log before this fix - `write_refusal`
         passes for screen_brightness_pct (modes=None), so this exercises
-        `build_write`'s own table check specifically (LOW-1, PLAN-047 review
+        `build_write_payload`'s own table check specifically (LOW-1, PLAN-047 review
         lens A)."""
         coordinator = _coordinator(hass)
         mock_mqtt = _connected_mqtt()

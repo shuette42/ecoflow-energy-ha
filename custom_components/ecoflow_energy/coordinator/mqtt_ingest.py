@@ -46,9 +46,8 @@ from ..ecoflow.parsers.delta3_proto import (
 )
 from ..ecoflow.parsers.delta_http import parse_delta_http_quota
 from ..ecoflow.parsers.delta_pro_ultra_proto import parse_delta_pro_ultra_message
-from ..ecoflow.parsers.hr61_proto import parse_hr61_proto_message
 from ..ecoflow.parsers.ocean2_proto import parse_ocean2_proto_message
-from ..ecoflow.parsers.powerocean import parse_powerocean_http_quota
+from ..ecoflow.parsers.powerocean_http import parse_powerocean_http_quota
 from ..ecoflow.parsers.powerocean_proto import (
     flatten_heartbeat,
     remap_bp_keys,
@@ -71,6 +70,7 @@ from ..ecoflow.parsers.smart_home_panel_2_proto import (
     parse_smart_home_panel_2_message,
 )
 from ..ecoflow.parsers.smart_meter_proto import parse_smart_meter_message
+from ..ecoflow.parsers.smart_panel_40_proto import parse_hr61_proto_message
 from ..ecoflow.parsers.smartplug import (
     parse_smartplug_http_quota,
     parse_smartplug_report,

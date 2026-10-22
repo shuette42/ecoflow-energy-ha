@@ -44,7 +44,7 @@ from math import isfinite
 from typing import Any
 
 from ..proto.decoder import decode_header_message
-from .powerocean import EMS_WORK_STATES
+from .powerocean_http import EMS_WORK_STATES
 from .stream_ac5000_proto import (
     _TYPE_FLOAT,
     _TYPE_INT,

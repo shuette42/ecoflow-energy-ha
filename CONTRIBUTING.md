@@ -53,7 +53,7 @@ data through the main unit. PowerOcean add-ons such as PowerGlow and PowerPulse
 are the clearest example: they show up as separate entries in the account device
 list, but a quota request against their own serial number is rejected with error
 `1006`, and their telemetry appears as extra keys in the PowerOcean quota
-response. Add those keys to the PowerOcean parsers (`ecoflow/parsers/powerocean.py` for the quota response, `ecoflow/parsers/powerocean_proto.py` for Enhanced Mode push data). They surface as
+response. Add those keys to the PowerOcean parsers (`ecoflow/parsers/powerocean_http.py` for the quota response, `ecoflow/parsers/powerocean_proto.py` for Enhanced Mode push data). They surface as
 additional PowerOcean sensors. A new device type with its own coordinator would
 have nothing to poll.
 

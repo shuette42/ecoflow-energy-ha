@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from ecoflow_energy.ecoflow.parsers.powerocean import parse_powerocean_http_quota
+from ecoflow_energy.ecoflow.parsers.powerocean_http import parse_powerocean_http_quota
 from ecoflow_energy.ecoflow.parsers.powerocean_proto import (
     flatten_heartbeat,
     remap_bp_keys,

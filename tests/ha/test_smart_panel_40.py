@@ -1,6 +1,6 @@
 """OCEAN Smart Electrical Panel 40 (`HR61`): frames in, Home Assistant states out.
 
-The parser is covered on its own in test_hr61_proto.py. These tests run the
+The parser is covered on its own in test_smart_panel_40_proto.py. These tests run the
 owner's recorded frames through the coordinator's own message path - the
 dispatch in `_parse_message`, the merge in `_apply_data` - and read the
 values the sensor entities render, so a missing dispatch branch or a merge

@@ -34,7 +34,7 @@ from custom_components.ecoflow_energy.ecoflow.parsers.ocean2_proto import (
     OCEAN2_CONTROL_MODES,
     OCEAN2_WORK_MODES,
 )
-from custom_components.ecoflow_energy.ecoflow.parsers.powerocean import (
+from custom_components.ecoflow_energy.ecoflow.parsers.powerocean_http import (
     EMS_WORK_STATES,
 )
 from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
