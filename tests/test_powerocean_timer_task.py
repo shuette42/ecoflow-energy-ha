@@ -15,14 +15,14 @@ from __future__ import annotations
 
 from base64 import b64encode
 
-from custom_components.ecoflow_energy.ecoflow.const import DEVICE_TYPE_POWEROCEAN
-from custom_components.ecoflow_energy.ecoflow.parsers.powerocean_proto import (
+from ecoflow_energy.ecoflow.const import DEVICE_TYPE_POWEROCEAN
+from ecoflow_energy.ecoflow.parsers.powerocean_proto import (
     remap_timer_task_keys,
 )
-from custom_components.ecoflow_energy.ecoflow.proto.runtime import (
+from ecoflow_energy.ecoflow.proto.runtime import (
     decode_proto_runtime_frame,
 )
-from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
+from ecoflow_energy.ecoflow.proto_encoding import (
     encode_field_bytes,
     encode_field_varint,
 )

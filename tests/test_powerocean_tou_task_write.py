@@ -18,12 +18,11 @@ import json
 from pathlib import Path
 
 import pytest
-
-from custom_components.ecoflow_energy.ecoflow.energy_stream import (
+from ecoflow_energy.ecoflow.energy_stream import (
     POWEROCEAN_TASK_POWER_MAX_W,
     build_tou_task_set_payload,
 )
-from custom_components.ecoflow_energy.ecoflow.proto.decoder import (
+from ecoflow_energy.ecoflow.proto.decoder import (
     decode_header_message,
 )
 

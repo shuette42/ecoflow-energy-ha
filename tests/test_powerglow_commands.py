@@ -19,15 +19,23 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from ecoflow_energy.diagnostics import _redact_serials
-from ecoflow_energy.ecoflow.const import DEVICE_TYPE_POWEROCEAN
-from ecoflow_energy.ecoflow.energy_stream import (
+
+from custom_components.ecoflow_energy.diagnostics import _redact_serials
+from custom_components.ecoflow_energy.ecoflow.const import DEVICE_TYPE_POWEROCEAN
+from custom_components.ecoflow_energy.ecoflow.energy_stream import (
     build_powerglow_param_set_payload,
     powerglow_max_power_w,
 )
-from ecoflow_energy.ecoflow.parsers.powerocean_proto import remap_heating_rod_keys
-from ecoflow_energy.ecoflow.parsers.stream_proto import _iter_fields, _read_varint
-from ecoflow_energy.ecoflow.proto.runtime import decode_proto_runtime_headers
+from custom_components.ecoflow_energy.ecoflow.parsers.powerocean_proto import (
+    remap_heating_rod_keys,
+)
+from custom_components.ecoflow_energy.ecoflow.parsers.stream_proto import (
+    _iter_fields,
+    _read_varint,
+)
+from custom_components.ecoflow_energy.ecoflow.proto.runtime import (
+    decode_proto_runtime_headers,
+)
 
 FIXTURE = Path(__file__).parent / "fixtures" / "powerglow" / "hf33_set_frames.json"
 

@@ -147,7 +147,7 @@ empty for the WAVE 3 (around 7275). An empty table is valid.
 
 **Step 6, the naming convention.** Definition blocks are named
 `<FAMILY>_<PLATFORM>` with exactly one family token: `WAVE3_SENSORS`, not
-`WAVE_3_SENSORS`. `tests/test_entity_definitions.py` enforces this (around
+`WAVE_3_SENSORS`. `tests/ha/test_entity_definitions.py` enforces this (around
 line 151), because a two-token name is invisible to every reachability and
 translation test in the suite. It also fails when a block exists that no
 dispatcher returns (around 213) and when a device type has no sensor block
@@ -243,7 +243,7 @@ Run these gates while you work (they fail fast and name the missing piece), and
 `pytest -q` before opening the PR:
 
 ```bash
-pytest tests/test_entity_definitions.py tests/test_entity_translations.py tests/test_translations.py -q
+pytest tests/ha/test_entity_definitions.py tests/test_entity_translations.py tests/test_translations.py -q
 ```
 
 ## Checklist

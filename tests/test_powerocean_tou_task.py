@@ -22,16 +22,16 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from custom_components.ecoflow_energy.ecoflow.const import DEVICE_TYPE_POWEROCEAN
-from custom_components.ecoflow_energy.ecoflow.parsers.powerocean_proto import (
+from ecoflow_energy.ecoflow.const import DEVICE_TYPE_POWEROCEAN
+from ecoflow_energy.ecoflow.parsers.powerocean_proto import (
     _format_windows,
     remap_timer_task_keys,
     remap_tou_task_keys,
 )
-from custom_components.ecoflow_energy.ecoflow.proto.runtime import (
+from ecoflow_energy.ecoflow.proto.runtime import (
     decode_proto_runtime_frame,
 )
-from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
+from ecoflow_energy.ecoflow.proto_encoding import (
     encode_field_bytes,
     encode_field_varint,
 )

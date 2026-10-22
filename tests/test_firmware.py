@@ -1,6 +1,6 @@
 """Tests for firmware revision extraction from HTTP quota responses."""
 
-from custom_components.ecoflow_energy.ecoflow.firmware import (
+from ecoflow_energy.ecoflow.firmware import (
     decode_version,
     extract_firmware_versions,
 )

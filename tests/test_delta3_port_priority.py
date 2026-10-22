@@ -343,12 +343,14 @@ class TestDelta3PlusIsReadByTheExistingParser:
     def _parsed(cls) -> dict:
         import json
 
-        from ecoflow_energy.ecoflow.parsers.delta3_proto import (
+        from custom_components.ecoflow_energy.ecoflow.parsers.delta3_proto import (
             parse_delta3_bms_heartbeat,
             parse_delta3_cms_heartbeat,
             parse_delta3_display_property,
         )
-        from ecoflow_energy.ecoflow.proto.runtime import decode_proto_runtime_frame
+        from custom_components.ecoflow_energy.ecoflow.proto.runtime import (
+            decode_proto_runtime_frame,
+        )
 
         merged: dict = {}
         for frame in json.loads(cls.FRAMES.read_text())["frames"]:
@@ -366,13 +368,13 @@ class TestDelta3PlusIsReadByTheExistingParser:
         return merged
 
     def test_the_prefix_maps_to_the_delta_3_parser(self) -> None:
-        from ecoflow_energy.ecoflow.const import get_device_type
+        from custom_components.ecoflow_energy.ecoflow.const import get_device_type
 
         assert get_device_type("", "P351TEST00000001") == DEVICE_TYPE_DELTA3
 
     def test_it_is_named_rather_than_left_to_the_serial(self) -> None:
         """The app API returns an empty product name for this model."""
-        from ecoflow_energy.ecoflow.const import get_device_name
+        from custom_components.ecoflow_energy.ecoflow.const import get_device_name
 
         assert get_device_name("", "P351TEST00000001") == "DELTA 3 Plus (0001)"
 

@@ -1,4 +1,7 @@
 """Tests for the listen-only capture of devices that have no parser yet."""
+# mypy: disable-error-code="attr-defined"
+# The probe's MQTT client is replaced by a mock on the instance; under the long
+# import name mypy sees the real type, which has no `return_value`.
 
 import itertools
 import logging
@@ -7,26 +10,27 @@ from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from ecoflow_energy.const import (
+from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
+from pytest_homeassistant_custom_component.common import async_fire_time_changed
+
+from custom_components.ecoflow_energy.const import (
     PROBE_WATCHDOG_INTERVAL_S,
     RAW_FRAME_KEYS_MAX,
     RAW_FRAME_MAX_BYTES,
     RAW_FRAME_PER_KEY_MAX,
 )
-from ecoflow_energy.device_probe import (
+from custom_components.ecoflow_energy.device_probe import (
     UnroutedDeviceProbe,
     async_start_probe_watchdog,
     async_start_probes,
 )
-from ecoflow_energy.ecoflow.broker import BrokerAddress
-from ecoflow_energy.ecoflow.cloud_mqtt import EcoFlowMQTTClient
-from ecoflow_energy.ecoflow.proto_encoding import (
+from custom_components.ecoflow_energy.ecoflow.broker import BrokerAddress
+from custom_components.ecoflow_energy.ecoflow.cloud_mqtt import EcoFlowMQTTClient
+from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
     encode_field_bytes,
     encode_field_varint,
 )
-from homeassistant.core import HomeAssistant
-from homeassistant.util import dt as dt_util
-from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 SKIPPED_SN = "RE11TEST00000001"
 
@@ -57,7 +61,9 @@ def _bundled_frame(total: int, *commands: tuple[int, int]) -> bytes:
 
 
 def _probe(hass: HomeAssistant) -> UnroutedDeviceProbe:
-    with patch("ecoflow_energy.device_probe.EcoFlowMQTTClient") as mock_client:
+    with patch(
+        "custom_components.ecoflow_energy.device_probe.EcoFlowMQTTClient"
+    ) as mock_client:
         client = MagicMock()
         # Every connection report names the broker it is reporting about,
         # so the stand-in has to answer that like the real client does.
@@ -82,7 +88,9 @@ def _fake_clock(step: float) -> Iterator[float]:
 class TestListenOnly:
     async def test_no_write_path_is_configured(self, hass: HomeAssistant) -> None:
         """A device we know nothing about must never be written to."""
-        with patch("ecoflow_energy.device_probe.EcoFlowMQTTClient") as mock_client:
+        with patch(
+            "custom_components.ecoflow_energy.device_probe.EcoFlowMQTTClient"
+        ) as mock_client:
             UnroutedDeviceProbe(hass, SKIPPED_SN, "Ocean 2", "acc", "pw", "user123")
 
         kwargs = mock_client.call_args.kwargs
@@ -145,7 +153,9 @@ class TestListenOnly:
         )
         client.client = MagicMock()
 
-        with patch("ecoflow_energy.ecoflow.cloud_mqtt.mqtt.Client") as paho_cls:
+        with patch(
+            "custom_components.ecoflow_energy.ecoflow.cloud_mqtt.mqtt.Client"
+        ) as paho_cls:
             fresh = paho_cls.return_value
             assert client.force_reconnect() is True
             client._on_connect(fresh, None, {}, 0)
@@ -230,7 +240,7 @@ class TestListenOnly:
         probe = _probe(hass)
 
         with patch(
-            "ecoflow_energy.device_probe.decode_cmd_headers",
+            "custom_components.ecoflow_energy.device_probe.decode_cmd_headers",
             return_value=[{"cmd_func": 96, "cmd_id": 33}],
         ):
             probe._on_message(f"/app/device/property/{SKIPPED_SN}", b"\x0a\x02\xff\xff")
@@ -308,10 +318,11 @@ class TestListenOnly:
 
         with (
             patch(
-                "ecoflow_energy.device_probe.decode_cmd_headers", side_effect=headers
+                "custom_components.ecoflow_energy.device_probe.decode_cmd_headers",
+                side_effect=headers,
             ),
             patch(
-                "ecoflow_energy.ecoflow.frame_capture.time.time",
+                "custom_components.ecoflow_energy.ecoflow.frame_capture.time.time",
                 side_effect=lambda: next(clock),
             ),
         ):
@@ -339,11 +350,11 @@ class TestListenOnly:
 
         with (
             patch(
-                "ecoflow_energy.device_probe.decode_cmd_headers",
+                "custom_components.ecoflow_energy.device_probe.decode_cmd_headers",
                 side_effect=lambda _payload: next(types),
             ),
             patch(
-                "ecoflow_energy.ecoflow.frame_capture.time.time",
+                "custom_components.ecoflow_energy.ecoflow.frame_capture.time.time",
                 side_effect=lambda: next(clock),
             ),
         ):
@@ -363,7 +374,8 @@ class TestListenOnly:
             return [{"cmd_func": 254, "cmd_id": next(counter) % 100}]
 
         with patch(
-            "ecoflow_energy.device_probe.decode_cmd_headers", side_effect=headers
+            "custom_components.ecoflow_energy.device_probe.decode_cmd_headers",
+            side_effect=headers,
         ):
             for _ in range(5_000):
                 probe._on_message("/topic", b"\x0a\x01")
@@ -383,7 +395,7 @@ class TestListenOnly:
         probe = _probe(hass)
 
         with patch(
-            "ecoflow_energy.device_probe.decode_cmd_headers",
+            "custom_components.ecoflow_energy.device_probe.decode_cmd_headers",
             return_value=[{"cmd_func": 254, "cmd_id": 21}],
         ):
             for _ in range(500):
@@ -413,7 +425,7 @@ class TestListenOnly:
         probe = _probe(hass)
 
         with patch(
-            "ecoflow_energy.device_probe.build_frame_entry",
+            "custom_components.ecoflow_energy.device_probe.build_frame_entry",
             side_effect=ValueError("boom"),
         ):
             probe._on_message("/topic", b"\x0a\x01")
@@ -758,12 +770,18 @@ class TestConnectionReport:
     async def test_ages_are_reported_from_the_capture_clock(
         self, hass: HomeAssistant
     ) -> None:
-        with patch("ecoflow_energy.device_probe.time.time", return_value=1000.0):
+        with patch(
+            "custom_components.ecoflow_energy.device_probe.time.time",
+            return_value=1000.0,
+        ):
             probe = _probe(hass)
             probe._on_status("connected", 0, "Connected")
         probe._client.is_connected.return_value = True
 
-        with patch("ecoflow_energy.device_probe.time.time", return_value=1300.0):
+        with patch(
+            "custom_components.ecoflow_energy.device_probe.time.time",
+            return_value=1300.0,
+        ):
             report = probe.connection
 
         assert report["capture_age_s"] == 300
@@ -825,7 +843,10 @@ class TestStartProbes:
         api = MagicMock()
         api.login = AsyncMock(return_value=False)
 
-        with patch("ecoflow_energy.ecoflow.app_api.AppApiClient", return_value=api):
+        with patch(
+            "custom_components.ecoflow_energy.ecoflow.app_api.AppApiClient",
+            return_value=api,
+        ):
             assert await async_start_probes(hass, skipped, "a@b.c", "pw") == []
 
     async def test_probe_started_per_skipped_device(self, hass: HomeAssistant) -> None:
@@ -844,11 +865,17 @@ class TestStartProbes:
         api.user_id = "user123"
 
         with (
-            patch("ecoflow_energy.ecoflow.app_api.AppApiClient", return_value=api),
+            patch(
+                "custom_components.ecoflow_energy.ecoflow.app_api.AppApiClient",
+                return_value=api,
+            ),
             patch.object(
                 UnroutedDeviceProbe, "async_start", AsyncMock(return_value=True)
             ),
-            patch("ecoflow_energy.device_probe.EcoFlowMQTTClient", MagicMock()),
+            patch(
+                "custom_components.ecoflow_energy.device_probe.EcoFlowMQTTClient",
+                MagicMock(),
+            ),
         ):
             probes = await async_start_probes(hass, skipped, "a@b.c", "pw")
 
@@ -875,11 +902,16 @@ class TestStartProbes:
         api.user_id = "user123"
 
         with (
-            patch("ecoflow_energy.ecoflow.app_api.AppApiClient", return_value=api),
+            patch(
+                "custom_components.ecoflow_energy.ecoflow.app_api.AppApiClient",
+                return_value=api,
+            ),
             patch.object(
                 UnroutedDeviceProbe, "async_start", AsyncMock(return_value=True)
             ),
-            patch("ecoflow_energy.device_probe.EcoFlowMQTTClient") as mock_client,
+            patch(
+                "custom_components.ecoflow_energy.device_probe.EcoFlowMQTTClient"
+            ) as mock_client,
         ):
             await async_start_probes(
                 hass, [{"sn": SKIPPED_SN, "product_name": ""}], "a@b.c", "pw"
@@ -898,7 +930,10 @@ class TestStartProbes:
         )
         api.user_id = "user123"
 
-        with patch("ecoflow_energy.ecoflow.app_api.AppApiClient", return_value=api):
+        with patch(
+            "custom_components.ecoflow_energy.ecoflow.app_api.AppApiClient",
+            return_value=api,
+        ):
             probes = await async_start_probes(
                 hass, [{"product_name": "no serial"}], "a@b.c", "pw"
             )

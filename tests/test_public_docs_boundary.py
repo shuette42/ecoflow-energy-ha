@@ -28,8 +28,7 @@ import re
 from pathlib import Path
 
 import pytest
-
-from custom_components.ecoflow_energy.ecoflow.const import _SN_PREFIX_MAP
+from ecoflow_energy.ecoflow.const import _SN_PREFIX_MAP
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DOCUMENTATION = REPO_ROOT / "documentation"

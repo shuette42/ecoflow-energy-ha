@@ -5935,8 +5935,10 @@ class TestParseMessageGetReply:
     ) -> None:
         """PowerOcean proto get_reply extracts EmsChangeReport (cmd_func=96,
         cmd_id=8)."""
-        from ecoflow_energy.ecoflow.proto.ecocharge_pb2 import JTS1EmsChangeReport
-        from ecoflow_energy.ecoflow.proto_encoding import (
+        from custom_components.ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
+            JTS1EmsChangeReport,
+        )
+        from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
             encode_field_bytes,
             encode_field_varint,
         )
@@ -5973,7 +5975,7 @@ class TestParseMessageGetReply:
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Proto get_reply without cmd_func=96/cmd_id=8 header returns None."""
-        from ecoflow_energy.ecoflow.proto_encoding import (
+        from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
             encode_field_bytes,
             encode_field_varint,
         )
@@ -6027,7 +6029,9 @@ class TestParseMessageGetReply:
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Binary get_reply for PowerOcean routes to _parse_powerocean_get_reply."""
-        from ecoflow_energy.ecoflow.proto.ecocharge_pb2 import JTS1EmsChangeReport
+        from custom_components.ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
+            JTS1EmsChangeReport,
+        )
 
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
@@ -6048,7 +6052,9 @@ class TestParseMessageGetReply:
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """Sub-messages with cmd_func != 96 are skipped entirely."""
-        from ecoflow_energy.ecoflow.proto.ecocharge_pb2 import JTS1EmsChangeReport
+        from custom_components.ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
+            JTS1EmsChangeReport,
+        )
 
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
@@ -6127,7 +6133,9 @@ class TestParseMessageGetReply:
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """An empty EmsChangeReport produces no fields and yields None."""
-        from ecoflow_energy.ecoflow.proto.ecocharge_pb2 import JTS1EmsChangeReport
+        from custom_components.ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
+            JTS1EmsChangeReport,
+        )
 
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
@@ -6144,7 +6152,9 @@ class TestParseMessageGetReply:
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """ems_word_mode from cmd_id=8 is renamed and enum-mapped to work mode."""
-        from ecoflow_energy.ecoflow.proto.ecocharge_pb2 import JTS1EmsChangeReport
+        from custom_components.ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
+            JTS1EmsChangeReport,
+        )
 
         enhanced_config_entry.add_to_hass(hass)
         coordinator = EcoFlowDeviceCoordinator(
@@ -6164,7 +6174,7 @@ class TestParseMessageGetReply:
         enhanced_config_entry: MockConfigEntry,
     ) -> None:
         """dev_soc from cmd_id=13 surfaces as ems_app_surplus_pct."""
-        from ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
+        from custom_components.ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
             JTS1EmsParamChangeReport,
         )
 
@@ -8663,10 +8673,10 @@ class TestStreamSocLatch:
         cleared to unknown, the battery level follows its own BMS, and the
         AC grid connection power is its own 791 W.
         """
-        from ecoflow_energy.ecoflow.parsers.stream_proto import (
+        from custom_components.ecoflow_energy.ecoflow.parsers.stream_proto import (
             parse_stream_proto_message,
         )
-        from ecoflow_energy.ecoflow.proto_encoding import (
+        from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
             encode_field_bytes,
             encode_field_varint,
             encode_varint,
@@ -9248,7 +9258,7 @@ class TestLinkedUnitPower:
         import json
         from pathlib import Path
 
-        from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (
+        from custom_components.ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (  # noqa: E501
             parse_stream_ac5000_message,
         )
 
@@ -9330,7 +9340,7 @@ def _pair_fixture() -> dict[str, Any]:
 
 
 def _pair_frame(fixture: dict[str, Any], index: int) -> dict[str, Any]:
-    from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (
+    from custom_components.ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (
         parse_stream_ac5000_message,
     )
 

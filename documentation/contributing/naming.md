@@ -51,4 +51,3 @@ Older names that do not follow the scheme. They stay because renaming them chang
 | `wave3_commands.build_write`, `build_power_write`, `build_band_write` return bytes without `_payload` in the name | Callers and patch strings use them | Name new bytes builders `build_<what>_payload` |
 | `delta3_commands.build_proto_command` returns bytes or `None` under a `_command` name | Same | Use `_payload` for bytes, `_command` for a JSON dict |
 | `energy_stream.py` holds the PowerOcean, PowerGlow and PowerPulse builders, not a `<family>_commands.py` file | It predates the pattern | Put new builders in `ecoflow/<family>_commands.py` |
-| Some tests import core code as `custom_components.ecoflow_energy.ecoflow.*` and a few import it under both names | Each file needs its patch strings checked before it changes | Use one import name per test file (see [Testing](testing.md)) |

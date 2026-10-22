@@ -40,8 +40,9 @@ mypy tests/
 ## Where a test goes
 
 - Put a test that needs Home Assistant under `tests/ha/`. Reason: those tests start an in-memory Home Assistant through the `hass` fixture.
-- Do not import `homeassistant` directly in a top-level test, and import core code there as `ecoflow_energy.ecoflow.*`. `tests/test_layer_boundary.py` enforces the direct-import rule. Some existing tests reach Home Assistant through the root `const.py` or the `custom_components.` name, so the suite needs Home Assistant installed. Reason: the core library is tested without Home Assistant, and a direct import ties a core test to it.
-- Import the integration under one name per test file. Tests under `tests/` import core code as `ecoflow_energy.ecoflow.*`, tests under `tests/ha/` as `custom_components.ecoflow_energy.*`. Never use both in one file. Reason: the two names load two module objects, and a patch on one misses the other.
+- Do not import `homeassistant` directly in a top-level test, and import core code there as `ecoflow_energy.ecoflow.*`. `tests/test_layer_boundary.py` enforces the direct-import rule. Reason: the core library is tested without Home Assistant, and a direct import ties a core test to it.
+- Keep a top-level test independent of Home Assistant. `tests/test_ha_independence.py` runs the top-level tests in a process where every Home Assistant import fails, and lists the files that still need it. The list can only shrink, so do not add a file to it: write the test under `tests/ha/` instead. Reason: a test that only needs the core library should not need a Home Assistant install to run.
+- Import the integration under one name per test file. Tests under `tests/` import core code as `ecoflow_energy.ecoflow.*` (the constants module as `ecoflow_energy.const`), tests under `tests/ha/` as `custom_components.ecoflow_energy.*`. Never use both in one file, and never import a Home Assistant module such as `config_flow` or `sensor` under the short name. `tests/test_import_names.py` enforces this. Reason: the two names load two module objects, so a patch on one misses the other, and a platform module loaded under the short name registers a second copy of itself and breaks the config flow tests.
 - Name the file as described in [Naming](naming.md).
 
 ## Writing the test
@@ -67,5 +68,8 @@ You do not need to write these again. Run the full suite and read the failure.
 - `tests/test_fixture_identifiers.py`: no real identifier in any fixture.
 - `tests/test_entity_documentation.py`: the entity pages under `documentation/entities/` agree with the code.
 - `tests/test_layer_boundary.py`: the core library imports no `homeassistant` and nothing from the layer above it, and no top-level test imports `homeassistant` directly.
+- `tests/test_import_names.py`: each test file uses one import name, the right one for its folder.
+- `tests/test_ha_independence.py`: the top-level tests that do not need Home Assistant run without it.
+- `tests/test_public_paths.py`: no tracked path carries an internal plan number.
 - `tests/test_public_docs_boundary.py`: the public documentation, including these pages, stays free of private paths, internal names, real serials, unresolved `ADR-NNN` references and en or em dashes.
 - `ruff` and `mypy`: style, imports and types.

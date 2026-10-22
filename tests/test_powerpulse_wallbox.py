@@ -13,12 +13,11 @@ fail on exactly this pair.
 from __future__ import annotations
 
 import pytest
-
-from custom_components.ecoflow_energy.ecoflow.const import DEVICE_TYPE_POWEROCEAN
-from custom_components.ecoflow_energy.ecoflow.parsers.powerocean_proto import (
+from ecoflow_energy.ecoflow.const import DEVICE_TYPE_POWEROCEAN
+from ecoflow_energy.ecoflow.parsers.powerocean_proto import (
     remap_ev_charging_keys,
 )
-from custom_components.ecoflow_energy.ecoflow.proto.runtime import (
+from ecoflow_energy.ecoflow.proto.runtime import (
     decode_proto_runtime_headers,
 )
 
@@ -52,9 +51,8 @@ def _from_frame(frame: bytes) -> dict:
 
 def _from_payload(payload: bytes) -> dict:
     """Same mapping for a bare 209/8 payload lifted out of a bundle."""
+    from ecoflow_energy.ecoflow.proto import ecocharge_pb2 as pb2
     from google.protobuf.json_format import MessageToDict
-
-    from custom_components.ecoflow_energy.ecoflow.proto import ecocharge_pb2 as pb2
 
     msg = pb2.EVChargingParamReport()
     msg.ParseFromString(payload)
@@ -125,7 +123,7 @@ class TestRegistry:
     def test_the_command_tuple_is_routed(self) -> None:
         """Without the registry entry the frame decodes to nothing at all,
         which is what the integration did with it before PLAN-079."""
-        from custom_components.ecoflow_energy.ecoflow.proto.runtime import (
+        from ecoflow_energy.ecoflow.proto.runtime import (
             _build_cmd_registry,
         )
 

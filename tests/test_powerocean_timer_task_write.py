@@ -13,12 +13,11 @@ local at first 1000 W and later 1500 W.
 from __future__ import annotations
 
 import pytest
-
-from custom_components.ecoflow_energy.ecoflow.energy_stream import (
+from ecoflow_energy.ecoflow.energy_stream import (
     POWEROCEAN_TASK_POWER_MAX_W,
     build_timer_task_set_payload,
 )
-from custom_components.ecoflow_energy.ecoflow.proto.decoder import (
+from ecoflow_energy.ecoflow.proto.decoder import (
     decode_header_message,
 )
 

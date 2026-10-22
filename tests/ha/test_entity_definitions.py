@@ -37,16 +37,17 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from ecoflow_energy import const as C
-from ecoflow_energy.binary_sensor import _get_binary_sensor_defs
-from ecoflow_energy.ecoflow import const as EC
-from ecoflow_energy.number import _get_number_defs
-from ecoflow_energy.select import _get_select_defs
-from ecoflow_energy.sensor import _get_sensor_defs
-from ecoflow_energy.switch import _get_switch_defs
 from homeassistant.util import slugify
 
-COMPONENT_DIR = Path(__file__).resolve().parent.parent / "custom_components"
+from custom_components.ecoflow_energy import const as C
+from custom_components.ecoflow_energy.binary_sensor import _get_binary_sensor_defs
+from custom_components.ecoflow_energy.ecoflow import const as EC
+from custom_components.ecoflow_energy.number import _get_number_defs
+from custom_components.ecoflow_energy.select import _get_select_defs
+from custom_components.ecoflow_energy.sensor import _get_sensor_defs
+from custom_components.ecoflow_energy.switch import _get_switch_defs
+
+COMPONENT_DIR = Path(__file__).resolve().parent.parent.parent / "custom_components"
 CONST_PY = COMPONENT_DIR / "ecoflow_energy" / "const.py"
 BUTTON_PY = COMPONENT_DIR / "ecoflow_energy" / "button.py"
 SENSOR_PY = COMPONENT_DIR / "ecoflow_energy" / "sensor.py"

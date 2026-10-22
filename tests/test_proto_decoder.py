@@ -203,7 +203,7 @@ class TestRuntimeDecoder:
         to detect cloud-only app changes that bypass the EMS-side
         sys_bat_backup_ratio.
         """
-        from custom_components.ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
+        from ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
             JTS1EmsParamChangeReport,
         )
 

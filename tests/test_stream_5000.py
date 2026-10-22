@@ -14,29 +14,30 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from ecoflow_energy.const import (
+
+from custom_components.ecoflow_energy.const import (
     STREAM_AC5000_CONTROL_PREFIXES,
     STREAMAC5000_NUMBERS,
     STREAMAC5000_SELECTS,
     STREAMAC5000_SWITCHES,
     supports_stream_ac5000_controls,
 )
-from ecoflow_energy.ecoflow.const import (
+from custom_components.ecoflow_energy.ecoflow.const import (
     _SN_PREFIX_MAP,
     DEVICE_TYPE_STREAM_AC5000,
     get_device_name,
     get_device_type,
 )
-from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (
+from custom_components.ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (
     parse_stream_ac5000_message,
 )
-from ecoflow_energy.ecoflow.proto_encoding import (
+from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
     encode_field_bytes,
     encode_field_varint,
 )
-from ecoflow_energy.number import _get_number_defs
-from ecoflow_energy.select import _get_select_defs
-from ecoflow_energy.switch import _get_switch_defs
+from custom_components.ecoflow_energy.number import _get_number_defs
+from custom_components.ecoflow_energy.select import _get_select_defs
+from custom_components.ecoflow_energy.switch import _get_switch_defs
 
 FIXTURES = Path(__file__).parent / "fixtures" / "stream_ac5000"
 ES21_FRAMES = FIXTURES / "es21_frames_masked.json"

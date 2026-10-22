@@ -22,11 +22,12 @@ docstring that merely mentions the package does not:
    an explicit allowlist. A stale allowlist entry (file gone, or no longer
    importing Home Assistant) fails too, so the list can only shrink.
 
-Check 2 proves only DIRECT imports. Some top-level tests still reach Home
-Assistant indirectly, through the root ``const.py`` or through the
-``custom_components.`` import name (which runs the package ``__init__``), so the
-suite needs Home Assistant installed. That is accepted practice, and this
-file does not claim otherwise.
+Check 2 proves only DIRECT imports. A top-level test can still reach Home
+Assistant through the root ``const.py`` (which imports ``Platform``) or through
+the ``custom_components.`` import name (which runs the package ``__init__``).
+``test_ha_independence.py`` covers that by running the top-level suite with
+every Home Assistant import blocked, and ``test_import_names.py`` keeps each
+file to one import name.
 
 Each check has positive controls (sample sources it must flag), negative
 controls (sample sources it must leave alone) and a floor on the number of
@@ -49,9 +50,9 @@ ROOT_PACKAGES = ("custom_components.ecoflow_energy", "ecoflow_energy")
 CORE_PACKAGES = tuple(f"{root}.ecoflow" for root in ROOT_PACKAGES)
 IMPORT_FUNCTIONS = frozenset({"import_module", "__import__"})
 
-# Top-level test files that still import Home Assistant. Moving one under
-# tests/ha/ removes its entry; adding an entry is a decision, not a drift.
-HA_TEST_ALLOWLIST = frozenset({"test_entity_definitions.py"})
+# Top-level test files that still import Home Assistant directly. The list is
+# empty and stays empty: a test that needs Home Assistant goes under tests/ha/.
+HA_TEST_ALLOWLIST: frozenset[str] = frozenset()
 
 # Floors well below the current counts: an empty glob must not pass as clean.
 CORE_FILE_FLOOR = 40
