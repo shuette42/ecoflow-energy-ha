@@ -91,9 +91,7 @@ from custom_components.ecoflow_energy.switch import (
     async_setup_entry as switch_setup,
 )
 
-CAPTURE = (
-    Path(__file__).parent.parent / "fixtures" / "wave3" / "ac71_frames.json"
-)
+CAPTURE = Path(__file__).parent.parent / "fixtures" / "wave3" / "ac71_frames.json"
 
 # One index per shape from the 24h capture (PLAN-047):
 FULL_DISPLAY_INDEX = 0  # 254/21, masked, full field dump incl. mode_info

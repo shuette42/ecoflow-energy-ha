@@ -41,9 +41,7 @@ from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
 )
 from custom_components.ecoflow_energy.ecoflow.wave3_commands import Wave3WriteRefused
 
-CAPTURE = (
-    Path(__file__).parent.parent / "fixtures" / "wave3" / "ac71_frames.json"
-)
+CAPTURE = Path(__file__).parent.parent / "fixtures" / "wave3" / "ac71_frames.json"
 SET_REPLY_CAPTURE = (
     Path(__file__).parent.parent / "fixtures" / "wave3" / "ac71_set_reply_20260907.json"
 )

@@ -53,12 +53,7 @@ from tests.test_powerocean_no_longer_relays_the_wallbox import (
     HEATING_ROD_REPORT,
 )
 
-FIXTURE = (
-    Path(__file__).parent.parent
-    / "fixtures"
-    / "powerpulse"
-    / "c376_frames.json"
-)
+FIXTURE = Path(__file__).parent.parent / "fixtures" / "powerpulse" / "c376_frames.json"
 
 POWEROCEAN_DEVICE: dict[str, Any] = {
     "sn": "HJ31TEST00000001",
