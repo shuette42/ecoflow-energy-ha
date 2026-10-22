@@ -8,7 +8,8 @@ can decide, so a new file cannot slip past the page:
    the three pairs that were there before the rules (``__init__``, ``const``,
    ``charging_history``). A new pair is a naming collision.
 2. Every ``build_*`` function in an ``ecoflow/*_commands.py`` file ends in
-   ``_payload`` (it returns bytes) or ``_command`` (it returns a JSON dict).
+   ``_payload`` and is annotated to return bytes, or ends in ``_command`` and
+   is annotated to return a dict.
 3. A parser file is ``<family>_proto.py``, ``<family>_http.py`` or
    ``<family>_modbus.py``, except the two older Standard Mode parsers named in
    ``UNSUFFIXED_PARSERS``.
@@ -41,13 +42,19 @@ def _stems(directory: Path) -> set[str]:
 
 
 def _bad_builders(source: str) -> list[str]:
-    return [
-        node.name
-        for node in ast.walk(ast.parse(source))
-        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
-        and node.name.startswith("build_")
-        and not node.name.endswith(BUILDER_SUFFIXES)
-    ]
+    bad: list[str] = []
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            continue
+        if not node.name.startswith("build_"):
+            continue
+        returns = ast.unparse(node.returns) if node.returns else ""
+        if node.name.endswith("_payload") and returns.startswith("bytes"):
+            continue
+        if node.name.endswith("_command") and returns.startswith("dict"):
+            continue
+        bad.append(node.name)
+    return bad
 
 
 def _bad_parser_stems(stems: set[str]) -> list[str]:
@@ -59,11 +66,23 @@ def _bad_parser_stems(stems: set[str]) -> list[str]:
 
 
 def test_the_builder_checker_flags_and_spares() -> None:
-    assert _bad_builders("def build_write(x):\n    pass\n") == ["build_write"]
+    assert _bad_builders("def build_write(x) -> bytes:\n    pass\n") == ["build_write"]
     assert _bad_builders("async def build_set(x):\n    pass\n") == ["build_set"]
-    assert _bad_builders("def build_write_payload(x):\n    pass\n") == []
-    assert _bad_builders("def build_toggle_command(x):\n    pass\n") == []
+    assert _bad_builders("def build_write_payload(x) -> bytes:\n    pass\n") == []
+    assert _bad_builders("def build_p(x) -> bytes | None:\n    pass\n") == ["build_p"]
+    assert _bad_builders("def build_p_payload(x) -> bytes | None:\n    pass\n") == []
+    assert _bad_builders("def build_t_command(x) -> dict[str, int]:\n    pass\n") == []
     assert _bad_builders("def helper_write(x):\n    pass\n") == []
+
+
+def test_the_builder_checker_flags_a_suffix_that_lies_about_the_return() -> None:
+    assert _bad_builders("def build_a_command(x) -> bytes:\n    pass\n") == [
+        "build_a_command"
+    ]
+    assert _bad_builders("def build_a_payload(x) -> dict:\n    pass\n") == [
+        "build_a_payload"
+    ]
+    assert _bad_builders("def build_a_payload(x):\n    pass\n") == ["build_a_payload"]
 
 
 def test_the_parser_checker_flags_and_spares() -> None:

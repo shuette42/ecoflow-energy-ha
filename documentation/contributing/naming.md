@@ -8,7 +8,7 @@ One naming scheme for new files, functions and entity keys. Follow it for new co
 - Name parsers `ecoflow/parsers/<family>_<transport>.py`, where the transport is `proto` (push over MQTT), `http` (IoT Developer API quota) or `modbus` (Local mode). Examples: `ocean2_proto.py`, `stream_http.py`, `powerocean_modbus.py`. Reason: one family can have several routes, and the suffix says which one the file reads.
 - Name command builders `ecoflow/<family>_commands.py`. Examples: `ocean2_commands.py`, `stream_commands.py`. Reason: a reader finds every write for a family in one predictable place.
 - Name config flow steps `config_flow_<step>.py` (`config_flow_setup.py`, `config_flow_options.py`). Reason: the existing steps already follow it.
-- Use the lowercase product family for `<family>`, as the existing parser names do (`ocean2`, `stream`, `delta3`, `wave3`, `stream_ac5000`). Use a serial prefix (for example `hc31`) only when the device has no family name. Reason: a prefix tells nothing to a reader who does not know the serial scheme.
+- Use the lowercase product family for `<family>`, as the existing parser names do (`ocean2`, `stream`, `delta3`, `wave3`, `stream_ac5000`). Use a serial prefix only when the device has no family name. Reason: a prefix tells nothing to a reader who does not know the serial scheme.
 - Keep a name unique across layers. Do not give a new root module the name of a core module. Reason: see [Architecture and Structure](architecture-and-structure.md).
 
 ## Functions
@@ -46,5 +46,6 @@ Older names that do not follow the scheme. They stay because no name in the sche
 
 | Existing name | Why it stays | What new code does |
 |---|---|---|
-| `parsers/delta.py` and `parsers/smartplug.py` have no transport suffix | `delta.py` reads Standard Mode MQTT JSON. `smartplug.py` reads HTTP, MQTT JSON and protobuf and also builds the SET payloads, so no single transport word fits. Tests and imports use these paths | Name new parsers `<family>_<transport>.py` |
+| `parsers/delta.py` and `parsers/smartplug.py` have no transport suffix | `delta.py` reads the JSON reports over MQTT in both modes. `smartplug.py` reads HTTP, MQTT JSON and protobuf and also builds the SET payloads, so no single transport word fits. Tests and imports use these paths | Name new parsers `<family>_<transport>.py` |
+| `parse_hr61_proto_message` and the fixture folder `tests/fixtures/hr61/` carry the serial prefix, not the family name | Callers and fixtures use them | Use the family name |
 | `energy_stream.py` holds the PowerOcean, PowerGlow and PowerPulse builders, not a `<family>_commands.py` file | It predates the pattern | Put new builders in `ecoflow/<family>_commands.py` |
