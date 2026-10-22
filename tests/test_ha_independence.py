@@ -90,11 +90,15 @@ _PASSED = re.compile(r"(\d+) passed")
 
 def _run_blocked(tmp_path: Path, names: list[str]) -> tuple[int, str]:
     (tmp_path / "block_ha.py").write_text(BLOCKER, encoding="utf-8")
+    # A developer's PYTEST_ADDOPTS or PYTEST_PLUGINS would reach the child and
+    # change what it loads, so the child starts without them.
     env = {
-        **os.environ,
-        "PYTHONPATH": str(tmp_path),
-        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+        k: v
+        for k, v in os.environ.items()
+        if k not in ("PYTEST_ADDOPTS", "PYTEST_PLUGINS")
     }
+    env["PYTHONPATH"] = str(tmp_path)
+    env["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
     cmd = [
         sys.executable,
         "-m",
@@ -117,7 +121,13 @@ def _run_blocked(tmp_path: Path, names: list[str]) -> tuple[int, str]:
         *[f"tests/{name}" for name in names],
     ]
     done = subprocess.run(
-        cmd, cwd=REPO_ROOT, env=env, capture_output=True, text=True, check=False
+        cmd,
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=600,
     )
     return done.returncode, done.stdout + done.stderr
 

@@ -76,6 +76,10 @@ def _dotted_names(source: str) -> list[str]:
             names.extend(alias.name for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
             names.append(node.module)
+            if node.module == "custom_components" and any(
+                alias.name == BARE for alias in node.names
+            ):
+                names.append(LONG)
             if node.module in (LONG, BARE):
                 names.extend(f"{node.module}.{alias.name}" for alias in node.names)
         elif (
@@ -117,6 +121,20 @@ def _problems(source: str, in_ha_dir: bool) -> list[str]:
             and not _is(n, BARE_CONST)
         )
     return found
+
+
+def _file_problems(source: str, in_ha_dir: bool, long_name_allowed: bool) -> list[str]:
+    """All problems of one file; ``long_name_allowed`` is the allowlist verdict."""
+    problems = _problems(source, in_ha_dir)
+    if not in_ha_dir and long_name_allowed:
+        # Allowed to use the long name, still never both names.
+        return [p for p in problems if p == "uses both import names"]
+    if not in_ha_dir and _uses(_dotted_names(source))[0]:
+        problems.append(
+            "top-level file uses the long name: import the core as "
+            "ecoflow_energy.ecoflow or move it to tests/ha/"
+        )
+    return problems
 
 
 def _test_files() -> list[Path]:
@@ -161,21 +179,29 @@ def test_checker_leaves_the_right_forms_alone(source: str, in_ha_dir: bool) -> N
     assert _problems(source, in_ha_dir) == [], source
 
 
+def test_an_unlisted_top_level_file_may_not_use_the_long_name() -> None:
+    source = "from custom_components.ecoflow_energy.sensor import X\n"
+    assert _file_problems(source, in_ha_dir=False, long_name_allowed=False)
+    assert _file_problems(source, in_ha_dir=False, long_name_allowed=True) == []
+    assert _file_problems(source, in_ha_dir=True, long_name_allowed=False) == []
+
+
+def test_from_the_parent_package_counts_as_the_long_name() -> None:
+    source = "from custom_components import ecoflow_energy\n"
+    assert _uses(_dotted_names(source)) == (True, False)
+
+
 def test_every_test_file_keeps_to_the_rules() -> None:
     files = _test_files()
     assert len(files) >= FILE_FLOOR, len(files)
     offenders: dict[str, list[str]] = {}
     for path in files:
         in_ha = path.parent == HA_DIR
-        problems = _problems(path.read_text(encoding="utf-8"), in_ha)
-        if not in_ha and path.name in LONG_NAME_ALLOWLIST:
-            # Allowed to use the long name, still never both names.
-            problems = [p for p in problems if p == "uses both import names"]
-        elif not in_ha and _uses(_dotted_names(path.read_text(encoding="utf-8")))[0]:
-            problems.append(
-                "top-level file uses the long name: import the core as "
-                "ecoflow_energy.ecoflow or move it to tests/ha/"
-            )
+        problems = _file_problems(
+            path.read_text(encoding="utf-8"),
+            in_ha,
+            path.name in LONG_NAME_ALLOWLIST,
+        )
         if problems:
             offenders[str(path.relative_to(REPO_ROOT))] = problems
     assert offenders == {}
