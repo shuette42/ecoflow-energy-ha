@@ -183,7 +183,7 @@ Two expansion packs (Slave 1, Slave 2), each with 16 sensors. All disabled by de
 
 ## RIVER 2 Max
 
-The RIVER 2 Max (`R611`) sends the Delta 2 messages, so it is read through the same parser as the Delta 2 Max. It was added from one owner's Enhanced Mode recording and is read-only: 12 sensors, no binary sensors, switches or numbers. Standard Mode has not been tried on it.
+The RIVER 2 Max (`R611`) sends the Delta 2 messages, so it is read through the same parser as the Delta 2 Max. It was added from one owner's Enhanced Mode recording and is read-only: 13 sensors, no binary sensors, switches or numbers. Standard Mode has not been tried on it.
 
 Sensors, with the reading each one was checked against in the recording:
 
@@ -192,8 +192,9 @@ Sensors, with the reading each one was checked against in the recording:
 - AC Input: 710 W on AC charge (the app: about 700 W), about 67 W through the unit (the app: about 60 W)
 - AC Output: about 67 W through the unit (the app: about 60 W)
 - Type-C 1: 17 W with a power bank plugged in, as in the app
+- USB 1: 11, 10 and 11 W with a power bank on each of the three USB-A ports in turn (the app: 11, 10 and 11 W). All three ports reported through this one reading. Only one load was plugged in at a time, so whether the reading adds up several loads at once is not known
 - AC Input Voltage, AC Output Voltage, AC Output Frequency: 117 to 121 V and 60 Hz, a North American mains. These were not compared with the app
 - AC Input Energy, AC Output Energy: integrated by the integration from the AC power, not sent by the unit
-- Remaining Time: the unit's runtime estimate, shown only while the unit runs from its battery (286 min, the app: 4 h 40 min). Full on AC, the unit sends 4092 min while the app and the unit's screen show 99 h 59 min. So the sensor stays empty whenever power comes in. It also stays empty while charging below 100 %: the app then shows a time to full instead, and the unit's own value sits at a fixed 5 min
+- Remaining Time: the unit's runtime estimate, shown only while the unit runs from its battery (286 min, the app: 4 h 40 min). Full on AC, the unit sent 4092 min in one recording and 5999 min (99 h 59 min) in another, while the app and the unit's screen show 99 h 59 min. So the sensor stays empty whenever power comes in. It also stays empty while charging below 100 %: the app then shows a time to full of 5 min that does not count down, the same figure the unit sends
 
-Left out until a recording backs them: battery voltage (the unit sends a whole number of 25 or 26 where the Delta 2 Max sends millivolts), the charge state, the USB-A, QC USB and 12 V power, the solar input, and every switch and number. The unit pushes about every 1.5 seconds in the recording. The energy counters are integrated from the AC power, so they are approximate. If the USB-C reading drops out in the app once the unit reaches 100 %, the unit itself reports 0 W at that point.
+Left out until a recording backs them: battery voltage (the unit sends a whole number of 25 or 26 where the Delta 2 Max sends millivolts), the charge state, the USB 2 and QC USB readings (they stayed at 0 W with a load on each USB-A port) and the 12 V power, the solar input, and every switch and number. The unit pushes about every 1.5 seconds in the recording. The energy counters are integrated from the AC power, so they are approximate. If the USB-C reading drops out in the app once the unit reaches 100 %, the unit itself reports 0 W at that point.

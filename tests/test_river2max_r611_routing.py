@@ -60,6 +60,13 @@ _FIXTURE = (
 _FRAMES: list[dict[str, Any]] = json.loads(_FIXTURE.read_text())["frames"]
 _BY_INDEX: dict[int, dict[str, Any]] = {f["frame_index"]: f for f in _FRAMES}
 
+# The second recording (2026-10-21): a power bank moved across the USB-A ports,
+# then the AC input plugged back in until the unit was full.
+_USB_FIXTURE = _FIXTURE.with_name("usb_a_ports_frames.json")
+_USB_FRAMES: dict[str, dict[str, Any]] = {
+    f["name"]: f for f in json.loads(_USB_FIXTURE.read_text())["frames"]
+}
+
 # Sensors the coordinator integrates from a live power key, so they are not in
 # any frame and cannot be checked against the recording.
 _DERIVED_ENERGY_KEYS = {"ac_in_energy_kwh", "ac_out_energy_kwh"}
@@ -187,6 +194,7 @@ class TestEntitySet:
             "ac_in_w",
             "ac_out_w",
             "typec1_w",
+            "usb1_w",
             "ac_in_vol_v",
             "ac_out_vol_v",
             "ac_out_freq_hz",
@@ -239,10 +247,11 @@ class TestEntitySet:
 
     def test_every_backed_sensor_has_a_value_in_the_recording(self) -> None:
         seen: set[str] = set()
-        for frame in _FRAMES:
+        for frame in [*_FRAMES, *_USB_FRAMES.values()]:
             seen.update(k for k, v in _ingest(frame).items() if v is not None)
         missing = RIVER2MAX_SENSOR_KEYS - _DERIVED_ENERGY_KEYS - seen
         assert not missing, sorted(missing)
+        assert any(_ingest(f)["usb1_w"] > 0 for f in _USB_FRAMES.values())
 
     def test_battery_voltage_stays_off(self) -> None:
         """`bms_bmsStatus.vol` is 25 and 26, not millivolts.
@@ -272,6 +281,43 @@ class TestEntitySet:
         assert len(filter_defs_for_serial(DELTA2MAX_NUMBERS, R351_SN)) == len(
             DELTA2MAX_NUMBERS
         )
+
+
+class TestUsbA:
+    """All three USB-A ports report through `usb1_w`, the other USB keys stay 0.
+
+    A power bank on each port in turn read 11, 10 and 11 W, and the app showed
+    11, 10 and 11 W. Each port moved the load into `usb1_w`, so it is not one
+    physical port. One load at a time, so whether it adds up several loads at
+    once is not known.
+    """
+
+    @pytest.mark.parametrize(
+        ("frame", "watts"),
+        [
+            ("usb_a_top_left", 11),
+            ("usb_a_top_right", 10),
+            ("usb_a_bottom_left", 11),
+            ("baseline", 0),
+        ],
+    )
+    def test_each_port_reads_through_usb1(self, frame: str, watts: int) -> None:
+        parsed = _ingest(_USB_FRAMES[frame])
+        assert parsed["usb1_w"] == watts
+        assert parsed["usb2_w"] == 0
+        assert parsed["usb_qc1_w"] == 0
+        assert parsed["usb_qc2_w"] == 0
+
+    def test_the_sensor_is_kept_for_the_prefix_and_the_idle_keys_are_not(
+        self,
+    ) -> None:
+        kept = _keys(filter_defs_for_serial(DELTA2MAX_SENSORS, R611_SN))
+        assert "usb1_w" in kept
+        assert {"usb2_w", "usb_qc1_w", "usb_qc2_w"}.isdisjoint(kept)
+
+    def test_control_other_serial_keeps_every_usb_key(self) -> None:
+        kept = _keys(filter_defs_for_serial(DELTA2MAX_SENSORS, R351_SN))
+        assert {"usb1_w", "usb2_w", "usb_qc1_w", "usb_qc2_w"} <= kept
 
 
 class _StateHost(StateApplyMixin):
@@ -321,6 +367,28 @@ class TestRemainingTime:
         """The frame carries its own total of 0, which wins over the stored 68."""
         parsed = self._apply(3, {"watts_in_sum": 68, "ac_in_w": 66})
         assert parsed["remain_time_min"] == 286
+
+    def test_charging_below_100_percent_is_empty_not_the_fixed_5_min(self) -> None:
+        """Charging at 707 W the unit sends 5 min; the app shows a time to full."""
+        frame = _USB_FRAMES["charging_below_100"]
+        parsed = _ingest(frame)
+        assert parsed["remain_time_min"] == 5
+        assert parsed["watts_in_sum"] == 707
+        _StateHost(R611_SN)._resolve_battery_only_remaining_time(parsed)
+        assert parsed["remain_time_min"] is None
+
+    def test_full_on_ac_is_empty_in_the_second_recording_too(self) -> None:
+        """The unit reads 99 h 59 min (5999) at 100 %, as the app does."""
+        parsed = _ingest(_USB_FRAMES["full_on_ac"])
+        assert parsed["remain_time_min"] == 5999
+        _StateHost(R611_SN)._resolve_battery_only_remaining_time(parsed)
+        assert parsed["remain_time_min"] is None
+
+    def test_on_battery_the_value_matches_the_app_to_the_minute(self) -> None:
+        """Bottom left, 3 h 50 min in the app, 230 min from the unit."""
+        parsed = _ingest(_USB_FRAMES["usb_a_bottom_left"])
+        _StateHost(R611_SN)._resolve_battery_only_remaining_time(parsed)
+        assert parsed["remain_time_min"] == 230
 
     def test_unknown_input_holds_a_value_back(self) -> None:
         host = _StateHost(R611_SN)

@@ -7016,15 +7016,23 @@ _SN_PREFIX_EXCLUDED_KEYS["R631"] = _SN_PREFIX_EXCLUDED_KEYS["R655"]
 #     on battery matches the app (about 4 h 40 min), the same field reads
 #     4092 min on AC at 100 % while the app and the unit's screen show
 #     99 h 59 min (the reporter, 2026-10-21), so the unit's number is not a
-#     runtime the app agrees with. `remaining_time_is_battery_only` below keeps the
+#     runtime the app agrees with. A second recording sent 5999 min (99 h
+#     59 min) in the same state, and the gate holds either way.
+#     `remaining_time_is_battery_only` below keeps the
 #     sensor empty whenever the input total or the AC input power is above
-#     zero. What the unit and the app show while it charges below 100 % was
-#     not recorded, which is why that case is empty rather than guessed.
+#     zero. While it charges below 100 % the app shows a time to full of 5 min
+#     that does not count down, the same figure the unit sends (one recorded
+#     frame, 2026-10-21), which is why that case is empty too.
 #   - The charge state enums: `pd.chgDsgState` is 0 in every frame, also while
 #     the unit ran on battery, and `bms_emsStatus.chgState` is 2 on battery
 #     and 0 on AC, which the Delta 2 Max map would name charging while the
 #     unit discharged.
-#   - USB-A, QC USB and 12 V power read 0 W with nothing plugged in, solar
+#   - `usb1_w` is allowed: a power bank on each of the three USB-A ports in
+#     turn read 11, 10 and 11 W in `pd.usb1Watts` (the app: 11, 10 and 11 W),
+#     and `usb2_w`, `usb_qc1_w` and `usb_qc2_w` stayed 0. Only one load was
+#     plugged in at a time, so whether the reading adds up several loads at
+#     once is not known.
+#   - QC USB and 12 V power read 0 W with nothing plugged in, solar
 #     reads nothing, and `mppt.inAmp` 18 with no panel connected is no solar
 #     current. The AC and DC output switches read 1 and 0 throughout, never
 #     changing, so no switch state is known to follow the app.
@@ -7036,6 +7044,7 @@ RIVER2MAX_SENSOR_KEYS: frozenset[str] = frozenset(
         "ac_in_w",
         "ac_out_w",
         "typec1_w",
+        "usb1_w",
         "ac_in_vol_v",
         "ac_out_vol_v",
         "ac_out_freq_hz",
