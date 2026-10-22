@@ -8,8 +8,6 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Literal, Protocol
 
-from homeassistant.const import Platform
-
 # Four names below (DEVICE_TYPE_UNKNOWN, device_log_tag, get_device_name,
 # get_device_type) are re-exported for callers that import them from this
 # top-level const module (e.g. coordinator/core.py, config_flow_setup.py)
@@ -81,26 +79,6 @@ DOMAIN = "ecoflow_energy"
 DATA_SKIPPED_DEVICES = "ecoflow_energy_skipped_devices"
 # Listen-only probes capturing raw data of devices that have no parser yet.
 DATA_DEVICE_PROBES = "ecoflow_energy_device_probes"
-
-PLATFORMS: list[Platform] = [
-    Platform.SENSOR,
-    Platform.BINARY_SENSOR,
-    Platform.SWITCH,
-    Platform.NUMBER,
-    Platform.SELECT,
-    Platform.CLIMATE,
-    Platform.BUTTON,
-]
-
-# A local Modbus entry: the readings, plus the one control switch, the two
-# writable settings and the diagnostic that shows whether the unit accepted
-# control. Nothing else of the cloud platform list applies to it.
-LOCAL_PLATFORMS: list[Platform] = [
-    Platform.SENSOR,
-    Platform.SWITCH,
-    Platform.NUMBER,
-    Platform.BINARY_SENSOR,
-]
 
 # Config entry keys
 CONF_UNIT_ID = "unit_id"

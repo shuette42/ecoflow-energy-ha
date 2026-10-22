@@ -2,11 +2,10 @@
 
 ``test_layer_boundary.py`` proves that no top-level test imports
 ``homeassistant`` directly. That is not enough: a test can reach Home Assistant
-through the root ``const.py`` (which imports ``Platform``), through the long
-import name (which runs the package ``__init__``), or by an import inside a
-function. This test runs the top-level suite in a subprocess in which every
-``homeassistant`` import raises, and demands that everything outside
-``HA_DEPENDENT`` passes.
+through a platform module, through the long import name (which runs the
+package ``__init__``), or by an import inside a function. This test runs the
+top-level suite in a subprocess in which every ``homeassistant`` import raises,
+and demands that everything outside ``HA_DEPENDENT`` passes.
 
 ``HA_DEPENDENT`` is a shrink-only list of the files that still need Home
 Assistant. Every entry must still fail under the blocker, so a file that stops
@@ -53,33 +52,19 @@ sys.meta_path.insert(0, _BlockHA())
 """
 
 # Top-level test files that still need Home Assistant, at collection time or
-# while running. Most reach it through the root const.py (its one Home Assistant
-# import is `Platform`); the rest through the long import name or a platform
-# module. Moving the platforms into __init__.py frees the first group.
+# while running. They import a platform module or the config flow, or run the
+# package ``__init__`` through the long import name. The root ``const.py``
+# no longer imports Home Assistant, so tests that only need it are not here.
 HA_DEPENDENT = frozenset(
     {
-        "test_const.py",
         "test_coordinator_mro.py",
         "test_delta2max_mppt_replay.py",
-        "test_delta3_commands.py",
-        "test_delta3_idle_shutdown.py",
-        "test_delta3_port_priority.py",
-        "test_delta3_screen_timeout.py",
         "test_entity_documentation.py",
-        "test_entity_translations.py",
-        "test_frame_capture.py",
         "test_powerglow_commands.py",
-        "test_powerocean_bundled_frames.py",
-        "test_powerocean_parser.py",
-        "test_powerpulse_c371.py",
-        "test_powerstream_parser.py",
         "test_prefix_and_powerpulse2_documentation.py",
         "test_river2max_r611_routing.py",
         "test_river3_r655_routing.py",
         "test_stream_5000.py",
-        "test_stream_ac5000_commands.py",
-        "test_stream_commands.py",
-        "test_stream_http_parser.py",
         "test_translations.py",
     }
 )
@@ -141,7 +126,7 @@ def _top_level_names() -> list[str]:
 
 def test_the_blocker_stops_a_file_that_needs_home_assistant(tmp_path: Path) -> None:
     """Positive control: a known dependent file must fail under the blocker."""
-    code, out = _run_blocked(tmp_path, ["test_const.py"])
+    code, out = _run_blocked(tmp_path, ["test_entity_documentation.py"])
     assert code != 0, out[-800:]
     assert "blocked for the independence test" in out
 

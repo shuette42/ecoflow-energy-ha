@@ -8,7 +8,7 @@ import time
 from datetime import datetime
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EVENT_HOMEASSISTANT_STOP
+from homeassistant.const import EVENT_HOMEASSISTANT_STOP, Platform
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryError, HomeAssistantError
 from homeassistant.helpers import device_registry as dr
@@ -34,10 +34,8 @@ from .const import (
     DEVICE_TYPE_UNKNOWN,
     DOMAIN,
     ENHANCED_ONLY_DEVICE_TYPES,
-    LOCAL_PLATFORMS,
     MODE_ENHANCED,
     MODE_LOCAL,
-    PLATFORMS,
     get_device_type,
     raw_capture_window_open,
 )
@@ -51,6 +49,26 @@ from .device_probe import (
 from .ecoflow.const import device_log_tag
 
 _LOGGER = logging.getLogger(__name__)
+
+PLATFORMS: list[Platform] = [
+    Platform.SENSOR,
+    Platform.BINARY_SENSOR,
+    Platform.SWITCH,
+    Platform.NUMBER,
+    Platform.SELECT,
+    Platform.CLIMATE,
+    Platform.BUTTON,
+]
+
+# A local Modbus entry: the readings, plus the one control switch, the two
+# writable settings and the diagnostic that shows whether the unit accepted
+# control. Nothing else of the cloud platform list applies to it.
+LOCAL_PLATFORMS: list[Platform] = [
+    Platform.SENSOR,
+    Platform.SWITCH,
+    Platform.NUMBER,
+    Platform.BINARY_SENSOR,
+]
 
 type EcoFlowConfigEntry = ConfigEntry
 

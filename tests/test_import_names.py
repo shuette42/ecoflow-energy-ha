@@ -52,11 +52,8 @@ LONG_NAME_ALLOWLIST = frozenset(
     {
         "test_coordinator_mro.py",
         "test_delta2max_mppt_replay.py",
-        "test_delta3_commands.py",
-        "test_delta3_port_priority.py",
         "test_entity_documentation.py",
         "test_powerglow_commands.py",
-        "test_powerpulse_c371.py",
         "test_prefix_and_powerpulse2_documentation.py",
         "test_river2max_r611_routing.py",
         "test_river3_r655_routing.py",

@@ -4,19 +4,19 @@ from __future__ import annotations
 
 import struct
 
-from custom_components.ecoflow_energy.const import (
+from ecoflow_energy.const import (
     POWERPULSE2_BINARY_SENSORS,
     POWERPULSE2_SENSORS,
     filter_defs_for_serial,
 )
-from custom_components.ecoflow_energy.ecoflow.const import (
+from ecoflow_energy.ecoflow.const import (
     DEVICE_TYPE_POWERPULSE2,
     get_device_type,
 )
-from custom_components.ecoflow_energy.ecoflow.parsers.powerpulse_proto import (
+from ecoflow_energy.ecoflow.parsers.powerpulse_proto import (
     parse_powerpulse_message,
 )
-from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
+from ecoflow_energy.ecoflow.proto_encoding import (
     encode_field_bytes,
     encode_field_varint,
 )

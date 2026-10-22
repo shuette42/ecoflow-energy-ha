@@ -12,8 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
-from custom_components.ecoflow_energy.const import (
+from ecoflow_energy.const import (
     DELTA3_NUMBERS,
     DELTA3_SWITCHES,
     DEVICE_TYPE_DELTA3,
@@ -22,20 +21,20 @@ from custom_components.ecoflow_energy.const import (
     excluded_keys_for_serial,
     filter_defs_for_serial,
 )
-from custom_components.ecoflow_energy.ecoflow.const import _SN_PREFIX_MAP
-from custom_components.ecoflow_energy.ecoflow.delta3_commands import (
+from ecoflow_energy.ecoflow.const import _SN_PREFIX_MAP
+from ecoflow_energy.ecoflow.delta3_commands import (
     PORT_PRIORITY_FIELD,
     build_port_priority_command,
     build_proto_command,
     encode_port_priority_item,
     port_priority_soc_bounds,
 )
-from custom_components.ecoflow_energy.ecoflow.parsers.delta3_proto import (
+from ecoflow_energy.ecoflow.parsers.delta3_proto import (
     parse_delta3_display_property,
     port_priority_keys,
 )
-from custom_components.ecoflow_energy.ecoflow.proto import ecocharge_pb2 as pb
-from custom_components.ecoflow_energy.ecoflow.proto.decoder import (
+from ecoflow_energy.ecoflow.proto import ecocharge_pb2 as pb
+from ecoflow_energy.ecoflow.proto.decoder import (
     decode_header_message,
 )
 
@@ -343,12 +342,12 @@ class TestDelta3PlusIsReadByTheExistingParser:
     def _parsed(cls) -> dict:
         import json
 
-        from custom_components.ecoflow_energy.ecoflow.parsers.delta3_proto import (
+        from ecoflow_energy.ecoflow.parsers.delta3_proto import (
             parse_delta3_bms_heartbeat,
             parse_delta3_cms_heartbeat,
             parse_delta3_display_property,
         )
-        from custom_components.ecoflow_energy.ecoflow.proto.runtime import (
+        from ecoflow_energy.ecoflow.proto.runtime import (
             decode_proto_runtime_frame,
         )
 
@@ -368,13 +367,13 @@ class TestDelta3PlusIsReadByTheExistingParser:
         return merged
 
     def test_the_prefix_maps_to_the_delta_3_parser(self) -> None:
-        from custom_components.ecoflow_energy.ecoflow.const import get_device_type
+        from ecoflow_energy.ecoflow.const import get_device_type
 
         assert get_device_type("", "P351TEST00000001") == DEVICE_TYPE_DELTA3
 
     def test_it_is_named_rather_than_left_to_the_serial(self) -> None:
         """The app API returns an empty product name for this model."""
-        from custom_components.ecoflow_energy.ecoflow.const import get_device_name
+        from ecoflow_energy.ecoflow.const import get_device_name
 
         assert get_device_name("", "P351TEST00000001") == "DELTA 3 Plus (0001)"
 

@@ -8,9 +8,8 @@ refactor cannot silently change what reaches the device.
 from __future__ import annotations
 
 import pytest
-
-from custom_components.ecoflow_energy.const import DELTA3_NUMBERS
-from custom_components.ecoflow_energy.ecoflow.delta3_commands import (
+from ecoflow_energy.const import DELTA3_NUMBERS
+from ecoflow_energy.ecoflow.delta3_commands import (
     AC_CHARGE_MODE_FIELD,
     DELTA3_NUMBER_PARAMS,
     DELTA3_SWITCH_PARAMS,
@@ -20,10 +19,10 @@ from custom_components.ecoflow_energy.ecoflow.delta3_commands import (
     build_switch_command,
     parse_config_write_ack,
 )
-from custom_components.ecoflow_energy.ecoflow.proto.decoder import (
+from ecoflow_energy.ecoflow.proto.decoder import (
     decode_header_message,
 )
-from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
+from ecoflow_energy.ecoflow.proto_encoding import (
     encode_field_bytes,
     encode_field_varint,
 )

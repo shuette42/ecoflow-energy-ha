@@ -5,14 +5,14 @@ the cloud and decodes frames, and it must stay importable and testable without
 Home Assistant. The platforms and coordinators above it are the only code that
 may import ``homeassistant``.
 
-Two checks, both AST walks so that a function-local import counts and a
+Three checks, all AST walks so that a function-local import counts and a
 docstring that merely mentions the package does not:
 
 1. No file under ``ecoflow/`` imports ``homeassistant`` and none imports
    anything that leaves ``ecoflow/`` for the Home Assistant layer above it. The
-   second half matters because the root ``const.py`` imports Home Assistant, so
-   ``from ..const import X`` written in a core file would reach it without ever
-   naming ``homeassistant``. Relative imports are resolved against the file's
+   second half matters because the root package is that layer, so
+   ``from ..sensor import X`` written in a core file would reach Home Assistant
+   without ever naming it. Relative imports are resolved against the file's
    own package: ``from ..const import X`` inside ``ecoflow/parsers/`` stays in
    ``ecoflow/const.py`` and is fine, the same line directly in ``ecoflow/``
    points at the root package and is flagged. A string literal handed to
@@ -21,13 +21,15 @@ docstring that merely mentions the package does not:
 2. No top-level ``tests/*.py`` file imports ``homeassistant`` directly, except
    an explicit allowlist. A stale allowlist entry (file gone, or no longer
    importing Home Assistant) fails too, so the list can only shrink.
+3. The root ``const.py`` imports no ``homeassistant`` either. Top-level tests
+   import it as ``ecoflow_energy.const``, and a Home Assistant import there
+   would tie all of them to an installed Home Assistant again.
 
 Check 2 proves only DIRECT imports. A top-level test can still reach Home
-Assistant through the root ``const.py`` (which imports ``Platform``) or through
-the ``custom_components.`` import name (which runs the package ``__init__``).
-``test_ha_independence.py`` covers that by running the top-level suite with
-every Home Assistant import blocked, and ``test_import_names.py`` keeps each
-file to one import name.
+Assistant through a platform module or through the ``custom_components.`` import
+name (which runs the package ``__init__``). ``test_ha_independence.py`` covers
+that by running the top-level suite with every Home Assistant import blocked,
+and ``test_import_names.py`` keeps each file to one import name.
 
 Each check has positive controls (sample sources it must flag), negative
 controls (sample sources it must leave alone) and a floor on the number of
@@ -313,3 +315,13 @@ def test_top_level_tests_import_no_home_assistant_directly() -> None:
         assert str(path.relative_to(REPO_ROOT)) in offenders, (
             f"allowlisted file no longer imports Home Assistant, drop it: {name}"
         )
+
+
+ROOT_CONST = REPO_ROOT / "custom_components" / "ecoflow_energy" / "const.py"
+
+
+def test_root_const_imports_no_home_assistant() -> None:
+    assert ROOT_CONST.is_file()
+    source = ROOT_CONST.read_text(encoding="utf-8")
+    assert len(source) > 10_000, "the constants module should not be a stub"
+    assert _imports_home_assistant(source) == []
