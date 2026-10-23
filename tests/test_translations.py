@@ -1063,15 +1063,33 @@ class TestWallboxChargingStatusLabels:
         for lang, labels in self.EXPECTED_OTHER.items():
             states = self._states(TRANSLATIONS_DIR / f"{lang}.json")
             assert (
-                states["available"], states["preparing"], states["finishing"]
+                states["available"],
+                states["preparing"],
+                states["finishing"],
             ) == labels, lang
 
     def test_every_language_changed_the_three_labels(self):
         """Negative control for the two tests above: no language keeps the old word."""
-        old = {"Available", "Preparing", "Finishing", "Bereit", "Vorbereitung",
-               "Beendet", "Disponibile", "Disponible", "Préparation", "Finalisation",
-               "In preparazione", "In completamento", "Beschikbaar", "Voorbereiden",
-               "Afronden", "Dostępny", "Przygotowywanie", "Kończenie"}
+        old = {
+            "Available",
+            "Preparing",
+            "Finishing",
+            "Bereit",
+            "Vorbereitung",
+            "Beendet",
+            "Disponibile",
+            "Disponible",
+            "Préparation",
+            "Finalisation",
+            "In preparazione",
+            "In completamento",
+            "Beschikbaar",
+            "Voorbereiden",
+            "Afronden",
+            "Dostępny",
+            "Przygotowywanie",
+            "Kończenie",
+        }
         for path in ALL_PATHS:
             states = self._states(path)
             for key in self.EXPECTED_EN:
