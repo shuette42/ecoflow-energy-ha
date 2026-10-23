@@ -77,7 +77,7 @@ async def test_a_serial_only_report_leaves_the_stored_shares_untouched(
 
     parsed = _ingest(coordinator, "serial_only")
 
-    assert not parsed or not {PV, BATTERY, GRID} & set(parsed)
+    assert not {PV, BATTERY, GRID} & set(parsed or {})
     data = coordinator._device_data
     assert (data[PV], data[BATTERY], data[GRID]) == (116.0, 33.0, 3.0)
 
@@ -161,3 +161,35 @@ async def test_a_zero_watt_report_before_any_212_33_creates_no_share_keys(
     assert parsed is not None and parsed[POWER] == 0.0
     assert not {PV, BATTERY, GRID} & set(parsed)
     assert not {PV, BATTERY, GRID} & set(coordinator._device_data)
+
+
+async def test_a_212_33_after_a_zero_watt_report_restores_the_shares(
+    hass: HomeAssistant,
+) -> None:
+    coordinator = _coordinator(hass, POWEROCEAN_DEVICE)
+    _ingest(coordinator, "pv_battery_grid")
+    _ingest_212_8(coordinator, 0)
+
+    _ingest(coordinator, "pv_battery_no_grid")
+
+    data = coordinator._device_data
+    assert (data[PV], data[BATTERY], data[GRID]) == (112.0, 41.0, 0.0)
+
+
+async def test_a_212_8_without_power_leaves_the_published_shares_alone(
+    hass: HomeAssistant,
+) -> None:
+    coordinator = _coordinator(hass, POWEROCEAN_DEVICE)
+    _ingest(coordinator, "pv_battery_grid")
+    header = (
+        encode_field_bytes(1, encode_field_varint(5, 154))
+        + encode_field_varint(8, 212)
+        + encode_field_varint(9, 8)
+    )
+    parsed = coordinator._parse_message(TOPIC, encode_field_bytes(1, header))
+    if parsed:
+        coordinator._apply_data(parsed)
+
+    assert POWER not in coordinator._device_data
+    data = coordinator._device_data
+    assert (data[PV], data[BATTERY], data[GRID]) == (116.0, 33.0, 3.0)

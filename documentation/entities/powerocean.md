@@ -189,7 +189,7 @@ These sensors are pre-configured for the HA Energy Dashboard (`total_increasing`
 | Heating Rod Water Temperature | Current water temperature at the heating rod, in whole degrees. | enabled |
 | Heating Rod Target Power | The power limit configured for the heating rod, in watts. | enabled |
 | Heating Rod Target Temperature | The water temperature the heating rod is set to reach. | enabled |
-| Heating Rod Power from PV | The part of the heating rod's power that comes from solar, in watts. Enhanced Mode only. Created once the rod has reported it. | enabled |
+| Heating Rod Power from PV | The part of the heating rod's power that comes from solar, in watts. Enhanced Mode only. | enabled |
 | Heating Rod Power from Battery | The part of the heating rod's power that comes from the battery, in watts. Enhanced Mode only. | enabled |
 | Heating Rod Power from Grid | The part of the heating rod's power that comes from the grid, in watts. Enhanced Mode only. A share the rod leaves out while it reports its total counts as 0 W. | enabled |
 | Heating Rod Tank Volume | The water tank size set for the heating rod in the EcoFlow app, in liters. Enhanced Mode only. | enabled |
