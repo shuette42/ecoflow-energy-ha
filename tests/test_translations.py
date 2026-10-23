@@ -1026,7 +1026,7 @@ class TestDevicePickerExplanation:
 
 
 class TestWallboxChargingStatusLabels:
-    """#590: the three plug-related states read as the app words them, in every language."""
+    """#590: the three plug-related states read as the app words them."""
 
     EXPECTED_EN = {
         "available": "Unplugged",
