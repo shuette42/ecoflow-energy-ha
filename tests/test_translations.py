@@ -1051,6 +1051,21 @@ class TestWallboxChargingStatusLabels:
         assert states["preparing"] == "Fahrzeug angeschlossen"
         assert states["finishing"] == "Ladevorgang beendet"
 
+    EXPECTED_OTHER = {
+        "fr": ("Non branché", "Véhicule branché", "Session de charge terminée"),
+        "it": ("Non collegato", "Veicolo collegato", "Sessione di ricarica terminata"),
+        "nl": ("Niet aangesloten", "Voertuig aangesloten", "Laadsessie beëindigd"),
+        "pl": ("Nie podłączono", "Pojazd podłączony", "Sesja ładowania zakończona"),
+    }
+
+    def test_other_languages_carry_their_own_words(self):
+        """An English leftover or an empty string would pass the old-word check."""
+        for lang, labels in self.EXPECTED_OTHER.items():
+            states = self._states(TRANSLATIONS_DIR / f"{lang}.json")
+            assert (
+                states["available"], states["preparing"], states["finishing"]
+            ) == labels, lang
+
     def test_every_language_changed_the_three_labels(self):
         """Negative control for the two tests above: no language keeps the old word."""
         old = {"Available", "Preparing", "Finishing", "Bereit", "Vorbereitung",

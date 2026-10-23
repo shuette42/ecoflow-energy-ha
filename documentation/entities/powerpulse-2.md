@@ -102,7 +102,7 @@ Created only when the integration entry holds exactly one PowerOcean, and only a
 | Wallbox Start Charging | enabled | Starts a charging session that the wallbox has stopped, that is, while Wallbox Charging Status reads Charging session ended (state value `finishing`). The press returns once the wallbox itself reports `charging` or `suspended_charger` (Paused by Charger, a Solar-mode start that waits for surplus), or fails after 30 s if it does not |
 | Wallbox Stop Charging | enabled | Stops the running session, while Wallbox Charging Status reads `charging`, or cancels a start that waits for solar surplus while it reads `suspended_charger` (Paused by Charger). The press returns once the wallbox reports Charging session ended (`finishing`) or Unplugged (`available`), or fails after 15 s if it does not |
 
-The command takes one of two routes, the way the EcoFlow app sends it in each setup, and the confirmation is always read from the wallbox's own reporting: nothing is shown as done until the wallbox says so, and a press in a state the action does not fit (a start while charging, a stop while idle) fails with a message naming the state instead of sending anything.
+The command takes one of two routes, the way the EcoFlow app sends it in each setup, and the confirmation is always read from the wallbox's own reporting: nothing is shown as done until the wallbox says so, and a press in a state the action does not fit (a start while charging, a stop while idle) fails with a message saying the current charging status does not allow it, instead of sending anything.
 
 - **One PowerOcean in the same integration entry:** the command travels through the PowerOcean, addressed to the wallbox by the address the wallbox reports. The buttons appear once the wallbox has reported that address, and are unavailable while the PowerOcean's connection is down.
 - **No PowerOcean in the entry:** the command goes on the wallbox's own channel. The buttons appear with the wallbox's first status report, and are unavailable while the wallbox's own connection is down.
@@ -116,7 +116,7 @@ A start is offered only from `finishing`, the state a stopped session sits in wi
 
 ### The four session readings are absent, not zero, between sessions
 
-Wallbox Session Start, Wallbox Session Duration, Wallbox Session Energy and Wallbox Session Start Meter only exist while a session is actually running. Once the session ends, the wallbox stops reporting them and the entities go unavailable instead of settling on the last session's numbers - showing the previous session's duration or energy as if it were still counting would be worse than showing nothing. In `preparing` (cable attached, nothing flowing yet) the wallbox still reports them, and Wallbox Session Start is withheld when the wallbox reports it as zero, which it does before the first session after a restart.
+Wallbox Session Start, Wallbox Session Duration, Wallbox Session Energy and Wallbox Session Start Meter only exist while a session is actually running. Once the session ends, the wallbox stops reporting them and the entities go unavailable instead of settling on the last session's numbers - showing the previous session's duration or energy as if it were still counting would be worse than showing nothing. In `preparing` (Vehicle connected: cable attached, nothing flowing yet) the wallbox still reports them, and Wallbox Session Start is withheld when the wallbox reports it as zero, which it does before the first session after a restart.
 
 ### The cable lock can take a while to appear
 
