@@ -2882,7 +2882,6 @@ class SetCommandsMixin(_Base):
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="powerpulse_action_state",
-                translation_placeholders={"status": str(status)},
             )
 
     def _clear_pending_write(self, record: PendingDeviceWrite) -> None:

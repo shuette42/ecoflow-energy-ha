@@ -1673,12 +1673,12 @@
         "name": "Stan ładowania wallboxa",
         "state": {
           "none": "Brak",
-          "available": "Dostępny",
-          "preparing": "Przygotowywanie",
+          "available": "Niepodłączony",
+          "preparing": "Pojazd podłączony",
           "charging": "Ładowanie",
           "suspended_charger": "Wstrzymane przez ładowarkę",
           "suspended_vehicle": "Wstrzymane przez pojazd",
-          "finishing": "Kończenie",
+          "finishing": "Sesja ładowania zakończona",
           "faulted": "Awaria"
         }
       },
@@ -3321,7 +3321,7 @@
       "message": "Nie udało się wysłać polecenia do wallboxa."
     },
     "powerpulse_action_state": {
-      "message": "Wallbox zgłasza stan {status}, który nie pozwala na to działanie."
+      "message": "Obecny stan ładowania wallboxa nie pozwala na to działanie."
     },
     "powerpulse_charge_current_needs_own_channel": {
       "message": "Prąd ładowania można ustawić tylko na wallboxie bez PowerOcean na tym samym koncie; ten wpis go zawiera."

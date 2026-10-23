@@ -1023,3 +1023,47 @@ class TestDevicePickerExplanation:
         assert "no data" in marker, (
             f"marker {marker!r} states the status without its consequence"
         )
+
+
+class TestWallboxChargingStatusLabels:
+    """#590: the three plug-related states read as the app words them, in every language."""
+
+    EXPECTED_EN = {
+        "available": "Unplugged",
+        "preparing": "Vehicle connected",
+        "finishing": "Charging session ended",
+    }
+
+    @staticmethod
+    def _states(path: Path) -> dict[str, str]:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data["entity"]["sensor"]["ev_charge_status"]["state"]
+
+    def test_english_labels(self):
+        for path in (STRINGS_PATH, EN_PATH):
+            states = self._states(path)
+            for key, label in self.EXPECTED_EN.items():
+                assert states[key] == label, (path.name, key)
+
+    def test_german_labels(self):
+        states = self._states(DE_PATH)
+        assert states["available"] == "Nicht angeschlossen"
+        assert states["preparing"] == "Fahrzeug angeschlossen"
+        assert states["finishing"] == "Ladevorgang beendet"
+
+    def test_every_language_changed_the_three_labels(self):
+        """Negative control for the two tests above: no language keeps the old word."""
+        old = {"Available", "Preparing", "Finishing", "Bereit", "Vorbereitung",
+               "Beendet", "Disponibile", "Disponible", "Préparation", "Finalisation",
+               "In preparazione", "In completamento", "Beschikbaar", "Voorbereiden",
+               "Afronden", "Dostępny", "Przygotowywanie", "Kończenie"}
+        for path in ALL_PATHS:
+            states = self._states(path)
+            for key in self.EXPECTED_EN:
+                assert states[key] not in old, (path.name, key)
+
+    def test_refusal_message_carries_no_raw_status(self):
+        for path in ALL_PATHS:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            message = data["exceptions"]["powerpulse_action_state"]["message"]
+            assert "{" not in message, (path.name, message)

@@ -379,7 +379,7 @@ Created only once a coupled wallbox reports a charging session. See the note at 
 | Wallbox Charging Power | Power currently going into the vehicle, in watts | enabled |
 | Wallbox Session Energy | Energy delivered in the current charging session, in watt hours. Resets when the next session starts, so it is not a lifetime counter | enabled |
 | Wallbox Session Duration | How long the current session has been running, in seconds | enabled |
-| Wallbox Charging Status | Available, preparing, charging, paused by charger, paused by vehicle, finishing, or fault | enabled |
+| Wallbox Charging Status | Unplugged, vehicle connected, charging, paused by charger, paused by vehicle, charging session ended, or fault | enabled |
 | Wallbox Vehicle | The vehicle the charger has recognized. Empty until a car is identified | enabled |
 
 ---

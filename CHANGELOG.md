@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- The PowerPulse 2 Wallbox Charging Status now reads Unplugged, Vehicle connected and Charging session ended (in German Nicht angeschlossen, Fahrzeug angeschlossen and Ladevorgang beendet) where it read Available, Preparing and Finishing, matching what the EcoFlow app shows for the same states. Only the displayed text changes, the state values stay, so automations keep working. The message shown when Start or Stop is refused no longer repeats the raw status. (Ref #590)
 - The DELTA Pro Ultra entity reference now explains the Remaining Time value (the unit's own estimate, not calculated here) and the Power In/Out port and the AC output groups, after questions on #464. (Ref #464)
 - The WAVE 3 entity page now names its serial prefix (`AC71`), and the Delta 2 Max (`R351`, `R331`), Smart Plug (`HW52`), PowerStream (`HW51`) and Smart Meter (`BK21`) pages mark theirs as code.
 - Behind the scenes, the list of Home Assistant platforms an entry loads moved from `const.py` to the integration's `__init__.py`. Entities, settings and behaviour are unchanged.

@@ -1673,12 +1673,12 @@
         "name": "Wallbox Charging Status",
         "state": {
           "none": "None",
-          "available": "Available",
-          "preparing": "Preparing",
+          "available": "Unplugged",
+          "preparing": "Vehicle connected",
           "charging": "Charging",
           "suspended_charger": "Paused by Charger",
           "suspended_vehicle": "Paused by Vehicle",
-          "finishing": "Finishing",
+          "finishing": "Charging session ended",
           "faulted": "Fault"
         }
       },
@@ -3321,7 +3321,7 @@
       "message": "The wallbox command could not be sent."
     },
     "powerpulse_action_state": {
-      "message": "The wallbox reports {status}, which does not allow this action."
+      "message": "The wallbox's current charging status does not allow this action."
     },
     "powerpulse_charge_current_needs_own_channel": {
       "message": "The charging current can only be set on a wallbox without a PowerOcean on the same account; this entry has one."

@@ -32,7 +32,7 @@ Start and stop of a charging session are available as two buttons with no PowerO
 | Wallbox Phase Mode | - | diagnostic | enabled | `single_phase` or `three_phase`: the phase mode in effect right now. The phase selection you configured (automatic, single or three) is the Wallbox Phase Setting select below; under automatic this reads whichever mode the wallbox is in |
 | Wallbox Session Status | - | diagnostic | enabled | `idle`, `charging` or `finished` |
 | Wallbox Session Duration | s | diagnostic | enabled | How long the current session has been running. Absent while no session is running, see the note below |
-| Wallbox Charging Status | - | - | enabled | Available, preparing, charging, paused by charger, paused by vehicle, finishing, or fault |
+| Wallbox Charging Status | - | - | enabled | Unplugged, vehicle connected, charging, paused by charger, paused by vehicle, charging session ended, or fault |
 | Wallbox Charging Mode | - | - | enabled | The charging mode set on the wallbox: `fast`, `solar`, `custom` or `smart`, the four modes the EcoFlow app offers. With a PowerOcean in the entry it follows the wallbox's settings report, about once a second, so a change shows within seconds. The wallbox's heartbeat, about once a minute, fills in while the latest settings report is missing, carries no mode or is more than 10 s old. Without a PowerOcean the heartbeat is the only source |
 | Wallbox Session Start | - | diagnostic | enabled | When the current session began. Absent while no session is running |
 | Wallbox Session Energy | Wh | - | enabled | Energy delivered in the current session. Resets with every new session, so it is not a lifetime counter. Absent while no session is running |
@@ -99,8 +99,8 @@ Created only when the integration entry holds exactly one PowerOcean, and only a
 
 | Entity | Default | Description |
 |:---|:---:|:---|
-| Wallbox Start Charging | enabled | Starts a charging session that the wallbox has stopped, that is, while Wallbox Charging Status reads `finishing`. The press returns once the wallbox itself reports `charging` or `suspended_charger` (Paused by Charger, a Solar-mode start that waits for surplus), or fails after 30 s if it does not |
-| Wallbox Stop Charging | enabled | Stops the running session, while Wallbox Charging Status reads `charging`, or cancels a start that waits for solar surplus while it reads `suspended_charger` (Paused by Charger). The press returns once the wallbox reports `finishing` or `available`, or fails after 15 s if it does not |
+| Wallbox Start Charging | enabled | Starts a charging session that the wallbox has stopped, that is, while Wallbox Charging Status reads Charging session ended (state value `finishing`). The press returns once the wallbox itself reports `charging` or `suspended_charger` (Paused by Charger, a Solar-mode start that waits for surplus), or fails after 30 s if it does not |
+| Wallbox Stop Charging | enabled | Stops the running session, while Wallbox Charging Status reads `charging`, or cancels a start that waits for solar surplus while it reads `suspended_charger` (Paused by Charger). The press returns once the wallbox reports Charging session ended (`finishing`) or Unplugged (`available`), or fails after 15 s if it does not |
 
 The command takes one of two routes, the way the EcoFlow app sends it in each setup, and the confirmation is always read from the wallbox's own reporting: nothing is shown as done until the wallbox says so, and a press in a state the action does not fit (a start while charging, a stop while idle) fails with a message naming the state instead of sending anything.
 

@@ -1673,12 +1673,12 @@
         "name": "Laadstatus laadpaal",
         "state": {
           "none": "Geen",
-          "available": "Beschikbaar",
-          "preparing": "Voorbereiden",
+          "available": "Niet aangesloten",
+          "preparing": "Voertuig aangesloten",
           "charging": "Opladen",
           "suspended_charger": "Gepauzeerd door lader",
           "suspended_vehicle": "Gepauzeerd door voertuig",
-          "finishing": "Afronden",
+          "finishing": "Laadsessie beëindigd",
           "faulted": "Storing"
         }
       },
@@ -3321,7 +3321,7 @@
       "message": "De opdracht voor de laadpaal kon niet worden verzonden."
     },
     "powerpulse_action_state": {
-      "message": "De laadpaal meldt {status}, en dat laat deze actie niet toe."
+      "message": "De huidige laadstatus van de laadpaal laat deze actie niet toe."
     },
     "powerpulse_charge_current_needs_own_channel": {
       "message": "De laadstroom kan alleen worden ingesteld op een laadpaal zonder PowerOcean op hetzelfde account; dit item heeft er een."

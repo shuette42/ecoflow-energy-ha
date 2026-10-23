@@ -509,7 +509,7 @@ async def test_start_is_refused_while_paused_by_the_charger(
         await wallbox.async_set_powerpulse_charge_action("start")
 
     assert excinfo.value.translation_key == "powerpulse_action_state"
-    assert excinfo.value.translation_placeholders == {"status": "suspended_charger"}
+    assert not excinfo.value.translation_placeholders
     assert _mqtt(oceans[0]).send_proto_set.call_count == 0
     assert _mqtt(wallbox).send_proto_set.call_count == 0
 

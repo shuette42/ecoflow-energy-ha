@@ -1673,12 +1673,12 @@
         "name": "Wallbox-Ladestatus",
         "state": {
           "none": "Kein Status",
-          "available": "Bereit",
-          "preparing": "Vorbereitung",
+          "available": "Nicht angeschlossen",
+          "preparing": "Fahrzeug angeschlossen",
           "charging": "Lädt",
           "suspended_charger": "Pausiert durch Wallbox",
           "suspended_vehicle": "Pausiert durch Fahrzeug",
-          "finishing": "Beendet",
+          "finishing": "Ladevorgang beendet",
           "faulted": "Störung"
         }
       },
@@ -3321,7 +3321,7 @@
       "message": "Der Wallbox-Befehl konnte nicht gesendet werden."
     },
     "powerpulse_action_state": {
-      "message": "Die Wallbox meldet {status}, das lässt diese Aktion nicht zu."
+      "message": "Der aktuelle Ladestatus der Wallbox lässt diese Aktion nicht zu."
     },
     "powerpulse_charge_current_needs_own_channel": {
       "message": "Der Ladestrom lässt sich nur an einer Wallbox ohne PowerOcean im selben Konto setzen; dieser Eintrag hat eine."
