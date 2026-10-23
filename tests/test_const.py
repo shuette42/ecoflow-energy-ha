@@ -508,6 +508,32 @@ class TestPowerOceanSensors:
             assert sensors[key].accessory is True, key
             assert sensors[key].disabled_by_default is False, key
 
+    def test_heating_rod_power_sources_and_tank_volume_are_diagnostic_accessories(
+        self,
+    ):
+        """#588: three shares of the rod's power and the tank size, all
+        read-only diagnostics that only exist once a rod has reported."""
+        sensors = {sensor.key: sensor for sensor in POWEROCEAN_SENSORS}
+        for key in (
+            "heating_rod_power_from_pv_w",
+            "heating_rod_power_from_battery_w",
+            "heating_rod_power_from_grid_w",
+            "heating_rod_tank_volume_l",
+        ):
+            assert sensors[key].accessory is True, key
+            assert sensors[key].entity_category == "diagnostic", key
+            assert sensors[key].disabled_by_default is False, key
+        for key in (
+            "heating_rod_power_from_pv_w",
+            "heating_rod_power_from_battery_w",
+            "heating_rod_power_from_grid_w",
+        ):
+            assert sensors[key].unit == "W", key
+            assert sensors[key].device_class == "power", key
+            assert sensors[key].state_class == "measurement", key
+        assert sensors["heating_rod_tank_volume_l"].unit == "L"
+        assert sensors["heating_rod_tank_volume_l"].state_class is None
+
     def test_keys_unique(self):
         keys = _extract_sensor_keys("POWEROCEAN_SENSORS")
         assert len(keys) > 30, f"Expected 30+ sensors, got {len(keys)}"
@@ -560,7 +586,7 @@ class TestPowerOceanSensors:
         }
         ems_extended = _PO_EMS_EXTENDED
         original = [k for k in non_pack if k not in ems_extended and k not in mppt_plus]
-        assert len(original) == 95, f"Expected 95 core sensors, got {len(original)}"
+        assert len(original) == 99, f"Expected 99 core sensors, got {len(original)}"
 
     def test_mppt_plus_sensor_count(self):
         """6 PowerOcean Plus MPPT sensors (strings 3 and 4)."""
@@ -593,9 +619,9 @@ class TestPowerOceanSensors:
         assert len(found) == 28, f"Expected 28 EMS extended sensors, got {len(found)}"
 
     def test_total_sensor_count(self):
-        """Total PowerOcean sensors = 95 + 6 + 120 + 28 = 249."""
+        """Total PowerOcean sensors = 99 + 6 + 120 + 28 = 253."""
         keys = _extract_sensor_keys("POWEROCEAN_SENSORS")
-        assert len(keys) == 249, f"Expected 249 total sensors, got {len(keys)}"
+        assert len(keys) == 253, f"Expected 253 total sensors, got {len(keys)}"
 
     def test_only_soc_has_battery_device_class(self):
         """Only the primary soc_pct should have device_class='battery'.

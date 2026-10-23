@@ -273,6 +273,18 @@
       "heating_rod_power_w": {
         "name": "Moc grzałki"
       },
+      "heating_rod_power_from_pv_w": {
+        "name": "Moc grzałki z PV"
+      },
+      "heating_rod_power_from_battery_w": {
+        "name": "Moc grzałki z baterii"
+      },
+      "heating_rod_power_from_grid_w": {
+        "name": "Moc grzałki z sieci"
+      },
+      "heating_rod_tank_volume_l": {
+        "name": "Pojemność zbiornika grzałki"
+      },
       "ac_grid_connection_power_w": {
         "name": "Moc przyłącza sieci AC"
       },

@@ -273,6 +273,18 @@
       "heating_rod_power_w": {
         "name": "Heating Rod Power"
       },
+      "heating_rod_power_from_pv_w": {
+        "name": "Heating Rod Power from PV"
+      },
+      "heating_rod_power_from_battery_w": {
+        "name": "Heating Rod Power from Battery"
+      },
+      "heating_rod_power_from_grid_w": {
+        "name": "Heating Rod Power from Grid"
+      },
+      "heating_rod_tank_volume_l": {
+        "name": "Heating Rod Tank Volume"
+      },
       "ac_grid_connection_power_w": {
         "name": "AC Grid Connection Power"
       },

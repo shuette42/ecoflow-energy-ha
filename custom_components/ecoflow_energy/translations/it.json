@@ -273,6 +273,18 @@
       "heating_rod_power_w": {
         "name": "Potenza resistenza di riscaldamento"
       },
+      "heating_rod_power_from_pv_w": {
+        "name": "Potenza resistenza di riscaldamento da FV"
+      },
+      "heating_rod_power_from_battery_w": {
+        "name": "Potenza resistenza di riscaldamento da batteria"
+      },
+      "heating_rod_power_from_grid_w": {
+        "name": "Potenza resistenza di riscaldamento da rete"
+      },
+      "heating_rod_tank_volume_l": {
+        "name": "Volume serbatoio resistenza di riscaldamento"
+      },
       "ac_grid_connection_power_w": {
         "name": "Potenza connessione rete AC"
       },

@@ -273,6 +273,18 @@
       "heating_rod_power_w": {
         "name": "Vermogen verwarmingselement"
       },
+      "heating_rod_power_from_pv_w": {
+        "name": "Vermogen verwarmingselement uit PV"
+      },
+      "heating_rod_power_from_battery_w": {
+        "name": "Vermogen verwarmingselement uit batterij"
+      },
+      "heating_rod_power_from_grid_w": {
+        "name": "Vermogen verwarmingselement uit net"
+      },
+      "heating_rod_tank_volume_l": {
+        "name": "Tankinhoud verwarmingselement"
+      },
       "ac_grid_connection_power_w": {
         "name": "Vermogen AC-netaansluiting"
       },

@@ -273,6 +273,18 @@
       "heating_rod_power_w": {
         "name": "Puissance du thermoplongeur"
       },
+      "heating_rod_power_from_pv_w": {
+        "name": "Puissance du thermoplongeur depuis le PV"
+      },
+      "heating_rod_power_from_battery_w": {
+        "name": "Puissance du thermoplongeur depuis la batterie"
+      },
+      "heating_rod_power_from_grid_w": {
+        "name": "Puissance du thermoplongeur depuis le réseau"
+      },
+      "heating_rod_tank_volume_l": {
+        "name": "Volume du ballon du thermoplongeur"
+      },
       "ac_grid_connection_power_w": {
         "name": "Puissance de raccordement AC au réseau"
       },

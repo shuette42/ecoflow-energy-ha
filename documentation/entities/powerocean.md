@@ -13,6 +13,8 @@ A Local (Modbus/TCP) entry for a three-phase PowerOcean creates only these share
 > are only created once your system actually reports a heating rod. A
 > PowerOcean without one gets no heating rod entities. They are enabled by
 > default since 1.25.0; one you had disabled before stays disabled.
+> The power split by source (from PV, Battery and Grid) and the tank volume
+> arrive on the real-time stream only, so they exist in Enhanced Mode.
 > In Standard Mode they come from the API quota. With EcoFlow
 > account sign-in they arrive on the PowerOcean's real-time stream instead, in
 > one report roughly every seventeen seconds, so a PowerGlow attached to a unit
@@ -65,7 +67,7 @@ A Local (Modbus/TCP) entry for a three-phase PowerOcean creates only these share
 
 > **PowerOcean Plus** units report more of the same entity set than a standard PowerOcean: per-phase reactive power (var) and apparent power (VA), plus MPPT strings 3 and 4. Those entities are disabled by default, so enable the ones you need after adding a Plus device.
 
-**Totals:** an account entry (Standard or Enhanced Mode) has 249 sensors, 21 binary sensors, 20 numbers, 16 switches and 2 selects. A Local (Modbus/TCP) entry has 28 sensors (20 of the sensors below plus the 8 in the Local-only section), 4 binary sensors, 2 numbers and 1 switch.
+**Totals:** an account entry (Standard or Enhanced Mode) has 253 sensors, 21 binary sensors, 20 numbers, 16 switches and 2 selects. A Local (Modbus/TCP) entry has 28 sensors (20 of the sensors below plus the 8 in the Local-only section), 4 binary sensors, 2 numbers and 1 switch.
 
 > Entities marked with *disabled* are available but hidden by default. Enable them in **Settings > Devices > EcoFlow PowerOcean > Entities** (click the filter icon and show disabled entities).
 
@@ -187,6 +189,10 @@ These sensors are pre-configured for the HA Energy Dashboard (`total_increasing`
 | Heating Rod Water Temperature | Current water temperature at the heating rod, in whole degrees. | enabled |
 | Heating Rod Target Power | The power limit configured for the heating rod, in watts. | enabled |
 | Heating Rod Target Temperature | The water temperature the heating rod is set to reach. | enabled |
+| Heating Rod Power from PV | The part of the heating rod's power that comes from solar, in watts. Enhanced Mode only. Created once the rod has reported it. | enabled |
+| Heating Rod Power from Battery | The part of the heating rod's power that comes from the battery, in watts. Enhanced Mode only. | enabled |
+| Heating Rod Power from Grid | The part of the heating rod's power that comes from the grid, in watts. Enhanced Mode only. A share the rod leaves out while it reports its total counts as 0 W. | enabled |
+| Heating Rod Tank Volume | The water tank size set for the heating rod in the EcoFlow app, in liters. Enhanced Mode only. | enabled |
 | EMS Max Internal Temp | Highest of the internal temperature probes | enabled |
 | MPPT 1/2 Warning Code | MPPT warnings, separate from the fault codes. Unlabelled in the same way, and only reported on the real-time connection. | disabled |
 | AFCI Self-Test Result | Result of the arc-fault detector self-test | disabled |

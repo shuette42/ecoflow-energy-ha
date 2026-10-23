@@ -94,7 +94,22 @@ INVERTER_KEYS = {
     for suffix in ("solar_w", "batt_w", "soc_pct")
 }
 
-ACCESSORY_KEYS = HEATING_ROD_KEYS | SCHEDULE_KEYS | WALLBOX_KEYS | INVERTER_KEYS
+# The rod's power sources and tank size (#588): gated the same way, but they are
+# not part of the four readings the creation tests below build entities from.
+HEATING_ROD_EXTRA_KEYS = {
+    "heating_rod_power_from_pv_w",
+    "heating_rod_power_from_battery_w",
+    "heating_rod_power_from_grid_w",
+    "heating_rod_tank_volume_l",
+}
+
+ACCESSORY_KEYS = (
+    HEATING_ROD_KEYS
+    | HEATING_ROD_EXTRA_KEYS
+    | SCHEDULE_KEYS
+    | WALLBOX_KEYS
+    | INVERTER_KEYS
+)
 
 
 def _entry(devices: list[dict[str, Any]] | None = None) -> MockConfigEntry:

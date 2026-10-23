@@ -1113,6 +1113,55 @@ POWEROCEAN_SENSORS: list[EcoFlowSensorDef] = [
         suggested_display_precision=0,
         accessory=True,
     ),
+    # Where the rod's power comes from (212/33 report, #588). The three shares
+    # add up to `heating_rod_power_w`; the total itself stays one reading from
+    # one source (212/8).
+    EcoFlowSensorDef(
+        "heating_rod_power_from_pv_w",
+        "Heating Rod Power from PV",
+        "W",
+        "power",
+        "measurement",
+        "mdi:solar-power",
+        "diagnostic",
+        suggested_display_precision=0,
+        accessory=True,
+    ),
+    EcoFlowSensorDef(
+        "heating_rod_power_from_battery_w",
+        "Heating Rod Power from Battery",
+        "W",
+        "power",
+        "measurement",
+        "mdi:battery-arrow-up",
+        "diagnostic",
+        suggested_display_precision=0,
+        accessory=True,
+    ),
+    EcoFlowSensorDef(
+        "heating_rod_power_from_grid_w",
+        "Heating Rod Power from Grid",
+        "W",
+        "power",
+        "measurement",
+        "mdi:transmission-tower",
+        "diagnostic",
+        suggested_display_precision=0,
+        accessory=True,
+    ),
+    # The tank size set in the app ("Anpassen", 1500 L), read from 212/8.
+    # `volume` + `measurement` is rejected by HA for liters, so no state class.
+    EcoFlowSensorDef(
+        "heating_rod_tank_volume_l",
+        "Heating Rod Tank Volume",
+        "L",
+        None,
+        None,
+        "mdi:water-boiler",
+        "diagnostic",
+        suggested_display_precision=0,
+        accessory=True,
+    ),
     EcoFlowSensorDef(
         "bp_online_sum",
         "Battery Packs Online (EMS)",

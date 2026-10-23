@@ -273,6 +273,18 @@
       "heating_rod_power_w": {
         "name": "Heizstab-Leistung"
       },
+      "heating_rod_power_from_pv_w": {
+        "name": "Heizstableistung aus PV"
+      },
+      "heating_rod_power_from_battery_w": {
+        "name": "Heizstableistung aus Batterie"
+      },
+      "heating_rod_power_from_grid_w": {
+        "name": "Heizstableistung aus Netz"
+      },
+      "heating_rod_tank_volume_l": {
+        "name": "Heizstab Tankvolumen"
+      },
       "ac_grid_connection_power_w": {
         "name": "AC-Netzanschlussleistung"
       },

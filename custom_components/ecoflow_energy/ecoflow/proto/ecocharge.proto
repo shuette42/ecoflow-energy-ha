@@ -940,6 +940,37 @@ message HRChargingParamReport {
   oneof _hr_run_flag { uint32 hr_run_flag = 12; }
 }
 
+// The rod's power report on cmd_id 33 of the same command family.
+//
+// A reporter download of 2026-10-23 holds seven of these. Five carry only the
+// rod's serial: the rod sent no reading, which is not the same as 0 W. Two
+// carry the total (field 2) and where it came from, all as float32 watts. The
+// app showed PV 116, battery 33, grid 3 and rod 152 at the moment of the first
+// one, and that frame reads 2=152, 4=116, 5=33, 6=3, so the three shares are
+// the app's three tiles and they add up to the total. The second one reads
+// 2=153, 4=112, 5=41 with no field 6: 112 + 41 = 153, so a share the report
+// leaves out beside a total is 0 W. Field 3 is absent from every frame.
+//
+// The oneof wrappers matter: a report that carries a real zero must be told
+// apart from one that does not carry the field at all.
+//
+// On the wire the report sits one level down: the payload is a list whose
+// field 1 holds the report, the way the battery heartbeat wraps its packs.
+// Read as a flat message, field 1 would be the report's bytes taken for the
+// serial string, and the whole payload would fail to decode.
+
+message HRPowerSourceReport {
+  oneof _hr_sn { string hr_sn = 1; }
+  oneof _hr_total_power { float hr_total_power = 2; }
+  oneof _hr_power_from_pv { float hr_power_from_pv = 4; }
+  oneof _hr_power_from_battery { float hr_power_from_battery = 5; }
+  oneof _hr_power_from_grid { float hr_power_from_grid = 6; }
+}
+
+message HRPowerSourceReportList {
+  repeated HRPowerSourceReport report = 1;
+}
+
 // --- Accessories on the PowerOcean's cmd_func 241 (the EDEV relay) ---
 //
 // A PowerOcean relays its coupled accessories on command family 241 as well.
