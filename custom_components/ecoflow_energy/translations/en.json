@@ -3284,6 +3284,12 @@
     "set_command_not_ready": {
       "message": "{entity} cannot be set yet - the device has not reported its current setting. Try again in a moment."
     },
+    "set_command_surplus_unreported": {
+      "message": "{entity} cannot be set: the device has not reported the Solar Surplus Threshold, which is sent together with it. Until it does, change the setting in the EcoFlow app."
+    },
+    "set_command_backup_unreported": {
+      "message": "{entity} cannot be set: the device has not reported the Backup Reserve, which is sent together with it. Until it does, change the setting in the EcoFlow app."
+    },
     "set_command_unsupported": {
       "message": "{entity} does not support this command on this device."
     },

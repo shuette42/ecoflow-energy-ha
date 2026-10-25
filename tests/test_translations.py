@@ -536,6 +536,7 @@ ENTITY_PATH = Path("custom_components/ecoflow_energy/entity.py")
 # rather than from an entity (ADR-009); the gate reads that file too.
 SET_COMMANDS_PATH = Path("custom_components/ecoflow_energy/coordinator/set_commands.py")
 RAISING_PATHS = (ENTITY_PATH, SET_COMMANDS_PATH)
+INTEGRATION_DIR = Path("custom_components/ecoflow_energy")
 
 # The source file and every rendered language, for tests about the text itself.
 ALL_PATHS = [STRINGS_PATH, *TRANSLATION_FILES.values()]
@@ -551,6 +552,26 @@ def _raised_translation_keys() -> set[str]:
     keys: set[str] = set()
     for path in RAISING_PATHS:
         keys |= _raised_translation_keys_in(path)
+    for path in sorted(INTEGRATION_DIR.glob("*.py")):
+        keys |= _helper_translation_keys_in(path)
+    return keys
+
+
+def _helper_translation_keys_in(path: Path) -> set[str]:
+    """Keys handed to `raise_set_partner_unreported` as a literal second argument.
+
+    The helper builds the HomeAssistantError itself, so the walk above sees
+    its parameter, not the key the caller passes.
+    """
+    keys: set[str] = set()
+    for node in ast.walk(ast.parse(path.read_text())):
+        if not isinstance(node, ast.Call):
+            continue
+        if _call_name(node) != "raise_set_partner_unreported" or len(node.args) < 2:
+            continue
+        value = _get_string_value(node.args[1])
+        if value:
+            keys.add(value)
     return keys
 
 
@@ -590,6 +611,14 @@ class TestExceptionTranslations:
             "powerpulse_sibling_missing",
             "powerpulse_sibling_offline",
         } <= wallbox_keys
+
+    def test_the_gate_reads_keys_passed_through_the_partner_helper(self):
+        """Positive control: the two keys #631 added reach the helper as a
+        parameter, so only the call-site walk can see them."""
+        assert {
+            "set_command_surplus_unreported",
+            "set_command_backup_unreported",
+        } <= _raised_translation_keys()
 
     def test_every_raised_key_has_a_message(self):
         keys = _raised_translation_keys()

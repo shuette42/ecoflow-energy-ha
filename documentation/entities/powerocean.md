@@ -395,6 +395,8 @@ Created only once a coupled wallbox reports a charging session. See the note at 
 | Heating Rod Target Temperature | Number | 10 - 80 °C | Enhanced only |
 | Heating Rod Mode | Select | Off / Solar / Manual | Enhanced only |
 
+Backup Reserve and Solar Surplus Threshold are sent to the PowerOcean as one pair, so each write repeats the value of the other. If the unit has not reported the other value, the write is refused and nothing is sent. The message names the missing value and points to the EcoFlow app. The PowerOcean Plus `R372` has not reported the Solar Surplus Threshold so far, so on that unit these two settings can only be changed in the EcoFlow app for now.
+
 ---
 
 ## Notes

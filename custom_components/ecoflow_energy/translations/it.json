@@ -3284,6 +3284,12 @@
     "set_command_not_ready": {
       "message": "{entity} non può ancora essere impostato - il dispositivo non ha riportato la sua impostazione attuale. Riprova tra un momento."
     },
+    "set_command_surplus_unreported": {
+      "message": "{entity} non può essere impostato: il dispositivo non ha riportato la soglia di surplus solare, che viene inviata insieme. Finché non lo fa, modifica l'impostazione nell'app EcoFlow."
+    },
+    "set_command_backup_unreported": {
+      "message": "{entity} non può essere impostato: il dispositivo non ha riportato la riserva di backup, che viene inviata insieme. Finché non lo fa, modifica l'impostazione nell'app EcoFlow."
+    },
     "set_command_unsupported": {
       "message": "{entity} non supporta questo comando su questo dispositivo."
     },

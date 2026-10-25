@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import threading
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
@@ -506,10 +507,11 @@ class TestPowerOceanNumberSet3Field:
         coordinator.async_set_powerocean_soc_debounced = AsyncMock(return_value=True)
         entity.async_write_ha_state = MagicMock()
 
-        with pytest.raises(HomeAssistantError):
+        with pytest.raises(HomeAssistantError) as err:
             await entity.async_set_native_value(50.0)
 
         coordinator.async_set_powerocean_soc_debounced.assert_not_awaited()
+        _assert_partner_unreported(err.value, "set_command_surplus_unreported", "Solar Surplus Threshold")
 
     async def test_set_backup_reserve_rejects_explicit_none_surplus(
         self,
@@ -527,10 +529,11 @@ class TestPowerOceanNumberSet3Field:
         coordinator.async_set_powerocean_soc_debounced = AsyncMock(return_value=True)
         entity.async_write_ha_state = MagicMock()
 
-        with pytest.raises(HomeAssistantError):
+        with pytest.raises(HomeAssistantError) as err:
             await entity.async_set_native_value(50.0)
 
         coordinator.async_set_powerocean_soc_debounced.assert_not_awaited()
+        _assert_partner_unreported(err.value, "set_command_surplus_unreported", "Solar Surplus Threshold")
 
     async def test_set_solar_surplus_rejects_missing_backup(
         self,
@@ -554,10 +557,11 @@ class TestPowerOceanNumberSet3Field:
         coordinator.async_set_powerocean_soc_debounced = AsyncMock(return_value=True)
         entity.async_write_ha_state = MagicMock()
 
-        with pytest.raises(HomeAssistantError):
+        with pytest.raises(HomeAssistantError) as err:
             await entity.async_set_native_value(90.0)
 
         coordinator.async_set_powerocean_soc_debounced.assert_not_awaited()
+        _assert_partner_unreported(err.value, "set_command_backup_unreported", "Backup Reserve")
 
     async def test_set_solar_surplus_rejects_explicit_none_backup(
         self,
@@ -575,10 +579,48 @@ class TestPowerOceanNumberSet3Field:
         coordinator.async_set_powerocean_soc_debounced = AsyncMock(return_value=True)
         entity.async_write_ha_state = MagicMock()
 
-        with pytest.raises(HomeAssistantError):
+        with pytest.raises(HomeAssistantError) as err:
             await entity.async_set_native_value(90.0)
 
         coordinator.async_set_powerocean_soc_debounced.assert_not_awaited()
+        _assert_partner_unreported(err.value, "set_command_backup_unreported", "Backup Reserve")
+
+
+_TRANSLATIONS = Path("custom_components/ecoflow_energy/translations")
+
+
+def _exception_message(lang: str, key: str) -> str:
+    data = json.loads((_TRANSLATIONS / f"{lang}.json").read_text(encoding="utf-8"))
+    return data["exceptions"][key]["message"]
+
+
+def _assert_partner_unreported(
+    err: HomeAssistantError, key: str, missing_setting: str
+) -> None:
+    """The refusal names the setting the device never reported (issue #631).
+
+    Nothing was sent, so the text must not say the command failed to reach
+    the device, and it must say what the user can do instead. The rendered
+    text is checked, not only the key, in every shipped language.
+    """
+    assert err.translation_key == key
+    assert set(err.translation_placeholders) == {"entity"}
+    entity = str(err.translation_placeholders["entity"])
+    failed = {lang: _exception_message(lang, "set_command_failed") for lang in _LANGS}
+    for lang in _LANGS:
+        rendered = _exception_message(lang, key).format(entity=entity)
+        assert entity in rendered
+        assert rendered != failed[lang].format(entity=entity)
+    en = _exception_message("en", key).format(entity=entity)
+    assert "did not reach the device" not in en
+    assert f"has not reported the {missing_setting}" in en
+    assert "EcoFlow app" in en
+    de = _exception_message("de", key).format(entity=entity)
+    assert "nicht gemeldet" in de
+    assert "EcoFlow-App" in de
+
+
+_LANGS = ("en", "de", "fr", "it", "nl", "pl")
 
 
 _MISSING = object()  # parametrize marker: pop the key rather than set a value
