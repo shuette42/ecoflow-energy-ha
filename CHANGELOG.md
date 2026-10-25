@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.26.1] - 2026-10-25
+
+### Fixed
+
+- PowerPulse 2 wallbox: Start Charging was refused while Wallbox Charging Status read Vehicle connected (`preparing`), although the EcoFlow app starts a session from that status. The button only accepted a start while the status read Charging session ended, on both the PowerOcean relay and the wallbox's own channel. It now sends the start from Vehicle connected as well. A second press while the first start is still waiting for the wallbox is still refused, and a press with no session (Unplugged) stays refused. Thanks to @Xygen for the start test from the app with the status history. (Ref #632)
+
 ## [1.26.0] - 2026-10-25
 
 ### Changed
