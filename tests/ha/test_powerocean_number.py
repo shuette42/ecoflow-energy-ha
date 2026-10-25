@@ -511,7 +511,7 @@ class TestPowerOceanNumberSet3Field:
             await entity.async_set_native_value(50.0)
 
         coordinator.async_set_powerocean_soc_debounced.assert_not_awaited()
-        _assert_partner_unreported(err.value, "set_command_surplus_unreported", "Solar Surplus Threshold")
+        _assert_partner_unreported(err.value, "set_command_surplus_unreported")
 
     async def test_set_backup_reserve_rejects_explicit_none_surplus(
         self,
@@ -533,7 +533,7 @@ class TestPowerOceanNumberSet3Field:
             await entity.async_set_native_value(50.0)
 
         coordinator.async_set_powerocean_soc_debounced.assert_not_awaited()
-        _assert_partner_unreported(err.value, "set_command_surplus_unreported", "Solar Surplus Threshold")
+        _assert_partner_unreported(err.value, "set_command_surplus_unreported")
 
     async def test_set_solar_surplus_rejects_missing_backup(
         self,
@@ -561,7 +561,7 @@ class TestPowerOceanNumberSet3Field:
             await entity.async_set_native_value(90.0)
 
         coordinator.async_set_powerocean_soc_debounced.assert_not_awaited()
-        _assert_partner_unreported(err.value, "set_command_backup_unreported", "Backup Reserve")
+        _assert_partner_unreported(err.value, "set_command_backup_unreported")
 
     async def test_set_solar_surplus_rejects_explicit_none_backup(
         self,
@@ -583,7 +583,41 @@ class TestPowerOceanNumberSet3Field:
             await entity.async_set_native_value(90.0)
 
         coordinator.async_set_powerocean_soc_debounced.assert_not_awaited()
-        _assert_partner_unreported(err.value, "set_command_backup_unreported", "Backup Reserve")
+        _assert_partner_unreported(err.value, "set_command_backup_unreported")
+
+    @pytest.mark.parametrize("key", ["backup_reserve", "solar_surplus_threshold"])
+    async def test_set_without_coordinator_data_is_not_ready(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+        key: str,
+    ) -> None:
+        """No data at all means nothing was sent, so "did not reach" is wrong.
+
+        The refusal says the device has not reported its setting yet, the
+        text the other not-ready paths use, in every shipped language.
+        """
+        entity, coordinator = self._make_entity(hass, enhanced_config_entry, key)
+        coordinator.data = None
+        coordinator.async_set_powerocean_soc_debounced = AsyncMock(return_value=True)
+        entity.async_write_ha_state = MagicMock()
+
+        with pytest.raises(HomeAssistantError) as err:
+            await entity.async_set_native_value(50.0)
+
+        coordinator.async_set_powerocean_soc_debounced.assert_not_awaited()
+        assert err.value.translation_key == "set_command_not_ready"
+        entity_id = str(err.value.translation_placeholders["entity"])
+        for lang in _LANGS:
+            rendered = _exception_message(lang, "set_command_not_ready").format(
+                entity=entity_id
+            )
+            assert rendered != _exception_message(lang, "set_command_failed").format(
+                entity=entity_id
+            )
+        en = _exception_message("en", "set_command_not_ready").format(entity=entity_id)
+        assert "cannot be set yet" in en
+        assert "did not reach the device" not in en
 
 
 _TRANSLATIONS = Path("custom_components/ecoflow_energy/translations")
@@ -594,26 +628,49 @@ def _exception_message(lang: str, key: str) -> str:
     return data["exceptions"][key]["message"]
 
 
-def _assert_partner_unreported(
-    err: HomeAssistantError, key: str, missing_setting: str
-) -> None:
+_PARTNER_KEYS = {
+    # message key -> (entity key of the setting the device did not report,
+    #                 message key of the other branch)
+    "set_command_surplus_unreported": (
+        "solar_surplus_threshold",
+        "set_command_backup_unreported",
+    ),
+    "set_command_backup_unreported": (
+        "backup_reserve",
+        "set_command_surplus_unreported",
+    ),
+}
+
+
+def _entity_name(lang: str, entity_key: str) -> str:
+    data = json.loads((_TRANSLATIONS / f"{lang}.json").read_text(encoding="utf-8"))
+    return data["entity"]["number"][entity_key]["name"]
+
+
+def _assert_partner_unreported(err: HomeAssistantError, key: str) -> None:
     """The refusal names the setting the device never reported (issue #631).
 
     Nothing was sent, so the text must not say the command failed to reach
     the device, and it must say what the user can do instead. The rendered
-    text is checked, not only the key, in every shipped language.
+    text is checked, not only the key, in every shipped language: it has to
+    carry that language's own name of the missing setting (as the entity is
+    called there) and must differ from the text of the other branch.
     """
     assert err.translation_key == key
     assert set(err.translation_placeholders) == {"entity"}
     entity = str(err.translation_placeholders["entity"])
-    failed = {lang: _exception_message(lang, "set_command_failed") for lang in _LANGS}
+    partner, other_key = _PARTNER_KEYS[key]
     for lang in _LANGS:
         rendered = _exception_message(lang, key).format(entity=entity)
         assert entity in rendered
-        assert rendered != failed[lang].format(entity=entity)
+        assert rendered != _exception_message(lang, "set_command_failed").format(
+            entity=entity
+        )
+        assert rendered != _exception_message(lang, other_key).format(entity=entity)
+        name = _entity_name(lang, partner)
+        assert name.casefold() in rendered.casefold(), (lang, name, rendered)
     en = _exception_message("en", key).format(entity=entity)
     assert "did not reach the device" not in en
-    assert f"has not reported the {missing_setting}" in en
     assert "EcoFlow app" in en
     de = _exception_message("de", key).format(entity=entity)
     assert "nicht gemeldet" in de

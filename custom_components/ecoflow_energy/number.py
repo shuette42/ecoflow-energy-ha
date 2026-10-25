@@ -846,8 +846,9 @@ class EcoFlowNumber(
             # Both PowerOcean sliders are sent as a pair, so the unchanged
             # one has to be read from coordinator data. Without data there
             # is nothing to send, and silently doing nothing would look
-            # like a successful write.
-            raise_set_failed(self.entity_id)
+            # like a successful write. Nothing was sent either, so this is
+            # "not ready", not "did not reach the device".
+            raise_set_not_ready(self.entity_id)
 
         if key == "backup_reserve":
             # Read the current solar-surplus from the user-side mirror
@@ -862,7 +863,8 @@ class EcoFlowNumber(
             # placeholder or silently move the app-side surplus to a value
             # the user never chose - a refusal that names the missing half
             # is the honest failure. Not "did not reach the device" (nothing
-            # was sent) and not "try again" (an R372 never reports it, #631).
+            # was sent) and not "try again" (an R372 did not report it in the
+            # reporter's capture, #631).
             current_solar = self.coordinator.data.get("ems_app_surplus_pct")
             if current_solar is None:
                 raise_set_partner_unreported(
