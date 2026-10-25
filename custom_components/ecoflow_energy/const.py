@@ -183,7 +183,8 @@ POWERPULSE2_CHARGE_ACTION_WINDOW_S: dict[str, float] = {"stop": 15.0, "start": 3
 # (a reporter started a session from the app while the wallbox read
 # "preparing", then "charging"). A press that is still pending is refused
 # before this check, so the "preparing" a start itself passes through cannot
-# send twice. Stop from "charging" and, as amended for #515, from
+# send twice while the window runs; once it has passed unconfirmed, a new
+# press is sent again. Stop from "charging" and, as amended for #515, from
 # "suspended_charger": a start waiting for solar surplus can be cancelled. The
 # app enables its stop in that state and sends the same command; confirmation
 # still needs a fresh "finishing" or "available".
