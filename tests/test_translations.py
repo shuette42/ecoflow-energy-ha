@@ -536,6 +536,7 @@ ENTITY_PATH = Path("custom_components/ecoflow_energy/entity.py")
 # rather than from an entity (ADR-009); the gate reads that file too.
 SET_COMMANDS_PATH = Path("custom_components/ecoflow_energy/coordinator/set_commands.py")
 RAISING_PATHS = (ENTITY_PATH, SET_COMMANDS_PATH)
+INTEGRATION_DIR = Path("custom_components/ecoflow_energy")
 
 # The source file and every rendered language, for tests about the text itself.
 ALL_PATHS = [STRINGS_PATH, *TRANSLATION_FILES.values()]
@@ -551,7 +552,58 @@ def _raised_translation_keys() -> set[str]:
     keys: set[str] = set()
     for path in RAISING_PATHS:
         keys |= _raised_translation_keys_in(path)
+    for path in _integration_sources():
+        keys |= _helper_translation_keys_in(path)
     return keys
+
+
+def _integration_sources() -> list[Path]:
+    """Every module of the integration, subpackages included."""
+    return sorted(INTEGRATION_DIR.rglob("*.py"))
+
+
+def _literal_strings(node: ast.expr) -> set[str] | None:
+    """The strings an expression can evaluate to, or None when any branch is not
+    a literal (`"a" if c else "b"` is fully literal, `"a" if c else name` is not)."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return {node.value}
+    if isinstance(node, ast.IfExp):
+        body = _literal_strings(node.body)
+        orelse = _literal_strings(node.orelse)
+        if body is not None and orelse is not None:
+            return body | orelse
+    return None
+
+
+def _helper_calls_in_source(source: str) -> tuple[set[str], list[int]]:
+    """Keys handed to `raise_set_partner_unreported`, and the lines of calls whose
+    key the walk cannot read.
+
+    The helper builds the HomeAssistantError itself, so the walk over
+    HomeAssistantError calls sees its parameter, not the key the caller passes.
+    The key can come as the second positional argument or as `translation_key=`.
+    """
+    keys: set[str] = set()
+    nonliteral: list[int] = []
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.Call):
+            continue
+        if _call_name(node) != "raise_set_partner_unreported":
+            continue
+        expr = node.args[1] if len(node.args) >= 2 else None
+        for kw in node.keywords:
+            if kw.arg == "translation_key":
+                expr = kw.value
+        literal = _literal_strings(expr) if expr is not None else None
+        if literal is None:
+            nonliteral.append(node.lineno)
+        else:
+            keys |= literal
+    return keys, nonliteral
+
+
+def _helper_translation_keys_in(path: Path) -> set[str]:
+    return _helper_calls_in_source(path.read_text())[0]
 
 
 def _raised_translation_keys_in(path: Path) -> set[str]:
@@ -590,6 +642,43 @@ class TestExceptionTranslations:
             "powerpulse_sibling_missing",
             "powerpulse_sibling_offline",
         } <= wallbox_keys
+
+    def test_the_gate_reads_keys_passed_through_the_partner_helper(self):
+        """Positive control: the two keys #631 added reach the helper as a
+        parameter, so only the call-site walk can see them."""
+        assert {
+            "set_command_surplus_unreported",
+            "set_command_backup_unreported",
+        } <= _raised_translation_keys()
+
+    def test_the_partner_helper_is_only_called_with_a_literal_key(self):
+        """A key held in a variable is invisible to the message check above."""
+        nonliteral = {
+            path.name: lines
+            for path in _integration_sources()
+            if (lines := _helper_calls_in_source(path.read_text())[1])
+        }
+        assert not nonliteral, (
+            f"raise_set_partner_unreported called with a non-literal key: {nonliteral}"
+        )
+
+    def test_the_literal_key_check_flags_a_variable_and_reads_both_forms(self):
+        """Negative control: the check above must be able to fail."""
+        keys, nonliteral = _helper_calls_in_source(
+            "raise_set_partner_unreported(entity_id, key)\n"
+            "raise_set_partner_unreported(entity_id, 'a' if c else other)\n"
+            "raise_set_partner_unreported(entity_id, translation_key=key)\n"
+            "raise_set_partner_unreported(entity_id)\n"
+        )
+        assert nonliteral == [1, 2, 3, 4]
+        assert keys == set()
+        keys, nonliteral = _helper_calls_in_source(
+            "raise_set_partner_unreported(e, 'a')\n"
+            "raise_set_partner_unreported(e, translation_key='b')\n"
+            "raise_set_partner_unreported(e, 'c' if x else 'd')\n"
+        )
+        assert nonliteral == []
+        assert keys == {"a", "b", "c", "d"}
 
     def test_every_raised_key_has_a_message(self):
         keys = _raised_translation_keys()

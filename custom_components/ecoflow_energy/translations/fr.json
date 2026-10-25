@@ -3284,6 +3284,12 @@
     "set_command_not_ready": {
       "message": "{entity} ne peut pas encore être réglé - l'appareil n'a pas signalé son réglage actuel. Réessayez dans un instant."
     },
+    "set_command_surplus_unreported": {
+      "message": "{entity} ne peut pas être réglé : l'appareil n'a pas signalé le seuil de surplus solaire, qui est envoyé en même temps. Tant qu'il ne l'a pas fait, modifiez le réglage dans l'application EcoFlow."
+    },
+    "set_command_backup_unreported": {
+      "message": "{entity} ne peut pas être réglé : l'appareil n'a pas signalé la réserve de secours, qui est envoyée en même temps. Tant qu'il ne l'a pas fait, modifiez le réglage dans l'application EcoFlow."
+    },
     "set_command_unsupported": {
       "message": "{entity} ne prend pas en charge cette commande sur cet appareil."
     },

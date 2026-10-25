@@ -3284,6 +3284,12 @@
     "set_command_not_ready": {
       "message": "{entity} kann noch nicht gesetzt werden - das Gerät hat seine aktuelle Einstellung noch nicht gemeldet. Bitte gleich noch einmal versuchen."
     },
+    "set_command_surplus_unreported": {
+      "message": "{entity} lässt sich nicht setzen: Das Gerät hat die Solarüberschuss-Schwelle nicht gemeldet, die zusammen damit gesendet wird. Bis dahin die Einstellung bitte in der EcoFlow-App ändern."
+    },
+    "set_command_backup_unreported": {
+      "message": "{entity} lässt sich nicht setzen: Das Gerät hat die Backup-Reserve nicht gemeldet, die zusammen damit gesendet wird. Bis dahin die Einstellung bitte in der EcoFlow-App ändern."
+    },
     "set_command_unsupported": {
       "message": "{entity} unterstützt dieses Kommando auf diesem Gerät nicht."
     },

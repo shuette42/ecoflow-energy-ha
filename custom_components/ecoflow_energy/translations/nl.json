@@ -3284,6 +3284,12 @@
     "set_command_not_ready": {
       "message": "{entity} kan nog niet worden ingesteld - het apparaat heeft zijn huidige instelling nog niet gerapporteerd. Probeer het zo meteen opnieuw."
     },
+    "set_command_surplus_unreported": {
+      "message": "{entity} kan niet worden ingesteld: het apparaat heeft de drempel zonne-overschot niet gerapporteerd, die samen hiermee wordt verzonden. Wijzig de instelling tot die tijd in de EcoFlow-app."
+    },
+    "set_command_backup_unreported": {
+      "message": "{entity} kan niet worden ingesteld: het apparaat heeft de back-upreserve niet gerapporteerd, die samen hiermee wordt verzonden. Wijzig de instelling tot die tijd in de EcoFlow-app."
+    },
     "set_command_unsupported": {
       "message": "{entity} ondersteunt deze opdracht niet op dit apparaat."
     },

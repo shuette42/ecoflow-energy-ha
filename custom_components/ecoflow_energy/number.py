@@ -78,6 +78,7 @@ from .entity import (
     raise_set_failed,
     raise_set_gone,
     raise_set_not_ready,
+    raise_set_partner_unreported,
     raise_set_rejected,
     raise_set_unsupported,
     reading_reported,
@@ -845,8 +846,9 @@ class EcoFlowNumber(
             # Both PowerOcean sliders are sent as a pair, so the unchanged
             # one has to be read from coordinator data. Without data there
             # is nothing to send, and silently doing nothing would look
-            # like a successful write.
-            raise_set_failed(self.entity_id)
+            # like a successful write. Nothing was sent either, so this is
+            # "not ready", not "did not reach the device".
+            raise_set_not_ready(self.entity_id)
 
         if key == "backup_reserve":
             # Read the current solar-surplus from the user-side mirror
@@ -859,11 +861,15 @@ class EcoFlowNumber(
             # value for this field, see ADR-011) means the surplus is
             # unknown. Guessing a pair would either send the device a
             # placeholder or silently move the app-side surplus to a value
-            # the user never chose - a refused write the user can retry is
-            # the honest failure.
+            # the user never chose - a refusal that names the missing half
+            # is the honest failure. Not "did not reach the device" (nothing
+            # was sent) and not "try again" (an R372 did not report it in the
+            # reporter's capture, #631).
             current_solar = self.coordinator.data.get("ems_app_surplus_pct")
             if current_solar is None:
-                raise_set_failed(self.entity_id)
+                raise_set_partner_unreported(
+                    self.entity_id, "set_command_surplus_unreported"
+                )
             backup = int_value
             solar = max(int(current_solar), backup)  # enforce backup <= solar
             self.coordinator.mark_user_surplus_set()
@@ -884,7 +890,9 @@ class EcoFlowNumber(
             # same way the other half of the pair already is.
             current_backup = self.coordinator.data.get("ems_discharge_lower_limit_pct")
             if current_backup is None:
-                raise_set_failed(self.entity_id)
+                raise_set_partner_unreported(
+                    self.entity_id, "set_command_backup_unreported"
+                )
             solar = int_value
             backup = min(int(current_backup), solar)  # enforce backup <= solar
             self.coordinator.mark_user_surplus_set()
