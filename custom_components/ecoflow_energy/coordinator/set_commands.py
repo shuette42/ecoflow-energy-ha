@@ -2872,10 +2872,10 @@ class SetCommandsMixin(_Base):
     def _require_wallbox_action_state(self, action: Literal["start", "stop"]) -> None:
         """Raise unless the wallbox's last reported state allows `action`.
 
-        Start only from `finishing`, stop from `charging` or
-        `suspended_charger` (ADR-009 decision 5, amended for #515), on both
-        routes, checked after the route's own preconditions so the message
-        names the first thing that is wrong.
+        Start from `finishing` or `preparing`, stop from `charging` or
+        `suspended_charger` (ADR-009 decision 5, amended for #515 and #632),
+        on both routes, checked after the route's own preconditions so the
+        message names the first thing that is wrong.
         """
         status = self._device_data.get("ev_charge_status")
         if status not in POWERPULSE2_CHARGE_ACTION_PRECONDITION[action]:

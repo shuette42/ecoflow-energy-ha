@@ -99,7 +99,7 @@ Created only when the integration entry holds exactly one PowerOcean, and only a
 
 | Entity | Default | Description |
 |:---|:---:|:---|
-| Wallbox Start Charging | enabled | Starts a charging session that the wallbox has stopped, that is, while Wallbox Charging Status reads Charging session ended (state value `finishing`). The press returns once the wallbox itself reports `charging` or `suspended_charger` (Paused by Charger, a Solar-mode start that waits for surplus), or fails after 30 s if it does not |
+| Wallbox Start Charging | enabled | Starts a charging session, while Wallbox Charging Status reads Charging session ended (state value `finishing`) or Vehicle connected (`preparing`). The press returns once the wallbox itself reports `charging` or `suspended_charger` (Paused by Charger, a Solar-mode start that waits for surplus), or fails after 30 s if it does not |
 | Wallbox Stop Charging | enabled | Stops the running session, while Wallbox Charging Status reads `charging`, or cancels a start that waits for solar surplus while it reads `suspended_charger` (Paused by Charger). The press returns once the wallbox reports Charging session ended (`finishing`) or Unplugged (`available`), or fails after 15 s if it does not |
 
 The command takes one of two routes, the way the EcoFlow app sends it in each setup, and the confirmation is always read from the wallbox's own reporting: nothing is shown as done until the wallbox says so, and a press in a state the action does not fit (a start while charging, a stop while idle) fails with a message saying the current charging status does not allow it, instead of sending anything.
@@ -108,7 +108,7 @@ The command takes one of two routes, the way the EcoFlow app sends it in each se
 - **No PowerOcean in the entry:** the command goes on the wallbox's own channel. The buttons appear with the wallbox's first status report, and are unavailable while the wallbox's own connection is down.
 - **Two or more PowerOceans in the entry:** no buttons; neither route has been observed on such an account.
 
-A start is offered only from `finishing`, the state a stopped session sits in with the cable attached. Starting from `available` (no session) has not been observed and is not offered.
+A start is offered only from `finishing`, the state a stopped session sits in with the cable attached, and from `preparing` (Vehicle connected), where the app starts a session too. Starting from `available` (no session) has not been observed and is not offered.
 
 ---
 
