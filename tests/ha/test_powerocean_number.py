@@ -607,6 +607,7 @@ class TestPowerOceanNumberSet3Field:
 
         coordinator.async_set_powerocean_soc_debounced.assert_not_awaited()
         assert err.value.translation_key == "set_command_not_ready"
+        assert err.value.translation_placeholders is not None
         entity_id = str(err.value.translation_placeholders["entity"])
         for lang in _LANGS:
             rendered = _exception_message(lang, "set_command_not_ready").format(
@@ -657,6 +658,7 @@ def _assert_partner_unreported(err: HomeAssistantError, key: str) -> None:
     called there) and must differ from the text of the other branch.
     """
     assert err.translation_key == key
+    assert err.translation_placeholders is not None
     assert set(err.translation_placeholders) == {"entity"}
     entity = str(err.translation_placeholders["entity"])
     partner, other_key = _PARTNER_KEYS[key]
