@@ -395,7 +395,7 @@ Created only once a coupled wallbox reports a charging session. See the note at 
 | Heating Rod Target Temperature | Number | 10 - 80 °C | Enhanced only |
 | Heating Rod Mode | Select | Off / Solar / Manual | Enhanced only |
 
-Backup Reserve and Solar Surplus Threshold are sent to the PowerOcean as one pair, so each write repeats the value of the other. If the unit has not reported the other value, the write is refused and nothing is sent. The message names the missing value and points to the EcoFlow app. Backup Reserve is refused for as long as the Solar Surplus Threshold is missing, and the Solar Surplus Threshold for as long as the Backup Reserve is missing. In the one diagnostics download from a PowerOcean Plus `R372` the Solar Surplus Threshold was not reported; only the message is corrected for that unit, and writing the setting from Home Assistant on it still needs a test with the unit.
+Backup Reserve and Solar Surplus Threshold are sent to the PowerOcean as one pair, so each write repeats the value of the other. If the unit has not reported the other value, the write is refused and nothing is sent. The message names the missing value and points to the EcoFlow app. Backup Reserve is refused for as long as the Solar Surplus Threshold is missing, and the Solar Surplus Threshold for as long as the Backup Reserve is missing. In the one diagnostics download from a PowerOcean Plus `R372` the Solar Surplus Threshold did not arrive in the message the integration reads it from; only the message is corrected for that unit, and writing the setting from Home Assistant on it still needs a test with the unit.
 
 ---
 
