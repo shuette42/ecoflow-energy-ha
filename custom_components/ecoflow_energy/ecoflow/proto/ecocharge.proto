@@ -407,6 +407,12 @@ message JTS1EmsChangeReport {
   oneof _ems_sg_ready_en { bool ems_sg_ready_en = 183; }
   oneof _ems_sg_run_stat { uint32 ems_sg_run_stat = 184; }
   oneof _battery_limit_reason { uint32 battery_limit_reason = 600; }
+  // cmd_id=8 on the PowerOcean Plus (R372): read-back of the app's solar
+  // surplus setting. Field 352 moves in the same second as a surplus change
+  // in the app and stays put on a backup reserve change. Named apart from
+  // `dev_soc` (field 10 of the cmd_id=13 message): every command's output
+  // merges into one flat dict, so one name keeps one field number.
+  oneof _ems_change_dev_soc { uint32 ems_change_dev_soc = 352; }
 
   // Grid-protection thresholds and their trip times, as commissioned in the
   // inverter. Read off a live single-phase unit: 253.0 / 287.5 V over-voltage

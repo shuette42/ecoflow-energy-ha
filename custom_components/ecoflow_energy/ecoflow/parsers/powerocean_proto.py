@@ -199,6 +199,10 @@ EMS_CHANGE_TO_SENSOR: dict[str, str] = {
     "ems_sg_ready_en": "ems_sg_ready_enabled",
     "ems_sg_run_stat": "ems_sg_ready_state",
     "battery_limit_reason": "battery_limit_reason",
+    # R372 read-back of the app's solar surplus setting (field 352). Not in
+    # PERCENT_SENSOR_KEYS on purpose: the state_apply resolver range-checks it
+    # (an out-of-range value must become None, not a deleted key).
+    "ems_change_dev_soc": "ems_change_dev_soc_pct",
 }
 
 # EMS state report (cmd_id=17) key -> sensor key mapping.

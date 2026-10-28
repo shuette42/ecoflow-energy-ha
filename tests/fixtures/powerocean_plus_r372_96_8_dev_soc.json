@@ -1,0 +1,50 @@
+{
+  "_note": "PowerOcean Plus R372 (Enhanced Mode) 96/8 EMS change report payloads from a reporter's diagnostics download of 2026-10-26 (issue 631), enc_type 1 already unmasked, protobuf payload only, no header and no serial number.",
+  "frames": [
+    {
+      "index": 0,
+      "ts_iso": "2026-10-26T09:16:36.016586+00:00",
+      "topic": "get_reply",
+      "what": "full get_reply, 352=100, reserve (12)=30",
+      "cmd_func": 96,
+      "cmd_id": 8,
+      "pdata_hex": "18002000601e8001038801649001a038980100a00100a80800b0083cb80800b80901c00964a00b00a80bb009b20b00b80b00c00b00a00e00a80e00b50e00002f44c21100c81100d01100d81100e01200e81201f01200f81200b01301f0159003f815018016648816009d1600000000a2161b080015000000001d0000000025000000002d000000003500000000aa1600ba1600c01600c81600d5160060ea45dd1600b01a46a01f00a81f01b21f060864103c181ec01f00ca1f3c0d0060ea451500b01a461d72f97f3f25a4707d3f2d0000704635000054423d0000c842450000f0414d00409c465500409c465d000000006500000000c02500c825ff02d82500ea2500f2250708d804103c1864fa250508901c103c8226008826de7c95260060ea459d2600b01a46a02601a82601b02600"
+    },
+    {
+      "index": 17,
+      "ts_iso": "2026-10-26T09:17:53.688352+00:00",
+      "topic": "property",
+      "what": "reserve change in the app, mini frame, 12=71, no 352",
+      "cmd_func": 96,
+      "cmd_id": 8,
+      "pdata_hex": "6047"
+    },
+    {
+      "index": 30,
+      "ts_iso": "2026-10-26T09:18:58.680362+00:00",
+      "topic": "property",
+      "what": "reserve change in the app, mini frame, 12=29, no 352",
+      "cmd_func": 96,
+      "cmd_id": 8,
+      "pdata_hex": "601d"
+    },
+    {
+      "index": 55,
+      "ts_iso": "2026-10-26T09:20:11.859848+00:00",
+      "topic": "property",
+      "what": "surplus set to 70 in the app, mini frame, 352=70, same second as the app write",
+      "cmd_func": 96,
+      "cmd_id": 8,
+      "pdata_hex": "801646"
+    },
+    {
+      "index": 63,
+      "ts_iso": "2026-10-26T09:21:16.561864+00:00",
+      "topic": "property",
+      "what": "surplus set back to 100 in the app, mini frame, 352=100",
+      "cmd_func": 96,
+      "cmd_id": 8,
+      "pdata_hex": "801664"
+    }
+  ]
+}
