@@ -173,6 +173,10 @@ BP_TO_SENSOR: dict[str, str] = {
     "bp_up_limit_soc": "bp_up_limit_soc_pct",
 }
 
+# Intermediate key for field 352 of the cmd_id=8 report. It is never an entity:
+# state_apply resolves it into `ems_app_surplus_pct` or drops it.
+EMS_CHANGE_DEV_SOC_KEY = "ems_change_dev_soc_pct"
+
 # EMS change report (cmd_id=8) key -> sensor key mapping
 EMS_CHANGE_TO_SENSOR: dict[str, str] = {
     "bp_online_sum": "bp_online_sum",
@@ -202,7 +206,7 @@ EMS_CHANGE_TO_SENSOR: dict[str, str] = {
     # R372 read-back of the app's solar surplus setting (field 352). Not in
     # PERCENT_SENSOR_KEYS on purpose: the state_apply resolver range-checks it
     # (an out-of-range value must become None, not a deleted key).
-    "ems_change_dev_soc": "ems_change_dev_soc_pct",
+    "ems_change_dev_soc": EMS_CHANGE_DEV_SOC_KEY,
 }
 
 # EMS state report (cmd_id=17) key -> sensor key mapping.
