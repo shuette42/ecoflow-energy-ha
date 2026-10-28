@@ -8,7 +8,7 @@ I built it for my own PowerOcean, the only unit it has been measured on. Treat i
 
 | What | Why |
 |---|---|
-| A three-phase PowerOcean | Single-phase and Plus units, and the Ocean 2, are not offered yet because nobody has measured them |
+| A three-phase PowerOcean | Single-phase and Plus units, and the Ocean 2, are not offered yet because nobody has measured them. A read-only scan can change that, see [Trying a model that is not offered yet](#trying-a-model-that-is-not-offered-yet) |
 | Modbus switched on by EcoFlow support | The inverter does not answer on the Modbus port until support enables it. Ask them through the support chat and quote EcoFlow's Open Modbus Protocol document |
 | A fixed address for the inverter | Give it a reserved address in your router, or a name your network resolves. The entry stores that address |
 | No other Modbus tool on the inverter | The inverter serves one Modbus client at a time. A second tool holding the connection makes this entry unavailable. The exception is two integrations on Home Assistant's shared Modbus connection, see [Sharing the inverter with another Modbus integration](#sharing-the-inverter-with-another-modbus-integration) |
@@ -33,9 +33,13 @@ Three binary sensors come from the inverter's status word. Off-Grid turns on whe
 
 The sensor System Alerts reads a second status word. It lists what the inverter currently reports, such as `fan_failure` or `battery_overheating`, or `none` when all is well. A notification can then name the actual problem.
 
+The diagnostic sensor Active Fault Codes lists the fault codes the inverter reports in decimal, or `none`. Its `faults` attribute adds a name for each code where one is known, in your Home Assistant language where a translation exists and in English otherwise. The integration reads the list only while the fault count is above zero, so an inverter without a fault is not asked for it. The names follow the list that @MaxGrmm published in his EF-PowerOcean-TcpModbus integration. I could not check them against EcoFlow's own material, so a name can be missing or off. The code itself is what the inverter reports.
+
 After five failed reads in a row the entry goes unavailable, and these entities with it. An automation should treat unavailable as "unknown", not as "grid is back". Four of the sensors are disabled by default: Total Battery Capacity, Battery Packs Online (EMS), EMS Backup Ratio and Feed Power Limit. Enable the ones you use in the entity settings. The Backup Reserve number shows the same value as EMS Backup Ratio and is enabled. The four entities under [Control from Home Assistant](#control-from-home-assistant) come on top.
 
 The values refresh every 2 seconds. The inverter updates its power readings about once a second, so this stays close to its own pace. On Home Assistant 2026.9 or newer the connection stays open while the entry is loaded. On older versions each refresh opens a short connection and closes it again, so the inverter's single slot is free almost all of the time.
+
+A lifetime counter only grows. A reading below the last total it showed would look like a meter reset in the statistics, so the integration drops it. If the inverter really reset its counter, every reading stays lower and the entity stays frozen. After a day of that, Home Assistant shows a repair notice for the counter with both totals. Select **Submit** to take the inverter's value from now on. The Energy dashboard then records a counter reset. Select **Ignore** to keep the current total. The timer starts again when Home Assistant restarts.
 
 I compared these values with the same inverter's account connection over about 19 hours. The charge level was within 1 percent. Power was on average within 7 W for solar, 11 W for battery, 17 W for grid and 25 W for home. Single readings differ more when the load changes fast, most likely because the two connections are not read in the same second. The battery energy counters matched within 0.01 kWh.
 
@@ -65,6 +69,16 @@ The inverter serves one Modbus client at a time, and a second client gets no ans
 Open the integration entry and choose **Reconfigure**. If the entry holds only this one PowerOcean, you can switch it to Local and back. The entities both connections share keep their names and history. An entry that holds other devices of the same account cannot be switched. Add a separate Local entry for the PowerOcean instead.
 
 Three energy sensors do not carry over, because the two connections measure different totals. The account connection adds up energy itself since it was set up, while the inverter keeps its own lifetime counters. On my unit the two differ by thousands of kWh. The Local entry therefore has its own **Solar Lifetime Energy**, **Grid Import Lifetime Energy** and **Grid Export Lifetime Energy**. If you use the Energy Dashboard, pick these once after you switch.
+
+## Trying a model that is not offered yet
+
+If you own a single-phase PowerOcean, a PowerOcean Plus, a DC Fit or an Ocean 2, a short read-only scan shows whether this integration's register map fits your inverter. It needs Python 3.10 or newer and nothing else to install. It runs on any computer that can reach the inverter once EcoFlow support has enabled Modbus. Download [register_scan.py](../tools/register_scan.py) and run:
+
+```bash
+python3 register_scan.py <inverter address>
+```
+
+The scan sends only read requests, so it changes nothing on the inverter. It prints which registers answered, their values, and whether each value looks plausible. The serial number is cut to its first four characters. Add `--json` for a machine-readable version. Attach the output to a new issue, together with the model name from the EcoFlow app. That measurement is what lets me add a model. If you already run a Local entry, its diagnostics download carries the registers of its last poll too, with the serial number left out.
 
 ## If it does not connect
 
