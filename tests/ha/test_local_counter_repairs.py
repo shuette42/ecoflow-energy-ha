@@ -153,9 +153,14 @@ async def test_an_open_notice_is_written_once_until_its_wording_changes(
     clock["now"] += timedelta(seconds=LOCAL_COUNTER_HELD_NOTICE_S)
     created: list[str] = []
     real = ir.async_create_issue
+
+    def spy(*args: Any, **kwargs: Any) -> None:
+        created.append(args[2])
+        real(*args, **kwargs)
+
     monkeypatch.setattr(
         "custom_components.ecoflow_energy.coordinator.local_modbus.ir.async_create_issue",
-        lambda *args, **kwargs: (created.append(args[2]), real(*args, **kwargs))[1],
+        spy,
     )
     for _ in range(3):
         await coordinator.async_refresh()
@@ -221,6 +226,7 @@ async def test_a_stale_notice_still_finishes_without_changing_anything(
         "stale",
         {"entry_id": entry_id.replace("{live}", entry.entry_id), "key": key},
     )
+    assert isinstance(flow, repairs.LocalCounterHeldRepairFlow)
     flow.hass = hass
     flow.handler = DOMAIN
     flow.issue_id = "stale"
@@ -289,9 +295,14 @@ async def test_the_notice_wording_moves_only_with_the_held_value_not_every_poll(
     clock["now"] += timedelta(seconds=LOCAL_COUNTER_HELD_NOTICE_S)
     created: list[str] = []
     real = ir.async_create_issue
+
+    def spy(*args: Any, **kwargs: Any) -> None:
+        created.append(args[2])
+        real(*args, **kwargs)
+
     monkeypatch.setattr(
         "custom_components.ecoflow_energy.coordinator.local_modbus.ir.async_create_issue",
-        lambda *args, **kwargs: (created.append(args[2]), real(*args, **kwargs))[1],
+        spy,
     )
     seen: list[float] = []
     for _ in range(2):

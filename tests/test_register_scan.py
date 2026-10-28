@@ -8,6 +8,7 @@ reaches the output, and that its copy of the map equals the integration's.
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
 import json
 import socket
@@ -147,19 +148,43 @@ class FakeInverter:
         self._listener = socket.socket()
         self._listener.bind(("127.0.0.1", 0))
         self._listener.listen(5)
+        self._listener.settimeout(0.05)
         self.port = self._listener.getsockname()[1]
-        threading.Thread(target=self._accept, daemon=True).start()
+        self._stopping = threading.Event()
+        self._threads: list[threading.Thread] = []
+        self._conns: list[socket.socket] = []
+        self._accept_thread = threading.Thread(target=self._accept, daemon=True)
+        self._accept_thread.start()
 
     def close(self) -> None:
+        """Stop the server and join every thread it started.
+
+        A thread left running past the test is reported by the Home Assistant
+        test plugin, so the accept loop polls a stop flag and each open
+        connection is shut down before the join.
+        """
+        self._stopping.set()
+        self._accept_thread.join(timeout=2)
         self._listener.close()
+        for conn in list(self._conns):
+            with contextlib.suppress(OSError):
+                conn.shutdown(socket.SHUT_RDWR)
+        for thread in list(self._threads):
+            thread.join(timeout=2)
+        assert not self._accept_thread.is_alive()
 
     def _accept(self) -> None:
-        while True:
+        while not self._stopping.is_set():
             try:
                 conn, _ = self._listener.accept()
+            except TimeoutError:
+                continue
             except OSError:
                 return
-            threading.Thread(target=self._serve, args=(conn,), daemon=True).start()
+            self._conns.append(conn)
+            thread = threading.Thread(target=self._serve, args=(conn,), daemon=True)
+            self._threads.append(thread)
+            thread.start()
 
     @staticmethod
     def _frame(tid: int, unit: int, pdu: bytes) -> bytes:

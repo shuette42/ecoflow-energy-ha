@@ -699,7 +699,9 @@ async def test_active_fault_codes_show_the_codes_and_their_names(
     assert shown is not None
     assert shown.state == state
     assert shown.attributes["faults"] == faults
-    assert er.async_get(hass).async_get(entity_id).entity_category == "diagnostic"
+    registered = er.async_get(hass).async_get(entity_id)
+    assert registered is not None
+    assert registered.entity_category == "diagnostic"
     await _unload(hass, entry)
 
 

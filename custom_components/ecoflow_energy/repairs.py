@@ -7,11 +7,10 @@ Home Assistant's own Ignore keeps the current total.
 
 from __future__ import annotations
 
-from typing import cast
+from typing import Any, cast
 
 from homeassistant.components.repairs import ConfirmRepairFlow, RepairsFlow
 from homeassistant.core import HomeAssistant
-from homeassistant.data_entry_flow import FlowResult
 
 from .const import DOMAIN
 from .coordinator.local_modbus import EcoFlowLocalModbusCoordinator
@@ -25,9 +24,9 @@ class LocalCounterHeldRepairFlow(ConfirmRepairFlow):
         self._entry_id = entry_id
         self._key = key
 
-    async def async_step_confirm(
-        self, user_input: dict[str, str] | None = None
-    ) -> FlowResult:
+    # ``Any``: newer Home Assistant versions name this result type differently
+    # (``RepairsFlowResult``), and an override must match the installed one.
+    async def async_step_confirm(self, user_input: dict[str, str] | None = None) -> Any:
         """Accept the device value; a gone entry or key still finishes the flow."""
         if user_input is not None:
             coordinators = self.hass.data.get(DOMAIN, {}).get(self._entry_id, {})
