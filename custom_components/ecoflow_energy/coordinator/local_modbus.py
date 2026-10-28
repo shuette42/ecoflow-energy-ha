@@ -65,6 +65,7 @@ from ..ecoflow.modbus_local import (
     ModbusTransport,
 )
 from ..ecoflow.parsers.powerocean_modbus import (
+    FAULT_BLOCKS,
     LIFETIME_COUNTER_KEYS,
     POLL_BLOCKS,
     SETUP_BLOCKS,
@@ -157,6 +158,13 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # drop of the current run happened, the latest dropped reading and the
         # bound it was compared with. In memory only.
         self._held_counters: dict[str, dict[str, Any]] = {}
+        # The raw register blocks (offset -> bytes) of the last successful
+        # poll, for the diagnostics download. Replaced on every success.
+        self._last_raw: dict[int, bytes] = {}
+        # The fault events are read apart (see ``FAULT_BLOCKS``). A device that
+        # refuses them is not asked again; any other failure is retried.
+        self._fault_events_supported = True
+        self._fault_read_failing = False
         # The placeholders each open repairs notice was created with, by key, so
         # a poll writes the registry only when the wording would change.
         self._notice_placeholders: dict[str, dict[str, str]] = {}
@@ -259,6 +267,11 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             del self._device_data[key]
             if self.data is not None:
                 self.data.pop(key, None)
+
+    @property
+    def last_raw(self) -> dict[int, bytes]:
+        """Return the raw register blocks of the last successful poll."""
+        return dict(self._last_raw)
 
     def held_counters(self, older_than_s: float = 0.0) -> dict[str, dict[str, Any]]:
         """Return the counters held back for at least ``older_than_s`` seconds.
@@ -508,10 +521,49 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         self._handle_success()
         parsed = parse_registers(raw)
+        fault_count = parsed.get("fault_count")
+        if fault_count:
+            # Only a device that reports a fault is asked for the event list:
+            # a healthy one costs no extra connection and no unprobed read.
+            raw = {**raw, **await self._read_fault_events()}
+            parsed = parse_registers(raw)
+        elif fault_count == 0:
+            parsed["fault_codes"] = []
+        self._last_raw = raw
+        if "fault_codes" not in parsed:
+            # Unknown beats a list from an earlier poll that may be out of date.
+            self._device_data.pop("fault_codes", None)
         self._hold_counters(parsed)
         self._device_data.update(parsed)
         self._sync_held_notices()
         return dict(self._device_data)
+
+    async def _read_fault_events(self) -> dict[int, bytes]:
+        """Read the fault event registers; a failure costs the list, never the poll."""
+        if not self._fault_events_supported:
+            return {}
+        try:
+            events = await self._link.read_blocks(FAULT_BLOCKS)
+        except ModbusExceptionResponse as err:
+            self._fault_events_supported = False
+            _LOGGER.debug(
+                "Local Modbus %s refused the fault event registers, the fault "
+                "list stays empty: %s",
+                self.device_tag,
+                err,
+            )
+            return {}
+        except ModbusLocalError as err:
+            if not self._fault_read_failing:
+                self._fault_read_failing = True
+                _LOGGER.debug(
+                    "Local Modbus %s: fault events not read, trying again: %s",
+                    self.device_tag,
+                    err,
+                )
+            return {}
+        self._fault_read_failing = False
+        return events
 
     def _handle_failure(self, err: ModbusLocalError) -> dict[str, Any]:
         """Count a failed poll; mark the device unavailable on the fifth in a row."""

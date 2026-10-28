@@ -936,6 +936,10 @@ _PRECISION_WAIVED = {
         "text, the active alert codes separated by commas or 'none', so there "
         "is no number to round"
     ),
+    "fault_codes": (
+        "text, the active fault codes in decimal separated by commas or 'none', "
+        "so there is no number to round"
+    ),
 }
 
 # One waiver per schedule slot the device can report. The window is a text

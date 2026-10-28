@@ -7,6 +7,8 @@ All notable changes to this project will be documented in this file.
 ### Added
 
 - Local mode raises a repairs notice when a lifetime total has been held back for more than a day because the inverter's counter went down. Select Submit to take the inverter's value from now on, or Ignore to keep the current total. Totals that are held back also show in the diagnostics download.
+- Local mode gets an Active Fault Codes sensor (a diagnostic entity). It lists the codes the inverter reports in decimal, separated by commas, and reads `none` while there are none. The `faults` attribute pairs each code with its name in your Home Assistant language, or with nothing for a code that has no name yet. German is translated, the other languages show the English names. The fault names follow the list published by @MaxGrmm in EF-PowerOcean-TcpModbus. They have not been checked against another source, and only the first fault register has ever been read on a real unit. The list is read only while the inverter reports a fault, so a healthy inverter is asked nothing extra, and the sensor stays unknown on an inverter that refuses the list while the rest of the readings are not affected.
+- The Local diagnostics download now carries the raw register words of the last poll (`raw_registers`, by hexadecimal start address), so a register the integration does not decode yet can be read from a report. The serial number words are left out.
 
 ## [1.26.1] - 2026-10-26
 

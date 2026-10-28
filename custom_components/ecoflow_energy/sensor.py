@@ -69,6 +69,7 @@ from .entity import (
     accessory_ready,
     label_placeholders,
 )
+from .fault_codes import FAULT_CODES_KEY, async_load_fault_names
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -125,6 +126,9 @@ async def async_setup_entry(
                     entities.append(EcoFlowSensor(coordinator, sensor_def))
                     continue
                 pending.append(sensor_def)
+                continue
+            if is_local and sensor_def.key == FAULT_CODES_KEY:
+                entities.append(EcoFlowFaultCodesSensor(coordinator, sensor_def))
                 continue
             entities.append(EcoFlowSensor(coordinator, sensor_def))
 
@@ -434,6 +438,50 @@ class EcoFlowSensor(
         if precision is None or not isinstance(val, (int, float)):
             return val
         return round(val, precision) if precision > 0 else int(round(val, 0))
+
+
+class EcoFlowFaultCodesSensor(EcoFlowSensor):
+    """The active fault codes of a Local device, with their names as attributes.
+
+    The state is the codes in decimal, joined by commas, or `none`. It is
+    unknown while the fault registers were not read (the device refused them,
+    or the read failed), because an empty list would claim "no fault".
+    """
+
+    def __init__(
+        self, coordinator: EcoFlowDeviceCoordinator, definition: EcoFlowSensorDef
+    ) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator, definition)
+        self._names: dict[int, str] = {}
+
+    async def async_added_to_hass(self) -> None:
+        """Load the names in the language Home Assistant runs in."""
+        await super().async_added_to_hass()
+        self._names = await async_load_fault_names(self.hass)
+
+    def _codes(self) -> list[int] | None:
+        data = self.coordinator.data
+        codes = data.get(FAULT_CODES_KEY) if data is not None else None
+        return list(codes) if isinstance(codes, list) else None
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the codes in decimal, `none` when the list is empty."""
+        codes = self._codes()
+        if codes is None:
+            return None
+        return ",".join(str(code) for code in codes) if codes else "none"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, list[dict[str, int | str | None]]]:
+        """Return the codes with their names; a code without a name has None."""
+        return {
+            "faults": [
+                {"code": code, "name": self._names.get(code)}
+                for code in self._codes() or []
+            ]
+        }
 
 
 class EcoFlowDiagnosticSensor(

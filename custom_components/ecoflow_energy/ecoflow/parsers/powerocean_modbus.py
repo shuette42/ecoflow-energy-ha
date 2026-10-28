@@ -14,6 +14,7 @@ Registers that no sensor reads are left out on purpose; blocks may span them
 from __future__ import annotations
 
 import math
+import struct
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -31,6 +32,9 @@ from .powerocean_proto import remap_proto_keys
 # (offset, register count): protocol version + product category + product number,
 # serial (16 ASCII bytes), firmware package (4 bytes).
 SETUP_BLOCKS: tuple[tuple[int, int], ...] = ((0x0000, 3), (0x0003, 8), (0x000B, 2))
+# The serial's registers, for a caller that must not publish them (0x0003-0x000A).
+SERIAL_OFFSET = 0x0003
+SERIAL_REGISTER_COUNT = 8
 
 # (offset, register count), each block at most 125 registers.
 POLL_BLOCKS: tuple[tuple[int, int], ...] = (
@@ -47,6 +51,14 @@ POLL_BLOCKS: tuple[tuple[int, int], ...] = (
     (0x0820, 1),  # batteries online
     (0x0870, 98),  # lifetime energy counters up to 0x08D1
 )
+
+# The fault event list: 20 events of one 16-bit word each, 0 = empty slot. It is
+# read apart from POLL_BLOCKS because only the first event has ever been read on
+# a real device: a device that refuses 0x0801 and up must lose the fault list,
+# not the whole poll (the client fails every block of a read on one refusal).
+FAULT_EVENT_OFFSET = 0x0801
+FAULT_EVENT_COUNT = 20
+FAULT_BLOCKS: tuple[tuple[int, int], ...] = ((FAULT_EVENT_OFFSET, FAULT_EVENT_COUNT),)
 
 # Bits of the system status word (0x0211) that are decoded. Bit 0: 0 grid
 # connected, 1 off-grid. Bit 1: 0 normal, 1 abnormal. Bit 11: the device
@@ -217,6 +229,14 @@ def parse_registers(blocks: Mapping[int, bytes]) -> dict[str, Any]:
         result["local_system_abnormal"] = bool((status >> _SYSTEM_ABNORMAL_BIT) & 1)
         result["modbus_control_active"] = bool((status >> _CONTROL_ACTIVE_BIT) & 1)
         result["local_bms_connected"] = bool((status >> _BMS_CONNECTED_BIT) & 1)
+
+    # The fault events: every non-zero word in register order, kept as read. No
+    # block read, no list: an empty list would claim "no fault" for a device
+    # that was never asked.
+    events = _slice(blocks, FAULT_EVENT_OFFSET, FAULT_EVENT_COUNT)
+    if events is not None:
+        words = struct.unpack(f">{FAULT_EVENT_COUNT}H", events)
+        result["fault_codes"] = [word for word in words if word]
 
     # Same rule for System State 2: no word read, no "none" invented.
     state2 = result.get("local_system_state2")

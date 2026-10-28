@@ -378,6 +378,9 @@
       "fault_count": {
         "name": "Fehleranzahl"
       },
+      "fault_codes": {
+        "name": "Aktive Fehlercodes"
+      },
       "local_system_alerts": {
         "name": "Systemmeldungen"
       },
@@ -3271,6 +3274,28 @@
       },
       "ev_stop_charging": {
         "name": "Wallbox Laden stoppen"
+      }
+    }
+  },
+  "selector": {
+    "fault_code": {
+      "options": {
+        "100": "Netzausfall",
+        "101": "Netzunterspannung",
+        "102": "Netzüberspannung",
+        "105": "Netz-Unterfrequenz",
+        "128": "Schnelle Zwischenkreis-Überspannung",
+        "139": "Alarm Spannungsflackern",
+        "140": "Alarm plötzlicher Phasensprung der Netzspannung",
+        "156": "Warten auf Netzwiederverbindung",
+        "163": "Fehler der 12-V-Hilfsstromversorgung",
+        "179": "Meldung: Wechselrichtermodul eingeschaltet",
+        "203": "Meldung: BP-Modul eingeschaltet",
+        "521": "Kommunikationsfehler des Energiespeichers",
+        "532": "Spannungsfehler der 12-V-Hilfsstromversorgung",
+        "700": "Ereignis: Gerät im Inselbetrieb",
+        "702": "Energiesparmodus",
+        "703": "Meldung: EMS-Modul eingeschaltet"
       }
     }
   },

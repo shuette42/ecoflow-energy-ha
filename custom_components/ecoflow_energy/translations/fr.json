@@ -378,6 +378,9 @@
       "fault_count": {
         "name": "Nombre de défauts"
       },
+      "fault_codes": {
+        "name": "Codes de défaut actifs"
+      },
       "local_system_alerts": {
         "name": "Alertes système"
       },
@@ -3271,6 +3274,28 @@
       },
       "ev_stop_charging": {
         "name": "Arrêter la charge de la wallbox"
+      }
+    }
+  },
+  "selector": {
+    "fault_code": {
+      "options": {
+        "100": "Power outage",
+        "101": "Grid undervoltage",
+        "102": "Grid overvoltage",
+        "105": "Grid under-frequency",
+        "128": "Bus fast overvoltage",
+        "139": "Voltage flicker alarm",
+        "140": "Sudden grid voltage phase change alarm",
+        "156": "Grid reconnection waiting",
+        "163": "12V auxiliary power fault",
+        "179": "Inverter module power-on notification",
+        "203": "BP module power-on notification",
+        "521": "Energy storage communication error",
+        "532": "12V auxiliary power voltage fault",
+        "700": "Device off-grid event",
+        "702": "Low power mode",
+        "703": "EMS module power-on notification"
       }
     }
   },

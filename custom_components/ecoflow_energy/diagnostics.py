@@ -9,7 +9,9 @@ from __future__ import annotations
 import base64
 import logging
 import re
+import struct
 import time
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
@@ -43,6 +45,7 @@ from .const import (
 from .coordinator import EcoFlowDeviceCoordinator, modbus_link
 from .coordinator.local_modbus import EcoFlowLocalModbusCoordinator
 from .ecoflow.cloud_http import EcoFlowHTTPQuota
+from .ecoflow.parsers.powerocean_modbus import SERIAL_OFFSET, SERIAL_REGISTER_COUNT
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -370,6 +373,23 @@ async def async_get_config_entry_diagnostics(
     return _redact_serials(diagnostics, tails=_serial_tails(serials))
 
 
+def _raw_registers(raw: Mapping[int, bytes]) -> dict[str, list[int | None]]:
+    """Return ``{"0x0206": [word, ...]}`` for the blocks of the last poll.
+
+    The serial's words are null. Only the first poll of a device (and the first
+    after an outage) reads them; later polls carry no identity block.
+    """
+    serial = range(SERIAL_OFFSET, SERIAL_OFFSET + SERIAL_REGISTER_COUNT)
+    result: dict[str, list[int | None]] = {}
+    for offset, data in sorted(raw.items()):
+        words = struct.unpack(f">{len(data) // 2}H", data[: len(data) // 2 * 2])
+        result[f"0x{offset:04X}"] = [
+            None if offset + index in serial else word
+            for index, word in enumerate(words)
+        ]
+    return result
+
+
 def _local_diagnostics(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any]:
     """Diagnostics for a local Modbus entry: link settings, poll health, data.
 
@@ -402,6 +422,9 @@ def _local_diagnostics(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any
                     key: {**held, "since": held["since"].isoformat()}
                     for key, held in coordinator.held_counters().items()
                 },
+                # What the last poll read, word by word, so a register the
+                # parser does not know yet can be read from a download.
+                "raw_registers": _raw_registers(coordinator.last_raw),
             }
         )
 

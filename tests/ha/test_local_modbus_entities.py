@@ -42,8 +42,10 @@ from custom_components.ecoflow_energy.ecoflow.modbus_local import (
     BACKUP_RATIO_OFFSET,
     BRIGHTNESS_OFFSET,
     HEARTBEAT_OFFSET,
+    ModbusExceptionResponse,
     ModbusTimeoutError,
 )
+from custom_components.ecoflow_energy.fault_codes import async_load_fault_names
 from custom_components.ecoflow_energy.number import EcoFlowLocalNumber, EcoFlowNumber
 from custom_components.ecoflow_energy.number import async_setup_entry as number_setup
 from custom_components.ecoflow_energy.switch import async_setup_entry as switch_setup
@@ -121,9 +123,16 @@ async def _setup_local(
     hass: HomeAssistant,
     frame: dict[int, bytes] | None = None,
     entry: MockConfigEntry | None = None,
+    fault_events: list[int] | None = None,
 ) -> tuple[MockConfigEntry, StubClient, EcoFlowLocalModbusCoordinator]:
-    """Set a local entry up on a stub client whose first poll is ``frame``."""
+    """Set a local entry up on a stub client whose first poll is ``frame``.
+
+    ``fault_events`` are the leading words the device answers for its fault
+    event registers (the rest are zero).
+    """
     stub = StubClient([frame if frame is not None else _poll_frame()])
+    if fault_events:
+        stub.fault_events[: len(fault_events)] = fault_events
     entry = entry if entry is not None else _local_entry()
     entry.add_to_hass(hass)
     with patch(
@@ -657,3 +666,80 @@ def test_the_documentation_lists_the_four_entities_under_the_local_controls() ->
     # user's words, not with the register address.
     assert "EMS Backup Ratio" in section
     assert "same device value" in section
+
+
+@pytest.mark.parametrize(
+    ("events", "state", "faults"),
+    [
+        ([], "none", []),
+        (
+            [100, 0, 9999, 521],
+            "100,9999,521",
+            [
+                {"code": 100, "name": "Power outage"},
+                {"code": 9999, "name": None},
+                {"code": 521, "name": "Energy storage communication error"},
+            ],
+        ),
+    ],
+)
+async def test_active_fault_codes_show_the_codes_and_their_names(
+    hass: HomeAssistant, events: list[int], state: str, faults: list[dict[str, Any]]
+) -> None:
+    """State: decimal codes or `none`. Attribute: each code with its name, or None."""
+    count = sum(1 for event in events if event)
+    entry, stub, _coordinator = await _setup_local(
+        hass, _poll_frame(fault_count=count), fault_events=events
+    )
+    # A clear device is believed on its count and never asked for the list.
+    assert stub.fault_calls == (1 if count else 0)
+
+    entity_id = _entity_id(hass, "sensor", "fault_codes")
+    shown = hass.states.get(entity_id)
+    assert shown is not None
+    assert shown.state == state
+    assert shown.attributes["faults"] == faults
+    assert er.async_get(hass).async_get(entity_id).entity_category == "diagnostic"
+    await _unload(hass, entry)
+
+
+async def test_active_fault_codes_are_unknown_while_the_registers_were_not_read(
+    hass: HomeAssistant,
+) -> None:
+    """A device that refuses the fault block shows unknown, not a clear `none`."""
+    stub = StubClient([_poll_frame(fault_count=1)])
+    stub.fault_error = ModbusExceptionResponse(2, 0x0801)
+    entry = _local_entry()
+    entry.add_to_hass(hass)
+    with patch(
+        "custom_components.ecoflow_energy.coordinator.local_modbus.create_link",
+        return_value=stub,
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert _state(hass, "sensor", "fault_codes") == "unknown"
+    assert _state(hass, "sensor", "soc_pct") == "100"
+    await _unload(hass, entry)
+
+
+@pytest.mark.parametrize(
+    ("language", "name"),
+    [
+        ("de", "Netzausfall"),
+        ("en", "Power outage"),
+        # No French table: the English name, not a missing one.
+        ("fr", "Power outage"),
+    ],
+)
+async def test_fault_names_follow_the_home_assistant_language_with_english_fallback(
+    hass: HomeAssistant, language: str, name: str
+) -> None:
+    hass.config.language = language
+
+    names = await async_load_fault_names(hass)
+
+    assert names[100] == name
+    assert 9999 not in names
+    # Every one of the 16 codes is named in every language.
+    assert len(names) == 16

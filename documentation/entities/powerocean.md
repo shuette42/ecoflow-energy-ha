@@ -257,8 +257,11 @@ These eight sensors exist only in a Local (Modbus/TCP) entry. Standard Mode and 
 | System Battery Current | A | - | enabled |
 | System Battery Temp | °C | - | enabled |
 | System Alerts | - | diagnostic | enabled |
+| Active Fault Codes | - | diagnostic | enabled |
 
 System Alerts lists the alerts the PowerOcean reports as codes separated by commas, in a fixed order and without spaces, for example `fan_failure,battery_overheating`. It shows `none` while no alert is active, and stays unknown until the PowerOcean has reported its alert state. The codes are system_shutdown, upgrade_shutdown, epo_triggered, low_power_mode, fan_failure, system_failure, battery_reverse_connection, battery_disconnected, auxiliary_power_failure, pcs_timeout, pcs_failure, igbt_self_test_failure, high_temperature_protection, battery_overheating, ntc_circuit_failure, system_reset, hardware_version_error, parallel_sync_error, low_temperature_protection, parallel_master_slave_conflict, parallel_slave_setting_error, parallel_inverter_error and parallel_meter_fault. An alert this integration does not know yet shows as `bit_` and its number. When so many alerts are active that the list would not fit in a Home Assistant state, the first ones are listed and the rest are counted at the end, for example `...,high_temperature_protection,+10`. Use it to send a notification when the state is not `none`.
+
+Active Fault Codes lists the fault codes the PowerOcean reports, in decimal and separated by commas, for example `100,521`. It shows `none` while no fault is active. The `faults` attribute pairs each code with its name in your Home Assistant language, for example `{"code": 100, "name": "Power outage"}`, and the name is empty for a code without one. The names are translated into German, the other languages show the English names. They follow the list published by @MaxGrmm in EF-PowerOcean-TcpModbus and have not been checked against another source. The sensor stays unknown while the inverter has not answered the fault registers, which does not affect the other readings.
 
 ---
 

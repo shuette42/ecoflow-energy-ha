@@ -2574,6 +2574,15 @@ POWEROCEANLOCALONLY_SENSORS: list[EcoFlowSensorDef] = [
         icon="mdi:alert-circle-outline",
         entity_category="diagnostic",
     ),
+    # The fault event list (0x0801-0x0814): the active codes in decimal as one
+    # text, `none` while the list is empty. The names ride in the `faults`
+    # attribute (`fault_codes.py`), so the state stays a stable code list.
+    EcoFlowSensorDef(
+        "fault_codes",
+        "Active Fault Codes",
+        icon="mdi:alert-circle-outline",
+        entity_category="diagnostic",
+    ),
     # Whole-system battery readings from the Modbus table. The cloud stream
     # has no such figure: its `bp_current_a` is a single pack, so the current
     # here keeps its own key instead of sharing one. The labels say "System"

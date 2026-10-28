@@ -70,6 +70,9 @@ from custom_components.ecoflow_energy.ecoflow.modbus_local import (
     ModbusTimeoutError,
 )
 from custom_components.ecoflow_energy.ecoflow.parsers.powerocean_modbus import (
+    FAULT_BLOCKS,
+    FAULT_EVENT_COUNT,
+    FAULT_EVENT_OFFSET,
     LIFETIME_COUNTER_KEYS,
     POLL_BLOCKS,
     SETUP_BLOCKS,
@@ -106,6 +109,7 @@ NEW_KEYS = {
     "batt_current_a",
     "batt_temp_c",
     "local_system_alerts",
+    "fault_codes",
 }
 # Integrated energy keys of the cloud entry. Local mode publishes none of them.
 INTEGRATED_KEYS = {
@@ -193,14 +197,24 @@ class StubClient:
         self._script = list(script)
         self.gate: asyncio.Event | None = None
         self.calls = 0
+        self.fault_calls = 0
         # The blocks each poll asked for, in order.
         self.requested: list[tuple[tuple[int, int], ...]] = []
         self.writes: list[tuple[int, int]] = []
         self.write_errors: list[Exception | None] = []
         self.registers: dict[int, int] = {}
         self.read_back_override: int | None = None
+        # The fault event words (0x0801-0x0814) every poll answers, or the error
+        # that read raises. The fault read is its own call and takes no script step.
+        self.fault_events: list[int] = [0] * FAULT_EVENT_COUNT
+        self.fault_error: Exception | None = None
 
     async def read_blocks(self, blocks: Sequence[tuple[int, int]]) -> dict[int, bytes]:
+        if tuple(blocks) == FAULT_BLOCKS:
+            self.fault_calls += 1
+            if self.fault_error is not None:
+                raise self.fault_error
+            return {FAULT_EVENT_OFFSET: struct.pack(">20H", *self.fault_events)}
         self.calls += 1
         self.requested.append(tuple(blocks))
         if len(blocks) == 1 and blocks[0][1] == 1 and blocks[0][0] in self.registers:
@@ -1696,3 +1710,143 @@ async def test_accepting_lowers_a_restored_floor_to_the_device_value(
     await coordinator.async_refresh()
     # Below the old restored value, above the accepted one: published now.
     assert _solar(coordinator) == pytest.approx(base + 1.0, abs=1e-3)
+
+
+async def test_a_refused_fault_block_costs_the_list_and_never_the_poll(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A device rejecting 0x0801 keeps its other readings and is not asked again."""
+    caplog.set_level(
+        logging.DEBUG, logger="custom_components.ecoflow_energy.coordinator"
+    )
+    faulty = _frame(DAY, fault_count=1)
+    coordinator, stub = _with_stub(hass, _local_entry(), [faulty, faulty, faulty])
+    stub.fault_error = ModbusExceptionResponse(2, FAULT_EVENT_OFFSET)
+
+    for _ in range(3):
+        await coordinator.async_refresh()
+
+    assert coordinator.last_poll_ok is True
+    assert coordinator.consecutive_failures == 0
+    assert coordinator.data["soc_pct"] == 100
+    assert "fault_codes" not in coordinator.data
+    assert stub.fault_calls == 1
+    assert [r for r in caplog.records if r.levelno >= logging.WARNING] == []
+    assert sum("refused the fault event" in r.getMessage() for r in caplog.records) == 1
+
+
+async def test_a_failed_fault_read_drops_the_old_list_and_is_retried(
+    hass: HomeAssistant,
+) -> None:
+    """A timeout is not a refusal: unknown until the next poll reads the list again."""
+    faulty = _frame(DAY, fault_count=1)
+    coordinator, stub = _with_stub(hass, _local_entry(), [faulty, faulty, faulty])
+    stub.fault_events[0] = 100
+    await coordinator.async_refresh()
+    assert coordinator.data["fault_codes"] == [100]
+
+    stub.fault_error = ModbusTimeoutError("no answer")
+    await coordinator.async_refresh()
+    assert coordinator.last_poll_ok is True
+    assert "fault_codes" not in coordinator.data
+
+    stub.fault_error = None
+    stub.fault_events[0] = 521
+    await coordinator.async_refresh()
+    assert coordinator.data["fault_codes"] == [521]
+
+
+async def test_local_diagnostics_carry_the_raw_registers_and_no_serial(
+    hass: HomeAssistant,
+) -> None:
+    """Hex start address -> words; the serial's words are null, the rest are as read."""
+    entry = _local_entry()
+    assert await _set_up_local_entry(hass, entry, [_frame(DAY, fault_count=1)])
+
+    diagnostics = await async_get_config_entry_diagnostics(hass, entry)
+
+    (device,) = diagnostics["devices"]
+    raw = device["raw_registers"]
+    assert {"0x0206", "0x0870", "0x0801", "0x0003"} <= set(raw)
+    assert len(raw["0x0870"]) == 98
+    frame = _frame(DAY)
+    assert raw["0x0206"] == list(struct.unpack(">15H", frame[0x0206]))
+    assert raw["0x0870"] != [0] * 98
+    # The first poll read the identity block: its eight words are withheld.
+    assert raw["0x0003"] == [None] * 8
+    assert SERIAL not in json.dumps(diagnostics)
+    # Positive control: the coordinator does hold the serial's words, so the
+    # null above is the diagnostics' doing and not an empty read.
+    coordinator = hass.data[DOMAIN][entry.entry_id][SERIAL]
+    serial_words = list(struct.unpack(">8H", SERIAL.encode("ascii")))
+    assert list(struct.unpack(">8H", coordinator.last_raw[0x0003])) == serial_words
+    assert not any(
+        serial_words[:2] == words[i : i + 2]
+        for words in raw.values()
+        for i in range(len(words) - 1)
+        if None not in words[i : i + 2]
+    )
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_the_raw_registers_are_those_of_the_last_successful_poll(
+    hass: HomeAssistant,
+) -> None:
+    """Empty before a poll, replaced by each success, kept through a failure."""
+    coordinator = _coordinator(
+        hass,
+        _local_entry(),
+        [_frame(DAY), _frame(DAY, soc=42), ModbusTimeoutError("down")],
+    )
+    assert coordinator.last_raw == {}
+
+    await coordinator.async_refresh()
+    first = coordinator.last_raw
+    await coordinator.async_refresh()
+    second = coordinator.last_raw
+    await coordinator.async_refresh()
+
+    assert first != second
+    assert coordinator.last_poll_ok is False
+    assert coordinator.last_raw == second
+
+
+async def test_a_clear_device_is_never_asked_for_its_fault_events(
+    hass: HomeAssistant,
+) -> None:
+    """Count 0 is a known "no fault" without the extra read; count > 0 reads."""
+    clear, faulty = _frame(DAY), _frame(DAY, fault_count=2)
+    coordinator, stub = _with_stub(hass, _local_entry(), [clear, clear, faulty, clear])
+    stub.fault_events[:2] = [100, 521]
+
+    await coordinator.async_refresh()
+    await coordinator.async_refresh()
+    assert coordinator.data["fault_codes"] == []
+    assert stub.fault_calls == 0
+    assert FAULT_EVENT_OFFSET not in coordinator.last_raw
+
+    await coordinator.async_refresh()
+    assert coordinator.data["fault_codes"] == [100, 521]
+    assert stub.fault_calls == 1
+    assert FAULT_EVENT_OFFSET in coordinator.last_raw
+
+    # The fault went away: back to a known empty list, with no second read.
+    await coordinator.async_refresh()
+    assert coordinator.data["fault_codes"] == []
+    assert stub.fault_calls == 1
+
+
+async def test_a_poll_without_the_fault_count_leaves_the_fault_list_unknown(
+    hass: HomeAssistant,
+) -> None:
+    """No count, no claim: the list is not invented and nothing extra is read."""
+    frame = _frame(DAY)
+    del frame[0x0800]
+    coordinator, stub = _with_stub(hass, _local_entry(), [_frame(DAY), frame])
+    await coordinator.async_refresh()
+    assert coordinator.data["fault_codes"] == []
+
+    await coordinator.async_refresh()
+
+    assert "fault_codes" not in coordinator.data
+    assert stub.fault_calls == 0
