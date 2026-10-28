@@ -475,12 +475,16 @@ class EcoFlowFaultCodesSensor(EcoFlowSensor):
 
     @property
     def extra_state_attributes(self) -> dict[str, list[dict[str, int | str | None]]]:
-        """Return the codes with their names; a code without a name has None."""
+        """Return the codes with their names; a code without a name has None.
+
+        Empty while the codes are unknown: an empty ``faults`` list would claim
+        "no fault" next to a state that says it does not know.
+        """
+        codes = self._codes()
+        if codes is None:
+            return {}
         return {
-            "faults": [
-                {"code": code, "name": self._names.get(code)}
-                for code in self._codes() or []
-            ]
+            "faults": [{"code": code, "name": self._names.get(code)} for code in codes]
         }
 
 

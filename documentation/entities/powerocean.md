@@ -245,7 +245,7 @@ There is no grid sensor per inverter. The grid figure the pair reports per inver
 
 ## Sensors - Local Modbus Only
 
-These eight sensors exist only in a Local (Modbus/TCP) entry. Standard Mode and Enhanced Mode never create them. The three energy counters are the device's own lifetime counters, read as the device reports them. System Battery Voltage, System Battery Current and System Battery Temp describe the whole battery system, not a single pack. System Battery Current is positive while the system charges and negative while it discharges, and System Battery Temp is the average over the battery packs.
+These nine sensors exist only in a Local (Modbus/TCP) entry. Standard Mode and Enhanced Mode never create them. The three energy counters are the device's own lifetime counters, read as the device reports them. System Battery Voltage, System Battery Current and System Battery Temp describe the whole battery system, not a single pack. System Battery Current is positive while the system charges and negative while it discharges, and System Battery Temp is the average over the battery packs.
 
 | Entity | Unit | Category | Default |
 |:---|:---:|:---:|:---:|

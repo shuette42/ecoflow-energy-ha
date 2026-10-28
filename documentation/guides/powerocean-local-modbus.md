@@ -8,7 +8,7 @@ I built it for my own PowerOcean, the only unit it has been measured on. Treat i
 
 | What | Why |
 |---|---|
-| A three-phase PowerOcean | Single-phase and Plus units, and the Ocean 2, are not offered yet because nobody has measured them. A read-only scan can change that, see [Trying a model that is not offered yet](#trying-a-model-that-is-not-offered-yet) |
+| A three-phase PowerOcean | Single-phase and Plus units, the DC Fit and the Ocean 2 are not offered yet because nobody has measured them. A read-only scan can change that, see [Trying a model that is not offered yet](#trying-a-model-that-is-not-offered-yet) |
 | Modbus switched on by EcoFlow support | The inverter does not answer on the Modbus port until support enables it. Ask them through the support chat and quote EcoFlow's Open Modbus Protocol document |
 | A fixed address for the inverter | Give it a reserved address in your router, or a name your network resolves. The entry stores that address |
 | No other Modbus tool on the inverter | The inverter serves one Modbus client at a time. A second tool holding the connection makes this entry unavailable. The exception is two integrations on Home Assistant's shared Modbus connection, see [Sharing the inverter with another Modbus integration](#sharing-the-inverter-with-another-modbus-integration) |
@@ -72,13 +72,18 @@ Three energy sensors do not carry over, because the two connections measure diff
 
 ## Trying a model that is not offered yet
 
-If you own a single-phase PowerOcean, a PowerOcean Plus, a DC Fit or an Ocean 2, a short read-only scan shows whether this integration's register map fits your inverter. It needs Python 3.10 or newer and nothing else to install. It runs on any computer that can reach the inverter once EcoFlow support has enabled Modbus. Download [register_scan.py](../tools/register_scan.py) and run:
+If you own a single-phase PowerOcean, a PowerOcean Plus, a DC Fit or an Ocean 2, a short read-only scan shows whether this integration's register map fits your inverter. It needs Python 3.10 or newer and nothing else to install. It runs on any computer that can reach the inverter once EcoFlow support has enabled Modbus. Download [register_scan.py](../tools/register_scan.py) or fetch it from the command line, then run it:
 
 ```bash
+curl -O https://raw.githubusercontent.com/shuette42/ecoflow-energy-ha/main/documentation/tools/register_scan.py
 python3 register_scan.py <inverter address>
 ```
 
-The scan sends only read requests, so it changes nothing on the inverter. It prints which registers answered, their values, and whether each value looks plausible. The serial number is cut to its first four characters. Add `--json` for a machine-readable version. Attach the output to a new issue, together with the model name from the EcoFlow app. That measurement is what lets me add a model. If you already run a Local entry, its diagnostics download carries the registers of its last poll too, with the serial number left out.
+On Windows the command is `py register_scan.py <inverter address>`. If your Modbus port is not 502 or your unit ID is not 1, add `--port <port>` or `--unit <id>`, the same values as in the Local setup.
+
+The inverter serves one Modbus client at a time. Switch off a Local entry and any other Modbus tool before the scan, or every block times out. See [Sharing the inverter with another Modbus integration](#sharing-the-inverter-with-another-modbus-integration). The scan shows one progress line per block. On an inverter that stays silent it takes a few minutes.
+
+The scan sends only read requests, so it changes nothing on the inverter. It prints which registers answered, their values, and whether each value looks plausible. The report does not contain the address you scanned. The serial number is cut to its first four characters. If the model is not the one this integration serves, the scan leaves out the identity registers and prints "withheld, unknown layout" in their place. I cannot tell where such a model keeps its serial number. Add `--json` for a machine-readable version. Attach the output to a new issue, together with the model name from the EcoFlow app. That measurement is what lets me add a model. If you already run a Local entry, its diagnostics download carries the registers of its last poll too, with the serial number left out.
 
 ## If it does not connect
 

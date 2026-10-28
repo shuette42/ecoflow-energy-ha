@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from datetime import datetime, timedelta
 from typing import Any
@@ -9,6 +10,7 @@ from typing import Any
 import pytest
 from homeassistant.components.repairs import ConfirmRepairFlow
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 
 from custom_components.ecoflow_energy import repairs
@@ -16,14 +18,19 @@ from custom_components.ecoflow_energy.const import (
     DOMAIN,
     LOCAL_COUNTER_HELD_NOTICE_S,
 )
+from custom_components.ecoflow_energy.coordinator.local_modbus import (
+    EcoFlowLocalModbusCoordinator,
+)
 from custom_components.ecoflow_energy.diagnostics import (
     async_get_config_entry_diagnostics,
 )
 
 from .test_local_modbus_coordinator import (
     DAY,
+    DEVICE_DICT,
     SERIAL,
     SOLAR,
+    StubClient,
     _coordinator,
     _frame,
     _held_clock,
@@ -71,7 +78,7 @@ async def test_a_counter_held_for_a_day_raises_a_fixable_notice(
     assert issue.translation_placeholders == {
         "counter": "Solar Lifetime Energy",
         "ha_value": f"{BASE:.3f}",
-        "device_value": f"{LOW:.3f}",
+        "device_value": f"{LOW:.1f}",
     }
     assert issue.data == {"entry_id": entry.entry_id, "key": SOLAR}
     assert SERIAL not in json.dumps(
@@ -258,4 +265,139 @@ async def test_diagnostics_list_the_held_counters_without_the_serial(
     assert held["published"] == pytest.approx(BASE, abs=1e-3)
     assert held["device_value"] == pytest.approx(LOW, abs=1e-3)
     assert SERIAL not in json.dumps(diagnostics)
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_the_notice_wording_moves_only_with_the_held_value_not_every_poll(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Device readings a few thousandths apart do not rewrite an open notice."""
+    clock = _held_clock(monkeypatch)
+    entry = _local_entry()
+    coordinator = _coordinator(
+        hass,
+        entry,
+        [
+            _frame(DAY),
+            _frame(DAY, solar_total_kwh=LOW),
+            _frame(DAY, solar_total_kwh=LOW + 0.004),
+            _frame(DAY, solar_total_kwh=LOW + 0.008),
+        ],
+    )
+    await coordinator.async_refresh()
+    await coordinator.async_refresh()
+    clock["now"] += timedelta(seconds=LOCAL_COUNTER_HELD_NOTICE_S)
+    created: list[str] = []
+    real = ir.async_create_issue
+    monkeypatch.setattr(
+        "custom_components.ecoflow_energy.coordinator.local_modbus.ir.async_create_issue",
+        lambda *args, **kwargs: (created.append(args[2]), real(*args, **kwargs))[1],
+    )
+    seen: list[float] = []
+    for _ in range(2):
+        await coordinator.async_refresh()
+        seen.append(coordinator.held_counters()[SOLAR]["device_value"])
+
+    # Positive control: the device value did move between the polls.
+    assert len(set(seen)) == 2
+    assert created == [_issue_id(entry.entry_id)]
+
+
+async def test_an_ignored_notice_survives_a_restart_and_comes_back_ignored(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Ignore is kept on unload and by the first poll after a restart.
+
+    A non-persistent issue is restored by Home Assistant only as an inactive
+    stub that still carries ``dismissed_version``. Deleting that stub (on
+    unload, or on the first poll for an id this run never raised) would bring
+    the notice back as new 24 h later.
+    """
+    entry, _ = await _held_for_a_day(hass, monkeypatch)
+    issue_id = _issue_id(entry.entry_id)
+    ir.async_ignore_issue(hass, DOMAIN, issue_id, True)
+    ignored = _issue(hass, entry.entry_id)
+    assert ignored is not None
+    assert ignored.dismissed_version is not None
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    kept = _issue(hass, entry.entry_id)
+    assert kept is not None
+    assert kept.dismissed_version == ignored.dismissed_version
+
+    # What ``IssueRegistry.async_load`` makes of a non-persistent issue.
+    registry = ir.async_get(hass)
+    registry.issues[(DOMAIN, issue_id)] = dataclasses.replace(
+        kept,
+        active=False,
+        breaks_in_ha_version=None,
+        data=None,
+        is_fixable=None,
+        issue_domain=None,
+        learn_more_url=None,
+        severity=None,
+        translation_key=None,
+        translation_placeholders=None,
+    )
+
+    # A new coordinator on the same hass, a healthy first poll: the stub stays.
+    clock = _held_clock(monkeypatch)
+    restarted = EcoFlowLocalModbusCoordinator(
+        hass,
+        entry,
+        DEVICE_DICT,
+        client=StubClient(
+            [_frame(DAY), *[_frame(DAY, solar_total_kwh=LOW)] * 2],
+        ),
+    )
+    await restarted.async_refresh()
+    stub = _issue(hass, entry.entry_id)
+    assert stub is not None
+    assert stub.dismissed_version == ignored.dismissed_version
+
+    # The counter drops again and is held a day: the notice is raised on the
+    # same record, still ignored.
+    await restarted.async_refresh()
+    clock["now"] += timedelta(seconds=LOCAL_COUNTER_HELD_NOTICE_S)
+    await restarted.async_refresh()
+    again = _issue(hass, entry.entry_id)
+    assert again is not None
+    assert again.active is True
+    assert again.dismissed_version == ignored.dismissed_version
+
+
+async def test_a_notice_raised_this_run_goes_when_the_counter_recovers_even_if_ignored(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Ignore answers one hold: once the hold is over the record goes."""
+    entry, coordinator = await _held_for_a_day(
+        hass, monkeypatch, _frame(DAY, solar_total_kwh=BASE + 1.0)
+    )
+    ir.async_ignore_issue(hass, DOMAIN, _issue_id(entry.entry_id), True)
+
+    await coordinator.async_refresh()
+
+    assert _issue(hass, entry.entry_id) is None
+
+
+async def test_accepting_the_notice_shows_the_device_value_before_the_next_poll(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The entity does not fall back to the restored high value while it waits."""
+    entry, coordinator = await _held_for_a_day(hass, monkeypatch)
+    entity_id = er.async_get(hass).async_get_entity_id(
+        "sensor", DOMAIN, f"{SERIAL}_{SOLAR}"
+    )
+    assert entity_id is not None
+    shown = hass.states.get(entity_id)
+    assert shown is not None
+    assert float(shown.state) == pytest.approx(BASE, abs=0.01)
+
+    assert coordinator.accept_device_counter(SOLAR) is True
+    await hass.async_block_till_done()
+
+    shown = hass.states.get(entity_id)
+    assert shown is not None
+    assert float(shown.state) == pytest.approx(LOW, abs=0.01)
     assert await hass.config_entries.async_unload(entry.entry_id)

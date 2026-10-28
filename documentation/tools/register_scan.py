@@ -5,12 +5,14 @@ Run it on any computer that can reach the inverter and attach the output to a
 GitHub issue. It shows whether the register map of the EcoFlow Energy
 integration fits your model, so a new model can be added from a real measurement.
 
-    python3 register_scan.py HOST [--port 502] [--unit 1] [--json]
+    python3 register_scan.py ADDRESS [--port 502] [--unit 1] [--json]
 
 Standard library only, Python 3.10 or newer. The scan never writes: the only
 Modbus function code it can send is 0x03 (read holding registers), and a guard
 raises before any other code reaches the socket. The serial number is never
-printed in full.
+printed in full, and the address you scan is not part of the report. For a
+model whose identity registers do not have the known layout, those registers
+are withheld altogether.
 """
 
 from __future__ import annotations
@@ -23,9 +25,11 @@ import socket
 import struct
 import sys
 import time
+from collections.abc import Callable
 from datetime import datetime, timezone
 
-SCRIPT_VERSION = "1"
+SCRIPT_VERSION = "2"
+MIN_PYTHON = (3, 10)
 DEFAULT_PORT = 502
 MODBUS_BASE_ADDRESS = 40001  # wire address = base + zero-based register offset
 READ_HOLDING_REGISTERS = 0x03
@@ -62,6 +66,10 @@ FAULT_EVENT_COUNT = 20
 
 # Product category and number of the model the integration's Local mode serves.
 SUPPORTED_PRODUCT = (1, 1)
+# Only for that model is it known that the serial ends before 0x000B. For any
+# other model the raw words of these two blocks are never printed.
+IDENTITY_BLOCK_OFFSETS = (0x0003, 0x000B)
+WITHHELD_TEXT = "withheld, unknown layout"
 
 _COUNTER = (0, math.inf)
 _PERCENT = (0, 100)
@@ -189,9 +197,18 @@ class Link:
             self._sock = socket.create_connection(
                 (self.host, self.port), timeout=self.timeout
             )
+        except (ValueError, OverflowError) as err:  # UnicodeError is a ValueError
+            raise ScanError("the inverter address you gave is not valid") from err
         except OSError as err:
+            # The address you typed is left out of the message on purpose.
+            reason = (
+                "timed out"
+                if isinstance(err, TimeoutError)
+                else (err.strerror or type(err).__name__)
+            )
             raise ScanError(
-                f"cannot connect to {self.host}:{self.port}: {err}"
+                f"cannot connect to the inverter address you gave (port {self.port}): "
+                f"{reason}"
             ) from err
 
     def close(self) -> None:
@@ -247,6 +264,9 @@ class Link:
             except TimeoutError:
                 self.close()  # a late reply would be taken for the next answer
                 raise NoAnswer from None
+            except ScanError:
+                self.close()  # out of sync: the next request starts clean
+                raise
             except (OSError, struct.error) as err:  # reset or closed
                 self.close()
                 if attempt == 2:
@@ -257,6 +277,9 @@ class Link:
 # ---------------------------------------------------------------------------
 # Scan
 # ---------------------------------------------------------------------------
+
+
+NULLED_WORD = "****"
 
 
 def _hex(words: list[int | None]) -> list[str | None]:
@@ -275,6 +298,7 @@ def read_block(link: Link, offset: int, count: int) -> dict:
         "read_mode": "block",
         "status": "ok",
         "detail": "",
+        "withheld": False,
     }
     words: list[int | None]
     try:
@@ -329,11 +353,13 @@ def mask_serial(serial: str) -> str:
     return serial[:4] + "*" * max(len(serial) - 4, 0) if serial else "(empty)"
 
 
-def _null_serial(offset: int, words: list[int | None]) -> list[int | None]:
+def _hex_without_serial(offset: int, words: list[int | None]) -> list[str | None]:
+    """Hex words for the report; a word of the serial range becomes ``****``."""
     start, end = SERIAL_OFFSET, SERIAL_OFFSET + SERIAL_REGISTER_COUNT
+    shown = _hex(words)
     return [
-        0 if (start <= offset + i < end and w is not None) else w
-        for i, w in enumerate(words)
+        NULLED_WORD if (start <= offset + i < end and w is not None) else w
+        for i, w in enumerate(shown)
     ]
 
 
@@ -345,21 +371,27 @@ def plausibility(value: float, bounds: tuple[float, float] | None) -> str:
     return "plausible" if bounds[0] <= value <= bounds[1] else "implausible"
 
 
-def scan(link: Link) -> dict:
-    """Run the whole scan and return the report as a dict."""
+def scan(
+    link: Link, progress: Callable[[int, int, int, int], None] | None = None
+) -> dict:
+    """Run the whole scan and return the report as a dict.
+
+    ``progress(index, total, offset, count)`` is called before each block.
+    """
     plan = [*SETUP_BLOCKS, *POLL_BLOCKS, (FAULT_EVENT_OFFSET, FAULT_EVENT_COUNT)]
     blocks: list[dict] = []
     known: dict[int, int] = {}
     serial = None
-    for offset, count in plan:
+    for index, (offset, count) in enumerate(plan, 1):
+        if progress is not None:
+            progress(index, len(plan), offset, count)
         block = read_block(link, offset, count)
         words = block["words"]
         found = _serial_text(offset, words)
         if found is not None:
             serial = found
-        words = _null_serial(offset, words)  # the clear serial is not kept
         known.update({offset + i: w for i, w in enumerate(words) if w is not None})
-        block["words"] = _hex(words)
+        block["words"] = _hex_without_serial(offset, words)  # clear serial not kept
         blocks.append(block)
 
     def window(offset: int, count: int) -> list[int] | None:
@@ -369,37 +401,51 @@ def scan(link: Link) -> dict:
     registers = []
     for key, offset, count, decoder, counter, bounds in REGISTERS:
         part = window(offset, count)
-        value = None if part is None else _DECODERS[decoder](part)
+        decoded = None if part is None else _DECODERS[decoder](part)
+        # NaN and infinity are not valid JSON: they are reported as null and
+        # the plausibility flag still marks them.
+        finite = not (isinstance(decoded, float) and not math.isfinite(decoded))
         registers.append(
             {
                 "key": key,
                 "offset": offset,
-                "answered": value is not None,
-                "value": value,
+                "answered": decoded is not None,
+                "value": decoded if finite else None,
                 "counter": counter,
-                "plausibility": None if value is None else plausibility(value, bounds),
+                "plausibility": None
+                if decoded is None
+                else plausibility(decoded, bounds),
             }
         )
 
+    category, number = known.get(1), known.get(2)
+    matches = (category, number) == SUPPORTED_PRODUCT
     firmware = window(0x000B, 2)
     fw_text = None
-    if firmware is not None:
+    if firmware is not None and matches:
         raw = struct.pack(">HH", *firmware)
         fw_text = ".".join(str(b) for b in raw[2:4] + raw[0:2])
+    if not matches:
+        # Fail closed: an unknown or unreadable model may keep its serial anywhere
+        # in these registers, so their words are not printed.
+        for block in blocks:
+            if block["offset"] in IDENTITY_BLOCK_OFFSETS:
+                block["words"] = None
+                block["withheld"] = True
+        serial = None
     events = window(FAULT_EVENT_OFFSET, FAULT_EVENT_COUNT)
-    category, number = known.get(1), known.get(2)
     answered = [r["key"] for r in registers if r["answered"]]
     return {
         "script_version": SCRIPT_VERSION,
         "scan_time_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),  # noqa: UP017
-        "host": link.host,
         "port": link.port,
         "unit": link.unit,
         "device": {
             "protocol_version": known.get(0),
             "product_category": category,
             "product_number": number,
-            "matches_local_mode": (category, number) == SUPPORTED_PRODUCT,
+            "matches_local_mode": matches,
+            "identity_withheld": not matches,
             "firmware": fw_text,
             "serial_masked": None if serial is None else mask_serial(serial),
         },
@@ -428,18 +474,20 @@ def render_text(report: dict) -> str:
         if dev["matches_local_mode"]
         else "not a model the Local mode serves yet"
     )
+    firmware = WITHHELD_TEXT if dev["identity_withheld"] else dev["firmware"]
+    serial = WITHHELD_TEXT if dev["identity_withheld"] else dev["serial_masked"]
     lines = [
         f"register_scan.py version {report['script_version']}",
         f"scan time (UTC): {report['scan_time_utc']}",
-        f"target: {report['host']}:{report['port']}, unit {report['unit']}",
+        f"target: port {report['port']}, unit {report['unit']}",
         "",
         "Device (as reported)",
         f"  protocol version: {dev['protocol_version']}",
         f"  product category: {dev['product_category']}",
         f"  product number:   {dev['product_number']}",
         f"  model:            {label}",
-        f"  firmware:         {dev['firmware']}",
-        f"  serial:           {dev['serial_masked']}",
+        f"  firmware:         {firmware}",
+        f"  serial:           {serial}",
         "",
         "Blocks",
     ]
@@ -453,12 +501,18 @@ def render_text(report: dict) -> str:
             lines.append(f"      block read: {b['block_result']}")
         if b["detail"]:
             lines.append(f"      note: {b['detail']}")
+        if b["withheld"]:
+            lines.append(f"      {WITHHELD_TEXT}")
+            continue
         words = [w or "----" for w in b["words"]]
         for start in range(0, len(words), 16):
             lines.append("      " + " ".join(words[start : start + 16]))
     lines += ["", "Registers of the integration's map"]
     for r in report["registers"]:
-        shown = "no answer" if not r["answered"] else repr(r["value"])
+        if not r["answered"]:
+            shown = "no answer"
+        else:
+            shown = "not finite" if r["value"] is None else repr(r["value"])
         flag = r["plausibility"] or ""
         lines.append(f"  {r['key']:<34} {r['offset']:#06x}  {shown:<14} {flag}")
     if report["fault_events"] is not None:
@@ -474,19 +528,82 @@ def render_text(report: dict) -> str:
     return "\n".join(lines)
 
 
+def _int_between(low: int, high: int) -> Callable[[str], int]:
+    def parse(text: str) -> int:
+        try:
+            value = int(text)
+        except ValueError:
+            raise argparse.ArgumentTypeError(
+                f"{text!r} is not a whole number"
+            ) from None
+        if not low <= value <= high:
+            raise argparse.ArgumentTypeError(f"must be between {low} and {high}")
+        return value
+
+    return parse
+
+
+def _seconds(*, allow_zero: bool) -> Callable[[str], float]:
+    def parse(text: str) -> float:
+        try:
+            value = float(text)
+        except ValueError:
+            raise argparse.ArgumentTypeError(f"{text!r} is not a number") from None
+        if not math.isfinite(value) or value < 0 or (value == 0 and not allow_zero):
+            raise argparse.ArgumentTypeError(
+                "must be 0 or more" if allow_zero else "must be more than 0"
+            )
+        return value
+
+    return parse
+
+
+def _address(text: str) -> str:
+    if not text.strip():
+        raise argparse.ArgumentTypeError("the inverter address is empty")
+    return text
+
+
+def _progress(index: int, total: int, offset: int, count: int) -> None:
+    end = offset + count - 1
+    sys.stderr.write(
+        f"reading block {index}/{total}: {offset:#06x}-{end:#06x} ({count} registers)\n"
+    )
+    sys.stderr.flush()
+
+
 def main(argv: list[str] | None = None) -> int:
+    if sys.version_info < MIN_PYTHON:
+        sys.stderr.write(
+            "error: register_scan.py needs Python "
+            f"{MIN_PYTHON[0]}.{MIN_PYTHON[1]} or newer "
+            f"(this is {sys.version_info[0]}.{sys.version_info[1]})\n"
+        )
+        return 2
     parser = argparse.ArgumentParser(
         description="Read-only Modbus register scan for EcoFlow PowerOcean inverters."
     )
-    parser.add_argument("host", help="IP address or name of the inverter")
-    parser.add_argument("--port", type=int, default=DEFAULT_PORT)
-    parser.add_argument("--unit", type=int, default=1, help="Modbus unit id")
-    parser.add_argument("--json", action="store_true", help="machine-readable output")
     parser.add_argument(
-        "--timeout", type=float, default=3.0, help="seconds per request"
+        "host", type=_address, help="IP address or name of the inverter"
     )
     parser.add_argument(
-        "--pause", type=float, default=0.2, help="seconds between requests"
+        "--port", type=_int_between(1, 65535), default=DEFAULT_PORT, help="TCP port"
+    )
+    parser.add_argument(
+        "--unit", type=_int_between(0, 255), default=1, help="Modbus unit id"
+    )
+    parser.add_argument("--json", action="store_true", help="machine-readable output")
+    parser.add_argument(
+        "--timeout",
+        type=_seconds(allow_zero=False),
+        default=3.0,
+        help="seconds per request",
+    )
+    parser.add_argument(
+        "--pause",
+        type=_seconds(allow_zero=True),
+        default=0.2,
+        help="seconds between requests",
     )
     args = parser.parse_args(argv)
 
@@ -499,13 +616,20 @@ def main(argv: list[str] | None = None) -> int:
     link = Link(args.host, args.port, args.unit, args.timeout, args.pause)
     try:
         link.connect()
-        report = scan(link)
+        report = scan(link, progress=_progress)
     except ScanError as err:
         sys.stderr.write(f"error: {err}\n")
         return 2
+    except KeyboardInterrupt:
+        sys.stderr.write("interrupted: nothing was written to the inverter\n")
+        return 130
     finally:
         link.close()
-    print(json.dumps(report, indent=2) if args.json else render_text(report))
+    print(
+        json.dumps(report, indent=2, allow_nan=False)
+        if args.json
+        else render_text(report)
+    )
     return 0 if report["summary"]["answered"] else 1
 
 

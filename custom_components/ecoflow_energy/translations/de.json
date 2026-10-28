@@ -3306,7 +3306,7 @@
         "step": {
           "confirm": {
             "title": "Ein Gesamtzähler wird zurückgehalten",
-            "description": "Home Assistant hält {counter} seit mehr als einem Tag bei {ha_value} kWh, weil der Wechselrichter jetzt {device_value} kWh meldet und damit weniger. Das bedeutet meist, dass der Wechselrichter seinen Zähler zurückgesetzt hat. Wählen Sie Absenden, um ab jetzt den Wert des Wechselrichters zu übernehmen. Das Energie-Dashboard zeigt dann einen Zählerrücksetzer an. Wählen Sie Ignorieren, um den bisherigen Gesamtwert zu behalten."
+            "description": "Home Assistant hält {counter} seit mehr als einem Tag bei {ha_value} kWh, weil der Wechselrichter jetzt {device_value} kWh meldet und damit weniger. Das bedeutet meist, dass der Wechselrichter seinen Zähler zurückgesetzt hat. Wählen Sie Absenden, um ab jetzt den Wert des Wechselrichters zu übernehmen. Das Energie-Dashboard zeigt dann einen Zählerrücksetzer an. Wählen Sie Absenden nur dann, wenn Sie wissen, dass der Wechselrichter seinen Zähler zurückgesetzt hat. Wählen Sie Ignorieren, um den bisherigen Gesamtwert zu behalten."
           }
         }
       }

@@ -3306,7 +3306,7 @@
         "step": {
           "confirm": {
             "title": "Un total cumulé est retenu",
-            "description": "Home Assistant maintient {counter} à {ha_value} kWh depuis plus d'une journée, car l'onduleur indique désormais {device_value} kWh, soit une valeur plus basse. Cela signifie généralement que l'onduleur a réinitialisé son compteur. Sélectionnez Envoyer pour reprendre la valeur de l'onduleur à partir de maintenant ; le tableau de bord Énergie affichera alors une réinitialisation du compteur. Sélectionnez Ignorer pour conserver le total actuel."
+            "description": "Home Assistant maintient {counter} à {ha_value} kWh depuis plus d'une journée, car l'onduleur indique désormais {device_value} kWh, soit une valeur plus basse. Cela signifie généralement que l'onduleur a réinitialisé son compteur. Sélectionnez Envoyer pour reprendre la valeur de l'onduleur à partir de maintenant ; le tableau de bord Énergie affichera alors une réinitialisation du compteur. N'envoyez que si vous savez que l'onduleur a réinitialisé son compteur. Sélectionnez Ignorer pour conserver le total actuel."
           }
         }
       }

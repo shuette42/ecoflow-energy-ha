@@ -1626,7 +1626,7 @@ async def test_a_growing_or_recovered_counter_is_never_listed(
     assert _solar(coordinator) == pytest.approx(DAY["solar_total_kwh"] + 2.0, abs=1e-3)
 
 
-async def test_accepting_the_device_counter_publishes_its_value_next_poll(
+async def test_accepting_the_device_counter_publishes_its_value_at_once(
     hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A reset counter: the floor follows the device and the entity moves on."""
@@ -1648,8 +1648,9 @@ async def test_accepting_the_device_counter_publishes_its_value_next_poll(
 
     assert coordinator.accept_device_counter(SOLAR) is True
     assert coordinator.held_counters() == {}
-    assert SOLAR not in coordinator.data
-    assert SOLAR not in coordinator.device_data
+    # The device value is published at once, before any poll.
+    assert _solar(coordinator) == pytest.approx(low, abs=1e-3)
+    assert coordinator.device_data[SOLAR] == pytest.approx(low, abs=1e-3)
 
     await coordinator.async_refresh()
     assert _solar(coordinator) == pytest.approx(low + 1.0, abs=1e-3)
@@ -1754,6 +1755,49 @@ async def test_a_failed_fault_read_drops_the_old_list_and_is_retried(
     stub.fault_events[0] = 521
     await coordinator.async_refresh()
     assert coordinator.data["fault_codes"] == [521]
+
+
+@pytest.mark.parametrize("code", [1, 2, 3])
+async def test_an_illegal_function_address_or_value_ends_the_fault_reads(
+    hass: HomeAssistant, code: int
+) -> None:
+    """Codes 1, 2 and 3 say the device does not offer the block: never asked again."""
+    faulty = _frame(DAY, fault_count=1)
+    coordinator, stub = _with_stub(hass, _local_entry(), [faulty, faulty, faulty])
+    stub.fault_error = ModbusExceptionResponse(code, FAULT_EVENT_OFFSET)
+
+    for _ in range(3):
+        await coordinator.async_refresh()
+
+    assert stub.fault_calls == 1
+    assert "fault_codes" not in coordinator.data
+
+
+@pytest.mark.parametrize("code", [4, 6, 11])
+async def test_a_busy_or_failing_device_is_asked_for_the_fault_list_again(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture, code: int
+) -> None:
+    """Slave busy (6) and the like are transient: the next poll reads the list."""
+    caplog.set_level(
+        logging.DEBUG, logger="custom_components.ecoflow_energy.coordinator"
+    )
+    faulty = _frame(DAY, fault_count=1)
+    coordinator, stub = _with_stub(hass, _local_entry(), [faulty, faulty, faulty])
+    stub.fault_events[0] = 100
+    stub.fault_error = ModbusExceptionResponse(code, FAULT_EVENT_OFFSET)
+    await coordinator.async_refresh()
+    await coordinator.async_refresh()
+    assert "fault_codes" not in coordinator.data
+    assert stub.fault_calls == 2
+
+    stub.fault_error = None
+    await coordinator.async_refresh()
+
+    assert stub.fault_calls == 3
+    assert coordinator.data["fault_codes"] == [100]
+    assert [r for r in caplog.records if r.levelno >= logging.WARNING] == []
+    # One DEBUG line per failing run, not one per poll.
+    assert sum("fault events not read" in r.getMessage() for r in caplog.records) == 1
 
 
 async def test_local_diagnostics_carry_the_raw_registers_and_no_serial(

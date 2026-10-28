@@ -53,9 +53,10 @@ POLL_BLOCKS: tuple[tuple[int, int], ...] = (
 )
 
 # The fault event list: 20 events of one 16-bit word each, 0 = empty slot. It is
-# read apart from POLL_BLOCKS because only the first event has ever been read on
-# a real device: a device that refuses 0x0801 and up must lose the fault list,
-# not the whole poll (the client fails every block of a read on one refusal).
+# read apart from POLL_BLOCKS because on the one device this was tried on only
+# the first event was read: a device that refuses 0x0801 and up must lose the
+# fault list, not the whole poll (the client fails every block of a read on one
+# refusal).
 FAULT_EVENT_OFFSET = 0x0801
 FAULT_EVENT_COUNT = 20
 FAULT_BLOCKS: tuple[tuple[int, int], ...] = ((FAULT_EVENT_OFFSET, FAULT_EVENT_COUNT),)

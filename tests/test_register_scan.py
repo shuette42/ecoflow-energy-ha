@@ -116,12 +116,32 @@ class FakeInverter:
     ``refuse`` maps a ``(offset, count)`` request to an exception code, ``drop``
     lists requests that get no answer at all. An address outside ``registers``
     is refused with exception 2, like a gap in a real register table.
+    ``bad_frame_once`` answers a request once with a wrong transaction id,
+    ``truncate_once`` / ``truncate_always`` cut the reply short and close the
+    connection, ``close_after_reply`` closes after every reply and ``silent``
+    never answers. ``units`` collects the unit ids it was addressed with.
     """
 
-    def __init__(self, registers, refuse=None, drop=None):
+    def __init__(
+        self,
+        registers,
+        refuse=None,
+        drop=None,
+        bad_frame_once=None,
+        truncate_once=None,
+        truncate_always=None,
+        close_after_reply=False,
+        silent=False,
+    ):
         self.registers = registers
         self.refuse = dict(refuse or {})
         self.drop = set(drop or ())
+        self.bad_frame_once = set(bad_frame_once or ())
+        self.truncate_once = set(truncate_once or ())
+        self.truncate_always = set(truncate_always or ())
+        self.close_after_reply = close_after_reply
+        self.silent = silent
+        self.units: set[int] = set()
         self.function_codes: set[int] = set()
         self.requests: list[tuple[int, int]] = []
         self._listener = socket.socket()
@@ -156,6 +176,7 @@ class FakeInverter:
                 if pdu is None:
                     return
                 function = pdu[0]
+                self.units.add(unit)
                 self.function_codes.add(function)
                 if function != 0x03:
                     conn.sendall(self._frame(tid, unit, bytes([function | 0x80, 1])))
@@ -163,7 +184,7 @@ class FakeInverter:
                 address, count = struct.unpack(">HH", pdu[1:5])
                 key = (address - BASE, count)
                 self.requests.append(key)
-                if key in self.drop:
+                if self.silent or key in self.drop:
                     continue
                 code = self.refuse.get(key)
                 if code is None and any(
@@ -175,7 +196,17 @@ class FakeInverter:
                     continue
                 words = [self.registers[key[0] + i] for i in range(count)]
                 body = struct.pack(f">{count}H", *words)
-                conn.sendall(self._frame(tid, unit, bytes([0x03, 2 * count]) + body))
+                frame = self._frame(tid, unit, bytes([0x03, 2 * count]) + body)
+                if key in self.bad_frame_once:
+                    self.bad_frame_once.discard(key)
+                    frame = self._frame(tid + 1000, unit, frame[7:])
+                elif key in self.truncate_always or key in self.truncate_once:
+                    self.truncate_once.discard(key)
+                    conn.sendall(frame[: len(frame) // 2])
+                    return
+                conn.sendall(frame)
+                if self.close_after_reply:
+                    return
 
 
 @pytest.fixture
@@ -297,8 +328,8 @@ def test_serial_number_never_reaches_text_or_json(fake_inverter, capsys):
     report = json.loads(json_out)
     assert report["device"]["serial_masked"] == SERIAL[:4] + "*" * 12
     serial_block = next(b for b in report["blocks"] if b["offset"] == 0x0003)
-    assert serial_block["words"] == ["0000"] * 8
-    assert " ".join(["0000"] * 8) in text_out
+    assert serial_block["words"] == ["****"] * 8
+    assert " ".join(["****"] * 8) in text_out
     assert "read-only scan: nothing is written to the inverter" in text_out
 
 
@@ -362,4 +393,257 @@ def test_unreachable_host_gives_one_line_error_and_exit_code_2():
     assert "Traceback" not in result.stderr
     lines = result.stderr.strip().splitlines()
     assert len(lines) == 1
-    assert lines[0].startswith("error: cannot connect to 127.0.0.1:")
+    assert lines[0].startswith("error: cannot connect to the inverter address you gave")
+    assert "127.0.0.1" not in result.stderr  # the typed address is never echoed
+
+
+def _scan_args(fake: FakeInverter, *extra: str) -> list[str]:
+    return [
+        "127.0.0.1",
+        "--port",
+        str(fake.port),
+        "--timeout",
+        "1",
+        "--pause",
+        "0",
+        *extra,
+    ]
+
+
+def test_the_typed_address_is_not_in_the_report(fake_inverter, capsys):
+    fake = fake_inverter()
+    assert script.main(_scan_args(fake)) == 0
+    text_out = capsys.readouterr().out
+    assert script.main(_scan_args(fake, "--json")) == 0
+    json_out = capsys.readouterr().out
+    for out in (text_out, json_out):
+        assert "127.0.0.1" not in out
+        assert "localhost" not in out
+    assert "host" not in json.loads(json_out)
+    assert f"target: port {fake.port}, unit 1" in text_out
+
+
+def test_unit_id_reaches_the_inverter(fake_inverter, capsys):
+    fake = fake_inverter()
+    assert script.main(_scan_args(fake, "--unit", "7", "--json")) == 0
+    assert fake.units == {7}
+    assert json.loads(capsys.readouterr().out)["unit"] == 7
+
+
+def test_json_stdout_is_pure_and_progress_goes_to_stderr(fake_inverter, capsys):
+    fake = fake_inverter()
+    assert script.main(_scan_args(fake, "--json")) == 0
+    captured = capsys.readouterr()
+    json.loads(captured.out)  # nothing but the report on stdout
+    progress = [
+        ln for ln in captured.err.splitlines() if ln.startswith("reading block")
+    ]
+    assert len(progress) == 11
+    assert progress[0].startswith("reading block 1/11: 0x0000-0x0002")
+    assert progress[-1].startswith("reading block 11/11: 0x0801")
+    assert "reading block" not in captured.out
+
+
+def test_a_bad_frame_does_not_spoil_the_blocks_after_it(fake_inverter):
+    fake = fake_inverter(bad_frame_once={(0x0217, 18)})
+    report = run_scan(fake, timeout=0.5)
+
+    by_offset = {b["offset"]: b for b in report["blocks"]}
+    assert by_offset[0x0217]["status"] == "error"
+    assert "does not match" in by_offset[0x0217]["detail"]
+    later = [b for o, b in by_offset.items() if o > 0x0217]
+    assert later and all(b["status"] == "ok" for b in later)
+    assert values_of(report)["batt_voltage_v"] == 650.0
+    assert values_of(report)["grid_export_lifetime_energy_kwh"] == 6789.25
+
+
+def test_scan_survives_a_connection_closed_after_every_reply(fake_inverter):
+    report = run_scan(fake_inverter(close_after_reply=True))
+    assert all(b["status"] == "ok" for b in report["blocks"])
+    assert all(b["read_mode"] == "block" for b in report["blocks"])
+    assert report["summary"]["missing"] == []
+
+
+def test_a_truncated_reply_is_retried_once_and_then_reported(fake_inverter):
+    once = run_scan(fake_inverter(truncate_once={(0x0870, 98)}))
+    block = next(b for b in once["blocks"] if b["offset"] == 0x0870)
+    assert block["status"] == "ok" and block["read_mode"] == "block"
+
+    always = run_scan(fake_inverter(truncate_always={(0x0870, 98)}))
+    block = next(b for b in always["blocks"] if b["offset"] == 0x0870)
+    assert block["status"] == "error"
+    assert block["detail"].startswith("connection lost")
+    others = [b for b in always["blocks"] if b["offset"] != 0x0870]
+    assert all(b["status"] == "ok" for b in others)
+
+
+def test_an_exception_code_other_than_2_is_reported_with_its_number(fake_inverter):
+    report = run_scan(fake_inverter(refuse={(0x0206, 15): 3}))
+    block = next(b for b in report["blocks"] if b["offset"] == 0x0206)
+    assert block["block_result"] == "refused (exception code 3)"
+    assert block["exception_code"] == 3
+    assert block["read_mode"] == "single"
+    assert block["status"] == "ok"
+
+
+def test_nothing_answering_exits_with_code_1(fake_inverter, capsys):
+    fake = fake_inverter(registers={})  # every address is refused
+    assert script.main(_scan_args(fake)) == 1
+    out = capsys.readouterr().out
+    assert "0 of" in out and "expected registers answered" in out
+
+
+def test_a_silent_inverter_ends_the_scan_with_exit_code_1(
+    fake_inverter, monkeypatch, capsys
+):
+    monkeypatch.setattr(script, "_FALLBACK_TIMEOUT_LIMIT", 1)  # keep the test fast
+    fake = fake_inverter(silent=True)
+    args = ["127.0.0.1", "--port", str(fake.port), "--timeout", "0.2", "--pause", "0"]
+    assert script.main(args) == 1
+    assert "0 of" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("bad", "fragment"),
+    [
+        (["--unit", "256"], "--unit"),
+        (["--unit", "-1"], "--unit"),
+        (["--port", "0"], "--port"),
+        (["--port", "65536"], "--port"),
+        (["--timeout", "0"], "--timeout"),
+        (["--timeout", "nan"], "--timeout"),
+        (["--pause", "-1"], "--pause"),
+        (["--unit", "abc"], "--unit"),
+    ],
+)
+def test_bad_arguments_exit_2_without_a_traceback(bad, fragment, capsys):
+    with pytest.raises(SystemExit) as raised:
+        script.main(["inverter.example", *bad])
+    assert raised.value.code == 2
+    err = capsys.readouterr().err
+    assert fragment in err
+    assert "Traceback" not in err
+    assert "inverter.example" not in err
+
+
+def test_an_invalid_address_is_a_one_line_error_with_exit_code_2():
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), ".."],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "Traceback" not in result.stderr
+    assert result.stderr.strip().splitlines() == [
+        "error: the inverter address you gave is not valid"
+    ]
+
+
+def test_ctrl_c_prints_one_line_and_returns_130(fake_inverter, monkeypatch, capsys):
+    def interrupted(link, progress=None):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(script, "scan", interrupted)
+    assert script.main(_scan_args(fake_inverter())) == 130
+    err = capsys.readouterr().err.strip().splitlines()
+    assert err == ["interrupted: nothing was written to the inverter"]
+
+
+def test_python_before_3_10_is_refused_with_exit_code_2(monkeypatch, capsys):
+    monkeypatch.setattr(script.sys, "version_info", (3, 9, 18, "final", 0))
+    assert script.main(["127.0.0.1"]) == 2
+    err = capsys.readouterr().err
+    assert err.strip().splitlines() == [
+        "error: register_scan.py needs Python 3.10 or newer (this is 3.9)"
+    ]
+
+
+def test_non_finite_floats_are_null_in_strict_json(fake_inverter, capsys):
+    regs = default_registers()
+    for i, word in enumerate(f32_words(float("nan"))):
+        regs[0x0251 + i] = word  # frequency NaN
+    for i, word in enumerate(f32_words(float("inf"))):
+        regs[0x0206 + i] = word  # home power +inf
+    fake = fake_inverter(regs)
+    assert script.main(_scan_args(fake, "--json")) == 0
+    out = capsys.readouterr().out
+    report = json.loads(out, parse_constant=_reject_constant)  # strict parse
+    rows = {r["key"]: r for r in report["registers"]}
+    for key in ("pcs_ac_freq_hz", "home_w"):
+        assert rows[key]["value"] is None
+        assert rows[key]["answered"] is True
+        assert rows[key]["plausibility"] == "implausible"
+    assert rows["grid_w"]["value"] == -200.0
+    assert report["summary"]["missing"] == []
+
+
+def _reject_constant(name):
+    raise AssertionError(f"non-standard JSON constant {name}")
+
+
+def test_serial_block_refused_or_incomplete_leaks_nothing(fake_inverter, capsys):
+    refused = fake_inverter(refuse={(0x0003, 8): 2})
+    one_missing = fake_inverter(refuse={(0x0003, 8): 2}, drop={(0x0005, 1)})
+    for fake in (refused, one_missing):
+        assert script.main(_scan_args(fake, "--timeout", "0.3")) == 0
+        text_out = capsys.readouterr().out
+        assert script.main(_scan_args(fake, "--timeout", "0.3", "--json")) == 0
+        json_out = capsys.readouterr().out
+        for out in (text_out, json_out):
+            assert SERIAL[4:].lower() not in out.lower()
+            for word in struct.unpack(">8H", SERIAL.encode("ascii")):
+                assert f"{word:04x}" not in out
+        block = next(b for b in json.loads(json_out)["blocks"] if b["offset"] == 0x0003)
+        assert block["read_mode"] == "single"
+    # One serial register missing: the masked serial cannot be built either.
+    assert json.loads(json_out)["device"]["serial_masked"] is None
+    assert "----" in text_out and "****" in text_out
+
+
+def test_unknown_model_withholds_the_identity_registers(fake_inverter, capsys):
+    regs = default_registers()
+    regs[0x0002] = 2  # product number is not the known one
+    spill = "QWXY"  # a longer serial runs on into 0x000B and 0x000C
+    regs[0x000B], regs[0x000C] = struct.unpack(">2H", spill.encode("ascii"))
+    fake = fake_inverter(regs)
+    assert script.main(_scan_args(fake)) == 0
+    text_out = capsys.readouterr().out
+    assert script.main(_scan_args(fake, "--json")) == 0
+    json_out = capsys.readouterr().out
+
+    for out in (text_out, json_out):
+        assert spill.lower() not in out.lower()
+        for word in struct.unpack(">2H", spill.encode("ascii")):
+            assert f"{word:04x}" not in out
+        assert SERIAL[:4].lower() not in out.lower()
+        assert SERIAL[4:].lower() not in out.lower()
+    assert text_out.count("withheld, unknown layout") == 4  # 2 blocks + 2 device rows
+    report = json.loads(json_out)
+    assert report["device"]["product_number"] == 2
+    assert report["device"]["identity_withheld"] is True
+    assert report["device"]["serial_masked"] is None
+    assert report["device"]["firmware"] is None
+    withheld = [b for b in report["blocks"] if b["withheld"]]
+    assert {b["offset"] for b in withheld} == {0x0003, 0x000B}
+    assert all(b["words"] is None for b in withheld)
+    assert values_of(report)["home_w"] == 1234.5  # the rest is still decoded
+
+
+def test_unreadable_model_numbers_also_withhold_the_identity_registers(
+    fake_inverter, capsys
+):
+    fake = fake_inverter(refuse={(0x0000, 3): 2, (0x0001, 1): 2})
+    assert script.main(_scan_args(fake, "--json")) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["device"]["identity_withheld"] is True
+    assert {b["offset"] for b in report["blocks"] if b["withheld"]} == {0x0003, 0x000B}
+
+
+def test_known_model_keeps_firmware_and_masked_serial(fake_inverter, capsys):
+    assert script.main(_scan_args(fake_inverter(), "--json")) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["device"]["identity_withheld"] is False
+    assert report["device"]["firmware"] == "5.1.37.10"
+    assert not any(b["withheld"] for b in report["blocks"])

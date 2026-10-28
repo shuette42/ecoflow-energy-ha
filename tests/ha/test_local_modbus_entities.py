@@ -719,6 +719,10 @@ async def test_active_fault_codes_are_unknown_while_the_registers_were_not_read(
         await hass.async_block_till_done()
 
     assert _state(hass, "sensor", "fault_codes") == "unknown"
+    # No `faults` list either: an empty one would claim "no fault".
+    shown = hass.states.get(_entity_id(hass, "sensor", "fault_codes"))
+    assert shown is not None
+    assert "faults" not in shown.attributes
     assert _state(hass, "sensor", "soc_pct") == "100"
     await _unload(hass, entry)
 

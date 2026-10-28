@@ -72,9 +72,15 @@ from ..ecoflow.parsers.powerocean_modbus import (
     parse_device_info,
     parse_registers,
 )
+from ..fault_codes import FAULT_CODES_KEY
 from .modbus_link import create_link
 
 _LOGGER = logging.getLogger(__name__)
+
+# Modbus exception codes that mean "this device does not offer that read":
+# illegal function, illegal data address, illegal data value. Any other code
+# (slave busy, device failure, ...) says nothing about the register map.
+_REFUSAL_CODES = frozenset({1, 2, 3})
 
 # The two settings the integration may write, by the data key that shows them.
 _WRITABLE_KEYS: dict[str, int] = {
@@ -292,17 +298,17 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Take the device's held reading as the new floor for ``key``.
 
         For a counter the inverter really reset: the floor drops to the held
-        device value, the entry is cleared and the published value withdrawn,
-        so the next poll publishes what the device reports. Returns False and
-        changes nothing when ``key`` is not held.
+        device value, the entry is cleared and the device value is published
+        at once, so a state write before the next poll shows it rather than
+        the value restored at startup. Returns False and changes nothing when
+        ``key`` is not held.
         """
         entry = self._held_counters.pop(key, None)
         if entry is None:
             return False
         self._counter_floor[key] = entry["device_value"]
-        self._device_data.pop(key, None)
-        if self.data is not None:
-            self.data.pop(key, None)
+        self._device_data[key] = entry["device_value"]
+        self.async_set_updated_data(dict(self._device_data))
         return True
 
     # ------------------------------------------------------------------
@@ -354,12 +360,20 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         The entry's repairs notices go with it: the held timers live in memory
         only, so a notice left behind would outlive the state that justifies it.
+        A notice the user chose Ignore on is kept. The issue is not persistent,
+        so after a restart Home Assistant restores it only as an inactive stub
+        that still carries the Ignore; raising the notice again later reuses
+        that record and the notice comes back ignored. Deleting it here would
+        throw the choice away.
         """
         self._closed = True
         self._cancel_heartbeat()
         self._notice_placeholders.clear()
+        registry = ir.async_get(self.hass)
         for key in LIFETIME_COUNTER_KEYS:
-            ir.async_delete_issue(self.hass, DOMAIN, self._notice_id(key))
+            issue = registry.async_get_issue(DOMAIN, self._notice_id(key))
+            if issue is not None and issue.dismissed_version is None:
+                ir.async_delete_issue(self.hass, DOMAIN, self._notice_id(key))
 
     def _cancel_heartbeat(self) -> None:
         """Stop the beats and show control off. Writes nothing.
@@ -528,11 +542,11 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             raw = {**raw, **await self._read_fault_events()}
             parsed = parse_registers(raw)
         elif fault_count == 0:
-            parsed["fault_codes"] = []
+            parsed[FAULT_CODES_KEY] = []
         self._last_raw = raw
-        if "fault_codes" not in parsed:
+        if FAULT_CODES_KEY not in parsed:
             # Unknown beats a list from an earlier poll that may be out of date.
-            self._device_data.pop("fault_codes", None)
+            self._device_data.pop(FAULT_CODES_KEY, None)
         self._hold_counters(parsed)
         self._device_data.update(parsed)
         self._sync_held_notices()
@@ -544,16 +558,16 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return {}
         try:
             events = await self._link.read_blocks(FAULT_BLOCKS)
-        except ModbusExceptionResponse as err:
-            self._fault_events_supported = False
-            _LOGGER.debug(
-                "Local Modbus %s refused the fault event registers, the fault "
-                "list stays empty: %s",
-                self.device_tag,
-                err,
-            )
-            return {}
         except ModbusLocalError as err:
+            if isinstance(err, ModbusExceptionResponse) and err.code in _REFUSAL_CODES:
+                self._fault_events_supported = False
+                _LOGGER.debug(
+                    "Local Modbus %s refused the fault event registers, the "
+                    "fault list stays empty: %s",
+                    self.device_tag,
+                    err,
+                )
+                return {}
             if not self._fault_read_failing:
                 self._fault_read_failing = True
                 _LOGGER.debug(
@@ -651,21 +665,26 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         The notice offers to take the inverter's value (``repairs.py``);
         Home Assistant's own Ignore is the choice to keep the current total.
-        Deleting is a no-op for an id that does not exist, so a notice left
-        over from before a restart (an ignored one is persisted) is cleared
-        too once its counter has recovered.
+        A notice is deleted only when this run raised it and the counter has
+        since recovered or been accepted. There is no sweep of ids this run
+        never raised: after a restart Home Assistant holds such an issue as an
+        inactive stub that carries the user's Ignore, and deleting the stub
+        would bring the notice back as new 24 h later.
         """
         held = self.held_counters(LOCAL_COUNTER_HELD_NOTICE_S)
         for key in LIFETIME_COUNTER_KEYS:
             entry = held.get(key)
             if entry is None:
-                self._notice_placeholders.pop(key, None)
-                ir.async_delete_issue(self.hass, DOMAIN, self._notice_id(key))
+                if self._notice_placeholders.pop(key, None) is not None:
+                    ir.async_delete_issue(self.hass, DOMAIN, self._notice_id(key))
                 continue
+            # The device value shows one decimal: after a real reset it moves
+            # with every poll, and three decimals would rewrite the notice
+            # each time. The held value (ha_value) is steady, so it keeps three.
             placeholders = {
                 "counter": LOCAL_COUNTER_LABELS.get(key, key),
                 "ha_value": f"{entry['published']:.3f}",
-                "device_value": f"{entry['device_value']:.3f}",
+                "device_value": f"{entry['device_value']:.1f}",
             }
             if self._notice_placeholders.get(key) == placeholders:
                 continue

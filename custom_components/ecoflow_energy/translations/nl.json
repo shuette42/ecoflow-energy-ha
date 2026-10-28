@@ -3306,7 +3306,7 @@
         "step": {
           "confirm": {
             "title": "Een totaalstand wordt vastgehouden",
-            "description": "Home Assistant houdt {counter} al meer dan een dag op {ha_value} kWh, omdat de omvormer nu {device_value} kWh meldt, wat lager is. Meestal betekent dit dat de omvormer zijn teller heeft gereset. Kies Verzenden om vanaf nu de waarde van de omvormer over te nemen; het Energiedashboard toont dan een tellerreset. Kies Negeren om het huidige totaal te behouden."
+            "description": "Home Assistant houdt {counter} al meer dan een dag op {ha_value} kWh, omdat de omvormer nu {device_value} kWh meldt, wat lager is. Meestal betekent dit dat de omvormer zijn teller heeft gereset. Kies Verzenden om vanaf nu de waarde van de omvormer over te nemen; het Energiedashboard toont dan een tellerreset. Verzend alleen als je weet dat de omvormer zijn teller heeft gereset. Kies Negeren om het huidige totaal te behouden."
           }
         }
       }
