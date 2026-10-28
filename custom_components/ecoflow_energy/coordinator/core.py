@@ -285,8 +285,10 @@ class EcoFlowDeviceCoordinator(
         # which leaves the EMS-side `sys_bat_backup_ratio` unchanged. The
         # device mirrors the app's value back via cmd_id=13 EmsParamChangeReport
         # field 10 (`dev_soc`). When that diverges from the EMS value, the
-        # coordinator schedules a corrective both-field SET. The throttle
-        # avoids redundant SETs and the user-grace gives the device echo time.
+        # coordinator schedules a corrective both-field SET (except R37x: fields
+        # 1, 2 and 4; inert there, `ems_backup_ratio_pct` is not reported).
+        # The throttle avoids redundant SETs and the user-grace gives the
+        # device echo time.
         self._last_app_surplus_sync_ts: float = 0.0
         self._last_user_surplus_set_ts: float = 0.0
         # Timestamp of the most recent EmsParamChangeReport (cmd_id=13) that

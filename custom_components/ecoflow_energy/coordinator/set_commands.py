@@ -401,7 +401,8 @@ class SetCommandsMixin(_Base):
 
         HA's Number-Entity emits one async_set_native_value call per 5%-step
         when the user drags the slider, producing 5-10 SETs in <1 s. The
-        device cannot keep wire field 3 (sys_bat_backup_ratio, EMS) and
+        device cannot keep wire field 3 (sys_bat_backup_ratio, EMS; not sent
+        to the R37x family, which is written with fields 1, 2 and 4) and
         field 4 (dev_soc, App-Layer) in sync at that cadence, so the two
         fields drift apart and the user sees stale values in HA or the
         EcoFlow app. This method stores the latest (backup, solar) and
@@ -674,8 +675,9 @@ class SetCommandsMixin(_Base):
         field 2=backup (sys_bat_dsg_down_limit), field 4=solar_surplus
         (dev_soc), plus extended envelope (check_type, from=ios, device_sn).
         Field 3 (sys_bat_backup_ratio) carries the same surplus value on every
-        unit except the PowerOcean Plus family (`R37x`), whose app never sends
-        it and which is therefore written with fields 1, 2 and 4 only
+        unit except the PowerOcean Plus family (`R37x`), which does not report
+        the counterpart of field 3 and whose recorded app writes (one R372)
+        carry fields 1, 2 and 4 only; it is written that way
         (`powerocean_soc_surplus_field`). The legacy `async_set_soc_limits`
         only sends fields 1+2 and is silently ignored by the device for
         backup-reserve changes.

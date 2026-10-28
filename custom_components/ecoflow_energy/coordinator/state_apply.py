@@ -805,8 +805,10 @@ class StateApplyMixin(_Base):
 
         # PowerOcean Enhanced Mode: detect cloud-only app changes to the
         # solar-surplus slider via the EmsParamChangeReport.dev_soc echo
-        # (cmd_id=13 wire field 10) and push a corrective both-field SET so
-        # the EMS-side sys_bat_backup_ratio catches up to what the app set.
+        # (cmd_id=13 wire field 10) and push a corrective both-field SET (except R37x:
+        # fields 1, 2 and 4; the sync is inert there, since
+        # `ems_backup_ratio_pct` is not reported) so the EMS-side
+        # sys_bat_backup_ratio catches up to what the app set.
         if self._enhanced_mode and self.device_type == DEVICE_TYPE_POWEROCEAN:
             self._maybe_schedule_surplus_sync()
 
@@ -861,7 +863,9 @@ class StateApplyMixin(_Base):
         via the cmd_id=13 EmsParamChangeReport message (`dev_soc`, mapped
         here to `ems_app_surplus_pct`). When that value diverges from
         `ems_backup_ratio_pct`, this method schedules a corrective
-        both-field SET that brings the EMS in line.
+        both-field SET that brings the EMS in line (except R37x: fields 1, 2
+        and 4; there `ems_backup_ratio_pct` is not reported, so the method
+        returns at the missing-value guard below and writes nothing).
 
         ADR-013: a divergent (app, ems) pair gets at most
         `_SURPLUS_SYNC_MAX_WRITES` writes per process lifetime. A boundary
@@ -941,7 +945,8 @@ class StateApplyMixin(_Base):
         # ParamChange we still see may be the obsolete app-side mirror
         # of a value the user has now superseded. Without this guard the
         # auto-sync would reissue the *old* app value as a both-field
-        # SET, dragging HA back to the value the user just left.
+        # SET (except R37x: fields 1, 2 and 4), dragging HA back to the value
+        # the user just left.
         if self._last_ems_param_change_ts <= self._last_user_surplus_set_ts:
             return
         now = time.monotonic()

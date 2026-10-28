@@ -92,10 +92,12 @@ def build_powerocean_soc_set_payload(
 
     Setting both keeps app, cloud quota, and EMS aligned.
 
-    The PowerOcean Plus (`R371` to `R374`) is the exception: its app sends the
-    pair as fields 1, 2 and 4 only and never field 3 (12 of 12 app writes in
-    the #631 downloads), so the coordinator writes that family with
-    `surplus_field="field4"` (`powerocean_soc_surplus_field`).
+    The PowerOcean Plus (`R371` to `R374`) is the exception: it does not
+    report the counterpart of field 3 (`ems_backup_ratio_pct`), and the app
+    writes on the one unit recorded, an R372, carry fields 1, 2 and 4 only
+    (12 of 12 in the #631 downloads; the siblings are not recorded). The
+    coordinator therefore writes that family with `surplus_field="field4"`
+    (`powerocean_soc_surplus_field`).
 
     Args:
         surplus_field: "both" (default) writes field 3 + field 4, which is what

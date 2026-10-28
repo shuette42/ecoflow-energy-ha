@@ -521,10 +521,14 @@ def schedule_power_max_w(sn: str) -> int:
 
 
 # Which surplus field the SoC/surplus pair write sends, by serial prefix. The
-# PowerOcean Plus (R371..R374) app sends the pair as fields 1, 2 and 4 only,
-# never field 3 (12 of 12 app writes in the #631 downloads), so a unit of that
-# family is written the way the app writes it. Every other prefix keeps the
-# field 3 + field 4 pair (see `build_powerocean_soc_set_payload`).
+# 12 app writes recorded for #631 all come from one unit, an R372, and carry
+# fields 1, 2 and 4, never field 3. The siblings R371, R373 and R374 are not
+# recorded: they are written the same way as a family choice made from that
+# one unit. What sets the family apart from the JTS1 EMS, where the field 3 +
+# field 4 pair was measured, is that it does not report the counterpart of
+# field 3 (`ems_backup_ratio_pct`), while the JTS1 EMS reads field 3. Every
+# other prefix keeps the field 3 + field 4 pair (see
+# `build_powerocean_soc_set_payload`).
 _POWEROCEAN_SOC_SURPLUS_FIELD_FAMILY: tuple[tuple[str, str], ...] = (("R37", "field4"),)
 
 
