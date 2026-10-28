@@ -826,8 +826,13 @@ class StateApplyMixin(_Base):
         352 keeps the ADR-013 auto-sync inert (it returns while the stamp is
         not newer than the last user SET).
 
-        The intermediate key never reaches the store. A frame from a linked
-        neighbour is ignored, since both units feed the same EMS keys (#436).
+        The intermediate key never reaches the store. An entry handed over
+        with `own_connection=False` (a linked STREAM's per-unit block, a
+        PowerPulse 2's relayed settings) did not travel on this device's
+        connection and is ignored. That is the whole of this guard: a
+        PowerOcean pair arrives on each unit's own connection, so the pair
+        case (#436) is not covered here, the same exposure field 12 has today
+        (outside PLAN-223).
         """
         if EMS_CHANGE_DEV_SOC_KEY not in parsed:
             return

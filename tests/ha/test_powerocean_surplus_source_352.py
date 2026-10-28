@@ -17,6 +17,7 @@ from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
+from custom_components.ecoflow_energy.diagnostics import _device_diagnostics
 from custom_components.ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
     JTS1EmsChangeReport,
     JTS1EmsParamChangeReport,
@@ -84,11 +85,45 @@ async def test_surplus_from_352_when_no_96_13(
     _push(coordinator, _header(96, 8, _fixture_pdata(55)))
 
     assert coordinator._device_data[_SURPLUS] == 70
+    # An int like the 96/13 value, not the float the parser carried.
+    assert type(coordinator._device_data[_SURPLUS]) is int
     assert _INTERMEDIATE not in coordinator._device_data
     assert coordinator.surplus_source_diagnostics == {
         "surplus_sources_both": False,
         "dev_soc_352_unapplied": 0,
     }
+
+
+async def test_surplus_range_bounds_are_valid(
+    hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+) -> None:
+    """0 and 100 are the ends of the range and both are readings."""
+    for frame, expected in (
+        (_header(96, 8, _fixture_pdata(63)), 100),
+        (_header(96, 8, _fixture_pdata(0)), 100),
+        (_change_352(0), 0),
+    ):
+        coordinator = _coordinator(hass, enhanced_config_entry)
+
+        _push(coordinator, frame)
+
+        assert coordinator._device_data[_SURPLUS] == expected
+        assert type(coordinator._device_data[_SURPLUS]) is int
+
+
+async def test_352_report_leaves_other_held_values_alone(
+    hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+) -> None:
+    """The mini frame is a partial report: what the store holds stays."""
+    coordinator = _coordinator(hass, enhanced_config_entry)
+    coordinator._device_data["ems_discharge_lower_limit_pct"] = 30.0
+    coordinator._device_data["grid_status"] = "grid_connected"
+
+    _push(coordinator, _header(96, 8, _fixture_pdata(55)))
+
+    assert coordinator._device_data[_SURPLUS] == 70
+    assert coordinator._device_data["ems_discharge_lower_limit_pct"] == 30.0
+    assert coordinator._device_data["grid_status"] == "grid_connected"
 
 
 async def test_surplus_source_precedence(
@@ -186,10 +221,14 @@ async def test_dev_soc_352_out_of_range_is_none(
     assert _INTERMEDIATE not in coordinator._device_data
 
 
-async def test_352_from_relayed_unit_is_ignored(
+async def test_352_in_an_entry_handed_over_is_ignored(
     hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
 ) -> None:
-    """A neighbour's 352 is not copied and leaves no trace on this device."""
+    """A 352 in an entry handed over (`own_connection=False`) is dropped.
+
+    That is the STREAM per-unit block and the PowerPulse 2 relay. A PowerOcean
+    pair travels on each unit's own connection and is not covered (PLAN-223).
+    """
     coordinator = _coordinator(hass, enhanced_config_entry)
     parsed = coordinator._parse_message(_TOPIC, _header(96, 8, _fixture_pdata(55)))
     assert parsed
@@ -201,3 +240,48 @@ async def test_352_from_relayed_unit_is_ignored(
     assert _SURPLUS not in coordinator._device_data
     assert _INTERMEDIATE not in coordinator._device_data
     assert coordinator.surplus_source_diagnostics is None
+
+
+async def test_both_sources_in_one_message(
+    hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+) -> None:
+    """A message carrying 96/13 and 96/8 together is merged into one dict.
+
+    `mqtt_ingest` folds every header of a message into one dict with
+    `merged.update`, so the apply path sees both keys at once, in either
+    header order, on a coordinator that has seen neither report before.
+    """
+    for message in (
+        _param_change_96_13(40) + _change_352(70),
+        _change_352(70) + _param_change_96_13(40),
+    ):
+        coordinator = _coordinator(hass, enhanced_config_entry)
+        parsed = coordinator._parse_message(_TOPIC, message)
+        assert parsed
+        assert parsed[_SURPLUS] == 40
+        assert parsed[_INTERMEDIATE] == 70.0
+
+        with patch(_CLOCK, return_value=5000.0):
+            coordinator._apply_data(parsed)
+
+        assert coordinator._device_data[_SURPLUS] == 40
+        assert coordinator.surplus_source_diagnostics == {
+            "surplus_sources_both": True,
+            "dev_soc_352_unapplied": 1,
+        }
+
+
+async def test_diagnostics_carry_the_surplus_source(
+    hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+) -> None:
+    """The download names the source facts, and null when 352 never came."""
+    coordinator = _coordinator(hass, enhanced_config_entry)
+    assert _device_diagnostics(coordinator)["surplus_source"] is None
+
+    _push(coordinator, _param_change_96_13(40))
+    _push(coordinator, _change_352(70))
+
+    assert _device_diagnostics(coordinator)["surplus_source"] == {
+        "surplus_sources_both": True,
+        "dev_soc_352_unapplied": 1,
+    }
