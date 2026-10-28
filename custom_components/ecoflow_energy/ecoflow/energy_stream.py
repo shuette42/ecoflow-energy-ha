@@ -92,9 +92,16 @@ def build_powerocean_soc_set_payload(
 
     Setting both keeps app, cloud quota, and EMS aligned.
 
+    The PowerOcean Plus (`R371` to `R374`) is the exception: its app sends the
+    pair as fields 1, 2 and 4 only and never field 3 (12 of 12 app writes in
+    the #631 downloads), so the coordinator writes that family with
+    `surplus_field="field4"` (`powerocean_soc_surplus_field`).
+
     Args:
-        surplus_field: "both" (default) writes field 3 + field 4. "field3"
-            and "field4" exist only as diagnostic shortcuts for probe scripts.
+        surplus_field: "both" (default) writes field 3 + field 4, which is what
+            every PowerOcean outside the Plus family gets. "field4" writes
+            fields 1, 2 and 4, the app's own frame on a PowerOcean Plus.
+            "field3" exists only as a diagnostic shortcut for probe scripts.
     """
     if not 0 <= backup_reserve_pct <= 100:
         raise ValueError(f"backup_reserve_pct must be 0..100, got {backup_reserve_pct}")

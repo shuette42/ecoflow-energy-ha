@@ -46,6 +46,7 @@ from ..ecoflow.const import (
     POWERPULSE2_DISPLAY_BRIGHTNESS_STEPS,
     POWERPULSE2_DISPLAY_KEYS,
     POWERPULSE2_DISPLAY_SWITCH_KEYS,
+    powerocean_soc_surplus_field,
     powerpulse2_display_value_valid,
     schedule_power_max_w,
     schedule_power_min_w,
@@ -667,13 +668,17 @@ class SetCommandsMixin(_Base):
         backup_reserve_pct: int,
         solar_surplus_pct: int,
     ) -> bool:
-        """Send a 3-field SoC SET to PowerOcean (app-replay format).
+        """Send the backup reserve / solar surplus pair to a PowerOcean.
 
         Wire: cmd_id=112 SysBatChgDsgSet with field 1=100 (sys_bat_chg_up_limit),
-        field 2=backup (sys_bat_dsg_down_limit), field 3=solar_surplus
-        (sys_bat_backup_ratio), plus extended envelope (check_type, from=ios,
-        device_sn). The legacy `async_set_soc_limits` only sends fields 1+2
-        and is silently ignored by the device for backup-reserve changes.
+        field 2=backup (sys_bat_dsg_down_limit), field 4=solar_surplus
+        (dev_soc), plus extended envelope (check_type, from=ios, device_sn).
+        Field 3 (sys_bat_backup_ratio) carries the same surplus value on every
+        unit except the PowerOcean Plus family (`R37x`), whose app never sends
+        it and which is therefore written with fields 1, 2 and 4 only
+        (`powerocean_soc_surplus_field`). The legacy `async_set_soc_limits`
+        only sends fields 1+2 and is silently ignored by the device for
+        backup-reserve changes.
         """
         if self._shutdown:
             return False
@@ -702,6 +707,7 @@ class SetCommandsMixin(_Base):
             backup_reserve_pct,
             solar_surplus_pct,
             device_sn=self.device_sn,
+            surplus_field=powerocean_soc_surplus_field(self.device_sn),
         )
         executor_job = self.hass.async_add_executor_job(
             partial(self._mqtt_client.send_proto_set, payload, wait=True),

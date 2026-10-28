@@ -780,11 +780,13 @@ class EcoFlowNumber(
     async def _async_set_powerocean_value(self, value: float) -> None:
         """Set a PowerOcean number value via WSS Protobuf.
 
-        SysBatChgDsgSet (cmd_id=112) is sent as a 4-field app-replay
-        payload: field 1=100 constant, field 2=backup_reserve_pct,
-        field 3+4=solar_surplus_pct (EMS state + app-UI state). The
-        unchanged value is read from coordinator data so both slider
-        positions stay consistent with the device and the EcoFlow app.
+        SysBatChgDsgSet (cmd_id=112) is sent as an app-replay payload:
+        field 1=100 constant, field 2=backup_reserve_pct, field 4=
+        solar_surplus_pct (app-UI state), plus field 3 with the same value
+        (EMS state) on every unit except the PowerOcean Plus family, whose
+        app sends fields 1, 2 and 4 only. The unchanged value is read from
+        coordinator data so both slider positions stay consistent with the
+        device and the EcoFlow app.
 
         SET delivery goes through the coordinator's debouncer so that
         rapid-fire slider drags coalesce into a single frame.

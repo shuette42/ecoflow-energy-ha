@@ -520,6 +520,26 @@ def schedule_power_max_w(sn: str) -> int:
     return POWEROCEAN_SCHEDULE_POWER_MAX_DEFAULT_W
 
 
+# Which surplus field the SoC/surplus pair write sends, by serial prefix. The
+# PowerOcean Plus (R371..R374) app sends the pair as fields 1, 2 and 4 only,
+# never field 3 (12 of 12 app writes in the #631 downloads), so a unit of that
+# family is written the way the app writes it. Every other prefix keeps the
+# field 3 + field 4 pair (see `build_powerocean_soc_set_payload`).
+_POWEROCEAN_SOC_SURPLUS_FIELD_FAMILY: tuple[tuple[str, str], ...] = (("R37", "field4"),)
+
+
+def powerocean_soc_surplus_field(sn: str) -> str:
+    """Return the `surplus_field` the SoC pair write uses for this unit.
+
+    "field4" for the PowerOcean Plus family, "both" for everything else.
+    """
+    prefix = (sn or "")[:4].upper()
+    for family, surplus_field in _POWEROCEAN_SOC_SURPLUS_FIELD_FAMILY:
+        if prefix.startswith(family):
+            return surplus_field
+    return "both"
+
+
 def schedule_power_min_w(online_battery_packs: int | None) -> int:
     """Return the scheduled charge power floor, in watts.
 
