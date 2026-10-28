@@ -780,11 +780,13 @@ class EcoFlowNumber(
     async def _async_set_powerocean_value(self, value: float) -> None:
         """Set a PowerOcean number value via WSS Protobuf.
 
-        SysBatChgDsgSet (cmd_id=112) is sent as a 4-field app-replay
-        payload: field 1=100 constant, field 2=backup_reserve_pct,
-        field 3+4=solar_surplus_pct (EMS state + app-UI state). The
-        unchanged value is read from coordinator data so both slider
-        positions stay consistent with the device and the EcoFlow app.
+        SysBatChgDsgSet (cmd_id=112) is sent as an app-replay payload:
+        field 1=100 constant, field 2=backup_reserve_pct, field 4=
+        solar_surplus_pct (app-UI state), plus field 3 with the same value
+        (EMS state) on every unit except the PowerOcean Plus family, whose
+        app sends fields 1, 2 and 4 only. The unchanged value is read from
+        coordinator data so both slider positions stay consistent with the
+        device and the EcoFlow app.
 
         SET delivery goes through the coordinator's debouncer so that
         rapid-fire slider drags coalesce into a single frame.
@@ -863,8 +865,9 @@ class EcoFlowNumber(
             # placeholder or silently move the app-side surplus to a value
             # the user never chose - a refusal that names the missing half
             # is the honest failure. Not "did not reach the device" (nothing
-            # was sent) and not "try again" (an R372 did not report it in the
-            # reporter's capture, #631).
+            # was sent) and not "try again" (a unit that sends the surplus in no
+            # message we read, for example an R372 before field 352 was
+            # read, #631, would never clear it).
             current_solar = self.coordinator.data.get("ems_app_surplus_pct")
             if current_solar is None:
                 raise_set_partner_unreported(

@@ -25,6 +25,7 @@ from ..const import (
     remaining_time_is_battery_only,
 )
 from ..ecoflow.const import POWERPULSE2_DISPLAY_BLOCK_LEN_KEY
+from ..ecoflow.parsers.powerocean_proto import EMS_CHANGE_DEV_SOC_KEY
 from ..ecoflow.parsers.powerpulse_proto import RELAYED_WALLBOX_SETTINGS_KEY
 from ..ecoflow.parsers.stream_ac5000_proto import (
     UNIT_POWER_BY_SN_KEY,
@@ -689,6 +690,7 @@ class StateApplyMixin(_Base):
         # whose value the user has since superseded.
         if "ems_app_surplus_pct" in parsed:
             self._last_ems_param_change_ts = now
+        self._resolve_surplus_source(parsed, own_connection=own_connection)
         self._resolve_unit_power(parsed, own_connection=own_connection, now=now)
         if (
             self._resolve_relayed_wallbox_settings(
@@ -803,10 +805,52 @@ class StateApplyMixin(_Base):
 
         # PowerOcean Enhanced Mode: detect cloud-only app changes to the
         # solar-surplus slider via the EmsParamChangeReport.dev_soc echo
-        # (cmd_id=13 wire field 10) and push a corrective both-field SET so
-        # the EMS-side sys_bat_backup_ratio catches up to what the app set.
+        # (cmd_id=13 wire field 10) and push a corrective both-field SET (except R37x:
+        # fields 1, 2 and 4; the sync is inert there, since
+        # `ems_backup_ratio_pct` is not reported) so the EMS-side
+        # sys_bat_backup_ratio catches up to what the app set.
         if self._enhanced_mode and self.device_type == DEVICE_TYPE_POWEROCEAN:
             self._maybe_schedule_surplus_sync()
+
+    def _resolve_surplus_source(
+        self, parsed: dict[str, Any], *, own_connection: bool
+    ) -> None:
+        """Decide whether 96/8 field 352 stands in for the 96/13 surplus value.
+
+        The parser offers field 352 under its own key and never writes
+        `ems_app_surplus_pct`; the choice is made here, from state the parser
+        cannot see (#631, same shape as `_resolve_soc`). 96/13 `dev_soc` owns
+        the key: field 352 is applied only while no 96/13 `dev_soc` has ever
+        arrived, which is exactly `_last_ems_param_change_ts == 0.0` (only the
+        96/13 block above sets it; `_last_user_surplus_set_ts` is a separate
+        clock). The copy must therefore run after that block, never before:
+        this resolver does not touch the timestamp, so a device that sends only
+        352 keeps the ADR-013 auto-sync inert (it returns while the stamp is
+        not newer than the last user SET).
+
+        The intermediate key never reaches the store. An entry handed over
+        with `own_connection=False` (a linked STREAM's per-unit block, a
+        PowerPulse 2's relayed settings) did not travel on this device's
+        connection and is ignored. That is the whole of this guard: a
+        PowerOcean pair arrives on each unit's own connection, so the pair
+        case (#436) is not covered here, the same exposure field 12 has today
+        (outside PLAN-223).
+        """
+        if EMS_CHANGE_DEV_SOC_KEY not in parsed:
+            return
+        value = parsed.pop(EMS_CHANGE_DEV_SOC_KEY)
+        if not own_connection:
+            return
+        self._dev_soc_352_seen = True
+        if self._last_ems_param_change_ts != 0.0:
+            self._dev_soc_352_unapplied += 1
+            return
+        if isinstance(value, (int, float)) and 0.0 <= value <= 100.0:
+            parsed["ems_app_surplus_pct"] = int(value)
+        else:
+            # Same rule as the 96/13 remap (ADR-011): a value the EMS never
+            # populated is an explicit None, not a reading and not a gap.
+            parsed["ems_app_surplus_pct"] = None
 
     def _maybe_schedule_surplus_sync(self) -> None:
         """Schedule an auto-sync SET if the app's dev_soc echo diverges from
@@ -819,7 +863,9 @@ class StateApplyMixin(_Base):
         via the cmd_id=13 EmsParamChangeReport message (`dev_soc`, mapped
         here to `ems_app_surplus_pct`). When that value diverges from
         `ems_backup_ratio_pct`, this method schedules a corrective
-        both-field SET that brings the EMS in line.
+        both-field SET that brings the EMS in line (except R37x: fields 1, 2
+        and 4; there `ems_backup_ratio_pct` is not reported, so the method
+        returns at the missing-value guard below and writes nothing).
 
         ADR-013: a divergent (app, ems) pair gets at most
         `_SURPLUS_SYNC_MAX_WRITES` writes per process lifetime. A boundary
@@ -899,7 +945,8 @@ class StateApplyMixin(_Base):
         # ParamChange we still see may be the obsolete app-side mirror
         # of a value the user has now superseded. Without this guard the
         # auto-sync would reissue the *old* app value as a both-field
-        # SET, dragging HA back to the value the user just left.
+        # SET (except R37x: fields 1, 2 and 4), dragging HA back to the value
+        # the user just left.
         if self._last_ems_param_change_ts <= self._last_user_surplus_set_ts:
             return
         now = time.monotonic()

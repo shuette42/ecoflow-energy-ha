@@ -717,6 +717,7 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
         # divergent pair it tracked has no record - see the property's own
         # docstring for why those two cases share one representation.
         "surplus_auto_sync": coordinator.surplus_auto_sync_diagnostics,
+        "surplus_source": coordinator.surplus_source_diagnostics,
         "event_log": _format_event_log(coordinator.event_log),
     }
 

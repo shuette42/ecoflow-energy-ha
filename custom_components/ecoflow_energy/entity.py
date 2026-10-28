@@ -58,9 +58,10 @@ def raise_set_partner_unreported(entity_id: str, translation_key: str) -> NoRetu
     """Report a paired write whose other half the device has not reported.
 
     Same situation as `raise_set_not_ready`, but not promised to clear with
-    the next frame: a PowerOcean Plus R372 did not report the surplus half
-    in the reporter's capture (issue #631), so "try again in a moment" could
-    send the user waiting for something that does not come. Nothing was
+    the next frame: a unit that sends the surplus half in no message we read
+    (a PowerOcean Plus R372 before field 352 was read, issue #631) would
+    never clear it, so "try again in a moment" could send the user waiting
+    for something that does not come. Nothing was
     sent, so "did not reach the device" would be wrong too. The key names
     which half is missing, so each message can say which setting the device
     has not reported and point to the EcoFlow app meanwhile.

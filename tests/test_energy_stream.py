@@ -198,8 +198,10 @@ class TestPowerOceanSocSetPayload:
 
     def test_surplus_field_diagnostic_modes(self):
         # The surplus_field parameter exists for diagnostic probes only.
-        # Production code paths use the default ("both"); the explicit
-        # variants exist so probe_powerocean_set.py can isolate behavior.
+        # Production code paths use the default ("both"), except the
+        # PowerOcean Plus family (R37x), which passes "field4" through
+        # `powerocean_soc_surplus_field`; "field3" exists so
+        # probe_powerocean_set.py can isolate behavior.
         only_3 = build_powerocean_soc_set_payload(0, 75, seq=1, surplus_field="field3")
         only_4 = build_powerocean_soc_set_payload(0, 75, seq=1, surplus_field="field4")
         both = build_powerocean_soc_set_payload(0, 75, seq=1, surplus_field="both")
