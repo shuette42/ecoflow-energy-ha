@@ -863,8 +863,9 @@ class EcoFlowNumber(
             # placeholder or silently move the app-side surplus to a value
             # the user never chose - a refusal that names the missing half
             # is the honest failure. Not "did not reach the device" (nothing
-            # was sent) and not "try again" (an R372 did not report it in the
-            # reporter's capture, #631).
+            # was sent) and not "try again" (a unit that sends the surplus in no
+            # message we read, for example an R372 before field 352 was
+            # read, #631, would never clear it).
             current_solar = self.coordinator.data.get("ems_app_surplus_pct")
             if current_solar is None:
                 raise_set_partner_unreported(
