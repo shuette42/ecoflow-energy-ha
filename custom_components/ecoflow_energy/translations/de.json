@@ -378,6 +378,9 @@
       "fault_count": {
         "name": "Fehleranzahl"
       },
+      "fault_codes": {
+        "name": "Aktive Fehlercodes"
+      },
       "local_system_alerts": {
         "name": "Systemmeldungen"
       },
@@ -3271,6 +3274,41 @@
       },
       "ev_stop_charging": {
         "name": "Wallbox Laden stoppen"
+      }
+    }
+  },
+  "selector": {
+    "fault_code": {
+      "options": {
+        "100": "Netzausfall",
+        "101": "Netzunterspannung",
+        "102": "Netzüberspannung",
+        "105": "Netz-Unterfrequenz",
+        "128": "Schnelle Zwischenkreis-Überspannung",
+        "139": "Alarm Spannungsflackern",
+        "140": "Alarm plötzlicher Phasensprung der Netzspannung",
+        "156": "Warten auf Netzwiederverbindung",
+        "163": "Fehler der 12-V-Hilfsstromversorgung",
+        "179": "Meldung: Wechselrichtermodul eingeschaltet",
+        "203": "Meldung: BP-Modul eingeschaltet",
+        "521": "Kommunikationsfehler des Energiespeichers",
+        "532": "Spannungsfehler der 12-V-Hilfsstromversorgung",
+        "700": "Ereignis: Gerät im Inselbetrieb",
+        "702": "Energiesparmodus",
+        "703": "Meldung: EMS-Modul eingeschaltet"
+      }
+    }
+  },
+  "issues": {
+    "local_counter_held": {
+      "title": "Ein Gesamtzähler wird zurückgehalten",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Ein Gesamtzähler wird zurückgehalten",
+            "description": "Home Assistant hält {counter} seit mehr als einem Tag bei {ha_value} kWh, weil der Wechselrichter jetzt {device_value} kWh meldet und damit weniger. Das bedeutet meist, dass der Wechselrichter seinen Zähler zurückgesetzt hat. Wählen Sie Absenden, um ab jetzt den Wert des Wechselrichters zu übernehmen. Das Energie-Dashboard zeigt dann einen Zählerrücksetzer an. Wählen Sie Absenden nur dann, wenn Sie wissen, dass der Wechselrichter seinen Zähler zurückgesetzt hat. Wählen Sie Ignorieren, um den bisherigen Gesamtwert zu behalten."
+          }
+        }
       }
     }
   },

@@ -140,6 +140,18 @@ LOCAL_MODBUS_FAILURES_UNAVAILABLE = 5
 # after 60 s without an acknowledged one, so the integration stops there too.
 LOCAL_MODBUS_HEARTBEAT_INTERVAL_S = 15
 LOCAL_MODBUS_HEARTBEAT_LAPSE_S = 60
+# A lifetime counter held back (reading below what was published) for this long
+# is no longer a bad read: the inverter's counter was probably reset.
+LOCAL_COUNTER_HELD_NOTICE_S = 24 * 3600
+# The name a repairs notice gives each Local lifetime counter. English like the
+# entity names they repeat; a placeholder in the notice text, not a translation.
+LOCAL_COUNTER_LABELS: dict[str, str] = {
+    "batt_charge_energy_kwh": "Battery Charge Energy",
+    "batt_discharge_energy_kwh": "Battery Discharge Energy",
+    "grid_export_lifetime_energy_kwh": "Grid Export Lifetime Energy",
+    "grid_import_lifetime_energy_kwh": "Grid Import Lifetime Energy",
+    "solar_lifetime_energy_kwh": "Solar Lifetime Energy",
+}
 
 # Coordinator - Stale detection
 STALE_THRESHOLD_S = (
@@ -2559,6 +2571,15 @@ POWEROCEANLOCALONLY_SENSORS: list[EcoFlowSensorDef] = [
     EcoFlowSensorDef(
         "local_system_alerts",
         "System Alerts",
+        icon="mdi:alert-circle-outline",
+        entity_category="diagnostic",
+    ),
+    # The fault event list (0x0801-0x0814): the active codes in decimal as one
+    # text, `none` while the list is empty. The names ride in the `faults`
+    # attribute (`fault_codes.py`), so the state stays a stable code list.
+    EcoFlowSensorDef(
+        "fault_codes",
+        "Active Fault Codes",
         icon="mdi:alert-circle-outline",
         entity_category="diagnostic",
     ),

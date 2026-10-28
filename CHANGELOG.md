@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.27.0] - 2026-10-28
+
+### Added
+
+- Local mode raises a repairs notice when a lifetime total has been held back for more than a day because the inverter's counter went down. Select Submit to take the inverter's value from now on, but only if you know the inverter reset its counter, or Ignore to keep the current total; the choice to Ignore is kept across a restart or reload. The one-day timer starts again when Home Assistant restarts, so a notice that was open comes back a day after the restart if the counter is still held. Totals that are held back also show in the diagnostics download.
+- Local mode gets an Active Fault Codes sensor (a diagnostic entity). It lists the codes the inverter reports in decimal, separated by commas, and reads `none` while there are none. The `faults` attribute pairs each code with its name in your Home Assistant language, or with nothing for a code that has no name yet. German is translated, the other languages show the English names. The fault names follow the list published by @MaxGrmm in EF-PowerOcean-TcpModbus. They have not been checked against another source. On the one inverter this was tried on, only the first fault register was read, and it held no fault, so no fault code has been seen on a real unit yet. The list is read only while the inverter reports a fault, so a healthy inverter is asked nothing extra, and the sensor stays unknown on an inverter that refuses the list while the rest of the readings are not affected.
+- The Local diagnostics download now carries the raw register words of the last poll (`raw_registers`, by hexadecimal start address), so a register the integration does not decode yet can be read from a report. The serial number words are left out.
+- A read-only register scan for owners of an inverter the Local mode does not offer yet, such as a single-phase PowerOcean, a PowerOcean Plus, a DC Fit or an Ocean 2. Download `documentation/tools/register_scan.py`, run it against the inverter and attach the output to an issue. It sends only read requests and cuts the serial number to its first four characters. The Local guide explains how to run it.
+
 ## [1.26.1] - 2026-10-26
 
 ### Fixed

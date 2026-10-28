@@ -378,6 +378,9 @@
       "fault_count": {
         "name": "Fault Count"
       },
+      "fault_codes": {
+        "name": "Active Fault Codes"
+      },
       "local_system_alerts": {
         "name": "System Alerts"
       },
@@ -3271,6 +3274,41 @@
       },
       "ev_stop_charging": {
         "name": "Wallbox Stop Charging"
+      }
+    }
+  },
+  "selector": {
+    "fault_code": {
+      "options": {
+        "100": "Power outage",
+        "101": "Grid undervoltage",
+        "102": "Grid overvoltage",
+        "105": "Grid under-frequency",
+        "128": "Bus fast overvoltage",
+        "139": "Voltage flicker alarm",
+        "140": "Sudden grid voltage phase change alarm",
+        "156": "Grid reconnection waiting",
+        "163": "12V auxiliary power fault",
+        "179": "Inverter module power-on notification",
+        "203": "BP module power-on notification",
+        "521": "Energy storage communication error",
+        "532": "12V auxiliary power voltage fault",
+        "700": "Device off-grid event",
+        "702": "Low power mode",
+        "703": "EMS module power-on notification"
+      }
+    }
+  },
+  "issues": {
+    "local_counter_held": {
+      "title": "A lifetime total is held back",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "A lifetime total is held back",
+            "description": "Home Assistant has kept {counter} at {ha_value} kWh for more than a day because the inverter now reports {device_value} kWh, which is lower. This usually means the inverter reset its counter. Select Submit to take the inverter's value from now on; the Energy dashboard will show a counter reset. Submit only if you know the inverter reset its counter. Select Ignore to keep the current total."
+          }
+        }
       }
     }
   },

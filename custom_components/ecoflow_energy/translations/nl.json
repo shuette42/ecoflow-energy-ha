@@ -378,6 +378,9 @@
       "fault_count": {
         "name": "Aantal storingen"
       },
+      "fault_codes": {
+        "name": "Actieve foutcodes"
+      },
       "local_system_alerts": {
         "name": "Systeemmeldingen"
       },
@@ -3271,6 +3274,41 @@
       },
       "ev_stop_charging": {
         "name": "Laden stoppen (laadpaal)"
+      }
+    }
+  },
+  "selector": {
+    "fault_code": {
+      "options": {
+        "100": "Power outage",
+        "101": "Grid undervoltage",
+        "102": "Grid overvoltage",
+        "105": "Grid under-frequency",
+        "128": "Bus fast overvoltage",
+        "139": "Voltage flicker alarm",
+        "140": "Sudden grid voltage phase change alarm",
+        "156": "Grid reconnection waiting",
+        "163": "12V auxiliary power fault",
+        "179": "Inverter module power-on notification",
+        "203": "BP module power-on notification",
+        "521": "Energy storage communication error",
+        "532": "12V auxiliary power voltage fault",
+        "700": "Device off-grid event",
+        "702": "Low power mode",
+        "703": "EMS module power-on notification"
+      }
+    }
+  },
+  "issues": {
+    "local_counter_held": {
+      "title": "Een totaalstand wordt vastgehouden",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Een totaalstand wordt vastgehouden",
+            "description": "Home Assistant houdt {counter} al meer dan een dag op {ha_value} kWh, omdat de omvormer nu {device_value} kWh meldt, wat lager is. Meestal betekent dit dat de omvormer zijn teller heeft gereset. Kies Verzenden om vanaf nu de waarde van de omvormer over te nemen; het Energiedashboard toont dan een tellerreset. Verzend alleen als je weet dat de omvormer zijn teller heeft gereset. Kies Negeren om het huidige totaal te behouden."
+          }
+        }
       }
     }
   },

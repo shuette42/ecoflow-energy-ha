@@ -378,6 +378,9 @@
       "fault_count": {
         "name": "Liczba usterek"
       },
+      "fault_codes": {
+        "name": "Aktywne kody usterek"
+      },
       "local_system_alerts": {
         "name": "Alerty systemowe"
       },
@@ -3271,6 +3274,41 @@
       },
       "ev_stop_charging": {
         "name": "Zatrzymaj ładowanie wallboxa"
+      }
+    }
+  },
+  "selector": {
+    "fault_code": {
+      "options": {
+        "100": "Power outage",
+        "101": "Grid undervoltage",
+        "102": "Grid overvoltage",
+        "105": "Grid under-frequency",
+        "128": "Bus fast overvoltage",
+        "139": "Voltage flicker alarm",
+        "140": "Sudden grid voltage phase change alarm",
+        "156": "Grid reconnection waiting",
+        "163": "12V auxiliary power fault",
+        "179": "Inverter module power-on notification",
+        "203": "BP module power-on notification",
+        "521": "Energy storage communication error",
+        "532": "12V auxiliary power voltage fault",
+        "700": "Device off-grid event",
+        "702": "Low power mode",
+        "703": "EMS module power-on notification"
+      }
+    }
+  },
+  "issues": {
+    "local_counter_held": {
+      "title": "Suma całkowita jest wstrzymana",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Suma całkowita jest wstrzymana",
+            "description": "Home Assistant utrzymuje {counter} na poziomie {ha_value} kWh od ponad doby, ponieważ falownik podaje teraz {device_value} kWh, czyli mniej. Zwykle oznacza to, że falownik zresetował swój licznik. Wybierz Prześlij, aby od teraz przyjmować wartość z falownika; panel Energia pokaże reset licznika. Prześlij tylko wtedy, gdy wiesz, że falownik zresetował swój licznik. Wybierz Zignoruj, aby zachować dotychczasową sumę."
+          }
+        }
       }
     }
   },

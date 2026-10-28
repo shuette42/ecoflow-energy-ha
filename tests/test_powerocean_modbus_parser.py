@@ -10,6 +10,9 @@ from ecoflow_energy.ecoflow.modbus_local import (
     BRIGHTNESS_OFFSET,
 )
 from ecoflow_energy.ecoflow.parsers.powerocean_modbus import (
+    FAULT_BLOCKS,
+    FAULT_EVENT_COUNT,
+    FAULT_EVENT_OFFSET,
     LIFETIME_COUNTER_KEYS,
     POLL_BLOCKS,
     SETUP_BLOCKS,
@@ -539,3 +542,41 @@ def test_blocks_stay_within_the_device_register_limit():
     # 154 registers at offset 0x0840 answered Modbus exception 03.
     for start, count in SETUP_BLOCKS + POLL_BLOCKS:
         assert 1 <= count <= 125, hex(start)
+
+
+def _fault_blocks(events):
+    """The poll blocks plus the fault event block, ``events`` padded with zeros."""
+    padded = list(events) + [0] * (FAULT_EVENT_COUNT - len(events))
+    blocks = _poll_blocks(DAY)
+    blocks[FAULT_EVENT_OFFSET] = struct.pack(f">{FAULT_EVENT_COUNT}H", *padded)
+    return blocks
+
+
+def test_the_fault_block_is_a_block_of_its_own_after_the_count_register():
+    # Not in POLL_BLOCKS: a device that refuses 0x0801 must not break the poll.
+    assert FAULT_BLOCKS == ((0x0801, 20),)
+    assert FAULT_EVENT_OFFSET + FAULT_EVENT_COUNT - 1 == 0x0814
+    assert all(start != FAULT_EVENT_OFFSET for start, _ in POLL_BLOCKS)
+
+
+def test_the_fault_codes_are_the_non_zero_events_in_register_order():
+    result = parse_registers(_fault_blocks([0, 100, 0, 521, 0]))
+
+    assert result["fault_codes"] == [100, 521]
+    assert result["fault_count"] == 0
+
+
+def test_a_repeated_code_and_the_last_event_are_kept_as_read():
+    events = [703, 100, 100] + [0] * 16 + [521]
+
+    assert parse_registers(_fault_blocks(events))["fault_codes"] == [703, 100, 100, 521]
+
+
+def test_all_zero_events_give_an_empty_list():
+    # Negative control: a clear device reports an empty list, not a missing key.
+    assert parse_registers(_fault_blocks([]))["fault_codes"] == []
+
+
+def test_a_poll_without_the_fault_block_invents_no_fault_state():
+    # Frame, not store: an unread block says nothing, so no empty list either.
+    assert "fault_codes" not in parse_registers(_poll_blocks(DAY))

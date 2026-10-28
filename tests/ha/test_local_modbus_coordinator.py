@@ -40,6 +40,7 @@ from custom_components.ecoflow_energy.const import (
     CONF_UNIT_ID,
     DEVICE_TYPE_POWEROCEAN,
     DOMAIN,
+    LOCAL_COUNTER_HELD_NOTICE_S,
     LOCAL_MODBUS_FAILURES_UNAVAILABLE,
     LOCAL_MODBUS_HEARTBEAT_INTERVAL_S,
     LOCAL_MODBUS_HEARTBEAT_LAPSE_S,
@@ -69,6 +70,9 @@ from custom_components.ecoflow_energy.ecoflow.modbus_local import (
     ModbusTimeoutError,
 )
 from custom_components.ecoflow_energy.ecoflow.parsers.powerocean_modbus import (
+    FAULT_BLOCKS,
+    FAULT_EVENT_COUNT,
+    FAULT_EVENT_OFFSET,
     LIFETIME_COUNTER_KEYS,
     POLL_BLOCKS,
     SETUP_BLOCKS,
@@ -105,6 +109,7 @@ NEW_KEYS = {
     "batt_current_a",
     "batt_temp_c",
     "local_system_alerts",
+    "fault_codes",
 }
 # Integrated energy keys of the cloud entry. Local mode publishes none of them.
 INTEGRATED_KEYS = {
@@ -192,14 +197,24 @@ class StubClient:
         self._script = list(script)
         self.gate: asyncio.Event | None = None
         self.calls = 0
+        self.fault_calls = 0
         # The blocks each poll asked for, in order.
         self.requested: list[tuple[tuple[int, int], ...]] = []
         self.writes: list[tuple[int, int]] = []
         self.write_errors: list[Exception | None] = []
         self.registers: dict[int, int] = {}
         self.read_back_override: int | None = None
+        # The fault event words (0x0801-0x0814) every poll answers, or the error
+        # that read raises. The fault read is its own call and takes no script step.
+        self.fault_events: list[int] = [0] * FAULT_EVENT_COUNT
+        self.fault_error: Exception | None = None
 
     async def read_blocks(self, blocks: Sequence[tuple[int, int]]) -> dict[int, bytes]:
+        if tuple(blocks) == FAULT_BLOCKS:
+            self.fault_calls += 1
+            if self.fault_error is not None:
+                raise self.fault_error
+            return {FAULT_EVENT_OFFSET: struct.pack(">20H", *self.fault_events)}
         self.calls += 1
         self.requested.append(tuple(blocks))
         if len(blocks) == 1 and blocks[0][1] == 1 and blocks[0][0] in self.registers:
@@ -1534,3 +1549,348 @@ async def test_a_refused_shared_unit_fails_setup_without_the_host_in_the_reason(
     assert host not in entry.reason
     # The whole log text, traceback of the chained cause included.
     assert host not in caplog.text
+
+
+SOLAR = "solar_lifetime_energy_kwh"
+
+
+def _held_clock(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    """Replace the coordinator's wall clock with one the test moves."""
+    clock: dict[str, Any] = {"now": dt_util.utcnow()}
+    monkeypatch.setattr(local_modbus, "_utcnow", lambda: clock["now"])
+    return clock
+
+
+async def test_a_dropped_counter_is_listed_only_after_the_notice_window(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A reading held back is remembered and reported once it is 24 h old."""
+    clock = _held_clock(monkeypatch)
+    start = clock["now"]
+    restored = DAY["solar_total_kwh"] + 40.0
+    coordinator = _coordinator(
+        hass, _local_entry(), [_frame(DAY), _frame(DAY), _frame(DAY)]
+    )
+    coordinator.seed_energy_total(SOLAR, restored)
+    await coordinator.async_refresh()
+
+    # Held, but too young for the notice.
+    assert SOLAR in coordinator.held_counters()
+    assert coordinator.held_counters(older_than_s=LOCAL_COUNTER_HELD_NOTICE_S) == {}
+
+    clock["now"] = start + timedelta(seconds=LOCAL_COUNTER_HELD_NOTICE_S - 1)
+    await coordinator.async_refresh()
+    assert coordinator.held_counters(older_than_s=LOCAL_COUNTER_HELD_NOTICE_S) == {}
+
+    clock["now"] = start + timedelta(seconds=LOCAL_COUNTER_HELD_NOTICE_S)
+    await coordinator.async_refresh()
+    held = coordinator.held_counters(older_than_s=LOCAL_COUNTER_HELD_NOTICE_S)
+    assert set(held) == {SOLAR}
+    assert held[SOLAR]["since"] == start
+    assert held[SOLAR]["published"] == pytest.approx(restored)
+    assert held[SOLAR]["device_value"] == pytest.approx(
+        DAY["solar_total_kwh"], abs=1e-3
+    )
+    # The result is a copy: changing it does not touch the coordinator.
+    held[SOLAR]["device_value"] = -1.0
+    assert coordinator.held_counters()[SOLAR]["device_value"] != -1.0
+
+
+async def test_a_growing_or_recovered_counter_is_never_listed(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Negative control: only a reading below the bound is held."""
+    clock = _held_clock(monkeypatch)
+    coordinator = _coordinator(
+        hass,
+        _local_entry(),
+        [
+            _frame(DAY),
+            _frame(DAY, solar_total_kwh=DAY["solar_total_kwh"] + 1.0),
+            _frame(DAY, solar_total_kwh=DAY["solar_total_kwh"] - 5.0),
+            _frame(DAY, solar_total_kwh=DAY["solar_total_kwh"] + 2.0),
+        ],
+    )
+    await coordinator.async_refresh()
+    await coordinator.async_refresh()
+    clock["now"] += timedelta(days=3)
+    # A counter that only grows is not held, however long the clock ran.
+    assert coordinator.held_counters() == {}
+
+    await coordinator.async_refresh()
+    assert SOLAR in coordinator.held_counters()
+
+    # Passing the bound again clears the entry.
+    await coordinator.async_refresh()
+    assert coordinator.held_counters() == {}
+    assert _solar(coordinator) == pytest.approx(DAY["solar_total_kwh"] + 2.0, abs=1e-3)
+
+
+async def test_accepting_the_device_counter_publishes_its_value_at_once(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A reset counter: the floor follows the device and the entity moves on."""
+    _held_clock(monkeypatch)
+    low = DAY["solar_total_kwh"] - 5.0
+    coordinator = _coordinator(
+        hass,
+        _local_entry(),
+        [
+            _frame(DAY),
+            _frame(DAY, solar_total_kwh=low),
+            _frame(DAY, solar_total_kwh=low + 1.0),
+        ],
+    )
+    await coordinator.async_refresh()
+    await coordinator.async_refresh()
+    # Ours is kept while the reading is held.
+    assert _solar(coordinator) == pytest.approx(DAY["solar_total_kwh"], abs=1e-3)
+
+    assert coordinator.accept_device_counter(SOLAR) is True
+    assert coordinator.held_counters() == {}
+    # The device value is published at once, before any poll.
+    assert _solar(coordinator) == pytest.approx(low, abs=1e-3)
+    assert coordinator.device_data[SOLAR] == pytest.approx(low, abs=1e-3)
+
+    await coordinator.async_refresh()
+    assert _solar(coordinator) == pytest.approx(low + 1.0, abs=1e-3)
+    assert coordinator.held_counters() == {}
+
+    # Nothing held for these keys: False, and nothing changes.
+    assert coordinator.accept_device_counter(SOLAR) is False
+    assert coordinator.accept_device_counter("soc_pct") is False
+    assert _solar(coordinator) == pytest.approx(low + 1.0, abs=1e-3)
+
+
+async def test_since_stays_at_the_first_drop_while_the_device_value_follows(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The timer counts the whole run of drops, the value is the latest one."""
+    clock = _held_clock(monkeypatch)
+    first_drop = clock["now"]
+    base = DAY["solar_total_kwh"]
+    coordinator = _coordinator(
+        hass,
+        _local_entry(),
+        [
+            _frame(DAY),
+            _frame(DAY, solar_total_kwh=base - 5.0),
+            _frame(DAY, solar_total_kwh=base - 4.0),
+            _frame(DAY, solar_total_kwh=base - 3.0),
+        ],
+    )
+    await coordinator.async_refresh()
+    await coordinator.async_refresh()
+    for _ in range(2):
+        clock["now"] += timedelta(hours=1)
+        await coordinator.async_refresh()
+
+    entry = coordinator.held_counters()[SOLAR]
+    assert entry["since"] == first_drop
+    assert entry["device_value"] == pytest.approx(base - 3.0, abs=1e-3)
+    assert entry["published"] == pytest.approx(base, abs=1e-3)
+
+
+async def test_accepting_lowers_a_restored_floor_to_the_device_value(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The restored floor is what holds a counter after a restart; accept moves it."""
+    _held_clock(monkeypatch)
+    base = DAY["solar_total_kwh"]
+    restored = base + 40.0
+    coordinator = _coordinator(
+        hass,
+        _local_entry(),
+        [_frame(DAY), _frame(DAY, solar_total_kwh=base + 1.0)],
+    )
+    coordinator.seed_energy_total(SOLAR, restored)
+    await coordinator.async_refresh()
+    assert SOLAR not in coordinator.data
+
+    assert coordinator.accept_device_counter(SOLAR) is True
+    await coordinator.async_refresh()
+    # Below the old restored value, above the accepted one: published now.
+    assert _solar(coordinator) == pytest.approx(base + 1.0, abs=1e-3)
+
+
+async def test_a_refused_fault_block_costs_the_list_and_never_the_poll(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A device rejecting 0x0801 keeps its other readings and is not asked again."""
+    caplog.set_level(
+        logging.DEBUG, logger="custom_components.ecoflow_energy.coordinator"
+    )
+    faulty = _frame(DAY, fault_count=1)
+    coordinator, stub = _with_stub(hass, _local_entry(), [faulty, faulty, faulty])
+    stub.fault_error = ModbusExceptionResponse(2, FAULT_EVENT_OFFSET)
+
+    for _ in range(3):
+        await coordinator.async_refresh()
+
+    assert coordinator.last_poll_ok is True
+    assert coordinator.consecutive_failures == 0
+    assert coordinator.data["soc_pct"] == 100
+    assert "fault_codes" not in coordinator.data
+    assert stub.fault_calls == 1
+    assert [r for r in caplog.records if r.levelno >= logging.WARNING] == []
+    assert sum("refused the fault event" in r.getMessage() for r in caplog.records) == 1
+
+
+async def test_a_failed_fault_read_drops_the_old_list_and_is_retried(
+    hass: HomeAssistant,
+) -> None:
+    """A timeout is not a refusal: unknown until the next poll reads the list again."""
+    faulty = _frame(DAY, fault_count=1)
+    coordinator, stub = _with_stub(hass, _local_entry(), [faulty, faulty, faulty])
+    stub.fault_events[0] = 100
+    await coordinator.async_refresh()
+    assert coordinator.data["fault_codes"] == [100]
+
+    stub.fault_error = ModbusTimeoutError("no answer")
+    await coordinator.async_refresh()
+    assert coordinator.last_poll_ok is True
+    assert "fault_codes" not in coordinator.data
+
+    stub.fault_error = None
+    stub.fault_events[0] = 521
+    await coordinator.async_refresh()
+    assert coordinator.data["fault_codes"] == [521]
+
+
+@pytest.mark.parametrize("code", [1, 2, 3])
+async def test_an_illegal_function_address_or_value_ends_the_fault_reads(
+    hass: HomeAssistant, code: int
+) -> None:
+    """Codes 1, 2 and 3 say the device does not offer the block: never asked again."""
+    faulty = _frame(DAY, fault_count=1)
+    coordinator, stub = _with_stub(hass, _local_entry(), [faulty, faulty, faulty])
+    stub.fault_error = ModbusExceptionResponse(code, FAULT_EVENT_OFFSET)
+
+    for _ in range(3):
+        await coordinator.async_refresh()
+
+    assert stub.fault_calls == 1
+    assert "fault_codes" not in coordinator.data
+
+
+@pytest.mark.parametrize("code", [4, 6, 11])
+async def test_a_busy_or_failing_device_is_asked_for_the_fault_list_again(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture, code: int
+) -> None:
+    """Slave busy (6) and the like are transient: the next poll reads the list."""
+    caplog.set_level(
+        logging.DEBUG, logger="custom_components.ecoflow_energy.coordinator"
+    )
+    faulty = _frame(DAY, fault_count=1)
+    coordinator, stub = _with_stub(hass, _local_entry(), [faulty, faulty, faulty])
+    stub.fault_events[0] = 100
+    stub.fault_error = ModbusExceptionResponse(code, FAULT_EVENT_OFFSET)
+    await coordinator.async_refresh()
+    await coordinator.async_refresh()
+    assert "fault_codes" not in coordinator.data
+    assert stub.fault_calls == 2
+
+    stub.fault_error = None
+    await coordinator.async_refresh()
+
+    assert stub.fault_calls == 3
+    assert coordinator.data["fault_codes"] == [100]
+    assert [r for r in caplog.records if r.levelno >= logging.WARNING] == []
+    # One DEBUG line per failing run, not one per poll.
+    assert sum("fault events not read" in r.getMessage() for r in caplog.records) == 1
+
+
+async def test_local_diagnostics_carry_the_raw_registers_and_no_serial(
+    hass: HomeAssistant,
+) -> None:
+    """Hex start address -> words; the serial's words are null, the rest are as read."""
+    entry = _local_entry()
+    assert await _set_up_local_entry(hass, entry, [_frame(DAY, fault_count=1)])
+
+    diagnostics = await async_get_config_entry_diagnostics(hass, entry)
+
+    (device,) = diagnostics["devices"]
+    raw = device["raw_registers"]
+    assert {"0x0206", "0x0870", "0x0801", "0x0003"} <= set(raw)
+    assert len(raw["0x0870"]) == 98
+    frame = _frame(DAY)
+    assert raw["0x0206"] == list(struct.unpack(">15H", frame[0x0206]))
+    assert raw["0x0870"] != [0] * 98
+    # The first poll read the identity block: its eight words are withheld.
+    assert raw["0x0003"] == [None] * 8
+    assert SERIAL not in json.dumps(diagnostics)
+    # Positive control: the coordinator does hold the serial's words, so the
+    # null above is the diagnostics' doing and not an empty read.
+    coordinator = hass.data[DOMAIN][entry.entry_id][SERIAL]
+    serial_words = list(struct.unpack(">8H", SERIAL.encode("ascii")))
+    assert list(struct.unpack(">8H", coordinator.last_raw[0x0003])) == serial_words
+    assert not any(
+        serial_words[:2] == words[i : i + 2]
+        for words in raw.values()
+        for i in range(len(words) - 1)
+        if None not in words[i : i + 2]
+    )
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_the_raw_registers_are_those_of_the_last_successful_poll(
+    hass: HomeAssistant,
+) -> None:
+    """Empty before a poll, replaced by each success, kept through a failure."""
+    coordinator = _coordinator(
+        hass,
+        _local_entry(),
+        [_frame(DAY), _frame(DAY, soc=42), ModbusTimeoutError("down")],
+    )
+    assert coordinator.last_raw == {}
+
+    await coordinator.async_refresh()
+    first = coordinator.last_raw
+    await coordinator.async_refresh()
+    second = coordinator.last_raw
+    await coordinator.async_refresh()
+
+    assert first != second
+    assert coordinator.last_poll_ok is False
+    assert coordinator.last_raw == second
+
+
+async def test_a_clear_device_is_never_asked_for_its_fault_events(
+    hass: HomeAssistant,
+) -> None:
+    """Count 0 is a known "no fault" without the extra read; count > 0 reads."""
+    clear, faulty = _frame(DAY), _frame(DAY, fault_count=2)
+    coordinator, stub = _with_stub(hass, _local_entry(), [clear, clear, faulty, clear])
+    stub.fault_events[:2] = [100, 521]
+
+    await coordinator.async_refresh()
+    await coordinator.async_refresh()
+    assert coordinator.data["fault_codes"] == []
+    assert stub.fault_calls == 0
+    assert FAULT_EVENT_OFFSET not in coordinator.last_raw
+
+    await coordinator.async_refresh()
+    assert coordinator.data["fault_codes"] == [100, 521]
+    assert stub.fault_calls == 1
+    assert FAULT_EVENT_OFFSET in coordinator.last_raw
+
+    # The fault went away: back to a known empty list, with no second read.
+    await coordinator.async_refresh()
+    assert coordinator.data["fault_codes"] == []
+    assert stub.fault_calls == 1
+
+
+async def test_a_poll_without_the_fault_count_leaves_the_fault_list_unknown(
+    hass: HomeAssistant,
+) -> None:
+    """No count, no claim: the list is not invented and nothing extra is read."""
+    frame = _frame(DAY)
+    del frame[0x0800]
+    coordinator, stub = _with_stub(hass, _local_entry(), [_frame(DAY), frame])
+    await coordinator.async_refresh()
+    assert coordinator.data["fault_codes"] == []
+
+    await coordinator.async_refresh()
+
+    assert "fault_codes" not in coordinator.data
+    assert stub.fault_calls == 0

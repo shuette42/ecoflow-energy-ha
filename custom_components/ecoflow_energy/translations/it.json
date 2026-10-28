@@ -378,6 +378,9 @@
       "fault_count": {
         "name": "Numero di guasti"
       },
+      "fault_codes": {
+        "name": "Codici di guasto attivi"
+      },
       "local_system_alerts": {
         "name": "Avvisi di sistema"
       },
@@ -3271,6 +3274,41 @@
       },
       "ev_stop_charging": {
         "name": "Interrompi ricarica wallbox"
+      }
+    }
+  },
+  "selector": {
+    "fault_code": {
+      "options": {
+        "100": "Power outage",
+        "101": "Grid undervoltage",
+        "102": "Grid overvoltage",
+        "105": "Grid under-frequency",
+        "128": "Bus fast overvoltage",
+        "139": "Voltage flicker alarm",
+        "140": "Sudden grid voltage phase change alarm",
+        "156": "Grid reconnection waiting",
+        "163": "12V auxiliary power fault",
+        "179": "Inverter module power-on notification",
+        "203": "BP module power-on notification",
+        "521": "Energy storage communication error",
+        "532": "12V auxiliary power voltage fault",
+        "700": "Device off-grid event",
+        "702": "Low power mode",
+        "703": "EMS module power-on notification"
+      }
+    }
+  },
+  "issues": {
+    "local_counter_held": {
+      "title": "Un totale cumulativo è trattenuto",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Un totale cumulativo è trattenuto",
+            "description": "Home Assistant mantiene {counter} a {ha_value} kWh da più di un giorno perché l'inverter ora riporta {device_value} kWh, un valore più basso. Di solito significa che l'inverter ha azzerato il suo contatore. Seleziona Invia per adottare da ora il valore dell'inverter; la dashboard Energia mostrerà un azzeramento del contatore. Invia solo se sai che l'inverter ha azzerato il suo contatore. Seleziona Ignora per mantenere il totale attuale."
+          }
+        }
       }
     }
   },
