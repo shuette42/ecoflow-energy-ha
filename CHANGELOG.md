@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [1.27.0] - 2026-10-28
 
+### Fixed
+
+- PowerOcean Plus `R372`: the Solar Surplus Threshold now has a value, and Backup Reserve is no longer refused for want of it. The unit does not send the value in the message the integration read it from (the reporter's downloads carry no such message). It reports it in field 352 of its change report, which moved to 70 and back to 100 in the same second as the matching changes in the EcoFlow app, while changing the reserve in the app left it alone. The integration now reads that field, and uses it only on a unit that has not sent the other message, so every other PowerOcean behaves as before. The automatic surplus sync stays off on a unit that only sends the new field. Writing the pair from Home Assistant on an `R372` has not been tried yet. On the PowerOcean Plus family (`R371` to `R374`) the integration now writes the same fields the app sends (the charge limit, the reserve and the surplus, without the additional internal field). The app writes on file come from one `R372` only, so the siblings are written the same way without having been recorded. The unit's answer to the integration's write is still unobserved, and a first test with the unit will show whether the Solar Surplus Threshold and the Backup Reserve follow. Thanks to @manutobi for the two diagnostics downloads, the second one taken with the app only and the extra recording on, which made the field visible. (Ref #631)
+
 ### Added
 
 - Local mode raises a repairs notice when a lifetime total has been held back for more than a day because the inverter's counter went down. Select Submit to take the inverter's value from now on, but only if you know the inverter reset its counter, or Ignore to keep the current total; the choice to Ignore is kept across a restart or reload. The one-day timer starts again when Home Assistant restarts, so a notice that was open comes back a day after the restart if the counter is still held. Totals that are held back also show in the diagnostics download.

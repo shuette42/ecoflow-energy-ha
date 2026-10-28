@@ -285,8 +285,10 @@ class EcoFlowDeviceCoordinator(
         # which leaves the EMS-side `sys_bat_backup_ratio` unchanged. The
         # device mirrors the app's value back via cmd_id=13 EmsParamChangeReport
         # field 10 (`dev_soc`). When that diverges from the EMS value, the
-        # coordinator schedules a corrective both-field SET. The throttle
-        # avoids redundant SETs and the user-grace gives the device echo time.
+        # coordinator schedules a corrective both-field SET (except R37x: fields
+        # 1, 2 and 4; inert there, `ems_backup_ratio_pct` is not reported).
+        # The throttle avoids redundant SETs and the user-grace gives the
+        # device echo time.
         self._last_app_surplus_sync_ts: float = 0.0
         self._last_user_surplus_set_ts: float = 0.0
         # Timestamp of the most recent EmsParamChangeReport (cmd_id=13) that
@@ -295,6 +297,12 @@ class EcoFlowDeviceCoordinator(
         # echo of a value the user has since superseded in HA) would
         # otherwise pull HA back to the obsolete app-side value.
         self._last_ems_param_change_ts: float = 0.0
+        # PowerOcean Plus (#631): 96/8 field 352 is read as the surplus value
+        # only while no 96/13 `dev_soc` has arrived (`_resolve_surplus_source`).
+        # Diagnostics only: whether 352 was ever seen on this connection, and
+        # how many of its frames lost to 96/13.
+        self._dev_soc_352_seen: bool = False
+        self._dev_soc_352_unapplied: int = 0
         # The bound the auto-sync keeps for the current app value (ADR-013,
         # amended for #436): writes issued per EMS value, and the EMS values
         # whose stop was reported. Cleared on a user SET or a changed app
@@ -746,6 +754,22 @@ class EcoFlowDeviceCoordinator(
                 str(ems): n for ems, n in sorted(record["writes_by_ems"].items())
             },
             "stopped_for": sorted(record["stopped_for"]),
+        }
+
+    @property
+    def surplus_source_diagnostics(self) -> dict[str, Any] | None:
+        """Return which wire fields fed the surplus value, or None (#631).
+
+        None on every device that never sent 96/8 field 352. Otherwise
+        `surplus_sources_both` says the device also sent a 96/13 `dev_soc`
+        (which then owns the value) and `dev_soc_352_unapplied` counts the
+        352 frames that were not applied because of it.
+        """
+        if not self._dev_soc_352_seen:
+            return None
+        return {
+            "surplus_sources_both": self._last_ems_param_change_ts != 0.0,
+            "dev_soc_352_unapplied": self._dev_soc_352_unapplied,
         }
 
     def _note_value_change(self, parsed: dict[str, Any]) -> None:

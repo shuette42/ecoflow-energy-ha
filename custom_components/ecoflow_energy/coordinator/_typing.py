@@ -101,6 +101,8 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
     _last_mqtt_event_ts: float
     _last_flush_ts: float
     _surplus_sync_record: SurplusSyncRecord | None
+    _dev_soc_352_seen: bool
+    _dev_soc_352_unapplied: int
     _last_app_surplus_sync_ts: float
     _batt_w_samples: list[tuple[float, float]]
     _batt_state_changed_at: float

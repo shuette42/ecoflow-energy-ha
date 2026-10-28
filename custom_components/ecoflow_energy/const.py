@@ -2708,7 +2708,8 @@ POWEROCEANLOCALONLY_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
 
 POWEROCEAN_NUMBERS: list[EcoFlowNumberDef] = [
     # Backup-Reserve (App-slider): minimum SoC kept in reserve. Wire field 2
-    # in cmd_id=112 SysBatChgDsgSet, sent as a 3-field app-replay payload.
+    # in cmd_id=112 SysBatChgDsgSet, sent as an app-replay payload (fields 1, 2,
+    # 3 and 4; except R37x: fields 1, 2 and 4).
     EcoFlowNumberDef(
         "backup_reserve",
         "Backup Reserve",
@@ -2728,9 +2729,10 @@ POWEROCEAN_NUMBERS: list[EcoFlowNumberDef] = [
     # sys_bat_backup_ratio) is a derived EMS status that the device
     # clamps internally; it diverges from dev_soc at edge cases (notably
     # 100%, where the EMS caps at 90). The SET path still writes BOTH
-    # fields (handled in async_set_powerocean_soc) so the device EMS
-    # follows the user value where it can; the slider sources from the
-    # user-side mirror so HA matches what the app shows the user.
+    # fields (handled in async_set_powerocean_soc; except R37x: fields 1, 2 and
+    # 4) so the device EMS follows the user value where it can; the slider
+    # sources from the user-side mirror so HA matches what the app shows the
+    # user.
     EcoFlowNumberDef(
         "solar_surplus_threshold",
         "Solar Surplus Threshold",
