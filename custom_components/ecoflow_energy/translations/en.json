@@ -3274,6 +3274,19 @@
       }
     }
   },
+  "issues": {
+    "local_counter_held": {
+      "title": "A lifetime total is held back",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "A lifetime total is held back",
+            "description": "Home Assistant has kept {counter} at {ha_value} kWh for more than a day because the inverter now reports {device_value} kWh, which is lower. This usually means the inverter reset its counter. Select Submit to take the inverter's value from now on; the Energy dashboard will show a counter reset. Select Ignore to keep the current total."
+          }
+        }
+      }
+    }
+  },
   "exceptions": {
     "set_command_failed": {
       "message": "The command for {entity} did not reach the device. Check that the device is connected and try again."

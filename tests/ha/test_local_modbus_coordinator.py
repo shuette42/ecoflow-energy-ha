@@ -40,6 +40,7 @@ from custom_components.ecoflow_energy.const import (
     CONF_UNIT_ID,
     DEVICE_TYPE_POWEROCEAN,
     DOMAIN,
+    LOCAL_COUNTER_HELD_NOTICE_S,
     LOCAL_MODBUS_FAILURES_UNAVAILABLE,
     LOCAL_MODBUS_HEARTBEAT_INTERVAL_S,
     LOCAL_MODBUS_HEARTBEAT_LAPSE_S,
@@ -1534,3 +1535,164 @@ async def test_a_refused_shared_unit_fails_setup_without_the_host_in_the_reason(
     assert host not in entry.reason
     # The whole log text, traceback of the chained cause included.
     assert host not in caplog.text
+
+
+SOLAR = "solar_lifetime_energy_kwh"
+
+
+def _held_clock(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    """Replace the coordinator's wall clock with one the test moves."""
+    clock: dict[str, Any] = {"now": dt_util.utcnow()}
+    monkeypatch.setattr(local_modbus, "_utcnow", lambda: clock["now"])
+    return clock
+
+
+async def test_a_dropped_counter_is_listed_only_after_the_notice_window(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A reading held back is remembered and reported once it is 24 h old."""
+    clock = _held_clock(monkeypatch)
+    start = clock["now"]
+    restored = DAY["solar_total_kwh"] + 40.0
+    coordinator = _coordinator(
+        hass, _local_entry(), [_frame(DAY), _frame(DAY), _frame(DAY)]
+    )
+    coordinator.seed_energy_total(SOLAR, restored)
+    await coordinator.async_refresh()
+
+    # Held, but too young for the notice.
+    assert SOLAR in coordinator.held_counters()
+    assert coordinator.held_counters(older_than_s=LOCAL_COUNTER_HELD_NOTICE_S) == {}
+
+    clock["now"] = start + timedelta(seconds=LOCAL_COUNTER_HELD_NOTICE_S - 1)
+    await coordinator.async_refresh()
+    assert coordinator.held_counters(older_than_s=LOCAL_COUNTER_HELD_NOTICE_S) == {}
+
+    clock["now"] = start + timedelta(seconds=LOCAL_COUNTER_HELD_NOTICE_S)
+    await coordinator.async_refresh()
+    held = coordinator.held_counters(older_than_s=LOCAL_COUNTER_HELD_NOTICE_S)
+    assert set(held) == {SOLAR}
+    assert held[SOLAR]["since"] == start
+    assert held[SOLAR]["published"] == pytest.approx(restored)
+    assert held[SOLAR]["device_value"] == pytest.approx(
+        DAY["solar_total_kwh"], abs=1e-3
+    )
+    # The result is a copy: changing it does not touch the coordinator.
+    held[SOLAR]["device_value"] = -1.0
+    assert coordinator.held_counters()[SOLAR]["device_value"] != -1.0
+
+
+async def test_a_growing_or_recovered_counter_is_never_listed(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Negative control: only a reading below the bound is held."""
+    clock = _held_clock(monkeypatch)
+    coordinator = _coordinator(
+        hass,
+        _local_entry(),
+        [
+            _frame(DAY),
+            _frame(DAY, solar_total_kwh=DAY["solar_total_kwh"] + 1.0),
+            _frame(DAY, solar_total_kwh=DAY["solar_total_kwh"] - 5.0),
+            _frame(DAY, solar_total_kwh=DAY["solar_total_kwh"] + 2.0),
+        ],
+    )
+    await coordinator.async_refresh()
+    await coordinator.async_refresh()
+    clock["now"] += timedelta(days=3)
+    # A counter that only grows is not held, however long the clock ran.
+    assert coordinator.held_counters() == {}
+
+    await coordinator.async_refresh()
+    assert SOLAR in coordinator.held_counters()
+
+    # Passing the bound again clears the entry.
+    await coordinator.async_refresh()
+    assert coordinator.held_counters() == {}
+    assert _solar(coordinator) == pytest.approx(DAY["solar_total_kwh"] + 2.0, abs=1e-3)
+
+
+async def test_accepting_the_device_counter_publishes_its_value_next_poll(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A reset counter: the floor follows the device and the entity moves on."""
+    _held_clock(monkeypatch)
+    low = DAY["solar_total_kwh"] - 5.0
+    coordinator = _coordinator(
+        hass,
+        _local_entry(),
+        [
+            _frame(DAY),
+            _frame(DAY, solar_total_kwh=low),
+            _frame(DAY, solar_total_kwh=low + 1.0),
+        ],
+    )
+    await coordinator.async_refresh()
+    await coordinator.async_refresh()
+    # Ours is kept while the reading is held.
+    assert _solar(coordinator) == pytest.approx(DAY["solar_total_kwh"], abs=1e-3)
+
+    assert coordinator.accept_device_counter(SOLAR) is True
+    assert coordinator.held_counters() == {}
+    assert SOLAR not in coordinator.data
+    assert SOLAR not in coordinator.device_data
+
+    await coordinator.async_refresh()
+    assert _solar(coordinator) == pytest.approx(low + 1.0, abs=1e-3)
+    assert coordinator.held_counters() == {}
+
+    # Nothing held for these keys: False, and nothing changes.
+    assert coordinator.accept_device_counter(SOLAR) is False
+    assert coordinator.accept_device_counter("soc_pct") is False
+    assert _solar(coordinator) == pytest.approx(low + 1.0, abs=1e-3)
+
+
+async def test_since_stays_at_the_first_drop_while_the_device_value_follows(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The timer counts the whole run of drops, the value is the latest one."""
+    clock = _held_clock(monkeypatch)
+    first_drop = clock["now"]
+    base = DAY["solar_total_kwh"]
+    coordinator = _coordinator(
+        hass,
+        _local_entry(),
+        [
+            _frame(DAY),
+            _frame(DAY, solar_total_kwh=base - 5.0),
+            _frame(DAY, solar_total_kwh=base - 4.0),
+            _frame(DAY, solar_total_kwh=base - 3.0),
+        ],
+    )
+    await coordinator.async_refresh()
+    await coordinator.async_refresh()
+    for _ in range(2):
+        clock["now"] += timedelta(hours=1)
+        await coordinator.async_refresh()
+
+    entry = coordinator.held_counters()[SOLAR]
+    assert entry["since"] == first_drop
+    assert entry["device_value"] == pytest.approx(base - 3.0, abs=1e-3)
+    assert entry["published"] == pytest.approx(base, abs=1e-3)
+
+
+async def test_accepting_lowers_a_restored_floor_to_the_device_value(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The restored floor is what holds a counter after a restart; accept moves it."""
+    _held_clock(monkeypatch)
+    base = DAY["solar_total_kwh"]
+    restored = base + 40.0
+    coordinator = _coordinator(
+        hass,
+        _local_entry(),
+        [_frame(DAY), _frame(DAY, solar_total_kwh=base + 1.0)],
+    )
+    coordinator.seed_energy_total(SOLAR, restored)
+    await coordinator.async_refresh()
+    assert SOLAR not in coordinator.data
+
+    assert coordinator.accept_device_counter(SOLAR) is True
+    await coordinator.async_refresh()
+    # Below the old restored value, above the accepted one: published now.
+    assert _solar(coordinator) == pytest.approx(base + 1.0, abs=1e-3)

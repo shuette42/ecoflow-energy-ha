@@ -396,6 +396,12 @@ def _local_diagnostics(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any
                 "last_error": coordinator.last_error,
                 "consecutive_failures": coordinator.consecutive_failures,
                 "device_data": dict(coordinator.device_data),
+                # Counters whose reading is being dropped as lower than the
+                # last total, by key. `since` is when the current run began.
+                "held_counters": {
+                    key: {**held, "since": held["since"].isoformat()}
+                    for key, held in coordinator.held_counters().items()
+                },
             }
         )
 

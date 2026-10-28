@@ -140,6 +140,18 @@ LOCAL_MODBUS_FAILURES_UNAVAILABLE = 5
 # after 60 s without an acknowledged one, so the integration stops there too.
 LOCAL_MODBUS_HEARTBEAT_INTERVAL_S = 15
 LOCAL_MODBUS_HEARTBEAT_LAPSE_S = 60
+# A lifetime counter held back (reading below what was published) for this long
+# is no longer a bad read: the inverter's counter was probably reset.
+LOCAL_COUNTER_HELD_NOTICE_S = 24 * 3600
+# The name a repairs notice gives each Local lifetime counter. English like the
+# entity names they repeat; a placeholder in the notice text, not a translation.
+LOCAL_COUNTER_LABELS: dict[str, str] = {
+    "batt_charge_energy_kwh": "Battery Charge Energy",
+    "batt_discharge_energy_kwh": "Battery Discharge Energy",
+    "grid_export_lifetime_energy_kwh": "Grid Export Lifetime Energy",
+    "grid_import_lifetime_energy_kwh": "Grid Import Lifetime Energy",
+    "solar_lifetime_energy_kwh": "Solar Lifetime Energy",
+}
 
 # Coordinator - Stale detection
 STALE_THRESHOLD_S = (

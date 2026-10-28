@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.27.0] - 2026-10-28
+
+### Added
+
+- Local mode raises a repairs notice when a lifetime total has been held back for more than a day because the inverter's counter went down. Select Submit to take the inverter's value from now on, or Ignore to keep the current total. Totals that are held back also show in the diagnostics download.
+
 ## [1.26.1] - 2026-10-26
 
 ### Fixed

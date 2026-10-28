@@ -3274,6 +3274,19 @@
       }
     }
   },
+  "issues": {
+    "local_counter_held": {
+      "title": "Suma całkowita jest wstrzymana",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Suma całkowita jest wstrzymana",
+            "description": "Home Assistant utrzymuje {counter} na poziomie {ha_value} kWh od ponad doby, ponieważ falownik podaje teraz {device_value} kWh, czyli mniej. Zwykle oznacza to, że falownik zresetował swój licznik. Wybierz Prześlij, aby od teraz przyjmować wartość z falownika; panel Energia pokaże reset licznika. Wybierz Zignoruj, aby zachować dotychczasową sumę."
+          }
+        }
+      }
+    }
+  },
   "exceptions": {
     "set_command_failed": {
       "message": "Polecenie dla {entity} nie dotarło do urządzenia. Sprawdź, czy urządzenie jest połączone, i spróbuj ponownie."

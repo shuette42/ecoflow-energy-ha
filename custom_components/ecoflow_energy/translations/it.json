@@ -3274,6 +3274,19 @@
       }
     }
   },
+  "issues": {
+    "local_counter_held": {
+      "title": "Un totale cumulativo è trattenuto",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Un totale cumulativo è trattenuto",
+            "description": "Home Assistant mantiene {counter} a {ha_value} kWh da più di un giorno perché l'inverter ora riporta {device_value} kWh, un valore più basso. Di solito significa che l'inverter ha azzerato il suo contatore. Seleziona Invia per adottare da ora il valore dell'inverter; la dashboard Energia mostrerà un azzeramento del contatore. Seleziona Ignora per mantenere il totale attuale."
+          }
+        }
+      }
+    }
+  },
   "exceptions": {
     "set_command_failed": {
       "message": "Il comando per {entity} non ha raggiunto il dispositivo. Controlla che il dispositivo sia connesso e riprova."
