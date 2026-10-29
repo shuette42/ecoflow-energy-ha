@@ -74,7 +74,7 @@ _AC_PRO_NUMBER_KEYS = {
 
 class TestStreamNumberDefs:
     def test_stream_has_backup_reserve(self):
-        defs = _get_number_defs(DEVICE_TYPE_STREAM)
+        defs = _get_number_defs(DEVICE_TYPE_STREAM, "BK31TEST00000001")
         keys = {d.key for d in defs}
         assert "backup_reserve" in keys
 
@@ -88,7 +88,8 @@ class TestStreamNumberDefs:
             "led_brightness",
             "backup_reserve",
         }
-        assert {definition.key for definition in other} == {"backup_reserve"}
+        # The Backup Reserve number follows the same gate (#561).
+        assert other == []
         assert filter_defs_for_serial(other, "BK01TEST00000001") == []
 
     def test_an_unknown_serial_gets_no_write_entities(self):
@@ -97,7 +98,7 @@ class TestStreamNumberDefs:
         it is what every caller that has no device to hand passes."""
         for serial in ("", "0000", "BK31"[::-1]):
             keys = {d.key for d in _get_number_defs(DEVICE_TYPE_STREAM, serial)}
-            assert keys == {"backup_reserve"}, serial
+            assert keys == set(), serial
 
     @pytest.mark.parametrize(
         ("key", "state_key", "minimum", "maximum", "step"),
