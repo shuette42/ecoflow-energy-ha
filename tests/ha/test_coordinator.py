@@ -4776,6 +4776,16 @@ class TestMonotonicFilter:
 
         assert parsed["ev_session_energy_wh"] == 0
         assert "ev_total_energy_wh" not in parsed
+
+        # A drop below 90 % is a reset HA books as a new cycle and passes. A
+        # smaller drop is a dip, a negative step in the statistics, and is
+        # still dropped. A short session that starts at or above 90 % of the
+        # last one is the known edge: it is held back until the value rises.
+        for new_value, kept in ((100, True), (824, True), (825, False), (915, False)):
+            coordinator._device_data["ev_session_energy_wh"] = 916
+            parsed = {"ev_session_energy_wh": new_value}
+            coordinator._enforce_monotonic(parsed)
+            assert ("ev_session_energy_wh" in parsed) is kept, new_value
         assert "ev_session_energy_wh" not in MqttIngestMixin._MONOTONIC_KEYS
         assert "ev_total_energy_wh" in MqttIngestMixin._MONOTONIC_KEYS
         assert set(_RESETS_BY_DESIGN) == {"ev_session_energy_wh"}

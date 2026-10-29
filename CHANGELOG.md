@@ -13,7 +13,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
-- The wallbox session energy of the PowerPulse 2 (`C376`, `C374`, `C371`) and of the earlier PowerPulse (`AC31`, through the PowerOcean) is a `total_increasing` sensor now, so Home Assistant no longer books the drop back to 0 at a new session as negative energy. Statistics recorded before keep their negative steps. In Settings > Tools > Statistics, Adjust sum on the session energy statistic fixes them. Thanks to @rhaschke for the report and the first change (Ref #617).
+- The wallbox session energy of the PowerPulse 2 (`C376`, `C374`, `C371`) and of the earlier PowerPulse (`AC31`, through the PowerOcean) is a `total_increasing` sensor now, so Home Assistant no longer books the drop back to 0 at a new session as negative energy. A drop of less than 10 % within a session is still held back. Statistics recorded before keep their negative steps. In Developer tools > Statistics, Adjust sum on the session energy statistic fixes them. Thanks to @rhaschke for the report and the first change (Ref #617).
 
 ## [1.26.1] - 2026-10-26
 
