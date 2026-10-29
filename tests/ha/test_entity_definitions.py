@@ -322,7 +322,7 @@ def test_no_unreachable_definition_inside_a_block() -> None:
     """Every single definition is reachable for at least one serial.
 
     A definition can be dispatched-but-unreachable: the Stream number gate
-    returns a key subset for a serial outside STREAM_CONTROL_PREFIXES (see
+    returns no Stream numbers for a serial outside STREAM_CONTROL_PREFIXES (see
     the Stream branch of `_get_number_defs`), so the block is compared
     definition by definition rather than as a whole.
     """

@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [1.27.0] - 2026-10-29
 
+### Fixed
+
+- Stream: Backup Reserve is no longer a writable control on the Streams outside the one model whose write has been confirmed, the Stream AC Pro (`BK31`). The Stream Ultra (`BK11`), Stream Max (`BK41`), Stream AC (`BK51`) and Stream Ultra X (`BK61`) lose the Backup Reserve number in Enhanced Mode, and Home Assistant removes the old entity when the integration loads. The value stays visible in the Backup Reserve sensor, and the level is changed in the EcoFlow app. A dashboard card or automation that points at the old number has to be changed. On a Stream Ultra X linked to a STREAM 5000 the control wrote only a level, and only to the Ultra X itself, which was never confirmed on that model, while the app's Backup Reserve is one shared setting with an on/off switch. A level of 95 % set in Home Assistant fell back to 3 % within seconds, and the reporter's app showed the reserve off afterwards. What switched it off is not established. Thanks to @PSCourtney for the test in the app, the download, the description of how the app's switch works and the screenshots. (Ref #561)
+
 ### Added
 
 - Local mode raises a repairs notice when a lifetime total has been held back for more than a day because the inverter's counter went down. Select Submit to take the inverter's value from now on, but only if you know the inverter reset its counter, or Ignore to keep the current total; the choice to Ignore is kept across a restart or reload. The one-day timer starts again when Home Assistant restarts, so a notice that was open comes back a day after the restart if the counter is still held. Totals that are held back also show in the diagnostics download.

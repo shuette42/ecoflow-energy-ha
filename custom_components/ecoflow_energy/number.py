@@ -485,12 +485,11 @@ class EcoFlowNumber(
         """Return True for the Stream backup reserve on a write-gated model.
 
         The key alone does not identify it: the STREAM AC 5000 carries a
-        backup reserve of its own, and the Stream list creates this one on
-        every BK serial. The gate is `supports_stream_controls`, the same
-        allowlist the other Stream writes ride, rather than a second set
+        backup reserve of its own. The gate is `supports_stream_controls`, the
+        same allowlist the other Stream writes ride, rather than a second set
         holding the one model the floor was measured on - see the note at
-        STREAM_CONTROL_PREFIXES. Everything outside it keeps the declared
-        range.
+        STREAM_CONTROL_PREFIXES. The number is only created behind that gate
+        (`_get_number_defs`), so the check is a second line of defence.
         """
         return (
             self._definition.key == "backup_reserve"
@@ -1130,18 +1129,14 @@ def _get_number_defs(device_type: str, device_sn: str = "") -> list[EcoFlowNumbe
         return SMARTPLUG_NUMBERS
     if device_type == DEVICE_TYPE_STREAM:
         if not supports_stream_controls(device_sn):
-            # An allowlist, not a denylist. `backup_reserve` predates the control
-            # gate and exists on every Stream, so removing it would orphan
-            # registrations owners already have. Everything else stays out until
-            # a capture from that prefix confirms the write, which means a number
-            # added to STREAM_NUMBERS later reaches only BK31 until someone
-            # deliberately lists it here. Named the other way round, a new control
-            # would land on unconfirmed prefixes by default.
-            return [
-                definition
-                for definition in STREAM_NUMBERS
-                if definition.key in {"backup_reserve"}
-            ]
+            # An allowlist, not a denylist: every Stream number, the Backup
+            # Reserve included, reaches only the models the write gate lists.
+            # The Backup Reserve number used to stay on the others so existing
+            # registrations were not orphaned; it wrote a bare level to the unit
+            # itself, never confirmed there, so it is gone and the registry
+            # cleanup in `__init__` removes the old entries (#561). The value
+            # stays on the Backup Reserve sensor.
+            return []
         return STREAM_NUMBERS
     if device_type == DEVICE_TYPE_DELTA3:
         return DELTA3_NUMBERS
