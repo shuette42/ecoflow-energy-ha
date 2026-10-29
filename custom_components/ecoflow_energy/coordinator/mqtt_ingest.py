@@ -49,12 +49,14 @@ from ..ecoflow.parsers.delta_pro_ultra_proto import parse_delta_pro_ultra_messag
 from ..ecoflow.parsers.ocean2_proto import parse_ocean2_proto_message
 from ..ecoflow.parsers.powerocean_http import parse_powerocean_http_quota
 from ..ecoflow.parsers.powerocean_proto import (
+    HEATING_ROD_POWER_SOURCE_TO_SENSOR,
     flatten_heartbeat,
     remap_bp_keys,
     remap_ems_param_change_keys,
     remap_ems_state_keys,
     remap_ev_charging_keys,
     remap_heating_rod_keys,
+    remap_heating_rod_power_source_keys,
     remap_parallel_unit_keys,
     remap_proto_keys,
     remap_timer_task_keys,
@@ -901,7 +903,23 @@ class MqttIngestMixin(_Base):
                     merged.update(remap_ev_charging_keys(raw))
                     continue
                 if result.mapped.get("_is_heating_rod_param"):
-                    merged.update(remap_heating_rod_keys(raw))
+                    rod = remap_heating_rod_keys(raw)
+                    merged.update(rod)
+                    # The 212/33 report may stop when the rod stops, which
+                    # would leave the shares at their last value. A rod
+                    # drawing 0 W draws nothing from any source, so a share
+                    # already published drops to 0. Never created from here:
+                    # a rod that never sent 212/33 gets no share sensors.
+                    if rod.get("heating_rod_power_w") == 0.0:
+                        for share_key in HEATING_ROD_POWER_SOURCE_TO_SENSOR.values():
+                            if (
+                                share_key in self._device_data
+                                and share_key not in merged
+                            ):
+                                merged[share_key] = 0.0
+                    continue
+                if result.mapped.get("_is_heating_rod_power_source"):
+                    merged.update(remap_heating_rod_power_source_keys(raw))
                     continue
                 # The scheduled charge tasks, the whole list at once. An empty
                 # payload is an empty list rather than a header with nothing

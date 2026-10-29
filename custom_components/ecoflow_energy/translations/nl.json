@@ -273,6 +273,18 @@
       "heating_rod_power_w": {
         "name": "Vermogen verwarmingselement"
       },
+      "heating_rod_power_from_pv_w": {
+        "name": "Vermogen verwarmingselement uit PV"
+      },
+      "heating_rod_power_from_battery_w": {
+        "name": "Vermogen verwarmingselement uit batterij"
+      },
+      "heating_rod_power_from_grid_w": {
+        "name": "Vermogen verwarmingselement uit net"
+      },
+      "heating_rod_tank_volume_l": {
+        "name": "Tankinhoud verwarmingselement"
+      },
       "ac_grid_connection_power_w": {
         "name": "Vermogen AC-netaansluiting"
       },
@@ -365,6 +377,9 @@
       },
       "fault_count": {
         "name": "Aantal storingen"
+      },
+      "fault_codes": {
+        "name": "Actieve foutcodes"
       },
       "local_system_alerts": {
         "name": "Systeemmeldingen"
@@ -1661,12 +1676,12 @@
         "name": "Laadstatus laadpaal",
         "state": {
           "none": "Geen",
-          "available": "Beschikbaar",
-          "preparing": "Voorbereiden",
+          "available": "Niet aangesloten",
+          "preparing": "Voertuig aangesloten",
           "charging": "Opladen",
           "suspended_charger": "Gepauzeerd door lader",
           "suspended_vehicle": "Gepauzeerd door voertuig",
-          "finishing": "Afronden",
+          "finishing": "Laadsessie beëindigd",
           "faulted": "Storing"
         }
       },
@@ -3262,6 +3277,41 @@
       }
     }
   },
+  "selector": {
+    "fault_code": {
+      "options": {
+        "100": "Power outage",
+        "101": "Grid undervoltage",
+        "102": "Grid overvoltage",
+        "105": "Grid under-frequency",
+        "128": "Bus fast overvoltage",
+        "139": "Voltage flicker alarm",
+        "140": "Sudden grid voltage phase change alarm",
+        "156": "Grid reconnection waiting",
+        "163": "12V auxiliary power fault",
+        "179": "Inverter module power-on notification",
+        "203": "BP module power-on notification",
+        "521": "Energy storage communication error",
+        "532": "12V auxiliary power voltage fault",
+        "700": "Device off-grid event",
+        "702": "Low power mode",
+        "703": "EMS module power-on notification"
+      }
+    }
+  },
+  "issues": {
+    "local_counter_held": {
+      "title": "Een totaalstand wordt vastgehouden",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Een totaalstand wordt vastgehouden",
+            "description": "Home Assistant houdt {counter} al meer dan een dag op {ha_value} kWh, omdat de omvormer nu {device_value} kWh meldt, wat lager is. Meestal betekent dit dat de omvormer zijn teller heeft gereset. Kies Verzenden om vanaf nu de waarde van de omvormer over te nemen; het Energiedashboard toont dan een tellerreset. Verzend alleen als je weet dat de omvormer zijn teller heeft gereset. Kies Negeren om het huidige totaal te behouden."
+          }
+        }
+      }
+    }
+  },
   "exceptions": {
     "set_command_failed": {
       "message": "De opdracht voor {entity} heeft het apparaat niet bereikt. Controleer of het apparaat verbonden is en probeer het opnieuw."
@@ -3271,6 +3321,12 @@
     },
     "set_command_not_ready": {
       "message": "{entity} kan nog niet worden ingesteld - het apparaat heeft zijn huidige instelling nog niet gerapporteerd. Probeer het zo meteen opnieuw."
+    },
+    "set_command_surplus_unreported": {
+      "message": "{entity} kan niet worden ingesteld: het apparaat heeft de drempel zonne-overschot niet gerapporteerd, die samen hiermee wordt verzonden. Wijzig de instelling tot die tijd in de EcoFlow-app."
+    },
+    "set_command_backup_unreported": {
+      "message": "{entity} kan niet worden ingesteld: het apparaat heeft de back-upreserve niet gerapporteerd, die samen hiermee wordt verzonden. Wijzig de instelling tot die tijd in de EcoFlow-app."
     },
     "set_command_unsupported": {
       "message": "{entity} ondersteunt deze opdracht niet op dit apparaat."
@@ -3309,7 +3365,7 @@
       "message": "De opdracht voor de laadpaal kon niet worden verzonden."
     },
     "powerpulse_action_state": {
-      "message": "De laadpaal meldt {status}, en dat laat deze actie niet toe."
+      "message": "De huidige laadstatus van de laadpaal laat deze actie niet toe."
     },
     "powerpulse_charge_current_needs_own_channel": {
       "message": "De laadstroom kan alleen worden ingesteld op een laadpaal zonder PowerOcean op hetzelfde account; dit item heeft er een."

@@ -140,6 +140,18 @@ LOCAL_MODBUS_FAILURES_UNAVAILABLE = 5
 # after 60 s without an acknowledged one, so the integration stops there too.
 LOCAL_MODBUS_HEARTBEAT_INTERVAL_S = 15
 LOCAL_MODBUS_HEARTBEAT_LAPSE_S = 60
+# A lifetime counter held back (reading below what was published) for this long
+# is no longer a bad read: the inverter's counter was probably reset.
+LOCAL_COUNTER_HELD_NOTICE_S = 24 * 3600
+# The name a repairs notice gives each Local lifetime counter. English like the
+# entity names they repeat; a placeholder in the notice text, not a translation.
+LOCAL_COUNTER_LABELS: dict[str, str] = {
+    "batt_charge_energy_kwh": "Battery Charge Energy",
+    "batt_discharge_energy_kwh": "Battery Discharge Energy",
+    "grid_export_lifetime_energy_kwh": "Grid Export Lifetime Energy",
+    "grid_import_lifetime_energy_kwh": "Grid Import Lifetime Energy",
+    "solar_lifetime_energy_kwh": "Solar Lifetime Energy",
+}
 
 # Coordinator - Stale detection
 STALE_THRESHOLD_S = (
@@ -178,13 +190,18 @@ POWERPULSE2_HARD_UNAVAILABLE_S = 3600.0
 # for like.
 POWERPULSE2_CHARGE_ACTION_WINDOW_S: dict[str, float] = {"stop": 15.0, "start": 30.0}
 # ADR-009 decision 5: the wallbox status an action may be sent from. Start
-# only from "finishing" (the only start transition observed on file). Stop
-# from "charging" and, as amended for #515, from "suspended_charger": a start
-# waiting for solar surplus can be cancelled. The app enables its stop in
-# that state and sends the same command; confirmation still needs a fresh
-# "finishing" or "available".
+# from "finishing" (the start transition observed on file) and, as amended for
+# #632, from "preparing": the cable is attached and the app starts from there
+# (a reporter started a session from the app while the wallbox read
+# "preparing", then "charging"). A press that is still pending is refused
+# before this check, so the "preparing" a start itself passes through cannot
+# send twice while the window runs; once it has passed unconfirmed, a new
+# press is sent again. Stop from "charging" and, as amended for #515, from
+# "suspended_charger": a start waiting for solar surplus can be cancelled. The
+# app enables its stop in that state and sends the same command; confirmation
+# still needs a fresh "finishing" or "available".
 POWERPULSE2_CHARGE_ACTION_PRECONDITION: dict[str, frozenset[str]] = {
-    "start": frozenset({"finishing"}),
+    "start": frozenset({"finishing", "preparing"}),
     "stop": frozenset({"charging", "suspended_charger"}),
 }
 # ADR-009 decision 4: the `ev_charge_status` that confirms the action once it
@@ -1109,6 +1126,55 @@ POWEROCEAN_SENSORS: list[EcoFlowSensorDef] = [
         "temperature",
         "measurement",
         "mdi:thermometer-chevron-up",
+        "diagnostic",
+        suggested_display_precision=0,
+        accessory=True,
+    ),
+    # Where the rod's power comes from (212/33 report, #588). The three shares
+    # add up to `heating_rod_power_w`; the total itself stays one reading from
+    # one source (212/8).
+    EcoFlowSensorDef(
+        "heating_rod_power_from_pv_w",
+        "Heating Rod Power from PV",
+        "W",
+        "power",
+        "measurement",
+        "mdi:solar-power",
+        "diagnostic",
+        suggested_display_precision=0,
+        accessory=True,
+    ),
+    EcoFlowSensorDef(
+        "heating_rod_power_from_battery_w",
+        "Heating Rod Power from Battery",
+        "W",
+        "power",
+        "measurement",
+        "mdi:battery-arrow-up",
+        "diagnostic",
+        suggested_display_precision=0,
+        accessory=True,
+    ),
+    EcoFlowSensorDef(
+        "heating_rod_power_from_grid_w",
+        "Heating Rod Power from Grid",
+        "W",
+        "power",
+        "measurement",
+        "mdi:transmission-tower",
+        "diagnostic",
+        suggested_display_precision=0,
+        accessory=True,
+    ),
+    # The tank size set in the app ("Anpassen", 1500 L), read from 212/8.
+    # `volume` + `measurement` is rejected by HA for liters, so no state class.
+    EcoFlowSensorDef(
+        "heating_rod_tank_volume_l",
+        "Heating Rod Tank Volume",
+        "L",
+        None,
+        None,
+        "mdi:water-boiler",
         "diagnostic",
         suggested_display_precision=0,
         accessory=True,
@@ -2508,6 +2574,15 @@ POWEROCEANLOCALONLY_SENSORS: list[EcoFlowSensorDef] = [
         icon="mdi:alert-circle-outline",
         entity_category="diagnostic",
     ),
+    # The fault event list (0x0801-0x0814): the active codes in decimal as one
+    # text, `none` while the list is empty. The names ride in the `faults`
+    # attribute (`fault_codes.py`), so the state stays a stable code list.
+    EcoFlowSensorDef(
+        "fault_codes",
+        "Active Fault Codes",
+        icon="mdi:alert-circle-outline",
+        entity_category="diagnostic",
+    ),
     # Whole-system battery readings from the Modbus table. The cloud stream
     # has no such figure: its `bp_current_a` is a single pack, so the current
     # here keeps its own key instead of sharing one. The labels say "System"
@@ -2633,7 +2708,8 @@ POWEROCEANLOCALONLY_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
 
 POWEROCEAN_NUMBERS: list[EcoFlowNumberDef] = [
     # Backup-Reserve (App-slider): minimum SoC kept in reserve. Wire field 2
-    # in cmd_id=112 SysBatChgDsgSet, sent as a 3-field app-replay payload.
+    # in cmd_id=112 SysBatChgDsgSet, sent as an app-replay payload (fields 1, 2,
+    # 3 and 4; except R37x: fields 1, 2 and 4).
     EcoFlowNumberDef(
         "backup_reserve",
         "Backup Reserve",
@@ -2653,9 +2729,10 @@ POWEROCEAN_NUMBERS: list[EcoFlowNumberDef] = [
     # sys_bat_backup_ratio) is a derived EMS status that the device
     # clamps internally; it diverges from dev_soc at edge cases (notably
     # 100%, where the EMS caps at 90). The SET path still writes BOTH
-    # fields (handled in async_set_powerocean_soc) so the device EMS
-    # follows the user value where it can; the slider sources from the
-    # user-side mirror so HA matches what the app shows the user.
+    # fields (handled in async_set_powerocean_soc; except R37x: fields 1, 2 and
+    # 4) so the device EMS follows the user value where it can; the slider
+    # sources from the user-side mirror so HA matches what the app shows the
+    # user.
     EcoFlowNumberDef(
         "solar_surplus_threshold",
         "Solar Surplus Threshold",

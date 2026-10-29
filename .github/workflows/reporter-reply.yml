@@ -1,0 +1,56 @@
+name: Reporter Reply
+
+# When somebody other than the maintainer comments on an issue that waits for
+# them (needs-info) or for a release (waiting-release), the wait is over for
+# the label's purpose: the label comes off and action:respond goes on, so the
+# issue shows up on the maintainer's list again.
+#
+# Only GITHUB_TOKEN with issues: write is used. Nothing from the comment text
+# reaches a shell: the job reads the issue number and the commenter's login
+# from the event, and the label state from the event's label list.
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  issues: write
+
+concurrency:
+  group: reporter-reply-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  hand-back:
+    name: Hand the issue back to the maintainer
+    runs-on: ubuntu-latest
+    # Pull requests share the issue_comment trigger and are not handled here.
+    if: >-
+      github.repository == 'shuette42/ecoflow-energy-ha'
+      && !github.event.issue.pull_request
+      && github.event.issue.state == 'open'
+      && github.event.comment.user.type != 'Bot'
+      && github.event.comment.user.login != github.repository_owner
+      && (contains(github.event.issue.labels.*.name, 'needs-info')
+          || contains(github.event.issue.labels.*.name, 'waiting-release'))
+    steps:
+      - name: Ask for the maintainer's answer
+        run: gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --add-label action:respond
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+      - name: Drop needs-info
+        if: contains(github.event.issue.labels.*.name, 'needs-info')
+        run: gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --remove-label needs-info
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+      - name: Drop waiting-release
+        if: contains(github.event.issue.labels.*.name, 'waiting-release')
+        run: gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --remove-label waiting-release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}

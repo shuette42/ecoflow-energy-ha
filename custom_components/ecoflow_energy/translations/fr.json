@@ -273,6 +273,18 @@
       "heating_rod_power_w": {
         "name": "Puissance du thermoplongeur"
       },
+      "heating_rod_power_from_pv_w": {
+        "name": "Puissance du thermoplongeur depuis le PV"
+      },
+      "heating_rod_power_from_battery_w": {
+        "name": "Puissance du thermoplongeur depuis la batterie"
+      },
+      "heating_rod_power_from_grid_w": {
+        "name": "Puissance du thermoplongeur depuis le réseau"
+      },
+      "heating_rod_tank_volume_l": {
+        "name": "Volume du ballon du thermoplongeur"
+      },
       "ac_grid_connection_power_w": {
         "name": "Puissance de raccordement AC au réseau"
       },
@@ -365,6 +377,9 @@
       },
       "fault_count": {
         "name": "Nombre de défauts"
+      },
+      "fault_codes": {
+        "name": "Codes de défaut actifs"
       },
       "local_system_alerts": {
         "name": "Alertes système"
@@ -1661,12 +1676,12 @@
         "name": "État de charge de la wallbox",
         "state": {
           "none": "Aucun",
-          "available": "Disponible",
-          "preparing": "Préparation",
+          "available": "Non branché",
+          "preparing": "Véhicule branché",
           "charging": "En charge",
           "suspended_charger": "Mise en pause par le chargeur",
           "suspended_vehicle": "Mise en pause par le véhicule",
-          "finishing": "Finalisation",
+          "finishing": "Session de charge terminée",
           "faulted": "Défaut"
         }
       },
@@ -3262,6 +3277,41 @@
       }
     }
   },
+  "selector": {
+    "fault_code": {
+      "options": {
+        "100": "Power outage",
+        "101": "Grid undervoltage",
+        "102": "Grid overvoltage",
+        "105": "Grid under-frequency",
+        "128": "Bus fast overvoltage",
+        "139": "Voltage flicker alarm",
+        "140": "Sudden grid voltage phase change alarm",
+        "156": "Grid reconnection waiting",
+        "163": "12V auxiliary power fault",
+        "179": "Inverter module power-on notification",
+        "203": "BP module power-on notification",
+        "521": "Energy storage communication error",
+        "532": "12V auxiliary power voltage fault",
+        "700": "Device off-grid event",
+        "702": "Low power mode",
+        "703": "EMS module power-on notification"
+      }
+    }
+  },
+  "issues": {
+    "local_counter_held": {
+      "title": "Un total cumulé est retenu",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Un total cumulé est retenu",
+            "description": "Home Assistant maintient {counter} à {ha_value} kWh depuis plus d'une journée, car l'onduleur indique désormais {device_value} kWh, soit une valeur plus basse. Cela signifie généralement que l'onduleur a réinitialisé son compteur. Sélectionnez Envoyer pour reprendre la valeur de l'onduleur à partir de maintenant ; le tableau de bord Énergie affichera alors une réinitialisation du compteur. N'envoyez que si vous savez que l'onduleur a réinitialisé son compteur. Sélectionnez Ignorer pour conserver le total actuel."
+          }
+        }
+      }
+    }
+  },
   "exceptions": {
     "set_command_failed": {
       "message": "La commande pour {entity} n'a pas atteint l'appareil. Vérifiez que l'appareil est connecté et réessayez."
@@ -3271,6 +3321,12 @@
     },
     "set_command_not_ready": {
       "message": "{entity} ne peut pas encore être réglé - l'appareil n'a pas signalé son réglage actuel. Réessayez dans un instant."
+    },
+    "set_command_surplus_unreported": {
+      "message": "{entity} ne peut pas être réglé : l'appareil n'a pas signalé le seuil de surplus solaire, qui est envoyé en même temps. Tant qu'il ne l'a pas fait, modifiez le réglage dans l'application EcoFlow."
+    },
+    "set_command_backup_unreported": {
+      "message": "{entity} ne peut pas être réglé : l'appareil n'a pas signalé la réserve de secours, qui est envoyée en même temps. Tant qu'il ne l'a pas fait, modifiez le réglage dans l'application EcoFlow."
     },
     "set_command_unsupported": {
       "message": "{entity} ne prend pas en charge cette commande sur cet appareil."
@@ -3309,7 +3365,7 @@
       "message": "La commande de la wallbox n'a pas pu être envoyée."
     },
     "powerpulse_action_state": {
-      "message": "La wallbox signale {status}, ce qui ne permet pas cette action."
+      "message": "L'état de charge actuel de la wallbox ne permet pas cette action."
     },
     "powerpulse_charge_current_needs_own_channel": {
       "message": "Le courant de charge ne peut être réglé que sur une wallbox sans PowerOcean sur le même compte ; cette entrée en contient un."

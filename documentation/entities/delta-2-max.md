@@ -192,7 +192,7 @@ Sensors, with the reading each one was checked against in the recording:
 - AC Input: 710 W on AC charge (the app: about 700 W), about 67 W through the unit (the app: about 60 W)
 - AC Output: about 67 W through the unit (the app: about 60 W)
 - Type-C 1: 17 W with a power bank plugged in, as in the app
-- USB 1: 11, 10 and 11 W with a power bank on each of the three USB-A ports in turn (the app: 11, 10 and 11 W). All three ports reported through this one reading. Only one load was plugged in at a time, so whether the reading adds up several loads at once is not known
+- USB 1: 11, 10 and 11 W with a power bank on each of the three USB-A ports in turn (the app: 11, 10 and 11 W). All three ports reported through this one reading. With two loads in two ports it read 20, 17 and 17 W, and with loads in all three 29 W, the sum each time and the same as the app
 - AC Input Voltage, AC Output Voltage, AC Output Frequency: 117 to 121 V and 60 Hz, a North American mains. These were not compared with the app
 - AC Input Energy, AC Output Energy: integrated by the integration from the AC power, not sent by the unit
 - Remaining Time: the unit's runtime estimate, shown only while the unit runs from its battery (286 min, the app: 4 h 40 min). Full on AC, the unit sent 4092 min in one recording and 5999 min (99 h 59 min) in another, while the app and the unit's screen show 99 h 59 min. So the sensor stays empty whenever power comes in. It also stays empty while charging below 100 %: the app then shows a time to full of 5 min that does not count down, the same figure the unit sends

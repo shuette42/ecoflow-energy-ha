@@ -46,6 +46,7 @@ from ..ecoflow.const import (
     POWERPULSE2_DISPLAY_BRIGHTNESS_STEPS,
     POWERPULSE2_DISPLAY_KEYS,
     POWERPULSE2_DISPLAY_SWITCH_KEYS,
+    powerocean_soc_surplus_field,
     powerpulse2_display_value_valid,
     schedule_power_max_w,
     schedule_power_min_w,
@@ -400,7 +401,8 @@ class SetCommandsMixin(_Base):
 
         HA's Number-Entity emits one async_set_native_value call per 5%-step
         when the user drags the slider, producing 5-10 SETs in <1 s. The
-        device cannot keep wire field 3 (sys_bat_backup_ratio, EMS) and
+        device cannot keep wire field 3 (sys_bat_backup_ratio, EMS; not sent
+        to the R37x family, which is written with fields 1, 2 and 4) and
         field 4 (dev_soc, App-Layer) in sync at that cadence, so the two
         fields drift apart and the user sees stale values in HA or the
         EcoFlow app. This method stores the latest (backup, solar) and
@@ -667,13 +669,18 @@ class SetCommandsMixin(_Base):
         backup_reserve_pct: int,
         solar_surplus_pct: int,
     ) -> bool:
-        """Send a 3-field SoC SET to PowerOcean (app-replay format).
+        """Send the backup reserve / solar surplus pair to a PowerOcean.
 
         Wire: cmd_id=112 SysBatChgDsgSet with field 1=100 (sys_bat_chg_up_limit),
-        field 2=backup (sys_bat_dsg_down_limit), field 3=solar_surplus
-        (sys_bat_backup_ratio), plus extended envelope (check_type, from=ios,
-        device_sn). The legacy `async_set_soc_limits` only sends fields 1+2
-        and is silently ignored by the device for backup-reserve changes.
+        field 2=backup (sys_bat_dsg_down_limit), field 4=solar_surplus
+        (dev_soc), plus extended envelope (check_type, from=ios, device_sn).
+        Field 3 (sys_bat_backup_ratio) carries the same surplus value on every
+        unit except the PowerOcean Plus family (`R37x`), which does not report
+        the counterpart of field 3 and whose recorded app writes (one R372)
+        carry fields 1, 2 and 4 only; it is written that way
+        (`powerocean_soc_surplus_field`). The legacy `async_set_soc_limits`
+        only sends fields 1+2 and is silently ignored by the device for
+        backup-reserve changes.
         """
         if self._shutdown:
             return False
@@ -702,6 +709,7 @@ class SetCommandsMixin(_Base):
             backup_reserve_pct,
             solar_surplus_pct,
             device_sn=self.device_sn,
+            surplus_field=powerocean_soc_surplus_field(self.device_sn),
         )
         executor_job = self.hass.async_add_executor_job(
             partial(self._mqtt_client.send_proto_set, payload, wait=True),
@@ -2872,17 +2880,16 @@ class SetCommandsMixin(_Base):
     def _require_wallbox_action_state(self, action: Literal["start", "stop"]) -> None:
         """Raise unless the wallbox's last reported state allows `action`.
 
-        Start only from `finishing`, stop from `charging` or
-        `suspended_charger` (ADR-009 decision 5, amended for #515), on both
-        routes, checked after the route's own preconditions so the message
-        names the first thing that is wrong.
+        Start from `finishing` or `preparing`, stop from `charging` or
+        `suspended_charger` (ADR-009 decision 5, amended for #515 and #632),
+        on both routes, checked after the route's own preconditions so the
+        message names the first thing that is wrong.
         """
         status = self._device_data.get("ev_charge_status")
         if status not in POWERPULSE2_CHARGE_ACTION_PRECONDITION[action]:
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="powerpulse_action_state",
-                translation_placeholders={"status": str(status)},
             )
 
     def _clear_pending_write(self, record: PendingDeviceWrite) -> None:

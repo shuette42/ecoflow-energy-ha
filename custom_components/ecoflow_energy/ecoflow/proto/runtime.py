@@ -212,14 +212,23 @@ def _build_powerocean_table(pb2: Any) -> dict[tuple[int, int], CmdConfig]:
             flags={"_is_ev_charging_param": True},
         ),
         # PowerGlow heating rod, forwarded by the PowerOcean it is coupled to.
-        # The rod also travels on (212, 33) and (212, 34), which carry the
-        # power alone. Only this one is registered: it is the only frame
-        # carrying the water temperature, the drawn power and both setpoints
-        # together, so the four cannot drift apart. See PLAN-101.
+        # The rod also travels on (212, 33) and (212, 34). This one is the
+        # only frame carrying the water temperature, the drawn power and both
+        # setpoints together, so the four cannot drift apart. See PLAN-101.
         (212, 8): CmdConfig(
             msg_class=pb2.HRChargingParamReport,
             parse_path="typed_runtime:heating_rod_param",
             flags={"_is_heating_rod_param": True},
+        ),
+        # The rod's power report: the total and the three sources it came
+        # from (PV, battery, grid). Most reports carry only the serial. The
+        # total is not read here - heating_rod_power_w stays on (212, 8), one
+        # reading from one source. (212, 34) stays unregistered. See PLAN-217.
+        (212, 33): CmdConfig(
+            msg_class=pb2.HRPowerSourceReportList,
+            parse_path="typed_runtime:heating_rod_power_source",
+            flags={"_is_heating_rod_power_source": True},
+            flatten_key="report",
         ),
         # The device's scheduled charge tasks, the whole list in one
         # message. It rides inside the get-all reply the integration already

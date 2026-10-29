@@ -78,6 +78,7 @@ from .entity import (
     raise_set_failed,
     raise_set_gone,
     raise_set_not_ready,
+    raise_set_partner_unreported,
     raise_set_rejected,
     raise_set_unsupported,
     reading_reported,
@@ -484,12 +485,11 @@ class EcoFlowNumber(
         """Return True for the Stream backup reserve on a write-gated model.
 
         The key alone does not identify it: the STREAM AC 5000 carries a
-        backup reserve of its own, and the Stream list creates this one on
-        every BK serial. The gate is `supports_stream_controls`, the same
-        allowlist the other Stream writes ride, rather than a second set
+        backup reserve of its own. The gate is `supports_stream_controls`, the
+        same allowlist the other Stream writes ride, rather than a second set
         holding the one model the floor was measured on - see the note at
-        STREAM_CONTROL_PREFIXES. Everything outside it keeps the declared
-        range.
+        STREAM_CONTROL_PREFIXES. The number is only created behind that gate
+        (`_get_number_defs`), so the check is a second line of defence.
         """
         return (
             self._definition.key == "backup_reserve"
@@ -779,11 +779,13 @@ class EcoFlowNumber(
     async def _async_set_powerocean_value(self, value: float) -> None:
         """Set a PowerOcean number value via WSS Protobuf.
 
-        SysBatChgDsgSet (cmd_id=112) is sent as a 4-field app-replay
-        payload: field 1=100 constant, field 2=backup_reserve_pct,
-        field 3+4=solar_surplus_pct (EMS state + app-UI state). The
-        unchanged value is read from coordinator data so both slider
-        positions stay consistent with the device and the EcoFlow app.
+        SysBatChgDsgSet (cmd_id=112) is sent as an app-replay payload:
+        field 1=100 constant, field 2=backup_reserve_pct, field 4=
+        solar_surplus_pct (app-UI state), plus field 3 with the same value
+        (EMS state) on every unit except the PowerOcean Plus family, whose
+        app sends fields 1, 2 and 4 only. The unchanged value is read from
+        coordinator data so both slider positions stay consistent with the
+        device and the EcoFlow app.
 
         SET delivery goes through the coordinator's debouncer so that
         rapid-fire slider drags coalesce into a single frame.
@@ -845,8 +847,9 @@ class EcoFlowNumber(
             # Both PowerOcean sliders are sent as a pair, so the unchanged
             # one has to be read from coordinator data. Without data there
             # is nothing to send, and silently doing nothing would look
-            # like a successful write.
-            raise_set_failed(self.entity_id)
+            # like a successful write. Nothing was sent either, so this is
+            # "not ready", not "did not reach the device".
+            raise_set_not_ready(self.entity_id)
 
         if key == "backup_reserve":
             # Read the current solar-surplus from the user-side mirror
@@ -859,11 +862,16 @@ class EcoFlowNumber(
             # value for this field, see ADR-011) means the surplus is
             # unknown. Guessing a pair would either send the device a
             # placeholder or silently move the app-side surplus to a value
-            # the user never chose - a refused write the user can retry is
-            # the honest failure.
+            # the user never chose - a refusal that names the missing half
+            # is the honest failure. Not "did not reach the device" (nothing
+            # was sent) and not "try again" (a unit that sends the surplus in no
+            # message we read, for example an R372 before field 352 was
+            # read, #631, would never clear it).
             current_solar = self.coordinator.data.get("ems_app_surplus_pct")
             if current_solar is None:
-                raise_set_failed(self.entity_id)
+                raise_set_partner_unreported(
+                    self.entity_id, "set_command_surplus_unreported"
+                )
             backup = int_value
             solar = max(int(current_solar), backup)  # enforce backup <= solar
             self.coordinator.mark_user_surplus_set()
@@ -884,7 +892,9 @@ class EcoFlowNumber(
             # same way the other half of the pair already is.
             current_backup = self.coordinator.data.get("ems_discharge_lower_limit_pct")
             if current_backup is None:
-                raise_set_failed(self.entity_id)
+                raise_set_partner_unreported(
+                    self.entity_id, "set_command_backup_unreported"
+                )
             solar = int_value
             backup = min(int(current_backup), solar)  # enforce backup <= solar
             self.coordinator.mark_user_surplus_set()
@@ -1119,18 +1129,14 @@ def _get_number_defs(device_type: str, device_sn: str = "") -> list[EcoFlowNumbe
         return SMARTPLUG_NUMBERS
     if device_type == DEVICE_TYPE_STREAM:
         if not supports_stream_controls(device_sn):
-            # An allowlist, not a denylist. `backup_reserve` predates the control
-            # gate and exists on every Stream, so removing it would orphan
-            # registrations owners already have. Everything else stays out until
-            # a capture from that prefix confirms the write, which means a number
-            # added to STREAM_NUMBERS later reaches only BK31 until someone
-            # deliberately lists it here. Named the other way round, a new control
-            # would land on unconfirmed prefixes by default.
-            return [
-                definition
-                for definition in STREAM_NUMBERS
-                if definition.key in {"backup_reserve"}
-            ]
+            # An allowlist, not a denylist: every Stream number, the Backup
+            # Reserve included, reaches only the models the write gate lists.
+            # The Backup Reserve number used to stay on the others so existing
+            # registrations were not orphaned; it wrote a bare level to the unit
+            # itself, never confirmed there, so it is gone and the registry
+            # cleanup in `__init__` removes the old entries (#561). The value
+            # stays on the Backup Reserve sensor.
+            return []
         return STREAM_NUMBERS
     if device_type == DEVICE_TYPE_DELTA3:
         return DELTA3_NUMBERS

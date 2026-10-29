@@ -273,6 +273,18 @@
       "heating_rod_power_w": {
         "name": "Moc grzałki"
       },
+      "heating_rod_power_from_pv_w": {
+        "name": "Moc grzałki z PV"
+      },
+      "heating_rod_power_from_battery_w": {
+        "name": "Moc grzałki z baterii"
+      },
+      "heating_rod_power_from_grid_w": {
+        "name": "Moc grzałki z sieci"
+      },
+      "heating_rod_tank_volume_l": {
+        "name": "Pojemność zbiornika grzałki"
+      },
       "ac_grid_connection_power_w": {
         "name": "Moc przyłącza sieci AC"
       },
@@ -365,6 +377,9 @@
       },
       "fault_count": {
         "name": "Liczba usterek"
+      },
+      "fault_codes": {
+        "name": "Aktywne kody usterek"
       },
       "local_system_alerts": {
         "name": "Alerty systemowe"
@@ -1661,12 +1676,12 @@
         "name": "Stan ładowania wallboxa",
         "state": {
           "none": "Brak",
-          "available": "Dostępny",
-          "preparing": "Przygotowywanie",
+          "available": "Nie podłączono",
+          "preparing": "Pojazd podłączony",
           "charging": "Ładowanie",
           "suspended_charger": "Wstrzymane przez ładowarkę",
           "suspended_vehicle": "Wstrzymane przez pojazd",
-          "finishing": "Kończenie",
+          "finishing": "Sesja ładowania zakończona",
           "faulted": "Awaria"
         }
       },
@@ -3262,6 +3277,41 @@
       }
     }
   },
+  "selector": {
+    "fault_code": {
+      "options": {
+        "100": "Power outage",
+        "101": "Grid undervoltage",
+        "102": "Grid overvoltage",
+        "105": "Grid under-frequency",
+        "128": "Bus fast overvoltage",
+        "139": "Voltage flicker alarm",
+        "140": "Sudden grid voltage phase change alarm",
+        "156": "Grid reconnection waiting",
+        "163": "12V auxiliary power fault",
+        "179": "Inverter module power-on notification",
+        "203": "BP module power-on notification",
+        "521": "Energy storage communication error",
+        "532": "12V auxiliary power voltage fault",
+        "700": "Device off-grid event",
+        "702": "Low power mode",
+        "703": "EMS module power-on notification"
+      }
+    }
+  },
+  "issues": {
+    "local_counter_held": {
+      "title": "Suma całkowita jest wstrzymana",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Suma całkowita jest wstrzymana",
+            "description": "Home Assistant utrzymuje {counter} na poziomie {ha_value} kWh od ponad doby, ponieważ falownik podaje teraz {device_value} kWh, czyli mniej. Zwykle oznacza to, że falownik zresetował swój licznik. Wybierz Prześlij, aby od teraz przyjmować wartość z falownika; panel Energia pokaże reset licznika. Prześlij tylko wtedy, gdy wiesz, że falownik zresetował swój licznik. Wybierz Zignoruj, aby zachować dotychczasową sumę."
+          }
+        }
+      }
+    }
+  },
   "exceptions": {
     "set_command_failed": {
       "message": "Polecenie dla {entity} nie dotarło do urządzenia. Sprawdź, czy urządzenie jest połączone, i spróbuj ponownie."
@@ -3271,6 +3321,12 @@
     },
     "set_command_not_ready": {
       "message": "Nie można jeszcze ustawić {entity} - urządzenie nie zgłosiło swojego bieżącego ustawienia. Spróbuj ponownie za chwilę."
+    },
+    "set_command_surplus_unreported": {
+      "message": "Nie można ustawić {entity}: urządzenie nie zgłosiło ustawienia „Próg nadwyżki solarnej”, które jest wysyłane razem z nim. Do tego czasu zmień to ustawienie w aplikacji EcoFlow."
+    },
+    "set_command_backup_unreported": {
+      "message": "Nie można ustawić {entity}: urządzenie nie zgłosiło ustawienia „Rezerwa awaryjna”, które jest wysyłane razem z nim. Do tego czasu zmień to ustawienie w aplikacji EcoFlow."
     },
     "set_command_unsupported": {
       "message": "{entity} nie obsługuje tego polecenia na tym urządzeniu."
@@ -3309,7 +3365,7 @@
       "message": "Nie udało się wysłać polecenia do wallboxa."
     },
     "powerpulse_action_state": {
-      "message": "Wallbox zgłasza stan {status}, który nie pozwala na to działanie."
+      "message": "Obecny stan ładowania wallboxa nie pozwala na to działanie."
     },
     "powerpulse_charge_current_needs_own_channel": {
       "message": "Prąd ładowania można ustawić tylko na wallboxie bez PowerOcean na tym samym koncie; ten wpis go zawiera."

@@ -13,6 +13,8 @@ A Local (Modbus/TCP) entry for a three-phase PowerOcean creates only these share
 > are only created once your system actually reports a heating rod. A
 > PowerOcean without one gets no heating rod entities. They are enabled by
 > default since 1.25.0; one you had disabled before stays disabled.
+> The power split by source (from PV, Battery and Grid) and the tank volume
+> arrive on the real-time stream only, so they exist in Enhanced Mode.
 > In Standard Mode they come from the API quota. With EcoFlow
 > account sign-in they arrive on the PowerOcean's real-time stream instead, in
 > one report roughly every seventeen seconds, so a PowerGlow attached to a unit
@@ -65,7 +67,7 @@ A Local (Modbus/TCP) entry for a three-phase PowerOcean creates only these share
 
 > **PowerOcean Plus** units report more of the same entity set than a standard PowerOcean: per-phase reactive power (var) and apparent power (VA), plus MPPT strings 3 and 4. Those entities are disabled by default, so enable the ones you need after adding a Plus device.
 
-**Totals:** an account entry (Standard or Enhanced Mode) has 249 sensors, 21 binary sensors, 20 numbers, 16 switches and 2 selects. A Local (Modbus/TCP) entry has 28 sensors (20 of the sensors below plus the 8 in the Local-only section), 4 binary sensors, 2 numbers and 1 switch.
+**Totals:** an account entry (Standard or Enhanced Mode) has 253 sensors, 21 binary sensors, 20 numbers, 16 switches and 2 selects. A Local (Modbus/TCP) entry has 29 sensors (20 of the sensors below plus the 9 in the Local-only section), 4 binary sensors, 2 numbers and 1 switch.
 
 > Entities marked with *disabled* are available but hidden by default. Enable them in **Settings > Devices > EcoFlow PowerOcean > Entities** (click the filter icon and show disabled entities).
 
@@ -187,6 +189,10 @@ These sensors are pre-configured for the HA Energy Dashboard (`total_increasing`
 | Heating Rod Water Temperature | Current water temperature at the heating rod, in whole degrees. | enabled |
 | Heating Rod Target Power | The power limit configured for the heating rod, in watts. | enabled |
 | Heating Rod Target Temperature | The water temperature the heating rod is set to reach. | enabled |
+| Heating Rod Power from PV | The part of the heating rod's power that comes from solar, in watts. Enhanced Mode only. | enabled |
+| Heating Rod Power from Battery | The part of the heating rod's power that comes from the battery, in watts. Enhanced Mode only. | enabled |
+| Heating Rod Power from Grid | The part of the heating rod's power that comes from the grid, in watts. Enhanced Mode only. A share the rod leaves out while it reports its total counts as 0 W. | enabled |
+| Heating Rod Tank Volume | The water tank size set for the heating rod in the EcoFlow app, in liters. Enhanced Mode only. | enabled |
 | EMS Max Internal Temp | Highest of the internal temperature probes | enabled |
 | MPPT 1/2 Warning Code | MPPT warnings, separate from the fault codes. Unlabelled in the same way, and only reported on the real-time connection. | disabled |
 | AFCI Self-Test Result | Result of the arc-fault detector self-test | disabled |
@@ -239,7 +245,7 @@ There is no grid sensor per inverter. The grid figure the pair reports per inver
 
 ## Sensors - Local Modbus Only
 
-These eight sensors exist only in a Local (Modbus/TCP) entry. Standard Mode and Enhanced Mode never create them. The three energy counters are the device's own lifetime counters, read as the device reports them. System Battery Voltage, System Battery Current and System Battery Temp describe the whole battery system, not a single pack. System Battery Current is positive while the system charges and negative while it discharges, and System Battery Temp is the average over the battery packs.
+These nine sensors exist only in a Local (Modbus/TCP) entry. Standard Mode and Enhanced Mode never create them. The three energy counters are the device's own lifetime counters, read as the device reports them. System Battery Voltage, System Battery Current and System Battery Temp describe the whole battery system, not a single pack. System Battery Current is positive while the system charges and negative while it discharges, and System Battery Temp is the average over the battery packs.
 
 | Entity | Unit | Category | Default |
 |:---|:---:|:---:|:---:|
@@ -251,8 +257,11 @@ These eight sensors exist only in a Local (Modbus/TCP) entry. Standard Mode and 
 | System Battery Current | A | - | enabled |
 | System Battery Temp | °C | - | enabled |
 | System Alerts | - | diagnostic | enabled |
+| Active Fault Codes | - | diagnostic | enabled |
 
 System Alerts lists the alerts the PowerOcean reports as codes separated by commas, in a fixed order and without spaces, for example `fan_failure,battery_overheating`. It shows `none` while no alert is active, and stays unknown until the PowerOcean has reported its alert state. The codes are system_shutdown, upgrade_shutdown, epo_triggered, low_power_mode, fan_failure, system_failure, battery_reverse_connection, battery_disconnected, auxiliary_power_failure, pcs_timeout, pcs_failure, igbt_self_test_failure, high_temperature_protection, battery_overheating, ntc_circuit_failure, system_reset, hardware_version_error, parallel_sync_error, low_temperature_protection, parallel_master_slave_conflict, parallel_slave_setting_error, parallel_inverter_error and parallel_meter_fault. An alert this integration does not know yet shows as `bit_` and its number. When so many alerts are active that the list would not fit in a Home Assistant state, the first ones are listed and the rest are counted at the end, for example `...,high_temperature_protection,+10`. Use it to send a notification when the state is not `none`.
+
+Active Fault Codes lists the fault codes the PowerOcean reports, in decimal and separated by commas, for example `100,521`. It shows `none` while no fault is active. The `faults` attribute pairs each code with its name in your Home Assistant language, for example `{"code": 100, "name": "Power outage"}`, and the name is empty for a code without one. The names are translated into German, the other languages show the English names. They follow the list published by @MaxGrmm in EF-PowerOcean-TcpModbus and have not been checked against another source. The sensor stays unknown while the inverter has not answered the fault registers, which does not affect the other readings.
 
 ---
 
@@ -373,7 +382,7 @@ Created only once a coupled wallbox reports a charging session. See the note at 
 | Wallbox Charging Power | Power currently going into the vehicle, in watts | enabled |
 | Wallbox Session Energy | Energy delivered in the current charging session, in watt hours. Resets when the next session starts, so it is not a lifetime counter | enabled |
 | Wallbox Session Duration | How long the current session has been running, in seconds | enabled |
-| Wallbox Charging Status | Available, preparing, charging, paused by charger, paused by vehicle, finishing, or fault | enabled |
+| Wallbox Charging Status | Unplugged, vehicle connected, charging, paused by charger, paused by vehicle, charging session ended, or fault | enabled |
 | Wallbox Vehicle | The vehicle the charger has recognized. Empty until a car is identified | enabled |
 
 ---
@@ -388,6 +397,8 @@ Created only once a coupled wallbox reports a charging session. See the note at 
 | Heating Rod Target Power | Number | 0 - 9000 W (by model) | Enhanced only |
 | Heating Rod Target Temperature | Number | 10 - 80 °C | Enhanced only |
 | Heating Rod Mode | Select | Off / Solar / Manual | Enhanced only |
+
+Backup Reserve and Solar Surplus Threshold are sent to the PowerOcean as one pair, so each write repeats the value of the other. If the unit has not reported the other value, the write is refused and nothing is sent. The message names the missing value and points to the EcoFlow app. Backup Reserve is refused for as long as the Solar Surplus Threshold is missing, and the Solar Surplus Threshold for as long as the Backup Reserve is missing. A PowerOcean Plus `R372` does not send the Solar Surplus Threshold in that message. In the two diagnostics downloads from one unit it arrives in another report field that moves in the same second as a change in the EcoFlow app, so the integration reads that field as the Solar Surplus Threshold when the unit sends no value the other way. Writing the pair from Home Assistant on that unit has not been tried yet.
 
 ---
 

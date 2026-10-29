@@ -9,7 +9,9 @@ from __future__ import annotations
 import base64
 import logging
 import re
+import struct
 import time
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
@@ -43,6 +45,7 @@ from .const import (
 from .coordinator import EcoFlowDeviceCoordinator, modbus_link
 from .coordinator.local_modbus import EcoFlowLocalModbusCoordinator
 from .ecoflow.cloud_http import EcoFlowHTTPQuota
+from .ecoflow.parsers.powerocean_modbus import SERIAL_OFFSET, SERIAL_REGISTER_COUNT
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -370,6 +373,23 @@ async def async_get_config_entry_diagnostics(
     return _redact_serials(diagnostics, tails=_serial_tails(serials))
 
 
+def _raw_registers(raw: Mapping[int, bytes]) -> dict[str, list[int | None]]:
+    """Return ``{"0x0206": [word, ...]}`` for the blocks of the last poll.
+
+    The serial's words are null. Only the first poll of a device (and the first
+    after an outage) reads them; later polls carry no identity block.
+    """
+    serial = range(SERIAL_OFFSET, SERIAL_OFFSET + SERIAL_REGISTER_COUNT)
+    result: dict[str, list[int | None]] = {}
+    for offset, data in sorted(raw.items()):
+        words = struct.unpack(f">{len(data) // 2}H", data[: len(data) // 2 * 2])
+        result[f"0x{offset:04X}"] = [
+            None if offset + index in serial else word
+            for index, word in enumerate(words)
+        ]
+    return result
+
+
 def _local_diagnostics(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any]:
     """Diagnostics for a local Modbus entry: link settings, poll health, data.
 
@@ -396,6 +416,15 @@ def _local_diagnostics(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any
                 "last_error": coordinator.last_error,
                 "consecutive_failures": coordinator.consecutive_failures,
                 "device_data": dict(coordinator.device_data),
+                # Counters whose reading is being dropped as lower than the
+                # last total, by key. `since` is when the current run began.
+                "held_counters": {
+                    key: {**held, "since": held["since"].isoformat()}
+                    for key, held in coordinator.held_counters().items()
+                },
+                # What the last poll read, word by word, so a register the
+                # parser does not know yet can be read from a download.
+                "raw_registers": _raw_registers(coordinator.last_raw),
             }
         )
 
@@ -717,6 +746,7 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
         # divergent pair it tracked has no record - see the property's own
         # docstring for why those two cases share one representation.
         "surplus_auto_sync": coordinator.surplus_auto_sync_diagnostics,
+        "surplus_source": coordinator.surplus_source_diagnostics,
         "event_log": _format_event_log(coordinator.event_log),
     }
 

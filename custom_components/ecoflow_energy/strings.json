@@ -273,6 +273,18 @@
       "heating_rod_power_w": {
         "name": "Heating Rod Power"
       },
+      "heating_rod_power_from_pv_w": {
+        "name": "Heating Rod Power from PV"
+      },
+      "heating_rod_power_from_battery_w": {
+        "name": "Heating Rod Power from Battery"
+      },
+      "heating_rod_power_from_grid_w": {
+        "name": "Heating Rod Power from Grid"
+      },
+      "heating_rod_tank_volume_l": {
+        "name": "Heating Rod Tank Volume"
+      },
       "ac_grid_connection_power_w": {
         "name": "AC Grid Connection Power"
       },
@@ -365,6 +377,9 @@
       },
       "fault_count": {
         "name": "Fault Count"
+      },
+      "fault_codes": {
+        "name": "Active Fault Codes"
       },
       "local_system_alerts": {
         "name": "System Alerts"
@@ -1661,12 +1676,12 @@
         "name": "Wallbox Charging Status",
         "state": {
           "none": "None",
-          "available": "Available",
-          "preparing": "Preparing",
+          "available": "Unplugged",
+          "preparing": "Vehicle connected",
           "charging": "Charging",
           "suspended_charger": "Paused by Charger",
           "suspended_vehicle": "Paused by Vehicle",
-          "finishing": "Finishing",
+          "finishing": "Charging session ended",
           "faulted": "Fault"
         }
       },
@@ -3262,6 +3277,41 @@
       }
     }
   },
+  "selector": {
+    "fault_code": {
+      "options": {
+        "100": "Power outage",
+        "101": "Grid undervoltage",
+        "102": "Grid overvoltage",
+        "105": "Grid under-frequency",
+        "128": "Bus fast overvoltage",
+        "139": "Voltage flicker alarm",
+        "140": "Sudden grid voltage phase change alarm",
+        "156": "Grid reconnection waiting",
+        "163": "12V auxiliary power fault",
+        "179": "Inverter module power-on notification",
+        "203": "BP module power-on notification",
+        "521": "Energy storage communication error",
+        "532": "12V auxiliary power voltage fault",
+        "700": "Device off-grid event",
+        "702": "Low power mode",
+        "703": "EMS module power-on notification"
+      }
+    }
+  },
+  "issues": {
+    "local_counter_held": {
+      "title": "A lifetime total is held back",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "A lifetime total is held back",
+            "description": "Home Assistant has kept {counter} at {ha_value} kWh for more than a day because the inverter now reports {device_value} kWh, which is lower. This usually means the inverter reset its counter. Select Submit to take the inverter's value from now on; the Energy dashboard will show a counter reset. Submit only if you know the inverter reset its counter. Select Ignore to keep the current total."
+          }
+        }
+      }
+    }
+  },
   "exceptions": {
     "set_command_failed": {
       "message": "The command for {entity} did not reach the device. Check that the device is connected and try again."
@@ -3271,6 +3321,12 @@
     },
     "set_command_not_ready": {
       "message": "{entity} cannot be set yet - the device has not reported its current setting. Try again in a moment."
+    },
+    "set_command_surplus_unreported": {
+      "message": "{entity} cannot be set: the device has not reported the Solar Surplus Threshold, which is sent together with it. Until it does, change the setting in the EcoFlow app."
+    },
+    "set_command_backup_unreported": {
+      "message": "{entity} cannot be set: the device has not reported the Backup Reserve, which is sent together with it. Until it does, change the setting in the EcoFlow app."
     },
     "set_command_unsupported": {
       "message": "{entity} does not support this command on this device."
@@ -3309,7 +3365,7 @@
       "message": "The wallbox command could not be sent."
     },
     "powerpulse_action_state": {
-      "message": "The wallbox reports {status}, which does not allow this action."
+      "message": "The wallbox's current charging status does not allow this action."
     },
     "powerpulse_charge_current_needs_own_channel": {
       "message": "The charging current can only be set on a wallbox without a PowerOcean on the same account; this entry has one."

@@ -173,6 +173,10 @@ BP_TO_SENSOR: dict[str, str] = {
     "bp_up_limit_soc": "bp_up_limit_soc_pct",
 }
 
+# Intermediate key for field 352 of the cmd_id=8 report. It is never an entity:
+# state_apply resolves it into `ems_app_surplus_pct` or drops it.
+EMS_CHANGE_DEV_SOC_KEY = "ems_change_dev_soc_pct"
+
 # EMS change report (cmd_id=8) key -> sensor key mapping
 EMS_CHANGE_TO_SENSOR: dict[str, str] = {
     "bp_online_sum": "bp_online_sum",
@@ -199,6 +203,10 @@ EMS_CHANGE_TO_SENSOR: dict[str, str] = {
     "ems_sg_ready_en": "ems_sg_ready_enabled",
     "ems_sg_run_stat": "ems_sg_ready_state",
     "battery_limit_reason": "battery_limit_reason",
+    # R372 read-back of the app's solar surplus setting (field 352). Not in
+    # PERCENT_SENSOR_KEYS on purpose: the state_apply resolver range-checks it
+    # (an out-of-range value must become None, not a deleted key).
+    "ems_change_dev_soc": EMS_CHANGE_DEV_SOC_KEY,
 }
 
 # EMS state report (cmd_id=17) key -> sensor key mapping.
@@ -689,11 +697,13 @@ def remap_ems_param_change_keys(raw: dict[str, Any]) -> dict[str, Any]:
 # PowerGlow heating rod report (`HRChargingParamReport`, cmd_func 212).
 # Only fields with both a name from the message definition and a check against
 # the reporter's own session are read. `hr_online_bits`, `hr_error_code`,
-# `hr_water_tank_volume`, `hr_selfcheck_percent` and `hr_run_flag` stay unread
-# on purpose: they move, but nothing observed says what they mean, and a
-# sensor named after a guess is worse than no sensor. See PLAN-079.
+# `hr_selfcheck_percent` and `hr_run_flag` stay unread on purpose: they move,
+# but nothing observed says what they mean, and a sensor named after a guess
+# is worse than no sensor. See PLAN-079. `hr_water_tank_volume` is read since
+# #588: it is 1500 in every report of the reporter's download and the app's
+# "Anpassen" setting shows 1500 L, so value and unit are both confirmed.
 #
-# The four readings below become floats and feed sensors. The mode, the run
+# The five readings below become floats and feed sensors. The mode, the run
 # state and the rod's own serial are read for the PowerGlow controls
 # (PLAN-190): a write must address the rod by its serial, and a switch or
 # select needs the device's state to confirm against. Those three stay as the
@@ -703,6 +713,7 @@ HEATING_ROD_TO_SENSOR: dict[str, str] = {
     "hr_heating_power": "heating_rod_power_w",
     "hr_target_temp": "heating_rod_target_temp_c",
     "hr_target_power": "heating_rod_target_power_w",
+    "hr_water_tank_volume": "heating_rod_tank_volume_l",
 }
 
 # Integer state values: `hr_mode` is 0 Solar or 1 Manual, `hr_run_stat` the
@@ -718,7 +729,8 @@ _HEATING_ROD_MODE_NAMES: dict[int, str] = {0: "solar", 1: "manual"}
 def remap_heating_rod_keys(raw: dict[str, Any]) -> dict[str, Any]:
     """Remap a PowerGlow report (cmd_func 212, cmd_id 8).
 
-    The same four readings the Standard Mode quota supplies, from the report
+    The same four readings the Standard Mode quota supplies (plus the tank
+    volume in liters, which only this Enhanced Mode report carries), from the report
     the PowerOcean forwards on its real-time stream. The powers are integer
     watts and the temperatures are floats in degrees Celsius, both as sent -
     a reporter capture carries 2159 W drawn against a 2160 W target at 69 of a
@@ -769,6 +781,48 @@ def remap_heating_rod_keys(raw: dict[str, Any]) -> dict[str, Any]:
     elif run_state is not None and mode in _HEATING_ROD_MODE_NAMES:
         result["heating_rod_operating_mode"] = _HEATING_ROD_MODE_NAMES[mode]
 
+    return result
+
+
+# Where the rod's power came from (`HRPowerSourceReport`, cmd_func 212, cmd_id
+# 33). Evidence is a reporter download of 2026-10-23 with seven of these
+# reports: five carry only the rod's serial, two carry the total (field 2) and
+# the shares. The first reads 2=152, 4=116, 5=33, 6=3 while the app showed PV
+# 116, battery 33, grid 3 and rod 152. The second reads 2=153, 4=112, 5=41 with
+# no field 6, and 112 + 41 = 153.
+HEATING_ROD_POWER_SOURCE_TO_SENSOR: dict[str, str] = {
+    "hr_power_from_pv": "heating_rod_power_from_pv_w",
+    "hr_power_from_battery": "heating_rod_power_from_battery_w",
+    "hr_power_from_grid": "heating_rod_power_from_grid_w",
+}
+
+
+def remap_heating_rod_power_source_keys(raw: dict[str, Any]) -> dict[str, Any]:
+    """Remap a PowerGlow power report (cmd_func 212, cmd_id 33).
+
+    A report that carries the total (field 2) publishes all three shares as
+    float watts. The shares add up to the total, so a share the report leaves
+    out beside the total is 0 W, not unknown: the second reporter frame holds
+    112 W from PV and 41 W from the battery against a total of 153 W and no
+    grid field.
+
+    A report without the total publishes nothing. Five of the seven reporter
+    frames are the bare serial, which means the rod sent no reading, and
+    answering that with 0 W would drop the sensors to zero in the middle of a
+    run.
+
+    The total itself is not published: the drawn power already comes from
+    cmd_id 8 as `heating_rod_power_w`, one reading from one source. The shares
+    are instantaneous powers, never meters, so none of them reaches a
+    total_increasing sensor.
+    """
+    if not isinstance(raw.get("hr_total_power"), (int, float)):
+        return {}
+
+    result: dict[str, Any] = {}
+    for proto_key, sensor_key in HEATING_ROD_POWER_SOURCE_TO_SENSOR.items():
+        value = raw.get(proto_key)
+        result[sensor_key] = float(value) if isinstance(value, (int, float)) else 0.0
     return result
 
 

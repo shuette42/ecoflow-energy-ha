@@ -54,6 +54,25 @@ def raise_set_not_ready(entity_id: str) -> NoReturn:
     )
 
 
+def raise_set_partner_unreported(entity_id: str, translation_key: str) -> NoReturn:
+    """Report a paired write whose other half the device has not reported.
+
+    Same situation as `raise_set_not_ready`, but not promised to clear with
+    the next frame: a unit that sends the surplus half in no message we read
+    (a PowerOcean Plus R372 before field 352 was read, issue #631) would
+    never clear it, so "try again in a moment" could send the user waiting
+    for something that does not come. Nothing was
+    sent, so "did not reach the device" would be wrong too. The key names
+    which half is missing, so each message can say which setting the device
+    has not reported and point to the EcoFlow app meanwhile.
+    """
+    raise HomeAssistantError(
+        translation_domain=DOMAIN,
+        translation_key=translation_key,
+        translation_placeholders={"entity": entity_id},
+    )
+
+
 def raise_set_gone(entity_id: str) -> NoReturn:
     """Report a write against a reading the device has stopped sending.
 

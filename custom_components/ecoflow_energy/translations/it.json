@@ -273,6 +273,18 @@
       "heating_rod_power_w": {
         "name": "Potenza resistenza di riscaldamento"
       },
+      "heating_rod_power_from_pv_w": {
+        "name": "Potenza resistenza di riscaldamento da FV"
+      },
+      "heating_rod_power_from_battery_w": {
+        "name": "Potenza resistenza di riscaldamento da batteria"
+      },
+      "heating_rod_power_from_grid_w": {
+        "name": "Potenza resistenza di riscaldamento da rete"
+      },
+      "heating_rod_tank_volume_l": {
+        "name": "Volume serbatoio resistenza di riscaldamento"
+      },
       "ac_grid_connection_power_w": {
         "name": "Potenza connessione rete AC"
       },
@@ -365,6 +377,9 @@
       },
       "fault_count": {
         "name": "Numero di guasti"
+      },
+      "fault_codes": {
+        "name": "Codici di guasto attivi"
       },
       "local_system_alerts": {
         "name": "Avvisi di sistema"
@@ -1661,12 +1676,12 @@
         "name": "Stato ricarica wallbox",
         "state": {
           "none": "Nessuno",
-          "available": "Disponibile",
-          "preparing": "In preparazione",
+          "available": "Non collegato",
+          "preparing": "Veicolo collegato",
           "charging": "In carica",
           "suspended_charger": "In pausa dal caricatore",
           "suspended_vehicle": "In pausa dal veicolo",
-          "finishing": "In completamento",
+          "finishing": "Sessione di ricarica terminata",
           "faulted": "Guasto"
         }
       },
@@ -3262,6 +3277,41 @@
       }
     }
   },
+  "selector": {
+    "fault_code": {
+      "options": {
+        "100": "Power outage",
+        "101": "Grid undervoltage",
+        "102": "Grid overvoltage",
+        "105": "Grid under-frequency",
+        "128": "Bus fast overvoltage",
+        "139": "Voltage flicker alarm",
+        "140": "Sudden grid voltage phase change alarm",
+        "156": "Grid reconnection waiting",
+        "163": "12V auxiliary power fault",
+        "179": "Inverter module power-on notification",
+        "203": "BP module power-on notification",
+        "521": "Energy storage communication error",
+        "532": "12V auxiliary power voltage fault",
+        "700": "Device off-grid event",
+        "702": "Low power mode",
+        "703": "EMS module power-on notification"
+      }
+    }
+  },
+  "issues": {
+    "local_counter_held": {
+      "title": "Un totale cumulativo è trattenuto",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Un totale cumulativo è trattenuto",
+            "description": "Home Assistant mantiene {counter} a {ha_value} kWh da più di un giorno perché l'inverter ora riporta {device_value} kWh, un valore più basso. Di solito significa che l'inverter ha azzerato il suo contatore. Seleziona Invia per adottare da ora il valore dell'inverter; la dashboard Energia mostrerà un azzeramento del contatore. Invia solo se sai che l'inverter ha azzerato il suo contatore. Seleziona Ignora per mantenere il totale attuale."
+          }
+        }
+      }
+    }
+  },
   "exceptions": {
     "set_command_failed": {
       "message": "Il comando per {entity} non ha raggiunto il dispositivo. Controlla che il dispositivo sia connesso e riprova."
@@ -3271,6 +3321,12 @@
     },
     "set_command_not_ready": {
       "message": "{entity} non può ancora essere impostato - il dispositivo non ha riportato la sua impostazione attuale. Riprova tra un momento."
+    },
+    "set_command_surplus_unreported": {
+      "message": "{entity} non può essere impostato: il dispositivo non ha riportato la soglia surplus solare, che viene inviata insieme. Finché non lo fa, modifica l'impostazione nell'app EcoFlow."
+    },
+    "set_command_backup_unreported": {
+      "message": "{entity} non può essere impostato: il dispositivo non ha riportato la riserva di backup, che viene inviata insieme. Finché non lo fa, modifica l'impostazione nell'app EcoFlow."
     },
     "set_command_unsupported": {
       "message": "{entity} non supporta questo comando su questo dispositivo."
@@ -3309,7 +3365,7 @@
       "message": "Non è stato possibile inviare il comando alla wallbox."
     },
     "powerpulse_action_state": {
-      "message": "La wallbox riporta {status}, che non consente questa azione."
+      "message": "Lo stato di ricarica attuale della wallbox non consente questa azione."
     },
     "powerpulse_charge_current_needs_own_channel": {
       "message": "La corrente di ricarica può essere impostata solo su una wallbox senza un PowerOcean nello stesso account; questa voce ne ha uno."

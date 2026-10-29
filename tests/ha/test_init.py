@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -121,6 +122,44 @@ class TestSetupEntry:
         coordinators = hass.data[DOMAIN][enhanced_config_entry.entry_id]
         coordinator = list(coordinators.values())[0]
         assert coordinator.enhanced_mode is True
+
+
+class TestSetupRetiresStreamReserveNumber:
+    async def test_setup_removes_the_old_reserve_number_of_a_bk61(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+        mock_iot_api,
+        mock_mqtt_client,
+        mock_http_client,
+    ) -> None:
+        """Setting up an entry runs the registry cleanup (#561): the old
+        Backup Reserve number of a Stream outside the write gate is gone, the
+        gated model's number stays."""
+        standard_config_entry.add_to_hass(hass)
+        registry = er.async_get(hass)
+        old = registry.async_get_or_create(
+            "number",
+            DOMAIN,
+            "BK61TEST00000001_backup_reserve",
+            config_entry=standard_config_entry,
+        )
+        kept = registry.async_get_or_create(
+            "number",
+            DOMAIN,
+            "BK31TEST00000001_backup_reserve",
+            config_entry=standard_config_entry,
+        )
+
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.EcoFlowDeviceCoordinator.async_config_entry_first_refresh",
+            new_callable=AsyncMock,
+        ):
+            assert await hass.config_entries.async_setup(standard_config_entry.entry_id)
+            await hass.async_block_till_done()
+
+        assert registry.async_get(old.entity_id) is None
+        assert registry.async_get(kept.entity_id) is not None
 
 
 class TestPartialSetupCleanup:

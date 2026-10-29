@@ -509,9 +509,122 @@ async def test_start_is_refused_while_paused_by_the_charger(
         await wallbox.async_set_powerpulse_charge_action("start")
 
     assert excinfo.value.translation_key == "powerpulse_action_state"
-    assert excinfo.value.translation_placeholders == {"status": "suspended_charger"}
+    assert not excinfo.value.translation_placeholders
     assert _mqtt(oceans[0]).send_proto_set.call_count == 0
     assert _mqtt(wallbox).send_proto_set.call_count == 0
+
+
+async def test_start_while_preparing_sends_through_the_powerocean_and_confirms(
+    hass: HomeAssistant,
+) -> None:
+    """Start is sent from "preparing" (cable attached, #632), relayed route.
+
+    Compares the published bytes with the builder's output, so the frame that
+    leaves is the start frame and not merely "a frame". Mutation this catches:
+    removing "preparing" from `POWERPULSE2_CHARGE_ACTION_PRECONDITION["start"]`
+    (the press raises `powerpulse_action_state` and nothing is published).
+    """
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    _apply_status(wallbox, 2)  # preparing
+
+    with patch(
+        "custom_components.ecoflow_energy.ecoflow.energy_stream.time.time",
+        return_value=1_700_000_000.0,
+    ):
+        expected_seq = int(1_700_000_000.0 * 1000) & 0x7FFFFFFF
+        expected = build_powerpulse_charge_action_payload(
+            "start", DEV_ADDR, DEV_SN, seq=expected_seq
+        )
+        task = asyncio.create_task(wallbox.async_set_powerpulse_charge_action("start"))
+        await asyncio.sleep(0.05)
+
+    assert _mqtt(oceans[0]).send_proto_set.call_count == 1
+    assert _mqtt(wallbox).send_proto_set.call_count == 0
+    assert _mqtt(oceans[0]).send_proto_set.call_args.args[0] == expected
+
+    _apply_status(wallbox, 3)  # charging - confirms
+    await asyncio.wait_for(task, timeout=2)
+    assert wallbox._pending_write is None
+
+
+async def test_own_route_start_while_preparing_sends_and_confirms(
+    hass: HomeAssistant,
+) -> None:
+    """Start is sent from "preparing" on the wallbox's own topic too (#632)."""
+    _entry_obj, _oceans, wallbox = _wire_entry(hass, [])
+    _apply_status(wallbox, 2)  # preparing
+
+    task = asyncio.create_task(wallbox.async_set_powerpulse_charge_action("start"))
+    await asyncio.sleep(0.05)
+
+    assert _mqtt(wallbox).send_proto_set.call_count == 1
+    published = _mqtt(wallbox).send_proto_set.call_args.args[0]
+    headers, _ = decode_header_message(published)
+    assert bytes.fromhex(headers[0]["pdata"]) == b"\x20\x01"
+
+    _apply_status(wallbox, 4)  # suspended_charger - confirms
+    await asyncio.wait_for(task, timeout=2)
+    assert wallbox._pending_write is None
+
+
+@pytest.mark.parametrize("route", ["relayed", "own"])
+async def test_start_while_available_is_still_refused(
+    hass: HomeAssistant, route: str
+) -> None:
+    """Start stays refused with no session ("available", no cable known, #632).
+
+    Only "preparing" joined the start set; "available" must not follow it.
+    Mutation this catches: adding "available" to
+    `POWERPULSE2_CHARGE_ACTION_PRECONDITION["start"]`.
+    """
+    devices = [POWEROCEAN_DEVICE] if route == "relayed" else []
+    _entry_obj, oceans, wallbox = _wire_entry(hass, devices)
+    _set_descriptor(wallbox)
+    _apply_status(wallbox, 1)  # available
+
+    with pytest.raises(HomeAssistantError) as excinfo:
+        await wallbox.async_set_powerpulse_charge_action("start")
+
+    assert excinfo.value.translation_key == "powerpulse_action_state"
+    assert _mqtt(wallbox).send_proto_set.call_count == 0
+    for ocean in oceans:
+        assert _mqtt(ocean).send_proto_set.call_count == 0
+
+
+async def test_second_start_press_while_preparing_sends_only_once(
+    hass: HomeAssistant,
+) -> None:
+    """A start passes through "preparing"; a second press must not send again.
+
+    After the first start the wallbox still reads (or returns to) "preparing"
+    while the confirmation is pending, which the start gate now allows. The
+    in-progress check ahead of the gate is what keeps it at one frame. Once the
+    wallbox reports "charging" a further start is refused on the state.
+    Mutation this catches: dropping the `_pending_write` in-progress check
+    (the second press publishes a second frame).
+    """
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    _apply_status(wallbox, 2)  # preparing
+
+    first = asyncio.create_task(wallbox.async_set_powerpulse_charge_action("start"))
+    await asyncio.sleep(0.05)
+    assert _mqtt(oceans[0]).send_proto_set.call_count == 1
+
+    _apply_status(wallbox, 2)  # preparing again - the status the gate allows
+    with pytest.raises(HomeAssistantError) as excinfo:
+        await wallbox.async_set_powerpulse_charge_action("start")
+    assert excinfo.value.translation_key == "powerpulse_action_in_progress"
+    assert _mqtt(oceans[0]).send_proto_set.call_count == 1
+
+    _apply_status(wallbox, 3)  # charging - confirms the first press
+    await asyncio.wait_for(first, timeout=2)
+
+    with pytest.raises(HomeAssistantError) as excinfo:
+        await wallbox.async_set_powerpulse_charge_action("start")
+    assert excinfo.value.translation_key == "powerpulse_action_state"
+    assert _mqtt(oceans[0]).send_proto_set.call_count == 1
 
 
 async def test_stop_while_paused_by_the_charger_sends_and_confirms_on_finishing(

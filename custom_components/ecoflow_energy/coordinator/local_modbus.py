@@ -38,6 +38,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
@@ -46,6 +47,8 @@ from ..const import (
     DEVICE_TYPE_DISPLAY_NAMES,
     DEVICE_TYPE_POWEROCEAN,
     DOMAIN,
+    LOCAL_COUNTER_HELD_NOTICE_S,
+    LOCAL_COUNTER_LABELS,
     LOCAL_MODBUS_FAILURES_UNAVAILABLE,
     LOCAL_MODBUS_HEARTBEAT_INTERVAL_S,
     LOCAL_MODBUS_HEARTBEAT_LAPSE_S,
@@ -62,15 +65,22 @@ from ..ecoflow.modbus_local import (
     ModbusTransport,
 )
 from ..ecoflow.parsers.powerocean_modbus import (
+    FAULT_BLOCKS,
     LIFETIME_COUNTER_KEYS,
     POLL_BLOCKS,
     SETUP_BLOCKS,
     parse_device_info,
     parse_registers,
 )
+from ..fault_codes import FAULT_CODES_KEY
 from .modbus_link import create_link
 
 _LOGGER = logging.getLogger(__name__)
+
+# Modbus exception codes that mean "this device does not offer that read":
+# illegal function, illegal data address, illegal data value. Any other code
+# (slave busy, device failure, ...) says nothing about the register map.
+_REFUSAL_CODES = frozenset({1, 2, 3})
 
 # The two settings the integration may write, by the data key that shows them.
 _WRITABLE_KEYS: dict[str, int] = {
@@ -81,6 +91,8 @@ _WRITABLE_KEYS: dict[str, int] = {
 # Seam for the heartbeat's clock. A module attribute rather than a call to
 # ``time.monotonic`` so a test can move it without touching the event loop.
 _monotonic = time.monotonic
+# Same seam for the wall clock that dates a held counter.
+_utcnow = dt_util.utcnow
 
 # Window arithmetic of the heartbeat. The unit hands control back after
 # LOCAL_MODBUS_HEARTBEAT_LAPSE_S (60 s) without an acknowledged beat and a beat
@@ -148,6 +160,20 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._device_data: dict[str, Any] = {}
         # Lower bound per lifetime counter, taken from the restored sensor state.
         self._counter_floor: dict[str, float] = {}
+        # Counters whose readings are being dropped, by key: when the first
+        # drop of the current run happened, the latest dropped reading and the
+        # bound it was compared with. In memory only.
+        self._held_counters: dict[str, dict[str, Any]] = {}
+        # The raw register blocks (offset -> bytes) of the last successful
+        # poll, for the diagnostics download. Replaced on every success.
+        self._last_raw: dict[int, bytes] = {}
+        # The fault events are read apart (see ``FAULT_BLOCKS``). A device that
+        # refuses them is not asked again; any other failure is retried.
+        self._fault_events_supported = True
+        self._fault_read_failing = False
+        # The placeholders each open repairs notice was created with, by key, so
+        # a poll writes the registry only when the wording would change.
+        self._notice_placeholders: dict[str, dict[str, str]] = {}
         # False until the serial was read and matched; reset when the device
         # becomes unavailable, so the next answer is checked again.
         self._identity_verified: bool = False
@@ -248,6 +274,43 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if self.data is not None:
                 self.data.pop(key, None)
 
+    @property
+    def last_raw(self) -> dict[int, bytes]:
+        """Return the raw register blocks of the last successful poll."""
+        return dict(self._last_raw)
+
+    def held_counters(self, older_than_s: float = 0.0) -> dict[str, dict[str, Any]]:
+        """Return the counters held back for at least ``older_than_s`` seconds.
+
+        Each entry carries ``since`` (first drop of the current run),
+        ``device_value`` (the latest dropped reading) and ``published`` (the
+        bound it was compared with). The result is a copy. The timer lives in
+        memory only, so a restart starts every held counter's clock again.
+        """
+        now = _utcnow()
+        return {
+            key: dict(entry)
+            for key, entry in self._held_counters.items()
+            if (now - entry["since"]).total_seconds() >= older_than_s
+        }
+
+    def accept_device_counter(self, key: str) -> bool:
+        """Take the device's held reading as the new floor for ``key``.
+
+        For a counter the inverter really reset: the floor drops to the held
+        device value, the entry is cleared and the device value is published
+        at once, so a state write before the next poll shows it rather than
+        the value restored at startup. Returns False and changes nothing when
+        ``key`` is not held.
+        """
+        entry = self._held_counters.pop(key, None)
+        if entry is None:
+            return False
+        self._counter_floor[key] = entry["device_value"]
+        self._device_data[key] = entry["device_value"]
+        self.async_set_updated_data(dict(self._device_data))
+        return True
+
     # ------------------------------------------------------------------
     # Control: heartbeat and writes
     # ------------------------------------------------------------------
@@ -293,9 +356,24 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self.async_update_listeners()
 
     def _close(self) -> None:
-        """Unload callback: stop the beats for good and refuse a late turn-on."""
+        """Unload callback: stop the beats for good and refuse a late turn-on.
+
+        The entry's repairs notices go with it: the held timers live in memory
+        only, so a notice left behind would outlive the state that justifies it.
+        A notice the user chose Ignore on is kept. The issue is not persistent,
+        so after a restart Home Assistant restores it only as an inactive stub
+        that still carries the Ignore; raising the notice again later reuses
+        that record and the notice comes back ignored. Deleting it here would
+        throw the choice away.
+        """
         self._closed = True
         self._cancel_heartbeat()
+        self._notice_placeholders.clear()
+        registry = ir.async_get(self.hass)
+        for key in LIFETIME_COUNTER_KEYS:
+            issue = registry.async_get_issue(DOMAIN, self._notice_id(key))
+            if issue is not None and issue.dismissed_version is None:
+                ir.async_delete_issue(self.hass, DOMAIN, self._notice_id(key))
 
     def _cancel_heartbeat(self) -> None:
         """Stop the beats and show control off. Writes nothing.
@@ -457,9 +535,49 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         self._handle_success()
         parsed = parse_registers(raw)
+        fault_count = parsed.get("fault_count")
+        if fault_count:
+            # Only a device that reports a fault is asked for the event list:
+            # a healthy one costs no extra connection and no unprobed read.
+            raw = {**raw, **await self._read_fault_events()}
+            parsed = parse_registers(raw)
+        elif fault_count == 0:
+            parsed[FAULT_CODES_KEY] = []
+        self._last_raw = raw
+        if FAULT_CODES_KEY not in parsed:
+            # Unknown beats a list from an earlier poll that may be out of date.
+            self._device_data.pop(FAULT_CODES_KEY, None)
         self._hold_counters(parsed)
         self._device_data.update(parsed)
+        self._sync_held_notices()
         return dict(self._device_data)
+
+    async def _read_fault_events(self) -> dict[int, bytes]:
+        """Read the fault event registers; a failure costs the list, never the poll."""
+        if not self._fault_events_supported:
+            return {}
+        try:
+            events = await self._link.read_blocks(FAULT_BLOCKS)
+        except ModbusLocalError as err:
+            if isinstance(err, ModbusExceptionResponse) and err.code in _REFUSAL_CODES:
+                self._fault_events_supported = False
+                _LOGGER.debug(
+                    "Local Modbus %s refused the fault event registers, the "
+                    "fault list stays empty: %s",
+                    self.device_tag,
+                    err,
+                )
+                return {}
+            if not self._fault_read_failing:
+                self._fault_read_failing = True
+                _LOGGER.debug(
+                    "Local Modbus %s: fault events not read, trying again: %s",
+                    self.device_tag,
+                    err,
+                )
+            return {}
+        self._fault_read_failing = False
+        return events
 
     def _handle_failure(self, err: ModbusLocalError) -> dict[str, Any]:
         """Count a failed poll; mark the device unavailable on the fifth in a row."""
@@ -538,6 +656,50 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if recovered:
             _LOGGER.info("Local Modbus device %s is answering again", self.device_tag)
 
+    def _notice_id(self, key: str) -> str:
+        """Return the repairs issue id of ``key``; the entry id, never the serial."""
+        return f"local_counter_held_{self.config_entry.entry_id}_{key}"
+
+    def _sync_held_notices(self) -> None:
+        """Raise a repairs notice per counter held 24 h, drop it once it is not.
+
+        The notice offers to take the inverter's value (``repairs.py``);
+        Home Assistant's own Ignore is the choice to keep the current total.
+        A notice is deleted only when this run raised it and the counter has
+        since recovered or been accepted. There is no sweep of ids this run
+        never raised: after a restart Home Assistant holds such an issue as an
+        inactive stub that carries the user's Ignore, and deleting the stub
+        would bring the notice back as new 24 h later.
+        """
+        held = self.held_counters(LOCAL_COUNTER_HELD_NOTICE_S)
+        for key in LIFETIME_COUNTER_KEYS:
+            entry = held.get(key)
+            if entry is None:
+                if self._notice_placeholders.pop(key, None) is not None:
+                    ir.async_delete_issue(self.hass, DOMAIN, self._notice_id(key))
+                continue
+            # The device value shows one decimal: after a real reset it moves
+            # with every poll, and three decimals would rewrite the notice
+            # each time. The held value (ha_value) is steady, so it keeps three.
+            placeholders = {
+                "counter": LOCAL_COUNTER_LABELS.get(key, key),
+                "ha_value": f"{entry['published']:.3f}",
+                "device_value": f"{entry['device_value']:.1f}",
+            }
+            if self._notice_placeholders.get(key) == placeholders:
+                continue
+            self._notice_placeholders[key] = placeholders
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                self._notice_id(key),
+                is_fixable=True,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="local_counter_held",
+                translation_placeholders=placeholders,
+                data={"entry_id": self.config_entry.entry_id, "key": key},
+            )
+
     def _hold_counters(self, parsed: dict[str, Any]) -> None:
         """Drop a counter reading that is lower than the lowest it may be.
 
@@ -557,7 +719,14 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._counter_floor.get(key, 0.0),
             )
             if new >= lowest:
+                self._held_counters.pop(key, None)
                 continue
+            held = self._held_counters.get(key)
+            self._held_counters[key] = {
+                "since": held["since"] if held is not None else _utcnow(),
+                "device_value": new,
+                "published": lowest,
+            }
             _LOGGER.debug(
                 "Local Modbus %s: ignoring %s reading %s below %s",
                 self.device_tag,
