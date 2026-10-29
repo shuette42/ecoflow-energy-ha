@@ -4711,6 +4711,7 @@ class TestMonotonicFilter:
 
         from custom_components.ecoflow_energy import const as _const
         from custom_components.ecoflow_energy.coordinator.mqtt_ingest import (
+            _RESETS_BY_DESIGN,
             MqttIngestMixin,
         )
 
@@ -4723,7 +4724,8 @@ class TestMonotonicFilter:
                     expected.add(item.key)
 
         assert expected, "no total_increasing sensors found - collection broken"
-        assert expected == set(MqttIngestMixin._MONOTONIC_KEYS)
+        # Keys that restart at 0 by design are total_increasing but not guarded.
+        assert expected - set(_RESETS_BY_DESIGN) == set(MqttIngestMixin._MONOTONIC_KEYS)
         # Keys the hand-maintained set used to miss
         for key in (
             "slave1_cycles",
@@ -4749,6 +4751,34 @@ class TestMonotonicFilter:
             "grid_l3_net_energy_wh",
         ):
             assert unguarded not in MqttIngestMixin._MONOTONIC_KEYS
+
+    async def test_session_energy_reset_passes_but_lifetime_dip_is_dropped(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """The session energy restarts at 0 and HA must see that reset; a dip
+        on the lifetime wallbox counter is still dropped."""
+        from custom_components.ecoflow_energy.coordinator.mqtt_ingest import (
+            _RESETS_BY_DESIGN,
+            MqttIngestMixin,
+        )
+
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_POWEROCEAN_DEVICE
+        )
+        coordinator._device_data["ev_session_energy_wh"] = 916
+        coordinator._device_data["ev_total_energy_wh"] = 5000
+
+        parsed = {"ev_session_energy_wh": 0, "ev_total_energy_wh": 4990}
+        coordinator._enforce_monotonic(parsed)
+
+        assert parsed["ev_session_energy_wh"] == 0
+        assert "ev_total_energy_wh" not in parsed
+        assert "ev_session_energy_wh" not in MqttIngestMixin._MONOTONIC_KEYS
+        assert "ev_total_energy_wh" in MqttIngestMixin._MONOTONIC_KEYS
+        assert set(_RESETS_BY_DESIGN) == {"ev_session_energy_wh"}
 
     async def test_regression_dropped(
         self,
@@ -5706,7 +5736,7 @@ class TestParseMessageGetReply:
                 CONF_AUTH_METHOD: AUTH_METHOD_APP,
                 CONF_MODE: MODE_ENHANCED,
                 CONF_EMAIL: "stream-test@example.invalid",
-                CONF_PASSWORD: "not-a-real-password",
+                CONF_PASSWORD: "test_password",
                 CONF_USER_ID: "user123",
                 CONF_DEVICES: [MOCK_STREAM_DEVICE],
             },
@@ -5760,7 +5790,7 @@ class TestParseMessageGetReply:
                 CONF_AUTH_METHOD: AUTH_METHOD_APP,
                 CONF_MODE: MODE_ENHANCED,
                 CONF_EMAIL: "stream-test@example.invalid",
-                CONF_PASSWORD: "not-a-real-password",
+                CONF_PASSWORD: "test_password",
                 CONF_USER_ID: "user123",
                 CONF_DEVICES: [MOCK_STREAM_DEVICE],
             },

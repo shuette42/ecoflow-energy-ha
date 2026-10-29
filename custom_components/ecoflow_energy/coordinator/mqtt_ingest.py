@@ -130,12 +130,18 @@ def _first_copy_wins(command: tuple[int | None, int | None]) -> bool:
     return command[0] == _EMS_CMD_FUNC and command not in _PER_DEVICE_COPIES
 
 
+# total_increasing keys that restart at 0 by design. The monotonic guard must
+# let their reset through, because HA reads the drop to 0 as a new cycle.
+_RESETS_BY_DESIGN: frozenset[str] = frozenset({"ev_session_energy_wh"})
+
+
 def _collect_total_increasing_keys() -> frozenset[str]:
     """Collect all total_increasing sensor keys from the entity definitions.
 
     Derived from const.py so the monotonic guard cannot drift from the
     sensor definitions: any new total_increasing sensor is guarded
-    automatically. Built once at module import; lookups stay O(1).
+    automatically, except the keys in `_RESETS_BY_DESIGN`. Built once at
+    module import; lookups stay O(1).
     """
     from .. import const as _const
 
@@ -146,7 +152,7 @@ def _collect_total_increasing_keys() -> frozenset[str]:
         for item in getattr(_const, name):
             if item.state_class == "total_increasing":
                 keys.add(item.key)
-    return frozenset(keys)
+    return frozenset(keys - _RESETS_BY_DESIGN)
 
 
 if TYPE_CHECKING:

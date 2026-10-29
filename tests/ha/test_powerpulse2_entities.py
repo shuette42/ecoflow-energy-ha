@@ -262,13 +262,14 @@ class TestEnergyStateClasses:
         )
         assert definition.state_class != "total_increasing"
 
-    def test_the_session_energy_counter_is_still_not_total_increasing(self) -> None:
-        """Pre-existing entity (unchanged by this phase): falls back to a
-        small value on every new session."""
-        definition = next(
-            d for d in POWERPULSE2_SENSORS if d.key == "ev_session_energy_wh"
-        )
-        assert definition.state_class != "total_increasing"
+    def test_the_session_energy_counter_is_total_increasing(self) -> None:
+        """Restarts at 0 on every new session: `total_increasing` makes HA
+        book the drop as a new cycle, `total` would book negative energy."""
+        from custom_components.ecoflow_energy.const import POWEROCEAN_SENSORS
+
+        for sensors in (POWERPULSE2_SENSORS, POWEROCEAN_SENSORS):
+            definition = next(d for d in sensors if d.key == "ev_session_energy_wh")
+            assert definition.state_class == "total_increasing"
 
 
 class TestAvailabilityThresholds:
