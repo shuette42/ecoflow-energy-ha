@@ -35,7 +35,7 @@ Start and stop of a charging session are available as two buttons with no PowerO
 | Wallbox Charging Status | - | - | enabled | Unplugged, vehicle connected, charging, paused by charger, paused by vehicle, charging session ended, or fault |
 | Wallbox Charging Mode | - | - | enabled | The charging mode set on the wallbox: `fast`, `solar`, `custom` or `smart`, the four modes the EcoFlow app offers. With a PowerOcean in the entry it follows the wallbox's settings report, about once a second, so a change shows within seconds. The wallbox's heartbeat, about once a minute, fills in while the latest settings report is missing, carries no mode or is more than 10 s old. Without a PowerOcean the heartbeat is the only source |
 | Wallbox Session Start | - | diagnostic | enabled | When the current session began. Absent while no session is running |
-| Wallbox Session Energy | Wh | - | enabled | Energy delivered in the current session. Resets with every new session, so it is not a lifetime counter. Absent while no session is running |
+| Wallbox Session Energy | Wh | - | enabled | Energy delivered in the current session. Restarts at 0 with every new session and is a `total_increasing` sensor, so Home Assistant books each restart as a new cycle. For the Energy Dashboard the lifetime counter Wallbox Total Energy is the better source. Absent while no session is running |
 | Wallbox Session Start Meter | Wh | diagnostic | enabled | The lifetime counter's reading at the moment the current session began. Absent while no session is running |
 | Wallbox Total Energy | Wh | - | enabled | Lifetime counter, energy delivered by the wallbox over its whole life |
 

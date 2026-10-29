@@ -130,12 +130,21 @@ def _first_copy_wins(command: tuple[int | None, int | None]) -> bool:
     return command[0] == _EMS_CMD_FUNC and command not in _PER_DEVICE_COPIES
 
 
+# total_increasing keys that restart at 0 by design. The monotonic guard lets
+# their reset through, because HA reads a drop below this fraction of the
+# previous value as a new cycle (a drop of less than 10 % it books as a dip,
+# a negative step in the statistics), so only that small drop is still dropped.
+_RESETS_BY_DESIGN: frozenset[str] = frozenset({"ev_session_energy_wh"})
+_RESET_THRESHOLD = 0.9
+
+
 def _collect_total_increasing_keys() -> frozenset[str]:
     """Collect all total_increasing sensor keys from the entity definitions.
 
     Derived from const.py so the monotonic guard cannot drift from the
     sensor definitions: any new total_increasing sensor is guarded
-    automatically. Built once at module import; lookups stay O(1).
+    automatically, except the keys in `_RESETS_BY_DESIGN`. Built once at
+    module import; lookups stay O(1).
     """
     from .. import const as _const
 
@@ -146,7 +155,7 @@ def _collect_total_increasing_keys() -> frozenset[str]:
         for item in getattr(_const, name):
             if item.state_class == "total_increasing":
                 keys.add(item.key)
-    return frozenset(keys)
+    return frozenset(keys - _RESETS_BY_DESIGN)
 
 
 if TYPE_CHECKING:
@@ -196,6 +205,16 @@ class MqttIngestMixin(_Base):
                     isinstance(old, (int, float))
                     and isinstance(new, (int, float))
                     and new < old
+                ):
+                    del parsed[key]
+        for key in _RESETS_BY_DESIGN:
+            if key in parsed and key in self._device_data:
+                old = self._device_data[key]
+                new = parsed[key]
+                if (
+                    isinstance(old, (int, float))
+                    and isinstance(new, (int, float))
+                    and _RESET_THRESHOLD * old <= new < old
                 ):
                     del parsed[key]
         return parsed

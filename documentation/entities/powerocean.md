@@ -34,8 +34,9 @@ A Local (Modbus/TCP) entry for a three-phase PowerOcean creates only these share
 > its session through the PowerOcean rather than on its own, and that message
 > does not reach the Developer API, so it needs the EcoFlow account sign-in. All
 > five readings describe the **current charging session** and reset when the next
-> one starts, so the session energy is not a meter and is not meant for the
-> Energy Dashboard. There are no wallbox controls.
+> one starts, so the session energy restarts at 0 each time. It is a
+> `total_increasing` sensor, so Home Assistant books each restart as a new
+> cycle. There are no wallbox controls.
 >
 > **The PowerPulse 2 is a device of its own** and is not listed here. It
 > reports straight from the box on its own channel and needs no PowerOcean

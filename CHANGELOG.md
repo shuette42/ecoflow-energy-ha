@@ -11,6 +11,10 @@ All notable changes to this project will be documented in this file.
 - The Local diagnostics download now carries the raw register words of the last poll (`raw_registers`, by hexadecimal start address), so a register the integration does not decode yet can be read from a report. The serial number words are left out.
 - A read-only register scan for owners of an inverter the Local mode does not offer yet, such as a single-phase PowerOcean, a PowerOcean Plus, a DC Fit or an Ocean 2. Download `documentation/tools/register_scan.py`, run it against the inverter and attach the output to an issue. It sends only read requests and cuts the serial number to its first four characters. The Local guide explains how to run it.
 
+### Fixed
+
+- The wallbox session energy of the PowerPulse 2 (`C376`, `C374`, `C371`) and of the earlier PowerPulse (`AC31`, through the PowerOcean) is a `total_increasing` sensor now, so Home Assistant no longer books the drop back to 0 at a new session as negative energy. A drop of less than 10 % within a session is still held back. Statistics recorded before keep their negative steps. In Developer tools > Statistics, Adjust sum on the session energy statistic fixes them. Thanks to @rhaschke for the report and the first change (Ref #617).
+
 ## [1.26.1] - 2026-10-26
 
 ### Fixed
