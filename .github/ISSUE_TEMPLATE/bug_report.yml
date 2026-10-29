@@ -103,10 +103,10 @@ body:
     id: diagnostics
     attributes:
       label: Diagnostics
-      description: If possible, download the integration diagnostics (Settings > Integrations > EcoFlow Energy > 3 dots > Download Diagnostics) and paste or attach the JSON. It carries at most the first four characters of a serial, plus the same short tag the log uses, so a log and a download can be matched up. Have a quick look through the file before you post it; the redaction covers everything it knows, and a field EcoFlow adds later is unknown until someone sees it.
+      description: Required, we cannot look into a bug without it. Download the integration diagnostics (Settings > Integrations > EcoFlow Energy > 3 dots > Download Diagnostics) and paste or attach the JSON. If the bug is about a setting, a schedule or a switch that does not behave, switch on "Record extra diagnostic data for 24 hours" (Configure) BEFORE you reproduce it, then download the diagnostics afterwards. It carries at most the first four characters of a serial, plus the same short tag the log uses, so a log and a download can be matched up. Have a quick look through the file before you post it; the redaction covers everything it knows, and a field EcoFlow adds later is unknown until someone sees it.
       render: json
     validations:
-      required: false
+      required: true
 
   - type: textarea
     id: additional
