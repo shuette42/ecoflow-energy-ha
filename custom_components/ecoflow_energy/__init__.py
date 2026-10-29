@@ -294,6 +294,11 @@ def _is_stream_outside_control_gate(serial: str) -> bool:
 
     Asks the gate itself (`supports_stream_controls`), so the retirement moves
     with it instead of holding a second list of prefixes.
+
+    The matcher sees only the serial-prefix table (`get_device_type("", serial)`),
+    while the platform setup uses the device type stored in the entry
+    (`coordinator/core.py`). Today both agree: every BK Stream prefix is in the
+    table (`ecoflow/const.py`), and the number never existed in Standard Mode.
     """
     return get_device_type("", serial) == DEVICE_TYPE_STREAM and (
         not supports_stream_controls(serial)

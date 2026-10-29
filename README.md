@@ -137,7 +137,7 @@ Power (W), current (A), voltage (V), frequency, temperature · Plug on/off switc
 </details>
 
 <details>
-<summary><b>Stream</b> (AC Pro, Ultra, Max, AC, Ultra X) - AC-coupled battery telemetry, per-string solar, reserve control</summary>
+<summary><b>Stream</b> (AC Pro, Ultra, Max, AC, Ultra X) - AC-coupled battery telemetry, per-string solar, reserve control on the AC Pro</summary>
 
 Battery SoC/SoH · signed battery power · battery charge/discharge power · **per-string solar power (PV 1-4)** · signed AC grid connection power ("Netz-Anschluss": negative=input, positive=output/feed-in) · AC outlet states and per-outlet power · AC voltage and frequency · battery temperature, capacity and cell voltage diagnostics · LED brightness diagnostics · **Numbers (Stream AC Pro `BK31`, Enhanced Mode):** Backup Reserve (3-95%), Max Charge SoC, Min Discharge SoC and LED Brightness · **Stream AC Pro switches:** AC outlets 1 and 2 in Enhanced Mode · **Stream Ultra X switch:** Feed-in Control in Standard Mode (the write has not yet been tried on a unit).
 
