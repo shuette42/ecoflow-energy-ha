@@ -54,10 +54,11 @@ Field notes:
   recording (#7, 2026-09-11) confirms the choice from the other side: its
   first frame carries `44` as 0 and `9` as 504, and the session that
   follows starts from `43` = 504, so `9` is not a safe stand-in for `44`.
-- `42` and `46` read as the same session-energy counter on the `C376`
-  frames; on the `C374` frames `46` is a different, smaller number (0 to
-  190 Wh against 184 to 1147 Wh) whose meaning is not known. Only `42` is
-  read, and it is the one the `44 - 43 == 42` identity holds for on both.
+- `45`, `46` and `47` are the session energy from solar, grid and battery
+  (#634, checked against the app on a `C371`). On every recorded frame of the
+  `C374` and the `C376` that carries all of them, `42` minus their sum is 0
+  to 9 Wh, and exactly 0 once a session has ended. The earlier `C376` frames
+  read `46` as a copy of `42` because those sessions ran from the grid alone.
 - `43` (the lifetime counter's value when the current session began) and
   `44` (the lifetime counter now) always satisfy `44 - 43 == 42` in every
   captured frame that carries a session. That identity is the test suite's
@@ -148,6 +149,11 @@ _HEARTBEAT_FIELD_MAP: dict[int, tuple[str, str]] = {
     42: ("_session_energy_wh_raw", _TYPE_INT),
     43: ("_session_start_energy_wh_raw", _TYPE_INT),
     44: ("_total_energy_wh_raw", _TYPE_INT),
+    # Session energy by source, in Wh like field 42: solar, grid, battery.
+    # The three add up to field 42 within a few Wh while a session runs.
+    45: ("_session_solar_wh_raw", _TYPE_INT),
+    46: ("_session_grid_wh_raw", _TYPE_INT),
+    47: ("_session_battery_wh_raw", _TYPE_INT),
     101: ("_session_status_raw", _TYPE_INT),
 }
 
@@ -211,19 +217,25 @@ _CHARGE_MODE_NAMES: dict[int, str] = {1: "fast", 2: "solar", 3: "custom", 4: "sm
 # `_SESSION_SCOPED_RAW_KEYS` is withheld while field 1 reports this value.
 _PLUG_STATUS_NO_SESSION = 1
 
-# The four session-scoped raw keys and the final keys they become once a
+# The session-scoped raw keys and the final keys they become once a
 # session is in progress. Order matters: `zip` below pairs them positionally.
 _SESSION_SCOPED_RAW_KEYS: tuple[str, ...] = (
     "_session_start_ts_raw",
     "_session_duration_s_raw",
     "_session_energy_wh_raw",
     "_session_start_energy_wh_raw",
+    "_session_solar_wh_raw",
+    "_session_grid_wh_raw",
+    "_session_battery_wh_raw",
 )
 _SESSION_SCOPED_FINAL_KEYS: tuple[str, ...] = (
     "ev_session_start_ts",
     "ev_session_duration_s",
     "ev_session_energy_wh",
     "ev_session_start_energy_wh",
+    "ev_session_solar_energy_wh",
+    "ev_session_grid_energy_wh",
+    "ev_session_battery_energy_wh",
 )
 
 
@@ -373,7 +385,7 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
     if isinstance(total_energy_raw, int) and total_energy_raw > 0:
         result["ev_total_energy_wh"] = total_energy_raw
 
-    # See the module docstring: the four session-scoped fields are only
+    # See the module docstring: the session-scoped fields are only
     # published while a session exists (status is not "available").
     if status_raw == _PLUG_STATUS_NO_SESSION:
         for raw_key in _SESSION_SCOPED_RAW_KEYS:

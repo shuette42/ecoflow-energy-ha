@@ -1666,6 +1666,15 @@
       "ev_session_energy_wh": {
         "name": "Energia sesji wallboxa"
       },
+      "ev_session_solar_energy_wh": {
+        "name": "Energia sesji wallboxa ze słońca"
+      },
+      "ev_session_grid_energy_wh": {
+        "name": "Energia sesji wallboxa z sieci"
+      },
+      "ev_session_battery_energy_wh": {
+        "name": "Energia sesji wallboxa z baterii"
+      },
       "ev_session_duration_s": {
         "name": "Czas trwania sesji wallboxa"
       },

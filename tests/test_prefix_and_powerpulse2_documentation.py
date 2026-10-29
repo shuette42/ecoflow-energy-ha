@@ -191,7 +191,7 @@ def test_enhanced_only_prefixes_in_the_readme_agree_with_the_table_and_code():
 
 
 def test_powerpulse2_definition_counts():
-    """PowerPulse 2's entity counts (18 sensors, 1 binary sensor, 2 selects,
+    """PowerPulse 2's entity counts (21 sensors, 1 binary sensor, 2 selects,
     2 buttons), and its six Numbers as the entry-gated set: five written
     only through a sibling PowerOcean (`ev_max_current_a`, the two stored
     setpoints `ev_solar_min_current_a` and `ev_custom_current_a`, and the two
@@ -204,7 +204,7 @@ def test_powerpulse2_definition_counts():
     `_ENTITY_REFERENCE_SIMPLE_DEVICES` because its documentation/README.md
     bullet has two routes rather than a single PowerOcean-gated footnote, so
     nothing gated it before this."""
-    assert len(const.POWERPULSE2_SENSORS) == 18
+    assert len(const.POWERPULSE2_SENSORS) == 21
     assert len(const.POWERPULSE2_BINARY_SENSORS) == 1
     assert len(const.POWERPULSE2_SELECTS) == 2
     assert len(const.POWERPULSE2_BUTTONS) == 2
