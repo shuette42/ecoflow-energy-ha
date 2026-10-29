@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import re
 import time
+from collections.abc import Callable
 from datetime import datetime
 
 from homeassistant.config_entries import ConfigEntry
@@ -31,6 +32,7 @@ from .const import (
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_POWERPULSE2,
     DEVICE_TYPE_POWERSTREAM,
+    DEVICE_TYPE_STREAM,
     DEVICE_TYPE_UNKNOWN,
     DOMAIN,
     ENHANCED_ONLY_DEVICE_TYPES,
@@ -38,6 +40,7 @@ from .const import (
     MODE_LOCAL,
     get_device_type,
     raw_capture_window_open,
+    supports_stream_controls,
 )
 from .coordinator import EcoFlowDeviceCoordinator
 from .coordinator.local_modbus import EcoFlowLocalModbusCoordinator
@@ -276,14 +279,41 @@ _AC71_RETIRED_KEYS_BY_DOMAIN: dict[str, frozenset[str]] = {
 }
 _AC71_SERIAL_RE = re.compile(r"^AC71[A-Z0-9]{11,}$")
 
-# One row per retired-entity generation: a serial-prefix pattern paired with
-# the platform/key pairs that generation's retirement removes. Table-driven
-# so the next retirement is one more row rather than a near-duplicate helper.
+# The writable Backup Reserve number every Stream used to get, kept for the
+# models outside the Stream write gate only so existing registrations were not
+# orphaned. It writes a bare level to the unit it is attached to, never
+# confirmed on those models (#561), so it is gone there; the Backup Reserve
+# sensor carries the value on. Domain AND key must both match.
+_STREAM_UNGATED_RESERVE_KEYS_BY_DOMAIN: dict[str, frozenset[str]] = {
+    "number": frozenset({"backup_reserve"}),
+}
+
+
+def _is_stream_outside_control_gate(serial: str) -> bool:
+    """Return True for a Stream serial the write gate does not cover.
+
+    Asks the gate itself (`supports_stream_controls`), so the retirement moves
+    with it instead of holding a second list of prefixes.
+
+    The matcher sees only the serial-prefix table (`get_device_type("", serial)`),
+    while the platform setup uses the device type stored in the entry
+    (`coordinator/core.py`). Today both agree: every BK Stream prefix is in the
+    table (`ecoflow/const.py`), and the number never existed in Standard Mode.
+    """
+    return get_device_type("", serial) == DEVICE_TYPE_STREAM and (
+        not supports_stream_controls(serial)
+    )
+
+
+# One row per retired-entity generation: a serial matcher paired with the
+# platform/key pairs that generation's retirement removes. Table-driven so the
+# next retirement is one more row rather than a near-duplicate helper.
 _RETIRED_KEYS_BY_SERIAL: tuple[
-    tuple[re.Pattern[str], dict[str, frozenset[str]]], ...
+    tuple[Callable[[str], object], dict[str, frozenset[str]]], ...
 ] = (
-    (_HW51_SERIAL_RE, _HW51_LEGACY_STREAM_KEYS_BY_DOMAIN),
-    (_AC71_SERIAL_RE, _AC71_RETIRED_KEYS_BY_DOMAIN),
+    (_HW51_SERIAL_RE.fullmatch, _HW51_LEGACY_STREAM_KEYS_BY_DOMAIN),
+    (_AC71_SERIAL_RE.fullmatch, _AC71_RETIRED_KEYS_BY_DOMAIN),
+    (_is_stream_outside_control_gate, _STREAM_UNGATED_RESERVE_KEYS_BY_DOMAIN),
 )
 
 
@@ -310,8 +340,9 @@ def _async_remove_retired_platform_entities(
 ) -> None:
     """Remove registry entries a platform once created for a serial prefix
     whose entities a later release retired - HW51's Stream misclassification,
-    and the WAVE 3 (AC71) sensors and running flag replaced by controls under
-    the same keys (see `_RETIRED_KEYS_BY_SERIAL`).
+    the WAVE 3 (AC71) sensors and running flag replaced by controls under the
+    same keys, and the Backup Reserve number of the Streams outside the write
+    gate (see `_RETIRED_KEYS_BY_SERIAL`).
     """
     registry = er.async_get(hass)
     for existing in er.async_entries_for_config_entry(registry, entry.entry_id):
@@ -321,11 +352,11 @@ def _async_remove_retired_platform_entities(
         serial, separator, key = existing.unique_id.partition("_")
         if not separator:
             continue
-        for serial_re, stale_by_domain in _RETIRED_KEYS_BY_SERIAL:
+        for serial_matches, stale_by_domain in _RETIRED_KEYS_BY_SERIAL:
             stale_keys = stale_by_domain.get(entity_domain)
             if not stale_keys or key not in stale_keys:
                 continue
-            if not serial_re.fullmatch(serial):
+            if not serial_matches(serial):
                 continue
             _LOGGER.debug("Removing retired entity %s", existing.entity_id)
             registry.async_remove(existing.entity_id)

@@ -185,11 +185,11 @@ class TestNumberDefsRouting:
         assert _get_number_defs(DEVICE_TYPE_POWEROCEAN) is POWEROCEAN_NUMBERS
 
     def test_stream_numbers(self) -> None:
-        """Without a serial the write-gated limits are withheld, so this is
-        the reduced list rather than STREAM_NUMBERS itself."""
-        keys = {d.key for d in _get_number_defs(DEVICE_TYPE_STREAM)}
-        assert keys == {"backup_reserve"}
-        assert {d.key for d in STREAM_NUMBERS} > keys
+        """Without a serial every Stream number is withheld, the Backup
+        Reserve included (#561): the gate lists the models a write was
+        confirmed on, and an unknown serial is not one of them."""
+        assert _get_number_defs(DEVICE_TYPE_STREAM) == []
+        assert "backup_reserve" in {d.key for d in STREAM_NUMBERS}
 
 
 # ===========================================================================
@@ -1194,7 +1194,7 @@ class TestEcoFlowNumber:
                 "auth_method": "app",
                 "mode": "enhanced",
                 "email": "stream-test@example.invalid",
-                "password": "not-a-real-password",
+                "password": "test_password",
                 "user_id": "user123",
                 "devices": [MOCK_STREAM_DEVICE],
             },
@@ -1260,7 +1260,7 @@ class TestEcoFlowNumber:
                 "auth_method": "app",
                 "mode": "enhanced",
                 "email": "stream-test@example.invalid",
-                "password": "not-a-real-password",
+                "password": "test_password",
                 "user_id": "user123",
                 "devices": [MOCK_STREAM_DEVICE],
             },

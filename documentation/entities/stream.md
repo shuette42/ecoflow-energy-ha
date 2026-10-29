@@ -2,11 +2,11 @@
 
 Full list of all entities created for Stream devices.
 
-**Models:** Stream AC Pro (`BK31`), Stream Ultra (`BK11`), Stream Max (`BK41`), Stream AC (`BK51`), Stream Ultra X (`BK61`). All five share the sensor and binary-sensor set below; the hardware-confirmed writable controls are limited to the AC Pro.
+**Models:** Stream AC Pro (`BK31`), Stream Ultra (`BK11`), Stream Max (`BK41`), Stream AC (`BK51`), Stream Ultra X (`BK61`). All five share the sensor and binary-sensor set below; the hardware-confirmed writable controls are limited to the AC Pro. On the other four models Backup Reserve is no longer a number. The Backup Reserve sensor shows the value.
 
 **The Stream Micro (`BK01`) does not.** It is a grid-tie inverter with two solar strings and no battery, and it gets a reduced set. See [Stream Micro (BK01)](#stream-micro-bk01) at the end of this page.
 
-**Totals:** 60 sensors, 2 binary sensors, 1 number. Stream AC Pro (`BK31`) adds 2 switches and 3 numbers. Stream Ultra X (`BK61`) adds 1 switch in Standard Mode. Eight of the 60 are *accessory* entities (PV 3 and PV 4, power, voltage, current and energy) and exist only on a unit that reports those strings.
+**Totals:** 60 sensors, 2 binary sensors, no numbers. Stream AC Pro (`BK31`) adds 2 switches and 4 numbers. Stream Ultra X (`BK61`) adds 1 switch in Standard Mode. Eight of the 60 are *accessory* entities (PV 3 and PV 4, power, voltage, current and energy) and exist only on a unit that reports those strings.
 
 > Entities marked with *disabled* are available but hidden by default. Enable them in **Settings > Devices > EcoFlow Stream > Entities** (click the filter icon and show disabled entities).
 
@@ -30,7 +30,7 @@ Full list of all entities created for Stream devices.
 | Battery Discharge Power | W | - | enabled | Discharging power of this unit's battery (always >= 0) |
 | Battery Voltage | V | - | enabled | Pack voltage |
 | Battery Temp | C | - | enabled | Battery temperature |
-| Backup Reserve | % | diagnostic | enabled | Current reserve level (mirrors the number) |
+| Backup Reserve | % | diagnostic | enabled | Current reserve level. On the Stream AC Pro (`BK31`) it mirrors the Backup Reserve number; the other models show the value only |
 | Battery Charge/Discharge State | - | diagnostic | disabled | `standby`, `charging` or `discharging` |
 
 ## Sensors - Solar
@@ -138,7 +138,7 @@ Stream AC Pro (`BK31`): two switches, `AC Outlet 1` and `AC Outlet 2`, confirmed
 | Max Charge SoC | % | 3 - 100 | 1 | Stream AC Pro (`BK31`) | Maximum charging SoC. **Enhanced Mode only.** |
 | Min Discharge SoC | % | 0 - 95 | 1 | Stream AC Pro (`BK31`) | Minimum discharging SoC. **Enhanced Mode only.** |
 | LED Brightness | % | 0 - 100 | 5 | Stream AC Pro (`BK31`) | LED brightness. **Enhanced Mode only.** |
-| Backup Reserve | % | 3 - 95 | 1 | All battery Stream models | Minimum SoC the system keeps in reserve. **Enhanced Mode only.** |
+| Backup Reserve | % | 3 - 95 | 1 | Stream AC Pro (`BK31`) | Minimum SoC the system keeps in reserve. **Enhanced Mode only.** |
 
 The AC Pro holds both limits and Backup Reserve as one grouped setting, so every write carries all three. The two values you did not change are sent back exactly as the device last reported them, never as a default, and a write is refused until all three have arrived. A combination where the limits cross is rejected instead of silently changing another setting.
 
