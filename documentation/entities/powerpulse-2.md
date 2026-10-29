@@ -119,7 +119,7 @@ A start is offered only from `finishing`, the state a stopped session sits in wi
 
 ### Session energy by source
 
-Wallbox Session Solar Energy, Wallbox Session Grid Energy and Wallbox Session Battery Energy are `total_increasing` sensors like Wallbox Session Energy. They add up to Wallbox Session Energy within a few Wh while the session runs, and exactly once it has ended. The mapping was checked against the EcoFlow app on one PowerPulse 2 (`C371`). In recordings of a `C374` and a `C376` the three add up to the session energy within 9 Wh, and on the `C374` exactly once a session had ended.
+Wallbox Session Solar Energy, Wallbox Session Grid Energy and Wallbox Session Battery Energy are `total_increasing` sensors like Wallbox Session Energy. The split was checked against the EcoFlow app on one PowerPulse 2 (`C371`). In recordings of a `C374` and a `C376` the three add up to Wallbox Session Energy within 9 Wh. Once a session has ended they match it exactly, seen on the `C374` and the `C371`.
 
 ### The session readings are absent, not zero, between sessions
 
