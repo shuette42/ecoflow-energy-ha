@@ -3309,6 +3309,10 @@
     }
   },
   "issues": {
+    "local_device_not_answering": {
+      "title": "{device} is not answering",
+      "description": "The inverter has not answered Modbus for 30 minutes, so the entities of this entry are unavailable. Restart the inverter: switch the system off in the EcoFlow app and on again. If it stays silent, follow the shut-down and restart steps in the EcoFlow manual for your model. This notice goes away when the inverter answers again."
+    },
     "local_counter_held": {
       "title": "A lifetime total is held back",
       "fix_flow": {

@@ -136,6 +136,12 @@ MODE_LOCAL = "local"
 LOCAL_MODBUS_POLL_INTERVAL_S = 2
 LOCAL_MODBUS_TIMEOUT_S = 3.0
 LOCAL_MODBUS_FAILURES_UNAVAILABLE = 5
+# A device unavailable this long gets a repairs notice. A short outage (a
+# firmware update, a restart) clears by itself and needs none; the HJ31 Modbus
+# service hung for an hour on 2026-10-29 and only a restart of the inverter
+# cleared it, so 30 minutes is long enough to rule out the first and early
+# enough that the second does not go unnoticed all day.
+LOCAL_MODBUS_OUTAGE_NOTICE_S = 1800
 # Control heartbeat: a beat every 15 s; the unit hands control back to the app
 # after 60 s without an acknowledged one, so the integration stops there too.
 LOCAL_MODBUS_HEARTBEAT_INTERVAL_S = 15

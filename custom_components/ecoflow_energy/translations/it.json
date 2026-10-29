@@ -3309,6 +3309,10 @@
     }
   },
   "issues": {
+    "local_device_not_answering": {
+      "title": "{device} non risponde",
+      "description": "L'inverter non risponde via Modbus da 30 minuti, quindi le entità di questa voce non sono disponibili. Riavvia l'inverter: spegni il sistema nell'app EcoFlow e riaccendilo. Se resta senza risposta, segui i passaggi di spegnimento e riavvio nel manuale EcoFlow per il tuo modello. Questo avviso scompare quando l'inverter risponde di nuovo."
+    },
     "local_counter_held": {
       "title": "Un totale cumulativo è trattenuto",
       "fix_flow": {

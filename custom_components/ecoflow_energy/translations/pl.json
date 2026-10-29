@@ -3309,6 +3309,10 @@
     }
   },
   "issues": {
+    "local_device_not_answering": {
+      "title": "{device} nie odpowiada",
+      "description": "Falownik nie odpowiada przez Modbus od 30 minut, dlatego encje tego wpisu są niedostępne. Uruchom falownik ponownie: wyłącz system w aplikacji EcoFlow i włącz go z powrotem. Jeśli nadal milczy, wykonaj kroki wyłączania i ponownego uruchamiania z instrukcji EcoFlow dla swojego modelu. To powiadomienie zniknie, gdy falownik znowu odpowie."
+    },
     "local_counter_held": {
       "title": "Suma całkowita jest wstrzymana",
       "fix_flow": {

@@ -52,6 +52,7 @@ from ..const import (
     LOCAL_MODBUS_FAILURES_UNAVAILABLE,
     LOCAL_MODBUS_HEARTBEAT_INTERVAL_S,
     LOCAL_MODBUS_HEARTBEAT_LAPSE_S,
+    LOCAL_MODBUS_OUTAGE_NOTICE_S,
     LOCAL_MODBUS_POLL_INTERVAL_S,
 )
 from ..ecoflow.const import device_log_tag, get_device_name
@@ -179,6 +180,11 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._identity_verified: bool = False
         self._mismatch_warned: bool = False
         self._device_available: bool = True
+        # When the device turned unavailable (``_monotonic`` seconds) and
+        # whether this run raised the outage notice for that outage. In memory
+        # only, like the held counters: a restart starts a new outage clock.
+        self._unavailable_since: float | None = None
+        self._outage_notice_raised: bool = False
         self._consecutive_failures: int = 0
         self.last_poll_ok: bool | None = None
         self.last_poll_time: datetime | None = None
@@ -370,6 +376,14 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._cancel_heartbeat()
         self._notice_placeholders.clear()
         registry = ir.async_get(self.hass)
+        outage = registry.async_get_issue(DOMAIN, self._outage_notice_id())
+        if (
+            self._outage_notice_raised
+            and outage is not None
+            and outage.dismissed_version is None
+        ):
+            ir.async_delete_issue(self.hass, DOMAIN, self._outage_notice_id())
+        self._outage_notice_raised = False
         for key in LIFETIME_COUNTER_KEYS:
             issue = registry.async_get_issue(DOMAIN, self._notice_id(key))
             if issue is not None and issue.dismissed_version is None:
@@ -614,6 +628,7 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
         elif self._device_available:
             self._device_available = False
+            self._unavailable_since = _monotonic()
             # Whatever answers next is checked against the entry's serial again.
             self._identity_verified = False
             if isinstance(err, ModbusExceptionResponse):
@@ -640,6 +655,7 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._consecutive_failures,
                 err,
             )
+        self._sync_outage_notice()
         # Keep serving the last data: before the threshold so entities do not
         # flicker, after it because availability alone carries the state.
         return dict(self._device_data)
@@ -653,12 +669,51 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.last_poll_ok = True
         self.last_poll_time = dt_util.utcnow()
         self.last_error = None
+        self._unavailable_since = None
+        if self._outage_notice_raised:
+            self._outage_notice_raised = False
+            ir.async_delete_issue(self.hass, DOMAIN, self._outage_notice_id())
         if recovered:
             _LOGGER.info("Local Modbus device %s is answering again", self.device_tag)
 
     def _notice_id(self, key: str) -> str:
         """Return the repairs issue id of ``key``; the entry id, never the serial."""
         return f"local_counter_held_{self.config_entry.entry_id}_{key}"
+
+    def _outage_notice_id(self) -> str:
+        """Return the repairs issue id of the outage notice, never the serial."""
+        return (
+            f"local_device_not_answering_{self.config_entry.entry_id}_{self.device_tag}"
+        )
+
+    def _sync_outage_notice(self) -> None:
+        """Raise one repairs notice once the device has been silent long enough.
+
+        Called from every failed poll, so the notice appears within one poll of
+        the threshold and is written once per outage. It is deleted only by the
+        poll that finds the device answering again, and only when this run
+        raised it: the same stub rule as ``_sync_held_notices``, no sweep of an
+        id this run never raised (after a restart Home Assistant keeps such an
+        issue as an inactive stub that carries the user's Ignore).
+        """
+        since = self._unavailable_since
+        if (
+            self._device_available
+            or since is None
+            or self._outage_notice_raised
+            or _monotonic() - since < LOCAL_MODBUS_OUTAGE_NOTICE_S
+        ):
+            return
+        self._outage_notice_raised = True
+        ir.async_create_issue(
+            self.hass,
+            DOMAIN,
+            self._outage_notice_id(),
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key="local_device_not_answering",
+            translation_placeholders={"device": self.device_tag},
+        )
 
     def _sync_held_notices(self) -> None:
         """Raise a repairs notice per counter held 24 h, drop it once it is not.
