@@ -4,7 +4,7 @@ Full list of entities for the EcoFlow PowerPulse 2 wallbox (`C376`, `C374` and `
 
 **`C371`: read-only.** It gets the same sensors and binary sensor. Charging power and session energy were checked against the app over one overnight charge. The buttons, numbers, selects and switches below work on the `C376` and `C374` only, until a write to a `C371` is confirmed.
 
-**Totals:** 18 sensors, 1 binary sensor, 2 buttons (with no PowerOcean or exactly one in the same integration entry, none with two or more), 2 selects and 5 switches (with exactly one PowerOcean in the entry), and six numbers: Wallbox Maximum Current, Wallbox Solar Minimum Current, Wallbox Custom Charging Current, Wallbox Screen Brightness and Wallbox LED Indicator Brightness with exactly one PowerOcean in the entry, Wallbox Charging Current Setpoint with none
+**Totals:** 21 sensors, 1 binary sensor, 2 buttons (with no PowerOcean or exactly one in the same integration entry, none with two or more), 2 selects and 5 switches (with exactly one PowerOcean in the entry), and six numbers: Wallbox Maximum Current, Wallbox Solar Minimum Current, Wallbox Custom Charging Current, Wallbox Screen Brightness and Wallbox LED Indicator Brightness with exactly one PowerOcean in the entry, Wallbox Charging Current Setpoint with none
 
 > **Enhanced Mode only.** The wallbox reports through the account connection, not through the EcoFlow Developer API. A Standard Mode setup gets error 1006 and no entities fill; set the integration up with an EcoFlow account e-mail and password instead.
 
@@ -36,6 +36,9 @@ Start and stop of a charging session are available as two buttons with no PowerO
 | Wallbox Charging Mode | - | - | enabled | The charging mode set on the wallbox: `fast`, `solar`, `custom` or `smart`, the four modes the EcoFlow app offers. With a PowerOcean in the entry it follows the wallbox's settings report, about once a second, so a change shows within seconds. The wallbox's heartbeat, about once a minute, fills in while the latest settings report is missing, carries no mode or is more than 10 s old. Without a PowerOcean the heartbeat is the only source |
 | Wallbox Session Start | - | diagnostic | enabled | When the current session began. Absent while no session is running |
 | Wallbox Session Energy | Wh | - | enabled | Energy delivered in the current session. Restarts at 0 with every new session and is a `total_increasing` sensor, so Home Assistant books each restart as a new cycle. For the Energy Dashboard the lifetime counter Wallbox Total Energy is the better source. Absent while no session is running |
+| Wallbox Session Solar Energy | Wh | - | enabled | Energy delivered in the current session from solar. Restarts at 0 with every new session. Absent while no session is running. See Session energy by source below |
+| Wallbox Session Grid Energy | Wh | - | enabled | Energy delivered in the current session from grid. Restarts at 0 with every new session. Absent while no session is running. See Session energy by source below |
+| Wallbox Session Battery Energy | Wh | - | enabled | Energy delivered in the current session from battery. Restarts at 0 with every new session. Absent while no session is running. See Session energy by source below |
 | Wallbox Session Start Meter | Wh | diagnostic | enabled | The lifetime counter's reading at the moment the current session began. Absent while no session is running |
 | Wallbox Total Energy | Wh | - | enabled | Lifetime counter, energy delivered by the wallbox over its whole life |
 
@@ -114,9 +117,13 @@ A start is offered only from `finishing`, the state a stopped session sits in wi
 
 ## Notes
 
-### The four session readings are absent, not zero, between sessions
+### Session energy by source
 
-Wallbox Session Start, Wallbox Session Duration, Wallbox Session Energy and Wallbox Session Start Meter only exist while a session is actually running. Once the session ends, the wallbox stops reporting them and the entities go unavailable instead of settling on the last session's numbers - showing the previous session's duration or energy as if it were still counting would be worse than showing nothing. In `preparing` (Vehicle connected: cable attached, nothing flowing yet) the wallbox still reports them, and Wallbox Session Start is withheld when the wallbox reports it as zero, which it does before the first session after a restart.
+Wallbox Session Solar Energy, Wallbox Session Grid Energy and Wallbox Session Battery Energy are `total_increasing` sensors like Wallbox Session Energy. The split was checked against the EcoFlow app on one PowerPulse 2 (`C371`). In recordings of a `C374` and a `C376` the three add up to Wallbox Session Energy within 9 Wh. Once a session has ended they match it exactly, seen on the `C374` and the `C371`.
+
+### The session readings are absent, not zero, between sessions
+
+Wallbox Session Start, Wallbox Session Duration, Wallbox Session Energy, Wallbox Session Solar Energy, Wallbox Session Grid Energy, Wallbox Session Battery Energy and Wallbox Session Start Meter only exist while a session is actually running. Once the session ends, the wallbox stops reporting them and the entities go unavailable instead of settling on the last session's numbers - showing the previous session's duration or energy as if it were still counting would be worse than showing nothing. In `preparing` (Vehicle connected: cable attached, nothing flowing yet) the wallbox still reports them, and Wallbox Session Start is withheld when the wallbox reports it as zero, which it does before the first session after a restart.
 
 ### The cable lock can take a while to appear
 

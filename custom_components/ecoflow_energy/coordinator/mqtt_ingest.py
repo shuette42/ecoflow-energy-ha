@@ -134,7 +134,14 @@ def _first_copy_wins(command: tuple[int | None, int | None]) -> bool:
 # their reset through, because HA reads a drop below this fraction of the
 # previous value as a new cycle (a drop of less than 10 % it books as a dip,
 # a negative step in the statistics), so only that small drop is still dropped.
-_RESETS_BY_DESIGN: frozenset[str] = frozenset({"ev_session_energy_wh"})
+_RESETS_BY_DESIGN: frozenset[str] = frozenset(
+    {
+        "ev_session_energy_wh",
+        "ev_session_solar_energy_wh",
+        "ev_session_grid_energy_wh",
+        "ev_session_battery_energy_wh",
+    }
+)
 _RESET_THRESHOLD = 0.9
 
 

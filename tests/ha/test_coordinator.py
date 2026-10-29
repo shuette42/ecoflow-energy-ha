@@ -4781,14 +4781,30 @@ class TestMonotonicFilter:
         # smaller drop is a dip, a negative step in the statistics, and is
         # still dropped. A short session that starts at or above 90 % of the
         # last one is the known edge: it is held back until the value rises.
-        for new_value, kept in ((100, True), (824, True), (825, False), (915, False)):
-            coordinator._device_data["ev_session_energy_wh"] = 916
-            parsed = {"ev_session_energy_wh": new_value}
-            coordinator._enforce_monotonic(parsed)
-            assert ("ev_session_energy_wh" in parsed) is kept, new_value
-        assert "ev_session_energy_wh" not in MqttIngestMixin._MONOTONIC_KEYS
+        for key in (
+            "ev_session_energy_wh",
+            "ev_session_solar_energy_wh",
+            "ev_session_grid_energy_wh",
+            "ev_session_battery_energy_wh",
+        ):
+            for new_value, kept in (
+                (100, True),
+                (824, True),
+                (825, False),
+                (915, False),
+            ):
+                coordinator._device_data[key] = 916
+                parsed = {key: new_value}
+                coordinator._enforce_monotonic(parsed)
+                assert (key in parsed) is kept, (key, new_value)
+            assert key not in MqttIngestMixin._MONOTONIC_KEYS, key
         assert "ev_total_energy_wh" in MqttIngestMixin._MONOTONIC_KEYS
-        assert set(_RESETS_BY_DESIGN) == {"ev_session_energy_wh"}
+        assert set(_RESETS_BY_DESIGN) == {
+            "ev_session_energy_wh",
+            "ev_session_solar_energy_wh",
+            "ev_session_grid_energy_wh",
+            "ev_session_battery_energy_wh",
+        }
 
     async def test_regression_dropped(
         self,
