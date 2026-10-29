@@ -52,6 +52,7 @@ from ..const import (
     LOCAL_MODBUS_FAILURES_UNAVAILABLE,
     LOCAL_MODBUS_HEARTBEAT_INTERVAL_S,
     LOCAL_MODBUS_HEARTBEAT_LAPSE_S,
+    LOCAL_MODBUS_OUTAGE_NOTICE_S,
     LOCAL_MODBUS_POLL_INTERVAL_S,
 )
 from ..ecoflow.const import device_log_tag, get_device_name
@@ -179,6 +180,15 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._identity_verified: bool = False
         self._mismatch_warned: bool = False
         self._device_available: bool = True
+        # When the device turned unavailable (``_monotonic`` seconds) and
+        # whether this run raised the outage notice for that outage. In memory
+        # only, like the held counters: a restart starts a new outage clock.
+        self._unavailable_since: float | None = None
+        self._outage_notice_raised: bool = False
+        # True until the first answered poll of this run. A reload while the
+        # device is silent leaves the notice in the registry, and this run
+        # cannot know it, so that first answer deletes it by id.
+        self._outage_notice_stale_check: bool = True
         self._consecutive_failures: int = 0
         self.last_poll_ok: bool | None = None
         self.last_poll_time: datetime | None = None
@@ -365,6 +375,10 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         that still carries the Ignore; raising the notice again later reuses
         that record and the notice comes back ignored. Deleting it here would
         throw the choice away.
+
+        The outage notice is not deleted here: it must survive a reload while the
+        device is silent, and ``_handle_success`` deletes it once the device
+        answers.
         """
         self._closed = True
         self._cancel_heartbeat()
@@ -640,6 +654,15 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._consecutive_failures,
                 err,
             )
+        if isinstance(err, (_SerialMismatchError, ModbusExceptionResponse)):
+            # The device answered, with the wrong serial or a refusal, so "has
+            # not answered" would be false and a restart the wrong advice. The
+            # WARNING above already names what to check; the outage clock
+            # stays off until the device is silent again.
+            self._unavailable_since = None
+        elif not self._device_available and self._unavailable_since is None:
+            self._unavailable_since = _monotonic()
+        self._sync_outage_notice()
         # Keep serving the last data: before the threshold so entities do not
         # flicker, after it because availability alone carries the state.
         return dict(self._device_data)
@@ -653,12 +676,56 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.last_poll_ok = True
         self.last_poll_time = dt_util.utcnow()
         self.last_error = None
+        self._unavailable_since = None
+        if recovered or self._outage_notice_stale_check:
+            # By id, whoever raised it: this run, or an earlier run that a
+            # reload ended while the device was silent. Deleting an id that
+            # does not exist does nothing.
+            ir.async_delete_issue(self.hass, DOMAIN, self._outage_notice_id())
+        self._outage_notice_stale_check = False
+        self._outage_notice_raised = False
         if recovered:
             _LOGGER.info("Local Modbus device %s is answering again", self.device_tag)
 
     def _notice_id(self, key: str) -> str:
         """Return the repairs issue id of ``key``; the entry id, never the serial."""
         return f"local_counter_held_{self.config_entry.entry_id}_{key}"
+
+    def _outage_notice_id(self) -> str:
+        """Return the repairs issue id of the outage notice, never the serial."""
+        return (
+            f"local_device_not_answering_{self.config_entry.entry_id}_{self.device_tag}"
+        )
+
+    def _sync_outage_notice(self) -> None:
+        """Raise one repairs notice once the device has been silent long enough.
+
+        Called from every failed poll, so the notice appears within one poll of
+        the threshold and is written once per outage. Unloading the entry does
+        not delete it: it has to survive a reload while the device is still
+        silent, so the first answered poll of a run deletes it by id
+        (``_handle_success``). An Ignore holds for the whole ongoing outage and
+        goes with the notice when the device answers again, as with
+        ``_sync_held_notices``.
+        """
+        since = self._unavailable_since
+        if (
+            self._device_available
+            or since is None
+            or self._outage_notice_raised
+            or _monotonic() - since < LOCAL_MODBUS_OUTAGE_NOTICE_S
+        ):
+            return
+        self._outage_notice_raised = True
+        ir.async_create_issue(
+            self.hass,
+            DOMAIN,
+            self._outage_notice_id(),
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key="local_device_not_answering",
+            translation_placeholders={"device": self.device_tag},
+        )
 
     def _sync_held_notices(self) -> None:
         """Raise a repairs notice per counter held 24 h, drop it once it is not.

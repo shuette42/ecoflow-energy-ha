@@ -88,7 +88,7 @@ The scan sends only read requests, so it changes nothing on the inverter. It pri
 ## If it does not connect
 
 - **Cannot connect.** Check the address and that EcoFlow support has enabled Modbus for this inverter.
-- **It was working and is now unavailable.** Another Modbus tool may be holding the connection, a second Modbus integration may use a different host string than this one, or Modbus is no longer enabled on the inverter. The log names the likely cause once. A serial mismatch in the log means the address now points at a different inverter.
+- **It was working and is now unavailable.** Another Modbus tool may be holding the connection, a second Modbus integration may use a different host string than this one, or Modbus is no longer enabled on the inverter. The log names the likely cause once. A serial mismatch in the log means the address now points at a different inverter. The inverter's Modbus service can also stop answering. After 30 minutes without an answer, Home Assistant shows a repair notice that names the inverter. The notice goes away when the inverter answers again. On the unit where this was seen, reloading the entry did not bring the answers back. A restart of the inverter did, and that restart came with a firmware update.
 - **The device answered with a Modbus error.** Check the unit ID and that Modbus is enabled for your inverter.
 - **Unsupported device.** The inverter reports a model this integration does not read yet.
 

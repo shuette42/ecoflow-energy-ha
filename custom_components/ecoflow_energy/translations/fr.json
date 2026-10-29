@@ -3309,6 +3309,10 @@
     }
   },
   "issues": {
+    "local_device_not_answering": {
+      "title": "{device} ne répond pas",
+      "description": "L'onduleur n'a pas répondu en Modbus depuis 30 minutes, les entités de cette entrée sont donc indisponibles. Redémarrez l'onduleur : éteignez le système dans l'application EcoFlow, puis rallumez-le. S'il reste muet, suivez les étapes d'arrêt et de redémarrage du manuel EcoFlow pour votre modèle. Cet avis disparaît dès que l'onduleur répond de nouveau."
+    },
     "local_counter_held": {
       "title": "Un total cumulé est retenu",
       "fix_flow": {

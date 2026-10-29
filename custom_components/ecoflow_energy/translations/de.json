@@ -3309,6 +3309,10 @@
     }
   },
   "issues": {
+    "local_device_not_answering": {
+      "title": "{device} antwortet nicht",
+      "description": "Der Wechselrichter hat seit 30 Minuten nicht auf Modbus geantwortet, deshalb sind die Entitäten dieses Eintrags nicht verfügbar. Starten Sie den Wechselrichter neu: Schalten Sie das System in der EcoFlow-App mit „System ausschalten“ aus und wieder ein. Bleibt er weiterhin stumm, folgen Sie den Schritten zum Herunterfahren und Neustarten im EcoFlow-Handbuch für Ihr Modell. Dieser Hinweis verschwindet, sobald der Wechselrichter wieder antwortet."
+    },
     "local_counter_held": {
       "title": "Ein Gesamtzähler wird zurückgehalten",
       "fix_flow": {

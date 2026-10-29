@@ -3309,6 +3309,10 @@
     }
   },
   "issues": {
+    "local_device_not_answering": {
+      "title": "{device} reageert niet",
+      "description": "De omvormer heeft al 30 minuten niet via Modbus gereageerd, dus de entiteiten van deze invoer zijn niet beschikbaar. Start de omvormer opnieuw op: schakel het systeem in de EcoFlow-app uit en weer in. Blijft hij stil, volg dan de stappen voor uitschakelen en opnieuw opstarten in de EcoFlow-handleiding voor jouw model. Deze melding verdwijnt zodra de omvormer weer reageert."
+    },
     "local_counter_held": {
       "title": "Een totaalstand wordt vastgehouden",
       "fix_flow": {

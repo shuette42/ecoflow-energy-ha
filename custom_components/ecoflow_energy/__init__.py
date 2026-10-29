@@ -14,6 +14,7 @@ from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryError, HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.event import async_call_later
 
 from .const import (
@@ -831,7 +832,15 @@ async def async_unload_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> 
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Remove opt-in charging ledgers when their integration entry is deleted."""
+    """Remove opt-in charging ledgers and an open outage notice with the entry."""
     from .charging_history import async_remove_history_stores
 
     await async_remove_history_stores(hass, entry)
+    # The outage notice outlives an unload on purpose (a reload keeps it), so
+    # removing the entry is the one place left to take it down. Its id is the
+    # entry id plus the device tag; the tag is not known here, hence the prefix.
+    registry = ir.async_get(hass)
+    prefix = f"local_device_not_answering_{entry.entry_id}_"
+    for (domain, issue_id), _issue in list(registry.issues.items()):
+        if domain == DOMAIN and issue_id.startswith(prefix):
+            ir.async_delete_issue(hass, DOMAIN, issue_id)
