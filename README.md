@@ -28,7 +28,7 @@
 - **Energy Dashboard ready** - local Riemann-sum kWh with gap detection
 - **Real-time out of the box** - Enhanced Mode: ~2-4 s updates for most devices
 - **Local option for a three-phase PowerOcean** - Modbus/TCP on your own network, about every 2 s, no account and no cloud
-- **Full PowerOcean control** - Backup Reserve, Solar Surplus Threshold, Work Mode (Self-use / AI Schedule)
+- **Full PowerOcean control** - Backup Reserve, Solar Surplus Threshold, Work Mode (Self-use / AI Schedule), and the charge and feed-to-grid schedules you created in the app
 - **Delta switches & numbers** - AC/DC output, charge speed, backup reserve, screen settings
 - **Auto-discovery** - all devices bound to your EcoFlow account (cloud connections)
 - **Six languages** - English, German, French, Italian, Dutch and Polish, for every entity name, state, setup screen and error message
@@ -113,6 +113,7 @@
 - **Backup Reserve** (`number`, 0-100%) - minimum SoC the system keeps in reserve. Same slider as "Backup-Reserve" in the EcoFlow app.
 - **Solar Surplus Threshold** (`number`, 0-100%) - SoC above which surplus solar is routed to controllable devices. Same slider as "Prioritize controllable devices (Beta)" in the app.
 - **Work Mode** (`select`) - Self-use ("Eigenstromversorgung") or AI Schedule ("Intelligenter Modus"). TOU and Backup modes are deferred (require additional sub-parameters).
+- **Schedules** (`switch` and `number` per schedule) - turn a charge or feed-to-grid schedule you created in the EcoFlow app on and off, and set its power. They appear only for the schedules your system reports. Creating and deleting a schedule stays in the app. See [PowerOcean entities](documentation/entities/powerocean.md#scheduled-charge-tasks-accessory-enhanced-mode).
 
 The integration enforces the app's `backup_reserve <= solar_surplus_threshold` constraint automatically.
 
