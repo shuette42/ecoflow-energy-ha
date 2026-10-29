@@ -406,3 +406,30 @@ async def test_a_notice_of_an_earlier_run_stays_while_the_new_run_keeps_failing(
     await coordinator.async_refresh()
     assert coordinator.last_poll_ok is True
     assert _issue(hass, entry.entry_id) is None
+
+
+async def test_removing_the_entry_takes_the_notice_down(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The notice outlives an unload, so removing the entry must clear it."""
+    _clock(monkeypatch)
+    entry = _local_entry()
+    assert await _set_up_local_entry(hass, entry, [_frame(DAY), TIMEOUT])
+    _seed_notice(hass, entry.entry_id)
+    other = _issue_id("other_entry_id")
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        other,
+        is_fixable=False,
+        severity=ir.IssueSeverity.WARNING,
+        translation_key="local_device_not_answering",
+        translation_placeholders={"device": device_log_tag(SERIAL)},
+    )
+    assert _issue(hass, entry.entry_id) is not None
+
+    assert await hass.config_entries.async_remove(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert _issue(hass, entry.entry_id) is None
+    assert ir.async_get(hass).async_get_issue(DOMAIN, other) is not None
