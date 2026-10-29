@@ -61,6 +61,11 @@ A Local (Modbus/TCP) entry for a three-phase PowerOcean creates only these share
 > value, and a write against it is refused with a message saying the schedule
 > is gone.
 >
+> The number in a schedule's name comes from the PowerOcean, not from Home
+> Assistant. A schedule created after a delete can therefore take the freed
+> number. An owner who deleted Schedule 1 in the app and made a new one saw the
+> new one appear as Schedule 1.
+>
 > Where the settings live in the app: **Settings > Automation > Schedule
 > charging and discharging**. Peak shaving sits on the same page and is a
 > different function; it limits what you draw from the grid and creates no
@@ -222,6 +227,8 @@ Further schedules follow the same pattern: Schedule 2 Enabled, Schedule 2 Charge
 Charge Power takes the same range the app offers for the same setting. It moves in steps of 100 W, its minimum is 100 W for every online battery pack your system reports (200 W with two packs), and its maximum comes from the model: 10000 W on the three-phase 10 kW unit, 8000 W on the 8 kW one, 12000 W on the 12 kW one, 6000 W on the 6 kW and single-phase units, and 29900 W on a PowerOcean Plus. A value outside that range, or one that is not a multiple of 100, is refused rather than quietly rounded.
 
 A schedule set in the app to run loads from the battery rather than to charge it keeps the same four entities, and its power is the discharge limit. Which direction a schedule has is set in the app and is not shown as an entity.
+
+An owner tested these controls on a PowerOcean Plus (`R372`). The schedule was a whole-day charge schedule, created in the app at 3000 W and left switched off. Switching Schedule 1 Enabled on from Home Assistant started charging the battery from the grid at about 2.98 kW within about 10 seconds. Lowering Schedule 1 Charge Power to 1500 W brought the battery to about 1.45 kW within about 13 seconds. Switching the schedule off stopped the charge. Deleting the schedule in the app turned both entities unknown.
 
 ---
 
