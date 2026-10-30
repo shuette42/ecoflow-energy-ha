@@ -51,8 +51,9 @@ TASK_FRAMES = (
     / "stream_ac5000"
     / "es22_task_frames_masked.json"
 )
+ISSUE_653_FRAMES = TASK_FRAMES.with_name("es22_653_task_list_masked.json")
 
-# A task the device already reports: discharge, 00:00-23:00, 600 W.
+# A task the device already reports: discharge, 00:00-23:00, 600 W, number 2.
 REPORTED: dict[str, Any] = {
     "max_charge_soc_pct": 90,
     "min_discharge_soc_pct": 15,
@@ -61,6 +62,12 @@ REPORTED: dict[str, Any] = {
     "scheduled_discharge_start_min": 0,
     "scheduled_discharge_end_min": 1380,
     "scheduled_discharge_enabled": True,
+    "scheduled_discharge_task_slot": 2,
+    "scheduled_discharge_task_count": 1,
+    "scheduled_discharge_settable_count": 1,
+    "scheduled_charge_task_count": 0,
+    "scheduled_charge_settable_count": 0,
+    "scheduled_task_slot_max": 2,
 }
 
 
@@ -382,10 +389,58 @@ class TestSocLimitNumbers:
         _sender(coordinator).assert_not_called()
 
 
+# The task list as the parser publishes it with no task of either kind.
+NO_TASKS: dict[str, Any] = {
+    "work_mode": "custom",
+    "scheduled_charge_task_count": 0,
+    "scheduled_charge_settable_count": 0,
+    "scheduled_discharge_task_count": 0,
+    "scheduled_discharge_settable_count": 0,
+    "scheduled_task_slot_max": 0,
+}
+
+# A whole-day charge task this integration wrote, numbered 1.
+WHOLE_DAY_CHARGE: dict[str, Any] = {
+    **NO_TASKS,
+    "scheduled_charge_power_w": 600,
+    "scheduled_charge_enabled": True,
+    "scheduled_charge_start_min": 0,
+    "scheduled_charge_end_min": 1439,
+    "scheduled_charge_task_slot": 1,
+    "scheduled_charge_soc_target": 80,
+    "scheduled_charge_task_count": 1,
+    "scheduled_charge_settable_count": 1,
+    "scheduled_task_slot_max": 1,
+}
+
+
+def _task_block(pdata: bytes, index: int = 0) -> bytes:
+    """Return the `39.1` (or `40.1`) task block at `index` of a task write."""
+    for number, value in _walk(pdata):
+        if number in (39, 40) and isinstance(value, bytes):
+            blocks = [v for n, v in _walk(value) if n == 1 and isinstance(v, bytes)]
+            return blocks[index]
+    raise AssertionError("no task list in this payload")
+
+
+def _issue_653_frames() -> dict[str, dict]:
+    frames = json.loads(ISSUE_653_FRAMES.read_text(encoding="utf-8"))["frames"]
+    return {frame["role"]: frame for frame in frames}
+
+
+def _issue_653_state() -> dict[str, Any]:
+    """What the parser publishes for the reporter's three-task list."""
+    frame = _issue_653_frames()["list_before_ha_write"]
+    parsed = parse_stream_ac5000_message(bytes.fromhex(frame["hex"]))
+    assert parsed is not None
+    return dict(parsed, work_mode="custom")
+
+
 class TestPowerSetpoints:
-    async def test_discharge_power_rewrites_the_reported_task(
+    async def test_the_reported_task_is_updated_in_place(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
     ) -> None:
+        """Only the watts change: number, window and on/off stay the owner's."""
         coordinator = _coordinator(hass, enhanced_config_entry)
         entity = _number(coordinator, "scheduled_discharge_power_w")
 
@@ -394,56 +449,18 @@ class TestPowerSetpoints:
         header, pdata = _sent(coordinator)
         assert int(header["cmd_id"]) == 38
         assert _config_field(pdata) == 39
-        # operation 2 (update), type 2 (discharge)
+        # operation 2 (update) naming 2, the number the device reported
         assert bytes([0x08, 2, 0x10, 2]) in pdata
-        # always a whole-day window
-        assert encode_field_bytes(7, encode_varint((1439 << 16) | 0)) in pdata
+        # the reported window 00:00-23:00, not a whole day
+        assert encode_field_bytes(7, encode_varint((1380 << 16) | 0)) in pdata
+        assert encode_field_bytes(7, encode_varint((1439 << 16) | 0)) not in pdata
         # field 9 = {1: 300}
         assert encode_field_bytes(9, encode_field_varint(1, 300)) in pdata
 
-    async def test_a_device_without_a_task_gets_one_for_the_whole_day(
+    async def test_a_disabled_task_stays_disabled(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
     ) -> None:
-        """A setpoint means nothing without a task, so one is added."""
-        coordinator = _coordinator(
-            hass, enhanced_config_entry, data={"work_mode": "custom"}
-        )
-        entity = _number(coordinator, "scheduled_discharge_power_w")
-
-        await entity.async_set_native_value(500)
-
-        _header, pdata = _sent(coordinator)
-        # operation 1 (add), not 2 (update)
-        assert bytes([0x08, 1, 0x10, 2]) in pdata
-        # 00:00 to 23:59
-        assert encode_field_bytes(7, encode_varint((1439 << 16) | 0)) in pdata
-
-    async def test_a_cleared_task_still_builds_an_enabled_one(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
-    ) -> None:
-        """The state a deleted task leaves behind: keys present but None."""
-        cleared = {
-            "work_mode": "custom",
-            "scheduled_discharge_power_w": None,
-            "scheduled_discharge_enabled": None,
-            "scheduled_discharge_start_min": None,
-            "scheduled_discharge_end_min": None,
-            "scheduled_charge_soc_target": None,
-        }
-        coordinator = _coordinator(hass, enhanced_config_entry, data=cleared)
-        entity = _number(coordinator, "scheduled_discharge_power_w")
-
-        await entity.async_set_native_value(500)
-
-        _header, pdata = _sent(coordinator)
-        # enabled = 1, its inverse = 0
-        assert bytes.fromhex("18012000") in pdata
-        assert bytes([0x08, 1, 0x10, 2]) in pdata
-        assert encode_field_bytes(7, encode_varint((1439 << 16) | 0)) in pdata
-
-    async def test_a_power_write_enables_the_task(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
-    ) -> None:
+        """Switching a task off is the owner's choice; a power write keeps it."""
         data = dict(REPORTED, scheduled_discharge_enabled=False)
         coordinator = _coordinator(hass, enhanced_config_entry, data=data)
         entity = _number(coordinator, "scheduled_discharge_power_w")
@@ -451,35 +468,93 @@ class TestPowerSetpoints:
         await entity.async_set_native_value(300)
 
         _header, pdata = _sent(coordinator)
-        assert bytes.fromhex("18012000") in pdata
+        # enabled = 0, its inverse = 1
+        assert bytes.fromhex("18002001") in pdata
 
-    async def test_a_power_write_covers_the_whole_day(
+    async def test_the_reporters_charge_task_keeps_its_window(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
     ) -> None:
-        """Whatever window the device reports, the setpoint applies now."""
-        data = dict(
-            REPORTED,
-            scheduled_discharge_start_min=540,
-            scheduled_discharge_end_min=630,
-        )
-        coordinator = _coordinator(hass, enhanced_config_entry, data=data)
+        """Issue #653, driven from the reporter's own task list.
+
+        A solar and grid charge task 22:00-23:30 (number 1), a Solar only
+        charge task 14:00-15:00 (number 2), a discharge task 07:00-08:00
+        (number 3). The old write removed the discharge task and turned the
+        Solar only task into a whole-day grid task. Now exactly one frame goes
+        out and it names task 1.
+        """
+        coordinator = _coordinator(hass, enhanced_config_entry, data=_issue_653_state())
+        entity = _number(coordinator, "scheduled_charge_power_w")
+
+        await entity.async_set_native_value(100)
+
+        _header, pdata = _sent(coordinator)
+        assert bytes([0x08, 2, 0x10, 1]) in pdata
+        assert encode_field_bytes(7, encode_varint((1410 << 16) | 1320)) in pdata
+        # the app's charge limit of 95 % goes back unchanged
+        assert encode_field_varint(2, 95) in pdata
+
+    async def test_the_update_matches_the_apps_own_edit(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """Byte for byte against the app's edit of the same task.
+
+        At 09:10:17Z the app changed task 1 from 2000 W to 1500 W and sent the
+        whole list. Its block for task 1 is what this write must produce from
+        the list the device reported just before.
+        """
+        coordinator = _coordinator(hass, enhanced_config_entry, data=_issue_653_state())
+        entity = _number(coordinator, "scheduled_charge_power_w")
+
+        await entity.async_set_native_value(1500)
+
+        _header, pdata = _sent(coordinator)
+        app = _issue_653_frames()["app_power_edit_whole_list"]
+        app_headers, _ = decode_header_message(bytes.fromhex(app["hex"]))
+        app_pdata = bytes.fromhex(app_headers[0]["pdata"])
+        # The recording carries the serial masked to a run of X.
+        ours = _task_block(pdata).replace(ES22_DEVICE["sn"].encode(), b"X" * 16)
+        assert len(ES22_DEVICE["sn"]) == 16
+        assert ours == _task_block(app_pdata, 0)
+
+    async def test_a_device_without_a_task_gets_one_for_the_whole_day(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """A setpoint means nothing without a task, so one is added."""
+        coordinator = _coordinator(hass, enhanced_config_entry, data=dict(NO_TASKS))
         entity = _number(coordinator, "scheduled_discharge_power_w")
+
+        await entity.async_set_native_value(500)
+
+        _header, pdata = _sent(coordinator)
+        # operation 1 (add), numbered 1, the next free number
+        assert bytes([0x08, 1, 0x10, 1]) in pdata
+        # enabled = 1, its inverse = 0
+        assert bytes.fromhex("18012000") in pdata
+        # 00:00 to 23:59
+        assert encode_field_bytes(7, encode_varint((1439 << 16) | 0)) in pdata
+
+    async def test_an_add_takes_the_number_after_the_highest(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """The app numbered its own third task 3 (09:08:13Z in #653)."""
+        data = dict(NO_TASKS, scheduled_task_slot_max=4)
+        coordinator = _coordinator(hass, enhanced_config_entry, data=data)
+        entity = _number(coordinator, "scheduled_charge_power_w")
 
         await entity.async_set_native_value(300)
 
-        _header, pdata = _sent(coordinator)
-        assert encode_field_bytes(7, encode_varint((1439 << 16) | 0)) in pdata
-        assert encode_field_bytes(7, encode_varint((630 << 16) | 540)) not in pdata
+        assert bytes([0x08, 1, 0x10, 5]) in _last_pdata(coordinator)
 
     async def test_the_charge_target_soc_is_carried_over(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
     ) -> None:
         """It decides what charging does, so a power change must not reset it."""
-        data = dict(REPORTED, scheduled_charge_soc_target=80)
-        coordinator = _coordinator(hass, enhanced_config_entry, data=data)
+        coordinator = _coordinator(
+            hass, enhanced_config_entry, data=dict(WHOLE_DAY_CHARGE)
+        )
         entity = _number(coordinator, "scheduled_charge_power_w")
 
-        await entity.async_set_native_value(600)
+        await entity.async_set_native_value(700)
 
         pdata = _last_pdata(coordinator)
         assert encode_field_varint(2, 80) in pdata
@@ -492,12 +567,9 @@ class TestPowerSetpoints:
 
         The read path clears every `scheduled_charge_` key when a task list
         arrives without a charge task, the target included, so the next charge
-        write has nothing to carry over and falls back to 100 percent. The
-        mirror case, a removal issued from Home Assistant, deliberately keeps
-        the target, because there the write path knows what the owner meant.
-        This pins the difference rather than letting the two drift apart.
+        write has nothing to carry over and falls back to 100 percent.
         """
-        data = dict(REPORTED, scheduled_charge_soc_target=None)
+        data = dict(NO_TASKS, scheduled_charge_soc_target=None)
         coordinator = _coordinator(hass, enhanced_config_entry, data=data)
         entity = _number(coordinator, "scheduled_charge_power_w")
 
@@ -505,20 +577,17 @@ class TestPowerSetpoints:
 
         pdata = _last_pdata(coordinator)
         assert encode_field_varint(2, 100) in pdata
-        assert encode_field_varint(2, 80) not in pdata
 
     async def test_charge_power_is_per_device(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
     ) -> None:
         """A charge task names the device it applies to, a discharge one does not."""
-        coordinator = _coordinator(hass, enhanced_config_entry)
+        coordinator = _coordinator(hass, enhanced_config_entry, data=dict(NO_TASKS))
         entity = _number(coordinator, "scheduled_charge_power_w")
 
         await entity.async_set_native_value(600)
 
-        pdata = _last_pdata(coordinator)
-        assert bytes([0x08, 1, 0x10, 1]) in pdata  # add, charge
-        assert ES22_DEVICE["sn"].encode() in pdata
+        assert ES22_DEVICE["sn"].encode() in _last_pdata(coordinator)
 
     async def test_zero_is_writable(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
@@ -532,11 +601,11 @@ class TestPowerSetpoints:
         _header, pdata = _sent(coordinator)
         assert bytes.fromhex("4a020800") in pdata
 
-    async def test_the_other_kind_is_removed_first(
+    async def test_a_whole_day_task_of_the_other_kind_is_removed_first(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
     ) -> None:
         """Two whole-day tasks overlap and the device then acts on neither."""
-        data = dict(REPORTED, scheduled_charge_power_w=600)
+        data = dict(WHOLE_DAY_CHARGE, scheduled_charge_task_slot=2)
         coordinator = _coordinator(hass, enhanced_config_entry, data=data)
         entity = _number(coordinator, "scheduled_discharge_power_w")
 
@@ -544,11 +613,10 @@ class TestPowerSetpoints:
 
         sent = _sender(coordinator).call_args_list
         assert len(sent) == 2
-        remove = _pdata_of(sent[0])
-        # operation 3 (remove), type 1 (charge), and it goes out first
-        assert bytes([0x08, 3, 0x10, 1]) in remove
-        write = _pdata_of(sent[1])
-        assert bytes([0x08, 2, 0x10, 2]) in write
+        # operation 3 (remove) naming 2, the number reported, and it goes first
+        assert bytes([0x08, 3, 0x10, 2]) in _pdata_of(sent[0])
+        # operation 1 (add) at the next free number
+        assert bytes([0x08, 1, 0x10, 2]) in _pdata_of(sent[1])
 
     async def test_a_parked_charge_task_from_a_real_frame_is_removed_first(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
@@ -580,66 +648,37 @@ class TestPowerSetpoints:
         # operation 3 (remove) naming task 1, the parked charge task
         assert bytes([0x08, 3, 0x10, 1]) in _pdata_of(sent[0])
 
-    async def test_the_removal_names_the_number_the_device_reported(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
-    ) -> None:
-        """The app numbers tasks its own way, so the derived number can miss.
-
-        On 2026-08-08 it removed the charge task numbered 1 and added its
-        discharge task at 1 in the same frame.
-        """
-        data = dict(
-            REPORTED, scheduled_charge_power_w=600, scheduled_charge_task_slot=2
-        )
-        coordinator = _coordinator(hass, enhanced_config_entry, data=data)
-        entity = _number(coordinator, "scheduled_discharge_power_w")
-
-        await entity.async_set_native_value(300)
-
-        sent = _sender(coordinator).call_args_list
-        # operation 3 (remove) naming 2, the number reported, not the kind's 1
-        assert bytes([0x08, 3, 0x10, 2]) in _pdata_of(sent[0])
-
-    async def test_the_update_names_the_number_the_device_reported(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
-    ) -> None:
-        """Same argument as the removal, on the frame that replaces the task."""
-        data = dict(REPORTED, scheduled_discharge_task_slot=1)
-        coordinator = _coordinator(hass, enhanced_config_entry, data=data)
-        entity = _number(coordinator, "scheduled_discharge_power_w")
-
-        await entity.async_set_native_value(300)
-
-        # operation 2 (update) naming 1, the number reported, not the kind's 2
-        assert bytes([0x08, 2, 0x10, 1]) in _last_pdata(coordinator)
-
-    async def test_an_add_is_never_given_a_number_to_reuse(
-        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
-    ) -> None:
-        """A number is only ever known when this kind's power was reported.
-
-        That is exactly when the operation is an update, so an add always falls
-        back to the number derived from the kind.
-        """
-        coordinator = _coordinator(
-            hass, enhanced_config_entry, data={"work_mode": "custom"}
-        )
-        entity = _number(coordinator, "scheduled_charge_power_w")
-
-        await entity.async_set_native_value(300)
-
-        # operation 1 (add), type 1 (charge)
-        assert bytes([0x08, 1, 0x10, 1]) in _last_pdata(coordinator)
-
     async def test_nothing_is_removed_when_there_is_no_other_task(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
     ) -> None:
-        coordinator = _coordinator(hass, enhanced_config_entry)
+        coordinator = _coordinator(hass, enhanced_config_entry, data=dict(NO_TASKS))
         entity = _number(coordinator, "scheduled_discharge_power_w")
 
         await entity.async_set_native_value(300)
 
         assert len(_sender(coordinator).call_args_list) == 1
+
+    async def test_the_other_kind_is_never_removed_on_an_update(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """The update keeps its window, so nothing new can overlap (#653)."""
+        data = dict(
+            WHOLE_DAY_CHARGE,
+            scheduled_discharge_power_w=300,
+            scheduled_discharge_enabled=True,
+            scheduled_discharge_start_min=420,
+            scheduled_discharge_end_min=480,
+            scheduled_discharge_task_slot=2,
+            scheduled_discharge_task_count=1,
+            scheduled_discharge_settable_count=1,
+        )
+        coordinator = _coordinator(hass, enhanced_config_entry, data=data)
+        entity = _number(coordinator, "scheduled_charge_power_w")
+
+        await entity.async_set_native_value(900)
+
+        _header, pdata = _sent(coordinator)
+        assert bytes([0x08, 2, 0x10, 1]) in pdata
 
     async def test_the_removed_task_stops_being_reported(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
@@ -649,16 +688,9 @@ class TestPowerSetpoints:
         It stops mentioning the task instead, and the parser's clear-everything
         branch needs an empty task list, which the replacement task prevents.
         """
-        data = dict(
-            REPORTED,
-            scheduled_charge_power_w=600,
-            scheduled_charge_enabled=True,
-            scheduled_charge_start_min=0,
-            scheduled_charge_end_min=1439,
-            scheduled_charge_soc_target=80,
-            scheduled_charge_task_slot=1,
+        coordinator = _coordinator(
+            hass, enhanced_config_entry, data=dict(WHOLE_DAY_CHARGE)
         )
-        coordinator = _coordinator(hass, enhanced_config_entry, data=data)
         entity = _number(coordinator, "scheduled_discharge_power_w")
 
         await entity.async_set_native_value(300)
@@ -672,30 +704,39 @@ class TestPowerSetpoints:
         ):
             assert coordinator.data[key] is None
             assert coordinator.device_data[key] is None
+        assert coordinator.data["scheduled_charge_task_count"] == 0
         # The app's charge limit. Clearing it too would reset a task set to
         # stop at 80% into charging to 100% on the next charge write.
         assert coordinator.data["scheduled_charge_soc_target"] == 80
         assert coordinator.data["scheduled_discharge_power_w"] == 300
 
-    async def test_a_removed_task_is_not_removed_twice(
+    async def test_a_second_write_before_the_readback_waits_for_it(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
     ) -> None:
-        data = dict(REPORTED, scheduled_charge_power_w=600)
-        coordinator = _coordinator(hass, enhanced_config_entry, data=data)
+        """An added task's number is the device's to report, never a guess.
+
+        The add is seeded, so the second write does not add another task. It
+        refuses as "not ready" until the readback names the task, seconds
+        later, and sends nothing.
+        """
+        coordinator = _coordinator(hass, enhanced_config_entry, data=dict(NO_TASKS))
         entity = _number(coordinator, "scheduled_discharge_power_w")
 
         await entity.async_set_native_value(300)
         _sender(coordinator).reset_mock()
-        await entity.async_set_native_value(400)
+        with pytest.raises(HomeAssistantError) as err:
+            await entity.async_set_native_value(400)
 
-        assert len(_sender(coordinator).call_args_list) == 1
+        assert err.value.translation_key == "set_command_not_ready"
+        _sender(coordinator).assert_not_called()
 
     async def test_a_failed_removal_does_not_write_the_new_task(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
     ) -> None:
         """Writing anyway would leave exactly the overlapping pair."""
-        data = dict(REPORTED, scheduled_charge_power_w=600)
-        coordinator = _coordinator(hass, enhanced_config_entry, data=data)
+        coordinator = _coordinator(
+            hass, enhanced_config_entry, data=dict(WHOLE_DAY_CHARGE)
+        )
         _sender(coordinator).return_value = False
         entity = _number(coordinator, "scheduled_discharge_power_w")
 
@@ -705,6 +746,74 @@ class TestPowerSetpoints:
         assert len(_sender(coordinator).call_args_list) == 1
         # The task may well still be there, so it stays reported.
         assert coordinator.data["scheduled_charge_power_w"] == 600
+
+    @pytest.mark.parametrize(
+        ("data", "key"),
+        [
+            pytest.param(
+                {
+                    "scheduled_discharge_task_count": 2,
+                    "scheduled_discharge_settable_count": 2,
+                },
+                "scheduled_discharge_power_w",
+                id="two-discharge-tasks",
+            ),
+            pytest.param(
+                {
+                    "scheduled_charge_task_count": 1,
+                    "scheduled_charge_settable_count": 0,
+                },
+                "scheduled_charge_power_w",
+                id="solar-only-charge-task",
+            ),
+            pytest.param(
+                {
+                    "scheduled_discharge_power_w": 800,
+                    "scheduled_discharge_enabled": True,
+                    "scheduled_discharge_start_min": 420,
+                    "scheduled_discharge_end_min": 480,
+                    "scheduled_discharge_task_slot": 3,
+                    "scheduled_discharge_task_count": 1,
+                    "scheduled_discharge_settable_count": 1,
+                },
+                "scheduled_charge_power_w",
+                id="other-kind-with-own-window",
+            ),
+        ],
+    )
+    async def test_an_ambiguous_schedule_is_refused(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+        data: dict[str, Any],
+        key: str,
+    ) -> None:
+        """No single task this power belongs to: refuse, send nothing (#653)."""
+        coordinator = _coordinator(
+            hass, enhanced_config_entry, data=dict(NO_TASKS, **data)
+        )
+        entity = _number(coordinator, key)
+
+        with pytest.raises(HomeAssistantError) as err:
+            await entity.async_set_native_value(300)
+
+        assert err.value.translation_key == "set_command_schedule_conflict"
+        _sender(coordinator).assert_not_called()
+
+    async def test_refuses_before_a_task_list_was_read(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """Every get-all carries the list, an empty one included."""
+        coordinator = _coordinator(
+            hass, enhanced_config_entry, data={"work_mode": "custom"}
+        )
+        entity = _number(coordinator, "scheduled_discharge_power_w")
+
+        with pytest.raises(HomeAssistantError) as err:
+            await entity.async_set_native_value(300)
+
+        assert err.value.translation_key == "set_command_not_ready"
+        _sender(coordinator).assert_not_called()
 
     async def test_warns_when_the_mode_cannot_act_on_it(
         self,
@@ -769,16 +878,14 @@ class TestConcurrentWrites:
         neither, while both entities report success.
 
         Both starting orders are covered because only one of them is harmful,
-        and nothing decides which one Home Assistant runs.
+        and nothing decides which one Home Assistant runs. When the discharge
+        write goes first, the charge write finds a task it may only remove by
+        the number the readback has not named yet, and refuses as "not ready"
+        rather than guessing it.
         """
-        data = {
-            "work_mode": "custom",
-            "scheduled_charge_power_w": 600,
-            "scheduled_charge_enabled": True,
-            "scheduled_charge_start_min": 0,
-            "scheduled_charge_end_min": 1439,
-        }
-        coordinator = _coordinator(hass, enhanced_config_entry, data=data)
+        coordinator = _coordinator(
+            hass, enhanced_config_entry, data=dict(WHOLE_DAY_CHARGE)
+        )
         sent = _suspending_sender(coordinator)
 
         writes = [
@@ -791,7 +898,11 @@ class TestConcurrentWrites:
         ]
         if first == "discharge":
             writes.reverse()
-        await asyncio.gather(*writes)
+        results = await asyncio.gather(*writes, return_exceptions=True)
+        for result in results:
+            if isinstance(result, BaseException):
+                assert isinstance(result, HomeAssistantError)
+                assert result.translation_key == "set_command_not_ready"
 
         held = {1}  # the charge task the device starts with
         for pdata in sent:

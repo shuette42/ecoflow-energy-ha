@@ -6,10 +6,11 @@
 import time  # noqa: F401
 
 from .core import DeviceSnapshot, EcoFlowDeviceCoordinator
-from .set_commands import DeviceValueNotReported
+from .set_commands import DeviceValueNotReported, ScheduleTaskConflict
 
 __all__ = [
     "DeviceSnapshot",
     "DeviceValueNotReported",
     "EcoFlowDeviceCoordinator",
+    "ScheduleTaskConflict",
 ]

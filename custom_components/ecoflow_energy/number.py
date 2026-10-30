@@ -46,7 +46,11 @@ from .const import (
     supports_stream_ac5000_controls,
     supports_stream_controls,
 )
-from .coordinator import DeviceValueNotReported, EcoFlowDeviceCoordinator
+from .coordinator import (
+    DeviceValueNotReported,
+    EcoFlowDeviceCoordinator,
+    ScheduleTaskConflict,
+)
 from .coordinator.local_modbus import EcoFlowLocalModbusCoordinator
 from .ecoflow.const import (
     POWEROCEAN_FEED_SCHEDULE_POWER_MIN_W,
@@ -80,6 +84,7 @@ from .entity import (
     raise_set_not_ready,
     raise_set_partner_unreported,
     raise_set_rejected,
+    raise_set_schedule_conflict,
     raise_set_unsupported,
     reading_reported,
 )
@@ -1007,6 +1012,8 @@ class EcoFlowNumber(
             # Sending a guessed counterpart would change a setting the user did
             # not touch. Temporary, so not "unsupported".
             raise_set_not_ready(self.entity_id)
+        except ScheduleTaskConflict:
+            raise_set_schedule_conflict(self.entity_id)
         except ValueError as err:
             # The device holds both SoC limits in one field and refuses a pair
             # where they cross. Both entity ranges reach 50, so the user can

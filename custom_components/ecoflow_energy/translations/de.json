@@ -3329,6 +3329,9 @@
     "set_command_failed": {
       "message": "Der Befehl für {entity} hat das Gerät nicht erreicht. Prüfe die Verbindung des Geräts und versuche es erneut."
     },
+    "set_command_schedule_conflict": {
+      "message": "{entity} wurde nicht geändert - der Zeitplan in der EcoFlow-App hat keine einzelne Aufgabe, zu der diese Leistung gehört (mehrere Aufgaben dieser Art, nur Ladeaufgaben mit Solar only oder eine Aufgabe der anderen Art mit eigenem Zeitfenster). Ändere die Leistung in der EcoFlow-App oder lass dort eine Aufgabe dieser Art stehen."
+    },
     "set_command_gone": {
       "message": "{entity} kann nicht gesetzt werden - das Gerät meldet diesen Zeitplan nicht mehr. Prüfe, ob der Zeitplan in der EcoFlow-App noch existiert."
     },

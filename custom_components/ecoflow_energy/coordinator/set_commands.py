@@ -202,6 +202,15 @@ class DeviceValueNotReported(Exception):
     """
 
 
+class ScheduleTaskConflict(Exception):
+    """A STREAM AC 5000 power write has no single task it may change.
+
+    Several settable tasks of the kind, only "Solar only" charge tasks, or an
+    opposite task a whole-day task would overlap (#653). Nothing was sent.
+    Platforms translate it into `raise_set_schedule_conflict`.
+    """
+
+
 @dataclass(frozen=True)
 class _PowerOceanScheduleFamily:
     """The write-side plumbing that differs between the two schedule families.
@@ -1550,57 +1559,111 @@ class SetCommandsMixin(_Base):
         kind: str,
         power_w: int,
     ) -> bool:
-        """Replace the scheduled task with one of `kind` at `power_w`.
+        """Set the power of the scheduled task of `kind`.
 
         This device has no direct power setpoint: a scheduled task is the
-        setpoint. Charge and discharge are separate whole-day tasks, so the
-        other kind is removed before the new one is written, or the device
-        sees overlapping time periods and acts on neither.
+        setpoint. Which task that is, the parser decides, and the write acts on
+        exactly that task (#653):
+
+        - One settable task of this kind: it is updated in place under its own
+          number, with its window, on/off state, source and charge limit as
+          the device reported them. Only the watts change, so nothing else in
+          the owner's schedule moves. That is what the app does, task by task,
+          on every edit.
+        - No task of this kind at all: a whole-day task is added.
+        - Either way, a single whole-day task of the other kind, the shape only
+          this integration writes, is removed first. Two whole-day tasks
+          overlap and the device then acts on neither: on 2026-08-08 it sat at
+          its 200 W base output under exactly that pair. A task of the other
+          kind with the owner's own window is never removed: an update keeps
+          its window and so cannot create an overlap, and an add next to it is
+          refused.
+        - Anything else (several settable tasks, only "Solar only" charge
+          tasks, an opposite task with a window of its own): refused, nothing
+          sent. Picking one would change a task the owner did not mean.
         """
         from ..ecoflow.stream_ac5000_commands import (
             MINUTES_PER_DAY,
-            TASK_REMOVE,
+            TASK_ADD,
             build_task_payload,
         )
 
         other = "discharge" if kind == "charge" else "charge"
         async with self._device_config_lock:
             data = self.data or {}
-            if as_known_int(data.get(f"scheduled_{other}_power_w")) is not None:
-                # `39.1.2` goes out as the device last reported it for this task
-                # rather than as the number derived from the kind. The two agree
-                # in every frame this integration wrote, and they did not agree
-                # once the app got involved: on 2026-08-08 the app removed the
-                # charge task numbered 1 and added its discharge task at 1 in
-                # the same frame. If that number is the task's slot, a removal
-                # naming the derived one names no task, and what is left
-                # standing is the overlapping pair the removal exists to
-                # prevent. Where nothing has been observed, the derived number
-                # is sent, which is what every removal before this one carried.
-                if not await self.async_send_proto_set_command(
-                    build_task_payload(
-                        other,
-                        0,
-                        MINUTES_PER_DAY - 1,
-                        0,
-                        self.device_sn,
-                        operation=TASK_REMOVE,
-                        task_slot=as_known_int(
-                            data.get(f"scheduled_{other}_task_slot")
-                        ),
-                    ),
-                    label=f"stream_ac5000_{other}_task_remove",
+            task_count = as_known_int(data.get(f"scheduled_{kind}_task_count"))
+            settable = as_known_int(data.get(f"scheduled_{kind}_settable_count"))
+            if task_count is None or settable is None:
+                # No task list read yet. Every get-all carries one, an empty
+                # one included, so this clears with the next status frame.
+                raise DeviceValueNotReported(f"scheduled_{kind}_task_count")
+
+            other_count = as_known_int(data.get(f"scheduled_{other}_task_count"))
+            if other_count is None:
+                raise DeviceValueNotReported(f"scheduled_{other}_task_count")
+            other_slot = (
+                self._stream_ac5000_whole_day_slot(other, data)
+                if other_count == 1
+                else None
+            )
+
+            if settable == 1:
+                payload = self._build_stream_ac5000_task_update(kind, power_w, data)
+                if other_slot is not None and not await self._remove_stream_ac5000_task(
+                    other, other_slot
                 ):
-                    # The task may well still be there, so writing the new one
-                    # would leave exactly the overlapping pair.
                     return False
-                self._clear_stream_ac5000_task(other)
-            payload = self._build_stream_ac5000_task(kind, power_w, data)
-            if not await self.async_send_proto_set_command(
-                payload, label=f"stream_ac5000_{kind}_power"
+                if not await self.async_send_proto_set_command(
+                    payload, label=f"stream_ac5000_{kind}_power"
+                ):
+                    return False
+                self._seed_device_values(**{f"scheduled_{kind}_power_w": power_w})
+                return True
+
+            if task_count or (other_count and other_slot is None):
+                raise ScheduleTaskConflict(kind)
+            slot_max = as_known_int(data.get("scheduled_task_slot_max"))
+            if slot_max is None:
+                raise DeviceValueNotReported("scheduled_task_slot_max")
+            if other_slot is not None and not await self._remove_stream_ac5000_task(
+                other, other_slot
             ):
                 return False
-            self._seed_device_values(**{f"scheduled_{kind}_power_w": power_w})
+
+            self._warn_unless_custom_mode(kind, data)
+            soc_target = as_known_int(data.get("scheduled_charge_soc_target"))
+            # The next free number, the way the app numbered its own add.
+            new_slot = slot_max + 1
+            if not await self.async_send_proto_set_command(
+                build_task_payload(
+                    kind,
+                    0,
+                    MINUTES_PER_DAY - 1,
+                    power_w,
+                    self.device_sn,
+                    enabled=True,
+                    operation=TASK_ADD,
+                    charge_soc_target=100 if soc_target is None else soc_target,
+                    task_slot=new_slot,
+                ),
+                label=f"stream_ac5000_{kind}_power",
+            ):
+                return False
+            # Seeded so a second write before the readback updates this task
+            # rather than adding another one. The number is not: the device
+            # decides where a task lands, and until the readback names it an
+            # update refuses as "not ready" instead of naming a guess.
+            self._seed_device_values(
+                **{
+                    f"scheduled_{kind}_power_w": power_w,
+                    f"scheduled_{kind}_enabled": True,
+                    f"scheduled_{kind}_start_min": 0,
+                    f"scheduled_{kind}_end_min": MINUTES_PER_DAY - 1,
+                    f"scheduled_{kind}_task_count": 1,
+                    f"scheduled_{kind}_settable_count": 1,
+                    "scheduled_task_slot_max": new_slot,
+                }
+            )
             return True
 
     def _seed_device_values(self, **values: Any) -> None:
@@ -1654,33 +1717,41 @@ class SetCommandsMixin(_Base):
             self.set_device_value(state_key, None)
             if self.data is not None:
                 self.data[state_key] = None
+        # The kind's only task is gone, which is a known zero, not an unknown.
+        self._seed_device_values(
+            **{f"scheduled_{kind}_task_count": 0, f"scheduled_{kind}_settable_count": 0}
+        )
 
-    def _build_stream_ac5000_task(
-        self, kind: str, power_w: int, data: dict[str, Any]
-    ) -> bytes:
-        """Build the task frame that carries a power setpoint.
+    async def _remove_stream_ac5000_task(self, kind: str, slot: int) -> bool:
+        """Remove the kind's task by the number the device reported.
 
-        It is always a whole-day, enabled task, so the value asked for is the
-        value that acts. The only thing carried over from a reported task is
-        the charge target SoC, which decides what charging does rather than
-        whether it happens.
-
-        Zero is a real setpoint, not an absence: a 0 W discharge task parks the
-        battery, while removing every task leaves it on its own 200 W base
-        output.
-
-        An update names the number the device reported for this kind, for the
-        same reason a removal does. It is only ever known when this kind's power
-        was reported, which is exactly when the operation is an update, so an
-        add is never affected.
+        On failure the task may well still be there, so the caller must not
+        write the other kind next to it: that is exactly the overlapping pair.
         """
         from ..ecoflow.stream_ac5000_commands import (
             MINUTES_PER_DAY,
-            TASK_ADD,
-            TASK_UPDATE,
+            TASK_REMOVE,
             build_task_payload,
         )
 
+        if not await self.async_send_proto_set_command(
+            build_task_payload(
+                kind,
+                0,
+                MINUTES_PER_DAY - 1,
+                0,
+                self.device_sn,
+                operation=TASK_REMOVE,
+                task_slot=slot,
+            ),
+            label=f"stream_ac5000_{kind}_task_remove",
+        ):
+            return False
+        self._clear_stream_ac5000_task(kind)
+        return True
+
+    def _warn_unless_custom_mode(self, kind: str, data: dict[str, Any]) -> None:
+        """Say so when the device will accept a task and not act on it."""
         mode = data.get("work_mode")
         if mode is not None and mode != "custom":
             _LOGGER.warning(
@@ -1692,18 +1763,73 @@ class SetCommandsMixin(_Base):
                 mode,
             )
 
-        reported = as_known_int(data.get(f"scheduled_{kind}_power_w")) is not None
-        soc_target = data.get("scheduled_charge_soc_target")
+    @staticmethod
+    def _stream_ac5000_whole_day_slot(kind: str, data: dict[str, Any]) -> int | None:
+        """The number of the kind's task when it is a whole-day task, else None.
+
+        00:00 to 23:59 is the window this integration writes and one the app
+        cannot set (#653), so a task with it is one Home Assistant may remove
+        to make room for the other kind. Any other window is the owner's.
+        """
+        from ..ecoflow.stream_ac5000_commands import MINUTES_PER_DAY
+
+        if (
+            as_known_int(data.get(f"scheduled_{kind}_settable_count")) != 1
+            or as_known_int(data.get(f"scheduled_{kind}_start_min")) != 0
+            or as_known_int(data.get(f"scheduled_{kind}_end_min"))
+            != MINUTES_PER_DAY - 1
+        ):
+            return None
+        slot = as_known_int(data.get(f"scheduled_{kind}_task_slot"))
+        if slot is None:
+            # Added by this integration moments ago: the readback naming its
+            # number is seconds away, and a removal must not name a guess.
+            raise DeviceValueNotReported(f"scheduled_{kind}_task_slot")
+        return slot
+
+    def _build_stream_ac5000_task_update(
+        self, kind: str, power_w: int, data: dict[str, Any]
+    ) -> bytes:
+        """Build the update that changes only the watts of the kind's task.
+
+        Every other field goes out as the device reported it: number, window,
+        on/off and the charge limit. The charging source is not carried
+        because a settable charge task is by definition one that charges from
+        solar and grid, which is what the builder writes. A task switched off
+        in the app stays off; the new power applies when the owner switches it
+        back on.
+
+        Zero is a real setpoint, not an absence: a 0 W discharge task parks the
+        battery, while removing every task leaves it on its own 200 W base
+        output.
+        """
+        from ..ecoflow.stream_ac5000_commands import TASK_UPDATE, build_task_payload
+
+        prefix = f"scheduled_{kind}_"
+        slot = as_known_int(data.get(f"{prefix}task_slot"))
+        start = as_known_int(data.get(f"{prefix}start_min"))
+        end = as_known_int(data.get(f"{prefix}end_min"))
+        enabled = data.get(f"{prefix}enabled")
+        if (
+            slot is None
+            or start is None
+            or end is None
+            or not isinstance(enabled, bool)
+        ):
+            # Right after an add, until the readback names the new task.
+            raise DeviceValueNotReported(f"{prefix}task_slot")
+        self._warn_unless_custom_mode(kind, data)
+        soc_target = as_known_int(data.get("scheduled_charge_soc_target"))
         return build_task_payload(
             kind,
-            0,
-            MINUTES_PER_DAY - 1,
+            start,
+            end,
             power_w,
             self.device_sn,
-            enabled=True,
-            operation=TASK_UPDATE if reported else TASK_ADD,
-            charge_soc_target=soc_target if isinstance(soc_target, int) else 100,
-            task_slot=as_known_int(data.get(f"scheduled_{kind}_task_slot")),
+            enabled=enabled,
+            operation=TASK_UPDATE,
+            charge_soc_target=100 if soc_target is None else soc_target,
+            task_slot=slot,
         )
 
     async def async_send_proto_set_command(
