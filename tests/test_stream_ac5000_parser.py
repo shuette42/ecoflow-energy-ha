@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 from ecoflow_energy.ecoflow.parsers.stream_ac5000_proto import (
+    _TASK_COUNT_KEYS,
     _TASK_KEYS,
     UNIT_PV_BY_SN_KEY,
     UNIT_PV_ENTRY_SOC_KEY,
@@ -617,8 +618,14 @@ class TestScheduledTasks:
         # (ADR-015). Absence would mean "this frame says nothing", which is
         # what a frame without `f40` means and this one is not.
         expected = {k for k in _TASK_KEYS if k.startswith("scheduled_charge_")}
-        assert {k for k in result if k.startswith("scheduled_charge_")} == expected
+        published = {
+            k
+            for k in result
+            if k.startswith("scheduled_charge_") and k not in _TASK_COUNT_KEYS
+        }
+        assert published == expected
         assert all(result[k] is None for k in expected)
+        assert result["scheduled_charge_task_count"] == 0
 
     def test_a_charge_task_numbered_two_is_read_as_charge(self) -> None:
         """The mirror, so the rule is not re-derived in one direction only."""
@@ -644,16 +651,23 @@ class TestScheduledTasks:
         # frame states there is no discharge task rather than staying silent
         # about it (ADR-015).
         expected = {k for k in _TASK_KEYS if k.startswith("scheduled_discharge_")}
-        assert {k for k in result if k.startswith("scheduled_discharge_")} == expected
+        published = {
+            k
+            for k in result
+            if k.startswith("scheduled_discharge_") and k not in _TASK_COUNT_KEYS
+        }
+        assert published == expected
         assert all(result[k] is None for k in expected)
+        assert result["scheduled_discharge_task_count"] == 0
 
-    def test_two_tasks_of_one_kind_report_the_last(
+    def test_two_settable_tasks_of_one_kind_report_none(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
-        """The keys hold one task per kind and the write path removes one.
+        """The keys describe the one task a write would change (#653).
 
-        A second task of the same kind therefore survives a setpoint write.
-        Pinned and logged rather than left undefined.
+        With two discharge tasks there is no such task, so no setpoint is
+        reported and the count says why. Reporting the last one, as this did
+        before, showed a value the next write then put somewhere else.
         """
         first = encode_field_varint(2, 1) + _sub(9, encode_field_varint(1, 300))
         second = encode_field_varint(2, 2) + _sub(9, encode_field_varint(1, 700))
@@ -662,9 +676,12 @@ class TestScheduledTasks:
                 _build_frame(254, 39, bytes(_sub(40, _sub(1, first) + _sub(1, second))))
             )
         assert result is not None
-        assert result["scheduled_discharge_power_w"] == 700
-        assert result["scheduled_discharge_task_slot"] == 2
-        assert "more than one discharge task" in caplog.text
+        assert result["scheduled_discharge_power_w"] is None
+        assert result["scheduled_discharge_task_slot"] is None
+        assert result["scheduled_discharge_task_count"] == 2
+        assert result["scheduled_discharge_settable_count"] == 2
+        assert result["scheduled_task_slot_max"] == 2
+        assert "2 settable discharge tasks" in caplog.text
 
     def test_disabled_task_reports_disabled(self) -> None:
         """Disabling a task in the app dropped f40.1.3 rather than sending 0."""
@@ -690,10 +707,14 @@ class TestScheduledTasks:
         )
         assert result is not None
         assert result["scheduled_discharge_power_w"] == 500
-        assert "scheduled_discharge_task_slot" not in result
+        assert result["scheduled_discharge_task_slot"] is None
 
     def test_a_task_with_neither_power_block_is_dropped(self) -> None:
-        """Nothing says what a task with no power container does."""
+        """Nothing says what a task with no power container does.
+
+        No setpoint comes from it, and the counts are withdrawn because the
+        list could not be read in full.
+        """
         task = (
             encode_field_varint(2, 1)
             + encode_field_varint(3, 1)
@@ -702,7 +723,11 @@ class TestScheduledTasks:
         result = parse_stream_ac5000_message(
             _build_frame(254, 39, bytes(_sub(40, _sub(1, task))))
         )
-        assert result is None
+        assert result is not None
+        assert {k for k in result if k.startswith("scheduled_")} == set(
+            _TASK_COUNT_KEYS
+        )
+        assert all(result[k] is None for k in _TASK_COUNT_KEYS)
 
     def test_empty_task_block_clears_every_readback_key(self) -> None:
         """Deleting the last task in the app sends `f40` with no bytes.
@@ -1554,6 +1579,132 @@ class TestLinkedPairPvStrings:
             assert not runs, runs
 
 
+class TestIssue653TaskList:
+    """The reporter's three-task list from #653, decoded the way a write uses it.
+
+    A solar and grid charge task 22:00-23:30 (number 1, 2000 W, limit 95 %),
+    a Solar only charge task 14:00-15:00 (number 2), a discharge task
+    07:00-08:00 (number 3, 800 W).
+    """
+
+    @staticmethod
+    def _parsed(role: str) -> dict:
+        frames = json.loads((FIXTURES / "es22_653_task_list_masked.json").read_text())
+        frame = next(f for f in frames["frames"] if f["role"] == role)
+        result = parse_stream_ac5000_message(bytes.fromhex(frame["hex"]))
+        assert result is not None
+        return result
+
+    def test_the_charge_setpoint_is_the_grid_task_not_the_last_one(self) -> None:
+        """Solar only has no power; reading it showed 0 W and then got written."""
+        result = self._parsed("list_before_ha_write")
+        assert result["scheduled_charge_power_w"] == 2000
+        assert result["scheduled_charge_task_slot"] == 1
+        assert result["scheduled_charge_start_min"] == 1320
+        assert result["scheduled_charge_end_min"] == 1410
+        assert result["scheduled_charge_soc_target"] == 95
+        assert result["scheduled_charge_task_count"] == 2
+        assert result["scheduled_charge_settable_count"] == 1
+
+    def test_the_discharge_task_and_the_highest_number(self) -> None:
+        result = self._parsed("list_before_ha_write")
+        assert result["scheduled_discharge_power_w"] == 800
+        assert result["scheduled_discharge_task_slot"] == 3
+        assert result["scheduled_discharge_start_min"] == 420
+        assert result["scheduled_discharge_end_min"] == 480
+        assert result["scheduled_task_slot_max"] == 3
+
+    def test_the_old_write_left_two_settable_charge_tasks(self) -> None:
+        """After the old whole-day write: no setpoint, so the next write refuses."""
+        result = self._parsed("list_after_ha_write")
+        assert result["scheduled_charge_settable_count"] == 2
+        assert result["scheduled_charge_power_w"] is None
+        assert result["scheduled_discharge_task_count"] == 0
+
+
+class TestEveryGetAllCarriesTheTaskList:
+    """The write path refuses until it has seen a task list (#653).
+
+    That is only safe if a full get-all always carries one, an empty one
+    included, or a device with no task could never be given one.
+    """
+
+    def test_every_recorded_get_reply_publishes_the_counts(self) -> None:
+        seen = empty = 0
+        for path in sorted(FIXTURES.glob("es2*_masked.json")):
+            for frame in json.loads(path.read_text()).get("frames", []):
+                if frame.get("topic") != "get_reply" or "hex" not in frame:
+                    continue
+                result = parse_stream_ac5000_message(bytes.fromhex(frame["hex"]))
+                assert result is not None, f"{path.name} {frame.get('ts_iso')}"
+                assert isinstance(result.get("scheduled_task_slot_max"), int), (
+                    f"{path.name} {frame.get('ts_iso')}"
+                )
+                seen += 1
+                empty += result["scheduled_task_slot_max"] == 0
+        # Counted rather than assumed: the sweep has to reach real get-alls,
+        # and some of them must come from a device holding no task at all.
+        assert seen >= 20
+        assert empty >= 10
+
+    def test_charge_field_8_2_is_never_set_on_the_wire(self) -> None:
+        """Updates write `.8.2` as 0 because no recorded task ever carries more."""
+
+        def fields(buf: bytes):
+            offset = 0
+            while offset < len(buf):
+                key, offset = _varint_at(buf, offset)
+                number, wire = key >> 3, key & 7
+                if wire == 0:
+                    value, offset = _varint_at(buf, offset)
+                    yield number, value
+                elif wire == 2:
+                    length, offset = _varint_at(buf, offset)
+                    yield number, buf[offset : offset + length]
+                    offset += length
+                else:
+                    return
+
+        def charge_blocks(buf: bytes, depth: int = 0):
+            try:
+                items = list(fields(buf))
+            except IndexError:
+                return
+            for number, value in items:
+                if not isinstance(value, bytes) or depth > 6:
+                    continue
+                if number in (39, 40):
+                    for sub, task in fields(value):
+                        if sub == 1 and isinstance(task, bytes):
+                            for n, v in fields(task):
+                                if n == 8 and isinstance(v, bytes):
+                                    yield v
+                else:
+                    yield from charge_blocks(value, depth + 1)
+
+        checked = 0
+        for path in sorted(FIXTURES.glob("es2*_masked.json")):
+            for frame in json.loads(path.read_text()).get("frames", []):
+                if "hex" not in frame:
+                    continue
+                for block in charge_blocks(bytes.fromhex(frame["hex"])):
+                    checked += 1
+                    ints = {n: v for n, v in fields(block) if isinstance(v, int)}
+                    assert ints.get(2, 0) == 0, path.name
+        assert checked >= 10
+
+
+def _varint_at(buf: bytes, offset: int) -> tuple[int, int]:
+    result = shift = 0
+    while True:
+        byte = buf[offset]
+        offset += 1
+        result |= (byte & 0x7F) << shift
+        shift += 7
+        if byte < 0x80:
+            return result, offset
+
+
 class TestTaskListShrink:
     """A task list that shrinks must retract the task that left it.
 
@@ -1669,15 +1820,16 @@ class TestTaskListShrink:
         assert by_kind
         assert set(_TASK_KEYS) == by_kind
 
-    def test_a_block_that_does_not_decode_retracts_nothing(self) -> None:
+    def test_a_block_that_does_not_decode_publishes_nothing(self) -> None:
         """Absence is evidence only when the list was read in full.
 
         A block that fails to decode, or that carries neither power container,
-        leaves the frame unable to say what the device holds. It publishes what
-        it did read and clears nothing. Without that rule one corrupt block
-        would wipe a live task's setpoint, and by the write path's rule that
-        drops the next removal too, which is the one-sided failure #234 is
-        about.
+        leaves the frame unable to say what the device holds. It clears
+        nothing, or one corrupt block would wipe a live task's setpoint (#234).
+        It publishes no setpoint either: the unreadable block may be a second
+        task of the same kind, and a setpoint chosen without it could point
+        the next write at the wrong task (#653). The counts are withdrawn, so
+        the merged ones from an earlier list cannot steer a write.
         """
         good = (
             encode_field_varint(2, 1)
@@ -1702,8 +1854,10 @@ class TestTaskListShrink:
             _build_frame(254, 39, bytes(_sub(40, _sub(1, good) + _sub(1, kindless))))
         )
         assert result is not None
-        assert result["scheduled_charge_power_w"] == 600
-        assert not [key for key in result if key.startswith("scheduled_discharge_")]
+        assert {k for k in result if k.startswith("scheduled_")} == set(
+            _TASK_COUNT_KEYS
+        )
+        assert all(result[k] is None for k in _TASK_COUNT_KEYS)
 
 
 def _unit_frames(unit: str) -> list[dict]:

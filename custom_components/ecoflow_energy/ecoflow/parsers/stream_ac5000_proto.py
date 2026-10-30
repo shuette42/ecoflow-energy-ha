@@ -325,6 +325,10 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
         # A power write has to carry it back unchanged or it would reset the
         # task to charge to 100%.
         "40.1.8.3.2": ("_task_charge_soc_target", _TYPE_INT, 1),
+        # `.8.1` is the charging source: 1 is solar and grid, the task the app
+        # shows with a power; 0 is "Solar only", which has no power to set and
+        # arrives with `.1` omitted (#653, the 2026-10-30 recording).
+        "40.1.8.1": ("_task_charge_source_raw", _TYPE_INT, 1),
         "40.1.8.3.3": ("_task_charge_power_w", _TYPE_INT, 1),
         "40.1.9.1": ("_task_discharge_power_w", _TYPE_INT, 1),
         # `f50.1.4` (signed battery power) is not mapped: the whole `f50` block
@@ -508,7 +512,15 @@ _PV_TOTAL_KEY = "pv_total_w"
 # so an unseen task was never removed and every later write landed on top of
 # it. The discharge side has been seen sending its zero explicitly, so there
 # the fill is a no-op, because an explicit value wins over a `setdefault`.
-_TASK_ZERO_FILL_PATHS: tuple[str, ...] = ("40.1.3", "40.1.8.3.3", "40.1.9.1")
+#
+# `40.1.8.1` is the charging source, and "Solar only" is its zero: the
+# 2026-10-30 readback carried that task's `.8` container with no `.1` (#653).
+_TASK_ZERO_FILL_PATHS: tuple[str, ...] = (
+    "40.1.3",
+    "40.1.8.1",
+    "40.1.8.3.3",
+    "40.1.9.1",
+)
 
 # Declared groups that can arrive more than once in one message, and the key
 # each occurrence's raw bytes are collected under.
@@ -890,6 +902,33 @@ _TASK_KEYS: tuple[str, ...] = (
     "scheduled_discharge_task_slot",
 )
 
+# What the list holds, written whenever a list arrives. Never cleared to None:
+# an arrived list always knows how many tasks it carries, and the write path
+# refuses to act until it has seen one (#653).
+_TASK_COUNT_KEYS: tuple[str, ...] = (
+    "scheduled_charge_task_count",
+    "scheduled_charge_settable_count",
+    "scheduled_discharge_task_count",
+    "scheduled_discharge_settable_count",
+    "scheduled_task_slot_max",
+)
+
+# Charging source on `40.1.8.1`: 1 charges from solar and grid at a set power,
+# 0 is "Solar only" and carries no power in the app.
+TASK_CHARGE_SOURCE_GRID = 1
+
+
+def _task_is_settable(task: dict[str, Any], kind: str) -> bool:
+    """Whether a power write may change this task.
+
+    A discharge task always carries a power. A charge task carries one only
+    when it charges from solar and grid; "Solar only" has no power in the app,
+    and writing one into it changes its source as well (#653).
+    """
+    if kind != "charge":
+        return True
+    return task.get("_task_charge_source_raw") == TASK_CHARGE_SOURCE_GRID
+
 
 def _finalize_task(result: dict[str, Any]) -> None:
     """Turn one task list readback into the keys the control side writes back.
@@ -902,94 +941,93 @@ def _finalize_task(result: dict[str, Any]) -> None:
     That kind comes from which power container the task carries, never from
     `40.1.2`. See `_TASK_BLOCKS` for what `.2` turned out to be.
 
+    The setpoint keys describe one task: the only *settable* task of its kind
+    (`_task_is_settable`). The write path changes exactly that task in place,
+    so reading any other one would show a value the next write does not touch.
+    That is what #653 showed: with a grid charge task and a "Solar only" one,
+    the last in the list was read (0 W) and then overwritten. With no settable
+    task, or several, the setpoint keys are cleared and the counts say why, so
+    the write path can refuse rather than pick one.
+
     A task at 0 W omits its watts and sends the container alone, so the
-    container is also what the zero fill keys off. Publishing nothing there is
-    not a safe default on this device: the write path removes the opposite task
-    only when its power is a known number, so a power that goes missing is a
-    task that is never removed and then written on top of.
+    container is also what the zero fill keys off.
 
-    Each kind gets its own keys and the coordinator's own merge keeps the other
-    kind's values across the frames that carry no `f40` at all, which is most
-    of them. That merge is why an empty task list has to clear every key at
-    once: deleting the last task in the app stops the readback rather than
-    zeroing it, so the setpoint entities would otherwise keep reporting a task
-    the device no longer has.
+    Each kind gets its own keys and the coordinator's own merge keeps them
+    across the frames that carry no `f40` at all, which is most of them. That
+    merge is why every key is written whenever a list arrives: deleting a task
+    in the app stops the readback rather than zeroing it, so the setpoint
+    entities would otherwise keep reporting a task the device no longer has.
 
-    The start, end, enabled and slot keys have no entity. The slot is read so a
-    removal or an update can name the task the device knows; the other three
-    are reported for a diagnostics download and nothing reads them back.
+    The start, end, enabled and slot keys have no entity. The write path reads
+    them back into the task it updates, so a power write keeps the owner's
+    window and on/off state.
     """
     task_list_empty = result.pop("_task_list_empty", False)
     blocks = result.pop("_task_blocks", None) or ()
-
-    published: set[str] = set()
-    # A block that does not decode, or that carries neither power container,
-    # leaves the frame unable to say what the list holds. It still publishes
-    # what it did read, and it clears nothing: one corrupt block would
-    # otherwise wipe a live task's setpoint, and by the write path's rule that
-    # drops the next removal as well.
-    inconclusive = False
-    for task in (_decode_task(block) for block in blocks):
-        kinds = task.get("_task_kinds", ())
-        if not kinds:
-            inconclusive = True
-            continue
-        for kind in kinds:
-            if kind in published:
-                # The device can hold more than one task of a kind and these
-                # keys hold one, so the last in the list is what is reported.
-                # The write path removes one task per kind too, so a second one
-                # would survive a setpoint write. Worth seeing in a log until
-                # there is a reason to model it.
-                _LOGGER.debug(
-                    "ES22 task list carries more than one %s task, "
-                    "reporting the last of them",
-                    kind,
-                )
-            published.add(kind)
-
-            power = task.get(f"_task_{kind}_power_w")
-            if isinstance(power, int):
-                result[f"scheduled_{kind}_power_w"] = power
-            if kind == "charge":
-                soc_target = task.get("_task_charge_soc_target")
-                if isinstance(soc_target, int):
-                    result["scheduled_charge_soc_target"] = soc_target
-            slot_raw = task.get("_task_slot_raw")
-            if isinstance(slot_raw, int):
-                result[f"scheduled_{kind}_task_slot"] = slot_raw
-            enabled_raw = task.get("_task_enabled_raw")
-            if isinstance(enabled_raw, int):
-                result[f"scheduled_{kind}_enabled"] = bool(enabled_raw)
-            window_raw = task.get("_task_window_raw")
-            if isinstance(window_raw, int):
-                # One varint: start in the low 16 bits, end in the high 16,
-                # both minutes since midnight.
-                result[f"scheduled_{kind}_start_min"] = window_raw & 0xFFFF
-                result[f"scheduled_{kind}_end_min"] = (window_raw >> 16) & 0xFFFF
 
     if not blocks and not task_list_empty:
         # No `f40` in this frame. Most `254/39` frames are deltas that carry
         # none even while tasks stand, so absence says nothing at all and the
         # coordinator merge keeps whatever the setpoints held.
         return
-    if inconclusive:
+
+    tasks = [_decode_task(block) for block in blocks]
+    # A block that does not decode, or that carries neither power container,
+    # leaves the frame unable to say what the list holds. No setpoint is
+    # published or cleared from it: one corrupt block would otherwise wipe a
+    # live task's setpoint. The counts are withdrawn instead, because the
+    # merged ones from the last good list may no longer be true, and a write
+    # acting on them could add a task next to one it cannot see. Writes then
+    # refuse as "not ready" until a list decodes in full.
+    if any(not task.get("_task_kinds") for task in tasks):
+        for key in _TASK_COUNT_KEYS:
+            result[key] = None
         return
-    # An `f40` that arrives is the whole list, so a kind missing from it has no
-    # task on the device. None is an explicit clear: both platforms show it as
-    # unknown and stop falling back to the value they restored at startup. Zero
-    # would not do, because 0 W is a real setpoint here and the write path
-    # would read it as a task to update rather than one that is gone.
-    #
-    # The empty list is the same rule with nothing published, so it needs no
-    # branch of its own any more.
+
+    slots = [
+        slot for task in tasks if isinstance(slot := task.get("_task_slot_raw"), int)
+    ]
+    # The next task this integration adds takes the number after the highest
+    # one in use, the way the app numbered its own add on 2026-10-30.
+    result["scheduled_task_slot_max"] = max(slots, default=0)
+
     for kind, _group in _TASK_BLOCKS:
-        if kind in published:
-            continue
         prefix = f"scheduled_{kind}_"
         for key in _TASK_KEYS:
             if key.startswith(prefix):
                 result[key] = None
+        of_kind = [task for task in tasks if kind in task["_task_kinds"]]
+        settable = [task for task in of_kind if _task_is_settable(task, kind)]
+        result[f"{prefix}task_count"] = len(of_kind)
+        result[f"{prefix}settable_count"] = len(settable)
+        if len(settable) != 1:
+            if len(settable) > 1:
+                _LOGGER.debug(
+                    "ES22 task list carries %d settable %s tasks, no setpoint reported",
+                    len(settable),
+                    kind,
+                )
+            continue
+        task = settable[0]
+        power = task.get(f"_task_{kind}_power_w")
+        if isinstance(power, int):
+            result[f"{prefix}power_w"] = power
+        if kind == "charge":
+            soc_target = task.get("_task_charge_soc_target")
+            if isinstance(soc_target, int):
+                result["scheduled_charge_soc_target"] = soc_target
+        slot_raw = task.get("_task_slot_raw")
+        if isinstance(slot_raw, int):
+            result[f"{prefix}task_slot"] = slot_raw
+        enabled_raw = task.get("_task_enabled_raw")
+        if isinstance(enabled_raw, int):
+            result[f"{prefix}enabled"] = bool(enabled_raw)
+        window_raw = task.get("_task_window_raw")
+        if isinstance(window_raw, int):
+            # One varint: start in the low 16 bits, end in the high 16,
+            # both minutes since midnight.
+            result[f"{prefix}start_min"] = window_raw & 0xFFFF
+            result[f"{prefix}end_min"] = (window_raw >> 16) & 0xFFFF
 
 
 def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:

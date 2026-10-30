@@ -3329,6 +3329,9 @@
     "set_command_failed": {
       "message": "De opdracht voor {entity} heeft het apparaat niet bereikt. Controleer of het apparaat verbonden is en probeer het opnieuw."
     },
+    "set_command_schedule_conflict": {
+      "message": "{entity} is niet gewijzigd - het schema in de EcoFlow-app heeft geen enkele taak waar dit vermogen bij hoort (meerdere taken van deze soort, alleen laadtaken met Alleen zonne-energie, of een taak van de andere soort met een eigen tijdvenster). Wijzig het vermogen in de EcoFlow-app, of houd daar precies één taak van deze soort (voor laden een die laadt uit zon en net)."
+    },
     "set_command_gone": {
       "message": "{entity} kan niet worden ingesteld - het apparaat rapporteert dit schema niet meer. Controleer of het schema nog bestaat in de EcoFlow-app."
     },

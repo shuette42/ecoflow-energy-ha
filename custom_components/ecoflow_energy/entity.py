@@ -89,6 +89,20 @@ def raise_set_gone(entity_id: str) -> NoReturn:
     )
 
 
+def raise_set_schedule_conflict(entity_id: str) -> NoReturn:
+    """Report a STREAM AC 5000 power write with no single task to change.
+
+    Nothing was sent. The owner's schedule holds several tasks this power
+    could belong to, or one a whole-day task would overlap, and picking one
+    would change a task the owner did not mean (#653).
+    """
+    raise HomeAssistantError(
+        translation_domain=DOMAIN,
+        translation_key="set_command_schedule_conflict",
+        translation_placeholders={"entity": entity_id},
+    )
+
+
 def raise_set_rejected(entity_id: str, reason: str) -> NoReturn:
     """Report a value this device will not accept, before anything is sent.
 
