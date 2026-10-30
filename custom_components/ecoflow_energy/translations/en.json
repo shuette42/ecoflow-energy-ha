@@ -3330,7 +3330,7 @@
       "message": "The command for {entity} did not reach the device. Check that the device is connected and try again."
     },
     "set_command_schedule_conflict": {
-      "message": "{entity} was not changed - the schedule in the EcoFlow app has no single task this power belongs to (several tasks of this kind, only Solar only charge tasks, or a task with its own time window of the other kind). Change the power in the EcoFlow app, or keep one task of this kind there."
+      "message": "{entity} was not changed - the schedule in the EcoFlow app has no single task this power belongs to (several tasks of this kind, only Solar only charge tasks, or a task of the other kind with its own time window). Change the power in the EcoFlow app, or keep exactly one task of this kind there (for charging, one that charges from solar and grid)."
     },
     "set_command_gone": {
       "message": "{entity} cannot be set - the device is no longer reporting this schedule. Check whether the schedule still exists in the EcoFlow app."

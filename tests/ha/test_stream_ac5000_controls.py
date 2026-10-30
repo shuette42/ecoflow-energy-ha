@@ -423,6 +423,16 @@ def _task_block(pdata: bytes, index: int = 0) -> bytes:
     raise AssertionError("no task list in this payload")
 
 
+def _frame_254_39(inner: bytes) -> bytes:
+    """A minimal `254/39` status frame around `inner`."""
+    header = (
+        encode_field_bytes(1, inner)
+        + encode_field_varint(8, 254)
+        + encode_field_varint(9, 39)
+    )
+    return encode_field_bytes(1, header)
+
+
 def _issue_653_frames() -> dict[str, dict]:
     frames = json.loads(ISSUE_653_FRAMES.read_text(encoding="utf-8"))["frames"]
     return {frame["role"]: frame for frame in frames}
@@ -605,7 +615,9 @@ class TestPowerSetpoints:
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
     ) -> None:
         """Two whole-day tasks overlap and the device then acts on neither."""
-        data = dict(WHOLE_DAY_CHARGE, scheduled_charge_task_slot=2)
+        data = dict(
+            WHOLE_DAY_CHARGE, scheduled_charge_task_slot=2, scheduled_task_slot_max=2
+        )
         coordinator = _coordinator(hass, enhanced_config_entry, data=data)
         entity = _number(coordinator, "scheduled_discharge_power_w")
 
@@ -616,7 +628,7 @@ class TestPowerSetpoints:
         # operation 3 (remove) naming 2, the number reported, and it goes first
         assert bytes([0x08, 3, 0x10, 2]) in _pdata_of(sent[0])
         # operation 1 (add) at the next free number
-        assert bytes([0x08, 1, 0x10, 2]) in _pdata_of(sent[1])
+        assert bytes([0x08, 1, 0x10, 3]) in _pdata_of(sent[1])
 
     async def test_a_parked_charge_task_from_a_real_frame_is_removed_first(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
@@ -658,7 +670,98 @@ class TestPowerSetpoints:
 
         assert len(_sender(coordinator).call_args_list) == 1
 
-    async def test_the_other_kind_is_never_removed_on_an_update(
+    async def test_the_reporters_discharge_task_keeps_its_window(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """Issue #653, the discharge side: task 3, 07:00-08:00, alone.
+
+        Two charge tasks stand beside it, neither of them whole-day, so
+        nothing is removed and exactly one frame goes out.
+        """
+        coordinator = _coordinator(hass, enhanced_config_entry, data=_issue_653_state())
+        entity = _number(coordinator, "scheduled_discharge_power_w")
+
+        await entity.async_set_native_value(600)
+
+        _header, pdata = _sent(coordinator)
+        assert bytes([0x08, 2, 0x10, 3]) in pdata
+        assert encode_field_bytes(7, encode_varint((480 << 16) | 420)) in pdata
+        assert encode_field_bytes(9, encode_field_varint(1, 600)) in pdata
+
+    async def test_an_update_beside_a_whole_day_task_removes_it_first(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """The pair from 2026-08-08: both kinds whole-day, the device idles."""
+        data = dict(
+            WHOLE_DAY_CHARGE,
+            scheduled_discharge_power_w=300,
+            scheduled_discharge_enabled=True,
+            scheduled_discharge_start_min=0,
+            scheduled_discharge_end_min=1439,
+            scheduled_discharge_task_slot=2,
+            scheduled_discharge_task_count=1,
+            scheduled_discharge_settable_count=1,
+            scheduled_task_slot_max=2,
+        )
+        coordinator = _coordinator(hass, enhanced_config_entry, data=data)
+        entity = _number(coordinator, "scheduled_discharge_power_w")
+
+        await entity.async_set_native_value(500)
+
+        sent = _sender(coordinator).call_args_list
+        assert len(sent) == 2
+        assert bytes([0x08, 3, 0x10, 1]) in _pdata_of(sent[0])
+        assert bytes([0x08, 2, 0x10, 2]) in _pdata_of(sent[1])
+
+    async def test_a_failed_removal_stops_the_update_too(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """Same rule as on the add path: the pair would stay."""
+        data = dict(
+            WHOLE_DAY_CHARGE,
+            scheduled_discharge_power_w=300,
+            scheduled_discharge_enabled=True,
+            scheduled_discharge_start_min=0,
+            scheduled_discharge_end_min=1439,
+            scheduled_discharge_task_slot=2,
+            scheduled_discharge_task_count=1,
+            scheduled_discharge_settable_count=1,
+        )
+        coordinator = _coordinator(hass, enhanced_config_entry, data=data)
+        _sender(coordinator).return_value = False
+        entity = _number(coordinator, "scheduled_discharge_power_w")
+
+        with pytest.raises(HomeAssistantError):
+            await entity.async_set_native_value(500)
+
+        assert len(_sender(coordinator).call_args_list) == 1
+
+    async def test_a_list_read_only_in_part_stops_the_write(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """Counts from an earlier list must not steer a write.
+
+        The earlier list held no discharge task. The next one carries a block
+        that cannot be read, which may be a new discharge task, so a write
+        refuses rather than adding one beside it.
+        """
+        coordinator = _coordinator(hass, enhanced_config_entry, data=dict(NO_TASKS))
+        kindless = encode_field_varint(2, 1) + encode_field_bytes(7, encode_varint(60))
+        partial = parse_stream_ac5000_message(
+            _frame_254_39(encode_field_bytes(40, encode_field_bytes(1, kindless)))
+        )
+        assert partial is not None
+        coordinator._device_data.update(partial)
+        coordinator.async_set_updated_data(dict(coordinator._device_data))
+        entity = _number(coordinator, "scheduled_discharge_power_w")
+
+        with pytest.raises(HomeAssistantError) as err:
+            await entity.async_set_native_value(300)
+
+        assert err.value.translation_key == "set_command_not_ready"
+        _sender(coordinator).assert_not_called()
+
+    async def test_the_other_kind_with_its_own_window_is_kept_on_an_update(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
     ) -> None:
         """The update keeps its window, so nothing new can overlap (#653)."""

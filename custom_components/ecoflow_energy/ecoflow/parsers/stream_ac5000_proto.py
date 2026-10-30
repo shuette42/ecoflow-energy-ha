@@ -973,11 +973,15 @@ def _finalize_task(result: dict[str, Any]) -> None:
 
     tasks = [_decode_task(block) for block in blocks]
     # A block that does not decode, or that carries neither power container,
-    # leaves the frame unable to say what the list holds. Nothing is published
-    # from it: a count or a selection made without that task could point a
-    # write at the wrong one, and one corrupt block would otherwise wipe a
-    # live task's setpoint.
+    # leaves the frame unable to say what the list holds. No setpoint is
+    # published or cleared from it: one corrupt block would otherwise wipe a
+    # live task's setpoint. The counts are withdrawn instead, because the
+    # merged ones from the last good list may no longer be true, and a write
+    # acting on them could add a task next to one it cannot see. Writes then
+    # refuse as "not ready" until a list decodes in full.
     if any(not task.get("_task_kinds") for task in tasks):
+        for key in _TASK_COUNT_KEYS:
+            result[key] = None
         return
 
     slots = [

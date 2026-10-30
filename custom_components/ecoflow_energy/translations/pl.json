@@ -3330,7 +3330,7 @@
       "message": "Polecenie dla {entity} nie dotarło do urządzenia. Sprawdź, czy urządzenie jest połączone, i spróbuj ponownie."
     },
     "set_command_schedule_conflict": {
-      "message": "Nie zmieniono {entity} - harmonogram w aplikacji EcoFlow nie ma jednego zadania, do którego należy ta moc (kilka zadań tego rodzaju, tylko zadania ładowania Solar only lub zadanie drugiego rodzaju z własnym przedziałem czasu). Zmień moc w aplikacji EcoFlow albo zostaw tam jedno zadanie tego rodzaju."
+      "message": "Nie zmieniono {entity} - harmonogram w aplikacji EcoFlow nie ma jednego zadania, do którego należy ta moc (kilka zadań tego rodzaju, tylko zadania ładowania Tylko energia słoneczna lub zadanie drugiego rodzaju z własnym przedziałem czasu). Zmień moc w aplikacji EcoFlow albo zostaw tam dokładnie jedno zadanie tego rodzaju (przy ładowaniu takie, które ładuje z energii słonecznej i sieci)."
     },
     "set_command_gone": {
       "message": "Nie można ustawić {entity} - urządzenie nie zgłasza już tego harmonogramu. Sprawdź, czy harmonogram nadal istnieje w aplikacji EcoFlow."

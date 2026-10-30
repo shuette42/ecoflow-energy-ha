@@ -3330,7 +3330,7 @@
       "message": "La commande pour {entity} n'a pas atteint l'appareil. Vérifiez que l'appareil est connecté et réessayez."
     },
     "set_command_schedule_conflict": {
-      "message": "{entity} n'a pas été modifié - la planification dans l'application EcoFlow ne contient pas une seule tâche à laquelle cette puissance appartient (plusieurs tâches de ce type, uniquement des tâches de charge Solar only, ou une tâche de l'autre type avec sa propre plage horaire). Modifiez la puissance dans l'application EcoFlow, ou gardez-y une seule tâche de ce type."
+      "message": "{entity} n'a pas été modifié - la planification dans l'application EcoFlow ne contient pas une seule tâche à laquelle cette puissance appartient (plusieurs tâches de ce type, uniquement des tâches de charge Énergie solaire uniquement, ou une tâche de l'autre type avec sa propre plage horaire). Modifiez la puissance dans l'application EcoFlow, ou gardez-y exactement une tâche de ce type (pour la charge, une qui charge depuis le solaire et le réseau)."
     },
     "set_command_gone": {
       "message": "{entity} ne peut pas être réglé - l'appareil ne signale plus cette planification. Vérifiez si la planification existe encore dans l'application EcoFlow."

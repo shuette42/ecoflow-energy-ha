@@ -1702,15 +1702,14 @@ class SetCommandsMixin(_Base):
     def _clear_stream_ac5000_task(self, kind: str) -> None:
         """Forget a task this integration has just removed.
 
-        The device stops mentioning a deleted task rather than reporting it
-        empty, and the parser's clear-everything branch only fires on an empty
-        task list, which the replacement task keeps it from being. So nothing
-        would ever retract these values and the setpoint entity would go on
-        showing a task that no longer exists.
+        The next task list would retract these values too, but it arrives
+        seconds later, and a write in between would still see the removed task
+        and act on it.
 
-        `scheduled_charge_soc_target` deliberately survives: it is the app's
-        charge limit, the next charge write reads it back, and clearing it
-        would reset a task set to stop at 80% into charging to 100%.
+        `scheduled_charge_soc_target` deliberately survives here: it is the
+        app's charge limit, and a charge task added right after this removal
+        reads it back instead of charging to 100%. The next list without a
+        charge task clears it, as it clears every key of a kind it lacks.
         """
         for suffix in ("power_w", "enabled", "start_min", "end_min", "task_slot"):
             state_key = f"scheduled_{kind}_{suffix}"
@@ -1802,6 +1801,10 @@ class SetCommandsMixin(_Base):
         Zero is a real setpoint, not an absence: a 0 W discharge task parks the
         battery, while removing every task leaves it on its own 200 W base
         output.
+
+        A charge task carries one per-device block, for this unit. No recorded
+        task names a linked unit beside it; if one did, this update would drop
+        that unit's block, as every write here always has.
         """
         from ..ecoflow.stream_ac5000_commands import TASK_UPDATE, build_task_payload
 

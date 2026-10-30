@@ -710,7 +710,11 @@ class TestScheduledTasks:
         assert result["scheduled_discharge_task_slot"] is None
 
     def test_a_task_with_neither_power_block_is_dropped(self) -> None:
-        """Nothing says what a task with no power container does."""
+        """Nothing says what a task with no power container does.
+
+        No setpoint comes from it, and the counts are withdrawn because the
+        list could not be read in full.
+        """
         task = (
             encode_field_varint(2, 1)
             + encode_field_varint(3, 1)
@@ -719,7 +723,11 @@ class TestScheduledTasks:
         result = parse_stream_ac5000_message(
             _build_frame(254, 39, bytes(_sub(40, _sub(1, task))))
         )
-        assert result is None
+        assert result is not None
+        assert {k for k in result if k.startswith("scheduled_")} == set(
+            _TASK_COUNT_KEYS
+        )
+        assert all(result[k] is None for k in _TASK_COUNT_KEYS)
 
     def test_empty_task_block_clears_every_readback_key(self) -> None:
         """Deleting the last task in the app sends `f40` with no bytes.
@@ -1614,6 +1622,89 @@ class TestIssue653TaskList:
         assert result["scheduled_discharge_task_count"] == 0
 
 
+class TestEveryGetAllCarriesTheTaskList:
+    """The write path refuses until it has seen a task list (#653).
+
+    That is only safe if a full get-all always carries one, an empty one
+    included, or a device with no task could never be given one.
+    """
+
+    def test_every_recorded_get_reply_publishes_the_counts(self) -> None:
+        seen = empty = 0
+        for path in sorted(FIXTURES.glob("es2*_masked.json")):
+            for frame in json.loads(path.read_text()).get("frames", []):
+                if frame.get("topic") != "get_reply" or "hex" not in frame:
+                    continue
+                result = parse_stream_ac5000_message(bytes.fromhex(frame["hex"]))
+                assert result is not None, f"{path.name} {frame.get('ts_iso')}"
+                assert isinstance(result.get("scheduled_task_slot_max"), int), (
+                    f"{path.name} {frame.get('ts_iso')}"
+                )
+                seen += 1
+                empty += result["scheduled_task_slot_max"] == 0
+        # Counted rather than assumed: the sweep has to reach real get-alls,
+        # and some of them must come from a device holding no task at all.
+        assert seen >= 20
+        assert empty >= 10
+
+    def test_charge_field_8_2_is_never_set_on_the_wire(self) -> None:
+        """Updates write `.8.2` as 0 because no recorded task ever carries more."""
+
+        def fields(buf: bytes):
+            offset = 0
+            while offset < len(buf):
+                key, offset = _varint_at(buf, offset)
+                number, wire = key >> 3, key & 7
+                if wire == 0:
+                    value, offset = _varint_at(buf, offset)
+                    yield number, value
+                elif wire == 2:
+                    length, offset = _varint_at(buf, offset)
+                    yield number, buf[offset : offset + length]
+                    offset += length
+                else:
+                    return
+
+        def charge_blocks(buf: bytes, depth: int = 0):
+            try:
+                items = list(fields(buf))
+            except IndexError:
+                return
+            for number, value in items:
+                if not isinstance(value, bytes) or depth > 6:
+                    continue
+                if number in (39, 40):
+                    for sub, task in fields(value):
+                        if sub == 1 and isinstance(task, bytes):
+                            for n, v in fields(task):
+                                if n == 8 and isinstance(v, bytes):
+                                    yield v
+                else:
+                    yield from charge_blocks(value, depth + 1)
+
+        checked = 0
+        for path in sorted(FIXTURES.glob("es2*_masked.json")):
+            for frame in json.loads(path.read_text()).get("frames", []):
+                if "hex" not in frame:
+                    continue
+                for block in charge_blocks(bytes.fromhex(frame["hex"])):
+                    checked += 1
+                    ints = {n: v for n, v in fields(block) if isinstance(v, int)}
+                    assert ints.get(2, 0) == 0, path.name
+        assert checked >= 10
+
+
+def _varint_at(buf: bytes, offset: int) -> tuple[int, int]:
+    result = shift = 0
+    while True:
+        byte = buf[offset]
+        offset += 1
+        result |= (byte & 0x7F) << shift
+        shift += 7
+        if byte < 0x80:
+            return result, offset
+
+
 class TestTaskListShrink:
     """A task list that shrinks must retract the task that left it.
 
@@ -1735,9 +1826,10 @@ class TestTaskListShrink:
         A block that fails to decode, or that carries neither power container,
         leaves the frame unable to say what the device holds. It clears
         nothing, or one corrupt block would wipe a live task's setpoint (#234).
-        It publishes nothing either: the unreadable block may be a second task
-        of the same kind, and a setpoint chosen without it could point the
-        next write at the wrong task (#653).
+        It publishes no setpoint either: the unreadable block may be a second
+        task of the same kind, and a setpoint chosen without it could point
+        the next write at the wrong task (#653). The counts are withdrawn, so
+        the merged ones from an earlier list cannot steer a write.
         """
         good = (
             encode_field_varint(2, 1)
@@ -1761,8 +1853,11 @@ class TestTaskListShrink:
         result = parse_stream_ac5000_message(
             _build_frame(254, 39, bytes(_sub(40, _sub(1, good) + _sub(1, kindless))))
         )
-        # The frame carries nothing else, so nothing at all is published.
-        assert result is None
+        assert result is not None
+        assert {k for k in result if k.startswith("scheduled_")} == set(
+            _TASK_COUNT_KEYS
+        )
+        assert all(result[k] is None for k in _TASK_COUNT_KEYS)
 
 
 def _unit_frames(unit: str) -> list[dict]:
