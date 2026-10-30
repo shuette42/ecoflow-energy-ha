@@ -4633,7 +4633,7 @@ STREAM_SENSORS: list[EcoFlowSensorDef] = [
         "W",
         "power",
         "measurement",
-        "mdi:transmission-tower-export",
+        "mdi:transmission-tower",
         "diagnostic",
         suggested_display_precision=0,
         disabled_by_default=True,
