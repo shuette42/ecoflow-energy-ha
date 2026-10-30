@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [1.27.0] - 2026-10-29
 
+### Changed
+
+- Changed grid import/export icons to correctly reflect import and export directions. (Ref #661)
+
 ### Added
 
 - Local mode raises a repairs notice when the inverter has not answered Modbus for 30 minutes, naming the device and suggesting a restart of the inverter. The notice stays through a reload of the integration, goes away when the inverter answers again, and is removed with the entry. It is not raised for an inverter that does answer, with a wrong serial number or a refused read, because the log line for those already says what to check. Until now an inverter whose Modbus service had stopped answering left the entry unavailable with a single log line and nothing in the Home Assistant interface. Seen on an HJ31 whose Modbus service stayed silent for an hour until its firmware was updated.
