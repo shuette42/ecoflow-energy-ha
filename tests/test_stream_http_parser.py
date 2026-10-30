@@ -343,3 +343,73 @@ class TestFeedInControl:
         assert off["feed_in_control_enabled"] is False
         assert on["grid_w"] == 198.0
         assert off["grid_w"] == 0.0
+
+
+class TestGridConnectionAndSockets:
+    """The AC readings that stayed unknown in Standard Mode (#659).
+
+    Each quota key is the JSON name of a field the protobuf path already maps
+    onto the same sensor key, so both modes feed one entity.
+    """
+
+    def test_the_real_ac_pro_quota_fills_grid_connection_and_both_sockets(
+        self,
+    ) -> None:
+        result = parse_stream_quota(TestRealAcProQuota.QUOTA)
+
+        assert result["ac_grid_connection_power_w"] == pytest.approx(-184.0303)
+        assert result["ac_outlet_1_enabled"] is True
+        assert result["ac_outlet_2_enabled"] is True
+
+    def test_false_relays_read_off(self) -> None:
+        """The Ultra X quota from Discussion #509 carries both relays false."""
+        snapshot = json.loads(FEED_IN_FIXTURE.read_text())["on"]
+
+        result = parse_stream_quota(snapshot)
+
+        assert result["ac_outlet_1_enabled"] is False
+        assert result["ac_outlet_2_enabled"] is False
+        assert result["ac_grid_connection_power_w"] == pytest.approx(63.671654)
+
+    def test_relay2_is_socket_1_and_relay3_is_socket_2(self) -> None:
+        """`relay2_onoff` is field 980 and `relay3_onoff` 982 on the wire."""
+        result = parse_stream_quota({"relay2Onoff": True, "relay3Onoff": False})
+
+        assert result["ac_outlet_1_enabled"] is True
+        assert result["ac_outlet_2_enabled"] is False
+
+    def test_voltage_current_frequency_and_socket_2_power(self) -> None:
+        result = parse_stream_quota(
+            {
+                "gridConnectionVol": 239.6,
+                "gridConnectionAmp": 1.3,
+                "gridConnectionFreq": 49.92,
+                "powGetSchuko2": 12.0,
+            }
+        )
+
+        assert result["ac_voltage_v"] == pytest.approx(239.6)
+        assert result["ac_current_a"] == pytest.approx(1.3)
+        assert result["ac_frequency_hz"] == pytest.approx(49.92)
+        assert result["ac_outlet_2_w"] == pytest.approx(12.0)
+
+    @pytest.mark.parametrize("value", ["true", 2, 1.0, None])
+    def test_a_relay_value_that_is_not_a_state_is_dropped(self, value) -> None:
+        result = parse_stream_quota({"relay2Onoff": value})
+
+        assert "ac_outlet_1_enabled" not in result
+
+    def test_a_boolean_on_a_reading_is_dropped(self) -> None:
+        """A flag on a power or voltage key must not read as 0 or 1."""
+        result = parse_stream_quota(
+            {"gridConnectionPower": True, "gridConnectionVol": False}
+        )
+
+        assert "ac_grid_connection_power_w" not in result
+        assert "ac_voltage_v" not in result
+
+    def test_a_relay_sent_as_zero_or_one_still_reads(self) -> None:
+        result = parse_stream_quota({"relay2Onoff": 0, "relay3Onoff": 1})
+
+        assert result["ac_outlet_1_enabled"] is False
+        assert result["ac_outlet_2_enabled"] is True
