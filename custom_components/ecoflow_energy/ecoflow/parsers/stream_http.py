@@ -46,13 +46,16 @@ Field notes:
   maps (`grid_connection_power` 616, `grid_connection_vol` 613,
   `grid_connection_amp` 614, `grid_connection_freq` 615, `relay2_onoff`
   980, `relay3_onoff` 982), so they feed the same keys (#659).
-  `gridConnectionPower` and both relays are in every recorded quota of a
-  STREAM AC Pro, Ultra and Ultra X. Voltage, current, frequency and the
-  second socket's power are in none of them; they are mapped for the
-  `/quota` push, which the reporter of #659 saw fill them.
-  `gridConnectionPower` is the signed grid connection the protobuf path
-  falls back to when field 992 is absent: negative is drawn from the
-  grid, positive is fed out.
+  `gridConnectionPower` and both relays are in the recorded AC Pro and
+  Ultra X quotas and in the reporter's Ultra (#659). Voltage, current,
+  frequency and the second socket's power are in none of them; they are
+  mapped in case the `/quota` push carries them, which the reporter of
+  #659 suspects is how voltage and frequency reached him.
+  `gridConnectionPower` is field 616, this unit's own signed grid
+  connection: negative is drawn from the grid, positive is fed out. The
+  protobuf path prefers the system figure in field 992 and falls back to
+  616, and no quota carries a 992 counterpart, so on the leading unit of
+  a linked group the reading can differ between the two modes.
 """
 
 from __future__ import annotations
@@ -85,8 +88,10 @@ STREAM_HTTP_FIELD_MAP: dict[str, str] = {
     "gridConnectionFreq": "ac_frequency_hz",
 }
 
-# AC socket relays: the live relay state, the same fields the protobuf path
-# reads as 980 and 982. The quota sends JSON booleans.
+# AC socket relays, the same fields the protobuf path reads as 980 and 982.
+# The quota sends JSON booleans. That `relay2` is socket 1 and `relay3`
+# socket 2 follows the protobuf path and is not yet confirmed by an owner
+# switching one socket alone.
 STREAM_HTTP_RELAY_MAP: dict[str, str] = {
     "relay2Onoff": "ac_outlet_1_enabled",
     "relay3Onoff": "ac_outlet_2_enabled",

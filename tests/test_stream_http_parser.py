@@ -361,8 +361,8 @@ class TestGridConnectionAndSockets:
         assert result["ac_outlet_1_enabled"] is True
         assert result["ac_outlet_2_enabled"] is True
 
-    def test_sockets_switched_off_read_off(self) -> None:
-        """Both relays false on the Ultra X in Discussion #509."""
+    def test_false_relays_read_off(self) -> None:
+        """The Ultra X quota from Discussion #509 carries both relays false."""
         snapshot = json.loads(FEED_IN_FIXTURE.read_text())["on"]
 
         result = parse_stream_quota(snapshot)
@@ -398,6 +398,15 @@ class TestGridConnectionAndSockets:
         result = parse_stream_quota({"relay2Onoff": value})
 
         assert "ac_outlet_1_enabled" not in result
+
+    def test_a_boolean_on_a_reading_is_dropped(self) -> None:
+        """A flag on a power or voltage key must not read as 0 or 1."""
+        result = parse_stream_quota(
+            {"gridConnectionPower": True, "gridConnectionVol": False}
+        )
+
+        assert "ac_grid_connection_power_w" not in result
+        assert "ac_voltage_v" not in result
 
     def test_a_relay_sent_as_zero_or_one_still_reads(self) -> None:
         result = parse_stream_quota({"relay2Onoff": 0, "relay3Onoff": 1})

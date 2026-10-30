@@ -6079,6 +6079,48 @@ class TestParseMessageGetReply:
         result = coordinator._parse_message(topic, payload)
         assert result == {"pv1_w": 518.0}
 
+    async def test_quota_push_stream_fills_the_ac_readings(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """The Standard Mode `/quota` push reaches the same keys as the poll (#659)."""
+        import json as json_mod
+
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                "access_key": "ak",
+                "secret_key": "sk",
+                "mode": MODE_STANDARD,
+                "devices": [MOCK_STREAM_DEVICE],
+            },
+            unique_id="ak_stream_quota",
+        )
+        entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_STREAM_DEVICE)
+        payload = json_mod.dumps(
+            {
+                "params": {
+                    "gridConnectionPower": 303.5,
+                    "gridConnectionVol": 239.6,
+                    "gridConnectionFreq": 49.92,
+                    "relay2Onoff": True,
+                    "relay3Onoff": False,
+                }
+            }
+        ).encode()
+
+        result = coordinator._parse_message("/open/cert/SN001/quota", payload)
+
+        assert result == {
+            "ac_grid_connection_power_w": 303.5,
+            "ac_voltage_v": 239.6,
+            "ac_frequency_hz": 49.92,
+            "ac_outlet_1_enabled": True,
+            "ac_outlet_2_enabled": False,
+        }
+
     async def test_powerocean_proto_get_reply_routed_via_parse_message(
         self,
         hass: HomeAssistant,
