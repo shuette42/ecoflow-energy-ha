@@ -141,9 +141,11 @@ _STREAM_FIELD_MAP: dict[tuple[int, int], dict[int, tuple[str, str]]] = {
         # the requested target rather than the live relay state and are
         # deliberately not mapped (same reasoning as LED field 384).
         #
-        # UNVERIFIED AGAINST HARDWARE: no BK31 telemetry frame exists in this
-        # repo, so that these two carry the live relay state rests on the
-        # protocol definition alone. Fields 380/381 used to feed the same two
+        # PARTLY VERIFIED: the Standard Mode quota of a BK31 and a BK61 carries
+        # the same two fields as `relay2Onoff` / `relay3Onoff` (#659), but no
+        # BK31 telemetry frame exists in this repo, and no capture switches one
+        # socket alone, so which socket each one is rests on the protocol
+        # definition. Fields 380/381 used to feed the same two
         # keys and were corrected to PV voltage and current; if these two turn
         # out not to be present on a BK31, both outlet sensors go permanently
         # stale without anything being logged. A BK31 frame carrying 380/381

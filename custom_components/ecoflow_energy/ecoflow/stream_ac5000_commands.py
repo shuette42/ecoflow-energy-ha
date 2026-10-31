@@ -320,8 +320,11 @@ def build_task_payload(
         39.1.3  enabled, 39.1.4 its inverse, 39.1.5 always 1
         39.1.7  window: a packed varint, start in the low 16 bits and end in
                 the high 16, both minutes since midnight
-        39.1.8  charge settings {1: 1, 2: 0, 3: per device}, where the per
-                device block is {1: serial, 2: target SoC %, 3: watts}
+        39.1.8  charge settings {1: source, 2: 0, 3: per device}, where the
+                per device block is {1: serial, 2: target SoC %, 3: watts}.
+                Source 1 charges from solar and grid at that power, 0 is the
+                app's "Solar only", which has no power (#653). `.2` is 0 or
+                absent in every recorded frame.
         39.1.9  discharge power, system wide: {1: watts}
 
     Written on config field 39, read back on `254/39 f40`. The grammar under
@@ -352,8 +355,8 @@ def build_task_payload(
     seconds. So it is stored and not acted on.
 
     What outranked it is unknown. Backup Reserve stood at 100% in that run, a
-    task is only acted on in Custom mode, `8.1` and `8.2` below are unexplained
-    constants, and the whole-day window is one no recorded app write uses - the
+    task is only acted on in Custom mode, `8.2` below is an unexplained
+    constant, and the whole-day window is one no recorded app write uses - the
     charge fixture this builder is pinned against covers 13:00 to 16:00. That
     last one is weak: the discharge task uses the same window and does act.
 

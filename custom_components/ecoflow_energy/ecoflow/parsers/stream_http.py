@@ -41,6 +41,21 @@ Field notes:
   the summed voltage, is what users are after.
 - BMS extras such as `cycles` are present in the payload but have no
   sensor definition yet and are therefore not mapped.
+- The `gridConnection*` keys, `powGetSchuko2` and `relay2Onoff` /
+  `relay3Onoff` are the JSON names of fields the protobuf path already
+  maps (`grid_connection_power` 616, `grid_connection_vol` 613,
+  `grid_connection_amp` 614, `grid_connection_freq` 615, `relay2_onoff`
+  980, `relay3_onoff` 982), so they feed the same keys (#659).
+  `gridConnectionPower` and both relays are in the recorded AC Pro and
+  Ultra X quotas and in the reporter's Ultra (#659). Voltage, current,
+  frequency and the second socket's power are in none of them; they are
+  mapped in case the `/quota` push carries them, which the reporter of
+  #659 suspects is how voltage and frequency reached him.
+  `gridConnectionPower` is field 616, this unit's own signed grid
+  connection: negative is drawn from the grid, positive is fed out. The
+  protobuf path prefers the system figure in field 992 and falls back to
+  616, and no quota carries a 992 counterpart, so on the leading unit of
+  a linked group the reading can differ between the two modes.
 """
 
 from __future__ import annotations
@@ -50,7 +65,7 @@ from typing import Any
 from .stream_proto import SOC_FALLBACK_KEY
 
 # Mapping: flat quota key -> sensor key. Every value in this map is a
-# plain number in its native unit (W, V, %); no scaling is applied.
+# plain number in its native unit (W, V, A, Hz, %); no scaling is applied.
 STREAM_HTTP_FIELD_MAP: dict[str, str] = {
     # --- PV (W) ---
     "powGetPvSum": "solar_w",
@@ -64,8 +79,22 @@ STREAM_HTTP_FIELD_MAP: dict[str, str] = {
     "powGetBpCms": "batt_w",
     "powGetSysLoadFromPv": "home_from_solar_w",
     "powGetSchuko1": "ac_outlet_1_w",
-    # --- Voltage (V) ---
+    "powGetSchuko2": "ac_outlet_2_w",
+    "gridConnectionPower": "ac_grid_connection_power_w",
+    # --- Voltage (V), current (A), frequency (Hz) ---
     "plugInInfoPvVol": "pv_voltage_v",
+    "gridConnectionVol": "ac_voltage_v",
+    "gridConnectionAmp": "ac_current_a",
+    "gridConnectionFreq": "ac_frequency_hz",
+}
+
+# AC socket relays, the same fields the protobuf path reads as 980 and 982.
+# The quota sends JSON booleans. That `relay2` is socket 1 and `relay3`
+# socket 2 follows the protobuf path and is not yet confirmed by an owner
+# switching one socket alone.
+STREAM_HTTP_RELAY_MAP: dict[str, str] = {
+    "relay2Onoff": "ac_outlet_1_enabled",
+    "relay3Onoff": "ac_outlet_2_enabled",
 }
 
 # Keys that are reported as clean integers (percent). Kept separate so the
@@ -142,6 +171,15 @@ def parse_stream_quota(raw: dict) -> dict[str, Any]:
         value = _numeric(raw[quota_key])
         if value is not None:
             result[sensor_key] = int(round(value))
+
+    # Only a real boolean, or exactly 0 or 1, is a relay state. Anything else
+    # is dropped rather than read as on or off.
+    for quota_key, sensor_key in STREAM_HTTP_RELAY_MAP.items():
+        relay = raw.get(quota_key)
+        if isinstance(relay, bool):
+            result[sensor_key] = relay
+        elif type(relay) is int and relay in (0, 1):
+            result[sensor_key] = bool(relay)
 
     # Absent key = no update. A present key with a value outside 1/2 is
     # published as None (Unknown) so a unit reporting 3 after 2 cannot keep

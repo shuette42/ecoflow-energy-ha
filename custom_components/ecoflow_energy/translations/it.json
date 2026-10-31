@@ -3329,6 +3329,9 @@
     "set_command_failed": {
       "message": "Il comando per {entity} non ha raggiunto il dispositivo. Controlla che il dispositivo sia connesso e riprova."
     },
+    "set_command_schedule_conflict": {
+      "message": "{entity} non è stato modificato - il programma nell'app EcoFlow non ha un'unica attività a cui appartiene questa potenza (più attività di questo tipo, solo attività di carica Solo solare, o un'attività dell'altro tipo con una propria fascia oraria). Modifica la potenza nell'app EcoFlow, oppure lascia lì esattamente un'attività di questo tipo (per la carica, una che carica da solare e rete)."
+    },
     "set_command_gone": {
       "message": "{entity} non può essere impostato - il dispositivo non riporta più questo programma. Controlla se il programma esiste ancora nell'app EcoFlow."
     },
