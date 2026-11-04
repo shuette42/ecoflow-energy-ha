@@ -47,7 +47,8 @@
 | **Delta 2 Max** | `R351` `R331` | Standard, MQTT push | 94 + 4 binary | 7 switches · 8 numbers | 4 | ~30 s |
 | **Delta 3** | `D3M1` `D3N1` `P321` `P231` `P351` | Standard, Enhanced | 47 (`D3M`: + 1 binary) | 7 switches · 4 numbers · 5 selects (`D3M`: 10 · 7 · 5) | 4 | ~30 s / ~2 s |
 | **Smart Plug** | `HW52` | Standard, Enhanced | 11 + 1 binary | 1 switch · 2 numbers | 1 | ~30 s / ~3 s |
-| **Stream** | `BK31` `BK11` `BK12` `BK41` `BK51` `BK61` | Standard, Enhanced | 60 + 2 binary | 0 numbers (`BK31`: 2 switches · 4 numbers; `BK61`: 1 switch) | 2 + 6 optional | ~30 s / ~3 s |
+| **Stream** | `BK31` `BK11` `BK41` `BK51` `BK61` | Standard, Enhanced | 60 + 2 binary | 0 numbers (`BK31`: 2 switches · 4 numbers; `BK61`: 1 switch) | 2 + 6 optional | ~30 s / ~3 s |
+| **Stream Pro** | `BK12` | Enhanced (Standard untested) | as Stream | none | as Stream | ~3 s |
 | **Stream Micro** | `BK01` | Enhanced only | 25 | none | 2 optional | ~3 s |
 | **Stream Micro** | `BK02` | Standard | 25 | none | 2 optional | MQTT bursts |
 | **PowerStream** | `HW51` | Standard only | 25 | none, read-only | 2 + 2 optional | ~30 s |
@@ -241,7 +242,7 @@ The local connection came last. [@jensfr1](https://github.com/jensfr1) showed ho
 
 Thank you to everyone who reports, tests, records data and contributes code. If you want to take part, open an issue or a pull request.
 
-**Enhanced Mode** connects with your EcoFlow email and password. No Developer API keys needed. Faster updates, but this is an unofficial, community-driven protocol based on observed behaviour that may change without notice. Stream-family devices report an empty product name, so they are identified by their serial prefix (`BK01`, `BK02`, `BK11`, `BK12`, `BK31`, `BK41`, `BK51`, `BK61`) and appear under the correct model name in Home Assistant in both modes. The Stream Micro `BK01` is not exposed through the Developer API at all and therefore needs Enhanced Mode.
+**Enhanced Mode** connects with your EcoFlow email and password. No Developer API keys needed. Faster updates, but this is an unofficial, community-driven protocol based on observed behaviour that may change without notice. Stream-family devices report an empty product name, so they are identified by their serial prefix (`BK01`, `BK02`, `BK11`, `BK31`, `BK41`, `BK51`, `BK61`) and appear under the correct model name in Home Assistant in both modes. The Stream Pro (`BK12`) is identified the same way in Enhanced Mode, where it has been seen; Standard Mode is untested. The Stream Micro `BK01` is not exposed through the Developer API at all and therefore needs Enhanced Mode.
 
 **Upgrading to v1.17.0?** The charge and discharge limits carry one name now, on every device that has them: **Max Charge SoC** and **Min Discharge SoC**. Depending on the device they used to read Charge Limit, Discharge Limit, Max. Ladezustand or Ladegrenze, which meant one value answered to four names across the integration. Only the displayed label changed. Entity ids, history, statistics and automations are untouched, so nothing needs migrating. The one place worth a look is a dashboard card whose title you typed by hand, or a template that matches on the friendly name.
 
