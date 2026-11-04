@@ -158,7 +158,7 @@ Per-string solar power, voltage and current for both strings · single-phase gri
 
 The Stream Micro feeds solar directly into the grid and has no battery and no AC outlets, so it gets a smaller entity set than the rest of the Stream family: no state of charge, no battery power or energy, no backup reserve and no outlet entities. Home Assistant keeps an entity in the registry once it has been created, so entities a device can never fill are not created in the first place.
 
-**Modes.** The `BK01` is not exposed through the EcoFlow Developer API at all, so it needs the EcoFlow account sign-in (Enhanced Mode only). The `BK02` is listed under the same product name in the EcoFlow app and is used in Standard Mode: it sends its data in bursts over MQTT, and the regular poll brings no data for it.
+**Modes.** The `BK01` is not exposed through the EcoFlow Developer API at all, so it needs the EcoFlow account sign-in (Enhanced Mode only). The `BK02` is listed under the same product name in the EcoFlow app and runs in Standard Mode. It sends its data in bursts over MQTT, and the regular poll fails for it.
 
 </details>
 

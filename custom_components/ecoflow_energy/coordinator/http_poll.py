@@ -76,7 +76,7 @@ class HttpPollMixin(_Base):
             # frames have stopped too (#674). An own frame already marks it
             # available whatever the poll said (`_apply_data`), so this is the
             # same proof read in the other direction: a Stream Micro whose
-            # quota answer is empty but which pushes in bursts stays
+            # quota poll brings no data but which pushes in bursts stays
             # available between them. Silent beyond the window - a Micro
             # after sunset (#437), or a device without MQTT at all - it goes
             # unavailable as before.

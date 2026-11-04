@@ -191,7 +191,7 @@ POWERPULSE2_SOFT_UNAVAILABLE_S = 2400.0
 POWERPULSE2_HARD_UNAVAILABLE_S = 3600.0
 # Standard Mode: how long the device's own last MQTT frame keeps it available
 # while its quota poll fails (#674). A Stream Micro (BK02) pushes in bursts
-# roughly every 15 minutes, and its quota answer is empty, so three polls in a
+# roughly every 15 minutes, and its quota poll fails, so three polls in a
 # row marked it unavailable while its data kept arriving. In the reporter's
 # diagnostics the failure counter climbs from 4 to 27 without a reset, which
 # puts the gap between two of its own frames at 806 s or more. 1800 s is 30
