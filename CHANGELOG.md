@@ -19,6 +19,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 
 - HACS installs and updates this integration from the release archive again, as it did from 1.18.0 to 1.25.0. GitHub's header on release downloads is back to a size HACS accepts (3,994 bytes measured on 31 October, against the 8,190 byte limit), so the detour through the repository files is no longer needed. Nothing changes in what is installed. Releases cut during the detour keep installing from the repository files.
+- The STREAM AC 5000 entity reference now says that, with units linked, Battery Charge Power, Battery Discharge Power, Battery Charge Energy and Battery Discharge Energy are the group figure: this unit plus every linked unit, such as a STREAM Ultra X. It adds an Energy Dashboard recipe for linked groups: either the group figures alone, or the unit's own Unit Battery Charge/Discharge Energy together with the Ultra X's own counters, never both, because the Ultra X would be counted twice. Thanks to @hollandgdavid for the report and the diagnostics download (Ref #669).
 
 ### Fixed
 
