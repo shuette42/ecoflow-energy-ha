@@ -123,12 +123,12 @@ All seven are integrated from the matching power reading, so they only ever coun
 | Grid Export Energy | kWh | - | enabled | Lifetime energy fed into the grid |
 | Home Energy | kWh | diagnostic | disabled | Lifetime house consumption |
 
-**Linked units in the Energy Dashboard: use one set, never both.** With a STREAM Ultra X (or another unit) linked, the STREAM 5000's Battery Charge Energy and Battery Discharge Energy already contain the Ultra X. Adding them next to the Ultra X's own Battery Charge Energy and Battery Discharge Energy counts the Ultra X twice. Pick one of the two:
+**Linked units in the Energy Dashboard: use one set, never both.** With a STREAM Ultra X (or another unit) linked, the STREAM AC 5000's Battery Charge Energy and Battery Discharge Energy already contain the Ultra X. Adding them next to the Ultra X's own Battery Charge Energy and Battery Discharge Energy counts the Ultra X twice. Pick one of the two:
 
-- **The group figure alone.** Add only the STREAM 5000's Battery Charge Energy and Battery Discharge Energy. Leave the Ultra X's out of the battery section.
-- **Each battery by itself.** Enable the STREAM 5000's Unit Battery Charge Energy and Unit Battery Discharge Energy (both are disabled by default) and add them together with the Ultra X's own Battery Charge Energy and Battery Discharge Energy. Leave the STREAM 5000's Battery Charge Energy and Battery Discharge Energy out.
+- **The group figure alone.** Add only the STREAM AC 5000's Battery Charge Energy and Battery Discharge Energy. Leave the Ultra X's out of the battery section.
+- **Each battery by itself.** Enable the STREAM AC 5000's Unit Battery Charge Energy and Unit Battery Discharge Energy (both are disabled by default) and add them together with the Ultra X's own Battery Charge Energy and Battery Discharge Energy. Leave the STREAM AC 5000's Battery Charge Energy and Battery Discharge Energy out.
 
-The two sets differ by a few percent over time, because the group figure is integrated from the flows of the whole system and the unit figures from each unit's own reading. The same applies to the power readings: Battery Charge Power is the group, Unit Battery Charge Power is this unit's share, so the group value is higher than what the app shows under the STREAM 5000's own name.
+In one owner's data the two sets differed by about 5 percent, in either direction. The same applies to the power readings: Battery Charge Power is the group, Unit Battery Charge Power is this unit's share, so while both units charge the group value is higher than what the app shows under the STREAM AC 5000's own name. The Ultra X's own counters exist in Enhanced Mode only.
 
 There is deliberately no Solar Energy counter, see the note below.
 
