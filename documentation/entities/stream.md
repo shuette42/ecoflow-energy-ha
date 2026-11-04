@@ -2,7 +2,7 @@
 
 Full list of all entities created for Stream devices.
 
-**Models:** Stream AC Pro (`BK31`), Stream Ultra (`BK11`), Stream Pro (`BK12`), Stream Max (`BK41`), Stream AC (`BK51`), Stream Ultra X (`BK61`). All six share the sensor and binary-sensor set below; the hardware-confirmed writable controls are limited to the AC Pro. On the other five models Backup Reserve is no longer a number. The Backup Reserve sensor shows the value. The Stream Pro (`BK12`) has been seen in Enhanced Mode only, in two reports. It has not been tried in Standard Mode, and which of the entities below fill on it is not confirmed yet.
+**Models:** Stream AC Pro (`BK31`), Stream Ultra (`BK11`), Stream Pro (`BK12`), Stream Max (`BK41`), Stream AC (`BK51`), Stream Ultra X (`BK61`). All six share the sensor and binary-sensor set below. The hardware-confirmed writable controls are limited to the AC Pro. On the other five models Backup Reserve is no longer a number. The Backup Reserve sensor shows the value. The Stream Pro (`BK12`) has been seen in Enhanced Mode only, in two reports. It has not been tried in Standard Mode. Which of the entities below fill on it is not confirmed yet.
 
 **The Stream Micro (`BK01`, `BK02`) does not.** It is a grid-tie inverter with two solar strings and no battery, and it gets a reduced set. See [Stream Micro (BK01, BK02)](#stream-micro-bk01-bk02) at the end of this page.
 
