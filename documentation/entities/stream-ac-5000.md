@@ -31,8 +31,8 @@ Full list of all entities created for the STREAM AC 5000.
 | Unit Battery Power | W | diagnostic | disabled | This unit's own share of the battery power above, positive = charging, negative = discharging. On a single unit it repeats that reading, which is why it is off by default. This is the figure the app shows under the unit's name |
 | Unit Battery Charge Power | W | diagnostic | disabled | This unit's own charging power (always >= 0), split from Unit Battery Power |
 | Unit Battery Discharge Power | W | diagnostic | disabled | This unit's own discharging power (always >= 0), split from Unit Battery Power |
-| Battery Charge Power | W | - | enabled | Charging power (always >= 0) |
-| Battery Discharge Power | W | - | enabled | Discharging power (always >= 0) |
+| Battery Charge Power | W | - | enabled | Charging power (always >= 0). It is split from Battery Power, so with units linked it is the group figure: this unit plus every linked unit, such as a STREAM Ultra X. This unit's own share is Unit Battery Charge Power above |
+| Battery Discharge Power | W | - | enabled | Discharging power (always >= 0). The group figure with units linked, like Battery Charge Power above. This unit's own share is Unit Battery Discharge Power |
 | Battery Charge/Discharge State | - | diagnostic | disabled | `standby`, `charging` or `discharging` |
 
 **Battery Power counts the flows, not the pack.** It is the figure the app's flow chart shows, and the unit's own consumption is not one of those flows. On one owner's unit the pack supplied a steady 45 to 61 W while the unit stood idle, and Battery Power showed little or none of it. At the backup reserve the same unit reported part of that consumption as a charge from the grid: for a minute Battery Power read 26 to 45 W charging, and in the one report that carried both readings it read 45 W charging while the pack was discharging at about 61 W. Battery Current, under Battery Diagnostics, shows the pack's real direction, but only for this unit's own pack: with units linked, Battery Power is the sum across them, so compare the two only while the linked unit's battery is idle. Battery Charge Energy and Battery Discharge Energy are integrated from Battery Power and carry the same gap. A load on the AC socket was not part of it: at the reserve the socket ran from the grid, and apart from a brief rise in the second a load of about 100 W was plugged in, the pack drew no more than before.
@@ -115,13 +115,20 @@ All seven are integrated from the matching power reading, so they only ever coun
 
 | Entity | Unit | Category | Default | Description |
 |:---|:---:|:---:|:---:|:---|
-| Battery Charge Energy | kWh | - | enabled | Lifetime energy into the battery |
-| Battery Discharge Energy | kWh | - | enabled | Lifetime energy out of the battery |
-| Unit Battery Charge Energy | kWh | diagnostic | disabled | Lifetime energy into this unit's own battery. With units linked, Battery Charge Energy above counts the whole group |
-| Unit Battery Discharge Energy | kWh | diagnostic | disabled | Lifetime energy out of this unit's own battery |
+| Battery Charge Energy | kWh | - | enabled | Lifetime energy into the battery. With units linked this is the group: it counts this unit and every linked unit, such as a STREAM Ultra X, because it is integrated from Battery Charge Power |
+| Battery Discharge Energy | kWh | - | enabled | Lifetime energy out of the battery. The group figure with units linked, like Battery Charge Energy above |
+| Unit Battery Charge Energy | kWh | diagnostic | disabled | Lifetime energy into this unit's own battery, without the linked units. With units linked, Battery Charge Energy above counts the whole group |
+| Unit Battery Discharge Energy | kWh | diagnostic | disabled | Lifetime energy out of this unit's own battery, without the linked units |
 | Grid Import Energy | kWh | - | enabled | Lifetime energy drawn from the grid |
 | Grid Export Energy | kWh | - | enabled | Lifetime energy fed into the grid |
 | Home Energy | kWh | diagnostic | disabled | Lifetime house consumption |
+
+**Linked units in the Energy Dashboard: use one set, never both.** With a STREAM Ultra X (or another unit) linked, the STREAM AC 5000's Battery Charge Energy and Battery Discharge Energy already contain the Ultra X. Adding them next to the Ultra X's own Battery Charge Energy and Battery Discharge Energy counts the Ultra X twice. Pick one of the two:
+
+- **The group figure alone.** Add only the STREAM AC 5000's Battery Charge Energy and Battery Discharge Energy. Leave the Ultra X's out of the battery section.
+- **Each battery by itself.** Enable the STREAM AC 5000's Unit Battery Charge Energy and Unit Battery Discharge Energy (both are disabled by default) and add them together with the Ultra X's own Battery Charge Energy and Battery Discharge Energy. Leave the STREAM AC 5000's Battery Charge Energy and Battery Discharge Energy out.
+
+In one owner's data the two sets differed by about 5 percent, in either direction. The same applies to the power readings: Battery Charge Power is the group, Unit Battery Charge Power is this unit's share, so while both units charge the group value is higher than what the app shows under the STREAM AC 5000's own name. The Ultra X's own counters exist in Enhanced Mode only.
 
 There is deliberately no Solar Energy counter, see the note below.
 
