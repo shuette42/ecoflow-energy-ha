@@ -13,6 +13,7 @@ from ..const import (
     DEVICE_TYPE_POWERSTREAM,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM,
+    STANDARD_MQTT_AVAILABILITY_WINDOW_S,
 )
 from ..ecoflow.firmware import extract_firmware_versions
 from ..ecoflow.parsers.delta3_http import parse_delta3_http_quota
@@ -64,10 +65,25 @@ class HttpPollMixin(_Base):
                 return dict(self._device_data)
 
             self._consecutive_http_failures += 1
+            # `{}` is the API's code 0 with no quota; None is no answer or an
+            # error. Kept apart in the event log so a diagnostics download
+            # tells the two cases apart (#674).
             self._log_event(
-                "http_fail", f"consecutive={self._consecutive_http_failures}"
+                "http_empty" if raw is not None else "http_fail",
+                f"consecutive={self._consecutive_http_failures}",
             )
-            if self._consecutive_http_failures >= 3:
+            # A failed poll takes the device offline only once its own MQTT
+            # frames have stopped too (#674). An own frame already marks it
+            # available whatever the poll said (`_apply_data`), so this is the
+            # same proof read in the other direction: a Stream Micro whose
+            # quota poll brings no data but which pushes in bursts stays
+            # available between them. Silent beyond the window - a Micro
+            # after sunset (#437), or a device without MQTT at all - it goes
+            # unavailable as before.
+            if (
+                self._consecutive_http_failures >= 3
+                and self._mqtt_data_age() > STANDARD_MQTT_AVAILABILITY_WINDOW_S
+            ):
                 self._device_available = False
                 self._snapshot = DeviceSnapshot(
                     data={},

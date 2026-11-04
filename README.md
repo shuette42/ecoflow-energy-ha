@@ -49,6 +49,7 @@
 | **Smart Plug** | `HW52` | Standard, Enhanced | 11 + 1 binary | 1 switch · 2 numbers | 1 | ~30 s / ~3 s |
 | **Stream** | `BK31` `BK11` `BK41` `BK51` `BK61` | Standard, Enhanced | 60 + 2 binary | 0 numbers (`BK31`: 2 switches · 4 numbers; `BK61`: 1 switch) | 2 + 6 optional | ~30 s / ~3 s |
 | **Stream Micro** | `BK01` | Enhanced only | 25 | none | 2 optional | ~3 s |
+| **Stream Micro** | `BK02` | Standard | 25 | none | 2 optional | MQTT bursts |
 | **PowerStream** | `HW51` | Standard only | 25 | none, read-only | 2 + 2 optional | ~30 s |
 | **STREAM AC 5000** | `ES22` | Enhanced only | 64 + 2 binary | 2 switches · 7 numbers · 1 select | 4 + 3 optional | ~2 s |
 | **STREAM 5000** | `ES21` | Enhanced only | 64 + 2 binary | 2 switches · 7 numbers · 1 select | 4 + 3 optional | ~2 s |
@@ -151,13 +152,13 @@ All five models are recognized by serial prefix and appear under their correct m
 </details>
 
 <details>
-<summary><b>Stream Micro</b> (`BK01`) - grid-tie solar inverter, two strings, no battery</summary>
+<summary><b>Stream Micro</b> (`BK01`, `BK02`) - grid-tie solar inverter, two strings, no battery</summary>
 
 Per-string solar power, voltage and current for both strings · single-phase grid connection with voltage, current, frequency and power · grid connection state · the feed-in limit configured in the EcoFlow app · WiFi signal strength.
 
 The Stream Micro feeds solar directly into the grid and has no battery and no AC outlets, so it gets a smaller entity set than the rest of the Stream family: no state of charge, no battery power or energy, no backup reserve and no outlet entities. Home Assistant keeps an entity in the registry once it has been created, so entities a device can never fill are not created in the first place.
 
-**Enhanced Mode only.** The Stream Micro is not exposed through the EcoFlow Developer API at all, so it needs the EcoFlow account sign-in.
+**Modes.** The `BK01` is not exposed through the EcoFlow Developer API at all, so it needs the EcoFlow account sign-in (Enhanced Mode only). The `BK02` is listed under the same product name in the EcoFlow app and runs in Standard Mode. It sends its data in bursts over MQTT, and the regular poll fails for it.
 
 </details>
 
@@ -226,7 +227,7 @@ Already running a different EcoFlow integration? It can stay installed while you
 
 **Standard and Enhanced are cloud-based.** The data travels from your device to EcoFlow's servers and from there to Home Assistant, so an internet connection is required and outages on EcoFlow's side are visible here. The difference between the two cloud modes is which EcoFlow service is used and how fast it delivers, not whether the connection leaves your network. These devices expose no local API to talk to instead, with one exception: the three-phase PowerOcean. Once EcoFlow support has enabled Modbus on the inverter, a third connection type reads it over your network, with no account and no cloud (see [Connecting a PowerOcean locally over Modbus](documentation/guides/powerocean-local-modbus.md)). An entry uses exactly one connection type, so a PowerOcean runs either on the cloud or locally.
 
-**Standard Mode** uses the official EcoFlow IoT Developer API. Apply for free API keys at [developer.ecoflow.com](https://developer.ecoflow.com). Note: the European PowerOcean variants (`J327`, `J32D`, `J32E`), the PowerOcean Plus units (`R371`, `R372`, `R373`, `R374`, `HJ3C`) and the Stream Micro (`BK01`) are currently not exposed through the Developer API and cannot be linked to an API key (error 1006). These devices work in Enhanced Mode only. So do both STREAM 5000 models (`ES21`, `ES22`): the integration reads them over the account sign-in alone and has no Standard Mode parser for them. Every other device marked Enhanced only in the Supported Devices table also needs Enhanced Mode, among them the Ocean 2 (`RE11`, `RE17`, `RE41`, `RE42`, `RE43`) and the PowerPulse 2 (`C376`, `C374`). Whether the 3.68 kW and 6 kW single-phase variants (`J32B`, `J329`) can be linked to a key has not been tested.
+**Standard Mode** uses the official EcoFlow IoT Developer API. Apply for free API keys at [developer.ecoflow.com](https://developer.ecoflow.com). Note: the European PowerOcean variants (`J327`, `J32D`, `J32E`), the PowerOcean Plus units (`R371`, `R372`, `R373`, `R374`, `HJ3C`) and the Stream Micro `BK01` are currently not exposed through the Developer API and cannot be linked to an API key (error 1006). These devices work in Enhanced Mode only. So do both STREAM 5000 models (`ES21`, `ES22`): the integration reads them over the account sign-in alone and has no Standard Mode parser for them. Every other device marked Enhanced only in the Supported Devices table also needs Enhanced Mode, among them the Ocean 2 (`RE11`, `RE17`, `RE41`, `RE42`, `RE43`) and the PowerPulse 2 (`C376`, `C374`). Whether the 3.68 kW and 6 kW single-phase variants (`J32B`, `J329`) can be linked to a key has not been tested.
 
 > **PowerOcean owners: use Enhanced Mode.** On a PowerOcean the Developer API serves the copy EcoFlow's cloud holds, and that copy refreshes reliably only while the EcoFlow app or web portal is open. With the app closed the readings can stand still for hours and then jump, while the integration polls every 30 seconds throughout: the poll is healthy, the data behind it is not. Getting a PowerOcean to update without somebody looking at the app is what this integration's Enhanced Mode was built for, after months of trying to keep the official path fresh by other means. One owner has since reported the same pattern independently ([#267](https://github.com/shuette42/ecoflow-energy-ha/issues/267)): readings moving twice in a day, everything else looking normal. If you own a three-phase PowerOcean and EcoFlow support has enabled Modbus, the local connection is a third option. It reads the inverter without the cloud, but it shows the main readings, not everything the account connection does.
 >
@@ -240,7 +241,7 @@ The local connection came last. [@jensfr1](https://github.com/jensfr1) showed ho
 
 Thank you to everyone who reports, tests, records data and contributes code. If you want to take part, open an issue or a pull request.
 
-**Enhanced Mode** connects with your EcoFlow email and password. No Developer API keys needed. Faster updates, but this is an unofficial, community-driven protocol based on observed behaviour that may change without notice. Stream-family devices report an empty product name, so they are identified by their serial prefix (`BK01`, `BK11`, `BK31`, `BK41`, `BK51`, `BK61`) and appear under the correct model name in Home Assistant in both modes. The Stream Micro (`BK01`) is not exposed through the Developer API at all and therefore needs Enhanced Mode.
+**Enhanced Mode** connects with your EcoFlow email and password. No Developer API keys needed. Faster updates, but this is an unofficial, community-driven protocol based on observed behaviour that may change without notice. Stream-family devices report an empty product name, so they are identified by their serial prefix (`BK01`, `BK02`, `BK11`, `BK31`, `BK41`, `BK51`, `BK61`) and appear under the correct model name in Home Assistant in both modes. The Stream Micro `BK01` is not exposed through the Developer API at all and therefore needs Enhanced Mode.
 
 **Upgrading to v1.17.0?** The charge and discharge limits carry one name now, on every device that has them: **Max Charge SoC** and **Min Discharge SoC**. Depending on the device they used to read Charge Limit, Discharge Limit, Max. Ladezustand or Ladegrenze, which meant one value answered to four names across the integration. Only the displayed label changed. Entity ids, history, statistics and automations are untouched, so nothing needs migrating. The one place worth a look is a dashboard card whose title you typed by hand, or a template that matches on the friendly name.
 

@@ -108,6 +108,22 @@ class TestStreamMicroRouting:
         assert get_device_name("Stream Micro X", "BK01TEST00000001") == "Stream Micro X"
 
 
+class TestStreamMicroSiblingBk02:
+    """BK02 is listed beside BK01 in the app's device list as the same product
+    (STREAM Microinverter, product type 55) and sends only PV readings (#674)."""
+
+    def test_bk02_is_a_stream_device(self) -> None:
+        assert get_device_type("", "BK02TEST00000001") == DEVICE_TYPE_STREAM
+
+    def test_bk02_has_the_micro_exclusion_set(self) -> None:
+        assert (
+            excluded_keys_for_serial("BK02TEST00000001") is STREAM_MICRO_EXCLUDED_KEYS
+        )
+
+    def test_bk02_display_name(self) -> None:
+        assert get_device_name("", "BK02TESTAAAAAAAA") == "Stream Micro"
+
+
 class TestPrefixFilterHelper:
     def test_bk01_has_an_exclusion_set(self) -> None:
         assert (

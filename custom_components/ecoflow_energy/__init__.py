@@ -39,6 +39,7 @@ from .const import (
     ENHANCED_ONLY_DEVICE_TYPES,
     MODE_ENHANCED,
     MODE_LOCAL,
+    STREAM_MICRO_EXCLUDED_KEYS,
     get_device_type,
     raw_capture_window_open,
     supports_stream_controls,
@@ -306,6 +307,21 @@ def _is_stream_outside_control_gate(serial: str) -> bool:
     )
 
 
+# A Stream Micro `BK02` once got the full Stream entity set; it now gets the
+# reduced one. The retirement reuses the exclusion set itself, so the entities
+# the filter stops creating are the entities this removes, with no second list.
+# The set is matched on key only, in every platform a key could sit in.
+_BK02_RETIRED_KEYS_BY_DOMAIN: dict[str, frozenset[str]] = dict.fromkeys(
+    ("sensor", "binary_sensor", "switch", "number", "select"),
+    STREAM_MICRO_EXCLUDED_KEYS,
+)
+
+
+def _is_stream_micro_bk02(serial: str) -> bool:
+    """Return True for a Stream Micro `BK02` serial (prefix match)."""
+    return serial[:4].upper() == "BK02"
+
+
 # One row per retired-entity generation: a serial matcher paired with the
 # platform/key pairs that generation's retirement removes. Table-driven so the
 # next retirement is one more row rather than a near-duplicate helper.
@@ -315,6 +331,7 @@ _RETIRED_KEYS_BY_SERIAL: tuple[
     (_HW51_SERIAL_RE.fullmatch, _HW51_LEGACY_STREAM_KEYS_BY_DOMAIN),
     (_AC71_SERIAL_RE.fullmatch, _AC71_RETIRED_KEYS_BY_DOMAIN),
     (_is_stream_outside_control_gate, _STREAM_UNGATED_RESERVE_KEYS_BY_DOMAIN),
+    (_is_stream_micro_bk02, _BK02_RETIRED_KEYS_BY_DOMAIN),
 )
 
 
@@ -342,8 +359,9 @@ def _async_remove_retired_platform_entities(
     """Remove registry entries a platform once created for a serial prefix
     whose entities a later release retired - HW51's Stream misclassification,
     the WAVE 3 (AC71) sensors and running flag replaced by controls under the
-    same keys, and the Backup Reserve number of the Streams outside the write
-    gate (see `_RETIRED_KEYS_BY_SERIAL`).
+    same keys, the Backup Reserve number of the Streams outside the write
+    gate, and the battery, outlet and house-flow entities a Stream Micro `BK02`
+    once got (see `_RETIRED_KEYS_BY_SERIAL`).
     """
     registry = er.async_get(hass)
     for existing in er.async_entries_for_config_entry(registry, entry.entry_id):
