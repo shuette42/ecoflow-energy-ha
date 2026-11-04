@@ -33,7 +33,7 @@ from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinato
 from custom_components.ecoflow_energy.number import async_setup_entry as number_setup
 from custom_components.ecoflow_energy.sensor import async_setup_entry as sensor_setup
 
-OUTSIDE_GATE = ("BK11", "BK41", "BK51", "BK61")
+OUTSIDE_GATE = ("BK11", "BK12", "BK41", "BK51", "BK61")
 
 
 def _device(prefix: str, device_type: str = DEVICE_TYPE_STREAM) -> dict[str, Any]:
@@ -80,6 +80,21 @@ async def test_no_reserve_number_outside_the_gate(
     hass: HomeAssistant, prefix: str
 ) -> None:
     assert await _keys(hass, _device(prefix), number_setup) == set()
+
+
+async def test_bk12_gets_the_bk11_sensor_set_and_no_control(
+    hass: HomeAssistant,
+) -> None:
+    """A Stream Pro shares the Stream sensor set of its sibling, BK11 (#668).
+
+    No capture shows which of these fill on a BK12; the test pins only that
+    registration adds no per-model difference and no switch or number.
+    """
+    bk12 = await _keys(hass, _device("BK12"), sensor_setup)
+    bk11 = await _keys(hass, _device("BK11"), sensor_setup)
+
+    assert bk12
+    assert bk12 == bk11
 
 
 async def test_bk31_keeps_its_reserve_number(hass: HomeAssistant) -> None:

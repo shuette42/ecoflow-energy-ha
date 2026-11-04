@@ -139,7 +139,7 @@ class TestSetupGate:
         coordinator, entry = _coordinator(hass, "BK61", enhanced=True)
         assert FEED_IN_KEY not in await _created_switch_keys(hass, coordinator, entry)
 
-    @pytest.mark.parametrize("prefix", ["BK31", "BK11"])
+    @pytest.mark.parametrize("prefix", ["BK31", "BK11", "BK12"])
     async def test_other_stream_models_standard_do_not(
         self, hass: HomeAssistant, prefix: str
     ) -> None:

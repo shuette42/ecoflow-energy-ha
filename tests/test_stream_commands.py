@@ -46,6 +46,7 @@ class TestFeedInControlGate:
         assert supports_stream_feed_in_control("bk61test00000001")
         assert not supports_stream_feed_in_control("BK31TEST00000001")
         assert not supports_stream_feed_in_control("BK11TEST00000001")
+        assert not supports_stream_feed_in_control("BK12TEST00000001")
         assert not supports_stream_feed_in_control("ES21TEST0000001")
         assert not supports_stream_feed_in_control("")
 
