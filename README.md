@@ -48,6 +48,7 @@
 | **Delta 3** | `D3M1` `D3N1` `P321` `P231` `P351` | Standard, Enhanced | 47 (`D3M`: + 1 binary) | 7 switches · 4 numbers · 5 selects (`D3M`: 10 · 7 · 5) | 4 | ~30 s / ~2 s |
 | **Smart Plug** | `HW52` | Standard, Enhanced | 11 + 1 binary | 1 switch · 2 numbers | 1 | ~30 s / ~3 s |
 | **Stream** | `BK31` `BK11` `BK41` `BK51` `BK61` | Standard, Enhanced | 60 + 2 binary | 0 numbers (`BK31`: 2 switches · 4 numbers; `BK61`: 1 switch) | 2 + 6 optional | ~30 s / ~3 s |
+| **Stream Pro** | `BK12` | Enhanced (Standard untested) | not counted yet | none | not counted yet | ~3 s |
 | **Stream Micro** | `BK01` | Enhanced only | 25 | none | 2 optional | ~3 s |
 | **Stream Micro** | `BK02` | Standard | 25 | none | 2 optional | MQTT bursts |
 | **PowerStream** | `HW51` | Standard only | 25 | none, read-only | 2 + 2 optional | ~30 s |
@@ -147,7 +148,7 @@ The Stream is treated as an AC-coupled battery. House, grid and total solar flow
 
 **Both modes are supported, and they differ in solar detail.** Standard Mode reads the Stream through the official Developer API (~30 s) and reports all four solar strings: PV 1 and PV 2 are enabled by default, PV 3 and PV 4 are disabled by default because only the larger units drive that many strings. Enhanced Mode updates faster (~3 s) and reports PV 1 and PV 2 with their input voltage and current, plus the power, voltage and current of strings 3 and 4. One owner compared those two readings with the app and reports that string 3 and string 4 are the right way round. Strings 3 and 4 are created only for a unit that actually reports them, rather than sitting at unknown for good on every other one. Everything else is the same set in both modes, while writable numbers require Enhanced Mode.
 
-All five models are recognized by serial prefix and appear under their correct model name: Stream AC Pro (`BK31`), Stream Ultra (`BK11`), Stream Max (`BK41`), Stream AC (`BK51`), Stream Ultra X (`BK61`).
+All six models are recognized by serial prefix and appear under their correct model name: Stream AC Pro (`BK31`), Stream Ultra (`BK11`), Stream Pro (`BK12`), Stream Max (`BK41`), Stream AC (`BK51`), Stream Ultra X (`BK61`). The Stream Pro (`BK12`) has been seen in Enhanced Mode only, in two reports. It has not been tried in Standard Mode and has no writable controls. Which of the entities fill on it is not confirmed yet.
 
 </details>
 
@@ -241,7 +242,7 @@ The local connection came last. [@jensfr1](https://github.com/jensfr1) showed ho
 
 Thank you to everyone who reports, tests, records data and contributes code. If you want to take part, open an issue or a pull request.
 
-**Enhanced Mode** connects with your EcoFlow email and password. No Developer API keys needed. Faster updates, but this is an unofficial, community-driven protocol based on observed behaviour that may change without notice. Stream-family devices report an empty product name, so they are identified by their serial prefix (`BK01`, `BK02`, `BK11`, `BK31`, `BK41`, `BK51`, `BK61`) and appear under the correct model name in Home Assistant in both modes. The Stream Micro `BK01` is not exposed through the Developer API at all and therefore needs Enhanced Mode.
+**Enhanced Mode** connects with your EcoFlow email and password. No Developer API keys needed. Faster updates, but this is an unofficial, community-driven protocol based on observed behaviour that may change without notice. Stream-family devices report an empty product name, so they are identified by their serial prefix (`BK01`, `BK02`, `BK11`, `BK31`, `BK41`, `BK51`, `BK61`) and appear under the correct model name in Home Assistant in both modes. The Stream Pro (`BK12`) is identified the same way in Enhanced Mode, where it has been seen. Standard Mode is untested for it. The Stream Micro `BK01` is not exposed through the Developer API at all and therefore needs Enhanced Mode.
 
 **Upgrading to v1.17.0?** The charge and discharge limits carry one name now, on every device that has them: **Max Charge SoC** and **Min Discharge SoC**. Depending on the device they used to read Charge Limit, Discharge Limit, Max. Ladezustand or Ladegrenze, which meant one value answered to four names across the integration. Only the displayed label changed. Entity ids, history, statistics and automations are untouched, so nothing needs migrating. The one place worth a look is a dashboard card whose title you typed by hand, or a template that matches on the friendly name.
 

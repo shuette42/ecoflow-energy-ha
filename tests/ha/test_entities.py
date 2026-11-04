@@ -156,6 +156,7 @@ class TestSwitchDefsRouting:
             _get_switch_defs(DEVICE_TYPE_STREAM, "BK31TEST00000001") is STREAM_SWITCHES
         )
         assert _get_switch_defs(DEVICE_TYPE_STREAM, "BK11TEST00000001") == []
+        assert _get_switch_defs(DEVICE_TYPE_STREAM, "BK12TEST00000001") == []
 
     def test_powerocean_switches_are_the_schedule_slots(self):
         """The only PowerOcean switches are the one per scheduled task on

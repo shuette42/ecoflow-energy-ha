@@ -81,7 +81,9 @@ class TestStreamNumberDefs:
     def test_ac_pro_controls_are_bk31_only(self):
         bk31 = _get_number_defs(DEVICE_TYPE_STREAM, "BK31TEST00000001")
         other = _get_number_defs(DEVICE_TYPE_STREAM, "BK11TEST00000001")
+        stream_pro = _get_number_defs(DEVICE_TYPE_STREAM, "BK12TEST00000001")
 
+        assert stream_pro == []
         assert {definition.key for definition in bk31} == {
             "stream_charge_limit",
             "stream_discharge_limit",

@@ -169,6 +169,10 @@ class TestDeviceTypeRouting:
     def test_stream_detected_by_bk11_prefix(self) -> None:
         assert get_device_type("", "BK11TEST00000001") == "stream"
 
+    def test_stream_detected_by_bk12_prefix(self) -> None:
+        """A Stream Pro with an empty product name is routed by its prefix (#668)."""
+        assert get_device_type("", "BK12TEST00000001") == "stream"
+
     def test_stream_detected_by_bk41_prefix(self) -> None:
         assert get_device_type("", "BK41TEST00000001") == "stream"
 
@@ -298,6 +302,7 @@ class TestDeviceTypeRouting:
 
     def test_stream_display_name_by_bk_prefix(self) -> None:
         assert get_device_name("", "BK11TEST00000001") == "Stream Ultra (0001)"
+        assert get_device_name("", "BK12TEST00000001") == "Stream Pro (0001)"
         assert get_device_name("", "BK31TEST00000001") == "Stream AC Pro (0001)"
         assert get_device_name("", "BK41TEST00000001") == "Stream Max (0001)"
         assert get_device_name("", "BK51TEST00000001") == "Stream AC (0001)"

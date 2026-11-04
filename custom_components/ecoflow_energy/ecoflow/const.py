@@ -291,6 +291,7 @@ _SN_PREFIX_MAP = {
     # BK-series Stream devices:
     #  - BK01, BK02: Stream Micro
     #  - BK11: Stream Ultra
+    #  - BK12: Stream Pro (#668, sibling of BK11 in the app's device list)
     #  - BK31: Stream AC Pro
     #  - BK41: Stream Max
     #  - BK51: Stream AC
@@ -302,6 +303,7 @@ _SN_PREFIX_MAP = {
     "BK01": DEVICE_TYPE_STREAM,
     "BK02": DEVICE_TYPE_STREAM,
     "BK11": DEVICE_TYPE_STREAM,
+    "BK12": DEVICE_TYPE_STREAM,
     "BK31": DEVICE_TYPE_STREAM,
     "BK41": DEVICE_TYPE_STREAM,
     "BK51": DEVICE_TYPE_STREAM,
@@ -429,6 +431,7 @@ _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
     "BK01": "Stream Micro",
     "BK02": "Stream Micro",
     "BK11": "Stream Ultra",
+    "BK12": "Stream Pro",
     "BK31": "Stream AC Pro",
     "BK41": "Stream Max",
     "BK51": "Stream AC",
