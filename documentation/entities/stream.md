@@ -165,7 +165,7 @@ The Stream Micro is a grid-tie solar inverter: two solar strings, one single-pha
 
 **Totals:** 25 sensor definitions, no binary sensors, no numbers. 17 are listed in the table below; the other 8 are the PV 3/4 power, voltage, current and energy sensors, which stay in the shared Stream definition list and are created only for a string that reports a reading - see the note after the table.
 
-**Modes.** The `BK01` is not exposed through the EcoFlow Developer API, so it needs the EcoFlow account sign-in (Enhanced Mode). The `BK02` is listed under the same product name in the EcoFlow app and also reports in Standard Mode. A `BK02` has been seen sending only the two PV strings (power and energy) and the PV 1 voltage, so the other sensors in the table stay empty on it.
+**Modes.** The `BK01` is not exposed through the EcoFlow Developer API, so it needs the EcoFlow account sign-in (Enhanced Mode). The `BK02` is listed under the same product name in the EcoFlow app and also reports in Standard Mode. A `BK02` has been seen sending only the power of its two solar strings and the PV voltage, and the two energy sensors are integrated from that power. The other sensors in the table stayed empty on that unit.
 
 ## Sensors - Stream Micro (`BK01`, `BK02`)
 

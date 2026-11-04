@@ -31,6 +31,8 @@ from .conftest import MOCK_DELTA_DEVICE, MOCK_STREAM_DEVICE
 # Ages relative to the window: well inside, just inside, beyond.
 _FRESH_S = 30.0
 _LATE_BUT_INSIDE_S = STANDARD_MQTT_AVAILABILITY_WINDOW_S - 100.0
+# Exactly on the boundary: a frame as old as the window still counts.
+_AT_WINDOW_S = STANDARD_MQTT_AVAILABILITY_WINDOW_S
 _BEYOND_S = STANDARD_MQTT_AVAILABILITY_WINDOW_S + 100.0
 # Fixed clock for the age helper (test-time-mocking: never subtract from the
 # real monotonic clock, a fresh CI runner can be younger than the window).
@@ -64,14 +66,14 @@ def _event_types(coordinator: EcoFlowDeviceCoordinator) -> list[str]:
 class TestStandardAvailabilityWindow:
     """A recent own MQTT frame keeps a device available through failed polls."""
 
-    def test_window_is_twenty_minutes(self) -> None:
-        """The window approved for #674: more than twice the gap on record."""
-        assert STANDARD_MQTT_AVAILABILITY_WINDOW_S == 1200.0
+    def test_window_is_thirty_minutes(self) -> None:
+        """The window decided for #674: twice the reported 15 minute interval."""
+        assert STANDARD_MQTT_AVAILABILITY_WINDOW_S == 1800.0
 
     @pytest.mark.parametrize(
         "device", [MOCK_DELTA_DEVICE, MOCK_STREAM_DEVICE], ids=["delta", "stream"]
     )
-    @pytest.mark.parametrize("age", [_FRESH_S, _LATE_BUT_INSIDE_S])
+    @pytest.mark.parametrize("age", [_FRESH_S, _LATE_BUT_INSIDE_S, _AT_WINDOW_S])
     async def test_empty_answer_with_recent_mqtt_stays_available(
         self,
         hass: HomeAssistant,

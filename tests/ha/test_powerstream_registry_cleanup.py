@@ -16,12 +16,14 @@ from custom_components.ecoflow_energy.const import (
     CONF_DEVICES,
     DOMAIN,
     POWERSTREAM_SENSORS,
+    STREAM_MICRO_EXCLUDED_KEYS,
 )
 
 HW51 = "HW51TEST00000001"
 BK31 = "BK31TEST00000001"
 AC71 = "AC71TEST00000052"
 BK21 = "BK21TEST00000001"
+BK02 = "BK02TEST00000001"
 
 # Exact v1.17 Stream surface minus the 16 sensor keys that are valid current
 # PowerStream entities. Kept independent of the production cleanup table so a
@@ -246,4 +248,32 @@ def test_ac71_control_and_other_serial_entities_survive(
 
     _async_remove_retired_platform_entities(hass, entry)
 
+    assert keep <= _ids(hass)
+
+
+def test_bk02_loses_the_entities_its_reduced_set_no_longer_creates(
+    hass: HomeAssistant,
+) -> None:
+    """A Stream Micro registered under the full Stream set is cleaned at start.
+
+    Every key of the exclusion set goes (here on the sensor platform, the
+    battery and house-flow entities), the keys the unit does report stay, and
+    the same keys on a Stream that does have a battery are not touched.
+    """
+    entry = _entry(hass)
+    stale = {
+        _register(hass, entry, "sensor", f"{BK02}_{key}")
+        for key in STREAM_MICRO_EXCLUDED_KEYS
+    }
+    stale.add(_register(hass, entry, "number", f"{BK02}_backup_reserve"))
+    stale.add(_register(hass, entry, "binary_sensor", f"{BK02}_ac_outlet_1_enabled"))
+    keep = {
+        _register(hass, entry, "sensor", f"{BK02}_pv1_w"),
+        _register(hass, entry, "sensor", f"{BK02}_pv_voltage_v"),
+        _register(hass, entry, "sensor", f"{BK31}_soc_pct"),
+    }
+
+    _async_remove_retired_platform_entities(hass, entry)
+
+    assert not (stale & _ids(hass))
     assert keep <= _ids(hass)
