@@ -4,7 +4,7 @@ Full list of all entities created for Stream devices.
 
 **Models:** Stream AC Pro (`BK31`), Stream Ultra (`BK11`), Stream Max (`BK41`), Stream AC (`BK51`), Stream Ultra X (`BK61`). All five share the sensor and binary-sensor set below; the hardware-confirmed writable controls are limited to the AC Pro. On the other four models Backup Reserve is no longer a number. The Backup Reserve sensor shows the value.
 
-**The Stream Micro (`BK01`) does not.** It is a grid-tie inverter with two solar strings and no battery, and it gets a reduced set. See [Stream Micro (BK01)](#stream-micro-bk01) at the end of this page.
+**The Stream Micro (`BK01`, `BK02`) does not.** It is a grid-tie inverter with two solar strings and no battery, and it gets a reduced set. See [Stream Micro (BK01, BK02)](#stream-micro-bk01-bk02) at the end of this page.
 
 **Totals:** 60 sensors, 2 binary sensors, no numbers. Stream AC Pro (`BK31`) adds 2 switches and 4 numbers. Stream Ultra X (`BK61`) adds 1 switch in Standard Mode. Eight of the 60 are *accessory* entities (PV 3 and PV 4, power, voltage, current and energy) and exist only on a unit that reports those strings.
 
@@ -159,15 +159,15 @@ The LED control reproduces the hardware-confirmed app ConfigWrite field `384` wi
 
 ---
 
-## Stream Micro (`BK01`)
+## Stream Micro (`BK01`, `BK02`)
 
 The Stream Micro is a grid-tie solar inverter: two solar strings, one single-phase grid connection, no battery and no AC outlets. It speaks the same protocol as the rest of the Stream family and shares this parser, but not the whole entity set.
 
 **Totals:** 25 sensor definitions, no binary sensors, no numbers. 17 are listed in the table below; the other 8 are the PV 3/4 power, voltage, current and energy sensors, which stay in the shared Stream definition list and are created only for a string that reports a reading - see the note after the table.
 
-**Enhanced Mode only.** The Stream Micro is not exposed through the EcoFlow Developer API, so it needs the EcoFlow account sign-in.
+**Modes.** The `BK01` is not exposed through the EcoFlow Developer API, so it needs the EcoFlow account sign-in (Enhanced Mode). The `BK02` is listed under the same product name in the EcoFlow app and also reports in Standard Mode. A `BK02` has been seen sending only the two PV strings (power and energy) and the PV 1 voltage, so the other sensors in the table stay empty on it.
 
-## Sensors - Stream Micro (`BK01`)
+## Sensors - Stream Micro (`BK01`, `BK02`)
 
 | Entity | Unit | Category | Default | Description |
 |:---|:---:|:---:|:---:|:---|

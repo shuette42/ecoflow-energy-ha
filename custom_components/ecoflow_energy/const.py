@@ -189,6 +189,14 @@ WAVE3_SOFT_UNAVAILABLE_S = 540.0
 POWERPULSE2_STALE_THRESHOLD_S = 1200.0
 POWERPULSE2_SOFT_UNAVAILABLE_S = 2400.0
 POWERPULSE2_HARD_UNAVAILABLE_S = 3600.0
+# Standard Mode: how long the device's own last MQTT frame keeps it available
+# while its quota poll fails (#674). A Stream Micro (BK02) pushes in bursts,
+# with a gap of 529 s in the one window on record, and three polls that
+# brought no data marked it unavailable while its data kept arriving.
+# 1200 s is more than twice that gap and the same window the PowerPulse 2
+# uses above. A device silent beyond it (a Micro after sunset, #437) still
+# goes unavailable on the failed polls, as before.
+STANDARD_MQTT_AVAILABILITY_WINDOW_S = 1200.0
 # ADR-009 decision 4: the confirmation window per action. Both above twice
 # the relayed latency on file (7 s stop->finishing, 10 s start->charging)
 # and the values the contributor's own integration tested live against real
@@ -5810,7 +5818,7 @@ STREAMAC5000_SELECTS: list[EcoFlowSelectDef] = [
 ]
 
 
-# The Stream Micro (BK01) is a grid-tie PV inverter: two PV strings, one
+# The Stream Micro (BK01, BK02) is a grid-tie PV inverter: two PV strings, one
 # single-phase grid connection, no battery, no AC outlets. It speaks the same
 # wire format as the rest of the BK series and therefore shares the parser and
 # the entity lists, so the keys it never produces are filtered out here rather
@@ -5911,6 +5919,7 @@ DELTA3_PORT_PRIORITY_KEYS: frozenset[str] = frozenset(
 # computed from, and `R631` shares it.
 _SN_PREFIX_EXCLUDED_KEYS: dict[str, frozenset[str]] = {
     "BK01": STREAM_MICRO_EXCLUDED_KEYS,
+    "BK02": STREAM_MICRO_EXCLUDED_KEYS,
     "P321": DELTA3_PORT_PRIORITY_KEYS,
     "P231": DELTA3_PORT_PRIORITY_KEYS,
     "D3N1": DELTA3_PORT_PRIORITY_KEYS,
