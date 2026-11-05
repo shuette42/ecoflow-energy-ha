@@ -298,8 +298,9 @@ def build_task_payload(
     end_min: int,
     power_w: int,
     device_sn: str,
+    *,
+    operation: int,
     enabled: bool = True,
-    operation: int = TASK_UPDATE,
     charge_soc_target: int = 100,
     seq: int = 0,
     task_slot: int | None = None,
@@ -360,6 +361,15 @@ def build_task_payload(
     charge fixture this builder is pinned against covers 13:00 to 16:00. That
     last one is weak: the discharge task uses the same window and does act.
 
+    The window of a new task (`TASK_ADD`) is the one Home Assistant writes
+    itself and has to be a same-day span, start before end. An update echoes
+    the window the device reported for a task it owns, and the app stores an
+    end at or before the start as the next day ("00:00-00:00 (+1)" is a whole
+    day). It is range-checked only and sent back exactly as the device sent
+    it, so nothing new is invented. A removal gets the same range check (the
+    coordinator sends a fixed 0..1439 there). `operation` has no default: a
+    forgotten one must fail instead of taking the loose check.
+
     Do not close this by inventing a different frame. What is pinned here is a
     reproduction of a recorded app write, and guessing past it would lose that.
     """
@@ -370,10 +380,17 @@ def build_task_payload(
         raise ValueError(f"task_slot must be 1..65535, got {task_slot}")
     if operation not in (TASK_ADD, TASK_UPDATE, TASK_REMOVE):
         raise ValueError(f"operation must be 1, 2 or 3, got {operation}")
-    if not 0 <= start_min < MINUTES_PER_DAY or not 0 < end_min <= MINUTES_PER_DAY:
+    if operation == TASK_ADD:
+        if not 0 <= start_min < MINUTES_PER_DAY or not 0 < end_min <= MINUTES_PER_DAY:
+            raise ValueError("window must be minutes since midnight")
+        if start_min >= end_min:
+            raise ValueError(f"start ({start_min}) must be before end ({end_min})")
+    elif not 0 <= start_min < MINUTES_PER_DAY or not 0 <= end_min <= MINUTES_PER_DAY:
+        # An update goes back with the window the device owns. The app stores
+        # an end at or before the start as the next day ("00:00-00:00 (+1)"),
+        # so only the range is checked and the value goes back as reported.
+        # A removal passes the same range check.
         raise ValueError("window must be minutes since midnight")
-    if start_min >= end_min:
-        raise ValueError(f"start ({start_min}) must be before end ({end_min})")
     if not 0 <= power_w <= MAX_TASK_POWER_W:
         raise ValueError(f"power_w must be 0..{MAX_TASK_POWER_W}, got {power_w}")
     if not 0 <= charge_soc_target <= 100:
