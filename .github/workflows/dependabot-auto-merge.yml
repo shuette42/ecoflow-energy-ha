@@ -1,5 +1,7 @@
 name: Dependabot Auto-Merge
 
+# No workflow_dispatch on purpose: this run needs the payload of a pull_request_target event,
+# a manual run would start with empty event data. Re-run a failed run with `gh run rerun`.
 on: pull_request_target
 
 permissions:
@@ -13,6 +15,7 @@ concurrency:
 jobs:
   auto-merge:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     if: github.actor == 'dependabot[bot]'
     steps:
       - name: Fetch Dependabot metadata

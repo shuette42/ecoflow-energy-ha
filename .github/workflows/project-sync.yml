@@ -5,6 +5,8 @@ name: Project Sync
 # Status field; this one adds edited issues, new comments and label changes,
 # and derives Status and "Wartet auf" from the labels.
 
+# No workflow_dispatch on purpose: this run needs the payload of an issues or issue_comment event,
+# a manual run would start with empty event data. Re-run a failed run with `gh run rerun`.
 on:
   issues:
     types: [opened, edited, closed, reopened, labeled, unlabeled]
@@ -22,6 +24,7 @@ jobs:
   sync:
     name: Sync issue to project
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # Pull requests share the issue_comment trigger and are not tracked here.
     if: github.repository == 'shuette42/ecoflow-energy-ha' && !github.event.issue.pull_request
     steps:

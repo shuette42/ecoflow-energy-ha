@@ -9,6 +9,8 @@ name: Reporter Reply
 # reaches a shell: the job reads the issue number and the commenter's login
 # from the event, and the label state from the event's label list.
 
+# No workflow_dispatch on purpose: this run needs the payload of an issue_comment event,
+# a manual run would start with empty event data. Re-run a failed run with `gh run rerun`.
 on:
   issue_comment:
     types: [created]
@@ -24,6 +26,7 @@ jobs:
   hand-back:
     name: Hand the issue back to the maintainer
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     # Pull requests share the issue_comment trigger and are not handled here.
     if: >-
       github.repository == 'shuette42/ecoflow-energy-ha'
