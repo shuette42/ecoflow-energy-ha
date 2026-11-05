@@ -1629,13 +1629,15 @@ class TestIssue653TaskList:
             for header in headers
             for task in _task_blocks(bytes.fromhex(header["pdata"]))
         ]
+
         # The grid charge task: field 8 with source 1 in its first position.
-        grid_task = next(
-            task
-            for task in tasks
-            if any(n == 8 for n, _ in _wire_fields(task))
-            and dict(_wire_fields(dict(_wire_fields(task))[8])).get(1) == 1
-        )
+        def charge_source(task: bytes) -> object:
+            settings = dict(_wire_fields(task)).get(8)
+            if not isinstance(settings, bytes):
+                return None
+            return dict(_wire_fields(settings)).get(1)
+
+        grid_task = next(task for task in tasks if charge_source(task) == 1)
 
         rebuilt = b"".join(
             encode_field_bytes(number, b"\x00")
