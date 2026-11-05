@@ -254,7 +254,9 @@ class TestSocLimits:
 
 class TestTask:
     def test_window_packs_end_above_start(self) -> None:
-        frame = build_task_payload("discharge", 0, 1380, 600, SN, seq=1)
+        frame = build_task_payload(
+            "discharge", 0, 1380, 600, SN, seq=1, operation=TASK_UPDATE
+        )
         pdata = bytes.fromhex(_pdata(frame))
 
         # 0x05640000 = (1380 << 16) | 0
@@ -262,11 +264,24 @@ class TestTask:
 
     def test_disabled_task_inverts_both_flags(self) -> None:
         enabled = bytes.fromhex(
-            _pdata(build_task_payload("discharge", 0, 1380, 600, SN, seq=1))
+            _pdata(
+                build_task_payload(
+                    "discharge", 0, 1380, 600, SN, seq=1, operation=TASK_UPDATE
+                )
+            )
         )
         disabled = bytes.fromhex(
             _pdata(
-                build_task_payload("discharge", 0, 1380, 600, SN, enabled=False, seq=1)
+                build_task_payload(
+                    "discharge",
+                    0,
+                    1380,
+                    600,
+                    SN,
+                    enabled=False,
+                    seq=1,
+                    operation=TASK_UPDATE,
+                )
             )
         )
 
@@ -275,10 +290,18 @@ class TestTask:
 
     def test_charge_power_is_per_device_and_discharge_is_not(self) -> None:
         charge = bytes.fromhex(
-            _pdata(build_task_payload("charge", 780, 960, 600, SN, seq=1))
+            _pdata(
+                build_task_payload(
+                    "charge", 780, 960, 600, SN, seq=1, operation=TASK_UPDATE
+                )
+            )
         )
         discharge = bytes.fromhex(
-            _pdata(build_task_payload("discharge", 0, 1380, 600, SN, seq=1))
+            _pdata(
+                build_task_payload(
+                    "discharge", 0, 1380, 600, SN, seq=1, operation=TASK_UPDATE
+                )
+            )
         )
 
         assert SN.encode() in charge
@@ -286,7 +309,9 @@ class TestTask:
 
     def test_zero_power_is_allowed(self) -> None:
         """Zero means idle on this device, so it has to be writable."""
-        frame = build_task_payload("discharge", 0, 1380, 0, SN, seq=1)
+        frame = build_task_payload(
+            "discharge", 0, 1380, 0, SN, seq=1, operation=TASK_UPDATE
+        )
 
         # field 9, length 2, holding field 1 = 0
         assert bytes.fromhex("4a020800") in bytes.fromhex(_pdata(frame))
@@ -297,25 +322,84 @@ class TestTask:
     )
     def test_invalid_window_is_rejected(self, start: int, end: int) -> None:
         with pytest.raises(ValueError):
-            build_task_payload("discharge", start, end, 600, SN)
+            build_task_payload("discharge", start, end, 600, SN, operation=TASK_ADD)
+
+    @pytest.mark.parametrize(
+        ("start", "end"),
+        [(0, 0), (0, 1440), (1380, 120), (600, 600)],
+    )
+    @pytest.mark.parametrize("kind", ["charge", "discharge"])
+    def test_update_echoes_a_window_the_device_reports(
+        self, kind: str, start: int, end: int
+    ) -> None:
+        """The app stores end <= start as the next day, 00:00-00:00 (+1) is 24 h.
+
+        An update sends back the window the device owns, whatever its order
+        (#653), so the packed word is exactly (end << 16) | start.
+        """
+        frame = build_task_payload(
+            kind, start, end, 600, SN, operation=TASK_UPDATE, task_slot=3, seq=1
+        )
+        pdata = bytes.fromhex(_pdata(frame))
+
+        packed = (end << 16) | start
+        varint = bytearray()
+        while packed > 0x7F:
+            varint.append((packed & 0x7F) | 0x80)
+            packed >>= 7
+        varint.append(packed)
+        assert bytes([0x3A, len(varint), *varint]) in pdata
+
+    def test_remove_accepts_a_next_day_window_too(self) -> None:
+        frame = build_task_payload(
+            "charge", 0, 0, 0, SN, operation=TASK_REMOVE, task_slot=3, seq=1
+        )
+
+        assert bytes.fromhex("3a0100") in bytes.fromhex(_pdata(frame))
+
+    @pytest.mark.parametrize(
+        ("start", "end"), [(-1, 600), (1440, 600), (0, -1), (0, 1441)]
+    )
+    def test_update_still_rejects_a_window_outside_the_day(
+        self, start: int, end: int
+    ) -> None:
+        with pytest.raises(ValueError, match="minutes since midnight"):
+            build_task_payload(
+                "discharge", start, end, 600, SN, operation=TASK_UPDATE, task_slot=2
+            )
+
+    def test_add_still_requires_a_same_day_window(self) -> None:
+        """Only the device's own window may wrap, never one Home Assistant writes."""
+        with pytest.raises(ValueError):
+            build_task_payload("discharge", 1380, 0, 600, SN, operation=TASK_ADD)
+        with pytest.raises(ValueError):
+            build_task_payload("discharge", 0, 0, 600, SN, operation=TASK_ADD)
 
     def test_power_above_the_hardware_ceiling_is_rejected(self) -> None:
         with pytest.raises(ValueError):
-            build_task_payload("discharge", 0, 1380, 2600, SN)
+            build_task_payload("discharge", 0, 1380, 2600, SN, operation=TASK_UPDATE)
 
     def test_unknown_kind_and_operation_are_rejected(self) -> None:
         with pytest.raises(ValueError):
-            build_task_payload("both", 0, 1380, 600, SN)
+            build_task_payload("both", 0, 1380, 600, SN, operation=TASK_UPDATE)
         with pytest.raises(ValueError):
             build_task_payload("discharge", 0, 1380, 600, SN, operation=9)
 
     def test_the_task_number_defaults_to_the_kind(self) -> None:
         """Which is what keeps the two tasks written here from colliding."""
         charge = bytes.fromhex(
-            _pdata(build_task_payload("charge", 780, 960, 600, SN, seq=1))
+            _pdata(
+                build_task_payload(
+                    "charge", 780, 960, 600, SN, seq=1, operation=TASK_UPDATE
+                )
+            )
         )
         discharge = bytes.fromhex(
-            _pdata(build_task_payload("discharge", 0, 1380, 600, SN, seq=1))
+            _pdata(
+                build_task_payload(
+                    "discharge", 0, 1380, 600, SN, seq=1, operation=TASK_UPDATE
+                )
+            )
         )
 
         assert bytes.fromhex("1001") in charge
@@ -352,12 +436,16 @@ class TestTask:
 
     def test_an_unknown_kind_is_still_rejected_with_a_number_given(self) -> None:
         with pytest.raises(ValueError):
-            build_task_payload("both", 0, 1380, 600, SN, task_slot=1)
+            build_task_payload(
+                "both", 0, 1380, 600, SN, task_slot=1, operation=TASK_UPDATE
+            )
 
     @pytest.mark.parametrize("slot", [0, -1, 70000])
     def test_an_out_of_range_task_number_is_rejected(self, slot: int) -> None:
         with pytest.raises(ValueError):
-            build_task_payload("discharge", 0, 1380, 600, SN, task_slot=slot)
+            build_task_payload(
+                "discharge", 0, 1380, 600, SN, task_slot=slot, operation=TASK_UPDATE
+            )
 
 
 def test_work_mode_write_and_read_tables_are_inverses() -> None:

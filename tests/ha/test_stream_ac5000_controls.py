@@ -783,6 +783,26 @@ class TestPowerSetpoints:
         _header, pdata = _sent(coordinator)
         assert bytes([0x08, 2, 0x10, 1]) in pdata
 
+    async def test_a_whole_day_task_with_a_wrapping_window_is_updated(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """The app's 00:00-00:00 (+1) comes back as it was reported (#653)."""
+        data = dict(
+            WHOLE_DAY_CHARGE,
+            scheduled_charge_start_min=0,
+            scheduled_charge_end_min=0,
+        )
+        coordinator = _coordinator(hass, enhanced_config_entry, data=data)
+        entity = _number(coordinator, "scheduled_charge_power_w")
+
+        await entity.async_set_native_value(900)
+
+        _header, pdata = _sent(coordinator)
+        task = _task_block(pdata)
+        assert bytes([0x08, 2, 0x10, 1]) in task
+        # field 7 holding (0 << 16) | 0, exactly what the device reported
+        assert bytes.fromhex("3a0100") in task
+
     async def test_the_removed_task_stops_being_reported(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
     ) -> None:

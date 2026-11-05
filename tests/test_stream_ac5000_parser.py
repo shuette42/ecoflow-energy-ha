@@ -1614,6 +1614,51 @@ class TestIssue653TaskList:
         assert result["scheduled_discharge_end_min"] == 480
         assert result["scheduled_task_slot_max"] == 3
 
+    def test_a_task_whose_window_is_zero_is_still_a_settable_task(self) -> None:
+        """00:00-00:00 (+1) reaches the write path as 0 and 0, not as unknown.
+
+        The app's whole-day task packs start and end into one varint of 0,
+        carried as `3a 01 00`. Reading it as missing would leave the number
+        unable to write the task it shows (#653).
+        """
+        frames = json.loads((FIXTURES / "es22_653_task_list_masked.json").read_text())
+        frame = next(f for f in frames["frames"] if f["role"] == "list_before_ha_write")
+        headers, _ = decode_header_message(bytes.fromhex(frame["hex"]))
+        tasks = [
+            task
+            for header in headers
+            for task in _task_blocks(bytes.fromhex(header["pdata"]))
+        ]
+
+        # The grid charge task: field 8 with source 1 in its first position.
+        def charge_source(task: bytes) -> object:
+            settings = dict(_wire_fields(task)).get(8)
+            if not isinstance(settings, bytes):
+                return None
+            return dict(_wire_fields(settings)).get(1)
+
+        grid_task = next(task for task in tasks if charge_source(task) == 1)
+
+        rebuilt = b"".join(
+            encode_field_bytes(number, b"\x00")
+            if number == 7
+            else encode_field_bytes(number, value)
+            if isinstance(value, bytes)
+            else encode_field_varint(number, value)
+            for number, value in _wire_fields(grid_task)
+        )
+        assert bytes.fromhex("3a0100") in rebuilt
+        result = parse_stream_ac5000_message(
+            _build_frame(
+                254, 39, encode_field_bytes(40, encode_field_bytes(1, rebuilt))
+            )
+        )
+
+        assert result is not None
+        assert result["scheduled_charge_start_min"] == 0
+        assert result["scheduled_charge_end_min"] == 0
+        assert result["scheduled_charge_settable_count"] == 1
+
     def test_the_old_write_left_two_settable_charge_tasks(self) -> None:
         """After the old whole-day write: no setpoint, so the next write refuses."""
         result = self._parsed("list_after_ha_write")
@@ -1692,6 +1737,46 @@ class TestEveryGetAllCarriesTheTaskList:
                     ints = {n: v for n, v in fields(block) if isinstance(v, int)}
                     assert ints.get(2, 0) == 0, path.name
         assert checked >= 10
+
+
+def _wire_fields(buf: bytes) -> list[tuple[int, int | bytes]]:
+    """Top-level (number, value) pairs of a varint / length-delimited message."""
+    fields: list[tuple[int, int | bytes]] = []
+    offset = 0
+    while offset < len(buf):
+        key, offset = _varint_at(buf, offset)
+        number, wire = key >> 3, key & 7
+        if wire == 0:
+            value, offset = _varint_at(buf, offset)
+            fields.append((number, value))
+        elif wire == 2:
+            length, offset = _varint_at(buf, offset)
+            fields.append((number, buf[offset : offset + length]))
+            offset += length
+        else:
+            break
+    return fields
+
+
+def _task_blocks(buf: bytes, depth: int = 0) -> list[bytes]:
+    """Every task (`39.1` / `40.1`) found anywhere inside a payload."""
+    try:
+        fields = _wire_fields(buf)
+    except IndexError:
+        return []
+    found: list[bytes] = []
+    for number, value in fields:
+        if not isinstance(value, bytes) or depth > 6:
+            continue
+        if number in (39, 40):
+            found += [
+                task
+                for sub, task in _wire_fields(value)
+                if sub == 1 and isinstance(task, bytes)
+            ]
+        else:
+            found += _task_blocks(value, depth + 1)
+    return found
 
 
 def _varint_at(buf: bytes, offset: int) -> tuple[int, int]:
