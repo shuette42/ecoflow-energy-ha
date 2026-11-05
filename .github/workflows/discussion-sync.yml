@@ -2,10 +2,8 @@ name: Discussion Sync
 
 # Mirrors GitHub Discussions onto the project board as draft cards: closed ones
 # move to Abgeschlossen, open ones show whether the next move is ours or the
-# reporter's, and a new discussion gets a card. Created, edited and deleted
-# discussions and their comments reach the board within moments. GitHub does not
-# offer closed and reopened as workflow triggers for discussions, so the daily
-# run moves those cards.
+# reporter's, and a new discussion gets a card. Discussion events keep the board
+# current within moments, the daily run catches anything an event missed.
 #
 # The board's item listing lags a write by minutes and nothing is remembered
 # between runs. So a discussion or comment event touches only its own
@@ -17,7 +15,7 @@ name: Discussion Sync
 
 on:
   discussion:
-    types: [created, edited, deleted]
+    types: [created, closed, reopened, edited, deleted]
   discussion_comment:
     types: [created, edited, deleted]
   schedule:
