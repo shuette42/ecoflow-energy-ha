@@ -35,6 +35,7 @@ import pytest
 from custom_components.ecoflow_energy.const import (
     DELTA3_BINARY_SENSORS,
     DELTA3_NUMBERS,
+    DELTA3_POWER_TO_ENERGY,
     DELTA3_SELECTS,
     DELTA3_SENSORS,
     DELTA3_SWITCHES,
@@ -81,7 +82,7 @@ _R631: list[dict[str, Any]] = json.loads(_R631_PATH.read_text())["frames"]
 
 # Sensors the coordinator integrates from a live power key, so they are not in
 # any frame and cannot be checked against the recording.
-_DERIVED_ENERGY_KEYS = {"ac_in_energy_kwh", "out_energy_kwh"}
+_DERIVED_ENERGY_KEYS = {"ac_in_energy_kwh", "out_energy_kwh", "solar_energy_kwh"}
 
 
 def _replay(
@@ -316,12 +317,10 @@ class TestReadOnlyEntitySet:
         keys = _keys(filter_defs_for_serial(DELTA3_SENSORS, R655_SN))
 
         assert keys == set(RIVER3_SENSOR_KEYS)
-        # The sensors a unit without a load, a solar panel or a USB device
-        # cannot back stay off, whatever the Delta 3 list offers.
+        # The sensors a unit without a load or a USB device cannot back stay
+        # off, whatever the Delta 3 list offers.
         assert not keys & {
-            "pv1_in_w",
             "pv2_in_w",
-            "solar_energy_kwh",
             "solar2_energy_kwh",
             "dc_12v_out_w",
             "typec2_w",
@@ -345,7 +344,7 @@ class TestReadOnlyEntitySet:
         """The allowed set is what the frames back, not what looks plausible.
 
         Every key is either produced with a value by a recorded frame of either
-        run, or is one of the two derived energy counters.
+        run, or is one of the three derived energy counters.
         """
         produced: set[str] = set()
         for unit in ("U0", "U1", "U2"):
@@ -395,6 +394,74 @@ class TestReadOnlyEntitySet:
             if line.startswith("- [RIVER 3 Plus]")
         )
         assert f"- {count} sensors and {binary} binary sensor" in bullet
+
+
+class TestRiver3SolarInput:
+    """Solar Input and Solar Energy on the RIVER 3 and RIVER 3 Plus (#586).
+
+    First non-zero reading: an owner's RIVER 3 charging from a solar panel,
+    69 W in the app, 68.0 W in the integrator. The shape below is that
+    diagnostics download reduced to the two figures that matter, with a
+    fictional serial.
+    """
+
+    DOWNLOAD: ClassVar[dict[str, Any]] = {
+        "data_keys": ["pv1_in_w", "solar_energy_kwh"],
+        "energy_integrator": {
+            "metrics": {"solar_energy_kwh": {"last_power_w": 68.0}},
+        },
+    }
+    SOLAR_KEYS: ClassVar[set[str]] = {"pv1_in_w", "solar_energy_kwh"}
+
+    @pytest.mark.parametrize("serial", [R655_SN, R631_SN])
+    def test_both_solar_sensors_are_offered(self, serial: str) -> None:
+        offered = {
+            d.key: d
+            for d in filter_defs_for_serial(DELTA3_SENSORS, serial)
+            if d.key in self.DOWNLOAD["data_keys"]
+        }
+
+        assert set(offered) == self.SOLAR_KEYS
+        power, energy = offered["pv1_in_w"], offered["solar_energy_kwh"]
+        assert (power.unit, power.device_class, power.state_class) == (
+            "W",
+            "power",
+            "measurement",
+        )
+        # The Energy dashboard picker needs all three of these.
+        assert (energy.unit, energy.device_class, energy.state_class) == (
+            "kWh",
+            "energy",
+            "total_increasing",
+        )
+
+    @pytest.mark.parametrize("serial", [R655_SN, R631_SN])
+    def test_what_the_recording_does_not_back_stays_off(self, serial: str) -> None:
+        offered = _keys(filter_defs_for_serial(DELTA3_SENSORS, serial))
+
+        assert not offered & {"pv2_in_w", "solar2_energy_kwh", "dc_12v_out_w"}
+        assert filter_defs_for_serial(DELTA3_SWITCHES, serial) == []
+
+    def test_a_delta3_still_has_them(self) -> None:
+        offered = _keys(filter_defs_for_serial(DELTA3_SENSORS, D3M1_SN))
+
+        assert offered >= self.SOLAR_KEYS | {"pv2_in_w", "solar2_energy_kwh"}
+
+    def test_the_panel_reading_reaches_pv1_in_w(self) -> None:
+        """The proto field the owner's panel feeds lands on the offered key."""
+        parsed = parse_delta3_display_property({"pow_get_pv": 68.0})
+
+        last_power = self.DOWNLOAD["energy_integrator"]["metrics"]["solar_energy_kwh"][
+            "last_power_w"
+        ]
+        assert parsed["pv1_in_w"] == last_power == 68
+
+    def test_solar_energy_has_its_power_source_in_the_set(self) -> None:
+        """An integrated counter without the power it is read from sits at zero."""
+        for power_key, energy_key in DELTA3_POWER_TO_ENERGY.items():
+            if energy_key in RIVER3_SENSOR_KEYS:
+                assert power_key in RIVER3_SENSOR_KEYS, (power_key, energy_key)
+        assert DELTA3_POWER_TO_ENERGY["pv1_in_w"] == "solar_energy_kwh"
 
 
 class TestRiver3PlusRecording:
