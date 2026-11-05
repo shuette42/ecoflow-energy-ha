@@ -6994,8 +6994,8 @@ AC_CHARGE_POWER_STATE_KEY = "ac_charge_power_limit_w"
 # decides here. Two of them, the remaining times, never carry a value in the
 # recording because every unit reported itself idle; they are allowed on the
 # strength of the raw remaining-time fields that are in the frames. The
-# sensors left out are the ones the recording does not back: the solar input,
-# the 12 V output and the USB ports read 0 W (one USB reading is -2 W), and on
+# sensors left out are the ones the recording does not back: the 12 V output
+# and the USB ports read 0 W (one USB reading is -2 W), and on
 # one unit the app showed 2 W of DC output while the matching Delta 3 field read
 # 0 W, so this model reports those ports somewhere the Delta 3 message does not
 # cover, and no unit had a USB load. Per-outlet AC power and the two
@@ -7003,16 +7003,26 @@ AC_CHARGE_POWER_STATE_KEY = "ac_charge_power_limit_w"
 # charge limits, the AC charge power limit and the idle timers do appear, but
 # they are the read-back of the controls left out here.
 #
-# `ac_in_energy_kwh` and `out_energy_kwh` are not in the frames either: the
-# coordinator integrates them from `ac_in_w` and `pow_out_sum_w`, which are.
+# The solar input was left out too, because every recording read 0 W. It is
+# allowed since the first non-zero reading (Discussion #586, 2026-11-04): an
+# owner's RIVER 3 charging from a solar panel showed 69 W in the app while the
+# integrator held 68.0 W from `pv1_in_w`, so the field carries the panel on
+# this model. Solar Energy goes with it, as the figure the Energy dashboard
+# takes; `solar2_energy_kwh` and the second input stay off, nothing backs them.
+#
+# `ac_in_energy_kwh`, `out_energy_kwh` and `solar_energy_kwh` are not in the
+# frames either: the coordinator integrates them from `ac_in_w`,
+# `pow_out_sum_w` and `pv1_in_w`, which are.
 RIVER3_SENSOR_KEYS: frozenset[str] = frozenset(
     {
         "cms_batt_soc",
         "pow_in_sum_w",
         "pow_out_sum_w",
         "ac_in_w",
+        "pv1_in_w",
         "ac_in_energy_kwh",
         "out_energy_kwh",
+        "solar_energy_kwh",
         "typec1_w",
         "usb_qc1_w",
         "chg_remain_time_min",
