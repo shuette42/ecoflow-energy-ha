@@ -73,11 +73,6 @@ scripts/
 probe_output_*
 probe_output_*/
 
-# Local mitmproxy/protocol captures
-dumps/
-*.mitm
-mitm-flows*.dump
-ecoflow-mqtt-decoded*.json
 .venv-proto/
 
 # Editor and tooling backups. A copy of a production module next to the module
