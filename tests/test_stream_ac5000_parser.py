@@ -233,6 +233,103 @@ class TestFlowEdges:
         assert result["grid_import_power_w"] == pytest.approx(0.0)
 
 
+DUAL_CT_596 = FIXTURES / "es22_dual_ct_solar_596_masked.json"
+
+
+def _dual_ct_frames() -> list[tuple[str, dict]]:
+    """Parse every frame of the #596 recording, keyed by its timestamp."""
+    out = []
+    for frame in _load(DUAL_CT_596):
+        parsed = parse_stream_ac5000_message(bytes.fromhex(frame["hex"]))
+        assert parsed is not None, frame["ts_iso"]
+        out.append((frame["ts_iso"][11:19], parsed))
+    return out
+
+
+class TestDualCtSolarNode:
+    """Issue #596: an ES22 whose solar comes from a Smart Meter Dual CT clamp.
+
+    That unit never sends `f11.9`, `f12.9` or `f12.10`. Its solar node is
+    `f11.8` in half-watts, and in all 4 frames that carry both groups it
+    equals `f12.14` plus `f12.16` exactly: 172/2 = 86, 132/2 = 66,
+    98/2 = 49, 72/2 = 29 + 7. `.14` closes the home node (`f11.1` halved
+    equals `.4` + `.6` + `.14` within 1 W) and `.16` the grid node
+    (`f11.2` = 13 halved against `.16` = 7 with `.6` absent).
+    """
+
+    def test_the_solar_node_reads_from_field_8_in_half_watts(self) -> None:
+        solar = {ts: p["solar_w"] for ts, p in _dual_ct_frames() if "home_w" in p}
+        assert solar == {
+            "15:19:48": pytest.approx(86.0),
+            "15:20:18": pytest.approx(66.0),
+            "15:21:18": pytest.approx(49.0),
+            "15:21:36": pytest.approx(46.0),
+            "15:23:48": pytest.approx(36.0),
+        }
+
+    def test_solar_to_home_reads_field_14(self) -> None:
+        to_home = [
+            p["home_from_solar_w"] for _, p in _dual_ct_frames() if "batt_w" in p
+        ]
+        assert to_home == [
+            pytest.approx(86.0),
+            pytest.approx(82.0),
+            pytest.approx(66.0),
+            pytest.approx(49.0),
+            pytest.approx(29.0),
+        ]
+
+    def test_the_home_node_closes_on_its_three_sources(self) -> None:
+        closed = 0
+        for ts, parsed in _dual_ct_frames():
+            if "home_w" not in parsed or "batt_w" not in parsed:
+                continue
+            sources = (
+                parsed["home_from_batt_w"]
+                + parsed["home_from_grid_w"]
+                + parsed["home_from_solar_w"]
+            )
+            # Within the 1 W the half-watt node total and the whole-watt
+            # edges allow: 15:21:18 reads 394/2 = 197 against 147 + 49.
+            assert sources == pytest.approx(parsed["home_w"], abs=1.0), ts
+            closed += 1
+        assert closed == 4
+
+    def test_solar_to_grid_counts_as_export(self) -> None:
+        export = {
+            ts: p["grid_export_power_w"] for ts, p in _dual_ct_frames() if "batt_w" in p
+        }
+        assert export["15:23:48"] == pytest.approx(7.0)
+        assert export["15:19:48"] == pytest.approx(0.0)
+
+    def test_night_on_the_new_layout_reads_zero_solar(self) -> None:
+        inner = _sub(11, encode_field_varint(1, 400))
+        result = parse_stream_ac5000_message(_build_frame(254, 39, bytes(inner)))
+        assert result is not None
+        assert result["solar_w"] == 0.0
+
+    def test_the_two_solar_nodes_add_up(self) -> None:
+        """Two separate nodes of one `f11`, so a frame carrying both sums them.
+
+        No frame on file carries both; the edges of each node are separate
+        fields of one flow matrix, which is what makes the nodes additive.
+        """
+        inner = _sub(11, encode_field_varint(8, 200) + encode_field_varint(9, 50))
+        result = parse_stream_ac5000_message(_build_frame(254, 39, bytes(inner)))
+        assert result is not None
+        assert result["solar_w"] == pytest.approx(150.0)
+
+    def test_field_15_does_not_reach_battery_power(self) -> None:
+        """`f12.15` would be solar to battery by position and is in no frame.
+
+        The same rule as field 8: map it when a capture shows it.
+        """
+        inner = _sub(12, encode_field_varint(4, 100) + encode_field_varint(15, 500))
+        result = parse_stream_ac5000_message(_build_frame(254, 39, bytes(inner)))
+        assert result is not None
+        assert result["batt_w"] == pytest.approx(-100.0)
+
+
 class TestDerivedValues:
     @pytest.mark.parametrize(
         ("edges", "batt_w"),

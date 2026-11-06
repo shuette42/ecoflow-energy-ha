@@ -17,10 +17,12 @@ is common to both, and its key names are kept identical here.
 Data shape:
 
 - ``f11`` node totals in half-watt units, except `f11.9` (solar) which is
-  already watts. `f11.2` and `f11.4`/`f11.6` are unsigned magnitudes and
-  are not mapped; the signed sources below are unambiguous. `f11.6` is
-  not a battery magnitude on every unit: on the #458 unit, with a load on
-  the AC socket, it tracks that load. `f11.7` is the socket output node
+  already watts. A unit with a Smart Meter Dual CT solar clamp sends its
+  solar on `f11.8` in half-watts instead, edges `f12.14`/`f12.16` (#596).
+  `f11.2` and `f11.4`/`f11.6` are unsigned magnitudes and are not mapped;
+  the signed sources below are unambiguous. `f11.6` is not a battery
+  magnitude on every unit: on the #458 unit, with a load on the AC
+  socket, it tracks that load. `f11.7` is the socket output node
   and is mapped.
 - ``f12`` flow matrix, one field per source-to-destination edge, watts.
   House consumption equals the sum of the edges into home within 2 W over
@@ -128,6 +130,14 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
         # EcoFlow, apart from rare frames where it attributes part of a
         # house export to a solar node.
         "11.9": ("solar_w", _TYPE_FLOAT, 1),
+        # A second solar node, in half-watts like the other node totals.
+        # Issue #596: an ES22 whose solar is measured by a Smart Meter Dual CT
+        # (ES81) solar clamp sends no `.9` at all and carries its solar here,
+        # with the edges `f12.14` and `f12.16` below: `.8` halved equals `.14`
+        # plus `.16` in all 4 frames that carry both groups (172 / 132 / 98 /
+        # 72 against 86 / 66 / 49 / 29 + 7). Internal: `_finalize` adds it to
+        # `solar_w`, since the two nodes have separate edges in one matrix.
+        "11.8": ("_solar_node_2_w", _TYPE_FLOAT, _HALF_WATT),
         # --- flow matrix edges (watts) ---
         # The MPPT-to-battery edge, and the only `f12` field that belongs
         # to the string block rather than to the third-party solar node.
@@ -186,6 +196,17 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
         # gating. It feeds the battery term in `_finalize`.
         "12.9": ("_solar_to_batt_w", _TYPE_FLOAT, 1),
         "12.10": ("_solar_to_grid_w", _TYPE_FLOAT, 1),
+        # The edges of the `f11.8` solar node (issue #596). `.14` is solar to
+        # home: the home node closes on `.4` + `.6` + `.14` against `f11.1`
+        # halved in all 4 frames, within the 1 W the half-watt total allows
+        # (309 = 216 + 7 + 86, 319 = 249 + 4 + 66, 197 against 147 + 49,
+        # 197 = 168 + 29). `.16` is solar to grid: the one
+        # frame that carries it reads 7 with `f11.2` = 13 halved and no `.6`.
+        # Both internal, added to the solar-to-home and export sums in
+        # `_finalize`. `.15` sits between them and would be solar to battery
+        # by position, but no frame carries it, so it stays out like `.8`.
+        "12.14": ("_solar_2_to_home_w", _TYPE_FLOAT, 1),
+        "12.16": ("_solar_2_to_grid_w", _TYPE_FLOAT, 1),
         # --- meter block, Tibber Pulse variant (source id 4) ---
         "15.3": ("_meter_net_w", _TYPE_FLOAT, 1),
         # --- meter block, EcoFlow P1 variant (source id 8) ---
@@ -430,6 +451,9 @@ _ZERO_FILL_PATHS: dict[tuple[int, int], tuple[str, ...]] = {
     # `_TASK_ZERO_FILL_PATHS`, where an absent flag inside a present task is
     # still what "disabled" looks like on the wire.
     (254, 39): (
+        # `.9` also carries the night zero for the second solar node `.8`
+        # (#596): `_finalize` only adds `.8` to `solar_w`, so `.8` needs no
+        # fill of its own. The same holds for `12.14` against `12.1` below.
         "11.9",
         # Issue #458: on the unit with a load on the socket all 6 frames that
         # carry `f11` carry `.7`, and the idle unit sends it in none of its 5.
@@ -1080,6 +1104,25 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
     mppt_to_grid = result.pop("_mppt_to_grid_w", None)
     solar_to_grid = result.pop("_solar_to_grid_w", None)
     solar_to_batt = result.pop("_solar_to_batt_w", None)
+    solar_2_to_grid = result.pop("_solar_2_to_grid_w", None)
+
+    # Issue #596: the second solar node and its edge to home are added to
+    # the readings `f11.9` and `f12.1` already give. Those two are
+    # zero-filled with their group, so the sum exists whenever the group was
+    # seen, and an absent `.8` or `.14` simply adds nothing.
+    solar_node_2 = result.pop("_solar_node_2_w", None)
+    if isinstance(solar_node_2, (int, float)) and isinstance(
+        result.get("solar_w"), (int, float)
+    ):
+        result["solar_w"] = float(result["solar_w"]) + float(solar_node_2)
+    solar_2_to_home = result.pop("_solar_2_to_home_w", None)
+    if isinstance(solar_2_to_home, (int, float)) and isinstance(
+        result.get("home_from_solar_w"), (int, float)
+    ):
+        result["home_from_solar_w"] = float(result["home_from_solar_w"]) + float(
+            solar_2_to_home
+        )
+
     home_from_grid = result.get("home_from_grid_w")
     home_from_batt = result.get("home_from_batt_w")
 
@@ -1099,7 +1142,7 @@ def _finalize(parsed: dict[str, Any]) -> dict[str, Any]:
         # absence here means no such contribution, not an unknown one.
         extra = sum(
             float(edge)
-            for edge in (solar_to_grid, mppt_to_grid)
+            for edge in (solar_to_grid, solar_2_to_grid, mppt_to_grid)
             if isinstance(edge, (int, float))
         )
         result["grid_export_power_w"] = float(batt_to_grid) + extra
