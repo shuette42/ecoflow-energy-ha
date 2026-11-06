@@ -5113,8 +5113,9 @@ STREAMAC5000_SENSORS: list[EcoFlowSensorDef] = [
         suggested_display_precision=0,
         disabled_by_default=True,
     ),
-    # Solar to home, from the MPPT edge `f12.1`. The parser zero-fills it on
-    # every unit, so the entity waits for a non-zero reading: a unit without
+    # Solar to home, from the MPPT edge `f12.1` plus the Dual CT solar edge
+    # `f12.14` (#596). The parser zero-fills it on every unit, so the entity
+    # waits for a non-zero reading: a unit without
     # PV in its group never gets it.
     EcoFlowSensorDef(
         "home_from_solar_w",
@@ -5146,6 +5147,10 @@ STREAMAC5000_SENSORS: list[EcoFlowSensorDef] = [
     # this figure is the whole solar reading: those panels are third-party by
     # the same definition. The key stays `solar_w` - renaming it would orphan
     # the entity for everyone who already has it.
+    #
+    # A unit whose solar is measured by a Smart Meter Dual CT clamp sends no
+    # `f11.9` and reports that solar on `f11.8` instead (#596); the parser
+    # adds the two nodes into this one key.
     EcoFlowSensorDef(
         "solar_w",
         "Third-Party Solar Power",
