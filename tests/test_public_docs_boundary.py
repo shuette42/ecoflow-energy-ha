@@ -25,6 +25,7 @@ Three checks:
 from __future__ import annotations
 
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -79,6 +80,12 @@ _SOURCE_TERMS = "|".join(
         _term("Treaty", "Engine"),
         r"\b" + _term("J", "NI") + r"\b",
         _term("getMqtt", "CheckSign"),
+        _term("mitm", "proxy"),
+        _term("mitm", "-flows"),
+        r"\b" + _term("j", "adx") + r"\b",
+        _term("apk", "tool"),
+        r"\b" + _term("fri", "da") + r"\b",
+        r"\b" + _term("ghi", "dra") + r"\b",
     ]
 )
 _TOOLING_NAMES = "|".join(
@@ -184,6 +191,70 @@ def _leaks(text: str) -> list[str]:
 def test_public_file_stays_inside_the_boundary(path: Path) -> None:
     findings = _leaks(path.read_text(encoding="utf-8"))
     assert not findings, f"{path.relative_to(REPO_ROOT)}: {findings[:5]}"
+
+
+# The prose scan above reads Markdown only. Configuration, workflows, ignore
+# files and code carry text too, and a note about how a protocol was learned
+# does not become harmless by sitting in a comment. Every other tracked text
+# file is read for the two pattern classes that have no legitimate use in
+# code: how the knowledge was obtained, and the tooling behind this checkout.
+_TEXT_SUFFIXES = frozenset(
+    {".py", ".yml", ".yaml", ".toml", ".cfg", ".ini", ".txt", ".json", ".sh"}
+)
+_TEXT_NAMES = frozenset({".gitignore", ".gitattributes", ".editorconfig"})
+
+
+def _tracked_text_files() -> list[Path]:
+    out = subprocess.run(
+        ["git", "ls-files", "-z"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        check=True,
+    ).stdout.decode("utf-8")
+    scanned = {p.resolve() for p in PUBLIC_FILES} | {Path(__file__).resolve()}
+    files = [REPO_ROOT / name for name in out.split("\0") if name]
+    return sorted(
+        f
+        for f in files
+        if f.is_file()
+        and (f.suffix in _TEXT_SUFFIXES or f.name in _TEXT_NAMES)
+        and f.resolve() not in scanned
+    )
+
+
+_EXTRA_FILES = _tracked_text_files()
+
+
+@pytest.mark.parametrize(
+    "path", _EXTRA_FILES, ids=lambda p: str(p.relative_to(REPO_ROOT))
+)
+def test_tracked_text_file_names_no_source_or_tooling(path: Path) -> None:
+    text = path.read_text(encoding="utf-8", errors="replace")
+    findings = [
+        f"{label}: {m.group()!r}"
+        for label in ("protocol-source term", "internal tooling name")
+        for m in FORBIDDEN[label].finditer(text)
+    ]
+    assert not findings, f"{path.relative_to(REPO_ROOT)}: {findings[:5]}"
+
+
+def test_the_extra_file_set_reaches_config_and_code() -> None:
+    """The floor: an empty or Markdown-only scan must not pass as clean."""
+    names = {f.name for f in _EXTRA_FILES}
+    assert ".gitignore" in names and "manifest.json" in names, sorted(names)[:20]
+    assert len(_EXTRA_FILES) >= 100, len(_EXTRA_FILES)
+
+
+@pytest.mark.parametrize(
+    "sample",
+    [
+        "# Local " + _term("mitm", "proxy") + " captures",
+        "run " + _term("j", "adx") + " on the bundle",
+        "dumps from " + _term("fri", "da"),
+    ],
+)
+def test_the_tool_name_patterns_catch_their_samples(sample: str) -> None:
+    assert FORBIDDEN["protocol-source term"].search(sample), sample
 
 
 # The code trees cite plan numbers by convention (`PLAN-136` beside the code
