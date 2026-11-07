@@ -12,8 +12,10 @@ from __future__ import annotations
 
 import asyncio
 import binascii
+import importlib.util
 import json
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -21,14 +23,17 @@ import pytest
 from homeassistant.components.climate import (
     ATTR_TARGET_TEMP_HIGH,
     ATTR_TARGET_TEMP_LOW,
+    ClimateEntity,
     HVACAction,
     HVACMode,
 )
+from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.ecoflow_energy import climate as climate_module
 from custom_components.ecoflow_energy.binary_sensor import (
     async_setup_entry as binary_sensor_setup,
 )
@@ -1221,6 +1226,110 @@ class TestTheClimateReadsTheDevice:
         coordinator = _coordinator(hass, {"running": True, "operating_mode": "cooling"})
         entity = _climate(coordinator)
         assert entity.target_temperature is None
+
+
+_LEGACY_TEMPERATURE_NAMES = (
+    "_attr_temperature_unit",
+    "current_temperature",
+    "target_temperature",
+    "target_temperature_low",
+    "target_temperature_high",
+)
+_NATIVE_TEMPERATURE_NAMES = (
+    "_attr_native_temperature_unit",
+    "native_current_temperature",
+    "native_target_temperature",
+    "native_target_temperature_low",
+    "native_target_temperature_high",
+)
+# Distinct values per key, so a property reading the wrong key cannot pass.
+_TEMPERATURE_STATE = {
+    "temp_ambient_c": 21.6,
+    "target_temp_c": 24.5,
+    "constant_temp_lower_limit_c": 18.0,
+    "constant_temp_upper_limit_c": 26.0,
+}
+
+
+def _climate_module_copy(
+    monkeypatch: pytest.MonkeyPatch, *, native: bool
+) -> ModuleType:
+    """Execute climate.py once more against a base class that does (native)
+    or does not offer the native temperature properties. A separate module
+    object, so the class every other test uses stays untouched."""
+    if native:
+        monkeypatch.setattr(
+            ClimateEntity, "native_current_temperature", None, raising=False
+        )
+    else:
+        monkeypatch.delattr(ClimateEntity, "native_current_temperature", raising=False)
+    spec = importlib.util.spec_from_file_location(
+        "custom_components.ecoflow_energy._climate_copy", climate_module.__file__
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class TestTheClimateUsesTheTemperatureNamesItsHomeAssistantReads:
+    """Home Assistant 2026.11 warns about a climate entity that defines the
+    old temperature names and reads `native_*` instead; older versions only
+    know the old names (Ref #694). The class defines exactly one set."""
+
+    def test_the_installed_class_defines_the_set_its_base_class_reads(self) -> None:
+        native = hasattr(ClimateEntity, "native_current_temperature")
+        defined, absent = (
+            (_NATIVE_TEMPERATURE_NAMES, _LEGACY_TEMPERATURE_NAMES)
+            if native
+            else (_LEGACY_TEMPERATURE_NAMES, _NATIVE_TEMPERATURE_NAMES)
+        )
+        names = vars(EcoFlowWave3Climate)
+        assert [n for n in defined if n not in names] == []
+        assert [n for n in absent if n in names] == []
+
+    @pytest.mark.parametrize("native", [True, False])
+    def test_each_branch_defines_only_its_own_set(
+        self, monkeypatch: pytest.MonkeyPatch, native: bool
+    ) -> None:
+        cls = _climate_module_copy(monkeypatch, native=native).EcoFlowWave3Climate
+        defined, absent = (
+            (_NATIVE_TEMPERATURE_NAMES, _LEGACY_TEMPERATURE_NAMES)
+            if native
+            else (_LEGACY_TEMPERATURE_NAMES, _NATIVE_TEMPERATURE_NAMES)
+        )
+        names = vars(cls)
+        assert [n for n in defined if n not in names] == []
+        assert [n for n in absent if n in names] == []
+
+    @pytest.mark.parametrize("native", [True, False])
+    @pytest.mark.parametrize(
+        ("mode", "expected"),
+        [
+            ("cooling", (21.6, 24.5, None, None)),
+            ("heating", (21.6, 24.5, None, None)),
+            ("constant_temp", (21.6, None, 18.0, 26.0)),
+            ("fan", (21.6, None, None, None)),
+            (None, (21.6, None, None, None)),
+        ],
+    )
+    async def test_both_sets_report_the_same_values(
+        self,
+        hass: HomeAssistant,
+        monkeypatch: pytest.MonkeyPatch,
+        native: bool,
+        mode: str | None,
+        expected: tuple[float | None, ...],
+    ) -> None:
+        """`None` is a unit that is not running: no setpoint shows."""
+        data: dict[str, Any] = dict(_TEMPERATURE_STATE)
+        data["running"] = mode is not None
+        data["operating_mode"] = mode or "cooling"
+        module = _climate_module_copy(monkeypatch, native=native)
+        entity = module.EcoFlowWave3Climate(_coordinator(hass, data))
+        names = _NATIVE_TEMPERATURE_NAMES if native else _LEGACY_TEMPERATURE_NAMES
+        assert getattr(entity, names[0]) == UnitOfTemperature.CELSIUS
+        assert tuple(getattr(entity, name) for name in names[1:]) == expected
 
 
 class TestTheClimateHasNoOptimisticHold:
