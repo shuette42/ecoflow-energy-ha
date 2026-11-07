@@ -15,6 +15,7 @@ from ecoflow_energy.const import (
 from ecoflow_energy.ecoflow.frame_capture import (
     _ANCHOR_DEPTH,
     _COORDINATE_PAIR,
+    _KEYS_SEEN_MAX,
     _SERIAL_RUN,
     WRITE_CLASS_RESERVE,
     TypedFrameBuffer,
@@ -2483,6 +2484,28 @@ class TestNovelReadingsSurviveThinning:
         kept = sorted(entry["ts"] - _T0 for entry in buffer.frames())
         assert kept[0] == 0.0
         assert kept[-1] > self._SPAN_S * 0.9
+
+    def test_the_names_a_type_remembers_are_capped(self) -> None:
+        """Undeclared-field names cannot grow the record for the process lifetime."""
+        key = "property:proto/254.21"
+        buffer = TypedFrameBuffer(keys_max=20, per_key_max=10)
+        buffer.add(key, _entry(0.0), readings={"setting": 1})
+        for i in range(600):
+            buffer.add(key, _entry(float(i + 1)), readings={f"unknown:254/21:{i}": 1})
+        bucket = buffer._buckets[key]
+        assert len(bucket.keys_seen) == _KEYS_SEEN_MAX
+        newest_novel = bucket.novel[-1][0]
+
+        # A name past the cap is not novel, however often it appears.
+        buffer.add(key, _entry(700.0), readings={"unknown:254/21:599": 1})
+        assert bucket.novel[-1][0] == newest_novel
+
+        # A name already held still updates and can be novel after a stable run.
+        for i in range(6):
+            buffer.add(key, _entry(800.0 + i), readings={"setting": 1})
+        buffer.add(key, _entry(900.0), readings={"setting": 2})
+        assert bucket.novel[-1][0] > newest_novel
+        assert len(bucket.keys_seen) == _KEYS_SEEN_MAX
 
     def test_a_repeated_reading_is_not_novel(self) -> None:
         """Novelty is a change, not every appearance."""

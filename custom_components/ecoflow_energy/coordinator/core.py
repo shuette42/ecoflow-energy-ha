@@ -493,6 +493,9 @@ class EcoFlowDeviceCoordinator(
         # it is called from the Paho thread while diagnostics read it on the
         # event loop.
         self._raw_frames_lock = threading.Lock()
+        # Undeclared fields of the frame being handled, set by the ingest
+        # and consumed by the frame capture on the same (Paho) thread.
+        self._frame_unknown_fields: dict[str, Any] = {}
         # Field numbers a device sends that the protobuf binding does not
         # declare, per command. The frame capture above answers "what bytes
         # arrived" up to a per-frame byte budget; this answers "which fields

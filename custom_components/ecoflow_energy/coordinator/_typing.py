@@ -81,6 +81,7 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
     _unit_sn_to_index: dict[str, int]
     _raw_frames: TypedFrameBuffer
     _raw_frames_lock: threading.Lock
+    _frame_unknown_fields: dict[str, Any]
     _schedule_indices: set[int]
     _feed_schedule_indices: set[int]
     _schedule_divergent_bundles: int

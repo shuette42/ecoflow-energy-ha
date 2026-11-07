@@ -458,8 +458,15 @@ def _typed_map_from_candidates(
     an empty message and the plaintext retry would never be reached.
     """
     ranked_fallback: tuple[dict[str, Any], str, bytes, str] | None = None
-    for source, reason_code in candidates:
-        typed = _typed_runtime_map([header], source, device_type)
+    for index, (source, reason_code) in enumerate(candidates):
+        # Only the first candidate is the reading the device meant: the
+        # decrypted bytes of a masked header, or the only one there is. The
+        # later ones are retries that exist to survive a wrong guess, and what
+        # a wrong guess decodes to is noise, so they never get to report
+        # undeclared fields on their own.
+        typed = _typed_runtime_map(
+            [header], source, device_type, authoritative=index == 0
+        )
         if typed is None:
             continue
         mapped, parse_path = typed
@@ -526,9 +533,27 @@ def unknown_field_summary(msg: Any) -> dict[int, Any]:
 
 
 def _typed_runtime_map(
-    headers: list[dict], source: bytes, device_type: str
+    headers: list[dict],
+    source: bytes,
+    device_type: str,
+    *,
+    authoritative: bool = False,
 ) -> tuple[dict[str, Any], str] | None:
-    """Declarative decode: command tuple -> MessageToDict -> rename -> flags."""
+    """Declarative decode: command tuple -> MessageToDict -> rename -> flags.
+
+    ``authoritative`` says the caller has no better reading of these bytes to
+    fall back on, so a message made only of undeclared fields is the device's
+    real content and not the residue of a wrong key (see step 7).
+
+    The flag cannot prove the bytes were read with the right key, so some noise
+    still gets through. A device that sets the masking flag without masking
+    makes the first candidate noise, and it is reported when the plaintext
+    retry holds only undeclared fields too. A single-header frame whose outer
+    payload field belongs to another message class of a registered command is
+    read as this one and reports its fields as undeclared. Both are bounded by
+    the existing caps (40 numbers per message, the per-command limits of the
+    summary), and diagnostics are the only reader.
+    """
     registry = _registry_for(device_type)
     if not registry:
         return None
@@ -623,13 +648,17 @@ def _typed_runtime_map(
     if unit_rows is not None:
         mapped["_unit_rows"] = unit_rows
 
-    # 7. Undeclared field numbers, for diagnostics only. Recorded solely when
-    # the message also produced declared fields: protobuf accepts arbitrary
-    # bytes as unknown fields rather than raising, so a payload decoded with
-    # the wrong key (see `_header_pdata_candidates`) yields a message that is
-    # *only* unknown fields. Reporting those would fill the summary with
-    # noise from a candidate the caller is about to discard anyway.
-    if fields:
+    # 7. Undeclared field numbers, for diagnostics only. Recorded when the
+    # message also produced declared fields, or when the caller marked the
+    # reading authoritative: protobuf accepts arbitrary bytes as unknown
+    # fields rather than raising, so a payload decoded with the wrong key
+    # (see `_header_pdata_candidates`) yields a message that is *only*
+    # unknown fields. Reporting those from a retry candidate would fill the
+    # summary with noise the caller is about to discard anyway. The first
+    # candidate is different: a Delta 3 USB status message that moves state
+    # in undeclared fields alone is decoded correctly and has nothing else to
+    # report (#685).
+    if fields or authoritative:
         unknown = unknown_field_summary(msg)
         if unknown:
             mapped["_unknown_fields"] = unknown

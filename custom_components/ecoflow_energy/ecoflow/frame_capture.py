@@ -1518,8 +1518,8 @@ class TypedFrameBuffer:
         pushes it on its own, which is the question a control needs
         answered.
 
-        The keys a type has carried are bounded by the parser's key space,
-        so the record cannot grow without bound. Values are kept only to be
+        The keys a type has carried are bounded by `_KEYS_SEEN_MAX`, so the
+        record cannot grow without bound. Values are kept only to be
         compared with the next one, never exported. The frames kept are
         capped separately, keeping the most recent: the first frames of a
         recording introduce every key a device reports, and those are
@@ -1530,6 +1530,8 @@ class TypedFrameBuffer:
             key = str(name)
             previous = bucket.keys_seen.get(key)
             if previous is None:
+                if len(bucket.keys_seen) >= _KEYS_SEEN_MAX:
+                    continue
                 novel = True
                 bucket.keys_seen[key] = (value, 1)
                 continue
@@ -1657,6 +1659,13 @@ _NOVEL_PER_KEY_MAX = 4
 # the cost of a false positive is one kept frame, the cost of a false negative
 # is the frame the recording was opened for.
 _STABLE_RUN = 5
+
+# Most distinct reading names one message type remembers. The parser's own key
+# space is small, but undeclared fields enter as names of their own, and a
+# device that sets the masking flag without masking decodes to random field
+# numbers. Past the cap a new name is neither stored nor counted as novel,
+# while the names already held keep updating.
+_KEYS_SEEN_MAX = 512
 
 
 def _same_reading(previous: Any, current: Any) -> bool:
