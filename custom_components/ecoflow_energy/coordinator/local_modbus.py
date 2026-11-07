@@ -516,16 +516,20 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._battery_lock.release()
 
     def _automatic_not_confirmed(self, turning_on: bool, reason: str) -> None:
-        """Log a missing Automatic: one WARNING when control ends, else DEBUG.
+        """Log a missing Automatic: WARNING on turn-off or unload, INFO on a stop.
 
-        ``_may_be_method3`` stays set, so the next turn-on ends the command.
+        While Home Assistant stops it is INFO: the stop cancels the background
+        tasks before the stop event, the link is gone and the unit's own lapse
+        ends the command, nobody has to act. ``_may_be_method3`` stays set, so
+        the next turn-on ends the command.
         """
         if turning_on:
             _LOGGER.debug(
                 "Local Modbus %s: Automatic not confirmed (%s)", self.device_tag, reason
             )
             return
-        _LOGGER.warning(
+        _LOGGER.log(
+            logging.INFO if self.hass.is_stopping else logging.WARNING,
             "Local Modbus %s: the battery did not confirm Automatic when control "
             "ended (%s). The device returns to Automatic by itself within %s s",
             self.device_tag,

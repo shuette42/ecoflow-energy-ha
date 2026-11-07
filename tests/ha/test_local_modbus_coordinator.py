@@ -25,7 +25,7 @@ import homeassistant.util.dt as dt_util
 import pytest
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_HOST, CONF_PORT, EVENT_HOMEASSISTANT_STOP
-from homeassistant.core import HomeAssistant, State
+from homeassistant.core import CoreState, HomeAssistant, State
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import (
@@ -2386,6 +2386,43 @@ async def test_a_link_error_while_ending_control_does_not_raise(
 
     assert coordinator.control_enabled is False
     # Not confirmed: the next turn-on ends the command.
+    assert coordinator._may_be_method3 is True
+
+
+@pytest.mark.parametrize(
+    ("how", "level"), [("switch_off", logging.WARNING), ("stop", logging.INFO)]
+)
+async def test_an_unconfirmed_automatic_warns_except_while_home_assistant_stops(
+    hass: HomeAssistant,
+    clock: Clock,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    how: str,
+    level: int,
+) -> None:
+    # A stop cancels the background tasks before the stop event, so the link
+    # is gone and the unit's own lapse is what ends the command (#696).
+    coordinator, _fake, _cancelled_at = await _charging_entry(hass, clock, monkeypatch)
+
+    async def broken(*_args: Any) -> None:
+        raise ModbusConnectError("link down")
+
+    monkeypatch.setattr(coordinator, "_command", broken)
+    caplog.set_level(logging.INFO, logger="custom_components.ecoflow_energy")
+    if how == "switch_off":
+        await coordinator.async_set_control(False)
+    else:
+        hass.set_state(CoreState.stopping)
+        try:
+            hass.bus.async_fire(EVENT_HOMEASSISTANT_STOP)
+            await hass.async_block_till_done()
+        finally:
+            hass.set_state(CoreState.running)
+
+    records = [r for r in caplog.records if "did not confirm Automatic" in r.message]
+    assert [r.levelno for r in records] == [level]
+    assert "returns to Automatic by itself" in records[0].getMessage()
+    assert coordinator.control_enabled is False
     assert coordinator._may_be_method3 is True
 
 
