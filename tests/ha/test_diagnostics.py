@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
@@ -2111,6 +2112,186 @@ class TestUnknownProtoFieldDiagnostics:
         assert parsed is not None
         assert "_unknown_fields" not in parsed
         assert "_cmd_key" not in parsed
+
+    def _recording_coordinator(
+        self, hass: HomeAssistant, entry: MockConfigEntry
+    ) -> EcoFlowDeviceCoordinator:
+        """A Delta 3 coordinator whose frame capture is live, dispatch off."""
+        entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_DELTA3_DEVICE)
+        coordinator._enhanced_mode = True  # the capture only runs on the app path
+        coordinator._shutdown = True  # parsed data is not dispatched to entities
+        return coordinator
+
+    def _push_status(
+        self, coordinator: EcoFlowDeviceCoordinator, **undeclared: int
+    ) -> None:
+        """Send one 254/21 status frame: one declared field, fields 13-16 undeclared.
+
+        Fields 13-16 are the shape of #685: a Delta 3 USB moves state in
+        numbers the binding does not declare, while the declared SoC holds.
+        """
+        from custom_components.ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
+            Delta3DisplayProperty,
+        )
+        from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
+            encode_field_varint,
+        )
+
+        msg = Delta3DisplayProperty()
+        msg.cms_batt_soc = 82.0
+        inner = msg.SerializeToString()
+        for number in (13, 14, 15, 16):
+            inner += encode_field_varint(number, undeclared.get(f"f{number}", 0))
+        topic = f"/app/device/property/{MOCK_DELTA3_DEVICE['sn']}"
+        coordinator._on_mqtt_message(topic, self._frame(254, 21, inner))
+
+    @staticmethod
+    def _novel_count(coordinator: EcoFlowDeviceCoordinator) -> int:
+        per_key = coordinator._raw_frames.stats()["per_key"]
+        assert len(per_key) == 1, "one message type was sent"
+        return int(next(iter(per_key.values()))["novel"])
+
+    async def test_a_change_in_an_undeclared_field_keeps_the_frame(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Only an undeclared field moves, and the recording keeps that frame.
+
+        Before the fix the parsed readings were identical on every frame, so
+        the novelty test never fired and the state change was thinned away
+        with the repeats around it (#685).
+        """
+        coordinator = self._recording_coordinator(hass, standard_config_entry)
+
+        for _ in range(7):  # past the stable run, so a change is a setting
+            self._push_status(coordinator, f14=0)
+        assert self._novel_count(coordinator) == 1  # the first frame only
+
+        self._push_status(coordinator, f14=1)
+        assert self._novel_count(coordinator) == 2
+
+        # The same frame again says nothing new.
+        self._push_status(coordinator, f14=1)
+        assert self._novel_count(coordinator) == 2
+
+    async def test_a_masked_frame_of_undeclared_fields_alone_is_judged(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """The frames of #685: XOR-masked, fields 13-16 and one more, no declared field.
+
+        The recording kept the full dump, which has declared fields, and lost
+        the two status messages that carry only numbers the binding does not
+        declare. The decoder used to report undeclared fields only beside a
+        declared one, so these frames offered the capture nothing.
+        """
+        from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
+            encode_field_bytes,
+            encode_field_varint,
+        )
+
+        coordinator = self._recording_coordinator(hass, standard_config_entry)
+        topic = f"/app/device/property/{MOCK_DELTA3_DEVICE['sn']}"
+        seq = 0x1B7
+
+        def push(f14: int) -> None:
+            inner = b"".join(
+                encode_field_varint(number, f14 if number == 14 else 0)
+                for number in (13, 14, 15, 16, 432)
+            )
+            masked = bytes(byte ^ (seq & 0xFF) for byte in inner)
+            header = (
+                encode_field_bytes(1, masked)
+                + encode_field_varint(6, 1)  # enc_type: masked with seq & 0xFF
+                + encode_field_varint(8, 254)
+                + encode_field_varint(9, 21)
+                + encode_field_varint(14, seq)
+            )
+            coordinator._on_mqtt_message(topic, encode_field_bytes(1, header))
+
+        push(0)
+        assert coordinator.unknown_proto_fields["254/21"]["432"] == 0
+        for _ in range(6):
+            push(0)
+        assert self._novel_count(coordinator) == 1
+        push(1)
+        assert self._novel_count(coordinator) == 2
+
+    async def test_a_frame_the_parser_returned_nothing_for_is_still_judged(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """A parsed value of None must not hide the undeclared fields."""
+        coordinator = self._recording_coordinator(hass, standard_config_entry)
+        topic = f"/app/device/property/{MOCK_DELTA3_DEVICE['sn']}"
+        payload = self._frame(254, 21, b"\x08\x01")
+
+        def capture(value: int) -> None:
+            coordinator._record_unknown_fields(
+                {"_unknown_fields": {14: value}, "_cmd_key": "254/21"}
+            )
+            coordinator._capture_raw_frame(topic, payload, None)
+
+        for _ in range(7):
+            capture(0)
+        assert self._novel_count(coordinator) == 1
+        capture(1)
+        assert self._novel_count(coordinator) == 2
+
+    async def test_a_bundled_frame_accumulates_and_never_leaks_forward(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Two messages of one frame both count, and the next frame starts empty."""
+        coordinator = self._recording_coordinator(hass, standard_config_entry)
+        topic = f"/app/device/property/{MOCK_DELTA3_DEVICE['sn']}"
+        payload = self._frame(254, 21, b"\x08\x01")
+
+        coordinator._record_unknown_fields(
+            {"_unknown_fields": {13: 1}, "_cmd_key": "254/21"}
+        )
+        coordinator._record_unknown_fields(
+            {"_unknown_fields": {7: 2}, "_cmd_key": "254/22"}
+        )
+        coordinator._capture_raw_frame(topic, payload, None)
+        bucket = next(iter(coordinator._raw_frames._buckets.values()))
+        assert {"unknown:254/21:13", "unknown:254/22:7"} <= set(bucket.keys_seen)
+
+        # A frame that records nothing must not re-offer the previous fields.
+        assert coordinator._frame_unknown_fields == {}
+        coordinator._capture_raw_frame(topic, payload, None)
+        assert bucket.keys_seen["unknown:254/21:13"][1] == 1
+
+    async def test_a_parse_that_raises_does_not_leak_into_the_next_frame(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """The reset at the top of the handler is the backstop for a failed parse."""
+        coordinator = self._recording_coordinator(hass, standard_config_entry)
+        topic = f"/app/device/property/{MOCK_DELTA3_DEVICE['sn']}"
+        seen: list[dict[str, Any]] = []
+
+        def parse(_topic: str, _payload: bytes) -> None:
+            seen.append(dict(coordinator._frame_unknown_fields))
+            if len(seen) == 1:
+                coordinator._record_unknown_fields(
+                    {"_unknown_fields": {14: 1}, "_cmd_key": "254/21"}
+                )
+                raise RuntimeError("parse failed after recording")
+
+        with patch.object(coordinator, "_parse_message", parse):
+            with pytest.raises(RuntimeError):
+                coordinator._on_mqtt_message(topic, b"x")
+            assert coordinator._frame_unknown_fields  # the capture never cleared it
+
+            coordinator._on_mqtt_message(topic, b"x")
+        assert seen[1] == {}
 
     async def test_powerocean_bundle_path_records_too(
         self,

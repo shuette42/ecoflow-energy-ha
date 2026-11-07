@@ -234,6 +234,12 @@ class MqttIngestMixin(_Base):
         to MQTT push for real-time data alongside HTTP polling (dual-source).
         In Enhanced Mode, MQTT is the primary source.
         """
+        # Deliberate backstop, not a duplicate of the clear in
+        # `_capture_raw_frame`. If `_parse_message` raises after it recorded
+        # fields, the capture never runs and never clears them, so without
+        # this reset they would be judged as part of the next frame.
+        self._frame_unknown_fields = {}
+
         # SET reply tracking (all modes): log acknowledgement, do not process
         # as data. The same predicate the capture buckets on
         # (`frame_capture._topic_class`), so a reply can never route as a
@@ -351,6 +357,10 @@ class MqttIngestMixin(_Base):
         The frame is truncated and the device serial is masked before storage.
         Capture never affects ingest - any failure is swallowed.
         """
+        # Taken before the early return and cleared with it, so a frame the
+        # capture skips cannot hand its fields to the next one.
+        unknown = self._frame_unknown_fields
+        self._frame_unknown_fields = {}
         if not self._enhanced_mode:
             return
         try:
@@ -417,7 +427,15 @@ class MqttIngestMixin(_Base):
                 # value of a key the type has carried for hours, not a new
                 # key. A frame the parser did not read - a write, a reply -
                 # passes None and is sampled on arrival alone.
-                self._raw_frames.add(key, entry, readings=parsed or None)
+                #
+                # Fields the proto binding does not declare count as
+                # readings too. They are absent from `parsed`, so a device
+                # whose state changes sit in such fields (Delta 3 USB,
+                # #685) would otherwise show the novelty test nothing and
+                # lose the very frames a repeat recording is taken for. A
+                # frame the parser returned nothing for still carries them.
+                readings = {**(parsed or {}), **unknown}
+                self._raw_frames.add(key, entry, readings=readings or None)
         except Exception:  # noqa: BLE001
             _LOGGER.debug("Raw frame capture failed", exc_info=True)
 
@@ -433,6 +451,15 @@ class MqttIngestMixin(_Base):
             cmd_key = mapped.get("_cmd_key")
             if isinstance(fields, dict) and isinstance(cmd_key, str):
                 self.record_unknown_proto_fields(cmd_key, fields)
+                # Kept for the frame capture, which runs right after the
+                # parse on this same thread. Keyed by command and field
+                # number so a bundled frame adds to it instead of replacing
+                # it. It is not under the summary's caps. What bounds it is
+                # that the decoder reports at most 40 numbers per message, the
+                # stash is emptied after every frame, and a device's commands
+                # and field numbers are a finite set.
+                for number, value in fields.items():
+                    self._frame_unknown_fields[f"unknown:{cmd_key}:{number}"] = value
         except Exception:  # noqa: BLE001
             _LOGGER.debug("Unknown proto field capture failed", exc_info=True)
 

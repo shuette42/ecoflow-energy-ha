@@ -19,6 +19,7 @@ from ecoflow_energy.ecoflow.proto.ecocharge_pb2 import (
 from ecoflow_energy.ecoflow.proto.runtime import (
     _UNKNOWN_FIELDS_MAX,
     _build_cmd_registry,
+    _typed_map_from_candidates,
     decode_proto_runtime_frame,
 )
 from ecoflow_energy.ecoflow.proto_encoding import (
@@ -148,13 +149,12 @@ class TestRuntimeDecoder:
 
         assert len(result.mapped["_unknown_fields"]) == _UNKNOWN_FIELDS_MAX
 
-    def test_unknown_fields_skipped_without_declared_fields(self):
-        """A payload that decodes to unknown fields only is not reported.
+    def test_unknown_fields_reported_without_declared_fields(self):
+        """A first or only candidate made of undeclared fields alone reports them.
 
-        Protobuf accepts arbitrary bytes as unknown fields instead of raising,
-        so a frame decoded with the wrong XOR key produces a message that is
-        entirely unknown fields. Those numbers are noise from a candidate the
-        caller discards.
+        A device can move state in numbers the binding does not declare and
+        send nothing else in that message (#685). Decoded with the right key
+        that is the device's real content, and dropping it hid the frame.
         """
         inner = encode_field_varint(5064, 1000)
 
@@ -163,9 +163,55 @@ class TestRuntimeDecoder:
         )
 
         # Positive control: the frame has to have reached its registry entry,
-        # or the absent summary below would only prove that nothing decoded.
+        # or the summary below would only prove that nothing decoded.
         assert result.parse_path == "typed_runtime:energy_stream_report"
-        assert "_unknown_fields" not in result.mapped
+        assert result.mapped["_unknown_fields"] == {5064: 1000}
+        assert result.mapped["_cmd_key"] == "96/33"
+
+    def test_unknown_fields_skipped_for_a_wrong_key_retry(self):
+        """Noise from a retry candidate is not reported.
+
+        Protobuf accepts arbitrary bytes as unknown fields rather than raising,
+        so the plaintext retry of a masked header decodes to a message that is
+        entirely unknown fields when the mask was right. Those numbers are
+        noise from a candidate the caller discards.
+        """
+        header = {"cmd_func": 96, "cmd_id": 33}
+        noise = encode_field_varint(5064, 1000)
+        broken = b"\x0a\xff\xff\xff"  # length-delimited field cut short
+
+        # Retry position: the first candidate does not parse at all.
+        retry = _typed_map_from_candidates(
+            header, [(broken, "first"), (noise, "retry")], DEVICE_TYPE_POWEROCEAN
+        )
+        assert retry is not None
+        assert retry[3] == "retry"  # positive control: the retry was reached
+        assert "_unknown_fields" not in retry[0]
+
+        # Same bytes in first position are the device's reading.
+        first = _typed_map_from_candidates(
+            header, [(noise, "first")], DEVICE_TYPE_POWEROCEAN
+        )
+        assert first is not None
+        assert first[0]["_unknown_fields"] == {5064: 1000}
+
+    def test_a_later_candidate_with_declared_fields_wins_unchanged(self):
+        """The winner on declared fields keeps its own mapping, not the first's."""
+        header = {"cmd_func": 96, "cmd_id": 33}
+        msg = JTS1EnergyStreamReport()
+        msg.bp_soc = 75
+        won = _typed_map_from_candidates(
+            header,
+            [
+                (encode_field_varint(5064, 1000), "first"),
+                (msg.SerializeToString(), "retry"),
+            ],
+            DEVICE_TYPE_POWEROCEAN,
+        )
+        assert won is not None
+        assert won[3] == "retry"
+        assert won[0]["soc"] == 75.0
+        assert "_unknown_fields" not in won[0]
 
     def test_ems_change_report_rename(self):
         """cmd_id=8 renames ems_word_mode → ems_work_mode."""
